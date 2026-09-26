@@ -440,7 +440,7 @@ let test_get_latest_journals_bounded_scan () =
                   [ "block/uuid", One_value (Uuid (Db_test_util.gen_uuid ()))
                   ; "block/title", One_value (String title)
                   ; "block/name", One_value (String title)
-                  ; "block/journal-day", One_value (Int (20240101 + i))
+                  ; "block/journal-day", One_value (Int64 (Int64.of_int (20240101 + i)))
                   ; "block/tags", One_value (Ref journal_id) ] })));
   Ldb.journal_day_scans := 0;
   let realized =
@@ -882,7 +882,7 @@ let test_fix_db_transact_runs_pipeline_without_recursive_validation_test () =
                 Datascript.with_tx report.db_after
                   [ Entity
                       { db_id = Some (Entity_id block_id)
-                      ; attrs = [ "block/tx-id", One_value (Int 42) ] } ]
+                      ; attrs = [ "block/tx-id", One_value (Int64 42L) ] } ]
               in
               { stamp with
                 db_before = report.db_before
@@ -905,7 +905,7 @@ let test_fix_db_transact_runs_pipeline_without_recursive_validation_test () =
      check "fix-db-transact title"
        (Ldb.string_value e "block/title" = Some "after");
      check "fix-db-transact pipeline-data committed"
-       (Ldb.value e "block/tx-id" = Some (Int 42))
+       (Ldb.value e "block/tx-id" = Some (Int64 42L))
    with e ->
      Db_tx.transact_pipeline_fn := saved_pipeline;
      Db_tx.validate_tx_report_fn := saved_validate;
@@ -1077,7 +1077,7 @@ let test_get_class_objects_filters_hidden_objects_test () =
           { Db_test_util.page =
               Db_test_util.{ default_page with pg_title = Some "Deleted";
                              pg_tags = [ "Child" ];
-                             pg_extra = [ "logseq.property/deleted-at", Db_test_util.Int 1 ] };
+                             pg_extra = [ "logseq.property/deleted-at", Db_test_util.Int64 1 ] };
             Db_test_util.blocks = [] };
           { Db_test_util.page =
               Db_test_util.{ default_page with pg_title = Some "Hidden";
@@ -1206,7 +1206,7 @@ let test_upsert_property_2 () =
     match ent_ident db "user.property/num" with
     | Some e ->
         (match Ldb.value e "block/updated-at" with
-         | Some (Int t) -> float_of_int t
+         | Some (Int64 t) -> Int64.to_float t
          | Some (Instant t) -> Int64.to_float t
          | Some (Float t) -> t
          | _ -> 0.)
@@ -1224,7 +1224,7 @@ let test_upsert_property_2 () =
          (Ldb.value e "db/cardinality" = Some (Keyword "db.cardinality/many"));
        check "upsert-property! bumps block/updated-at"
          ((match Ldb.value e "block/updated-at" with
-           | Some (Int t) -> float_of_int t
+           | Some (Int64 t) -> Int64.to_float t
            | Some (Instant t) -> Int64.to_float t
            | Some (Float t) -> t
            | _ -> 0.)
@@ -1404,7 +1404,7 @@ let test_create_property_text_block_2 () =
               Db_test_util.{ default_page with pg_title = Some "page1" };
             Db_test_util.blocks =
               [ Db_test_util.{ default_block with b_title = Some "b1";
-                                b_properties = [ "num", Db_test_util.Int 2 ] };
+                                b_properties = [ "num", Db_test_util.Int64 2 ] };
                 Db_test_util.{ default_block with b_title = Some "b2" } ] } ]
       ()
   in
@@ -1455,7 +1455,7 @@ let test_create_property_text_block_3 () =
             Db_test_util.blocks =
               [ Db_test_util.{ default_block with b_title = Some "b1";
                                 b_properties =
-                                  [ "num-many", Db_test_util.Set_ [ Db_test_util.Int 2 ] ] };
+                                  [ "num-many", Db_test_util.Set_ [ Db_test_util.Int64 2 ] ] };
                 Db_test_util.{ default_block with b_title = Some "b2" } ] } ]
       ()
   in
@@ -1499,7 +1499,7 @@ let test_set_block_property_basic_cases () =
               Db_test_util.{ default_page with pg_title = Some "page1" };
             Db_test_util.blocks =
               [ Db_test_util.{ default_block with b_title = Some "b1";
-                                b_properties = [ "num", Db_test_util.Int 2 ] };
+                                b_properties = [ "num", Db_test_util.Int64 2 ] };
                 Db_test_util.{ default_block with b_title = Some "b2" } ] } ]
       ()
   in
@@ -1548,7 +1548,8 @@ let test_set_block_property_basic_cases () =
     (match prop_value_ents b2'' "user.property/num" with
      | [ pv ] ->
          (match Ldb.value pv "logseq.property/value" with
-          | Some (Ref id) | Some (Int id) -> id = empty_placeholder_id
+          | Some (Ref id) -> id = empty_placeholder_id
+          | Some (Int64 id) -> Int64.equal id (Int64.of_int empty_placeholder_id)
           | _ -> pv.id = empty_placeholder_id)
      | _ -> false)
 
@@ -1561,9 +1562,9 @@ let test_set_block_property_basic_cases_2 () =
               Db_test_util.{ default_page with pg_title = Some "page1" };
             Db_test_util.blocks =
               [ Db_test_util.{ default_block with b_title = Some "b1";
-                                b_properties = [ "num", Db_test_util.Int 2 ] };
+                                b_properties = [ "num", Db_test_util.Int64 2 ] };
                 Db_test_util.{ default_block with b_title = Some "b2";
-                                b_properties = [ "num", Db_test_util.Int 3 ] } ] } ]
+                                b_properties = [ "num", Db_test_util.Int64 3 ] } ] } ]
       ()
   in
   let db = db_of conn in
@@ -2145,9 +2146,9 @@ let test_add_existing_values_to_closed_values () =
               Db_test_util.{ default_page with pg_title = Some "page1" };
             Db_test_util.blocks =
               [ Db_test_util.{ default_block with b_title = Some "b1";
-                                b_properties = [ "num", Db_test_util.Int 1 ] };
+                                b_properties = [ "num", Db_test_util.Int64 1 ] };
                 Db_test_util.{ default_block with b_title = Some "b2";
-                                b_properties = [ "num", Db_test_util.Int 2 ] } ] } ]
+                                b_properties = [ "num", Db_test_util.Int64 2 ] } ] } ]
       ()
   in
   let db = db_of conn in

@@ -224,7 +224,7 @@ let page_relative_path repo db (page : entity) ~(opts : opts) : string option =
   if Ldb.is_journal page then
     let day =
       match Ldb.value page "block/journal-day" with
-      | Some (Int n) -> Some n
+      | Some (Int64 n) -> Datascript.Util.int64_to_int n
       | _ -> None
     in
     (match normalize_file_stem_opt (opts.journal_file_stem_fn day) with
@@ -422,7 +422,7 @@ let status_marker db (v : value) : string option =
             | None ->
                 (match Ldb.value status "logseq.property/value" with
                  | Some (String c) -> status_marker_content c
-                 | Some (Int n) -> status_marker_content (string_of_int n)
+                 | Some (Int64 n) -> status_marker_content (Int64.to_string n)
                  | _ -> None))
        | None -> None)
   | _ -> None
@@ -815,7 +815,7 @@ let mirrorable_pages db : entity list =
   |> List.stable_sort (fun (a : entity) (b : entity) ->
          let day e =
            match Ldb.value e "block/journal-day" with
-           | Some (Int n) -> string_of_int n
+           | Some (Int64 n) -> Int64.to_string n
            | _ -> ""
          in
          let title e =
@@ -881,7 +881,7 @@ let mirror_page repo db (page_id : entity_id) (opts : opts)
         else
           let journal_day =
             match Ldb.value page "block/journal-day" with
-            | Some (Int n) -> Some n
+            | Some (Int64 n) -> Datascript.Util.int64_to_int n
             | _ -> None
           in
           let duplicate_day =
@@ -889,7 +889,7 @@ let mirror_page repo db (page_id : entity_id) (opts : opts)
             && (match journal_day with
                 | Some day ->
                     Datascript.datoms db Datascript.Avet
-                      ~a:"block/journal-day" ~v:(Int day) ()
+                      ~a:"block/journal-day" ~v:(Int64 (Int64.of_int day)) ()
                     |> Seq.take 2 |> List.of_seq |> List.length > 1
                 | None -> false)
           in

@@ -628,11 +628,11 @@ let test_imported_snapshot_blocks_local_revisions () =
     (Ldb.string_value block "block/title" = Some "downloaded");
   let tx_id =
     match Ldb.value block "block/tx-id" with
-    | Some (Int n) -> n
-    | _ -> -1
+    | Some (Int64 n) -> n
+    | _ -> -1L
   in
-  check "remote tx-id not retained" (tx_id <> 42);
-  check "local tx stamped" (tx_id = db.max_tx)
+  check "remote tx-id not retained" (not (Int64.equal tx_id 42L));
+  check "local tx stamped" (Int64.equal tx_id (Int64.of_int db.max_tx))
 
 (* ---------- export-client-ops-db-binary ---------- *)
 

@@ -3235,7 +3235,8 @@ let test_local_checksum_matches_recompute_after_post_pipeline_update () =
       with_datascript_conns conn (Some ops) (fun () ->
           let page_id =
             match Ldb.value parent "block/page" with
-            | Some (Ref id | Int id) -> id
+            | Some (Ref id) -> id
+            | Some (Int64 id) -> Datascript.Util.int64_to_int_exn "block/page" id
             | _ -> failwith "no page ref"
           in
           let parent_id = parent.id in
@@ -3506,7 +3507,8 @@ let test_remote_batch_drops_follow_up_ops_for_stale_created_block () =
       let conn, ops, parent, _c1, _c2, _c3 = setup_parent_child () in
       let page_id =
         match Ldb.value parent "block/page" with
-        | Some (Ref id | Int id) -> id
+        | Some (Ref id) -> id
+        | Some (Int64 id) -> Datascript.Util.int64_to_int_exn "block/page" id
         | _ -> failwith "no page ref"
       in
       let missing_parent_uuid = fresh_uuid () in
@@ -3773,9 +3775,16 @@ let test_indent_outdent_direct_outdent_undo_restores_right_sibling_parent
             match ent_by_block_uuid (Datascript.db conn) u with
             | Some e -> (
                 match Ldb.value e "block/parent" with
-                | Some (Ref id | Int id) -> (
+                | Some (Ref id) -> (
                     match Ldb.ent_of_id (Datascript.db conn) id with
                     | Some p -> Some (ent_block_uuid p)
+                    | None -> None)
+                | Some (Int64 id) -> (
+                    match Datascript.Util.int64_to_int id with
+                    | Some id -> (
+                        match Ldb.ent_of_id (Datascript.db conn) id with
+                        | Some p -> Some (ent_block_uuid p)
+                        | None -> None)
                     | None -> None)
                 | _ -> None)
             | None -> None
@@ -5056,7 +5065,7 @@ let test_delete_page_rewrites_node_refs_and_semantic_undo_redo () =
             (match ent_by_block_uuid (Datascript.db conn) page_uuid with
              | Some e -> (
                  match Ldb.value e "logseq.property/deleted-at" with
-                 | Some (Int _ | Instant _) -> true
+                 | Some (Int64 _ | Instant _) -> true
                  | _ -> false)
              | None -> false)))
 
@@ -5442,7 +5451,7 @@ let batch_set_property_raw_uuid_body () =
           in
           check "heading 2"
             (match heading_v with
-             | [ Int 2 ] -> true
+             | [ Int64 2L ] -> true
              | [ Float f ] -> f = 2.
              | _ -> false);
           let r2 =
@@ -7045,13 +7054,13 @@ let test_rebase_drops_stale_title_add_for_deleted_reference_view () =
                [ wire_map
                    [ ( "tx-data"
                      , Wire.Array
-                         [ raw_datom "block/created-at" (Int now)
+                         [ raw_datom "block/created-at" (Int64 (Int64.of_int now))
                          ; raw_datom "block/order" (String "cD66")
                          ; raw_datom "block/page" (Ref page_id)
                          ; raw_datom "block/parent" (Ref page_id)
                          ; raw_datom "block/title"
                              (String "Unlinked references")
-                         ; raw_datom "block/updated-at" (Int now)
+                         ; raw_datom "block/updated-at" (Int64 (Int64.of_int now))
                          ; raw_datom "block/uuid" (Uuid view_uuid)
                          ; raw_datom "logseq.property/view-for"
                              (Ref page_id)
@@ -9462,7 +9471,7 @@ let test_reverse_tx_data_create_property_text_block_restores_base () =
 let history_block_count (db : db) (block_id : int) : int =
   List.length
     (Datascript.q_string
-       ~inputs:[ Arg_scalar (Result_value (Int block_id)) ] db
+       ~inputs:[ Arg_scalar (Result_value (Int64 (Int64.of_int block_id))) ] db
        "[:find ?h :in $ ?block :where [?h :logseq.property.history/block ?block]]")
 
 (* cljs (set (map :db/ident (:block/tags e))) *)
@@ -11196,7 +11205,7 @@ let select_offline_inserted conn template_root_uuid (title : string)
         List.filter_map
           (fun v ->
              match v with
-             | Result_value (Int id) -> Ldb.ent_of_id db id
+             | Result_value (Int64 id) -> Option.bind (Datascript.Util.int64_to_int id) (Ldb.ent_of_id db)
              | Result_entity id -> Ldb.ent_of_id db id
              | _ -> None)
           row
@@ -11204,7 +11213,7 @@ let select_offline_inserted conn template_root_uuid (title : string)
         List.filter_map
           (fun row ->
              match row with
-             | [ Result_value (Int id) ] -> Ldb.ent_of_id db id
+             | [ Result_value (Int64 id) ] -> Option.bind (Datascript.Util.int64_to_int id) (Ldb.ent_of_id db)
              | [ Result_entity id ] -> Ldb.ent_of_id db id
              | _ -> None)
           rows
@@ -11625,9 +11634,16 @@ let test_undo_redo_apply_template_rewrites_property_value_refs () =
                       with
                       | Some u -> Some u
                       | None -> None)
-                  | Some (Ref id) | Some (Int id) -> (
+                  | Some (Ref id) -> (
                       match Ldb.ent_of_id (Datascript.db conn) id with
                       | Some e -> Some (ent_block_uuid e)
+                      | None -> None)
+                  | Some (Int64 id) -> (
+                      match Datascript.Util.int64_to_int id with
+                      | Some id -> (
+                          match Ldb.ent_of_id (Datascript.db conn) id with
+                          | Some e -> Some (ent_block_uuid e)
+                          | None -> None)
                       | None -> None)
                   | Some (Keyword ident) -> (
                       match
@@ -11862,7 +11878,7 @@ let test_additional_outliner_operations_upload () =
              Sqlite_export.build_export source_db
                (Map
                   [ Keyword "export-type", Keyword "page"
-                  ; Keyword "page-id", Int source_page.id ])
+                  ; Keyword "page-id", Int64 (Int64.of_int source_page.id) ])
            in
            let child1_uuid = ent_block_uuid child1 in
            let args =

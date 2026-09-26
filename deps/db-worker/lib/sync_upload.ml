@@ -366,10 +366,10 @@ let create_remote_graph_aux repo ~graph_e2ee ~graph_ready_for_use
                 match v with
                 | Map kvs ->
                     (match List.assoc_opt (Keyword "major") kvs with
-                     | Some (Int n) -> string_of_int n
+                     | Some (Int64 n) -> Int64.to_string n
                      | Some (Float f) -> string_of_int (int_of_float f)
                      | _ -> "")
-                | Int n -> string_of_int n
+                | Int64 n -> Int64.to_string n
                 | _ -> "")
             | None -> "")
         | None -> ""

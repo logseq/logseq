@@ -366,7 +366,7 @@ let get_missing_ref_by_lookup (missing_refs : Wire.t list)
     (tag_lookups : Wire.t list) : (Wire.t * Wire.t) list =
   (* cljs writes (common-util/time-ms) — a plain number; Wire.Int64
      serializes as a raw transit number (never ~t) *)
-  let now = Wire.Int64 (Common_util.time_ms ()) in
+  let now = Ds_wire.wire_int64 (Common_util.time_ms ()) in
   List.filter_map
     (fun block ->
        match mget "block/uuid" block with

@@ -351,8 +351,8 @@ let test_permanently_delete_recycled_page_removes_blocks_parented_by_page () =
            ; attrs =
                [ "block/uuid", One_value (Uuid block_uuid)
                ; "block/title", One_value (String "parented by page1")
-               ; "block/created-at", One_value (Int n)
-               ; "block/updated-at", One_value (Int n)
+               ; "block/created-at", One_value (Int64 (Int64.of_int n))
+               ; "block/updated-at", One_value (Int64 (Int64.of_int n))
                ; "block/parent", One_value (Ref page1.id)
                ; "block/page", One_value (Ref page2.id)
                ; "block/order", One_value (String "a0") ] } ]);
@@ -385,10 +385,10 @@ let test_permanently_delete_recycled_converted_page_removes_property_value_block
   let target_uuid = uuid_of target in
   let value_id =
     List.find_map
-      (function Result_value (Int i) -> Some i | _ -> None)
+      (function Result_value (Int64 i) -> Datascript.Util.int64_to_int i | _ -> None)
       (List.concat
          (Datascript.q_string
-            ~inputs:[ Arg_scalar (Result_value (Int target_id)) ] db
+            ~inputs:[ Arg_scalar (Result_value (Int64 (Int64.of_int target_id))) ] db
             "[:find [?value ...] :in $ ?target :where \
              [?value :block/parent ?target] \
              [?value :logseq.property/created-from-property]]"))
@@ -436,10 +436,10 @@ let test_gc_recycled_converted_page_removes_property_value_blocks () =
   let target_id = target.id in
   let value_id =
     List.find_map
-      (function Result_value (Int i) -> Some i | _ -> None)
+      (function Result_value (Int64 i) -> Datascript.Util.int64_to_int i | _ -> None)
       (List.concat
          (Datascript.q_string
-            ~inputs:[ Arg_scalar (Result_value (Int target_id)) ] db
+            ~inputs:[ Arg_scalar (Result_value (Int64 (Int64.of_int target_id))) ] db
             "[:find [?value ...] :in $ ?target :where \
              [?value :block/parent ?target] \
              [?value :logseq.property/created-from-property]]"))
@@ -508,7 +508,7 @@ let test_insert_blocks_stores_numeric_timestamps () =
        { Outliner_core.default_insert_opts with keep_uuid = true } []);
   let e = entity_by_uuid_exn conn new_uuid in
   let is_numeric = function
-    | Some (Datascript.Int _) | Some (Datascript.Float _) -> true
+    | Some (Datascript.Int64 _) | Some (Datascript.Float _) -> true
     | _ -> false
   in
   check "block/created-at stored as a plain number"
@@ -591,8 +591,8 @@ let test_permanently_delete_recycled_block_removes_corresponding_view_history
            ; attrs =
                [ "block/uuid", One_value (Uuid view_uuid)
                ; "block/title", One_value (String "target view")
-               ; "block/created-at", One_value (Int n)
-               ; "block/updated-at", One_value (Int n)
+               ; "block/created-at", One_value (Int64 (Int64.of_int n))
+               ; "block/updated-at", One_value (Int64 (Int64.of_int n))
                ; "logseq.property/view-for", One_value (Ref target.id)
                ; "logseq.property.view/type",
                  One_value (Keyword "logseq.property.view/type.table")
@@ -602,8 +602,8 @@ let test_permanently_delete_recycled_block_removes_corresponding_view_history
            { db_id = None
            ; attrs =
                [ "block/uuid", One_value (Uuid target_history_uuid)
-               ; "block/created-at", One_value (Int n)
-               ; "block/updated-at", One_value (Int n)
+               ; "block/created-at", One_value (Int64 (Int64.of_int n))
+               ; "block/updated-at", One_value (Int64 (Int64.of_int n))
                ; "logseq.property.history/block", One_value (Ref target.id)
                ; "logseq.property.history/property", One_value (Ref status_id)
                ; "logseq.property.history/scalar-value",
@@ -612,8 +612,8 @@ let test_permanently_delete_recycled_block_removes_corresponding_view_history
            { db_id = None
            ; attrs =
                [ "block/uuid", One_value (Uuid view_history_uuid)
-               ; "block/created-at", One_value (Int n)
-               ; "block/updated-at", One_value (Int n)
+               ; "block/created-at", One_value (Int64 (Int64.of_int n))
+               ; "block/updated-at", One_value (Int64 (Int64.of_int n))
                ; "logseq.property.history/block",
                  One_value
                    (Ref_to (Lookup_ref ("block/uuid", Uuid view_uuid)))
@@ -741,7 +741,7 @@ let test_new_graph_should_be_valid () =
           (fun r ->
             match r with
             | Result_entity id -> Some id
-            | Result_value (Int id) -> Some id
+            | Result_value (Int64 id) -> Datascript.Util.int64_to_int id
             | _ -> None)
           row
     | _ -> []
@@ -783,8 +783,7 @@ let test_new_graph_should_be_valid () =
   List.iter
     (fun row ->
       match row with
-      | [ Result_entity p; Result_entity c ]
-      | [ Result_value (Int p); Result_value (Int c) ] ->
+      | [ Result_entity p; Result_entity c ] -> (
           let parent = Option.get (Ldb.ent_of_id db p) in
           let child = Option.get (Ldb.ent_of_id db c) in
           check "new-graph-should-be-valid extends"
@@ -792,7 +791,19 @@ let test_new_graph_should_be_valid () =
                Outliner_validate.validate_extends_property_have_correct_type
                  (Some parent) [ child ];
                true
-             with _ -> false)
+             with _ -> false))
+      | [ Result_value (Int64 p); Result_value (Int64 c) ] -> (
+          match Datascript.Util.int64_to_int p, Datascript.Util.int64_to_int c with
+          | Some p, Some c ->
+              let parent = Option.get (Ldb.ent_of_id db p) in
+              let child = Option.get (Ldb.ent_of_id db c) in
+              check "new-graph-should-be-valid extends"
+                (try
+                   Outliner_validate.validate_extends_property_have_correct_type
+                     (Some parent) [ child ];
+                   true
+                 with _ -> false)
+          | _ -> ())
       | _ -> ())
     pairs
 
@@ -824,8 +835,8 @@ let test_toggle_reaction_op () =
   let now = 1234 in
   transact_maps conn
     [ [ "block/uuid", Uuid user_uuid; "block/name", Str "user";
-        "block/title", Str "user"; "block/created-at", Int now;
-        "block/updated-at", Int now;
+        "block/title", Str "user"; "block/created-at", Int64 now;
+        "block/updated-at", Int64 now;
         "block/tags", Set_ [ Kw "logseq.class/Page" ] ] ];
   let block = find_block conn "Block" in
   let target_uuid = uuid_of block in
@@ -969,12 +980,12 @@ let test_apply_ops_plugin_property_sequence () =
      | None -> false);
   check "plugin-sequence x3"
     (match Ldb.ref_ent block' "plugin.property._test_plugin/x3" with
-     | Some v -> Ldb.value v "logseq.property/value" = Some (Int 1)
+     | Some v -> Ldb.value v "logseq.property/value" = Some (Int64 1L)
      | None -> false);
   check "plugin-sequence x4"
     (Ldb.ref_ents block' "plugin.property._test_plugin/x4"
      |> List.filter_map (fun v -> Ldb.value v "logseq.property/value")
-     = [ Int 1 ]);
+     = [ Int64 1L ]);
   check "plugin-sequence x5"
     (Ldb.string_value block' "plugin.property._test_plugin/x5"
      = Some "{\"foo\":\"bar\"}");
@@ -1109,7 +1120,7 @@ let test_apply_template_op_resolves_dynamic_variables () =
     | [ [ r ] ] -> (
         match r with
         | Result_entity id -> Ldb.ent_of_id (db_of conn) id
-        | Result_value (Int id) -> Ldb.ent_of_id (db_of conn) id
+        | Result_value (Int64 id) -> Option.bind (Datascript.Util.int64_to_int id) (Ldb.ent_of_id (db_of conn))
         | _ -> None)
     | _ -> None
   in
@@ -1262,7 +1273,7 @@ let test_bulk_block_refs_preserve_datetime_and_content_rules () =
             blocks =
               [ { default_block with
                   b_title = Some "b1";
-                  b_properties = [ "datetime", Int timestamp ] } ] } ]
+                  b_properties = [ "datetime", Int64 timestamp ] } ] } ]
       ()
   in
   let db = db_of conn in
@@ -1271,7 +1282,7 @@ let test_bulk_block_refs_preserve_datetime_and_content_rules () =
   let alias_uuid = gen_uuid () and journal_uuid = gen_uuid () in
   transact_maps conn
     [ [ "block/uuid", Uuid journal_uuid; "block/title", Str "Sep 8th, 2026";
-        "block/journal-day", Int 20260908;
+        "block/journal-day", Int64 20260908;
         "block/tags", Vec [ Kw "logseq.class/Journal" ] ];
       [ "block/uuid", Uuid alias_uuid; "block/title", Str "alias" ];
       [ "block/uuid", Uuid (uuid_of block);
@@ -1310,7 +1321,7 @@ let test_blocks_vec_tree_data_preserves_caller_field_policy () =
         [ Keyword "block/uuid", Pulled_scalar (Uuid "a0a0a0a0-0000-4000-8000-000000000002")
         ; Keyword "block/order", Pulled_scalar (String "a0")
         ; Keyword "block/parent", Pulled_scalar (Ref 1)
-        ; Keyword "block/tx-id", Pulled_scalar (Int 9) ] }
+        ; Keyword "block/tx-id", Pulled_scalar (Int64 9L) ] }
   in
   let result =
     Outliner_tree.vec_tree_data ~include_root:false ~root:None ~root_id:1
@@ -1949,9 +1960,9 @@ let test_delete_page () =
   let d1 = Option.get (Ldb.get_page db (String "D1")) in
   let b1 = Option.get (find_block_by_content db "b1") in
   transact_maps conn
-    [ [ "db/id", Int b1.id
+    [ [ "db/id", Int64 b1.id
       ; "block/title", Str ("b1 [[" ^ uuid_of d1 ^ "]]")
-      ; "block/refs", Set_ [ Int d1.id ] ] ];
+      ; "block/refs", Set_ [ Int64 d1.id ] ] ];
   let db = db_of conn in
   let b1' = ent_of_ref_exn db (Entity_id b1.id) in
   check "b1 refs d1" (List.mem d1.id (Ldb.ref_ids b1' "block/refs"));
@@ -1969,7 +1980,7 @@ let test_delete_page () =
       | None -> false));
   check "deleted-at is an int"
     (match Ldb.value d1' "logseq.property/deleted-at" with
-     | Some (Int _) -> true
+     | Some (Int64 _) -> true
      | _ -> false);
   (* f6fc6f78ac: assert the stored :block/title datom keeps the internal
      page ref; :block/raw-title is a derived lookup with no stored datoms *)
@@ -2276,7 +2287,7 @@ open Datascript
      [:logseq.class/Page :logseq.class/Page]' — lib emits a duplicated
      block/tags ref pair that datascript-ocaml reads as a lookup-ref
      (engine; insert-blocks-reuses-page-* cases).
-   - Negative db/id tempids: lib maps 'Int n' to 'Entity_id n' in
+   - Negative db/id tempids: lib maps 'Int64 n' to 'Entity_id n' in
      block_map.ml/db_transact.ml/outliner_core.ml regardless of sign, so
      {:db/id -1} in tx data fails 'entity id must not be negative' inside
      apply_tx (insert-blocks-resolves-journal-class-tagged-refs).
@@ -2448,20 +2459,20 @@ let test_blocks_with_level_handles_10k_deep_tree () =
   let blocks : Block_map.t list =
     List.init 10000 (fun i ->
         let id = i + 1 in
-        [ "db/id", Int id
+        [ "db/id", Int64 (Int64.of_int id)
         ; "block/uuid", Uuid (string_of_int id)
         ; "block/parent"
-        , Datascript.Map [ Datascript.Keyword "db/id", Int (id - 1) ] ])
+        , Datascript.Map [ Datascript.Keyword "db/id", Int64 (Int64.of_int (id - 1)) ] ])
   in
   let started = Unix.gettimeofday () in
   let result = Outliner_core.blocks_with_level blocks in
   let elapsed_ms = (Unix.gettimeofday () -. started) *. 1000. in
   check "first block level is 1"
-    (Block_map.attr_value (List.hd result) "block/level" = Some (Int 1));
+    (Block_map.attr_value (List.hd result) "block/level" = Some (Int64 1L));
   check "last block level is 10000"
     (Block_map.attr_value
        (List.nth result 9999) "block/level"
-     = Some (Int 10000));
+     = Some (Int64 10000L));
   check "10k level calculation under 250ms" (elapsed_ms < 250.)
 
 (* (deftest existing-inline-class-uses-its-canonical-uuid ...) *)
@@ -2604,7 +2615,7 @@ let test_insert_blocks_resolves_journal_class_tagged_refs () =
       ; Datascript.Keyword "block/title", String journal_title
       ; Datascript.Keyword "block/name"
       , String (Ldb.page_name_sanity_lc journal_title)
-      ; Datascript.Keyword "block/journal-day", Int journal_day
+      ; Datascript.Keyword "block/journal-day", Int64 (Int64.of_int journal_day)
       ; Datascript.Keyword "block/tags"
       , Datascript.List [ Datascript.Keyword "logseq.class/Journal" ] ]
   in
@@ -2613,7 +2624,7 @@ let test_insert_blocks_resolves_journal_class_tagged_refs () =
     List.length
       (List.of_seq
          (Datascript.datoms db Avet ~a:"block/journal-day"
-            ~v:(Int journal_day) ()))
+            ~v:(Int64 (Int64.of_int journal_day)) ()))
   in
   let insert_ref page_uuid =
     let result, blocks =
@@ -2837,7 +2848,7 @@ let test_save_block_rejects_built_in_entity () =
   throws_with "built-in entity can't be saved" "can't be modified"
     (fun () ->
       save_block_bang conn
-        [ "db/id", Int placeholder.id
+        [ "db/id", Int64 (Int64.of_int placeholder.id)
         ; "block/title", String "hacked" ]
         ())
 
@@ -3044,7 +3055,7 @@ let core_cases : unit Alcotest.test_case list =
    and save-block path mget_int->"db/id"->Entity_id (:967); both reach
    max_explicit_tx_entity which rejects negative Entity_id
    ("entity id must not be negative: -1"). No workaround added — same fix
-   (negative Int db/id -> Temp_id, not Entity_id) covers all cases. *)
+   (negative Int64 db/id -> Temp_id, not Entity_id) covers all cases. *)
 
 (* cljs ->lookup-ref *)
 let uuid_lookup_ref (u : string) : value =
@@ -3107,7 +3118,7 @@ let clipboard_block (db : db) (block : entity) : Block_map.t =
                      (List.filter_map (uuid_of_te db) tes)) ))
       (Datascript.entity_attrs block)
   in
-  ("db/id", Int block.id) :: ("block/uuid", Uuid (uuid_of block)) :: attrs
+  ("db/id", Int64 (Int64.of_int block.id)) :: ("block/uuid", Uuid (uuid_of block)) :: attrs
 
 (* cljs copied-blocks-for *)
 let copied_blocks_for (db : db) (block : entity)
@@ -3118,10 +3129,10 @@ let copied_blocks_for (db : db) (block : entity)
        (uuid_of block))
 
 (* cljs passes the target entity to insert-blocks!; insert_blocks resolves
-   it via "db/id". Prepend the Int eid cljs would have supplied — of_entity
+   it via "db/id". Prepend the Int64 eid cljs would have supplied — of_entity
    emits ("db/id", Ref id), which mget_int misses (known lib bug). *)
 let target_bm (e : entity) : Block_map.t =
-  ("db/id", Int e.id)
+  ("db/id", Int64 (Int64.of_int e.id))
   :: List.remove_assoc "db/id" (Block_map.of_entity e)
 
 (* cljs outline-child-titles — children sorted by order, property-value
@@ -3400,7 +3411,8 @@ let test_paste_page_entity_links_to_existing_page () =
     Datascript.q_string db
       "[:find [?e ...] :where [?e :block/name \"pagea\"]]"
     |> List.filter_map (function
-         | [ Result_entity i ] | [ Result_value (Int i) ] -> Some i
+         | [ Result_entity i ] -> Some i
+         | [ Result_value (Int64 i) ] -> Datascript.Util.int64_to_int i
          | _ -> None)
   in
   check "paste must not create a second page entity"
@@ -3547,8 +3559,8 @@ let cut_property_cases : paste_case list =
     ; pc_extra_pages = []
     ; pc_block_title = "b1"
     ; pc_block_tags = []
-    ; pc_block_props = [ "num", Db_test_util.Int 2 ]
-    ; pc_expected = [ "user.property/num", Int 2 ] }
+    ; pc_block_props = [ "num", Db_test_util.Int64 2 ]
+    ; pc_expected = [ "user.property/num", Int64 2L ] }
   ; { pc_title = "number cardinality-many"
     ; pc_properties =
         [ "num-many"
@@ -3558,9 +3570,9 @@ let cut_property_cases : paste_case list =
     ; pc_block_title = "b1"
     ; pc_block_tags = []
     ; pc_block_props =
-        [ "num-many", Set_ [ Db_test_util.Int 3; Db_test_util.Int 4 ] ]
+        [ "num-many", Set_ [ Db_test_util.Int64 3; Db_test_util.Int64 4 ] ]
     ; pc_expected =
-        [ "user.property/num-many", Set [ Int 3; Int 4 ] ] }
+        [ "user.property/num-many", Set [ Int64 3L; Int64 4L ] ] }
   ; { pc_title = "url cardinality-one"
     ; pc_properties =
         [ "link", { default_property with p_type = "url" } ]
@@ -3598,8 +3610,8 @@ let cut_property_cases : paste_case list =
     ; pc_extra_pages = []
     ; pc_block_title = "b1"
     ; pc_block_tags = []
-    ; pc_block_props = [ "when", Db_test_util.Int 1700000000000 ]
-    ; pc_expected = [ "user.property/when", Int 1700000000000 ] }
+    ; pc_block_props = [ "when", Db_test_util.Int64 1700000000000 ]
+    ; pc_expected = [ "user.property/when", Int64 1700000000000L ] }
   ; { pc_title = "date cardinality-one"
     ; pc_properties =
         [ "due", { default_property with p_type = "date" } ]
@@ -3609,7 +3621,7 @@ let cut_property_cases : paste_case list =
     ; pc_block_title = "b1"
     ; pc_block_tags = []
     ; pc_block_props = [ "due", build_page_ref ~journal:20250203 () ]
-    ; pc_expected = [ "user.property/due", Int 20250203 ] }
+    ; pc_expected = [ "user.property/due", Int64 20250203L ] }
   ; { pc_title = "date cardinality-many"
     ; pc_properties =
         [ "due-many"
@@ -3628,7 +3640,7 @@ let cut_property_cases : paste_case list =
             [ build_page_ref ~journal:20250203 ()
             ; build_page_ref ~journal:20250204 () ] ]
     ; pc_expected =
-        [ "user.property/due-many", Set [ Int 20250203; Int 20250204 ] ] }
+        [ "user.property/due-many", Set [ Int64 20250203L; Int64 20250204L ] ] }
   ; { pc_title = "node page ref"
     ; pc_properties =
         [ "page", { default_property with p_type = "node" } ]
@@ -3811,7 +3823,7 @@ let test_copy_paste_duplicates_text_property_values () =
       |> List.filter_map
            (function
              | Result_entity id -> Some id
-             | Result_value (Int id) -> Some id
+             | Result_value (Int64 id) -> Datascript.Util.int64_to_int id
              | _ -> None))
     |> List.filter_map (Ldb.ent_of_id db)
     |> List.find_opt (fun e -> e.id <> original.id)
@@ -5249,7 +5261,7 @@ let page_updated_at conn (page : entity) : int =
 (* cljs test-helper reset-page-updated-at! *)
 let reset_page_updated_at conn (page : entity) : int =
   transact_maps conn
-    [ [ "db/id", Int page.id; "block/updated-at", Int 1 ] ];
+    [ [ "db/id", Int64 page.id; "block/updated-at", Int64 1 ] ];
   page_updated_at conn page
 
 (* (deftest page-updated-at-bumps-on-child-insert-reorder-and-move ...) *)

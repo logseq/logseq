@@ -393,7 +393,7 @@ let apply_tx_meta (remote_tx : Wire.t) : tx_meta =
   let base =
     [ "transact-remote?", Bool true; "persist-op?", Bool false ]
     @ (match Wire.get "t" remote_tx with
-       | Some (Wire.Int n) -> [ "t", Int n ]
+       | Some (Wire.Int n) -> [ "t", Int64 (Int64.of_int n) ]
        | _ -> [])
   in
   let with_op =
@@ -2596,7 +2596,7 @@ let broadcast_sync_conflicts repo conflicts : unit =
                                  , match c.remote_t with
                                    | Some t -> Wire.Int t
                                    | None -> Wire.Nil )
-                               ; kw "created-at", Wire.Int64 c.created_at ])
+                               ; kw "created-at", Ds_wire.wire_int64 c.created_at ])
                           cs)) ]] )))
     uuids
 

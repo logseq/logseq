@@ -214,14 +214,14 @@ let test_safe_subs () =
 (* deftest timestamp-ms *)
 let test_timestamp_ms () =
   (* keeps positive epoch-ms numbers *)
-  check "timestamp-ms epoch" (Common_util.timestamp_ms (Int 1577934245000) = Some 1577934245000L);
+  check "timestamp-ms epoch" (Common_util.timestamp_ms (Int64 1577934245000L) = Some 1577934245000L);
   (* reads Date.getTime — 2020-01-02T03:04:05.000Z *)
   check "timestamp-ms Date"
     (Common_util.timestamp_ms (Instant 1577934245000L) = Some 1577934245000L);
   (* treats missing and non-positive values as absent *)
   List.iter
     (fun v -> check "timestamp-ms absent" (Common_util.timestamp_ms v = None))
-    [ Nil; Int 0; Int (-1); Instant 0L;
+    [ Nil; Int64 0L; Int64 (-1L); Instant 0L;
       String "2020-01-02T03:04:05.000Z"; Float Float.nan ]
 
 (* ---------- deps/common config_test.cljs ---------- *)

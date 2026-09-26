@@ -15,7 +15,7 @@
 open Datascript
 
 type error =
-  { e_in : value list (* :in — Keyword attr or Int index *)
+  { e_in : value list (* :in — Keyword attr or Int64 index *)
   ; e_path : string list (* :path — schema path, for debugging *)
   ; e_message : string
   ; e_type : string
@@ -74,12 +74,12 @@ let prim_ok (p : prim) (v : value) : bool =
   (* cljs int? — integer? accepts any number with no decimal part *)
   | PInt ->
       (match v with
-       | Int _ | Instant _ -> true
+       | Int64 _ -> true
        | Float f -> integer_float f
        | _ -> false)
   (* cljs double? is number? — JS numbers are all doubles, ints included *)
-  | PDouble -> (match v with Int _ | Float _ | Instant _ -> true | _ -> false)
-  | PNumber -> (match v with Int _ | Float _ | Instant _ -> true | _ -> false)
+  | PDouble -> (match v with Int64 _ | Float _ -> true | _ -> false)
+  | PNumber -> (match v with Int64 _ | Float _ -> true | _ -> false)
   | PBoolean -> (match v with Bool _ -> true | _ -> false)
   | PString -> (match v with String _ -> true | _ -> false)
   | PKeyword -> (match v with Keyword _ -> true | _ -> false)
@@ -234,7 +234,7 @@ let rec validate (ctx : vctx) (s : schema) (v : value) ~(in_ : value list)
            List.concat_map Fun.id
              (List.mapi
                 (fun i x ->
-                  validate ctx s x ~in_:(Int i :: in_) ~path:(string_of_int i :: path))
+                  validate ctx s x ~in_:(Int64 (Int64.of_int i) :: in_) ~path:(string_of_int i :: path))
                 xs)
        | _ ->
            [ { e_in = List.rev in_
@@ -247,7 +247,7 @@ let rec validate (ctx : vctx) (s : schema) (v : value) ~(in_ : value list)
            List.concat_map Fun.id
              (List.mapi
                 (fun i x ->
-                  validate ctx s x ~in_:(Int i :: in_) ~path:(string_of_int i :: path))
+                  validate ctx s x ~in_:(Int64 (Int64.of_int i) :: in_) ~path:(string_of_int i :: path))
                 xs)
        | _ ->
            [ { e_in = List.rev in_

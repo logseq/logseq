@@ -44,7 +44,8 @@ let add (e : int) (a : attr) (v : value) : tx_op =
 
 let ent_of_datom_v (db : db) (v : value) : entity option =
   match v with
-  | Int i | Ref i -> Ldb.ent_of_id db i
+  | Ref i -> Ldb.ent_of_id db i
+  | Int64 i -> Option.bind (Datascript.Util.int64_to_int i) (Ldb.ent_of_id db)
   | _ -> None
 
 (* ---------- rebuild-block-refs ---------- *)
@@ -154,7 +155,9 @@ let insert_tag_templates (tx_report : tx_report) : tx_op list =
         List.exists
           (fun (d : datom) ->
             d.added && d.a = "block/tags"
-            && (match d.v with Int i -> i = jid | Ref i -> i = jid
+            && (match d.v with
+                | Ref i -> i = jid
+                | Int64 i -> Int64.equal i (Int64.of_int jid)
                 | _ -> false))
           tx_report.tx_data
     | None -> false
@@ -185,7 +188,7 @@ let insert_tag_templates (tx_report : tx_report) : tx_op list =
               | [] -> []
               | first_child :: rest_children ->
                   (Block_map.put (Block_map.of_entity first_child)
-                     "logseq.property/used-template" (Int template.id)
+                     "logseq.property/used-template" (Int64 (Int64.of_int template.id))
                    :: List.map Block_map.of_entity rest_children)
                   |> List.map
                        (fun (m : Block_map.t) ->
@@ -231,7 +234,10 @@ let insert_tag_templates (tx_report : tx_report) : tx_op list =
           List.sort_uniq compare
             (List.filter_map
                (fun (d : datom) ->
-                 match d.v with Int i | Ref i -> Some i | _ -> None)
+                 match d.v with
+                 | Ref i -> Some i
+                 | Int64 i -> Datascript.Util.int64_to_int i
+                 | _ -> None)
                ds)
         in
         let templates =
@@ -308,7 +314,7 @@ let insert_tag_templates (tx_report : tx_report) : tx_op list =
                                 [ Block_map.to_tx_op db_with_pages
                                     [ "db/id", id_v
                                     ; "block/refs",
-                                      Set (List.map (fun i -> Int i) refs) ] ]
+                                      Set (List.map (fun i -> Int64 (Int64.of_int i)) refs) ] ]
                             | None -> [])))
                 inserted_blocks)
       insertion_inputs
@@ -338,7 +344,8 @@ let fix_page_tags (report : tx_report) : tx_op list =
           (match ent, tag with
            | Some e, Some tag_e
              when (match d.v with
-                   | Int i | Ref i -> i = tag_e.id
+                   | Ref i -> i = tag_e.id
+                   | Int64 i -> Int64.equal i (Int64.of_int tag_e.id)
                    | _ -> false)
                   && (match Ldb.string_value e "block/raw-title" with
                       | Some raw ->
@@ -368,7 +375,8 @@ let fix_page_tags (report : tx_report) : tx_op list =
                (match page_tag with
                 | Some pt
                   when (match d.v with
-                        | Int i | Ref i -> i = pt.id
+                        | Ref i -> i = pt.id
+                        | Int64 i -> Int64.equal i (Int64.of_int pt.id)
                         | _ -> false) ->
                     (* remove #Page when entity has other page-classes *)
                     let tag_idents =
@@ -473,7 +481,10 @@ let fix_inline_built_in_page_classes (report : tx_report) : tx_op list =
         | false -> []
         | true ->
             let vid =
-              match d.v with Int i | Ref i -> Some i | _ -> None
+              match d.v with
+              | Ref i -> Some i
+              | Int64 i -> Datascript.Util.int64_to_int i
+              | _ -> None
             in
             (match vid with
              | Some vid when List.mem vid class_ids ->
@@ -499,7 +510,7 @@ let fix_inline_built_in_page_classes (report : tx_report) : tx_op list =
                                page_tag
                            in
                            [ Block_map.to_tx_op db
-                               [ "db/id", Int id
+                               [ "db/id", Int64 (Int64.of_int id)
                                ; "block/title", String new_title ]
                            ; retract id "block/tags" d.v
                            ; retract id "block/tags"
@@ -537,8 +548,8 @@ let toggle_page_and_block (db : db) (report : tx_report) : tx_op list =
                   && Ldb.value root "db/ident" = None
                   && not (Ldb.built_in root) ->
                [ Block_map.to_tx_op db
-                   [ "db/id", Int root.id
-                   ; "block/parent", Int lp.id
+                   [ "db/id", Int64 (Int64.of_int root.id)
+                   ; "block/parent", Int64 (Int64.of_int lp.id)
                    ; "block/order",
                      String (Db_order.gen_key None None) ] ]
            | _ -> [])
@@ -549,14 +560,16 @@ let toggle_page_and_block (db : db) (report : tx_report) : tx_op list =
         let page_tag_update =
           d.a = "block/tags"
           && (match page_tag, d.v with
-              | Some pt, Int i | Some pt, Ref i -> i = pt.id
+              | Some pt, Ref i -> i = pt.id
+              | Some pt, Int64 i -> Int64.equal i (Int64.of_int pt.id)
               | _ -> false)
         in
         let added_parent = d.a = "block/parent" && d.added in
         let move_to_library =
           added_parent
           && (match library_page, d.v with
-              | Some lp, Int i | Some lp, Ref i -> i = lp.id
+              | Some lp, Ref i -> i = lp.id
+              | Some lp, Int64 i -> Int64.equal i (Int64.of_int lp.id)
               | _ -> false)
         in
         (* A page moved under another page creates a namespace whose
@@ -564,10 +577,17 @@ let toggle_page_and_block (db : db) (report : tx_report) : tx_op list =
         let move_under_page =
           added_parent && not move_to_library
           && (match d.v with
-              | Int i | Ref i ->
-                  (match entity report.db_after (Entity_id i) with
-                   | Some e -> Ldb.internal_page e
+              | Int64 i ->
+                  (match Datascript.Util.int64_to_int i with
+                   | Some i -> (
+                       match entity report.db_after (Entity_id i) with
+                       | Some e -> Ldb.internal_page e
+                       | None -> false)
                    | None -> false)
+              | Ref i -> (
+                  match entity report.db_after (Entity_id i) with
+                  | Some e -> Ldb.internal_page e
+                  | None -> false)
               | _ -> false)
         in
         if page_tag_update || move_to_library || move_under_page then
@@ -582,8 +602,8 @@ let toggle_page_and_block (db : db) (report : tx_report) : tx_op list =
                 | Some child when not (Ldb.is_page child) ->
                     Some
                       (Block_map.to_tx_op db
-                         [ "db/id", Int child_id
-                         ; "block/page", Int id ])
+                         [ "db/id", Int64 (Int64.of_int child_id)
+                         ; "block/page", Int64 (Int64.of_int id) ])
                 | _ -> None)
               (Ldb.get_block_full_children_ids report.db_after id)
           in
@@ -593,7 +613,7 @@ let toggle_page_and_block (db : db) (report : tx_report) : tx_op list =
               if move_to_library && not (Ldb.is_page ba) then
                 (* move non-page block to Library *)
                 Block_map.to_tx_op db
-                  [ "db/id", Int id
+                  [ "db/id", Int64 (Int64.of_int id)
                   ; "block/name",
                     String
                       (Ldb.page_name_sanity_lc
@@ -624,7 +644,7 @@ let toggle_page_and_block (db : db) (report : tx_report) : tx_op list =
                 in
                 let to_page_tx =
                   (Block_map.to_tx_op db
-                     [ "db/id", Int id
+                     [ "db/id", Int64 (Int64.of_int id)
                      ; "block/name",
                        String (Ldb.page_name_sanity_lc page_title)
                      ; "block/title", String page_title ]
@@ -659,7 +679,7 @@ let toggle_page_and_block (db : db) (report : tx_report) : tx_op list =
                     (match find_parent_page parent with
                      | Some pp ->
                          [ retract_attr id "block/name"
-                         ; add id "block/page" (Int pp.id) ]
+                         ; add id "block/page" (Int64 (Int64.of_int pp.id)) ]
                      | None -> [])
                 | None -> []
               end
@@ -731,7 +751,7 @@ let add_missing_properties_to_typed_display_blocks (db : db)
                      Ldb.get_key_value db "logseq.kv/latest-code-lang"
                    in
                    [ Block_map.to_tx_op db
-                       ([ "db/id", Int d.e
+                       ([ "db/id", Int64 (Int64.of_int d.e)
                         ; "logseq.property.node/display-type",
                           Keyword display_type ]
                         @ (match display_type, block, latest_code_lang with
@@ -799,7 +819,7 @@ let ensure_query_property_on_tag_additions (report : tx_report) : tx_op list =
                    [ Block_map.to_tx_op db value_block
                    ; Block_map.to_tx_op db
                        (Outliner_core.block_with_updated_at
-                          [ "db/id", Int block.id
+                          [ "db/id", Int64 (Int64.of_int block.id)
                           ; "logseq.property/query",
                             Ref_to
                               (Lookup_ref ("block/uuid", Uuid value_uuid)) ]) ])
@@ -822,7 +842,8 @@ let ensure_comments_blocks_property_on_tag_additions (report : tx_report)
            (fun (d : datom) ->
              if d.a = "block/tags" && d.added
                 && (match d.v with
-                    | Int i | Ref i -> i = comments_class.id
+                    | Ref i -> i = comments_class.id
+                    | Int64 i -> Int64.equal i (Int64.of_int comments_class.id)
                     | _ -> false)
              then Some d.e
              else None)
@@ -843,9 +864,9 @@ let ensure_comments_blocks_property_on_tag_additions (report : tx_report)
                  Some
                    (Block_map.to_tx_op db
                       (Outliner_core.block_with_updated_at
-                         [ "db/id", Int eid
+                         [ "db/id", Int64 (Int64.of_int eid)
                          ; "logseq.property.comments/blocks",
-                           Int parent.id ]))
+                           Int64 (Int64.of_int parent.id) ]))
              | _ -> None)
   | _ -> []
 
@@ -882,7 +903,7 @@ let add_created_by_ref_hook (db_before : db) (db_after : db)
         in
         let created_by_ref : value =
           match created_by_ent with
-          | Some e -> Int e.id
+          | Some e -> Int64 (Int64.of_int e.id)
           | None -> Ref_to (Temp_id "created-by-id")
         in
         let adds =
@@ -957,12 +978,23 @@ let revert_disallowed_changes (report : tx_report) : tx_op list =
          (fun (d : datom) ->
            if not d.added then []
            else if d.a = "block/tags" && (match d.v with
-                                          | Int i | Ref i ->
-                                              built_in_page i
+                                          | Ref i -> built_in_page i
+                                          | Int64 i -> (
+                                              match Datascript.Util.int64_to_int i with
+                                              | Some i -> built_in_page i
+                                              | None -> false)
                                           | _ -> false)
            then
              (match d.v with
-              | Int v | Ref v ->
+              | Int64 v -> (
+                  match Datascript.Util.int64_to_int v with
+                  | Some v ->
+                      [ retract_attr v "db/ident"
+                      ; retract_attr v "logseq.property.class/extends"
+                      ; retract v "block/tags"
+                          (Keyword "logseq.class/Tag") ]
+                  | None -> [])
+              | Ref v ->
                   [ retract_attr v "db/ident"
                   ; retract_attr v "logseq.property.class/extends"
                   ; retract v "block/tags"
@@ -997,7 +1029,7 @@ let revert_disallowed_changes (report : tx_report) : tx_op list =
                           whole extends set *)
                        retract_attr d.e d.a
                        :: [ Block_map.to_tx_op db_after
-                              [ "db/id", Int d.e; d.a, Set prev_vs ] ]
+                              [ "db/id", Int64 (Int64.of_int d.e); d.a, Set prev_vs ] ]
                    | [] -> [ retract d.e d.a d.v ])
               | None -> [])
            else if
@@ -1024,7 +1056,7 @@ let revert_disallowed_changes (report : tx_report) : tx_op list =
                       | (_ :: _) as prev_vs ->
                           (* cljs {e a (map :db/id prev-v)} *)
                           [ Block_map.to_tx_op db_after
-                              [ "db/id", Int d.e
+                              [ "db/id", Int64 (Int64.of_int d.e)
                               ; d.a, Set prev_vs ] ]
                       | [] ->
                           [ add d.e d.a
@@ -1323,7 +1355,7 @@ let transact_pipeline (tx_report : tx_report) : tx_report =
         then
           Some
             (Block_map.to_tx_op db_after
-               [ "db/id", Int db_id; "block/tx-id", Int tx_id ])
+               [ "db/id", Int64 (Int64.of_int db_id); "block/tx-id", Int64 (Int64.of_int tx_id) ])
         else None)
       revision_ids
   in

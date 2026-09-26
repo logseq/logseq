@@ -547,7 +547,7 @@ let build_initial_files (config_content : string) : BM.t list =
 
 (* cljs db-schema/version = (parse-schema-version "65.33") *)
 let db_schema_version : value =
-  Map [ Keyword "major", Int 65; Keyword "minor", Int 33 ]
+  Map [ Keyword "major", Int64 65L; Keyword "minor", Int64 33L ]
 
 (* cljs build-db-initial-data — the whole seed tx for a new graph.
    [db] is the fresh conn's db (used by Block_map.to_tx_op to decide which

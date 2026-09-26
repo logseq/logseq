@@ -193,7 +193,7 @@ let test_nested_insert_keeps_parent_revision_test () =
              Outliner_core.insert_blocks db_before
                [ [ "block/uuid", Uuid inserted_uuid
                  ; "block/title", String "inserted"
-                 ; "block/page", Int page.id ] ]
+                 ; "block/page", Int64 (Int64.of_int page.id) ] ]
                (Block_map.of_entity target)
                { Outliner_core.default_insert_opts with
                  sibling = true
@@ -233,7 +233,7 @@ let test_top_level_insert_keeps_page_revision_test () =
              Outliner_core.insert_blocks db_before
                [ [ "block/uuid", Uuid inserted_uuid
                  ; "block/title", String "inserted"
-                 ; "block/page", Int page.id ] ]
+                 ; "block/page", Int64 (Int64.of_int page.id) ] ]
                (Block_map.of_entity target)
                { Outliner_core.default_insert_opts with
                  sibling = true
@@ -312,13 +312,13 @@ let test_referenced_entity_timestamp_change_does_not_revise_rendered_blocks_test
   ignore
     (Datascript.transact_conn conn
        [ add owner.id "block/refs" (Ref_to (Entity_id page.id))
-       ; add page.id "block/tx-id" (Int 10)
-       ; add owner.id "block/tx-id" (Int 10) ]);
+       ; add page.id "block/tx-id" (Int64 10L)
+       ; add owner.id "block/tx-id" (Int64 10L) ]);
   let db_before = db_of conn in
   let tx_report =
     Datascript.with_tx ~tx_meta:[] db_before
       [ add page.id "block/updated-at"
-          (Int (Int64.to_int (Date_time_util.time_ms ()))) ]
+          (Int64 (Int64.of_int (Int64.to_int (Date_time_util.time_ms ())))) ]
   in
   let result = Worker_pipeline.transact_pipeline tx_report in
   check "referenced-entity timestamp keeps page revision"
@@ -436,10 +436,10 @@ let test_direct_child_visibility_keeps_its_membership_owner_revision_test () =
       let value = mk_value initial_db in
       ignore
         (Datascript.transact_conn conn
-           [ Add (Entity_id page.id, "block/tx-id", Int 10)
-           ; Add (Entity_id ancestor.id, "block/tx-id", Int 10)
-           ; Add (Entity_id parent.id, "block/tx-id", Int 10)
-           ; Add (Entity_id child.id, "block/tx-id", Int 10) ]);
+           [ Add (Entity_id page.id, "block/tx-id", Int64 10L)
+           ; Add (Entity_id ancestor.id, "block/tx-id", Int64 10L)
+           ; Add (Entity_id parent.id, "block/tx-id", Int64 10L)
+           ; Add (Entity_id child.id, "block/tx-id", Int64 10L) ]);
       let db_before = db_of conn in
       ignore
         (with_transact_pipeline (fun () ->
@@ -467,7 +467,7 @@ let test_direct_child_visibility_keeps_its_membership_owner_revision_test () =
            "direct-child-visibility %s: showing keeps parent revision" label)
         (hidden_parent_revision = revision (db_of conn) parent))
     [ ("recycled child", "logseq.property/deleted-at",
-       fun _ -> Int 1000)
+       fun _ -> Int64 1000L)
     ; ("text property value", "logseq.property/created-from-property",
        fun db ->
          (match entity db (Ident "logseq.property/query") with
@@ -490,7 +490,7 @@ let test_temp_inner_mutations_enter_the_pipeline_once_at_the_final_live_commit_t
     Option.get (Db_test_util.find_block_by_content (db_of conn) "before")
   in
   let block_id = block.id in
-  ignore (Datascript.transact_conn conn [ add block_id "block/tx-id" (Int 10) ]);
+  ignore (Datascript.transact_conn conn [ add block_id "block/tx-id" (Int64 10L) ]);
   let db_before = db_of conn in
   let outer_tx_meta : tx_meta =
     [ "rtc-tx?", Bool true; "with-local-changes?", Bool true ]
@@ -555,7 +555,7 @@ let test_temp_inner_mutations_enter_the_pipeline_once_at_the_final_live_commit_t
        in
        check "temp-inner-mutations canonical revision"
          (match revision (db_of conn) block, current_tx with
-          | Some (Int i), Some t -> i = t
+          | Some (Int64 i), Some t -> Int64.equal i (Int64.of_int t)
           | _ -> false)
    | [] -> check "temp-inner-mutations canonical revision" false)
 
@@ -800,8 +800,8 @@ let test_imported_data_rebuilds_block_refs_in_the_formal_pipeline_test () =
                   [ "block/uuid", ov (Uuid block_uuid)
                   ; "block/title",
                     ov (String (Page_ref.to_page_ref (uuid_of target)))
-                  ; "block/created-at", ov (Int 1000)
-                  ; "block/updated-at", ov (Int 1000)
+                  ; "block/created-at", ov (Int64 1000L)
+                  ; "block/updated-at", ov (Int64 1000L)
                   ; "block/page", ref_ent_attr (Entity_id page.id)
                   ; "block/parent", ref_ent_attr (Entity_id page.id)
                   ; "block/order", ov (String "a0") ] } ]);
@@ -924,8 +924,8 @@ let test_permanent_delete_recycled_page_removes_blocks_parented_by_page_test () 
            ; attrs =
                [ "block/uuid", ov (Uuid block_uuid)
                ; "block/title", ov (String "parented by page1")
-               ; "block/created-at", ov (Int now)
-               ; "block/updated-at", ov (Int now)
+               ; "block/created-at", ov (Int64 (Int64.of_int now))
+               ; "block/updated-at", ov (Int64 (Int64.of_int now))
                ; "block/parent", ref_ent_attr (Entity_id page1.id)
                ; "block/page", ref_ent_attr (Entity_id page2.id)
                ; "block/order", ov (String "a0") ] } ]);
@@ -1024,8 +1024,8 @@ let test_code_block_tag_addition_preserves_explicit_code_lang_test () =
               ; attrs =
                   [ "block/uuid", ov (Uuid code_block_uuid)
                   ; "block/title", ov (String "1 + 2")
-                  ; "block/created-at", ov (Int now)
-                  ; "block/updated-at", ov (Int now)
+                  ; "block/created-at", ov (Int64 (Int64.of_int now))
+                  ; "block/updated-at", ov (Int64 (Int64.of_int now))
                   ; "block/page", ref_ent_attr (Entity_id page.id)
                   ; "block/parent", ref_ent_attr (Entity_id page.id)
                   ; "block/order",
@@ -1056,8 +1056,8 @@ let test_code_block_tag_addition_preserves_explicit_code_lang_test () =
                   [ "block/uuid",
                     ov (Uuid code_block_without_lang_uuid)
                   ; "block/title", ov (String "plain code")
-                  ; "block/created-at", ov (Int now)
-                  ; "block/updated-at", ov (Int now)
+                  ; "block/created-at", ov (Int64 (Int64.of_int now))
+                  ; "block/updated-at", ov (Int64 (Int64.of_int now))
                   ; "block/page", ref_ent_attr (Entity_id page.id)
                   ; "block/parent", ref_ent_attr (Entity_id page.id)
                   ; "block/order",
@@ -1453,8 +1453,8 @@ let test_built_in_tag_must_not_convert_page_child_block_to_class_test () =
               ; attrs =
                   [ "block/uuid", ov (Uuid bad_block_uuid)
                   ; "block/title", ov (String "charlie")
-                  ; "block/created-at", ov (Int now)
-                  ; "block/updated-at", ov (Int now)
+                  ; "block/created-at", ov (Int64 (Int64.of_int now))
+                  ; "block/updated-at", ov (Int64 (Int64.of_int now))
                   ; "block/page", ref_ent_attr (Entity_id page1.id)
                   ; "block/parent", ref_ent_attr (Entity_id page1.id)
                   ; "block/order",
@@ -1485,8 +1485,8 @@ let test_built_in_tag_must_not_convert_page_child_block_to_class_test () =
                   [ "block/uuid", ov (Uuid new_tag_uuid)
                   ; "block/name", ov (String "standalone-tag")
                   ; "block/title", ov (String "standalone-tag")
-                  ; "block/created-at", ov (Int now)
-                  ; "block/updated-at", ov (Int now)
+                  ; "block/created-at", ov (Int64 (Int64.of_int now))
+                  ; "block/updated-at", ov (Int64 (Int64.of_int now))
                   ; "block/tags",
                     Many_entities
                       [ { db_id = Some (Ident "logseq.class/Tag")
@@ -1859,7 +1859,7 @@ let test_empty_tag_template_on_asset_allows_asset_create_test () =
                 ; "block/title", String "ableton"
                 ; "block/tags", Vector [ Keyword "logseq.class/Asset" ]
                 ; "logseq.property.asset/type", String "png"
-                ; "logseq.property.asset/size", Int 10
+                ; "logseq.property.asset/size", Int64 10L
                 ; "logseq.property.asset/checksum", String "abc123" ] ]
               (Block_map.of_entity home)
               { Outliner_core.default_insert_opts with
@@ -1979,15 +1979,15 @@ let test_journal_tag_template_applied_on_repeating_task_reschedule_test () =
                ; "block/page", One_value (Ref_to (Entity_id task.id))
                ; "block/parent", One_value (Ref_to (Entity_id task.id))
                ; "block/order", One_value (String "a1")
-               ; "block/created-at", One_value (Int now_i)
-               ; "block/updated-at", One_value (Int now_i)
+               ; "block/created-at", One_value (Int64 (Int64.of_int now_i))
+               ; "block/updated-at", One_value (Int64 (Int64.of_int now_i))
                ; "logseq.property/created-from-property",
                  One_value (Ref_to (Ident "logseq.property.repeat/recur-frequency"))
-               ; "logseq.property/value", One_value (Int 6) ] }
+               ; "logseq.property/value", One_value (Int64 6L) ] }
        ; ent_op task.id
            [ "logseq.property/status",
              ref_ent_attr (Ident "logseq.property/status.todo")
-           ; "logseq.property/scheduled", ov (Int now_i)
+           ; "logseq.property/scheduled", ov (Int64 (Int64.of_int now_i))
            ; "logseq.property.repeat/repeated?", ov (Bool true)
            ; "logseq.property.repeat/recur-frequency",
              ref_ent_attr (Temp_id "recur-freq")
@@ -2288,7 +2288,7 @@ let test_save_block_resolves_page_refs_in_worker_test () =
   in
   with_transact_pipeline (fun () ->
       save_block_bang conn
-        [ "db/id", Int first_block.id
+        [ "db/id", Int64 (Int64.of_int first_block.id)
         ; "block/uuid", Uuid (uuid_of first_block)
         ; "block/title", String (Page_ref.to_page_ref first_page_uuid)
         ; "block/refs", Vector [ page_ref_map first_page_uuid ] ]
@@ -2303,7 +2303,7 @@ let test_save_block_resolves_page_refs_in_worker_test () =
          | [ t ] -> Ldb.ident_of t = Some "logseq.class/Page"
          | _ -> false);
       save_block_bang conn
-        [ "db/id", Int second_block.id
+        [ "db/id", Int64 (Int64.of_int second_block.id)
         ; "block/uuid", Uuid (uuid_of second_block)
         ; "block/title", String (Page_ref.to_page_ref second_page_uuid)
         ; "block/refs", Vector [ page_ref_map second_page_uuid ] ]
@@ -2334,7 +2334,7 @@ let test_save_block_resolves_page_refs_in_worker_test () =
       check "second block title rewritten to [[foo]]" (display_title = "[[foo]]");
       (* tag-refs: a tag map also resolves to a class *)
       save_block_bang conn
-        [ "db/id", Int second_block.id
+        [ "db/id", Int64 (Int64.of_int second_block.id)
         ; "block/uuid", Uuid (uuid_of second_block)
         ; "block/title", String ("#" ^ Page_ref.to_page_ref tag_ref_uuid)
         ; ( "block/tags"
@@ -2379,7 +2379,7 @@ let test_save_block_resolves_page_refs_in_worker_test () =
       (* journal page refs get the Journal class *)
       let now = Date_time_util.time_ms () in
       save_block_bang conn
-        [ "db/id", Int second_block.id
+        [ "db/id", Int64 (Int64.of_int second_block.id)
         ; "block/uuid", Uuid (uuid_of second_block)
         ; "block/title", String (Page_ref.to_page_ref journal_uuid)
         ; ( "block/refs"
@@ -2388,7 +2388,7 @@ let test_save_block_resolves_page_refs_in_worker_test () =
                   [ "block/uuid", Uuid journal_uuid
                   ; "block/title", String "Jul 9th, 2026"
                   ; "block/name", String "jul 9th, 2026"
-                  ; "block/journal-day", Int 20260709
+                  ; "block/journal-day", Int64 20260709L
                   ; "block/created-at", Instant now
                   ; "block/updated-at", Instant now
                   ; "block/type", String "journal" ] ] ) ]
@@ -2399,7 +2399,7 @@ let test_save_block_resolves_page_refs_in_worker_test () =
         | None -> failwith "journal page missing"
       in
       check "journal-day kept"
-        (Ldb.value journal "block/journal-day" = Some (Int 20260709));
+        (Ldb.value journal "block/journal-day" = Some (Int64 20260709L));
       check "journal tagged Journal class"
         (match Ldb.ref_ents journal "block/tags" with
          | [ t ] -> Ldb.ident_of t = Some "logseq.class/Journal"
@@ -2471,11 +2471,11 @@ let test_batch_import_edn_datom_format_with_shifted_builtin_eids_test () =
               (fun d ->
                 match d with
                 | Vector
-                    [ Int e
+                    [ Int64 e
                     ; Keyword "db/ident"
                     ; Keyword "logseq.property/color.purple" ]
                 | List
-                    [ Int e
+                    [ Int64 e
                     ; Keyword "db/ident"
                     ; Keyword "logseq.property/color.purple" ] ->
                     Some e
@@ -2501,7 +2501,7 @@ let test_batch_import_edn_datom_format_with_shifted_builtin_eids_test () =
      | _ -> false);
   check "test relies on shifted built-in eids between source and dest"
     (match source_purple_eid, dest_purple_eid with
-     | Some s, Some d -> s <> d
+     | Some s, Some d -> not (Int64.equal s (Int64.of_int d))
      | _ -> false);
   let result =
     with_transact_pipeline (fun () ->
@@ -2542,18 +2542,18 @@ let test_batch_import_edn_invalid_datom_format_does_not_change_db_test () =
         , Keyword "datoms" )
       ; ( Keyword "datoms"
         , Vector
-            [ vec [ Int 1; Keyword "block/title"; String "Orphan Page" ]
-            ; vec [ Int 1; Keyword "block/name"; String "orphan page" ]
+            [ vec [ Int64 1L; Keyword "block/title"; String "Orphan Page" ]
+            ; vec [ Int64 1L; Keyword "block/name"; String "orphan page" ]
             ; vec
-                [ Int 1
+                [ Int64 1L
                 ; Keyword "block/uuid"
                 ; Uuid "33333333-3333-4333-8333-000000000001" ]
-            ; vec [ Int 1; Keyword "block/tags"; Int 2 ]
-            ; vec [ Int 2; Keyword "block/title"; String "Page" ]
-            ; vec [ Int 2; Keyword "block/name"; String "page" ]
-            ; vec [ Int 2; Keyword "db/ident"; Keyword "logseq.class/Page" ]
+            ; vec [ Int64 1L; Keyword "block/tags"; Int64 2L ]
+            ; vec [ Int64 2L; Keyword "block/title"; String "Page" ]
+            ; vec [ Int64 2L; Keyword "block/name"; String "page" ]
+            ; vec [ Int64 2L; Keyword "db/ident"; Keyword "logseq.class/Page" ]
             ; vec
-                [ Int 2
+                [ Int64 2L
                 ; Keyword "block/uuid"
                 ; Uuid "33333333-3333-4333-8333-000000000002" ] ] ) ]
   in
@@ -2831,7 +2831,7 @@ let test_clearing_past_deadline_drops_journal_ref_from_rebuild () =
                     b_title = Some "task"
                   ; b_tags = [ "logseq.class/Task" ]
                   ; b_properties =
-                      [ "logseq.property/deadline", Int (Int64.to_int timestamp) ] } ] } ]
+                      [ "logseq.property/deadline", Int64 (Int64.to_int timestamp) ] } ] } ]
       ()
   in
   let block = Option.get (Db_test_util.find_block_by_content (db_of conn) "task") in
@@ -2883,7 +2883,7 @@ let test_clearing_past_deadline_drops_journal_ref_from_rebuild () =
                       [ ( "due"
                         , Vec
                             [ Kw "build/page"
-                            ; Map [ "build/journal", Int past_day ] ] ) ] } ] } ]
+                            ; Map [ "build/journal", Int64 past_day ] ] ) ] } ] } ]
       ()
   in
   let block = Option.get (Db_test_util.find_block_by_content (db_of conn) "dated") in

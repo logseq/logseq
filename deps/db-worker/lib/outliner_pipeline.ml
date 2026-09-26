@@ -9,7 +9,7 @@ open Datascript
 let ref_to_id db (v : value) : entity_id option =
   match v with
   | Ref id -> Some id
-  | Int id -> Some id
+  | Int64 id -> Datascript.Util.int64_to_int id
   | Ref_to r -> Option.map (fun (e : entity) -> e.id) (entity db r)
   | Keyword k -> Option.map (fun (e : entity) -> e.id) (entity db (Ident k))
   | Map kvs -> (
@@ -19,7 +19,7 @@ let ref_to_id db (v : value) : entity_id option =
           kvs
       in
       match get "db/id" with
-      | Some (Int id) -> Some id
+      | Some (Int64 id) -> Datascript.Util.int64_to_int id
       | _ -> (
           match get "block/uuid" with
           | Some (Uuid u) ->
@@ -60,7 +60,7 @@ let block_content_refs (db : db) (block : entity) : entity_id list =
 let get_journal_day_from_long (db : db) (v : value) : entity_id option =
   let ms =
     match v with
-    | Int n -> Some (Int64.of_int n)
+    | Int64 n -> Some n
     | Float f -> Some (Int64.of_float f)
     | Instant f -> Some f
     | _ -> None
@@ -69,7 +69,7 @@ let get_journal_day_from_long (db : db) (v : value) : entity_id option =
   | None -> None
   | Some ms ->
       let day = Date_time_util.ms_to_journal_day ms in
-      List.of_seq (datoms db Avet ~a:"block/journal-day" ~v:(Int day) ())
+      List.of_seq (datoms db Avet ~a:"block/journal-day" ~v:(Int64 (Int64.of_int day)) ())
       |> List.find_map (fun (d : datom) -> Some d.e)
 
 (* cljs private-built-in-props:

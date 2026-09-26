@@ -216,7 +216,7 @@ let import_db_binary args =
         String.init (List.length vs) (fun i ->
             Char.chr
               (match List.nth_opt vs i with
-               | Some (Int n) -> n land 0xff
+               | Some (Int64 n) -> Int64.to_int (Int64.logand n 255L)
                | Some (Float f) -> int_of_float f land 0xff
                | _ -> 0))
     | _ -> invalid_arg "import-db-binary: missing data arg"

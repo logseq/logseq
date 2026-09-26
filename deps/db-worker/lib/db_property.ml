@@ -260,7 +260,7 @@ let built_in_property_specs : built_in_property list =
       ~queryable:true
       ~properties:
         [ "logseq.property/hide-empty-value", Bool true
-        ; "logseq.property/default-value", Int 1 ]
+        ; "logseq.property/default-value", Int64 1L ]
       [ "type", kw "number"; "public?", Bool false ]
   ; bip "logseq.property.repeat/recur-unit" ~title:"Repeating recur unit"
       ~queryable:true
@@ -729,7 +729,7 @@ let normalize_sorted_entities_block_order (sorted_entities : entity list)
             @ List.map2
                 (fun order (ent : entity) ->
                   Map
-                    [ kw "db/id", Int ent.id
+                    [ kw "db/id", Int64 (Int64.of_int ent.id)
                     ; kw "block/order", String order ])
                 orders ents
           in

@@ -34,7 +34,7 @@ let maybe_run_recycle_gc (conn : conn) : unit =
     match entity (Conn.db conn) (Ident recycle_gc_kv) with
     | Some e -> (
         match Ldb.value e "kv/value" with
-        | Some (Int n) -> Some (float_of_int n)
+        | Some (Int64 n) -> Some (Int64.to_float n)
         | Some (Float f) -> Some f
         | _ -> None)
     | None -> None

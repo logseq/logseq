@@ -442,7 +442,7 @@ let cli_list_pages db (opts : Wire.t option) : Wire.t =
            match created_after with
            | Some ms ->
                (match Ldb.value e "block/created-at" with
-                | Some (Int n) -> float_of_int n > ms
+                | Some (Int64 n) -> Int64.to_float n > ms
                 | Some (Instant i) -> Int64.to_float i > ms
                 | Some (Float f) -> f > ms
                 | _ -> false)
@@ -451,7 +451,7 @@ let cli_list_pages db (opts : Wire.t option) : Wire.t =
            match updated_after with
            | Some ms ->
                (match Ldb.value e "block/updated-at" with
-                | Some (Int n) -> float_of_int n > ms
+                | Some (Int64 n) -> Int64.to_float n > ms
                 | Some (Instant i) -> Int64.to_float i > ms
                 | Some (Float f) -> f > ms
                 | _ -> false)
