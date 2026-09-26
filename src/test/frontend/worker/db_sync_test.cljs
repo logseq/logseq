@@ -302,6 +302,12 @@
           (cleanup)
           result)))))
 
+(defn- mark-graph-synced!
+  "Sets :logseq.kv/graph-remote?, as upload and download do: undo and redo
+  then replay the semantic ops, not the datoms of the change."
+  [conn]
+  (d/transact! conn [(ldb/kv :logseq.kv/graph-remote? true)] {:persist-op? false}))
+
 (defn- setup-parent-child
   []
   (let [conn (db-test/create-conn-with-blocks
@@ -8262,6 +8268,8 @@
           undo-redo? [false true]]
     (let [{:keys [template-root-uuid empty-target-uuid seed-conn client-ops-conn]}
           (setup-rebase-apply-template-repro-state)
+          ;; A graph that rebases and uploads syncs.
+          _ (mark-graph-synced! seed-conn)
           conn (d/conn-from-db @seed-conn)
           server-conn (d/conn-from-db @seed-conn)
           seed (db-test/find-block-by-content @conn "seed")]
@@ -8327,6 +8335,8 @@
       (let [{:keys [template-root-uuid template-3-uuid empty-target-uuid seed-conn client-ops-conn
                     property-text reference-uuid]}
             (setup-template-text-property-state explicit-value-block? with-reference? nonempty-target?)
+            ;; A graph that rebases and uploads syncs.
+            _ (mark-graph-synced! seed-conn)
             conn (d/conn-from-db @seed-conn)
             server-conn (d/conn-from-db @seed-conn)
             seed (db-test/find-block-by-content @conn "seed")
