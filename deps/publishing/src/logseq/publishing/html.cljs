@@ -6,6 +6,7 @@ necessary db filtering"
             [datascript.transit :as dt]
             [goog.string :as gstring]
             [goog.string.format]
+            [logseq.publishing.const :as publish-const]
             [logseq.publishing.db :as db]))
 
 ;; Copied from hiccup but tweaked for publish usage
@@ -19,6 +20,12 @@ necessary db filtering"
       (string/replace ">"  "logseq____&gt;")
       (string/replace "\"" "logseq____&quot;")
       (string/replace "'" "logseq____&apos;")))
+
+(defn- published-db-boot-script
+  [inline-db]
+  (if (some? inline-db)
+    [:script (gstring/format "window.logseq_db=%s" (js/JSON.stringify (escape-html inline-db)))]
+    [:script (str "window.logseq_db_url=" (js/JSON.stringify publish-const/db-transit-file-path))]))
 
 ;; Copied from https://github.com/babashka/babashka/blob/8c1077af00c818ade9e646dfe1297bbe24b17f4d/examples/notes.clj#L21
 (defn- html [v]
@@ -41,7 +48,7 @@ necessary db filtering"
         :else (str v)))
 
 (defn- ^:large-vars/html publishing-html
-  [transit-db app-state options]
+  [app-state options inline-db]
   (let [{name' :name :keys [icon alias title description url]} options
         icon (or icon "static/img/logo.png")
         project (or alias name')]
@@ -90,7 +97,7 @@ necessary db filtering"
              {:description description}]]
            [:body
             [:div {:id "root"}]
-            [:script (gstring/format "window.logseq_db=%s" (js/JSON.stringify (escape-html transit-db)))]
+            (published-db-boot-script inline-db)
             [:script (str "window.logseq_state=" (js/JSON.stringify (pr-str app-state)))]
             [:script {:type "text/javascript"}
              "// Single Page Apps for GitHub Pages
@@ -137,7 +144,7 @@ necessary db filtering"
 (defn build-html
   "Given the graph's db, filters the db using the given options and returns the
 generated index.html string and assets used by the html"
-  [db* {:keys [repo app-state repo-config html-options dev?]}]
+  [db* {:keys [repo app-state repo-config html-options dev? inline-db?]}]
   (let [all-pages-public? (if-let [value (:publishing/all-pages-public? repo-config)]
                             value
                             (:all-pages-public? repo-config))
@@ -157,6 +164,9 @@ generated index.html string and assets used by the html"
         state (assoc app-state
                      :git/current-repo repo
                      :config {repo repo-config})
-        raw-html-str (publishing-html db-str state html-options)]
+        raw-html-str (publishing-html state html-options (when inline-db? db-str))]
     {:html raw-html-str
-     :asset-filenames asset-filenames}))
+     :asset-filenames asset-filenames
+     ;; The transit payload is only needed as a separate artifact when it is
+     ;; not already inlined in the html.
+     :db-transit (when-not inline-db? db-str)}))
