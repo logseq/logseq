@@ -241,8 +241,11 @@
                        (state/clear-edit!))))))
              (p/let [result (editor-handler/paste-blocks blocks {:revert-cut-txs revert-cut-txs
                                                                  :keep-uuid? keep-uuid?})]
-               (when-let [uuid->new-uuid (not-empty (:uuid->new-uuid result))]
-                 (editor-assets/copy-pasted-asset-files! repo blocks uuid->new-uuid))
+               (when (or (not-empty (:uuid->new-uuid result))
+                         (not-empty (:id->new-uuid result)))
+                 (editor-assets/copy-pasted-asset-files! repo blocks
+                                                       (:uuid->new-uuid result)
+                                                       (:id->new-uuid result)))
                result)))
          (paste-copied-text input text html)))
      (p/catch (fn [error]

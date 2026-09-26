@@ -1098,6 +1098,7 @@
              {:tx-data full-tx'
               :blocks tx
               :uuid->new-uuid uuid->new-uuid
+              :id->new-uuid id->new-uuid
               :tx-meta {:outliner-ops [[:insert-blocks [(insert-history-blocks tx page-txs id->new-uuid)
                                                        (:block/uuid target-block)
                                                        (assoc insert-opts :keep-uuid? true)]]]}})))))))

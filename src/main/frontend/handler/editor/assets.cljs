@@ -42,9 +42,9 @@
 (defn copy-pasted-asset-files!
   "A copy-pasted asset block gets a fresh uuid while its :logseq.property.asset/*
   attrs resolve to assets/<new-uuid>.<ext>, so duplicate the source file under
-  the new uuid. uuid->new-uuid maps each source block uuid to the pasted uuid.
-  (db-test#1155)"
-  [repo blocks uuid->new-uuid]
+  the new uuid. The pasted uuid is found by source uuid first, then by the
+  block's :db/id for sources whose entity no longer exists. (db-test#1155)"
+  [repo blocks uuid->new-uuid id->new-uuid]
   (p/let [repo-dir (config/get-repo-dir repo)
           assets-dir (path/path-join repo-dir "assets")
           _ (fs/mkdir-if-not-exists assets-dir)]
@@ -52,7 +52,8 @@
      (for [block blocks
            :let [source-uuid (:block/uuid block)
                  ext (:logseq.property.asset/type block)
-                 new-uuid (get uuid->new-uuid source-uuid)]
+                 new-uuid (or (get uuid->new-uuid source-uuid)
+                              (get id->new-uuid (:db/id block)))]
            :when (and (ldb/asset? block)
                       (uuid? source-uuid)
                       (uuid? new-uuid)
