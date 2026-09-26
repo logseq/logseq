@@ -1001,8 +1001,10 @@
                              (apply dissoc b' dissoc-keys))
                            b))
                        blocks)
-                  (or (= outliner-op :paste)
-                      insert-template?)
+                  ;; Pasted asset blocks keep their asset props; the frontend
+                  ;; copies the backing file to the new block uuid (db-test#1155).
+                  ;; Template instantiation still drops them.
+                  insert-template?
                   (remove ldb/asset?))
          [target-block sibling?] (get-target-block db blocks target-block opts)
          _ (assert (some? target-block) (str "Invalid target: " target-block))
@@ -1095,6 +1097,7 @@
                            full-tx)]
              {:tx-data full-tx'
               :blocks tx
+              :uuid->new-uuid uuid->new-uuid
               :tx-meta {:outliner-ops [[:insert-blocks [(insert-history-blocks tx page-txs id->new-uuid)
                                                        (:block/uuid target-block)
                                                        (assoc insert-opts :keep-uuid? true)]]]}})))))))
@@ -1107,13 +1110,25 @@
             page-blocks)))
 
 (defn- get-top-level-blocks
-  [top-level-blocks non-consecutive?]
-  (let [reversed? (and (not non-consecutive?)
+  [db top-level-blocks non-consecutive?]
+  (let [same-parent? (apply = (map (comp :db/id :block/parent) top-level-blocks))
+        ;; :block/order is only comparable between siblings; order keys from
+        ;; different parents have no shared ordering (db-test#1297).
+        reversed? (and same-parent?
+                       (not non-consecutive?)
                        (:block/order (first top-level-blocks))
                        (:block/order (second top-level-blocks))
                        (> (compare (:block/order (first top-level-blocks))
                                    (:block/order (second top-level-blocks))) 0))]
-    (if reversed? (reverse top-level-blocks) top-level-blocks)))
+    (cond
+      reversed?
+      (reverse top-level-blocks)
+
+      same-parent?
+      top-level-blocks
+
+      :else
+      (sort-non-consecutive-blocks db top-level-blocks))))
 
 (def ^:private comments-tag-ident :logseq.class/Comments)
 (def ^:private comment-tag-ident :logseq.class/Comment)
@@ -1189,7 +1204,7 @@
   [db blocks _opts]
   (let [top-level-blocks (filter-top-level-blocks db blocks)
         non-consecutive? (and (> (count top-level-blocks) 1) (seq (ldb/get-non-consecutive-blocks db top-level-blocks)))
-        top-level-blocks* (get-top-level-blocks top-level-blocks non-consecutive?)
+        top-level-blocks* (get-top-level-blocks db top-level-blocks non-consecutive?)
         top-level-blocks (remove outliner-validate/built-in-entity? top-level-blocks*)
         deleted-block-ids (into #{} (mapcat #(block-subtree-ids db %) top-level-blocks))
         orphaned-comments-areas (orphaned-range-comments-areas db deleted-block-ids)
@@ -1355,7 +1370,7 @@
       (when (seq top-level-blocks)
         (let [[target-block sibling?] (get-target-block db top-level-blocks target-block opts)
               non-consecutive? (and (> (count top-level-blocks) 1) (seq (ldb/get-non-consecutive-blocks db top-level-blocks)))
-              top-level-blocks (get-top-level-blocks top-level-blocks non-consecutive?)
+              top-level-blocks (get-top-level-blocks db top-level-blocks non-consecutive?)
               blocks (->> (if non-consecutive?
                             (sort-non-consecutive-blocks db top-level-blocks)
                             top-level-blocks)
@@ -1422,7 +1437,7 @@
   (let [db @conn
         top-level-blocks (filter-top-level-blocks db blocks)
         non-consecutive? (and (> (count top-level-blocks) 1) (seq (ldb/get-non-consecutive-blocks @conn top-level-blocks)))
-        top-level-blocks (get-top-level-blocks top-level-blocks non-consecutive?)]
+        top-level-blocks (get-top-level-blocks db top-level-blocks non-consecutive?)]
     (when-not (or non-consecutive?
                   (and (not indent?)
                        ;; property value blocks shouldn't be outdented

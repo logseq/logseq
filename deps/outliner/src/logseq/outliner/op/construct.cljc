@@ -264,30 +264,165 @@
        distinct
        vec))
 
-(defn- created-page-uuid-from-tx-data
+(defn- created-page-entities-from-tx-data
+  "Page-like entities created in `tx-data` (they carry :block/title plus
+  :block/name or :db/ident), returned as {:eid :uuid :title :parent-ref :extends-ref}
+  maps in tx order. Handles both datom and map forms."
+  [tx-data]
+  (let [datom-entities
+        (->> (group-by :e (filter #(some? (:a %)) tx-data))
+             (keep (fn [[eid datoms]]
+                     (let [v (fn [a]
+                               (some #(when (and (= a (:a %))
+                                                 (true? (:added %)))
+                                        (:v %))
+                                     datoms))
+                           uuid' (v :block/uuid)
+                           title (v :block/title)]
+                       (when (and (uuid? uuid')
+                                  (string? title)
+                                  (or (string? (v :block/name))
+                                      (qualified-keyword? (v :db/ident))))
+                         {:eid eid
+                          :uuid uuid'
+                          :title title
+                          :parent-ref (v :block/parent)
+                          :extends-ref (v :logseq.property.class/extends)})))))
+        map-entities
+        (keep (fn [item]
+                (when (and (map? item)
+                           (nil? (:a item))
+                           (uuid? (:block/uuid item))
+                           (string? (:block/title item))
+                           (or (string? (:block/name item))
+                               (qualified-keyword? (:db/ident item))))
+                  {:eid (:db/id item)
+                   :uuid (:block/uuid item)
+                   :title (:block/title item)
+                   :parent-ref (:block/parent item)
+                   :extends-ref (:logseq.property.class/extends item)}))
+              tx-data)]
+    (vec (concat datom-entities map-entities))))
+
+(defn- title-eq?
+  [a b]
+  (and (string? a)
+       (string? b)
+       (= (common-util/page-name-sanity-lc a)
+          (common-util/page-name-sanity-lc b))))
+
+(defn- created-page-info-from-tx-data
+  "Returns {:leaf-uuid :parent-uuids :created-uuids} for a :create-page tx.
+  :leaf-uuid is the uuid of the created page named `title`.
+  :parent-uuids is indexed by the title's namespace parent parts, nil where a
+  parent segment was not created by this tx.
+  :created-uuids is every page-like entity created by this tx (leaf, namespace
+  ancestors, new tags)."
   [tx-data title]
-  (or
-   (some (fn [item]
-           (when (and (map? item)
-                      (= title (:block/title item))
-                      (:block/uuid item))
-             (:block/uuid item)))
-         tx-data)
-   (let [grouped (group-by :e tx-data)]
-     (some (fn [[_ datoms]]
-             (let [title' (some (fn [datom]
-                                  (when (and (= :block/title (:a datom))
-                                             (true? (:added datom)))
-                                    (:v datom)))
-                                datoms)
-                   uuid' (some (fn [datom]
-                                 (when (and (= :block/uuid (:a datom))
-                                            (true? (:added datom)))
-                                   (:v datom)))
-                               datoms)]
-               (when (and (= title title') (uuid? uuid'))
-                 uuid')))
-           grouped))))
+  (let [entities (created-page-entities-from-tx-data tx-data)
+        by-eid (into {} (keep (fn [e] (when (:eid e) [(:eid e) e])) entities))
+        by-uuid (into {} (map (fn [e] [(:uuid e) e]) entities))
+        resolve-ref (fn [v]
+                      (cond
+                        (contains? by-eid v) (get by-eid v)
+                        (uuid? v) (get by-uuid v)
+                        (and (vector? v) (= :block/uuid (first v))) (get by-uuid (second v))
+                        (map? v) (or (get by-uuid (:block/uuid v))
+                                     (get by-eid (:db/id v)))
+                        (de/entity? v) (or (get by-uuid (:block/uuid v))
+                                           (get by-eid (:db/id v)))
+                        :else nil))
+        parent-of (fn [e] (or (resolve-ref (:parent-ref e))
+                              (resolve-ref (:extends-ref e))))
+        parts (->> (string/split (or title "") #"/")
+                   (map string/trim)
+                   (remove string/blank?)
+                   vec)
+        leaf-segment (last parts)
+        ;; Walk the parent chain of a leaf candidate and require each namespace
+        ;; ancestor segment (innermost first) to match.
+        chain-match? (fn [leaf]
+                       (loop [e leaf
+                              segments (seq (rseq (pop parts)))]
+                         (if (nil? segments)
+                           true
+                           (when-let [p (parent-of e)]
+                             (when (title-eq? (:title p) (first segments))
+                               (recur p (next segments)))))))
+        candidates (filter #(title-eq? (:title %) leaf-segment) entities)
+        loose-leaf-uuid
+        ;; Entities that only assert :block/uuid + :block/title (e.g. synthesized
+        ;; tx-data) still count for identifying the created page itself.
+        (some (fn [[_eid datoms]]
+                (let [uuid' (some #(when (and (= :block/uuid (:a %)) (true? (:added %))) (:v %)) datoms)
+                      title' (some #(when (and (= :block/title (:a %)) (true? (:added %))) (:v %)) datoms)]
+                  (when (and (uuid? uuid')
+                             (or (title-eq? title' leaf-segment)
+                                 (title-eq? title' title)))
+                    uuid')))
+              (group-by :e (filter #(some? (:a %)) tx-data)))
+        loose-leaf-map-uuid
+        (some (fn [item]
+                (when (and (map? item)
+                           (nil? (:a item))
+                           (uuid? (:block/uuid item))
+                           (or (title-eq? (:block/title item) leaf-segment)
+                               (title-eq? (:block/title item) title)))
+                  (:block/uuid item)))
+              tx-data)
+        leaf (or (some #(when (chain-match? %) %) candidates)
+                 (first candidates)
+                 (some #(when (title-eq? (:title %) title) %) entities)
+                 (when (or loose-leaf-uuid loose-leaf-map-uuid)
+                   {:uuid (or loose-leaf-uuid loose-leaf-map-uuid)}))
+        title->uuid (into {}
+                          (map (fn [e] [(common-util/page-name-sanity-lc (:title e)) (:uuid e)])
+                               entities))
+        parent-uuids (mapv title->uuid (if (seq parts) (pop parts) []))]
+    {:leaf-uuid (:uuid leaf)
+     :parent-uuids parent-uuids
+     :created-uuids (mapv :uuid entities)}))
+
+(defn- created-property-ident-from-tx-data
+  "Ident of a property entity created in `tx-data`, matched by the Property tag
+  or by its title, falling back to any created db/ident."
+  [db tx-data property-name]
+  (let [property-class-id (:db/id (d/entity db :logseq.class/Property))
+        name-eq? (fn [v] (title-eq? v property-name))
+        datom-ident
+        (some (fn [[_eid datoms]]
+                (let [ident (some (fn [item]
+                                    (when (and (= :db/ident (:a item))
+                                               (true? (:added item))
+                                               (qualified-keyword? (:v item)))
+                                      (:v item)))
+                                  datoms)
+                      title' (some (fn [item]
+                                     (when (and (= :block/title (:a item))
+                                                (true? (:added item)))
+                                       (:v item)))
+                                   datoms)
+                      property-tagged? (some (fn [item]
+                                               (and (= :block/tags (:a item))
+                                                    (true? (:added item))
+                                                    (= property-class-id (:v item))))
+                                             datoms)]
+                  (when (and ident (or property-tagged? (name-eq? title')))
+                    ident)))
+              (group-by :e (filter #(some? (:a %)) tx-data)))
+        map-ident
+        (some (fn [item]
+                (when (and (map? item)
+                           (nil? (:a item))
+                           (qualified-keyword? (:db/ident item))
+                           (or (name-eq? (:block/title item))
+                               (some (fn [tag]
+                                       (= :logseq.class/Property
+                                          (if (keyword? tag) tag (:db/ident tag))))
+                                     (:block/tags item))))
+                  (:db/ident item)))
+              tx-data)]
+    (or datom-ident map-ident)))
 
 (defn- created-db-ident-from-tx-data
   [tx-data]
@@ -623,11 +758,13 @@
 
     :create-page
     (let [[title opts] args
-          page-uuid (created-page-uuid-from-tx-data tx-data title)]
+          {:keys [leaf-uuid parent-uuids]} (created-page-info-from-tx-data tx-data title)]
       [:create-page [title
                      (cond-> (or opts {})
-                       page-uuid
-                       (assoc :uuid page-uuid))]])
+                       leaf-uuid
+                       (assoc :uuid leaf-uuid)
+                       (some some? parent-uuids)
+                       (assoc :parent-uuids parent-uuids))]])
 
     :rename-page
     (let [[page-uuid new-title] args]
@@ -650,6 +787,7 @@
     :upsert-property
     (let [[property-id schema opts] args
           property-id' (or (stable-entity-ref db property-id)
+                           (created-property-ident-from-tx-data db tx-data (:property-name opts))
                            (property-ident-by-title db (:property-name opts))
                            (created-db-ident-from-tx-data tx-data))]
       [:upsert-property [property-id' schema opts]])
@@ -1032,7 +1170,21 @@
                           :create-page
                           (let [[_title opts] args]
                             (when-let [page-uuid (:uuid opts)]
-                              [:delete-page [page-uuid {}]]))
+                              (let [extra-uuids (->> (created-page-entities-from-tx-data tx-data)
+                                                     (map :uuid)
+                                                     (remove #(= % page-uuid))
+                                                     distinct
+                                                     vec)]
+                                (if (seq extra-uuids)
+                                  ;; The tx created auxiliary page-like entities too
+                                  ;; (namespace parents, new tags): delete every created
+                                  ;; entity so nothing dangling remains after undo.
+                                  (->> (cons page-uuid extra-uuids)
+                                       (mapcat (fn [u]
+                                                 [[:delete-page [u {}]]
+                                                  [:recycle-delete-permanently [u]]]))
+                                       vec)
+                                  [:delete-page [page-uuid {}]]))))
 
                           :delete-page
                           (let [[page-uuid _opts] args]
@@ -1344,7 +1496,8 @@
 
     :create-page
     (let [[_title opts] args]
-      (unresolved-numeric-entity-id? (:uuid opts)))
+      (or (unresolved-numeric-entity-id? (:uuid opts))
+          (numeric-id-in-ref-value? (:parent-uuids opts))))
 
     :rename-page
     (let [[page-uuid _new-title] args]

@@ -2,6 +2,7 @@
   (:require ["path" :as node-path]
             [clojure.string :as string]
             [frontend.commands :as commands]
+            [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
             [frontend.db.async :as db-async]
@@ -13,6 +14,7 @@
             [frontend.modules.outliner.ui :as ui-outliner-tx]
             [frontend.state :as state]
             [frontend.util.ref :as ref]
+            [logseq.common.path :as path]
             [logseq.db :as ldb]
             [logseq.db.frontend.asset :as db-asset]
             [medley.core :as medley]
@@ -36,6 +38,33 @@
   [repo file-path file]
   (p/let [buffer (.arrayBuffer file)]
     (fs/write-asset-file! repo file-path buffer)))
+
+(defn copy-pasted-asset-files!
+  "A copy-pasted asset block gets a fresh uuid while its :logseq.property.asset/*
+  attrs resolve to assets/<new-uuid>.<ext>, so duplicate the source file under
+  the new uuid. uuid->new-uuid maps each source block uuid to the pasted uuid.
+  (db-test#1155)"
+  [repo blocks uuid->new-uuid]
+  (p/let [repo-dir (config/get-repo-dir repo)
+          assets-dir (path/path-join repo-dir "assets")
+          _ (fs/mkdir-if-not-exists assets-dir)]
+    (p/all
+     (for [block blocks
+           :let [source-uuid (:block/uuid block)
+                 ext (:logseq.property.asset/type block)
+                 new-uuid (get uuid->new-uuid source-uuid)]
+           :when (and (ldb/asset? block)
+                      (uuid? source-uuid)
+                      (uuid? new-uuid)
+                      (not= source-uuid new-uuid)
+                      (string? ext)
+                      ;; external-url assets don't have a local file
+                      (nil? (:logseq.property.asset/external-url block)))]
+       (p/let [source-name (str source-uuid "." ext)
+               data (p/catch (fs/read-file-raw assets-dir source-name)
+                             (constantly nil))]
+         (when (some? data)
+           (fs/write-asset-file! repo (str new-uuid "." ext) data)))))))
 
 (defn- new-asset-block
   [repo ^js file {:keys [external-url] :as opts}]
