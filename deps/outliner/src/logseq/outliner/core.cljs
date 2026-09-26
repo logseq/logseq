@@ -176,6 +176,17 @@
   [db block]
   (outliner-pipeline/db-rebuild-block-refs db block))
 
+(defn- matching-ref-for-tag
+  "Class titles are case-sensitive while :block/name is not, so among same-name
+  refs prefer the one whose :block/title equals the tag's."
+  [tag candidates]
+  (or (some (fn [r]
+              (when (and (:block/title tag)
+                         (= (:block/title r) (:block/title tag)))
+                r))
+            candidates)
+      (first candidates)))
+
 (defn- fix-tag-ids
   "Fix or remove tags related when entered via `Escape`"
   [m db]
@@ -193,16 +204,10 @@
                    ;; Update :block/tag to reference ids from :block/refs
                    (map (fn [tag]
                           (if (contains? refs (:block/name tag))
-                            ;; class titles are case-sensitive, so prefer a title match
-                            (let [matched-ref (or (first (filter (fn [r] (and (= (:block/name tag)
-                                                                                (:block/name r))
-                                                                             (:block/title tag)
-                                                                             (= (:block/title tag)
-                                                                                (:block/title r))))
-                                                                 (:block/refs m)))
-                                                  (first (filter (fn [r] (= (:block/name tag)
-                                                                            (:block/name r)))
-                                                                 (:block/refs m))))]
+                            (let [matched-ref (matching-ref-for-tag
+                                               tag
+                                               (filter #(= (:block/name tag) (:block/name %))
+                                                       (:block/refs m)))]
                               (cond-> (assoc tag :block/uuid (:block/uuid matched-ref))
                                 (:db/ident matched-ref)
                                 (assoc :db/ident (:db/ident matched-ref))))
@@ -279,19 +284,18 @@
   (first
    (reduce
     (fn [[resolved seen] ref]
-      (let [dedup-key (if (contains? tag-names (:block/name ref))
+      (let [new-page? (new-page-ref? ref)
+            dedup-key (if (contains? tag-names (:block/name ref))
                         [:class (:block/title ref)]
-                        [:page (:block/name ref)])
-            seen-ref (and (new-page-ref? ref)
-                          (get seen dedup-key))]
-        (if seen-ref
+                        [:page (:block/name ref)])]
+        (if-let [seen-ref (and new-page? (get seen dedup-key))]
           [(conj resolved [(merge seen-ref
                                   (select-keys ref [:block.temp/original-page-name]))
                             nil])
            seen]
           (let [[ref' tx-data :as resolved-ref] (resolve-page-ref db ref tag-names)]
             [(conj resolved resolved-ref)
-             (if (and (new-page-ref? ref) (seq tx-data))
+             (if (and new-page? (seq tx-data))
                (assoc seen dedup-key ref')
                seen)]))))
     [[] {}]
@@ -311,14 +315,7 @@
                            {}
                            refs')
           tags' (mapv (fn [tag]
-                        (if-let [ref (when-let [candidates (get tag-refs (:block/name tag))]
-                                       ;; Class titles are case-sensitive, so prefer the
-                                       ;; ref whose title matches the tag's title exactly.
-                                       (or (some #(when (and (:block/title tag)
-                                                             (= (:block/title %) (:block/title tag)))
-                                                    %)
-                                                 candidates)
-                                           (first candidates)))]
+                        (if-let [ref (matching-ref-for-tag tag (get tag-refs (:block/name tag)))]
                           (merge (dissoc tag :block/type)
                                  (select-keys ref [:block/uuid :db/ident]))
                           tag))
