@@ -1,0 +1,19 @@
+(version 3.0.0)
+
+(build
+ (all_platforms
+  ((action
+    (progn
+     (when %{pkg-self:dev} (run dune subst))
+     (run dune build -p %{pkg-self:name} -j %{jobs} @install))))))
+
+(depends
+ (all_platforms
+  (dune ocaml)))
+
+(source
+ (fetch
+  (url
+   https://github.com/ocaml-community/yojson/releases/download/3.0.0/yojson-3.0.0.tbz)
+  (checksum
+   sha512=896d0ea829a36ccadba6628800369c1a3ab9e7c64dbda8b76331889c9db481cd64e137f467481ae80a8dd5fca45d748bfa71f58641806cc1bb1a007f8291789f)))

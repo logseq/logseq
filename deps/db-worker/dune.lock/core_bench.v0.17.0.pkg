@@ -1,0 +1,29 @@
+(version v0.17.0)
+
+(build
+ (all_platforms ((action (run dune build -p %{pkg-self:name} -j %{jobs})))))
+
+(depends
+ (all_platforms
+  (ocaml
+   core
+   core_extended
+   core_kernel
+   core_unix
+   delimited_parsing
+   ppx_compare
+   ppx_fields_conv
+   ppx_jane
+   ppx_let
+   ppx_sexp_conv
+   textutils
+   time_now
+   dune
+   re)))
+
+(source
+ (fetch
+  (url
+   https://github.com/janestreet/core_bench/archive/refs/tags/v0.17.0.tar.gz)
+  (checksum
+   sha256=a093a77179629a8baef03f58947aac9cf5da37cc0ed7fabdd651832c4fe4cfe5)))

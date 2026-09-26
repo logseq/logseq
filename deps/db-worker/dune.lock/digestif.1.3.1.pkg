@@ -1,0 +1,15 @@
+(version 1.3.1)
+
+(build
+ (all_platforms ((action (run dune build -p %{pkg-self:name} -j %{jobs})))))
+
+(depends
+ (all_platforms
+  (ocaml dune eqaf)))
+
+(source
+ (fetch
+  (url
+   https://github.com/mirage/digestif/releases/download/v1.3.1/digestif-1.3.1.tbz)
+  (checksum
+   sha512=436dcd82081aa03b6d3424629950dbc64212c6281e241dad5e39812d58f2e5ddd52e0138840ad92e172baffbae81d1d34df8f5d893b83c734ac53cd95cad2707)))

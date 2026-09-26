@@ -1,0 +1,31 @@
+(version 1.6)
+
+(build
+ (all_platforms
+  ((action
+    (run
+     %{make}
+     PROFILE=release
+     (when
+      (catch_undefined_var
+       (and_absorb_undefined_var
+        (not %{pkg:ocaml:preinstalled})
+        (< %{pkg:ocaml:version} 5.0.0~~))
+       false)
+      opam-legacy)
+     (when
+      (catch_undefined_var
+       (or_absorb_undefined_var
+        %{pkg:ocaml:preinstalled}
+        (>= %{pkg:ocaml:version} 5.0.0~~))
+       false)
+      opam-modern))))))
+
+(depends
+ (all_platforms (ocaml)))
+
+(source
+ (fetch
+  (url https://github.com/ocaml/num/archive/refs/tags/v1.6.tar.gz)
+  (checksum
+   sha512=5cb32dfa9a9f0ad375bfd89079e9b1422979f3c089f61ef2300ad9cc64fb1fc25ed1f86b0267eb017f12ae41a574a959df5bfa39ab22c2be2f1ac84c3c671bdf)))

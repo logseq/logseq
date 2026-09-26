@@ -1,0 +1,14 @@
+(version 0.5.0)
+
+(build
+ (all_platforms ((dune))))
+
+(depends
+ (all_platforms (ocaml)))
+
+(source
+ (fetch
+  (url
+   git+https://github.com/logseq/melange-edn.git#3cb79f278e972388a0a2b2ea1caec7a008a0b956)))
+
+(dev)

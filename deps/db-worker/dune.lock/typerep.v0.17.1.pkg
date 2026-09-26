@@ -1,0 +1,15 @@
+(version v0.17.1)
+
+(build
+ (all_platforms ((action (run dune build -p %{pkg-self:name} -j %{jobs})))))
+
+(depends
+ (all_platforms
+  (ocaml base dune)))
+
+(source
+ (fetch
+  (url
+   https://github.com/janestreet/typerep/archive/refs/tags/v0.17.1.tar.gz)
+  (checksum
+   sha512=e81434ced58ab1cf3cb61d0e2c2106d81c81fe040130cfe07bb79dc3dcc834b1f51dec0faf50e06ccf8cac831e39f31a2ff4ca3dabef7bbaa61f85f13d7f44f5)))
