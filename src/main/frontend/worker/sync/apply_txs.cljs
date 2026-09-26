@@ -1556,10 +1556,12 @@
           page-uuid (:uuid opts)
           existing-page (or (when (uuid? page-uuid)
                               (d/entity @conn [:block/uuid page-uuid]))
-                            ;; A page and a tag can share a title; only a
-                            ;; page of the kind being created is this page.
+                            ;; A page, a tag or a property can share a title;
+                            ;; only an entity of the kind being created is
+                            ;; this page.
                             (let [page (ldb/get-page @conn title)]
-                              (when (= (boolean (:class? opts)) (boolean (ldb/class? page)))
+                              (when (and (not (ldb/property? page))
+                                         (= (boolean (:class? opts)) (boolean (ldb/class? page))))
                                 page)))]
       (if (and existing-page
                (not (ldb/recycled? existing-page)))
