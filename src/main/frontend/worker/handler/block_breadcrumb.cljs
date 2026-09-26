@@ -93,10 +93,14 @@
    (d/datoms db :eavt ref-id)))
 
 (defn- page-ref-identity?
+  "Pages skip property/asset extras. Closed values can have :block/name and no
+   :db/ident (custom Status choices), but they still need :logseq.property/icon
+   in query/table shallow refs."
   [collected]
   (and (string? (:block/name collected))
        (not (keyword? (:db/ident collected)))
-       (nil? (:logseq.property.asset/type collected))))
+       (nil? (:logseq.property.asset/type collected))
+       (nil? (:block/closed-value-property collected))))
 
 (defn- property-or-asset-extras
   [db collected]
