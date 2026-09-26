@@ -759,7 +759,7 @@ let render_block_comment_summary db key _runtime =
 let render_block_task_time db key _runtime =
   let block_uuid = require_uuid "block-uuid" (List.nth key 1) in
   let block = entity_by_uuid db "block-uuid" block_uuid in
-  let now_ms = Clock.now_ms () in
+  let now_ms = Time.epoch_ms_to_float (Time.now ()) in
   let history_items, seconds =
     match Endpoint_query.task_spent_time_impl db block.id now_ms with
     | Wire.Array [ Wire.Array items; Wire.Int s ] -> (items, s)

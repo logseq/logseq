@@ -269,7 +269,8 @@ let profile_log_fn (options : options) : string -> (attr * value) list -> unit =
 let import_progress (options : options) (m : (string * value) list) : unit =
   Import_profile.set_import_progress options.import_watchdog m
 
-let log_phase_ms (options : options) (phase : string) (start : float option)
+let log_phase_ms (options : options) (phase : string)
+    (start : Time.monotonic_ms option)
     (extra : (attr * value) list) : unit =
   match start with
   | Some s ->
@@ -6154,7 +6155,7 @@ let default_save_file (conn : conn) (path : string) (content : string)
        [ bm_tx_op db
            [ ("file/path", String path); ("file/content", String content)
            ; ("file/last-modified-at",
-              Instant (Int64.of_float (Import_profile.now_ms ()))) ] ]);
+              Instant (Time.epoch_ms_to_int64 (Time.now ()))) ] ]);
   Eff.pure ()
 
 (* export-logseq-files — custom.css / custom.js under logseq/ *)

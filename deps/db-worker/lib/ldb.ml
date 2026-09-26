@@ -522,7 +522,7 @@ let page_exists db (page_name : string) (tag_idents : string list) : bool =
    descending, LAZILY like cljs: callers `Seq.take n` to bound the work
    to the requested page size. *)
 let get_latest_journals db : entity Seq.t =
-  let today = Clock.today_int () in
+  let today = Date_time_util.date_to_int (Date_time_util.time_ms ()) in
   let seen = Hashtbl.create 31 in
   (* cljs take-while over the rseek seq, counting each pulled datom *)
   let rec take_while_journals (s : datom Seq.t) : datom Seq.t = fun () ->

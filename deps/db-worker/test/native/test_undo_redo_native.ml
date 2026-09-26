@@ -162,7 +162,7 @@ let with_worker_conns f =
      cljs fixture produces. *)
   let page_u = Uuid_gen.uuid () and task_u = Uuid_gen.uuid () in
   let parent_u = Uuid_gen.uuid () and child_u = Uuid_gen.uuid () in
-  let now = Int64.of_float (Clock.now_ms ()) in
+  let now = Time.epoch_ms_to_int64 (Time.now ()) in
   ignore
     (transact_conn_string conn
        (Printf.sprintf
@@ -1119,7 +1119,7 @@ let test_undo_delete_comment_restores_created_by_ref () =
       let user_uuid = Uuid_gen.uuid () in
       let comments_uuid = Uuid_gen.uuid () in
       let comment_uuid = Uuid_gen.uuid () in
-      let now = Int64.of_float (Clock.now_ms ()) in
+      let now = Time.epoch_ms_to_int64 (Time.now ()) in
       ignore
         (transact_conn_string conn
            (Printf.sprintf
@@ -1170,7 +1170,7 @@ let test_undo_delete_page_restores_class_property_and_today_page () =
         | None -> failwith "property page missing"
       in
       let today_day =
-        Date_time_util.ms_to_journal_day (Int64.of_float (Clock.now_ms ()))
+        Date_time_util.ms_to_journal_day (Time.epoch_ms_to_int64 (Time.now ()))
       in
       let today_title =
         let journal =

@@ -2,13 +2,14 @@
 
 open Datascript
 
-let now_ms () : float = Clock.now_ms ()
+let now_ms () : Time.monotonic_ms = Time.monotonic_now ()
 
-let elapsed_ms (start_ms : float) : float = now_ms () -. start_ms
+let elapsed_ms (start_ms : Time.monotonic_ms) : float =
+  Time.diff_monotonic_ms start_ms (now_ms ())
 
 (* import-profile/log-phase! *)
 let log_phase (log_fn : (string -> (attr * value) list -> unit) option)
-    (phase : string) (start_ms : float)
+    (phase : string) (start_ms : Time.monotonic_ms)
     ?(extra : (attr * value) list option) () =
   match log_fn with
   | Some f ->
@@ -18,7 +19,7 @@ let log_phase (log_fn : (string -> (attr * value) list -> unit) option)
   | None -> ()
 
 type watchdog_state =
-  { mutable start_ms : float
+  { mutable start_ms : Time.monotonic_ms
   ; mutable step : string
   ; mutable phase : string option
   ; mutable file : string option

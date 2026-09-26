@@ -647,7 +647,7 @@ let get_blocks_response repo (requests : Wire.t) : Wire.t option =
           tbl
         else Hashtbl.create 0
       in
-      let now_ms = Clock.now_ms () in
+      let now_ms = Time.epoch_ms_to_float (Time.now ()) in
       Wire.Array
         (List.map
            (fun (req, result) ->

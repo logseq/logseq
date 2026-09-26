@@ -439,9 +439,8 @@ let compute_reschedule_property_tx (db : db) (ent : entity)
                          "logseq.property.journal/title-format"
                    | None -> None
                  in
-                 let lc = Date_time.of_epoch_ms next_time_long in
                  let next_day_int =
-                   lc.year * 10000 + lc.month * 100 + lc.day
+                   Date_time_util.date_to_int next_time_long
                  in
                  let title =
                    Ldb.journal_title_of_day next_day_int

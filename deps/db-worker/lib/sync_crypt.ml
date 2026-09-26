@@ -318,7 +318,8 @@ let http_send_fn : (Http.request -> Http.response t) ref = ref Http.send
    embedder's broadcast fn via Broadcast.to_clients *)
 let post_message_fn : (string -> unit) ref =
   ref (fun payload -> Broadcast.to_clients ~kind:"db-worker/ui-request" ~transit_payload:payload)
-let now_ms_fn : (unit -> float) ref = ref Clock.now_ms
+let now_ms_fn : (unit -> float) ref =
+  ref (fun () -> Time.epoch_ms_to_float (Time.now ()))
 
 (* ---------- hooks: crypt helpers (frontend.common.crypt) ---------- *)
 
@@ -2240,7 +2241,7 @@ let reset_hooks () =
   post_message_fn :=
     (fun payload ->
       Broadcast.to_clients ~kind:"db-worker/ui-request" ~transit_payload:payload);
-  now_ms_fn := Clock.now_ms;
+  now_ms_fn := (fun () -> Time.epoch_ms_to_float (Time.now ()));
   generate_rsa_key_pair_fn := generate_rsa_key_pair_impl;
   encrypt_private_key_fn := encrypt_private_key_impl;
   decrypt_private_key_crypt_fn := decrypt_private_key_crypt_impl;

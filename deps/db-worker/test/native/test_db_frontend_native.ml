@@ -486,7 +486,7 @@ let test_reaction_entity_valid () =
            ; attrs =
                [ "block/uuid", One_value (Uuid (gen_uuid ()))
                ; "block/created-at",
-                 One_value (Int (int_of_float (Clock.now_ms ())))
+                 One_value (Int (Int64.to_int (Time.epoch_ms_to_int64 (Time.now ()))))
                ; "logseq.property.reaction/emoji-id",
                  One_value (String "+1")
                ; "logseq.property.reaction/target",

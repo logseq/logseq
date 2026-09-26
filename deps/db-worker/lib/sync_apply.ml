@@ -125,7 +125,9 @@ let report_upload_response_timeout (client : Sync_state.client)
     match ws with Some ws -> ws_open ws | None -> false
   in
   if online && ws_open_state then begin
-    let elapsed_ms = Clock.now_ms () -. request.sent_at in
+    let elapsed_ms =
+      Time.diff_monotonic_ms request.sent_at (Time.monotonic_now ())
+    in
     let outliner_op_tag =
       match request.outliner_ops with
       | [] -> Wire.Nil
@@ -213,7 +215,7 @@ let start_upload_response_timeout (client : Sync_state.client)
     let request =
       match request.timer with
       | Some _ -> request
-      | None -> { request with Sync_state.sent_at = Clock.now_ms () }
+      | None -> { request with Sync_state.sent_at = Time.monotonic_now () }
     in
     let timer =
       Timers.set_timeout upload_response_timeout_ms (fun () ->
@@ -405,7 +407,7 @@ let apply_tx_meta (remote_tx : Wire.t) : tx_meta =
       @ [ "db-migrate?", Bool true; "skip-validate-db?", Bool true ]
   | _ -> with_op
 
-let perf_time_ms () = Clock.now_ms ()
+let perf_time_ms () = Time.monotonic_now ()
 
 let log_outliner_op_perf (_data : (string * string) list) : unit =
   if !Sync_state.dev_or_test then
@@ -2382,7 +2384,7 @@ let send_tx_batch (client : Sync_state.client)
     ; outliner_ops
     ; large_upload_progress = large_upload_progress tx_entries'
     ; t_before = local_tx
-    ; sent_at = Clock.now_ms ()
+    ; sent_at = Time.monotonic_now ()
     ; timer = None };
   Db_worker_effect.pure ()
 
@@ -2886,7 +2888,7 @@ and persist_local_tx repo (tx_report : tx_report) normalized reversed
     in
     let result =
       Sync_client_op.upsert_local_tx_entry repo ~tx_id
-        ~created_at:(Int64.of_float (Clock.now_ms ())) ~pending:true
+        ~created_at:(Time.epoch_ms_to_int64 (Time.now ())) ~pending:true
         ~failed:false
         ~outliner_op:
           (match outliner_op with
