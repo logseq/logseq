@@ -40,7 +40,7 @@ type token_cache_state =
 
 let token_cache_state = ref { tokens = []; expiry_queue = [] }
 
-let get_now_ms () = Clock.now_ms ()
+let get_now_ms () = Time.epoch_ms_to_float (Time.now ())
 
 let cached_token token now_s now_ms =
   match List.assoc_opt token (!token_cache_state).tokens with

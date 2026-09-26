@@ -136,7 +136,7 @@ let rejection_code e =
 
 let random_suffix () = String.sub (Uuid_gen.uuid ()) 0 8
 
-let now_ms () = Wire.Int64 (Int64.of_float (Clock.now_ms ()))
+let now_ms () = Wire.Int64 (Time.epoch_ms_to_int64 (Time.now ()))
 
 let json_parse str =
   try Js.Json.parseExn str with _ -> Js.Json.null

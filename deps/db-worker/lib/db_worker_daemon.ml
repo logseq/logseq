@@ -31,7 +31,7 @@ type http_result =
 
 let http_request ?(timeout_ms = 5000.) ~method_ ~host ~port ~path
     ?(headers = []) ?body () : http_result E.t =
-  let start_ms = Clock.now_ms () in
+  let start_ms = Time.monotonic_now () in
   let url =
     Printf.sprintf "http://%s:%d%s" host port path
   in
@@ -39,7 +39,7 @@ let http_request ?(timeout_ms = 5000.) ~method_ ~host ~port ~path
     (fun (res : Http.response) ->
        { status = res.status
        ; body = res.body
-       ; elapsed_ms = Clock.now_ms () -. start_ms })
+       ; elapsed_ms = Time.diff_monotonic_ms start_ms (Time.monotonic_now ()) })
     (E.timeout
        (Http.send { url; method_; headers; body })
        timeout_ms)

@@ -106,7 +106,7 @@ let error_to_diagnostic (e : exn) : Wire.t =
   Wire.kw_map
     [ "code", kw code
     ; "message", Wire.String (ex_message e)
-    ; "at", Wire.Float (Clock.now_ms ())
+    ; "at", Wire.Float (Time.epoch_ms_to_float (Time.now ()))
     ; "data", (if Wire.as_map data = [] then Wire.Nil else data)
     ]
 

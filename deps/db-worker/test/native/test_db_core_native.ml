@@ -2777,7 +2777,7 @@ let test_search_index_input_idle_updates () =
     (Wire.Map
        [ ( kw repo
          , Wire.Map
-             [ kw "ts", Wire.Float (Clock.now_ms ())
+             [ kw "ts", Wire.Float (Time.epoch_ms_to_float (Time.now ()))
              ; kw "idle?", Wire.Bool true ] ) ]);
   check "input idle after quiet period"
     (Endpoint_search.search_index_input_idle repo)
@@ -2791,7 +2791,7 @@ let test_search_index_input_idle_recent () =
     (Wire.Map
        [ ( kw repo
          , Wire.Map
-             [ kw "ts", Wire.Float (Clock.now_ms ())
+             [ kw "ts", Wire.Float (Time.epoch_ms_to_float (Time.now ()))
              ; kw "idle?", Wire.Bool false ] ) ]);
   check "input not idle right after input"
     (not (Endpoint_search.search_index_input_idle repo))

@@ -26,7 +26,7 @@ open Test_shared
 
 (* ---------- helpers ---------- *)
 
-let now () = int_of_float (Clock.now_ms ())
+let now () = Int64.to_int (Time.epoch_ms_to_int64 (Time.now ()))
 
 let retract_entity (id : entity_id) = RetractEntity (Entity_id id)
 

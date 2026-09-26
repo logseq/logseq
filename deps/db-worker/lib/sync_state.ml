@@ -16,7 +16,7 @@ type upload_request =
   ; outliner_ops : string list
   ; large_upload_progress : Wire.t list
   ; t_before : int option
-  ; mutable sent_at : float
+  ; mutable sent_at : Time.monotonic_ms
   ; mutable timer : Timers.timer option
   }
 
@@ -80,7 +80,7 @@ type client =
   ; last_sync_error : Wire.t option ref
   ; reconnect : reconnect_state ref
   ; stale_kill_timer : Timers.timer option ref
-  ; last_ws_message_ts : float ref
+  ; last_ws_message_ts : Time.monotonic_ms ref
   ; online_users : Wire.t list ref
   ; ws_state : string ref (* "inactive" | "connecting" | "open" | "closed" | "stopped" *)
   ; conn_gen : int ref (* connection generation — bumped on stop/connect;
@@ -101,7 +101,7 @@ let new_client repo : client =
   ; last_sync_error = ref None
   ; reconnect = ref { attempt = 0; timer = None }
   ; stale_kill_timer = ref None
-  ; last_ws_message_ts = ref (Clock.now_ms ())
+  ; last_ws_message_ts = ref (Time.monotonic_now ())
   ; online_users = ref []
   ; ws_state = ref "closed"
   ; conn_gen = ref 0
@@ -246,7 +246,7 @@ let uuid_re = Regexp.compile ~caseless:true "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9
 
 let uuid_string s = Regexp.test uuid_re s
 
-let time_ms () = Clock.now_ms ()
+let time_ms () = Time.epoch_ms_to_float (Time.now ())
 
 (* worker-util/dev-or-test? — goog.DEBUG || node-test in cljs; a settable
    flag here, defaulting to off like production builds *)

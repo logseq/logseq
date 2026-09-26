@@ -293,7 +293,7 @@ let upsert_local_tx_entry repo ~(tx_id : string) ?created_at ?(pending = true)
     | None ->
         (match created_at with
          | Some c -> c
-         | None -> Int64.of_float (Clock.now_ms ()))
+         | None -> Time.epoch_ms_to_int64 (Time.now ()))
   in
   let b i = Sqlite.Integer (Int64.of_int (if i then 1 else 0)) in
   run st
@@ -354,7 +354,7 @@ type sync_conflict =
 
 let add_sync_conflicts repo (conflicts : (string * string * string * int) list) =
   let st = store repo in
-  let now = Int64.of_float (Clock.now_ms ()) in
+  let now = Time.epoch_ms_to_int64 (Time.now ()) in
   List.iter
     (fun (block_uuid, attr, value, remote_t) ->
        if Sync_state.uuid_string block_uuid then begin
@@ -490,7 +490,7 @@ let upsert_asset_op st (op_type : string) (t : int) (value : Wire.t) =
         [ text block_uuid ];
       run st
         "insert into client_ops (kind, created_at, asset_uuid, asset_op, asset_t, asset_value) values ('asset', ?, ?, ?, ?, ?)"
-        [ Sqlite.Integer (Int64.of_float (Clock.now_ms ()))
+        [ Sqlite.Integer (Time.epoch_ms_to_int64 (Time.now ()))
         ; text block_uuid
         ; text op_type
         ; int t

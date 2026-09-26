@@ -766,9 +766,12 @@ let journal_name (ms : int64) : string =
 
 (* current-time — "h:mm a" *)
 let current_time () : string =
-  let c = Date_time.of_epoch_ms (Int64.of_float (Clock.now_ms ())) in
-  let h12 = match c.Date_time.hour mod 12 with 0 -> 12 | h -> h in
-  Printf.sprintf "%d:%02d %s" h12 c.minute (if c.hour < 12 then "AM" else "PM")
+  let _, _, _, hour, minute, _, _ =
+    Time.civil_fields
+      (Time.civil_of_epoch_ms (Time.local_tz ()) (Time.now ()))
+  in
+  let h12 = match hour mod 12 with 0 -> 12 | h -> h in
+  Printf.sprintf "%d:%02d %s" h12 minute (if hour < 12 then "AM" else "PM")
 
 let variable_rules ~current_page_title ~today_day =
   let today_date =

@@ -16,8 +16,10 @@ let writing : bool ref = ref false
 let pad2 (v : int) : string = if v < 10 then "0" ^ string_of_int v else string_of_int v
 
 (* yyyymmdd — local calendar date (Date#getFullYear/Month/Date). *)
-let yyyymmdd (time_ms : float) : string =
-  let year, month, day, _, _ = Clock.localtime_ms time_ms in
+let yyyymmdd (t : Time.epoch_ms) : string =
+  let year, month, day, _, _, _, _ =
+    Time.civil_fields (Time.civil_of_epoch_ms (Time.local_tz ()) t)
+  in
   Printf.sprintf "%04d%s%s" year (pad2 month) (pad2 day)
 
 let resolve_root_dir (root_dir : string) : string =
@@ -41,7 +43,7 @@ let repo_dir (root_dir : string) (repo : string) : string =
 let log_path (root_dir : string) (repo : string) : string =
   Filename.concat
     (repo_dir root_dir repo)
-    ("db-worker-node-" ^ yyyymmdd (Clock.now_ms ()) ^ ".log")
+    ("db-worker-node-" ^ yyyymmdd (Time.now ()) ^ ".log")
 
 let log_file_re = Regexp.compile "db-worker-node-\\d{8}\\.log"
 
@@ -85,7 +87,7 @@ let ensure_log_file ~(storage : Graph_lifecycle.storage) ~(repo : string)
   let graph_dir_path = Filename.concat storage.graphs_dir encoded in
   let file_path =
     Filename.concat graph_dir_path
-      ("db-worker-node-" ^ yyyymmdd (Clock.now_ms ()) ^ ".log")
+      ("db-worker-node-" ^ yyyymmdd (Time.now ()) ^ ".log")
   in
   E.bind (File_sys.mkdir_p graph_dir_path) (fun () ->
       E.bind (File_sys.append_text file_path "") (fun () ->
@@ -120,7 +122,7 @@ let fields_to_edn (fields : (string * string) list) : string =
 (* format-glogi-line — `ts [level] [logger] {:event {:fields}}`: cljs
    pr-str's the glogi record message, which is the event map itself. *)
 let format_glogi_line (entry : Worker_log.entry) : string =
-  let ts = Clock.iso_string_ms entry.time_ms in
+  let ts = Time.iso_string_of_epoch_ms (Time.epoch_ms_of_float entry.time_ms) in
   let level =
     match entry.level with
     | Worker_log.Trace -> "trace"
@@ -159,7 +161,7 @@ let append_lines (file_path : string) (source : string) (text : string) : unit =
          (fun line ->
             let chunk =
               Printf.sprintf "%s [stdio] [%s] %s\n"
-                (Clock.iso_string_ms (Clock.now_ms ()))
+                (Time.iso_string_of_epoch_ms (Time.now ()))
                 source line
             in
             E.async (fun () ->

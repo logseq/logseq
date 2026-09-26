@@ -147,7 +147,7 @@ let clear_stale_ws_loop_timer (client : Sync_state.client) : unit =
   | None -> ()
 
 let touch_last_ws_message (client : Sync_state.client) : unit =
-  client.last_ws_message_ts := Clock.now_ms ()
+  client.last_ws_message_ts := Time.monotonic_now ()
 
 let ready_state (ws : Sync_state.ws_endpoint) : int =
   Sync_state.ws_endpoint_ready_state ws
@@ -262,9 +262,10 @@ and close_stale_ws_loop (client : Sync_state.client)
                     | Some w -> Sync_state.same_ws_endpoint w ws
                     | None -> false) ->
              if ws_open ws then begin
-               let now = Clock.now_ms () in
-               let last_ts = !(current.last_ws_message_ts) in
-               let stale_ms = now -. last_ts in
+               let stale_ms =
+                 Time.diff_monotonic_ms !(current.last_ws_message_ts)
+                   (Time.monotonic_now ())
+               in
                if stale_ms >= float_of_int ws_stale_timeout_ms then begin
                  Worker_log.warn "db-sync/ws-stale-timeout"
                    [ "repo", client.repo

@@ -191,7 +191,7 @@ let notification_data (exn : exn) : Wire.t option =
   | _ -> None
 
 (* cljs perf-time-ms *)
-let perf_time_ms () = Clock.monotonic_ms ()
+let perf_time_ms () = Time.monotonic_now ()
 
 (* :thread-api/apply-outliner-ops [repo ops opts] *)
 let apply_outliner_ops args : Wire.t Db_worker_effect.t =
@@ -295,10 +295,14 @@ let apply_outliner_ops args : Wire.t Db_worker_effect.t =
      (* cljs perf-data + log-outliner-op-perf! — the console line the
         e2e suite counts per outliner op. *)
      let perf_data =
-       [ ("apply-ms", Wire.Float (applied_at -. apply_started_at))
-       ; ("listener-ms", Wire.Float (listener_at -. applied_at))
-       ; ("plain-ms", Wire.Float (plain_at -. listener_at))
-       ; ("total-ms", Wire.Float (plain_at -. started_at))
+       [ ( "apply-ms"
+         , Wire.Float (Time.diff_monotonic_ms apply_started_at applied_at) )
+       ; ( "listener-ms"
+         , Wire.Float (Time.diff_monotonic_ms applied_at listener_at) )
+       ; ( "plain-ms"
+         , Wire.Float (Time.diff_monotonic_ms listener_at plain_at) )
+       ; ( "total-ms"
+         , Wire.Float (Time.diff_monotonic_ms started_at plain_at) )
        ; ("listener", Wire.Array listener_perf) ]
      in
      Db_listener.log_tx_outliner_op_perf
