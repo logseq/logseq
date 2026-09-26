@@ -855,6 +855,85 @@
         (finally
           (ldb/register-transact-pipeline-fn! identity))))))
 
+(deftest custom-title-format-today-ref-does-not-update-default-journal-name-test
+  (testing "Saving a /today-style custom-format date link keeps the default journal :block/name"
+    (let [journal-day 20260925
+          title-format "E, dd.MM.yyyy"
+          conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks
+                 [{:page {:build/journal journal-day}}
+                  {:page {:block/title "page1"}
+                   :blocks [{:block/title "target"}]}]})
+          journal (db-test/find-journal-by-journal-day @conn journal-day)
+          target (db-test/find-block-by-content @conn "target")
+          stored-name (:block/name journal)
+          stored-title (raw-block-title @conn journal)
+          custom-title (date-time-util/int->journal-title journal-day title-format)
+          custom-name (common-util/page-name-sanity-lc custom-title)]
+      (is (= "sep 25th, 2026" stored-name))
+      (is (= "Sep 25th, 2026" stored-title))
+      (is (= "Fri, 25.09.2026" custom-title))
+      (d/transact! conn [[:db/add :logseq.class/Journal
+                          :logseq.property.journal/title-format title-format]])
+      (let [journal' (d/entity @conn (:db/id journal))]
+        (is (= custom-title (:block/title journal'))
+            "Entity title follows the configured format after the setting change")
+        (is (= stored-name (:block/name journal'))
+            "Stored :block/name stays on the default formatter"))
+      (ldb/register-transact-pipeline-fn! worker-pipeline/transact-pipeline)
+      (try
+        (testing "page-name->map + save-block, as wrap-parse-block / /today would"
+          (let [reference (gp-block/page-name->map custom-title @conn true title-format)
+                error (try
+                        (outliner-op/apply-ops!
+                         conn
+                         [[:save-block [{:db/id (:db/id target)
+                                         :block/uuid (:block/uuid target)
+                                         :block/title (str "[[" custom-title "]]")
+                                         :block/refs [reference]}
+                                        nil]]]
+                         {})
+                        nil
+                        (catch :default e
+                          e))
+                journal-after (db-test/find-journal-by-journal-day @conn journal-day)
+                target-after (d/entity @conn (:db/id target))]
+            (is (nil? error))
+            (is (= stored-name (:block/name journal-after)))
+            (is (= stored-title (raw-block-title @conn journal-after)))
+            (is (= (:block/uuid journal)
+                   (:block/uuid (first (:block/refs target-after)))))))
+
+        (testing "inbound custom-format :block/name rebound to the existing journal UUID"
+          (let [parsed-uuid (random-uuid)
+                inbound-ref {:block/uuid parsed-uuid
+                             :block/title custom-title
+                             :block/name custom-name
+                             :block/tags [:logseq.class/Page]}
+                error (try
+                        (outliner-op/apply-ops!
+                         conn
+                         [[:save-block [{:db/id (:db/id target)
+                                         :block/uuid (:block/uuid target)
+                                         :block/title (str "[[" parsed-uuid "]]")
+                                         :block/refs [inbound-ref]}
+                                        nil]]]
+                         {})
+                        nil
+                        (catch :default e
+                          e))
+                journal-after (db-test/find-journal-by-journal-day @conn journal-day)
+                target-after (d/entity @conn (:db/id target))]
+            (is (nil? error))
+            (is (not= :journal-page-protected-attr-updated
+                      (:type (ex-data error))))
+            (is (= stored-name (:block/name journal-after)))
+            (is (= stored-title (raw-block-title @conn journal-after)))
+            (is (= (:block/uuid journal)
+                   (:block/uuid (first (:block/refs target-after)))))))
+        (finally
+          (ldb/register-transact-pipeline-fn! identity))))))
+
 (deftest create-journal-page-name-uses-default-formatter-test
   (let [conn (db-test/create-conn)]
     (d/transact! conn [[:db/add :logseq.class/Journal :logseq.property.journal/title-format "yyyy-MM-dd EEEE"]])

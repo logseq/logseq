@@ -321,6 +321,13 @@
     (d/entity db
               (first (sort (map :e (entity-util/get-pages-by-name db page-name)))))))
 
+(defn- stored-block-attr
+  "Read a scalar from datoms. Journal :block/title on Entity is computed from
+  title-format and must not be used as a write-back value."
+  [db eid attr]
+  (when (and db eid)
+    (:v (first (d/datoms db :eavt eid attr)))))
+
 (defn- page-name-string->map
   [original-page-name db date-formatter
    {:keys [with-timestamp? page-uuid from-page class? skip-existing-page-check? skip-journal?]}]
@@ -346,9 +353,11 @@
 
                         :else
                         (get-page db original-page-name')))
-        original-page-name' (or from-page (:block/title page-entity) original-page-name')
+        original-page-name' (or from-page
+                                (stored-block-attr db (:db/id page-entity) :block/title)
+                                original-page-name')
         page-name' (if (and journal-day page-entity)
-                     (:block/name page-entity)
+                     (stored-block-attr db (:db/id page-entity) :block/name)
                      page-name)
         page (merge
               {:block/name page-name'

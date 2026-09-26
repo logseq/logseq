@@ -242,26 +242,79 @@
            (seq (set/intersection (ref-tag-idents ref)
                                   #{:logseq.class/Page :logseq.class/Journal})))))
 
+(defn- journal-identity-ref
+  "Journals keep a stable stored :block/name. Never copy inbound or
+  entity-computed title/name onto that page."
+  [page ref]
+  (merge (select-keys page [:db/id :block/uuid :db/ident])
+         (select-keys ref [:block.temp/original-page-name])))
+
+(defn- live-journal?
+  [e]
+  (and (ldb/journal? e)
+       ;; Recycled journals still carry :block/journal-day and their tags;
+       ;; refs to them go through outliner-page/create so they get restored.
+       (not (ldb/recycled? e))))
+
+(defn- existing-journal-page
+  [db ref]
+  (when (map? ref)
+    (or (when-let [day (:block/journal-day ref)]
+          (when-let [e (ldb/get-journal-page-by-day db day)]
+            (when (live-journal? e) e)))
+        (when-let [e (or (some->> (:db/id ref) (d/entity db))
+                         (when-let [id (:block/uuid ref)]
+                           (d/entity db [:block/uuid id])))]
+          (when (live-journal? e) e))
+        (when-let [page-name (:block/name ref)]
+          (when-let [e (ldb/get-page db page-name)]
+            (when (live-journal? e) e))))))
+
+(defn- journal-page-tx?
+  [page-uuid tx]
+  (and (map? tx)
+       (= page-uuid (:block/uuid tx))
+       (or (:block/journal-day tx)
+           (= "journal" (:block/type tx))
+           (let [tags (:block/tags tx)
+                 tag-set (set (if (or (sequential? tags) (set? tags))
+                                tags
+                                [tags]))]
+             (contains? tag-set :logseq.class/Journal)))))
+
+(defn- resolve-created-page-ref
+  [db ref class? page-uuid tx-data]
+  (let [existing (d/entity db [:block/uuid page-uuid])]
+    (if (or (ldb/journal? existing)
+            (some #(journal-page-tx? page-uuid %) tx-data))
+      [(journal-identity-ref (or existing {:block/uuid page-uuid}) ref)
+       tx-data]
+      [(cond-> (assoc (select-keys ref [:block/title :block/name :block.temp/original-page-name])
+                      :block/uuid page-uuid)
+         class? (assoc :db/ident (or (some :db/ident tx-data)
+                                     (:db/ident existing))))
+       tx-data])))
+
 (defn- resolve-page-ref
   [db ref tag-names]
-  (if (new-page-ref? ref)
-    (let [class? (contains? tag-names (:block/name ref))]
-      (if-let [page (and (not class?) (ldb/get-page db (:block/name ref)))]
-        [(merge (select-keys page [:db/id :block/uuid :block/title :block/name :db/ident])
-                (select-keys ref [:block.temp/original-page-name]))
-         nil]
-        (let [{:keys [page-uuid tx-data]} (outliner-page/create db (:block/title ref)
-                                                                 {:uuid (:block/uuid ref)
-                                                                  :class? class?
-                                                                  :journal? (or (= "journal" (:block/type ref))
-                                                                                (contains? (ref-tag-idents ref)
-                                                                                           :logseq.class/Journal))})]
-          [(cond-> (assoc (select-keys ref [:block/title :block/name :block.temp/original-page-name])
-                          :block/uuid page-uuid)
-             class? (assoc :db/ident (or (some :db/ident tx-data)
-                                         (:db/ident (d/entity db [:block/uuid page-uuid])))))
-           tx-data])))
-    [ref nil]))
+  (if-let [journal (existing-journal-page db ref)]
+    [(journal-identity-ref journal ref) nil]
+    (if (new-page-ref? ref)
+      (let [class? (contains? tag-names (:block/name ref))]
+        (if-let [page (and (not class?) (ldb/get-page db (:block/name ref)))]
+          [(if (ldb/journal? page)
+             (journal-identity-ref page ref)
+             (merge (select-keys page [:db/id :block/uuid :block/title :block/name :db/ident])
+                    (select-keys ref [:block.temp/original-page-name])))
+           nil]
+          (let [{:keys [page-uuid tx-data]} (outliner-page/create db (:block/title ref)
+                                                                   {:uuid (:block/uuid ref)
+                                                                    :class? class?
+                                                                    :journal? (or (= "journal" (:block/type ref))
+                                                                                  (contains? (ref-tag-idents ref)
+                                                                                             :logseq.class/Journal))})]
+            (resolve-created-page-ref db ref class? page-uuid tx-data))))
+      [ref nil])))
 
 (defn- resolve-page-refs
   [db block]
