@@ -4066,12 +4066,14 @@
   [& {:keys [select? save-block? editing-another-block?]
       :or {save-block? true}}]
   ;; `save-current-block!` resolves after the worker persists the block; during
-  ;; that window the user may already be editing another block, so only clear
-  ;; the edit session this escape was issued for.
-  (let [editing-block-id (:block/uuid (state/get-edit-block))]
+  ;; that window the user may have left or re-entered editing, so only proceed
+  ;; while this exact edit session is still the active one. Every new edit
+  ;; session installs a fresh `:editor/block`, so identity catches re-editing
+  ;; the same block too.
+  (let [editing-block (state/get-edit-block)]
     (p/do!
      (when save-block? (save-current-block!))
-     (when (= editing-block-id (:block/uuid (state/get-edit-block)))
+     (when (identical? editing-block (state/get-edit-block))
        (if select?
          (when-let [node (some-> (state/get-input) (util/rec-get-node "ls-block"))]
            (state/exit-editing-and-set-selected-blocks! [node]))
