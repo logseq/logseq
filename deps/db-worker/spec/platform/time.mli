@@ -41,18 +41,15 @@ val epoch_ms_of_float : float -> epoch_ms
 val epoch_ms_to_int64 : epoch_ms -> int64
 val epoch_ms_to_float : epoch_ms -> float
 val compare_epoch_ms : epoch_ms -> epoch_ms -> int
-val equal_epoch_ms : epoch_ms -> epoch_ms -> bool
 val now : unit -> epoch_ms
 
 (* ---- monotonic_ms ---- *)
 
 val monotonic_now : unit -> monotonic_ms
-val monotonic_ms_to_float : monotonic_ms -> float
 val diff_monotonic_ms : monotonic_ms -> monotonic_ms -> float
 (** Elapsed milliseconds from the first reading to the second. *)
 
 val compare_monotonic_ms : monotonic_ms -> monotonic_ms -> int
-val equal_monotonic_ms : monotonic_ms -> monotonic_ms -> bool
 
 (* ---- local_date ---- *)
 
@@ -81,7 +78,6 @@ val civil_fields : civil -> int * int * int * int * int * int * int
 (** (year, month, day, hour, minute, second, ms). *)
 
 val compare_civil : civil -> civil -> int
-val equal_civil : civil -> civil -> bool
 
 (* ---- epoch_ms <-> civil/local_date ---- *)
 
@@ -91,19 +87,6 @@ val civil_of_epoch_ms : tz -> epoch_ms -> civil
 val epoch_ms_of_civil : tz -> civil -> epoch_ms
 (** Epoch ms of a civil time read in [tz]; out-of-range fields roll
     over (cljs: Date setters). *)
-
-val local_date_of_epoch_ms : tz -> epoch_ms -> local_date
-(** The civil date an instant falls on in [tz]. *)
-
-val epoch_ms_of_local_date : local_date -> epoch_ms
-(** Epoch ms of local midnight of the date in its timezone. *)
-
-val epoch_ms_of_local_date_at :
-  local_date -> hour:int -> minute:int -> second:int -> ms:int -> epoch_ms
-(** Same local date with the given time fields (cljs: Date#setHours);
-    out-of-range fields roll over. *)
-
-val today : tz -> local_date
 
 (* ---- journal-day int (yyyymmdd) ---- *)
 

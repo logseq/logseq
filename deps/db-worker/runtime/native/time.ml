@@ -33,16 +33,13 @@ let epoch_ms_of_float f = Int64.of_float f
 let epoch_ms_to_int64 t = t
 let epoch_ms_to_float t = Int64.to_float t
 let compare_epoch_ms = Int64.compare
-let equal_epoch_ms = Int64.equal
 let now () = Int64.of_float (Unix.gettimeofday () *. 1000.)
 
 (* ---- monotonic_ms ---- *)
 
 let monotonic_now () = Unix.gettimeofday () *. 1000.
-let monotonic_ms_to_float t = t
 let diff_monotonic_ms a b = b -. a
 let compare_monotonic_ms = Float.compare
-let equal_monotonic_ms = Float.equal
 
 (* ---- int64 floor division + civil<->days (Howard Hinnant) ---- *)
 
@@ -150,7 +147,6 @@ let civil_fields c =
     c.cv_ms )
 
 let compare_civil a b = compare (civil_fields a) (civil_fields b)
-let equal_civil a b = a = b
 
 let civil_of_epoch_ms tz ms =
   match tz with
@@ -196,22 +192,6 @@ let compare_local_date a b =
 
 let equal_local_date a b =
   local_date_fields a = local_date_fields b && equal_tz a.ld_tz b.ld_tz
-
-let local_date_of_epoch_ms tz ms =
-  let c = civil_of_epoch_ms tz ms in
-  { ld_year = c.cv_year; ld_month = c.cv_month; ld_day = c.cv_day; ld_tz = tz }
-
-let epoch_ms_of_local_date d =
-  epoch_ms_of_civil d.ld_tz
-    { cv_year = d.ld_year; cv_month = d.ld_month; cv_day = d.ld_day;
-      cv_hour = 0; cv_minute = 0; cv_second = 0; cv_ms = 0 }
-
-let epoch_ms_of_local_date_at d ~hour ~minute ~second ~ms =
-  epoch_ms_of_civil d.ld_tz
-    { cv_year = d.ld_year; cv_month = d.ld_month; cv_day = d.ld_day;
-      cv_hour = hour; cv_minute = minute; cv_second = second; cv_ms = ms }
-
-let today tz = local_date_of_epoch_ms tz (now ())
 
 (* ---- journal-day int (yyyymmdd) ---- *)
 
