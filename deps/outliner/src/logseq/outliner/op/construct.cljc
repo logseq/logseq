@@ -799,7 +799,9 @@
 
 (defn- inbound-ref-restore-ops
   "`:db/retractEntity` on a deleted block also retracts the ref values other
-  blocks hold on it, e.g. a node property value. Restore those values."
+  blocks hold on it, e.g. a node property value. Restore those values. They
+  can point at blocks from several delete ops, so run these after every
+  deleted block has been inserted again."
   [db-before tx-data]
   (let [deleted-ids (into #{}
                           (keep (fn [d]
@@ -825,14 +827,15 @@
                        {}]])))))))
 
 (defn- build-inverse-delete-blocks
-  [db-before tx-data ids]
+  [db-before ids]
   (let [{:keys [roots incomplete?]} (selected-block-roots db-before ids)
         plans (mapv #(delete-root->restore-plan db-before %) roots)]
     (when (and (not incomplete?)
                (seq roots)
                (every? some? plans))
-      (seq (concat (mapv #(to-insert-op db-before %) plans)
-                   (inbound-ref-restore-ops db-before tx-data))))))
+      (->> plans
+           (mapv #(to-insert-op db-before %))
+           seq))))
 
 (defn- move-root->restore-op
   [db-before root]
@@ -1053,7 +1056,7 @@
 
                           :delete-blocks
                           (let [[ids _opts] args]
-                            (build-inverse-delete-blocks db-before tx-data ids))
+                            (build-inverse-delete-blocks db-before ids))
 
                           :create-page
                           (let [[_title opts] args]
@@ -1085,7 +1088,11 @@
       ;; Any missing inverse entry means the whole semantic inverse is incomplete.
       ;; Use raw reversed tx instead of partially replaying.
       (when (every? some? inverse-entries)
-        (some->> (reverse-inverse-entry-groups inverse-entries forward-op-group-sizes)
+        (some->> (concat
+                  (reverse-inverse-entry-groups inverse-entries forward-op-group-sizes)
+                  (when-let [restore-ops (and (some #(= :delete-blocks (first %)) forward-ops)
+                                              (seq (inbound-ref-restore-ops db-before tx-data)))]
+                    [restore-ops]))
                  (mapcat #(if (and (sequential? %)
                                    (sequential? (first %)))
                             %
