@@ -9,6 +9,7 @@
             [frontend.worker.undo-redo :as worker-undo-redo]
             [logseq.common.util.date-time :as date-time-util]
             [logseq.db :as ldb]
+            [logseq.db.sqlite.build :as sqlite-build]
             [logseq.db.test.helper :as db-test]
             [logseq.outliner.op :as outliner-op]))
 
@@ -1209,3 +1210,118 @@
       (is (= ::worker-undo-redo/empty-redo-stack
              (worker-undo-redo/redo test-repo)))
       (is (= "v3" (:block/title (d/entity @conn [:block/uuid child-uuid])))))))
+
+(defn- seed-inner-ref-graph!
+  "Adds the node property \"related\" (cardinality many), page \"refs 1\" with
+  blocks a, b (children b1, b2), c, page \"refs 2\" with blocks d and tmpl
+  (tagged Template, child \"tmpl child\"), and a journal with block e. Clears
+  history and returns a fn from a block title to its uuid."
+  []
+  (let [conn (worker-state/get-datascript-conn test-repo)]
+    (sqlite-build/create-blocks
+     conn
+     {:properties {:related {:logseq.property/type :node
+                             :db/cardinality :db.cardinality/many}}
+      :pages-and-blocks
+      [{:page {:block/title "refs 1"}
+        :blocks [{:block/title "a"}
+                 {:block/title "b"
+                  :build/children [{:block/title "b1"}
+                                   {:block/title "b2"}]}
+                 {:block/title "c"}]}
+       {:page {:block/title "refs 2"}
+        :blocks [{:block/title "d"}
+                 {:block/title "tmpl"
+                  :build/tags [:logseq.class/Template]
+                  :build/children [{:block/title "tmpl child"}]}]}
+       {:page {:build/journal 20260925}
+        :blocks [{:block/title "e"}]}]})
+    (worker-undo-redo/clear-history! test-repo)
+    (fn [title]
+      (:block/uuid (db-test/find-block-by-content @conn title)))))
+
+(defn- page-tree
+  "The page titled page-title and its blocks, as nested titles."
+  [page-title]
+  (let [db @(worker-state/get-datascript-conn test-repo)
+        node (fn node [e]
+               (let [children (ldb/sort-by-order (:block/_parent e))]
+                 (if (seq children)
+                   [(:block/title e) (mapv node children)]
+                   (:block/title e))))]
+    (node (db-test/find-page-by-title db page-title))))
+
+(defn- undo-with-history-action-results!
+  "Undoes once and returns the undo result and the results of the worker's
+  history actions it ran."
+  []
+  (let [apply-action @worker-undo-redo/*apply-history-action!
+        *results (atom [])]
+    (reset! worker-undo-redo/*apply-history-action!
+            (fn [& args]
+              (let [result (apply apply-action args)]
+                (swap! *results conj result)
+                result)))
+    (try
+      [(worker-undo-redo/undo test-repo) @*results]
+      (finally
+        (reset! worker-undo-redo/*apply-history-action! apply-action)))))
+
+(deftest undo-delete-of-blocks-referring-to-each-other-test
+  (testing "undoing a delete of blocks where one holds a node property value pointing at another restores both"
+    (let [conn (worker-state/get-datascript-conn test-repo)
+          uuid-of (seed-inner-ref-graph!)
+          related (d/q '[:find ?ident . :where
+                         [?p :block/title "related"]
+                         [?p :db/ident ?ident]]
+                       @conn)]
+      (apply-ops! conn
+                  [[:set-block-property [(uuid-of "a") related
+                                         (:db/id (d/entity @conn [:block/uuid (uuid-of "b1")]))]]]
+                  (local-tx-meta {:client-id "test-client"}))
+      (let [a-uuid (uuid-of "a")
+            b1-uuid (uuid-of "b1")]
+        (apply-ops! conn
+                    [[:delete-blocks [[a-uuid (uuid-of "b")] {}]]]
+                    (local-tx-meta {:client-id "test-client"}))
+        (is (= ["refs 1" ["c"]] (page-tree "refs 1")))
+        (let [[undo-result results] (undo-with-history-action-results!)]
+          (is (map? undo-result))
+          (is (= [true] (mapv :applied? results))))
+        (is (= ["refs 1" ["a" ["b" ["b1" "b2"]] "c"]] (page-tree "refs 1")))
+        (is (= #{b1-uuid}
+               (set (map :block/uuid (get (d/entity @conn [:block/uuid a-uuid]) related)))))
+        (testing "redo deletes them again and a second undo restores them again"
+          (is (map? (worker-undo-redo/redo test-repo)))
+          (is (= ["refs 1" ["c"]] (page-tree "refs 1")))
+          (is (map? (worker-undo-redo/undo test-repo)))
+          (is (= ["refs 1" ["a" ["b" ["b1" "b2"]] "c"]] (page-tree "refs 1")))
+          (is (= #{b1-uuid}
+                 (set (map :block/uuid (get (d/entity @conn [:block/uuid a-uuid]) related))))))))))
+
+(deftest undo-delete-of-template-and-its-applied-copy-test
+  (testing "undoing a delete of a template and a copy of it (selected copy first) restores both"
+    (let [conn (worker-state/get-datascript-conn test-repo)
+          uuid-of (seed-inner-ref-graph!)
+          tmpl-uuid (uuid-of "tmpl")
+          e-uuid (uuid-of "e")]
+      (apply-ops! conn
+                  [[:apply-template [tmpl-uuid e-uuid {:sibling? false}]]]
+                  (local-tx-meta {:client-id "test-client"}))
+      (let [copy-uuid (d/q '[:find ?uuid . :in $ ?tmpl-uuid :where
+                             [?t :block/uuid ?tmpl-uuid]
+                             [?b :logseq.property/used-template ?t]
+                             [?b :block/uuid ?uuid]]
+                           @conn tmpl-uuid)]
+        (is (uuid? copy-uuid))
+        (apply-ops! conn
+                    [[:delete-blocks [[copy-uuid tmpl-uuid] {}]]]
+                    (local-tx-meta {:client-id "test-client"}))
+        (is (= ["refs 2" ["d"]] (page-tree "refs 2")))
+        (let [[undo-result results] (undo-with-history-action-results!)]
+          (is (map? undo-result))
+          (is (= [true] (mapv :applied? results))))
+        (is (= ["refs 2" ["d" ["tmpl" ["tmpl child"]]]] (page-tree "refs 2")))
+        (let [copy (d/entity @conn [:block/uuid copy-uuid])]
+          (is (= e-uuid (:block/uuid (:block/parent copy))))
+          (is (= tmpl-uuid (:block/uuid (:logseq.property/used-template copy)))))))))

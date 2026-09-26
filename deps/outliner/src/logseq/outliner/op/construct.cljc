@@ -792,6 +792,50 @@
         created-from-property
         (assoc :created-from-property created-from-property)))))
 
+(defn- split-block-refs
+  "Splits the ref values of the insert payload `block` into those pointing at a
+  block in `uuids` and the rest: [block without them, map of them]."
+  [db-before uuids block]
+  (let [in-uuids? (fn [v]
+                    (and (vector? v)
+                         (= :block/uuid (first v))
+                         (contains? uuids (second v))))]
+    (reduce-kv
+     (fn [[block' refs :as acc] k v]
+       (if (worker-ref-attr? db-before k)
+         (if (set? v)
+           (let [{in true out false} (group-by in-uuids? v)]
+             (if (seq in)
+               [(if (seq out) (assoc block' k (set out)) (dissoc block' k))
+                (assoc refs k (set in))]
+               acc))
+           (if (in-uuids? v)
+             [(dissoc block' k) (assoc refs k v)]
+             acc))
+         acc))
+     [block {}]
+     block)))
+
+(defn- defer-refs-to-later-plans
+  "Each restore plan is inserted by its own op, so a block that refers to a
+  block of a later plan (a node property value, a used template) fails to
+  insert: the later block doesn't exist yet. Takes those refs out of the
+  plans and returns [plans, :save-block ops that set them after all inserts]."
+  [db-before plans]
+  (let [plan-uuids (mapv #(set (keep :block/uuid (:blocks %))) plans)]
+    (reduce
+     (fn [[plans' save-ops] [i plan]]
+       (let [later-uuids (into #{} cat (subvec plan-uuids (inc i)))
+             splits (mapv #(split-block-refs db-before later-uuids %) (:blocks plan))]
+         [(conj plans' (assoc plan :blocks (mapv first splits)))
+          (into save-ops
+                (keep (fn [[block refs]]
+                        (when (seq refs)
+                          [:save-block [(assoc refs :block/uuid (:block/uuid block)) {}]])))
+                splits)]))
+     [[] []]
+     (map-indexed vector plans))))
+
 (defn- build-inverse-delete-blocks
   [db-before ids]
   (let [{:keys [roots incomplete?]} (selected-block-roots db-before ids)
@@ -799,9 +843,10 @@
     (when (and (not incomplete?)
                (seq roots)
                (every? some? plans))
-      (->> plans
-           (mapv #(to-insert-op db-before %))
-           seq))))
+      (let [[plans' save-ops] (defer-refs-to-later-plans db-before plans)]
+        (-> (mapv #(to-insert-op db-before %) plans')
+            (into save-ops)
+            seq)))))
 
 (defn- move-root->restore-op
   [db-before root]
