@@ -797,16 +797,42 @@
         created-from-property
         (assoc :created-from-property created-from-property)))))
 
+(defn- inbound-ref-restore-ops
+  "`:db/retractEntity` on a deleted block also retracts the ref values other
+  blocks hold on it, e.g. a node property value. Restore those values."
+  [db-before tx-data]
+  (let [deleted-ids (into #{}
+                          (keep (fn [d]
+                                  (when (and (= :block/uuid (:a d))
+                                             (not (:added d)))
+                                    (:e d))))
+                          tx-data)]
+    (->> tx-data
+         (filter (fn [d]
+                   (and (not (:added d))
+                        (contains? deleted-ids (:v d))
+                        (not (contains? deleted-ids (:e d)))
+                        (worker-ref-attr? db-before (:a d)))))
+         (group-by :e)
+         (keep (fn [[e datoms]]
+                 (let [ent (d/entity db-before e)]
+                   (when-let [block-uuid (:block/uuid ent)]
+                     [:save-block
+                      [(reduce (fn [m a]
+                                 (assoc m a (sanitize-ref-value db-before (get ent a))))
+                               {:block/uuid block-uuid}
+                               (distinct (map :a datoms)))
+                       {}]])))))))
+
 (defn- build-inverse-delete-blocks
-  [db-before ids]
+  [db-before tx-data ids]
   (let [{:keys [roots incomplete?]} (selected-block-roots db-before ids)
         plans (mapv #(delete-root->restore-plan db-before %) roots)]
     (when (and (not incomplete?)
                (seq roots)
                (every? some? plans))
-      (->> plans
-           (mapv #(to-insert-op db-before %))
-           seq))))
+      (seq (concat (mapv #(to-insert-op db-before %) plans)
+                   (inbound-ref-restore-ops db-before tx-data))))))
 
 (defn- move-root->restore-op
   [db-before root]
@@ -1027,7 +1053,7 @@
 
                           :delete-blocks
                           (let [[ids _opts] args]
-                            (build-inverse-delete-blocks db-before ids))
+                            (build-inverse-delete-blocks db-before tx-data ids))
 
                           :create-page
                           (let [[_title opts] args]
