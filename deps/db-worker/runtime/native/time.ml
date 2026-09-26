@@ -151,7 +151,9 @@ let compare_civil a b = compare (civil_fields a) (civil_fields b)
 let civil_of_epoch_ms tz ms =
   match tz with
   | Local_tz ->
-      let tm = Unix.localtime (Int64.to_float ms /. 1000.) in
+      (* floor, not truncation: the civil second containing a negative
+         epoch-ms is its floor (ms part is taken floor-mod below) *)
+      let tm = Unix.localtime (Float.floor (Int64.to_float ms /. 1000.)) in
       civil_of_unix_tm
         tm
         (Int64.(to_int (rem (add (rem ms 1000L) 1000L) 1000L)))
