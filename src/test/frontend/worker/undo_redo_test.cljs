@@ -1506,20 +1506,28 @@
 (deftest undo-create-property-removes-only-the-new-ident-test
   (testing "undo of a property creation that got a uniquified ident removes the new property and leaves the old one (db-test#1299)"
     (worker-undo-redo/clear-history! test-repo)
-    (let [conn (worker-state/get-datascript-conn test-repo)]
-      (apply-ops! conn
-                  [[:upsert-property [nil {:logseq.property/type :default} {:property-name "rating"}]]]
-                  (local-tx-meta {:client-id "test-client"}))
-      (apply-ops! conn
-                  [[:upsert-property [nil {:logseq.property/type :number} {:property-name "rating"}]]]
-                  (local-tx-meta {:client-id "test-client"}))
-      (is (some? (d/entity @conn :user.property/rating)))
-      (is (some? (d/entity @conn :user.property/rating-1)))
+    (let [conn (worker-state/get-datascript-conn test-repo)
+          ;; New property idents carry a random suffix; track the entities
+          ;; themselves instead of their idents.
+          old-property (apply-ops! conn
+                                   [[:upsert-property [nil {:logseq.property/type :default} {:property-name "rating"}]]]
+                                   (local-tx-meta {:client-id "test-client"}))
+          new-property (apply-ops! conn
+                                   [[:upsert-property [nil {:logseq.property/type :number} {:property-name "rating"}]]]
+                                   (local-tx-meta {:client-id "test-client"}))
+          old-uuid (:block/uuid old-property)
+          new-uuid (:block/uuid new-property)]
+      (is (uuid? old-uuid))
+      (is (uuid? new-uuid))
+      (is (not= old-uuid new-uuid))
+      (is (not= (:db/ident old-property) (:db/ident new-property))
+          "the second upsert must create a distinct property")
 
       ;; Undo only the second upsert
       (is (map? (worker-undo-redo/undo test-repo)))
-      (is (some? (d/entity @conn :user.property/rating))
-          "the pre-existing property must be untouched")
-      (is (= :default (:logseq.property/type (d/entity @conn :user.property/rating))))
-      (is (nil? (d/entity @conn :user.property/rating-1))
+      (let [old-property' (d/entity @conn [:block/uuid old-uuid])]
+        (is (some? old-property')
+            "the pre-existing property must be untouched")
+        (is (= :default (:logseq.property/type old-property'))))
+      (is (nil? (d/entity @conn [:block/uuid new-uuid]))
           "the newly created property must be removed"))))
