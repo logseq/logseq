@@ -171,6 +171,7 @@ external process_platform : string = "platform" [@@mel.scope "process"]
 
 external process_env : unit -> string Js.Dict.t = "env"
   [@@mel.scope "process"]
+
 external process_resources_path : string = "resourcesPath"
   [@@mel.scope "process"]
 
@@ -178,6 +179,7 @@ external process_resources_path : string = "resourcesPath"
 
 module Session = struct
   type t
+  type web_request = < > Js.t
 
   external from_partition : string -> t = "fromPartition"
     [@@mel.module "electron"] [@@mel.scope "session"]
@@ -187,6 +189,17 @@ module Session = struct
     = "forceReloadProxyConfig" [@@mel.send]
   external resolve_proxy : t -> string -> string Js.Promise.t
     = "resolveProxy" [@@mel.send]
+  external web_request : t -> web_request = "webRequest" [@@mel.get]
+end
+
+module Web_request = struct
+  type t = Session.web_request
+  type details = < responseHeaders : Js.Json.t Js.Dict.t [@mel.get] > Js.t
+
+  external on_headers_received :
+    t ->
+    (details -> (Js.Json.t -> unit [@u]) -> unit [@u]) ->
+    unit = "onHeadersReceived" [@@mel.send]
 end
 
 external web_contents_session : Web_contents.t -> Session.t = "session"

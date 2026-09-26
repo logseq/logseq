@@ -200,18 +200,14 @@ let local_url_handler (win : Browser_window.t) (parsed_url : url)
                     [| payload |]
                 in
                 if open_new_window then
-                  (* redirect-f fires once the new window's graph is
-                     ready; the thunk re-finds the window that has
-                     registered itself on this graph's dir. *)
+                  (* cljs redirect-f (fn [win' graph-name']): fires on the
+                     :graphReady ipc of the new window; redirects only
+                     when the reported graph matches. *)
                   Electron_state.once_graph_ready :=
                     Some
-                      (fun () ->
-                        match graph_dir with
-                        | Some dir ->
-                            (match get_graph_all_windows dir with
-                             | w :: _ -> redirect w
-                             | [] -> ())
-                        | None -> ())
+                      (fun win' graph_name' ->
+                        if String.equal graph_name graph_name' then
+                          redirect win')
                 else
                   (match window_on_graph with
                    | Some w ->
