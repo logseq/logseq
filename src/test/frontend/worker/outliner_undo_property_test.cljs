@@ -95,7 +95,11 @@
                           "undo-mismatch props+tags delete-page:tag"
                           "undo-mismatch tags delete-page:tag"]
    ;; Undo of changing a property to multiple values does nothing.
-   "logseq/db-test#1306" ["undo-mismatch props retype:*"]})
+   "logseq/db-test#1306" ["undo-mismatch props retype:*"]
+   ;; Undo of deleting a property with choices sets the property's own value.
+   "logseq/db-test#1309" ["undo-mismatch props delete-page:property"]
+   ;; Undo of deleting a parent tag leaves its child tags under Root Tag.
+   "logseq/db-test#1312" ["undo-mismatch props delete-page:tag"]})
 
 (defn- env [k] (gobj/get (.-env js/process) k))
 
