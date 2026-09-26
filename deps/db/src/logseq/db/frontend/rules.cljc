@@ -145,10 +145,7 @@
     '[(object-has-class-property? ?b ?prop)
       [?prop-e :db/ident ?prop]
       [?t :logseq.property.class/properties ?prop-e]
-      [?b :block/tags ?tc]
-      (or
-       [(= ?t ?tc)]
-       (class-extends ?t ?tc))]
+      (class-instance ?t ?b)]
 
     :has-property-or-object-property
     '[(has-property-or-object-property? ?b ?prop)
@@ -284,13 +281,8 @@
        [(identity ?tags) [?spec ...]]
        (tag-spec->tag ?tag ?spec)
 
-       ;; tag/class attached to block
-       [?b :block/tags ?tc]
-
-       ;; direct or descendant
-       (or
-        [(= ?tag ?tc)]
-        (class-extends ?tag ?tc))
+       ;; tag/class attached to block, directly or through a descendant class
+       (class-instance ?tag ?b)
 
        [(missing? $ ?b :block/link)]]]
 
@@ -338,10 +330,10 @@
    :class-instance #{:class-extends}
    :task #{:ref-property-with-default :class-instance}
    :priority #{:ref-property-with-default}
-   :tags #{:class-extends}
+   :tags #{:class-instance}
 
    :has-property-or-object-property #{:object-has-class-property}
-   :object-has-class-property #{:class-extends}
+   :object-has-class-property #{:class-instance}
    :has-simple-query-property #{:has-property-or-object-property}
    :has-private-simple-query-property #{:has-property-or-object-property}
    :property-missing-value #{:object-has-class-property}
