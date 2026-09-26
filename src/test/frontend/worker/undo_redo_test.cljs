@@ -1452,3 +1452,82 @@
       (let [property (d/entity @conn :user.property/undo-self-rating)]
         (is (= property-uuid (:block/uuid property)))
         (is (nil? (:user.property/undo-self-rating property)))))))
+
+(deftest undo-redo-namespaced-create-page-test
+  (testing "undo removes the whole created namespace, redo recreates pages with their original uuids (db-test#1298)"
+    (worker-undo-redo/clear-history! test-repo)
+    (let [conn (worker-state/get-datascript-conn test-repo)]
+      (apply-ops! conn
+                  [[:create-page ["ns-undo-test/leaf" {:redirect? false
+                                                        :split-namespace? true
+                                                        :tags ()}]]]
+                  (local-tx-meta {:client-id "test-client"}))
+      (let [leaf (db-test/find-page-by-title @conn "leaf")
+            ns-page (db-test/find-page-by-title @conn "ns-undo-test")
+            leaf-uuid (:block/uuid leaf)
+            ns-uuid (:block/uuid ns-page)]
+        (is (some? leaf))
+        (is (some? ns-page))
+        (is (seq (undo-all!)))
+        (is (nil? (d/entity @conn [:block/uuid leaf-uuid])))
+        (is (nil? (d/entity @conn [:block/uuid ns-uuid])))
+
+        (is (seq (redo-all!)))
+        (let [leaf' (db-test/find-page-by-title @conn "leaf")
+              ns-page' (db-test/find-page-by-title @conn "ns-undo-test")]
+          (is (= leaf-uuid (:block/uuid leaf')))
+          (is (= ns-uuid (:block/uuid ns-page')))
+          (is (= ns-uuid (:block/uuid (:block/parent leaf')))))))))
+
+(deftest undo-create-page-removes-created-tag-test
+  (testing "undo of create-page also removes a tag created in the same tx (db-test#1300)"
+    (worker-undo-redo/clear-history! test-repo)
+    (let [conn (worker-state/get-datascript-conn test-repo)]
+      (apply-ops! conn
+                  [[:create-page ["undo-alpha" {:redirect? false
+                                                :split-namespace? true
+                                                :tags [{:block/title "UndoMovie"
+                                                        :block/name "undomovie"}]}]]]
+                  (local-tx-meta {:client-id "test-client"}))
+      (let [page-uuid (:block/uuid (db-test/find-page-by-title @conn "undo-alpha"))
+            tag-uuid (:block/uuid (db-test/find-page-by-title @conn "UndoMovie"))]
+        (is (some? page-uuid))
+        (is (some? tag-uuid))
+
+        (is (seq (undo-all!)))
+        (is (nil? (d/entity @conn [:block/uuid page-uuid])))
+        (is (nil? (d/entity @conn [:block/uuid tag-uuid]))
+            "the created tag must not survive undo")
+
+        (is (seq (redo-all!)))
+        (is (= page-uuid (:block/uuid (db-test/find-page-by-title @conn "undo-alpha"))))
+        (is (some? (db-test/find-page-by-title @conn "UndoMovie")))))))
+
+(deftest undo-create-property-removes-only-the-new-ident-test
+  (testing "undo of a property creation that got a uniquified ident removes the new property and leaves the old one (db-test#1299)"
+    (worker-undo-redo/clear-history! test-repo)
+    (let [conn (worker-state/get-datascript-conn test-repo)
+          ;; New property idents carry a random suffix; track the entities
+          ;; themselves instead of their idents.
+          old-property (apply-ops! conn
+                                   [[:upsert-property [nil {:logseq.property/type :default} {:property-name "rating"}]]]
+                                   (local-tx-meta {:client-id "test-client"}))
+          new-property (apply-ops! conn
+                                   [[:upsert-property [nil {:logseq.property/type :number} {:property-name "rating"}]]]
+                                   (local-tx-meta {:client-id "test-client"}))
+          old-uuid (:block/uuid old-property)
+          new-uuid (:block/uuid new-property)]
+      (is (uuid? old-uuid))
+      (is (uuid? new-uuid))
+      (is (not= old-uuid new-uuid))
+      (is (not= (:db/ident old-property) (:db/ident new-property))
+          "the second upsert must create a distinct property")
+
+      ;; Undo only the second upsert
+      (is (map? (worker-undo-redo/undo test-repo)))
+      (let [old-property' (d/entity @conn [:block/uuid old-uuid])]
+        (is (some? old-property')
+            "the pre-existing property must be untouched")
+        (is (= :default (:logseq.property/type old-property'))))
+      (is (nil? (d/entity @conn [:block/uuid new-uuid]))
+          "the newly created property must be removed"))))

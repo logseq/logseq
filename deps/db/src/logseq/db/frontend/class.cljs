@@ -6,6 +6,7 @@
             [datascript.impl.entity :as de]
             [flatland.ordered.map :refer [ordered-map]]
             [logseq.common.defkeywords :refer [defkeywords]]
+            [logseq.common.uuid :as common-uuid]
             [logseq.db.frontend.db-ident :as db-ident]
             [logseq.db.frontend.rules :as rules]
             [logseq.db.sqlite.util :as sqlite-util]))
@@ -208,7 +209,13 @@
   [db page-m & {:as option}]
   {:pre [(string? (:block/title page-m))]}
   (let [db-ident (create-user-class-ident-from-name db (:block/title page-m) option)]
-    (sqlite-util/build-new-class (assoc page-m :db/ident db-ident))))
+    (sqlite-util/build-new-class (assoc page-m
+                                        :db/ident db-ident
+                                        ;; ident-derived uuid keeps created classes
+                                        ;; addressable by uuid (like properties), so
+                                        ;; semantic ops can target them
+                                        :block/uuid (or (:block/uuid page-m)
+                                                        (common-uuid/gen-uuid :db-ident-block-uuid db-ident))))))
 
 (defonce logseq-class "logseq.class")
 

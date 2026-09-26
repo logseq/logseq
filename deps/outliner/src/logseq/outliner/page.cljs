@@ -316,7 +316,7 @@
            :block/order (db-order/gen-key))))
 
 (defn- ^:large-vars/cleanup-todo split-namespace-pages
-  [db page date-formatter create-class?]
+  [db page date-formatter create-class? parent-uuids]
   (let [{:block/keys [title] block-uuid :block/uuid} page]
     (->>
      (if (and (or (entity-util/class? page)
@@ -334,7 +334,9 @@
                                    (get-page-by-parent-name db (nth parts (dec idx)) part create-class?))
                             result (or page
                                        (gp-block/page-name->map part db true date-formatter
-                                                                {:page-uuid (when last-part? block-uuid)
+                                                                {:page-uuid (if last-part?
+                                                                              block-uuid
+                                                                              (nth parent-uuids idx nil))
                                                                  :skip-existing-page-check? true
                                                                  :class? class?}))]
                         result))
@@ -464,7 +466,7 @@
             [page parents'] (if (and (not (:block/journal-day page))
                                      (text/namespace-page? title)
                                      split-namespace?)
-                              (let [pages (split-namespace-pages db page date-formatter class?)]
+                              (let [pages (split-namespace-pages db page date-formatter class? (:parent-uuids options))]
                                 [(last pages) (butlast pages)])
                               [page nil])]
         (when (and page (or (nil? (:db/ident page))

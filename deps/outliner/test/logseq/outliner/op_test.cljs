@@ -265,3 +265,28 @@
                       conn
                       [[:set-block-property [block-uuid property-id true]]]
                       {})))))))
+
+(deftest move-blocks-keeps-document-order-across-parents-test
+  (testing "A consecutive selection spanning different parents must keep document order (db-test#1297)"
+    (let [conn (db-test/create-conn-with-blocks
+                [{:page {:block/title "page"}
+                  :blocks [{:block/title "parent-a"
+                            :build/children [{:block/title "a-1"}
+                                             {:block/title "a-2"}]}
+                           {:block/title "parent-b"}
+                           {:block/title "target"}]}])
+          parent-a (db-test/find-block-by-content @conn "parent-a")
+          a2 (db-test/find-block-by-content @conn "a-2")
+          parent-b (db-test/find-block-by-content @conn "parent-b")
+          target (db-test/find-block-by-content @conn "target")
+          ;; a-2's sibling order sorts after parent-b's even though a-2 precedes
+          ;; parent-b in document order; comparing :block/order across parents
+          ;; would wrongly reverse [a-2 parent-b].
+          _ (d/transact! conn [[:db/add (:db/id parent-a) :block/order "y0"]
+                               [:db/add (:db/id parent-b) :block/order "y1"]
+                               [:db/add (:db/id target) :block/order "y2"]
+                               [:db/add (:db/id a2) :block/order "zz"]])
+          _ (outliner-core/move-blocks! conn [a2 parent-b] target {:sibling? false})
+          children (->> (ldb/sort-by-order (:block/_parent (d/entity @conn (:db/id target))))
+                        (mapv :block/title))]
+      (is (= ["a-2" "parent-b"] children)))))

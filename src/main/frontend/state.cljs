@@ -205,7 +205,6 @@
       :editor/on-paste?                      false
       :editor/last-key-code                  nil
       :ui/global-last-key-code               nil
-      :editor/block-op-type                  nil ;; :cut, :copy
       :editor/block-refs                     #{}
 
       ;; Stores deleted refed blocks, indexed by repo
@@ -1898,14 +1897,6 @@ should be done through this fn in order to get global config and config defaults
 (defn get-ui-last-key-code
   []
   (get-state :ui/global-last-key-code))
-
-(defn set-block-op-type!
-  [op-type]
-  (set-state! :editor/block-op-type op-type))
-
-(defn get-block-op-type
-  []
-  (:editor/block-op-type (rfx/snapshot)))
 
 (defn feature-http-server-enabled?
   []

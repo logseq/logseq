@@ -2,6 +2,7 @@
   (:require ["path" :as node-path]
             [clojure.string :as string]
             [frontend.commands :as commands]
+            [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
             [frontend.db.async :as db-async]
@@ -13,6 +14,8 @@
             [frontend.modules.outliner.ui :as ui-outliner-tx]
             [frontend.state :as state]
             [frontend.util.ref :as ref]
+            [lambdaisland.glogi :as log]
+            [logseq.common.path :as path]
             [logseq.db :as ldb]
             [logseq.db.frontend.asset :as db-asset]
             [medley.core :as medley]
@@ -36,6 +39,44 @@
   [repo file-path file]
   (p/let [buffer (.arrayBuffer file)]
     (fs/write-asset-file! repo file-path buffer)))
+
+(defn copy-pasted-asset-files!
+  "A copy-pasted asset block gets a fresh uuid while its :logseq.property.asset/*
+  attrs resolve to assets/<new-uuid>.<ext>, so duplicate the source file under
+  the new uuid. The pasted uuid is found by source uuid first, then by the
+  block's :db/id for sources whose entity no longer exists. (db-test#1155)"
+  [repo blocks uuid->new-uuid id->new-uuid]
+  (p/let [repo-dir (config/get-repo-dir repo)
+          assets-dir (path/path-join repo-dir "assets")
+          _ (fs/mkdir-if-not-exists assets-dir)]
+    (p/all
+     (for [block blocks
+           :let [source-uuid (:block/uuid block)
+                 ext (:logseq.property.asset/type block)
+                 new-uuid (or (get uuid->new-uuid source-uuid)
+                              (get id->new-uuid (:db/id block)))]
+           :when (and (ldb/asset? block)
+                      (uuid? source-uuid)
+                      (uuid? new-uuid)
+                      (not= source-uuid new-uuid)
+                      (string? ext)
+                      ;; external-url assets don't have a local file
+                      (nil? (:logseq.property.asset/external-url block)))]
+       (p/let [source-name (str source-uuid "." ext)
+               data (p/catch (fs/read-file-raw assets-dir source-name)
+                             (fn [error]
+                               (log/error :msg "Failed to read pasted asset file"
+                                          :asset-file source-name
+                                          :exception error)
+                               nil))]
+         (if (some? data)
+           (fs/write-asset-file! repo (str new-uuid "." ext) data)
+           (do
+             (log/error :msg "Pasted asset has no backing file"
+                        :asset-file source-name)
+             (notification/show! (t :asset/paste-file-copy-failed source-name)
+                                 :error
+                                 false))))))))
 
 (defn- new-asset-block
   [repo ^js file {:keys [external-url] :as opts}]

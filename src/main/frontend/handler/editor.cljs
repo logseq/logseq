@@ -1213,8 +1213,7 @@
         (p/let [copied-source-blocks (<get-all-blocks-by-ids repo top-level-block-uuids)
                 html (export-html/export-blocks-as-html repo top-level-block-uuids nil)]
           (common-handler/copy-to-clipboard-without-id-property!
-           repo content (when html? html) (blocks-for-clipboard copied-source-blocks) :op block-op)
-          (state/set-block-op-type! block-op))
+           repo content (when html? html) (blocks-for-clipboard copied-source-blocks) :op block-op))
         ;; (notification/show! "Copied!" :success)
         ))))
 
@@ -1277,7 +1276,6 @@
     (p/do!
      (when copy?
        (copy-selection-blocks true :selected-ids selected-ids :op :cut))
-     (state/set-block-op-type! :cut)
      (when-let [blocks selected-blocks]
        ;; remove queries
        (let [dom-blocks (remove (fn [block] (= "true" (dom/attr block "data-query"))) blocks)]
@@ -1441,7 +1439,6 @@
                 copied-source-blocks (<get-all-blocks-by-ids repo [block-id])]
           (common-handler/copy-to-clipboard-without-id-property!
            repo md-content html (blocks-for-clipboard copied-source-blocks) :op :cut)
-          (state/set-block-op-type! :cut)
           (delete-block-aux! block))))))
 
 (defn- selection-node-block-id
@@ -2173,7 +2170,6 @@
           (p/let [_ (when has-unsaved-edits
                       (save-block-inner! editing-block (:block/title editing-block) {}))
                   result (transact-blocks!)]
-            (state/set-block-op-type! nil)
             (when result
               (edit-last-block-after-inserted! result)
               result)))))))

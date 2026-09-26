@@ -191,3 +191,27 @@
         (is (= ["d"] (mapv :block/title children)))
         (is (= [d-uuid] (mapv :block/uuid children))
             "Live children reparented by merge must keep their uuid on undo restore")))))
+
+(deftest paste-asset-block-keeps-asset-props-test
+  (testing "Copy-pasting an asset block keeps it as an asset and returns its uuid remint (db-test#1155)."
+    (let [conn (db-test/create-conn-with-blocks
+                [{:page {:block/title "source"}
+                  :blocks [{:block/title "image.png"
+                            :block/tags #{:logseq.class/Asset}
+                            :logseq.property.asset/type "png"
+                            :logseq.property.asset/checksum "deadbeef"
+                            :logseq.property.asset/size 42}]}
+                 {:page {:block/title "dest"}
+                  :blocks [{:block/title "target"}]}])
+          asset (db-test/find-block-by-content @conn "image.png")
+          copied (copied-blocks-for @conn asset)
+          target (db-test/find-block-by-content @conn "target")
+          result (outliner-core/insert-blocks! conn copied target
+                                             {:sibling? true
+                                              :outliner-op :paste
+                                              :keep-uuid? false})
+          new-uuid (get (:uuid->new-uuid result) (:block/uuid asset))
+          pasted (some->> new-uuid (vector :block/uuid) (d/entity @conn))]
+      (is (uuid? new-uuid) "uuid->new-uuid maps the source uuid to the pasted uuid")
+      (is (some? pasted) "Asset block is pasted, not silently dropped")
+      (is (= "png" (:logseq.property.asset/type pasted))))))
