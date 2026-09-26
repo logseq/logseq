@@ -1,0 +1,19 @@
+(version 1.5.2)
+
+(build
+ (all_platforms
+  ((action
+    (progn
+     (when %{pkg-self:dev} (run dune subst))
+     (run dune build -p %{pkg-self:name} -j %{jobs} @install))))))
+
+(depends
+ (all_platforms
+  (dune ocaml)))
+
+(source
+ (fetch
+  (url
+   https://github.com/ocaml-dune/csexp/releases/download/1.5.2/csexp-1.5.2.tbz)
+  (checksum
+   sha512=be281018bcfc20d4db14894ef51c4b836d6338d2fdfe22e63d46f405f8dea7349e16f1c0ecd65f73d4c85a2a80e618cdbb8c9dafcbb9f229f04f1adca5b1973c)))

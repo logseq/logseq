@@ -1,0 +1,15 @@
+(version dev)
+
+(build
+ (all_platforms ((action (run dune build -p %{pkg-self:name} -j %{jobs})))))
+
+(depends
+ (all_platforms
+  (ocaml dune melange)))
+
+(source
+ (fetch
+  (url
+   git+https://github.com/logseq/persistent-sorted-set-ocaml.git#879de3b2f2d40aa9afcdecd1bb304b2f5f4e3ee5)))
+
+(dev)

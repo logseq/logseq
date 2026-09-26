@@ -1,0 +1,25 @@
+(version 0.11.0)
+
+(build
+ (all_platforms
+  ((action
+    (run
+     ocaml
+     pkg/pkg.ml
+     build
+     --dev-pkg
+     %{pkg-self:dev}
+     --with-base-unix
+     %{pkg:base-unix:installed}
+     --with-cmdliner
+     %{pkg:cmdliner:installed})))))
+
+(depends
+ (all_platforms
+  (ocaml ocamlfind ocamlbuild topkg base-unix cmdliner)))
+
+(source
+ (fetch
+  (url https://erratique.ch/software/fmt/releases/fmt-0.11.0.tbz)
+  (checksum
+   sha512=3f40155fc6a7315202e410585964307d63416c8001fd243667ed9d8d1a02b67deecacb25e9c2feb409c537bbdfb7817d91168de4ddd643532ff51d6c1c696a4a)))

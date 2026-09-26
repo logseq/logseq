@@ -1,0 +1,19 @@
+(version 0.3.0)
+
+(build
+ (all_platforms
+  ((action
+    (progn
+     (when %{pkg-self:dev} (run dune subst))
+     (run dune build -p %{pkg-self:name} -j %{jobs}))))))
+
+(depends
+ (all_platforms
+  (ocaml dune)))
+
+(source
+ (fetch
+  (url
+   https://github.com/hannesm/gmap/releases/download/0.3.0/gmap-0.3.0.tbz)
+  (checksum
+   sha512=71616981f5a15d6b2a47e18702083e52e81f6547076085b1489f676f50b0cc47c7c2c4fa19cb581e2878dc3d4f7133d0c50d8b51a8390be0e6e30318907d81d3)))

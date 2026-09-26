@@ -1,0 +1,19 @@
+(version 6.3.0)
+
+(build
+ (all_platforms
+  ((action
+    (progn
+     (when %{pkg-self:dev} (run dune subst))
+     (run dune build -p %{pkg-self:name} -j %{jobs}))))))
+
+(depends
+ (all_platforms
+  (ocaml dune fmt)))
+
+(source
+ (fetch
+  (url
+   https://github.com/mirage/ocaml-cstruct/releases/download/v6.3.0/cstruct-6.3.0.tbz)
+  (checksum
+   sha512=71a503c7017f2d143ec8af2b8f132d1f59a0526ee4602b9a3e307e904bc18867755f87f445e4a49d995c7ca0002adfc2e3dae2f5fa6e22fb71fe85db774dede1)))

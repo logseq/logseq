@@ -1,0 +1,18 @@
+(version 0.10)
+
+(build
+ (all_platforms
+  ((action
+    (progn
+     (when %{pkg-self:dev} (run dune subst))
+     (run dune build -p %{pkg-self:name} -j %{jobs}))))))
+
+(depends
+ (all_platforms
+  (ocaml dune)))
+
+(source
+ (fetch
+  (url https://github.com/mirage/eqaf/releases/download/v0.10/eqaf-0.10.tbz)
+  (checksum
+   sha512=7f75b5d5667e3605f8d95e2d6fda40953129033e6a342ee2c98ee4135c2428e1db87547971868605ab989374757c47c21c5397d4c3da578952d716826a156979)))

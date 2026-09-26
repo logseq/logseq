@@ -1,0 +1,15 @@
+(version 0.3.0)
+
+(build
+ (all_platforms ((action (run dune build -p %{pkg-self:name} -j %{jobs})))))
+
+(depends
+ (all_platforms
+  (dune ocaml)))
+
+(source
+ (fetch
+  (url
+   https://github.com/ocaml/stdlib-shims/releases/download/0.3.0/stdlib-shims-0.3.0.tbz)
+  (checksum
+   sha512=1151d7edc8923516e9a36995a3f8938d323aaade759ad349ed15d6d8501db61ffbe63277e97c4d86149cf371306ac23df0f581ec7e02611f58335126e1870980)))

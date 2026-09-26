@@ -1,0 +1,14 @@
+(version dev)
+
+(build
+ (all_platforms ((dune))))
+
+(depends
+ (all_platforms (ocaml)))
+
+(source
+ (fetch
+  (url
+   git+https://github.com/logseq/xmlm#eb469d536e98c98f2754c0ff8813c92b3a17fe9f)))
+
+(dev)

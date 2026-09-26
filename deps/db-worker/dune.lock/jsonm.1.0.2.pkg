@@ -1,0 +1,15 @@
+(version 1.0.2)
+
+(build
+ (all_platforms
+  ((action (run ocaml pkg/pkg.ml build --dev-pkg %{pkg-self:dev})))))
+
+(depends
+ (all_platforms
+  (ocaml ocamlfind ocamlbuild topkg uutf)))
+
+(source
+ (fetch
+  (url https://erratique.ch/software/jsonm/releases/jsonm-1.0.2.tbz)
+  (checksum
+   sha512=0072f5c31080202ed1cb996a8530d72c882723f26b597f784441033f59338ba8c0cbabf901794d5b1ae749a54af4d7ebf7b47987db43488c7f6ac7fe191a042f)))

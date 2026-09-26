@@ -1,0 +1,70 @@
+(version 5)
+
+(build
+ (all_platforms
+  ((action
+    (run
+     sh
+     -c
+     "pkg-config --print-errors --exists gmp || cc -c $CFLAGS -I/usr/local/include test.c")))))
+
+(depends
+ (choice
+  ((((arch x86_64)
+     (os linux))
+    ((arch arm64)
+     (os linux)))
+   ())
+  ((((arch x86_64)
+     (os macos))
+    ((arch arm64)
+     (os macos)))
+   (conf-pkg-config))))
+
+(depexts
+ ((libgmp-dev)
+  (= %{os_family} debian))
+ ((libgmp-dev)
+  (= %{os_family} ubuntu))
+ ((gmp)
+  (and_absorb_undefined_var
+   (= %{os} macos)
+   (= %{os_distribution} homebrew)))
+ ((gmp)
+  (and_absorb_undefined_var
+   (= %{os_distribution} macports)
+   (= %{os} macos)))
+ ((gmp-devel gmp)
+  (= %{os_distribution} centos))
+ ((gmp-devel gmp)
+  (= %{os_family} fedora))
+ ((gmp-devel gmp)
+  (= %{os_distribution} ol))
+ ((gmp)
+  (= %{os} openbsd))
+ ((gmp)
+  (= %{os} freebsd))
+ ((gmp)
+  (= %{os_distribution} arch))
+ ((gmp-dev)
+  (= %{os_distribution} alpine))
+ ((gmp-devel)
+  (or_absorb_undefined_var
+   (= %{os_family} suse)
+   (= %{os_family} opensuse)))
+ ((gmp)
+  (and_absorb_undefined_var
+   (= %{os} win32)
+   (= %{os_distribution} cygwinports)))
+ ((gmp)
+  (= %{os_distribution} nixos))
+ ((libgmp-devel)
+  (= %{os_family} altlinux)))
+
+(extra_sources
+ (test.c
+  (fetch
+   (url
+    https://raw.githubusercontent.com/ocaml/opam-source-archives/main/patches/conf-gmp/test.c.4)
+   (checksum
+    sha256=54a30735f1f271a2531526747e75716f4490dd7bc1546efd6498ccfe3cc4d6fb))))

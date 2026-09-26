@@ -1,0 +1,19 @@
+(version 0.6.0)
+
+(build
+ (all_platforms
+  ((action
+    (progn
+     (when %{pkg-self:dev} (run dune subst))
+     (run dune build -p %{pkg-self:name} -j %{jobs} @install))))))
+
+(depends
+ (all_platforms
+  (dune ocaml ezjsonm sexplib sexplib0 fpath)))
+
+(source
+ (fetch
+  (url
+   https://github.com/edwintorok/dune-compiledb/releases/download/0.6.0/dune-compiledb-0.6.0.tbz)
+  (checksum
+   sha512=74e50c759ef50ce13d0f1a424f91176f1327349d6c1b97d0a20c848417920c1490ff7d5a8cabc541b1409a6a6e488f807e34c3cf7ac0d9866938bd43eab08de8)))

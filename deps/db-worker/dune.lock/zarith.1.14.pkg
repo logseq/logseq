@@ -1,0 +1,18 @@
+(version 1.14)
+
+(install
+ (all_platforms
+  (run %{make} install)))
+
+(build
+ (all_platforms ((action (progn (run ./configure) (run %{make}))))))
+
+(depends
+ (all_platforms
+  (ocaml ocamlfind conf-pkg-config conf-gmp)))
+
+(source
+ (fetch
+  (url https://github.com/ocaml/Zarith/archive/release-1.14.tar.gz)
+  (checksum
+   sha512=8a7f3e82dfa5699c8dda54dd5398c712f3ac4fe04f5208d43d8ba198fb8152de5f91cbb59c15c0a4ba010d4dfcc79f52e405bdd0abbf2798167e9e4216bcb3dd)))

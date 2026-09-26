@@ -10,25 +10,37 @@
 (documentation https://docs.logseq.com)
 
 (pin
- (url "git+https://github.com/logseq/datascript-ocaml.git")
+ (url "git+https://github.com/logseq/datascript-ocaml.git#main")
  (package (name datascript_ocaml)))
 (pin
- (url "git+https://github.com/logseq/datascript-ocaml.git")
+ (url "git+https://github.com/logseq/datascript-ocaml.git#main")
  (package (name datascript-ocaml-melange)))
 (pin
- (url "git+https://github.com/logseq/datascript-ocaml.git")
+ (url "git+https://github.com/logseq/datascript-ocaml.git#main")
  (package (name datascript-ocaml-native)))
 (pin
- (url "git+https://github.com/logseq/persistent-sorted-set-ocaml.git")
+ (url "git+https://github.com/logseq/persistent-sorted-set-ocaml.git#main")
  (package (name persistent_sorted_set_ocaml)))
 (pin
- (url "git+https://github.com/logseq/melange-edn.git")
- (package (name melange-edn)))
+ (url "git+https://github.com/logseq/melange-edn.git#main")
+ (package (name melange-edn-core) (version 0.5.0)))
 (pin
- (url "git+https://github.com/logseq/melange-transit.git")
- (package (name melange-transit)))
+ (url "git+https://github.com/logseq/melange-edn.git#main")
+ (package (name melange-edn-melange) (version 0.5.0)))
 (pin
- (url "git+https://github.com/logseq/rrbvec.git")
+ (url "git+https://github.com/logseq/melange-edn.git#main")
+ (package (name melange-edn-native) (version 0.5.0)))
+(pin
+ (url "git+https://github.com/logseq/melange-transit.git#main")
+ (package (name melange-transit-core) (version 0.1.2)))
+(pin
+ (url "git+https://github.com/logseq/melange-transit.git#main")
+ (package (name melange-transit-melange) (version 0.1.2)))
+(pin
+ (url "git+https://github.com/logseq/melange-transit.git#main")
+ (package (name melange-transit-native) (version 0.1.2)))
+(pin
+ (url "git+https://github.com/logseq/rrbvec.git#main")
  (package (name rrbvec)))
 (pin
  (url "git+https://github.com/logseq/angstrom#fork")
@@ -37,7 +49,7 @@
  (url "git+https://github.com/logseq/xmlm#eb469d536e98c98f2754c0ff8813c92b3a17fe9f")
  (package (name xmlm)))
 (pin
- (url "git+https://github.com/logseq/mldoc")
+ (url "git+https://github.com/logseq/mldoc#master")
  (package (name mldoc)))
 
 (package
@@ -53,9 +65,14 @@
   datascript_ocaml
   datascript-ocaml-melange
   datascript-ocaml-native
-  melange-transit
-  melange-edn
+  melange-transit-core
+  melange-transit-melange
+  melange-transit-native
+  melange-edn-core
+  melange-edn-melange
+  melange-edn-native
   melange-fest
+  alcotest
   melange-fetch
   melange-webapi
   rrbvec

@@ -1,0 +1,47 @@
+(version 1.9.8+dune)
+
+(install
+ (all_platforms
+  (progn
+   (run %{make} install)
+   (when
+    %{pkg:ocaml:preinstalled}
+    (run install -m 0755 ocaml-stub %{bin}/ocaml)))))
+
+(build
+ (all_platforms
+  ((action
+    (progn
+     (run
+      ./configure
+      -bindir
+      %{bin}
+      -sitelib
+      %{lib}
+      -mandir
+      %{man}
+      -config
+      %{lib}/findlib.conf
+      -with-relative-paths-at
+      %{prefix}
+      -no-custom
+      (when
+       (catch_undefined_var
+        (and_absorb_undefined_var
+         (not %{pkg:ocaml:preinstalled})
+         (>= %{pkg:ocaml:version} 4.02.0))
+        false)
+       -no-camlp4)
+      -no-topfind)
+     (run %{make} all)
+     (when %{pkg:ocaml:native} (run %{make} opt)))))))
+
+(depends
+ (all_platforms (ocaml)))
+
+(source
+ (fetch
+  (url
+   https://github.com/ocaml/ocamlfind/archive/refs/tags/findlib-1.9.8.tar.gz)
+  (checksum
+   sha512=8967986de2ab4ec5993f437b0a4206742adf37aa7a292a3bba0a04438d78539b84d001191e60b2d5bde98a695b38cba2593b7051f7749adbdb964a0df3c4b661)))

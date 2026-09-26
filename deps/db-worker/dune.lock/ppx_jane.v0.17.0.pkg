@@ -1,0 +1,44 @@
+(version v0.17.0)
+
+(build
+ (all_platforms ((action (run dune build -p %{pkg-self:name} -j %{jobs})))))
+
+(depends
+ (all_platforms
+  (ocaml
+   base_quickcheck
+   ppx_assert
+   ppx_base
+   ppx_bench
+   ppx_bin_prot
+   ppx_custom_printf
+   ppx_disable_unused_warnings
+   ppx_expect
+   ppx_fields_conv
+   ppx_fixed_literal
+   ppx_here
+   ppx_ignore_instrumentation
+   ppx_inline_test
+   ppx_let
+   ppx_log
+   ppx_module_timer
+   ppx_optional
+   ppx_pipebang
+   ppx_sexp_message
+   ppx_sexp_value
+   ppx_stable
+   ppx_stable_witness
+   ppx_string
+   ppx_string_conv
+   ppx_tydi
+   ppx_typerep_conv
+   ppx_variants_conv
+   dune
+   ppxlib)))
+
+(source
+ (fetch
+  (url
+   https://github.com/janestreet/ppx_jane/archive/refs/tags/v0.17.0.tar.gz)
+  (checksum
+   sha256=4dcf29dbb093f57fdda18b659739b255b66dc5566b6c4c8a35caa3ce8666fa65)))

@@ -1,0 +1,19 @@
+(version 3.5.2)
+
+(build
+ (all_platforms
+  ((action
+    (progn
+     (when %{pkg-self:dev} (run dune subst))
+     (run dune build -p %{pkg-self:name} -j %{jobs}))))))
+
+(depends
+ (all_platforms
+  (ocaml dune)))
+
+(source
+ (fetch
+  (url
+   https://github.com/mirage/ocaml-base64/releases/download/v3.5.2/base64-3.5.2.tbz)
+  (checksum
+   sha512=82148a1fefec9493aaeac032c8d46b9548369d7fd90a57865e009a32c8a0eef950f0f8dbb52b74bb46880a590a0b49f2daa7ab4857233734aee8e383f5a164ec)))

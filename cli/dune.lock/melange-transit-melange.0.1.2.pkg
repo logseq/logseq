@@ -1,0 +1,15 @@
+(version 0.1.2)
+
+(build
+ (all_platforms ((dune))))
+
+(depends
+ (all_platforms
+  (ocaml melange melange-transit-core melange-edn-melange)))
+
+(source
+ (fetch
+  (url
+   git+https://github.com/logseq/melange-transit.git#38ca92e299cf34c897d9a44091fe86e55b1315ee)))
+
+(dev)

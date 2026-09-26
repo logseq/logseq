@@ -1,0 +1,19 @@
+(version 0.3.1)
+
+(build
+ (all_platforms
+  ((action
+    (progn
+     (when %{pkg-self:dev} (run dune subst))
+     (run dune build -p %{pkg-self:name} -j %{jobs}))))))
+
+(depends
+ (all_platforms
+  (ocaml dune)))
+
+(source
+ (fetch
+  (url
+   https://github.com/hannesm/duration/releases/download/v0.3.1/duration-0.3.1.tbz)
+  (checksum
+   sha512=248fec8ba9ebf6ac7cc91055307496658974e402bb9de6d37027fbe51b6708247530392cc60f954cf8d7ed8a03ce0d2da440fbd9f8720e398a446e0a43f590ad)))
