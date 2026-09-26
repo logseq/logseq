@@ -2712,7 +2712,7 @@
        :else
        (text-block-title config block))
      query-setting
-     (when (cards-block? block)
+     (when (and (state/enable-flashcards?) (cards-block? block))
        (ui/tooltip
         (shui/button
          {:variant :ghost

@@ -1695,6 +1695,7 @@
             all-classes (cond-> all-classes
                           (and non-page-block? page-class)
                           (conj page-class))
+            all-classes (state/classes-for-tag-completion (state/get-current-repo) all-classes)
             classes (->> all-classes
                          (mapcat (fn [class]
                                    (conj (:block/alias class) class)))
