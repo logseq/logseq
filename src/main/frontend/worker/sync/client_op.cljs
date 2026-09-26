@@ -299,13 +299,18 @@
   "Stores the checksum together with the graph commit (:max-tx) it covers. The
   checksum is written post-commit to the client-ops sqlite file, separate from
   the graph store, so process death between the two writes leaves it stale; the
-  covered commit lets graph open detect that and recompute."
+  covered commit lets graph open detect that and recompute. Both keys go in 1
+  sqlite transaction: this runs after every graph commit, and 2 autocommits
+  cost 2 synced writes."
   [repo checksum covered-tx]
   {:pre [(some? checksum) (integer? covered-tx)]}
   (let [store (sqlite-store-or-throw repo)]
     (assert (some? store) repo)
-    (sqlite-set-meta! store :db-sync/checksum checksum)
-    (sqlite-set-meta! store :db-sync/checksum-covered-tx covered-tx)))
+    (sqlite-with-tx!
+     store
+     (fn [tx]
+       (sqlite-set-meta! tx :db-sync/checksum checksum)
+       (sqlite-set-meta! tx :db-sync/checksum-covered-tx covered-tx)))))
 
 (defn get-pending-local-tx-count
   [repo]
