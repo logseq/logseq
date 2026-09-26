@@ -9,13 +9,6 @@ type epoch_ms = int64
 type monotonic_ms = float
 type tz = Local_tz | Offset_tz of int (* minutes east of UTC *)
 type local_date = { ld_year : int; ld_month : int; ld_day : int; ld_tz : tz }
-type localtime =
-  { lt_year : int
-  ; lt_month : int
-  ; lt_day : int
-  ; lt_hour : int
-  ; lt_minute : int
-  }
 type civil =
   { cv_year : int
   ; cv_month : int
@@ -138,31 +131,6 @@ let epoch_ms_of_civil tz c =
             ~seconds:(float_of_int c.cv_second) ()
         +. float_of_int c.cv_ms
         -. float_of_int (off * 60000) )
-
-(* ---- localtime ---- *)
-
-let localtime ~year ~month ~day ~hour ~minute =
-  { lt_year = year; lt_month = month; lt_day = day; lt_hour = hour;
-    lt_minute = minute }
-
-let localtime_fields lt =
-  (lt.lt_year, lt.lt_month, lt.lt_day, lt.lt_hour, lt.lt_minute)
-
-let compare_localtime a b =
-  compare (localtime_fields a) (localtime_fields b)
-
-let equal_localtime a b = a = b
-
-let localtime_of_epoch_ms tz ms =
-  let c = civil_of_epoch_ms tz ms in
-  { lt_year = c.cv_year; lt_month = c.cv_month; lt_day = c.cv_day;
-    lt_hour = c.cv_hour; lt_minute = c.cv_minute }
-
-let epoch_ms_of_localtime tz lt =
-  epoch_ms_of_civil tz
-    { cv_year = lt.lt_year; cv_month = lt.lt_month; cv_day = lt.lt_day;
-      cv_hour = lt.lt_hour; cv_minute = lt.lt_minute; cv_second = 0;
-      cv_ms = 0 }
 
 (* ---- local_date ---- *)
 
