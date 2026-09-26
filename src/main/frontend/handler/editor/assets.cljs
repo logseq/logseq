@@ -14,6 +14,7 @@
             [frontend.modules.outliner.ui :as ui-outliner-tx]
             [frontend.state :as state]
             [frontend.util.ref :as ref]
+            [lambdaisland.glogi :as log]
             [logseq.common.path :as path]
             [logseq.db :as ldb]
             [logseq.db.frontend.asset :as db-asset]
@@ -63,9 +64,15 @@
                       (nil? (:logseq.property.asset/external-url block)))]
        (p/let [source-name (str source-uuid "." ext)
                data (p/catch (fs/read-file-raw assets-dir source-name)
-                             (constantly nil))]
-         (when (some? data)
-           (fs/write-asset-file! repo (str new-uuid "." ext) data)))))))
+                             (fn [error]
+                               (log/error :msg "Failed to read pasted asset file"
+                                          :asset-file source-name
+                                          :exception error)
+                               nil))]
+         (if (some? data)
+           (fs/write-asset-file! repo (str new-uuid "." ext) data)
+           (log/error :msg "Pasted asset has no backing file"
+                      :asset-file source-name)))))))
 
 (defn- new-asset-block
   [repo ^js file {:keys [external-url] :as opts}]
