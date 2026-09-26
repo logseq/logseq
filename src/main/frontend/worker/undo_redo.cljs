@@ -86,10 +86,12 @@
     editor-info))
 
 (defn- conj-op
+  "Pushes op; a full stack drops its oldest half. The newest entries must
+  stay: each undo meets the state the entry above it left."
   [col op]
   (let [result (conj (if (empty? col) [] col) op)]
     (if (>= (count result) max-stack-length)
-      (subvec result 0 (/ max-stack-length 2))
+      (subvec result (- (count result) (quot max-stack-length 2)))
       result)))
 
 (defn- pop-stack
