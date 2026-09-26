@@ -10,7 +10,6 @@
             [logseq.common.uuid :as common-uuid]
             [logseq.db :as ldb]
             [logseq.db.common.order :as db-order]
-            [logseq.db.frontend.entity-util :as entity-util]
             [logseq.outliner.pipeline :as outliner-pipeline]))
 
 (defn- remove-block-ref-from-title
@@ -190,35 +189,8 @@
     (when (seq tx)
       (ldb/transact! conn tx {:logseq.graph-parser.exporter/imported-data? true}))))
 
-(defn- missing-internal-page-parent-order-tx
-  "Namespace import sets :block/parent without :block/order. Only repair
-  internal pages so class pages that share the same rewrite stay unordered.
-  Insertion boundary uses every direct child so repaired page orders do not
-  collide with content-block siblings."
-  [db]
-  (->> (d/datoms db :avet :block/parent)
-       (map (fn [d] (d/entity db (:e d))))
-       (group-by :block/parent)
-       (mapcat
-        (fn [[_parent children]]
-          (let [missing (->> children
-                             (filter entity-util/internal-page?)
-                             (remove #(string? (:block/order %)))
-                             vec)
-                max-order (->> children
-                               (keep :block/order)
-                               (filter string?)
-                               sort
-                               last)]
-            (when (seq missing)
-              (map (fn [child order]
-                     {:db/id (:db/id child)
-                      :block/order order})
-                   missing
-                   (db-order/gen-n-keys (count missing) max-order nil))))))))
-
 (defn ensure-imported-page-parent-orders!
   [conn]
-  (let [tx-data (missing-internal-page-parent-order-tx @conn)]
+  (let [tx-data (db-order/missing-internal-page-parent-order-tx @conn)]
     (when (seq tx-data)
       (ldb/transact! conn tx-data {:logseq.graph-parser.exporter/imported-data? true}))))
