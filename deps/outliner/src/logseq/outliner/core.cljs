@@ -1146,13 +1146,37 @@
               (ldb/sort-page-random-blocks db blocks))
             page-blocks)))
 
+(defn- block-document-order-path
+  "The :db/id of the page, then the :block/order of each ancestor down to
+  `block`, so blocks under different parents still compare in document order."
+  [block]
+  (loop [block block
+         path ()]
+    (if-let [parent (:block/parent block)]
+      (recur parent (conj path (:block/order block)))
+      (conj path (:db/id block)))))
+
+(defn- compare-document-order-paths
+  [path-1 path-2]
+  (loop [path-1 (seq path-1)
+         path-2 (seq path-2)]
+    (cond
+      (and (nil? path-1) (nil? path-2)) 0
+      (nil? path-1) -1
+      (nil? path-2) 1
+      :else (let [c (compare (first path-1) (first path-2))]
+              (if (zero? c)
+                (recur (next path-1) (next path-2))
+                c)))))
+
 (defn- get-top-level-blocks
   [top-level-blocks non-consecutive?]
   (let [reversed? (and (not non-consecutive?)
                        (:block/order (first top-level-blocks))
                        (:block/order (second top-level-blocks))
-                       (> (compare (:block/order (first top-level-blocks))
-                                   (:block/order (second top-level-blocks))) 0))]
+                       (pos? (compare-document-order-paths
+                              (block-document-order-path (first top-level-blocks))
+                              (block-document-order-path (second top-level-blocks)))))]
     (if reversed? (reverse top-level-blocks) top-level-blocks)))
 
 (def ^:private comments-tag-ident :logseq.class/Comments)

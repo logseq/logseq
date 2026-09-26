@@ -1211,6 +1211,100 @@
              (worker-undo-redo/redo test-repo)))
       (is (= "v3" (:block/title (d/entity @conn [:block/uuid child-uuid])))))))
 
+(deftest undo-rename-after-recycled-create-uses-old-title-test
+  (testing "undoing a rename whose old title is held by a recycled page still applies"
+    (worker-undo-redo/clear-history! test-repo)
+    (let [conn (worker-state/get-datascript-conn test-repo)
+          {:keys [page-uuid]} (seed-page-parent-child!)]
+      (apply-ops! conn
+                  [[:save-block [{:block/uuid page-uuid
+                                  :block/title "alpha"} {}]]]
+                  (local-tx-meta {:client-id "test-client"}))
+      (apply-ops! conn
+                  [[:create-page ["page 1" {:redirect? false
+                                            :split-namespace? true
+                                            :tags ()}]]]
+                  (local-tx-meta {:client-id "test-client"}))
+      (is (= "alpha" (:block/title (d/entity @conn [:block/uuid page-uuid]))))
+      (is (map? (worker-undo-redo/undo test-repo)))
+      (is (true? (ldb/recycled? (db-test/find-page-by-title @conn "page 1"))))
+      (is (map? (worker-undo-redo/undo test-repo)))
+      (is (= "page 1" (:block/title (d/entity @conn [:block/uuid page-uuid])))))))
+
+(deftest redo-create-namespaced-page-restores-uuid-test
+  (testing "redoing a namespaced page create restores the created pages' uuids"
+    (worker-undo-redo/clear-history! test-repo)
+    (let [conn (worker-state/get-datascript-conn test-repo)]
+      (apply-ops! conn
+                  [[:create-page ["ns/leaf-page" {:redirect? false
+                                                 :split-namespace? true
+                                                 :tags ()}]]]
+                  (local-tx-meta {:client-id "test-client"}))
+      (let [child (db-test/find-page-by-title @conn "leaf-page")
+            child-uuid (:block/uuid child)]
+        (is (some? child))
+        (is (map? (worker-undo-redo/undo test-repo)))
+        (let [deleted (db-test/find-page-by-title @conn "leaf-page")
+              deleted-ns (db-test/find-page-by-title @conn "ns")]
+          (is (true? (ldb/recycled? deleted)))
+          (is (true? (ldb/recycled? deleted-ns))))
+        (is (map? (worker-undo-redo/redo test-repo)))
+        (let [restored (db-test/find-page-by-title @conn "leaf-page")
+              restored-ns (db-test/find-page-by-title @conn "ns")]
+          (is (some? restored))
+          (is (= child-uuid (:block/uuid restored)))
+          (is (false? (ldb/recycled? restored)))
+          (is (false? (ldb/recycled? restored-ns)))
+          (is (= (:db/id restored-ns) (:db/id (:block/parent restored)))))))))
+
+(deftest undo-create-property-with-existing-name-removes-new-property-test
+  (testing "undoing a property create that reused an existing name removes the new property"
+    (worker-undo-redo/clear-history! test-repo)
+    (let [conn (worker-state/get-datascript-conn test-repo)]
+      (apply-ops! conn
+                  [[:upsert-property [nil
+                                      {:logseq.property/type :number}
+                                      {:property-name "rating"}]]]
+                  (local-tx-meta {:client-id "test-client"}))
+      (is (some? (d/entity @conn :user.property/rating)))
+      (worker-undo-redo/clear-history! test-repo)
+      (apply-ops! conn
+                  [[:upsert-property [nil
+                                      {:logseq.property/type :number}
+                                      {:property-name "rating"}]]]
+                  (local-tx-meta {:client-id "test-client"}))
+      (let [new-ident (d/q '[:find ?ident .
+                             :where
+                             [?p :db/ident ?ident]
+                             [?p :block/title "rating"]
+                             [?p :block/tags :logseq.class/Property]
+                             [(not= ?ident :user.property/rating)]]
+                           @conn)]
+        (is (some? new-ident))
+        (is (map? (worker-undo-redo/undo test-repo)))
+        (is (nil? (d/entity @conn new-ident)))
+        (is (some? (d/entity @conn :user.property/rating)))))))
+
+(deftest undo-create-page-with-new-tag-removes-tag-test
+  (testing "undoing a page create removes tags created in the same transaction"
+    (worker-undo-redo/clear-history! test-repo)
+    (let [conn (worker-state/get-datascript-conn test-repo)
+          tag-uuid (random-uuid)]
+      (apply-ops! conn
+                  [[:create-page ["alpha" {:redirect? false
+                                           :split-namespace? true
+                                           :tags [{:block/title "Movie"
+                                                   :block/name "movie"
+                                                   :block/uuid tag-uuid}]}]]]
+                  (local-tx-meta {:client-id "test-client"}))
+      (let [page (db-test/find-page-by-title @conn "alpha")
+            tag (db-test/find-page-by-title @conn "Movie")]
+        (is (some? page))
+        (is (some? tag))
+        (is (map? (worker-undo-redo/undo test-repo)))
+        (is (true? (ldb/recycled? (db-test/find-page-by-title @conn "alpha"))))
+        (is (nil? (d/entity @conn [:block/uuid tag-uuid])))))))
+
 (def ^:private outline-1-start ["outline 1" ["a" ["b" ["b1" "b2"]] "c"]])
 
 (defn- seed-outline!
@@ -1452,3 +1546,52 @@
       (let [property (d/entity @conn :user.property/undo-self-rating)]
         (is (= property-uuid (:block/uuid property)))
         (is (nil? (:user.property/undo-self-rating property)))))))
+
+(deftest redo-create-slash-title-page-restores-uuid-test
+  (testing "redoing the create of a page whose title contains a slash restores its uuid"
+    (worker-undo-redo/clear-history! test-repo)
+    (let [conn (worker-state/get-datascript-conn test-repo)]
+      (apply-ops! conn
+                  [[:create-page ["2026/09/26" {:redirect? false
+                                                :split-namespace? false
+                                                :tags ()}]]]
+                  (local-tx-meta {:client-id "test-client"}))
+      (let [created (db-test/find-page-by-title @conn "2026/09/26")
+            page-uuid (:block/uuid created)]
+        (is (some? created))
+        (is (map? (worker-undo-redo/undo test-repo)))
+        (is (true? (ldb/recycled? (db-test/find-page-by-title @conn "2026/09/26"))))
+        (is (map? (worker-undo-redo/redo test-repo)))
+        (let [restored (db-test/find-page-by-title @conn "2026/09/26")]
+          (is (some? restored))
+          (is (= page-uuid (:block/uuid restored)))
+          (is (false? (ldb/recycled? restored))))))))
+
+(deftest undo-create-pages-sharing-namespace-restores-parent-test
+  (testing "undoing creates of a/b and a/c in one tx deletes their shared ancestor once"
+    (worker-undo-redo/clear-history! test-repo)
+    (let [conn (worker-state/get-datascript-conn test-repo)]
+      (apply-ops! conn
+                  [[:create-page ["a/b" {:redirect? false
+                                         :split-namespace? true
+                                         :tags ()}]]
+                   [:create-page ["a/c" {:redirect? false
+                                         :split-namespace? true
+                                         :tags ()}]]]
+                  (local-tx-meta {:client-id "test-client"
+                                  :outliner-op :create-page}))
+      (let [a-parent-id (:db/id (:block/parent (db-test/find-page-by-title @conn "a")))]
+        (is (map? (worker-undo-redo/undo test-repo)))
+        (is (true? (ldb/recycled? (db-test/find-page-by-title @conn "a"))))
+        (is (true? (ldb/recycled? (db-test/find-page-by-title @conn "b"))))
+        (is (true? (ldb/recycled? (db-test/find-page-by-title @conn "c"))))
+        (is (map? (worker-undo-redo/redo test-repo)))
+        (let [a (db-test/find-page-by-title @conn "a")
+              b (db-test/find-page-by-title @conn "b")
+              c (db-test/find-page-by-title @conn "c")]
+          (is (false? (ldb/recycled? a)))
+          (is (false? (ldb/recycled? b)))
+          (is (false? (ldb/recycled? c)))
+          (is (= a-parent-id (:db/id (:block/parent a))))
+          (is (= (:db/id a) (:db/id (:block/parent b))))
+          (is (= (:db/id a) (:db/id (:block/parent c)))))))))

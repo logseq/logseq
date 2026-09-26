@@ -1563,9 +1563,28 @@
                               (when (and (not (ldb/property? page))
                                          (= (boolean (:class? opts)) (boolean (ldb/class? page))))
                                 page)))]
-      (if (and existing-page
-               (not (ldb/recycled? existing-page)))
+      (cond
+        (and existing-page
+             (not (ldb/recycled? existing-page)))
         [(:block/title existing-page) (:block/uuid existing-page)]
+
+        (and (uuid? page-uuid)
+             (ldb/recycled? existing-page))
+        (let [recycled-ancestors (loop [e (:logseq.property.recycle/original-parent existing-page)
+                                        acc ()]
+                                   (if (and e (ldb/recycled? e))
+                                     (recur (:logseq.property.recycle/original-parent e)
+                                            (conj acc e))
+                                     acc))]
+          ;; restore top-down so each page's original parent is already live;
+          ;; re-read entities per step so prior restores are visible
+          (doseq [ancestor (concat (reverse recycled-ancestors) [existing-page])]
+            (let [fresh (d/entity @conn (:db/id ancestor))]
+              (ldb/transact! conn
+                             (outliner-recycle/restore-tx-data @conn fresh)
+                             {:outliner-op :create-page}))))
+
+        :else
         (outliner-page/create! conn title opts)))
 
     :delete-page
