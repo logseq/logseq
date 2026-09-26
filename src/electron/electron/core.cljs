@@ -247,9 +247,9 @@
                        {:role "windowMenu"
                         :submenu
                         (concat
+                          [{:role "minimize"}]
                           (when-not mac?
-                            [{:role "minimize"}
-                             {:role "zoom"}
+                            [{:role "zoom"}
                              ;; Disable Control+W shortcut
                              {:role "close"
                               :accelerator false}])
