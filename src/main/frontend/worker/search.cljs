@@ -12,6 +12,7 @@
             [logseq.db :as ldb]
             [logseq.db.frontend.block-title :as db-block-title]
             [logseq.db.frontend.content :as db-content]
+            [logseq.db.frontend.property :as db-property]
             [logseq.graph-parser.text :as text]))
 
 (def ^:private max-vector-search-results 10)
@@ -589,12 +590,9 @@ DROP TRIGGER IF EXISTS blocks_au;
            :or {include-vector-title? false}}]
   (let [;; Numeric closed choices store the number in :logseq.property/value
         ;; instead of :block/title; index them by the value so they're searchable
-        block (let [v (:logseq.property/value block)]
-                (if (and (ldb/closed-value? block)
-                         (nil? (:block/title block))
-                         (or (string? v) (number? v)))
-                  (assoc block :block/title (str v))
-                  block))
+        block (if (ldb/closed-value? block)
+                (assoc block :block/title (str (db-property/closed-value-content block)))
+                block)
         {:block/keys [uuid page title]} block]
     (when-not (or
                (and (string? title) (> (count title) 10000))
