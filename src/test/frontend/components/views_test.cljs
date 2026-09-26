@@ -11,12 +11,14 @@
             [frontend.db.async :as db-async]
             [frontend.db.hooks :as db-hooks]
             [frontend.db.subs :as subs]
+            [frontend.db.transact :as db-transact]
             [frontend.modules.outliner.op :as outliner-op]
             [frontend.state :as state]
             [frontend.util :as util]
             [frontend.worker.handler.block :as worker-block]
             [frontend.worker.handler.render-resource.view :as worker-view]
             [goog.object :as gobj]
+            [logseq.shui.ui :as shui]
             [promesa.core :as p]
             [reitit.frontend.easy :as rfe]))
 
@@ -1424,11 +1426,30 @@
     (is (false? (views/delete-pages-needs-confirm? page-class-parent :class-objects pages))
         "The built-in Page class never deletes its rows, so nothing needs confirming")
     (is (false? (views/delete-pages-needs-confirm? tag-parent :property-objects pages))
-        "Property objects only retract a property value, they delete no page")
+        "Property objects must not use the page-delete dialog; they retract a property value")
     (is (false? (views/delete-pages-needs-confirm? tag-parent :unknown-feature pages))
         "An unrecognised view must not be treated as destructive")
     (is (false? (views/delete-pages-needs-confirm? tag-parent :class-objects []))
         "A block-only selection must delete at once, with no page dialog")))
+
+(deftest property-objects-delete-needs-confirm-covers-destructive-rows
+  (let [pages [{:db/id 1 :block/uuid (random-uuid)}]
+        blocks [{:db/id 2 :block/uuid (random-uuid)}]
+        property {:db/ident :user.property/priority}
+        built-in-property {:db/ident :logseq.property/status
+                           :logseq.property/built-in? true}]
+    (is (true? (views/property-objects-delete-needs-confirm? property :property-objects pages []))
+        "Retracting a property from pages is destructive (db-test#1286)")
+    (is (true? (views/property-objects-delete-needs-confirm? property :property-objects [] blocks))
+        "Deleting non-page nodes from a property table is destructive")
+    (is (true? (views/property-objects-delete-needs-confirm? built-in-property :property-objects pages blocks))
+        "A mixed selection still deletes blocks on a built-in property page")
+    (is (false? (views/property-objects-delete-needs-confirm? built-in-property :property-objects pages []))
+        "A built-in property page never retracts, so page-only trash has nothing to confirm")
+    (is (false? (views/property-objects-delete-needs-confirm? property :class-objects pages []))
+        "Other view types keep using the page-delete dialog, not this confirm")
+    (is (false? (views/property-objects-delete-needs-confirm? property :property-objects [] []))
+        "An empty selection must not open a confirm dialog")))
 
 (deftest on-delete-rows-confirms-instead-of-deleting-pages-inline
   (async done
@@ -1469,3 +1490,91 @@
                        (set! outliner-op/delete-page! original-delete-page!)
                        (set! state/pub-event! original-pub-event!)
                        (done)))))))
+
+(defn- with-property-objects-delete-harness
+  [row confirm-result f]
+  (let [on-delete-rows #'views/on-delete-rows
+        confirms (atom [])
+        applied (atom [])
+        events (atom [])
+        cleared (atom 0)
+        table {:data-fns {:set-row-selection! (fn [_] (swap! cleared inc))}}
+        original-repo state/get-current-repo
+        original-get-blocks db-async/<get-blocks
+        original-confirm! shui/dialog-confirm!
+        original-apply-ops db-transact/apply-outliner-ops
+        original-pub-event! state/pub-event!]
+    (set! state/get-current-repo (fn [] "views-property-objects-delete-test"))
+    (set! db-async/<get-blocks (fn [_repo _ids _opts] (p/resolved [{:block row}])))
+    (set! shui/dialog-confirm! (fn [config]
+                                 (swap! confirms conj config)
+                                 (if (= :reject confirm-result)
+                                   (p/rejected false)
+                                   (p/resolved true))))
+    (set! db-transact/apply-outliner-ops (fn [_conn ops _opts]
+                                           (swap! applied conj ops)
+                                           nil))
+    (set! state/pub-event! (fn [event] (swap! events conj event) nil))
+    (-> (f {:on-delete-rows on-delete-rows
+            :table table
+            :confirms confirms
+            :applied applied
+            :events events
+            :cleared cleared})
+        (p/finally
+         (fn []
+           (set! state/get-current-repo original-repo)
+           (set! db-async/<get-blocks original-get-blocks)
+           (set! shui/dialog-confirm! original-confirm!)
+           (set! db-transact/apply-outliner-ops original-apply-ops)
+           (set! state/pub-event! original-pub-event!))))))
+
+(deftest on-delete-rows-confirms-property-objects-before-mutating
+  (async done
+    (let [page {:db/id 11
+                :block/uuid (random-uuid)
+                :block/title "Priority owner"
+                :block/tags [:logseq.class/Page]}
+          property {:db/ident :user.property/priority}]
+      (-> (with-property-objects-delete-harness
+            page
+            :resolve
+            (fn [{:keys [on-delete-rows table confirms applied events cleared]}]
+              (p/let [_ (on-delete-rows property :property-objects table [11])]
+                (is (= 1 (count @confirms))
+                    "Property-page trash must ask before removing a row (db-test#1286)")
+                (is (= (:title (first @confirms))
+                       "Are you sure you want to delete the selected nodes?")
+                    "The confirm uses the table-delete copy, not the page-delete dialog")
+                (is (empty? @events)
+                    "Property objects must not open the page-delete dialog")
+                (is (= 1 (count @applied))
+                    "The retract runs only after the user confirms")
+                (is (= 1 @cleared)
+                    "The selection is cleared only after confirm"))))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))))
+          (p/finally (fn [] (done)))))))
+
+(deftest on-delete-rows-property-objects-cancel-leaves-rows
+  (async done
+    (let [block {:db/id 12
+                 :block/uuid (random-uuid)
+                 :block/title "Property table block"}
+          property {:db/ident :user.property/priority}]
+      (-> (with-property-objects-delete-harness
+            block
+            :reject
+            (fn [{:keys [on-delete-rows table confirms applied events cleared]}]
+              (p/let [_ (on-delete-rows property :property-objects table [12])]
+                (is (= 1 (count @confirms))
+                    "Cancel still saw a confirmation dialog")
+                (is (empty? @events)
+                    "Cancel must not fall through to the page-delete dialog")
+                (is (empty? @applied)
+                    "Cancel must not delete or retract anything")
+                (is (zero? @cleared)
+                    "Cancel must leave the current selection"))))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))))
+          (p/finally (fn [] (done)))))))
