@@ -611,8 +611,12 @@
                   matched
 
                   :else
+                  ;; Eids with no value on the sort attr tie on nil in
+                  ;; sort-eids-by-sorting; keep its eid tie-break order here.
                   (let [seen (set matched)]
-                    (into matched (remove seen) leftover-eids)))))))))))
+                    (into matched
+                          (sort (if asc? compare #(compare %2 %1))
+                                (remove seen leftover-eids)))))))))))))
 
 (defn- sort-eids-by-sorting
   [db eids sorting]
