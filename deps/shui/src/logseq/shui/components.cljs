@@ -744,7 +744,7 @@
 (def DropdownMenuItem
   (react/forwardRef
    (fn [^js props ref]
-     (let [props' (with-class-props props "ui__dropdown-menu-item relative flex cursor-pointer select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none data-[highlighted]:bg-muted data-[disabled]:pointer-events-none data-[disabled]:opacity-50" nil)]
+     (let [props' (with-class-props props "ui__dropdown-menu-item relative flex cursor-pointer select-none items-center rounded-sm px-2 py-1.5 text-sm leading-4 outline-none data-[highlighted]:bg-muted data-[disabled]:pointer-events-none data-[disabled]:opacity-50" nil)]
        (adapt-menu-item-props! props')
        (when ref (set-prop! props' "ref" ref))
        (react/createElement MenuItemPart props')))))

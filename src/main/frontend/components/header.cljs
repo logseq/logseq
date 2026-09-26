@@ -296,9 +296,9 @@
                                                            [:a.flex.items-center.w-full
                                                             {:href href :on-click #(shui/popup-hide! id)
                                                              :style {:color "inherit"}}
-                                                            [:span.flex.items-center.gap-1.w-full
+                                                            [:span.flex.items-center.gap-1.w-full.leading-4
                                                              icon [:div title]]]
-                                                           [:span.flex.items-center.gap-1.w-full
+                                                           [:span.flex.items-center.gap-1.w-full.leading-4
                                                             icon [:div title]])))
                                                     #js {:key (str key)})))))
                                            {:align "end"

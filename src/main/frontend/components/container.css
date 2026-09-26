@@ -212,10 +212,11 @@
           }
 
           li > a:first-of-type {
-            @apply px-2 flex items-center justify-between relative h-[32px] w-full rounded-md;
+            /* Match the 16px page icon: text-sm's 20px line-box sits 2px higher than the icon. */
+            @apply px-2 flex items-center justify-between relative h-[32px] w-full rounded-md leading-4;
 
             .page-title {
-              @apply whitespace-nowrap text-ellipsis flex-grow overflow-hidden pr-8;
+              @apply whitespace-nowrap text-ellipsis flex-grow overflow-hidden pr-8 leading-4;
 
               * {
                 display: inline !important;
@@ -223,7 +224,7 @@
             }
 
             .page-icon {
-              @apply flex items-center;
+              @apply flex items-center h-4 shrink-0 leading-none;
             }
 
             .sidebar-page-actions {

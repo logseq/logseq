@@ -468,6 +468,15 @@ kbd.shui-shortcut-key-pressed,
   -webkit-app-region: no-drag;
 }
 
+.ui__dropdown-menu-item {
+  /* Match 16px menu icons: text-sm's 20px line-box sits 2px higher than the icon. */
+  @apply leading-4;
+
+  .ui__icon {
+    @apply inline-flex items-center justify-center h-4 shrink-0 leading-none;
+  }
+}
+
 .ui__dropdown-menu-content, div[data-radix-menu-content],
 .ui__select-content {
   @apply overflow-y-auto;

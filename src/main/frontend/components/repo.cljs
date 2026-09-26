@@ -383,7 +383,7 @@
                             ready-for-use? (not= false graph-ready-for-use?)
                             title (str "<" GraphName "> #" GraphUUID)]
                         (when short-repo-name
-                          {:title [:span.flex.items-center.title-wrap short-repo-name
+                          {:title [:span.flex.items-center.leading-4.title-wrap short-repo-name
                                    (when remote? [:span.pl-1.flex.items-center
                                                   {:title title}
                                                   (ui/icon (if graph-e2ee? "lock" "cloud") {:size 18})
@@ -513,7 +513,7 @@
                    [:a.flex.items-center.w-full
                     {:href href' :on-click #(shui/popup-hide! contentid)
                      :style {:color "inherit"}} title]
-                   [:span.flex.items-center.gap-1.w-full
+                   [:span.flex.items-center.gap-1.w-full.leading-4
                     icon [:div title]]))))))]
      (when footer?
        (repos-footer))]))
@@ -525,7 +525,7 @@
      (shui/dropdown-menu-item
       {:key "open-repo-folder"
        :on-click #(open-repo-folder! repo)}
-      [:span.flex.items-center.gap-1
+      [:span.flex.items-center.gap-1.leading-4
        (ui/icon "folder-pin")
        (t :graph/open-folder-action)])
 
@@ -537,7 +537,7 @@
        :disabled disabled?
        :on-click #(when-not disabled?
                     (delete-local-graph! repo))}
-      [:span.flex.items-center.gap-1.text-red-700
+      [:span.flex.items-center.gap-1.leading-4.text-red-700
        (ui/icon "trash")
        (t :graph/delete-local-action)])]))
 

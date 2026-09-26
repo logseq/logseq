@@ -19,7 +19,15 @@
     @apply flex flex-col px-2 relative overflow-hidden min-w-[300px] sm:max-w-[400px];
 
     .ui__dropdown-menu-item {
-      @apply overflow-hidden overflow-ellipsis;
+      @apply overflow-hidden overflow-ellipsis leading-4;
+
+      .ui__icon {
+        @apply inline-flex items-center h-4 shrink-0 leading-none;
+      }
+
+      .title-wrap {
+        @apply leading-4;
+      }
     }
 
     .cp__repos-list-wrap {
@@ -64,8 +72,13 @@
   @apply -mx-2 pl-1 pr-2 pb-1.5 pt-3 border-t flex flex-col rounded-b h-fit;
 
   .ui__button {
+    /* Match the 16px action icon: text-sm's 20px line-box sits 2px higher than the icon. */
     @apply w-full !py-4 !justify-start opacity-70 font-medium hover:opacity-90
-    items-center gap-1.5 hover:bg-gray-03;
+    items-center gap-1.5 hover:bg-gray-03 leading-4;
+
+    .ui__icon {
+      @apply inline-flex items-center h-4 shrink-0 leading-none;
+    }
   }
 }
 
@@ -85,7 +98,7 @@
 
     > strong {
       @apply whitespace-nowrap overflow-hidden text-ellipsis pl-1
-      font-medium relative pr-4 text-sm;
+      font-medium relative pr-4 text-sm leading-4;
     }
 
     > .ui__icon {

@@ -1515,7 +1515,7 @@
                             (state/pub-event! [:go/plugins-settings (:id (first plugins-of-settings))])
                             (reset! *active [label (first active)])))}
 
-             [:button.flex.items-center.settings-menu-link
+             [:button.flex.items-center.leading-4.settings-menu-link
               {:type "button"}
               icon
               [:strong text]]]))]]

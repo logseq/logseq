@@ -26,7 +26,11 @@
         @apply flex gap-3 p-1 bg-gray-02 rounded-md;
 
         .ui__button {
-          @apply flex items-center opacity-70 px-3;
+          @apply flex items-center opacity-70 px-3 leading-4;
+
+          .ui__icon {
+            @apply inline-flex items-center h-4 shrink-0 leading-none;
+          }
 
           &.active {
             @apply bg-gray-04 opacity-100;
@@ -41,10 +45,10 @@
 
     .secondary-tabs {
       .ui__button {
-        @apply mr-1.5 bg-transparent border border-b-2;
+        @apply mr-1.5 bg-transparent border border-b-2 leading-4;
 
-        .ti, .tie {
-          @apply mr-1;
+        .ti, .tie, .ui__icon {
+          @apply mr-1 inline-flex items-center h-4 shrink-0 leading-none;
         }
 
         &.active {
@@ -358,8 +362,16 @@
         }
 
         > .l {
-          @apply flex items-center;
+          @apply flex items-center leading-4;
           margin-left: -70px;
+
+          li {
+            @apply leading-4;
+
+            svg, .icon {
+              @apply shrink-0;
+            }
+          }
         }
 
         a.btn {
@@ -611,11 +623,11 @@
             @apply p-1.5 rounded;
 
             a {
-              @apply mb-0 text-gray-12 opacity-90;
+              @apply mb-0 text-gray-12 opacity-90 leading-4;
             }
 
             strong {
-              @apply overflow-hidden text-ellipsis whitespace-nowrap;
+              @apply overflow-hidden text-ellipsis whitespace-nowrap leading-4;
             }
           }
         }
