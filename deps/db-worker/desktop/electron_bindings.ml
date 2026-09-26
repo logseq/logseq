@@ -120,6 +120,8 @@ module Ipc_main = struct
     = "handle" [@@mel.module "electron"] [@@mel.scope "ipcMain"]
   external on : string -> (Js.Json.t -> 'a -> unit [@u]) -> unit = "on"
     [@@mel.module "electron"] [@@mel.scope "ipcMain"]
+  external handle_once : string -> (Js.Json.t -> 'a -> unit [@u]) -> unit
+    = "handleOnce" [@@mel.module "electron"] [@@mel.scope "ipcMain"]
   external remove_handler : string -> unit = "removeHandler"
     [@@mel.module "electron"] [@@mel.scope "ipcMain"]
   external emit : Js.Json.t -> string -> 'a array -> unit = "emit" [@@mel.send]
