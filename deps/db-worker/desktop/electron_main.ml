@@ -643,7 +643,7 @@ let preferred_unix_cli_dir () : string option =
     }
 
 let preferred_win_cli_dir () : string option =
-  let env = process_env () in
+  let env = process_env in
   let path_env =
     match Js.Dict.get env "PATH" with
     | Some p -> p
@@ -680,7 +680,7 @@ let install_cli_launcher () : unit =
     if Electron_state.win32 then preferred_win_cli_dir ()
     else preferred_unix_cli_dir ()
   in
-  let env = process_env () in
+  let env = process_env in
   Electron_cli_install.install_cli_launcher
     {
       windows = Electron_state.win32;
