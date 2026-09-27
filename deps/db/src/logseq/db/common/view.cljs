@@ -330,21 +330,40 @@
 
 (defonce ^:private exclude-page-ids-cache (js/WeakMap.))
 
+(defn- with-descendant-eids
+  "Each eid plus every :block/parent descendant. Recycled/hidden parents
+  must also drop nested child pages from All Pages."
+  [db eids]
+  (loop [queue (vec eids)
+         seen (transient #{})]
+    (if-let [id (peek queue)]
+      (if (contains? seen id)
+        (recur (pop queue) seen)
+        (recur (into (pop queue) (map :e (d/datoms db :avet :block/parent id)))
+               (conj! seen id)))
+      (persistent! seen))))
+
 (defn- get-exclude-page-ids
-  "Hidden/deleted/built-in/property-page ids only change when the snapshot
-  changes, so cache them per immutable db value instead of rescanning four
-  AVET slices per request."
+  "Hidden/deleted (including descendants)/built-in/property-page ids only
+  change when the snapshot changes, so cache them per immutable db value
+  instead of rescanning AVET slices per request."
   [db]
   (or (.get exclude-page-ids-cache db)
       (let [property-tag-id (ident-eid db :logseq.class/Property)
-            exclude-ids
+            hidden-or-deleted
             (persistent!
              (reduce (fn [result d]
                        (conj! result (:e d)))
                      (transient #{})
                      (concat
                       (d/datoms db :avet :logseq.property/hide? true)
-                      (d/datoms db :avet :logseq.property/deleted-at)
+                      (d/datoms db :avet :logseq.property/deleted-at))))
+            exclude-ids
+            (persistent!
+             (reduce (fn [result d]
+                       (conj! result (:e d)))
+                     (transient (with-descendant-eids db hidden-or-deleted))
+                     (concat
                       (d/datoms db :avet :logseq.property/built-in? true)
                       (d/datoms db :avet :block/tags property-tag-id))))]
         (.set exclude-page-ids-cache db exclude-ids)

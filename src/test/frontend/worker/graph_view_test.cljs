@@ -75,6 +75,25 @@
       (is (contains? labels "Plain Page")))
     (is (= :all-pages (get-in result [:meta :view-mode])))))
 
+(deftest global-all-pages-graph-excludes-nested-pages-under-recycled-parent
+  (let [conn (db-test/create-conn-with-blocks
+              {:pages-and-blocks
+               [{:page {:block/title "page1"}
+                 :blocks [{:block/title "page2"
+                           :block/name "page2"
+                           :build/tags [:logseq.class/Page]}]}
+                {:page {:block/title "keep"}}]})
+        page1 (db-test/find-page-by-title @conn "page1")]
+    (d/transact! conn [{:db/id (:db/id page1)
+                        :logseq.property/deleted-at 1}])
+    (let [labels (node-labels (graph-view/build-graph @conn {:type :global
+                                                             :view-mode :all-pages
+                                                             :orphan-pages? true}))]
+      (is (contains? labels "keep"))
+      (is (not (contains? labels "page1")))
+      (is (not (contains? labels "page2"))
+          "Graph View All Pages must hide nested pages under a recycled parent."))))
+
 (deftest global-all-pages-page-nodes-include-uuid
   (let [conn (db-test/create-conn-with-blocks
               {:pages-and-blocks

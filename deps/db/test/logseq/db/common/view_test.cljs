@@ -304,6 +304,66 @@
     (is (= ["Beta" "Alpha"] (result-titles conn after)))
     (is (= (:count after) (count (:data after))))))
 
+(deftest get-view-data-all-pages-excludes-nested-pages-under-recycled-parent-test
+  (let [conn (db-test/create-conn-with-blocks
+              {:pages-and-blocks
+               [{:page {:block/title "page1" :block/updated-at 10}
+                 :blocks [{:block/title "page2"
+                           :block/name "page2"
+                           :block/updated-at 20
+                           :build/tags [:logseq.class/Page]
+                           :build/children [{:block/title "page3"
+                                             :block/name "page3"
+                                             :block/updated-at 25
+                                             :build/tags [:logseq.class/Page]}]}]}
+                {:page {:block/title "keep" :block/updated-at 30}}]})
+        view-id (create-view-id conn :all-pages)
+        option {:view-feature-type :all-pages
+                :sorting [{:id :block/title :asc? true}]}
+        before-full (db-view/get-view-data @conn view-id option)
+        before-window (db-view/get-view-data @conn view-id (assoc option :row-limit 10))
+        page1 (db-test/find-page-by-title @conn "page1")
+        _ (d/transact! conn [{:db/id (:db/id page1)
+                              :logseq.property/deleted-at 1}])
+        after-full (db-view/get-view-data @conn view-id option)
+        after-window (db-view/get-view-data @conn view-id (assoc option :row-limit 10))
+        after-filtered (db-view/get-view-data
+                        @conn view-id
+                        (assoc option
+                               :row-limit 10
+                               :filters {:or? false
+                                         :filters [[:block/title :text-contains "page"]]}))]
+    (is (= #{"keep" "page1" "page2" "page3"} (set (result-titles conn before-full))))
+    (is (= (:count before-full) (:count before-window)))
+    (is (= ["keep"] (result-titles conn after-full))
+        "Nested pages under a recycled parent must leave All Pages with the parent.")
+    (is (= 1 (:count after-window) (:count after-full)))
+    (is (= ["keep"] (result-titles conn after-window))
+        "The first-window All Pages path must use the same recycled-descendant contract.")
+    (is (= [] (result-titles conn after-filtered))
+        "A title filter must not resurrect recycled nested pages.")))
+
+(deftest get-view-data-all-pages-excludes-nested-pages-under-hidden-parent-test
+  (let [conn (db-test/create-conn-with-blocks
+              {:pages-and-blocks
+               [{:page {:block/title "hidden-parent" :block/updated-at 10}
+                 :blocks [{:block/title "hidden-child"
+                           :block/name "hidden-child"
+                           :block/updated-at 20
+                           :build/tags [:logseq.class/Page]}]}
+                {:page {:block/title "keep" :block/updated-at 30}}]})
+        view-id (create-view-id conn :all-pages)
+        option {:view-feature-type :all-pages
+                :sorting [{:id :block/title :asc? true}]}
+        parent (db-test/find-page-by-title @conn "hidden-parent")
+        _ (d/transact! conn [{:db/id (:db/id parent)
+                              :logseq.property/hide? true}])
+        full (db-view/get-view-data @conn view-id option)
+        window (db-view/get-view-data @conn view-id (assoc option :row-limit 10))]
+    (is (= ["keep"] (result-titles conn full)))
+    (is (= 1 (:count full) (:count window)))
+    (is (= ["keep"] (result-titles conn window)))))
+
 (deftest get-view-data-all-pages-filter-count-matches-rows-test
   (let [conn (db-test/create-conn-with-blocks
               {:pages-and-blocks
