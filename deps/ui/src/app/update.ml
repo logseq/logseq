@@ -28,6 +28,16 @@ let update (model : t) (action : Action.t) : t =
       { model with left_sidebar_open = not model.left_sidebar_open }
   | Toggle_right_sidebar ->
       { model with right_sidebar_open = not model.right_sidebar_open }
+  | Toast_push t ->
+      { model with
+        toasts =
+          model.toasts @ [ { t with toast_id = model.toast_next } ]
+      ; toast_next = model.toast_next + 1
+      }
+  | Toast_dismiss id ->
+      { model with
+        toasts = List.filter (fun (t : toast) -> t.toast_id <> id) model.toasts
+      }
   | Worker_event _ | Refresh_page | Block_content_changed _ | Toggle_search
   | Noop ->
       model

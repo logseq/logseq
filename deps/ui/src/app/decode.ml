@@ -83,3 +83,23 @@ let repos_of_list_db (w : Wire.t) : string list =
           | _ -> None)
         xs
   | _ -> []
+
+(* worker :notification broadcast payload:
+   [message type clear? uid timeout {:i18n-key :i18n-args}] *)
+let toast_of_wire (w : Wire.t) : Model.toast option =
+  let text_of = function
+    | Wire.String s -> Some s
+    | Wire.Keyword s -> Some s
+    | _ -> None
+  in
+  match w with
+  | Wire.Array (m :: ty :: _) | Wire.List (m :: ty :: _) -> (
+      match text_of m with
+      | Some text ->
+          Some
+            { Model.toast_id = 0
+            ; toast_text = text
+            ; toast_kind = Option.value (text_of ty) ~default:"info"
+            }
+      | None -> None)
+  | _ -> None
