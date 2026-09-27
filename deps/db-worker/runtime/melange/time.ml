@@ -126,14 +126,22 @@ let epoch_ms_of_civil tz c =
       in
       Int64.of_float (Js.Date.getTime d)
   | Offset_tz off ->
-      (* Date.UTC applies the same field rollover in UTC space *)
+      (* Same rollover sequence as the local branch, in UTC space.
+         Date.UTC maps years 0-99 onto 1900-1999; the UTC setters keep
+         the literal year so both branches agree on early civil years. *)
+      let d = Js.Date.make () in
+      let _ = Js.Date.setUTCDate ~date:1.0 d in
+      let _ = Js.Date.setUTCFullYear ~year:(float_of_int c.cv_year) d in
+      let _ = Js.Date.setUTCMonth ~month:(float_of_int (c.cv_month - 1)) d in
+      let _ = Js.Date.setUTCDate ~date:(float_of_int c.cv_day) d in
+      let _ =
+        Js.Date.setUTCHours ~hours:(float_of_int c.cv_hour)
+          ~minutes:(float_of_int c.cv_minute)
+          ~seconds:(float_of_int c.cv_second)
+          ~milliseconds:(float_of_int c.cv_ms) d
+      in
       Int64.of_float
-        ( Js.Date.utc ~year:(float_of_int c.cv_year)
-            ~month:(float_of_int (c.cv_month - 1)) ~date:(float_of_int c.cv_day)
-            ~hours:(float_of_int c.cv_hour) ~minutes:(float_of_int c.cv_minute)
-            ~seconds:(float_of_int c.cv_second) ()
-        +. float_of_int c.cv_ms
-        -. float_of_int (off * 60000) )
+        (Js.Date.getTime d -. float_of_int (off * 60000))
 
 (* ---- local_date ---- *)
 
