@@ -207,6 +207,99 @@
              (set! (.-requestAnimationFrame js/globalThis) original-raf)
              (done)))))))
 
+(deftest apply-outliner-ops-runs-an-edit-on-send-callback-when-the-op-is-sent-test
+  (async done
+    (let [repo "edit-on-send-repo"
+          block-id (random-uuid)
+          worker-reply (p/deferred)
+          calls (atom [])
+          frame-callback (atom nil)
+          original-raf (.-requestAnimationFrame js/globalThis)
+          original-flush-sync (.-flushSync react-dom)]
+      (set! (.-flushSync react-dom) (fn [f] (f)))
+      (set! (.-requestAnimationFrame js/globalThis) #(reset! frame-callback %))
+      (-> (p/with-redefs [util/node-test? false
+                          db-subs/apply-delta! (fn [_] (swap! calls conj :delta) true)
+                          state/get-current-repo (constantly repo)
+                          state/get-route-match (constantly nil)
+                          state/get-editor-info (constantly nil)
+                          state/<invoke-db-worker
+                          (fn [api _repo _ops worker-opts]
+                            (swap! calls conj [api (select-keys worker-opts
+                                                                [:editor-row-uuids
+                                                                 :editor/edit-block-on-send?])])
+                            worker-reply)]
+            (let [;; a task queued before the op is sent runs after all of
+                  ;; this task's microtasks: a stand-in for the key event's
+                  ;; other listeners, which run after this one's microtasks
+                  after-this-task (p/deferred)
+                  _ (js/setTimeout #(p/resolve! after-this-task @calls) 0)
+                  request (db-transact/apply-outliner-ops
+                           nil
+                           [[:delete-blocks [[block-id] {}]]]
+                           {:outliner-op :delete-blocks
+                            :editor/edit-block-on-send? true
+                            :editor/edit-block-fn
+                            (fn [rows]
+                              (swap! calls conj [:editor-callback rows]))})]
+              (p/let [calls-after-this-task after-this-task
+                      _ (is (= [[:thread-api/apply-outliner-ops {}]] calls-after-this-task)
+                            "The request is out; the editor does not move within the task that sent it")
+                      _ (is (fn? @frame-callback) "The editor moves at the next animation frame")
+                      _ (@frame-callback)
+                      _ (is (= [[:thread-api/apply-outliner-ops {}]
+                                [:editor-callback []]]
+                               @calls)
+                            "The callback runs at that frame, before the reply")
+                      _ (p/resolve! worker-reply {:result ::deleted :delta {:rev 1}})
+                      value request]
+                (is (= ::deleted value))
+                (is (= [[:thread-api/apply-outliner-ops {}]
+                        [:editor-callback []]
+                        :delta]
+                       @calls)
+                    "The reply applies its delta and does not run the callback again"))))
+          (p/catch (fn [error]
+                     (is false (str "Unexpected transaction failure: " error))))
+          (p/finally (fn []
+                       (set! (.-flushSync react-dom) original-flush-sync)
+                       (set! (.-requestAnimationFrame js/globalThis) original-raf)
+                       (done)))))))
+
+(deftest apply-outliner-ops-keeps-an-edit-on-send-when-the-worker-fails-test
+  (async done
+    (let [block-id (random-uuid)
+          calls (atom [])
+          frame-callback (atom nil)
+          original-raf (.-requestAnimationFrame js/globalThis)
+          original-flush-sync (.-flushSync react-dom)]
+      (set! (.-flushSync react-dom) (fn [f] (f)))
+      (set! (.-requestAnimationFrame js/globalThis) #(reset! frame-callback %))
+      (-> (p/with-redefs [util/node-test? false
+                          state/get-current-repo (constantly "edit-on-send-failure-repo")
+                          state/get-route-match (constantly nil)
+                          state/get-editor-info (constantly nil)
+                          state/<invoke-db-worker
+                          (fn [& _]
+                            (p/rejected (ex-info "Built-in nodes can't be deleted" {})))]
+            (-> (db-transact/apply-outliner-ops
+                 nil
+                 [[:delete-blocks [[block-id] {}]]]
+                 {:outliner-op :delete-blocks
+                  :editor/edit-block-on-send? true
+                  :editor/edit-block-fn (fn [_rows] (swap! calls conj :editor-callback))})
+                (p/then (fn [_] (swap! calls conj :resolved)))
+                (p/catch (fn [error] (swap! calls conj [:rejected (ex-message error)])))))
+          (p/then (fn [_]
+                    (some-> @frame-callback (apply []))
+                    (is (= [[:rejected "Built-in nodes can't be deleted"] :editor-callback]
+                           @calls)
+                        "The failure reaches the caller; the editor still moves, once")))
+          (p/finally (fn []
+                       (set! (.-flushSync react-dom) original-flush-sync)
+                       (set! (.-requestAnimationFrame js/globalThis) original-raf)
+                       (done)))))))
+
 (deftest dependent-outliner-mutations-reach-the-worker-in-call-order-test
   (async done
     (let [repo "ordered-worker-repo"
