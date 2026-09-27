@@ -35,11 +35,18 @@ let as_seq v =
   | Wire.Array xs | Wire.List xs -> xs
   | _ -> err "seq" v
 
-(* malli :keyword — a plain string is NOT a keyword *)
+(* malli :keyword under json-transformer decodes a plain string to a
+   keyword — server responses carry e.g. "outliner-op": "insert-blocks" *)
 let as_kw v =
   match v with
   | Wire.Keyword s -> s
+  | Wire.String s -> s
   | _ -> err "keyword" v
+
+let maybe_kw v =
+  match v with
+  | Wire.Nil -> Wire.Nil
+  | x -> Wire.Keyword (as_kw x)
 
 let opt_kw s = Wire.Keyword s
 let kw_name = function Wire.Keyword s | Wire.String s -> s | _ -> ""
@@ -83,14 +90,17 @@ let tx_entry v =
   ignore (opt (Wire.Map kvs) "tx-id" as_uuid);
   ignore (req (Wire.Map kvs) "tx" as_str);
   ignore (optm (Wire.Map kvs) "outliner-op" as_kw);
-  Wire.Map (norm_field kvs "tx-id" (fun x -> Wire.Uuid (as_uuid x)))
+  Wire.Map
+    (norm_field
+       (norm_field kvs "tx-id" (fun x -> Wire.Uuid (as_uuid x)))
+       "outliner-op" maybe_kw)
 
 let tx_log_entry v =
   let kvs = map_kv v in
   ignore (req (Wire.Map kvs) "t" as_int);
   ignore (req (Wire.Map kvs) "tx" as_str);
   ignore (optm (Wire.Map kvs) "outliner-op" as_kw);
-  Wire.Map kvs
+  Wire.Map (norm_field kvs "outliner-op" maybe_kw)
 
 let coerce_seq elem xs = List.map elem xs
 
@@ -114,8 +124,8 @@ let pull_ok v =
   let m = Wire.Map kvs in
   ignore (req m "t" as_int);
   ignore (opt m "checksum" as_str);
-  ignore (req m "txs" (fun x -> coerce_seq tx_log_entry (as_seq x)));
-  m
+  let txs = req m "txs" (fun x -> coerce_seq tx_log_entry (as_seq x)) in
+  Wire.Map (norm_field kvs "txs" (fun _ -> Wire.Array txs))
 
 let tx_batch_ok v =
   let kvs = map_kv v in
