@@ -799,7 +799,8 @@ let on_app_ready () : unit =
                       match window with
                       | Some _ ->
                           Electron_window.close_handler win e;
-                          win_ref := None
+                          win_ref := None;
+                          Electron_state.main_window := None
                       | None -> ()
                     else if Electron_state.mac && not multiple_windows then (
                       (* Just hiding — no actual closing *)
