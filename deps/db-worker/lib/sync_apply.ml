@@ -1563,14 +1563,24 @@ let rec replay_canonical_outliner_op (conn : conn) (op_entry : Wire.t)
         | _ -> None
       in
       let existing_page =
+        (* A page, a tag or a property can share a title; only an entity
+           of the kind being created is this page. *)
+        let by_title =
+          match Ldb.get_page db (String title_str) with
+          | Some page
+            when (not (Ldb.is_property page))
+                 && opt_bool "class?" = Ldb.is_class page ->
+              Some page
+          | _ -> None
+        in
         match page_uuid with
         | Some u -> (
             match
               Datascript.entity db (Lookup_ref ("block/uuid", Uuid u))
             with
             | Some e -> Some e
-            | None -> Ldb.get_page db (String title_str))
-        | None -> Ldb.get_page db (String title_str)
+            | None -> by_title)
+        | None -> by_title
       in
       match existing_page with
       | Some page when not (Ldb.recycled page) -> (
@@ -1589,10 +1599,10 @@ let rec replay_canonical_outliner_op (conn : conn) (op_entry : Wire.t)
           (* cljs (outliner-page/create! conn title opts) — opts carries
              :uuid/:tags/:properties/flags; keep them on replay so the
              recreated page keeps the wire uuid *)
-          ignore
-            (Outliner_page.create_bang conn title_str
-               ~opts:(fun () ->
-                  Outliner_page.create db title_str
+          let created_title, created_uuid =
+            Outliner_page.create_bang conn title_str
+              ~opts:(fun () ->
+                Outliner_page.create db title_str
                     ?uuid:page_uuid
                     ?tags:
                       (match Wire.get "tags" opts with
@@ -1625,8 +1635,15 @@ let rec replay_canonical_outliner_op (conn : conn) (op_entry : Wire.t)
                        | Some (Wire.String s) -> Some s
                        | _ -> None)
                     ())
-               ());
-          None)
+              ()
+          in
+          (* cljs create! returns [title page-uuid] *)
+          Some
+            (Wire.Array
+               [ Wire.String created_title
+               ; (match created_uuid with
+                  | Some u -> Wire.Uuid u
+                  | None -> Wire.Nil) ]))
   | "delete-page", [ page_uuid; opts ] ->
       (match page_uuid with
        | Wire.Uuid u | Wire.String u ->

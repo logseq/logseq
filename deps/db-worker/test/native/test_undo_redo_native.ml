@@ -1701,6 +1701,402 @@ let test_new_local_save_clears_redo_stack () =
          | Some e -> ent_title_of e = Some "v3"
          | None -> false))
 
+(* ---------- cljs outline fixture (seed-outline! / outline / embed-block!) ----------
+
+   sqlite-build/create-blocks :build/children can't be used here (the
+   same-tx :block/parent drop documented above), so the outline is emitted
+   as plain transact_conn_string maps. The cljs expectations are rendered
+   here as s-expressions: "outline 1" ["a" ["b" ["b1" "b2"]] "c"] becomes
+   ("outline 1" "a" ("b" "b1" "b2") "c"). *)
+
+let outline_1_start = "(\"outline 1\" \"a\" (\"b\" \"b1\" \"b2\") \"c\")"
+
+(* cljs seed-outline! *)
+let seed_outline () : string -> string =
+  let conn = conn () in
+  let p1, a, b, b1, b2, c, p2, d =
+    ( Uuid_gen.uuid ()
+    , Uuid_gen.uuid ()
+    , Uuid_gen.uuid ()
+    , Uuid_gen.uuid ()
+    , Uuid_gen.uuid ()
+    , Uuid_gen.uuid ()
+    , Uuid_gen.uuid ()
+    , Uuid_gen.uuid () )
+  in
+  let now = Time.epoch_ms_to_int64 (Time.now ()) in
+  let page u t =
+    Printf.sprintf
+      "{:block/uuid %s :block/title %s :block/name %s :block/tags [:logseq.class/Page] :block/created-at %Ld :block/updated-at %Ld}"
+      (uuid_lit u) (qstr t) (qstr t) now now
+  in
+  let blk u t page_u parent order =
+    Printf.sprintf
+      "{:block/uuid %s :block/title %s :block/page [:block/uuid %s] :block/parent %s :block/order %s :block/created-at %Ld :block/updated-at %Ld}"
+      (uuid_lit u) (qstr t) (uuid_lit page_u) parent (qstr order) now now
+  in
+  let child_of u = Printf.sprintf "{:db/id [:block/uuid %s]}" (uuid_lit u) in
+  let top_of u = Printf.sprintf "[:block/uuid %s]" (uuid_lit u) in
+  ignore
+    (transact_conn_string conn
+       (Printf.sprintf "[%s %s %s %s %s %s %s %s]"
+          (page p1 "outline 1")
+          (blk a "a" p1 (top_of p1) "a1")
+          (blk b "b" p1 (top_of p1) "a2")
+          (blk b1 "b1" p1 (child_of b) "a1")
+          (blk b2 "b2" p1 (child_of b) "a2")
+          (blk c "c" p1 (top_of p1) "a3")
+          (page p2 "outline 2")
+          (blk d "d" p2 (top_of p2) "a1")));
+  Undo_redo.clear_history test_repo;
+  fun title ->
+    match Db_test_util.find_block_by_content (db_of conn) title with
+    | Some e -> ent_uuid_of e
+    | None -> failwith ("no block titled " ^ title)
+
+(* cljs outline — the page titled [title] and its live blocks as nested
+   titles *)
+let outline (title : string) : string =
+  let db = db_of (conn ()) in
+  let rec node (e : entity) : string =
+    let children =
+      Ldb.ref_ents e "block/_parent"
+      |> List.filter (fun c -> not (Ldb.recycled c))
+      |> Ldb.sort_by_order
+    in
+    let t = Option.value (Ldb.string_value e "block/title") ~default:"" in
+    match children with
+    | [] -> Printf.sprintf "%S" t
+    | cs ->
+        Printf.sprintf "(%S %s)" t
+          (String.concat " " (List.map node cs))
+  in
+  match Db_test_util.find_page_by_title db title with
+  | Some e -> node e
+  | None -> Alcotest.fail ("no page titled " ^ title)
+
+let page_uuid_by_title (title : string) : string =
+  match Db_test_util.find_page_by_title (db_of (conn ())) title with
+  | Some e -> ent_uuid_of e
+  | None -> failwith ("no page titled " ^ title)
+
+(* cljs embed-block! — make the block titled [title] an embed of the block
+   titled [linked_title], as pasting a block copied as an embed does, and
+   clear history. *)
+let embed_block (uuid_of : string -> string) (title : string)
+    (linked_title : string) =
+  let conn = conn () in
+  ignore
+    (transact_conn_string conn
+       (Printf.sprintf
+          "[[:db/add [:block/uuid %s] :block/link [:block/uuid %s]]]"
+          (uuid_lit (uuid_of title)) (uuid_lit (uuid_of linked_title))));
+  Undo_redo.clear_history test_repo
+
+let undo_is_map () =
+  match Undo_redo.undo test_repo with Wire.Map _ -> true | _ -> false
+
+(* cljs undo-move-down-of-blocks-at-different-levels-test *)
+let test_undo_move_down_of_blocks_at_different_levels () =
+  with_worker_conns (fun () ->
+      let conn = conn () in
+      let uuid_of = seed_outline () in
+      ignore
+        (apply_ops_edn conn
+           (Printf.sprintf "[[:move-blocks-up-down [[%s %s] false]]]"
+              (uuid_lit (uuid_of "a")) (uuid_lit (uuid_of "b1"))));
+      check "moved into b"
+        (outline "outline 1"
+        = "(\"outline 1\" (\"b\" \"b2\" \"a\" \"b1\") \"c\")");
+      check "undo map" (undo_is_map ());
+      check "restored" (outline "outline 1" = outline_1_start))
+
+(* cljs undo-move-up-of-blocks-at-different-levels-test *)
+let test_undo_move_up_of_blocks_at_different_levels () =
+  with_worker_conns (fun () ->
+      let conn = conn () in
+      let uuid_of = seed_outline () in
+      ignore
+        (apply_ops_edn conn
+           (Printf.sprintf "[[:move-blocks-up-down [[%s %s] true]]]"
+              (uuid_lit (uuid_of "a")) (uuid_lit (uuid_of "b1"))));
+      check "moved up"
+        (outline "outline 1"
+        = "(\"outline 1\" \"a\" \"b1\" (\"b\" \"b2\") \"c\")");
+      check "undo map" (undo_is_map ());
+      check "restored" (outline "outline 1" = outline_1_start))
+
+(* cljs undo-move-up-of-siblings-that-are-not-adjacent-test *)
+let test_undo_move_up_of_siblings_that_are_not_adjacent () =
+  with_worker_conns (fun () ->
+      let conn = conn () in
+      let uuid_of = seed_outline () in
+      ignore
+        (apply_ops_edn conn
+           (Printf.sprintf "[[:move-blocks-up-down [[%s %s] true]]]"
+              (uuid_lit (uuid_of "a")) (uuid_lit (uuid_of "c"))));
+      check "moved up"
+        (outline "outline 1"
+        = "(\"outline 1\" \"a\" \"c\" (\"b\" \"b1\" \"b2\"))");
+      check "undo map" (undo_is_map ());
+      check "restored" (outline "outline 1" = outline_1_start))
+
+(* cljs undo-move-of-block-and-its-grandchild-restores-both-test *)
+let test_undo_move_of_block_and_its_grandchild_restores_both () =
+  with_worker_conns (fun () ->
+      let conn = conn () in
+      let uuid_of = seed_outline () in
+      let page_2_uuid = page_uuid_by_title "outline 2" in
+      ignore
+        (apply_ops_edn conn
+           (Printf.sprintf "[[:move-blocks [[%s] %s {:sibling? false}]]]"
+              (uuid_lit (uuid_of "b")) (uuid_lit (uuid_of "a"))));
+      ignore
+        (apply_ops_edn conn
+           (Printf.sprintf "[[:move-blocks [[%s %s] %s {:sibling? false}]]]"
+              (uuid_lit (uuid_of "a")) (uuid_lit (uuid_of "b2"))
+              (uuid_lit page_2_uuid)));
+      check "moved to page 2"
+        (outline "outline 2"
+        = "(\"outline 2\" (\"a\" (\"b\" \"b1\")) \"b2\" \"d\")");
+      check "2 undos" (List.length (undo_all ()) = 2);
+      check "outline 1 restored"
+        (outline "outline 1" = outline_1_start);
+      check "outline 2 d only" (outline "outline 2" = "(\"outline 2\" \"d\")"))
+
+(* cljs undo-move-of-blocks-selected-bottom-up-restores-both-test *)
+let test_undo_move_of_blocks_selected_bottom_up_restores_both () =
+  with_worker_conns (fun () ->
+      let conn = conn () in
+      let uuid_of = seed_outline () in
+      let page_2_uuid = page_uuid_by_title "outline 2" in
+      ignore
+        (apply_ops_edn conn
+           (Printf.sprintf "[[:move-blocks [[%s %s] %s {:sibling? false}]]]"
+              (uuid_lit (uuid_of "b2")) (uuid_lit (uuid_of "b1"))
+              (uuid_lit page_2_uuid)));
+      check "moved"
+        (outline "outline 2" = "(\"outline 2\" \"b1\" \"b2\" \"d\")");
+      check "undo map" (undo_is_map ());
+      check "outline 1 restored"
+        (outline "outline 1" = outline_1_start);
+      check "outline 2 d only" (outline "outline 2" = "(\"outline 2\" \"d\")"))
+
+(* cljs undo-delete-after-undoing-move-of-block-left-behind-test *)
+let test_undo_delete_after_undoing_move_of_block_left_behind () =
+  with_worker_conns (fun () ->
+      let conn = conn () in
+      let uuid_of = seed_outline () in
+      let page_2_uuid = page_uuid_by_title "outline 2" in
+      ignore
+        (apply_ops_edn conn
+           (Printf.sprintf "[[:delete-blocks [[%s %s] {}]]]"
+              (uuid_lit (uuid_of "a")) (uuid_lit (uuid_of "b"))));
+      ignore
+        (apply_ops_edn conn
+           (Printf.sprintf "[[:move-blocks [[%s] %s {:sibling? false}]]]"
+              (uuid_lit (uuid_of "c")) (uuid_lit page_2_uuid)));
+      check "c moved"
+        (outline "outline 2" = "(\"outline 2\" \"c\" \"d\")");
+      check "2 undos" (List.length (undo_all ()) = 2);
+      check "outline 1 restored"
+        (outline "outline 1" = outline_1_start);
+      check "outline 2 d only" (outline "outline 2" = "(\"outline 2\" \"d\")"))
+
+(* cljs undo-move-down-of-last-children-into-next-block-test *)
+let test_undo_move_down_of_last_children_into_next_block () =
+  with_worker_conns (fun () ->
+      let conn = conn () in
+      let uuid_of = seed_outline () in
+      ignore
+        (apply_ops_edn conn
+           (Printf.sprintf "[[:move-blocks-up-down [[%s %s] false]]]"
+              (uuid_lit (uuid_of "b1")) (uuid_lit (uuid_of "b2"))));
+      check "moved into c"
+        (outline "outline 1"
+        = "(\"outline 1\" \"a\" \"b\" (\"c\" \"b1\" \"b2\"))");
+      check "undo map" (undo_is_map ());
+      check "restored" (outline "outline 1" = outline_1_start))
+
+(* cljs undo-move-up-of-first-children-into-previous-block-test *)
+let test_undo_move_up_of_first_children_into_previous_block () =
+  with_worker_conns (fun () ->
+      let conn = conn () in
+      let uuid_of = seed_outline () in
+      ignore
+        (apply_ops_edn conn
+           (Printf.sprintf "[[:move-blocks-up-down [[%s %s] true]]]"
+              (uuid_lit (uuid_of "b1")) (uuid_lit (uuid_of "b2"))));
+      check "moved into a"
+        (outline "outline 1"
+        = "(\"outline 1\" (\"a\" \"b1\" \"b2\") \"b\" \"c\")");
+      check "undo map" (undo_is_map ());
+      check "restored" (outline "outline 1" = outline_1_start))
+
+(* cljs undo-move-down-of-last-children-into-next-embed-test *)
+let test_undo_move_down_of_last_children_into_next_embed () =
+  with_worker_conns (fun () ->
+      let conn = conn () in
+      let uuid_of = seed_outline () in
+      embed_block uuid_of "c" "d";
+      ignore
+        (apply_ops_edn conn
+           (Printf.sprintf "[[:move-blocks-up-down [[%s %s] false]]]"
+              (uuid_lit (uuid_of "b1")) (uuid_lit (uuid_of "b2"))));
+      check "moved under embed"
+        (outline "outline 2" = "(\"outline 2\" (\"d\" \"b1\" \"b2\"))");
+      check "undo map" (undo_is_map ());
+      check "outline 1 restored"
+        (outline "outline 1" = outline_1_start);
+      check "outline 2 d only" (outline "outline 2" = "(\"outline 2\" \"d\")"))
+
+(* cljs undo-move-up-of-first-children-into-previous-embed-test *)
+let test_undo_move_up_of_first_children_into_previous_embed () =
+  with_worker_conns (fun () ->
+      let conn = conn () in
+      let uuid_of = seed_outline () in
+      embed_block uuid_of "a" "d";
+      ignore
+        (apply_ops_edn conn
+           (Printf.sprintf "[[:move-blocks-up-down [[%s %s] true]]]"
+              (uuid_lit (uuid_of "b1")) (uuid_lit (uuid_of "b2"))));
+      check "moved under embed"
+        (outline "outline 2" = "(\"outline 2\" (\"d\" \"b1\" \"b2\"))");
+      check "undo map" (undo_is_map ());
+      check "outline 1 restored"
+        (outline "outline 1" = outline_1_start);
+      check "outline 2 d only" (outline "outline 2" = "(\"outline 2\" \"d\")"))
+
+(* cljs undo-delete-of-property-valued-on-itself-restores-property-test *)
+let test_undo_delete_of_property_valued_on_itself_restores_property () =
+  with_worker_conns (fun () ->
+      let conn = conn () in
+      ignore
+        (apply_ops_edn conn
+           "[[:upsert-property [:user.property/undo-self-rating {:logseq.property/type :number} {:property-name \"undo-self-rating\"}]]]");
+      let property_uuid =
+        match
+          entity_of_ident (db_of conn) "user.property/undo-self-rating"
+        with
+        | Some e -> ent_uuid_of e
+        | None -> failwith "property missing"
+      in
+      Undo_redo.clear_history test_repo;
+      ignore
+        (apply_ops_edn conn
+           (Printf.sprintf
+              "[[:set-block-property [%s :user.property/undo-self-rating 1]]]"
+              (uuid_lit property_uuid)));
+      ignore
+        (apply_ops_edn conn
+           (Printf.sprintf "[[:delete-page [%s {}]]]"
+              (uuid_lit property_uuid)));
+      check "property gone"
+        (entity_of_ident (db_of conn) "user.property/undo-self-rating"
+        = None);
+      check "undo map" (undo_is_map ());
+      (match
+         entity_of_ident (db_of conn) "user.property/undo-self-rating"
+       with
+       | Some property ->
+           check "uuid kept" (ent_uuid_of property = property_uuid);
+           check "value 1"
+             (match
+                Ldb.ref_ent property "user.property/undo-self-rating"
+              with
+              | Some vb ->
+                  Ldb.value vb "logseq.property/value" = Some (Int64 1L)
+              | None -> false)
+       | None -> check "property restored" false);
+      check "undo 2 map" (undo_is_map ());
+      match
+        entity_of_ident (db_of conn) "user.property/undo-self-rating"
+      with
+      | Some property ->
+          check "uuid kept 2" (ent_uuid_of property = property_uuid);
+          check "value cleared"
+            (Ldb.ref_ent property "user.property/undo-self-rating" = None)
+      | None -> check "property restored 2" false)
+
+(* cljs undo-delete-of-tag-renamed-to-page-title-restores-tag-test *)
+let test_undo_delete_of_tag_renamed_to_page_title_restores_tag () =
+  with_worker_conns (fun () ->
+      let conn = conn () in
+      let tag_uuid =
+        match
+          apply_ops_edn conn
+            "[[:create-page [\"undo tag topic\" {:class? true :redirect? false :split-namespace? true :tags ()}]]]"
+        with
+        | Wire.Array [ _; Wire.Uuid u ] -> u
+        | Wire.Array [ _; Wire.String u ] -> u
+        | _ -> (
+            match
+              Db_test_util.find_page_by_title (db_of conn) "undo tag topic"
+            with
+            | Some e -> ent_uuid_of e
+            | None -> Alcotest.fail "create-page returned no uuid")
+      in
+      let tag_ident =
+        Option.bind (ent_at_uuid (db_of conn) tag_uuid) ent_ident
+      in
+      Undo_redo.clear_history test_repo;
+      ignore
+        (apply_ops_edn conn
+           (Printf.sprintf "[[:rename-page [%s \"page 1\"]]]"
+              (uuid_lit tag_uuid)));
+      ignore
+        (apply_ops_edn conn
+           (Printf.sprintf "[[:delete-page [%s {}]]]" (uuid_lit tag_uuid)));
+      check "tag gone" (ent_at_uuid (db_of conn) tag_uuid = None);
+      check "2 undos" (List.length (undo_all ()) = 2);
+      match ent_at_uuid (db_of conn) tag_uuid with
+      | Some tag ->
+          check "is class" (Ldb.is_class tag);
+          check "title" (ent_title_of tag = Some "undo tag topic");
+          check "ident" (ent_ident tag = tag_ident)
+      | None -> check "tag restored" false)
+
+(* cljs replay-create-page-titled-like-property-creates-page-test *)
+let test_replay_create_page_titled_like_property_creates_page () =
+  with_worker_conns (fun () ->
+      let conn = conn () in
+      ignore
+        (apply_ops_edn conn
+           "[[:upsert-property [:user.property/undo-replay-rating {:logseq.property/type :number} {:property-name \"undo replay rating\"}]]]");
+      let page_uuid = Uuid_gen.uuid () in
+      let result =
+        Sync_apply.replay_canonical_outliner_op conn
+          (Wire.Array
+             [ Wire.Keyword "create-page"
+             ; Wire.Array
+                 [ Wire.String "undo replay rating"
+                 ; Wire.Map
+                     [ (Wire.Keyword "uuid", Wire.Uuid page_uuid)
+                     ; (Wire.Keyword "redirect?", Wire.Bool false)
+                     ; (Wire.Keyword "split-namespace?", Wire.Bool true)
+                     ; (Wire.Keyword "tags", Wire.List []) ] ] ])
+          None
+      in
+      (match result with
+       | Some (Wire.Array [ _; Wire.Uuid u ]) ->
+           check "replay returned uuid" (u = page_uuid)
+       | Some (Wire.Array [ _; Wire.String u ]) ->
+           check "replay returned uuid" (u = page_uuid)
+       | _ -> check "replay returned uuid" false);
+      (match ent_at_uuid (db_of conn) page_uuid with
+       | Some page ->
+           check "title"
+             (Ldb.string_value page "block/title"
+             = Some "undo replay rating");
+           check "not property" (not (Ldb.is_property page))
+       | None -> check "page created" false);
+      check "property intact"
+        (match
+           entity_of_ident (db_of conn) "user.property/undo-replay-rating"
+         with
+         | Some e -> Ldb.is_property e
+         | None -> false))
+
 let cases =
   [ Alcotest.test_case "worker-ui-state-roundtrip-test" `Quick
       test_worker_ui_state_roundtrip
@@ -1769,4 +2165,42 @@ let cases =
       test_save_two_blocks_undo_targets_latest_block
   ; Alcotest.test_case "new-local-save-clears-redo-stack-test" `Quick
       test_new_local_save_clears_redo_stack
+  ; Alcotest.test_case
+      "undo-move-down-of-blocks-at-different-levels-test" `Quick
+      test_undo_move_down_of_blocks_at_different_levels
+  ; Alcotest.test_case "undo-move-up-of-blocks-at-different-levels-test"
+      `Quick test_undo_move_up_of_blocks_at_different_levels
+  ; Alcotest.test_case
+      "undo-move-up-of-siblings-that-are-not-adjacent-test" `Quick
+      test_undo_move_up_of_siblings_that_are_not_adjacent
+  ; Alcotest.test_case
+      "undo-move-of-block-and-its-grandchild-restores-both-test" `Quick
+      test_undo_move_of_block_and_its_grandchild_restores_both
+  ; Alcotest.test_case
+      "undo-move-of-blocks-selected-bottom-up-restores-both-test" `Quick
+      test_undo_move_of_blocks_selected_bottom_up_restores_both
+  ; Alcotest.test_case
+      "undo-delete-after-undoing-move-of-block-left-behind-test" `Quick
+      test_undo_delete_after_undoing_move_of_block_left_behind
+  ; Alcotest.test_case
+      "undo-move-down-of-last-children-into-next-block-test" `Quick
+      test_undo_move_down_of_last_children_into_next_block
+  ; Alcotest.test_case
+      "undo-move-up-of-first-children-into-previous-block-test" `Quick
+      test_undo_move_up_of_first_children_into_previous_block
+  ; Alcotest.test_case
+      "undo-move-down-of-last-children-into-next-embed-test" `Quick
+      test_undo_move_down_of_last_children_into_next_embed
+  ; Alcotest.test_case
+      "undo-move-up-of-first-children-into-previous-embed-test" `Quick
+      test_undo_move_up_of_first_children_into_previous_embed
+  ; Alcotest.test_case
+      "undo-delete-of-property-valued-on-itself-restores-property-test"
+      `Quick test_undo_delete_of_property_valued_on_itself_restores_property
+  ; Alcotest.test_case
+      "undo-delete-of-tag-renamed-to-page-title-restores-tag-test" `Quick
+      test_undo_delete_of_tag_renamed_to_page_title_restores_tag
+  ; Alcotest.test_case
+      "replay-create-page-titled-like-property-creates-page-test" `Quick
+      test_replay_create_page_titled_like_property_creates_page
   ]
