@@ -263,6 +263,37 @@
       (is (= (:db/id property-value)
              (:db/id (:user.property/num (db-test/find-block-by-content @conn "b2"))))))))
 
+(deftest set-block-property-stores-integer-numbers-as-values
+  (testing "Literal integers including 0, negatives, and coincidental entity ids store as numbers"
+    (let [conn (db-test/create-conn-with-blocks
+                [{:page {:block/title "page1"}
+                  :blocks [{:block/title "b1"}
+                           {:block/title "b2"}]}])
+          _ (outliner-property/upsert-property! conn nil {:logseq.property/type :number} {:property-name "rating"})
+          b1-uuid (:block/uuid (db-test/find-block-by-content @conn "b1"))
+          b2-uuid (:block/uuid (db-test/find-block-by-content @conn "b2"))]
+      (outliner-property/set-block-property! conn [:block/uuid b1-uuid] :user.property/rating 0)
+      (is (= 0 (db-property/property-value-content
+                (:user.property/rating (db-test/find-block-by-content @conn "b1")))))
+
+      (outliner-property/set-block-property! conn [:block/uuid b1-uuid] :user.property/rating -3)
+      (is (= -3 (db-property/property-value-content
+                 (:user.property/rating (db-test/find-block-by-content @conn "b1")))))
+
+      (outliner-property/set-block-property! conn [:block/uuid b1-uuid] :user.property/rating 2)
+      (let [value-block-id (:db/id (:user.property/rating (db-test/find-block-by-content @conn "b1")))]
+        (outliner-property/set-block-property! conn [:block/uuid b2-uuid] :user.property/rating value-block-id)
+        (is (= value-block-id
+               (db-property/property-value-content
+                (:user.property/rating (db-test/find-block-by-content @conn "b2"))))
+            "A number that coincides with another value block's entity id is stored as that number")
+        (is (not= value-block-id
+                  (:db/id (:user.property/rating (db-test/find-block-by-content @conn "b2"))))
+            "Does not reuse the other block's value entity")
+        (is (not= 2
+                  (db-property/property-value-content
+                   (:user.property/rating (db-test/find-block-by-content @conn "b2")))))))))
+
 (deftest set-block-property-with-non-ref-values
   (testing "Setting :default with same property value reuses existing entity"
     (let [conn (db-test/create-conn-with-blocks
