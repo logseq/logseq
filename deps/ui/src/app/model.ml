@@ -58,6 +58,9 @@ type t =
   ; confirm : confirm option
   ; toasts : toast list
   ; toast_next : int
+  ; unlinked_open : bool
+  ; unlinked_search : bool
+  ; unlinked_query : string
   }
 
 let initial =
@@ -76,4 +79,7 @@ let initial =
   ; confirm = None
   ; toasts = []
   ; toast_next = 0
+  ; unlinked_open = false
+  ; unlinked_search = false
+  ; unlinked_query = ""
   }
