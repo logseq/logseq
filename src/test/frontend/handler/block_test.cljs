@@ -113,6 +113,26 @@
              (mapv :block/uuid (block-handler/get-top-level-blocks [a a2])))
           "A selected direct child is still dropped when the parent is selected."))))
 
+(deftest get-top-level-blocks-drops-grandchild-from-copy-summaries
+  (let [a-id (random-uuid)
+        x-id (random-uuid)
+        summaries [{:db/id 1
+                    :block/uuid a-id
+                    :block/title "a"
+                    :block/parent {:db/id 10}}
+                   {:db/id 3
+                    :block/uuid x-id
+                    :block/title "a2x"
+                    :block/parent {:db/id 2
+                                   :block/parent {:db/id 1
+                                                  :block/parent {:db/id 10}}}}]]
+    (with-redefs [state/get-edit-block (constantly nil)
+                  state/get-input (constantly nil)
+                  state/get-selection-blocks (constantly [])]
+      (is (= [a-id]
+             (mapv :block/uuid (block-handler/get-top-level-blocks summaries)))
+          "Copy summaries with a hydrated parent chain must not export the grandchild twice."))))
+
 (deftest edit-block-loads-target-through-worker-test
   (async done
     (let [block-id #uuid "11111111-1111-1111-1111-111111111111"
