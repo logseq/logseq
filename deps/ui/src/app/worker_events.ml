@@ -17,3 +17,34 @@ let dispatch kind payload =
       | None -> ())
   | "sync-db-changes" -> Router.reload ()
   | _ -> Runtime.send (Action.Worker_event (kind, payload))
+
+(* sdk show_msg/close_msg dispatch `ls:toast`/`ls:toast-close`
+   CustomEvents on document — same toast path as worker notifications. *)
+let detail_json ev = Platform.json_prop ev "detail"
+
+let init () =
+  Platform.on_document_event "ls:toast" (fun ev ->
+      let d = detail_json ev in
+      let text =
+        match Js.Json.decodeObject d with
+        | Some o -> (
+            match Js.Dict.get o "msg" with
+            | Some v -> Option.value (Js.Json.decodeString v) ~default:""
+            | None -> "")
+        | None -> ""
+      in
+      let kind =
+        match Js.Json.decodeObject d with
+        | Some o -> (
+            match Js.Dict.get o "cls" with
+            | Some v -> Option.value (Js.Json.decodeString v) ~default:"info"
+            | None -> "info")
+        | None -> "info"
+      in
+      Runtime.send
+        (Action.Toast_push
+           { Model.toast_id = 0; toast_text = text; toast_kind = kind });
+      Runtime.flush ());
+  Platform.on_document_event "ls:toast-close" (fun _ ->
+      Runtime.send Action.Toasts_clear;
+      Runtime.flush ())
