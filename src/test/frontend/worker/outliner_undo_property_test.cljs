@@ -102,26 +102,34 @@
    "logseq/db-test#1305" ["undo-mismatch props delete-page:tag"
                           "undo-mismatch props+tags delete-page:tag"
                           "undo-mismatch tags delete-page:tag"
-                          "undo-mismatch children+props+refs+tags+title delete-page:tag"]
+                          "undo-mismatch children+props+refs+tags+title delete-page:tag"
+                          "undo-mismatch children+refs+tags+title delete-page:tag"]
    ;; Undo of changing a property to multiple values does nothing.
    "logseq/db-test#1306" ["undo-mismatch props retype:*"]
    ;; Undo of deleting a property with choices sets the property's own value.
    "logseq/db-test#1309" ["undo-mismatch props delete-page:property"
-                          "undo-mismatch props+tag-props delete-page:property"]
+                          "undo-mismatch props+tag-props delete-page:property"
+                          "undo-mismatch children+props+refs+tag-props+title delete-page:property"]
    ;; Undo of deleting a tag leaves the links to it in text as plain text
    ;; (the same for a property or a page).
    "logseq/db-test#1310" ["undo-mismatch children+refs+title delete-page:*"
-                          "undo-mismatch children+props+refs+tags+title delete-page:tag"]
+                          "undo-mismatch children+props+refs+tags+title delete-page:tag"
+                          "undo-mismatch children+refs+tags+title delete-page:tag"
+                          "undo-mismatch children+props+refs+tag-props+title delete-page:property"]
    ;; Undo of deleting a property removes it from the tags that had it as a
    ;; tag property.
    "logseq/db-test#1311" ["undo-mismatch tag-props delete-page:property"
-                          "undo-mismatch props+tag-props delete-page:property"]
+                          "undo-mismatch props+tag-props delete-page:property"
+                          "undo-mismatch children+props+refs+tag-props+title delete-page:property"]
    ;; Undo of deleting a parent tag leaves its child tags under Root Tag.
    "logseq/db-test#1312" ["undo-mismatch props delete-page:tag"]
    ;; Undo of deleting a block leaves block references to it as plain text.
    "logseq/db-test#1325" ["undo-mismatch children+refs+title delete:*"]
    ;; Undo of deleting a block stores its page links by name.
-   "logseq/db-test#1326" ["undo-mismatch refs delete:*"]})
+   "logseq/db-test#1326" ["undo-mismatch refs delete:*"]
+   ;; Undo of deleting 2 blocks fails and clears the history when one's node
+   ;; property points at the other.
+   "logseq/db-test#1331" ["undo-mismatch children+nodes+props delete:*"]})
 
 (defn- env [k] (gobj/get (.-env js/process) k))
 
