@@ -1,0 +1,10 @@
+(include_subdirs unqualified)
+
+(library
+ (name logseq_ui)
+ (wrapped false)
+ (modes melange)
+ (libraries lui lui.web.dom melange-webapi melange.dom
+   melange-transit-melange melange-fetch)
+ (preprocess
+  (pps melange.ppx)))

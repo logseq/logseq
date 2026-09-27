@@ -1,0 +1,58 @@
+(* Decode worker wire values into model types. *)
+
+let rec block_of_wire (w : Wire.t) : Model.block =
+  let uuid = Wire.map_get_uuid w "block/uuid" in
+  let db_id = Wire.map_get_int w "db/id" in
+  let title =
+    match Wire.map_get_string w "block/title" with
+    | Some t -> t
+    | None -> Option.value (Wire.map_get_string w "block/name") ~default:""
+  in
+  let level =
+    Option.value (Wire.map_get_int w "block/level") ~default:1
+  in
+  let children =
+    match Wire.get w "block/children" with
+    | Some (Wire.List xs) | Some (Wire.Array xs) ->
+        List.map block_of_wire xs
+    | _ -> []
+  in
+  { block_uuid = uuid
+  ; block_db_id = db_id
+  ; block_title = title
+  ; block_level = level
+  ; block_children = children
+  }
+
+let blocks_of_wire (w : Wire.t) : Model.block list =
+  match w with
+  | Wire.Array xs | Wire.List xs -> List.map block_of_wire xs
+  | _ -> []
+
+let page_of_summary (w : Wire.t) : Model.page option =
+  match w with
+  | Wire.Map _ ->
+      Some
+        { Model.page_title =
+            Option.value
+              (Wire.map_get_string w "block/title")
+              ~default:
+                (Option.value
+                   (Wire.map_get_string w "block/raw-title")
+                   ~default:"")
+        ; page_uuid = Wire.map_get_uuid w "block/uuid"
+        ; page_blocks = []
+        }
+  | _ -> None
+
+let repos_of_list_db (w : Wire.t) : string list =
+  match w with
+  | Wire.Array xs | Wire.List xs ->
+      List.filter_map
+        (fun item ->
+          match Wire.map_get_string item "name" with
+          | Some name when String.lowercase_ascii name <> "upload-temp" ->
+              Some name
+          | _ -> None)
+        xs
+  | _ -> []

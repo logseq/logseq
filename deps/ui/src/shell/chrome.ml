@@ -1,0 +1,99 @@
+(* App chrome — mirrors components/container.cljs shell:
+
+   <main#app-container-wrapper.theme-container-inner>
+     <button#skip-to-main>
+     <div#app-container>
+       <div#left-container>
+         <header#head .cp__header> ... nav buttons ... </header>
+         <div#main-container .cp__sidebar-main-layout>
+           <div#main-content-container .scrollbar-spacing>
+             <div .cp__sidebar-main-content> [page] </div>
+           </div>
+         </div>
+       </div>
+     </div>
+   </main>
+*)
+
+open Lui_elements
+
+let skip_to_main =
+  Logseq_dom.dom ~key:"skip" ~tag:"button" ~id:"skip-to-main"
+    ~style_class:"sr-only" ~text:"Skip to main content" []
+
+let search_button =
+  Logseq_dom.dom ~key:"search-btn" ~tag:"button" ~id:"search-button"
+    ~style_class:"button cp__header-btn" ~text:"Search"
+    ~events:"click"
+    ~on_dom_event:(fun name _payload ->
+      if name = "click" then Runtime.send Action.Toggle_search)
+    []
+
+let left_menu_button =
+  Logseq_dom.dom ~key:"left-menu-btn" ~tag:"button" ~id:"left-menu"
+    ~style_class:"button cp__header-btn" ~text:"Menu"
+    ~events:"click"
+    ~on_dom_event:(fun name _payload ->
+      if name = "click" then Runtime.send Action.Toggle_left_sidebar)
+    []
+
+let header =
+  Logseq_dom.dom ~key:"head" ~tag:"header" ~id:"head"
+    ~style_class:"cp__header"
+    [ Logseq_dom.dom ~key:"head-inner" ~style_class:"l"
+        [ left_menu_button ]
+    ; Logseq_dom.dom ~key:"head-r" ~style_class:"r"
+        [ search_button ]
+    ]
+
+(* right sidebar — hidden until toggled; e2e checks .cp__right-sidebar *)
+let right_sidebar (ms : Model.t Signal.signal) =
+  Logseq_dom.dom ~key:"right-sidebar" ~id:"right-sidebar"
+    ~style_class_signal:
+      (Logseq_dom.class_signal ms (fun (m : Model.t) ->
+           "cp__right-sidebar"
+           ^ if m.right_sidebar_open then " open" else ""))
+    []
+
+let left_sidebar (ms : Model.t Signal.signal) =
+  Logseq_dom.dom ~key:"left-sidebar"
+    ~style_class_signal:
+      (Logseq_dom.class_signal ms (fun (m : Model.t) ->
+           "cp__sidebar-left-layout"
+           ^ if m.left_sidebar_open then " is-open" else ""))
+    [ Logseq_dom.dom ~key:"ls-left" ~style_class:"cp__sidebar-left"
+        [ box ~key:"ls-menu" ~style_class:"sidebar-menu"
+            [ text ~key:"ls-h" ~value:"Logseq" ~style_class:"app-name" [] ]
+        ]
+    ]
+
+let main_content (ms : Model.t Signal.signal) =
+  Logseq_dom.dom ~key:"main-container" ~id:"main-container"
+    ~style_class:"cp__sidebar-main-layout"
+    [ Logseq_dom.dom ~key:"main-content" ~id:"main-content-container"
+        ~style_class:"scrollbar-spacing"
+        [ Logseq_dom.dom ~key:"main-inner"
+            ~style_class:"cp__sidebar-main-content"
+            [ dyn
+                ~equal:(fun (a : Model.t) (b : Model.t) ->
+                  a.phase = b.phase && a.route_page = b.route_page)
+                (fun m -> Page.page_view_of_model m)
+                ms ]
+        ]
+    ]
+
+let shell (ms : Model.t Signal.signal) : t =
+  Logseq_dom.dom ~key:"wrapper" ~tag:"main" ~id:"app-container-wrapper"
+    ~style_class_signal:
+      (Logseq_dom.class_signal ms (fun (m : Model.t) ->
+           "theme-container-inner"
+           ^ if m.left_sidebar_open then " ls-left-sidebar-open" else ""
+           ^ if m.right_sidebar_open then " ls-right-sidebar-open" else ""))
+    [ skip_to_main
+    ; Logseq_dom.dom ~key:"app" ~id:"app-container"
+        ~style_class:"cp__sidebar-main-layout"
+        [ Logseq_dom.dom ~key:"left-container" ~id:"left-container"
+            [ header; left_sidebar ms; main_content ms ]
+        ; right_sidebar ms
+        ]
+    ]
