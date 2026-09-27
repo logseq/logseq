@@ -283,31 +283,43 @@ let create_on_request_handler (client_channel : Broadcast_channel.t)
                  E.pure ()))
     | _ -> ()
 
+(* cljs arms this watch inside <slave-registered-handler — only once the
+   master acks a slave's "slave-register". If the master is destroyed
+   mid-handshake the ack never arrives, the service lock is released, and
+   nobody re-checks: this client would wait on register forever. Arm the
+   watch at register time instead; the pending-request check below keeps
+   it single. *)
+let watch_master_lock ~service_name ~slave_client_id : unit E.t =
+  E.map
+    (fun (qr : Navigator_locks.query_result) ->
+       let already_watching =
+         List.exists
+           (fun (li : Navigator_locks.lock_info) ->
+              li.name = service_name && li.client_id = slave_client_id)
+           qr.pending
+       in
+       if not already_watching then
+         (* dont watch multiple times *)
+         do_not_wait
+           (Navigator_locks.request ~name:service_name ~mode:"exclusive"
+              (fun _lock ->
+                (* The master has gone, elect the new master *)
+                Worker_log.debug "shared-service/master-has-gone" [];
+                trigger_master_re_check "re-check";
+                E.pure ())))
+    (Navigator_locks.query ())
+
 let slave_registered_handler ~service_name ~slave_client_id ~event
     ~(register_finish : (unit E.t * unit E.resolver) option ref) : unit =
   match Wire.get "slave-client-id" event with
   | Some (Wire.String sid) when sid = slave_client_id ->
       E.async (fun () ->
-          E.bind (Navigator_locks.query ()) (fun qr ->
-              let already_watching =
-                List.exists
-                  (fun (li : Navigator_locks.lock_info) ->
-                     li.name = service_name && li.client_id = slave_client_id)
-                  qr.pending
-              in
-              if not already_watching then
-                (* dont watch multiple times *)
-                do_not_wait
-                  (Navigator_locks.request ~name:service_name
-                     ~mode:"exclusive" (fun _lock ->
-                       (* The master has gone, elect the new master *)
-                       Worker_log.debug "shared-service/master-has-gone" [];
-                       trigger_master_re_check "re-check";
-                       E.pure ()));
-              (match !register_finish with
-               | Some (_, r) -> E.wakeup r ()
-               | None -> ());
-              E.pure ()))
+          E.bind (watch_master_lock ~service_name ~slave_client_id)
+            (fun () ->
+               (match !register_finish with
+                | Some (_, r) -> E.wakeup r ()
+                | None -> ());
+               E.pure ()))
   | _ -> ()
 
 let re_requests_in_flight_on_slave (client_channel : Broadcast_channel.t)
@@ -390,9 +402,10 @@ let on_become_slave ~slave_client_id ~service_name ~common_channel
           Worker_log.error "shared-service/unknown-event"
             [ "event", Ds_wire.edn_of_transit data ]);
   E.catch
-    (E.bind (register ()) (fun () ->
-         E.wakeup status_ready ();
-         E.pure ()))
+    (E.bind (watch_master_lock ~service_name ~slave_client_id) (fun () ->
+         E.bind (register ()) (fun () ->
+             E.wakeup status_ready ();
+             E.pure ())))
     (fun e ->
        Worker_log.error "shared-service/on-become-slave"
          [ "error", Printexc.to_string e ];
