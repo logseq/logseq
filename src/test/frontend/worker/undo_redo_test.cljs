@@ -1452,3 +1452,58 @@
       (let [property (d/entity @conn :user.property/undo-self-rating)]
         (is (= property-uuid (:block/uuid property)))
         (is (nil? (:user.property/undo-self-rating property)))))))
+
+(deftest undo-delete-of-property-restores-view-group-by-test
+  (testing "undoing a property delete restores :logseq.property.view/group-by-property on views that referenced it"
+    (let [conn (worker-state/get-datascript-conn test-repo)
+          {:keys [page-uuid]} (seed-page-parent-child!)
+          page-id (:db/id (d/entity @conn [:block/uuid page-uuid]))
+          view-uuid (random-uuid)
+          property-id :user.property/undo-note]
+      (apply-ops! conn
+                  [[:upsert-property [property-id
+                                      {:logseq.property/type :default}
+                                      {:property-name "undo-note"}]]]
+                  (local-tx-meta {:client-id "test-client"}))
+      (let [property-uuid (:block/uuid (d/entity @conn property-id))]
+        (apply-ops! conn
+                    [[:set-block-property [page-uuid property-id "alpha"]]]
+                    (local-tx-meta {:client-id "test-client"}))
+        (apply-ops! conn
+                    [[:insert-blocks [[{:block/uuid view-uuid
+                                        :block/title "undo group-by view"
+                                        :logseq.property.view/feature-type :all-pages
+                                        :logseq.property.view/type :logseq.property.view/type.table}]
+                                      page-id
+                                      {:sibling? false
+                                       :keep-uuid? true}]]]
+                    (local-tx-meta {:client-id "test-client"}))
+        (apply-ops! conn
+                    [[:set-block-property [view-uuid
+                                           :logseq.property.view/group-by-property
+                                           property-id]]]
+                    (local-tx-meta {:client-id "test-client"}))
+        (is (= property-id
+               (:db/ident (:logseq.property.view/group-by-property
+                           (d/entity @conn [:block/uuid view-uuid])))))
+        (worker-undo-redo/clear-history! test-repo)
+        (apply-ops! conn
+                    [[:delete-page [property-uuid {}]]]
+                    (local-tx-meta {:client-id "test-client"}))
+        (is (nil? (d/entity @conn property-id)))
+        (is (nil? (:logseq.property.view/group-by-property
+                   (d/entity @conn [:block/uuid view-uuid]))))
+        (is (map? (worker-undo-redo/undo test-repo)))
+        (let [property (d/entity @conn property-id)
+              view (d/entity @conn [:block/uuid view-uuid])]
+          (is (= property-uuid (:block/uuid property)))
+          (is (= property-id
+                 (:db/ident (:logseq.property.view/group-by-property view)))))
+        (is (map? (worker-undo-redo/redo test-repo)))
+        (is (nil? (d/entity @conn property-id)))
+        (is (nil? (:logseq.property.view/group-by-property
+                   (d/entity @conn [:block/uuid view-uuid]))))
+        (is (map? (worker-undo-redo/undo test-repo)))
+        (is (= property-id
+               (:db/ident (:logseq.property.view/group-by-property
+                           (d/entity @conn [:block/uuid view-uuid])))))))))
