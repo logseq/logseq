@@ -93,11 +93,15 @@ let uuid_lit u = Printf.sprintf "#uuid \"%s\"" u
 
 let log_mark () = List.length (Worker_log.entries ())
 
+(* List.drop is OCaml >= 5.3; this tree still builds on 5.1 *)
+let rec list_drop n l =
+  if n <= 0 then l else match l with [] -> [] | _ :: tl -> list_drop (n - 1) tl
+
 let new_errors_since mark =
   List.filter
     (fun (e : Worker_log.entry) ->
       e.message = "db-worker/post-commit-handler-failed")
-    (List.drop mark (Worker_log.entries ()))
+    (list_drop mark (Worker_log.entries ()))
 
 let field (e : Worker_log.entry) k = List.assoc_opt k e.fields
 
