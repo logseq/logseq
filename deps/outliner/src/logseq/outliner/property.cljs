@@ -518,11 +518,8 @@
            (not number-property?))
       v
 
-      (and (integer? v)
-           (or (not number-property?)
-               ;; Allows :number property to use number as a ref (for closed value) or value
-               (and number-property?
-                    (= property-id (:db/ident (:logseq.property/created-from-property (d/entity @conn v)))))))
+      ;; :number integers are values, not entity ids. Use batch-set {:entity-id? true} for refs.
+      (and (integer? v) (not number-property?))
       v
 
       (= property-type :page)

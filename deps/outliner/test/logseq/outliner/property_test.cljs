@@ -241,8 +241,7 @@
           property-value (:user.property/num (db-test/find-block-by-content @conn "b1"))
           _ (assert (:db/id property-value))
           block-uuid (:block/uuid (db-test/find-block-by-content @conn "b2"))
-          ;; Use same args as outliner.op
-          _ (outliner-property/set-block-property! conn [:block/uuid block-uuid] :user.property/num (:db/id property-value))]
+          _ (outliner-property/batch-set-property! conn [block-uuid] :user.property/num (:db/id property-value) {:entity-id? true})]
       (is (= (:db/id property-value)
              (:db/id (:user.property/num (db-test/find-block-by-content @conn "b2")))))
       (let [empty-placeholder-id (:db/id (d/entity @conn :logseq.property/empty-placeholder))]
@@ -258,8 +257,7 @@
           property-value (:user.property/num (db-test/find-block-by-content @conn "b1"))
           _ (assert (:db/id property-value))
           block-uuid (:block/uuid (db-test/find-block-by-content @conn "b2"))
-          ;; Use same args as outliner.op
-          _ (outliner-property/set-block-property! conn [:block/uuid block-uuid] :user.property/num (:db/id property-value))]
+          _ (outliner-property/batch-set-property! conn [block-uuid] :user.property/num (:db/id property-value) {:entity-id? true})]
       (is (= (:db/id property-value)
              (:db/id (:user.property/num (db-test/find-block-by-content @conn "b2"))))))))
 
