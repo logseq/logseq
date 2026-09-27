@@ -143,6 +143,7 @@ let overlays (ms : Model.t Signal.signal) =
     [ Cmdk_view.render ms
     ; Popups_view.render ms
     ; Dialogs_view.render ms
+    ; Cards_view.render ms
     ; Toasts_view.render ms
     ]
 
