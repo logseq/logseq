@@ -70,7 +70,6 @@ end
 type fetch_response = < ok : bool ; status : int > Js.t
 
 external fetch_ : string -> fetch_response Js.Promise.t = "fetch"
-  [@@mel.module]
 
 external __dirname : string = "__dirname"
 
