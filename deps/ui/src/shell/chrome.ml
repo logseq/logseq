@@ -32,7 +32,7 @@ let search_button =
 let dots_button =
   Logseq_dom.dom ~key:"dots-btn" ~tag:"button"
     ~style_class:"button cp__header-btn toolbar-dots-btn"
-    ~text:"···" ~events:"click"
+    ~events:"click"
     ~on_dom_event:(fun name payload ->
       if name = "click" then (
         let x, y =
@@ -43,7 +43,7 @@ let dots_button =
           | None -> (0., 0.)
         in
         Runtime.send (Action.Page_menu_set (Some (x, y)))))
-    []
+    [ Logseq_dom.dom ~key:"dots-i" ~tag:"i" ~style_class:"ti ti-dots" [] ]
 
 let left_menu_button =
   Logseq_dom.dom ~key:"left-menu-btn" ~tag:"button" ~id:"left-menu"
@@ -71,14 +71,37 @@ let right_sidebar (ms : Model.t Signal.signal) =
            ^ if m.right_sidebar_open then " open" else ""))
     [ Right_sidebar_view.render ms ]
 
+(* left_sidebar.cljs:570 — div#left-sidebar.cp__sidebar-left-layout
+   holds .left-sidebar-inner (contents) + .shade-mask + .left-sidebar-
+   resizer. #left-sidebar{display:none} on desktop keeps the overlay
+   out of the click path when closed. *)
 let left_sidebar (ms : Model.t Signal.signal) =
-  Logseq_dom.dom ~key:"left-sidebar"
+  Logseq_dom.dom ~key:"left-sidebar" ~id:"left-sidebar"
     ~style_class_signal:
       (Logseq_dom.class_signal ms (fun (m : Model.t) ->
            "cp__sidebar-left-layout"
            ^ if m.left_sidebar_open then " is-open" else ""))
-    [ Logseq_dom.dom ~key:"ls-left" ~style_class:"cp__sidebar-left"
-        [ Left_sidebar_view.render ms ]
+    [ Logseq_dom.dom ~key:"ls-inner"
+        ~style_class:
+          "left-sidebar-inner as-container flex-1 flex flex-col min-h-0"
+        [ Logseq_dom.dom ~key:"ls-wrap" ~style_class:"wrap"
+            [ Logseq_dom.dom ~key:"ls-head"
+                ~style_class:"sidebar-header-container" []
+            ; Logseq_dom.dom ~key:"ls-body"
+                ~style_class:"sidebar-contents-container"
+                [ Logseq_dom.dom ~key:"ls-left"
+                    ~style_class:"cp__sidebar-left"
+                    [ Left_sidebar_view.render ms ]
+                ]
+            ]
+        ]
+    ; Logseq_dom.dom ~key:"shade" ~tag:"span" ~style_class:"shade-mask"
+        ~events:"click"
+        ~on_dom_event:(fun name _ ->
+          if name = "click" then Runtime.send Action.Toggle_left_sidebar)
+        []
+    ; Logseq_dom.dom ~key:"resizer" ~tag:"span"
+        ~style_class:"left-sidebar-resizer" []
     ]
 
 let main_content (ms : Model.t Signal.signal) =
