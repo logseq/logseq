@@ -93,9 +93,11 @@ let card_titles repo ids =
 let load_cards st repo =
   let sel_arg =
     let sel = Signal.get_state st.sel in
-    match List.nth_opt (Signal.get_state st.decks) sel with
-    | Some d when sel >= 0 -> Wire.Int d.deck_eid
-    | _ -> Wire.String "global"
+    if sel < 0 then Wire.String "global"
+    else
+      match List.nth_opt (Signal.get_state st.decks) sel with
+      | Some d -> Wire.Int d.deck_eid
+      | None -> Wire.String "global"
   in
   Runtime.invoke2 "thread-api/get-fsrs-due-card-block-ids"
     (Wire.String repo) sel_arg
