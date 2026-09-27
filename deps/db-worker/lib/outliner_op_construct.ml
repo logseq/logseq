@@ -1245,8 +1245,12 @@ let build_insert_block_payload db_before (ent : entity) : Wire.t option =
            ((kw "block/uuid", block_uuid)
            :: List.map (sanitized_entry_of_entity db_before ent) keys))
 
-(* op-construct/selected-block-roots — returns [roots incomplete] *)
-let selected_block_roots db_before (ids : Wire.t) : entity list * bool =
+(* op-construct/selected-block-roots — returns [roots incomplete].
+   With [direct_parent], the selected blocks without a selected parent:
+   the blocks outliner.core/filter-top-level-blocks keeps, so a moved
+   block under a selected grandparent gets its own restore. *)
+let selected_block_roots ?(direct_parent = false) db_before (ids : Wire.t)
+    : entity list * bool =
   let resolved = List.map (block_entity db_before) (Wire.as_seq ids) in
   let incomplete = List.exists Option.is_none resolved in
   let entities =
@@ -1265,6 +1269,7 @@ let selected_block_roots db_before (ids : Wire.t) : entity list * bool =
     match parent with
     | Some p ->
         if List.mem p.id selected_ids then true
+        else if direct_parent then false
         else has_selected_ancestor (Ldb.ref_ent p "block/parent")
     | None -> false
   in
@@ -1381,9 +1386,54 @@ let move_root_to_restore_op db_before (root : entity) : Wire.t option =
                    | None -> [])) ])
   | None -> None
 
+(* op-construct/document-order-path — the id of the page, then the
+   :block/order of each block from the page down to [ent]. *)
+let document_order_path (ent : entity) : value list =
+  let rec loop (e : entity) (path : value list) : value list =
+    match Ldb.ref_ent e "block/parent" with
+    | Some parent ->
+        loop parent
+          (Option.value
+             (Ldb.value e "block/order")
+             ~default:Nil
+          :: path)
+    | None -> Int64 (Int64.of_int e.id) :: path
+  in
+  loop ent []
+
+(* op-construct/compare-document-order — blocks sort as they appear on
+   their pages, a parent before its children. *)
+let compare_document_order (p1 : value list) (p2 : value list) : int =
+  let rec loop p1 p2 =
+    match p1, p2 with
+    | [], [] -> 0
+    | [], _ :: _ -> -1
+    | _ :: _, [] -> 1
+    | a :: t1, b :: t2 ->
+        let c =
+          match a, b with
+          | Int64 x, Int64 y -> Int64.compare x y
+          | String x, String y -> String.compare x y
+          | _ -> invalid_arg "compare_document_order"
+        in
+        if c = 0 then loop t1 t2 else c
+  in
+  loop p1 p2
+
 (* op-construct/build-inverse-move-blocks *)
 let build_inverse_move_blocks db_before (ids : Wire.t) : Wire.t list option =
-  let roots, incomplete = selected_block_roots db_before ids in
+  let roots, incomplete =
+    selected_block_roots ~direct_parent:true db_before ids
+  in
+  (* Restore in page order: a block's restore target, its left sibling
+     or parent, may be another moved block, which must be back first. *)
+  let roots =
+    List.stable_sort
+      (fun a b ->
+         compare_document_order (document_order_path a)
+           (document_order_path b))
+      roots
+  in
   let restore_ops = List.map (move_root_to_restore_op db_before) roots in
   if (not incomplete) && roots <> [] && List.for_all Option.is_some restore_ops
   then
@@ -1391,6 +1441,47 @@ let build_inverse_move_blocks db_before (ids : Wire.t) : Wire.t list option =
     | [] -> None
     | ops -> Some ops
   else None
+
+let rec adjacent_pairs = function
+  | a :: (b :: _ as rest) -> (a, b) :: adjacent_pairs rest
+  | _ -> []
+
+(* op-construct/opposite-move-restores? — whether moving [ids] the other
+   way undoes moving them up ([up]) or down: the top-level blocks among
+   [ids] are adjacent siblings in order, and a sibling on the side they
+   move to keeps them under their parent. A move past the first or last
+   child takes the blocks into another parent, and the opposite move need
+   not bring them back: moving a, b up in P(Q(a, b)) gives P(a, b, Q),
+   and moving them down again gives P(Q, a, b). *)
+let opposite_move_restores (db : db) (ids : Wire.t) (up : bool) : bool =
+  let blocks = List.map (block_entity db) (Wire.as_seq ids) in
+  let resolved = List.filter_map Fun.id blocks in
+  let selected_ids = List.map (fun b -> b.id) resolved in
+  let top_level_blocks =
+    List.filter
+      (fun b ->
+         match Ldb.ref_ent b "block/parent" with
+         | Some p -> not (List.mem p.id selected_ids)
+         | None -> true)
+      resolved
+  in
+  List.for_all Option.is_some blocks
+  && top_level_blocks <> []
+  && List.for_all
+       (fun (left, right) ->
+          match Ldb.get_left_sibling right with
+          | Some s -> s.id = left.id
+          | None -> false)
+       (adjacent_pairs top_level_blocks)
+  &&
+  if up then
+    match top_level_blocks with
+    | first :: _ -> Option.is_some (Ldb.get_left_sibling first)
+    | [] -> false
+  else
+    match List.rev top_level_blocks with
+    | last :: _ -> Option.is_some (Ldb.get_right_sibling last)
+    | [] -> false
 
 (* op-construct/page-top-level-blocks *)
 let page_top_level_blocks (page : entity) : entity list =
@@ -1474,10 +1565,12 @@ let build_inverse_delete_page db_before (page_uuid : Wire.t)
             List.map (to_insert_op db_before) (List.filter_map Fun.id root_plans)
           else []
         in
+        (* Put the page's blocks back before its attributes: a property
+           value of the page can be one of those blocks. *)
         match
           (match create_op with Some c -> [ c ] | None -> [])
-          @ (match page_save_op with Some s -> [ s ] | None -> [])
           @ restore_root_ops
+          @ (match page_save_op with Some s -> [ s ] | None -> [])
         with
         | [] -> None
         | ops -> Some ops
@@ -1665,10 +1758,19 @@ let build_strict_inverse_outliner_ops db_before db_after tx_data
                           ; Wire.Bool (not (truthy (arg args 1)))
                           ; arg args 2 ] ]
                 | "move-blocks-up-down" ->
-                    Some
-                      [ op_entry "move-blocks-up-down"
-                          [ stable_id_coll db_before (arg args 0)
-                          ; Wire.Bool (not (truthy (arg args 1))) ] ]
+                    let up = truthy (arg args 1) in
+                    (* Moving blocks that aren't adjacent siblings gathers
+                       them next to each other, and moving blocks past
+                       their parent's first or last child changes their
+                       parent, so moving them back the other way can't
+                       always restore them. *)
+                    if opposite_move_restores db_before (arg args 0) up
+                    then
+                      Some
+                        [ op_entry "move-blocks-up-down"
+                            [ stable_id_coll db_before (arg args 0)
+                            ; Wire.Bool (not up) ] ]
+                    else build_inverse_move_blocks db_before (arg args 0)
                 | "delete-blocks" ->
                     build_inverse_delete_blocks db_before (arg args 0)
                 | "create-page" ->

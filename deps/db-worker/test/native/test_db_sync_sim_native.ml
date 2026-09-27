@@ -505,6 +505,11 @@ let existing_blocks db (uuids : string list) : entity list =
    (the trailing tx element is ignored and a string e acts as a tempid
    resolved via :block/uuid unique upsert); drop the trailing element so
    the OCaml tx-op parser takes the same path *)
+(* List.take is OCaml >= 5.3; this tree still builds on 5.1 *)
+let rec list_take n l =
+  if n <= 0 then []
+  else match l with [] -> [] | x :: tl -> x :: list_take (n - 1) tl
+
 let strip_datom_tx (item : Wire.t) : Wire.t =
   match item with
   | (Wire.Array (op :: rest) | Wire.List (op :: rest)) -> (
@@ -512,8 +517,8 @@ let strip_datom_tx (item : Wire.t) : Wire.t =
       | Wire.Keyword "db/add" | Wire.Keyword "db/retract"
         when List.length rest > 3 -> (
           match item with
-          | Wire.Array _ -> Wire.Array (op :: List.take 3 rest)
-          | _ -> Wire.List (op :: List.take 3 rest))
+          | Wire.Array _ -> Wire.Array (op :: list_take 3 rest)
+          | _ -> Wire.List (op :: list_take 3 rest))
       | _ -> item)
   | _ -> item
 

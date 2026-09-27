@@ -106,46 +106,45 @@ let civil_of_epoch_ms tz ms =
       civil_of_date_utc (Js.Date.fromFloat (Int64.to_float ms +. float_of_int (off * 60000)))
 
 let epoch_ms_of_civil tz c =
+  (* Date setters roll out-of-range fields over like the multi-arg
+     constructor and Date.UTC (cljs-time/goog.date semantics). Only
+     single-arg setters are used: melange < 7 lacks the optional-arg
+     forms and the utc/makeWith* helpers, so each field is set
+     individually. Pinning the day to 1 while the month shifts keeps an
+     oversized day from bleeding into the next month, and the year is
+     written last so it combines with the already-final month/day in
+     one evaluation — setting it earlier could produce a transient
+     out-of-range date that later setters cannot recover. *)
   match tz with
   | Local_tz ->
-      (* year+month+date go into one setter call so the triple is
-         evaluated atomically — a per-field order could pass through an
-         out-of-range intermediate date (e.g. an extreme year with
-         today's month) and poison the Date. Out-of-range fields still
-         roll over like the multi-arg constructor
-         (cljs-time/goog.date semantics); melange < 7 only has the
-         zero-arg Js.Date.make. *)
       let d = Js.Date.make () in
+      let _ = Js.Date.setDate ~date:1.0 d in
+      let _ = Js.Date.setMonth ~month:(float_of_int (c.cv_month - 1)) d in
+      let _ = Js.Date.setDate ~date:(float_of_int c.cv_day) d in
+      let _ = Js.Date.setHours ~hours:(float_of_int c.cv_hour) d in
+      let _ = Js.Date.setMinutes ~minutes:(float_of_int c.cv_minute) d in
+      let _ = Js.Date.setSeconds ~seconds:(float_of_int c.cv_second) d in
       let _ =
-        Js.Date.setFullYear ~year:(float_of_int c.cv_year)
-          ~month:(float_of_int (c.cv_month - 1))
-          ~date:(float_of_int c.cv_day) d
+        Js.Date.setMilliseconds ~milliseconds:(float_of_int c.cv_ms) d
       in
-      let _ =
-        Js.Date.setHours ~hours:(float_of_int c.cv_hour)
-          ~minutes:(float_of_int c.cv_minute)
-          ~seconds:(float_of_int c.cv_second)
-          ~milliseconds:(float_of_int c.cv_ms) d
-      in
+      let _ = Js.Date.setFullYear ~year:(float_of_int c.cv_year) d in
       Int64.of_float (Js.Date.getTime d)
   | Offset_tz off ->
-      (* Same atomic year+month+date write in UTC space. Date.UTC is
-         not usable here: it maps years 0-99 onto 1900-1999 while
-         setUTCFullYear keeps the literal year. *)
+      (* Same field order in UTC space. Date.UTC itself is unusable
+         here: it maps years 0-99 onto 1900-1999 while setUTCFullYear
+         keeps the literal year. *)
       let d = Js.Date.make () in
+      let _ = Js.Date.setUTCDate ~date:1.0 d in
+      let _ = Js.Date.setUTCMonth ~month:(float_of_int (c.cv_month - 1)) d in
+      let _ = Js.Date.setUTCDate ~date:(float_of_int c.cv_day) d in
+      let _ = Js.Date.setUTCHours ~hours:(float_of_int c.cv_hour) d in
+      let _ = Js.Date.setUTCMinutes ~minutes:(float_of_int c.cv_minute) d in
+      let _ = Js.Date.setUTCSeconds ~seconds:(float_of_int c.cv_second) d in
       let _ =
-        Js.Date.setUTCFullYear ~year:(float_of_int c.cv_year)
-          ~month:(float_of_int (c.cv_month - 1))
-          ~date:(float_of_int c.cv_day) d
+        Js.Date.setUTCMilliseconds ~milliseconds:(float_of_int c.cv_ms) d
       in
-      let _ =
-        Js.Date.setUTCHours ~hours:(float_of_int c.cv_hour)
-          ~minutes:(float_of_int c.cv_minute)
-          ~seconds:(float_of_int c.cv_second)
-          ~milliseconds:(float_of_int c.cv_ms) d
-      in
-      Int64.of_float
-        (Js.Date.getTime d -. float_of_int (off * 60000))
+      let _ = Js.Date.setUTCFullYear ~year:(float_of_int c.cv_year) d in
+      Int64.of_float (Js.Date.getTime d -. float_of_int (off * 60000))
 
 (* ---- local_date ---- *)
 
