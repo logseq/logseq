@@ -108,15 +108,22 @@ let civil_of_epoch_ms tz ms =
 let epoch_ms_of_civil tz c =
   match tz with
   | Local_tz ->
-      (* js/Date constructor + setMilliseconds roll out-of-range fields
-         over (cljs-time/goog.date semantics) *)
-      let d =
-        Js.Date.make ~year:(float_of_int c.cv_year)
-          ~month:(float_of_int (c.cv_month - 1)) ~date:(float_of_int c.cv_day)
-          ~hours:(float_of_int c.cv_hour) ~minutes:(float_of_int c.cv_minute)
-          ~seconds:(float_of_int c.cv_second) ()
+      (* Date setters roll out-of-range fields over like the multi-arg
+         constructor (cljs-time/goog.date semantics); melange < 7 only
+         has the zero-arg Js.Date.make. Pin the day to 1 while year and
+         month shift so an oversized day can't bleed into the next
+         month, then write day and time-of-day last. *)
+      let d = Js.Date.make () in
+      let _ = Js.Date.setDate ~date:1.0 d in
+      let _ = Js.Date.setFullYear ~year:(float_of_int c.cv_year) d in
+      let _ = Js.Date.setMonth ~month:(float_of_int (c.cv_month - 1)) d in
+      let _ = Js.Date.setDate ~date:(float_of_int c.cv_day) d in
+      let _ =
+        Js.Date.setHours ~hours:(float_of_int c.cv_hour)
+          ~minutes:(float_of_int c.cv_minute)
+          ~seconds:(float_of_int c.cv_second)
+          ~milliseconds:(float_of_int c.cv_ms) d
       in
-      let _ = Js.Date.setMilliseconds ~milliseconds:(float_of_int c.cv_ms) d in
       Int64.of_float (Js.Date.getTime d)
   | Offset_tz off ->
       (* Date.UTC applies the same field rollover in UTC space *)

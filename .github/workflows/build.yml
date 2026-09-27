@@ -82,6 +82,22 @@ jobs:
       - name: Fetch pnpm deps
         run: pnpm install --frozen-lockfile
 
+      - name: Set up OCaml
+        uses: ocaml/setup-ocaml@v3
+        with:
+          ocaml-compiler: ${{ env.OCAML_VERSION }}
+
+      - name: Fetch db-worker OCaml deps
+        working-directory: deps/db-worker
+        run: |
+          sh scripts/install-opam-deps.sh
+          pnpm install
+
+      # electron.db-worker-manager-test spawns static/db-worker-node.js,
+      # which requires the OCaml bundle produced by db-worker:build
+      - name: Build db-worker node bundle
+        run: pnpm db-worker:build
+
       - name: Build test asset
         run: pnpm cljs:test
 
