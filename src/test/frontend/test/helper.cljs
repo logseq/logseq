@@ -6,12 +6,11 @@
             [frontend.config :as config]
             [frontend.db.conn :as conn]
             [frontend.state :as state]
-            [frontend.worker.pipeline :as worker-pipeline]
-            [logseq.db :as ldb]
             [logseq.db.frontend.schema :as db-schema]
             [logseq.db.sqlite.build :as sqlite-build]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
-            [logseq.db.test.helper :as db-test]))
+            [logseq.db.test.helper :as db-test]
+            [logseq.outliner.db-pipeline :as db-pipeline]))
 
 (def bare-marker-pattern
   #"(TODO|DOING|DONE|WAIT|CANCELED|CANCELLED){1}\s+")
@@ -25,11 +24,8 @@
         db-conn (d/create-conn (merge db-schema/schema schema))]
     (conn/destroy-all!)
     (swap! conn/conns assoc db-name db-conn)
-    (ldb/register-transact-pipeline-fn! worker-pipeline/transact-pipeline)
     (when build-init-data? (d/transact! db-conn (sqlite-create-graph/build-db-initial-data config/config-default-content)))
-    (d/listen! db-conn ::listen-db-changes!
-               (fn [tx-report]
-                 (worker-pipeline/invoke-hooks db-conn tx-report {})))))
+    (db-pipeline/add-listener db-conn)))
 
 (defn destroy-test-db!
   []

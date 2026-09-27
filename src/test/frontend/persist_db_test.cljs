@@ -1688,8 +1688,11 @@
                            (swap! stop-calls conj client)
                            (p/resolved true)))
       (-> (p/let [_ (persist-db/<close-db "logseq_db_graph_a")]
+            ;; background tasks (e.g. search-input-idle sync) may invoke the
+            ;; remote client concurrently; assert on the close-db calls only
             (is (= [[(:client fake-client) "thread-api/close-db" ["logseq_db_graph_a"]]]
-                   @invoke-calls))
+                   (filterv (fn [[_ method _]] (= "thread-api/close-db" method))
+                            @invoke-calls)))
             (is (= [fake-client] @stop-calls))
             (is (nil? @persist-db/remote-db))
             (is (nil? @persist-db/remote-repo)))
