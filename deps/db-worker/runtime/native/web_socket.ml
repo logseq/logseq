@@ -16,13 +16,17 @@ type t =
   ; cmds : cmd Queue.t
   ; cmds_mutex : Mutex.t
   ; wake : Unix.file_descr (* self-pipe writer; any thread may poke it *)
+  ; mutable wake_open : bool
   }
 
 let enqueue t cmd =
-  Mutex.lock t.cmds_mutex;
-  Queue.push cmd t.cmds;
-  Mutex.unlock t.cmds_mutex;
-  ignore (Unix.write_substring t.wake "x" 0 1)
+  if t.state < 3 then begin
+    Mutex.lock t.cmds_mutex;
+    (if t.wake_open then Queue.push cmd t.cmds);
+    Mutex.unlock t.cmds_mutex;
+    if t.wake_open then
+      (try ignore (Unix.write_substring t.wake "x" 0 1) with _ -> ())
+  end
 
 let take_cmds t =
   Mutex.lock t.cmds_mutex;
@@ -30,6 +34,16 @@ let take_cmds t =
   Queue.clear t.cmds;
   Mutex.unlock t.cmds_mutex;
   xs
+
+(* Eio-domain teardown: mark closed and close the self-pipe writer so
+   [command_loop]'s read gets EOF and the eio loop (and its thread) can
+   exit. *)
+let finish t =
+  t.state <- 3;
+  if t.wake_open then begin
+    t.wake_open <- false;
+    (try Unix.close t.wake with _ -> ())
+  end
 
 (* [send_bytes] copies into the connection's Faraday and mutates the bytes
    for client masking — must only run on the eio domain. *)
@@ -43,20 +57,25 @@ let send_cmd wsd = function
   | `Close -> Httpun_ws.Wsd.close wsd
 
 (* Runs inside the eio domain: waits for a poke on the pipe, then applies
-   queued commands on the eio-owned [Wsd.t]. *)
+   queued commands on the eio-owned [Wsd.t]. Exits on pipe EOF (writer
+   closed by [finish]) or any IO error. *)
 let rec command_loop t (src : _ Eio.Flow.source) =
   let buf = Cstruct.create 64 in
-  match Eio.Flow.single_read src buf with
-  | exception End_of_file -> ()
-  | _n ->
+  match
+    (try Some (Eio.Flow.single_read src buf) with _ -> None)
+  with
+  | None -> ()
+  | Some _n ->
+      let cmds = take_cmds t in
       (match t.wsd with
        | Some wsd ->
            List.iter
-             (fun cmd ->
-                try send_cmd wsd cmd with _ -> ())
-             (take_cmds t)
-       | None -> ignore (take_cmds t));
-      command_loop t src
+             (fun cmd -> try send_cmd wsd cmd with _ -> ())
+             cmds
+       | None -> ());
+      (match List.exists (fun c -> c = `Close) cmds with
+       | true -> ()
+       | false -> command_loop t src)
 
 let connect ~url ~on_event =
   let task, resolver = Db_worker_effect.wait () in
@@ -67,6 +86,7 @@ let connect ~url ~on_event =
     ; cmds = Queue.create ()
     ; cmds_mutex = Mutex.create ()
     ; wake = pipe_w
+    ; wake_open = true
     }
   in
   let resolved = ref false in
@@ -131,17 +151,13 @@ let connect ~url ~on_event =
                              read_payload ())
                        in
                        read_payload ()
-                   | `Connection_close ->
-                       Httpun_ws.Payload.schedule_read payload
-                         ~on_eof:(fun () -> ())
-                         ~on_read:(fun _ ~off:_ ~len:_ -> ())
-                   | `Ping | `Pong | `Other _ ->
+                   | `Connection_close | `Ping | `Pong | `Other _ ->
                        Httpun_ws.Payload.schedule_read payload
                          ~on_eof:(fun () -> ())
                          ~on_read:(fun _ ~off:_ ~len:_ -> ()))
             ; eof =
                 (fun ?error:_ () ->
-                   ws.state <- 3;
+                   finish ws;
                    on_event (Close (1000, "")))
             }
           in
@@ -154,10 +170,15 @@ let connect ~url ~on_event =
              :> _ Eio.Flow.source)
           in
           Eio.Fiber.fork ~sw (fun () -> command_loop ws cmd_src);
-          Net_eio.pump (module Httpun_ws.Client_connection) conn flow))
+          (try Net_eio.pump (module Httpun_ws.Client_connection) conn flow
+           with _ -> ());
+          (* conn ended: unblock the command fiber and release fds *)
+          finish ws;
+          flow.close ();
+          (try Unix.close pipe_r with _ -> ())))
     with
     | exn ->
-        ws.state <- 3;
+        finish ws;
         if !resolved then on_event (Error (Printexc.to_string exn)) else (
           resolved := true;
           Db_worker_effect.reject resolver exn)
@@ -174,7 +195,7 @@ let send_binary t data =
   Db_worker_effect.pure ()
 
 let close t =
-  t.state <- 2;
+  if t.state < 2 then t.state <- 2;
   enqueue t `Close;
   Db_worker_effect.pure ()
 
