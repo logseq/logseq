@@ -202,7 +202,7 @@ let preserve_state (f : unit -> 'a) : 'a =
   Fun.protect f ~finally:(fun () ->
       (match owner_source_prev with
        | Some v -> Unix.putenv "LOGSEQ_OWNER_SOURCE" v
-       | None -> Unix.unsetenv "LOGSEQ_OWNER_SOURCE");
+       | None -> Unix.putenv "LOGSEQ_OWNER_SOURCE" "");
       Hashtbl.reset Worker_state.app_state;
       Hashtbl.iter (Hashtbl.replace Worker_state.app_state) state_prev;
       Worker_state.set_db_sync_config cfg_prev;
