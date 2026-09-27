@@ -96,6 +96,8 @@
     "cljs:run-test": "cross-env LOGSEQ_STABLE_IDENTS=1 bb dev:run-test-namespaces -r \"^(?!logseq.db-sync.).*\" -e fix-me",
     "cljs:test-no-worker": "clojure -M:test compile test-no-worker",
     "cljs:run-test-no-worker": "node static/tests-no-worker.js",
+    "db-worker-node:compile": "pnpm db-worker:build",
+    "db-worker-node:release": "pnpm db-worker:build",
     "db-worker-node:bundle": "node ./scripts/build-db-worker-node-bundle.mjs",
     "db-worker-node:release:bundle": "run-s db-worker:build db-worker-node:bundle",
     "db-worker-node:compile:bundle": "run-s db-worker:build db-worker-node:bundle",

@@ -49,7 +49,6 @@
                    ;; :ignore-warnings true
                    }}
 
-
   :mobile {:target        :browser
            :module-loader true
 	           :js-options    {:ignore-asset-requires true}
@@ -93,26 +92,11 @@
                         {:build-time "test-build-time"
                          :revision "test-revision"})]
          :closure-defines {frontend.util/NODETEST true
-                           frontend.worker-common.util/NODETEST true
                            logseq.shui.util/NODETEST true}
          :devtools {:enabled false}
          ;; disable :static-fns to allow for with-redefs and repl development
          :compiler-options {:static-fns false}
          :main frontend.test.frontend-node-test-runner/main}
-
-  :test-no-worker {:target :node-test
-                   :output-to "static/tests-no-worker.js"
-                   :build-hooks [(shadow.hooks/build-metadata-hook
-                                  {:build-time "test-build-time"
-                                   :revision "test-revision"})]
-                   :closure-defines {frontend.util/NODETEST true
-                                     frontend.worker-common.util/NODETEST true
-                                     logseq.shui.util/NODETEST true}
-                   :devtools {:enabled false}
-                   :build-options {:ns-exclude-regexp "^(frontend\\.worker|logseq\\.db-sync\\.worker)"}
-                   ;; disable :static-fns to allow for with-redefs and repl development
-                   :compiler-options {:static-fns false}
-                   :main frontend.test.frontend-node-test-runner/main}
 
   :gen-malli-kondo-config {:target :node-script
                            :build-hooks [(shadow.hooks/build-metadata-hook "--long --always --dirty")]
