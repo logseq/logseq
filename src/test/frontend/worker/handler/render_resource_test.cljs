@@ -1398,6 +1398,32 @@
                             (map :value (get-in response [:value :hidden-properties]))))
           "Graph property values cross the resource boundary only as UUIDs."))))
 
+(deftest resources-of-a-deleted-block-do-not-fail-their-snapshot-batch-test
+  (let [{:keys [conn resource-block]} (render-resource-fixture)
+        deleted (random-uuid)
+        deleted-key [:block-display-properties deleted default-display-context]
+        deleted-summary-key [:block-comment-summary deleted]
+        live-key [:block-display-properties resource-block default-display-context]]
+    (testing "a delete can reach the worker before a queued batch that names the block"
+      (let [response (render-engine/render-snapshots
+                      @conn
+                      {:blocks [] :children []
+                       :resources [deleted-key deleted-summary-key live-key]}
+                      {})]
+        (doseq [resource-key [deleted-key deleted-summary-key]]
+          (is (= {:watch {:keys #{[:entity deleted]} :all? false} :value nil}
+                 (get-in response [:slots [:resource resource-key]]))
+              "The deleted block's resources render as nil and watch the block"))
+        (is (seq (get-in response [:slots [:resource live-key] :value :full-properties]))
+            "The other resources of the batch render as before")))
+    (testing "a resource of a live block still fails on a bad request"
+      (is (thrown? js/Error
+                   (render-engine/render-snapshots
+                    @conn
+                    {:blocks [] :children []
+                     :resources [[:block-display-properties resource-block {:page-title? true}]]}
+                    {}))))))
+
 (deftest block-display-properties-resource-includes-configured-class-properties-test
   (when-let [api (render-resource-api)]
     (let [{:keys [conn resource-block]} (render-resource-fixture)
@@ -1711,8 +1737,9 @@
 (deftest block-comment-summary-resource-rejects-invalid-uuid-and-thread-test
   (when-let [api (render-resource-api)]
     (let [{:keys [conn resource-block]} (render-resource-fixture)]
+      ;; a uuid no block carries renders as nil instead:
+      ;; resources-of-a-deleted-block-do-not-fail-their-snapshot-batch-test
       (doseq [resource-key [[:block-comment-summary "not-a-uuid"]
-                            [:block-comment-summary (random-uuid)]
                             [:block-comment-summary resource-block]
                             [:block-comment-summary resource-block :extra]]]
         (is (thrown? js/Error

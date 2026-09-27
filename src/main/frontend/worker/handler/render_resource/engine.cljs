@@ -1,6 +1,7 @@
 (ns frontend.worker.handler.render-resource.engine
   "Renderer resource registry, batching, and thread API."
-  (:require [frontend.common.thread-api :refer [def-thread-api]]
+  (:require [datascript.core :as d]
+            [frontend.common.thread-api :refer [def-thread-api]]
             [frontend.worker.handler.block :as block-handler]
             [frontend.worker.handler.render-resource.basic :as basic]
             [frontend.worker.handler.render-resource.common :as common]
@@ -22,6 +23,31 @@
                               {:provider :sync-state
                                :resource-key resource-key})))}))
 
+(defn- deleted-owner-uuid
+  "The owner a resource key names, its second element as the renderer's delta
+  handling reads it (`frontend.db.subs/apply-delta-store`), when no entity
+  carries that uuid any more."
+  [db resource-key]
+  (let [owner (second resource-key)]
+    (when (and (uuid? owner)
+               (nil? (d/entity db [:block/uuid owner])))
+      owner)))
+
+(defn- render-resource
+  "Renders a resource. A block can be deleted after the renderer asked for one
+  of its resources and before the worker reaches that request: a delete op
+  sent while the snapshot batch waited behind a slower one. Failing then
+  would reject the whole batch and crash the page, as `missing-view-data`
+  notes for views, so a resource whose owner is gone renders as nil until
+  the delete's delta marks its slot missing."
+  [render db resource-key runtime]
+  (try
+    (render db resource-key runtime)
+    (catch :default error
+      (if-let [owner (deleted-owner-uuid db resource-key)]
+        [#{[:entity owner]} nil]
+        (throw error)))))
+
 (defn- resource-value
   [db resource-key runtime]
   (when-not (and (vector? resource-key) (seq resource-key))
@@ -41,7 +67,7 @@
         (do
           (when shape
             (common/require-shape! resource-key resource-kind shape))
-          (render db resource-key runtime))
+          (render-resource render db resource-key runtime))
         (common/fail! "Unknown renderer resource key"
                       {:resource-key resource-key})))))
 
