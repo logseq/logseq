@@ -41,7 +41,7 @@
 (defn- create-synced-conn
   "A graph that syncs: :logseq.kv/graph-remote? set, as upload and download
   set it, so undo and redo replay the semantic ops, not the datoms of the
-  change."
+  change, and its local transactions are kept as client-op rows to upload."
   []
   (doto (db-test/create-conn)
     (d/transact! [(ldb/kv :logseq.kv/graph-remote? true)])))
@@ -649,7 +649,7 @@
   (testing "sim upload removes acked pending txs so later rebases don't reverse stale creates"
     (let [base-uuid (random-uuid)
           block-uuid (random-uuid)
-          conn (db-test/create-conn)
+          conn (create-synced-conn)
           ops-conn (new-client-ops-db)
           client (make-client repo-a)
           server (make-server)]
@@ -1657,7 +1657,7 @@
           rng (make-rng seed)
           gen-uuid #(rng-uuid rng)
           base-uuid (gen-uuid)
-          conn-a (db-test/create-conn)
+          conn-a (create-synced-conn)
           ops-a (new-client-ops-db)
           client-a (make-client repo-a)
           server (make-server)
@@ -1864,8 +1864,8 @@
   (testing "two clients keep local title after reverse tx with newer tx id"
     (let [base-uuid (uuid "11111111-1111-1111-1111-111111111111")
           block-uuid (uuid "22222222-2222-2222-2222-222222222222")
-          conn-a (db-test/create-conn)
-          conn-b (db-test/create-conn)
+          conn-a (create-synced-conn)
+          conn-b (create-synced-conn)
           ops-a (new-client-ops-db)
           ops-b (new-client-ops-db)
           client-a (make-client repo-a)
@@ -2501,8 +2501,8 @@
           rng (make-rng seed)
           gen-uuid #(rng-uuid rng)
           base-uuid (gen-uuid)
-          conn-a (db-test/create-conn)
-          conn-b (db-test/create-conn)
+          conn-a (create-synced-conn)
+          conn-b (create-synced-conn)
           ops-a (new-client-ops-db)
           ops-b (new-client-ops-db)
           client-a (make-client repo-a)
@@ -2969,9 +2969,9 @@
           rng (make-rng seed)
           gen-uuid #(rng-uuid rng)
           base-uuid (gen-uuid)
-          conn-a (db-test/create-conn)
-          conn-b (db-test/create-conn)
-          conn-c (db-test/create-conn)
+          conn-a (create-synced-conn)
+          conn-b (create-synced-conn)
+          conn-c (create-synced-conn)
           ops-a (new-client-ops-db)
           ops-b (new-client-ops-db)
           ops-c (new-client-ops-db)
