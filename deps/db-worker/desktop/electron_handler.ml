@@ -465,13 +465,18 @@ let stop_all_db_workers () : bool Js.Promise.t =
   Electron_db_worker.stop_all_managed ()
 
 let open_new_window (repo : string option) : Browser_window.t Js.Promise.t =
+  let opts =
+    match repo with
+    | Some repo -> Some [%mel.obj { graph = repo }]
+    | None -> None
+  in
   Js.Promise.then_
     (fun win ->
       Electron_window.on_close_actions win;
       let _ : unit -> unit = Electron_window.setup_window win in
       Js.Promise.resolve win)
     (Electron_window.create_main_window ~url:Electron_window.main_window_entry
-       (Some [%mel.obj { graph = Cli_server.jstr_opt repo }]))
+       opts)
 
 let set_current_graph (window : Browser_window.t) (graph_path : string) : unit =
   Electron_state.set_window_graph window graph_path
