@@ -134,7 +134,9 @@ let handlers_of el =
       h
 
 let apply_events el names =
-  let emit =
+  (* The emit closure is bound to the node's runtime id at create time; read
+     it lazily so a reused element always emits for its current node. *)
+  let current_emit () =
     match Js.Undefined.toOption (emit_get el) with
     | Some e -> e
     | None -> fun _ _ -> ()
@@ -161,7 +163,7 @@ let apply_events el names =
           if name = "input" && W.Element.tagName el = "TEXTAREA" then
             W.Element.setTextContent el (get_value el);
           let payload = json_of_event name ev in
-          emit "dom-event"
+          current_emit () "dom-event"
             (String_map.empty
             |> String_map.add "name" (StringValue name)
             |> String_map.add "payload" (StringValue payload))

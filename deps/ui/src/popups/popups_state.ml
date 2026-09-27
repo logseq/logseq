@@ -18,6 +18,8 @@ type item_action =
   | Emit of string (* ls:editor-insert {text} *)
   | Switch of ac_kind (* reopen as another autocomplete *)
   | Editor_cmd of string (* ls:editor-command {command} *)
+  | Tag_apply of string (* existing entity — cljs tag-on-chosen-handler *)
+  | Tag_create of string (* "New tag" row — always creates a class *)
   | Noop (* empty-state placeholder row; never applied *)
 
 type ac_item =
@@ -229,12 +231,10 @@ let filter_slash q items =
 
 let page_items_for t kind q =
   let wrap title =
-    let text =
-      match kind with
-      | Tag_search -> "#[[" ^ title ^ "]]"
-      | _ -> "[[" ^ title ^ "]]"
-    in
-    mk_item ~key:("page:" ^ title) ~label:title (Emit text)
+    match kind with
+    | Tag_search -> mk_item ~key:("page:" ^ title) ~label:title (Tag_apply title)
+    | _ ->
+        mk_item ~key:("page:" ^ title) ~label:title (Emit ("[[" ^ title ^ "]]"))
   in
   let matched =
     take 20 (List.map wrap (List.filter (fun ti -> contains_ci ti q) !(t.titles)))
@@ -248,12 +248,12 @@ let page_items_for t kind q =
          | _ -> U.t "editor/new-page")
         ^ " " ^ q
       in
-      let text =
+      let act =
         match kind with
-        | Tag_search -> "#[[" ^ q ^ "]]"
-        | _ -> "[[" ^ q ^ "]]"
+        | Tag_search -> Tag_create q
+        | _ -> Emit ("[[" ^ q ^ "]]")
       in
-      mk_item ~key:("new:" ^ q) ~label (Emit text) :: matched
+      mk_item ~key:("new:" ^ q) ~label act :: matched
     else matched
   in
   renumber items
@@ -411,13 +411,73 @@ let emit editor tpos text =
     (detail_obj
        [ "text", Js.Json.string text
        ; "from", Js.Json.number (float_of_int tpos)
-       ; "to", Js.Json.number (float_of_int (Dom_ext.selection_start editor)) ])
+       ; "to", Js.Json.number (float_of_int (Dom_ext.selection_start editor)) ]);
+  (* cljs refocuses the editor input after a chosen item *)
+  Dom_ext.focus editor
 ;;
 
 let emit_cmd command extra =
   Dom_ext.dispatch_custom "ls:editor-command"
     (detail_obj (("command", Js.Json.string command) :: extra))
 ;;
+
+(* cljs tag-on-chosen-handler: strip the "#query" fragment, then either
+   keep "#title" inline (existing page) or attach the tag as a class via
+   block/tags (existing class or a new "New tag" class). The "New tag"
+   row always takes the class path even when a plain page exists. *)
+let apply_tag t ac ~create title =
+  match Editor_state.editing_uuid () with
+  | None -> ()
+  | Some buuid ->
+      let repo_v = repo () in
+      let save_and_tag dbid =
+        (* emit already stripped "#q" from the buffer; persist the new
+           buffer and the tag in one batch *)
+        let v = Dom_ext.value ac.editor in
+        ignore
+          (Outliner_ops.apply_and_refresh
+             [ Outliner_ops.save_block buuid v
+             ; Outliner_ops.set_block_property buuid "block/tags"
+                 (Wire.Int dbid)
+             ])
+      in
+      let create_and_tag () =
+        emit ac.editor ac.tpos "";
+        close_ac t;
+        ignore
+          (Runtime.invoke3 "thread-api/apply-outliner-ops"
+             (Wire.String repo_v)
+             (Wire.Array [ Outliner_ops.create_class title ])
+             (Wire.Map [])
+           |> Js.Promise.then_ (fun _ ->
+                  Runtime.invoke2 "thread-api/get-case-page"
+                    (Wire.String repo_v) (Wire.String title))
+           |> Js.Promise.then_ (fun e ->
+                  (match Wire.map_get_int e "db/id" with
+                   | Some dbid -> save_and_tag dbid
+                   | None -> ());
+                  Js.Promise.resolve ()))
+      in
+      if create then create_and_tag ()
+      else
+        ignore
+          (Runtime.invoke2 "thread-api/get-case-page" (Wire.String repo_v)
+             (Wire.String title)
+           |> Js.Promise.then_ (fun w ->
+                  Js.Promise.resolve
+                    (match Wire.get w "db/ident" with
+                     | Some _ -> (
+                         emit ac.editor ac.tpos "";
+                         close_ac t;
+                         match Wire.map_get_int w "db/id" with
+                         | Some dbid -> save_and_tag dbid
+                         | None -> ())
+                     | None -> (
+                         match w with
+                         | Wire.Map _ ->
+                             emit ac.editor ac.tpos ("#" ^ title);
+                             close_ac t
+                         | _ -> create_and_tag ()))))
 
 let apply_item t ac it =
   match it.ai_act with
@@ -433,6 +493,8 @@ let apply_item t ac it =
               { ac with kind; query = ""; items = []; chosen = 0 }))
   | Emit text -> emit ac.editor ac.tpos text; close_ac t
   | Editor_cmd c -> emit_cmd c []; close_ac t
+  | Tag_apply title -> apply_tag t ac ~create:false title
+  | Tag_create title -> apply_tag t ac ~create:true title
   | Noop -> ()
 ;;
 

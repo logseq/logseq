@@ -597,12 +597,14 @@ let validate_db_result (db : db) : db_result =
 let log_validation_errors (errors : Db_validate.grouped_error list) : unit =
   List.iter
     (fun (ge : Db_validate.grouped_error) ->
-      Printf.eprintf "validation error entity: %d errors: %d\n%!"
+      Printf.eprintf "validation error entity: %d errors: %d detail: %s\n%!"
         (match Malli.map_get "db/id" ge.ge_entity with
          | Some (Ref i) -> i
          | Some (Int64 i) -> Option.value (Datascript.Util.int64_to_int i) ~default:(-1)
          | _ -> -1)
-        (List.length ge.ge_errors))
+        (List.length ge.ge_errors)
+        (Transit_codec.to_string
+           (Ds_wire.transit_of_value (Malli.humanize ge.ge_errors))))
     errors
 
 let humanize_grouped (ge : Db_validate.grouped_error) : Wire.t =

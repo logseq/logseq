@@ -276,11 +276,24 @@ let refresh st =
                   apply_results st v.input v.move_mode v.expanded rows total;
                 Js.Promise.resolve ())
          |> Js.Promise.catch (fun e ->
-                Platform.console_error ("cmdk search failed", e);
+                Platform.console_error
+                  ( "cmdk search failed"
+                  , Option.value (Js.Json.stringifyAny e)
+                      ~default:"unknown" );
                 Js.Promise.resolve ()))
 
+(* the create row must not depend on the worker search resolving *)
+let upsert_create v =
+  let others = List.filter (fun g -> g.gid <> G_create) v.groups in
+  { v with
+    groups =
+      { gid = G_create; gtitle = ""; gitems = create_items v.input
+      ; gtotal = 0; glimit = 1; gexpanded = false }
+      :: others
+  }
+
 let on_input st q =
-  set_in st (fun v -> { v with input = q });
+  set_in st (fun v -> upsert_create { v with input = q });
   let gen = (incr st.gen; !(st.gen)) in
   Dom_ext.set_timeout (fun () -> if gen = !(st.gen) then refresh st) 100
 
@@ -416,7 +429,9 @@ let create_page title =
                        Editor_actions.append_block ();
                        Js.Promise.resolve ()))
          |> Js.Promise.catch (fun e ->
-                Platform.console_error ("cmdk create-page failed", e);
+                (* TEMP-DEBUG: e wraps the real rejection in _1 *)
+                Platform.console_error
+                  ("cmdk create-page failed", Platform.error_inner e);
                 Js.Promise.resolve ()))
 
 let validate_graph repo =
@@ -468,7 +483,8 @@ let run_item st it =
         | Cmd_search -> () (* keep palette open on the input *)
         | Cmd_journals ->
             close st;
-            Option.iter (fun repo -> ignore (goto_today_journal repo)) repo
+            (* cljs route-handler/go-to-journals! -> :home/:all-journals *)
+            Platform.set_location_hash "#/journals"
         | Cmd_all_graphs ->
             close st;
             Runtime.send (Action.Navigate_to Model.All_graphs);
@@ -483,20 +499,7 @@ let run_item st it =
             Platform.set_location_hash "#/graph"
         | Cmd_db_add ->
             close st;
-            (* TODO(dialogs): delegate to the dialogs area once it owns a
-               graph-create dialog. For now prompt inline. *)
-            (match Dom_ext.prompt_text "New graph name" with
-             | Some name when String.trim name <> "" ->
-                 ignore
-                   (Graph.create_graph (String.trim name)
-                    |> Js.Promise.then_ (fun _ ->
-                           ignore (Graph.list_graphs ()
-                                   |> Js.Promise.then_ (fun repos ->
-                                          Runtime.send (Action.Repos_loaded repos);
-                                          Js.Promise.resolve ()));
-                           toast "Graph created" "success";
-                           Js.Promise.resolve ()))
-             | _ -> ())
+            Dialogs_state.open_ "new-graph"
         | Cmd_validate ->
             Option.iter validate_graph repo
         | Cmd_rtc_start | Cmd_rtc_stop ->
