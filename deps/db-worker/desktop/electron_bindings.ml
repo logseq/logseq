@@ -30,6 +30,9 @@ module App = struct
   external on2 :
     t -> string -> (Js.Json.t -> 'a -> unit [@u]) -> unit = "on"
     [@@mel.send]
+  external on3 :
+    t -> string -> (Js.Json.t -> 'a -> 'b -> unit [@u]) -> unit = "on"
+    [@@mel.send]
   external once : t -> string -> (unit -> unit [@u]) -> unit = "once"
     [@@mel.send]
   external set_app_user_model_id : t -> string -> unit = "setAppUserModelId"
@@ -305,3 +308,73 @@ end
 
 external dialog_show_message_box_sync : 'a -> int = "showMessageBoxSync"
   [@@mel.module "electron"] [@@mel.scope "dialog"]
+
+external dialog_show_open_dialog : 'a -> 'b Js.Promise.t = "showOpenDialog"
+  [@@mel.module "electron"] [@@mel.scope "dialog"]
+
+external dialog_show_save_dialog : 'a -> 'b Js.Promise.t = "showSaveDialog"
+  [@@mel.module "electron"] [@@mel.scope "dialog"]
+
+external process_exec_path : string = "execPath" [@@mel.scope "process"]
+
+external process_arch : string = "arch" [@@mel.scope "process"]
+
+external process_argv : string array = "argv" [@@mel.scope "process"]
+
+external process_default_app : bool Js.Undefined.t = "defaultApp"
+  [@@mel.scope "process"]
+
+external app_set_as_default_protocol_client : App.t -> string -> bool
+  = "setAsDefaultProtocolClient" [@@mel.send]
+
+external app_set_as_default_protocol_client_full :
+  App.t -> string -> string -> string array -> bool
+  = "setAsDefaultProtocolClient" [@@mel.send]
+
+external app_running_under_arm64_translation : App.t -> bool Js.Undefined.t
+  = "runningUnderARM64Translation" [@@mel.get]
+
+external browser_window_is_maximized : Browser_window.t -> bool
+  = "isMaximized" [@@mel.send]
+
+external browser_window_maximize : Browser_window.t -> unit = "maximize"
+  [@@mel.send]
+
+external browser_window_unmaximize : Browser_window.t -> unit = "unmaximize"
+  [@@mel.send]
+
+external browser_window_set_title : Browser_window.t -> string -> unit
+  = "setTitle" [@@mel.send]
+
+external browser_window_hide : Browser_window.t -> unit = "hide" [@@mel.send]
+
+external ipc_main_handle5 :
+  string -> (Js.Json.t -> 'a -> 'b -> 'c -> 'd -> 'e Js.Promise.t [@u]) -> unit
+  = "handle"
+  [@@mel.module "electron"] [@@mel.scope "ipcMain"]
+
+external ipc_main_handle_args :
+  string -> ('a -> 'b -> 'c -> 'd -> 'e -> 'f -> 'g -> 'h [@u]) -> unit = "handle"
+  [@@mel.module "electron"] [@@mel.scope "ipcMain"]
+
+external dialog_show_message_box : 'a -> 'b Js.Promise.t = "showMessageBox"
+  [@@mel.module "electron"] [@@mel.scope "dialog"]
+
+external dialog_show_error_box : string -> string -> unit = "showErrorBox"
+  [@@mel.module "electron"] [@@mel.scope "dialog"]
+
+module Protocol = struct
+  type t
+
+  external t : t = "protocol" [@@mel.module "electron"]
+
+  external register_file_protocol :
+    t -> string -> (Js.Json.t -> (Js.Json.t -> unit [@u]) -> unit [@u]) -> unit
+    = "registerFileProtocol" [@@mel.send]
+
+  external unregister_protocol : t -> string -> unit = "unregisterProtocol"
+    [@@mel.send]
+
+  external register_schemes_as_privileged : t -> Js.Json.t array -> unit
+    = "registerSchemesAsPrivileged" [@@mel.send]
+end
