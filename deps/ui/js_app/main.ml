@@ -18,6 +18,7 @@ let main root =
       let changed = Lui_app.send app action in
       ignore (Lui_app.flush app);
       changed);
+  Runtime.app_flush := (fun () -> ignore (Lui_app.flush app));
   ignore
     (Lui_web.set_event_handler renderer (fun event ->
          ignore (Lui_app.dispatch_event app event);

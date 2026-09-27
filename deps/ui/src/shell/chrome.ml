@@ -53,7 +53,7 @@ let right_sidebar (ms : Model.t Signal.signal) =
       (Logseq_dom.class_signal ms (fun (m : Model.t) ->
            "cp__right-sidebar"
            ^ if m.right_sidebar_open then " open" else ""))
-    []
+    [ Right_sidebar_view.render ms ]
 
 let left_sidebar (ms : Model.t Signal.signal) =
   Logseq_dom.dom ~key:"left-sidebar"
@@ -62,9 +62,7 @@ let left_sidebar (ms : Model.t Signal.signal) =
            "cp__sidebar-left-layout"
            ^ if m.left_sidebar_open then " is-open" else ""))
     [ Logseq_dom.dom ~key:"ls-left" ~style_class:"cp__sidebar-left"
-        [ box ~key:"ls-menu" ~style_class:"sidebar-menu"
-            [ text ~key:"ls-h" ~value:"Logseq" ~style_class:"app-name" [] ]
-        ]
+        [ Left_sidebar_view.render ms ]
     ]
 
 let main_content (ms : Model.t Signal.signal) =
@@ -82,6 +80,17 @@ let main_content (ms : Model.t Signal.signal) =
         ]
     ]
 
+(* Overlay layer — cmdk palette, popups (autocomplete/slash/context
+   menus), dialogs and toasts mount here (single shared container;
+   e2e selects by class so the wrapper is transparent). *)
+let overlays (ms : Model.t Signal.signal) =
+  Logseq_dom.dom ~key:"overlays" ~style_class:"cp__overlays"
+    [ Cmdk_view.render ms
+    ; Popups_view.render ms
+    ; Dialogs_view.render ms
+    ; Toasts_view.render ms
+    ]
+
 let shell (ms : Model.t Signal.signal) : t =
   Logseq_dom.dom ~key:"wrapper" ~tag:"main" ~id:"app-container-wrapper"
     ~style_class_signal:
@@ -95,5 +104,6 @@ let shell (ms : Model.t Signal.signal) : t =
         [ Logseq_dom.dom ~key:"left-container" ~id:"left-container"
             [ header; left_sidebar ms; main_content ms ]
         ; right_sidebar ms
+        ; overlays ms
         ]
     ]

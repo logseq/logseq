@@ -92,9 +92,15 @@ let string_of_wire = function StringValue s -> s | _ -> ""
 let class_signal (source : 'a Signal.signal) (f : 'a -> string) =
   Signal.map (fun v -> StringValue (f v)) source
 
+let attrs_signal source (f : 'a -> (string * string) list) =
+  Signal.map (fun v -> StringValue (attrs_json (f v))) source
+
 let dom ?key ?(tag = "div") ?(attrs = []) ?(events = "")
     ?(style_class = "")
     ?(style_class_signal : Lui_protocol.wire_value Signal.signal option)
+    ?(attrs_signal_v : Lui_protocol.wire_value Signal.signal option)
+    ?(text_signal : Lui_protocol.wire_value Signal.signal option)
+    ?(id_signal : Lui_protocol.wire_value Signal.signal option)
     ?(id = "") ?(text = "") ?on_dom_event
     (children : Lui_elements.t list) : Lui_elements.t =
  fun context parent ->
@@ -111,6 +117,15 @@ let dom ?key ?(tag = "div") ?(attrs = []) ?(events = "")
   Option.iter
     (Lui_ui.extension_property_signal context node "style-class")
     style_class_signal;
+  Option.iter
+    (Lui_ui.extension_property_signal context node "attrs")
+    attrs_signal_v;
+  Option.iter
+    (Lui_ui.extension_property_signal context node "text")
+    text_signal;
+  Option.iter
+    (Lui_ui.extension_property_signal context node "accessibility-identifier")
+    id_signal;
   if id <> "" then
     Lui_ui.extension_property context node "accessibility-identifier"
       (StringValue id);
