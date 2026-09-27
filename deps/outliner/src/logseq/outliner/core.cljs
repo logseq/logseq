@@ -1417,15 +1417,17 @@
                 (transact-move-blocks! conn blocks target-block sibling? opts outliner-op top-level-blocks)
                 nil))))))))
 
-(defn- move-blocks-up-down
-  "Move blocks up/down."
+(defn- page-id
+  [block]
+  (:db/id (:block/page block)))
+
+(defn- move-same-page-blocks-up-down
+  "Move one page's top-level blocks up or down. A first block of a page does not
+  leave that page; a last block does not move onto another page."
   [conn blocks up?]
-  {:pre [(seq blocks) (boolean? up?)]}
-  (let [db @conn
-        top-level-blocks (filter-top-level-blocks db blocks)
-        opts {:outliner-op :move-blocks-up-down}]
+  (let [opts {:outliner-op :move-blocks-up-down}]
     (if up?
-      (let [first-block (d/entity db (:db/id (first top-level-blocks)))
+      (let [first-block (d/entity @conn (:db/id (first blocks)))
             first-block-parent (:block/parent first-block)
             first-block-left-sibling (ldb/get-left-sibling first-block)
             left-or-parent (or first-block-left-sibling first-block-parent)
@@ -1434,26 +1436,34 @@
             sibling? (= (:db/id (:block/parent left-left))
                         (:db/id first-block-parent))]
         (when (and left-left
-                   (not= (:db/id (:block/page first-block-parent))
-                         (:db/id left-left))
+                   (or first-block-left-sibling
+                       (not (ldb/page? left-left)))
                    (not (and (:logseq.property/created-from-property first-block)
                              (nil? first-block-left-sibling))))
-          (move-blocks conn top-level-blocks left-left (merge opts {:sibling? sibling?
-                                                                    :up? up?}))))
-
-      (let [last-top-block (last top-level-blocks)
+          (move-blocks conn blocks left-left (merge opts {:sibling? sibling?
+                                                          :up? up?}))))
+      (let [last-top-block (d/entity @conn (:db/id (last blocks)))
             last-top-block-right (ldb/get-right-sibling last-top-block)
-            right (or
-                   last-top-block-right
-                   (let [parent (:block/parent last-top-block)]
-                     (ldb/get-right-sibling parent)))
+            right (or last-top-block-right
+                      (let [parent (:block/parent last-top-block)]
+                        (ldb/get-right-sibling parent)))
             sibling? (= (:db/id (:block/parent last-top-block))
                         (:db/id (:block/parent right)))]
         (when (and right
+                   (not (ldb/page? right))
                    (not (and (:logseq.property/created-from-property last-top-block)
                              (nil? last-top-block-right))))
           (move-blocks conn blocks right (merge opts {:sibling? sibling?
                                                       :up? up?})))))))
+
+(defn- move-blocks-up-down
+  "Move blocks up/down. Multi-page selections move each page's blocks within
+  that page."
+  [conn blocks up?]
+  {:pre [(seq blocks) (boolean? up?)]}
+  (let [top-level-blocks (filter-top-level-blocks @conn blocks)]
+    (doseq [page-blocks (vals (group-by page-id top-level-blocks))]
+      (move-same-page-blocks-up-down conn page-blocks up?))))
 
 (defn- ^:large-vars/cleanup-todo indent-outdent-blocks
   "Indent or outdent `blocks`."
