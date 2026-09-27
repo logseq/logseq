@@ -29,15 +29,16 @@ let fetch (req : request) : response =
   Eio_posix.run (fun env ->
     Eio.Switch.run (fun sw ->
       let host, target, flow = Net_eio.connect_flow ~env ~sw req.url in
-      let last_io = ref (Time.monotonic_now ()) in
+      let clock = Eio.Stdenv.clock env in
+      let last_io = ref (Eio.Time.now clock) in
       let flow =
         { Net_eio.read =
             (fun c ->
                let n = flow.Net_eio.read c in
-               last_io := Time.monotonic_now ();
+               last_io := Eio.Time.now clock;
                n)
         ; write =
-            (fun cs -> flow.Net_eio.write cs; last_io := Time.monotonic_now ())
+            (fun cs -> flow.Net_eio.write cs; last_io := Eio.Time.now clock)
         ; shutdown = flow.Net_eio.shutdown
         ; close = flow.Net_eio.close
         }
@@ -86,12 +87,9 @@ let fetch (req : request) : response =
         Eio.Fiber.first
           (fun () -> Eio.Promise.await done_p; false)
           (fun () ->
-             let clock = Eio.Stdenv.clock env in
              let rec watch () =
                Eio.Time.sleep clock 1.0;
-               if
-                 Time.diff_monotonic_ms !last_io (Time.monotonic_now ())
-                 > fetch_idle_timeout_s *. 1000.
+               if Eio.Time.now clock -. !last_io > fetch_idle_timeout_s
                then true
                else watch ()
              in
