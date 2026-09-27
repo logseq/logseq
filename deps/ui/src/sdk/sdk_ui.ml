@@ -68,7 +68,16 @@ let set_theme_mode a _b _c _d =
 let set_state_from_store _a _b _c _d = resolved_nil
 
 let get_selected_blocks _a _b _c _d =
-  resolved (Sdk_convert.json_arr [||])
+  let uuids = Platform.selected_block_uuids () in
+  match uuids with
+  | [] -> resolved (Sdk_convert.json_arr [||])
+  | _ ->
+      Js.Promise.all
+        (Array.of_list (List.map get_entity uuids))
+      |> Js.Promise.then_ (fun entities ->
+             Js.Promise.resolve
+               (Sdk_convert.json_arr
+                  (Array.map Sdk_convert.json_of_wire entities)))
 
 let get_current_graph _a _b _c _d =
   resolved (Js.Json.string (repo ()))
