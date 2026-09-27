@@ -385,7 +385,6 @@ let query_arg_of_transit (t : Wire.t) : query_arg =
   | t ->
       (match value_of_transit t with
        | Keyword s -> Arg_scalar (Result_attr s)
-       | Int64 n -> Arg_scalar (Result_entity (Datascript.Util.int64_to_int_exn "entity id" n))
        | v -> Arg_scalar (Result_value v))
 
 let rec edn_of_query_form (f : query_form) : string =
@@ -408,7 +407,6 @@ let rec edn_of_query_form (f : query_form) : string =
 let query_result_of_transit (t : Wire.t) : query_result =
   match value_of_transit t with
   | Keyword s -> Result_attr s
-  | Int64 n -> Result_entity (Datascript.Util.int64_to_int_exn "entity id" n)
   | v -> Result_value v
 
 (* Canonical string key for a wire scalar (ui-request ids, state keys). *)
