@@ -1,5 +1,6 @@
 (ns frontend.handler.editor-async-test
-  (:require [cljs.test :refer [is testing async use-fixtures]]
+  (:require ["react-dom" :as react-dom]
+            [cljs.test :refer [is testing async use-fixtures]]
             [datascript.core :as d]
             [dommy.core :as dom]
             [frontend.components.block.comments-model :as comments-model]
@@ -335,7 +336,7 @@
                "The loaded editor block should remain usable until worker persistence catches up.")))
         (p/finally (fn [] nil)))))
 
-(deftest-async delete-selection-focuses-the-previous-block-after-the-worker-transaction
+(deftest-async delete-selection-sends-the-selection-and-focuses-the-previous-block-at-send
   (let [previous-block {:db/id 1
                         :block/uuid (random-uuid)
                         :block/title "previous"}
@@ -343,52 +344,64 @@
                        :block/uuid (random-uuid)
                        :block/title "deleted"}
         previous-dom #js {:getAttribute #({"blockid" (str (:block/uuid previous-block))
-                                           "containerid" nil} %)}
-        deleted-dom #js {}
-        tx-opts (atom nil)
-        worker-lookups (atom 0)
-        edit-call (atom nil)]
-    (-> (p/with-redefs [util/get-prev-block-non-collapsed-non-embed
+                                           "containerid" nil} %)
+                          :__logseqBlock previous-block}
+        deleted-dom #js {:getAttribute #({"blockid" (str (:block/uuid deleted-block))} %)}
+        worker-reply (p/deferred)
+        worker-calls (atom [])
+        edit-calls (atom [])
+        original-flush-sync (.-flushSync react-dom)]
+    (set! (.-flushSync react-dom) (fn [f] (f)))
+    (-> (p/with-redefs [editor/get-selected-blocks (constantly [deleted-dom])
+                        dom/has-class? (constantly false)
+                        dom/attr (fn [node attr]
+                                   (when node
+                                     (.getAttribute node attr)))
+                        state/get-current-repo (constantly "test-repo")
+                        util/get-prev-block-non-collapsed-non-embed
                         (fn [block]
                           (is (identical? deleted-dom block))
                           previous-dom)
-                        db-async/<get-block
-                        (fn [& _args]
-                          (swap! worker-lookups inc)
-                          (p/resolved nil))
-                        db-transact/apply-outliner-ops (fn [_conn _ops opts]
-                                                        (reset! tx-opts opts)
-                                                        (p/resolved nil))
+                        state/<invoke-db-worker
+                        (fn [api & args]
+                          (swap! worker-calls conj [api args])
+                          (case api
+                            :thread-api/get-blocks
+                            (p/resolved [{:block deleted-block}])
+                            :thread-api/apply-outliner-ops
+                            worker-reply
+                            (p/resolved nil)))
                         editor/edit-block! (fn [block pos opts]
-                                             (reset! edit-call [block pos opts]))]
-          (-> (editor/delete-blocks! "test-repo"
-                                     [(:block/uuid deleted-block)]
-                                     [deleted-block]
-                                     [deleted-dom]
-                                     false)
-              (p/then
-               (fn [_]
-                 (is (nil? @edit-call)
-                     "Deletion should not focus before the renderer applies the response")
-                 (is (zero? @worker-lookups)
-                     "Selection deletion should use the post-transaction window instead of a preflight worker lookup")
-                 (is (fn? (:editor/edit-block-fn @tx-opts))
-                     "Deletion should carry a response-local renderer callback")
-                 (let [edit-block-f (:editor/edit-block-fn @tx-opts)]
-                   (is (fn? edit-block-f)
-                       "Deletion should run focus from the worker response")
-                   (when edit-block-f
-                     (edit-block-f [previous-block])))
-                 (is (= [previous-block 8
-                         {:custom-content "previous"
-                          :tail-len 0
-                          :container-id nil
-                          :save-code-editor? false
-                          :save-current-block? false
-                          :skip-load? true}]
-                        @edit-call)
-                     "Deletion should restore focus from the renderer callback")))))
-        (p/finally (fn [] nil)))))
+                                             (swap! edit-calls conj [block pos opts]))]
+          ;; not awaited: a delete that waited for the worker reply would
+          ;; never settle here, since the reply is held back below
+          (p/let [_ (do (editor/cut-selection-blocks false) nil)
+                  ;; past the next animation frame, or its setTimeout stand-in
+                  _ (p/delay 40)
+                  _ (is (= [:thread-api/apply-outliner-ops] (map first @worker-calls))
+                        "The delete reads nothing from the worker before it sends the op")
+                  [_repo ops worker-opts] (second (first @worker-calls))
+                  _ (is (= [[:delete-blocks [[(:block/uuid deleted-block)]
+                                             {:selection {:original-ids {}}}]]]
+                           ops)
+                        "The op carries the selected ids; the worker resolves the selection")
+                  _ (is (not-any? #(contains? worker-opts %)
+                                  [:editor/edit-block-fn :editor/edit-block-on-send? :editor-row-uuids]))
+                  _ (is (= [[previous-block 8
+                             {:custom-content "previous"
+                              :tail-len 0
+                              :container-id nil
+                              :save-code-editor? false
+                              :save-current-block? false
+                              :skip-load? true}]]
+                           @edit-calls)
+                        "The editor moves to the previous block when the op is sent")
+                  _ (p/resolve! worker-reply {:result nil})
+                  _ (p/delay 0)]
+            (is (= 1 (count @edit-calls))
+                "The worker reply does not move the editor again")))
+        (p/finally (fn []
+                     (set! (.-flushSync react-dom) original-flush-sync))))))
 
 (defn- selection-block-dom
   [block]

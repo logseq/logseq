@@ -144,6 +144,21 @@
     {:canonical-rows-ms (- rows-ready-at started-at)
      :edit-block-flush-ms (- (now-ms) rows-ready-at)}))
 
+(defn- run-send-editor-callback!
+  "Runs the editor callback of an op that moves the cursor when it is sent,
+  such as a selection delete: its target row is on screen already and the
+  worker reply carries no editor rows for it. Runs at the next animation
+  frame, once the key event that sent the op is fully dispatched: in a
+  microtask, the editing-only shortcut handlers that listen after the
+  selection ones would see the new editor and run the same Backspace or
+  Delete on it. The frame after a key event comes before the next key is
+  dispatched, where a timer comes after it and that key finds no editor."
+  [tx-meta]
+  (on-next-frame!
+   (fn []
+     (react-dom/flushSync
+      #(run-edit-block-fn! tx-meta [])))))
+
 (defn- publish-worker-response!
   [tx-meta delta editor-rows row-uuids run-editor-callback?]
   (let [started-at (now-ms)]
@@ -188,8 +203,11 @@
                        :client-id (:client-id (state/get-state))
                        :ui/perf-id perf-id
                        :local-tx? true))
-            worker-opts (cond-> (dissoc opts' :ui/page-id :editor/edit-block-fn)
-                          (:editor/edit-block-fn opts')
+            edit-on-send? (boolean (and (:editor/edit-block-on-send? opts')
+                                        (:editor/edit-block-fn opts')))
+            worker-opts (cond-> (dissoc opts' :ui/page-id :editor/edit-block-fn
+                                        :editor/edit-block-on-send?)
+                          (and (:editor/edit-block-fn opts') (not edit-on-send?))
                           (assoc :editor-row-uuids (operation-row-uuids ops))
                           ;; recorded in the worker right before apply-ops! —
                           ;; saves a separate worker roundtrip per op
@@ -198,8 +216,11 @@
                       :thread-api/apply-outliner-ops
                       request-repo
                       ops
-                      worker-opts)]
-        (p/let [response (enqueue-outliner-mutation! request-repo request)
+                      worker-opts)
+            response-promise (enqueue-outliner-mutation! request-repo request)]
+        (when edit-on-send?
+          (run-send-editor-callback! opts'))
+        (p/let [response response-promise
                 {:keys [result delta editor-rows editor-row-uuids perf]} response
                 mutation-returned-at (now-ms)
                 worker-returned-at (now-ms)
@@ -207,10 +228,12 @@
                                       (= request-route (state/get-route-match)))
                 publish? (or delta
                              (and current-context?
-                                  (:editor/edit-block-fn opts')))
+                                  (:editor/edit-block-fn opts')
+                                  (not edit-on-send?)))
                 ui-refresh-perf (when publish?
                                   (publish-worker-response!
-                                   opts' delta editor-rows editor-row-uuids current-context?))
+                                   opts' delta editor-rows editor-row-uuids
+                                   (and current-context? (not edit-on-send?))))
                 ui-updated-at (now-ms)]
           (when publish?
             (on-next-frame!
