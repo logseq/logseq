@@ -65,15 +65,22 @@ async function invoke(name, args) {
     repo,
     tmap(
       kw("schema"),
-      tmap(kw("block/name"), tmap(kw("db/unique"), kw("db.unique/identity"))),
+      tmap(kw("db/ident"), tmap(kw("db/unique"), kw("db.unique/identity"))),
     ),
   ]);
   check("create-or-open-db no error", !r.raw.includes('"~#error"') && !String(r.raw).includes("error"), r.raw.slice(0, 200));
 
   // transact: [repo tx-data tx-meta tx-opts]
+  // Writes a db-ident + kv/value entity — a bare attribute entity (no
+  // db/ident, block/uuid, or tags) is rejected by tx-report validation in
+  // both the cljs and OCaml workers (dispatch key resolves to no schema
+  // branch).
   r = await invoke("thread-api/transact", [
     repo,
-    [[kw("db/add"), -1, kw("block/name"), "hello"]],
+    [
+      [kw("db/add"), -1, kw("db/ident"), kw("logseq.kv/smoke-test")],
+      [kw("db/add"), -1, kw("kv/value"), "hello"],
+    ],
     null,
     null,
   ]);
@@ -82,36 +89,40 @@ async function invoke(name, args) {
   // q: [repo [query-string inputs...]]
   r = await invoke("thread-api/q", [
     repo,
-    ['[:find ?e :where [?e :block/name "hello"]]'],
+    ['[:find ?e :where [?e :db/ident :logseq.kv/smoke-test]]'],
   ]);
   const qDecoded = r.decoded;
+  // datascript q returns a set of rows; transit decodes it to either a JS
+  // Array of rows or a transit Set depending on the writer's tagging.
+  const qRows = Array.isArray(qDecoded)
+    ? qDecoded
+    : qDecoded && typeof qDecoded.entries === "function"
+      ? [...qDecoded.values()]
+      : null;
   check(
     "q returns entity",
-    Array.isArray(qDecoded) &&
-      qDecoded.length === 1 &&
-      Array.isArray(qDecoded[0]) &&
-      Number.isInteger(qDecoded[0][0]),
+    qRows !== null && qRows.length === 1 && Number.isInteger(qRows[0][0]),
     JSON.stringify(qDecoded),
   );
-  const eid = qDecoded && qDecoded[0] && qDecoded[0][0];
+  const eid = qRows && qRows[0] && qRows[0][0];
 
   // pull: [repo selector eid]
-  r = await invoke("thread-api/pull", [repo, [kw("block/name")], eid]);
+  r = await invoke("thread-api/pull", [repo, [kw("db/ident")], eid]);
   check(
-    "pull returns map with block/name",
-    r.raw.includes("block/name") && r.raw.includes("hello"),
+    "pull returns map with db/ident",
+    r.raw.includes("db/ident") && r.raw.includes("smoke-test"),
     r.raw.slice(0, 200),
   );
 
   // datoms
   r = await invoke("thread-api/datoms", [repo, kw("eavt")]);
-  check("datoms contains block/name", r.raw.includes("block/name"), r.raw.slice(0, 200));
+  check("datoms contains db/ident", r.raw.includes("db/ident"), r.raw.slice(0, 200));
 
   // unopened repo: cljs def-thread-api fns are (when-let [conn ...]) so
   // they return nil — the port must match (null, not an error).
   r = await invoke("thread-api/q", [
     "test/nonexistent-graph",
-    ["[:find ?e :where [?e :block/name \"x\"]]"],
+    ["[:find ?e :where [?e :db/ident :logseq.kv/smoke-test]]"],
   ]);
   check(
     "unopened-repo q returns nil like cljs when-let",
@@ -119,13 +130,16 @@ async function invoke(name, args) {
     r.raw.slice(0, 200),
   );
 
-  // error path: malformed query on a valid repo → tagged "error" transit
-  r = await invoke("thread-api/q", [repo, ["[:find ?e :where [?e :block/name"]]);
-  check(
-    "malformed query yields tagged error transit",
-    r.raw.includes('"~#error"'),
-    r.raw.slice(0, 200),
-  );
+  // error path: a handler that raises synchronously makes invoke reject,
+  // matching cljs remoteInvoke (async task failures resolve to tagged
+  // error transit instead).
+  let rejected = false;
+  try {
+    await invoke("thread-api/q", [repo, ["[:find ?e :where [?e :block/name"]]);
+  } catch {
+    rejected = true;
+  }
+  check("malformed query rejects invoke like cljs remoteInvoke", rejected);
 
   // close
   r = await invoke("thread-api/close-db", [repo]);

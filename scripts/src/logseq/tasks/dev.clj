@@ -24,12 +24,6 @@
   (shell {:shutdown nil} "pnpm cljs:test")
   (apply shell {:shutdown nil} "pnpm cljs:run-test" args))
 
-(defn test-no-worker
-  "Run tests without compiling worker namespaces. Pass args through to cmd 'pnpm cljs:run-test-no-worker'"
-  [& args]
-  (shell "pnpm cljs:test-no-worker")
-  (apply shell "pnpm cljs:run-test-no-worker" args))
-
 (def test-jobs (min 5 (.availableProcessors (Runtime/getRuntime))))
 (def test-batches-per-job 6)
 
@@ -38,16 +32,13 @@
 (def isolated-test-namespaces
   #{"frontend.components.block.drop-boundary-test"
     "frontend.handler.db-based.page-test"
-    "frontend.handler.editor-async-test"
     "frontend.handler.editor-lifecycle-test"
     "frontend.handler.editor-test"
     "frontend.handler.route-test"
-    "frontend.rfx-test"
-    "frontend.worker.db-core-test"})
+    "frontend.rfx-test"})
 
 (def serial-test-namespaces
-  #{"frontend.db.query-dsl-test"
-    "frontend.worker.search-test"})
+  #{})
 
 (defn isolated-test-namespace?
   [test-ns]
@@ -105,9 +96,7 @@
 
 (defn- namespace-batches
   [test-namespaces]
-  (let [priority-namespaces ["frontend.handler.editor-test"
-                             "frontend.worker.db-core-test"
-                             "frontend.handler.editor-async-test"]
+  (let [priority-namespaces ["frontend.handler.editor-test"]
         priority-set (set priority-namespaces)
         priority (->> priority-namespaces
                       (filter (set test-namespaces))
@@ -214,7 +203,7 @@
                                                     (fs/glob "." "{src/main,deps/graph-parser/src}/**")))))]
     (do
       (println "Building publishing js asset...")
-      (shell {:shutdown nil} "clojure -M:cljs release publishing db-worker"))
+      (shell {:shutdown nil} "clojure -M:cljs release publishing"))
     (println "Publishing js asset is up to date")))
 
 (defn publishing-backend

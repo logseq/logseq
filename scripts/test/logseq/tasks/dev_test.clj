@@ -54,7 +54,7 @@
   (let [namespaces ["frontend.alpha-test"
                     "frontend.components.block.drop-boundary-test"
                     "frontend.handler.editor-test"
-                    "frontend.worker.db-core-test"]
+                    "frontend.handler.route-test"]
         started-node-runs (atom [])]
     (with-redefs [dev/test-jobs 2
                   dev/test-batches-per-job 1
@@ -67,7 +67,7 @@
       (is (= 4 (count @started-node-runs)))
       (doseq [isolated-ns ["frontend.components.block.drop-boundary-test"
                            "frontend.handler.editor-test"
-                           "frontend.worker.db-core-test"]]
+                           "frontend.handler.route-test"]]
         (is (= 1 (count (filter #(some #{isolated-ns} %) @started-node-runs))))
         (is (= 1 (->> @started-node-runs
                       (some #(when (some #{isolated-ns} %) %))
@@ -76,8 +76,8 @@
 
 (deftest run-test-namespaces-runs-performance-tests-after-parallel-tests
   (let [namespaces ["frontend.alpha-test"
-                    "frontend.db.query-dsl-test"
-                    "frontend.worker.search-test"]
+                    "frontend.beta-test"
+                    "frontend.gamma-test"]
         completed-runs (atom [])
         parallel-finished? (atom false)]
     (with-redefs [dev/test-jobs 2

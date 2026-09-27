@@ -80,8 +80,10 @@ let maps_equal (a : (attr * value) list) (b : (attr * value) list) : bool =
 (* cljs writes inst values only for :file/created-at and
    :file/last-modified-at (malli inst? schema); a ~m value on any other
    attr is a corrupt epoch-ms number — rewrite it as the numeric rep
-   cljs would have stored. Runs before the db listener is installed on
-   open, same as check-and-fix-schema, so it never enters local-tx. *)
+   cljs would have stored. The file attrs go the other way: cljs writes
+   only js/Date there, so a numeric value is a corrupt instant — rewrite
+   it as Instant. Runs before the db listener is installed on open, same
+   as check-and-fix-schema, so it never enters local-tx. *)
 let instant_attrs = [ "file/created-at"; "file/last-modified-at" ]
 
 let heal_instant_values (conn : conn) =
@@ -89,11 +91,21 @@ let heal_instant_values (conn : conn) =
   let ops =
     List.of_seq (datoms db Eavt ())
     |> List.concat_map (fun (d : datom) ->
-         match d.v with
-         | Instant ms when not (List.mem d.a instant_attrs) ->
-             [ Retract (Entity_id d.e, d.a, Some d.v)
-             ; Add (Entity_id d.e, d.a, Common_util.value_of_ms ms) ]
-         | _ -> [])
+         if List.mem d.a instant_attrs then
+           match d.v with
+           | Instant _ -> []
+           | value -> (
+               match Common_util.timestamp_ms value with
+               | Some ms ->
+                   [ Retract (Entity_id d.e, d.a, Some d.v)
+                   ; Add (Entity_id d.e, d.a, Instant ms) ]
+               | None -> [])
+         else
+           match d.v with
+           | Instant ms ->
+               [ Retract (Entity_id d.e, d.a, Some d.v)
+               ; Add (Entity_id d.e, d.a, Common_util.value_of_ms ms) ]
+           | _ -> [])
   in
   if ops <> [] then begin
     Worker_log.info "worker-db-fix/heal-instant-values"

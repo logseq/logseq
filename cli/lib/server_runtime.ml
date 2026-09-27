@@ -239,6 +239,19 @@ let invoke_config_of_server config server =
     profile_session = config.profile_session;
   }
 
+(* Within one CLI process, a second ensure must reuse the runtime the first
+   ensure started: the lifecycle protocol retires any established (non-pending)
+   worker on each start, so re-ensuring would kill the worker mid-command and
+   leave earlier invoke_config values pointing at a dead port. *)
+let ensured_servers : (string, Transport.invoke_config) Hashtbl.t =
+  Hashtbl.create 4
+
+let ensured_key config repo =
+  resolve_root_dir config ^ "\x00" ^ Cli_primitive.string_of_repo repo
+
+let forget_ensured config repo =
+  Hashtbl.remove ensured_servers (ensured_key config repo)
+
 let ensure_runtime config repo ~create_empty_db =
   match resolve_script_path config with
   | Stdlib.Error err -> Cli_effect.pure (Stdlib.Error err)
@@ -261,6 +274,9 @@ let start_server config repo ~create_empty_db =
         ensure_runtime config repo ~create_empty_db
         |> Cli_effect.map
              (Result.map (fun (server : server) ->
+                  Hashtbl.replace ensured_servers
+                    (ensured_key config repo)
+                    (invoke_config_of_server config server);
                   {
                     repo;
                     owner_source = server.owner_source;
@@ -277,22 +293,33 @@ let ensure_server config repo ~create_empty_db =
              timeout_span = config.timeout_span;
              profile_session = config.profile_session;
            })
-  | None ->
-      ensure_runtime config repo ~create_empty_db
-      |> Cli_effect.map (Result.map (invoke_config_of_server config))
+  | None -> (
+      match Hashtbl.find_opt ensured_servers (ensured_key config repo) with
+      | Some invoke_config -> Cli_effect.pure (Ok invoke_config)
+      | None ->
+          ensure_runtime config repo ~create_empty_db
+          |> Cli_effect.map (function
+            | Ok server ->
+                let invoke_config = invoke_config_of_server config server in
+                Hashtbl.replace ensured_servers
+                  (ensured_key config repo) invoke_config;
+                Ok invoke_config
+            | Error _ as error -> error))
 
 let stop_server config repo =
   if Option.is_some config.Cli_config.base_url then
     Cli_effect.pure (Ok { repo })
   else
-    Cli_unix.stop_graph_runtime ~root_dir:(resolve_root_dir config)
-      ~repo:(Cli_primitive.string_of_repo repo)
-      ~owner_source:"cli"
-    |> Cli_effect.map (function
-      | Stdlib.Error err -> Stdlib.Error (lifecycle_error err)
-      | Ok () -> Ok { repo })
+    (forget_ensured config repo;
+     Cli_unix.stop_graph_runtime ~root_dir:(resolve_root_dir config)
+       ~repo:(Cli_primitive.string_of_repo repo)
+       ~owner_source:"cli"
+     |> Cli_effect.map (function
+       | Stdlib.Error err -> Stdlib.Error (lifecycle_error err)
+       | Ok () -> Ok { repo }))
 
 let delete_graph config repo ~on_removed =
+  forget_ensured config repo;
   Cli_unix.delete_graph ~root_dir:(resolve_root_dir config)
     ~repo:(Cli_primitive.string_of_repo repo) ~on_removed:(fun () ->
       on_removed ()
@@ -367,6 +394,7 @@ let revision_matches cli_revision server =
 
 let cleanup_revision_mismatched_servers config ~cli_revision =
   let open Cli_effect in
+  Hashtbl.reset ensured_servers;
   bind (list_servers config) (fun servers ->
       let mismatched =
         Vec.filter
