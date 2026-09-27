@@ -133,6 +133,9 @@
   (testing "Delete blocks case 1"
     (b/new-blocks ["b1" "b2" "b3" "b4"])
     (b/delete-blocks)                        ; delete b4
+    ;; The delete puts b3 in editing only after a worker roundtrip; a
+    ;; Shift+ArrowUp pressed before b3's editor mounts is lost.
+    (util/wait-edit-content "b3")
     (util/repeat-keyboard 2 "Shift+ArrowUp") ; select b3 and b2
     (b/delete-blocks)
     (util/wait-edit-content "b1")
