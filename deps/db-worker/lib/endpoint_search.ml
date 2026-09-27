@@ -78,6 +78,12 @@ let open_search_db repo : Sqlite.db =
         ~path:"search/db.sqlite"
     else Sqlite.open_db ~path:(search_db_path repo)
   in
+  (* cljs get-dbs runs enable-sqlite-wal-mode! on the search conn before
+     any statement executes on it. The OPFS SAH pool has no shared-memory
+     support, so a WAL-mode db file raises SQLITE_CANTOPEN on its first
+     access unless locking_mode=exclusive is set first. *)
+  Sqlite.exec db ~sql:"pragma locking_mode=exclusive" ~bind:[||];
+  Sqlite.exec db ~sql:"pragma journal_mode=WAL" ~bind:[||];
   Search_index.create_tables_and_triggers db;
   db
 
