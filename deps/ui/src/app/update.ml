@@ -11,7 +11,19 @@ let update (model : t) (action : Action.t) : t =
   | Journals_loaded js -> { model with journals = js }
   | Refs_loaded refs -> { model with page_refs = refs }
   | Navigate_to route ->
-      { model with route; route_page = None; page_refs = [] }
+      { model with
+        route
+      ; route_page = None
+      ; page_refs = []
+      ; editing_title = false
+      ; page_menu = None
+      }
+  | Title_edit_start -> { model with editing_title = true }
+  | Title_edit_done -> { model with editing_title = false }
+  | Page_menu_set pos -> { model with page_menu = pos }
+  | Confirm_set c -> { model with confirm = c; page_menu = None }
+  | Dismiss_all ->
+      { model with page_menu = None; confirm = None }
   | Toggle_left_sidebar ->
       { model with left_sidebar_open = not model.left_sidebar_open }
   | Toggle_right_sidebar ->

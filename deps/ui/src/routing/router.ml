@@ -53,11 +53,9 @@ let parse_hash () : Model.route =
 let repo () = Option.value !Runtime.current_repo ~default:""
 
 (* ref wire for get-page-blocks-tree / get-page-route-info:
-   uuid lookup-ref or name string *)
+   Uuid for uuid strings, String for page names *)
 let page_ref s =
-  if Sdk_util.is_uuid_string s then
-    Wire.Array [ Wire.Keyword "block/uuid"; Wire.Uuid s ]
-  else Wire.String s
+  if Sdk_util.is_uuid_string s then Wire.Uuid s else Wire.String s
 
 let ref_of_page (p : Model.page) =
   match p.Model.page_uuid, p.Model.page_title with
@@ -187,6 +185,7 @@ let load_block_zoom uuid =
                          { Model.page_title = b.Model.block_title
                          ; page_uuid = b.block_uuid
                          ; page_db_id = b.block_db_id
+                         ; page_is_tag = false
                          ; page_blocks = b.block_children
                          })
                 | _ ->
@@ -212,4 +211,8 @@ let resolve () =
 
 let init () =
   Platform.on_hash_change resolve;
-  Platform.on_document_event "ls:navigate" (fun _ -> resolve ())
+  Platform.on_document_event "ls:navigate" (fun _ -> resolve ());
+  Platform.add_document_listener "keydown" (fun ev ->
+      if Platform.event_str ev "key" = "Escape" then (
+        Runtime.send Action.Dismiss_all;
+        Runtime.flush ()))

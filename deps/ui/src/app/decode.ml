@@ -29,6 +29,20 @@ let blocks_of_wire (w : Wire.t) : Model.block list =
   | Wire.Array xs | Wire.List xs -> List.map block_of_wire xs
   | _ -> []
 
+(* page is a tag/class when route-info says tag? or its entity tags
+   contain logseq.class/Tag *)
+let is_tag_page (w : Wire.t) : bool =
+  match Option.bind (Wire.get w "tag?") Wire.as_bool with
+  | Some b -> b
+  | None -> (
+      match Wire.get w "tags" with
+      | Some (Wire.Array xs) | Some (Wire.List xs) ->
+          List.exists
+            (fun t ->
+              Wire.map_get_string t "ident" = Some "logseq.class/Tag")
+            xs
+      | _ -> false)
+
 (* accepts entity maps (block/title) and get-page-route-info maps
    (page-title/page-uuid/page-id) *)
 let page_of_summary (w : Wire.t) : Model.page option =
@@ -53,6 +67,7 @@ let page_of_summary (w : Wire.t) : Model.page option =
             (match Wire.map_get_int w "db/id" with
              | Some i -> Some i
              | None -> Wire.map_get_int w "page-id")
+        ; page_is_tag = is_tag_page w
         ; page_blocks = []
         }
   | _ -> None

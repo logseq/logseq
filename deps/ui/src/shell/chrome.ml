@@ -29,6 +29,22 @@ let search_button =
       if name = "click" then Runtime.send Action.Toggle_search)
     []
 
+let dots_button =
+  Logseq_dom.dom ~key:"dots-btn" ~tag:"button"
+    ~style_class:"button cp__header-btn toolbar-dots-btn"
+    ~text:"···" ~events:"click"
+    ~on_dom_event:(fun name payload ->
+      if name = "click" then (
+        let x, y =
+          match payload with
+          | Some p ->
+              ( Platform.payload_num p "clientX"
+              , Platform.payload_num p "clientY" )
+          | None -> (0., 0.)
+        in
+        Runtime.send (Action.Page_menu_set (Some (x, y)))))
+    []
+
 let left_menu_button =
   Logseq_dom.dom ~key:"left-menu-btn" ~tag:"button" ~id:"left-menu"
     ~style_class:"button cp__header-btn" ~text:"Menu"
@@ -43,7 +59,7 @@ let header =
     [ Logseq_dom.dom ~key:"head-inner" ~style_class:"l"
         [ left_menu_button ]
     ; Logseq_dom.dom ~key:"head-r" ~style_class:"r"
-        [ search_button ]
+        [ search_button; dots_button ]
     ]
 
 (* right sidebar — hidden until toggled; e2e checks .cp__right-sidebar *)
@@ -78,7 +94,10 @@ let main_content (ms : Model.t Signal.signal) =
                   && a.route = b.route
                   && a.route_page = b.route_page
                   && a.journals = b.journals
-                  && a.page_refs = b.page_refs)
+                  && a.page_refs = b.page_refs
+                  && a.editing_title = b.editing_title
+                  && a.page_menu = b.page_menu
+                  && a.confirm = b.confirm)
                 (fun m -> Page.page_view_of_model m)
                 ms ]
         ]

@@ -13,4 +13,9 @@ type t =
   | Toggle_right_sidebar
   | Toggle_search
   | Block_content_changed of string * string
+  | Title_edit_start
+  | Title_edit_done (* value already committed via page op *)
+  | Page_menu_set of (float * float) option
+  | Confirm_set of Model.confirm option
+  | Dismiss_all (* Escape / outside click *)
   | Noop
