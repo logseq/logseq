@@ -44,6 +44,47 @@ let insert_blocks blocks target_uuid ~sibling =
 let delete_blocks uuids =
   op "delete-blocks" [ uuids_list uuids; Wire.Map [] ]
 
+(* flatten block trees for paste: flat preorder map list where each child
+   carries block/parent as a [:block/uuid u] lookup-ref — same shape as
+   sdk_write.flatten_batch; blocks_with_level re-derives levels *)
+let paste_block_maps (trees : Model.block list) =
+  let rec go acc ~level ~parent (b : Model.block) =
+    match b.Model.block_uuid with
+    | None -> acc
+    | Some u ->
+        let parent_kv =
+          match parent with
+          | Some pu ->
+              [ str "block/parent"
+                  (Wire.Array [ Wire.Keyword "block/uuid"; Wire.Uuid pu ]) ]
+          | None -> []
+        in
+        let m =
+          Wire.Map
+            ([ str "block/uuid" (Wire.Uuid u)
+             ; str "block/title" (Wire.String (String.trim b.Model.block_title))
+             ; str "block/level" (Wire.Int level) ]
+            @ parent_kv)
+        in
+        let acc = m :: acc in
+        List.fold_left
+          (fun a c -> go a ~level:(level + 1) ~parent:(Some u) c)
+          acc b.Model.block_children
+  in
+  List.rev (List.fold_left (fun a b -> go a ~level:1 ~parent:None b) [] trees)
+
+let paste_trees trees target_uuid ~replace_empty =
+  op "insert-blocks"
+    [ Wire.Array (paste_block_maps trees)
+    ; Wire.Uuid target_uuid
+    ; Wire.Map
+        [ kw "sibling?" (Wire.Bool true)
+        ; kw "keep-uuid?" (Wire.Bool true)
+        ; kw "replace-empty-target?" (Wire.Bool replace_empty)
+        ; kw "outliner-op" (Wire.Keyword "paste")
+        ]
+    ]
+
 let move_blocks uuids target_uuid ~sibling =
   op "move-blocks"
     [ uuids_list uuids
