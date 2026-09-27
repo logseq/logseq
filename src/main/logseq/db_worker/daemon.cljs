@@ -20,18 +20,6 @@
       owner-source
       :unknown)))
 
-(defn pid-status
-  [pid]
-  (when (number? pid)
-    (try
-      (.kill js/process pid 0)
-      :alive
-      (catch :default e
-        (case (.-code e)
-          "ESRCH" :not-found
-          "EPERM" :no-permission
-          :error)))))
-
 (defn http-request
   [{:keys [method host port path headers body timeout-ms]}]
   (p/create
