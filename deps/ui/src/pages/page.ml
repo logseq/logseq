@@ -188,13 +188,26 @@ let not_found_view name : t =
         ]
     ]
 
+let is_today_page (m : Model.t) (page : Model.page) : bool =
+  match page.page_journal_day with
+  | Some d -> d = Dates.today_journal_day () && m.route <> Model.Home
+  | None -> false
+
 let page_view (m : Model.t) (page : Model.page) : t =
-  box ~key:"page" ~style_class:"page"
-    [ breadcrumbs page.page_title
-    ; page_title_el m page
-    ; blocks_inner page.page_blocks
-    ; references_view m.page_refs
-    ; unlinked_references_view ()
+  let cls =
+    "flex-1 page relative cp__page-inner-wrap"
+    ^ (if page.page_journal_day <> None then " is-journals" else "")
+    ^ (if is_today_page m page then " is-today-page" else "")
+  in
+  dom ~key:"page" ~style_class:cls
+    [ dom ~key:"page-inner"
+        ~style_class:"relative grid gap-4 sm:gap-8 page-inner mb-16"
+        [ breadcrumbs page.page_title
+        ; page_title_el m page
+        ; blocks_inner page.page_blocks
+        ; references_view m.page_refs
+        ; unlinked_references_view ()
+        ]
     ; Page_menu.dialog_view m
     ]
 

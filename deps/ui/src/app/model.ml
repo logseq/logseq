@@ -23,6 +23,7 @@ type page =
   ; page_uuid : string option
   ; page_db_id : int option
   ; page_is_tag : bool
+  ; page_journal_day : int option
   ; page_blocks : block list
   }
 

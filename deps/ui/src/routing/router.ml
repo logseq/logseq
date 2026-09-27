@@ -186,6 +186,7 @@ let load_block_zoom uuid =
                          ; page_uuid = b.block_uuid
                          ; page_db_id = b.block_db_id
                          ; page_is_tag = false
+                         ; page_journal_day = None
                          ; page_blocks = b.block_children
                          })
                 | _ ->

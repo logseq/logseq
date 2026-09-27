@@ -540,6 +540,11 @@ let get_page_route_info args =
                     ; ( kw "private-built-in?",
                         Wire.Bool
                           (Ldb.built_in page && Ldb.private_built_in_page page) )
+                    ; ( kw "journal-day",
+                        Ds_wire.transit_of_value
+                          (Option.value
+                             (Ldb.value page "block/journal-day")
+                             ~default:Nil) )
                     ]
                   in
                   let base =
