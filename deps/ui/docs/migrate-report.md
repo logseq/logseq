@@ -40,6 +40,48 @@ selecting without an explicit Escape.
 `"ArrowUp" when shift` shadows `meta/alt+shift` combinations. Modifier combos
 must be ordered most-specific first in any match-based key dispatch.
 
+### Undo restores the DB but the open editor keeps a stale buffer
+Worker `apply_history_action` replays inverse outliner ops correctly; the
+bug was UI-side: after undo restored a title, the still-mounted textarea
+kept showing the pre-undo `buffer`, and `visible-outline-content-tree`
+prefers `editor.value`. `resync_open_editor` after undo/redo re-reads the
+block from the model and rewrites the textarea when they diverge.
+**LUI lesson**: controlled-input state that can diverge from source of
+truth (DB) needs an explicit resync hook on every external-mutation path —
+undo/redo, RTC apply, sync events.
+
+### mousedown commit → synchronous re-render steals the click target
+Committing the edit on `mousedown` re-renders the DOM between `mousedown`
+and `mouseup`; the browser then retargets `click` to a common ancestor
+(`.page-blocks-inner`), so the block's click handler never fires and the
+clicked block never enters edit. Fix: defer the blur commit one tick
+(`schedule_blur_commit`), cancelled by `enter_edit`.
+**General rule**: pointerdown handlers must not synchronously mutate DOM
+that the same gesture's click depends on — defer or dispatch on the
+stable ancestor.
+
+### Pending focus must retry until mount, not poll twice
+`apply_focus` polled at 0ms/120ms after an apply+refresh; a slower refresh
+(more blocks, cold wasm paths) lost the focus entirely, leaving
+`pending_focus` set but dead. Bounded retry-until-mounted (40ms × 50)
+fixes Enter→Tab flows on collapsed blocks.
+
+### Collapsed-state override is per-view, not per-DB
+cljs `expand-collapsed-indent-target!` expands the indent target in the DB
+*and* clears the local `:ui/collapsed-blocks` override — porting only the
+DB part left the freshly-indented child invisible on journals.
+
+### Menu links must not steal editor focus
+`a.menu-link` items with `tabindex=0` accept focus on click; cljs keeps
+editor focus. preventDefault on mousedown inside `.ui__popover-content` /
+`.ls-context-menu-content` preserves it (click still fires).
+
+### Undo recording needs `outliner-op` on multi-op batches
+Worker `gen_undo_ops` auto-derives `outliner-op` only for single-op
+batches; multi-op batches (e.g. split = `save-block` + `insert-blocks`,
+merges = `move`+`delete`+`save`) MUST pass it via opts or the tx is
+invisible to undo.
+
 ## Worker protocol edge cases
 
 - `apply-outliner-ops` op entries require nested `Array` args
