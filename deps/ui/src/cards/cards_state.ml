@@ -35,6 +35,13 @@ let cards_class_eid repo =
   |> Js.Promise.then_ (fun w ->
          Js.Promise.resolve (Wire.as_int w))
 
+let cards_class_uuid repo =
+  q repo
+    "[:find ?u . :where [?e :db/ident :logseq.class/Cards] \
+     [?e :block/uuid ?u]]"
+  |> Js.Promise.then_ (fun w ->
+         Js.Promise.resolve (Wire.as_uuid w))
+
 (* label = block title; blank title -> query property block's title *)
 let deck_label repo eid title =
   if String.trim title <> "" then Js.Promise.resolve title
@@ -147,18 +154,20 @@ let add_cards_block st =
            match Wire.map_get_uuid page_w "block/uuid" with
            | None -> Js.Promise.resolve ()
            | Some page_uuid ->
+               cards_class_uuid r
+               |> Js.Promise.then_ (function
+                    | None -> Js.Promise.resolve ()
+                    | Some cards_uuid ->
+               let new_uuid = Platform.random_uuid () in
                let new_block =
                  Wire.Map
                    [ (Wire.String "block/title", Wire.String "")
-                   ; ( Wire.String "block/uuid"
-                     , Wire.Uuid (Platform.random_uuid ()) )
-                   ; ( Wire.String "block/properties"
-                     , Wire.Map
-                         [ ( Wire.Keyword "block/tags"
-                           , Wire.Array
-                               [ Wire.Keyword "logseq.class/Cards" ] )
-                         ] )
-                   ]
+                   ; (Wire.String "block/uuid", Wire.Uuid new_uuid)
+                   ; ( Wire.String "block/tags"
+                     , Wire.Set
+                         [ Wire.Array
+                             [ Wire.Keyword "block/uuid"
+                             ; Wire.Uuid cards_uuid ] ] ) ]
                in
                Runtime.invoke3 "thread-api/apply-outliner-ops"
                  (Wire.String r)
@@ -183,7 +192,7 @@ let add_cards_block st =
                |> Js.Promise.then_ (fun _ ->
                       close st;
                       Router.reload ();
-                      Js.Promise.resolve ()))
+                      Js.Promise.resolve ())))
     |> ignore
 
 let on_open_dialog ev st =
