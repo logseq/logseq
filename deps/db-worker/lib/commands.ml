@@ -256,11 +256,7 @@ let advance_until_future (datetime : Time.civil) (u : recur_unit)
       (if utc_civil_after datetime now then 1
        else in_units datetime now u)
   in
-  let delta_n =
-    int_of_float (Float.of_int periods /. Float.of_int frequency
-                  |> Float.ceil)
-    * frequency
-  in
+  let delta_n = ((periods + frequency - 1) / frequency) * frequency in
   let result = add_units datetime u delta_n in
   let rec loop cand =
     if utc_civil_after cand now then cand
