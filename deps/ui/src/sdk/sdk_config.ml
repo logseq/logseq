@@ -1,0 +1,104 @@
+(* Graph config backed by the repo's logseq/config.edn file —
+   mirrors config-handler/set-config! + state/get-config. *)
+
+open Sdk_util
+
+let config_path = "logseq/config.edn"
+
+let read_config repo =
+  Runtime.invoke2 "thread-api/get-file-content" (Wire.String repo)
+    (Wire.String config_path)
+  |> Js.Promise.then_ (fun w ->
+         Js.Promise.resolve
+           (match w with
+            | Wire.String s when String.trim s <> "" -> (
+                try Edn.parse s with _ -> Wire.Map [])
+            | _ -> Wire.Map []))
+
+(* js-object wire (String keys) -> config wire (keyword keys, recursive) *)
+let rec keywordize (w : Wire.t) : Wire.t =
+  match w with
+  | Wire.Map kvs ->
+      Wire.Map
+        (List.map
+           (fun (k, v) ->
+             ( (match k with
+                | Wire.String s -> Wire.Keyword s
+                | other -> other)
+             , keywordize v ))
+           kvs)
+  | Wire.Array xs -> Wire.Array (List.map keywordize xs)
+  | Wire.List xs -> Wire.List (List.map keywordize xs)
+  | Wire.Set xs -> Wire.Set (List.map keywordize xs)
+  | other -> other
+
+let write_config repo (cfg : Wire.t) =
+  let now_ms = Int64.of_float (Js.Date.now ()) in
+  Runtime.invoke "thread-api/transact"
+    [ Wire.String repo
+    ; Wire.Array
+        [ Wire.Map
+            [ (Wire.kw "file/path", Wire.String config_path)
+            ; (Wire.kw "file/content", Wire.String (Edn.to_string cfg))
+            ; (Wire.kw "file/created-at", Wire.Date_ms now_ms)
+            ; (Wire.kw "file/last-modified-at", Wire.Date_ms now_ms)
+            ]
+        ]
+    ; Wire.Map []
+    ; Wire.Nil
+    ]
+  |> Js.Promise.then_ (fun _ -> Js.Promise.resolve ())
+
+(* :app.getCurrentGraphConfigs [...keys] -> value at key path *)
+let get_configs _a b _c _d =
+  let keys =
+    match Sdk_convert.wire_of_json b with
+    | Wire.String s -> [ s ]
+    | Wire.Array xs | Wire.List xs -> List.filter_map Wire.as_string xs
+    | _ -> []
+  in
+  read_config (repo ())
+  |> Js.Promise.then_ (fun cfg ->
+         let v =
+           List.fold_left
+             (fun m k ->
+               match Wire.get m k with
+               | Some v -> v
+               | None -> Wire.Nil)
+             cfg keys
+         in
+         resolved (Sdk_convert.json_of_wire v))
+
+(* :app.setCurrentGraphConfigs {k v...} -> merge into config.edn *)
+let set_configs a _b _c _d =
+  let repo = repo () in
+  match Sdk_convert.wire_of_json a with
+  | Wire.Map entries ->
+      read_config repo
+      |> Js.Promise.then_ (fun cfg ->
+             let base =
+               match cfg with Wire.Map kvs -> kvs | _ -> []
+             in
+             let keys =
+               List.map
+                 (fun (k, _) ->
+                   match k with
+                   | Wire.String s -> Wire.Keyword s
+                   | other -> other)
+                 entries
+             in
+             let kept =
+               List.filter (fun (ek, _) -> not (List.mem ek keys)) base
+             in
+             let added =
+               List.map
+                 (fun (k, v) ->
+                   ( (match k with
+                      | Wire.String s -> Wire.Keyword s
+                      | other -> other)
+                   , keywordize v ))
+                 entries
+             in
+             write_config repo (Wire.Map (kept @ added))
+             |> Js.Promise.then_ (fun () -> resolved_nil))
+  | _ -> resolved_nil

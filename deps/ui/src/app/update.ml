@@ -8,7 +8,10 @@ let update (model : t) (action : Action.t) : t =
       { model with phase = Ready; repo = Some repo }
   | Repos_loaded repos -> { model with repos }
   | Page_loaded page -> { model with route_page = Some page }
-  | Navigate_to route -> { model with route; route_page = None }
+  | Journals_loaded js -> { model with journals = js }
+  | Refs_loaded refs -> { model with page_refs = refs }
+  | Navigate_to route ->
+      { model with route; route_page = None; page_refs = [] }
   | Toggle_left_sidebar ->
       { model with left_sidebar_open = not model.left_sidebar_open }
   | Toggle_right_sidebar ->

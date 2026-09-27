@@ -29,18 +29,30 @@ let blocks_of_wire (w : Wire.t) : Model.block list =
   | Wire.Array xs | Wire.List xs -> List.map block_of_wire xs
   | _ -> []
 
+(* accepts entity maps (block/title) and get-page-route-info maps
+   (page-title/page-uuid/page-id) *)
 let page_of_summary (w : Wire.t) : Model.page option =
+  let str ks =
+    List.fold_left
+      (fun acc k -> match acc with Some _ -> acc | None ->
+         Wire.map_get_string w k)
+      None ks
+  in
   match w with
   | Wire.Map _ ->
       Some
         { Model.page_title =
             Option.value
-              (Wire.map_get_string w "block/title")
-              ~default:
-                (Option.value
-                   (Wire.map_get_string w "block/raw-title")
-                   ~default:"")
-        ; page_uuid = Wire.map_get_uuid w "block/uuid"
+              (str [ "block/title"; "page-title"; "block/raw-title" ])
+              ~default:""
+        ; page_uuid =
+            (match Wire.map_get_uuid w "block/uuid" with
+             | Some u -> Some u
+             | None -> Wire.map_get_uuid w "page-uuid")
+        ; page_db_id =
+            (match Wire.map_get_int w "db/id" with
+             | Some i -> Some i
+             | None -> Wire.map_get_int w "page-id")
         ; page_blocks = []
         }
   | _ -> None

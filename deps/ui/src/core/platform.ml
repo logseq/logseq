@@ -8,19 +8,21 @@ external window : Js.Json.t = "window"
 external document_ : W.Document.t = "document"
 external location_ : Js.Json.t = "location"
 
-external location_hash : unit -> string = "hash"
-  [@@mel.scope "location"]
-
 type loc
 
 external location_obj : loc = "location"
+
+external hash_of : loc -> string = "hash" [@@mel.get]
+
+let location_hash () = hash_of location_obj
 
 external set_hash : loc -> string -> unit = "hash" [@@mel.set]
 
 let set_location_hash s = set_hash location_obj s
 
-external location_search : unit -> string = "search"
-  [@@mel.scope "location"]
+external search_of : loc -> string = "search" [@@mel.get]
+
+let location_search () = search_of location_obj
 
 external get_element_by_id : string -> W.Element.t option
   = "getElementById" [@@mel.scope "document"] [@@mel.return nullable]
@@ -69,6 +71,15 @@ let query_param name =
 let on_hash_change f =
   add_event_listener "hashchange" (fun _ -> f ())
 
+external add_document_listener :
+  string -> (Js.Json.t -> unit) -> unit = "addEventListener"
+  [@@mel.scope "document"]
+
+(* CustomEvents dispatched on document do not bubble to window *)
+let on_document_event name f = add_document_listener name f
+
+external decode_uri : string -> string = "decodeURIComponent"
+
 let rtc_test_mode () =
   match query_param "rtc-test" with Some "true" -> true | _ -> false
 
@@ -79,8 +90,7 @@ external random_uuid : unit -> string = "randomUUID"
 external custom_event : string -> Js.Json.t -> Js.Json.t = "CustomEvent"
   [@@mel.new]
 
-external dispatch_event : Js.Json.t -> unit = "dispatchEvent"
-  [@@mel.scope "document"] [@@mel.send]
+external dispatch_event : Js.Json.t -> unit = "document.dispatchEvent"
 
 let dispatch name detail =
   dispatch_event (custom_event name detail)

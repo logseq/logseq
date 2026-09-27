@@ -1,9 +1,11 @@
 (* App model — immutable snapshot consumed by the LUI view. *)
 
 type route =
-  | Home (* today's journal *)
-  | Page of string (* block/uuid *)
+  | Home (* today's journal, or default-home config page *)
+  | Page of string (* name or uuid *)
   | Block_zoom of string
+  | Journals
+  | Library
   | All_pages
   | All_graphs
   | Not_found of string
@@ -19,6 +21,7 @@ type block =
 type page =
   { page_title : string
   ; page_uuid : string option
+  ; page_db_id : int option
   ; page_blocks : block list
   }
 
@@ -32,6 +35,8 @@ type t =
   ; repo : string option
   ; route : route
   ; route_page : page option
+  ; journals : page list
+  ; page_refs : block list
   ; repos : string list
   ; theme_dark : bool
   ; left_sidebar_open : bool
@@ -43,6 +48,8 @@ let initial =
   ; repo = None
   ; route = Home
   ; route_page = None
+  ; journals = []
+  ; page_refs = []
   ; repos = []
   ; theme_dark = false
   ; left_sidebar_open = true
