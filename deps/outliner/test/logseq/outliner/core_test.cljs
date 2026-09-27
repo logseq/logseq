@@ -317,6 +317,24 @@
         (is (nil? (:block/parent page2')))
         (is (nil? (:block/order page2')))))))
 
+(defn- child-titles
+  [conn parent]
+  (->> (:block/_parent (d/entity @conn (:db/id parent)))
+       ldb/sort-by-order
+       (mapv :block/title)))
+
+(defn- issue-1317-conn
+  "Page with a (children a1; a2 with child a2x), b, c."
+  []
+  (db-test/create-conn-with-blocks
+   [{:page {:block/title "page1"}
+     :blocks [{:block/title "a"
+               :build/children [{:block/title "a1"}
+                                {:block/title "a2"
+                                 :build/children [{:block/title "a2x"}]}]}
+              {:block/title "b"}
+              {:block/title "c"}]}]))
+
 (deftest delete-blocks-deletes-grandchild-when-selected-page-ancestor-does-not-retract-it
   (testing "Page A contains page B contains X; deleting A+X still deletes X"
     (let [conn (db-test/create-conn-with-blocks
@@ -470,24 +488,6 @@
     (is (thrown-with-msg? js/Error #"Built-in.*can't be modified"
           (db-test/silence-stderr
             (outliner-core/save-block! conn {:db/id (:db/id placeholder) :block/title "hacked"}))))))
-
-(defn- child-titles
-  [conn parent]
-  (->> (:block/_parent (d/entity @conn (:db/id parent)))
-       ldb/sort-by-order
-       (mapv :block/title)))
-
-(defn- issue-1317-conn
-  "Page with a (children a1; a2 with child a2x), b, c."
-  []
-  (db-test/create-conn-with-blocks
-   [{:page {:block/title "page1"}
-     :blocks [{:block/title "a"
-               :build/children [{:block/title "a1"}
-                                {:block/title "a2"
-                                 :build/children [{:block/title "a2x"}]}]}
-              {:block/title "b"}
-              {:block/title "c"}]}]))
 
 (deftest move-blocks-rejects-built-in-entity
   (let [conn (db-test/create-conn-with-blocks
