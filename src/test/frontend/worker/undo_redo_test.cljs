@@ -1463,7 +1463,7 @@
       (is (= ["outline 2" ["d"]] (outline "outline 2"))))))
 
 (deftest undo-move-of-block-and-its-grandchild-restores-both-test
-  (testing "undoing a move of a block and its grandchild (Ctrl+click selection) puts the grandchild back too"
+  (testing "undoing a move of a block and its grandchild (Ctrl+click selection) restores the whole subtree"
     (let [conn (worker-state/get-datascript-conn test-repo)
           uuid-of (seed-outline!)
           page-2-uuid (:block/uuid (db-test/find-page-by-title @conn "outline 2"))]
@@ -1473,7 +1473,7 @@
       (apply-ops! conn
                   [[:move-blocks [[(uuid-of "a") (uuid-of "b2")] page-2-uuid {:sibling? false}]]]
                   (local-tx-meta {:client-id "test-client"}))
-      (is (= ["outline 2" [["a" [["b" ["b1"]]]] "b2" "d"]] (outline "outline 2")))
+      (is (= ["outline 2" [["a" [["b" ["b1" "b2"]]]] "d"]] (outline "outline 2")))
       (is (= 2 (count (undo-all!))))
       (is (= outline-1-start (outline "outline 1")))
       (is (= ["outline 2" ["d"]] (outline "outline 2"))))))
