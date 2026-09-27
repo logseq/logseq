@@ -1802,6 +1802,7 @@
     (util/stop event)
     (state/pub-event! [:editor/hide-action-bar])
     (let [edit-block-id (:block/uuid (state/get-edit-block))
+          selection-ids (vec (state/get-selection-block-ids))
           move-nodes (fn [blocks]
                        (let [blocks' (block-handler/get-top-level-blocks blocks)
                              result (ui-outliner-tx/transact!
@@ -1812,7 +1813,7 @@
                            (.scrollIntoView block-node #js {:behavior "smooth" :block "nearest"}))
                          result))]
       (p/let [root-block (get-focused-root-block)]
-        (if edit-block-id
+        (if (and edit-block-id (empty? selection-ids))
           (p/let [block (db-async/<get-block (state/get-current-repo) edit-block-id {:children? false})]
             (let [blocks [(assoc block :block/title (state/get-edit-content))]
                   blocks (filter #(block-eligible-for-move-up-down? % root-block) blocks)
@@ -1826,9 +1827,12 @@
                    (when-let [input (some-> (state/get-edit-input-id) gdom/getElement)]
                      (.focus input)
                      (util/scroll-editor-cursor input)))))))
-          (let [ids (state/get-selection-block-ids)]
+          (let [ids (if (and edit-block-id (not (some #{edit-block-id} selection-ids)))
+                      (into [edit-block-id] selection-ids)
+                      selection-ids)]
             (when (seq ids)
-              (p/let [results (db-async/<get-blocks (state/get-current-repo) ids {:children? false})
+              (p/let [_ (when edit-block-id (save-current-block!))
+                      results (db-async/<get-blocks (state/get-current-repo) ids {:children? false})
                       loaded-blocks (unwrap-block-results results)
                       blocks (filter #(block-eligible-for-move-up-down? % root-block) loaded-blocks)]
                 (when (seq blocks)

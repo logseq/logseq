@@ -2905,9 +2905,22 @@
                 meta?
                 (do
                   (util/stop e)
-                  (if (some #(= block-dom-element %) selection-blocks)
-                    (state/drop-selection-block! block-dom-element)
-                    (state/conj-selection-block! block-dom-element :down))
+                  (let [editing-el (state/get-editor-block-container)]
+                    (when editing-el
+                      (state/exit-editing-and-set-selected-blocks!
+                       (if (some #(= editing-el %) selection-blocks)
+                         (state/get-selection-blocks)
+                         (into [editing-el] selection-blocks))
+                       :down))
+                    (cond
+                      (= block-dom-element editing-el)
+                      nil
+
+                      (some #(= block-dom-element %) (state/get-selection-blocks))
+                      (state/drop-selection-block! block-dom-element)
+
+                      :else
+                      (state/conj-selection-block! block-dom-element :down)))
                   (if (empty? (state/get-selection-blocks))
                     (state/clear-selection!)
                     (state/set-selection-start-block! block-dom-element)))
