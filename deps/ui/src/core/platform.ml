@@ -113,7 +113,9 @@ external custom_event : string -> Js.Json.t -> Js.Json.t = "CustomEvent"
 external dispatch_event : Js.Json.t -> unit = "document.dispatchEvent"
 
 let dispatch name detail =
-  dispatch_event (custom_event name detail)
+  dispatch_event
+    (custom_event name
+       (Js.Json.object_ (Js.Dict.fromList [ ("detail", detail) ])))
 
 external query_selector_all : string -> Js.Json.t array
   = "querySelectorAll" [@@mel.scope "document"]
