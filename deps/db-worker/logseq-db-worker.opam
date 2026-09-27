@@ -40,6 +40,16 @@ depends: [
   "kdf"
   "x509"
   "uucp"
+  "eio"
+  "eio_posix"
+  "httpun"
+  "httpun-ws"
+  "tls-eio"
+  "ca-certs-nss"
+  "domain-name"
+  "bigstringaf"
+  "faraday"
+  "cstruct"
   "odoc" {with-doc}
 ]
 build: [
