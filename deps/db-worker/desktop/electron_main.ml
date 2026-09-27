@@ -763,6 +763,7 @@ let on_app_ready () : unit =
             ~url:Electron_window.main_window_entry None
           |> Js.Promise.then_ (fun win ->
               win_ref := Some win;
+              Electron_state.main_window := Some win;
 
               ignore (Electron_utils.restore_proxy_settings ());
 
