@@ -18,6 +18,10 @@ let req_to_hooks (r : request) : Native_test_hooks.http_req =
 let resp_of_hooks (r : Native_test_hooks.http_resp) : response =
   { status = r.status; headers = r.headers; body = r.body }
 
+(* Deadline matching undici's default headersTimeout/bodyTimeout — a
+   stalled server must eventually fail instead of hanging forever. *)
+let fetch_timeout_s = 300.
+
 (* One HTTP/1.1 request per connection, on a dedicated eio loop thread —
    same as the cljs fetch+single-request model this replaces. *)
 let fetch (req : request) : response =
@@ -64,8 +68,15 @@ let fetch (req : request) : response =
         with
         | exn ->
             Httpun.Client_connection.report_exn conn exn);
-      Eio.Promise.await done_p;
+      let timed_out =
+        Eio.Fiber.first
+          (fun () -> Eio.Promise.await done_p; false)
+          (fun () ->
+             Eio.Time.sleep (Eio.Stdenv.clock env) fetch_timeout_s;
+             true)
+      in
       flow.close ();
+      if timed_out then failwith "Http: request timed out";
       match !error_ref with
       | Some (Some (`Malformed_response m)) ->
           failwith ("Http: malformed response: " ^ m)
