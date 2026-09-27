@@ -12,13 +12,7 @@ env:
   CLOJURE_VERSION: "1.12.4.1618"
   NODE_VERSION: "24"
   JAVA_VERSION: "21"
-<<<<<<< HEAD
   OCAML_VERSION: '5.5.1'
-||||||| parent of 102b5fca30 (refactor(electron): replace cljs main process with OCaml electron.js)
-  OCAML_VERSION: '5.1.1'
-=======
-  OCAML_VERSION: '5.5.0'
->>>>>>> 102b5fca30 (refactor(electron): replace cljs main process with OCaml electron.js)
 
 jobs:
   build-and-deploy:
