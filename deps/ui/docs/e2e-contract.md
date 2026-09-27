@@ -460,3 +460,35 @@ Graph view: `#global-graph.graph-root`, `[role='application'][aria-label='Graph 
 5. **Plugin API surface** on `window.logseq.api` (+ `logseq.sdk`) must keep snake_case names — heavily used for seeding, not just plugin tests.
 6. **Console-silence contract**: absence of specific error strings; presence of `:db-worker/outliner-op-perf` logs under perf logging.
 7. **Computed styles** are asserted — visual layout details (cursor, scrollbar color, sidebar backgrounds, overflow, journal spacing, indent offsets) are part of the contract, not just DOM shape.
+
+---
+
+## 7. Views worker-data contract (reverse-engineered, db-worker `render_resource.ml`)
+
+Contracts discovered while porting `components/views.cljs` — they are implicit in the cljs wire code and enforced by `require_*` assertions on the worker side.
+
+### `thread-api/get-render-snapshots`
+- Request map has **exactly three keys**: `{:blocks [], :children [], :resources [k1 k2 ...]}` — resource entries are the **bare key vectors** (e.g. `[:view-data uuid ctx]`), NOT wrapped as `[:resource k]`.
+- At least one of the three lists must be non-empty; limits: blocks ≤1000, children ≤25, resources ≤25; duplicate keys are rejected — dedupe before sending.
+- Response: `{:basis-rev n, :slots {[:resource <key>] -> {:watch {:keys set, :all? bool}, :value v}}, :groups {...}}` — read the payload from the slot's `:value`.
+
+### Resource key shapes (`rr` arity)
+- `[:views owner feature-type]` (3) — view entities for an owner; owner is a `Uuid` (entity) or non-empty `String` (page name — fails "Missing view owner page" if absent; use `$$$views` for the all-pages owner page).
+- `[:view-data view-uuid ctx]` (3) — rows for a view; `ctx` keys ⊆ `{feature-type, sorting, filters, input, group-by-property-ident, initial-row-count, row-offset, query-row-uuids}`; `feature-type` ∈ `{all-pages, class-objects, property-objects, linked-references, unlinked-references, query-result}`; `query-result` **requires** `query-row-uuids`.
+- `[:query spec]` (2) — run a `{{query}}`; `spec` requires `:kind` as a **keyword** `:dsl|datalog` (a string kind is rejected) plus `:query`; allowed extra keys: `current-page-title`, `current-block-uuid`, `today-day` (yyyymmdd int), `remove-block-children?`, `result-transform-edn`, dsl `cards?`, datalog `inputs`/`rules`. Unknown keys → rejected.
+- `[:page-identity name]` (2) — page-name → uuid lookup (used to resolve journal page uuids).
+
+### `thread-api/get-blocks`
+- Args `[repo [{:id <uuid> :opts {:block-metadata? bool}} ...]]`; response is one **wrapper** `{id, block, children?}` per request — callers must unwrap `:block` (a missing block yields `{id}` only).
+
+### `thread-api/apply-outliner-ops`
+- Args `[repo [[op-name args...] ...] {..opts}]`; `insert-blocks` takes `[["~#list" [block-maps]] target-uuid {:sibling? bool :keep-uuid? bool :outliner-op :insert-blocks}]`; block-maps use **string keys** (`"block/uuid"`, `"block/title"`, `"block/tags"`, `"block/page"`, `"logseq.property/view-for"`), ref values as `{:block/uuid "~u..."}` maps.
+
+### View entities
+- A named view is a block under the `$$$views` page (uuid `~u00000004-1867-9724-0098-000000000000` on a fresh Demo graph) carrying `logseq.property/view-for` (ref → owner entity) + `logseq.property.view/feature-type` (keyword). The UI auto-creates the default "All" view via `insert-blocks` on first visit.
+- `[:views owner feature]` returns the *block uuids* of view entities; hydrate them via `get-blocks` and read `block/title`, `logseq.property.view/type` (display type), `logseq.property.table/*` (sorting/filters/hidden/ordered columns), `logseq.property.view/group-by-property`, `sort-groups-*`.
+
+### Mount notes (LUI side)
+- `.ls-all-pages` is appended to `.cp__sidebar-main-content` on `Model.All_pages` (page.ml renders an empty `graphs-view` box — TODO there).
+- Tag/class pages get `.ls-views-wrap` inserted before `.ls-page-blocks` inside `.page-inner`.
+- `{{query ...}}` blocks render a `.custom-query-results` shell (render area); views fills it with `.views-query-inner` (builder + result view).
