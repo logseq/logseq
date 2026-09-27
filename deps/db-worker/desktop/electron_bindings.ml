@@ -174,7 +174,7 @@ end
 
 external process_platform : string = "platform" [@@mel.scope "process"]
 
-external process_env : unit -> string Js.Dict.t = "env"
+external process_env : string Js.Dict.t = "env"
   [@@mel.scope "process"]
 
 external process_resources_path : string = "resourcesPath"

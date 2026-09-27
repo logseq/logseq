@@ -56,7 +56,7 @@ external buffer_from_any : Js.Json.t -> Node.Buffer.t = "from"
 external array_buffer_is_view : 'a -> bool = "isView"
 [@@mel.scope "ArrayBuffer"]
 
-module Fs = struct
+module Fs_node = struct
   external access_sync : string -> int -> unit = "accessSync"
   [@@mel.module "fs"]
 
@@ -134,7 +134,7 @@ module Graph_lifecycle = struct
   [@@mel.module "@logseq/graph-lifecycle"]
 end
 
-module Os = struct
+module Os_node = struct
   external homedir : unit -> string = "homedir" [@@mel.module "os"]
 end
 
@@ -178,12 +178,15 @@ let promise_timeout (p : 'a Js.Promise.t) (ms : float) : 'a Js.Promise.t =
 let is_js_binary (v : Js.Json.t) : bool =
   Node.Buffer.isBuffer v || array_buffer_is_view v
   ||
-  match Js.Undefined.toOption (get_index v "constructor") with
-  | Some ctor -> (
-      match Js.Undefined.toOption (get_index ctor "name") with
-      | Some "ArrayBuffer" -> true
-      | _ -> false)
-  | None -> false
+  match Js.Json.classify v with
+  | Js.Json.JSONObject _ -> (
+      match Js.Undefined.toOption (get_index v "constructor") with
+      | Some ctor -> (
+          match Js.Undefined.toOption (get_index ctor "name") with
+          | Some "ArrayBuffer" -> true
+          | _ -> false)
+      | None -> false)
+  | _ -> false
 
 (* local copies of runtime/melange/json.ml's hidden wire_of_json /
    json_of_wire (the spec .mli only exports parse/stringify) *)
@@ -259,7 +262,7 @@ let canonical_repo (graph : string) : string option =
 (* utils/fs-stat->clj — {:size :birthtime :mtime :ctime}; dates transit
    as the same JS-time values as the cljs Date objects. *)
 let fs_stat_wire (path : string) : Wire.t =
-  let s = Fs.stat_sync path in
+  let s = Fs_node.stat_sync path in
   Wire.kw_map
     [
       ("size", Wire.Float s##size);
@@ -270,7 +273,7 @@ let fs_stat_wire (path : string) : Wire.t =
 
 (* bean/->js of a cljs Stats object: all enumerable numeric fields on
    string keys. *)
-let stats_to_wire (s : Fs.stats) : Wire.t =
+let stats_to_wire (s : Fs_node.stats) : Wire.t =
   Wire.Map
     (List.map
        (fun (k, v) -> (Wire.String k, Wire.Float v))
@@ -296,7 +299,7 @@ let stats_to_wire (s : Fs.stats) : Wire.t =
 let read_file_sync (path : string) : string Js.Null.t =
   try
     if Fs_extra.path_exists_sync path then
-      Js.Null.return (Node.Buffer.toString (Fs.read_file_sync path))
+      Js.Null.return (Node.Buffer.toString (Fs_node.read_file_sync path))
     else Js.Null.empty
   with e ->
     Electron_logger.error_args [| Js.Json.string "Read file:"; exn_json e |];
@@ -329,7 +332,7 @@ let replace_first (s : string) (pat : string) (by : string) : string =
 
 let writable_ (path : string) : bool =
   try
-    Fs.access_sync path Fs.w_ok;
+    Fs_node.access_sync path Fs_node.w_ok;
     true
   with _ -> false
 
@@ -349,7 +352,7 @@ let get_files (path : string) : Wire.t list Db_worker_effect.t =
     (fun files ->
       List.filter_map
         (fun file_path ->
-          let stat = Fs.stat_sync file_path in
+          let stat = Fs_node.stat_sync file_path in
           if stat##isDirectory () then None
           else
             Some
@@ -720,10 +723,10 @@ let handle (window : Browser_window.t) (message : Wire.t) : Wire.t Js.Promise.t
     =
   match command_name message with
   | Some "mkdir" ->
-      Fs.mkdir_sync (str_arg_exn message 1);
+      Fs_node.mkdir_sync (str_arg_exn message 1);
       resolve_nil ()
   | Some "mkdir-recur" ->
-      Fs.mkdir_sync_opts (str_arg_exn message 1) [%mel.obj { recursive = true }];
+      Fs_node.mkdir_sync_opts (str_arg_exn message 1) [%mel.obj { recursive = true }];
       resolve_nil ()
   | Some "readdir" ->
       let dir = str_arg_exn message 1 in
@@ -743,7 +746,7 @@ let handle (window : Browser_window.t) (message : Wire.t) : Wire.t Js.Promise.t
           (if
              Electron_plugin.dotdir_file (Some path)
              || Electron_plugin.assetsdir_file (Some path)
-           then Fs.unlink_sync path
+           then Fs_node.unlink_sync path
            else
              try
                Electron_logger.info_args
@@ -760,7 +763,7 @@ let handle (window : Browser_window.t) (message : Wire.t) : Wire.t Js.Promise.t
                let recycle_dir = repo_dir ^ "/logseq/.recycle" in
                Fs_extra.ensure_dir_sync recycle_dir;
                let new_path = recycle_dir ^ "/" ^ file_name in
-               Fs.rename_sync path new_path;
+               Fs_node.rename_sync path new_path;
                Electron_logger.debug_args
                  [| ":electron.handler/unlink"; "recycle to"; new_path |]
              with e ->
@@ -796,7 +799,7 @@ let handle (window : Browser_window.t) (message : Wire.t) : Wire.t Js.Promise.t
       Js.Promise.resolve
         (Wire.Binary
            (Node.Buffer.toString ~encoding:`latin1
-              (Fs.read_file_sync (str_arg_exn message 1))))
+              (Fs_node.read_file_sync (str_arg_exn message 1))))
   | Some "copyFile" ->
       Electron_logger.info_args
         [|
@@ -814,9 +817,9 @@ let handle (window : Browser_window.t) (message : Wire.t) : Wire.t Js.Promise.t
       | Some path -> (
           let content_js = content_to_js content in
           try
-            if chmod_enabled () && Fs.exists_sync path && not (writable_ path)
-            then Fs.chmod_sync path "644";
-            Fs.write_file_sync path content_js;
+            if chmod_enabled () && Fs_node.exists_sync path && not (writable_ path)
+            then Fs_node.chmod_sync path "644";
+            Fs_node.write_file_sync path content_js;
             Js.Promise.resolve (fs_stat_wire path)
           with e ->
             Electron_logger.warn_args
@@ -891,7 +894,7 @@ let handle (window : Browser_window.t) (message : Wire.t) : Wire.t Js.Promise.t
       and new_path = str_arg_exn message 2 in
       Electron_logger.info_args
         [| ":electron.handler/rename"; "from"; old_path; "to"; new_path |];
-      Fs.rename_sync old_path new_path;
+      Fs_node.rename_sync old_path new_path;
       resolve_nil ()
   | Some "stat" ->
       let path = str_arg_exn message 1 in
@@ -1000,7 +1003,7 @@ let handle (window : Browser_window.t) (message : Wire.t) : Wire.t Js.Promise.t
           | Some endpoint -> (
               Js.Dict.set opts_json "embedding-endpoint"
                 (Js.Json.string endpoint);
-              match Js.Dict.get (process_env ()) "LOGSEQ_EMBEDDING_MODEL" with
+              match Js.Dict.get process_env "LOGSEQ_EMBEDDING_MODEL" with
               | Some m ->
                   Js.Dict.set opts_json "embedding-model-id" (Js.Json.string m)
               | None -> ())
@@ -1354,7 +1357,7 @@ let handle (window : Browser_window.t) (message : Wire.t) : Wire.t Js.Promise.t
       Js.Promise.resolve
         (Wire.kw_map
            [
-             ("home-dir", Wire.String (Os.homedir ()));
+             ("home-dir", Wire.String (Os_node.homedir ()));
              ("graphs-dir", Wire.String (Common_graph.get_db_graphs_dir ()));
            ])
   | Some "window/open-blank-callback" ->

@@ -2,7 +2,7 @@
    under <repo>/logseq/bak (or an explicit backups dir) with hourly/daily
    version retention. *)
 
-module Fs = struct
+module Fs_node = struct
   type dirent
 
   external is_file : dirent -> bool = "isFile" [@@mel.send]
@@ -73,12 +73,12 @@ let truncate_daily_versioned_files dir keep_versions =
   let keep_versions = max 0 (Option.value keep_versions ~default:0) in
   let keep_hourly = min 6 keep_versions in
   let dirents =
-    Fs.readdirSync dir (Fs.readdir_options ~withFileTypes:true ())
+    Fs_node.readdirSync dir (Fs_node.readdir_options ~withFileTypes:true ())
   in
   let files =
     Array.to_list dirents
-    |> List.filter Fs.is_file
-    |> List.map Fs.name
+    |> List.filter Fs_node.is_file
+    |> List.map Fs_node.name
   in
   let sorted =
     files
@@ -137,10 +137,10 @@ let truncate_daily_versioned_files dir keep_versions =
    file's mtimeMs. Clojure max-key keeps the last max on ties. *)
 let latest_backup_info dir =
   let dirents =
-    Fs.readdirSync dir (Fs.readdir_options ~withFileTypes:true ())
+    Fs_node.readdirSync dir (Fs_node.readdir_options ~withFileTypes:true ())
   in
   let files =
-    Array.to_list dirents |> List.filter Fs.is_file |> List.map Fs.name
+    Array.to_list dirents |> List.filter Fs_node.is_file |> List.map Fs_node.name
   in
   match files with
   | [] -> None
@@ -148,13 +148,13 @@ let latest_backup_info dir =
       files
       |> List.map (fun name ->
              let p = Node.Path.join [| dir; name |] in
-             let stat = Fs.statSync p in
+             let stat = Fs_node.statSync p in
              let ts =
                match parse_backup_ts name with
                | Some ts -> ts
-               | None -> Fs.mtimeMs stat
+               | None -> Fs_node.mtimeMs stat
              in
-             (name, ts, Fs.size stat))
+             (name, ts, Fs_node.size stat))
       |> List.fold_left
            (fun best (name, ts, size) ->
              match best with
@@ -188,6 +188,6 @@ let backup_file ~repo ~dir ~relative_path ~ext ~content
   in
   if force_backup || not (too_soon dir) then begin
     Node.Fs.writeFileAsUtf8Sync new_path content;
-    ignore (Fs.statSync new_path : Fs.stat);
+    ignore (Fs_node.statSync new_path : Fs_node.stat);
     truncate_daily_versioned_files dir (Some keep_versions)
   end
