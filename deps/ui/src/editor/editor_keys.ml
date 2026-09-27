@@ -172,7 +172,11 @@ let on_input ev =
     match D.closest_sel ".editor-wrapper textarea" (D.ev_target ev) with
     | Some el -> (
         match uuid_of_prefixed "edit-block-" (D.el_id el) with
-        | Some uuid -> A.sync_buffer uuid (D.el_value el)
+        | Some uuid ->
+            A.sync_buffer uuid (D.el_value el);
+            (* keep textContent in lockstep so innerText/:has-text see the
+               buffer (textarea innerText follows textContent, not value) *)
+            D.el_set_text_content el (D.el_value el)
         | None -> ())
     | None -> ()
 

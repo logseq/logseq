@@ -37,6 +37,8 @@ external handlers_set : W.Element.t -> handler_tbl -> unit = "__lsHandlers"
 
 external set_value : W.Element.t -> string -> unit = "value" [@@mel.set]
 
+external get_value : W.Element.t -> string = "value" [@@mel.get]
+
 external add_listener :
   W.Element.t -> string -> (Js.Json.t -> unit) -> unit = "addEventListener"
   [@@mel.send]
@@ -154,6 +156,10 @@ let apply_events el names =
       if not (Hashtbl.mem tbl name) then (
         let f (ev : Js.Json.t) =
           if name = "contextmenu" then prevent_default ev;
+          (* keep textarea textContent matching its value so innerText and
+             Playwright :has-text see what was typed *)
+          if name = "input" && W.Element.tagName el = "TEXTAREA" then
+            W.Element.setTextContent el (get_value el);
           let payload = json_of_event name ev in
           emit "dom-event"
             (String_map.empty
@@ -171,7 +177,13 @@ let set_property el prop value =
   | "attrs", StringValue s -> apply_attrs el s
   | "events", StringValue s -> apply_events el s
   | "text", StringValue s ->
-      if is_input_tag el then set_value el s
+      if is_input_tag el then (
+        (* skip redundant .value writes — assigning resets the caret *)
+        if get_value el <> s then set_value el s;
+        (* textarea: keep textContent in sync so innerText/:has-text and
+           e2e value assertions observe the buffer *)
+        if W.Element.tagName el = "TEXTAREA" then
+          W.Element.setTextContent el s)
       else W.Element.setTextContent el s
   | "style-class", StringValue s -> W.Element.setClassName el s
   | "accessibility-identifier", StringValue s ->
