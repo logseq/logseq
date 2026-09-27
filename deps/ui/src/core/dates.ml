@@ -28,3 +28,17 @@ let journal_day_of (d : Js.Date.t) =
 
 let today () = journal_title_of (date_now ())
 let today_journal_day () = journal_day_of (date_now ())
+
+(* "Sep 27, 2026" — matches cljs format-time-travel-date's
+   toLocaleDateString {month: "short", day: "numeric", year: "numeric"} *)
+let short_date_of_ts ts =
+  let d = Js.Date.fromFloat ts in
+  let month = int_of_float (Js.Date.getMonth d) in
+  let month =
+    if month >= 0 && month < Array.length month_abbr then
+      month_abbr.(month)
+    else ""
+  in
+  let day = int_of_float (Js.Date.getDate d) in
+  let year = int_of_float (Js.Date.getFullYear d) in
+  Printf.sprintf "%s %d, %d" month day year
