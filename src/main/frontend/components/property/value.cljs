@@ -2639,7 +2639,8 @@
 
 (defn- resolved-property-value-for-render
   [block property multiple-values?]
-  (let [v (get block (:db/ident property))
+  (let [property-ident (:db/ident property)
+        v (get block property-ident)
         block-loaded? (some? (:block/uuid block))]
     (or
      (cond
@@ -2651,7 +2652,11 @@
        (first v)
        :else
        v)
-     (when block-loaded?
+     (when (and block-loaded?
+                ;; Defaults of class-declared properties only apply to class
+                ;; members; defaults of other properties apply everywhere.
+                (or (contains? (:block.temp/class-property-idents block) property-ident)
+                    (not (:block.temp/class-declared? property))))
        (:logseq.property/default-value property)))))
 
 (hsx/defc ^:large-vars/cleanup-todo property-value
