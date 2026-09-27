@@ -53,7 +53,7 @@
      expected to report).
 
    Resolved lib/engine bugs (documented while red; now green):
-     - runtime/native/transit_codec.ml decode mis-resolved Normal-mode
+     - runtime/native/transit_codec.ml decode wrongly-resolved Normal-mode
        read-cache refs (^@, ^:, ^G …): repeated keyword/uuid values in a
        broadcast payload (e.g. [:attr :block/uuid] inside affected-keys)
        decoded to wrong values (~u<uuid>, Tagged sets), so `delta
@@ -340,7 +340,7 @@ let test_builds_one_delta () =
                     | _ -> None
                   in
                   (* Engine-owned failure: native transit_codec decode
-                     mis-resolves Normal-mode read-cache refs (^@, ^:,
+                     wrongly-resolves Normal-mode read-cache refs (^@, ^:,
                      ^G …) — repeated keyword/uuid values inside
                      affected-keys decode to wrong values, so the
                      transit roundtrip corrupts the delta. Documented

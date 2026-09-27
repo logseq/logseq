@@ -206,11 +206,18 @@
     (util/stop e)
     (state/clear-editor-action!)
     (p/let [repo (state/get-current-repo)
+            convert-page-to-tag? (:convert-page-to-tag? chosen-result)
             chosen-result (<chosen-result repo chosen-result)
-            _ (when (and (:convert-page-to-tag? chosen-result)
+            _ (when (and convert-page-to-tag?
                          (entity/page? chosen-result)
                          (not (entity/class? chosen-result)))
                 (db-page-handler/convert-page-to-tag! chosen-result))
+            ;; Re-resolve after conversion so entity/class? reflects the post-conversion snapshot
+            chosen-result (if convert-page-to-tag?
+                            (<chosen-result repo chosen-result)
+                            chosen-result)
+            conversion-rejected? (and convert-page-to-tag?
+                                      (not (entity/class? chosen-result)))
             target (when (and (:db/id chosen-result) (not (entity/class? chosen-result)))
                      (db-async/<get-alias-source-page repo (:db/id chosen-result)))
             chosen-result (if (and target (not (entity/class? chosen-result)) (entity/class? target)) target chosen-result)
@@ -237,16 +244,18 @@
                              q))
             last-pattern (str "#" (when wrapped? page-ref/left-brackets) last-pattern)
             tag-in-page-auto-complete? (= page-ref/right-brackets (common-util/safe-subs edit-content current-pos (+ current-pos 2)))]
-      (p/do!
-       (editor-handler/insert-command! id
-                                       (if (and class? (not inline-tag?)) "" (str "#" wrapped-tag))
-                                       format
-                                       {:last-pattern last-pattern
-                                        :end-pattern (when wrapped? page-ref/right-brackets)
-                                        :command :page-ref})
-       (when-not tag-in-page-auto-complete?
-         (db-page-handler/tag-on-chosen-handler chosen chosen-result class? edit-content current-pos last-pattern))
-       (when input (.focus input))))))
+      (if conversion-rejected?
+        (when input (.focus input))
+        (p/do!
+         (editor-handler/insert-command! id
+                                         (if (and class? (not inline-tag?)) "" (str "#" wrapped-tag))
+                                         format
+                                         {:last-pattern last-pattern
+                                          :end-pattern (when wrapped? page-ref/right-brackets)
+                                          :command :page-ref})
+         (when-not tag-in-page-auto-complete?
+           (db-page-handler/tag-on-chosen-handler chosen chosen-result class? edit-content current-pos last-pattern))
+         (when input (.focus input)))))))
 
 (defn- page-on-chosen-handler
   [id format q]

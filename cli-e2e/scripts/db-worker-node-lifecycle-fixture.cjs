@@ -83,6 +83,15 @@ const mode = args[args.indexOf('--mode') + 1];
   await barrier('before-publication');
   const server = http.createServer((request, response) => {
     response.setHeader('Connection', 'close');
+    // Simulate a worker mid-teardown: once <root>/begin-teardown exists, health
+    // checks hit a resetting endpoint while the process itself is still alive.
+    // 'teardown-exit' exits shortly after the first reset; 'teardown-stuck' stays up.
+    if ((mode === 'teardown-exit' || mode === 'teardown-stuck')
+        && fs.existsSync(path.join(root, 'begin-teardown'))) {
+      request.socket.destroy();
+      if (mode === 'teardown-exit') setTimeout(() => process.exit(0), 150);
+      return;
+    }
     if (request.url === '/healthz') {
       response.end(JSON.stringify({ ...identity, 'root-dir': runtime.root, host: '127.0.0.1',
         port: server.address().port, status: 'ready',
