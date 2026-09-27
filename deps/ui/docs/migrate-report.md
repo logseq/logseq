@@ -50,6 +50,33 @@ block from the model and rewrites the textarea when they diverge.
 truth (DB) needs an explicit resync hook on every external-mutation path —
 undo/redo, RTC apply, sync events.
 
+### Structured clipboard: copy must keep only topmost selected roots
+`select-blocks` selects every visible row including children that are
+already inside a selected parent. If the clipboard keeps all selected
+uuids, `paste_block_maps` expands each parent AND emits the children again
+as separate roots — the worker receives duplicate maps for the same uuid
+(one bare, one with a `block/parent` lookup-ref) and the flat writes win,
+flattening the pasted tree (cut-and-paste e2e). Fix: filter the clipboard
+to uuids with no selected ancestor (`has_selected_ancestor` walks
+`find_parent`).
+**cljs semantics**: copying a parent implicitly includes its subtree; the
+clipboard payload is *trees*, not rows.
+
+### Replace-empty paste swaps the entity under the live editor
+`insert-blocks` with `replace-empty-target?` reuses the target's db/id,
+uuid and order — the editing block's entity is rewritten in place. The
+worker tx was correct from the start (`DBG-POST` showed `title=b1` on the
+target uuid); the visible `""` was the still-open textarea buffer. Same
+class of bug as undo-resync: `resync_open_editor` now also runs after a
+replace-empty paste.
+
+### Worker-side debugging workflow that worked
+`eprintf` in `deps/db-worker/lib` reaches the page console (captured by
+the e2e `console-logs-*.txt` dump — note the dump is **newest-first**,
+`conj` onto a list). Add prints around `insert_blocks` input/output,
+rebuild `dune build js_api` + `vite build --mode browser`, run the single
+e2e namespace, then strip. No cljs needed.
+
 ### mousedown commit → synchronous re-render steals the click target
 Committing the edit on `mousedown` re-renders the DOM between `mousedown`
 and `mouseup`; the browser then retargets `click` to a common ancestor
