@@ -516,10 +516,14 @@
                                        :block/parent 1
                                        :block/page 1}]))
           original-parent-uuid (:block/uuid (d/entity db1 3))
-          tx-data [(d/datom 3 :block/uuid original-parent-uuid 200 false)
-                   (d/datom 5 :block/uuid shared-uuid 200 false)
-                   (d/datom 3 :block/uuid shared-uuid 200 true)
-                   (d/datom 3 :block/order "a9" 200 true)]
+          ;; a real tx id: a datom whose tx is below tx0 (200 here before)
+          ;; is missed by (d/datoms db :eavt 3) and d/entity, and returned
+          ;; by a walk of the whole :eavt index or of :block/uuid in :avet
+          tx (inc (:max-tx db1))
+          tx-data [(d/datom 3 :block/uuid original-parent-uuid tx false)
+                   (d/datom 5 :block/uuid shared-uuid tx false)
+                   (d/datom 3 :block/uuid shared-uuid tx true)
+                   (d/datom 3 :block/order "a9" tx true)]
           tx-report (d/with db1 tx-data)
           db-before (:db-before tx-report)
           checksum-before (checksum/recompute-checksum db-before)
