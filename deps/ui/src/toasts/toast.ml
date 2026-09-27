@@ -1,8 +1,6 @@
-(* Toast helpers: Toast.show pushes a toast straight into the model;
-   init wires the document 'ls:toast' CustomEvent so any code (including
-   the plugin SDK bridge) can raise one without an Action dep.
-   detail contract: { msg : string, cls : string }; 'ls:toast-close'
-   { key } dismisses the most recent toast. *)
+(* Toast helpers: Toast.show pushes a toast straight into the model.
+   Document 'ls:toast'/'ls:toast-close' CustomEvents are wired by
+   Worker_events.init; don't double-listen here. *)
 
 let show ~kind msg =
   Runtime.send
@@ -35,19 +33,4 @@ let schedule_dismiss ~ms id =
     Hashtbl.replace timers id timer;
     live_ids := !live_ids @ [ id ])
 
-let detail_field ev key =
-  Js.Json.decodeString
-    (Platform.json_prop (Platform.json_prop ev "detail") key)
-  |> Option.value ~default:""
 
-let init () =
-  Platform.on_document_event "ls:toast" (fun ev ->
-      let msg = detail_field ev "msg" in
-      let cls =
-        match detail_field ev "cls" with "" -> "info" | c -> c
-      in
-      if msg <> "" then show ~kind:cls msg);
-  Platform.on_document_event "ls:toast-close" (fun _ ->
-      match List.rev !live_ids with
-      | id :: _ -> dismiss id
-      | [] -> ())

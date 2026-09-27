@@ -112,7 +112,9 @@ let theme_item ~st mode label =
         use_mode mode;
         Signal.set st mode;
         Runtime.flush ()))
-    [ dom ~key:("tmi-" ^ mode) ~tag:"i" ~style_class:("mode-" ^ mode) []
+    [ dom ~key:("tmi-" ^ mode) ~tag:"i"
+        (* .mode-light needs .radix for its preview background-image *)
+        ~style_class:("mode-" ^ mode ^ " radix") []
     ; dom ~key:("tms-" ^ mode) ~tag:"strong" ~text:label []
     ]
 

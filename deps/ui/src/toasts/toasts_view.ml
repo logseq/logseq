@@ -24,11 +24,8 @@ let toast_icon_class (k : string) : string =
 
 let toast_item (t : Model.toast) (idx : int) : t =
   let kind = toast_kind_class t.toast_kind in
-  (* .ui__toast is position:absolute in the stylesheet with unset CSS vars;
-     relative + --toast-index keep stacked toasts from overlapping *)
-  let style =
-    Printf.sprintf "position:relative; --toast-index:%d" idx
-  in
+  (* stylesheet stacks toasts via --toast-index *)
+  let style = Printf.sprintf "--toast-index:%d" idx in
   fun ctx parent ->
     Toast.schedule_dismiss ~ms:5000 t.toast_id;
     (dom ~key:("toast-" ^ string_of_int t.toast_id)
@@ -53,12 +50,7 @@ let toast_item (t : Model.toast) (idx : int) : t =
        ])
       ctx parent
 
-let init_done = ref false
-
 let render (ms : Model.t Signal.signal) : t =
-  if not !init_done then (
-    init_done := true;
-    Toast.init ());
   dyn
     ~equal:(fun (a : Model.t) (b : Model.t) -> a.toasts = b.toasts)
     (fun (m : Model.t) ->

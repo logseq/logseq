@@ -16,7 +16,8 @@ let finish_import repo label =
       ignore (Graphs_ops.refresh ());
       ignore (Graphs_ops.navigate_journal repo))
 
-(* name prompt -> validate -> create repo -> run import *)
+(* name prompt -> validate -> run import; `run` resolves true only when
+   the import actually landed (it may toast a local error itself) *)
 let ask_name_and_run label run =
   Dialogs_state.prompt ~title:T.set_graph_name ~on_submit:(fun name ->
       let name = String.trim name in
@@ -30,22 +31,24 @@ let ask_name_and_run label run =
         let repo = Graph.full_graph_name name in
         ignore
           (Js.Promise.then_
-             (fun _ ->
-                finish_import repo label;
+             (fun ok ->
+                if ok then finish_import repo label;
                 Js.Promise.resolve ())
              (Js.Promise.catch
                 (fun _e ->
                    Toast.error T.import_failed;
-                   Js.Promise.resolve Wire.Nil)
+                   Js.Promise.resolve false)
                 (run repo)))))
   ()
 
 let import_sqlite_db repo file =
   file |> B.file_buffer
   |> Js.Promise.then_ (fun buf ->
-         Runtime.invoke2 "thread-api/import-db-binary"
-           (Wire.String repo)
-           (Wire.Binary (B.u8_of_buffer buf)))
+         Js.Promise.then_
+           (fun _ -> Js.Promise.resolve true)
+           (Runtime.invoke2 "thread-api/import-db-binary"
+              (Wire.String repo)
+              (Wire.Binary (B.u8_of_buffer buf))))
 
 let import_edn repo file =
   file |> B.file_text
@@ -53,10 +56,12 @@ let import_edn repo file =
          match (try Some (Edn.parse text) with _ -> None) with
          | None ->
              Toast.warning T.import_invalid_edn;
-             Js.Promise.resolve Wire.Nil
+             Js.Promise.resolve false
          | Some w ->
-             Runtime.invoke2 "thread-api/import-edn" (Wire.String repo)
-               w)
+             Js.Promise.then_
+               (fun _ -> Js.Promise.resolve true)
+               (Runtime.invoke2 "thread-api/import-edn"
+                  (Wire.String repo) w))
 
 let file_item f =
   f |> B.file_text
@@ -72,17 +77,20 @@ let import_file_graph repo files =
   | config :: rest ->
       Js.Promise.all (Array.of_list (List.map file_item rest))
       |> Js.Promise.then_ (fun files_w ->
-             config |> B.file_text
-             |> Js.Promise.then_ (fun cfg ->
-                    Runtime.invoke3 "thread-api/import-file-graph"
-                      (Wire.String repo)
-                      (Wire.Map
-                         [ ( Wire.kw "path"
-                           , Wire.String "logseq/config.edn" )
-                         ; (Wire.kw "content", Wire.String cfg)
-                         ])
-                      (Wire.Array (Array.to_list files_w))))
-  | [] -> Js.Promise.resolve Wire.Nil
+             Js.Promise.then_
+               (fun _ -> Js.Promise.resolve true)
+               (Js.Promise.then_
+                  (fun cfg ->
+                     Runtime.invoke3 "thread-api/import-file-graph"
+                       (Wire.String repo)
+                       (Wire.Map
+                          [ ( Wire.kw "path"
+                            , Wire.String "logseq/config.edn" )
+                          ; (Wire.kw "content", Wire.String cfg)
+                          ])
+                       (Wire.Array (Array.to_list files_w)))
+                  (B.file_text config)))
+  | [] -> Js.Promise.resolve false
 
 let run_files kind files =
   match (kind, files) with
@@ -106,15 +114,17 @@ let on_change id () =
       | files -> run_files id files)
   | None -> ()
 
-let file_input ~id ~label ~accept =
-  dom ~key:id ~style_class:"flex flex-col gap-1"
-    [ dom ~key:(id ^ "-l") ~tag:"label"
-        ~style_class:"text-sm font-medium" ~attrs:[ ("for", id) ]
-        ~text:label []
+let file_input ~id ~label ~accept ?(extra_attrs = []) () =
+  dom ~key:id ~tag:"label"
+    ~style_class:"action-input flex items-center mx-2 my-2"
+    [ dom ~key:(id ^ "-t")
+        ~style_class:"flex flex-col"
+        [ dom ~key:(id ^ "-s") ~tag:"strong" ~text:label [] ]
     ; dom ~key:(id ^ "-i") ~tag:"input"
+        ~style_class:"absolute hidden"
         ~attrs:
-          [ ("id", id); ("type", "file"); ("accept", accept)
-          ; ("class", "form-input") ]
+          ([ ("id", id); ("type", "file"); ("accept", accept) ]
+           @ extra_attrs)
         ~events:"change"
         ~on_dom_event:(fun n _ -> if n = "change" then on_change id ())
         []
@@ -125,13 +135,15 @@ let body (_ms : Model.t Signal.signal) : t =
     [ dom ~key:"imp-h" ~tag:"h1" ~style_class:"title" ~text:T.import_title
         []
     ; file_input ~id:"import-db-edn" ~label:T.import_db_edn_title
-        ~accept:".edn"
+        ~accept:".edn" ()
     ; file_input ~id:"import-sqlite-db" ~label:T.import_sqlite_title
-        ~accept:".sqlite"
+        ~accept:".sqlite" ()
     ; file_input ~id:"import-sqlite-zip" ~label:T.import_sqlite_zip_title
-        ~accept:".zip"
+        ~accept:".zip" ()
     ; file_input ~id:"import-file-graph" ~label:T.import_file_graph_title
         ~accept:".edn,.json,.md,.org,.png,.jpg,.jpeg,.zip"
+        ~extra_attrs:[ ("webkitdirectory", "true") ]
+        ()
     ; file_input ~id:"import-debug-transit"
-        ~label:T.import_debug_transit_title ~accept:".transit,.json"
+        ~label:T.import_debug_transit_title ~accept:".transit,.json" ()
     ]

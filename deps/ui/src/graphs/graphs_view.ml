@@ -195,17 +195,7 @@ and rerender () =
   | Some host -> render_into host
   | None -> ()
 
-(* TODO(shared): #main-container should get class `is-left-sidebar-open`
-   (style.css `#main-container.is-left-sidebar-open{padding-left:...}`)
-   so main content reflows; chrome.ml only sets `ls-left-sidebar-open` on
-   the wrapper. Until then pad the host ourselves so the open sidebar
-   overlay doesn't cover/intercept the graphs UI. *)
-let pad_for_sidebar host sidebar_open =
-  if sidebar_open then
-    B.set_attr host "style" "padding-left:var(--ls-left-sidebar-width)"
-  else B.set_attr host "style" ""
-
-let show sidebar_open =
+let show () =
   Graphs_ops.on_repos_changed := (fun () ->
       match B.qs ".graphs-host" with
       | Some host ->
@@ -217,13 +207,10 @@ let show sidebar_open =
   match B.qs "#main-content-container" with
   | Some parent -> (
       match B.qs ".graphs-host" with
-      | Some host ->
-          pad_for_sidebar host sidebar_open;
-          rerender ()
+      | Some _ -> rerender ()
       | None ->
           let host = B.create "div" in
           B.set_class host "graphs-host";
-          pad_for_sidebar host sidebar_open;
           B.append parent host;
           if !Graphs_ops.repos = [] then
             ignore
