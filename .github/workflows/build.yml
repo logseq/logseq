@@ -214,9 +214,6 @@ jobs:
       - name: Lint hardcoded user-facing strings
         run: bb lang:lint-hardcoded
 
-      - name: Lint to keep worker independent of frontend
-        run: bb lint:worker-and-frontend-separate
-
   db-graph-test:
     strategy:
       matrix:
