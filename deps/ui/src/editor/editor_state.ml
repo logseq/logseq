@@ -1,0 +1,178 @@
+(* Editor/outliner UI state, owned by the editor area. One LUI signal holds
+   the whole ui record: which block is being edited (and its live buffer so a
+   remount can restore the textarea verbatim), the block-selection set with
+   its anchor, and the collapsed set mirrored from :block/collapsed? (the
+   shared Model.block drops that flag, so we read it from the raw wire
+   ourselves in Outliner_ops.refresh). *)
+
+module String_set = Stdlib.Set.Make (String)
+
+type editing = { uuid : string; buffer : string }
+
+type t =
+  { editing : editing option
+  ; selected : String_set.t
+  ; anchor : string option (* selection focus end for shift-arrow *)
+  ; collapsed : String_set.t
+  }
+
+let initial =
+  { editing = None
+  ; selected = String_set.empty
+  ; anchor = None
+  ; collapsed = String_set.empty
+  }
+
+let st : t Signal.state option ref = ref None
+
+(* focus request consumed after the next DOM flush — ops remount the page
+   subtree, so the textarea must be re-focused once it exists again *)
+let pending_focus : (string * int) option ref = ref None
+
+(* structured block clipboard (titles + hierarchy), set by copy/cut *)
+let clipboard : string list ref = ref []
+
+(* state transforms deferred until the first block_row mounts the state —
+   an empty page mounts no rows, so click-to-add on .block-add-button must
+   queue its edit-mode entry here. They fold into [initial] before the
+   state is created: a staged Signal.set inside mount would only publish on
+   the next stabilize, producing a patch batch out of order *)
+let on_init : (t -> t) list ref = ref []
+
+let defer_init f = on_init := f :: !on_init
+
+let ensure (ctx : Lui_ui.ui_context) =
+  match !st with
+  | Some _ -> ()
+  | None ->
+      let init =
+        List.fold_left (fun acc f -> f acc) initial (List.rev !on_init)
+      in
+      on_init := [];
+      st := Some (Signal.state ctx.ui_scheduler init)
+
+let ready () = Option.is_some !st
+
+let state () =
+  match !st with
+  | Some s -> s
+  | None -> failwith "editor state not mounted"
+
+let value () = Signal.get_state (state ())
+
+(* the state as a read-only signal for dyn/if_/class_signal consumers *)
+let signal () = (state ()).Signal.state_signal
+
+(* updates that must repaint now (called from document listeners, outside
+   LUI's event dispatch); Signal.update composes with any pending staged
+   value so deferred on_init writes aren't lost *)
+let set f =
+  Signal.update (state ()) f;
+  Runtime.flush ()
+
+(* updates with no visual dependency — folded into the next flush *)
+let set_silent f = Signal.update (state ()) f
+
+let editing () = (value ()).editing
+
+let editing_uuid () =
+  match editing () with Some e -> Some e.uuid | None -> None
+
+let is_editing uuid = editing_uuid () = Some uuid
+let selected () = (value ()).selected
+let is_selected uuid = String_set.mem uuid (selected ())
+let collapsed () = (value ()).collapsed
+let is_collapsed uuid = String_set.mem uuid (collapsed ())
+let anchor () = (value ()).anchor
+let selection_active () = not (String_set.is_empty (selected ()))
+
+(* -- model helpers over !Runtime.current_page -- *)
+
+let page_blocks () =
+  match !Runtime.current_page with
+  | Some p -> p.Model.page_blocks
+  | None -> []
+
+let rec find_in blocks uuid =
+  match blocks with
+  | [] -> None
+  | b :: rest -> (
+      if b.Model.block_uuid = Some uuid then Some b
+      else
+        match find_in b.Model.block_children uuid with
+        | Some _ as r -> r
+        | None -> find_in rest uuid)
+
+let find uuid = find_in (page_blocks ()) uuid
+
+(* returns (parent, index) of uuid among its siblings *)
+let rec find_parent_in blocks uuid =
+  match blocks with
+  | [] -> None
+  | parent :: rest -> (
+      let children = parent.Model.block_children in
+      let rec idx i = function
+        | [] -> None
+        | c :: _ when c.Model.block_uuid = Some uuid -> Some i
+        | _ :: cs -> idx (i + 1) cs
+      in
+      match idx 0 children with
+      | Some i -> Some (Some parent, i)
+      | None -> (
+          match find_parent_in children uuid with
+          | Some _ as r -> r
+          | None -> find_parent_in rest uuid))
+
+let find_parent uuid =
+  (* top-level: parent = None (page) *)
+  let tops = page_blocks () in
+  let rec top_idx i = function
+    | [] -> None
+    | b :: _ when b.Model.block_uuid = Some uuid -> Some i
+    | _ :: cs -> top_idx (i + 1) cs
+  in
+  match top_idx 0 tops with
+  | Some i -> Some (None, i)
+  | None -> find_parent_in tops uuid
+
+(* DFS over visible (non-collapsed-subtree) blocks *)
+let flat_visible () =
+  let collapsed = collapsed () in
+  let rec go acc blocks =
+    match blocks with
+    | [] -> acc
+    | b :: rest ->
+        let acc = b :: acc in
+        let acc =
+          match b.Model.block_uuid with
+          | Some u when String_set.mem u collapsed -> acc
+          | _ -> go acc b.Model.block_children
+        in
+        go acc rest
+  in
+  List.rev (go [] (page_blocks ()))
+
+let flat_all () =
+  let rec go acc blocks =
+    match blocks with
+    | [] -> acc
+    | b :: rest -> go (go (b :: acc) b.Model.block_children) rest
+  in
+  List.rev (go [] (page_blocks ()))
+
+let neighbor_of uuid dir =
+  let flat = flat_visible () in
+  let rec scan prev = function
+    | [] -> None
+    | b :: rest ->
+        if b.Model.block_uuid = Some uuid then (
+          match dir, rest with
+          | `Prev, _ -> prev
+          | `Next, h :: _ -> Some h
+          | `Next, [] -> None)
+        else scan (Some b) rest
+  in
+  scan None flat
+
+let prev_visible uuid = neighbor_of uuid `Prev
+let next_visible uuid = neighbor_of uuid `Next
