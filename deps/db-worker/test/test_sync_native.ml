@@ -181,6 +181,24 @@ let () =
         (wire_get "client-revision" w = Some (Wire.String "explicit-revision"))
   | None -> check "coerce-http-request preserves explicit client-revision" false
 
+(* pull responses arrive as plain JSON — :outliner-op is a string that the
+   malli json-transformer decodes to a keyword *)
+let () =
+  let body =
+    Json_codec.parse
+      {|{"type":"pull/ok","t":3,"txs":[{"t":1,"tx":"[1]","outliner-op":"insert-blocks"},{"t":2,"tx":"[2]","outliner-op":null}]}|}
+  in
+  match Sync_util.coerce_http_response "sync/pull" body with
+  | Some w ->
+      let txs =
+        match wire_get "txs" w with Some (Wire.Array xs) -> xs | _ -> []
+      in
+      check "pull-ok outliner-op string decodes to keyword"
+        (wire_get "outliner-op" (List.nth txs 0)
+         = Some (Wire.Keyword "insert-blocks")
+         && wire_get "outliner-op" (List.nth txs 1) = Some Wire.Nil)
+  | None -> check "pull-ok outliner-op string decodes to keyword" false
+
 (* ---- client_op_test.cljs ---- *)
 
 let () =
