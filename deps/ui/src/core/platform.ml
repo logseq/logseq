@@ -80,6 +80,26 @@ let on_document_event name f = add_document_listener name f
 
 external decode_uri : string -> string = "decodeURIComponent"
 
+external json_parse : string -> Js.Json.t = "parse" [@@mel.scope "JSON"]
+external json_prop : Js.Json.t -> string -> Js.Json.t = "" [@@mel.get_index]
+
+(* string field from a JSON payload string (dom-event "payload") *)
+let payload_str json key =
+  match Js.Json.decodeString (json_prop (json_parse json) key) with
+  | Some s -> s
+  | None -> ""
+
+let payload_num json key =
+  match Js.Json.decodeNumber (json_prop (json_parse json) key) with
+  | Some n -> n
+  | None -> 0.
+
+(* raw DOM event field, e.g. keydown "key" *)
+let event_str ev key =
+  match Js.Json.decodeString (json_prop ev key) with
+  | Some s -> s
+  | None -> ""
+
 let rtc_test_mode () =
   match query_param "rtc-test" with Some "true" -> true | _ -> false
 
@@ -93,7 +113,9 @@ external custom_event : string -> Js.Json.t -> Js.Json.t = "CustomEvent"
 external dispatch_event : Js.Json.t -> unit = "document.dispatchEvent"
 
 let dispatch name detail =
-  dispatch_event (custom_event name detail)
+  dispatch_event
+    (custom_event name
+       (Js.Json.object_ (Js.Dict.fromList [ ("detail", detail) ])))
 
 external query_selector_all : string -> Js.Json.t array
   = "querySelectorAll" [@@mel.scope "document"]
