@@ -40,6 +40,7 @@ let parse_hash () : Model.route =
           | "library" -> Model.Library
           | "all-pages" -> Model.All_pages
           | "all-graphs" -> Model.All_graphs
+          | "graph" -> Model.Graph
           | _ -> Model.Not_found p)
       | None -> (
           match p with
@@ -47,6 +48,7 @@ let parse_hash () : Model.route =
           | "library" -> Model.Library
           | "all-pages" -> Model.All_pages
           | "all-graphs" -> Model.All_graphs
+          | "graph" -> Model.Graph
           | "page" | "block" -> Model.Not_found p
           | _ -> Model.Not_found p))
 
@@ -194,6 +196,30 @@ let load_block_zoom uuid =
                       (Action.Navigate_to (Model.Not_found uuid)))
             | _ -> Runtime.send (Action.Navigate_to (Model.Not_found uuid))))
 
+(* created-at range over named pages feeds the time-travel slider *)
+let load_graph () =
+  let query =
+    "[:find (min ?ca) (max ?ca) :where [?e :block/name _]\
+     [?e :block/created-at ?ca]]"
+  in
+  Runtime.invoke2 "thread-api/q" (Wire.String (repo ()))
+    (Wire.Array [ Wire.String query ])
+  |> Js.Promise.then_ (fun w ->
+         let to_num = function
+           | Wire.Int i -> Float.of_int i
+           | Wire.Int64 i -> Int64.to_float i
+           | Wire.Float f -> f
+           | _ -> 0.
+         in
+         (match Sdk_util.wire_elems w with
+          | [ row ] -> (
+              match Sdk_util.wire_elems row with
+              | [ mn; mx ] ->
+                  Runtime.send (Action.Graph_loaded (to_num mn, to_num mx))
+              | _ -> ())
+          | _ -> ());
+         Js.Promise.resolve ())
+
 let load_route (route : Model.route) =
   match route with
   | Model.Home -> ignore (load_home ())
@@ -202,6 +228,7 @@ let load_route (route : Model.route) =
   | Model.Journals -> ignore (load_journals ())
   | Model.Library ->
       ignore (load_page_ref (Wire.String "Library") ~missing:"Library")
+  | Model.Graph -> ignore (load_graph ())
   | Model.All_pages | Model.All_graphs | Model.Not_found _ -> ()
 
 let resolve () =
