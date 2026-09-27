@@ -1326,23 +1326,69 @@ let blocks_with_ordered_list_props (blocks : Block_map.t list)
 
 let get_block_orders (blocks : Block_map.t list) (target_block : entity)
     (sibling : bool) (keep_block_order : bool) : string list =
+  let target_order = Ldb.string_value target_block "block/order" in
+  let start_order = if sibling then target_order else None in
+  let end_order =
+    if sibling then
+      match Ldb.get_right_sibling target_block with
+      | Some r -> Ldb.string_value r "block/order"
+      | None -> None
+    else
+      match Ldb.get_down target_block with
+      | Some c -> Ldb.string_value c "block/order"
+      | None -> None
+  in
+  let top_level b =
+    match mget b "block/level" with
+    | Some (Int64 n) -> n = 1L
+    | _ -> false
+  in
+  let at_target order =
+    (match start_order with
+     | None -> true
+     | Some s -> String.compare order s > 0)
+    &&
+    match end_order with
+    | None -> true
+    | Some e -> String.compare order e < 0
+  in
   if keep_block_order
      && List.for_all (fun b -> mget_str b "block/order" <> None) blocks
-  then List.filter_map (fun b -> mget_str b "block/order") blocks
-  else
-    let target_order = Ldb.string_value target_block "block/order" in
-    let start_order = if sibling then target_order else None in
-    let end_order =
-      if sibling then
-        match Ldb.get_right_sibling target_block with
-        | Some r -> Ldb.string_value r "block/order"
-        | None -> None
-      else
-        match Ldb.get_down target_block with
-        | Some c -> Ldb.string_value c "block/order"
-        | None -> None
-    in
-    Db_order.gen_n_keys (List.length blocks) start_order end_order
+  then begin
+    let top_level_blocks = List.filter top_level blocks in
+    if
+      List.for_all
+        (fun b ->
+           match mget_str b "block/order" with
+           | Some o -> at_target o
+           | None -> false)
+        top_level_blocks
+    then List.filter_map (fun b -> mget_str b "block/order") blocks
+    else
+      (* The kept orders of the top-level blocks no longer fall next to the
+         target, e.g. undo restoring deleted blocks after a sibling moved
+         away and back got a new order: order them at the target and keep
+         the orders of their children. *)
+      let top_level_orders =
+        Db_order.gen_n_keys (List.length top_level_blocks) start_order
+          end_order
+      in
+      fst
+        (List.fold_left
+           (fun (orders, top_level_orders) b ->
+              if top_level b then
+                match top_level_orders with
+                | o :: rest -> (o :: orders, rest)
+                | [] -> (orders, top_level_orders)
+              else
+                ( (match mget_str b "block/order" with
+                   | Some o -> o :: orders
+                   | None -> orders)
+                , top_level_orders ))
+           ([], top_level_orders) blocks
+        |> fun (orders, rest) -> (List.rev orders, rest))
+  end
+  else Db_order.gen_n_keys (List.length blocks) start_order end_order
 
 (* update-property-ref-when-paste — [:block/uuid u] values get reminted *)
 let update_property_ref_when_paste (block : Block_map.t)
