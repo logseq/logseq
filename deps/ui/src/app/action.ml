@@ -21,4 +21,7 @@ type t =
   | Toast_push of Model.toast
   | Toast_dismiss of int
   | Toasts_clear
+  | Unlinked_toggle_open
+  | Unlinked_toggle_search
+  | Unlinked_set_query of string
   | Noop

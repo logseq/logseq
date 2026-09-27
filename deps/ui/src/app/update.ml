@@ -17,6 +17,9 @@ let update (model : t) (action : Action.t) : t =
       ; page_refs = []
       ; editing_title = false
       ; page_menu = None
+      ; unlinked_open = false
+      ; unlinked_search = false
+      ; unlinked_query = ""
       }
   | Title_edit_start -> { model with editing_title = true }
   | Title_edit_done -> { model with editing_title = false }
@@ -39,6 +42,14 @@ let update (model : t) (action : Action.t) : t =
         toasts = List.filter (fun (t : toast) -> t.toast_id <> id) model.toasts
       }
   | Toasts_clear -> { model with toasts = [] }
+  | Unlinked_toggle_open ->
+      { model with unlinked_open = not model.unlinked_open }
+  | Unlinked_toggle_search ->
+      { model with
+        unlinked_search = not model.unlinked_search
+      ; unlinked_query = ""
+      }
+  | Unlinked_set_query q -> { model with unlinked_query = q }
   | Worker_event _ | Refresh_page | Block_content_changed _ | Toggle_search
   | Noop ->
       model

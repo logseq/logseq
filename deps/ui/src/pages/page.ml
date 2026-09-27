@@ -132,15 +132,53 @@ let references_view (refs : Model.block list) : t =
             (List.map Tree.block_row refs)
         ]
 
-let unlinked_references_view () : t =
-  (* section header always rendered; body populated by the views area *)
+let unlinked_search_input () : t =
+  dom ~key:"urefs-search-box" ~style_class:"view-action-search"
+    [ dom ~key:"urefs-input" ~tag:"input"
+        ~attrs:[ ("placeholder", Strings.filter_placeholder) ]
+        ~events:"input"
+        ~on_dom_event:(fun name payload ->
+          if name = "input" then
+            Runtime.send
+              (Action.Unlinked_set_query
+                 (Platform.payload_str
+                    (Option.value payload ~default:"{}") "value")))
+        []
+    ]
+
+let unlinked_references_view (m : Model.t) : t =
+  (* collapsed by default; title click toggles ls-foldable-content.
+     .ls-view-body rows are populated by the views area (TODO). *)
+  let body =
+    dom ~key:"urefs-content" ~style_class:"ls-foldable-content"
+      ~attrs:
+        [ ( "aria-hidden"
+          , if m.unlinked_open then "false" else "true" )
+        ]
+      [ dom ~key:"urefs-body" ~style_class:"ls-view-body" [] ]
+  in
   dom ~key:"urefs" ~style_class:"unlinked-references mt-6"
     [ dom ~key:"urefs-fold" ~style_class:"ls-foldable-title-control"
-        [ dom ~key:"urefs-t" ~style_class:"foldable-title" ~text:"Unlinked References" []
+        [ dom ~key:"urefs-t" ~style_class:"foldable-title"
+            ~text:Strings.unlinked_references
+            ~events:"click"
+            ~on_dom_event:(fun name _ ->
+              if name = "click" then (
+                Runtime.send Action.Unlinked_toggle_open;
+                Runtime.flush ()))
+            []
         ; dom ~key:"urefs-search" ~tag:"button"
             ~style_class:"view-action-search"
-            [ dom ~key:"urefs-icon" ~tag:"i" ~style_class:"ls-icon-search" [] ]
+            ~events:"click"
+            ~on_dom_event:(fun name _ ->
+              if name = "click" then (
+                Runtime.send Action.Unlinked_toggle_search;
+                Runtime.flush ()))
+            [ dom ~key:"urefs-icon" ~tag:"i"
+                ~style_class:"ls-icon-search ti ti-search" [] ]
         ]
+    ; if m.unlinked_search then unlinked_search_input () else box ~key:"urefs-sb" []
+    ; body
     ]
 
 (* --- route views -------------------------------------------------- *)
@@ -206,7 +244,7 @@ let page_view (m : Model.t) (page : Model.page) : t =
         ; page_title_el m page
         ; blocks_inner page.page_blocks
         ; references_view m.page_refs
-        ; unlinked_references_view ()
+        ; unlinked_references_view m
         ]
     ; Page_menu.dialog_view m
     ]
