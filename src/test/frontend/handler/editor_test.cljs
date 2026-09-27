@@ -2286,14 +2286,14 @@
                           (fn [_repo _id _opts]
                             (p/resolved {:block value-block :children []}))
                           editor/delete-blocks!
-                          (fn [_repo uuids _blocks _dom-blocks _mobile?]
-                            (reset! deleted-uuids uuids))]
+                          (fn [_repo uuids dom-blocks _mobile?]
+                            (reset! deleted-uuids [uuids dom-blocks]))]
             (editor/cut-selection-blocks true))
           (p/then (fn [_]
-                    (is (= [value-uuid] @requested-ids)
-                        "Cut must load the inner text property-value block, not drop the wrapper.")
-                    (is (= [value-uuid] @deleted-uuids)
-                        "Cut must delete the inner text property-value block.")))
+                    (is (nil? @requested-ids)
+                        "Cut sends the selection to the worker without reading it first.")
+                    (is (= [[value-uuid] [inner]] @deleted-uuids)
+                        "Cut must delete the inner text property-value block, not drop the wrapper.")))
           (p/catch (fn [error]
                      (is false (str error))))
           (p/finally done)))))
