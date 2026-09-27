@@ -426,21 +426,29 @@
   [db e]
   (cons e (mapcat #(subtree db %) (live-children db e))))
 
-(defn- op->plan
-  "The outliner ops for one generated operation and its signature shape, or
-  nil when it has no target. Targets come from the live entities of db."
-  [db [kind i j flag]]
+(defn- plan-context
+  "The live entities of db that the plan fns pick their targets from."
+  [db]
   (let [blocks (live-blocks db)
         pages (user-pages db)
-        nodes (into blocks pages)
         builtin-classes (builtin-entities db builtin-class-idents)
         builtin-properties (builtin-entities db builtin-property-idents)
-        builtin-nodes (into builtin-classes builtin-properties)
-        classes (into builtin-classes (user-classes db))
-        properties (user-properties db)
-        any-properties (into properties builtin-properties)
-        uuid-of :block/uuid
-        plan (fn [shape ops] {:sig (str (name kind) ":" shape) :ops ops})]
+        properties (user-properties db)]
+    {:db db
+     :blocks blocks
+     :pages pages
+     :nodes (into blocks pages)
+     :builtin-classes builtin-classes
+     :builtin-nodes (into builtin-classes builtin-properties)
+     :classes (into builtin-classes (user-classes db))
+     :properties properties
+     :any-properties (into properties builtin-properties)}))
+
+(defn- outline-plan
+  "Plans of the operations on the outline: insert, delete, move, up-down,
+  indent, save and paste."
+  [{:keys [db blocks pages nodes]} plan [kind i j flag]]
+  (let [uuid-of :block/uuid]
     (case kind
       :insert (when-let [target (pick nodes i)]
                 (plan (node-kind target)
@@ -486,6 +494,32 @@
                       [[:save-block [(cond-> {:block/uuid (uuid-of target) :block/title title}
                                        refs (assoc :block/refs refs))
                                      {}]]])))
+      ;; Copy a block with its live children and paste the copy, as the
+      ;; app's paste does: new uuids, parents inside the copy by uuid.
+      :paste (let [source (pick blocks i)
+                   target (pick nodes (+ i j 1))]
+               (when (and source target)
+                 (let [copied-nodes (vec (subtree db source))
+                       new-uuid (into {} (map (fn [e] [(uuid-of e) (next-uuid)])) copied-nodes)
+                       copied (mapv (fn [e]
+                                      (let [parent-uuid (uuid-of (:block/parent e))]
+                                        (cond-> {:block/uuid (new-uuid (uuid-of e))
+                                                 :block/title (or (:block/title e) "")}
+                                          (contains? new-uuid parent-uuid)
+                                          (assoc :block/parent [:block/uuid (new-uuid parent-uuid)]))))
+                                    copied-nodes)]
+                   (plan (str (if (> (count copied) 1) "tree" "one") "->" (node-kind target)
+                              (if flag "-sibling" "-child"))
+                         [[:insert-blocks [copied (uuid-of target)
+                                           {:sibling? (and flag (not (ldb/page? target)))
+                                            :outliner-op :paste
+                                            :keep-uuid? true}]]])))))))
+
+(defn- property-plan
+  "Plans of the operations on tags, properties, values and choices."
+  [{:keys [db blocks nodes builtin-nodes classes properties any-properties]} plan [kind i j flag]]
+  (let [uuid-of :block/uuid]
+    (case kind
       :tag (let [target (pick (if flag (into nodes builtin-nodes) nodes) i)
                  class (pick classes j)]
              (when (and target class)
@@ -543,6 +577,28 @@
                                              (:db/id (d/entity db (if flag
                                                                     :logseq.property/status.todo
                                                                     :logseq.property/status.done)))]]]))
+      ;; Change an existing property's type (and with flag its cardinality)
+      ;; while blocks may hold values of it.
+      :retype (when-let [p (pick properties i)]
+                (let [type (pick property-types j)]
+                  (plan (str (property-kind p) "->" (name type) (when flag "-many"))
+                        [[:upsert-property [(:db/ident p)
+                                            (cond-> {:logseq.property/type type}
+                                              flag (assoc :db/cardinality :db.cardinality/many))
+                                            {}]]])))
+      :delete-choice (let [p (pick (filterv #(seq (:block/_closed-value-property %)) any-properties) i)
+                           choice (when p
+                                    (pick (->> (:block/_closed-value-property p) (sort-by :db/id) vec) j))]
+                       (when choice
+                         (plan (property-kind p)
+                               [[:delete-closed-value [(:db/ident p) (uuid-of choice)]]]))))))
+
+(defn- page-plan
+  "Plans of the operations on pages, tags as pages, the recycle bin and
+  templates."
+  [{:keys [db pages nodes builtin-nodes builtin-classes]} plan [kind i j flag]]
+  (let [uuid-of :block/uuid]
+    (case kind
       :create-page (plan (if flag (str "tagged-" (pick tag-titles j)) "plain")
                          [[:create-page [(pick title-pool i)
                                          (cond-> {:redirect? false
@@ -569,21 +625,6 @@
                     (plan (node-kind target)
                           [[:apply-template [(uuid-of template) (uuid-of target)
                                              {:sibling? (and flag (not (ldb/page? target)))}]]])))
-      ;; Change an existing property's type (and with flag its cardinality)
-      ;; while blocks may hold values of it.
-      :retype (when-let [p (pick properties i)]
-                (let [type (pick property-types j)]
-                  (plan (str (property-kind p) "->" (name type) (when flag "-many"))
-                        [[:upsert-property [(:db/ident p)
-                                            (cond-> {:logseq.property/type type}
-                                              flag (assoc :db/cardinality :db.cardinality/many))
-                                            {}]]])))
-      :delete-choice (let [p (pick (filterv #(seq (:block/_closed-value-property %)) any-properties) i)
-                           choice (when p
-                                    (pick (->> (:block/_closed-value-property p) (sort-by :db/id) vec) j))]
-                       (when choice
-                         (plan (property-kind p)
-                               [[:delete-closed-value [(:db/ident p) (uuid-of choice)]]])))
       :extends (let [class (pick (into (user-classes db) builtin-classes) i)
                      parent (pick (into (user-classes db) builtin-classes) (+ i j 1))]
                  (when (and class parent)
@@ -594,27 +635,22 @@
                    other (pick pages (+ i j 1))]
                (when (and page other)
                  (plan (str (node-kind page) "=" (node-kind other))
-                       [[:set-block-property [(uuid-of page) :block/alias (:db/id other)]]])))
-      ;; Copy a block with its live children and paste the copy, as the
-      ;; app's paste does: new uuids, parents inside the copy by uuid.
-      :paste (let [source (pick blocks i)
-                   target (pick nodes (+ i j 1))]
-               (when (and source target)
-                 (let [copied-nodes (vec (subtree db source))
-                       new-uuid (into {} (map (fn [e] [(uuid-of e) (next-uuid)])) copied-nodes)
-                       copied (mapv (fn [e]
-                                      (let [parent-uuid (uuid-of (:block/parent e))]
-                                        (cond-> {:block/uuid (new-uuid (uuid-of e))
-                                                 :block/title (or (:block/title e) "")}
-                                          (contains? new-uuid parent-uuid)
-                                          (assoc :block/parent [:block/uuid (new-uuid parent-uuid)]))))
-                                    copied-nodes)]
-                   (plan (str (if (> (count copied) 1) "tree" "one") "->" (node-kind target)
-                              (if flag "-sibling" "-child"))
-                         [[:insert-blocks [copied (uuid-of target)
-                                           {:sibling? (and flag (not (ldb/page? target)))
-                                            :outliner-op :paste
-                                            :keep-uuid? true}]]])))))))
+                       [[:set-block-property [(uuid-of page) :block/alias (:db/id other)]]]))))))
+
+(def ^:private outline-op-kinds #{:insert :delete :move :up-down :indent :save :paste})
+(def ^:private page-op-kinds
+  #{:create-page :create-tag :rename-page :delete-page :restore :purge :template :extends :alias})
+
+(defn- op->plan
+  "The outliner ops for one generated operation and its signature shape, or
+  nil when it has no target. Targets come from the live entities of db."
+  [db [kind :as op]]
+  (let [ctx (plan-context db)
+        plan (fn [shape ops] {:sig (str (name kind) ":" shape) :ops ops})]
+    (cond
+      (outline-op-kinds kind) (outline-plan ctx plan op)
+      (page-op-kinds kind) (page-plan ctx plan op)
+      :else (property-plan ctx plan op))))
 
 (def ^:private op-kinds
   [:insert :delete :move :up-down :indent :save :tag :untag :property
