@@ -18,9 +18,10 @@ let req_to_hooks (r : request) : Native_test_hooks.http_req =
 let resp_of_hooks (r : Native_test_hooks.http_resp) : response =
   { status = r.status; headers = r.headers; body = r.body }
 
-(* Deadline matching undici's default headersTimeout/bodyTimeout — a
-   stalled server must eventually fail instead of hanging forever. *)
-let fetch_timeout_s = 300.
+(* Stall deadline matching undici's default header/body timeouts — any
+   socket IO (upload or download progress) resets it, so slow transfers
+   stay alive while a truly stalled server eventually fails. *)
+let fetch_idle_timeout_s = 300.
 
 (* One HTTP/1.1 request per connection, on a dedicated eio loop thread —
    same as the cljs fetch+single-request model this replaces. *)
@@ -28,6 +29,19 @@ let fetch (req : request) : response =
   Eio_posix.run (fun env ->
     Eio.Switch.run (fun sw ->
       let host, target, flow = Net_eio.connect_flow ~env ~sw req.url in
+      let last_io = ref (Time.monotonic_now ()) in
+      let flow =
+        { Net_eio.read =
+            (fun c ->
+               let n = flow.Net_eio.read c in
+               last_io := Time.monotonic_now ();
+               n)
+        ; write =
+            (fun cs -> flow.Net_eio.write cs; last_io := Time.monotonic_now ())
+        ; shutdown = flow.Net_eio.shutdown
+        ; close = flow.Net_eio.close
+        }
+      in
       let conn = Httpun.Client_connection.create () in
       let done_p, done_u = Eio.Promise.create () in
       let status = ref 0 in
@@ -72,8 +86,16 @@ let fetch (req : request) : response =
         Eio.Fiber.first
           (fun () -> Eio.Promise.await done_p; false)
           (fun () ->
-             Eio.Time.sleep (Eio.Stdenv.clock env) fetch_timeout_s;
-             true)
+             let clock = Eio.Stdenv.clock env in
+             let rec watch () =
+               Eio.Time.sleep clock 1.0;
+               if
+                 Time.diff_monotonic_ms !last_io (Time.monotonic_now ())
+                 > fetch_idle_timeout_s *. 1000.
+               then true
+               else watch ()
+             in
+             watch ())
       in
       flow.close ();
       if timed_out then failwith "Http: request timed out";
