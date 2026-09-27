@@ -144,10 +144,20 @@ let sleep span =
   ignore (Unix.select [] [] [] (span /. 1000.));
   pure ()
 
-let timeout task _ms =
-  (* No event loop on native — a still-pending task can never settle,
-     so it always times out like p/timeout would. *)
+let timeout task ms =
+  (* Handlers run on per-connection threads, so blocking until the task
+     settles or the deadline passes matches promesa p/timeout. *)
   match task.state with
   | Resolved value -> pure value
   | Rejected exn -> error exn
-  | Pending -> error (Failure "timeout")
+  | Pending ->
+      let deadline = Unix.gettimeofday () +. (ms /. 1000.) in
+      while
+        is_pending task && Unix.gettimeofday () < deadline
+      do
+        ignore (Unix.select [] [] [] 0.005)
+      done;
+      (match task.state with
+       | Resolved value -> pure value
+       | Rejected exn -> error exn
+       | Pending -> error (Failure "timeout"))
