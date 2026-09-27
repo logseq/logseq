@@ -19,13 +19,15 @@ type t =
   ; mutable wake_open : bool
   }
 
+(* The wake-fd check and write stay under cmds_mutex together with
+   [finish]'s close, so a wake byte can never land on a reused fd. *)
 let enqueue t cmd =
   if t.state < 3 then begin
     Mutex.lock t.cmds_mutex;
-    (if t.wake_open then Queue.push cmd t.cmds);
-    Mutex.unlock t.cmds_mutex;
-    if t.wake_open then
-      (try ignore (Unix.write_substring t.wake "x" 0 1) with _ -> ())
+    (if t.wake_open then (
+       Queue.push cmd t.cmds;
+       (try ignore (Unix.write_substring t.wake "x" 0 1) with _ -> ())));
+    Mutex.unlock t.cmds_mutex
   end
 
 let take_cmds t =
@@ -35,15 +37,17 @@ let take_cmds t =
   Mutex.unlock t.cmds_mutex;
   xs
 
-(* Eio-domain teardown: mark closed and close the self-pipe writer so
-   [command_loop]'s read gets EOF and the eio loop (and its thread) can
-   exit. *)
+(* Teardown: mark closed and close the self-pipe writer (under
+   cmds_mutex, matching [enqueue]) so [command_loop]'s read gets EOF and
+   the eio loop (and its thread) can exit. *)
 let finish t =
+  Mutex.lock t.cmds_mutex;
   t.state <- 3;
   if t.wake_open then begin
     t.wake_open <- false;
     (try Unix.close t.wake with _ -> ())
-  end
+  end;
+  Mutex.unlock t.cmds_mutex
 
 (* [send_bytes] copies into the connection's Faraday and mutates the bytes
    for client masking — must only run on the eio domain. *)
@@ -179,6 +183,7 @@ let connect ~url ~on_event =
     with
     | exn ->
         finish ws;
+        (try Unix.close pipe_r with _ -> ());
         if !resolved then on_event (Error (Printexc.to_string exn)) else (
           resolved := true;
           Db_worker_effect.reject resolver exn)
