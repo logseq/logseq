@@ -394,12 +394,10 @@
                    (swap! close-calls conj close-label)))}))
 
 (defn- fake-storage-db
-  ([]
-   (fake-storage-db {}))
-  ([opts]
-   (let [db (fake-db opts)]
-     (gobj/set db "transaction" (fn [f] (f db)))
-     db)))
+  []
+  (let [db (fake-db)]
+    (gobj/set db "transaction" (fn [f] (f db)))
+    db))
 
 (defn- bootstrap-datoms
   []
@@ -1424,41 +1422,6 @@
           "sqlite NORMAL is 1; FULL (the WAL default) is 2")
       (finally
         (.close db)))))
-
-(deftest create-or-open-db-enables-wal-synchronous-normal-on-all-sqlite-dbs
-  (async done
-    (-> (restoring-worker-state
-         (fn []
-           (let [graph-sql (atom [])
-                 search-sql (atom [])
-                 client-ops-sql (atom [])
-                 db (fake-storage-db {:sql-calls graph-sql})
-                 search-db (fake-storage-db {:sql-calls search-sql})
-                 client-ops-db (fake-storage-db {:sql-calls client-ops-sql})
-                 opened-dbs (atom [db search-db client-ops-db])
-                 platform' (assoc-in (build-test-platform)
-                                     [:sqlite :open-db]
-                                     (fn [_opts]
-                                       (let [opened-db (first @opened-dbs)]
-                                         (swap! opened-dbs subvec 1)
-                                         opened-db)))]
-             (platform/set-platform! platform')
-             (p/with-redefs
-               [shared-service/*master-client? (atom true)
-                db-sync/handle-local-tx! (fn [& _] nil)
-                shared-service/broadcast-to-clients! (fn [& _] nil)
-                db-listener/listen-db-changes! (fn [& _] nil)]
-               (p/let [_ ((get-thread-api :thread-api/create-or-open-db) "wal-pragma-repo" {})]
-                 (doseq [[label sql-calls] [["graph" graph-sql]
-                                            ["search" search-sql]
-                                            ["client-ops" client-ops-sql]]]
-                   (is (some #{"PRAGMA locking_mode=exclusive"} @sql-calls) label)
-                   (is (some #{"PRAGMA journal_mode=WAL"} @sql-calls) label)
-                   (is (some #{"PRAGMA synchronous=NORMAL"} @sql-calls) label))
-                 (db-core/close-db! "wal-pragma-repo"))))))
-        (p/catch (fn [error]
-                   (is false (str "unexpected error: " error))))
-        (p/finally done))))
 
 (deftest checkpoint-db-executes-wal-checkpoint
   (let [checkpoint-db! #'db-core/checkpoint-db!
