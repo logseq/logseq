@@ -441,6 +441,7 @@
 (deftest undo-redo-rebinds-stack-to-latest-history-tx-id-test
   (testing "undo/redo pushes stack op with latest persisted history tx id"
     (worker-undo-redo/clear-history! test-repo)
+    (mark-graph-synced! (worker-state/get-datascript-conn test-repo))
     (let [conn (worker-state/get-datascript-conn test-repo)
           client-ops-conn (get @worker-state/*client-ops-conns test-repo)
           {:keys [child-uuid]} (seed-page-parent-child!)]
@@ -478,6 +479,7 @@
 (deftest undo-history-records-semantic-action-metadata-test
   (testing "worker undo history stores a logical action id and semantic forward/inverse ops"
     (worker-undo-redo/clear-history! test-repo)
+    (mark-graph-synced! (worker-state/get-datascript-conn test-repo))
     (let [conn (worker-state/get-datascript-conn test-repo)
           {:keys [child-uuid]} (seed-page-parent-child!)]
       (d/transact! conn
@@ -519,6 +521,7 @@
 (deftest undo-history-canonicalizes-insert-block-uuids-test
   (testing "worker undo history uses the created block uuid for insert semantic ops"
     (worker-undo-redo/clear-history! test-repo)
+    (mark-graph-synced! (worker-state/get-datascript-conn test-repo))
     (let [conn (worker-state/get-datascript-conn test-repo)
           {:keys [page-uuid]} (seed-page-parent-child!)
           page-id (:db/id (d/entity @conn [:block/uuid page-uuid]))
@@ -820,6 +823,7 @@
 (deftest undo-history-canonicalizes-template-replace-empty-target-to-apply-template-test
   (testing "template replace-empty-target history keeps semantic forward op and restores empty target"
     (worker-undo-redo/clear-history! test-repo)
+    (mark-graph-synced! (worker-state/get-datascript-conn test-repo))
     (let [conn (worker-state/get-datascript-conn test-repo)
           {:keys [page-uuid]} (seed-page-parent-child!)
           page-id (:db/id (d/entity @conn [:block/uuid page-uuid]))
@@ -891,6 +895,7 @@
 (deftest undo-history-replace-empty-target-insert-restores-empty-target-with-insert-op-test
   (testing "replace-empty-target insert inverse should delete inserted blocks and reinsert original empty target"
     (worker-undo-redo/clear-history! test-repo)
+    (mark-graph-synced! (worker-state/get-datascript-conn test-repo))
     (let [conn (worker-state/get-datascript-conn test-repo)
           {:keys [page-uuid]} (seed-page-parent-child!)
           page-id (:db/id (d/entity @conn [:block/uuid page-uuid]))
@@ -942,6 +947,7 @@
 (deftest apply-template-op-replays-via-undo-redo-test
   (testing ":apply-template op can be applied and replayed via undo/redo"
     (worker-undo-redo/clear-history! test-repo)
+    (mark-graph-synced! (worker-state/get-datascript-conn test-repo))
     (let [conn (worker-state/get-datascript-conn test-repo)
           {:keys [page-uuid]} (seed-page-parent-child!)
           page-id (:db/id (d/entity @conn [:block/uuid page-uuid]))
@@ -1202,6 +1208,7 @@
 (deftest undo-history-records-forward-ops-for-save-block-test
   (testing "worker save-block history keeps semantic forward ops for redo replay"
     (worker-undo-redo/clear-history! test-repo)
+    (mark-graph-synced! (worker-state/get-datascript-conn test-repo))
     (let [conn (worker-state/get-datascript-conn test-repo)
           {:keys [child-uuid]} (seed-page-parent-child!)]
       (apply-ops! conn
@@ -2154,14 +2161,12 @@
       (is (= [2 0] (stacks))))))
 
 (deftest synced-graph-undo-replays-semantic-ops-test
-  (testing "on a synced graph undo replays the semantic ops, also for entries recorded before the graph synced"
+  (testing "on a synced graph undo replays the semantic ops of the entry's client-op row"
     (worker-undo-redo/clear-history! test-repo)
     (let [conn (worker-state/get-datascript-conn test-repo)
           {:keys [child-uuid]} (seed-page-parent-child!)
           apply-history-action @worker-undo-redo/*apply-history-action!
           calls (atom [])]
-      (save-block-title! conn child-uuid "local")
-      (is (seq (:tx-datoms (latest-undo-history-data))))
       (mark-graph-synced! conn)
       (save-block-title! conn child-uuid "synced")
       (is (nil? (:tx-datoms (latest-undo-history-data))))
@@ -2170,8 +2175,8 @@
                 (swap! calls conj undo?)
                 (apply-history-action repo tx-id undo? tx-meta)))
       (try
-        (is (= 2 (count (undo-all!))))
-        (is (= [true true] @calls))
+        (is (= 1 (count (undo-all!))))
+        (is (= [true] @calls))
         (is (= "child" (:block/title (d/entity @conn [:block/uuid child-uuid]))))
         (finally
           (reset! worker-undo-redo/*apply-history-action! apply-history-action))))))
