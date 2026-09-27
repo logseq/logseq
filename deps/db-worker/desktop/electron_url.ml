@@ -199,11 +199,6 @@ let local_url_handler (win : Browser_window.t) (parsed_url : url)
                   Electron_utils.send_to_window w "redirectWhenExists"
                     [| payload |]
                 in
-                let redirect_f (win' : Browser_window.t)
-                    (graph_name' : string) : unit =
-                  if String.equal graph_name graph_name' then
-                    redirect win'
-                in
                 if open_new_window then
                   Electron_state.once_graph_ready := Some redirect_f
                 else
