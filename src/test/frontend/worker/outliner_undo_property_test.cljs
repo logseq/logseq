@@ -117,7 +117,11 @@
    "logseq/db-test#1311" ["undo-mismatch tag-props delete-page:property"
                           "undo-mismatch props+tag-props delete-page:property"]
    ;; Undo of deleting a parent tag leaves its child tags under Root Tag.
-   "logseq/db-test#1312" ["undo-mismatch props delete-page:tag"]})
+   "logseq/db-test#1312" ["undo-mismatch props delete-page:tag"]
+   ;; Undo of deleting a block leaves block references to it as plain text.
+   "logseq/db-test#1325" ["undo-mismatch children+refs+title delete:*"]
+   ;; Undo of deleting a block stores its page links by name.
+   "logseq/db-test#1326" ["undo-mismatch refs delete:*"]})
 
 (defn- env [k] (gobj/get (.-env js/process) k))
 
