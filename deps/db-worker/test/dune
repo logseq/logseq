@@ -30,6 +30,30 @@
   (run node --test %{test_js} %{test_query_js} %{test_crypt_js}
     %{test_node_js} %{test_time_js})))
 
+(melange.emit
+ (target test_desktop_node)
+ (alias test_desktop_node)
+ (module_systems commonjs)
+ (modules test_electron_desktop_melange)
+ (libraries
+  logseq_db_worker
+  logseq_db_worker_desktop
+  melange-fest
+  melange.node
+  melange.js)
+ (preprocess
+  (pps melange.ppx)))
+
+(rule
+ (alias runtest)
+ (deps
+  (alias test_desktop_node)
+  (source_tree node_stubs)
+  (:test_desktop_js ./test_desktop_node/test/test_electron_desktop_melange.js))
+ (action
+  (run env NODE_PATH=%{project_root}/test/node_stubs node --test
+    %{test_desktop_js})))
+
 (executable
  (name test_worker_native)
  (modes native)
