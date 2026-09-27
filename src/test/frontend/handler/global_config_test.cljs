@@ -104,3 +104,35 @@
          (fn []
            (state/replace-state! previous-state)
            (delete-global-root root-dir))))))
+
+(deftest-async overlapping-shortcut-saves-keep-both-bindings
+  {:before (node-fixtures/setup-get-fs!)
+   :after (node-fixtures/restore-get-fs!)}
+  (let [root-dir (create-global-root-without-config)
+        previous-state (state/get-state)
+        write-count (atom 0)]
+    (-> (p/with-redefs [config-handler/set-config! (fn [_k _v] nil)
+                        util/electron? (constantly true)
+                        fs/write-file! (fn [path content]
+                                         (let [n (swap! write-count inc)]
+                                           (p/do!
+                                            (when (= 1 n)
+                                              (p/delay 40))
+                                            (fsp/writeFile path content))))]
+          (let [first-save (shortcut/persist-user-shortcut! :ui/toggle-theme "t z")
+                second-save (shortcut/persist-user-shortcut! :ui/toggle-brackets "t b")]
+            (p/do!
+             first-save
+             second-save
+             (is (= {:ui/toggle-theme "t z"
+                     :ui/toggle-brackets "t b"}
+                    (:shortcuts (state/get-global-config)))
+                 "in-memory shortcuts keep both overlapping saves")
+             (is (= {:ui/toggle-theme "t z"
+                     :ui/toggle-brackets "t b"}
+                    (:shortcuts (read-global-config)))
+                 "config.edn keeps both overlapping saves"))))
+        (p/finally
+         (fn []
+           (state/replace-state! previous-state)
+           (delete-global-root root-dir))))))

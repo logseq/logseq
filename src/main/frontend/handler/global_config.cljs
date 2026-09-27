@@ -51,23 +51,36 @@
     (p/let [config-content (fs/read-file nil config-path)]
       (set-global-config-state! config-content))))
 
+(defonce ^:private *persist-tail
+  (atom (p/resolved nil)))
+
+(defn- enqueue-persist!
+  "Runs f after earlier global-config disk writes so overlapping saves stay ordered."
+  [f]
+  (let [prev @*persist-tail
+        next (p/do! prev (f))]
+    (reset! *persist-tail (p/catch next (fn [_] nil)))
+    next))
+
 (defn set-global-config-kv!
   [k v]
-  (p/let [_ (ensure-global-config-file!)]
-    (let [result (rewrite/parse-string
-                  (or (state/get-global-config-str-content) "{}"))
-          ks (if (sequential? k) k [k])
-          v (cond->> v
-              (map? v)
-              (reduce-kv (fn [a k v] (rewrite/assoc a k v)) (rewrite/parse-string "{}")))
-          new-result (if (and (= 1 (count ks))
-                              (nil? v))
-                       (rewrite/dissoc result (first ks))
-                       (rewrite/assoc-in result ks v))
-          new-str-content (str new-result)]
-      (p/do!
-       (fs/write-file! (global-config-path) new-str-content)
-       (state/set-global-config! (rewrite/sexpr new-result) new-str-content)))))
+  (let [result (rewrite/parse-string
+                (or (state/get-global-config-str-content) "{}"))
+        ks (if (sequential? k) k [k])
+        v (cond->> v
+            (map? v)
+            (reduce-kv (fn [a k v] (rewrite/assoc a k v)) (rewrite/parse-string "{}")))
+        new-result (if (and (= 1 (count ks))
+                            (nil? v))
+                     (rewrite/dissoc result (first ks))
+                     (rewrite/assoc-in result ks v))
+        new-str-content (str new-result)]
+    (state/set-global-config! (rewrite/sexpr new-result) new-str-content)
+    (enqueue-persist!
+     (fn []
+       (p/do!
+        (fs/mkdir-if-not-exists (global-config-dir))
+        (fs/write-file! (global-config-path) new-str-content))))))
 
 (defn start
   "This component has three responsibilities on start:
