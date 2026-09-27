@@ -1,0 +1,148 @@
+(* Create-a-new-graph dialog body (.new-graph): name input, Logseq Sync /
+   E2EE checkboxes (rtc-test mode only), Submit. Mirrors
+   components/repo.cljs new-db-graph-inner: validation toasts +
+   create-or-open-db via Graph.create_graph; the sync path calls the
+   worker db-sync endpoints like the cljs flow does. *)
+
+open Lui_elements
+
+let dom = Logseq_dom.dom
+module T = Graphs_text
+
+let checkbox_cls checked =
+  "ui__checkbox peer h-4 w-4 shrink-0 cursor-pointer rounded-sm border \
+   border-primary focus-visible:outline-none"
+  ^ if checked then " data-checked" else ""
+
+let checkbox ~key ~id ~checked ~on_click =
+  dom ~key ~tag:"button" ~id
+    ~style_class:(checkbox_cls checked)
+    ~attrs:
+      [ ("role", "checkbox")
+      ; ("type", "button")
+      ; ("aria-checked", string_of_bool checked)
+      ; ("data-state", if checked then "checked" else "unchecked")
+      ]
+    ~events:"click"
+    ~on_dom_event:(fun n _ -> if n = "click" then on_click ())
+    (if checked then
+       [ dom ~key:(key ^ "-ck") ~tag:"i" ~style_class:"ti ti-check h-4 w-4"
+           [] ]
+     else [])
+
+let name_input () =
+  match Browser_ui.qs ".new-graph input" with
+  | Some el -> Browser_ui.value el |> String.trim
+  | None -> ""
+
+let invalid_name name = Graphs_ops.invalid_chars name <> []
+
+let already_exists name = Graphs_ops.already_exists name
+
+let submit cloud e2ee creating =
+  let name = name_input () in
+  if String.trim name = "" then
+    Toast.warning T.name_reserved_warning
+  else if already_exists name then
+    Toast.error (T.already_exists name)
+  else if invalid_name name then
+    Toast.warning T.name_reserved_warning
+  else (
+    Signal.set creating true;
+    Runtime.flush ();
+    ignore
+      (Js.Promise.then_
+         (fun repo ->
+           Graphs_ops.remember_open repo;
+           Dialogs_state.close_named "new-graph";
+           ignore (Graphs_ops.navigate_journal repo);
+           Js.Promise.resolve ())
+         (if Signal.get_state cloud then
+            Graphs_ops.create_remote name (Signal.get_state e2ee)
+          else Graph.create_graph name)))
+
+let body (_ms : Model.t Signal.signal) : t =
+ fun ctx parent ->
+  let cloud = Signal.state ctx.ui_scheduler false in
+  let e2ee = Signal.state ctx.ui_scheduler false in
+  let creating = Signal.state ctx.ui_scheduler false in
+  let node =
+    dom ~key:"new-graph" ~style_class:"new-graph flex flex-col gap-4 p-1 pt-2"
+      [ dom ~key:"ng-h" ~tag:"h2"
+          ~style_class:
+            "ui__dialog-title text-lg font-semibold leading-none \
+             tracking-tight" ~text:T.create_new_graph []
+      ; dom ~key:"ng-in" ~tag:"input"
+          ~attrs:
+            [ ("placeholder", T.graph_name_placeholder)
+            ; ("autocomplete", "off")
+            ; ("type", "text")
+            ]
+          ~events:"keydown"
+          ~on_dom_event:(fun n p ->
+            match n with
+            | "keydown" -> (
+                match
+                  Platform.payload_str
+                    (Option.value p ~default:"{}")
+                    "key"
+                with
+                | "Enter" -> submit cloud e2ee creating
+                | _ -> ())
+            | _ -> ())
+          []
+      ; if Platform.rtc_test_mode () then
+          dom ~key:"ng-rtc" ~style_class:"flex flex-col"
+            [ dom ~key:"ng-rtc-row"
+                ~style_class:"flex flex-row items-center gap-1"
+                [ dyn ~equal:Stdlib.( = )
+                    (fun c ->
+                      checkbox ~key:"rtc" ~id:"rtc-sync" ~checked:c
+                        ~on_click:(fun () ->
+                          Signal.set cloud (not (Signal.get_state cloud));
+                          Runtime.flush ()))
+                    (Signal.value cloud)
+                ; dom ~key:"rtc-lbl" ~tag:"label"
+                    ~style_class:"opacity-70 text-sm"
+                    ~attrs:[ ("for", "rtc-sync") ]
+                    ~text:T.use_sync_label []
+                ; if_ ~test:(Signal.value cloud)
+                    (dom ~key:"ng-e2ee-row"
+                       ~style_class:"flex flex-row items-center gap-1 ml-3"
+                       [ dyn ~equal:Stdlib.( = )
+                           (fun c ->
+                             checkbox ~key:"e2ee" ~id:"rtc-graph-e2ee"
+                               ~checked:c
+                               ~on_click:(fun () ->
+                                 Signal.set e2ee
+                                   (not (Signal.get_state e2ee));
+                                 Runtime.flush ()))
+                           (Signal.value e2ee)
+                       ; dom ~key:"e2ee-lbl" ~tag:"label"
+                           ~style_class:"opacity-70 text-sm"
+                           ~attrs:[ ("for", "rtc-graph-e2ee") ]
+                           ~text:T.encrypt_data_label []
+                       ])
+                ]
+            ]
+        else box ~key:"ng-no-rtc" []
+      ; dom ~key:"ng-submit" ~tag:"button" ~text:T.submit ~events:"click"
+          ~style_class:
+            "inline-flex items-center justify-center rounded-md text-sm \
+             font-medium bg-primary text-primary-foreground px-4 py-2"
+          ~attrs_signal_v:
+            (Logseq_dom.attrs_signal (Signal.value creating) (fun c ->
+                 if c then [ ("disabled", "true") ] else []))
+          ~on_dom_event:(fun n _ ->
+            if n = "click" then submit cloud e2ee creating)
+          []
+      ]
+  in
+  ignore
+    (Browser_ui.set_timeout
+       (fun () ->
+         match Browser_ui.qs ".new-graph input" with
+         | Some el -> Browser_ui.focus el
+         | None -> ())
+       32);
+  node ctx parent
