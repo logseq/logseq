@@ -947,6 +947,30 @@
   [db-before ent]
   (build-inverse-save-block db-before (into {} ent) nil))
 
+(defn- incoming-ref-holders
+  [page attr]
+  (when (and (keyword? attr) (namespace attr))
+    (get page (keyword (namespace attr) (str "_" (name attr))))))
+
+(defn- restore-incoming-ref-save-ops
+  "Save-block ops that put `attr` back on other entities that referenced `page`.
+   :db/retractEntity drops those incoming refs; the delete-page inverse must
+   restore them after the page exists again."
+  [page attr]
+  (let [value-ref (or (:db/ident page)
+                      (when-let [page-uuid (:block/uuid page)]
+                        [:block/uuid page-uuid]))]
+    (when value-ref
+      (->> (incoming-ref-holders page attr)
+           (keep (fn [holder]
+                   (when-let [holder-uuid (:block/uuid holder)]
+                     (when (not= (:db/id holder) (:db/id page))
+                       [:save-block [{:block/uuid holder-uuid
+                                      attr value-ref}
+                                     {}]]))))
+           vec
+           seq))))
+
 (defn- build-inverse-delete-page
   [db-before db-after page-uuid]
   (when-let [page (d/entity db-before [:block/uuid page-uuid])]
@@ -973,9 +997,12 @@
                             (inverse-upsert-property-schema db-before db-after page)
                             {:property-name (:block/title page)}]])
               restore-root-ops (when (every? some? root-plans)
-                                 (restore-plans->ops db-before root-plans))]
+                                 (restore-plans->ops db-before root-plans))
+              restore-group-by-ops (restore-incoming-ref-save-ops
+                                    page :logseq.property.view/group-by-property)]
           ;; Put the page's blocks back before its attributes: a property
-          ;; value of the page can be one of those blocks.
+          ;; value of the page can be one of those blocks. Restore incoming
+          ;; view group-by refs after the property exists again.
           (cond-> []
             create-op
             (conj create-op)
@@ -983,6 +1010,8 @@
             (into restore-root-ops)
             page-save-op
             (conj page-save-op)
+            (seq restore-group-by-ops)
+            (into restore-group-by-ops)
             :always
             seq))
 
