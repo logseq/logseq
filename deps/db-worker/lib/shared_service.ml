@@ -84,8 +84,19 @@ let wire_string (k : string) (data : Wire.t) : string option =
   | _ -> None
 
 let error_to_wire (e : exn) : Wire.t =
-  Wire.Map
-    [ Wire.String "message", Wire.String (Printexc.to_string e) ]
+  match e with
+  | Dispatcher.Exn_info (message, kvs) ->
+      (* cljs bean/->clj on an ExceptionInfo keeps message + data *)
+      Wire.Map
+        [ Wire.String "message", Wire.String message
+        ; Wire.String "data", Wire.Map kvs ]
+  | Outliner_validate.Notification w ->
+      Wire.Map
+        [ Wire.String "message", Wire.String (Printexc.to_string e)
+        ; Wire.String "data", w ]
+  | _ ->
+      Wire.Map
+        [ Wire.String "message", Wire.String (Printexc.to_string e) ]
 
 (* ---- client-id ---- *)
 
