@@ -44,17 +44,19 @@
 
 (defn- validate-frontend-not-in-workers
   []
-  (let [res (shell {:out :string :shutdown nil}
+  (let [res (shell {:out :string :continue true :shutdown nil}
                    "git grep -h" "\\[frontend.*:as"
-                   "src/main/frontend/worker" "src/main/frontend/worker_common")
+                   "--" "src/main/frontend/worker" "src/main/frontend/worker_common")
         allowed-export-requires #{"            [frontend.handler.export.common-impl :as common-impl]"
                                   "            [frontend.handler.export.html :as export-html]"
                                   "            [frontend.handler.export.opml :as export-opml]"
                                   "            [frontend.handler.export.text-impl :as export-text]"}
-        req-lines (->> (:out res)
-                       string/split-lines
-                       (remove #(re-find #"frontend\.worker|frontend\.common" %))
-                       (remove allowed-export-requires))]
+        req-lines (when (= 0 (:exit res))
+                    (->> (:out res)
+                         string/split-lines
+                         (remove #(re-find #"frontend\.worker|frontend\.common" %))
+                         (remove allowed-export-requires)))
+        _ (when (> (:exit res) 1) (System/exit 1))]
 
     (if (seq req-lines)
       (do
