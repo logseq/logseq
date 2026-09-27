@@ -100,3 +100,44 @@
       (is (= ["a" "b" "c"] (page-child-titles conn today)))
       (is (= ["e" "f"] (page-child-titles conn yesterday)))
       (is (= (:db/id yesterday) (block-page-id conn "e"))))))
+
+(deftest move-blocks-up-down-keeps-nested-pages-under-own-parent
+  (testing "Ctrl+click nested pages under different parents move within each parent"
+    (let [conn (db-test/create-conn-with-blocks
+                [{:page {:block/title "Projects"}}
+                 {:page {:block/title "Archive"}}
+                 {:page {:block/title "A"}}
+                 {:page {:block/title "B"}}
+                 {:page {:block/title "C"}}
+                 {:page {:block/title "X"}}
+                 {:page {:block/title "Y"}}])
+          projects (db-test/find-page-by-title @conn "Projects")
+          archive (db-test/find-page-by-title @conn "Archive")
+          a (db-test/find-page-by-title @conn "A")
+          b (db-test/find-page-by-title @conn "B")
+          c (db-test/find-page-by-title @conn "C")
+          x (db-test/find-page-by-title @conn "X")
+          y (db-test/find-page-by-title @conn "Y")]
+      (outliner-core/move-blocks! conn [a] projects {:sibling? false})
+      (outliner-core/move-blocks! conn [b] a {:sibling? true})
+      (outliner-core/move-blocks! conn [c] b {:sibling? true})
+      (outliner-core/move-blocks! conn [x] archive {:sibling? false})
+      (outliner-core/move-blocks! conn [y] x {:sibling? true})
+      (is (= ["A" "B" "C"] (page-child-titles conn projects)))
+      (is (= ["X" "Y"] (page-child-titles conn archive)))
+      (outliner-core/move-blocks-up-down!
+       conn
+       [(d/entity @conn (:db/id c)) (d/entity @conn (:db/id y))]
+       true)
+      (is (= (:db/id projects)
+             (:db/id (:block/parent (d/entity @conn (:db/id c))))))
+      (is (= (:db/id archive)
+             (:db/id (:block/parent (d/entity @conn (:db/id y))))))
+      (is (= ["A" "C" "B"] (page-child-titles conn projects)))
+      (is (= ["Y" "X"] (page-child-titles conn archive)))
+      (outliner-core/move-blocks-up-down!
+       conn
+       [(d/entity @conn (:db/id a))]
+       false)
+      (is (= ["C" "A" "B"] (page-child-titles conn projects))
+          "A nested page can still move down past a sibling page"))))

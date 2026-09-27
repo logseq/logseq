@@ -1417,14 +1417,10 @@
                 (transact-move-blocks! conn blocks target-block sibling? opts outliner-op top-level-blocks)
                 nil))))))))
 
-(defn- page-id
-  [block]
-  (:db/id (:block/page block)))
-
 (defn- same-page-move-target?
-  "True when moving to target would keep the first selected block on its page."
+  "True when moving to target would keep the block in its containing page."
   [block target sibling?]
-  (= (page-id block)
+  (= (container-page-eid block)
      (get-target-block-page target sibling?)))
 
 (defn- move-same-page-blocks-up-down
@@ -1466,8 +1462,10 @@
   that page."
   [conn blocks up?]
   {:pre [(seq blocks) (boolean? up?)]}
-  (let [top-level-blocks (filter-top-level-blocks @conn blocks)]
-    (doseq [page-blocks (vals (group-by page-id top-level-blocks))]
+  (let [db @conn
+        top-level-blocks (->> (filter-top-level-blocks db blocks)
+                              (map #(d/entity db (:db/id %))))]
+    (doseq [page-blocks (vals (group-by container-page-eid top-level-blocks))]
       (move-same-page-blocks-up-down conn page-blocks up?))))
 
 (defn- ^:large-vars/cleanup-todo indent-outdent-blocks
