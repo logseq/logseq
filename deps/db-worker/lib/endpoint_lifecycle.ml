@@ -450,17 +450,21 @@ let create_or_open_db args =
                       ~tx_meta:[ "initial-db?", Datascript.Bool true ])
                else None
              in
+             (* cljs (when-not sync-download-graph?
+                (let [migrate-result (db-migrate/migrate conn)] ...)
+                (transaction-handler/maybe-run-recycle-gc! conn)) — both
+                gated: a sync-download open hands an empty conn to the
+                importer, and the recycle-gc upsert would allocate eid 1
+                before the imported datoms arrive. *)
              (if not sync_download then begin
-                (* cljs (if migrate-result (handle-migrate-result-local-txs!
-                   ...) (maybe-enqueue-built-in-sync-repair! ...)) *)
-                match Db_migrate.migrate conn with
-                | Some result ->
-                    handle_migrate_result_local_txs repo result
-                | None ->
-                    maybe_enqueue_built_in_sync_repair repo conn None
-                      initial_data_exists
-              end;
-              Endpoint_transaction.maybe_run_recycle_gc conn);
+                (match Db_migrate.migrate conn with
+                 | Some result ->
+                     handle_migrate_result_local_txs repo result
+                 | None ->
+                     maybe_enqueue_built_in_sync_repair repo conn None
+                       initial_data_exists);
+                Endpoint_transaction.maybe_run_recycle_gc conn
+              end);
              (* cljs (when initial-tx-report (db-sync/handle-local-tx! repo
                 initial-tx-report)). *)
              (match initial_tx_report with

@@ -460,6 +460,10 @@ let finalize_import repo graph_id remote_tx import_id
      (if state.rows_imported then replay_imported_rows state
       else Db_worker_effect.pure ())
      >>= fun () ->
+     (* cljs graph validate reuses the live conn (create-or-open-db
+        early-returns), so the open-time heal never sees imported
+        datoms; heal the instant attrs here once the replay lands. *)
+     Worker_db_fix.heal_instant_values state.conn;
      complete_datoms_import repo graph_id remote_tx >>= fun () ->
      clear_import_state import_id)
     (fun e ->
