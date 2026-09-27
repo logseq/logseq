@@ -89,6 +89,30 @@
       (is (= [(select-keys original [:block/uuid])]
              (block-handler/get-top-level-blocks [block]))))))
 
+(deftest get-top-level-blocks-drops-descendant-covered-by-selected-ancestor
+  (let [conn (db-test/create-conn-with-blocks
+              [{:page {:block/title "page1"}
+                :blocks [{:block/title "a"
+                          :build/children [{:block/title "a1"}
+                                           {:block/title "a2"
+                                            :build/children [{:block/title "a2x"}]}]}
+                         {:block/title "b"}]}])
+        a (db-test/find-block-by-content @conn "a")
+        a2 (db-test/find-block-by-content @conn "a2")
+        a2x (db-test/find-block-by-content @conn "a2x")]
+    (with-redefs [state/get-edit-block (constantly nil)
+                  state/get-input (constantly nil)
+                  state/get-selection-blocks (constantly [])]
+      (is (= [(:block/uuid a)]
+             (mapv :block/uuid (block-handler/get-top-level-blocks [a a2x])))
+          "A selected grandchild is already covered by its selected ancestor.")
+      (is (= [(:block/uuid a)]
+             (mapv :block/uuid (block-handler/get-top-level-blocks [a2x a])))
+          "Selection order must not treat the grandchild as a move root.")
+      (is (= [(:block/uuid a)]
+             (mapv :block/uuid (block-handler/get-top-level-blocks [a a2])))
+          "A selected direct child is still dropped when the parent is selected."))))
+
 (deftest edit-block-loads-target-through-worker-test
   (async done
     (let [block-id #uuid "11111111-1111-1111-1111-111111111111"

@@ -736,11 +736,8 @@
                  {:block/uuid block-uuid}))))
 
 (defn- selected-block-roots
-  "The selected blocks without a selected ancestor. With `direct-parent?`, the
-  selected blocks without a selected parent: the blocks
-  outliner.core/filter-top-level-blocks keeps, so a moved block under a
-  selected grandparent gets its own restore."
-  [db-before ids & {:keys [direct-parent?]}]
+  "The selected blocks that are not descendants of another selected block."
+  [db-before ids]
   (let [resolved-entities (mapv #(block-entity db-before %) ids)
         unresolved-id? (some nil? resolved-entities)
         entities (reduce (fn [acc ent]
@@ -753,10 +750,8 @@
         has-selected-ancestor? (fn [ent]
                                  (loop [parent (:block/parent ent)]
                                    (if-let [parent-id (some-> parent :db/id)]
-                                     (cond
-                                       (contains? selected-ids parent-id) true
-                                       direct-parent? false
-                                       :else (recur (:block/parent parent)))
+                                     (or (contains? selected-ids parent-id)
+                                         (recur (:block/parent parent)))
                                      false)))]
     {:roots (->> entities
                  (remove has-selected-ancestor?)
@@ -912,7 +907,7 @@
 
 (defn- build-inverse-move-blocks
   [db-before ids]
-  (let [{:keys [roots incomplete?]} (selected-block-roots db-before ids :direct-parent? true)
+  (let [{:keys [roots incomplete?]} (selected-block-roots db-before ids)
         ;; Restore in page order: a block's restore target, its left sibling
         ;; or parent, may be another moved block, which must be back first.
         roots (sort-by document-order-path compare-document-order roots)
@@ -932,7 +927,12 @@
   [db ids up?]
   (let [blocks (mapv #(block-entity db %) ids)
         selected-ids (set (keep :db/id blocks))
-        top-level-blocks (remove #(contains? selected-ids (:db/id (:block/parent %))) blocks)]
+        has-selected-ancestor? (fn [ent]
+                                 (loop [parent (:block/parent ent)]
+                                   (when-let [parent-id (some-> parent :db/id)]
+                                     (or (contains? selected-ids parent-id)
+                                         (recur (:block/parent parent))))))
+        top-level-blocks (remove has-selected-ancestor? blocks)]
     (and (every? some? blocks)
          (seq top-level-blocks)
          (every? (fn [[left right]]

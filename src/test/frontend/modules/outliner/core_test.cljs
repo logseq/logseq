@@ -229,6 +229,36 @@
     (is (= [3 5 4] (get-children 2)))
     (is (= [2 6 7 8] (get-children 22)))))
 
+(deftest test-move-ancestor-with-selected-grandchild
+  (testing "Moving a together with grandchild a2x keeps a2x under a2"
+    ;; a=2 (a1=3; a2=4 with a2x=5), b=6, c=7
+    (transact-tree! [[22 [[2 [[3]
+                              [4 [[5]]]]
+                          [6]
+                          [7]]]])
+    (outliner-tx/transact!
+     (transact-opts)
+     (outliner-core/move-blocks! (conn/get-db test-db false)
+                                 [(get-block 2) (get-block 5)] (get-block 6)
+                                 {:sibling? true}))
+    (is (= [6 2 7] (get-children 22)))
+    (is (= [3 4] (get-children 2)))
+    (is (= [5] (get-children 4))))
+
+  (testing "Move-up of first ancestor plus grandchild does not pull a2x out"
+    (transact-tree! [[22 [[2 [[3]
+                              [4 [[5]]]]
+                          [6]
+                          [7]]]])
+    (outliner-tx/transact!
+     (transact-opts)
+     (outliner-core/move-blocks-up-down! (conn/get-db test-db false)
+                                         [(get-block 2) (get-block 5)]
+                                         true))
+    (is (= [2 6 7] (get-children 22)))
+    (is (= [3 4] (get-children 2)))
+    (is (= [5] (get-children 4)))))
+
 (deftest test-indent-blocks
   (testing "
   [1 [[2 [[3

@@ -80,14 +80,25 @@
   (let [updated-at (common-util/time-ms)]
     (assoc block :block/updated-at updated-at)))
 
+(defn- selected-ancestor?
+  "True when another selected block is an ancestor of `block`."
+  [selected-ids block]
+  (loop [parent (:block/parent block)
+         seen #{}]
+    (when-let [parent-id (:db/id parent)]
+      (when-not (contains? seen parent-id)
+        (or (contains? selected-ids parent-id)
+            (recur (:block/parent parent) (conj seen parent-id)))))))
+
 (defn- filter-top-level-blocks
   [db blocks]
-  (let [parent-ids (set/intersection (set (map (comp :db/id :block/parent) blocks))
-                                     (set (map :db/id blocks)))]
+  (let [->entity (fn [block]
+                   (if (de/entity? block) block (d/entity db (:db/id block))))
+        selected-ids (set (keep :db/id blocks))]
     (->> blocks
-         (remove (fn [e] (contains? parent-ids (:db/id (:block/parent e)))))
-         (map (fn [block]
-                (if (de/entity? block) block (d/entity db (:db/id block))))))))
+         (remove (fn [block]
+                   (selected-ancestor? selected-ids (->entity block))))
+         (map ->entity))))
 
 (defn- remove-orphaned-page-refs!
   [db {db-id :db/id} txs-state old-refs new-refs]
