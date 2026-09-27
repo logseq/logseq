@@ -317,6 +317,36 @@
         (is (nil? (:block/parent page2')))
         (is (nil? (:block/order page2')))))))
 
+(deftest delete-blocks-deletes-grandchild-when-selected-page-ancestor-does-not-retract-it
+  (testing "Page A contains page B contains X; deleting A+X still deletes X"
+    (let [conn (db-test/create-conn-with-blocks
+                [{:page {:block/title "page-a"}
+                  :blocks [{:block/title "a-child"}]}
+                 {:page {:block/title "page-b"}
+                  :blocks [{:block/title "x"}]}])
+          page-a (ldb/get-page @conn "page-a")
+          page-b (ldb/get-page @conn "page-b")
+          _ (d/transact! conn [{:db/id (:db/id page-b)
+                                :block/order "a1"
+                                :block/parent (:db/id page-a)}])
+          x (db-test/find-block-by-content @conn "x")]
+      (outliner-core/delete-blocks! conn [page-a x] {})
+      (is (nil? (db-test/find-block-by-content @conn "x")))
+      (is (some? (ldb/get-page @conn "page-a")))
+      (is (nil? (:block/parent (ldb/get-page @conn "page-a"))))
+      (is (some? (ldb/get-page @conn "page-b"))))))
+
+(deftest delete-blocks-retracts-grandchild-covered-by-selected-block-ancestor
+  (let [conn (issue-1317-conn)
+        page (db-test/find-page-by-title @conn "page1")
+        a (db-test/find-block-by-content @conn "a")
+        a2x (db-test/find-block-by-content @conn "a2x")]
+    (outliner-core/delete-blocks! conn [a a2x] {})
+    (is (nil? (db-test/find-block-by-content @conn "a")))
+    (is (nil? (db-test/find-block-by-content @conn "a2x")))
+    (is (nil? (db-test/find-block-by-content @conn "a2")))
+    (is (= ["b" "c"] (child-titles conn page)))))
+
 (deftest delete-blocks-hard-retracts-subtree
   (let [user-uuid (random-uuid)
         conn (db-test/create-conn-with-blocks

@@ -80,25 +80,37 @@
   (let [updated-at (common-util/time-ms)]
     (assoc block :block/updated-at updated-at)))
 
-(defn- selected-ancestor?
-  "True when another selected block is an ancestor of `block`."
-  [selected-ids block]
+(defn- selected-covering-ancestor?
+  "True when a selected ancestor covers `block`. `cover-ancestor?` is
+  (fn [block ancestor]) and decides whether that ancestor counts."
+  [selected-ids block cover-ancestor?]
   (loop [parent (:block/parent block)
          seen #{}]
     (when-let [parent-id (:db/id parent)]
       (when-not (contains? seen parent-id)
-        (or (contains? selected-ids parent-id)
+        (or (and (contains? selected-ids parent-id)
+                 (cover-ancestor? block parent))
             (recur (:block/parent parent) (conj seen parent-id)))))))
 
 (defn- filter-top-level-blocks
-  [db blocks]
-  (let [->entity (fn [block]
-                   (if (de/entity? block) block (d/entity db (:db/id block))))
-        selected-ids (set (keep :db/id blocks))]
-    (->> blocks
-         (remove (fn [block]
-                   (selected-ancestor? selected-ids (->entity block))))
-         (map ->entity))))
+  ([db blocks]
+   (filter-top-level-blocks db blocks (constantly true)))
+  ([db blocks cover-ancestor?]
+   (let [->entity (fn [block]
+                    (if (de/entity? block) block (d/entity db (:db/id block))))
+         selected-ids (set (keep :db/id blocks))]
+     (->> blocks
+          (remove (fn [block]
+                    (selected-covering-ancestor? selected-ids (->entity block) cover-ancestor?)))
+          (map ->entity)))))
+
+(defn- delete-covers-selected-ancestor?
+  "A selected ancestor covers a block for delete when it is the direct parent
+   (a page parent only detaches, so its selected children must not also be
+   deleted) or a non-page ancestor whose delete retracts the subtree."
+  [block ancestor]
+  (or (= (:db/id ancestor) (:db/id (:block/parent block)))
+      (not (ldb/page? ancestor))))
 
 (defn- remove-orphaned-page-refs!
   [db {db-id :db/id} txs-state old-refs new-refs]
@@ -1272,7 +1284,7 @@
 (defn ^:api ^:large-vars/cleanup-todo delete-blocks
   "Delete blocks from the tree."
   [db blocks _opts]
-  (let [top-level-blocks (filter-top-level-blocks db blocks)
+  (let [top-level-blocks (filter-top-level-blocks db blocks delete-covers-selected-ancestor?)
         non-consecutive? (and (> (count top-level-blocks) 1) (seq (ldb/get-non-consecutive-blocks db top-level-blocks)))
         top-level-blocks* (get-top-level-blocks top-level-blocks non-consecutive?)
         top-level-blocks (remove outliner-validate/built-in-entity? top-level-blocks*)
