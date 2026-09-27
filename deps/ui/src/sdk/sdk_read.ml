@@ -43,15 +43,7 @@ let get_tag a _b _c _d =
   match arg_string a with
   | None -> resolved_nil
   | Some id ->
-      let ref_w =
-        if is_uuid_string id then Wire.Uuid id
-        else if String.contains id '/' then Wire.Keyword id
-        else Wire.String id
-      in
-      Runtime.invoke2 "thread-api/get-case-page"
-        (Wire.String (repo ()))
-        ref_w
-      |> Js.Promise.then_ (fun w -> resolved_wire w)
+      get_entity id |> Js.Promise.then_ (fun w -> resolved_wire w)
 
 let get_tags_by_name a _b _c _d =
   match arg_string a with
@@ -81,14 +73,22 @@ let get_all_tags _a _b _c _d =
 let get_all_properties _a _b _c _d =
   call "thread-api/get-all-properties" [ Wire.String (repo ()); Wire.Map [] ]
 
+(* cljs get-property returns the entity + :type = :logseq.property/type *)
 let get_property a _b _c _d =
   match arg_string a with
   | None -> resolved_nil
   | Some name ->
-      Runtime.invoke2 "thread-api/get-case-page"
-        (Wire.String (repo ()))
-        (Wire.Keyword (property_ident name))
-      |> Js.Promise.then_ (fun w -> resolved_wire w)
+      get_entity_ident (property_ident name)
+      |> Js.Promise.then_ (fun w ->
+             match w with
+             | Wire.Map kvs ->
+                 let w' =
+                   match Wire.get w "logseq.property/type" with
+                   | Some t -> Wire.Map ((Wire.kw "type", t) :: kvs)
+                   | None -> w
+                 in
+                 resolved_wire w'
+             | _ -> resolved_nil)
 
 (* properties of an entity: :block/properties map on the wire entity *)
 let get_block_properties a _b _c _d =
