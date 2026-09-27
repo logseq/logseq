@@ -24,28 +24,41 @@ let toast_icon_class (k : string) : string =
 
 let toast_item (t : Model.toast) (idx : int) : t =
   let kind = toast_kind_class t.toast_kind in
-  dom ~key:("toast-" ^ string_of_int t.toast_id)
-    ~style_class:("ui__toast " ^ kind)
-    ~attrs:[ ("data-toast-index", string_of_int idx) ]
-    [ dom ~key:"ti-icon" ~tag:"i" ~style_class:(toast_icon_class kind) []
-    ; dom ~key:"ti-content" ~style_class:"ui__toast-content"
-        [ dom ~key:"ti-body" ~style_class:"ui__toast-body"
-            [ dom ~key:"ti-text" ~style_class:"ui__toast-text"
-                [ dom ~key:"ti-desc" ~style_class:"ui__toast-description"
-                    ~text:t.toast_text [] ]
-            ]
-        ]
-    ; dom ~key:"ti-close" ~tag:"button" ~style_class:"ui__toast-close"
-        ~attrs:[ ("aria-label", "Close") ]
-        ~events:"click"
-        ~on_dom_event:(fun name _ ->
-          if name = "click" then (
-            Runtime.send (Action.Toast_dismiss t.toast_id);
-            Runtime.flush ()))
-        []
-    ]
+  (* .ui__toast is position:absolute in the stylesheet with unset CSS vars;
+     relative + --toast-index keep stacked toasts from overlapping *)
+  let style =
+    Printf.sprintf "position:relative; --toast-index:%d" idx
+  in
+  fun ctx parent ->
+    Toast.schedule_dismiss ~ms:5000 t.toast_id;
+    (dom ~key:("toast-" ^ string_of_int t.toast_id)
+       ~style_class:("ui__toast " ^ kind)
+       ~attrs:
+         [ ("data-toast-index", string_of_int idx); ("style", style) ]
+       [ dom ~key:"ti-icon" ~tag:"i" ~style_class:(toast_icon_class kind) []
+       ; dom ~key:"ti-content" ~style_class:"ui__toast-content"
+           [ dom ~key:"ti-body" ~style_class:"ui__toast-body"
+               [ dom ~key:"ti-text" ~style_class:"ui__toast-text"
+                   [ dom ~key:"ti-desc"
+                       ~style_class:"ui__toast-description"
+                       ~text:t.toast_text [] ]
+               ]
+           ]
+       ; dom ~key:"ti-close" ~tag:"button" ~style_class:"ui__toast-close"
+           ~attrs:[ ("aria-label", "Close") ]
+           ~events:"click"
+           ~on_dom_event:(fun name _ ->
+             if name = "click" then Toast.dismiss t.toast_id)
+           []
+       ])
+      ctx parent
+
+let init_done = ref false
 
 let render (ms : Model.t Signal.signal) : t =
+  if not !init_done then (
+    init_done := true;
+    Toast.init ());
   dyn
     ~equal:(fun (a : Model.t) (b : Model.t) -> a.toasts = b.toasts)
     (fun (m : Model.t) ->
