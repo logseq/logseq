@@ -84,3 +84,15 @@ external dispatch_event : Js.Json.t -> unit = "dispatchEvent"
 
 let dispatch name detail =
   dispatch_event (custom_event name detail)
+
+external query_selector_all : string -> Js.Json.t array
+  = "querySelectorAll" [@@mel.scope "document"]
+
+external get_attribute : Js.Json.t -> string -> string option
+  = "getAttribute" [@@mel.send] [@@mel.return nullable]
+
+(* uuid list of .ls-block.selected blocks, in DOM order *)
+let selected_block_uuids () =
+  query_selector_all ".ls-block.selected"
+  |> Array.to_list
+  |> List.filter_map (fun el -> get_attribute el "blockid")
