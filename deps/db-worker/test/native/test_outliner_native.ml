@@ -2664,6 +2664,161 @@ let test_insert_blocks_resolves_journal_class_tagged_refs () =
   check "second ref uuid is canonical"
     (first_ref_uuid (List.hd blocks2) "block/refs" = Some canonical_uuid)
 
+(* ========== src/test/logseq/outliner/paste_refs_test.cljs ==========
+   1:1 translations of the 5 deftests: pasting blocks whose :block/refs
+   repeat the same new-page ref (e.g. an OG-exported page that links
+   [[internet]] many times) must create one page; case-distinct class
+   refs (#Movie vs #movie) still create both. *)
+
+(* cljs (d/q '[:find [?e ...] :in $ ?name :where [?e :block/name ?name]]) *)
+let eids_named (db : db) (name : string) : entity_id list =
+  Datascript.q_string db
+    ~inputs:[ Arg_scalar (Result_value (String name)) ]
+    "[:find [?e ...] :in $ ?name :where [?e :block/name ?name]]"
+  |> List.filter_map (function
+       | [ Result_entity id ] -> Some id
+       | [ Result_value (Int64 id) ] -> Datascript.Util.int64_to_int id
+       | _ -> None)
+
+let page_count (db : db) (name : string) : int = List.length (eids_named db name)
+
+(* cljs page-ref-map — a new-page ref map like paste.cljs produces for an
+   unresolved [[title]]: file-style :block/type "page" with a fresh uuid
+   per occurrence. *)
+let page_ref_map (title : string) : value =
+  Datascript.Map
+    [ Datascript.Keyword "block/uuid", Uuid (gen_uuid ())
+    ; Datascript.Keyword "block/title", String title
+    ; Datascript.Keyword "block/name", String title
+    ; Datascript.Keyword "block/type", String "page" ]
+
+(* the test's class-ref — same but :block/name lower-cased *)
+let class_ref_map (title : string) : value =
+  Datascript.Map
+    [ Datascript.Keyword "block/uuid", Uuid (gen_uuid ())
+    ; Datascript.Keyword "block/title", String title
+    ; Datascript.Keyword "block/name", String (Unicode.lowercase title)
+    ; Datascript.Keyword "block/type", String "page" ]
+
+(* cljs paste-opts *)
+let paste_opts : Outliner_core.insert_opts =
+  { Outliner_core.default_insert_opts with
+    sibling = true
+  ; outliner_op = Some "paste"
+  ; outliner_real_op = Some "paste-text"
+  ; keep_uuid = true }
+
+(* cljs paste-blocks! *)
+let paste_blocks conn (blocks : Block_map.t list) : unit =
+  let target =
+    Option.get (find_block_by_content (db_of conn) "anchor")
+  in
+  insert_blocks_bang conn blocks (Block_map.of_entity target)
+    ~opts:paste_opts ()
+
+(* cljs conn-with-target *)
+let conn_with_target () =
+  Db_test_util.create_conn_with_blocks
+    ~pages_and_blocks:
+      [ { page = { default_page with pg_title = Some "target" };
+          blocks = [ { default_block with b_title = Some "anchor" } ] } ]
+    ()
+
+(* uuids of a block's :block/refs entities, deduped *)
+let ref_uuid_set (block : entity) : string list =
+  Ldb.ref_ents block "block/refs"
+  |> List.filter_map (fun r -> Ldb.uuid_value r "block/uuid")
+  |> List.sort_uniq String.compare
+
+let test_insert_same_block_repeated_page_refs_creates_one_page () =
+  let conn = conn_with_target () in
+  paste_blocks conn
+    [ [ "block/uuid", Uuid (gen_uuid ())
+      ; "block/title", String "see [[internet]] and [[internet]]"
+      ; "block/refs"
+      , Datascript.List [ page_ref_map "internet"; page_ref_map "internet" ] ] ];
+  check "one internet page" (page_count (db_of conn) "internet" = 1);
+  let block =
+    Option.get
+      (find_block_by_content (db_of conn)
+         "see [[internet]] and [[internet]]")
+  in
+  check "one ref uuid" (List.length (ref_uuid_set block) = 1)
+
+let test_insert_cross_block_repeated_page_refs_creates_one_page () =
+  let conn = conn_with_target () in
+  paste_blocks conn
+    [ [ "block/uuid", Uuid (gen_uuid ())
+      ; "block/title", String "see [[internet]]"
+      ; "block/refs", Datascript.List [ page_ref_map "internet" ] ]
+    ; [ "block/uuid", Uuid (gen_uuid ())
+      ; "block/title", String "again [[internet]]"
+      ; "block/refs", Datascript.List [ page_ref_map "internet" ] ] ];
+  check "one internet page" (page_count (db_of conn) "internet" = 1)
+
+let test_insert_case_distinct_class_refs_creates_both () =
+  (* Classes are case-sensitive: #Movie and #movie must create two
+     classes even though both refs share :block/name "movie". *)
+  let conn = conn_with_target () in
+  paste_blocks conn
+    [ [ "block/uuid", Uuid (gen_uuid ())
+      ; "block/title", String "#Movie and #movie"
+      ; "block/tags"
+      , Datascript.List [ class_ref_map "Movie"; class_ref_map "movie" ]
+      ; "block/refs"
+      , Datascript.List [ class_ref_map "Movie"; class_ref_map "movie" ] ] ];
+  check "two movie pages" (page_count (db_of conn) "movie" = 2);
+  let block =
+    Option.get (find_block_by_content (db_of conn) "#Movie and #movie")
+  in
+  let tag_uuids =
+    Ldb.ref_ents block "block/tags"
+    |> List.filter_map (fun t -> Ldb.uuid_value t "block/uuid")
+    |> List.sort_uniq String.compare
+  in
+  check "two distinct tag uuids" (List.length tag_uuids = 2)
+
+let test_all_pages_classifies_paste_created_pages_as_pages () =
+  let conn = conn_with_target () in
+  paste_blocks conn
+    [ [ "block/uuid", Uuid (gen_uuid ())
+      ; "block/title", String "see [[internet]]"
+      ; "block/refs", Datascript.List [ page_ref_map "internet" ] ] ];
+  match eids_named (db_of conn) "internet" with
+  | eid :: _ -> (
+      (* cljs (entity/page? ...) -> ldb/page? *)
+      match Ldb.ent_of_id (db_of conn) eid with
+      | Some e -> check "paste-created page is a page" (Ldb.is_page e)
+      | None -> check "paste-created page found" false)
+  | [] -> check "paste-created page found" false
+
+let test_delete_paste_created_pages () =
+  let conn = conn_with_target () in
+  paste_blocks conn
+    [ [ "block/uuid", Uuid (gen_uuid ())
+      ; "block/title", String "see [[internet]]"
+      ; "block/refs", Datascript.List [ page_ref_map "internet" ] ] ];
+  let results =
+    List.map
+      (fun eid ->
+        match Ldb.ent_of_id (db_of conn) eid with
+        | Some e -> (
+            match Ldb.uuid_value e "block/uuid" with
+            | Some u ->
+                Outliner_page.delete_conn conn u (Wire.Map [])
+            | None -> Wire.Bool false)
+        | None -> Wire.Bool false)
+      (eids_named (db_of conn) "internet")
+  in
+  let remaining =
+    Datascript.q_string (db_of conn)
+      "[:find [?e ...] :where [?e :block/name \"internet\"] \
+        [(missing? $ ?e :logseq.property/deleted-at)]]"
+  in
+  check "every delete! true"
+    (results <> [] && List.for_all (fun r -> r = Wire.Bool true) results);
+  check "no non-deleted internet page remains" (remaining = [])
+
 (* (deftest test-delete-block-with-default-property ...) *)
 let test_delete_block_with_default_property () =
   let conn =
@@ -3018,6 +3173,11 @@ let core_cases : unit Alcotest.test_case list =
     Alcotest.test_case "insert-blocks-reuses-page-created-after-reference-parsing" `Quick test_insert_blocks_reuses_page_created_after_reference_parsing;
     Alcotest.test_case "insert-blocks-reuses-page-when-ref-tags-are-a-scalar-keyword" `Quick test_insert_blocks_reuses_page_when_ref_tags_are_a_scalar_keyword;
     Alcotest.test_case "insert-blocks-resolves-journal-class-tagged-refs" `Quick test_insert_blocks_resolves_journal_class_tagged_refs;
+    Alcotest.test_case "insert-same-block-repeated-page-refs-creates-one-page" `Quick test_insert_same_block_repeated_page_refs_creates_one_page;
+    Alcotest.test_case "insert-cross-block-repeated-page-refs-creates-one-page" `Quick test_insert_cross_block_repeated_page_refs_creates_one_page;
+    Alcotest.test_case "insert-case-distinct-class-refs-creates-both" `Quick test_insert_case_distinct_class_refs_creates_both;
+    Alcotest.test_case "all-pages-classifies-paste-created-pages-as-pages" `Quick test_all_pages_classifies_paste_created_pages_as_pages;
+    Alcotest.test_case "delete-paste-created-pages" `Quick test_delete_paste_created_pages;
     Alcotest.test_case "test-delete-block-with-default-property" `Quick test_delete_block_with_default_property;
     Alcotest.test_case "test-delete-page-with-outliner-core" `Quick test_delete_page_with_outliner_core;
     Alcotest.test_case "delete-blocks-hard-retracts-subtree" `Quick test_delete_blocks_hard_retracts_subtree;
