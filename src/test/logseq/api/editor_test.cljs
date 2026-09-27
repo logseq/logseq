@@ -183,6 +183,48 @@
                    (is false (str error))))
         (p/finally done))))
 
+(defn- property-written-value
+  [value]
+  (or (when (map? value)
+        (or (:logseq.property/value value)
+            (:block/title value)
+            (:value value)))
+      (when (and (object? value) (not (coll? value)))
+        (or (aget value "value")
+            (aget value ":logseq.property/value")))
+      (:logseq.property/value value)
+      value))
+
+(deftest upsert-block-property-stores-integer-numbers-as-values
+  (async done
+    (load-editor-page!)
+    (-> (api-test/with-plugin-api
+          (fn []
+            (p/let [alpha (test-helper/find-block-by-content "alpha")
+                    bravo (test-helper/find-block-by-content "bravo")
+                    uuid-a (str (:block/uuid alpha))
+                    uuid-b (str (:block/uuid bravo))
+                    _ (api-editor/upsert_block_property uuid-a "rating" 0 nil)
+                    zero-value (api-editor/get_block_property uuid-a "rating")
+                    _ (api-editor/upsert_block_property uuid-a "rating" -3 nil)
+                    negative-value (api-editor/get_block_property uuid-a "rating")
+                    _ (api-editor/upsert_block_property uuid-a "rating" 2 nil)
+                    two-owner (test-helper/find-block-by-content "alpha")
+                    value-block-id (:db/id (:plugin.property._test_plugin/rating two-owner))
+                    _ (api-editor/upsert_block_property uuid-b "rating" value-block-id nil)
+                    coincidental-value (api-editor/get_block_property uuid-b "rating")
+                    bravo-after (test-helper/find-block-by-content "bravo")]
+              (is (= 0 (property-written-value zero-value)))
+              (is (= -3 (property-written-value negative-value)))
+              (is (some? value-block-id))
+              (is (= value-block-id (property-written-value coincidental-value)))
+              (is (= value-block-id
+                     (property-written-value (get bravo-after :plugin.property._test_plugin/rating))))
+              (is (not= 2 (property-written-value coincidental-value))))))
+        (p/catch (fn [error]
+                   (is false (str error))))
+        (p/finally done))))
+
 (deftest editing-and-selection-state
   (let [block {:block/uuid #uuid "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
                :block/title "editing"}]
