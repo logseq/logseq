@@ -194,10 +194,10 @@
        (= (:tx-id current) (:tx-id next-slot))
        (= (select-keys (get-in current [:snapshot :value])
                        [:block.temp/positioned-properties :property/closed-values
-                        :block.temp/has-children?])
+                        :block.temp/has-children? :block.temp/class-property-idents])
           (select-keys (get-in next-slot [:snapshot :value])
                        [:block.temp/positioned-properties :property/closed-values
-                        :block.temp/has-children?]))))
+                        :block.temp/has-children? :block.temp/class-property-idents]))))
 
 (defn- wire-slot
   [basis-rev [kind key :as slot-key] wire]
