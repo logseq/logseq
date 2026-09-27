@@ -711,6 +711,45 @@ let test_apply_outliner_ops_insert_dead_uuid_ref () =
   in
   check "block inserted" (Ldb.string_value b "block/title" <> None)
 
+(* ensure-comments-area-for-blocks — "Add comment" on a plain block must
+   create a comments-area child tagged logseq.class/Comments pointing back
+   at the block via logseq.property.comments/blocks. *)
+let test_ensure_comments_area_for_blocks () =
+  let conn =
+    create_conn_with_blocks
+      ~pages_and_blocks:
+        [ { page = { default_page with pg_title = Some "p1" }
+          ; blocks =
+              [ { default_block with
+                  b_uuid = Some "eeeeeeee-0000-0000-0000-000000000001"
+                ; b_title = Some "target block" } ] } ]
+      ()
+  in
+  register_conn conn;
+  let buuid = "eeeeeeee-0000-0000-0000-000000000001" in
+  let r =
+    api "ensure-comments-area-for-blocks"
+      [ Wire.String test_repo; Wire.Array [ Wire.Uuid buuid ] ]
+  in
+  let area_uuid =
+    match r with
+    | Wire.Map kvs -> (
+        match List.assoc_opt (kw "block/uuid") kvs with
+        | Some (Wire.Uuid u) -> u
+        | _ -> Alcotest.fail "ensure-comments-area returned no uuid")
+    | _ -> Alcotest.fail "ensure-comments-area-for-blocks returned non-map"
+  in
+  let area = Option.get (entity_at_uuid (db_of conn) area_uuid) in
+  check "area tagged Comments"
+    (Ldb.has_tag area "logseq.class/Comments");
+  let targets = Ldb.ref_ents area "logseq.property.comments/blocks" in
+  let block_ent = Option.get (entity_at_uuid (db_of conn) buuid) in
+  check "comments/blocks points at block"
+    (List.exists (fun (t : entity) -> t.id = block_ent.id) targets);
+  let parent = Ldb.ref_ent area "block/parent" in
+  check "area under target block"
+    (match parent with Some p -> p.id = block_ent.id | None -> false)
+
 (* (deftest apply-outliner-ops-rejects-missing-indent-parent-original ...) *)
 let test_apply_outliner_ops_rejects_missing_indent_parent_original () =
   let u1 = "cccccccc-0000-0000-0000-000000000001"
@@ -3234,6 +3273,8 @@ let cases =
       test_apply_outliner_ops_move_up_down
   ; Alcotest.test_case "apply-outliner-ops-insert-dead-uuid-ref" `Quick
       test_apply_outliner_ops_insert_dead_uuid_ref
+  ; Alcotest.test_case "ensure-comments-area-for-blocks" `Quick
+      test_ensure_comments_area_for_blocks
   ; Alcotest.test_case "get-block-sibling" `Quick test_get_block_sibling
   ; Alcotest.test_case "set-db-sync-config-keeps-only-non-auth-fields-test" `Quick
       test_set_db_sync_config_keeps_only_non_auth_fields
