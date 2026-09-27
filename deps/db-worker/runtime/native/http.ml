@@ -23,13 +23,24 @@ let resp_of_hooks (r : Native_test_hooks.http_resp) : response =
    stay alive while a truly stalled server eventually fails. *)
 let fetch_idle_timeout_s = 300.
 
+(* DNS + TCP + TLS setup runs before the idle watchdog can start, so it
+   gets its own bound; otherwise a stalled connect would pin the request
+   thread forever even after the caller times out. *)
+let connect_timeout_s = 30.
+
 (* One HTTP/1.1 request per connection, on a dedicated eio loop thread —
    same as the cljs fetch+single-request model this replaces. *)
 let fetch (req : request) : response =
   Eio_posix.run (fun env ->
     Eio.Switch.run (fun sw ->
-      let host, target, flow = Net_eio.connect_flow ~env ~sw req.url in
       let clock = Eio.Stdenv.clock env in
+      let host, target, flow =
+        Eio.Fiber.first
+          (fun () -> Net_eio.connect_flow ~env ~sw req.url)
+          (fun () ->
+             Eio.Time.sleep clock connect_timeout_s;
+             failwith "Http: connect timed out")
+      in
       let last_io = ref (Eio.Time.now clock) in
       let flow =
         { Net_eio.read =
