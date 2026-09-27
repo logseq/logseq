@@ -4,6 +4,29 @@
 
 let demo_graph = "Demo"
 
+(* storage values are edn-ish strings: "\"en\"" -> "en" *)
+let unquote s =
+  let len = String.length s in
+  if len >= 2 && String.get s 0 = '"' && String.get s (len - 1) = '"' then
+    String.sub s 1 (len - 2)
+  else s
+
+(* e2e contract: html lang reflects preferred-language storage key *)
+let apply_storage_env () =
+  let lang =
+    match Platform.local_storage_get "preferred-language" with
+    | Some v -> unquote v
+    | None -> "en"
+  in
+  Platform.document_set_lang lang;
+  let theme =
+    match Platform.local_storage_get "ui/theme" with
+    | Some v -> unquote v
+    | None -> "light"
+  in
+  Platform.document_set_data "theme" theme;
+  Platform.document_set_data "color" "logseq"
+
 (* pick the graph to open: first existing repo, else create Demo. *)
 let pick_graph repos =
   match repos with
@@ -47,6 +70,7 @@ let load_home_page repo =
          | None -> Js.Promise.resolve None)
 
 let run () =
+  apply_storage_env ();
   Runtime.worker := Some (Worker_client.create ());
   Graph.init_worker ()
   |> Js.Promise.then_ (fun () -> Graph.list_graphs ())
