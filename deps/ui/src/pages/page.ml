@@ -263,6 +263,7 @@ let page_view_of_model (m : Model.t) : t =
       | Some p -> library_view m p
       | None -> empty_state ())
   | Model.Ready, Model.Not_found n -> not_found_view n
+  | Model.Ready, Model.Graph -> Graph_view.view m
   | Model.Ready, (Model.All_graphs | Model.All_pages) ->
       box ~key:"graphs-view" [] (* graphs area renders via its own view *)
   | Model.Ready, _ -> (
