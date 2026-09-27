@@ -39,17 +39,81 @@ let breadcrumbs title : t =
       in
       dom ~key:"bc" ~style_class:"breadcrumb" (crumbs [] "" parts)
 
-let page_title_el (page : Model.page) : t =
+(* click position payload -> Page_menu_set *)
+let open_menu name payload =
+  if name = "contextmenu" then
+    Option.iter
+      (fun p ->
+        Runtime.send
+          (Action.Page_menu_set
+             (Some
+                ( Platform.payload_num p "clientX"
+                , Platform.payload_num p "clientY" )));
+        Runtime.flush ())
+      payload
+
+let title_editor (page : Model.page) : t =
+  let commit value =
+    (match page.page_uuid with
+     | Some u -> ignore (Page_ops.rename u value)
+     | None -> ());
+    Runtime.send Action.Title_edit_done;
+    Runtime.flush ()
+  in
+  (* e2e: exactly one .editor-wrapper textarea while renaming *)
+  dom ~key:"pt-edit" ~style_class:"editor-wrapper"
+    [ dom ~key:"pt-ta" ~tag:"textarea"
+        ~style_class:"block-title-wrap"
+        ~attrs:[ ("autofocus", "true") ]
+        ~text:page.page_title ~events:"keydown blur"
+        ~on_dom_event:(fun name payload ->
+          match name with
+          | "blur" -> commit (Platform.payload_str (Option.value payload ~default:"{}") "value")
+          | "keydown" -> (
+              match
+                Platform.payload_str
+                  (Option.value payload ~default:"{}") "key"
+              with
+              | "Enter" | "Escape" ->
+                  commit
+                    (Platform.payload_str
+                       (Option.value payload ~default:"{}") "value")
+              | _ -> ())
+          | _ -> ())
+        []
+    ]
+
+let page_title_el (m : Model.t) (page : Model.page) : t =
+  let icon =
+    if page.page_is_tag then
+      [ dom ~key:"pt-icon" ~style_class:"ls-page-icon flex self-start"
+          [ dom ~key:"pt-ic" ~tag:"i" ~style_class:"ti ti-hash" [] ]
+      ]
+    else []
+  in
+  let body =
+    if m.editing_title then [ title_editor page ]
+    else
+      [ box ~key:"pt-inner" ~style_class:"w-full relative"
+          [ dom ~key:"pt-title" ~style_class:"block-title-wrap"
+              ~attrs:[ ("id", "page-title-text") ]
+              ~text:page.page_title []
+          ]
+      ]
+  in
   (* e2e selects [data-testid='page title'] -> mapped to #page-title *)
   dom ~key:"page-title" ~id:"page-title"
     ~style_class:"ls-page-title flex flex-1 w-full content items-start title"
     ~attrs:[ ("data-testid", "page title") ]
-    [ box ~key:"pt-inner" ~style_class:"w-full relative"
-        [ dom ~key:"pt-title" ~style_class:"block-title-wrap"
-            ~attrs:[ ("id", "page-title-text") ]
-            ~text:page.page_title []
-        ]
-    ]
+    ~events:"click contextmenu"
+    ~on_dom_event:(fun name payload ->
+      match name with
+      | "click" ->
+          if page.page_uuid <> None then (
+            Runtime.send Action.Title_edit_start;
+            Runtime.flush ())
+      | _ -> open_menu name payload)
+    (icon @ body)
 
 let blocks_inner (blocks : Model.block list) : t =
   dom ~key:"page-blocks" ~style_class:"ls-page-blocks"
@@ -101,10 +165,10 @@ let journals_view (js : Model.page list) : t =
      | [] -> [ dom ~key:"jp" ~style_class:"journal-item-placeholder" [] ]
      | _ -> List.map journal_item js)
 
-let library_view (page : Model.page) : t =
+let library_view (m : Model.t) (page : Model.page) : t =
   (* child pages render title rows only, no block bodies *)
   dom ~key:"library" ~style_class:"page"
-    [ page_title_el page
+    [ page_title_el m page
     ; dom ~key:"lib-blocks" ~style_class:"ls-page-blocks"
         [ dom ~key:"lib-inner" ~style_class:"page-blocks-inner relative"
             (List.map
@@ -119,7 +183,7 @@ let library_view (page : Model.page) : t =
 let not_found_view name : t =
   dom ~key:"not-found" ~style_class:"page"
     [ box ~key:"nf-inner" ~style_class:"flex flex-col items-center"
-        [ text ~key:"nf-t" ~value:("Page not found: " ^ name)
+        [ text ~key:"nf-t" ~value:(Strings.page_not_found ^ name)
             ~style_class:"" []
         ]
     ]
@@ -127,16 +191,17 @@ let not_found_view name : t =
 let page_view (m : Model.t) (page : Model.page) : t =
   box ~key:"page" ~style_class:"page"
     [ breadcrumbs page.page_title
-    ; page_title_el page
+    ; page_title_el m page
     ; blocks_inner page.page_blocks
     ; references_view m.page_refs
     ; unlinked_references_view ()
+    ; Page_menu.dialog_view m
     ]
 
 let empty_state () : t =
   box ~key:"empty" ~style_class:"page"
     [ box ~key:"empty-inner" ~style_class:"flex flex-col items-center"
-        [ text ~key:"empty-t" ~value:"Loading..." ~style_class:"" [] ]
+        [ text ~key:"empty-t" ~value:Strings.loading ~style_class:"" [] ]
     ]
 
 let page_view_of_model (m : Model.t) : t =
@@ -144,7 +209,7 @@ let page_view_of_model (m : Model.t) : t =
   | Model.Ready, Model.Journals -> journals_view m.journals
   | Model.Ready, Model.Library -> (
       match m.route_page with
-      | Some p -> library_view p
+      | Some p -> library_view m p
       | None -> empty_state ())
   | Model.Ready, Model.Not_found n -> not_found_view n
   | Model.Ready, (Model.All_graphs | Model.All_pages) ->
