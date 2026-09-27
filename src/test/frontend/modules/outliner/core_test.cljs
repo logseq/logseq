@@ -233,7 +233,7 @@
   (testing "Moving a together with grandchild a2x keeps a2x under a2"
     ;; a=2 (a1=3; a2=4 with a2x=5), b=6, c=7
     (transact-tree! [[22 [[2 [[3]
-                              [4 [[5]]]]
+                              [4 [[5]]]]]
                           [6]
                           [7]]]])
     (outliner-tx/transact!
@@ -247,7 +247,7 @@
 
   (testing "Move-up of first ancestor plus grandchild does not pull a2x out"
     (transact-tree! [[22 [[2 [[3]
-                              [4 [[5]]]]
+                              [4 [[5]]]]]
                           [6]
                           [7]]]])
     (outliner-tx/transact!
