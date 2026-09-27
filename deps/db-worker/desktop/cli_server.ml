@@ -71,7 +71,7 @@ module Lifecycle = struct
   [@@mel.get] [@@mel.return { undefined_to_opt }]
 end
 
-module Fs = struct
+module Fs_node = struct
   type dirent
 
   external name : dirent -> string = "name" [@@mel.get]
@@ -477,7 +477,7 @@ let canonical_path (path : string option) : string option =
   match path with
   | Some path when not (String.equal path "") ->
       let path = Common_graph.expand_home path in
-      Some (try Fs.realpath_sync path with _ -> Root_dir.path_resolve path)
+      Some (try Fs_node.realpath_sync path with _ -> Root_dir.path_resolve path)
   | _ -> None
 
 let current_root_dir (config : config) : string option =
@@ -864,10 +864,10 @@ let classify_graph_dir (graphs_root : string) (dir_name : string) :
 let list_graph_items (config : config) : graph_item array =
   let graphs_root = graphs_dir config in
   if Node.Fs.existsSync graphs_root then
-    Fs.readdir_sync graphs_root (Fs.readdir_options ~withFileTypes:true ())
+    Fs_node.readdir_sync graphs_root (Fs_node.readdir_options ~withFileTypes:true ())
     |> Array.to_list
-    |> List.filter (fun d -> Fs.is_directory d)
-    |> List.filter_map (fun d -> classify_graph_dir graphs_root (Fs.name d))
+    |> List.filter (fun d -> Fs_node.is_directory d)
+    |> List.filter_map (fun d -> classify_graph_dir graphs_root (Fs_node.name d))
     |> Array.of_list
   else [||]
 

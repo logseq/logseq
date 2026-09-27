@@ -94,8 +94,8 @@ let get_default_graphs_dir () : string =
 (* expand-home — node-path/join homedir rest when path starts with ~ *)
 let expand_home (path : string) : string =
   if String.length path > 0 && String.get path 0 = '~' then
-    Common_path.path_join (Runtime_env.home_dir ())
-      [ String.sub path 1 (String.length path - 1) ]
+    Gp_node_path.join
+      [ Runtime_env.home_dir (); String.sub path 1 (String.length path - 1) ]
   else path
 
 (* get-db-graphs-dir *)
