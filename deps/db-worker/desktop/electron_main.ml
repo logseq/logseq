@@ -643,7 +643,7 @@ let preferred_unix_cli_dir () : string option =
     }
 
 let preferred_win_cli_dir () : string option =
-  let env = process_env () in
+  let env = process_env in
   let path_env =
     match Js.Dict.get env "PATH" with
     | Some p -> p
@@ -680,7 +680,7 @@ let install_cli_launcher () : unit =
     if Electron_state.win32 then preferred_win_cli_dir ()
     else preferred_unix_cli_dir ()
   in
-  let env = process_env () in
+  let env = process_env in
   Electron_cli_install.install_cli_launcher
     {
       windows = Electron_state.win32;
@@ -752,8 +752,8 @@ let on_app_ready () : unit =
                     Js.log2 "Added Extension:" react_devtools;
                     Js.Promise.resolve ())
                   ((as_fun install_fn
-                     : Js.Json.t -> Js.Json.t -> Js.Json.t Js.Promise.t)
-                     devtools_installer react_devtools))
+                     : Js.Json.t -> Js.Json.t Js.Promise.t)
+                     react_devtools))
          | None -> ());
 
       Electron_db_worker.prepare_startup ()
