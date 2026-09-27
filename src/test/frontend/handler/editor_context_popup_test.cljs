@@ -28,7 +28,10 @@
                   editor/cut-selection-blocks
                   (fn [copy?]
                     (swap! calls conj [:cut copy?])
-                    (p/resolved nil))
+                    ;; Pending promise: the resolved case would run
+                    ;; clear-selection! asynchronously, after with-redefs has
+                    ;; restored the real implementation that needs a DOM.
+                    (p/deferred))
                   editor/clear-selection! (fn [])
                   shui-popup/get-popups (constantly [preview-popup context-popup])
                   shui/popup-hide! (fn [id]
