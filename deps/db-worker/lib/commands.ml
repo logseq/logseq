@@ -266,7 +266,8 @@ let advance_until_future (now : Time.civil) (datetime : Time.civil)
       (if utc_civil_after datetime now then 1
        else in_units datetime now u)
   in
-  let steps = max 1 ((periods + frequency - 1) / frequency) in
+  (* periods >= 1; (p - 1) / f + 1 avoids overflowing p + f - 1 *)
+  let steps = max 1 ((periods - 1) / frequency + 1) in
   let rec loop n =
     let cand = add_units datetime u (n * frequency) in
     if utc_civil_after cand now then cand else loop (n + 1)

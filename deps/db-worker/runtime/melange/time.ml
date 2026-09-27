@@ -127,6 +127,9 @@ let epoch_ms_of_civil tz c =
       in
       Int64.of_float (Js.Date.getTime d)
   | Offset_tz off ->
+      (* Same field order in UTC space. Date.UTC itself is unusable
+         here: it maps years 0-99 onto 1900-1999 while setUTCFullYear
+         keeps the literal year. *)
       let d = Js.Date.make () in
       let _ = Js.Date.setUTCDate ~date:1.0 d in
       let _ = Js.Date.setUTCFullYear ~year:(float_of_int c.cv_year) d in
