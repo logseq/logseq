@@ -49,9 +49,21 @@ external promise_error_as_exn : Js.Promise.error -> exn = "%identity"
 external exn_as_json : exn -> Js.Json.t = "%identity"
 
 let exn_code (e : exn) : string option =
-  Option.bind
-    (Js.Undefined.toOption (get_index (exn_as_json e) "code"))
-    Js.Json.decodeString
+  (* JS errors caught from externals arrive wrapped: the original error
+     object lives on the wrapper's `_1` slot. *)
+  let code_of (j : Js.Json.t) : string option =
+    Option.bind
+      (Js.Undefined.toOption (get_index j "code"))
+      Js.Json.decodeString
+  in
+  let wrapped = exn_as_json e in
+  match code_of wrapped with
+  | Some c -> Some c
+  | None ->
+      Option.bind
+        (Js.Undefined.toOption
+           (get_index wrapped "_1" : Js.Json.t Js.Undefined.t))
+        code_of
 
 let exn_info ?(code : string option) (message : string)
     (fields : (string * string) list) : exn =
