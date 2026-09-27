@@ -64,7 +64,12 @@ let in_units (a : Time.civil) (b : Time.civil) (u : recur_unit) : int =
       in
       if u = Year then months / 12 else months
 
-let utc_now () : Time.civil = Time.civil_of_epoch_ms Time.utc (Time.now ())
+(* cljs cljs-time.core/now — behind a ref so tests can pin the clock the way
+   cljs tests do with (with-redefs t/now ...) *)
+let now_fn : (unit -> Time.epoch_ms) ref = ref Time.now
+
+let utc_now () : Time.civil =
+  Time.civil_of_epoch_ms Time.utc (!now_fn ())
 
 let utc_civil_after (a : Time.civil) (b : Time.civil) : bool =
   Int64.compare (utc_ms a) (utc_ms b) > 0
@@ -239,18 +244,19 @@ let commands : command list =
     ; actions = [ [ "record-property-history" ] ] } ]
 
 (* cljs advance-from-completion — `.+` *)
-let advance_from_completion (u : recur_unit) (frequency : int) : Time.civil =
-  add_units (utc_now ()) u frequency
+let advance_from_completion (now : Time.civil) (u : recur_unit)
+    (frequency : int) : Time.civil =
+  add_units now u frequency
 
 (* cljs advance-from-scheduled — `+` *)
 let advance_from_scheduled (datetime : Time.civil) (u : recur_unit)
     (frequency : int) : Time.civil =
   add_units datetime u frequency
 
-(* cljs advance-until-future — `++` *)
-let advance_until_future (datetime : Time.civil) (u : recur_unit)
-    (frequency : int) : Time.civil =
-  let now = utc_now () in
+(* cljs advance-until-future — `++`; cljs-time arithmetic is UTC, so adding
+   whole weeks preserves day-of-week by construction — no fix-up needed *)
+let advance_until_future (now : Time.civil) (datetime : Time.civil)
+    (u : recur_unit) (frequency : int) : Time.civil =
   let periods =
     max 1
       (if utc_civil_after datetime now then 1
@@ -264,17 +270,22 @@ let advance_until_future (datetime : Time.civil) (u : recur_unit)
   in
   loop result
 
-let repeat_next_timestamp (datetime : Time.civil) (u : recur_unit)
-    (frequency : int) (repeat_type : string) : Time.civil =
+let repeat_next_timestamp ?(now : Time.civil = utc_now ())
+    (datetime : Time.civil) (u : recur_unit) (frequency : int)
+    (repeat_type : string) : Time.civil =
   match repeat_type with
   | "logseq.property.repeat/repeat-type.dotted-plus" ->
-      advance_from_completion u frequency
+      advance_from_completion now u frequency
   | "logseq.property.repeat/repeat-type.plus" ->
       advance_from_scheduled datetime u frequency
-  | _ -> advance_until_future datetime u frequency
+  | _ -> advance_until_future now datetime u frequency
 
-let get_next_time (current_value : int64) (unit : entity)
-    (frequency : int) (repeat_type : string) : int64 option =
+(* cljs get-next-time — the next occurrence, in milliseconds, of a repeat
+   whose current value is current-value (milliseconds). now defaults to the
+   current time; a date repeat passes today's UTC midnight so that it
+   computes in whole UTC days. *)
+let get_next_time ?(now : Time.civil = utc_now ()) (current_value : int64)
+    (unit : entity) (frequency : int) (repeat_type : string) : int64 option =
   let recur_unit =
     match Ldb.ident_of unit with
     | Some "logseq.property.repeat/recur-unit.minute" -> Some Minute
@@ -289,7 +300,7 @@ let get_next_time (current_value : int64) (unit : entity)
   | Some u when frequency > 0 ->
       Some
         (utc_ms
-           (repeat_next_timestamp (utc_civil current_value) u
+           (repeat_next_timestamp ~now (utc_civil current_value) u
               frequency repeat_type))
   | _ -> None
 
@@ -371,17 +382,38 @@ let compute_reschedule_property_tx (db : db) (ent : entity)
     | true, _, Some (Instant ms) -> Some ms
     | _ -> None
   in
+  (* A :date value is a day, carried here as its UTC midnight. It is
+     advanced in whole UTC days against today's UTC midnight and read back
+     as a UTC day; read in the local zone, UTC midnight is the previous
+     evening west of UTC and the repeat landed a day early. *)
+  let now : Time.civil =
+    if date_ then
+      utc_civil
+        (journal_day_to_ms
+           (Date_time_util.ms_to_journal_day (utc_ms (utc_now ()))))
+    else utc_now ()
+  in
   match frequency > 0, unit, current_value with
   | true, Some u, Some cv ->
-      (match get_next_time cv u frequency repeat_type with
+      (match get_next_time ~now cv u frequency repeat_type with
        | None -> []
        | Some next_time_long ->
-           let journal_day =
-             Outliner_pipeline.get_journal_day_from_long db
-               (Common_util.value_of_ms next_time_long)
+           let next_day =
+             if date_ then
+               Date_time_util.utc_ms_to_journal_day next_time_long
+             else Date_time_util.ms_to_journal_day next_time_long
+           in
+           let journal_page_id =
+             match
+               Seq.uncons
+                 (datoms db Avet ~a:"block/journal-day"
+                    ~v:(Int64 (Int64.of_int next_day)) ())
+             with
+             | Some (d, _) -> Some d.e
+             | None -> None
            in
            let page_uuid, page_txs =
-             match journal_day with
+             match journal_page_id with
              | Some eid ->
                  ((match Ldb.ent_of_id db eid with
                    | Some e ->
@@ -398,11 +430,8 @@ let compute_reschedule_property_tx (db : db) (ent : entity)
                          "logseq.property.journal/title-format"
                    | None -> None
                  in
-                 let next_day_int =
-                   Date_time_util.date_to_int next_time_long
-                 in
                  let title =
-                   Ldb.journal_title_of_day next_day_int
+                   Ldb.journal_title_of_day next_day
                      (match formatter with
                       | Some f -> f
                       | None -> "MMM do, yyyy")
