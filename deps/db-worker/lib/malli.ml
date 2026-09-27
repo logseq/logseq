@@ -61,7 +61,7 @@ and prim =
 let integer_float (f : float) : bool =
   match classify_float f with
   | FP_nan | FP_infinite -> false
-  | _ -> Float.equal f (Float.floor f)
+  | _ -> Float.equal f (Int64.to_float (Int64.of_float f))
 
 (* cljs pred semantics over datascript values. Instant doubles as the
    int64 scalar rep: epoch-ms values (block/created-at, updated-at,
