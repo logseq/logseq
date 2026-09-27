@@ -83,9 +83,8 @@ let set_properties_op block_uuid props =
   |> List.map (fun (ident, v) ->
          Wire.Array
            [ Wire.Keyword "set-block-property"
-           ; Wire.Uuid block_uuid
-           ; Wire.Keyword ident
-           ; v
+           ; Wire.Array
+               [ Wire.Uuid block_uuid; Wire.Keyword ident; v ]
            ])
 
 let ensure_property_ops props =
@@ -93,19 +92,21 @@ let ensure_property_ops props =
     (fun (ident, _) ->
       Wire.Array
         [ Wire.Keyword "upsert-property"
-        ; Wire.Keyword ident
-        ; Wire.Map
-            [ (Wire.kw "logseq.property/type", Wire.kw "default")
-            ; (Wire.kw "db/cardinality", Wire.kw "db.cardinality/one")
-            ]
-        ; Wire.Map
-            [ (Wire.kw "property-name"
-              , Wire.String
-                  (match String.rindex_opt ident '/' with
-                   | Some i ->
-                       String.sub ident (i + 1)
-                         (String.length ident - i - 1)
-                   | None -> ident))
+        ; Wire.Array
+            [ Wire.Keyword ident
+            ; Wire.Map
+                [ (Wire.kw "logseq.property/type", Wire.kw "default")
+                ; (Wire.kw "db/cardinality", Wire.kw "db.cardinality/one")
+                ]
+            ; Wire.Map
+                [ (Wire.kw "property-name"
+                  , Wire.String
+                      (match String.rindex_opt ident '/' with
+                       | Some i ->
+                           String.sub ident (i + 1)
+                             (String.length ident - i - 1)
+                       | None -> ident))
+                ]
             ]
         ])
     props
@@ -163,9 +164,11 @@ let insert_block a b c _d =
                         apply_ops
                           ([ Wire.Array
                                [ Wire.Keyword "insert-blocks"
-                               ; Wire.Array [ new_block ]
-                               ; Wire.Uuid target
-                               ; insert_opts
+                               ; Wire.Array
+                                   [ Wire.Array [ new_block ]
+                                   ; Wire.Uuid target
+                                   ; insert_opts
+                                   ]
                                ]
                            ]
                           @ ensure_property_ops props
@@ -321,9 +324,9 @@ let create_page_with_flags name journal uuid custom_uuid props =
   apply_op "create-page" [ Wire.String name; Wire.Map opts ]
   |> Js.Promise.then_ (fun r ->
          Js.Promise.resolve
-           (match r with
-            | Wire.Array [ _; Wire.Uuid u ] -> u
-            | Wire.Array [ _; Wire.String u ] -> u
+           (match wire_elems r with
+            | [ _; Wire.Uuid u ] -> u
+            | [ _; Wire.String u ] -> u
             | _ -> uuid))
   |> Js.Promise.then_ (fun u -> get_entity u)
   |> Js.Promise.then_ (fun w -> resolved_wire w)

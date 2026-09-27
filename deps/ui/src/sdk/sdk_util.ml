@@ -68,15 +68,28 @@ let property_ident name =
     ^ String.lowercase_ascii
         (String.map (fun c -> if ident_char_ok c then c else '_') stripped)
 
-(* dispatch outliner ops; resolves to the op result *)
+(* transit vectors may decode as Array or List — treat both as seqs *)
+let wire_elems w =
+  match w with
+  | Wire.Array xs | Wire.List xs | Wire.Set xs -> xs
+  | _ -> []
+
+(* dispatch outliner ops; each op entry is [kw-name, [args...]].
+   Response is {result: <last op result>, ...} — unwrap it. *)
 let apply_ops ops opts =
   Runtime.invoke3 "thread-api/apply-outliner-ops"
     (Wire.String (repo ()))
     (Wire.Array ops)
     opts
+  |> Js.Promise.then_ (fun w ->
+         Js.Promise.resolve
+           (match Wire.get w "result" with
+            | Some r -> r
+            | None -> Wire.Nil))
 
 let apply_op op args =
-  apply_ops [ Wire.Array (Wire.Keyword op :: args) ] (Wire.Map [])
+  apply_ops [ Wire.Array [ Wire.Keyword op; Wire.Array args ] ]
+    (Wire.Map [])
 
 (* id-or-name -> entity wire (get-blocks by uuid, else case page) *)
 let get_entity id_or_name =
@@ -90,11 +103,16 @@ let get_entity id_or_name =
              ]
          ])
     |> Js.Promise.then_ (fun w ->
-           match w with
-           | Wire.Array [ Wire.Array [ _; res ] ]
-           | Wire.Array [ Wire.List [ _; res ] ] ->
-               Js.Promise.resolve res
-           | _ -> Js.Promise.resolve Wire.Nil)
+           Js.Promise.resolve
+             (match wire_elems w with
+              | [ pair ] -> (
+                  match Wire.get pair "block" with
+                  | Some res -> res
+                  | None -> (
+                      match wire_elems pair with
+                      | [ _; res ] -> res
+                      | _ -> Wire.Nil))
+              | _ -> Wire.Nil))
   else
     Runtime.invoke2 "thread-api/get-case-page" (Wire.String repo)
       (Wire.String id_or_name)

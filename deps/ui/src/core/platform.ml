@@ -26,10 +26,10 @@ external get_element_by_id : string -> W.Element.t option
   = "getElementById" [@@mel.scope "document"] [@@mel.return nullable]
 
 external local_storage_get : string -> string option = "getItem"
-  [@@mel.scope "localStorage"] [@@mel.return nullable] [@@mel.send]
+  [@@mel.scope "localStorage"] [@@mel.return nullable]
 
 external local_storage_set : string -> string -> unit = "setItem"
-  [@@mel.scope "localStorage"] [@@mel.send]
+  [@@mel.scope "localStorage"]
 
 external document_element : Js.Json.t = "document.documentElement"
 
