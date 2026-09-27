@@ -610,8 +610,8 @@
           b-rev (db-test/find-block-by-content @conn-rev "b")]
       (outliner-core/move-blocks-up-down! conn-fwd [b-fwd c-fwd] true)
       (outliner-core/move-blocks-up-down! conn-rev [c-rev b-rev] true)
-      (is (= ["page1" ["b" "c" "a"]] (page-outline conn-fwd)))
-      (is (= (page-outline conn-fwd) (page-outline conn-rev)))))
+      (is (= ["page1" ["b" "c" "a"]] (page-outline conn-fwd "page1")))
+      (is (= (page-outline conn-fwd "page1") (page-outline conn-rev "page1")))))
 
   (testing "bottom-first selection on a,b,c,d matches page-order for up and down"
     (doseq [up? [true false]]
@@ -628,13 +628,13 @@
                      (mapv #(db-test/find-block-by-content @conn %) ["b" "c"]))]
         (outliner-core/move-blocks-up-down! conn-fwd (blocks conn-fwd) up?)
         (outliner-core/move-blocks-up-down! conn-rev (reverse (blocks conn-rev)) up?)
-        (is (= (page-outline conn-fwd) (page-outline conn-rev))
+        (is (= (page-outline conn-fwd "page1") (page-outline conn-rev "page1"))
             (str "up? " up?))
         (is (= (if up?
                  ["page1" ["b" "c" "a" "d"]]
                  ["page1" ["a" "d" "b" "c"]])
-               (page-outline conn-fwd)
-               (page-outline conn-rev))))))
+               (page-outline conn-fwd "page1")
+               (page-outline conn-rev "page1"))))))
 
   (testing "non-sibling Ctrl+click order does not change the move target"
     (let [tree [{:page {:block/title "page1"}
@@ -654,5 +654,5 @@
                        (mapv #(db-test/find-block-by-content @conn %) ["a2x" "c"]))]
           (outliner-core/move-blocks-up-down! conn-fwd (blocks conn-fwd) up?)
           (outliner-core/move-blocks-up-down! conn-rev (reverse (blocks conn-rev)) up?)
-          (is (= (page-outline conn-fwd) (page-outline conn-rev))
+          (is (= (page-outline conn-fwd "page1") (page-outline conn-rev "page1"))
               (str "up? " up?)))))))
