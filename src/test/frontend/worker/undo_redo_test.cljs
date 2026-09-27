@@ -707,6 +707,51 @@
       (is (some? (d/entity @conn [:block/uuid child-uuid])))
       (is (= #{"task" "child"} (set (property-value-titles (get (d/entity @conn [:block/uuid parent-uuid]) property))))))))
 
+(deftest undo-delete-page-restores-node-property-values-pointing-at-its-blocks-test
+  (testing "undoing delete-page should restore node property values that pointed at the page's hard-deleted blocks"
+    (worker-undo-redo/clear-history! test-repo)
+    (let [conn (worker-state/get-datascript-conn test-repo)
+          holder-uuid (:block/uuid (db-test/find-block-by-content @conn "task"))
+          property :user.property/related-today
+          today-day (date-time-util/ms->journal-day (js/Date.))
+          today-title (date-time-util/int->journal-title
+                       today-day
+                       (:logseq.property.journal/title-format
+                        (d/entity @conn :logseq.class/Journal)))
+          [_ today-page-uuid] (apply-ops! conn
+                                          [[:create-page [today-title
+                                                          {:today-journal? true
+                                                           :redirect? false
+                                                           :split-namespace? true
+                                                           :tags ()}]]]
+                                          (local-tx-meta {:client-id "test-client"}))
+          today-page-id (:db/id (d/entity @conn [:block/uuid today-page-uuid]))
+          target-uuid (random-uuid)]
+      (apply-ops! conn
+                  [[:insert-blocks [[{:block/uuid target-uuid
+                                      :block/title "today target"}]
+                                    today-page-id
+                                    {:sibling? false
+                                     :keep-uuid? true}]]]
+                  (local-tx-meta {:client-id "test-client"}))
+      (apply-ops! conn
+                  [[:upsert-property [property {:logseq.property/type :node
+                                                :db/cardinality :one} {}]]]
+                  (local-tx-meta {:client-id "test-client"}))
+      (apply-ops! conn
+                  [[:set-block-property [holder-uuid property (:db/id (d/entity @conn [:block/uuid target-uuid]))]]]
+                  (local-tx-meta {:client-id "test-client"}))
+      (is (= ["today target"] (property-value-titles (get (d/entity @conn [:block/uuid holder-uuid]) property))))
+      (worker-undo-redo/clear-history! test-repo)
+      (apply-ops! conn
+                  [[:delete-page [today-page-uuid {}]]]
+                  (local-tx-meta {:client-id "test-client"}))
+      (is (nil? (d/entity @conn [:block/uuid target-uuid])))
+      (is (empty? (property-value-titles (get (d/entity @conn [:block/uuid holder-uuid]) property))))
+      (is (map? (worker-undo-redo/undo test-repo)))
+      (is (some? (d/entity @conn [:block/uuid target-uuid])))
+      (is (= ["today target"] (property-value-titles (get (d/entity @conn [:block/uuid holder-uuid]) property)))))))
+
 (deftest undo-delete-page-restores-class-property-and-today-page-test
   (testing "undoing delete-page restores hard-retracted class/property pages and today page blocks"
     (let [conn (worker-state/get-datascript-conn test-repo)

@@ -801,7 +801,8 @@
   "`:db/retractEntity` on a deleted block also retracts the ref values other
   blocks hold on it, e.g. a node property value. Restore those values. They
   can point at blocks from several delete ops, so run these after every
-  deleted block has been inserted again."
+  deleted block has been inserted again. `:delete-page` hard-deletes blocks
+  too, e.g. when it truncates today's journal page."
   [db-before tx-data]
   (let [deleted-ids (into #{}
                           (keep (fn [d]
@@ -1090,7 +1091,7 @@
       (when (every? some? inverse-entries)
         (some->> (concat
                   (reverse-inverse-entry-groups inverse-entries forward-op-group-sizes)
-                  (when-let [restore-ops (and (some #(= :delete-blocks (first %)) forward-ops)
+                  (when-let [restore-ops (and (some #(contains? #{:delete-blocks :delete-page} (first %)) forward-ops)
                                               (seq (inbound-ref-restore-ops db-before tx-data)))]
                     [restore-ops]))
                  (mapcat #(if (and (sequential? %)
