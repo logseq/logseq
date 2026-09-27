@@ -309,7 +309,12 @@ let serve_connection (conn : conn) : unit =
                     ; res_head_sent = false
                     ; res_chunked = false
                     ; res_ended = false
-                    ; res_close = false }
+                    ; res_close =
+                        (match header_lookup headers "connection" with
+                         | Some v
+                           when String.lowercase_ascii (String.trim v) = "close" ->
+                             true
+                         | _ -> false) }
                   in
                   (try conn.conn_server.srv_handler req res
                    with exn ->
