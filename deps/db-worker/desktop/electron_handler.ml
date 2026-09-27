@@ -1250,11 +1250,9 @@ let handle (window : Browser_window.t) (message : Wire.t) : Wire.t Js.Promise.t
       resolve_nil ()
   | Some "httpRequest" -> http_request message
   | Some "httpRequestAbort" ->
-      (match str_arg message 1 with
-      | Some req_id -> (
-          match Hashtbl.find_opt request_abort_signals req_id with
-          | Some controller -> controller##abort ()
-          | None -> ())
+      (match Hashtbl.find_opt request_abort_signals (req_key (arg message 1))
+      with
+      | Some controller -> controller##abort ()
       | None -> ());
       resolve_nil ()
   | Some "quitAndInstall" ->
