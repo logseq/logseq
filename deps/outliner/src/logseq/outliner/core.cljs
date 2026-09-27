@@ -1421,9 +1421,15 @@
   [block]
   (:db/id (:block/page block)))
 
+(defn- same-page-move-target?
+  "True when moving to target would keep the first selected block on its page."
+  [block target sibling?]
+  (= (page-id block)
+     (get-target-block-page target sibling?)))
+
 (defn- move-same-page-blocks-up-down
-  "Move one page's top-level blocks up or down. A first block of a page does not
-  leave that page; a last block does not move onto another page."
+  "Move one page's top-level blocks up or down. The target is computed from this
+  page's selection only, so a multi-page selection cannot pull blocks across pages."
   [conn blocks up?]
   (let [opts {:outliner-op :move-blocks-up-down}]
     (if up?
@@ -1436,8 +1442,7 @@
             sibling? (= (:db/id (:block/parent left-left))
                         (:db/id first-block-parent))]
         (when (and left-left
-                   (or first-block-left-sibling
-                       (not (ldb/page? left-left)))
+                   (same-page-move-target? first-block left-left sibling?)
                    (not (and (:logseq.property/created-from-property first-block)
                              (nil? first-block-left-sibling))))
           (move-blocks conn blocks left-left (merge opts {:sibling? sibling?
@@ -1450,7 +1455,7 @@
             sibling? (= (:db/id (:block/parent last-top-block))
                         (:db/id (:block/parent right)))]
         (when (and right
-                   (not (ldb/page? right))
+                   (same-page-move-target? last-top-block right sibling?)
                    (not (and (:logseq.property/created-from-property last-top-block)
                              (nil? last-top-block-right))))
           (move-blocks conn blocks right (merge opts {:sibling? sibling?
