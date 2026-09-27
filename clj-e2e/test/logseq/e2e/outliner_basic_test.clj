@@ -263,11 +263,17 @@
                 "+Shift+"
                 (if up? "ArrowUp" "ArrowDown"))))
 
+(defn- edit-block!
+  [title]
+  (util/exit-edit)
+  (b/jump-to-block title)
+  (util/wait-editor-visible)
+  (is (= title (util/get-edit-content))))
+
 (defn move-up-down-ctrl-click
   []
   (testing "Ctrl/Cmd+click bottom-first on a,b,c moves b and c up together"
     (b/new-blocks ["a" "b" "c"])
-    (b/jump-to-block "c")
     (util/wait-editor-visible)
     (is (= "c" (util/get-edit-content)))
     (ctrl-click-block! "b")
@@ -281,8 +287,7 @@
   (testing "Ctrl/Cmd+click c then b on a,b,c,d moves like Shift+click of the same blocks"
     (p/new-page "ctrl click move abcd")
     (b/new-blocks ["a" "b" "c" "d"])
-    (b/jump-to-block "c")
-    (util/wait-editor-visible)
+    (edit-block! "c")
     (ctrl-click-block! "b")
     (util/wait-timeout 200)
     (assert/assert-have-count ".ls-page-blocks .ls-block.selected" 2)

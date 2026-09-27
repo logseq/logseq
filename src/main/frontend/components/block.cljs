@@ -2907,6 +2907,8 @@
                   (util/stop e)
                   (let [editing-el (state/get-editor-block-container)]
                     (when editing-el
+                      (state/clear-editor-action!)
+                      (editor-handler/save-current-block!)
                       (state/exit-editing-and-set-selected-blocks!
                        (if (some #(= editing-el %) selection-blocks)
                          (state/get-selection-blocks)
