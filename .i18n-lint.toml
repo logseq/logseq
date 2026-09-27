@@ -341,6 +341,10 @@ always_used_key_patterns = [
   # Electron context-menu label used by the OCaml electron main
   # (deps/db-worker/desktop/electron_context_menu.ml).
   "^:editor/paste$",
+  # Emitted as :i18n-key payloads by the OCaml db-worker daemon
+  # (deps/db-worker/lib/endpoint_export.ml, worker_db_validate.ml).
+  "^:export/error-unexpected$",
+  "^:storage/invalid-data-writing$",
 ]
 
 # Key namespace prefixes excluded from unused-key checking.
