@@ -274,9 +274,11 @@
       (clear-history! repo)
       (empty-stack-result undo?))))
 
-(defn- local-graph?
+(defn local-graph?
   "True unless the graph syncs. Upload and download set
-  `:logseq.kv/graph-remote?`; nothing unsets it."
+  `:logseq.kv/graph-remote?`; nothing unsets it. Such a graph keeps no
+  client-op rows of its local transactions: its undo entries carry
+  `:tx-datoms` and read no row."
   [db]
   (not (true? (:kv/value (d/entity db :logseq.kv/graph-remote?)))))
 
@@ -429,7 +431,10 @@
   (when (nil? @*apply-history-action!)
     (reset! *apply-history-action! apply-history-action!))
   (let [{:keys [outliner-op local-tx?]} tx-meta
-        {:db-sync/keys [forward-outliner-ops inverse-outliner-ops]} (pending-history-action-ops repo tx-id)]
+        local-graph?' (local-graph? db-after)
+        {:db-sync/keys [forward-outliner-ops inverse-outliner-ops]}
+        (when-not local-graph?'
+          (pending-history-action-ops repo tx-id))]
     (when (and
            (true? local-tx?)
            outliner-op
@@ -454,7 +459,7 @@
                           :retracted-ids retracted-ids
                           :db-sync/forward-outliner-ops forward-outliner-ops
                           :db-sync/inverse-outliner-ops inverse-outliner-ops}
-                   (local-graph? db-after)
+                   local-graph?'
                    (assoc :tx-datoms (recorded-datoms tx-data)))
             op (->> [(when editor-info [::record-editor-info editor-info])
                      [::db-transact data]]
