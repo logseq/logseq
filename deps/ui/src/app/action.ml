@@ -20,4 +20,5 @@ type t =
   | Dismiss_all (* Escape / outside click *)
   | Toast_push of Model.toast
   | Toast_dismiss of int
+  | Toasts_clear
   | Noop

@@ -38,6 +38,7 @@ let update (model : t) (action : Action.t) : t =
       { model with
         toasts = List.filter (fun (t : toast) -> t.toast_id <> id) model.toasts
       }
+  | Toasts_clear -> { model with toasts = [] }
   | Worker_event _ | Refresh_page | Block_content_changed _ | Toggle_search
   | Noop ->
       model

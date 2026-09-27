@@ -48,6 +48,7 @@ let run () =
   apply_storage_env ();
   let w = Worker_client.create () in
   w.on_message <- Worker_events.dispatch;
+  Worker_events.init ();
   Runtime.worker := Some w;
   Graph.init_worker ()
   |> Js.Promise.then_ (fun () -> Graph.list_graphs ())
