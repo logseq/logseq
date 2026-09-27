@@ -1,36 +1,18 @@
 (* Render-scoped access to the current repo for worker lookups
-   (e.g. resolving ((uuid)) block references).
-
-   TODO(render): [Render.title]'s signature carries no repo argument, so
-   the repo is discovered lazily through thread-api/list-db (first
-   graph, matching Boot.pick_graph).  When a proper "current repo"
-   channel exists in the app layer, replace this with it. *)
-
-let repo : string option ref = ref None
-let loading = ref false
-let waiters : (string -> unit) list ref = ref []
-
-let first_repo = function
-  | Wire.Array (m :: _) -> Wire.map_get_string m "name"
-  | _ -> None
-
-let drain () =
-  let fs = List.rev !waiters in
-  waiters := [];
-  match !repo with
-  | Some r -> List.iter (fun f -> f r) fs
-  | None -> ()
+   (e.g. resolving ((uuid)) block references). Reads the app-tracked
+   current repo; falls back to the first listed graph before boot. *)
 
 let with_repo f =
-  match !repo with
+  match !Runtime.current_repo with
   | Some r -> f r
   | None ->
-      waiters := f :: !waiters;
-      if not !loading then (
-        loading := true;
-        Runtime.invoke "thread-api/list-db" []
-        |> Js.Promise.then_ (fun w ->
-               repo := first_repo w;
-               drain ();
-               Js.Promise.resolve ())
-        |> ignore)
+      ignore
+        (Runtime.invoke "thread-api/list-db" []
+         |> Js.Promise.then_ (fun w ->
+                Js.Promise.resolve
+                  (match w with
+                   | Wire.Array (m :: _) -> (
+                       match Wire.map_get_string m "name" with
+                       | Some r -> f r
+                       | None -> ())
+                   | _ -> ())))

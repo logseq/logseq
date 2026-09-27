@@ -74,7 +74,11 @@ let main_content (ms : Model.t Signal.signal) =
             ~style_class:"cp__sidebar-main-content"
             [ dyn
                 ~equal:(fun (a : Model.t) (b : Model.t) ->
-                  a.phase = b.phase && a.route_page = b.route_page)
+                  a.phase = b.phase
+                  && a.route = b.route
+                  && a.route_page = b.route_page
+                  && a.journals = b.journals
+                  && a.page_refs = b.page_refs)
                 (fun m -> Page.page_view_of_model m)
                 ms ]
         ]

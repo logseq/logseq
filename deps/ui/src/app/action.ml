@@ -4,6 +4,8 @@ type t =
   | Boot_graph_ready of string
   | Repos_loaded of string list
   | Page_loaded of Model.page
+  | Journals_loaded of Model.page list
+  | Refs_loaded of Model.block list
   | Navigate_to of Model.route
   | Worker_event of string * Wire.t
   | Refresh_page
