@@ -30,7 +30,7 @@ let st : t Signal.state option ref = ref None
 let pending_focus : (string * int) option ref = ref None
 
 (* structured block clipboard (titles + hierarchy), set by copy/cut *)
-let clipboard : string list ref = ref []
+let clipboard : Model.block list ref = ref []
 
 (* state transforms deferred until the first block_row mounts the state —
    an empty page mounts no rows, so click-to-add on .block-add-button must
