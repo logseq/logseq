@@ -5,7 +5,20 @@ let worker : Worker_client.t option ref = ref None
 let app_send : (Action.t -> bool) ref = ref (fun _ -> false)
 let app_flush : (unit -> unit) ref = ref (fun () -> ())
 
-let send action = ignore (!app_send action)
+(* mirrors of model fields for non-view consumers (sdk bridge, events) *)
+let current_repo : string option ref = ref None
+let current_page : Model.page option ref = ref None
+
+let track action =
+  match action with
+  | Action.Boot_graph_ready repo -> current_repo := Some repo
+  | Action.Page_loaded page -> current_page := Some page
+  | Action.Navigate_to _ -> current_page := None
+  | _ -> ()
+
+let send action =
+  track action;
+  ignore (!app_send action)
 let flush () = !app_flush ()
 
 (* Convenience for feature modules: update a signal state and flush so the

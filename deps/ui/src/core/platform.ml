@@ -71,3 +71,16 @@ let on_hash_change f =
 
 let rtc_test_mode () =
   match query_param "rtc-test" with Some "true" -> true | _ -> false
+
+external random_uuid : unit -> string = "randomUUID"
+  [@@mel.scope "crypto"]
+
+(* dispatch a DOM CustomEvent on document — cross-area comms *)
+external custom_event : string -> Js.Json.t -> Js.Json.t = "CustomEvent"
+  [@@mel.new]
+
+external dispatch_event : Js.Json.t -> unit = "dispatchEvent"
+  [@@mel.scope "document"] [@@mel.send]
+
+let dispatch name detail =
+  dispatch_event (custom_event name detail)
