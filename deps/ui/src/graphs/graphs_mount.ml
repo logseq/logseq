@@ -13,10 +13,10 @@ let on_model (m : Model.t) =
   match m.phase, m.route with
   | Model.Ready, Model.All_graphs ->
       Recycle.hide ();
-      Graphs_view.show m.left_sidebar_open
+      Graphs_view.show ()
   | Model.Ready, Model.Page name when name = "Recycle" ->
       Graphs_view.hide ();
-      Recycle.show m.left_sidebar_open
+      Recycle.show ()
   | Model.Ready, _ ->
       Graphs_view.hide ();
       Recycle.hide ()

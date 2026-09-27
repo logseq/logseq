@@ -149,16 +149,13 @@ and render_roots host roots =
     B.append sec col;
     B.append host sec)
 
-let show sidebar_open =
+let show () =
   match B.qs "#main-content-container" with
   | Some parent -> (
       match B.qs ".ls-recycle-page-content" with
-      | Some host ->
-          Graphs_view.pad_for_sidebar host sidebar_open;
-          refresh host
+      | Some host -> refresh host
       | None ->
           let host = B.create "div" in
-          Graphs_view.pad_for_sidebar host sidebar_open;
           B.append parent host;
           refresh host)
   | None -> ()
