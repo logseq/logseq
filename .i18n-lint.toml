@@ -338,6 +338,9 @@ always_used_key_patterns = [
   # Default view title keys resolved dynamically via default-view-title-key-by-feature-type.
   "^:view/linked-references",
   "^:view/unlinked-references",
+  # Electron context-menu label used by the OCaml electron main
+  # (deps/db-worker/desktop/electron_context_menu.ml).
+  "^:editor/paste$",
 ]
 
 # Key namespace prefixes excluded from unused-key checking.
@@ -358,6 +361,9 @@ ignore_key_namespaces = [
   "graph.validation",
   # Left sidebar nav keys derived from tag nav entries.
   "nav",
+  # Electron main-process keys consumed by the OCaml electron main
+  # (deps/db-worker/desktop/electron_i18n.ml), outside cljs scan scope.
+  "electron",
 ]
 
 # Map attribute keys whose keyword values are translation key references.
