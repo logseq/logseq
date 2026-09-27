@@ -22,6 +22,8 @@ type page =
   { page_title : string
   ; page_uuid : string option
   ; page_db_id : int option
+  ; page_is_tag : bool
+  ; page_journal_day : int option
   ; page_blocks : block list
   }
 
@@ -29,6 +31,16 @@ type phase =
   | Booting
   | Ready
   | Failed of string
+
+(* modal confirm intent — carried as data so it survives the reducer *)
+type confirm = Confirm_delete_page of string (* page uuid *)
+
+(* worker :notification broadcast -> toast *)
+type toast =
+  { toast_id : int
+  ; toast_text : string
+  ; toast_kind : string (* "success" | "error" | "warning" | ... *)
+  }
 
 type t =
   { phase : phase
@@ -41,6 +53,11 @@ type t =
   ; theme_dark : bool
   ; left_sidebar_open : bool
   ; right_sidebar_open : bool
+  ; editing_title : bool
+  ; page_menu : (float * float) option (* click position *)
+  ; confirm : confirm option
+  ; toasts : toast list
+  ; toast_next : int
   }
 
 let initial =
@@ -54,4 +71,9 @@ let initial =
   ; theme_dark = false
   ; left_sidebar_open = true
   ; right_sidebar_open = false
+  ; editing_title = false
+  ; page_menu = None
+  ; confirm = None
+  ; toasts = []
+  ; toast_next = 0
   }

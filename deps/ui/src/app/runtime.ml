@@ -8,12 +8,15 @@ let app_flush : (unit -> unit) ref = ref (fun () -> ())
 (* mirrors of model fields for non-view consumers (sdk bridge, events) *)
 let current_repo : string option ref = ref None
 let current_page : Model.page option ref = ref None
+let current_route : Model.route option ref = ref None
 
 let track action =
   match action with
   | Action.Boot_graph_ready repo -> current_repo := Some repo
   | Action.Page_loaded page -> current_page := Some page
-  | Action.Navigate_to _ -> current_page := None
+  | Action.Navigate_to r ->
+      current_page := None;
+      current_route := Some r
   | _ -> ()
 
 let send action =
