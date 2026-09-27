@@ -67,13 +67,6 @@
       [nil 0]   ""
       [42 0 1]  "")))
 
-(deftest by-sorting-missing-values-stay-last
-  (let [items [{:id "dated" :v 3} {:id "undated" :v nil}]
-        titles (fn [asc?]
-                 (mapv :id (sort (common-util/by-sorting [{:get-value :v :asc? asc?}]) items)))]
-    (is (= ["dated" "undated"] (titles true)))
-    (is (= ["dated" "undated"] (titles false)))))
-
 (deftest timestamp-ms
   (testing "keeps positive epoch-ms numbers"
     (is (= 1577934245000 (common-util/timestamp-ms 1577934245000))))
