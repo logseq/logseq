@@ -49,24 +49,33 @@ let trim_leading s =
   in
   String.sub s (go 0) (n - go 0)
 
+(* db-ident/normalize-ident-name-part: keep alnum + =*+!_'?<>=-, and
+   prefix NUM- when the name starts with a digit *)
 let ident_char_ok c =
-  (Char.code c >= 0x80)
-  || ('a' <= c && c <= 'z')
+  ('a' <= c && c <= 'z')
   || ('A' <= c && c <= 'Z')
   || ('0' <= c && c <= '9')
-  || c = '_' || c = '-'
+  || String.contains "=*+!_'?<>=-" c
+
+let normalize_ident_name s =
+  let s = if String.length s > 0 && s.[0] >= '0' && s.[0] <= '9'
+          then "NUM-" ^ s else s in
+  String.to_seq s |> Seq.filter ident_char_ok |> String.of_seq
+
+(* property-name->title: trim, strip leading ':', trim *)
+let property_title name =
+  String.trim (trim_leading name)
+
+(* sanitize-user-property-name: trim, remove spaces, strip leading :_\s *)
+let sanitize_property_name name =
+  let s = String.trim name |> trim_leading in
+  String.to_seq s |> Seq.filter (fun c -> c <> ' ') |> String.of_seq
 
 (* property ident: unqualified names live in the test-plugin ns *)
 let property_ident name =
-  let stripped =
-    String.trim name |> trim_leading
-    |> String.map (fun c -> if c = ' ' then '_' else c)
-  in
+  let stripped = property_title name in
   if String.contains stripped '/' then stripped
-  else
-    "plugin.property._test_plugin/"
-    ^ String.lowercase_ascii
-        (String.map (fun c -> if ident_char_ok c then c else '_') stripped)
+  else "plugin.property._test_plugin/" ^ normalize_ident_name stripped
 
 (* transit vectors may decode as Array or List — treat both as seqs *)
 let wire_elems w =
@@ -91,30 +100,38 @@ let apply_op op args =
   apply_ops [ Wire.Array [ Wire.Keyword op; Wire.Array args ] ]
     (Wire.Map [])
 
-(* id-or-name -> entity wire (get-blocks by uuid, else case page) *)
+(* get-blocks [{id, opts}] -> [[{id, block?}...]] — resolve first result *)
+let get_by_id id_wire =
+  Runtime.invoke2 "thread-api/get-blocks" (Wire.String (repo ()))
+    (Wire.Array
+       [ Wire.Map
+           [ (Wire.String "id", id_wire); (Wire.String "opts", Wire.Map []) ]
+       ])
+  |> Js.Promise.then_ (fun w ->
+         Js.Promise.resolve
+           (match wire_elems w with
+            | [ pair ] -> (
+                match Wire.get pair "block" with
+                | Some res -> res
+                | None -> (
+                    match wire_elems pair with
+                    | [ _; res ] -> res
+                    | _ -> Wire.Nil))
+            | _ -> Wire.Nil))
+
+(* id-or-name -> entity wire (uuid / namespaced ident / page name) *)
 let get_entity id_or_name =
   let repo = repo () in
-  if is_uuid_string id_or_name then
-    Runtime.invoke2 "thread-api/get-blocks" (Wire.String repo)
-      (Wire.Array
-         [ Wire.Map
-             [ (Wire.String "id", Wire.String id_or_name)
-             ; (Wire.String "opts", Wire.Map [])
-             ]
-         ])
-    |> Js.Promise.then_ (fun w ->
-           Js.Promise.resolve
-             (match wire_elems w with
-              | [ pair ] -> (
-                  match Wire.get pair "block" with
-                  | Some res -> res
-                  | None -> (
-                      match wire_elems pair with
-                      | [ _; res ] -> res
-                      | _ -> Wire.Nil))
-              | _ -> Wire.Nil))
+  if is_uuid_string id_or_name then get_by_id (Wire.String id_or_name)
   else
     Runtime.invoke2 "thread-api/get-case-page" (Wire.String repo)
       (Wire.String id_or_name)
+    |> Js.Promise.then_ (fun w ->
+           match w with
+           | Wire.Nil when String.contains id_or_name '/' ->
+               get_by_id (Wire.Keyword id_or_name)
+           | _ -> Js.Promise.resolve w)
+
+let get_entity_ident ident = get_by_id (Wire.Keyword ident)
 
 let block_uuid_of (w : Wire.t) = Wire.map_get_uuid w "block/uuid"

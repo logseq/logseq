@@ -45,6 +45,9 @@ external remove_listener :
   W.Element.t -> string -> (Js.Json.t -> unit) -> unit =
   "removeEventListener" [@@mel.send]
 
+external prevent_default : Js.Json.t -> unit = "preventDefault"
+  [@@mel.send]
+
 let is_input_tag el =
   match String.lowercase_ascii (W.Element.tagName el) with
   | "input" | "textarea" | "select" -> true
@@ -150,6 +153,7 @@ let apply_events el names =
     (fun name ->
       if not (Hashtbl.mem tbl name) then (
         let f (ev : Js.Json.t) =
+          if name = "contextmenu" then prevent_default ev;
           let payload = json_of_event name ev in
           emit "dom-event"
             (String_map.empty

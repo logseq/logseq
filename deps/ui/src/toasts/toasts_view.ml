@@ -1,6 +1,57 @@
-(* ui__toast stack — stub; implementation owned by the src/toasts/ module area.
-   render takes the app model signal; area-local state lives in
-   toasts_state.ml (create it here if needed). *)
+(* Toast stack — worker :notification broadcasts land in model.toasts.
+   DOM contract: .ui__toaster-viewport > .ui__toast.<kind> with a
+   .ui__toast-close button and the message in .ui__toast-content. *)
+
 open Lui_elements
 
-let render (_ms : Model.t Signal.signal) : t = box ~key:"toasts_view" []
+let dom = Logseq_dom.dom
+
+let toast_kind_class (k : string) : string =
+  match k with
+  | "success" | "error" | "warning" | "info" -> k
+  | _ -> "info"
+
+let toast_icon_class (k : string) : string =
+  (* tabler icon per kind, mirrors notification.cljs status-icon *)
+  let i =
+    match k with
+    | "success" -> "circle-check"
+    | "warning" -> "alert-circle"
+    | "error" -> "circle-x"
+    | _ -> "info-circle"
+  in
+  "ui__toast-status-icon " ^ k ^ " ti ti-" ^ i
+
+let toast_item (t : Model.toast) (idx : int) : t =
+  let kind = toast_kind_class t.toast_kind in
+  dom ~key:("toast-" ^ string_of_int t.toast_id)
+    ~style_class:("ui__toast " ^ kind)
+    ~attrs:[ ("data-toast-index", string_of_int idx) ]
+    [ dom ~key:"ti-icon" ~tag:"i" ~style_class:(toast_icon_class kind) []
+    ; dom ~key:"ti-content" ~style_class:"ui__toast-content"
+        [ dom ~key:"ti-body" ~style_class:"ui__toast-body"
+            [ dom ~key:"ti-text" ~style_class:"ui__toast-text"
+                [ dom ~key:"ti-desc" ~style_class:"ui__toast-description"
+                    ~text:t.toast_text [] ]
+            ]
+        ]
+    ; dom ~key:"ti-close" ~tag:"button" ~style_class:"ui__toast-close"
+        ~attrs:[ ("aria-label", "Close") ]
+        ~events:"click"
+        ~on_dom_event:(fun name _ ->
+          if name = "click" then (
+            Runtime.send (Action.Toast_dismiss t.toast_id);
+            Runtime.flush ()))
+        []
+    ]
+
+let render (ms : Model.t Signal.signal) : t =
+  dyn
+    ~equal:(fun (a : Model.t) (b : Model.t) -> a.toasts = b.toasts)
+    (fun (m : Model.t) ->
+      match m.toasts with
+      | [] -> box ~key:"toaster-empty" []
+      | ts ->
+          dom ~key:"toaster" ~style_class:"ui__toaster-viewport"
+            (List.mapi (fun i (t : Model.toast) -> toast_item t i) ts))
+    ms

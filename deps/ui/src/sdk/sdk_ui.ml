@@ -82,15 +82,6 @@ let get_selected_blocks _a _b _c _d =
 let get_current_graph _a _b _c _d =
   resolved (Js.Json.string (repo ()))
 
-let graph_configs : Js.Json.t Js.Dict.t option ref = ref None
+let get_current_graph_configs _a b c d = Sdk_config.get_configs _a b c d
 
-let get_current_graph_configs _a _b _c _d =
-  match !graph_configs with
-  | Some o -> resolved (Sdk_convert.json_obj o)
-  | None -> resolved_nil
-
-let set_current_graph_configs a _b _c _d =
-  (match Js.Json.classify a with
-   | Js.Json.JSONObject o -> graph_configs := Some o
-   | _ -> ());
-  resolved_nil
+let set_current_graph_configs a b c d = Sdk_config.set_configs a b c d

@@ -401,9 +401,7 @@ let delete_page a _b _c _d =
                  |> Js.Promise.then_ (fun _ -> resolved_nil))
 
 let ensure_property ident name =
-  Runtime.invoke2 "thread-api/get-case-page"
-    (Wire.String (repo ()))
-    (Wire.Keyword ident)
+  get_entity_ident ident
   |> Js.Promise.then_ (fun p ->
          match p with
          | Wire.Map _ -> Js.Promise.resolve ()
@@ -446,32 +444,74 @@ let remove_block_property a b _c _d =
                  |> Js.Promise.then_ (fun _ -> resolved_nil)))
   | _ -> resolved_nil
 
-let upsert_property a b _c _d =
+(* schema remap — cljs upsert-property-aux: type→logseq.property/type
+   keyword, cardinality→db/cardinality kw, hide→logseq.property/hide?,
+   public→public?; type restricted to the known set *)
+let valid_property_types =
+  [ "default"; "number"; "date"; "datetime"; "checkbox"; "url"; "node"
+  ; "asset"; "json"; "string" ]
+
+let schema_entry (k, v) =
+  let ks = match k with Wire.String s | Wire.Keyword s -> s | _ -> "" in
+  match ks with
+  | "type" -> (
+      match v with
+      | Wire.String s when List.mem s valid_property_types ->
+          Some (Wire.kw "logseq.property/type", Wire.kw s)
+      | Wire.Keyword s when List.mem s valid_property_types ->
+          Some (Wire.kw "logseq.property/type", Wire.kw s)
+      | _ -> Some (Wire.kw "logseq.property/type", Wire.kw "default"))
+  | "cardinality" -> (
+      match v with
+      | Wire.String "many" | Wire.Keyword "many" | Wire.Keyword "db.cardinality/many"
+      | Wire.String "db.cardinality/many" ->
+          Some (Wire.kw "db/cardinality", Wire.kw "db.cardinality/many")
+      | _ -> Some (Wire.kw "db/cardinality", Wire.kw "db.cardinality/one"))
+  | "hide" -> Some (Wire.kw "logseq.property/hide?", v)
+  | "public" -> Some (Wire.kw "public?", v)
+  | _ -> Some (Wire.Keyword ks, v)
+
+let upsert_property a b c _d =
   match arg_string a with
   | None -> resolved_nil
   | Some name ->
       let ident = property_ident name in
-      let schema = arg_map b in
-      let schema' =
-        match schema with
-        | Wire.Map [] ->
-            Wire.Map [ (Wire.kw "logseq.property/type", Wire.kw "default") ]
-        | _ -> schema
+      let entries = map_entries (arg_wire b) in
+      let has_type =
+        List.exists
+          (fun (k, _) ->
+            match k with
+            | Wire.String "type" | Wire.Keyword "type" -> true
+            | _ -> false)
+          entries
       in
-      apply_op "upsert-property"
-        [ Wire.Keyword ident
-        ; schema'
-        ; Wire.Map [ (Wire.kw "property-name", Wire.String name) ]
-        ]
-      |> Js.Promise.then_ (fun w -> resolved_wire w)
+      let schema' =
+        Wire.Map
+          ((if has_type then []
+            else [ (Wire.kw "logseq.property/type", Wire.kw "default") ])
+           @ List.filter_map schema_entry entries)
+      in
+      let opts =
+        Wire.Map
+          ( (Wire.kw "property-name"
+            , Wire.String (sanitize_property_name name))
+          :: (match arg_map c with
+              | Wire.Map kvs -> kvs
+              | _ -> []) )
+      in
+      apply_op "upsert-property" [ Wire.Keyword ident; schema'; opts ]
+      |> Js.Promise.then_ (fun w ->
+             match w with
+             | Wire.Map _ -> resolved_wire w
+             | _ ->
+                 get_entity_ident ident
+                 |> Js.Promise.then_ (fun p -> resolved_wire p))
 
 let remove_property a _b _c _d =
   match arg_string a with
   | None -> resolved_nil
   | Some name ->
-      Runtime.invoke2 "thread-api/get-case-page"
-        (Wire.String (repo ()))
-        (Wire.Keyword (property_ident name))
+      get_entity_ident (property_ident name)
       |> Js.Promise.then_ (fun p ->
              match block_uuid_of p with
              | None -> resolved_nil
@@ -508,9 +548,7 @@ let set_property_node_tags a b _c _d =
                | Wire.String s -> Some (Wire.String s)
                | _ -> None)
       in
-      Runtime.invoke2 "thread-api/get-case-page"
-        (Wire.String (repo ()))
-        (Wire.Keyword ident)
+      get_entity_ident ident
       |> Js.Promise.then_ (fun p ->
              match block_uuid_of p with
              | None -> resolved_nil
