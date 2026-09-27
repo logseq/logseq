@@ -78,6 +78,10 @@ let open_search_db repo : Sqlite.db =
         ~path:"search/db.sqlite"
     else Sqlite.open_db ~path:(search_db_path repo)
   in
+  (* locking_mode=exclusive must precede any access: the sahpool VFS has no
+     xShmMap, so a WAL-mode file is only readable once exclusive locking is
+     set (sqlite then uses a heap wal-index). *)
+  Sqlite.exec db ~sql:"pragma locking_mode=exclusive" ~bind:[||];
   Search_index.create_tables_and_triggers db;
   db
 
