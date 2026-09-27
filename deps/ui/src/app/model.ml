@@ -19,6 +19,7 @@ type block =
   ; block_tag_ids : int list (* block/tags ref ids from the pull *)
   ; block_tags : string list (* resolved tag titles, for .block-tags *)
   ; block_children : block list
+  ; block_page_name : string option (* containing page, for ref rows *)
   }
 
 type page =
@@ -74,6 +75,7 @@ type t =
   ; route_page : page option
   ; journals : page list
   ; page_refs : block list
+  ; unlinked_refs : block list
   ; repos : string list
   ; theme_dark : bool
   ; left_sidebar_open : bool
@@ -96,6 +98,7 @@ let initial =
   ; route_page = None
   ; journals = []
   ; page_refs = []
+  ; unlinked_refs = []
   ; repos = []
   ; theme_dark = false
   ; left_sidebar_open = true
