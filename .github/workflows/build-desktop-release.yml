@@ -57,7 +57,7 @@ env:
   CLOJURE_VERSION: '1.12.4.1618'
   NODE_VERSION: '24'
   JAVA_VERSION: '21'
-  OCAML_VERSION: '5.1.1'
+  OCAML_VERSION: '5.5.0'
 
 jobs:
   compile-cljs:
@@ -186,6 +186,7 @@ jobs:
 
       - name: Verify desktop runtime script locations
         run: |
+          test -f ./static/electron.js
           test -f ./static/js/db-worker-node.js
           test -f ./static/js/logseq-cli.js
           test -f ./static/.agents/skills/logseq-cli/SKILL.md
