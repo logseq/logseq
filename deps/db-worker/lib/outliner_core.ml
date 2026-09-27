@@ -805,9 +805,29 @@ let resolve_refs_dedup (db : db) ?(base_db : db option) (refs : value list)
   in
   List.rev resolved
 
+(* A refs/tags item that cannot resolve at transact: a [:block/uuid u]
+   lookup or bare positive eid whose entity is missing from db. datascript
+   throws "Nothing found for entity id" on it — cljs hits the same crash on
+   e.g. Enter-splitting a block whose pasted [[uuid]] ref points at a
+   deleted entity; drop the dangling edge instead (the title keeps the
+   literal [[uuid]] text). [pending_uuids] are uuids minted by this op —
+   they are not in db yet but resolve at commit. *)
+let dangling_ref (db : db) (pending_uuids : string list) (r : value) : bool =
+  match r with
+  | Vector [ Keyword "block/uuid"; Uuid u ]
+  | List [ Keyword "block/uuid"; Uuid u ] ->
+      Option.is_none (entity db (Lookup_ref ("block/uuid", Uuid u)))
+      && not (List.mem u pending_uuids)
+  | Ref id when id > 0 -> Option.is_none (Ldb.ent_of_id db id)
+  | Int64 id -> (
+      match Datascript.Util.int64_to_int id with
+      | Some id when id > 0 -> Option.is_none (Ldb.ent_of_id db id)
+      | _ -> false)
+  | _ -> false
+
 (* resolve-page-refs — rewrite block/refs + block/tags and title uuids *)
-let resolve_page_refs (db : db) ?(base_db : db option) (block : Block_map.t)
-    : Block_map.t * tx_op list =
+let resolve_page_refs (db : db) ?(base_db : db option) ?(pending_uuids : string list = [])
+    (block : Block_map.t) : Block_map.t * tx_op list =
   let refs =
     match mget block "block/refs" with
     | Some (Vector vs) | Some (List vs) | Some (Set vs) -> vs
@@ -826,9 +846,15 @@ let resolve_page_refs (db : db) ?(base_db : db option) (block : Block_map.t)
             vs
       | _ -> []
     in
-    let resolved = resolve_refs_dedup db ?base_db refs tag_names in
-    let refs' = List.map fst resolved in
-    let page_txs = List.concat_map snd resolved in
+    (* resolve + drop dangling refs, keeping src->resolved pairing for the
+       title rewrite below *)
+    let kept =
+      List.combine refs (resolve_refs_dedup db ?base_db refs tag_names)
+      |> List.filter (fun (_src, (r', _tx)) ->
+             not (dangling_ref db pending_uuids r'))
+    in
+    let refs' = List.map (fun (_, (r', _)) -> r') kept in
+    let page_txs = List.concat_map (fun (_, (_, tx)) -> tx) kept in
     let tag_refs =
       List.fold_left
         (fun m (r : value) ->
@@ -868,14 +894,15 @@ let resolve_page_refs (db : db) ?(base_db : db option) (block : Block_map.t)
                | None -> tag)
           | None -> tag)
         tags
+      |> List.filter (fun t -> not (dangling_ref db pending_uuids t))
     in
     let replacements =
       List.filter_map
-        (fun (r, r') ->
+        (fun (r, (r', _)) ->
           match uuid_of_value r, uuid_of_value r' with
           | Some old_u, Some new_u when old_u <> new_u -> Some (old_u, new_u)
           | _ -> None)
-        (List.combine refs refs')
+        kept
     in
     let replace_refs title =
       List.fold_left
@@ -1941,7 +1968,7 @@ let insert_blocks_aux (db : db) (blocks : Block_map.t list)
         (match uuid' with
          | Some uuid' ->
              let block, page_txs =
-               resolve_page_refs db ?base_db
+               resolve_page_refs db ?base_db ~pending_uuids:uuids
                  (remove_disallowed_inline_classes db block)
              in
              let top_level =

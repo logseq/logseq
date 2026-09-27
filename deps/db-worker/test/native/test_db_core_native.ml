@@ -669,6 +669,48 @@ let test_apply_outliner_ops_move_up_down () =
   ignore (move [ "bbbbbbbb-0000-0000-0000-000000000003"; "bbbbbbbb-0000-0000-0000-000000000004" ] false);
   check "restored" (titles_of () = [ "b1"; "b2"; "b3"; "b4" ])
 
+(* insert-blocks with a dangling [:block/uuid ...] ref in :block/refs —
+   pasted id-refs to deleted entities arrive as raw lookup vectors in the
+   block payload. They must not crash the tx. *)
+let test_apply_outliner_ops_insert_dead_uuid_ref () =
+  let conn =
+    create_conn_with_blocks
+      ~pages_and_blocks:
+        [ { page = { default_page with pg_title = Some "p1" }
+          ; blocks =
+              [ { default_block with b_uuid = Some "dddddddd-0000-0000-0000-000000000001" } ] } ]
+      ()
+  in
+  register_conn conn;
+  let dead = "deadbeef-0000-0000-0000-000000000001" in
+  let r =
+    api "apply-outliner-ops"
+      [ Wire.String test_repo
+      ; Wire.Array
+          [ Wire.Array
+              [ kw "insert-blocks"
+              ; Wire.Array
+                  [ Wire.Array
+                      [ Wire.Map
+                          [ kw "block/uuid", Wire.Uuid "dddddddd-0000-0000-0000-000000000002"
+                          ; kw "block/title"
+                            , Wire.String ("pasted ref: [[" ^ dead ^ "]]")
+                          ; ( kw "block/refs"
+                            , Wire.Array
+                                [ Wire.Array [ kw "block/uuid"; Wire.Uuid dead ] ] ) ] ]
+                  ; Wire.Uuid "dddddddd-0000-0000-0000-000000000001"
+                  ; Wire.Map [ kw "sibling?", Wire.Bool true; kw "keep-uuid?", Wire.Bool true ] ] ] ]
+      ; Wire.Map [] ]
+  in
+  (match r with
+   | Wire.Tagged ("worker/error", _) ->
+       Alcotest.fail "apply-outliner-ops errored"
+   | _ -> ());
+  let b =
+    Option.get (entity_at_uuid (db_of conn) "dddddddd-0000-0000-0000-000000000002")
+  in
+  check "block inserted" (Ldb.string_value b "block/title" <> None)
+
 (* (deftest apply-outliner-ops-rejects-missing-indent-parent-original ...) *)
 let test_apply_outliner_ops_rejects_missing_indent_parent_original () =
   let u1 = "cccccccc-0000-0000-0000-000000000001"
@@ -3190,6 +3232,8 @@ let cases =
       test_apply_outliner_ops_typing_flow_order_and_delete
   ; Alcotest.test_case "apply-outliner-ops-move-up-down" `Quick
       test_apply_outliner_ops_move_up_down
+  ; Alcotest.test_case "apply-outliner-ops-insert-dead-uuid-ref" `Quick
+      test_apply_outliner_ops_insert_dead_uuid_ref
   ; Alcotest.test_case "get-block-sibling" `Quick test_get_block_sibling
   ; Alcotest.test_case "set-db-sync-config-keeps-only-non-auth-fields-test" `Quick
       test_set_db_sync_config_keeps_only_non_auth_fields
