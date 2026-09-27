@@ -38,6 +38,13 @@
     (client-op/ensure-sqlite-schema! db)
     db))
 
+(defn- create-remote-conn
+  "A client graph that syncs, marked as upload and download mark it. The stored
+  checksum is kept only on such a graph."
+  []
+  (doto (db-test/create-conn)
+    (d/transact! [(ldb/kv :logseq.kv/graph-remote? true)])))
+
 (defn- env-seed []
   (try
     (when (exists? js/process)
@@ -1711,8 +1718,8 @@
           rng (make-rng seed)
           gen-uuid #(rng-uuid rng)
           base-uuid (gen-uuid)
-          conn-a (db-test/create-conn)
-          conn-b (db-test/create-conn)
+          conn-a (create-remote-conn)
+          conn-b (create-remote-conn)
           ops-a (new-client-ops-db)
           ops-b (new-client-ops-db)
           client-a (make-client repo-a)
@@ -1856,8 +1863,8 @@
   (testing "two clients keep local title after reverse tx with newer tx id"
     (let [base-uuid (uuid "11111111-1111-1111-1111-111111111111")
           block-uuid (uuid "22222222-2222-2222-2222-222222222222")
-          conn-a (db-test/create-conn)
-          conn-b (db-test/create-conn)
+          conn-a (create-remote-conn)
+          conn-b (create-remote-conn)
           ops-a (new-client-ops-db)
           ops-b (new-client-ops-db)
           client-a (make-client repo-a)
@@ -2125,8 +2132,8 @@
           rng (make-rng seed)
           gen-uuid #(rng-uuid rng)
           base-uuid (gen-uuid)
-          conn-a (db-test/create-conn)
-          conn-b (db-test/create-conn)
+          conn-a (create-remote-conn)
+          conn-b (create-remote-conn)
           ops-a (new-client-ops-db)
           ops-b (new-client-ops-db)
           client-a (make-client repo-a)
@@ -2196,8 +2203,8 @@
           root-uuid (uuid "82222222-2222-2222-2222-222222222222")
           child-a-uuid (uuid "83333333-3333-3333-3333-333333333333")
           child-b-uuid (uuid "84444444-4444-4444-4444-444444444444")
-          conn-a (db-test/create-conn)
-          conn-b (db-test/create-conn)
+          conn-a (create-remote-conn)
+          conn-b (create-remote-conn)
           ops-a (new-client-ops-db)
           ops-b (new-client-ops-db)
           client-a (make-client repo-a)
@@ -2961,9 +2968,9 @@
           rng (make-rng seed)
           gen-uuid #(rng-uuid rng)
           base-uuid (gen-uuid)
-          conn-a (db-test/create-conn)
-          conn-b (db-test/create-conn)
-          conn-c (db-test/create-conn)
+          conn-a (create-remote-conn)
+          conn-b (create-remote-conn)
+          conn-c (create-remote-conn)
           ops-a (new-client-ops-db)
           ops-b (new-client-ops-db)
           ops-c (new-client-ops-db)
