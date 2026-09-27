@@ -1427,6 +1427,56 @@
       (is (not (ldb/property? page)))
       (is (ldb/property? (d/entity @conn :user.property/undo-replay-rating))))))
 
+(deftest undo-upsert-property-one-to-many-restores-cardinality-and-value-shape-test
+  (testing "undo of one-to-many cardinality restores single cardinality and value shape"
+    (worker-undo-redo/clear-history! test-repo)
+    (let [conn (worker-state/get-datascript-conn test-repo)
+          {:keys [child-uuid]} (seed-page-parent-child!)
+          property-id :user.property/undo-note]
+      (apply-ops! conn
+                  [[:upsert-property [property-id
+                                      {:logseq.property/type :default
+                                       :db/cardinality :one}
+                                      {:property-name "note"}]]]
+                  (local-tx-meta {:client-id "test-client"}))
+      (apply-ops! conn
+                  [[:set-block-property [child-uuid property-id "text 1"]]]
+                  (local-tx-meta {:client-id "test-client"}))
+      (let [value-before (get (d/entity @conn [:block/uuid child-uuid]) property-id)]
+        (is (= :db.cardinality/one (:db/cardinality (d/entity @conn property-id))))
+        (is (not (set? value-before)))
+        (is (= ["text 1"] (property-value-titles value-before))))
+      (worker-undo-redo/clear-history! test-repo)
+      (apply-ops! conn
+                  [[:upsert-property [property-id
+                                      {:logseq.property/type :default
+                                       :db/cardinality :many}
+                                      {}]]]
+                  (local-tx-meta {:client-id "test-client"}))
+      (is (= :db.cardinality/many (:db/cardinality (d/entity @conn property-id))))
+      (is (set? (get (d/entity @conn [:block/uuid child-uuid]) property-id)))
+      (is (= ["text 1"]
+             (property-value-titles
+              (get (d/entity @conn [:block/uuid child-uuid]) property-id))))
+      (let [history (latest-undo-history-data)
+            inverse-op (first (:db-sync/inverse-outliner-ops history))]
+        (is (= :upsert-property (first inverse-op)))
+        (is (= :db.cardinality/one (get-in inverse-op [1 1 :db/cardinality])))
+        (is (true? (get-in inverse-op [1 2 :allow-many-to-one?])))
+        (when-let [undo-tx-id (:db-sync/tx-id history)]
+          (poison-history-tx-order! undo-tx-id)))
+      (is (map? (worker-undo-redo/undo test-repo)))
+      (is (= :db.cardinality/one (:db/cardinality (d/entity @conn property-id))))
+      (let [value-after (get (d/entity @conn [:block/uuid child-uuid]) property-id)]
+        (is (not (set? value-after)))
+        (is (= ["text 1"] (property-value-titles value-after))))
+      (is (map? (worker-undo-redo/redo test-repo)))
+      (is (= :db.cardinality/many (:db/cardinality (d/entity @conn property-id))))
+      (is (set? (get (d/entity @conn [:block/uuid child-uuid]) property-id)))
+      (is (map? (worker-undo-redo/undo test-repo)))
+      (is (= :db.cardinality/one (:db/cardinality (d/entity @conn property-id))))
+      (is (not (set? (get (d/entity @conn [:block/uuid child-uuid]) property-id)))))))
+
 (deftest undo-delete-of-property-valued-on-itself-restores-property-test
   (testing "undoing a delete of a property set on its own page, then the set, brings the property back"
     (let [conn (worker-state/get-datascript-conn test-repo)

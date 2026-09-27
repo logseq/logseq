@@ -1047,7 +1047,8 @@
                                   (sanitize-upsert-property-schema
                                    db-before
                                    (db-property/get-property-schema (into {} property)))
-                                  {:property-name (:block/title property)}]]
+                                  {:property-name (:block/title property)
+                                   :allow-many-to-one? true}]]
                                 [:delete-page [(common-uuid/gen-uuid :db-ident-block-uuid property-id) {}]])))
 
                           nil)]

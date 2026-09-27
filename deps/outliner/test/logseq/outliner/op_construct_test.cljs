@@ -107,7 +107,8 @@
                                                      {}]]]}
           {:keys [inverse-outliner-ops]}
           (op-construct/derive-history-outliner-ops @conn @conn [] tx-meta)]
-      (is (= [[:upsert-property [property-id expected-schema {:property-name "p-many"}]]]
+      (is (= [[:upsert-property [property-id expected-schema {:property-name "p-many"
+                                                              :allow-many-to-one? true}]]]
              inverse-outliner-ops))
       (is (every? (fn [class-ref]
                     (or (keyword? class-ref)

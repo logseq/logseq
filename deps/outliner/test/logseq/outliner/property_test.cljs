@@ -60,6 +60,41 @@
       (outliner-property/upsert-property! conn :user.property/empty-prop {:logseq.property/type :number} {})
       (is (= :number (:logseq.property/type (d/entity @conn :user.property/empty-prop)))))))
 
+(deftest upsert-property-many-to-one-restore
+  (testing "many to one is rejected when values exist"
+    (let [conn (db-test/create-conn-with-blocks
+                [{:page {:block/title "page1"}
+                  :blocks [{:block/title "b1" :build/properties {:note "text 1"}}]}])]
+      (outliner-property/upsert-property! conn :user.property/note {:db/cardinality :many} {})
+      (is (db-property/many? (d/entity @conn :user.property/note)))
+      (is (thrown-with-msg?
+           js/Error #"Disallowed many to one conversion"
+           (outliner-property/upsert-property! conn :user.property/note {:db/cardinality :one} {})))))
+
+  (testing "history restore can revert many to one when each block still has one value"
+    (let [conn (db-test/create-conn-with-blocks
+                [{:page {:block/title "page1"}
+                  :blocks [{:block/title "b1" :build/properties {:note "text 1"}}]}])]
+      (outliner-property/upsert-property! conn :user.property/note {:db/cardinality :many} {})
+      (is (set? (:user.property/note (db-test/find-block-by-content @conn "b1"))))
+      (outliner-property/upsert-property! conn :user.property/note {:db/cardinality :one} {:allow-many-to-one? true})
+      (is (not (db-property/many? (d/entity @conn :user.property/note))))
+      (let [value (:user.property/note (db-test/find-block-by-content @conn "b1"))]
+        (is (not (set? value)))
+        (is (= "text 1" (db-property/property-value-content value))))))
+
+  (testing "history restore still rejects many to one when a block has multiple values"
+    (let [conn (db-test/create-conn-with-blocks
+                [{:page {:block/title "page1"}
+                  :blocks [{:block/title "b1" :build/properties {:note "text 1"}}]}])
+          block (db-test/find-block-by-content @conn "b1")]
+      (outliner-property/upsert-property! conn :user.property/note {:db/cardinality :many} {})
+      (outliner-property/set-block-property! conn (:db/id block) :user.property/note "text 2")
+      (is (< 1 (count (:user.property/note (d/entity @conn (:db/id block))))))
+      (is (thrown-with-msg?
+           js/Error #"Disallowed many to one conversion"
+           (outliner-property/upsert-property! conn :user.property/note {:db/cardinality :one} {:allow-many-to-one? true}))))))
+
 (deftest convert-property-input-string
   (testing "Convert property input string according to its schema type"
     (let [test-uuid (random-uuid)]

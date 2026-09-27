@@ -281,8 +281,15 @@
     (outliner-validate/validate-block-title @conn property-name property)
     (outliner-validate/validate-property-title property-name)))
 
+(defn- property-has-multiple-values?
+  [db db-ident]
+  (->> (d/datoms db :avet db-ident)
+       (group-by :e)
+       (some (fn [[_ datoms]]
+               (> (count datoms) 1)))))
+
 (defn- update-property
-  [conn db-ident property schema {:keys [property-name properties]}]
+  [conn db-ident property schema {:keys [property-name properties allow-many-to-one?]}]
   (validate-property-name-update conn property property-name)
   (outliner-validate/validate-editing-built-in-property property schema)
   (let [changed-property-attrs
@@ -314,8 +321,12 @@
                              (build-property-value-tx-data conn property property-id v)) properties)))
         many->one? (and (db-property/many? property)
                         ;; For UI calls, :db/cardinality can have :one and :many values
-                        (contains? #{:one :db.cardinality/one} (:db/cardinality schema)))]
-    (when (and many->one? (seq (d/datoms @conn :avet db-ident)))
+                        (contains? #{:one :db.cardinality/one} (:db/cardinality schema)))
+        existing-values? (seq (d/datoms @conn :avet db-ident))
+        unsafe-many->one? (if allow-many-to-one?
+                            (property-has-multiple-values? @conn db-ident)
+                            existing-values?)]
+    (when (and many->one? unsafe-many->one?)
       (throw (ex-info "Disallowed many to one conversion"
                       {:type :notification
                        :payload {:message "This property can't change from multiple values to one value because it has existing data."
