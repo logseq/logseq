@@ -727,8 +727,38 @@ let lookup_ref_wire (v : Wire.t) : bool =
   | Wire.Array [ Wire.Keyword _; _ ] | Wire.List [ Wire.Keyword _; _ ] -> true
   | _ -> false
 
-let upload_tx_item_tempids (db : db) (linked : Wire.t list) (item : Wire.t) :
-    Wire.t list =
+(* cljs upload-replaced-values: the [entity attr] pairs whose
+   cardinality-one value the tx retracts on an existing entity. The server
+   validates each request as a whole transaction, so such a retract sent
+   ahead of the add of the new value can leave the entity without a
+   required attribute and be rejected. *)
+let upload_replaced_values (db : db) (tx_data : Wire.t list)
+    : (string, unit) Hashtbl.t =
+  let replaced = Hashtbl.create 17 in
+  List.iter
+    (fun item ->
+       match item with
+       | Wire.Array l | Wire.List l -> (
+           match l with
+           | op :: entity :: (Wire.Keyword a as attr_wire) :: _ :: _
+             when op = kw "db/retract"
+                  && List.length l >= 4
+                  && (not (upload_tempid entity))
+                  && not (Ldb.many_attr db a) ->
+               Hashtbl.replace replaced
+                 (Transit_codec.to_string (Wire.Array [ entity; attr_wire ]))
+                 ()
+           | _ -> ())
+       | _ -> ())
+    tx_data;
+  replaced
+
+(* cljs upload-tx-item-group-keys: keys of the groups an upload tx item
+   belongs to. Items sharing a key are sent in one request: those of a
+   tempid, which the server resolves within a request, and the retract and
+   adds of a value in [replaced]. *)
+let upload_tx_item_group_keys (db : db) (linked : Wire.t list)
+    (replaced : (string, unit) Hashtbl.t) (item : Wire.t) : Wire.t list =
   match item with
   | Wire.Map _ -> (
       match Wire.get "db/id" item with
@@ -755,6 +785,13 @@ let upload_tx_item_tempids (db : db) (linked : Wire.t list) (item : Wire.t) :
            | Wire.Keyword a when ref_attr db a ->
                if upload_tempid value then acc := value :: !acc
            | _ -> ());
+          if (op = kw "db/add" || op = kw "db/retract")
+             && Hashtbl.mem replaced
+                  (Transit_codec.to_string (Wire.Array [ entity; attr ]))
+          then
+            acc :=
+              Wire.List [ kw "sync/value-replacement"; entity; attr ]
+              :: !acc;
           !acc
       | [ op; e ]
         when (op = kw "db/retractEntity" || op = kw "db.fn/retractEntity")
@@ -776,8 +813,9 @@ let merge_upload_tx_ranges (ranges : (int * int) list) : (int * int) list =
     [] sorted
   |> List.rev
 
-let upload_tempid_range_by_start (db : db) (tx_data : Wire.t list)
+let upload_group_range_by_start (db : db) (tx_data : Wire.t list)
     : (int, int) Hashtbl.t =
+  let replaced = upload_replaced_values db tx_data in
   let linked =
     List.concat_map
       (fun item ->
@@ -788,20 +826,20 @@ let upload_tempid_range_by_start (db : db) (tx_data : Wire.t list)
          | _ -> [])
       tx_data
   in
-  let by_tempid : (string, int * int) Hashtbl.t = Hashtbl.create 17 in
+  let by_key : (string, int * int) Hashtbl.t = Hashtbl.create 17 in
   List.iteri
     (fun idx item ->
        List.iter
-         (fun tempid ->
-            let k = Transit_codec.to_string tempid in
-            match Hashtbl.find_opt by_tempid k with
+         (fun group_key ->
+            let k = Transit_codec.to_string group_key in
+            match Hashtbl.find_opt by_key k with
             | Some (s, e) ->
-                Hashtbl.replace by_tempid k (min s idx, max e idx)
-            | None -> Hashtbl.replace by_tempid k (idx, idx))
-         (upload_tx_item_tempids db linked item))
+                Hashtbl.replace by_key k (min s idx, max e idx)
+            | None -> Hashtbl.replace by_key k (idx, idx))
+         (upload_tx_item_group_keys db linked replaced item))
     tx_data;
   let ranges =
-    Hashtbl.fold (fun _ r acc -> r :: acc) by_tempid []
+    Hashtbl.fold (fun _ r acc -> r :: acc) by_key []
     |> merge_upload_tx_ranges
   in
   let by_start = Hashtbl.create 17 in
@@ -820,7 +858,7 @@ let next_upload_tx_group (tx_data : Wire.t list)
 
 let next_large_upload_request_chunk (db : db) (tx_data : Wire.t list)
     (start : int) : Wire.t list * int =
-  let range_by_start = upload_tempid_range_by_start db tx_data in
+  let range_by_start = upload_group_range_by_start db tx_data in
   let total = List.length tx_data in
   let rec loop idx chunk =
     if idx < total then begin
