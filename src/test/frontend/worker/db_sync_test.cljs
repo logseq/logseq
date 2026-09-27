@@ -273,10 +273,22 @@
 
 (declare minimal-platform)
 
-(defn- with-datascript-conns
-  [db-conn ops-conn f]
+(defn- mark-graph-synced!
+  "Sets :logseq.kv/graph-remote?, as upload and download do: undo and redo
+  then replay the semantic ops, not the datoms of the change, and each local
+  transaction is kept as a client-op row."
+  [conn]
+  (d/transact! conn [(ldb/kv :logseq.kv/graph-remote? true)] {:persist-op? false}))
+
+(defn- with-datascript-conns*
+  "Registers the conns as test-repo's and records local transactions as the
+  db listener does. The graph is marked as one that syncs, the only kind that
+  keeps the client-op rows these tests read, unless `local-graph?`."
+  [db-conn ops-conn {:keys [local-graph?]} f]
   (let [db-prev @worker-state/*datascript-conns
         ops-prev @worker-state/*client-ops-conns]
+    (when (and db-conn (not local-graph?))
+      (mark-graph-synced! db-conn))
     (swap! client-op/*repo->pending-local-tx-count dissoc test-repo)
     (reset! worker-state/*datascript-conns {test-repo db-conn})
     (reset! worker-state/*client-ops-conns {test-repo ops-conn})
@@ -292,21 +304,28 @@
           cleanup (fn []
                     (when ops-conn
                       (d/unlisten! db-conn ::listen-db))
-                    (undo-redo/clear-history! test-repo)
-                    (swap! client-op/*repo->pending-local-tx-count dissoc test-repo)
-                    (reset! worker-state/*datascript-conns db-prev)
-                    (reset! worker-state/*client-ops-conns ops-prev))]
+                    ;; An async test that calls done before this runs lets
+                    ;; the next test start first; the conns and the history
+                    ;; are then that test's.
+                    (when (identical? db-conn (get @worker-state/*datascript-conns test-repo))
+                      (undo-redo/clear-history! test-repo)
+                      (swap! client-op/*repo->pending-local-tx-count dissoc test-repo)
+                      (reset! worker-state/*datascript-conns db-prev)
+                      (reset! worker-state/*client-ops-conns ops-prev)))]
       (if (promise-like? result)
         (.finally (js/Promise.resolve result) cleanup)
         (do
           (cleanup)
           result)))))
 
-(defn- mark-graph-synced!
-  "Sets :logseq.kv/graph-remote?, as upload and download do: undo and redo
-  then replay the semantic ops, not the datoms of the change."
-  [conn]
-  (d/transact! conn [(ldb/kv :logseq.kv/graph-remote? true)] {:persist-op? false}))
+(defn- with-datascript-conns
+  [db-conn ops-conn f]
+  (with-datascript-conns* db-conn ops-conn {} f))
+
+(defn- with-local-graph-conns
+  "with-datascript-conns for a graph that does not sync."
+  [db-conn ops-conn f]
+  (with-datascript-conns* db-conn ops-conn {:local-graph? true} f))
 
 (defn- setup-parent-child
   []
@@ -3232,6 +3251,135 @@
             (is (= (sync-checksum/recompute-checksum @local-conn)
                    (sync-checksum/recompute-checksum @server-conn)))))))))
 
+(defn- client-op-tx-row-count
+  [db]
+  (aget (sqlite-get-row db "select count(*) as c from client_ops where kind = 'tx'") "c"))
+
+(defn- latest-undo-data
+  []
+  (some #(when (= ::undo-redo/db-transact (first %)) (second %))
+        (last (:undo-ops (undo-redo/get-debug-state test-repo)))))
+
+(defn- save-title!
+  [conn block-uuid title]
+  (apply-ops! conn
+              [[:save-block [{:block/uuid block-uuid :block/title title} {}]]]
+              local-tx-meta))
+
+(deftest local-graph-edit-writes-no-sync-record-test
+  (testing "an edit on a graph that does not sync writes no client-op row; its undo and redo work from the entry"
+    (let [{:keys [conn client-ops-conn child1]} (setup-parent-child)
+          child-uuid (:block/uuid child1)
+          title #(:block/title (d/entity @conn [:block/uuid child-uuid]))]
+      (with-local-graph-conns conn client-ops-conn
+        (fn []
+          (save-title! conn child-uuid "local edit")
+          (is (= 0 (client-op-tx-row-count client-ops-conn)))
+          (is (empty? (#'sync-apply/pending-txs test-repo)))
+          (is (= 0 (client-op/get-pending-local-tx-count test-repo)))
+          (is (= 1 (count (:undo-ops (undo-redo/get-debug-state test-repo)))))
+          (is (seq (:tx-datoms (latest-undo-data))))
+          (is (map? (undo-redo/undo test-repo)))
+          (is (= "child 1" (title)))
+          (is (map? (undo-redo/redo test-repo)))
+          (is (= "local edit" (title)))
+          (is (= 0 (client-op-tx-row-count client-ops-conn))))))))
+
+(deftest remote-graph-edit-writes-sync-record-test
+  (testing "an edit on a graph that syncs writes its client-op row, and undo takes the entry's ops from it"
+    (let [{:keys [conn client-ops-conn child1]} (setup-parent-child)
+          child-uuid (:block/uuid child1)
+          title #(:block/title (d/entity @conn [:block/uuid child-uuid]))]
+      (mark-graph-synced! conn)
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (save-title! conn child-uuid "synced edit")
+          (let [[row :as pending] (#'sync-apply/pending-txs test-repo)
+                data (latest-undo-data)]
+            (is (= 1 (count pending)))
+            (is (= 1 (client-op/get-pending-local-tx-count test-repo)))
+            (is (= :save-block (ffirst (:forward-outliner-ops row))))
+            (is (= (:tx-id row) (:db-sync/tx-id data)))
+            (is (nil? (:tx-datoms data)))
+            (is (= :save-block (ffirst (:db-sync/forward-outliner-ops data)))))
+          (is (map? (undo-redo/undo test-repo)))
+          (is (= "child 1" (title))))))))
+
+(deftest local-graph-keeps-existing-sync-records-test
+  (testing "rows written before this change stay on a graph that does not sync, pending, and no new row joins them"
+    (let [{:keys [conn client-ops-conn child1]} (setup-parent-child)
+          old-tx-id (random-uuid)]
+      (with-local-graph-conns conn client-ops-conn
+        (fn []
+          (seed-client-op-txs! test-repo
+                               [{:db-sync/tx-id old-tx-id
+                                 :db-sync/created-at 1
+                                 :db-sync/outliner-op :save-block
+                                 :db-sync/normalized-tx-data [[:db/add [:block/uuid (:block/uuid child1)] :block/title "old"]]}])
+          (is (= 1 (client-op/get-pending-local-tx-count test-repo)))
+          (save-title! conn (:block/uuid child1) "local edit")
+          (client-op/cleanup-finished-history-ops! test-repo #{})
+          (is (= 1 (client-op-tx-row-count client-ops-conn)))
+          (is (= 1 (aget (client-op-tx-row client-ops-conn old-tx-id) "pending")))
+          (is (= [old-tx-id] (mapv :tx-id (#'sync-apply/pending-txs test-repo))))
+          (is (= 1 (client-op/get-pending-local-tx-count test-repo))))))))
+
+(deftest upload-ends-undo-history-recorded-without-sync-record-test
+  (testing "the upload that makes a graph sync ends the undo history recorded while it did not; later edits get a row and undo by it"
+    (async done
+           (let [{:keys [conn client-ops-conn child1]} (setup-parent-child)
+                 child-uuid (:block/uuid child1)
+                 title #(:block/title (d/entity @conn [:block/uuid child-uuid]))
+                 stacks #(mapv count ((juxt :undo-ops :redo-ops) (undo-redo/get-debug-state test-repo)))
+                 graph-id (str (random-uuid))]
+             (-> (with-local-graph-conns
+                   conn
+                   client-ops-conn
+                   (fn []
+                     ;; the app's listener, which sees the upload's metadata transaction
+                     (d/unlisten! conn ::listen-db)
+                     (db-listener/listen-db-changes! test-repo conn :handler-keys [:db-sync])
+                     (save-title! conn child-uuid "local 1")
+                     (save-title! conn child-uuid "local 2")
+                     (is (map? (undo-redo/undo test-repo)))
+                     (is (= [1 1] (stacks)))
+                     (is (= 0 (client-op-tx-row-count client-ops-conn)))
+                     (-> (p/with-redefs [sync-upload/http-base-url (constantly "https://sync.example.test")
+                                         sync-crypt/graph-e2ee? (constantly false)
+                                         sync-upload/list-remote-graphs! (fn [] (p/resolved []))
+                                         sync-crypt/<preflight-upload-e2ee! (fn [_repo _graph-e2ee?] (p/resolved nil))
+                                         sync-util/require-auth-token! (fn [_context] nil)
+                                         sync-util/fetch-json (fn [url _request _opts]
+                                                                (p/resolved
+                                                                 (if (string/ends-with? url "/graphs")
+                                                                   {:graph-id graph-id :graph-e2ee? false}
+                                                                   {:ok true :count 1})))
+                                         sync-upload/<prepare-upload-temp-sqlite! (fn [& _] (p/resolved {:db :temp-db}))
+                                         sync-upload/count-kvs-rows (constantly 1)
+                                         sync-upload/fetch-kvs-rows (fn [_db last-addr _limit]
+                                                                      (if (neg? last-addr)
+                                                                        #js [#js [1 "content" nil]]
+                                                                        #js []))
+                                         sync-upload/<snapshot-upload-body (fn [rows] (p/resolved {:body rows :encoding nil}))
+                                         sync-temp-sqlite/cleanup-temp-sqlite! (fn [_temp] nil)
+                                         worker-util/post-message (fn [& _] nil)]
+                           (sync-upload/upload-graph! test-repo))
+                         (p/then (fn [_]
+                                   (is (true? (:kv/value (d/entity @conn :logseq.kv/graph-remote?))))
+                                   (is (= [0 0] (stacks)))
+                                   (is (= ::undo-redo/empty-undo-stack (undo-redo/undo test-repo)))
+                                   (is (= "local 1" (title)))
+                                   (save-title! conn child-uuid "synced")
+                                   (is (= 1 (count (#'sync-apply/pending-txs test-repo))))
+                                   (is (nil? (:tx-datoms (latest-undo-data))))
+                                   (is (map? (undo-redo/undo test-repo)))
+                                   (is (= "local 1" (title)))))
+                         (p/catch (fn [error]
+                                    (is nil (str error))))
+                         (p/finally (fn []
+                                      (d/unlisten! conn :frontend.worker.db-listener/listen-db-changes!))))))
+                 (p/finally done))))))
+
 (deftest reaction-add-enqueues-pending-sync-tx-test
   (testing "adding a reaction should enqueue tx for db-sync"
     (let [{:keys [conn client-ops-conn parent]} (setup-parent-child)]
@@ -3421,6 +3569,7 @@
 (deftest enqueue-local-tx-preserves-existing-tx-id-test
   (testing "local tx persistence reuses tx-id already attached to tx-meta"
     (let [{:keys [conn client-ops-conn child1]} (setup-parent-child)
+          _ (mark-graph-synced! conn)
           tx-id (random-uuid)
           tx-report (d/with @conn
                             [[:db/add (:db/id child1) :block/title "stable tx id"]]
@@ -3999,6 +4148,7 @@
 (deftest enqueue-local-tx-keeps-mixed-semantic-forward-outliner-ops-test
   (testing "mixed semantic outliner ops stay semantic and preserve op ordering"
     (let [{:keys [conn client-ops-conn child2]} (setup-parent-child)
+          _ (mark-graph-synced! conn)
           block-id (:db/id child2)
           block-uuid (:block/uuid child2)
           tx-report (d/with @conn
@@ -4048,6 +4198,7 @@
 (deftest enqueue-local-tx-persists-semantic-undo-ops-test
   (testing "undo local tx persists explicit semantic forward and inverse ops"
     (let [{:keys [conn client-ops-conn child1]} (setup-parent-child)
+          _ (mark-graph-synced! conn)
           tx-id (random-uuid)
           forward-ops [[:save-block [{:block/uuid (:block/uuid child1)
                                       :block/title "undo value"} {}]]]

@@ -40,8 +40,9 @@
 
 (defn- create-remote-conn
   "A client graph that syncs, marked as upload and download mark it. The stored
-  checksum is kept only on such a graph, and undo and redo replay the semantic
-  ops there, not the datoms of the change."
+  checksum is kept only on such a graph, undo and redo replay the semantic ops,
+  not the datoms of the change, and its local transactions are kept as
+  client-op rows to upload."
   []
   (doto (db-test/create-conn)
     (d/transact! [(ldb/kv :logseq.kv/graph-remote? true)])))
@@ -649,7 +650,7 @@
   (testing "sim upload removes acked pending txs so later rebases don't reverse stale creates"
     (let [base-uuid (random-uuid)
           block-uuid (random-uuid)
-          conn (db-test/create-conn)
+          conn (create-remote-conn)
           ops-conn (new-client-ops-db)
           client (make-client repo-a)
           server (make-server)]
@@ -1657,7 +1658,7 @@
           rng (make-rng seed)
           gen-uuid #(rng-uuid rng)
           base-uuid (gen-uuid)
-          conn-a (db-test/create-conn)
+          conn-a (create-remote-conn)
           ops-a (new-client-ops-db)
           client-a (make-client repo-a)
           server (make-server)
@@ -2501,8 +2502,8 @@
           rng (make-rng seed)
           gen-uuid #(rng-uuid rng)
           base-uuid (gen-uuid)
-          conn-a (db-test/create-conn)
-          conn-b (db-test/create-conn)
+          conn-a (create-remote-conn)
+          conn-b (create-remote-conn)
           ops-a (new-client-ops-db)
           ops-b (new-client-ops-db)
           client-a (make-client repo-a)
