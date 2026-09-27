@@ -209,6 +209,14 @@ let resolve () =
   load_route route;
   Runtime.flush ()
 
+(* worker sync-db-changes broadcast: reload the current route's data
+   without Navigate_to (keeps route_page until the fresh one lands, so
+   the page does not blank). *)
+let reload () =
+  match !Runtime.current_route with
+  | Some r -> load_route r
+  | None -> resolve ()
+
 let init () =
   Platform.on_hash_change resolve;
   Platform.on_document_event "ls:navigate" (fun _ -> resolve ());

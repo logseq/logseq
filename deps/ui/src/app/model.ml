@@ -34,6 +34,13 @@ type phase =
 (* modal confirm intent — carried as data so it survives the reducer *)
 type confirm = Confirm_delete_page of string (* page uuid *)
 
+(* worker :notification broadcast -> toast *)
+type toast =
+  { toast_id : int
+  ; toast_text : string
+  ; toast_kind : string (* "success" | "error" | "warning" | ... *)
+  }
+
 type t =
   { phase : phase
   ; repo : string option
@@ -48,6 +55,8 @@ type t =
   ; editing_title : bool
   ; page_menu : (float * float) option (* click position *)
   ; confirm : confirm option
+  ; toasts : toast list
+  ; toast_next : int
   }
 
 let initial =
@@ -64,4 +73,6 @@ let initial =
   ; editing_title = false
   ; page_menu = None
   ; confirm = None
+  ; toasts = []
+  ; toast_next = 0
   }

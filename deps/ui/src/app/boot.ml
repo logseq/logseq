@@ -46,7 +46,9 @@ let ensure_today_journal repo =
 
 let run () =
   apply_storage_env ();
-  Runtime.worker := Some (Worker_client.create ());
+  let w = Worker_client.create () in
+  w.on_message <- Worker_events.dispatch;
+  Runtime.worker := Some w;
   Graph.init_worker ()
   |> Js.Promise.then_ (fun () -> Graph.list_graphs ())
   |> Js.Promise.then_ (fun repos ->
