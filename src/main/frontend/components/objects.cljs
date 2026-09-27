@@ -110,7 +110,7 @@
                                                                             :target (.-target e)}]))})]))
 
 (hsx/defc class-objects
-  [class config]
+  [class config on-first-table-paint!]
   (let [container-key (select-keys config [:id :sidebar? :embed? :custom-query? :query :current-block :table? :block? :db/id :page-name])
         config (assoc config :container-id (or (:container-id config) (state/get-container-id container-key)))
         ;; Subscribe to the class block reactively so that adding/removing a
@@ -132,7 +132,11 @@
            [(:db/id class) class-properties first-paint-done?])]
     [:div.ml-1
      (class-objects-inner config class properties
-                          {:on-first-table-paint! #(set-first-paint-done! true)})]))
+                          {:on-first-table-paint!
+                           (fn []
+                             (set-first-paint-done! true)
+                             (when on-first-table-paint!
+                               (on-first-table-paint!)))})]))
 
 (defn- <property-object-default-value
   [property]
