@@ -818,14 +818,18 @@
                         (worker-ref-attr? db-before (:a d)))))
          (group-by :e)
          (keep (fn [[e datoms]]
-                 (let [ent (d/entity db-before e)]
+                 (let [ent (d/entity db-before e)
+                       attrs (vec (distinct (map :a datoms)))]
                    (when-let [block-uuid (:block/uuid ent)]
+                     ;; Replace, not add: a delete can also add values to the
+                     ;; same attr, e.g. a child class extends Root after its
+                     ;; parent class is deleted.
                      [:save-block
                       [(reduce (fn [m a]
                                  (assoc m a (sanitize-ref-value db-before (get ent a))))
                                {:block/uuid block-uuid}
-                               (distinct (map :a datoms)))
-                       {}]])))))))
+                               attrs)
+                       {:retract-attributes attrs}]])))))))
 
 (defn- build-inverse-delete-blocks
   [db-before ids]

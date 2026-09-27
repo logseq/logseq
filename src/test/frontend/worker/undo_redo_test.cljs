@@ -752,6 +752,37 @@
       (is (some? (d/entity @conn [:block/uuid target-uuid])))
       (is (= ["today target"] (property-value-titles (get (d/entity @conn [:block/uuid holder-uuid]) property)))))))
 
+(deftest undo-delete-class-page-restores-child-class-extends-test
+  (testing "undoing a parent class delete should restore the child's extends without the Root class it got on delete"
+    (worker-undo-redo/clear-history! test-repo)
+    (let [conn (worker-state/get-datascript-conn test-repo)
+          create-class! (fn [title]
+                          (second (apply-ops! conn
+                                              [[:create-page [title {:class? true
+                                                                     :redirect? false
+                                                                     :split-namespace? true
+                                                                     :tags ()}]]]
+                                              (local-tx-meta {:client-id "test-client"}))))
+          project-uuid (create-class! "undo project")
+          subtask-uuid (create-class! "undo subtask")
+          extends-titles #(set (map :block/title
+                                    (:logseq.property.class/extends (d/entity @conn [:block/uuid subtask-uuid]))))]
+      (apply-ops! conn
+                  [[:set-block-property [subtask-uuid
+                                         :logseq.property.class/extends
+                                         (:db/id (d/entity @conn [:block/uuid project-uuid]))]]]
+                  (local-tx-meta {:client-id "test-client"}))
+      (is (= #{"undo project"} (extends-titles)))
+      (worker-undo-redo/clear-history! test-repo)
+      (apply-ops! conn
+                  [[:delete-page [project-uuid {}]]]
+                  (local-tx-meta {:client-id "test-client"}))
+      (is (not (contains? (extends-titles) "undo project")))
+      (is (map? (worker-undo-redo/undo test-repo)))
+      (is (= #{"undo project"} (extends-titles)))
+      (is (map? (worker-undo-redo/redo test-repo)))
+      (is (not (contains? (extends-titles) "undo project"))))))
+
 (deftest undo-delete-page-restores-class-property-and-today-page-test
   (testing "undoing delete-page restores hard-retracted class/property pages and today page blocks"
     (let [conn (worker-state/get-datascript-conn test-repo)
