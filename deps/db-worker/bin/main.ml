@@ -1,7 +1,7 @@
 (* db-worker-node native daemon entrypoint.
 
    Runs the OCaml worker directly instead of the node
-   db-worker-node.js + db-worker-ocaml.cjs bundle. The cljs daemon is
+   db-worker-node.js bundle. The cljs daemon is
    single-threaded; here request handlers run on connection threads,
    so worker invocations are serialized on a global mutex held until
    the returned E.t settles — preserving the JS "one invoke at a
