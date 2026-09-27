@@ -46,19 +46,19 @@ let in_units (a : Time.civil) (b : Time.civil) (u : recur_unit) : int =
   | Day -> Int64.to_int (Int64.div (Int64.sub ms_b ms_a) 86400000L)
   | Week -> Int64.to_int (Int64.div (Int64.sub ms_b ms_a) 604800000L)
   | Month | Year ->
-      let ay, amo, ad, ah, ami, ase, ams = Time.civil_fields a in
-      let by, bmo, bd, bh, bmi, bse, bms = Time.civil_fields b in
+      let ay, amo, ad, ah, ami, asec, ams = Time.civil_fields a in
+      let by, bmo, bd, bh, bmi, bsec, bms = Time.civil_fields b in
       let tod h mi s ms = h * 3600000 + mi * 60000 + s * 1000 + ms in
       let raw = (by - ay) * 12 + (bmo - amo) in
       (* a whole month only counts when the day/time doesn't regress *)
       let months =
         if ms_b >= ms_a
            && (bd < ad
-               || (bd = ad && tod bh bmi bse bms < tod ah ami ase ams))
+               || (bd = ad && tod bh bmi bsec bms < tod ah ami asec ams))
         then raw - 1
         else if ms_b < ms_a
                 && (bd > ad
-                    || (bd = ad && tod bh bmi bse bms > tod ah ami ase ams))
+                    || (bd = ad && tod bh bmi bsec bms > tod ah ami asec ams))
         then raw + 1
         else raw
       in

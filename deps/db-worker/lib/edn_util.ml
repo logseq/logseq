@@ -33,7 +33,7 @@ let rec value_of_edn (Edn_parser.Any v) : value =
        | "inst", String s -> (
            match Date_time_util.epoch_ms_of_iso s with
            | Some ms -> Instant ms
-           | None -> invalid_arg "edn_util: unparseable #inst literal")
+           | None -> invalid_arg "edn_util: unparsable #inst literal")
        | _ -> Tuple [ Some (Symbol t); Some (value_of_edn v) ])
 
 (* edn/read-string: reads the first form *)

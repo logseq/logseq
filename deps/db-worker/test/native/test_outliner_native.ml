@@ -1784,8 +1784,8 @@ let test_create_namespace_pages () =
   let keys_parents =
     match
       Datascript.q_string db
-        "[:find ?pn :where [?b :block/title \"keys\"] \
-          [?b :block/parent ?p] [?p :block/title ?pn]]"
+        "[:find ?pname :where [?b :block/title \"keys\"] \
+          [?b :block/parent ?p] [?p :block/title ?pname]]"
     with
     | rows ->
         sort_uniq

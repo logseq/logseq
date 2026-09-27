@@ -938,7 +938,7 @@ let update_block_tags (block : BM.t) (db : db) (user_options : user_options)
           not (getv tm "block.temp/new-class" <> None || logseq_class_ident t))
         tags
     in
-    let is_convertable t =
+    let is_convertible t =
       match ref_bm_name t with
       | Some n -> convert_tag n user_options
       | None -> false
@@ -948,7 +948,7 @@ let update_block_tags (block : BM.t) (db : db) (user_options : user_options)
         let tag_names =
           List.filter_map
             (fun t ->
-              if is_convertable t then
+              if is_convertible t then
                 get_string (bm_of_value (Some t)) "block/title"
               else None)
             original_tags
@@ -960,7 +960,7 @@ let update_block_tags (block : BM.t) (db : db) (user_options : user_options)
          | None -> block)
       else
         let namespaced =
-          List.filter is_convertable original_tags
+          List.filter is_convertible original_tags
         in
         (match get_string block "block/title" with
          | Some title ->
@@ -974,7 +974,7 @@ let update_block_tags (block : BM.t) (db : db) (user_options : user_options)
         let refs =
           List.filter_map
             (fun t ->
-              if is_convertable t then None
+              if is_convertible t then None
               else
                 let m = bm_of_value (Some t) in
                 Some
