@@ -34,12 +34,13 @@
 
 (def default-content (rc/inline "templates/global-config.edn"))
 
-(defn- create-global-config-file-if-not-exists
-  [repo-url]
+(defn- ensure-global-config-file!
+  "Creates ~/.logseq/config/config.edn and its parent directory if they do not exist."
+  []
   (let [config-dir (global-config-dir)
         config-path (global-config-path)]
     (p/let [_ (fs/mkdir-if-not-exists config-dir)
-            file-exists? (fs/create-if-not-exists repo-url nil config-path default-content)]
+            file-exists? (fs/create-if-not-exists nil nil config-path default-content)]
       (when-not file-exists?
         (set-global-config-state! default-content)))))
 
@@ -52,31 +53,33 @@
 
 (defn set-global-config-kv!
   [k v]
-  (let [result (rewrite/parse-string
-                (or (state/get-global-config-str-content) "{}"))
-        ks (if (sequential? k) k [k])
-        v (cond->> v
-            (map? v)
-            (reduce-kv (fn [a k v] (rewrite/assoc a k v)) (rewrite/parse-string "{}")))
-        new-result (if (and (= 1 (count ks))
-                            (nil? v))
-                     (rewrite/dissoc result (first ks))
-                     (rewrite/assoc-in result ks v))
-        new-str-content (str new-result)]
-    (fs/write-file! (global-config-path) new-str-content)
-    (state/set-global-config! (rewrite/sexpr new-result) new-str-content)))
+  (p/let [_ (ensure-global-config-file!)]
+    (let [result (rewrite/parse-string
+                  (or (state/get-global-config-str-content) "{}"))
+          ks (if (sequential? k) k [k])
+          v (cond->> v
+              (map? v)
+              (reduce-kv (fn [a k v] (rewrite/assoc a k v)) (rewrite/parse-string "{}")))
+          new-result (if (and (= 1 (count ks))
+                              (nil? v))
+                       (rewrite/dissoc result (first ks))
+                       (rewrite/assoc-in result ks v))
+          new-str-content (str new-result)]
+      (p/do!
+       (fs/write-file! (global-config-path) new-str-content)
+       (state/set-global-config! (rewrite/sexpr new-result) new-str-content)))))
 
 (defn start
   "This component has three responsibilities on start:
 - Fetch root-dir for later use with config paths
-- Manage ui state of global config
-- Create a global config dir and file if it doesn't exist"
-  [{:keys [repo]}]
+- Create a global config dir and file if it doesn't exist
+- Manage ui state of global config"
+  [_opts]
   (-> (p/do!
        (p/let [root-dir' (ipc/ipc "getLogseqDotDirRoot")]
          (reset! root-dir root-dir'))
-       (restore-global-config!)
-       (create-global-config-file-if-not-exists repo))
+       (ensure-global-config-file!)
+       (restore-global-config!))
       (p/timeout 6000)
       (p/catch (fn [e]
                  (js/console.error "cannot start global-config" e)))))
