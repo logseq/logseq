@@ -313,6 +313,130 @@
       (finally
         (restore!)))))
 
+(defn- autocomplete-input
+  [value pos]
+  (doto (js-obj)
+    (aset "value" value)
+    (aset "selectionStart" pos)
+    (aset "selectionEnd" pos)
+    (aset "focus" (fn []))))
+
+(defn- autocomplete-select-event
+  []
+  (doto (js-obj)
+    (aset "identifier" "auto-complete/select")
+    (aset "preventDefault" (fn []))
+    (aset "stopPropagation" (fn []))))
+
+(defn- run-hashtag-convert-selection
+  [page-id]
+  (try
+    ((page-handler/on-chosen-handler (autocomplete-input "#test" 5) "edit-input" 0 :markdown)
+     {:block/title "test"
+      :db/id 4
+      :block/uuid page-id
+      :convert-page-to-tag? true}
+     (autocomplete-select-event))
+    (catch :default error
+      (p/rejected error))))
+
+(defn- install-convert-page-to-tag-stubs!
+  "Like `install-hashtag-on-chosen-stubs!` but <get-block resolves entities
+   from the get-block-results queue atom (pre/post-conversion snapshots) and
+   convert-page-to-tag! is stubbed too. Returns a restore fn."
+  [get-block-results calls]
+  (let [restore-hashtag! (install-hashtag-on-chosen-stubs! nil calls)
+        original-convert-page-to-tag! db-page-handler/convert-page-to-tag!]
+    (set! db-async/<get-block
+          (fn [repo id opts]
+            (swap! calls conj [:get-block repo id opts])
+            (let [result (first @get-block-results)]
+              (swap! get-block-results
+                     (fn [results] (if (next results) (next results) results)))
+              (p/resolved result))))
+    (set! db-page-handler/convert-page-to-tag!
+          (fn [& args]
+            (swap! calls conj (into [:convert-page-to-tag] args))
+            (p/resolved nil)))
+    (fn []
+      (set! db-page-handler/convert-page-to-tag! original-convert-page-to-tag!)
+      (restore-hashtag!))))
+
+(deftest hashtag-convert-page-to-tag-uses-post-conversion-snapshot-test
+  (async done
+    (let [page-id #uuid "66666666-6666-6666-6666-666666666666"
+          page-entity {:db/id 4
+                       :block/uuid page-id
+                       :block/title "test"
+                       :block/name "test"
+                       :block/tags [{:db/ident :logseq.class/Page}]}
+          class-entity (assoc page-entity
+                              :db/ident :logseq.class.test
+                              :block/tags [{:db/ident :logseq.class/Tag}])
+          get-block-results (atom [page-entity class-entity])
+          calls (atom [])
+          restore! (install-convert-page-to-tag-stubs! get-block-results calls)]
+      (-> (run-hashtag-convert-selection page-id)
+          (p/then
+           (fn []
+             (let [convert-calls (filter #(= :convert-page-to-tag (first %)) @calls)
+                   get-block-calls (filter #(= :get-block (first %)) @calls)
+                   tag-call (some #(when (= :tag-on-chosen (first %)) %) @calls)
+                   insert-call (some #(when (= :insert-command (first %)) %) @calls)]
+               (is (= 1 (count convert-calls))
+                   "convert-page-to-tag! runs once for the pre-conversion page")
+               (is (= [page-entity] (subvec (first convert-calls) 1)))
+               (is (= 2 (count get-block-calls))
+                   "chosen-result is re-resolved after conversion")
+               (is (= ["test" class-entity true "#test" 5 "#test"]
+                      (subvec tag-call 1))
+                   "tag-on-chosen sees the post-conversion class snapshot")
+               (is (= [:insert-command "edit-input" "" :markdown
+                       {:last-pattern "#test"
+                        :end-pattern nil
+                        :command :page-ref}]
+                      insert-call)))))
+          (p/catch
+           (fn [error]
+             (is false (str error))))
+          (p/finally
+           (fn []
+             (restore!)
+             (done)))))))
+
+(deftest hashtag-convert-page-to-tag-rejected-keeps-editor-text-test
+  (async done
+    (let [page-id #uuid "77777777-7777-7777-7777-777777777777"
+          page-entity {:db/id 4
+                       :block/uuid page-id
+                       :block/title "test"
+                       :block/name "test"
+                       :block/tags [{:db/ident :logseq.class/Page}]}
+          ;; Conversion rejected (e.g. duplicate tag): page is still a Page
+          get-block-results (atom [page-entity])
+          calls (atom [])
+          restore! (install-convert-page-to-tag-stubs! get-block-results calls)]
+      (-> (run-hashtag-convert-selection page-id)
+          (p/then
+           (fn []
+             (let [convert-calls (filter #(= :convert-page-to-tag (first %)) @calls)
+                   tag-call (some #(when (= :tag-on-chosen (first %)) %) @calls)
+                   insert-call (some #(when (= :insert-command (first %)) %) @calls)]
+               (is (= 1 (count convert-calls))
+                   "convert-page-to-tag! is still attempted")
+               (is (nil? insert-call)
+                   "rejected conversion does not rewrite the typed hashtag")
+               (is (nil? tag-call)
+                   "rejected conversion does not tag the block"))))
+          (p/catch
+           (fn [error]
+             (is false (str error))))
+          (p/finally
+           (fn []
+             (restore!)
+             (done)))))))
+
+
 (deftest chosen-result-loads-uuid-result-through-worker-test
   (async done
     (let [tag-id #uuid "22222222-2222-2222-2222-222222222222"

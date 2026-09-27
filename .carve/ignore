@@ -33,7 +33,7 @@ frontend.ui/_emoji-init-data
 ;; defonce
 mobile.components.popup/native-sheet-listener
 mobile.bottom-tabs/add-tab-listeners!
-;; Unused after the cljs db-worker/electron-main removal
+;; Callers were the deleted cljs db-worker; kept as host-side/daemon API surface
 frontend.common.crypt/<export-public-key
 frontend.common.crypt/<import-public-key
 frontend.common.crypt/<encrypt-uint8array
@@ -52,5 +52,7 @@ frontend.util/with-time
 logseq.cli.common.db-worker/list-nodes
 logseq.common.export.file/get-all-page->content
 logseq.db-worker.daemon/normalize-owner-source
+logseq.db-worker.log/log-path
+logseq.db-worker.log/install!
 frontend.test.helper/with-config
 frontend.test.noise/mute-console-fixture
