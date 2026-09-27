@@ -24,6 +24,8 @@ JavaScript via Melange (browser + Node) and native OCaml.
   are unclear or unreasonable, stop development immediately and report
   the specific spec issue, suggested changes, and rationale.
 
+- Avoid O(n²) `List` patterns such as `List.concat` and repeated `List.append` on large sequences; when the project already depends on the `rrbvec` package, use `Rrbvec` vectors instead.
+
 ## Layout
 
 - `spec/platform/*.mli` — runtime capabilities (virtual module
