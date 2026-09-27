@@ -148,7 +148,7 @@ export default defineConfig(({ mode }) => {
           formats: ["cjs"],
           fileName: () => "db-worker-node.js",
         },
-        outDir,
+        outDir: resolve(import.meta.dirname, "../../static"),
         emptyOutDir: false,
         target: "node22",
         minify: true,
