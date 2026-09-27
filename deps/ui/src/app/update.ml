@@ -17,6 +17,9 @@ let update (model : t) (action : Action.t) : t =
       ; page_refs = []
       ; editing_title = false
       ; page_menu = None
+      ; unlinked_open = false
+      ; unlinked_search = false
+      ; unlinked_query = ""
       }
   | Title_edit_start -> { model with editing_title = true }
   | Title_edit_done -> { model with editing_title = false }
@@ -39,6 +42,30 @@ let update (model : t) (action : Action.t) : t =
         toasts = List.filter (fun (t : toast) -> t.toast_id <> id) model.toasts
       }
   | Toasts_clear -> { model with toasts = [] }
+  | Unlinked_toggle_open ->
+      { model with unlinked_open = not model.unlinked_open }
+  | Unlinked_toggle_search ->
+      { model with
+        unlinked_search = not model.unlinked_search
+      ; unlinked_query = ""
+      }
+  | Unlinked_set_query q -> { model with unlinked_query = q }
+  | Graph_toggle_settings ->
+      let gv = model.gv in
+      { model with gv = { gv with gv_settings_open = not gv.gv_settings_open } }
+  | Graph_set_mode mode ->
+      { model with gv = { model.gv with gv_mode = mode } }
+  | Graph_toggle_tt ->
+      let gv = model.gv in
+      { model with gv = { gv with gv_tt_open = not gv.gv_tt_open } }
+  | Graph_set_tt v ->
+      { model with gv = { model.gv with gv_tt_value = Some v } }
+  | Graph_tt_reset ->
+      { model with gv = { model.gv with gv_tt_value = None } }
+  | Graph_loaded (mn, mx) ->
+      { model with
+        gv = { model.gv with gv_min = mn; gv_max = mx; gv_loaded = true }
+      }
   | Worker_event _ | Refresh_page | Block_content_changed _ | Toggle_search
   | Noop ->
       model
