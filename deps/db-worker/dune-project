@@ -86,4 +86,14 @@
   mirage-crypto-pk
   kdf
   x509
-  uucp))
+  uucp
+  eio
+  eio_posix
+  httpun
+  httpun-ws
+  tls-eio
+  ca-certs-nss
+  domain-name
+  bigstringaf
+  faraday
+  cstruct))
