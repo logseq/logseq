@@ -202,9 +202,24 @@ let fetch_zoom_blocks repo uuid : Wire.t Js.Promise.t =
               | _ -> Js.Promise.resolve (Wire.List [])))
          | _ -> Js.Promise.resolve (Wire.List []))
 
+(* refetch unlinked refs for the current page — a block-title edit can
+   create or remove a text mention *)
+let fetch_unlinked_refs (p : Model.page) =
+  match !Runtime.current_repo, p.Model.page_db_id with
+  | Some repo, Some id ->
+      ignore
+        (Runtime.invoke2 "thread-api/get-unlinked-refs" (Wire.String repo)
+           (Wire.Int id)
+         |> Js.Promise.then_ (fun w ->
+                Js.Promise.resolve
+                  (Runtime.send
+                     (Action.Unlinked_loaded (Decode.blocks_of_wire w)))))
+  | _ -> ()
+
 let refresh_page () : unit Js.Promise.t =
   match (!Runtime.current_repo, !Runtime.current_page) with
   | Some repo, Some page -> (
+      fetch_unlinked_refs page;
       let blocks_p =
         match !Runtime.current_route, page.Model.page_uuid with
         | Some (Model.Block_zoom _), Some u -> fetch_zoom_blocks repo u

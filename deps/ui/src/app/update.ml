@@ -10,11 +10,13 @@ let update (model : t) (action : Action.t) : t =
   | Page_loaded page -> { model with route_page = Some page }
   | Journals_loaded js -> { model with journals = js }
   | Refs_loaded refs -> { model with page_refs = refs }
+  | Unlinked_loaded refs -> { model with unlinked_refs = refs }
   | Navigate_to route ->
       { model with
         route
       ; route_page = None
       ; page_refs = []
+      ; unlinked_refs = []
       ; editing_title = false
       ; page_menu = None
       ; unlinked_open = false
