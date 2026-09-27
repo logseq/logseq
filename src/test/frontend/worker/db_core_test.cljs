@@ -6,6 +6,7 @@
             [datascript.storage :as storage]
             [frontend.common.thread-api :as thread-api]
             [frontend.db.query-dsl :as query-dsl]
+            [frontend.test.node-helper :as node-helper]
             [frontend.worker-common.util :as worker-util]
             [frontend.worker.db-core :as db-core]
             [frontend.worker.db-listener :as db-listener]
@@ -393,10 +394,12 @@
                    (swap! close-calls conj close-label)))}))
 
 (defn- fake-storage-db
-  []
-  (let [db (fake-db)]
-    (gobj/set db "transaction" (fn [f] (f db)))
-    db))
+  ([]
+   (fake-storage-db {}))
+  ([opts]
+   (let [db (fake-db opts)]
+     (gobj/set db "transaction" (fn [f] (f db)))
+     db)))
 
 (defn- bootstrap-datoms
   []
@@ -1392,7 +1395,70 @@
        (is (= "/graph/search/vector"
               (vector-index-path test-repo pool)))))))
 
-;; ---- checkpoint-db! tests ----
+;; ---- sqlite WAL / checkpoint tests ----
+
+(deftest enable-sqlite-wal-mode-sets-exclusive-wal-and-synchronous-normal
+  (let [enable-sqlite-wal-mode! #'db-core/enable-sqlite-wal-mode!
+        sql-calls (atom [])
+        db #js {:exec (fn [sql]
+                        (swap! sql-calls conj sql)
+                        #js [])}]
+    (enable-sqlite-wal-mode! db)
+    (is (= ["PRAGMA locking_mode=exclusive"
+            "PRAGMA journal_mode=WAL"
+            "PRAGMA synchronous=NORMAL"]
+           @sql-calls))))
+
+(deftest enable-sqlite-wal-mode-sqlite-reports-wal-and-synchronous-normal
+  (let [Database (js/require "better-sqlite3")
+        node-path (js/require "path")
+        dir (node-helper/create-tmp-dir "wal-pragma")
+        db (new Database (.join node-path dir "graph.sqlite"))
+        pragma (fn [name]
+                 (aget (.get (.prepare db (str "PRAGMA " name))) name))]
+    (try
+      (#'db-core/enable-sqlite-wal-mode! db)
+      (is (= "exclusive" (pragma "locking_mode")))
+      (is (= "wal" (pragma "journal_mode")))
+      (is (= 1 (pragma "synchronous"))
+          "sqlite NORMAL is 1; FULL (the WAL default) is 2")
+      (finally
+        (.close db)))))
+
+(deftest create-or-open-db-enables-wal-synchronous-normal-on-all-sqlite-dbs
+  (async done
+    (-> (restoring-worker-state
+         (fn []
+           (let [graph-sql (atom [])
+                 search-sql (atom [])
+                 client-ops-sql (atom [])
+                 db (fake-storage-db {:sql-calls graph-sql})
+                 search-db (fake-storage-db {:sql-calls search-sql})
+                 client-ops-db (fake-storage-db {:sql-calls client-ops-sql})
+                 opened-dbs (atom [db search-db client-ops-db])
+                 platform' (assoc-in (build-test-platform)
+                                     [:sqlite :open-db]
+                                     (fn [_opts]
+                                       (let [opened-db (first @opened-dbs)]
+                                         (swap! opened-dbs subvec 1)
+                                         opened-db)))]
+             (platform/set-platform! platform')
+             (p/with-redefs
+               [shared-service/*master-client? (atom true)
+                db-sync/handle-local-tx! (fn [& _] nil)
+                shared-service/broadcast-to-clients! (fn [& _] nil)
+                db-listener/listen-db-changes! (fn [& _] nil)]
+               (p/let [_ ((get-thread-api :thread-api/create-or-open-db) "wal-pragma-repo" {})]
+                 (doseq [[label sql-calls] [["graph" graph-sql]
+                                            ["search" search-sql]
+                                            ["client-ops" client-ops-sql]]]
+                   (is (some #{"PRAGMA locking_mode=exclusive"} @sql-calls) label)
+                   (is (some #{"PRAGMA journal_mode=WAL"} @sql-calls) label)
+                   (is (some #{"PRAGMA synchronous=NORMAL"} @sql-calls) label))
+                 (db-core/close-db! "wal-pragma-repo"))))))
+        (p/catch (fn [error]
+                   (is false (str "unexpected error: " error))))
+        (p/finally done))))
 
 (deftest checkpoint-db-executes-wal-checkpoint
   (let [checkpoint-db! #'db-core/checkpoint-db!

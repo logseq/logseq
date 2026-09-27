@@ -592,9 +592,13 @@
       [db search-db client-ops-db vector-index])))
 
 (defn- enable-sqlite-wal-mode!
+  "WAL + exclusive lock. synchronous=NORMAL skips per-commit fsync: an app
+  or worker crash stays durable; a power loss or OS crash can lose commits
+  since the last checkpoint (~2s on the graph db)."
   [^Object db]
   (.exec db "PRAGMA locking_mode=exclusive")
-  (.exec db "PRAGMA journal_mode=WAL"))
+  (.exec db "PRAGMA journal_mode=WAL")
+  (.exec db "PRAGMA synchronous=NORMAL"))
 
 (defn- disable-sqlite-auto-checkpoint!
   [^Object db]
