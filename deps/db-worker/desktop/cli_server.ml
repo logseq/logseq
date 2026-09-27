@@ -605,11 +605,23 @@ let stop_server_target (config : config) (repo : string)
           (Lifecycle.stop (resolve_storage config) repo owner_name)))
     (fun e ->
       let field_str name =
-        try
-          Option.bind
-            (Js.Undefined.toOption (get_field (exn_as_json e) name))
-            Js.Json.decodeString
-        with _ -> None
+        (* JS errors arrive wrapped; the original error object lives on
+           the wrapper's `_1` slot. *)
+        let of_json (j : Js.Json.t) =
+          try
+            Option.bind
+              (Js.Undefined.toOption (get_field j name))
+              Js.Json.decodeString
+          with _ -> None
+        in
+        let wrapped = exn_as_json e in
+        match of_json wrapped with
+        | Some v -> Some v
+        | None ->
+            Option.bind
+              (Js.Undefined.toOption
+                 (get_field wrapped "_1" : Js.Json.t Js.Undefined.t))
+              of_json
       in
       E.pure
         {

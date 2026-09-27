@@ -1004,6 +1004,7 @@ let handle (window : Browser_window.t) (message : Wire.t) : Wire.t Js.Promise.t
               Js.Dict.set opts_json "embedding-endpoint"
                 (Js.Json.string endpoint);
               match Js.Dict.get process_env "LOGSEQ_EMBEDDING_MODEL" with
+              match Js.Dict.get (process_env ()) "LOGSEQ_EMBEDDING_MODEL" with
               | Some m ->
                   Js.Dict.set opts_json "embedding-model-id" (Js.Json.string m)
               | None -> ())
