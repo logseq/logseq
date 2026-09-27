@@ -359,8 +359,7 @@ let create_or_open_db args =
               block together with the other dbs. *)
            (match Endpoint_search.get_search_db repo with
             | Some search_db when created_sqlite ->
-                Sqlite.exec search_db ~sql:"pragma locking_mode=exclusive"
-                  ~bind:[||];
+                (* locking_mode=exclusive was already set in open_search_db *)
                 Sqlite.exec search_db ~sql:"pragma journal_mode=WAL" ~bind:[||]
             | _ -> ());
            let finish () : Wire.t Db_worker_effect.t =
