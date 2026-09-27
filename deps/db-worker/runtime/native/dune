@@ -24,4 +24,15 @@
   mirage-crypto-rng.unix
   mirage-crypto-pk
   kdf.pbkdf
-  x509))
+  x509
+  eio
+  eio.unix
+  eio_posix
+  httpun
+  httpun-ws
+  tls-eio
+  ca-certs-nss
+  domain-name
+  bigstringaf
+  faraday
+  cstruct))
