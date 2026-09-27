@@ -104,7 +104,7 @@ jobs:
       # NOTE: require the app to be build with DEV-RELEASE flag
       - name: Prepare E2E test build
         run: |
-          pnpm gulp:build && clojure -M:cljs release app --config-merge "{:closure-defines {frontend.config/DEV-RELEASE true frontend.worker.handler.transaction/OUTLINER-PERF-LOGGING true}}" --debug && pnpm db-worker:build
+          pnpm gulp:build && clojure -M:cljs release app --config-merge "{:closure-defines {frontend.config/DEV-RELEASE true}}" --debug && pnpm db-worker:build
 
       - name: Upload E2E test build
         uses: actions/upload-artifact@v4
