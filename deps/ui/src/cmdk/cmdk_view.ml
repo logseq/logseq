@@ -234,14 +234,14 @@ let input_row st : t =
              st.S.vs.Signal.state_signal)
         ~events:"input"
         ~on_dom_event:(fun name payload ->
-          if name = "input" then
+          if name = "input" then (
             let q =
               Option.value
                 (Option.bind payload (fun p ->
                      Dom_ext.payload_string p "value"))
                 ~default:""
             in
-            S.on_input st q)
+            S.on_input st q))
         []
     ]
 

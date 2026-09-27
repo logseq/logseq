@@ -1,6 +1,85 @@
-# cljs → LUI migration notes
+# LUI Web UI Migration Report
 
-Implicit behaviors reverse-engineered from `src/main/frontend/` while porting,
+Tracking the issues encountered while rewriting the Logseq web UI in LUI
+(pure OCaml/Melange), to inform future LUI product design.
+
+## Implicit DOM/behavior contracts surfaced by e2e
+
+These were discoverable only by running the suite — they were implicit in the
+cljs implementation, not documented anywhere.
+
+### textarea innerText comes from textContent, not `.value`
+Playwright `:has-text` and `innerText` on a `<textarea>` read `textContent`,
+not `.value`. The cljs React renderer keeps textContent in sync; our adapter
+set only `.value`. Fixed by syncing `textContent` in the document input
+handler and making adapter `.value` writes skip redundant assignments
+(assigning `.value` resets the caret even to an identical string).
+
+**Design note for LUI**: input-like elements need a value/textContent sync
+story. A `text` prop on a `textarea` should probably update both.
+
+### `.block-title-wrap` presence during editing
+`get-page-blocks-contents` counts `.block-title-wrap` under non-add-button
+blocks. While editing, cljs still keeps the `.block-title-wrap` container
+(with the editor inside); our initial implementation swapped content for
+`.editor-wrapper`, dropping the block from the count. DOM structure around
+editing states must preserve the wrapper element.
+
+### Duplicate `.block-title-wrap`
+`Render.title` already emits `span.block-title-wrap`; wrapping it again in
+`tree.ml` produced nested wraps and doubled content counts. Guard against
+component-level wrappers stacking.
+
+### Shift+Arrow at editor boundary must cross into block selection
+In cljs, `Shift+ArrowUp` with caret on the first row exits editing and enters
+block-selection mode (selects the block); second press extends the selection.
+A no-op in editing mode broke `new-blocks` flows that rely on committing and
+selecting without an explicit Escape.
+
+### Match-order bugs in key dispatch
+`"ArrowUp" when shift` shadows `meta/alt+shift` combinations. Modifier combos
+must be ordered most-specific first in any match-based key dispatch.
+
+## Worker protocol edge cases
+
+- `apply-outliner-ops` op entries require nested `Array` args
+  (`[Keyword op-name; Array args]`), not a flat list.
+- `insert-blocks` block maps put `block/tags` at the top level of the new
+  block map (cljs merges `:properties` into the block map); worker expects
+  lookup-refs `Array [Keyword "block/uuid"; Uuid u]` inside a `Set`.
+- `set-block-property` rejects private tags (`logseq.class/Cards` is in
+  `Db_class.private_tags`, raising `Outliner_validate.Notification`). Card
+  tagging must go through the `insert-blocks` path.
+- `q`/datalog wire form: `[:find ?x . :where ...]` (single-scalar find) works;
+  multi-scalar forms return rows. Nested vector queries need the nested
+  `Array` wrapping.
+
+## LUI runtime issues found and fixed (already merged upstream)
+
+- Retained-store `insert_at` duplicated elements on non-end insertion,
+  producing stale node ids (crash on Toast page nav).
+- Document `pointerdown` Dismiss handler fired for every mounted dropdown,
+  closing sibling menus on clicks that were inside their own menu group.
+- `.lui-modal-layer` lacked `pointer-events: auto` inside the
+  `pointer-events: none` portal — clicks passed through the modal.
+- `ToggleChanged` echo suppression only matched `Checked`, swallowing
+  tree-node `Expanded`/accordion `Selected` collapse events.
+
+## Open / intermittent issues
+
+- cmdk "Create page called 'X'" row occasionally never appears for ~10s.
+  The create row previously depended on the worker search resolving; we now
+  upsert it synchronously on input. Root cause of the search hang itself is
+  still unknown — possibly a stale-`gen` drop or a rejected `search-blocks`
+  promise that logs only to console.
+
+## Process notes
+
+- `opam env --switch=5.5.0` is required before `dune` — the `default` switch
+  lacks `lui` and produces confusing "lui.web.dom not found" errors.
+- e2e DOM contract is `clj-e2e/`; selectors may move to class/id but the
+  behavioral assumptions above are load-bearing.
+
 that the e2e contract doesn't spell out directly. Newest area last.
 
 ## Graphs / dialogs / toasts / settings / import-export

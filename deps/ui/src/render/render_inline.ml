@@ -473,6 +473,21 @@ and try_emoji s i =
     Some (emoji_el (String.sub s (i + 1) (j - i - 1)), j + 1 - i)
   else None
 
+(* s renders as one bare text node when no inline markup fires —
+   callers use the result to emit ~text: (a direct DOM text node, like
+   cljs) instead of span.lui-text children, which Playwright :text-is
+   requires *)
+and plain_text s =
+  let n = String.length s in
+  let rec go i =
+    if i >= n then Some s
+    else
+      match try_match s i with
+      | Some _ -> None
+      | None -> go (i + 1)
+  in
+  go 0
+
 (* bare http(s):// url *)
 and try_url s i =
   if starts_at s i "http://" || starts_at s i "https://" then (

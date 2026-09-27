@@ -182,15 +182,26 @@ let load_block_zoom uuid =
                 match blk with
                 | Wire.Map _ ->
                     let b = Decode.block_of_wire blk in
-                    Runtime.send
-                      (Action.Page_loaded
-                         { Model.page_title = b.Model.block_title
-                         ; page_uuid = b.block_uuid
-                         ; page_db_id = b.block_db_id
-                         ; page_is_tag = false
-                         ; page_journal_day = None
-                         ; page_blocks = b.block_children
-                         })
+                    (* cljs block-route-root renders the zoomed block itself
+                       as the root row (children nested under it) *)
+                    ignore
+                      (Outliner_ops.resolve_block_tags [ b ]
+                       |> Js.Promise.then_ (fun bs ->
+                              Runtime.send
+                                (Action.Page_loaded
+                                   { Model.page_title = b.Model.block_title
+                                   ; page_uuid = b.block_uuid
+                                   ; page_db_id = b.block_db_id
+                                   ; page_is_tag = false
+                                   ; page_journal_day = None
+                                   ; page_blocks = bs
+                                   });
+                              (match Editor_actions.consume_pending_zoom () with
+                               | Some u when Editor_state.ready () ->
+                                   Editor_actions.enter_edit u
+                                     (String.length b.Model.block_title)
+                               | _ -> ());
+                              Js.Promise.resolve ()))
                 | _ ->
                     Runtime.send
                       (Action.Navigate_to (Model.Not_found uuid)))
@@ -225,7 +236,9 @@ let load_route (route : Model.route) =
   | Model.Home -> ignore (load_home ())
   | Model.Page s -> ignore (load_page_ref (page_ref s) ~missing:s)
   | Model.Block_zoom uuid -> ignore (load_block_zoom uuid)
-  | Model.Journals -> ignore (load_journals ())
+  | Model.Journals ->
+      Runtime.reload_current_view := load_journals;
+      ignore (load_journals ())
   | Model.Library ->
       ignore (load_page_ref (Wire.String "Library") ~missing:"Library")
   | Model.Graph -> ignore (load_graph ())

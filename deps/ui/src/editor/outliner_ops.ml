@@ -21,8 +21,14 @@ let op name args = Wire.Array [ Wire.Keyword name; Wire.Array args ]
 
 let uuids_list uuids = Wire.List (List.map (fun u -> Wire.Uuid u) uuids)
 
+(* tx-meta :outliner-op — required for multi-op batches or the worker
+   skips undo recording (gen_undo_ops requires local-tx? + outliner-op;
+   single-op batches get it auto-derived from the op name) *)
+let op_opts name = Wire.Map [ kw "outliner-op" (Wire.Keyword name) ]
+
+(* cljs save-block-aux! trims the value before persisting *)
 let save_block uuid title =
-  op "save-block" [ block_map ~title uuid; Wire.Map [] ]
+  op "save-block" [ block_map ~title:(String.trim title) uuid; Wire.Map [] ]
 
 let insert_blocks blocks target_uuid ~sibling =
   op "insert-blocks"
@@ -43,6 +49,15 @@ let move_blocks uuids target_uuid ~sibling =
     [ uuids_list uuids
     ; Wire.Uuid target_uuid
     ; Wire.Map [ kw "sibling?" (Wire.Bool sibling) ]
+    ]
+
+(* move to the top of target's children — cljs :top? *)
+let move_blocks_top uuids target_uuid =
+  op "move-blocks"
+    [ uuids_list uuids
+    ; Wire.Uuid target_uuid
+    ; Wire.Map
+        [ kw "sibling?" (Wire.Bool false); kw "top?" (Wire.Bool true) ]
     ]
 
 let move_up_down uuids up =
@@ -68,6 +83,13 @@ let collapse_expand pairs =
 let create_page title =
   op "create-page" [ Wire.String title; Wire.Map [] ]
 
+let create_class title =
+  op "create-page"
+    [ Wire.String title; Wire.Map [ kw "class?" (Wire.Bool true) ] ]
+
+let set_block_property uuid prop v =
+  op "set-block-property" [ Wire.Uuid uuid; Wire.Keyword prop; v ]
+
 (* mirror :block/collapsed? from the raw wire into editor state — the
    decoded Model.block drops it *)
 let rec collect_collapsed set (w : Wire.t) =
@@ -81,7 +103,12 @@ let rec collect_collapsed set (w : Wire.t) =
   match Wire.get w "block/children" with
   | Some (Wire.List xs) | Some (Wire.Array xs) ->
       List.fold_left collect_collapsed set xs
-  | _ -> set
+  | _ -> (
+      (* a top-level list of blocks (zoom refresh) — walk each item *)
+      match w with
+      | Wire.List xs | Wire.Array xs ->
+          List.fold_left collect_collapsed set xs
+      | _ -> set)
 
 let set_collapsed set =
   let apply st = { st with S.collapsed = set } in
@@ -90,29 +117,138 @@ let set_collapsed set =
   if S.ready () then S.set_silent apply
   else S.defer_init apply
 
+(* block/tags arrives as {:db/id} stubs — cljs resolves tag entities live
+   off datascript; we batch-resolve titles via get-blocks and rewrite the
+   model before rendering. *)
+let rec collect_tag_ids acc (b : Model.block) =
+  List.fold_left collect_tag_ids (List.rev_append b.Model.block_tag_ids acc)
+    b.block_children
+
+let resolve_block_tags (blocks : Model.block list) : Model.block list Js.Promise.t =
+  let ids =
+    List.sort_uniq compare (List.fold_left collect_tag_ids [] blocks)
+  in
+  match ids with
+  | [] -> Js.Promise.resolve blocks
+  | _ -> (
+      match !Runtime.current_repo with
+      | None -> Js.Promise.resolve blocks
+      | Some repo ->
+          Runtime.invoke2 "thread-api/get-blocks" (Wire.String repo)
+            (Wire.Array
+               (List.map
+                  (fun i ->
+                    Wire.Map
+                      [ (Wire.String "id", Wire.Int i)
+                      ; (Wire.String "opts", Wire.Map [])
+                      ])
+                  ids))
+          |> Js.Promise.then_ (fun w ->
+                 let titles =
+                   List.filter_map
+                     (fun pair ->
+                       let blk =
+                         match Wire.get pair "block" with
+                         | Some b -> b
+                         | None -> (
+                             match Sdk_util.wire_elems pair with
+                             | [ _; b ] -> b
+                             | _ -> Wire.Nil)
+                       in
+                       match
+                         ( Wire.map_get_int blk "db/id"
+                         , Wire.map_get_string blk "block/title" )
+                       with
+                       | Some id, Some t -> Some (id, t)
+                       | _ -> None)
+                     (Sdk_util.wire_elems w)
+                 in
+                 let rec fill (b : Model.block) =
+                   { b with
+                     Model.block_tags =
+                       List.filter_map
+                         (fun i -> List.assoc_opt i titles)
+                         b.block_tag_ids
+                   ; block_children = List.map fill b.block_children
+                   }
+                 in
+                 Js.Promise.resolve (List.map fill blocks)))
+
+(* block zoom: the route root is a block, not a page — refetch it via
+   get-blocks (get-page-blocks-tree would return its children or nothing).
+   Returns the raw wire list like get-page-blocks-tree. *)
+let fetch_zoom_blocks repo uuid : Wire.t Js.Promise.t =
+  Runtime.invoke2 "thread-api/get-blocks" (Wire.String repo)
+    (Wire.Array
+       [ Wire.Map
+           [ (Wire.String "id", Wire.Uuid uuid)
+           ; ( Wire.String "opts"
+             , Wire.Map [ (Wire.Keyword "children?", Wire.Bool true) ] )
+           ]
+       ])
+  |> Js.Promise.then_ (fun w ->
+         match Sdk_util.wire_elems w with
+         | [ pair ] -> (
+             let blk =
+               match Wire.get pair "block" with
+               | Some b -> b
+               | None -> (
+                   match Sdk_util.wire_elems pair with
+                   | [ _; b ] -> b
+                   | _ -> Wire.Nil)
+             in
+             (match blk with
+              | Wire.Map _ -> Js.Promise.resolve (Wire.List [ blk ])
+              | _ -> Js.Promise.resolve (Wire.List [])))
+         | _ -> Js.Promise.resolve (Wire.List []))
+
 let refresh_page () : unit Js.Promise.t =
   match (!Runtime.current_repo, !Runtime.current_page) with
   | Some repo, Some page -> (
-      let ref_v =
-        (* Ldb.get_page accepts Uuid/String/Int64 only — a [:block/uuid u]
-           lookup-ref vector decodes to Vector and returns no page *)
-        match page.Model.page_uuid with
-        | Some u -> Wire.Uuid u
-        | None -> Wire.String page.Model.page_title
+      let blocks_p =
+        match !Runtime.current_route, page.Model.page_uuid with
+        | Some (Model.Block_zoom _), Some u -> fetch_zoom_blocks repo u
+        | _ -> (
+            let ref_v =
+              (* Ldb.get_page accepts Uuid/String/Int64 only — a
+                 [:block/uuid u] lookup-ref vector decodes to Vector and
+                 returns no page *)
+              match page.Model.page_uuid with
+              | Some u -> Wire.Uuid u
+              | None -> Wire.String page.Model.page_title
+            in
+            Runtime.invoke3 "thread-api/get-page-blocks-tree"
+              (Wire.String repo) ref_v Wire.Nil)
       in
-      Runtime.invoke3 "thread-api/get-page-blocks-tree" (Wire.String repo)
-        ref_v Wire.Nil
+      blocks_p
       |> Js.Promise.then_ (fun blocks_w ->
              set_collapsed (collect_collapsed S.String_set.empty blocks_w);
-             Runtime.send
-               (Action.Page_loaded
-                  { page with
-                    Model.page_blocks = Decode.blocks_of_wire blocks_w
-                  });
-             Js.Promise.resolve ()))
+             let blocks = Decode.blocks_of_wire blocks_w in
+             resolve_block_tags blocks
+             |> Js.Promise.then_ (fun blocks ->
+                    Runtime.send
+                      (Action.Page_loaded
+                         { page with Model.page_blocks = blocks });
+                    Js.Promise.resolve ())))
+  | Some _, None ->
+      (* journals / other non-page views reload through the router hook *)
+      !Runtime.reload_current_view ()
   | _ -> Js.Promise.resolve ()
 
+(* debounced save-block for in-flight typing: cljs persists the editing
+   buffer to the db on a debounce so reads (API calls, undo) see it even
+   while the editor stays open *)
+let save_timer = ref 0
+let pending_save : (string * string) option ref = ref None
+
+let cancel_pending_save () =
+  Editor_dom.clear_timeout !save_timer;
+  pending_save := None
+
 let apply ?(opts = Wire.Map []) ops : unit Js.Promise.t =
+  (* any structural op already carries the correct titles — a queued
+     keystroke save firing afterwards would clobber them *)
+  cancel_pending_save ();
   match !Runtime.current_repo with
   | None -> Js.Promise.resolve ()
   | Some repo ->
@@ -123,20 +259,59 @@ let apply ?(opts = Wire.Map []) ops : unit Js.Promise.t =
              Platform.console_error ("apply-outliner-ops failed", e);
              Js.Promise.resolve ())
 
+let schedule_save uuid title =
+  cancel_pending_save ();
+  pending_save := Some (uuid, title);
+  save_timer :=
+    Editor_dom.set_timeout_id
+      (fun () ->
+        pending_save := None;
+        ignore (apply [ save_block uuid title ]))
+      400
+
 let apply_and_refresh ?opts ops =
   apply ?opts ops
   |> Js.Promise.then_ (fun () -> refresh_page ())
 
+(* undo/redo writes datoms straight into the db — resync the open
+   editor's buffer so a stale textarea does not mask the restored title *)
+let resync_open_editor () =
+  match S.editing () with
+  | None -> ()
+  | Some e -> (
+      match S.find e.uuid with
+      | Some b ->
+          let title = String.trim b.Model.block_title in
+          if e.S.buffer <> title then begin
+            S.set_silent (fun st ->
+                match st.S.editing with
+                | Some e' when e'.uuid = e.uuid ->
+                    { st with S.editing = Some { e' with S.buffer = title } }
+                | _ -> st);
+            match Editor_dom.textarea_of e.uuid with
+            | Some el -> Editor_dom.el_set_value el title
+            | None -> ()
+          end
+      | None -> S.set_silent (fun st -> { st with S.editing = None }))
+
 let undo () =
+  cancel_pending_save ();
   match !Runtime.current_repo with
   | Some repo ->
       Runtime.invoke1 "thread-api/undo-redo-undo" (Wire.String repo)
       |> Js.Promise.then_ (fun _ -> refresh_page ())
+      |> Js.Promise.then_ (fun () ->
+             resync_open_editor ();
+             Js.Promise.resolve ())
   | None -> Js.Promise.resolve ()
 
 let redo () =
+  cancel_pending_save ();
   match !Runtime.current_repo with
   | Some repo ->
       Runtime.invoke1 "thread-api/undo-redo-redo" (Wire.String repo)
       |> Js.Promise.then_ (fun _ -> refresh_page ())
+      |> Js.Promise.then_ (fun () ->
+             resync_open_editor ();
+             Js.Promise.resolve ())
   | None -> Js.Promise.resolve ()

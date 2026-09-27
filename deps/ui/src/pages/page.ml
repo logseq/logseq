@@ -94,10 +94,13 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
   let body =
     if m.editing_title then [ title_editor page ]
     else
+      (* cljs wraps the title in block-container -> .ls-block *)
       [ box ~key:"pt-inner" ~style_class:"w-full relative"
-          [ dom ~key:"pt-title" ~style_class:"block-title-wrap"
-              ~attrs:[ ("id", "page-title-text") ]
-              ~text:page.page_title []
+          [ dom ~key:"pt-block" ~style_class:"ls-block"
+              [ dom ~key:"pt-title" ~style_class:"block-title-wrap"
+                  ~attrs:[ ("id", "page-title-text") ]
+                  ~text:page.page_title []
+              ]
           ]
       ]
   in
@@ -115,9 +118,15 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
       | _ -> open_menu name payload)
     (icon @ body)
 
-let blocks_inner (blocks : Model.block list) : t =
+let blocks_inner ?puuid (blocks : Model.block list) : t =
+  let inner_attrs =
+    match puuid with
+    | Some u -> [ ("data-pu", u) ]
+    | None -> []
+  in
   dom ~key:"page-blocks" ~style_class:"ls-page-blocks"
     [ dom ~key:"page-blocks-inner" ~style_class:"page-blocks-inner relative"
+        ~attrs:inner_attrs
         (List.map Tree.block_row blocks)
     ]
 
@@ -193,7 +202,7 @@ let journal_item (p : Model.page) : t =
                 ~attrs:[ ("href", "#/page/" ^ key) ]
                 ~text:p.page_title []
             ]
-        ; blocks_inner p.page_blocks
+        ; blocks_inner ?puuid:p.page_uuid p.page_blocks
         ]
     ]
 
@@ -242,7 +251,7 @@ let page_view (m : Model.t) (page : Model.page) : t =
         ~style_class:"relative grid gap-4 sm:gap-8 page-inner mb-16"
         [ breadcrumbs page.page_title
         ; page_title_el m page
-        ; blocks_inner page.page_blocks
+        ; blocks_inner ?puuid:page.page_uuid page.page_blocks
         ; references_view m.page_refs
         ; unlinked_references_view m
         ]

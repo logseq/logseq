@@ -91,7 +91,11 @@ let selection_active () = not (String_set.is_empty (selected ()))
 let page_blocks () =
   match !Runtime.current_page with
   | Some p -> p.Model.page_blocks
-  | None -> []
+  | None ->
+      (* journals view renders every journal item's blocks in the same
+         page flow *)
+      List.concat_map (fun (p : Model.page) -> p.Model.page_blocks)
+        !Runtime.current_journals
 
 let rec find_in blocks uuid =
   match blocks with
@@ -176,3 +180,14 @@ let neighbor_of uuid dir =
 
 let prev_visible uuid = neighbor_of uuid `Prev
 let next_visible uuid = neighbor_of uuid `Next
+
+let prev_sibling uuid =
+  match find_parent uuid with
+  | Some (parent_opt, idx) when idx > 0 ->
+      let siblings =
+        match parent_opt with
+        | Some p -> p.Model.block_children
+        | None -> page_blocks ()
+      in
+      List.nth_opt siblings (idx - 1)
+  | _ -> None

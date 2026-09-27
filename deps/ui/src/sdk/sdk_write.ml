@@ -189,65 +189,127 @@ let insert_block a b c _d =
                                       resolved_wire w)))))
   | _ -> resolved_nil
 
-(* batch blocks [{content, uuid?, properties?, children?}] -> wire maps *)
-let rec batch_block_wire (w : Wire.t) : Wire.t =
-  let title =
-    match Wire.get w "content" with
-    | Some (Wire.String s) -> s
-    | _ -> ""
-  in
-  let uuid =
-    match Wire.map_get_uuid w "uuid" with
-    | Some u -> u
-    | None -> Platform.random_uuid ()
-  in
-  let children =
-    match Wire.get w "children" with
-    | Some c -> List.map batch_block_wire (list_items c)
-    | None -> []
-  in
-  let props =
-    match Wire.get w "properties" with
-    | Some p ->
+(* batch blocks [{content, uuid?, properties?, children?}] -> flat
+   (uuid, block-map, props) list in pre-order — cljs tree-vec-flatten plus
+   the :uuid prewalk in insert-batch-blocks; each node becomes
+   {block/title, block/uuid, block/level} and its properties are applied
+   afterwards via set-block-property ops (as cljs does) *)
+let rec flatten_batch level parent_uuid acc (w : Wire.t) =
+  match w with
+  | Wire.Map _ ->
+      let content =
+        match Wire.get w "content" with
+        | Some (Wire.String s) -> s
+        | _ -> ""
+      in
+      let uuid =
+        match Wire.get w "uuid" with
+        | Some (Wire.Uuid u) | Some (Wire.String u) -> u
+        | _ -> Platform.random_uuid ()
+      in
+      let props =
+        match Wire.get w "properties" with
+        | Some p -> properties_of p
+        | None -> []
+      in
+      (* cljs with-parent-and-order: children carry :block/parent as a
+         [:block/uuid u] lookup-ref — the worker re-derives level from it *)
+      let parent_kv =
+        match parent_uuid with
+        | Some p ->
+            [ ( Wire.String "block/parent"
+              , Wire.Array [ Wire.kw "block/uuid"; Wire.Uuid p ] ) ]
+        | None -> []
+      in
+      let flat =
         Wire.Map
-          (List.map
-             (fun (ident, v) -> (Wire.Keyword ident, v))
-             (properties_of p))
-    | None -> Wire.Map []
-  in
-  Wire.Map
-    ([ (Wire.String "block/title", Wire.String title)
-     ; (Wire.String "block/uuid", Wire.Uuid uuid)
-     ]
-    @ (match children with
-       | [] -> []
-       | cs -> [ (Wire.String "children", Wire.List cs) ])
-    @
-    match props with
-    | Wire.Map [] -> []
-    | _ -> [ (Wire.String "block/properties", props) ])
+          ([ (Wire.String "block/title", Wire.String content)
+           ; (Wire.String "block/uuid", Wire.Uuid uuid)
+           ; (Wire.String "block/level", Wire.Int level) ]
+          @ parent_kv)
+      in
+      let acc = (uuid, flat, props) :: acc in
+      (match Wire.get w "children" with
+       | Some c ->
+           List.fold_left
+             (flatten_batch (level + 1) (Some uuid))
+             acc (list_items c)
+       | None -> acc)
+  | _ -> acc
 
 let insert_batch_block a b c _d =
   match arg_string a with
   | None -> resolved_nil
   | Some id ->
-      let blocks = List.map batch_block_wire (list_items (arg_wire b)) in
-      let opts = arg_map c in
-      let insert_opts =
-        Wire.Map
-          [ (Wire.kw "sibling?", Wire.Bool (opt_bool "sibling" opts))
-          ; (Wire.kw "keep-uuid?", Wire.Bool true)
-          ; (Wire.kw "outliner-op", Wire.Keyword "insert-blocks")
-          ]
+      let flats =
+        List.rev
+          (List.fold_left (flatten_batch 1 None) [] (list_items (arg_wire b)))
       in
+      let opts = arg_map c in
       get_entity id
       |> Js.Promise.then_ (fun target ->
              match block_uuid_of target with
              | None -> resolved_nil
              | Some uuid ->
-                 apply_op "insert-blocks"
-                   [ Wire.List blocks; Wire.Uuid uuid; insert_opts ]
-                 |> Js.Promise.then_ (fun _ -> resolved_nil))
+                 (* cljs insert-batch-blocks: a page target forces sibling?
+                    false — children of the page *)
+                 let is_page = Wire.get target "block/name" <> None in
+                 let insert_opts =
+                   Wire.Map
+                     [ ( Wire.kw "sibling?"
+                       , Wire.Bool (opt_bool "sibling" opts && not is_page) )
+                     ; (Wire.kw "keep-uuid?", Wire.Bool true)
+                     ; (Wire.kw "outliner-op", Wire.Keyword "paste")
+                     ; (Wire.kw "replace-empty-target?", Wire.Bool false)
+                     ]
+                 in
+                 let prop_ops =
+                   List.concat_map
+                     (fun (_, _, props) -> ensure_property_ops props)
+                     flats
+                   @ List.concat_map
+                       (fun (u, _, props) -> set_properties_op u props)
+                       flats
+                 in
+                 apply_ops
+                   (Wire.Array
+                      [ Wire.Keyword "insert-blocks"
+                      ; Wire.Array
+                          [ Wire.Array (List.map (fun (_, m, _) -> m) flats)
+                          ; Wire.Uuid uuid
+                          ; insert_opts
+                          ]
+                      ]
+                   :: prop_ops)
+                   (Wire.Map [])
+                 |> Js.Promise.then_ (fun _ ->
+                        Runtime.invoke2 "thread-api/get-blocks"
+                          (Wire.String (repo ()))
+                          (Wire.Array
+                             (List.map
+                                (fun (u, _, _) ->
+                                  Wire.Map
+                                    [ (Wire.String "id", Wire.String u)
+                                    ; (Wire.String "opts", Wire.Map [])
+                                    ])
+                                flats))
+                        |> Js.Promise.then_ (fun w ->
+                               let blocks =
+                                 List.filter_map
+                                   (fun pair ->
+                                     match Wire.get pair "block" with
+                                     | Some b -> Some b
+                                     | None -> (
+                                         match wire_elems pair with
+                                         | [ _; b ] -> Some b
+                                         | _ -> None))
+                                   (wire_elems w)
+                               in
+                               resolved
+                                 (Sdk_convert.json_arr
+                                    (Array.of_list
+                                       (List.map Sdk_convert.json_of_wire
+                                          blocks))))))
 
 let append_block_in_page a b c _d =
   (* overloads: (content) | (page, content) | (page, content, opts) *)

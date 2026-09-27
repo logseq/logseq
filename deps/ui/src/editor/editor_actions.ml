@@ -23,33 +23,43 @@ let sync_buffer uuid v =
           { st with S.editing = Some { e with S.buffer = v } }
       | _ -> st)
 
-let apply_focus () =
+(* retry until the textarea mounts — a slow apply+refresh can take
+   longer than the fixed delays the old version used *)
+let focus_attempts = ref 0
+
+let rec apply_focus () =
   match !S.pending_focus with
   | None -> ()
   | Some (uuid, caret) -> (
       match D.textarea_of uuid with
       | Some el ->
           S.pending_focus := None;
+          focus_attempts := 0;
           D.el_focus el;
           let len = String.length (D.el_value el) in
           let c = max 0 (min caret len) in
           D.el_set_selection_range el c c
-      | None -> ())
+      | None ->
+          incr focus_attempts;
+          if !focus_attempts < 50 then D.set_timeout apply_focus 40
+          else (
+            S.pending_focus := None;
+            focus_attempts := 0))
 
 let request_focus uuid caret =
   S.pending_focus := Some (uuid, caret);
-  D.set_timeout apply_focus 0;
-  D.set_timeout apply_focus 120
+  focus_attempts := 0;
+  D.set_timeout apply_focus 0
 
 (* set pending focus, then run [p]; re-apply focus after the flush so a
    remounted textarea still ends up focused *)
 let with_focus_after uuid caret p =
   S.pending_focus := Some (uuid, caret);
+  focus_attempts := 0;
   ignore
     (p
     |> Js.Promise.then_ (fun () ->
            D.set_timeout apply_focus 0;
-           D.set_timeout apply_focus 120;
            Js.Promise.resolve ()))
 
 let model_title uuid =
@@ -60,9 +70,19 @@ let save_if_dirty uuid =
   if buf <> model_title uuid then
     ignore (Ops.apply_and_refresh [ Ops.save_block uuid buf ])
 
+(* deferred blur: committing synchronously on mousedown re-renders the
+   tree between mousedown and mouseup, so the browser retargets the click
+   to a common ancestor and enter_edit never runs. Defer one tick; a
+   click into another block runs enter_edit first (save_if_dirty commits
+   the old buffer) and clears this via clear_pending_blur. *)
+let pending_blur_uuid : string option ref = ref None
+
+let clear_pending_blur () = pending_blur_uuid := None
+
 (* ---- enter / exit ---- *)
 
 let enter_edit uuid caret =
+  clear_pending_blur ();
   (match S.editing () with
   | Some e when e.uuid <> uuid -> save_if_dirty e.uuid
   | _ -> ());
@@ -70,7 +90,8 @@ let enter_edit uuid caret =
   | Some b ->
       S.set (fun st ->
           { st with
-            S.editing = Some { uuid; buffer = b.Model.block_title }
+            S.editing =
+              Some { uuid; buffer = String.trim b.Model.block_title }
           ; selected = S.String_set.empty
           ; anchor = None
           });
@@ -104,6 +125,23 @@ let blur_commit () =
       S.set (fun st -> { st with S.editing = None });
       commit_buf e.uuid buf
 
+let schedule_blur_commit () =
+  match S.editing () with
+  | None -> ()
+  | Some e ->
+      pending_blur_uuid := Some e.uuid;
+      ignore
+        (Editor_dom.set_timeout_id
+          (fun () ->
+            match !pending_blur_uuid with
+            | Some u ->
+                pending_blur_uuid := None;
+                (match S.editing () with
+                 | Some e' when e'.uuid = u -> blur_commit ()
+                 | _ -> ())
+            | None -> ())
+          0)
+
 (* ---- structure ops ---- *)
 
 let split_at_cursor uuid =
@@ -127,7 +165,8 @@ let split_at_cursor uuid =
       in
       S.set_silent (fun st ->
           { st with S.editing = Some { uuid = new_uuid; buffer = after } });
-      with_focus_after new_uuid 0 (Ops.apply_and_refresh ops)
+      with_focus_after new_uuid 0
+        (Ops.apply_and_refresh ~opts:(Ops.op_opts "insert-blocks") ops)
   | _ -> ()
 
 let move_children_ops (b : Model.block) target_uuid =
@@ -142,6 +181,22 @@ let is_parent_of (parent : Model.block) uuid =
     (fun c -> c.Model.block_uuid = Some uuid)
     parent.Model.block_children
 
+let same_parent a_uuid b_uuid =
+  match (S.find_parent a_uuid, S.find_parent b_uuid) with
+  | Some (p1, _), Some (p2, _) -> (
+      match (p1, p2) with
+      | None, None -> true
+      | Some p, Some q -> p.Model.block_uuid = q.Model.block_uuid
+      | _ -> false)
+  | _ -> false
+
+(* cljs boundary-merge-allowed?: a block with children cannot merge
+   across a parent boundary *)
+let boundary_merge_allowed source target_uuid =
+  source.Model.block_children = [] || same_parent
+    (Option.value source.Model.block_uuid ~default:"")
+    target_uuid
+
 (* Backspace at caret 0: merge current into previous visible block *)
 let merge_prev uuid =
   match (S.editing (), S.find uuid, S.prev_visible uuid) with
@@ -150,7 +205,8 @@ let merge_prev uuid =
       | None -> ()
       | Some prev_uuid ->
           let buf = live_buffer uuid in
-          if
+          if not (boundary_merge_allowed b prev_uuid) then ()
+          else if
             String.trim prev.Model.block_title = ""
             && not (is_parent_of prev uuid)
           then (
@@ -162,7 +218,8 @@ let merge_prev uuid =
             in
             S.set_silent (fun st ->
                 { st with S.editing = Some { e with S.buffer = buf } });
-            with_focus_after uuid 0 (Ops.apply_and_refresh ops))
+            with_focus_after uuid 0
+              (Ops.apply_and_refresh ~opts:(Ops.op_opts "delete-blocks") ops))
           else (
             let ops =
               move_children_ops b prev_uuid
@@ -180,46 +237,82 @@ let merge_prev uuid =
                 });
             with_focus_after prev_uuid
               (String.length prev.Model.block_title)
-              (Ops.apply_and_refresh ops)))
+              (Ops.apply_and_refresh ~opts:(Ops.op_opts "delete-blocks") ops)))
   | _ -> ()
+
+(* children of b except [except_uuid] -> move under target *)
+let move_children_except_ops (b : Model.block) except_uuid target_uuid =
+  match
+    List.filter_map
+      (fun c ->
+        if c.Model.block_uuid = Some except_uuid then None
+        else c.Model.block_uuid)
+      b.Model.block_children
+  with
+  | [] -> []
+  | uuids -> [ Ops.move_blocks uuids target_uuid ~sibling:false ]
 
 (* Delete at end: merge next visible block into current *)
 let merge_next uuid =
   match (S.editing (), S.find uuid, S.next_visible uuid) with
-  | Some e, Some _b, Some next when e.uuid = uuid -> (
+  | Some e, Some b, Some next when e.uuid = uuid -> (
       match next.Model.block_uuid with
       | None -> ()
       | Some next_uuid ->
           let buf = live_buffer uuid in
-          let ops =
-            (match
-               List.filter_map
-                 (fun c -> c.Model.block_uuid)
-                 next.Model.block_children
-             with
-            | [] -> []
-            | uuids -> [ Ops.move_blocks uuids uuid ~sibling:false ])
-            @ [ Ops.delete_blocks [ next_uuid ]
-              ; Ops.save_block uuid (buf ^ next.Model.block_title)
-              ]
-          in
-          S.set_silent (fun st ->
-              { st with
-                S.editing =
-                  Some { e with S.buffer = buf ^ next.Model.block_title }
-              });
-          with_focus_after uuid (String.length buf)
-            (Ops.apply_and_refresh ops))
+          (* cljs boundary-merge-allowed?(next-block, current-block): a
+             next-block with children cannot merge/delete across a parent
+             boundary — gates both the empty-delete and the merge path *)
+          if not (boundary_merge_allowed next uuid) then ()
+          else if String.trim buf = "" then (
+            (* cljs input-empty + delete-concat: the empty current block
+               is deleted, its children reparented to next, next is
+               edited at caret 0 *)
+            let ops =
+              move_children_except_ops b next_uuid next_uuid
+              @ (if is_parent_of b next_uuid then
+                   [ Ops.move_blocks [ next_uuid ] uuid ~sibling:true ]
+                 else [])
+              @ [ Ops.delete_blocks [ uuid ] ]
+            in
+            S.set_silent (fun st ->
+                { st with
+                  S.editing =
+                    Some
+                      { uuid = next_uuid
+                      ; buffer = String.trim next.Model.block_title
+                      }
+                });
+            with_focus_after next_uuid 0
+              (Ops.apply_and_refresh ~opts:(Ops.op_opts "delete-blocks") ops))
+          else (
+            let ops =
+              move_children_ops next uuid
+              @ [ Ops.delete_blocks [ next_uuid ]
+                ; Ops.save_block uuid (buf ^ next.Model.block_title)
+                ]
+            in
+            S.set_silent (fun st ->
+                { st with
+                  S.editing =
+                    Some { e with S.buffer = buf ^ next.Model.block_title }
+                });
+            with_focus_after uuid (String.length buf)
+              (Ops.apply_and_refresh ~opts:(Ops.op_opts "delete-blocks") ops)))
   | _ -> ()
 
 (* ---- selection ---- *)
-
-let selected_uuids () = S.String_set.elements (S.selected ())
 
 let flat_uuids () =
   List.filter_map
     (fun b -> b.Model.block_uuid)
     (S.flat_visible ())
+
+(* cljs sends selected blocks to move/delete ops in document order;
+   String_set.elements is uuid-sorted, which corrupts worker ordering *)
+let selected_uuids () =
+  let sel = S.selected () in
+  List.filter (fun u -> S.String_set.mem u sel) (flat_uuids ())
 
 let index_of lst u =
   let rec go i = function
@@ -320,6 +413,23 @@ let indent_or_outdent ~indent =
   match uuids with
   | [] -> ()
   | focus :: _ ->
+      (* cljs expand-collapsed-indent-target!: indenting under a
+         collapsed sibling expands it — clear the local collapsed
+         override so the indented block stays visible *)
+      if indent then
+        List.iter
+          (fun u ->
+            match S.prev_sibling u with
+            | Some s -> (
+                match s.Model.block_uuid with
+                | Some su ->
+                    S.set_silent (fun st ->
+                        { st with
+                          S.collapsed = S.String_set.remove su st.S.collapsed
+                        })
+                | None -> ())
+            | None -> ())
+          uuids;
       with_focus_after focus
         (String.length (live_buffer focus))
         (Ops.apply_and_refresh [ Ops.indent_outdent uuids indent ])
@@ -327,27 +437,97 @@ let indent_or_outdent ~indent =
 let move_blocks_up_down up =
   match selected_uuids () with
   | [] -> ()
-  | uuids -> ignore (Ops.apply_and_refresh [ Ops.move_up_down uuids up ])
+  | uuids ->
+      (match !Runtime.current_page with
+       | Some page ->
+           let page' = Model.move_selected_top_blocks page uuids up in
+           Runtime.send (Action.Page_loaded page')
+       | None -> ());
+      ignore (Ops.apply_and_refresh [ Ops.move_up_down uuids up ])
 
 let delete_selection () =
   let uuids = selected_uuids () in
   match uuids with
   | [] -> ()
-  | first :: _ ->
+  | _ ->
+      (* first selected in flat visible order — String_set.elements is
+         sorted by uuid, not position *)
+      let sel = S.selected () in
+      let first =
+        match
+          List.find_opt (fun u -> S.String_set.mem u sel) (flat_uuids ())
+        with
+        | Some u -> u
+        | None -> List.hd uuids
+      in
       let prev =
         match S.prev_visible first with
         | Some p -> p.Model.block_uuid
         | None -> None
       in
-      S.set_silent (fun st ->
-          { st with
-            S.selected =
-              (match prev with
-              | Some u -> S.String_set.singleton u
-              | None -> S.String_set.empty)
-          ; anchor = prev
-          });
-      ignore (Ops.apply_and_refresh [ Ops.delete_blocks uuids ])
+      (* cljs enters edit mode on the previous block, caret at end *)
+      (match prev with
+       | Some pu -> (
+           match S.find pu with
+           | Some b ->
+               S.set_silent (fun st ->
+                   { st with
+                     S.editing =
+                        Some { uuid = pu; buffer = String.trim b.Model.block_title }
+                   ; selected = S.String_set.empty
+                   ; anchor = None
+                   });
+               with_focus_after pu
+                 (String.length b.Model.block_title)
+                 (Ops.apply_and_refresh [ Ops.delete_blocks uuids ])
+           | None ->
+               ignore (Ops.apply_and_refresh [ Ops.delete_blocks uuids ]))
+       | None ->
+           S.set_silent (fun st ->
+               { st with
+                 S.selected = S.String_set.empty
+               ; anchor = None
+               });
+           ignore (Ops.apply_and_refresh [ Ops.delete_blocks uuids ]))
+
+(* ---- drag & drop ---- *)
+
+(* is [uuid] nested inside [ancestor]? (walks the parent chain) *)
+let rec is_descendant uuid ancestor =
+  match S.find_parent uuid with
+  | Some (Some p, _) -> (
+      match p.Model.block_uuid with
+      | Some pu -> pu = ancestor || is_descendant pu ancestor
+      | None -> false)
+  | _ -> false
+
+(* cljs dnd/move-blocks: :top -> first child of the target's parent (page
+   when top-level); :nested -> last child of target; :sibling -> after
+   target *)
+let drop_dragged_block src tgt move_to =
+  if src = tgt || is_descendant tgt src then ()
+  else
+    match move_to with
+    | "top" -> (
+        let parent_uuid =
+          match S.find_parent tgt with
+          | Some (Some p, _) -> p.Model.block_uuid
+          | _ -> (
+              match !Runtime.current_page with
+              | Some page -> page.Model.page_uuid
+              | None -> None)
+        in
+        match parent_uuid with
+        | Some pu ->
+            ignore
+              (Ops.apply_and_refresh [ Ops.move_blocks_top [ src ] pu ])
+        | None -> ())
+    | "nested" ->
+        ignore
+          (Ops.apply_and_refresh [ Ops.move_blocks [ src ] tgt ~sibling:false ])
+    | _ ->
+        ignore
+          (Ops.apply_and_refresh [ Ops.move_blocks [ src ] tgt ~sibling:true ])
 
 (* ---- clipboard ---- *)
 
@@ -475,9 +655,26 @@ let arrow_nav uuid up =
       | None -> ())
   | None -> ()
 
-(* append a fresh block at the bottom of the current page *)
-let append_block () =
-  match !Runtime.current_page with
+(* append a fresh block at the bottom of the current page — or, on
+   journals, at the bottom of the journal item the add-button lives in
+   (its parentblockid attr carries the page uuid) *)
+let append_block ?for_page () =
+  let page =
+    match for_page with
+    | Some u -> (
+        match !Runtime.current_journals with
+        | js ->
+            List.find_opt
+              (fun (p : Model.page) -> p.Model.page_uuid = Some u)
+              js)
+    | None -> !Runtime.current_page
+  in
+  let page =
+    match page, !Runtime.current_page with
+    | Some _ as p, _ -> p
+    | None, p -> p
+  in
+  match page with
   | None -> ()
   | Some p -> (
       match p.Model.page_uuid with
@@ -485,7 +682,7 @@ let append_block () =
       | Some puuid ->
           let new_uuid = Platform.random_uuid () in
           let target, sibling =
-            match List.rev (S.page_blocks ()) with
+            match List.rev p.Model.page_blocks with
             | last :: _ -> (
                 match last.Model.block_uuid with
                 | Some u -> (u, true)
@@ -511,5 +708,15 @@ let append_block () =
 (* Meta+e quick-add: stub *)
 let quick_add () = ()
 
-(* Meta+Shift+. zoom: set the hash; router session owns navigation *)
-let zoom_to uuid = Platform.set_location_hash ("#/block/" ^ uuid)
+(* Meta+Shift+. zoom: cljs keeps the zoomed block in edit mode across the
+   redirect (state/set-editing-block-id! before redirect-to-page!) *)
+let pending_zoom : string option ref = ref None
+
+let zoom_to uuid =
+  pending_zoom := Some uuid;
+  Platform.set_location_hash ("#/block/" ^ uuid)
+
+let consume_pending_zoom () =
+  let z = !pending_zoom in
+  pending_zoom := None;
+  z

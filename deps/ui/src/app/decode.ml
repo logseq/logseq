@@ -17,10 +17,18 @@ let rec block_of_wire (w : Wire.t) : Model.block =
         List.map block_of_wire xs
     | _ -> []
   in
+  let tag_ids =
+    match Wire.get w "block/tags" with
+    | Some (Wire.List xs) | Some (Wire.Array xs) | Some (Wire.Set xs) ->
+        List.filter_map (fun t -> Wire.map_get_int t "db/id") xs
+    | _ -> []
+  in
   { block_uuid = uuid
   ; block_db_id = db_id
   ; block_title = title
   ; block_level = level
+  ; block_tag_ids = tag_ids
+  ; block_tags = []
   ; block_children = children
   }
 
