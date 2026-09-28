@@ -740,7 +740,7 @@ let run_item st it =
         | Cmd_all_graphs ->
             close st;
             Runtime.send (Action.Navigate_to Model.All_graphs);
-            Platform.set_location_hash (Runtime.nav_hash "#/all-graphs")
+            Platform.set_location_hash (Runtime.nav_hash "#/graphs")
         | Cmd_all_pages ->
             close st;
             Runtime.send (Action.Navigate_to Model.All_pages);
