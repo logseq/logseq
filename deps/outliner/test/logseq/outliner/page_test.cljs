@@ -72,7 +72,24 @@
                (->> (d/q '[:find [(pull ?b [{:block/parent [:block/title]}]) ...] :where [?b :block/title "keys"]] @conn)
                     (map #(get-in % [:block/parent :block/title]))
                     set))
-            "Two child pages with same name exist and have different parents"))))
+            "Two child pages with same name exist and have different parents")))
+
+    (testing "Invalid workflows"
+      (is (thrown-with-msg?
+           js/Error
+           #"Cannot create"
+           (outliner-page/create! conn "class1/page" {:split-namespace? true}))
+          "Page can't have a class parent")
+      (is (thrown-with-msg?
+           js/Error
+           #"Cannot create"
+           (outliner-page/create! conn "property1/page" {:split-namespace? true}))
+          "Page can't have a property parent")
+      (is (thrown-with-msg?
+           js/Error
+           #"Cannot create"
+           (outliner-page/create! conn "property1/class" {:split-namespace? true :class? true}))
+          "Class can't have a property parent"))))
 
 (defn- library-child-pages
   [db]
@@ -207,23 +224,6 @@
       (is (= #{"foo"} (extends-titles bar)))
       (is (= 1 (count (d/q '[:find [?e ...] :where [?e :block/title "foo"]] @conn))))
       (is (nil? (:errors (db-validate/validate-db @conn)))))))
-
-    (testing "Invalid workflows"
-      (is (thrown-with-msg?
-           js/Error
-           #"Cannot create"
-           (outliner-page/create! conn "class1/page" {:split-namespace? true}))
-          "Page can't have a class parent")
-      (is (thrown-with-msg?
-           js/Error
-           #"Cannot create"
-           (outliner-page/create! conn "property1/page" {:split-namespace? true}))
-          "Page can't have a property parent")
-      (is (thrown-with-msg?
-           js/Error
-           #"Cannot create"
-           (outliner-page/create! conn "property1/class" {:split-namespace? true :class? true}))
-          "Class can't have a property parent"))))
 
 (deftest create-page
   (let [conn (db-test/create-conn)

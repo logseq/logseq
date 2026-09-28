@@ -321,20 +321,25 @@
   "Resolve the first namespace segment to a top-level page or tag.
    Nested children that share the name (Bar/Foo when creating Foo/Baz) are ignored."
   [db title class?]
-  (if class?
-    (->> (d/datoms db :avet :block/title title)
-         (sort-by :e)
-         (some (fn [d]
-                 (let [e (d/entity db (:e d))]
-                   (when (and (ldb/class? e)
-                              (class-namespace-root? e))
-                     e)))))
-    (->> (entity-util/get-pages-by-name db title)
-         (sort-by :e)
-         (some (fn [d]
-                 (let [e (d/entity db (:e d))]
-                   (when (page-namespace-root? db e)
-                     e)))))))
+  (let [by-name (->> (entity-util/get-pages-by-name db title)
+                     (sort-by :e)
+                     (keep (fn [d]
+                             (let [e (d/entity db (:e d))]
+                               (when (page-namespace-root? db e)
+                                 e)))))]
+    (if class?
+      (or (->> (d/datoms db :avet :block/title title)
+               (sort-by :e)
+               (some (fn [d]
+                       (let [e (d/entity db (:e d))]
+                         (when (and (ldb/class? e)
+                                    (class-namespace-root? e))
+                           e)))))
+          ;; Top-level page/property with this name, so create can reject mixed parents
+          (some (fn [e]
+                  (when-not (ldb/class? e) e))
+                by-name))
+      (first by-name))))
 
 (defn- get-namespace-child
   "Look up a namespace child under the already-resolved parent entity.
@@ -414,7 +419,9 @@
                 (if class?
                   (cond
                     (and (de/entity? page) (ldb/class? page))
-                    (assoc page :logseq.property.class/extends parent-eid)
+                    (if parent-eid
+                      (assoc page :logseq.property.class/extends parent-eid)
+                      page)
 
                     (de/entity? page) ; page exists but not a class, avoid converting here because this could be troublesome.
                     nil
