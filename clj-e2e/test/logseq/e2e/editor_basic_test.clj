@@ -89,6 +89,85 @@
    ".ls-page-blocks .ls-block:not(.block-add-button) .bullet-container")
   (w/wait-for ".ls-context-menu-content"))
 
+(defn- open-page-context-menu!
+  []
+  (util/exit-edit)
+  (util/right-click "div[data-testid='page title']")
+  (w/wait-for ".ls-context-menu-content"))
+
+(defn- reset-uncaught-errors!
+  []
+  (w/eval-js
+   "() => {
+      window.__lsUncaughtErrors = [];
+      if (!window.__lsUncaughtErrorsInstalled) {
+        window.__lsUncaughtErrorsInstalled = true;
+        window.addEventListener('error', (event) => {
+          window.__lsUncaughtErrors.push(String(event.error || event.message || ''));
+        });
+      }
+      return true;
+    }"))
+
+(defn- uncaught-errors
+  []
+  (json/read-value
+   (w/eval-js "() => JSON.stringify(window.__lsUncaughtErrors || [])")))
+
+(defn- stack-overflow-messages
+  [messages]
+  (filter #(string/includes? (str %) "Maximum call stack size exceeded") messages))
+
+(defn- collect-page-errors!
+  [*errors]
+  (.onPageError (w/get-page)
+                (reify Consumer
+                  (accept [_ error]
+                    (swap! *errors conj (str error))))))
+
+(defn- assert-no-stack-overflow!
+  [*page-errors]
+  (let [console (->> (some-> custom-report/*pw-page->console-logs* deref vals)
+                     (mapcat identity))
+        overflows (concat (stack-overflow-messages @*page-errors)
+                          (stack-overflow-messages (uncaught-errors))
+                          (stack-overflow-messages console))]
+    (is (empty? overflows) (pr-str overflows))))
+
+(deftest page-context-menu-tab-closes-without-stack-overflow-test
+  (let [*page-errors (atom [])]
+    (collect-page-errors! *page-errors)
+    (reset-uncaught-errors!)
+    (open-page-context-menu!)
+    (assert/assert-is-visible (loc/filter "[role='menuitem']" :has-text "Delete page"))
+    (k/tab)
+    (w/wait-for-not-visible ".ls-context-menu-content")
+    (assert-no-stack-overflow! *page-errors)
+    (assert/assert-is-visible "div[data-testid='page title']")))
+
+(deftest page-context-menu-shift-tab-then-tab-closes-without-stack-overflow-test
+  (let [*page-errors (atom [])]
+    (collect-page-errors! *page-errors)
+    (reset-uncaught-errors!)
+    (open-page-context-menu!)
+    (k/shift+tab)
+    (k/tab)
+    (w/wait-for-not-visible ".ls-context-menu-content")
+    (assert-no-stack-overflow! *page-errors)
+    (assert/assert-is-visible "div[data-testid='page title']")))
+
+(deftest block-context-menu-tab-does-not-overflow-test
+  (let [*page-errors (atom [])]
+    (collect-page-errors! *page-errors)
+    (reset-uncaught-errors!)
+    (open-block-context-menu!)
+    (k/tab)
+    (when (w/visible? ".ls-context-menu-content")
+      (k/esc))
+    (w/wait-for-not-visible ".ls-context-menu-content")
+    (assert-no-stack-overflow! *page-errors)
+    (assert/assert-is-visible "div[data-testid='page title']")))
+
 (deftest block-context-menu-clickable-controls-use-pointer-test
   (open-block-context-menu!)
   (let [heading-button (w/-query "button[title='Auto heading']")
