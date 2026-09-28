@@ -57,6 +57,8 @@ let body_of name (ms : Model.t Signal.signal) : t =
   | "login" -> Login_view.body ms
   | "import" | "importer" -> Importer.body ms
   | "export" | "export-graph" -> Exporter.body ms
+  | "export-page" -> Export_view.body ms
+  | "publish-page" -> Publish_view.body ms
   | "sync-server" -> Settings_url_view.sync_body ms
   | "publish-server" -> Settings_url_view.publish_body ms
   | _ -> box ~key:("empty-" ^ name) []
@@ -79,6 +81,8 @@ let dialog_view name (ms : Model.t Signal.signal) : t =
          ^
          match name with
          | "sync-server" | "publish-server" -> " lg:max-w-2xl"
+         | "export-page" -> " w-auto md:max-w-4xl max-h-[80vh] overflow-y-auto"
+         | "publish-page" -> " w-auto max-w-md"
          | _ -> "")
         ~attrs:
           ([ ("data-state", "open")
