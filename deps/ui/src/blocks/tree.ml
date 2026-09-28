@@ -76,9 +76,55 @@ let collapsed_sig (b : Model.block) =
 
 (* -- control wrap: collapse arrow + bullet -- *)
 
+(* icon.cljs get-node-icon: own icon wins, then first tag icon, then the
+   node-type default ("file" for Page-tagged blocks, "hash" for Tag,
+   "letter-p" for Property). block-control-with-icon? keeps the plain
+   bullet unless the node has an explicit icon or is a non-library
+   page — in Library the default page icon stays a bullet. *)
+let node_icon ~(library : bool) (b : Model.block) : Model.icon option =
+  let cls s = List.mem ("logseq.class/" ^ s) b.block_tag_idents in
+  let default_id =
+    if cls "Tag" then "hash"
+    else if cls "Property" then "letter-p"
+    else if cls "Page" || cls "Journal" then "file"
+    else ""
+  in
+  let icon =
+    match b.block_icon with
+    | Some _ -> b.block_icon
+    | None -> (
+        match b.block_tag_icons with
+        | i :: _ -> Some i
+        | [] -> (
+            match default_id with
+            | "" -> None
+            | id ->
+                Some { Model.icon_kind = "tabler-icon"; icon_id = id }))
+  in
+  match icon with
+  | Some i
+    when b.block_icon <> None
+         || b.block_tag_icons <> []
+         || (default_id <> "" && not library) ->
+      Some i
+  | _ -> None
+
+let icon_el uuid (icon : Model.icon) : t =
+  if icon.icon_kind = "emoji" then
+    dom ~key:("ic-" ^ uuid) ~tag:"span" ~style_class:"ui__icon"
+      [ dom ~key:("ice-" ^ uuid) ~tag:"em-emoji"
+          ~attrs:[ ("id", icon.icon_id) ] []
+      ]
+  else
+    dom ~key:("ic-" ^ uuid) ~tag:"span"
+      ~style_class:("ui__icon ti ls-icon-" ^ icon.icon_id)
+      [ dom ~key:("ici-" ^ uuid) ~tag:"i"
+          ~style_class:("ti ti-" ^ icon.icon_id) []
+      ]
+
 (* cljs block-control-icon-size: heading chrome sizes differ, collapsed
    bullets shrink *)
-let control_wrap uuid (b : Model.block) : t =
+let control_wrap ~library uuid (b : Model.block) : t =
   let order_list = b.Model.block_order_list = Some "number" in
   let bullet_cls =
     "bullet-container cursor-pointer"
@@ -117,13 +163,17 @@ let control_wrap uuid (b : Model.block) : t =
             ~style_class_signal:
               (Logseq_dom.class_signal (collapsed_sig b) (fun c ->
                    bullet_cls ^ if c then " bullet-closed" else ""))
-            [ dom ~key:("b-" ^ uuid) ~tag:"span" ~style_class:"bullet"
-                ~attrs:[ ("blockid", uuid) ]
-                (match b.Model.block_order_index with
-                 | Some idx when order_list ->
-                     [ dom ~key:("ol-" ^ uuid) ~tag:"label"
-                         ~text:(string_of_int idx ^ ".") [] ]
-                 | _ -> [])
+            [ (match node_icon ~library b with
+               | Some icon -> icon_el uuid icon
+               | None ->
+                   dom ~key:("b-" ^ uuid) ~tag:"span"
+                     ~style_class:"bullet"
+                     ~attrs:[ ("blockid", uuid) ]
+                     (match b.Model.block_order_index with
+                      | Some idx when order_list ->
+                          [ dom ~key:("ol-" ^ uuid) ~tag:"label"
+                              ~text:(string_of_int idx ^ ".") [] ]
+                      | _ -> []))
             ]
         ]
     ]
@@ -295,12 +345,14 @@ let () =
   Add_button.install ();
   Asset_dom.install ()
 
-let rec block_row ?(scope = "main") ?(editable = true) (b : Model.block) : t =
+let rec block_row
+    ?(scope = "main") ?(editable = true) ?(library = false)
+    (b : Model.block) : t =
  fun ctx parent ->
   S.ensure ctx;
-  (row_el ~editable scope b) ctx parent
+  (row_el ~editable ~library scope b) ctx parent
 
-and row_el ~editable scope (b : Model.block) : t =
+and row_el ~editable scope ~(library : bool) (b : Model.block) : t =
   let uuid = Option.value b.block_uuid ~default:"" in
   if b.Model.block_is_comments_area then Comments_view.area_el b
   else
@@ -317,7 +369,7 @@ and row_el ~editable scope (b : Model.block) : t =
           (match b.block_heading with
            | Some lvl -> [ ("data-has-heading", string_of_int lvl) ]
            | None -> [])
-        [ control_wrap uuid b
+        [ control_wrap ~library uuid b
         ; dom ~key:("col-" ^ key) ~style_class:"flex flex-col w-full"
             [ dom ~key:("bmc-" ^ key)
                 ~style_class:"block-main-content flex flex-row gap-2"
@@ -346,11 +398,11 @@ and row_el ~editable scope (b : Model.block) : t =
                 ]
             ]
         ]
-    ; (if has_children then children_el ~editable uuid scope b
+    ; (if has_children then children_el ~editable ~library uuid scope b
        else box ~key:("nc-" ^ key) [])
     ]
 
-and children_el ~editable uuid scope (b : Model.block) : t =
+and children_el ~editable ~library uuid scope (b : Model.block) : t =
   if_
     ~test:(Signal.map (fun c -> not c) (collapsed_sig b))
     (dom ~key:("children-" ^ uuid)
@@ -359,14 +411,15 @@ and children_el ~editable uuid scope (b : Model.block) : t =
            ~style_class:"block-children-left-border"
            ~attrs:[ ("blockid", uuid) ] []
        ; dom ~key:("clist-" ^ uuid) ~style_class:"block-children w-full"
-           (List.map (block_row ~scope ~editable) (S.children_of b))
+           (List.map (block_row ~scope ~editable ~library)
+              (S.children_of b))
        ])
 
 (* Read-only row for linked-reference lists: same shell as row_el but the
    content never swaps to editor_el — a block shown in .references can
    simultaneously be under edit in its own page, and a second
    #edit-block-<uuid> textarea breaks locators. *)
-and block_row_static (b : Model.block) : t =
+and block_row_static ?(library = false) (b : Model.block) : t =
   let uuid = Option.value b.block_uuid ~default:"" in
   let key = block_key b in
   let embed = b.block_link <> None in
@@ -377,7 +430,7 @@ and block_row_static (b : Model.block) : t =
     ~attrs_signal_v:(row_attrs_sig uuid b)
     [ dom ~key:("main-" ^ key)
         ~style_class:"block-main-container flex flex-row gap-1"
-        [ control_wrap uuid b
+        [ control_wrap ~library uuid b
         ; dom ~key:("col-" ^ key) ~style_class:"flex flex-col w-full"
             [ dom ~key:("bmc-" ^ key)
                 ~style_class:"block-main-content flex flex-row gap-2"
@@ -400,18 +453,18 @@ and block_row_static (b : Model.block) : t =
                 ]
             ]
         ]
-    ; (if has_children then children_static_el uuid b
+    ; (if has_children then children_static_el ~library uuid b
        else box ~key:("nc-" ^ key) [])
     ]
 
-and children_static_el uuid (b : Model.block) : t =
+and children_static_el ~library uuid (b : Model.block) : t =
   dom ~key:("children-" ^ uuid)
     ~style_class:"block-children-container flex"
     [ dom ~key:("border-" ^ uuid)
         ~style_class:"block-children-left-border"
         ~attrs:[ ("blockid", uuid) ] []
     ; dom ~key:("clist-" ^ uuid) ~style_class:"block-children w-full"
-        (List.map block_row_static b.block_children)
+        (List.map (block_row_static ~library) b.block_children)
     ]
 
 

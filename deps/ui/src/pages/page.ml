@@ -499,8 +499,8 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
       | _ -> open_menu name payload)
     body
 
-let blocks_inner ?puuid ?(virtualize = false) (blocks : Model.block list)
-    : t =
+let blocks_inner ?puuid ?(virtualize = false) ?(library = false)
+    (blocks : Model.block list) : t =
   let inner_attrs =
     match puuid with
     | Some u -> [ ("data-pu", u) ]
@@ -514,9 +514,10 @@ let blocks_inner ?puuid ?(virtualize = false) (blocks : Model.block list)
       [ dom ~key:"blw-virt" ~style_class:"blocks-list-wrap"
           ~attrs:[ ("data-level", "0"); ("data-virtuoso-scroller", "true") ]
           [ Virt_list.list ~key_of:Tree.block_key
-              ~estimate_size:(fun _ -> 32.) ~render:Tree.block_row items ]
+              ~estimate_size:(fun _ -> 32.)
+              ~render:(Tree.block_row ~library) items ]
       ]
-    else List.map Tree.block_row blocks
+    else List.map (Tree.block_row ~library) blocks
   in
   dom ~key:"page-blocks" ~style_class:"mt-4 ls-page-blocks"
     ~attrs:[ ("style", "margin-left: -20px") ]
@@ -1033,7 +1034,7 @@ let library_view (m : Model.t) (page : Model.page) : t =
         [ dom ~key:"page-title-row" ~style_class:"flex flex-row space-between"
             [ page_title_el m page ]
         ; library_add_pages_button
-        ; blocks_inner ?puuid:page.page_uuid ~virtualize:true
+        ; blocks_inner ?puuid:page.page_uuid ~virtualize:true ~library:true
             page.page_blocks
         ]
     ; dom ~key:"refs-wrap" ~style_class:"flex flex-col gap-8 ml-1"

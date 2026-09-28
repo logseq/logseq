@@ -423,11 +423,38 @@ let node_items_source ~block ~prop ~on_pick =
                    | None -> []))
      | None -> Js.Promise.resolve [])
   in
+  let sub_of needle hay =
+    let nl = String.length needle and hl = String.length hay in
+    let rec go i =
+      i + nl <= hl && (String.sub hay i nl = needle || go (i + 1))
+    in
+    nl <= hl && go 0
+  in
   let on_search q =
-    if String.trim q = "" then initial
+    let q' = String.trim q in
+    if q' = "" then initial
     else
-      D.search_blocks q
-      |> Js.Promise.then_ (fun w -> Js.Promise.resolve (items_of w))
+      let searched =
+        D.search_blocks q
+        |> Js.Promise.then_ (fun w -> Js.Promise.resolve (items_of w))
+      in
+      (* cljs re-adds the built-in Page class for block/tags — block-search
+         filters built-ins out *)
+      let is_tags =
+        D.getk prop "db/ident" = Some "block/tags"
+        && sub_of (String.lowercase_ascii q') "page"
+      in
+      if is_tags then
+        searched
+        |> Js.Promise.then_ (fun items ->
+               D.entity
+                 (W.List [ W.Keyword "db/ident"; W.Keyword "logseq.class/Page" ])
+               |> Js.Promise.then_ (fun e ->
+                      Js.Promise.resolve
+                        (match to_item e with
+                         | Some it -> items @ [ it ]
+                         | None -> items)))
+      else searched
   in
   (initial, on_search)
 

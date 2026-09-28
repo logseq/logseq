@@ -370,6 +370,17 @@ let delete_property_value ~block_uuid ~ident ~value =
   apply "delete-property-value"
     [ W.Uuid block_uuid; W.Keyword ident; value ]
 
+let uuid_list uuids = W.List (List.map (fun u -> W.Uuid u) uuids)
+
+(* cljs batch ops for multi-block selection *)
+let batch_set_property ~block_uuids ~ident ~value =
+  apply "batch-set-property"
+    [ uuid_list block_uuids; W.Keyword ident; value; W.Map [] ]
+
+let batch_delete_property_value ~block_uuids ~ident ~value =
+  apply "batch-delete-property-value"
+    [ uuid_list block_uuids; W.Keyword ident; value ]
+
 let upsert_property ?ident ~schema ~property_name () =
   apply "upsert-property"
     [ (match ident with Some i -> W.Keyword i | None -> W.Nil)

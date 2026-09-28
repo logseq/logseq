@@ -12,6 +12,11 @@ type route =
   | Settings
   | Not_found of string
 
+type icon =
+  { icon_kind : string (* "emoji" | "tabler-icon" *)
+  ; icon_id : string
+  }
+
 type block =
   { block_uuid : string option
   ; block_db_id : int option
@@ -30,6 +35,8 @@ type block =
   ; block_is_comments_area : bool
   ; block_is_comment : bool
   ; block_comment_targets : int (* live :comments/blocks target count *)
+  ; block_icon : icon option (* logseq.property/icon on the block *)
+  ; block_tag_icons : icon list (* logseq.property/icon of each tag *)
   ; block_children : block list
   ; (* db id of a :block/link target — the block renders the linked
        page's blocks instead of its own children *)

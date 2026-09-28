@@ -68,6 +68,8 @@ external ev_data_transfer : ev -> clipboard_data option = "dataTransfer"
   [@@mel.get] [@@mel.return nullable]
 external dt_set_data : clipboard_data -> string -> string -> unit = "setData"
   [@@mel.send]
+external ev_buttons : ev -> int = "buttons" [@@mel.get]
+
 external ev_client_y : ev -> float = "clientY" [@@mel.get]
 external ev_page_x : ev -> float = "pageX" [@@mel.get]
 

@@ -58,9 +58,28 @@ let matches needle item =
 
 let visible_items cfg =
   let base =
-    match cfg.on_search, cfg.searched with
-    | Some _, Some items -> items
-    | _ -> List.filter (matches cfg.filter) cfg.items
+    let matched =
+      match cfg.on_search, cfg.searched with
+      | Some _, Some items -> items
+      | _ -> List.filter (matches cfg.filter) cfg.items
+    in
+    let q = String.lowercase_ascii (String.trim cfg.filter) in
+    if q = "" then matched
+    else
+      (* cljs fuzzy ranks exact/prefix hits first; e2e relies on #ac-0
+         being the best match *)
+      List.stable_sort
+        (fun a b ->
+          let score it =
+            let t = String.lowercase_ascii it.it_title in
+            if t = q then 0
+            else if String.length t > String.length q
+                    && String.sub t 0 (String.length q) = q
+            then 1
+            else 2
+          in
+          compare (score a) (score b))
+        matched
   in
   let exact =
     List.exists

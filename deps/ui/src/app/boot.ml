@@ -118,7 +118,9 @@ let run () =
                 Js.Promise.resolve repo))
   |> Js.Promise.then_ (fun repo ->
          ensure_today_journal repo
-         |> Js.Promise.then_ (fun () -> Js.Promise.resolve repo))
+         |> Js.Promise.then_ (fun () ->
+            Graph.build_search_index repo;
+            Js.Promise.resolve repo))
   |> Js.Promise.then_ (fun repo ->
          Runtime.send (Action.Boot_graph_ready repo);
          Graph.build_search_index repo;

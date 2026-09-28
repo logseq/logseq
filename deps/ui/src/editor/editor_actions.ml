@@ -906,6 +906,22 @@ let wrap_selection uuid marker =
   | None -> ()
 
 (* arrow up/down inside editor -> move edit focus to neighbor block *)
+(* ArrowUp past the first block lands in the page title — cljs
+   move-cross-boundary-up-down treats .ls-page-title as a block *)
+let focus_page_title () =
+  match D.get_element_by_id "page-title" with
+  | None -> ()
+  | Some _ -> (
+      Runtime.send Action.Title_edit_start;
+      Runtime.flush ();
+      let nl = D.query_selector_all "#page-title textarea" in
+      match D.node_list_item nl 0 with
+      | Some ta ->
+          D.el_focus ta;
+          let len = String.length (D.el_value ta) in
+          D.el_set_selection_range ta len len
+      | None -> ())
+
 let arrow_nav uuid up =
   let nb = (if up then S.prev_visible else S.next_visible) uuid in
   match nb with
@@ -920,7 +936,7 @@ let arrow_nav uuid up =
           in
           enter_edit nu caret
       | None -> ())
-  | None -> ()
+  | None -> if up then (exit_edit ~select:false; focus_page_title ())
 
 (* append a fresh block at the bottom of the current page — or, on
    journals, at the bottom of the journal item the add-button lives in

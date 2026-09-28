@@ -17,19 +17,27 @@ let main root =
     (fun action ->
       let changed = Lui_app.send app action in
       ignore (Lui_app.flush app);
+      Virtual_scroll.sync ();
       changed);
-  Runtime.app_flush := (fun () -> ignore (Lui_app.flush app));
+  Runtime.app_flush :=
+    (fun () ->
+      ignore (Lui_app.flush app);
+      Virtual_scroll.sync ());
   ignore
     (Lui_web.set_event_handler renderer (fun event ->
          ignore (Lui_app.dispatch_event app event);
-         Lui_app.flush app));
+         let flushed = Lui_app.flush app in
+         Virtual_scroll.sync ();
+         flushed));
   ignore (Lui_app.start app);
   ignore (Lui_app.flush app);
   Lui_web.mount renderer (Lui_app.root_node app) root;
+  Virtual_scroll.sync ();
   Sdk_api.install ();
   Properties_view.install ();
   Editor_commands.install ();
   Views_mount.install ();
+  Icon_picker.init_emoji ();
   Router.init ();
   ignore (Boot.run ())
 
