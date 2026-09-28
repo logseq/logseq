@@ -28,6 +28,7 @@ let main root =
   Lui_web.mount renderer (Lui_app.root_node app) root;
   Sdk_api.install ();
   Properties_view.install ();
+  Editor_commands.install ();
   Views_mount.install ();
   Router.init ();
   ignore (Boot.run ())

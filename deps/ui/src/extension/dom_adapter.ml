@@ -50,6 +50,41 @@ external remove_listener :
 external prevent_default : Js.Json.t -> unit = "preventDefault"
   [@@mel.send]
 
+external owner_document : W.Element.t -> W.Document.t = "ownerDocument"
+  [@@mel.get]
+
+external create_text_node : W.Document.t -> string -> W.Node.t =
+  "createTextNode" [@@mel.send]
+
+external first_child_node : W.Element.t -> W.Node.t Js.Null.t = "firstChild"
+  [@@mel.get]
+
+external node_type : W.Node.t -> int = "nodeType" [@@mel.get]
+
+external set_node_data : W.Node.t -> string -> unit = "data" [@@mel.set]
+
+external insert_before_node :
+  W.Element.t -> W.Node.t -> W.Node.t -> unit = "insertBefore" [@@mel.send]
+
+external append_child_node : W.Element.t -> W.Node.t -> unit = "appendChild"
+  [@@mel.send]
+
+(* A textContent write would wipe LUI-tracked children the reconciler still
+   expects to remove itself (e.g. the <br> an empty block title carries), so
+   the text lives in a leading text node instead. Children inserts index
+   Element.children, which ignores text nodes. *)
+let set_text el s =
+  let document = owner_document el in
+  match Js.Null.toOption (first_child_node el) with
+  | Some n when node_type n = 3 -> set_node_data n s
+  | Some n -> insert_before_node el (create_text_node document s) n
+  | None -> append_child_node el (create_text_node document s)
+
+let clear_text el =
+  match Js.Null.toOption (first_child_node el) with
+  | Some n when node_type n = 3 -> set_node_data n ""
+  | _ -> ()
+
 let is_input_tag el =
   match String.lowercase_ascii (W.Element.tagName el) with
   | "input" | "textarea" | "select" -> true
@@ -186,7 +221,7 @@ let set_property el prop value =
            e2e value assertions observe the buffer *)
         if W.Element.tagName el = "TEXTAREA" then
           W.Element.setTextContent el s)
-      else W.Element.setTextContent el s
+      else set_text el s
   | "style-class", StringValue s -> W.Element.setClassName el s
   | "accessibility-identifier", StringValue s ->
       W.Element.setAttribute "id" s el
@@ -198,7 +233,7 @@ let remove_property el prop =
   | "events" -> apply_events el ""
   | "text" ->
       if is_input_tag el then set_value el ""
-      else W.Element.setTextContent el ""
+      else clear_text el
   | "style-class" -> W.Element.setClassName el ""
   | "accessibility-identifier" -> W.Element.removeAttribute "id" el
   | _ -> ()

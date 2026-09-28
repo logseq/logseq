@@ -21,7 +21,7 @@ let web_profile =
 (* tags the UI emits; each becomes a "logseq-<tag>" extension component *)
 let tags =
   [ "div"; "span"; "a"; "button"; "textarea"; "input"; "img"; "main"
-  ; "header"; "h1"; "h2"; "h3"; "p"; "ul"; "li"; "nav"; "section"
+  ; "header"; "h1"; "h2"; "h3"; "h4"; "h5"; "h6"; "p"; "ul"; "li"; "nav"; "section"
   ; "strong"; "em"; "code"; "pre"; "label"; "form"; "select"; "option"
   ; "video"; "audio"; "iframe"; "small"; "kbd"; "table"; "thead"; "tbody"
   ; "tr"; "td"; "th"; "br"; "hr"; "canvas"; "svg"; "path"; "article"

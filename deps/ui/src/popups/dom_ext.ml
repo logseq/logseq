@@ -24,6 +24,10 @@ external key_ : event -> string option = "key"
 external code_ : event -> string option = "code"
   [@@mel.get] [@@mel.return nullable]
 
+(* InputEvent.inputType — "insertReplacementText" marks a programmatic
+   whole-value fill (wally `fill` in e2e), as opposed to typing *)
+external input_type : event -> string = "inputType" [@@mel.get]
+
 external meta_key : event -> bool = "metaKey" [@@mel.get]
 external ctrl_key : event -> bool = "ctrlKey" [@@mel.get]
 external shift_key : event -> bool = "shiftKey" [@@mel.get]
@@ -157,3 +161,9 @@ let caret_popup_pos el =
   in
   let line = float_of_int (caret_line_index el) in
   (rect_left r, rect_top r +. (line +. 1.0) *. lh)
+
+external make_error : unit -> event = "Error" [@@mel.new]
+
+external error_stack : event -> string = "stack" [@@mel.get]
+
+let debug_stack () = error_stack (make_error ())

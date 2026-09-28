@@ -1,0 +1,626 @@
+(* Slash/context command consumer. popups_state dispatches
+   `ls:editor-command` CustomEvents with {command, from, to} (the slash
+   trigger range inside the editing textarea) or {command, block, value}
+   (context-menu rows on unedited blocks). Side effects beyond a text
+   splice live here: property writes (heading/status/priority/
+   display-type/order-list), the inline calendar (#date-time-picker,
+   cljs components/date-picker), the link/image-link form
+   (.ls-editor-link-form, cljs components/link), and the popup key
+   router consulted by editor_keys while a popup is open. *)
+
+module S = Editor_state
+module D = Editor_dom
+module A = Editor_actions
+module Ops = Outliner_ops
+module V = Views_dom
+module W = Wire
+
+(* ---------- event detail ---------- *)
+
+let detail_json ev name =
+  match D.ev_detail ev with
+  | Some j -> (
+      match Js.Json.decodeObject j with
+      | Some o -> Js.Dict.get o name
+      | None -> None)
+  | None -> None
+
+let detail_str ev name =
+  Option.bind (detail_json ev name) Js.Json.decodeString
+
+let detail_int ev name =
+  Option.map int_of_float
+    (Option.bind (detail_json ev name) Js.Json.decodeNumber)
+
+(* ---------- buffer splice ---------- *)
+
+(* splice [text] into the editing textarea over [from, to); returns the
+   new buffer and the caret position after the inserted text *)
+let replace_range uuid from to_ text =
+  match D.textarea_of uuid with
+  | Some el ->
+      let v = D.el_value el in
+      let n = String.length v in
+      let f = max 0 (min from n) in
+      let t = max f (min to_ n) in
+      let nv =
+        String.sub v 0 f ^ text ^ String.sub v t (n - t)
+      in
+      let caret = f + String.length text in
+      D.el_set_value el nv;
+      D.el_set_text_content el nv;
+      D.el_set_selection_range el caret caret;
+      A.sync_buffer uuid nv;
+      (nv, caret)
+  | None -> (A.live_buffer uuid, 0)
+
+let clear_range uuid from to_ = snd (replace_range uuid from to_ "")
+
+(* ---------- property batches ---------- *)
+
+(* save the live buffer together with property writes, keeping the block
+   in edit mode and the caret at [caret] after the refresh *)
+let prop_batch ~caret uuid ops =
+  let buf = A.live_buffer uuid in
+  A.with_focus_after uuid caret
+    (Ops.apply_and_refresh (Ops.save_block uuid buf :: ops))
+
+(* same, but drop edit mode first (cljs :editor/exit — code blocks leave
+   the textarea while the view re-renders the code surface) *)
+let exit_to_props uuid ops =
+  let buf = A.live_buffer uuid in
+  S.set_silent (fun st -> { st with S.editing = None });
+  ignore
+    (Ops.apply_and_refresh (Ops.save_block uuid buf :: ops))
+
+(* ---------- calendar ---------- *)
+
+let month_names =
+  [| "January"; "February"; "March"; "April"; "May"; "June"; "July"
+   ; "August"; "September"; "October"; "November"; "December" |]
+
+type popup_kind =
+  | Cal_insert (* "date picker": Enter writes [[journal]] at the slash range *)
+  | Cal_prop of string (* scheduled/deadline: Enter sets a datetime prop *)
+  | Link_form of bool (* link/image-link form; bool = image *)
+
+type popup =
+  { kind : popup_kind
+  ; uuid : string
+  ; from : int (* caret position the cleared slash range ended at *)
+  ; root : D.el
+  ; mutable cy : int
+  ; mutable cm : int
+  ; mutable cd : int
+  ; mutable menu : D.el option
+  ; link_url : D.el option
+  ; link_label : D.el option
+  }
+
+let active : popup option ref = ref None
+
+let days_in_month y m =
+  int_of_float
+    (Js.Date.getDate
+       (Js.Date.make ~year:(float_of_int y)
+          ~month:(float_of_int m) ~date:0. ()))
+
+let day_date p =
+  Js.Date.make ~year:(float_of_int p.cy)
+    ~month:(float_of_int (p.cm - 1)) ~date:(float_of_int p.cd) ()
+
+let focus_day p =
+  match V.query_inside p.root "td[data-focused='true'] button" with
+  | Some b -> V.el_focus b
+  | None -> ()
+
+(* one td[role=gridcell] > button; data-focused moves with arrow keys,
+   data-selected/data-today pin the current date *)
+let cal_cell p d =
+  let focused = d = p.cd in
+  let is_today =
+    p.cy * 10000 + p.cm * 100 + d = Dates.today_journal_day ()
+  in
+  let btn =
+    V.h ~tag:"button"
+      ~attrs:
+        [ ("type", "button")
+        ; ("aria-label", string_of_int d)
+        ; ("tabindex", if focused then "0" else "-1") ]
+      ~text:(string_of_int d) ()
+  in
+  V.h ~tag:"td"
+    ~attrs:
+      ([ ("role", "gridcell") ]
+       @ (if focused then [ ("data-focused", "true") ] else [])
+       @ if is_today
+         then
+           [ ("data-today", "true"); ("data-selected", "true")
+           ; ("aria-selected", "true") ]
+         else [])
+    ~children:[ btn ] ()
+
+let rebuild_grid p =
+  match V.query_inside p.root ".ui__calendar tbody" with
+  | None -> ()
+  | Some tbody ->
+      V.clear tbody;
+      let days = days_in_month p.cy p.cm in
+      let lead =
+        int_of_float
+          (Js.Date.getDay
+             (Js.Date.make ~year:(float_of_int p.cy)
+                ~month:(float_of_int (p.cm - 1)) ~date:1. ()))
+      in
+      let rows = (lead + days + 6) / 7 in
+      for r = 0 to rows - 1 do
+        let tr = Editor_dom.create_element "tr" in
+        for c = 0 to 6 do
+          let d = (r * 7) + c + 1 - lead in
+          D.el_append_child tr
+            (if d < 1 || d > days
+             then V.h ~tag:"td" ~attrs:[ ("role", "gridcell") ] ()
+             else cal_cell p d)
+        done;
+        D.el_append_child tbody tr
+      done
+
+let rebuild_cal p =
+  (match V.query_inside p.root ".ls-date-month-select" with
+   | Some sel ->
+       V.el_set_text_content sel month_names.(p.cm - 1)
+   | None -> ());
+  (match V.query_inside p.root ".ls-cal-caption" with
+   | Some c ->
+       V.el_set_text_content c
+         (month_names.(p.cm - 1) ^ " " ^ string_of_int p.cy)
+   | None -> ());
+  rebuild_grid p;
+  focus_day p
+
+let close_menu p =
+  match p.menu with
+  | Some m -> V.el_remove m; p.menu <- None
+  | None -> ()
+
+(* cljs ui.cljs month select: label + [role=menu] of long month names *)
+let toggle_month_menu p =
+  match p.menu with
+  | Some _ -> close_menu p
+  | None ->
+      let menu =
+        V.h ~cls:"ls-date-month-menu" ~attrs:[ ("role", "menu") ]
+          ~children:
+            (List.mapi
+               (fun i name ->
+                 V.h ~cls:"ls-date-month-option" ~text:name
+                   ~attrs:[ ("role", "menuitem") ]
+                   ~on_click:(fun _ ->
+                     p.cm <- i + 1;
+                     close_menu p;
+                     rebuild_cal p)
+                   ())
+               (Array.to_list month_names))
+          ()
+      in
+      p.menu <- Some menu;
+      D.el_append_child p.root menu
+
+let cal_move p delta =
+  p.cd <- p.cd + delta;
+  if p.cd < 1 then (
+    p.cm <- p.cm - 1;
+    if p.cm < 1 then (p.cm <- 12; p.cy <- p.cy - 1);
+    p.cd <- p.cd + days_in_month p.cy p.cm)
+  else if p.cd > days_in_month p.cy p.cm then (
+    p.cd <- p.cd - days_in_month p.cy p.cm;
+    p.cm <- p.cm + 1;
+    if p.cm > 12 then (p.cm <- 1; p.cy <- p.cy + 1));
+  rebuild_cal p
+
+let close_popup ?focus_caret p =
+  V.el_remove p.root;
+  active := None;
+  match focus_caret with
+  | Some c -> (
+      match D.textarea_of p.uuid with
+      | Some el ->
+          D.el_focus el;
+          D.el_set_selection_range el c c
+      | None -> ())
+  | None -> ()
+
+(* cljs Enter handler: "date picker" closes the popup and inserts
+   [[journal]]; scheduled/deadline set the datetime property and keep
+   the calendar open (still editing) *)
+let commit_cal p =
+  let d = day_date p in
+  match p.kind with
+  | Cal_insert ->
+      let nv, caret =
+        replace_range p.uuid p.from p.from
+          ("[[" ^ Dates.journal_title_of d ^ "]]")
+      in
+      Ops.schedule_save p.uuid nv;
+      close_popup p ~focus_caret:caret
+  | Cal_prop ident ->
+      prop_batch ~caret:p.from p.uuid
+        [ Ops.set_block_property p.uuid ident
+            (W.Float (Js.Date.getTime d)) ]
+      (* popup deliberately stays open — cljs datepicker stays up for
+         scheduled/deadline so the user can keep adjusting *)
+  | Link_form _ -> ()
+
+let open_cal kind uuid from =
+  let today = Dates.date_now () in
+  let cy = int_of_float (Js.Date.getFullYear today)
+  and cm = int_of_float (Js.Date.getMonth today) + 1
+  and cd = int_of_float (Js.Date.getDate today) in
+  let tbody = V.h ~tag:"tbody" () in
+  let sel =
+    V.h ~tag:"button" ~cls:"ls-date-month-select"
+      ~attrs:[ ("type", "button") ]
+      ~text:month_names.(cm - 1) ()
+  in
+  let cap =
+    V.h ~cls:"ls-cal-caption"
+      ~text:(month_names.(cm - 1) ^ " " ^ string_of_int cy) ()
+  in
+  let root =
+    V.h ~cls:"ls-editor-date-picker"
+      ~attrs:
+        [ ("id", "date-time-picker")
+        ; ("style", "position:fixed;top:96px;left:240px;z-index:900") ]
+      ~children:
+        [ V.h ~cls:"ui__calendar"
+            ~children:
+              [ V.h ~cls:"ls-cal-head" ~children:[ cap; sel ] ()
+              ; V.h ~tag:"table" ~attrs:[ ("role", "grid") ]
+                  ~children:[ tbody ] () ]
+            () ]
+      ()
+  in
+  let p =
+    { kind; uuid; from; root; cy; cm; cd; menu = None
+    ; link_url = None; link_label = None }
+  in
+  V.el_add_listener sel "click" (fun _ -> toggle_month_menu p);
+  D.el_append_child V.document_body root;
+  active := Some p;
+  rebuild_grid p;
+  focus_day p
+
+(* ---------- link / image-link form ---------- *)
+
+let open_link_form image uuid from =
+  let url_inp =
+    V.h ~tag:"input" ~cls:"ls-link-url"
+      ~attrs:
+        [ ("type", "text")
+        ; ("placeholder", "Paste a link, input a search term") ]
+      ()
+  in
+  let label_inp =
+    V.h ~tag:"input" ~cls:"ls-link-text"
+      ~attrs:[ ("type", "text"); ("placeholder", "Label") ] ()
+  in
+  let root =
+    V.h ~cls:"ls-editor-link-form"
+      ~attrs:
+        [ ("style"
+          , "position:fixed;top:96px;left:240px;z-index:900;\
+             display:flex;flex-direction:column;gap:4px;padding:8px;\
+             background:var(--lx-popover-bg,#fff)") ]
+      ~children:[ url_inp; label_inp ] ()
+  in
+  let p =
+    { kind = Link_form image; uuid; from; root; cy = 0; cm = 0; cd = 0
+    ; menu = None; link_url = Some url_inp; link_label = Some label_inp }
+  in
+  D.el_append_child V.document_body root;
+  active := Some p;
+  D.el_focus url_inp
+
+let submit_link p =
+  let url =
+    match p.link_url with
+    | Some i -> String.trim (V.el_value i)
+    | None -> ""
+  in
+  let label =
+    match p.link_label with
+    | Some i -> String.trim (V.el_value i)
+    | None -> ""
+  in
+  let label = if label = "" then url else label in
+  let bang = (match p.kind with Link_form true -> "!" | _ -> "") in
+  let nv, caret =
+    replace_range p.uuid p.from p.from
+      (bang ^ "[" ^ label ^ "](" ^ url ^ ")")
+  in
+  Ops.schedule_save p.uuid nv;
+  close_popup p ~focus_caret:caret
+
+(* ---------- popup key router (runs before editor_keys) ---------- *)
+
+let popup_key ev =
+  match !active with
+  | None -> false
+  | Some p -> (
+      match (p.kind, D.ev_key ev) with
+      | (Cal_insert | Cal_prop _), "ArrowRight" -> cal_move p 1; true
+      | (Cal_insert | Cal_prop _), "ArrowLeft" -> cal_move p (-1); true
+      | (Cal_insert | Cal_prop _), "ArrowDown" -> cal_move p 7; true
+      | (Cal_insert | Cal_prop _), "ArrowUp" -> cal_move p (-7); true
+      | (Cal_insert | Cal_prop _), "Enter" ->
+          D.prevent_default ev;
+          commit_cal p; true
+      | Link_form _, "Enter" ->
+          D.prevent_default ev;
+          submit_link p; true
+      | _, "Escape" ->
+          D.prevent_default ev;
+          close_popup p ~focus_caret:p.from; true
+      | Link_form _, _ -> false (* inputs handle their own keys *)
+      | (Cal_insert | Cal_prop _), _ -> (
+          (* swallow keys aimed at the calendar so e.g. typing does not
+             reach the textarea while a day button is focused *)
+          match D.closest_sel "#date-time-picker" (D.ev_target ev) with
+          | Some _ -> D.prevent_default ev; true
+          | None -> false))
+
+(* click_guard: true -> mousedown inside a popup, suppress blur-commit.
+   A click outside closes the popup; the normal blur-commit still runs *)
+let click_guard target =
+  match !active with
+  | None -> false
+  | Some p -> (
+      match
+        D.closest_sel "#date-time-picker, .ls-editor-link-form" target
+      with
+      | Some _ -> true
+      | None -> close_popup p; false)
+
+(* ---------- code-pre (contenteditable CodeMirror surface) ---------- *)
+
+let update_calc_results el =
+  match D.closest_sel ".extensions__code" (Some el) with
+  | Some wrap -> (
+      match D.el_query wrap ".extensions__code-calc-results" with
+      | Some res ->
+          V.clear res;
+          List.iter
+            (fun line ->
+              D.el_append_child res
+                (V.h ~cls:"extensions__code-calc-output-line" ~text:line
+                   ()))
+            (Render_calc.results (V.el_text_content el))
+      | None -> ())
+  | None -> ()
+
+let code_pre_input el =
+  match D.el_get_attr el "data-code-uuid" with
+  | Some uuid ->
+      let v = V.el_text_content el in
+      A.sync_buffer uuid v;
+      Ops.schedule_save uuid v;
+      update_calc_results el
+  | None -> ()
+
+let code_pre_key el ev =
+  match D.el_get_attr el "data-code-uuid" with
+  | None -> ()
+  | Some uuid -> (
+      match D.ev_key ev with
+      | "Escape" ->
+          D.prevent_default ev;
+          A.exit_edit ~select:true
+      | "Enter" when D.ev_shift ev ->
+          D.prevent_default ev;
+          A.insert_sibling_after uuid
+      | _ -> ())
+
+(* ---------- command dispatch ---------- *)
+
+let starts s prefix =
+  let n = String.length prefix in
+  String.length s >= n && String.sub s 0 n = prefix
+
+let set_props ~caret uuid ident v =
+  prop_batch ~caret uuid [ Ops.set_block_property uuid ident v ]
+
+(* cljs batch-set-property-closed-value!: resolve the closed-value entity
+   by db-property/closed-value-content (block/title else
+   logseq.property/value), then batch-set-property {:entity-id? true} *)
+let set_closed_prop ~caret uuid ident title =
+  Platform.console_log ("DBG closed-prop start", ident, title);
+  ignore
+    (Properties_data.closed_values (W.Keyword ident)
+     |> Js.Promise.then_ (fun w ->
+            Platform.console_log
+              ("DBG closed-prop wire", Js.Json.stringifyAny w);
+            let rows =
+              match w with
+              | W.Array xs | W.List xs | W.Set xs -> xs
+              | _ -> []
+            in
+            let id =
+              List.find_map
+                (fun e ->
+                  let e = Properties_data.untag e in
+                  let content =
+                    match Properties_data.gets e "block/title" with
+                    | Some t -> Some t
+                    | None -> Properties_data.gets e "logseq.property/value"
+                  in
+                  match content with
+                  | Some t when t = title -> Properties_data.geti e "db/id"
+                  | _ -> None)
+                rows
+            in
+            Platform.console_log ("DBG closed-prop id", id);
+            (match id with
+             | Some id ->
+                 prop_batch ~caret uuid
+                   [ Ops.batch_set_property [ uuid ] ident (W.Int id)
+                       ~entity_id:true ]
+             | None ->
+                 Platform.console_error
+                   ("no closed value for", title));
+            Js.Promise.resolve ())
+     |> Js.Promise.catch (fun e ->
+            Platform.console_error ("DBG closed-prop failed", e);
+            Js.Promise.resolve ()))
+
+(* toggle this block's own logseq.property/order-list-type *)
+let toggle_own_list uuid caret =
+  let has =
+    match S.find uuid with
+    | Some b -> b.Model.block_order_list <> None
+    | None -> false
+  in
+  prop_batch ~caret uuid
+    [ (if has
+       then Ops.remove_block_property uuid "logseq.property/order-list-type"
+       else Ops.set_block_property uuid "logseq.property/order-list-type"
+              (W.String "number")) ]
+
+(* cljs toggle-blocks-as-own-order-list!: any child ordered -> remove all,
+   else set all children *)
+let toggle_children_list uuid caret =
+  match S.find uuid with
+  | Some b -> (
+      let kids = b.Model.block_children in
+      let has_ordered =
+        List.exists (fun c -> c.Model.block_order_list <> None) kids
+      in
+      match
+        List.filter_map
+          (fun c ->
+            Option.map
+              (fun u ->
+                if has_ordered
+                then
+                  Ops.remove_block_property u
+                    "logseq.property/order-list-type"
+                else
+                  Ops.set_block_property u
+                    "logseq.property/order-list-type" (W.String "number"))
+              c.Model.block_uuid)
+          kids
+      with
+      | [] -> ()
+      | ops -> prop_batch ~caret uuid ops)
+  | None -> ()
+
+let run_editor_cmd uuid command from to_ =
+  let caret = clear_range uuid from to_ in
+  match command with
+  | "date-picker" -> open_cal Cal_insert uuid caret
+  | "scheduled" ->
+      open_cal (Cal_prop "logseq.property/scheduled") uuid caret
+  | "deadline" ->
+      open_cal (Cal_prop "logseq.property/deadline") uuid caret
+  | "link" -> open_link_form false uuid caret
+  | "image-link" -> open_link_form true uuid caret
+  | "quote" ->
+      set_props ~caret uuid "logseq.property.node/display-type"
+        (W.Keyword "quote")
+  | "math-block" ->
+      set_props ~caret uuid "logseq.property.node/display-type"
+        (W.Keyword "math")
+  | "code-block" ->
+      exit_to_props uuid
+        [ Ops.set_block_property uuid "logseq.property.node/display-type"
+            (W.Keyword "code") ]
+  | "calculator" ->
+      prop_batch ~caret uuid
+        [ Ops.set_block_property uuid "logseq.property.node/display-type"
+            (W.Keyword "code")
+        ; Ops.set_block_property uuid "logseq.property.code/lang"
+            (W.String "calc") ]
+  | "normal-text" | "clear-heading" ->
+      prop_batch ~caret uuid
+        [ Ops.remove_block_property uuid "logseq.property/heading" ]
+  | "number-list" -> toggle_own_list uuid caret
+  | "number-children" -> toggle_children_list uuid caret
+  | "query" | "advanced-query" ->
+      (* cljs run-query-command! tags the block Query + opens the query
+         view; a {{query }} title produces the same surface *)
+      let nv, _ =
+        replace_range uuid caret caret "{{query }}"
+      in
+      Ops.schedule_save uuid nv;
+      A.exit_edit ~select:false
+  | "add-property" -> Properties_dialog.open_for_block uuid
+  | _ ->
+      if starts command "heading:" then
+        match
+          int_of_string_opt
+            (String.sub command 8 (String.length command - 8))
+        with
+        | Some n when n >= 1 && n <= 6 ->
+            set_props ~caret uuid "logseq.property/heading" (W.Int n)
+        | _ -> ()
+      else if starts command "status:" then
+        set_closed_prop ~caret uuid "logseq.property/status"
+          (String.sub command 7 (String.length command - 7))
+      else if starts command "priority:" then (
+        let s = String.sub command 9 (String.length command - 9) in
+        if s = "" then
+          set_props ~caret uuid "logseq.property/priority"
+            (W.Keyword "logseq.property/empty-placeholder")
+        else
+          set_closed_prop ~caret uuid "logseq.property/priority" s)
+      else ()
+
+(* context-menu commands target a block by uuid — no slash range, no
+   editing state required *)
+let run_block_cmd uuid command value =
+  let ops =
+    match (command, value) with
+    | "Set block color", Some v ->
+        [ (if v = ""
+           then
+             Ops.remove_block_property uuid
+               "logseq.property/background-color"
+           else
+             Ops.set_block_property uuid
+               "logseq.property/background-color" (W.String v)) ]
+    | "Set heading", Some v -> (
+        match int_of_string_opt v with
+        | Some n when n >= 1 && n <= 6 ->
+            [ Ops.set_block_property uuid "logseq.property/heading"
+                (W.Int n) ]
+        | _ -> [ Ops.remove_block_property uuid "logseq.property/heading" ])
+    | _ -> []
+  in
+  match ops with
+  | [] -> ()
+  | _ -> ignore (Ops.apply_and_refresh ops)
+
+let on_command ev =
+  if S.ready () then
+    match detail_str ev "command" with
+    | None -> ()
+    | Some command -> (
+        match detail_str ev "block" with
+        | Some block_id ->
+            run_block_cmd block_id command (detail_str ev "value")
+        | None -> (
+            match S.editing () with
+            | None -> ()
+            | Some e ->
+                let from =
+                  Option.value (detail_int ev "from") ~default:0
+                in
+                let to_ = Option.value (detail_int ev "to") ~default:from in
+                run_editor_cmd e.uuid command from to_))
+
+let installed = ref false
+
+let install () =
+  if not !installed then begin
+    installed := true;
+    D.document_add_listener "ls:editor-command" on_command true
+  end

@@ -19,8 +19,8 @@ export default defineConfig({
     },
     outDir: resolve(import.meta.dirname, "../../static/js"),
     emptyOutDir: false,
-    minify: true,
-    sourcemap: false,
+    minify: false,
+    sourcemap: true,
     rollupOptions: {
       output: { codeSplitting: false },
     },

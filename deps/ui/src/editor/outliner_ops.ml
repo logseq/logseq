@@ -26,9 +26,41 @@ let uuids_list uuids = Wire.List (List.map (fun u -> Wire.Uuid u) uuids)
    single-op batches get it auto-derived from the op name) *)
 let op_opts name = Wire.Map [ kw "outliner-op" (Wire.Keyword name) ]
 
+(* cljs wrap-parse-block: a leading "#"+ whitespace normalizes into
+   logseq.property/heading and is stripped from block/title (skipped for
+   code/math display types) *)
+let markdown_heading_level s =
+  let t = String.trim s in
+  let n = String.length t in
+  let rec hashes i = if i < n && t.[i] = '#' then hashes (i + 1) else i in
+  let i = hashes 0 in
+  if i >= 1 && i <= 6 && i < n
+     && (t.[i] = ' ' || t.[i] = '\t' || t.[i] = '\n')
+  then Some i
+  else None
+
+let strip_markdown_heading s lvl =
+  String.trim (String.sub (String.trim s) lvl (String.length (String.trim s) - lvl))
+
 (* cljs save-block-aux! trims the value before persisting *)
 let save_block uuid title =
-  op "save-block" [ block_map ~title:(String.trim title) uuid; Wire.Map [] ]
+  let dt =
+    match S.find uuid with
+    | Some b -> b.Model.block_display_type
+    | None -> None
+  in
+  match markdown_heading_level title with
+  | Some lvl when dt <> Some "code" && dt <> Some "math" ->
+      op "save-block"
+        [ Wire.Map
+            [ str "block/uuid" (Wire.Uuid uuid)
+            ; str "block/title"
+                (Wire.String (strip_markdown_heading title lvl))
+            ; str "logseq.property/heading" (Wire.Int lvl) ]
+        ; Wire.Map [] ]
+  | _ ->
+      op "save-block"
+        [ block_map ~title:(String.trim title) uuid; Wire.Map [] ]
 
 let insert_blocks blocks target_uuid ~sibling =
   op "insert-blocks"
@@ -90,6 +122,28 @@ let create_class title =
 let set_block_property uuid prop v =
   op "set-block-property" [ Wire.Uuid uuid; Wire.Keyword prop; v ]
 
+(* cljs batch-set-property! — {:entity-id? true} means v is already a
+   resolved db/id and skips ref-value conversion *)
+let batch_set_property uuids prop v ~entity_id =
+  op "batch-set-property"
+    [ uuids_list uuids
+    ; Wire.Keyword prop
+    ; v
+    ; Wire.Map [ kw "entity-id?" (Wire.Bool entity_id) ]
+    ]
+
+let remove_block_property uuid prop =
+  op "remove-block-property" [ Wire.Uuid uuid; Wire.Keyword prop ]
+
+(* cljs insert-template! passes replace-empty-target? so a blank target
+   block is reused instead of left empty *)
+let apply_template template_uuid target_uuid =
+  op "apply-template"
+    [ Wire.Uuid template_uuid
+    ; Wire.Uuid target_uuid
+    ; Wire.Map [ kw "replace-empty-target?" (Wire.Bool true) ]
+    ]
+
 (* mirror :block/collapsed? from the raw wire into editor state — the
    decoded Model.block drops it *)
 let rec collect_collapsed set (w : Wire.t) =
@@ -124,6 +178,24 @@ let rec collect_tag_ids acc (b : Model.block) =
   List.fold_left collect_tag_ids (List.rev_append b.Model.block_tag_ids acc)
     b.block_children
 
+(* cljs block.cljs hides class tags on a node: entities whose
+   :logseq.property.class/hide-from-node is true (Quote-block, Code-block,
+   Math-block, ...) and the ldb/internal-tags idents when
+   show-tag-and-property-classes? is off (the only mode we support). *)
+let internal_tag_idents =
+  [ "logseq.class/Page"; "logseq.class/Property"; "logseq.class/Tag"
+  ; "logseq.class/Root"; "logseq.class/Asset" ]
+
+let tag_hidden blk =
+  (match Wire.get blk "logseq.property.class/hide-from-node" with
+   | Some (Wire.Bool hidden) -> hidden
+   | _ -> false)
+  ||
+  match Wire.get blk "db/ident" with
+  | Some (Wire.Keyword ident) | Some (Wire.String ident) ->
+      List.mem ident internal_tag_idents
+  | _ -> false
+
 let resolve_block_tags (blocks : Model.block list) : Model.block list Js.Promise.t =
   let ids =
     List.sort_uniq compare (List.fold_left collect_tag_ids [] blocks)
@@ -140,8 +212,14 @@ let resolve_block_tags (blocks : Model.block list) : Model.block list Js.Promise
                   (fun i ->
                     Wire.Map
                       [ (Wire.String "id", Wire.Int i)
-                      ; (Wire.String "opts", Wire.Map [])
-                      ])
+                      ; ( Wire.String "opts"
+                        , Wire.Map
+                            [ ( Wire.String "properties"
+                              , Wire.Array
+                                  [ Wire.Keyword "db/ident"
+                                  ; Wire.Keyword
+                                      "logseq.property.class/hide-from-node" ])
+                            ]) ])
                   ids))
           |> Js.Promise.then_ (fun w ->
                  let titles =
@@ -159,7 +237,8 @@ let resolve_block_tags (blocks : Model.block list) : Model.block list Js.Promise
                          ( Wire.map_get_int blk "db/id"
                          , Wire.map_get_string blk "block/title" )
                        with
-                       | Some id, Some t -> Some (id, t)
+                       | Some id, Some t when not (tag_hidden blk) ->
+                           Some (id, t)
                        | _ -> None)
                      (Sdk_util.wire_elems w)
                  in

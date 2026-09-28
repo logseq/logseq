@@ -141,7 +141,7 @@ let pill_el (ctx : V.ctx) ~owner_is_tag ~owner_title row =
   el_append_child pill content;
   pill
 
-let render_pills (ctx : V.ctx) ~owner_is_tag ~owner_title container rows =
+let pills_el (ctx : V.ctx) ~owner_is_tag ~owner_title rows =
   let pos =
     mk ~cls:
       "positioned-properties block-below flex flex-col gap-1 text-sm \
@@ -166,7 +166,13 @@ let render_pills (ctx : V.ctx) ~owner_is_tag ~owner_title container rows =
     rows;
   el_append_child prow strip;
   el_append_child pos prow;
-  el_append_child container pos
+  pos
+
+(* block-below pills sit before the properties panel in the cljs layout —
+   insert before the area so key order matches *)
+let insert_pills_before ctx ~owner_is_tag ~owner_title before rows =
+  el_insert_adjacent before "beforebegin"
+    (pills_el ctx ~owner_is_tag ~owner_title rows)
 
 let remove_all parent sel =
   let nl = el_query_all parent sel in
@@ -179,25 +185,10 @@ let remove_all parent sel =
 
 (* ---------- area render ---------- *)
 
-(* split rows into block-left chips, block-below pills and panel rows *)
-let partition_rows rows =
-  let left, rest =
-    List.partition
-      (fun r -> D.row_position r = "logseq.property.ui-position/block-left")
-      rows
-  in
-  let below, panel =
-    List.partition
-      (fun r ->
-        D.row_position r = "logseq.property.ui-position/block-below")
-      rest
-  in
-  (left, below, panel)
-
 (* left chips: .positioned-properties.block-left inline in
    .block-main-content; one .property-value-inner per row *)
 let render_left (ctx : V.ctx) ~owner_is_tag ~owner_title host rows =
-  remove_all host ".positioned-properties.block-left";
+  remove_all host ":scope > .positioned-properties.block-left";
   if rows <> [] then begin
     let pos = mk ~cls:"positioned-properties block-left" "div" in
     List.iter
@@ -221,7 +212,11 @@ let render_panel ctx ~owner_is_tag ~owner_title ~page_area ~show_hidden
       (fun r ->
         el_append_child panel (row_el ctx ~owner_is_tag ~owner_title r))
       hidden_rows;
-  if hidden_rows <> [] then el_append_child panel (toggle_row ());
+  (* cljs: the panel toggle only renders for the route page or the zoom
+     root block; regular blocks expose hidden props via the block-below
+     pill row instead *)
+  if (page_area || owner_is_tag) && hidden_rows <> [] then
+    el_append_child panel (toggle_row ());
   if page_area then (
     let wrap = mk ~cls:"ls-new-property" "div" in
     let btn =
@@ -237,7 +232,7 @@ let render_panel ctx ~owner_is_tag ~owner_title ~page_area ~show_hidden
         Properties_dialog.open_for_block ctx.block_uuid);
     el_append_child panel wrap)
 
-let render_area ?(left_host = None) ctx ~owner_is_tag ~owner_title
+let render_area ?(left_host = None) (ctx : V.ctx) ~owner_is_tag ~owner_title
     ~page_area area_el =
   el_clear area_el;
   let panel = mk ~cls:"properties-panel" "div" in
@@ -245,27 +240,69 @@ let render_area ?(left_host = None) ctx ~owner_is_tag ~owner_title
   D.display_props ~page_title:page_area ~tag_dialog:false
     ~show_hidden:!S.show_hidden (D.uuid_ref ctx.block_uuid)
   |> Js.Promise.then_ (fun wire ->
-         let rows, hidden = D.split_display wire in
-         let left_rows, below_rows, panel_rows = partition_rows rows in
+         (match W.get wire "positioned-properties" with
+          | Some w ->
+              let dump =
+                String.concat ";"
+                  (List.map
+                     (fun (k, v) ->
+                       let ks =
+                         match W.as_keyword k with
+                         | Some s -> s
+                         | None -> "?"
+                       in
+                       ks ^ "="
+                       ^ String.concat ","
+                           (List.filter_map D.row_ident (D.elems v)))
+                     (match w with W.Map kvs -> kvs | _ -> []))
+              in
+              Platform.console_log ("DBG pos", ctx.block_uuid, dump)
+          | None -> Platform.console_log ("DBG pos", "absent"));
+         let rows, hidden, positioned = D.split_display wire in
+         (* positioned rows come from block.temp/positioned-properties —
+            never part of full/hidden; icon renders on the block itself
+            (cljs hidden-block-below-property?) *)
+         let left_rows = positioned "block-left" in
+         let below_rows =
+           List.filter
+             (fun r -> D.row_ident r <> Some "logseq.property/icon")
+             (positioned "block-below")
+         in
          (match left_host with
           | Some host ->
               render_left ctx ~owner_is_tag ~owner_title host left_rows
           | None -> ());
-         let panel_rows =
-           match left_host with
-           | Some _ -> panel_rows
-           | None -> left_rows @ panel_rows
-         in
          render_panel ctx ~owner_is_tag ~owner_title ~page_area
-           ~show_hidden:!S.show_hidden panel panel_rows hidden;
-         (* pills render next to the area inside the indent container *)
+           ~show_hidden:!S.show_hidden panel rows hidden;
+         (* block-below pills sit before the properties panel in the cljs
+            layout — insert before the area so key order matches *)
+         (* direct children only — the page-level area's parent contains
+            every block's indent, and a descendant-scoped querySelectorAll
+            would delete their pills *)
          (match el_parent area_el with
           | Some parent ->
-              remove_all parent ".positioned-properties.block-below";
-              if below_rows <> [] then
-                render_pills ctx ~owner_is_tag ~owner_title parent
-                  below_rows
-          | None -> ());
+              remove_all parent ":scope > .positioned-properties.block-below";
+              if below_rows <> [] then begin
+                Platform.console_log
+                  ("DBG pills-insert", List.length below_rows);
+                insert_pills_before ctx ~owner_is_tag ~owner_title area_el
+                  below_rows;
+                Platform.console_log
+                  ("DBG pills-done",
+                    (match el_parent area_el with
+                     | Some p ->
+                         (match
+                            el_query p
+                              ".positioned-properties.block-below"
+                          with
+                          | Some _ -> "present"
+                          | None -> "GONE")
+                     | None -> "no-parent"))
+              end
+          | None -> Platform.console_log ("DBG pills", "no-parent"));
+         Js.Promise.resolve ())
+  |> Js.Promise.catch (fun e ->
+         Platform.console_log ("DBG pills-err", e);
          Js.Promise.resolve ())
   |> ignore
 

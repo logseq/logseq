@@ -74,7 +74,7 @@ let row_many row =
   | _ -> false
 
 let row_closed_values row =
-  match getf (row_prop row) "logseq.property/closed-values" with
+  match getf (row_prop row) "property/closed-values" with
   | Some w -> elems w
   | None -> []
 
@@ -86,9 +86,18 @@ let row_hidden row =
 let row_hide_empty row =
   getb (row_prop row) "logseq.property/hide-empty-value"
 
+(* ui-position is a ref attr: the display map carries a ref summary with
+   db/ident (e.g. :logseq.property.ui-position/block-left) *)
 let row_position row =
-  getk (row_prop row) "logseq.property/ui-position"
-  |> Option.value ~default:"logseq.property.ui-position/properties"
+  match getf (row_prop row) "logseq.property/ui-position" with
+  | Some w -> (
+      match untag w with
+      | W.Map _ as m ->
+          Option.value (getk m "db/ident")
+            ~default:"logseq.property.ui-position/properties"
+      | W.Keyword s | W.String s -> s
+      | _ -> "logseq.property.ui-position/properties")
+  | None -> "logseq.property.ui-position/properties"
 
 (* A display row's value for ref types is a ref_value_summary map or a
    set of them; plain types come through as scalars. *)
@@ -162,7 +171,9 @@ let display_props ?(page_title = false) ?(tag_dialog = false)
         ]
     ]
 
-(* returns (rows, hidden-rows, description, class-properties-prop) *)
+(* returns (rows, hidden-rows, positioned-by-position) — the worker emits
+   positioned-properties as {block-left|block-right|block-below: rows}
+   (cljs block.temp/positioned-properties) *)
 let split_display wire =
   let rows =
     match W.get wire "full-properties" with
@@ -174,7 +185,13 @@ let split_display wire =
     | Some w -> elems w
     | None -> []
   in
-  (rows, hidden)
+  let positioned position =
+    match W.get wire "positioned-properties" with
+    | Some p -> (
+        match W.get p position with Some w -> elems w | None -> [])
+    | None -> []
+  in
+  (rows, hidden, positioned)
 
 let bidirectional target_id =
   invoke "get-bidirectional-properties"

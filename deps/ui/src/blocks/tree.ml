@@ -60,7 +60,12 @@ let collapsed_sig uuid =
 
 (* -- control wrap: collapse arrow + bullet -- *)
 
-let control_wrap uuid : t =
+let control_wrap uuid (b : Model.block) : t =
+  let order_list = b.Model.block_order_list = Some "number" in
+  let bullet_cls =
+    "bullet-container cursor-pointer"
+    ^ if order_list then " as-order-list typed-list" else ""
+  in
   dom ~key:("ctrlw-" ^ uuid)
     ~style_class:"block-control-wrap flex flex-row items-center h-6"
     [ dom ~key:("ctrl-" ^ uuid) ~tag:"a" ~style_class:"block-control"
@@ -77,10 +82,14 @@ let control_wrap uuid : t =
             ~attrs:[ ("blockid", uuid); ("draggable", "true") ]
             ~style_class_signal:
               (Logseq_dom.class_signal (collapsed_sig uuid) (fun c ->
-                   "bullet-container cursor-pointer"
-                   ^ if c then " bullet-closed" else ""))
+                   bullet_cls ^ if c then " bullet-closed" else ""))
             [ dom ~key:("b-" ^ uuid) ~tag:"span" ~style_class:"bullet"
-                ~attrs:[ ("blockid", uuid) ] []
+                ~attrs:[ ("blockid", uuid) ]
+                (match b.Model.block_order_index with
+                 | Some idx when order_list ->
+                     [ dom ~key:("ol-" ^ uuid) ~tag:"label"
+                         ~text:(string_of_int idx ^ ".") [] ]
+                 | _ -> [])
             ]
         ]
     ]
@@ -97,7 +106,7 @@ let content_el uuid (b : Model.block) : t =
     [ dom ~key:("bci-" ^ uuid)
         ~style_class:"block-content-inner flex flex-row justify-between"
         [ dom ~key:("bh-" ^ uuid) ~style_class:"block-head-wrap"
-            (Render.title b.block_title)
+            (Render.title_block b)
         ]
     ]
 
@@ -118,10 +127,39 @@ let editor_el uuid : t =
         ]
     ]
 
+(* code/calc blocks edit through a contenteditable pre.CodeMirror-line —
+   no textarea (cljs parity: CodeMirror owns the surface) *)
+let code_editor_el uuid (b : Model.block) : t =
+  let buffer =
+    match S.editing () with
+    | Some e when e.uuid = uuid -> e.buffer
+    | _ -> ""
+  in
+  let lang = Option.value b.Model.block_code_lang ~default:"" in
+  dom ~key:("ew-" ^ uuid) ~style_class:"extensions__code w-full"
+    ~id:("editor-edit-block-" ^ uuid)
+    [ dom ~key:("cm-" ^ uuid) ~style_class:"CodeMirror"
+        ~attrs:[ ("data-lang", lang) ]
+        [ dom ~key:("cp-" ^ uuid) ~tag:"pre"
+            ~style_class:"CodeMirror-line"
+            ~attrs:
+              [ ("contenteditable", "true")
+              ; ("spellcheck", "false")
+              ; ("data-code-uuid", uuid) ]
+            ~text:buffer []
+        ]
+    ; dom ~key:("cr-" ^ uuid) ~style_class:"extensions__code-calc-results"
+        []
+    ]
+
 let content_or_editor uuid (b : Model.block) : t =
   dyn ~equal:(fun a b -> a = b)
     (fun editing ->
-      if editing then editor_el uuid else content_el uuid b)
+      if editing then
+        match b.Model.block_display_type with
+        | Some "code" -> code_editor_el uuid b
+        | _ -> editor_el uuid
+      else content_el uuid b)
     (Signal.map
        (fun (st : S.t) ->
          match st.editing with
@@ -184,12 +222,16 @@ and row_el (b : Model.block) : t =
     ~attrs_signal_v:(row_attrs_sig uuid b)
     [ dom ~key:("main-" ^ key)
         ~style_class:"block-main-container flex flex-row gap-1"
-        [ control_wrap uuid
+        [ control_wrap uuid b
         ; dom ~key:("col-" ^ key) ~style_class:"flex flex-col w-full"
             [ dom ~key:("bmc-" ^ key)
                 ~style_class:"block-main-content flex flex-row gap-2"
                 [ dom ~key:("cew-" ^ key)
                     ~style_class:"block-content-or-editor-wrap flex flex-1"
+                    ~attrs:
+                      (match b.Model.block_display_type with
+                       | Some dt -> [ ("data-node-type", dt) ]
+                       | None -> [])
                     [ dom ~key:("cei-" ^ key)
                         ~style_class:"block-content-or-editor-inner"
                         [ dom ~key:("row-" ^ key)
