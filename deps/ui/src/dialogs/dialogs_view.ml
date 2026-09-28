@@ -17,7 +17,7 @@ let overlay_cls =
 let content_cls =
   "ui__dialog-content fixed left-[50%] top-[50%] z-50 grid w-full \
    max-w-2xl lg:max-w-3xl gap-4 border sm:rounded-lg bg-background p-6 \
-   shadow-lg"
+   shadow-lg ui__dialog-zoom-in"
 
 let btn_style =
   "inline-flex items-center justify-center rounded-md text-sm \
@@ -59,16 +59,27 @@ let body_of name (ms : Model.t Signal.signal) : t =
   | "export" | "export-graph" -> Exporter.body ms
   | _ -> box ~key:("empty-" ^ name) []
 
+(* cljs shui dialog-open! :label values — CSS sizes each dialog via
+   .ui__dialog-content[label=...] *)
+let label_of name =
+  match name with
+  | "settings" -> "app-settings"
+  | "plugins" -> "plugins-dashboard"
+  | _ -> ""
+
 let dialog_view name (ms : Model.t Signal.signal) : t =
+  let label = label_of name in
   dom ~key:("dlg-ov-" ^ name) ~style_class:overlay_cls ~events:"click"
     ~on_dom_event:(fun n p ->
       if n = "click" && is_overlay_click p then Dialogs_state.close_top ())
     [ dom ~key:("dlg-c-" ^ name) ~style_class:content_cls
         ~attrs:
-          [ ("data-state", "open")
-          ; ( "style"
-            , "transform: translate(-50%, -50%)" )
-          ]
+          ([ ("data-state", "open")
+           ; ( "style"
+             , "transform: translate(-50%, -50%)" )
+           ]
+           @ (if label = "" then [] else [ ("label", label) ])
+           @ [ ("role", "dialog"); ("tabindex", "-1") ])
         [ body_of name ms; close_btn ]
     ]
 

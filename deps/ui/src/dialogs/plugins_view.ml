@@ -56,35 +56,74 @@ let search_input ~key st =
         []
     ]
 
-let category_tabs ~key cat cat_st =
-  let btn id label ic =
+(* cljs plugins.cljs category-tabs: "Plugins (n)" / "Themes (n)" *)
+let category_tabs ~key ~nums cat cat_st =
+  let btn id label ic n =
     dom ~key:(key ^ "-" ^ id) ~tag:"button"
-      ~style_class:(if cat = id then "active" else "")
+      ~style_class:
+        ("ui__button inline-flex items-center justify-center gap-1 px-3           py-1.5 text-sm"
+         ^ if cat = id then " active" else "")
       ~events:"click"
       ~on_dom_event:(fun n _ ->
         if n = "click" then Runtime.signal_set cat_st id)
       [ dom ~tag:"span" ~style_class:"flex items-center"
-          [ icon ic; dom ~tag:"span" ~text:label [] ] ]
+          [ icon ic
+          ; dom ~tag:"span" ~text:(label ^ " (" ^ string_of_int n ^ ")") [] ]
+        ]
   in
+  let (np, nt) = nums in
   dom ~key:(key ^ "-cats")
     ~style_class:"secondary-tabs categories flex"
-    [ btn "plugins" (t "Plugins") "puzzle"
-    ; btn "themes" (t "Themes") "palette"
+    [ btn "plugins" (t "Plugins") "puzzle" np
+    ; btn "themes" (t "Themes") "palette" nt
     ]
 
-let control_tabs ~key ~search_st ~cat ~cat_st =
+external open_url_ : string -> unit = "open" [@@mel.scope "window"]
+
+(* cljs plugins.cljs panel-control-tabs .r: search + filter + more +
+   contribute link *)
+let control_tabs ~key ~search_st ~cat ~cat_st ~nums =
+  let ghost_btn id cls ic =
+    dom ~key:(key ^ "-" ^ id) ~tag:"button"
+      ~style_class:
+        ("ui__button inline-flex items-center justify-center h-8 w-8 " ^ cls)
+      [ icon ic ]
+  in
   dom ~key:(key ^ "-ctls")
     ~style_class:"pb-3 flex justify-between control-tabs relative"
     [ dom ~key:(key ^ "-l") ~style_class:"flex items-center l"
-        [ category_tabs ~key cat cat_st ]
+        [ category_tabs ~key ~nums cat cat_st ]
     ; dom ~key:(key ^ "-r") ~style_class:"flex items-center r"
-        [ search_input ~key:(key ^ "-search") search_st ]
+        [ search_input ~key:(key ^ "-search") search_st
+        ; ghost_btn "filter" "sort-or-filter-by" "filter"
+        ; ghost_btn "more" "more-do" "dots-vertical"
+        ; dom ~key:(key ^ "-contrib") ~tag:"a"
+            ~style_class:"contribute"
+            ~attrs:
+              [ ("href", "https://github.com/logseq/marketplace")
+              ; ("target", "_blank")
+              ]
+            ~text:(Platform.utf8 (t "✨ Write and submit new plugin")) []
+        ]
     ]
+
+let empty_item =
+  fun key ->
+    dom ~key
+      ~style_class:
+        "flex items-center justify-center py-28 flex-col gap-2 opacity-30"
+      [ Icons.icon ~size:40. "list-search"
+      ; dom ~tag:"span" ~style_class:"text-sm"
+          ~text:(t "Nothing Found.") []
+      ]
 
 let list_wrap ~key children =
   dom ~key ~style_class:"cp__plugins-item-lists"
     [ dom ~key:(key ^ "-in")
-        ~style_class:"cp__plugins-item-lists-inner" children ]
+        ~style_class:"cp__plugins-item-lists-inner" children
+    ; if children = [] then empty_item (key ^ "-empty")
+      else dom ~key:(key ^ "-nonempty") []
+    ]
 
 (* ---------- marketplace card ---------- *)
 
@@ -252,8 +291,21 @@ let installed_panel ~key ~search ~cat ~search_st ~cat_st =
            || contains_ci name search
            || contains_ci (Plugin_host.jstr web_pkg "description") search)
   in
+  let all =
+    Js.Dict.values Plugin_host.installed
+    |> Array.to_list
+    |> List.map (fun pl ->
+           let plj =
+             Plugin_host.meth pl "toJSON" [| Js.Json.boolean false |]
+           in
+           Plugin_host.jbool (Plugin_host.getf plj "webPkg") "theme"
+           || Plugin_host.jbool plj "theme")
+  in
+  let n_themes = List.length (List.filter Fun.id all) in
+  let n_plugins = List.length all - n_themes in
   dom ~key ~style_class:"cp__plugins-installed"
     [ control_tabs ~key:(key ^ "-tabs") ~search_st ~cat ~cat_st
+        ~nums:(n_plugins, n_themes)
     ; list_wrap ~key:(key ^ "-list") (List.map installed_card plugins)
     ]
 
@@ -263,6 +315,7 @@ let market_panel ~key ~search ~cat ~search_st ~cat_st ~pkgs ~loading =
   in
   dom ~key ~style_class:"cp__plugins-marketplace"
     [ control_tabs ~key:(key ^ "-tabs") ~search_st ~cat ~cat_st
+        ~nums:(0, 0)
     ; if loading && pkgs = [] then
         dom ~key:"pl-loading" ~tag:"p"
           ~style_class:"flex justify-center py-20" [ icon "loader-2" ]
