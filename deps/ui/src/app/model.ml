@@ -20,6 +20,12 @@ type block =
   ; block_tags : string list (* resolved tag titles, for .block-tags *)
   ; block_children : block list
   ; block_page_name : string option (* containing page, for ref rows *)
+  ; block_asset_type : string option (* logseq.property.asset/type *)
+  ; block_asset_url : string option (* logseq.property.asset/external-url *)
+  ; block_asset_width : int option (* logseq.property.asset/width *)
+  ; block_asset_height : int option (* logseq.property.asset/height *)
+  ; block_asset_resize : int option (* resize-metadata width *)
+  ; block_asset_align : string option (* logseq.property.asset/align *)
   }
 
 type page =
@@ -41,6 +47,7 @@ type phase =
 type confirm =
   | Confirm_delete_page of string (* page uuid *)
   | Confirm_convert_tag_to_page of int (* class db/id *)
+  | Confirm_delete_asset of string (* asset block uuid *)
 
 (* worker :notification broadcast -> toast *)
 type toast =

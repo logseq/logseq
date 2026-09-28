@@ -10,6 +10,24 @@ let convert_tag_to_page_desc =
 
 let confirm = "Confirm"
 let cancel = "Cancel"
+
+(* app menu *)
+let settings = "Settings"
+let export_graph = "Export graph"
+let import = "Import"
+let login = "Login"
+
+(* assets — en.edn :asset/* *)
+let asset_align = "Align"
+let asset_align_left = "Align left"
+let asset_align_center = "Align center"
+let asset_align_right = "Align right"
+let asset_copy = "Copy image"
+let asset_delete = "Delete image"
+let asset_confirm_delete = "Are you sure you want to delete this image?"
+let asset_already_exists title uuid =
+  "Asset exists already, title: " ^ title ^ ", node reference: [[" ^ uuid
+  ^ "]]"
 let delete_page_title = "Delete page?"
 let delete_page_desc = "Are you sure you want to delete this page?"
 let page_not_found = "Page not found: "
