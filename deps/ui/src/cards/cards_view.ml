@@ -5,7 +5,7 @@ open Lui_elements
 open Logseq_dom
 
 let t_ (s : string) = s
-let icon name = dom ~tag:"i" ~style_class:("ti ti-" ^ name) []
+let icon name = Icons.icon name
 
 let opt_row st i label =
   dom ~key:("opt-" ^ string_of_int i) ~attrs:[ ("role", "option") ]

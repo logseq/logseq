@@ -22,6 +22,7 @@ let update (model : t) (action : Action.t) : t =
       ; unlinked_open = false
       ; unlinked_search = false
       ; unlinked_query = ""
+      ; unlinked_blocks = []
       }
   | Title_edit_start -> { model with editing_title = true }
   | Title_edit_done -> { model with editing_title = false }
@@ -30,13 +31,16 @@ let update (model : t) (action : Action.t) : t =
   | Dismiss_all ->
       { model with page_menu = None; confirm = None }
   | Toggle_left_sidebar ->
-      { model with left_sidebar_open = not model.left_sidebar_open }
+      (* cljs set-left-sidebar-open! persists to storage *)
+      let open_ = not model.left_sidebar_open in
+      Platform.local_storage_set "ls-left-sidebar-open?"
+        (if open_ then "true" else "false");
+      { model with left_sidebar_open = open_ }
   | Toggle_right_sidebar ->
       { model with right_sidebar_open = not model.right_sidebar_open }
   | Toast_push t ->
       { model with
-        toasts =
-          model.toasts @ [ { t with toast_id = model.toast_next } ]
+        toasts = { t with toast_id = model.toast_next } :: model.toasts
       ; toast_next = model.toast_next + 1
       }
   | Toast_dismiss id ->
@@ -52,6 +56,7 @@ let update (model : t) (action : Action.t) : t =
       ; unlinked_query = ""
       }
   | Unlinked_set_query q -> { model with unlinked_query = q }
+  | Help_toggle -> { model with help_open = not model.help_open }
   | Graph_toggle_settings ->
       let gv = model.gv in
       { model with gv = { gv with gv_settings_open = not gv.gv_settings_open } }

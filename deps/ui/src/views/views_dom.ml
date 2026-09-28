@@ -150,6 +150,54 @@ let icon ?(cls = "") name =
 
 let clear el = el_replace_children el
 
+(* shui/button rendered classes (deps/shui components.cljs) *)
+let button_base_cls =
+  "ui__button inline-flex cursor-pointer items-center justify-center \
+   whitespace-nowrap rounded-md text-sm gap-1 font-medium \
+   ring-offset-background transition-colors focus-visible:outline-none \
+   focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 \
+   disabled:pointer-events-none disabled:opacity-50 select-none"
+
+let button_cls ?(variant = "default") ?(size = "default") ?(cls = "") () =
+  let v =
+    match variant with
+    | "text" ->
+        "hover:bg-secondary/70 hover:text-secondary-foreground \
+         active:opacity-80 as-text"
+    | "ghost" ->
+        "hover:bg-secondary/70 hover:text-secondary-foreground \
+         active:opacity-80 as-ghost"
+    | "outline" ->
+        "border bg-background hover:bg-accent hover:text-accent-foreground \
+         active:opacity-80 as-outline"
+    | "secondary" ->
+        "bg-secondary/70 text-secondary-foreground hover:bg-secondary/100 \
+         active:opacity-80 as-secondary"
+    | "destructive" ->
+        "bg-destructive/90 hover:bg-destructive/100 \
+         active:opacity-90 text-destructive-foreground \
+         hover:text-destructive-foreground as-destructive"
+    | "link" ->
+        "text-primary underline-offset-4 hover:underline active:opacity-80 \
+         as-link"
+    | _ ->
+        "bg-primary/90 hover:bg-primary/100 active:opacity-90 \
+         text-primary-foreground hover:text-primary-foreground as-solid"
+  in
+  let s =
+    match size with
+    | "sm" -> "h-7 rounded px-3 py-1"
+    | "xs" -> "h-6 text-xs rounded px-3"
+    | "md" -> "h-9 px-4 rounded-md py-2"
+    | "lg" -> "h-11 text-base rounded-md px-8"
+    | "icon" -> "box-content h-6 w-6 p-1 overflow-hidden"
+    | _ -> "h-10 px-4 py-2"
+  in
+  String.concat " "
+    (List.filter
+       (fun x -> x <> "")
+       [ button_base_cls; v; s; cls ])
+
 let query_inside (root : el) sel = Editor_dom.el_query root sel
 
 (* subtree query via :scope — querySelectorAll on element *)

@@ -16,7 +16,7 @@ module D = Logseq_dom
 let dom = D.dom
 let t = Sidebar_state.t
 
-let icon name = dom ~tag:"i" ~style_class:("ti ti-" ^ name) []
+let icon name = Icons.icon ~size:16. name
 
 (* ---------- popup menu helpers ---------- *)
 
@@ -81,36 +81,6 @@ let nav_edit_menu st checked =
         (List.map mk nav_labels)
     ]
 
-(* ---------- dots (page) menu ---------- *)
-
-let dots_menu st favorited =
-  let page_items =
-    match !Runtime.current_page with
-    | Some _ ->
-        [ menu_item st
-            (if favorited then t "Unfavorite page" else t "Add to Favorites")
-            (fun () -> Sidebar_state.toggle_favorite st)
-        ; menu_item st (t "Delete page")
-            (fun () -> Sidebar_state.open_dialog "delete-page")
-        ]
-    | None -> []
-  in
-  dom ~key:"dots-menu"
-    [ backdrop st
-    ; menu_box
-        ~style:"position:fixed;top:96px;right:16px;z-index:999;min-width:200px"
-        (page_items
-         @ [ menu_item st (t "Settings")
-               (fun () -> Sidebar_state.open_dialog "settings")
-           ; menu_item st (t "Export graph")
-               (fun () -> Sidebar_state.open_dialog "export-graph")
-           ; menu_item st (t "Import")
-               (fun () -> Sidebar_state.open_dialog "import")
-           ; menu_item st (t "Login")
-               (fun () -> Sidebar_state.open_dialog "login")
-           ])
-    ]
-
 (* ---------- plugins dropdown (toolbar-plugins-manager) ---------- *)
 
 let plugins_menu st =
@@ -159,7 +129,7 @@ let plugins_menu st =
         ~attrs:
           [ ("role", "menu")
           ; ( "style"
-            , "position:fixed;top:96px;left:16px;z-index:999;min-width:200px" )
+            , "position:fixed;top:64px;right:16px;z-index:999;min-width:200px" )
           ]
         (dyn ~equal:Stdlib.( = )
            (fun _dirty ->
@@ -186,71 +156,112 @@ let menu_host st =
          (Signal.value st.favorited))
   in
   dyn ~equal:(fun a b -> a = b)
-    (fun (menu, checked, favorited) ->
+    (fun (menu, checked, _favorited) ->
       match menu with
       | "nav-edit" -> nav_edit_menu st checked
-      | "dots" -> dots_menu st favorited
       | "plugins" -> plugins_menu st
       | _ -> dom ~key:"menu-closed" [])
     menu_sig
 
 (* ---------- navigations ---------- *)
 
-let nav_link ~key ~class_ ~title ~icon_name ~on_click =
-  dom ~key ~style_class:class_
+(* cljs shui/shortcut separate-keys: space-separated bindings render one
+   kbd per key inside .shui-shortcut-separate *)
+let shortcut_hint binding =
+  let keys = String.split_on_char ' ' binding in
+  dom ~key:("sc-" ^ binding) ~tag:"span"
+    ~style_class:"ml-1 mr-2 flex items-center"
+    [ dom ~key:"wrap" ~tag:"span" ~style_class:"keyboard-shortcut"
+        [ dom ~key:"inlf" ~tag:"span"
+            ~attrs:
+              [ ( "style"
+                , "display: inline-flex; align-items: center; \
+                   white-space: nowrap;" ) ]
+            [ dom ~key:"sep"
+                ~style_class:"shui-shortcut-separate shui-shortcut-glow"
+            ~attrs:
+              [ ("data-shortcut-binding", binding)
+              ; ("aria-hidden", "true")
+              ; ("style", "white-space: nowrap; gap: 4px") ]
+            (List.map
+               (fun k ->
+                 dom ~tag:"kbd" ~style_class:"shui-shortcut-key"
+                   ~attrs:[ ("aria-hidden", "false") ]
+                   ~text:(String.uppercase_ascii k) [])
+               keys) ] ] ]
+
+(* cljs sidebar-item: wrapper div gets the nav class (+ `active`), the
+   inner `a.item` also gets `active` when the route matches *)
+let nav_link ~key ~class_ ~active ~title ~icon_name ?shortcut ~on_click () =
+  let act = if active then " active" else "" in
+  let tail = match shortcut with Some s -> [ shortcut_hint s ] | None -> [] in
+  dom ~key ~style_class:(class_ ^ act)
     [ dom ~tag:"a"
-        ~style_class:"item group flex items-center text-sm rounded-md font-medium"
+        ~style_class:
+          ("item group flex items-center text-sm rounded-md font-medium" ^ act)
         ~events:"click" ~on_dom_event:on_click
-        [ icon icon_name
-        ; dom ~tag:"span" ~style_class:"flex-1" ~text:title [] ]
+        ([ icon icon_name
+         ; dom ~tag:"span" ~style_class:"flex-1" ~text:title [] ]
+        @ tail)
     ]
 
-let nav_route ~class_ ~title ~icon_name hash =
-  nav_link ~key:("nl-" ^ class_) ~class_ ~title ~icon_name
+let nav_route ~class_ ~active ~title ~icon_name ?shortcut hash =
+  nav_link ~key:("nl-" ^ class_) ~class_ ~active ~title ~icon_name ?shortcut
     ~on_click:(fun name _ ->
       if name = "click" then (
-        Platform.set_location_hash hash;
+        Platform.set_location_hash (Runtime.nav_hash hash);
         Platform.dispatch "ls:navigate" Js.Json.null))
+    ()
 
-let tag_nav class_ label titles =
+let tag_nav ~active_route class_ label titles =
   match List.assoc_opt class_ titles with
   | Some title ->
       Some
         (nav_link ~key:("tag-" ^ class_) ~class_:("tag-view-nav " ^ class_)
+           ~active:(active_route = Model.Page title)
            ~title:(t label) ~icon_name:"hash"
            ~on_click:(fun name _ ->
-             if name = "click" then Sidebar_state.navigate_to_page title))
+             if name = "click" then Sidebar_state.navigate_to_page title)
+           ())
   | None -> None
 
-let nav_items (checked, tag_titles) =
+(* active nav per route — cljs sidebar-navigations-loaded *)
+let nav_items ~active_route (checked, tag_titles) =
   List.filter_map
     (fun nav ->
       match nav with
       | "flashcards" ->
           Some
             (nav_link ~key:"nl-flashcards" ~class_:"flashcards-nav"
-               ~title:(t "Flashcards") ~icon_name:"cards"
+               ~active:false ~title:(t "Flashcards") ~icon_name:"cards"
+               ~shortcut:"g f"
                ~on_click:(fun name _ ->
-                 if name = "click" then Sidebar_state.open_cards ()))
+                 if name = "click" then Sidebar_state.open_cards ())
+               ())
       | "all-pages" ->
           Some
-            (nav_route ~class_:"all-pages-nav" ~title:(t "All pages")
+            (nav_route ~class_:"all-pages-nav"
+               ~active:(active_route = Model.All_pages) ~title:(t "Pages")
                ~icon_name:"files" "#/all-pages")
       | "graph-view" ->
           Some
-            (nav_route ~class_:"graph-view-nav" ~title:(t "Graph view")
-               ~icon_name:"hierarchy" "#/graph")
-      | "tag/tasks" -> tag_nav "tasks" "Tasks" tag_titles
-      | "tag/assets" -> tag_nav "assets" "Assets" tag_titles
+            (nav_route ~class_:"graph-view-nav"
+               ~active:(active_route = Model.Graph) ~title:(t "Graph view")
+               ~icon_name:"hierarchy" ~shortcut:"g g" "#/graph")
+      | "tag/tasks" -> tag_nav ~active_route "tasks" "Tasks" tag_titles
+      | "tag/assets" -> tag_nav ~active_route "assets" "Assets" tag_titles
       | _ -> None)
     checked
 
-let nav_group st =
+let nav_group ms st =
   let navs_sig =
     Signal.map2
-      (fun a b -> (a, b))
-      (Signal.value st.Sidebar_state.nav_checked)
-      (Signal.value st.nav_tag_titles)
+      (fun route rest -> (route, rest))
+      (Signal.map (fun (m : Model.t) -> m.Model.route) ms)
+      (Signal.map2
+         (fun a b -> (a, b))
+         (Signal.value st.Sidebar_state.nav_checked)
+         (Signal.value st.nav_tag_titles))
   in
   dom ~key:"nav-group"
     ~style_class:"sidebar-content-group navigations is-expand has-children"
@@ -271,15 +282,16 @@ let nav_group st =
                       if name = "click" then Sidebar_state.open_nav_menu st)
                     [ icon "filter-edit" ] ] ]
         ; dom ~key:"nav-bd" ~style_class:"bd"
-            [ dom ~key:"navs"
-                ~style_class:"sidebar-navigations flex flex-col mt-1"
-                (nav_route ~class_:"journals-nav" ~title:(t "Journals")
-                   ~icon_name:"calendar" "#/"
-                :: [ dyn ~equal:(fun a b -> a = b)
-                       (fun pair ->
-                         dom ~key:"nav-dyn" ~style_class:"contents"
-                           (nav_items pair))
-                       navs_sig ])
+            [ dyn ~equal:(fun a b -> a = b)
+                (fun (route, (checked, tag_titles)) ->
+                  dom ~key:"navs"
+                    ~style_class:"sidebar-navigations flex flex-col mt-1"
+                    (nav_route ~class_:"journals-nav"
+                       ~active:(route = Model.Journals || route = Model.Home)
+                       ~title:(t "Journals") ~icon_name:"calendar"
+                       ~shortcut:"g j" "#/"
+                    :: nav_items ~active_route:route (checked, tag_titles)))
+                navs_sig
             ]
         ]
     ]
@@ -310,7 +322,7 @@ let page_item_el st (p : Model.page) ~li_class ~key =
                 (match p.Model.page_title with
                  | "" -> Option.value p.Model.page_uuid ~default:""
                  | title -> title)))
-        [ dom ~tag:"span" ~style_class:"page-icon" [ icon "page" ]
+        [ dom ~tag:"span" ~style_class:"page-icon" [ icon "file" ]
         ; dom ~tag:"span" ~style_class:"page-title" ~text:p.Model.page_title
             [] ]
     ]
@@ -328,7 +340,7 @@ let content_group st ~key ~class_ ~label ~items_sig ~li_class =
                     [ dom ~tag:"strong" ~style_class:"flex-1" ~text:label
                         [] ] ]
             ; dom ~key:(key ^ "-b") ~tag:"span" ~style_class:"b"
-                [ icon "chevron-right" ] ]
+                [ Icons.icon ~cls:"more" ~size:15. "chevron-right" ] ]
         ; dom ~key:(key ^ "-bd") ~style_class:"bd"
             [ dyn ~equal:(fun a b -> a = b)
                 (fun ps ->
@@ -352,47 +364,79 @@ let favorites_group st =
 
 let recents_group st =
   content_group st ~key:"recent" ~class_:"recent"
-    ~label:(t "Recent pages")
+    ~label:(t "Recent")
     ~items_sig:(Signal.value st.Sidebar_state.recents)
     ~li_class:"recent-item select-none font-medium"
 
-(* ---------- plugins / dots toolbar ---------- *)
-
-let toolbar_row st =
-  dom ~key:"sb-toolbar"
-    ~style_class:"toolbar-plugins-manager flex items-center gap-1 px-2"
-    [ dom ~key:"pm-trigger" ~tag:"a"
-        ~style_class:"flex relative toolbar-plugins-manager-trigger"
-        ~attrs:[ ("title", t "Plugins") ]
-        ~events:"click"
-        ~on_dom_event:(fun name _ ->
-          if name = "click" then (
-            Runtime.signal_set st.Sidebar_state.open_menu "plugins";
-            Plugin_host.inject_toolbar_ui ()))
-        [ icon "apps" ]
-    ; dom ~key:"dots-btn" ~tag:"button"
-        ~style_class:"button sidebar-dots-btn"
-        ~attrs:[ ("title", t "More") ]
-        ~events:"click"
-        ~on_dom_event:(fun name _ ->
-          if name = "click" then Sidebar_state.open_dots_menu st)
-        [ icon "dots" ]
-    ]
+(* cljs plugins.cljs hook-ui-items :toolbar — the puzzle trigger lives
+   in the header .ui-items-container and renders ONLY when at least one
+   plugin contributes a toolbar ui-item; click opens the plugins dropdown *)
+let plugins_toolbar (ms : Model.t Signal.signal) : t =
+  let st = Sidebar_state.ensure ms in
+  let owner =
+    st.Sidebar_state.open_menu.Signal.state_signal.Signal.owner
+  in
+  dyn ~equal:Stdlib.( = )
+    (fun _dirty ->
+      match Plugin_host.toolbar_items () with
+      | [] -> dom ~key:"pm-none" []
+      | _ ->
+          dom ~key:"pm" ~tag:"div"
+            ~style_class:"toolbar-plugins-manager flex items-center"
+            ~events:"click"
+            ~on_dom_event:(fun n _ ->
+              if n = "click" then (
+                Runtime.signal_set st.Sidebar_state.open_menu "plugins";
+                Plugin_host.inject_toolbar_ui ()))
+            [ dom ~key:"pm-trigger" ~tag:"a"
+                ~style_class:"flex relative toolbar-plugins-manager-trigger"
+                ~attrs:[ ("title", t "Plugins") ]
+                [ icon "puzzle" ] ])
+    (Plugin_host.dirty_value owner)
 
 (* ---------- root ---------- *)
 (* chrome.ml owns the #left-sidebar.cp__sidebar-left-layout shell +
    shade-mask + resizer; these pieces fill its .wrap skeleton *)
 
+(* cljs repo/graphs-selector: icon + graph display name + selector chevron *)
+let graphs_selector (ms : Model.t Signal.signal) : t =
+  dyn ~equal:(fun a b -> a = b)
+    (fun (m : Model.t) ->
+      let name =
+        match m.repo with
+        | Some r ->
+            if String.length r > 10
+               && String.sub r 0 10 = "logseq_db_"
+            then String.sub r 10 (String.length r - 10)
+            else r
+        | None -> "Select a Graph"
+      in
+      dom ~key:"gsel" ~style_class:"sidebar-graphs"
+        [ dom ~key:"gsel-box"
+            ~style_class:"cp__graphs-selector flex items-center justify-between"
+            [ dom ~key:"gsel-a" ~tag:"a"
+                ~style_class:"item flex items-center gap-1 select-none"
+                ~events:"click"
+                ~on_dom_event:(fun n _ ->
+                  if n = "click" then Sidebar_state.open_dialog "graphs")
+                [ dom ~key:"gsel-th" ~tag:"span" ~style_class:"thumb"
+                    [ icon "topology-star" ]
+                ; dom ~key:"gsel-n" ~tag:"strong" ~text:name []
+                ; icon "selector" ] ] ])
+    ms
+
 let header (ms : Model.t Signal.signal) : t =
   let st = Sidebar_state.ensure ms in
-  nav_group st
+  dom ~key:"ls-header" ~style_class:"flex flex-col"
+    [ graphs_selector ms; nav_group ms st ]
 
 let contents (ms : Model.t Signal.signal) : t =
   let st = Sidebar_state.ensure ms in
   dom ~key:"ls-contents" ~style_class:"sidebar-contents-container"
     [ dom ~key:"ls-left" ~style_class:"cp__sidebar-left"
-        [ favorites_group st; recents_group st; toolbar_row st ] ]
+        [ favorites_group st; recents_group st ] ]
 
 let menus (ms : Model.t Signal.signal) : t =
   let st = Sidebar_state.ensure ms in
   menu_host st
+

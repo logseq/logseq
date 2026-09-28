@@ -124,6 +124,39 @@ and refresh (host : B.E.t) =
          Js.Promise.resolve ())
        (snapshots ()))
 
+(* cljs groups roots under the deleted page's title — page roots group
+   under their own title, blocks under their original page's *)
+and group_title_of root =
+  if is_page root then title_of root
+  else
+    match Wire.get root "logseq.property.recycle/original-page" with
+    | Some m -> Option.value (Wire.map_get_string m "block/title") ~default:""
+    | None -> ""
+
+and groups_of roots =
+  let rec insert acc root =
+    let gt = group_title_of root in
+    match acc with
+    | [] -> [ (gt, [ root ]) ]
+    | (g, rs) :: rest when g = gt -> (g, root :: rs) :: rest
+    | x :: rest -> x :: insert rest root
+  in
+  List.fold_left insert [] roots
+  |> List.map (fun (g, rs) -> (g, List.rev rs))
+  |> List.sort (fun (_, a) (_, b) ->
+         compare (deleted_at (List.hd b)) (deleted_at (List.hd a)))
+
+(* cljs renders the recycled root through block-container — a text row
+   carrying the title is what e2e reads back *)
+and root_body root =
+  let blk = B.create "div" in
+  B.set_class blk "ls-block";
+  let t = B.create "div" in
+  B.set_class t "block-title-wrap";
+  B.set_text t (title_of root);
+  B.append blk t;
+  blk
+
 and render_roots host roots =
   (* clear inside the async callback — concurrent refreshes race
      otherwise and each append piles rows onto the previous paint *)
@@ -137,25 +170,34 @@ and render_roots host roots =
     B.set_class e "text-sm text-muted-foreground";
     B.set_text e T.recycle_empty;
     B.append host e)
-  else (
-    let sec = B.create "section" in
-    let col = B.create "div" in
-    B.set_class col "flex flex-col";
+  else
     List.iter
-      (fun root ->
-        let row = B.create "div" in
-        B.append row (root_header root host);
-        (* deleted-root-outliner renders the block title — a plain title
-           row is enough for the recycled contract (row text must carry
-           the node title for has-text filters) *)
-        let body = B.create "div" in
-        B.set_class body "ls-block";
-        B.set_text body (title_of root);
-        B.append row body;
-        B.append col row)
-      roots;
-    B.append sec col;
-    B.append host sec)
+      (fun (title, rs) ->
+        let sec = B.create "section" in
+        (if not (List.exists is_page rs) then (
+           let h = B.create "h2" in
+           B.set_class h "text-lg font-medium mb-3";
+           B.set_text h title;
+           B.append sec h));
+        let col = B.create "div" in
+        B.set_class col "flex flex-col";
+        List.iter
+          (fun root ->
+            let row = B.create "div" in
+            B.append row (root_header root host);
+            (* deleted-root-outliner renders the block title — a plain
+               title row is enough for the recycled contract (row text
+               must carry the node title for has-text filters) *)
+            let body = B.create "div" in
+            B.set_class body "ls-block";
+            B.set_text body (title_of root);
+            B.append row body;
+            B.append row (root_body root);
+            B.append col row)
+          rs;
+        B.append sec col;
+        B.append host sec)
+      (groups_of roots)
 
 let show () =
   match B.qs "#main-content-container" with
@@ -167,6 +209,8 @@ let show () =
              before the promise resolves finds it instead of creating
              a duplicate container *)
           let host = B.create "div" in
+          (* mark before the async refresh fills it so a second show()
+             does not append a duplicate host *)
           B.set_class host "flex flex-col gap-8 ls-recycle-page-content";
           B.append parent host;
           refresh host)

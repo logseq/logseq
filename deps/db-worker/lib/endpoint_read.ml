@@ -545,6 +545,11 @@ let get_page_route_info args =
                           (Option.value
                              (Ldb.value page "block/journal-day")
                              ~default:Nil) )
+                    ; ( kw "icon",
+                        Ds_wire.transit_of_value
+                          (Option.value
+                             (Ldb.value page "logseq.property/icon")
+                             ~default:Nil) )
                     ]
                   in
                   let base =
@@ -630,6 +635,23 @@ let get_block_refs args =
 
 let () = Dispatcher.register "thread-api/get-block-refs" get_block_refs
 
+(* :thread-api/get-unlinked-references — [:db/id? eid] → plain block maps
+   of unlinked mentions (title contains page title, not in :block/refs) *)
+let get_unlinked_references args =
+  with_conn args (fun db ->
+      let eid = Option.bind (arg args 1) Wire.as_int in
+      Db_worker_effect.pure
+        (match eid with
+         | Some eid ->
+             Wire.List
+               (List.map (plain_map_wire db)
+                  (Db_view.get_unlinked_references db eid))
+         | None -> Wire.nil))
+
+let () =
+  Dispatcher.register "thread-api/get-unlinked-references"
+    get_unlinked_references
+
 (* :thread-api/get-unlinked-refs — [:db/id? eid] → plain maps for blocks
    whose title text-mentions the page but doesn't ref it *)
 let get_unlinked_refs args =
@@ -645,6 +667,7 @@ let get_unlinked_refs args =
 
 let () =
   Dispatcher.register "thread-api/get-unlinked-refs" get_unlinked_refs
+
 
 module IntSet = Set.Make (Int)
 
@@ -787,6 +810,30 @@ let get_page_block_index db (ref_t : Wire.t) (initial_limit : Wire.t) : Wire.t =
         ; (kw "blocks", Wire.Array blocks)
         ]
 
+(* A page's outline children = :block/page members UNION the recursive
+   :block/_parent subtree (cljs use-children walks _parent only).
+   Page-typed outline children carry no :block/page (the insert tx
+   dissocs it for entities with block/name), so the AVET pull alone
+   misses Library children and nested pages. Entities already pulled via
+   :block/page are skipped; the walk still descends through them. *)
+let page_parent_subtree db (page : entity) (have : entity_id list) :
+    pulled_entity list =
+  let seen = Hashtbl.create 64 in
+  List.iter (fun id -> Hashtbl.replace seen id ()) have;
+  let rec walk acc (e : entity) =
+    List.fold_left
+      (fun acc (c : entity) ->
+        if Hashtbl.mem seen c.id then acc
+        else (
+          Hashtbl.replace seen c.id ();
+          walk (c :: acc) c))
+      acc (Ldb.get_children e)
+  in
+  let extras = List.rev (walk [] page) in
+  Datascript.pull_many_string db "[*]"
+    (List.map (fun (e : entity) -> Entity_id e.id) extras)
+  |> List.filter_map (fun x -> x)
+
 (* :thread-api/get-page-blocks-tree *)
 let get_page_blocks_tree args =
   with_conn args (fun db ->
@@ -806,8 +853,15 @@ let get_page_blocks_tree args =
                  match Ldb.get_page db (Ds_wire.value_of_transit ref_t) with
                  | Some page ->
                      let blocks = Ldb.get_page_blocks db page.id in
+                     let extras =
+                       page_parent_subtree db page
+                         (List.map
+                            (fun (p : pulled_entity) -> p.pulled_id)
+                            blocks)
+                     in
                      Wire.Array
-                       (Outliner_tree.page_blocks_vec_tree db blocks page.id)
+                       (Outliner_tree.page_blocks_vec_tree db
+                          (blocks @ extras) page.id)
                  | None -> Wire.nil))
          | None -> Wire.nil))
 

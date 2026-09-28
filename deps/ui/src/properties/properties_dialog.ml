@@ -55,14 +55,6 @@ let type_of prop =
 
 let is_checkbox prop = type_of prop = "checkbox"
 
-(* db-property/valid-property-name? *)
-let valid_property_name (s : string) : bool =
-  not
-    (String.length s > 0
-     && (s.[0] = '#' || String.length s > 1 && s.[0] = '[' && s.[1] = '['))
-
-
-
 (* ---------- writes shared by phases ---------- *)
 
 let write_prop_value d prop w =
@@ -183,6 +175,11 @@ and render_type_select d body name =
   in
   el_append_child wrap sel
 
+and valid_property_name s =
+  not (String.length s > 0
+       && (s.[0] = '#'
+          || (String.length s > 1 && s.[0] = '[' && s.[1] = '[')))
+
 and on_type_chosen d name ty =
   (* cljs add-existing-or-new-property validates the name client-side and
      shows invalid-name without calling the worker *)
@@ -202,7 +199,6 @@ and on_type_chosen d name ty =
   |> Js.Promise.then_ (fun res ->
          (match D.untag res with
           | W.Nil ->
-              (* validation failure -> worker already pushed the toast *)
               S.toast_error (I18n.t "property/create-error")
           | W.Map _ as m ->
               let prop = m in
@@ -314,7 +310,7 @@ and value_items d prop wire_values =
           wire_values
 
 and render_value_edit d body prop =
-  let wrap = mk ~cls:"flex flex-1" "div" in
+  let wrap = mk ~cls:"flex flex-1 property-select" "div" in
   el_append_child body wrap;
   let ty = type_of prop in
   if ty = "date" || ty = "datetime" then (
@@ -351,14 +347,25 @@ and render_value_edit d body prop =
         | _ -> ())
       true)
   else (
-    let fetch, placeholder =
-      ( D.property_values ~property_ident:(ident_of prop)
-          ~block:(D.uuid_ref d.target.uuid)
-      , I18n.t1 "property/set-placeholder" (title_of prop) )
+    let placeholder = I18n.t1 "property/set-placeholder" (title_of prop) in
+    let fetch, on_search =
+      if List.mem ty [ "node"; "page"; "class"; "property" ] then (
+        let initial, on_search =
+          V.node_items_source ~block:(D.uuid_ref d.target.uuid) ~prop
+            ~on_pick:(fun id ->
+              write_prop_value d prop (Some (W.Int id));
+              close ())
+        in
+        (initial, Some on_search))
+      else
+        ( D.property_values ~property_ident:(ident_of prop)
+            ~block:(D.uuid_ref d.target.uuid)
+          |> Js.Promise.then_ (fun w ->
+                 Js.Promise.resolve (value_items d prop (D.elems w)))
+        , None )
     in
     fetch
-    |> Js.Promise.then_ (fun w ->
-           let items = value_items d prop (D.elems w) in
+    |> Js.Promise.then_ (fun items ->
            let on_new =
              if ty = "number" then
                Some
@@ -393,7 +400,7 @@ and render_value_edit d body prop =
            in
            let sel, input =
              Sel.create ~placeholder ~new_option:on_new ~on_escape:close
-               items
+               ~on_search items
            in
            el_append_child wrap sel;
            el_focus input;

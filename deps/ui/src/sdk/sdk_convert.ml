@@ -143,21 +143,23 @@ let rec property_refs_to_ids (w : Wire.t) : Wire.t =
 let result_json_of_wire w = json_of_wire (property_refs_to_ids w)
 
 let rec wire_of_json (j : Js.Json.t) : Wire.t =
-  match Js.typeof j with
-  | "undefined" -> Wire.Nil
-  | _ -> (
-      match Js.Json.classify j with
-  | Js.Json.JSONFalse -> Wire.Bool false
-  | Js.Json.JSONTrue -> Wire.Bool true
-  | Js.Json.JSONNull -> Wire.Nil
-  | Js.Json.JSONString s -> Wire.String s
-  | Js.Json.JSONNumber f ->
-      if Float.is_integer f then Wire.Int (int_of_float f)
-      else Wire.Float f
-  | Js.Json.JSONArray xs ->
-      Wire.Array (List.map wire_of_json (Array.to_list xs))
-  | Js.Json.JSONObject obj ->
-      Wire.Map
-        (List.map
-           (fun k -> (Wire.String k, wire_of_json (Js.Dict.unsafeGet obj k)))
-           (Array.to_list (Js.Dict.keys obj))))
+  (* sdk handlers receive fixed arity — absent args arrive as undefined,
+     which classify mis-tags as JSONObject *)
+  if Js.typeof j = "undefined" then Wire.Nil
+  else
+    match Js.Json.classify j with
+    | Js.Json.JSONFalse -> Wire.Bool false
+    | Js.Json.JSONTrue -> Wire.Bool true
+    | Js.Json.JSONNull -> Wire.Nil
+    | Js.Json.JSONString s -> Wire.String s
+    | Js.Json.JSONNumber f ->
+        if Float.is_integer f then Wire.Int (int_of_float f)
+        else Wire.Float f
+    | Js.Json.JSONArray xs ->
+        Wire.Array (List.map wire_of_json (Array.to_list xs))
+    | Js.Json.JSONObject obj ->
+        Wire.Map
+          (List.map
+             (fun k ->
+               (Wire.String k, wire_of_json (Js.Dict.unsafeGet obj k)))
+             (Array.to_list (Js.Dict.keys obj)))

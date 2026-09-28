@@ -33,6 +33,9 @@ type select_config =
   ; new_option : (string -> unit) option (* on_new text *)
   ; on_escape : unit -> unit
   ; on_enter_text : (string -> unit) option (* Enter with no items *)
+  ; on_search : (string -> item list Js.Promise.t) option
+        (* async item source — bypasses the static substring filter *)
+  ; mutable searched : item list option
   ; mutable results_inner : Editor_dom.el option
   }
 
@@ -51,13 +54,17 @@ let matches needle item =
     nl <= hl && go 0
 
 let visible_items cfg =
-  let base = List.filter (matches cfg.filter) cfg.items in
+  let base =
+    match cfg.on_search, cfg.searched with
+    | Some _, Some items -> items
+    | _ -> List.filter (matches cfg.filter) cfg.items
+  in
   let exact =
     List.exists
       (fun it ->
         String.lowercase_ascii it.it_title
         = String.lowercase_ascii (String.trim cfg.filter))
-      cfg.items
+      base
   in
   match cfg.new_option with
   | Some on_new when String.trim cfg.filter <> "" && not exact ->
@@ -102,7 +109,10 @@ let item_el idx cfg it =
     mk ~cls:"flex-1 flex gap-1 items-center font-normal" "span"
       ~attrs:[ ("title", it.it_tip) ]
   in
-  el_set_text inner
+  (* e2e targets `span` + exact text; a leaf span keeps the deepest
+     getByText match a span *)
+  let strong = mk ~cls:"font-normal" "span" in
+  el_set_text strong
     (if it.it_new then I18n.t "select/new-option" ^ " " ^ it.it_title
      else it.it_title);
   el_append_child a inner;
@@ -144,7 +154,7 @@ let move cfg results_inner delta =
 (* Creates the select element. Returns (root, input) so the caller can
    mount the root as an overlay/inline element and el_focus the input. *)
 let create ~placeholder ?(new_option = None) ?(on_escape = fun () -> ())
-    ?(on_enter_text = None) items =
+    ?(on_enter_text = None) ?(on_search = None) items =
   let cfg =
     { placeholder
     ; items
@@ -153,6 +163,8 @@ let create ~placeholder ?(new_option = None) ?(on_escape = fun () -> ())
     ; new_option
     ; on_escape
     ; on_enter_text
+    ; on_search
+    ; searched = None
     ; results_inner = None
     }
   in
@@ -179,6 +191,18 @@ let create ~placeholder ?(new_option = None) ?(on_escape = fun () -> ())
     (fun _ ->
       cfg.filter <- el_value input;
       cfg.chosen <- 0;
+      (match cfg.on_search with
+       | Some search ->
+           let q = cfg.filter in
+           search q
+           |> Js.Promise.then_ (fun items ->
+                  (* stale guard — a later keystroke owns the list *)
+                  if cfg.filter = q then (
+                    cfg.searched <- Some items;
+                    rebuild_results cfg results_inner);
+                  Js.Promise.resolve ())
+           |> ignore
+       | None -> ());
       rebuild_results cfg results_inner)
     true;
   el_listen input "keydown"

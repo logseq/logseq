@@ -1,5 +1,30 @@
 (* Decode worker wire values into model types. *)
 
+(* block.temp/reactions — raw {emoji-id} entity maps grouped by emoji
+   for the count chips (cljs groups identically for .ls-block-reactions) *)
+let reactions_of_wire (w : Wire.t) : (string * int) list =
+  let xs =
+    match Wire.get w "block.temp/reactions" with
+    | Some (Wire.Array xs) | Some (Wire.List xs) | Some (Wire.Set xs) -> xs
+    | _ -> []
+  in
+  List.fold_left
+    (fun acc r ->
+      match Wire.map_get_string r "logseq.property.reaction/emoji-id" with
+      | Some id -> (
+          match List.assoc_opt id acc with
+          | Some n -> (id, n + 1) :: List.remove_assoc id acc
+          | None -> (id, 1) :: acc)
+      | None -> acc)
+    [] xs
+  |> List.rev
+
+let count_refs (w : Wire.t) (k : string) : int =
+  match Wire.get w k with
+  | Some (Wire.List xs) | Some (Wire.Array xs) | Some (Wire.Set xs) ->
+      List.length xs
+  | _ -> 0
+
 let rec block_of_wire (w : Wire.t) : Model.block =
   let uuid = Wire.map_get_uuid w "block/uuid" in
   let db_id = Wire.map_get_int w "db/id" in
@@ -23,10 +48,22 @@ let rec block_of_wire (w : Wire.t) : Model.block =
         List.map block_of_wire (List.filter renderable xs)
     | _ -> []
   in
+  (* a pulled [:block/link ...] ref arrives as a {:db/id n} stub *)
+  let link =
+    match Wire.get w "block/link" with
+    | Some l -> Wire.map_get_int l "db/id"
+    | None -> None
+  in
   let tag_ids =
     match Wire.get w "block/tags" with
     | Some (Wire.List xs) | Some (Wire.Array xs) | Some (Wire.Set xs) ->
-        List.filter_map (fun t -> Wire.map_get_int t "db/id") xs
+        List.filter_map
+          (fun t ->
+            match t with
+            | Wire.Int i -> Some i
+            | Wire.Int64 i -> Some (Int64.to_int i)
+            | _ -> Wire.map_get_int t "db/id")
+          xs
     | _ -> []
   in
   let num_prop k =
@@ -52,9 +89,35 @@ let rec block_of_wire (w : Wire.t) : Model.block =
   ; block_level = level
   ; block_tag_ids = tag_ids
   ; block_tags = []
+  ; block_tag_uuids = []
+  ; block_page_name =
+      (match Wire.get w "block/page" with
+       | Some (Wire.Map _ as p) -> (
+           match Wire.map_get_string p "block/title" with
+           | Some t -> Some t
+           | None -> Wire.map_get_string w "block/page-name")
+       | _ -> Wire.map_get_string w "block/page-name")
   ; block_tag_idents = []
+  ; block_reactions = reactions_of_wire w
+  ; block_is_comments_area = false
+  ; block_is_comment = false
+  ; block_comment_targets = count_refs w "logseq.property.comments/blocks"
   ; block_children = children
-  ; block_page_name = Wire.map_get_string w "block/page-name"
+  ; block_link = link
+  ; block_embed_children = []
+  ; block_is_page =
+      Option.is_some (Wire.map_get_string w "block/name")
+  ; block_heading =
+      (* cljs block-heading-level: :block/heading-level first, else the
+         logseq.property/heading value (int 1-6, or true = level+1) *)
+      (match Wire.map_get_int w "block/heading-level" with
+       | Some n -> Some n
+       | None -> (
+           match Wire.get w "logseq.property/heading" with
+           | Some (Wire.Int n) when n >= 1 && n <= 6 -> Some n
+           | Some (Wire.Bool true) -> Some (min (level + 1) 6)
+           | _ -> None))
+  ; block_default_collapsed = false
   ; block_asset_type = Wire.map_get_string w "logseq.property.asset/type"
   ; block_asset_url =
       Wire.map_get_string w "logseq.property.asset/external-url"
@@ -72,6 +135,29 @@ let blocks_of_wire (w : Wire.t) : Model.block list =
   | Wire.Array xs | Wire.List xs -> List.map block_of_wire xs
   | _ -> []
 
+(* cljs block-default-collapsed?: page-typed children render collapsed on
+   non-Library pages. *)
+let rec mark_default_collapsed (b : Model.block) : Model.block =
+  { b with
+    block_children = List.map mark_default_collapsed b.block_children
+  ; block_default_collapsed = b.block_is_page
+  }
+
+(* Library page outlines nested pages only (cljs with-library-child-uuids
+   keeps entity/page? children): drop non-page subtrees. *)
+let rec pages_only (bs : Model.block list) : Model.block list =
+  List.filter_map
+    (fun (b : Model.block) ->
+      if b.block_is_page then
+        Some { b with block_children = pages_only b.block_children }
+      else None)
+    bs
+
+(* view-specific shaping of a fetched block tree *)
+let view_blocks ~(library : bool) (bs : Model.block list) :
+    Model.block list =
+  if library then pages_only bs else List.map mark_default_collapsed bs
+
 (* page is a tag/class when route-info says tag? or its entity tags
    contain logseq.class/Tag *)
 let is_tag_page (w : Wire.t) : bool =
@@ -86,6 +172,41 @@ let is_tag_page (w : Wire.t) : bool =
             xs
       | _ -> false)
 
+(* entity internal-page? = :block/tags contains the given class ident
+   (route-info maps carry "tags" [{ident}] stubs) *)
+let has_ident_page (w : Wire.t) (ident : string) : bool =
+  match Wire.get w "tags" with
+  | Some (Wire.Array xs) | Some (Wire.List xs) ->
+      List.exists
+        (fun t -> Wire.map_get_string t "ident" = Some ident)
+        xs
+  | _ -> false
+(* page is a property entity when route-info says property? or its
+   entity tags contain logseq.class/Property *)
+let is_property_page (w : Wire.t) : bool =
+  match Option.bind (Wire.get w "property?") Wire.as_bool with
+  | Some b -> b
+  | None -> (
+      match Wire.get w "tags" with
+      | Some (Wire.Array xs) | Some (Wire.List xs) ->
+          List.exists
+            (fun t ->
+              Wire.map_get_string t "ident" = Some "logseq.class/Property")
+            xs
+      | _ -> false)
+
+(* logseq.property/icon is a map {type: :emoji|:tabler-icon, id: str} *)
+let icon_of_wire (w : Wire.t) : (string * string) option =
+  let ty =
+    match Wire.get w "type" with
+    | Some (Wire.Keyword s) -> Some s
+    | Some (Wire.String s) -> Some s
+    | _ -> None
+  in
+  match ty, Wire.map_get_string w "id" with
+  | Some t, Some i -> Some (t, i)
+  | _ -> None
+
 (* accepts entity maps (block/title) and get-page-route-info maps
    (page-title/page-uuid/page-id) *)
 let page_of_summary (w : Wire.t) : Model.page option =
@@ -97,11 +218,13 @@ let page_of_summary (w : Wire.t) : Model.page option =
   in
   match w with
   | Wire.Map _ ->
+      let title =
+        Option.value
+          (str [ "block/title"; "page-title"; "block/raw-title" ])
+          ~default:""
+      in
       Some
-        { Model.page_title =
-            Option.value
-              (str [ "block/title"; "page-title"; "block/raw-title" ])
-              ~default:""
+        { Model.page_title = title
         ; page_uuid =
             (match Wire.map_get_uuid w "block/uuid" with
              | Some u -> Some u
@@ -111,12 +234,40 @@ let page_of_summary (w : Wire.t) : Model.page option =
              | Some i -> Some i
              | None -> Wire.map_get_int w "page-id")
         ; page_is_tag = is_tag_page w
+        ; page_is_property = is_property_page w
+        ; page_icon =
+            (match Wire.get w "icon" with
+             | Some v -> icon_of_wire v
+             | None ->
+                 Option.bind
+                   (Wire.get w "logseq.property/icon") icon_of_wire)
         ; page_journal_day =
             (match Wire.map_get_int w "journal-day" with
              | Some d -> Some d
              | None -> Wire.map_get_int w "block/journal-day")
+        ; page_is_library =
+            (* cljs entity-util/library? = :logseq.property/built-in?
+               && title = "Library". get-case-page exposes the raw attr
+               key; get-page-route-info returns the computed "built-in?". *)
+            (match
+               ( Wire.get w "logseq.property/built-in?"
+               , Wire.get w "built-in?" )
+             with
+             | Some (Wire.Bool true), _ | _, Some (Wire.Bool true) ->
+                 title = "Library"
+             | _ -> false)
+        ; page_internal = has_ident_page w "logseq.class/Page"
+        ; page_built_in =
+            (match
+               ( Wire.get w "logseq.property/built-in?"
+               , Wire.get w "built-in?" )
+             with
+             | Some (Wire.Bool true), _ | _, Some (Wire.Bool true) -> true
+             | _ -> false)
         ; page_tags = []
         ; page_blocks = []
+        ; page_linked_refs = []
+        ; page_parents = []
         }
   | _ -> None
 

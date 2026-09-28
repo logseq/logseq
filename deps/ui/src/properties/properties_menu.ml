@@ -398,7 +398,11 @@ let default_value_pane m =
           mk ~cls:"editor-inner flex flex-1 block-editor" "div"
         in
         let ta = mk "textarea" in
+        let mt = mk ~cls:"mock-text" "div" in
+        el_set_attr mt "style"
+          "width:100%;height:100%;position:absolute;visibility:hidden;top:0;left:0";
         el_append_child inner ta;
+        el_append_child inner mt;
         el_append_child wrap inner;
         el_append_child pane wrap;
         el_focus ta;
@@ -510,7 +514,7 @@ let menu_body m =
   el_append_child body
     (menuitem (I18n.t "property/go-to-this-property") (fun () ->
          (match prop_uuid m with
-          | Some u -> Platform.set_location_hash ("#/page/" ^ u)
+          | Some u -> Platform.set_location_hash (Runtime.nav_hash ("#/page/" ^ u))
           | None -> ());
          S.close_overlays ()));
   el_append_child body

@@ -27,6 +27,7 @@ type column =
 type inst_kind =
   | KAllPages
   | KTagPage of string (* owner tag page uuid *)
+  | KPropertyPage of string (* owner property page uuid *)
   | KQuery of { block_uuid : string }
 
 type inst =
