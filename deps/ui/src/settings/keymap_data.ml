@@ -204,12 +204,6 @@ let items =
       ; bindings = [ { kind = "combo"; data = "meta+close-square-bracket"; keys = [ "\xe2\x8c\x98"; "]" ] } ]
       }
   ; Shortcut
-      { label = "Go to graph view"
-      ; title = ":go/graph-view#global-non-editing-only"
-      ; unset = false
-      ; bindings = [ { kind = "separate"; data = "g g"; keys = [ "G"; "G" ] } ]
-      }
-  ; Shortcut
       { label = "Go to home"
       ; title = ":go/home#global-non-editing-only"
       ; unset = false

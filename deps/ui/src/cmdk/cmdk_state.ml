@@ -21,7 +21,6 @@ type command_id =
   | Cmd_move
   | Cmd_all_graphs
   | Cmd_all_pages
-  | Cmd_graph_view
   | Cmd_validate
   | Cmd_rtc_start
   | Cmd_rtc_stop
@@ -101,7 +100,6 @@ let commands : (command_id * string) list =
   ; (Cmd_move, Ui_strings.t "command.editor/move-blocks")
   ; (Cmd_all_graphs, Ui_strings.t "command.go/all-graphs")
   ; (Cmd_all_pages, Ui_strings.t "command.go/all-pages")
-  ; (Cmd_graph_view, Ui_strings.t "command.go/graph-view")
   ; (Cmd_validate, "(Dev) Validate current graph")
   ; (Cmd_rtc_start, "(Dev) RTC Start")
   ; (Cmd_rtc_stop, "(Dev) RTC Stop")
@@ -746,10 +744,6 @@ let run_item st it =
             close st;
             Runtime.send (Action.Navigate_to Model.All_pages);
             Platform.set_location_hash (Runtime.nav_hash "#/all-pages")
-        | Cmd_graph_view ->
-            close st;
-            Runtime.send (Action.Navigate_to Model.Graph);
-            Platform.set_location_hash (Runtime.nav_hash "#/graph")
         | Cmd_db_add ->
             close st;
             Dialogs_state.open_ "new-graph"

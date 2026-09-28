@@ -38,9 +38,6 @@ let topbar st =
         [ topbar_btn "contents" (t "Contents") (fun n _ ->
               if n = "click" then
                 Sidebar_state.open_sticky_item st "contents")
-        ; topbar_btn "page-graph" (t "Page graph") (fun n _ ->
-              if n = "click" then
-                Sidebar_state.open_sticky_item st "page-graph")
         ; topbar_btn "help" (t "Help") (fun n _ ->
               if n = "click" then Sidebar_state.open_sticky_item st "help")
         ]
@@ -133,10 +130,6 @@ let item_title (it : Sidebar_state.item) =
       (* cljs: (icon "list-details") + "Contents" *)
       dom ~key:"pt-contents" ~style_class:"flex items-center"
         [ Icons.icon ~cls:"text-md mr-2" "list-details"
-        ; dom ~tag:"span" ~text:it.title [] ]
-  | [], "page-graph" ->
-      dom ~key:"pt-pg" ~style_class:"flex items-center"
-        [ Icons.icon ~cls:"text-md mr-2" "hierarchy"
         ; dom ~tag:"span" ~text:it.title [] ]
   | [], "help" ->
       dom ~key:"pt-help" ~style_class:"flex items-center"
