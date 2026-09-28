@@ -1576,6 +1576,158 @@ let test_repeated_task_reschedules_numeric_scheduled_value () =
      | Some (Int64 _) | Some (Float _) -> true
      | _ -> false)
 
+(* cljs t/local-date-time + tc/to-long — epoch ms of a local-zone civil *)
+let local_civil_ms y mo d h mi : Time.epoch_ms =
+  Time.epoch_ms_of_civil
+    (Time.local_tz ())
+    (Time.civil ~year:y ~month:mo ~day:d ~hour:h ~minute:mi ~second:0 ~ms:0)
+
+(* cljs reschedule-date-property — completes a weekly repeating task whose
+   temporal property is the user :date property due, set to journal day
+   20260910, and returns the commands' tx. The cljs with-redefs t/now is
+   ported as pinning Commands.now_fn. *)
+let reschedule_date_property (repeat_type : string)
+    (now : Time.epoch_ms) (pages : int list) : db * entity * tx_op list =
+  (* cljs create-conn-with-blocks on the full built-in ontology —
+     Sqlite_export.create_conn seeds the repeat/status/journal
+     properties and closed values the command conditions read *)
+  let conn = Sqlite_export.create_conn () in
+  let journal_uuid day =
+    Printf.sprintf "%08x-0000-4000-8000-%012x" (day land 0xffffffff)
+      (day land 0xffffffffffff)
+  in
+  let journal_map day =
+    let title = Ldb.journal_title_of_day day "MMM do, yyyy" in
+    Printf.sprintf
+      "{:block/uuid #uuid \"%s\" :block/journal-day %d\n\
+        :block/title \"%s\" :block/name \"%s\"\n\
+        :block/tags :logseq.class/Journal}"
+      (journal_uuid day) day title
+      (String.lowercase_ascii title)
+  in
+  let freq_uuid = "66666666-6666-4666-8666-666666666666"
+  and inbox_uuid = "10101010-1010-4010-8010-101010101010"
+  and block_uuid = "90909090-9090-4090-8090-909090909090"
+  and due_prop_uuid = "80808080-8080-4080-8080-808080808080" in
+  let maps =
+    String.concat "\n"
+      (List.map journal_map pages
+       @ [ Printf.sprintf
+             "{:db/ident :user.property/due
+                :block/uuid #uuid \"%s\" :block/title \"due\"
+                :block/name \"due\"
+                :logseq.property/type :date
+                :db/valueType :db.type/ref
+                :db/cardinality :db.cardinality/one
+                :block/tags :logseq.class/Property}
+               {:block/uuid #uuid \"%s\" :block/title \"Inbox\"
+                :block/name \"inbox\"}
+               {:block/uuid #uuid \"%s\" :logseq.property/value 1}
+               {:block/uuid #uuid \"%s\" :block/title \"weekly task\"
+                :block/parent [:block/uuid #uuid \"%s\"]
+                :block/page [:block/uuid #uuid \"%s\"]
+                :logseq.property.repeat/repeated? true
+                :logseq.property.repeat/recur-frequency [:block/uuid #uuid \"%s\"]
+                :logseq.property.repeat/recur-unit :logseq.property.repeat/recur-unit.week
+                :logseq.property.repeat/temporal-property :user.property/due
+                :user.property/due [:block/uuid #uuid \"%s\"]
+                :logseq.property/status :logseq.property/status.todo}"
+             due_prop_uuid inbox_uuid freq_uuid block_uuid inbox_uuid
+             inbox_uuid freq_uuid (journal_uuid 20260910) ])
+  in
+  ignore
+    (Datascript.transact_conn_string conn
+       (Printf.sprintf "[%s]" maps));
+  let db = db_of conn in
+  let block =
+    Option.get (Db_test_util.find_block_by_content db "weekly task")
+  in
+  ignore
+    (Datascript.transact_conn_string conn
+       (Printf.sprintf
+          "[[:db/add [:block/uuid #uuid \"%s\"] :logseq.property.repeat/repeat-type :%s]]"
+          block_uuid repeat_type));
+  let report =
+    Datascript.transact_conn_string conn
+      (Printf.sprintf
+         "[[:db/add [:block/uuid #uuid \"%s\"] :logseq.property/status :logseq.property/status.done]]"
+         block_uuid)
+  in
+  let prev = !Commands.now_fn in
+  Fun.protect
+    ~finally:(fun () -> Commands.now_fn := prev)
+    (fun () ->
+       Commands.now_fn := (fun () -> now);
+       ( db_of conn
+       , block
+       , Commands.run_commands report.db_after report.tx_data ))
+
+(* cljs [:block/uuid u] ref add value for attr on eid *)
+let tx_add_ref_uuid (txs : tx_op list) (eid : entity_id) (a : attr)
+    : string option =
+  List.find_map
+    (function
+      | Add (Entity_id e, a', Ref_to (Lookup_ref ("block/uuid", Uuid u)))
+        when e = eid && a' = a -> Some u
+      | _ -> None)
+    txs
+
+(* (deftest repeated-date-property-keeps-its-weekday-test) *)
+let test_repeated_date_property_keeps_its_weekday () =
+  (* "A weekly repeat of a :date property lands 7 days later in any time
+     zone" *)
+  (let db, block, tx =
+     reschedule_date_property double_plus
+       (local_civil_ms 2026 9 10 12 0)
+       [ 20260910; 20260917 ]
+   in
+   match tx_add_ref_uuid tx block.id "user.property/due" with
+   | Some u -> (
+       match
+         Datascript.entity db (Lookup_ref ("block/uuid", Uuid u))
+       with
+       | Some e ->
+           check "due lands on 20260917"
+             (Ldb.value e "block/journal-day" = Some (Int64 20260917L))
+       | None -> check "due journal page resolved" false)
+   | None -> check "due ref add emitted" false);
+  (* "`.+` on a :date property counts from today's date" *)
+  (let db, block, tx =
+     reschedule_date_property dotted_plus
+       (local_civil_ms 2026 9 12 21 0)
+       [ 20260910; 20260919 ]
+   in
+   match tx_add_ref_uuid tx block.id "user.property/due" with
+   | Some u -> (
+       match
+         Datascript.entity db (Lookup_ref ("block/uuid", Uuid u))
+       with
+       | Some e ->
+           check "due lands on 20260919"
+             (Ldb.value e "block/journal-day" = Some (Int64 20260919L))
+       | None -> check "due journal page resolved" false)
+   | None -> check "due ref add emitted" false);
+  (* "A missing journal page is created for the right day" — the cljs
+     (filter map? tx) finds map-shaped entity ops carrying the day *)
+  (let _db, _block, tx =
+     reschedule_date_property double_plus
+       (local_civil_ms 2026 9 10 12 0)
+       [ 20260910 ]
+   in
+   check "journal page tx for 20260917"
+     (List.exists
+        (function
+          | Entity e ->
+              List.exists
+                (fun (a, v) ->
+                   a = "block/journal-day"
+                   && (match v with
+                       | One_value (Int64 d) -> d = 20260917L
+                       | _ -> false))
+                e.attrs
+          | _ -> false)
+        tx))
+
 let test_resolve_recur_frequency () =
   (* cljs with-redefs a mock db; port uses a real seeded conn — the
      recur-frequency built-in property exists there. *)
@@ -1639,6 +1791,8 @@ let commands_cases : unit Alcotest.test_case list =
   ; Alcotest.test_case
       "repeated-task-reschedules-numeric-scheduled-value-test" `Quick
       test_repeated_task_reschedules_numeric_scheduled_value
+  ; Alcotest.test_case "repeated-date-property-keeps-its-weekday-test"
+      `Quick test_repeated_date_property_keeps_its_weekday
   ; Alcotest.test_case "resolve-recur-frequency-test" `Quick
       test_resolve_recur_frequency ]
 

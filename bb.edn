@@ -225,9 +225,6 @@
   lint:ns-docstrings
   logseq.bb-tasks.lint.ns-docstrings/-main
 
-  lint:worker-and-frontend-separate
-  logseq.tasks.dev.lint/worker-and-frontend-separate
-
   nbb:watch
   logseq.bb-tasks.nbb.watch/watch
 
