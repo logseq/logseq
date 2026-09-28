@@ -4,17 +4,21 @@
             [cljs.test :refer [deftest is testing]]
             [datascript.core :as d]
             [frontend.worker.commands :as commands]
+            [logseq.common.util.date-time :as date-time-util]
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.property.build :as db-property-build]
             [logseq.db.test.helper :as db-test]))
 
 (defn- get-next-time
   "Test helper. Three-arg form uses the `:double-plus` default (preserves prior
-  test expectations); four-arg form passes the repeat-type explicitly."
+  test expectations); four-arg form passes the repeat-type explicitly;
+  five-arg form pins `now`."
   ([current-value unit frequency]
    (get-next-time current-value unit frequency :logseq.property.repeat/repeat-type.double-plus))
   ([current-value unit frequency repeat-type]
-   (#'commands/get-next-time current-value unit frequency repeat-type)))
+   (#'commands/get-next-time current-value unit frequency repeat-type))
+  ([current-value unit frequency repeat-type now]
+   (#'commands/get-next-time current-value unit frequency repeat-type now)))
 
 (def minute-unit {:db/ident :logseq.property.repeat/recur-unit.minute})
 (def hour-unit {:db/ident :logseq.property.repeat/recur-unit.hour})
@@ -288,13 +292,123 @@
               next-time (get-next-time two-years-ago year-unit 1 double-plus)]
           (is (= 1 (in-years next-time))))))))
 
+(defn- with-time-zone
+  "Run `f` with `process.env.TZ` set to `tz`. Node honors a runtime TZ change
+   for subsequent Date local fields, which cljs-time's local calendar uses.
+   Restores the previous TZ so sibling tests in a shared worker stay put."
+  [tz f]
+  (let [prev (.-TZ js/process.env)]
+    (set! (.-TZ js/process.env) tz)
+    (try
+      (let [resolved (.-timeZone (.resolvedOptions (js/Intl.DateTimeFormat.)))]
+        (when-not (= tz resolved)
+          (throw (ex-info "TZ did not apply"
+                          {:tz tz :resolved resolved}))))
+      (f)
+      (finally
+        (if (undefined? prev)
+          (js-delete js/process.env "TZ")
+          (set! (.-TZ js/process.env) prev))))))
+
+(defn- local-ymd
+  [ms]
+  (let [dt (t/to-default-time-zone (tc/from-long ms))]
+    [(t/year dt) (t/month dt) (t/day dt)]))
+
+(defn- local-ymdh
+  [ms]
+  (let [dt (t/to-default-time-zone (tc/from-long ms))]
+    [(t/year dt) (t/month dt) (t/day dt) (t/hour dt) (t/minute dt)]))
+
+(deftest monthly-repeat-keeps-local-day-east-of-utc-test
+  (testing "East of UTC, a date-only Deadline on the 1st advances to the next 1st"
+    ;; Stored value is local midnight, the date picker's date-without-time.
+    ;; In Tokyo that instant is still February in UTC; UTC month add then
+    ;; reads back as the 29th of the same local month (#1355).
+    (doseq [tz ["Asia/Tokyo" "Europe/Berlin"]]
+      (with-time-zone tz
+        (fn []
+          (let [deadline (t/local-date-time 2026 3 1)
+                now (t/local-date-time 2026 3 1 12 0)]
+            (is (= [2026 4 1] (local-ymd (get-next-time deadline month-unit 1 plus now)))
+                tz)
+            (is (= [2026 4 1] (local-ymd (get-next-time deadline month-unit 1 double-plus now)))
+                tz)
+            (is (= 20260401 (date-time-util/ms->journal-day
+                             (get-next-time deadline month-unit 1 plus now)))
+                tz)))))))
+
+(deftest yearly-repeat-keeps-local-day-in-berlin-test
+  (testing "Berlin yearly from 2027-03-01 is 2028-03-01, not 2028-02-29"
+    (with-time-zone "Europe/Berlin"
+      (fn []
+        (let [deadline (t/local-date-time 2027 3 1)
+              now (t/local-date-time 2027 3 1 9 0)]
+          (is (= [2028 3 1] (local-ymd (get-next-time deadline year-unit 1 plus now)))))))))
+
+(deftest quarterly-repeat-from-month-end-follows-local-calendar-test
+  (testing "UTC+14 `+` every 3 months from Aug 31 lands on Nov 30, not Dec 1"
+    (with-time-zone "Pacific/Kiritimati"
+      (fn []
+        (let [deadline (t/local-date-time 2026 8 31)
+              now (t/local-date-time 2026 8 31 12 0)]
+          (is (= [2026 11 30] (local-ymd (get-next-time deadline month-unit 3 plus now))))))))
+  (testing "UTC-12 gives the same Nov 30"
+    (with-time-zone "Etc/GMT+12"
+      (fn []
+        (let [deadline (t/local-date-time 2026 8 31)
+              now (t/local-date-time 2026 8 31 12 0)]
+          (is (= [2026 11 30] (local-ymd (get-next-time deadline month-unit 3 plus now)))))))))
+
+(deftest dotted-plus-monthly-from-completion-uses-local-calendar-test
+  (testing "Los Angeles `.+` 1 month from Apr 30 17:00 is May 30 17:00, not May 31"
+    (with-time-zone "America/Los_Angeles"
+      (fn []
+        (let [now (t/local-date-time 2026 4 30 17 0)]
+          (is (= [2026 5 30 17 0]
+                 (local-ymdh (get-next-time now month-unit 1 dotted-plus now)))))))))
+
+(deftest weekly-repeat-still-uses-instant-arithmetic-east-of-utc-test
+  (testing "Weeks stay duration-based: Tokyo Mar 1 + 1 week is Mar 8"
+    (with-time-zone "Asia/Tokyo"
+      (fn []
+        (let [deadline (t/local-date-time 2026 3 1)
+              now (t/local-date-time 2026 3 1 12 0)]
+          (is (= [2026 3 8] (local-ymd (get-next-time deadline week-unit 1 plus now)))))))))
+
+(deftest monthly-repeat-from-first-after-short-month-test
+  (testing "A 1st after a short month does not stay in that month"
+    (with-time-zone "Asia/Tokyo"
+      (fn []
+        (doseq [[year month next-month] [[2026 3 4]
+                                         [2026 5 6]
+                                         [2026 7 8]
+                                         [2026 10 11]
+                                         [2026 12 1]]]
+          (let [deadline (t/local-date-time year month 1)
+                now (t/local-date-time year month 1 8 0)
+                [y m d] (local-ymd (get-next-time deadline month-unit 1 plus now))
+                expected-year (if (= 12 month) (inc year) year)]
+            (is (= [expected-year next-month 1] [y m d])
+                (str year "-" month "-01"))))))))
+
 (deftest double-plus-month-clamp-stays-future-test
   (testing "`++` keeps advancing after month-end clamping until the result is future"
     (let [now (t/date-time 2026 3 30)
           scheduled (t/date-time 2026 1 31)]
       (with-redefs [t/now (fn [] now)]
         (is (t/after? (tc/from-long (get-next-time scheduled month-unit 1 double-plus))
-                      now))))))
+                      now)))))
+  (testing "`++` from the 31st keeps the 31st when the landed month has that day (#1354)"
+    (with-time-zone "UTC"
+      (fn []
+        (let [deadline (t/local-date-time 2026 1 31)
+              now (t/local-date-time 2026 7 1 9 1)]
+          (is (= [2026 7 31] (local-ymd (get-next-time deadline month-unit 1 double-plus now)))))
+        (let [scheduled (t/local-date-time 2026 10 31 9 30)
+              now (t/local-date-time 2028 3 1 12 0)]
+          (is (= [2028 3 31 9 30]
+                 (local-ymdh (get-next-time scheduled month-unit 1 double-plus now)))))))))
 
 (deftest double-plus-far-overdue-minute-is-bounded-test
   (testing "`++` does not advance far-overdue minute repeats one interval at a time"
@@ -389,6 +503,36 @@
                  (tx-add-value commands-tx (:db/id block) :logseq.property/deadline)))
           (is (= :logseq.property/status.todo
                  (tx-add-value commands-tx (:db/id block) :logseq.property/status))))))))
+
+(deftest repeated-task-monthly-deadline-keeps-local-day-test
+  (testing "Completing a monthly Tokyo Deadline on Mar 1 2026 writes Apr 1"
+    (with-time-zone "Asia/Tokyo"
+      (fn []
+        (let [now (t/local-date-time 2026 3 1 12 0)
+              deadline (tc/to-long (t/local-date-time 2026 3 1))
+              conn (db-test/create-conn-with-blocks
+                    {:pages-and-blocks
+                     [{:page {:block/title "Inbox"}
+                       :blocks [{:block/title "monthly deadline"
+                                 :build/properties
+                                 {:logseq.property.repeat/repeated? true
+                                  :logseq.property.repeat/recur-frequency 1
+                                  :logseq.property.repeat/recur-unit :logseq.property.repeat/recur-unit.month
+                                  :logseq.property/deadline deadline
+                                  :logseq.property/status :logseq.property/status.todo}}]}]})
+              block (db-test/find-block-by-content @conn "monthly deadline")
+              _ (d/transact! conn [[:db/add (:db/id block)
+                                    :logseq.property.repeat/repeat-type
+                                    :logseq.property.repeat/repeat-type.double-plus]])
+              report (d/transact! conn [[:db/add (:db/id block)
+                                         :logseq.property/status
+                                         :logseq.property/status.done]])]
+          (with-redefs [t/now (fn [] now)]
+            (let [commands-tx (doall (commands/run-commands report))
+                  next-deadline (tx-add-value commands-tx (:db/id block) :logseq.property/deadline)]
+              (is (= 20260401 (date-time-util/ms->journal-day next-deadline)))
+              (is (= :logseq.property/status.todo
+                     (tx-add-value commands-tx (:db/id block) :logseq.property/status))))))))))
 
 (defn- reschedule-date-property
   "Completes a weekly repeating task whose temporal property is the user :date

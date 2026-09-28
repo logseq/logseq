@@ -33,9 +33,10 @@ interval is anchored to your completion, not to the calendar.
 
 The next occurrence starts at *original + one interval* and keeps
 advancing in whole intervals until the result is strictly in the
-future. Because the arithmetic is in UTC and advances by whole weeks
-(or months, or years), weekly recurrences naturally land on the same
-day-of-week as the original.
+future. Weeks are a fixed duration, so weekly recurrences land on the
+same weekday. Months and years use the local calendar, so a date-only
+Deadline on the 1st stays on the 1st, and a 31st stays a 31st when the
+target month has that day.
 
 **Best for:** calendar-anchored recurrences where completion is a side
 event and the anchor matters — "every Monday standup," "monthly review
