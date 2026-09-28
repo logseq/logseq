@@ -18,10 +18,14 @@ module D = Render_dom
 
 (* .block-title-wrap with inline-parsed children; plain titles become a
    direct text node (cljs parity — Playwright :text-is needs it) *)
+(* text and child-carrying variants need distinct keys: the runtime diffs
+   same-key nodes and cannot apply text + remove-child on one node safely *)
 let wrap ?(cls = "block-title-wrap") ?(tag = "span") s : t =
   match Render_inline.plain_text s with
-  | Some text -> D.el ~tag ~style_class:cls ~text []
-  | None -> D.el ~tag ~style_class:cls (Render_inline.parse s)
+  | Some text -> D.el ~key:("btw-t-" ^ tag) ~tag ~style_class:cls ~text []
+  | None ->
+      D.el ~key:("btw-c-" ^ tag) ~tag ~style_class:cls
+        (Render_inline.parse s)
 
 (* #..###### markdown heading at title start *)
 let heading_level s =
@@ -109,7 +113,7 @@ let is_whole_query s =
   && String.sub t (String.length t - 2) 2 = "}}"
 
 let code_block lang code =
-  D.el ~tag:"div" ~style_class:"extensions__code"
+  D.el ~key:"rc-code" ~tag:"div" ~style_class:"extensions__code"
     [ D.el ~tag:"div" ~style_class:"CodeMirror"
         ~attrs:[ ("data-lang", lang) ]
         [ D.el ~tag:"pre" ~style_class:"CodeMirror-line"
@@ -118,7 +122,7 @@ let code_block lang code =
     ]
 
 let query_shell =
-  D.el ~tag:"div" ~style_class:"custom-query-results"
+  D.el ~key:"rc-query" ~tag:"div" ~style_class:"custom-query-results"
     [ D.el ~tag:"button"
         ~style_class:
           "ls-query-setting ls-small-icon text-muted-foreground ml-2 w-6 h-6"
@@ -136,13 +140,15 @@ let content s =
          .block-content keeps its clickable area (cljs does the same via
          the mldoc linebreak node it emits for empty content) *)
       if s = "" then
-        D.el ~tag:"span" ~style_class:"block-title-wrap" [ D.el ~tag:"br" [] ]
+        D.el ~key:"btw-empty" ~tag:"span" ~style_class:"block-title-wrap"
+          [ D.el ~tag:"br" [] ]
       else wrap s
 
 let title (s : string) : t list =
   match quote_body s with
   | Some body ->
-      [ D.el ~tag:"div" ~attrs:[ ("data-node-type", "quote") ]
+      [ D.el ~key:"rc-quote" ~tag:"div"
+          ~attrs:[ ("data-node-type", "quote") ]
           [ content body ] ]
   | None -> (
       match src_block s with
@@ -152,7 +158,8 @@ let title (s : string) : t list =
           else (
               match ordered_prefix s with
               | Some (num, rest) ->
-                  [ D.el ~tag:"span" ~style_class:"typed-list"
+                  [ D.el ~key:"rc-typed-list" ~tag:"span"
+                      ~style_class:"typed-list"
                       [ D.el ~tag:"label" ~text:num [] ]
                   ; content rest ]
               | None -> [ content s ])))

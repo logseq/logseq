@@ -15,7 +15,7 @@ let rename uuid new_title =
 let delete uuid =
   Sdk_util.apply_op "delete-page" [ Wire.Uuid uuid; Wire.Map [] ]
   |> Js.Promise.then_ (fun _ ->
-         Platform.set_location_hash "/";
+         Platform.set_location_hash (Runtime.nav_hash "/");
          Js.Promise.resolve ())
 
 let convert_to_tag db_id =

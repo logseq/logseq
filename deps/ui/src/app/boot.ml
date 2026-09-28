@@ -27,11 +27,21 @@ let apply_storage_env () =
   Platform.document_set_data "theme" theme;
   Platform.document_set_data "color" "logseq"
 
-(* pick the graph to open: first existing repo, else create Demo. *)
+(* pick the graph to open: the repo a deep link's ?graph-id= resolves to
+   (via the uuid persisted in ls-graphs-metadata), else the first existing
+   repo, else create Demo. *)
 let pick_graph repos =
-  match repos with
-  | first :: _ -> Js.Promise.resolve first
-  | [] -> Graph.create_graph demo_graph
+  let resolved =
+    match Platform.hash_query_param "graph-id" with
+    | Some gid -> Graphs_meta.repo_of_uuid gid
+    | None -> None
+  in
+  match resolved with
+  | Some repo when List.mem repo repos -> Js.Promise.resolve repo
+  | _ -> (
+      match repos with
+      | first :: _ -> Js.Promise.resolve first
+      | [] -> Graph.create_graph demo_graph)
 
 let ensure_today_journal repo =
   let day = Dates.today_journal_day () in

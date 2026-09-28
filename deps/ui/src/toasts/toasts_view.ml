@@ -29,7 +29,7 @@ let toast_item (t : Model.toast) (idx : int) : t =
   fun ctx parent ->
     Toast.schedule_dismiss ~ms:5000 t.toast_id;
     (dom ~key:("toast-" ^ string_of_int t.toast_id)
-       ~style_class:("ui__toast " ^ kind)
+       ~style_class:("ui__toast pointer-events-auto " ^ kind)
        ~attrs:
          [ ("data-toast-index", string_of_int idx); ("style", style) ]
        [ dom ~key:"ti-icon" ~tag:"i" ~style_class:(toast_icon_class kind) []

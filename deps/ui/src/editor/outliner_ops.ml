@@ -203,6 +203,7 @@ let fetch_zoom_blocks repo uuid : Wire.t Js.Promise.t =
          | _ -> Js.Promise.resolve (Wire.List []))
 
 let refresh_page () : unit Js.Promise.t =
+  let route_at_start = !Runtime.current_route in
   match (!Runtime.current_repo, !Runtime.current_page) with
   | Some repo, Some page -> (
       let blocks_p =
@@ -226,9 +227,12 @@ let refresh_page () : unit Js.Promise.t =
              let blocks = Decode.blocks_of_wire blocks_w in
              resolve_block_tags blocks
              |> Js.Promise.then_ (fun blocks ->
-                    Runtime.send
-                      (Action.Page_loaded
-                         { page with Model.page_blocks = blocks });
+                    (* the user may have navigated while the refetch was
+                       in-flight — never overwrite the new route's page *)
+                    if !Runtime.current_route = route_at_start then
+                      Runtime.send
+                        (Action.Page_loaded
+                           { page with Model.page_blocks = blocks });
                     Js.Promise.resolve ())))
   | Some _, None ->
       (* journals / other non-page views reload through the router hook *)

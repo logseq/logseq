@@ -373,7 +373,7 @@ let load_page repo ref_v =
   Runtime.invoke3 "thread-api/get-page-blocks-tree" (Wire.String repo)
     ref_v Wire.Nil
   |> Js.Promise.then_ (fun blocks_w ->
-         Js.Promise.resolve (Decode.blocks_of_wire blocks_w))
+         Outliner_ops.resolve_block_tags (Decode.blocks_of_wire blocks_w))
 
 let goto_page repo uuid =
   Runtime.invoke2 "thread-api/get-case-page" (Wire.String repo)
@@ -388,7 +388,7 @@ let goto_page repo uuid =
                     let page = { page with Model.page_blocks = blocks } in
                     Runtime.send (Action.Navigate_to (Model.Page uuid));
                     Runtime.send (Action.Page_loaded page);
-                    Platform.set_location_hash ("#/page/" ^ uuid);
+                    Platform.set_location_hash (Runtime.nav_hash ("#/page/" ^ uuid));
                     Js.Promise.resolve ()))
 
 let goto_today_journal repo =
@@ -484,19 +484,19 @@ let run_item st it =
         | Cmd_journals ->
             close st;
             (* cljs route-handler/go-to-journals! -> :home/:all-journals *)
-            Platform.set_location_hash "#/journals"
+            Platform.set_location_hash (Runtime.nav_hash "#/journals")
         | Cmd_all_graphs ->
             close st;
             Runtime.send (Action.Navigate_to Model.All_graphs);
-            Platform.set_location_hash "#/all-graphs"
+            Platform.set_location_hash (Runtime.nav_hash "#/all-graphs")
         | Cmd_all_pages ->
             close st;
             Runtime.send (Action.Navigate_to Model.All_pages);
-            Platform.set_location_hash "#/all-pages"
+            Platform.set_location_hash (Runtime.nav_hash "#/all-pages")
         | Cmd_graph_view ->
             close st;
             Runtime.send (Action.Navigate_to Model.Graph);
-            Platform.set_location_hash "#/graph"
+            Platform.set_location_hash (Runtime.nav_hash "#/graph")
         | Cmd_db_add ->
             close st;
             Dialogs_state.open_ "new-graph"
