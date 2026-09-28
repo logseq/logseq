@@ -52,34 +52,45 @@ let close_btn =
 let body_of name (ms : Model.t Signal.signal) : t =
   match name with
   | "new-graph" | "add-graph" -> New_graph.body ms
-  | "settings" -> Settings_view.body ms
+  | "settings" -> Settings_page.modal_body ms
   | "plugins" -> Plugins_view.body ms
   | "login" -> Login_view.body ms
   | "import" | "importer" -> Importer.body ms
   | "export" | "export-graph" -> Exporter.body ms
+  | "sync-server" -> Settings_url_view.sync_body ms
+  | "publish-server" -> Settings_url_view.publish_body ms
   | _ -> box ~key:("empty-" ^ name) []
 
-(* cljs shui dialog-open! :label values — CSS sizes each dialog via
-   .ui__dialog-content[label=...] *)
-let label_of name =
-  match name with
-  | "settings" -> "app-settings"
-  | "plugins" -> "plugins-dashboard"
-  | _ -> ""
-
+(* cljs shui/dialog-open! :label opts — drives .ui__dialog-content[label=…]
+   CSS (app-settings -> max-w-5xl/overflow hidden; plugins-dashboard ->
+   90vw/1246px) *)
+let label_of = function
+  | "settings" -> Some "app-settings"
+  | "plugins" -> Some "plugins-dashboard"
+  | _ -> None
 let dialog_view name (ms : Model.t Signal.signal) : t =
-  let label = label_of name in
-  dom ~key:("dlg-ov-" ^ name) ~style_class:overlay_cls ~events:"click"
+  let is_settings = name = "settings" in  dom ~key:("dlg-ov-" ^ name) ~style_class:overlay_cls ~events:"click"
+    ~attrs:(if is_settings then [ ("data-align", "top") ] else [])
     ~on_dom_event:(fun n p ->
       if n = "click" && is_overlay_click p then Dialogs_state.close_top ())
-    [ dom ~key:("dlg-c-" ^ name) ~style_class:content_cls
+    [ dom ~key:("dlg-c-" ^ name)
+        ~style_class:
+          (content_cls
+         ^
+         match name with
+         | "sync-server" | "publish-server" -> " lg:max-w-2xl"
+         | _ -> "")
         ~attrs:
           ([ ("data-state", "open")
            ; ( "style"
-             , "transform: translate(-50%, -50%)" )
+             , if is_settings then
+                 "transform: translateX(-50%); width: min(1024px,                   calc(100vw - 2rem)); max-width: calc(100vw - 2rem)"
+               else "transform: translate(-50%, -50%)" )
            ]
-           @ (if label = "" then [] else [ ("label", label) ])
-           @ [ ("role", "dialog"); ("tabindex", "-1") ])
+          @
+          match label_of name with
+          | Some l -> [ ("label", l) ]
+          | None -> [])
         [ body_of name ms; close_btn ]
     ]
 

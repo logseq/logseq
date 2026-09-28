@@ -14,6 +14,19 @@ let dom = Logseq_dom.dom
 
 (* --- shared pieces ------------------------------------------------ *)
 
+(* block zoom: .breadcrumb lists ancestor block titles (root first),
+   each linking to its own zoom route — cljs breadcrumb parity *)
+let zoom_breadcrumbs (page : Model.page) : t =
+  dom ~key:"bc" ~style_class:"breadcrumb"
+    (List.map
+       (fun (p : Model.block) ->
+         dom ~tag:"a" ~style_class:"breadcrumb-item"
+           ~attrs:
+             [ ( "href"
+               , "#/block/" ^ Option.value p.block_uuid ~default:"" ) ]
+           ~text:p.block_title [])
+       page.page_parents)
+
 let breadcrumbs title : t =
   (* namespaced pages "a/b/c" -> breadcrumb trail *)
   match String.split_on_char '/' title with
@@ -51,6 +64,42 @@ let open_menu name payload =
                 , Platform.payload_num p "clientY" )));
         Runtime.flush ())
       payload
+
+let set_page_icon (page : Model.page) (c : Icon_picker.choice) =
+  match page.page_uuid with
+  | None -> ()
+  | Some u ->
+      let op =
+        match c with
+        | Icon_picker.Remove ->
+            Outliner_ops.op "remove-block-property"
+              [ Wire.Uuid u; Wire.Keyword "logseq.property/icon" ]
+        | Icon_picker.Emoji id ->
+            Outliner_ops.op "set-block-property"
+              [ Wire.Uuid u; Wire.Keyword "logseq.property/icon"
+              ; Wire.Map
+                  [ Wire.Keyword "type", Wire.Keyword "emoji"
+                  ; Wire.Keyword "id", Wire.String id ]
+              ]
+        | Icon_picker.Tabler id ->
+            Outliner_ops.op "set-block-property"
+              [ Wire.Uuid u; Wire.Keyword "logseq.property/icon"
+              ; Wire.Map
+                  [ Wire.Keyword "type", Wire.Keyword "tabler-icon"
+                  ; Wire.Keyword "id", Wire.String id ]
+              ]
+      in
+      ignore
+        (Outliner_ops.apply [ op ]
+         |> Js.Promise.then_ (fun _ -> !Runtime.reload_current_view ()))
+
+let page_icon_picker (page : Model.page) (anchor : string) =
+  match Properties_dom.doc_query anchor with
+  | None -> ()
+  | Some anchor ->
+      Icon_picker.open_picker ~anchor
+        ~del:(page.page_icon <> None)
+        ~on_chosen:(fun c -> set_page_icon page c)
 
 let title_editor (page : Model.page) : t =
   let commit value =
@@ -206,13 +255,51 @@ let title_content (page : Model.page) : t =
     ]
 
 let page_title_el (m : Model.t) (page : Model.page) : t =
+  let icon_btn_id = "page-icon-btn" in
+  let icon_children =
+    match page.page_icon, page.page_is_tag with
+    | Some ("emoji", eid), _ ->
+        [ dom ~key:"pt-e" ~tag:"em-emoji" ~attrs:[ "id", eid ] [] ]
+    | Some (_, iid), _ ->
+        [ dom ~key:"pt-ti" ~style_class:("ui__icon ti ls-icon-" ^ iid)
+            [ dom ~key:"pt-tii" ~tag:"i" ~style_class:("ti ti-" ^ iid) []
+            ]
+        ]
+    | None, true -> [ dom ~key:"pt-ic" ~tag:"i" ~style_class:"ti ti-hash" [] ]
+    | None, false -> []
+  in
   let uuid = Option.value page.page_uuid ~default:"" in
   let icon =
-    if page.page_is_tag then
-      [ dom ~key:"pt-icon" ~style_class:"ls-page-icon flex self-start"
-          [ dom ~key:"pt-ic" ~tag:"i" ~style_class:"ti ti-hash" [] ]
-      ]
-    else []
+    match icon_children with
+    | [] -> []
+    | _ ->
+        [ dom ~key:"pt-icon" ~style_class:"ls-page-icon flex self-start"
+            [ dom ~key:"pt-icbtn" ~tag:"button"
+                ~attrs:
+                  [ "id", icon_btn_id; "type", "button"
+                  ; "title", Ui_strings.t "icon/tab-emojis" ]
+                ~events:"click"
+                ~on_dom_event:(fun _ _ ->
+                  page_icon_picker page ("#" ^ icon_btn_id))
+                icon_children
+            ]
+        ]
+  in
+  let actions =
+    match page.page_icon, page.page_is_tag, page.page_uuid with
+    | None, false, Some _ ->
+        [ dom ~key:"pt-actions" ~style_class:"ls-page-title-actions"
+            [ dom ~key:"pt-add-icon" ~tag:"button"
+                ~style_class:"ui__button"
+                ~attrs:[ "id", "add-page-icon-btn"; "type", "button" ]
+                ~text:(Ui_strings.t "command.editor/add-property-icon")
+                ~events:"click"
+                ~on_dom_event:(fun _ _ ->
+                  page_icon_picker page "#add-page-icon-btn")
+                []
+            ]
+        ]
+    | _ -> []
   in
   let body =
     (* cljs db-page-title: the page title is a full block row —
@@ -297,7 +384,34 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
   dom ~key:"page-title" ~id:"page-title"
     ~style_class:"ls-page-title flex flex-1 w-full content items-start title"
     ~attrs:[ ("data-testid", "page title") ]
-    ~events:"contextmenu" ~on_dom_event:open_menu (icon @ body)
+    ~events:"click contextmenu"
+    ~on_dom_event:(fun name payload ->
+      match name with
+      | "click" ->
+          (* icon buttons live inside #page-title; skip title-edit when
+             they (or their children) are the click target *)
+          let target =
+            match payload with
+            | Some p -> Platform.payload_str p "targetId"
+            | None -> ""
+          in
+          if
+            page.page_uuid <> None
+            && (target = "" || target = "page-title"
+                || target = "page-title-text")
+          then (
+            Runtime.send Action.Title_edit_start;
+            Runtime.flush ();
+            (* autofocus doesn't re-fire on remount — focus explicitly so
+               Enter/Escape reach the textarea *)
+            match Dom_ext.doc_query_selector ".ls-page-title textarea" with
+            | Some el ->
+                Dom_ext.focus el;
+                let n = String.length (Dom_ext.value el) in
+                Dom_ext.set_selection_range el n n
+            | None -> ())
+      | _ -> open_menu name payload)
+    (icon @ body @ actions)
 
 let blocks_inner ?puuid ?(virtualize = false) (blocks : Model.block list)
     : t =
@@ -525,6 +639,25 @@ let references_row (b : Model.block) : t =
   | None -> Tree.block_row_static b
 
 (* cljs reference/references -> views/view :linked-references DOM *)
+
+(* cljs renders a Page column naming the source page; shared by the
+   linked-refs (.references) and unlinked-refs bodies *)
+let ref_item (b : Model.block) : t =
+  dom ~style_class:"references-item"
+    [ (match b.Model.block_page_name with
+       | None -> box []
+       | Some name ->
+           dom ~tag:"a" ~style_class:"references-item-page"
+             ~attrs:[ ("data-ref", name) ]
+             ~text:name [])
+    ; Tree.block_row b
+    ]
+
+let fetch_unlinked (m : Model.t) =
+  match m.route_page with
+  | Some p -> Router.fetch_unlinked p
+  | None -> ()
+
 let references_view (refs : Model.block list) : t =
   match refs with
   | [] -> box ~key:"refs-empty" []
@@ -574,11 +707,13 @@ let unlinked_search_input () : t =
         ~attrs:[ ("placeholder", Strings.filter_placeholder) ]
         ~events:"input"
         ~on_dom_event:(fun name payload ->
-          if name = "input" then
-            Runtime.send
-              (Action.Unlinked_set_query
-                 (Platform.payload_str
-                    (Option.value payload ~default:"{}") "value")))
+          if name = "input" then (
+            let q =
+              Platform.payload_str
+                (Option.value payload ~default:"{}") "value"
+            in
+            Runtime.send (Action.Unlinked_set_query q);
+            Runtime.flush ()))
         []
     ]
 
@@ -635,6 +770,7 @@ let unlinked_references_view (m : Model.t) : t =
                 [ foldable_title "urefs-t"
                     ~on_click:(fun () ->
                       Runtime.send Action.Unlinked_toggle_open;
+                      if not m.unlinked_open then fetch_unlinked m;
                       Runtime.flush ())
                     (refs_view_head "urefs"
                        (Ui_strings.t "view/unlinked-references")
@@ -752,7 +888,10 @@ let page_view (m : Model.t) (page : Model.page) : t =
       ~attrs:(page_wrap_attrs page)
     [ dom ~key:"page-inner"
         ~style_class:"relative grid gap-4 sm:gap-8 page-inner mb-16"
-        [ dom ~key:"page-title-row" ~style_class:"flex flex-row space-between"
+        [ (match m.route with
+           | Model.Block_zoom _ -> zoom_breadcrumbs page
+           | _ -> breadcrumbs page.page_title)
+        ; dom ~key:"page-title-row" ~style_class:"flex flex-row space-between"
             [ page_title_el m page ]
         ; (if page.page_is_library then library_add_pages_button
            else dom ~key:"lib-add-off" [])
@@ -812,6 +951,7 @@ let page_view_of_model (m : Model.t) : t =
   | Model.Ready, Model.Graph -> Graph_view.view m
   | Model.Ready, (Model.All_graphs | Model.All_pages) ->
       box ~key:"graphs-view" [] (* graphs area renders via its own view *)
+  | Model.Ready, Model.Settings -> Settings_page.view m
   | Model.Ready, _ -> (
       match m.route_page with
       | Some page -> page_view m page

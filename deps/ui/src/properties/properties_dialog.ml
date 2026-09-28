@@ -177,21 +177,23 @@ and render_type_select d body name =
   in
   el_append_child wrap sel
 
+and valid_property_name s =
+  not (String.length s > 0
+       && (s.[0] = '#'
+          || (String.length s > 1 && s.[0] = '[' && s.[1] = '[')))
+
 and on_type_chosen d name ty =
+  if not (valid_property_name name) then
+    (* cljs checks the name client-side before any worker call *)
+    S.toast_error (I18n.t "property/invalid-name-error")
+  else
   D.upsert_property
     ~schema:(W.Map [ (W.Keyword "logseq.property/type", W.Keyword ty) ])
     ~property_name:name ()
-  |> (fun p ->
-      Js.Promise.catch
-        (fun _ ->
-          (* worker rejected (invalid name already pushes its own toast) *)
-          S.toast_error (I18n.t "property/create-error");
-          Js.Promise.resolve W.Nil)
-        p)
+  |> Js.Promise.catch (fun _ -> Js.Promise.resolve W.Nil)
   |> Js.Promise.then_ (fun res ->
          (match D.untag res with
           | W.Nil ->
-              (* validation failure -> worker already pushed the toast *)
               S.toast_error (I18n.t "property/create-error")
           | W.Map _ as m ->
               let prop = m in

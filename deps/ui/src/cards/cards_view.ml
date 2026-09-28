@@ -56,29 +56,63 @@ let selector_row st =
            (Signal.value st.Cards_state.cards))
     ]
 
-let card_items cards =
-  List.mapi
-    (fun i title ->
-      dom ~key:("card-" ^ string_of_int i)
-        ~style_class:"ls-card content flex flex-col overflow-hidden"
-        [ dom ~key:"scroll"
-            ~style_class:
-              "ls-card-scroll flex-1 min-h-0 overflow-y-auto overflow-x-hidden"
-            [ text ~key:"t" ~value:title [] ] ])
-    cards
+let rating_btn st rating =
+  let label, id =
+    match rating with
+    | "again" -> (t_ "Again", "card-again")
+    | "hard" -> (t_ "Hard", "card-hard")
+    | "good" -> (t_ "Good", "card-good")
+    | _ -> (t_ "Easy", "card-easy")
+  in
+  dom ~key:id ~tag:"button" ~id
+    ~style_class:"ui__button !px-2 !py-1 border-primary opacity-90"
+    ~events:"click"
+    ~on_dom_event:(fun name _ -> if name = "click" then Cards_state.rate st)
+    [ text ~key:"t" ~value:label [] ]
 
-let cards_body st =
-  dyn ~equal:(fun (a : string list) b -> a = b)
-    (fun cards ->
-      match cards with
-      | [] ->
+let rating_btns st =
+  dom ~key:"ratings"
+    ~style_class:"flex flex-row items-center gap-8 flex-wrap"
+    (List.map (rating_btn st) [ "again"; "hard"; "good"; "easy" ])
+
+(* cljs card-view: current card + "Show answers" (init) or the rating row
+   (show-answer) *)
+let current_card st =
+  dyn ~equal:(fun (a : int * bool * string list) b -> a = b)
+    (fun (pos, revealed, cards) ->
+      match List.nth_opt cards pos with
+      | None ->
           dom ~key:"empty" ~style_class:"ls-card content ml-2"
             [ dom ~key:"h" ~tag:"h2" ~style_class:"font-medium"
                 [ text ~key:"t" ~value:(t_ "No cards") [] ] ]
-      | _ ->
-          dom ~key:"cards" ~style_class:"flex flex-col flex-1 min-h-0"
-            (card_items cards))
-    (Signal.value st.Cards_state.cards)
+      | Some title ->
+          let actions =
+            if revealed then rating_btns st
+            else
+              dom ~key:"reveal" ~tag:"button" ~id:"card-answers"
+                ~style_class:"ui__button !px-2 !py-1"
+                ~events:"click"
+                ~on_dom_event:(fun name _ ->
+                  if name = "click" then Cards_state.reveal st)
+                [ text ~key:"t" ~value:(t_ "Show answers") [] ]
+          in
+          dom ~key:("card-" ^ string_of_int pos)
+            ~style_class:"ls-card content flex flex-col overflow-hidden"
+            [ dom ~key:"scroll"
+                ~style_class:
+                  "ls-card-scroll flex-1 min-h-0 overflow-y-auto overflow-x-hidden"
+                [ text ~key:"t" ~value:title [] ]
+            ; dom ~key:"acts" ~style_class:"mt-8 pb-2 shrink-0" [ actions ]
+            ])
+    (Signal.map2
+       (fun (a, b) c -> (a, b, c))
+       (Signal.map2 (fun a b -> (a, b)) (Signal.value st.Cards_state.pos)
+          (Signal.value st.Cards_state.revealed))
+       (Signal.value st.Cards_state.cards))
+
+let cards_body st =
+  dom ~key:"cards" ~style_class:"flex flex-col flex-1 min-h-0"
+    [ current_card st ]
 
 let modal st =
   dom ~key:"cards-modal" ~id:"cards-modal"

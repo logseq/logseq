@@ -147,7 +147,7 @@ let build_columns (inst : V.inst) (properties : W.t list) : V.column list =
   | V.KAllPages ->
       [ select_column; page_title_column; refs_count_column; tags_column
       ; created_column; updated_column ]
-  | V.KTagPage _ ->
+  | V.KTagPage _ | V.KPropertyPage _ ->
       (* cljs objects.cljs: Asset-class tag pages get a "File" column
          before the logseq property columns *)
       [ select_column; id_column; title_column ]
@@ -506,7 +506,30 @@ let header_cell inst ~refresh (c : V.column) : D.el =
             ~cls:"h-8 w-6 flex items-center justify-center"
             ~attrs:[ ("for", "header-index"); ("title", I.row_number) ]
             ~text:"#" ())
-   | _ -> D.el_append_child cell (header_button inst ~refresh c));
+   | _ ->
+       D.el_append_child cell
+         (D.h ~tag:"span" ~cls:"truncate" ~text:c.V.c_name ());
+       (match c.V.c_prop with
+        | Some p ->
+            (* cljs header-cp: property columns open the property
+               configure dropdown (.ls-property-dropdown) *)
+            D.el_add_listener cell "click" (fun _ ->
+                let owner_uuid =
+                  match inst.V.kind with
+                  | V.KTagPage u | V.KPropertyPage u -> u
+                  | _ -> ""
+                in
+                Properties_menu.open_menu ~anchor:cell ~owner_uuid
+                  ~owner_id:(Properties_data.entity_id_of p)
+                  ~owner_is_tag:(match inst.V.kind with
+                    | V.KTagPage _ -> true
+                    | _ -> false)
+                  ~owner_title:c.V.c_name
+                  ~refresh:(fun () -> refresh inst)
+                  (W.Map
+                     [ (W.Keyword "property", p)
+                     ; (W.Keyword "property-id", W.Keyword c.V.c_id) ]))
+        | None -> D.el_append_child cell (header_button inst ~refresh c)));
   cell
 
 (* ---------- action bar ---------- *)

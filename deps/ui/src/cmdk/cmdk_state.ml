@@ -25,6 +25,8 @@ type command_id =
   | Cmd_validate
   | Cmd_rtc_start
   | Cmd_rtc_stop
+  | Cmd_add_reaction
+  | Cmd_add_comment
 
 type action =
   | Create_page of string
@@ -101,7 +103,9 @@ let commands : (command_id * string) list =
   ; (Cmd_graph_view, Ui_strings.t "command.go/graph-view")
   ; (Cmd_validate, "(Dev) Validate current graph")
   ; (Cmd_rtc_start, "(Dev) RTC Start")
-  ; (Cmd_rtc_stop, "(Dev) RTC Stop") ]
+  ; (Cmd_rtc_stop, "(Dev) RTC Stop")
+  ; (Cmd_add_reaction, Ui_strings.t "command.editor/add-reaction")
+  ; (Cmd_add_comment, Ui_strings.t "block.comments/add-comment") ]
 
 let match_commands q =
   let q' = String.lowercase_ascii q in
@@ -513,14 +517,35 @@ let toast msg cls =
   Js.Dict.set d "cls" (Js.Json.string cls);
   Dom_ext.dispatch_custom "ls:toast" (Js.Json.object_ d)
 
-let goto_page _repo uuid =
-  let h = "#/page/" ^ uuid in
-  (* hashchange loads the page when the hash differs; when it does not,
-     and to have the returned promise settle after Page_loaded, load
-     through the canonical route path either way *)
-  Platform.set_location_hash h;
-  Router.load_page_ref (Model.Page uuid) (Wire.Uuid uuid) ~missing:uuid
+let load_page repo ref_v =
+  Runtime.invoke3 "thread-api/get-page-blocks-tree" (Wire.String repo)
+    ref_v Wire.Nil
+  |> Js.Promise.then_ (fun blocks_w ->
+         Js.Promise.resolve (Decode.blocks_of_wire blocks_w))
 
+let goto_page repo uuid =
+  (* navigation intent: commit and close any in-progress edit so the old
+     page stops rendering an editor during the async load gap (e2e
+     waits on .editor-visible and must not see the stale one) *)
+  Editor_actions.exit_edit ~select:false;
+  Runtime.invoke2 "thread-api/get-page-route-info" (Wire.String repo)
+    (Wire.String uuid)
+  |> Js.Promise.then_ (fun page_w ->
+         match Decode.page_of_summary page_w with
+         | None -> Js.Promise.resolve ()
+         | Some page ->
+             load_page repo
+               (Wire.Array [ Wire.Keyword "block/uuid"; Wire.Uuid uuid ])
+             |> Js.Promise.then_ (fun blocks ->
+                    let page = { page with Model.page_blocks = blocks } in
+                    (* invalidate in-flight route loads so their late
+                       Page_loaded cannot clobber this fresh page *)
+                    Router.bump_load_gen ();
+                    Runtime.send (Action.Navigate_to (Model.Page uuid));
+                    Runtime.send (Action.Page_loaded page);
+                    Router.fetch_refs page;
+                    Platform.set_location_hash ("#/page/" ^ uuid);
+                    Js.Promise.resolve ()))
 let goto_today_journal repo =
   let day = Dates.today_journal_day () in
   Runtime.invoke2 "thread-api/get-journal-page-by-day" (Wire.String repo)
@@ -537,6 +562,10 @@ let create_page title =
   match !(Runtime.current_repo) with
   | None -> ()
   | Some repo ->
+      (* navigation intent: commit and close any in-progress edit so the
+         old page stops rendering an editor during the async gap (e2e
+         waits on .editor-visible and must not see the stale one) *)
+      Editor_actions.exit_edit ~select:false;
       ignore
         (Runtime.invoke3 "thread-api/apply-outliner-ops" (Wire.String repo)
            (Wire.Array
@@ -559,7 +588,6 @@ let create_page title =
                        Editor_actions.append_block ();
                        Js.Promise.resolve ()))
          |> Js.Promise.catch (fun e ->
-                (* TEMP-DEBUG: e wraps the real rejection in _1 *)
                 Platform.console_error
                   ("cmdk create-page failed", Platform.error_inner e);
                 Js.Promise.resolve ()))
@@ -600,6 +628,58 @@ let run_move st target =
       (Outliner_ops.apply_and_refresh
          [ Outliner_ops.move_blocks_bottom uuids target ]))
 
+
+(* :editor/add-reaction — applies to the block selection (or the block
+   being edited); the picker anchors on the first target's row *)
+let target_uuids () : string list =
+  let sel = Editor_state.selected () in
+  if not (Editor_state.String_set.is_empty sel) then
+    Editor_state.String_set.elements sel
+  else
+    match Editor_state.editing () with
+    | Some e -> [ e.Editor_state.uuid ]
+    | None -> []
+
+let run_add_reaction st =
+  close st;
+  match target_uuids () with
+  | [] -> ()
+  | uuids -> (
+      let anchor =
+        match uuids with
+        | u :: _ -> Properties_dom.doc_query ("[blockid='" ^ u ^ "']")
+        | [] -> None
+      in
+      match anchor with
+      | None -> ()
+      | Some anchor ->
+          Icon_picker.open_picker ~anchor ~del:false ~on_chosen:(fun c ->
+              match c with
+              | Icon_picker.Emoji emoji_id ->
+                  ignore
+                    (Outliner_ops.apply_and_refresh
+                       (List.map
+                          (fun u ->
+                            Outliner_ops.op "toggle-reaction"
+                              [ Wire.Uuid u; Wire.String emoji_id
+                              ; Wire.Nil ])
+                          uuids))
+              | _ -> ()))
+
+(* :editor/add-comment — ensure-comments-area-for-blocks over the block
+   selection (or the edited block); the area renders once the refresh
+   lands *)
+let run_add_comment repo st =
+  close st;
+  let uuids = target_uuids () in
+  match repo, uuids with
+  | Some repo, _ :: _ ->
+      ignore
+        (Runtime.invoke2 "thread-api/ensure-comments-area-for-blocks"
+           (Wire.String repo)
+           (Wire.Array (List.map (fun u -> Wire.Uuid u) uuids))
+        |> Js.Promise.then_ (fun _ -> Outliner_ops.refresh_page ()))
+  | _ -> ()
 let run_item st it =
   let repo = !(Runtime.current_repo) in
   let v = get st in
@@ -666,10 +746,13 @@ let run_item st it =
             close st;
             Dialogs_state.open_ "new-graph"
         | Cmd_validate ->
+            close st;
             Option.iter validate_graph repo
         | Cmd_rtc_start | Cmd_rtc_stop ->
             (* RTC lifecycle lives outside this area; no-op per spec *)
-            ())))
+            ()
+        | Cmd_add_reaction -> run_add_reaction st
+        | Cmd_add_comment -> run_add_comment repo st)))
 
 let run_highlighted st =
   let v = get st in

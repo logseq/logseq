@@ -12,10 +12,16 @@
 module S = String
 module U = Ui_strings
 
-type ac_kind = Slash | Page_ref | Block_ref | Tag_search | Embed_ref
+(* Page_embed is a Page_ref search whose chosen item emits a page embed
+   ({{embed [[title]]}}) instead of a bare [[title]] — the "Node embed"
+   slash command switches into it. Embed_ref is the block-embed picker
+   (Editor_embed.insert — the db-based cljs embed). *)
+type ac_kind =
+    Slash | Page_ref | Page_embed | Block_ref | Tag_search | Embed_ref
 
 type item_action =
   | Emit of string (* ls:editor-insert {text} *)
+  | Emit_exit of string (* ls:editor-insert {text, exit} — cljs clear-edit! *)
   | Switch of ac_kind (* reopen as another autocomplete *)
   | Editor_cmd of string (* ls:editor-command {command} *)
   | Embed of string (* page title — insert a :block/link embed *)
@@ -114,19 +120,19 @@ let close_cm t = set_cm t None
 
 let ac_class_of_kind = function
   | Slash -> "cp__commands-slash"
-  | Page_ref | Tag_search | Embed_ref -> "black"
+  | Page_ref | Page_embed | Tag_search | Embed_ref -> "black"
   | Block_ref -> "ac-block-search"
 ;;
 
 let trigger_len_of_kind = function
   | Slash | Tag_search -> 1
-  | Page_ref | Block_ref -> 2
+  | Page_ref | Page_embed | Block_ref -> 2
   | Embed_ref -> 0 (* only reachable via Switch — no typed trigger *)
 
 (* cljs data-editor-popup-ref values drive popup sizing in editor.css *)
 let popup_ref_of_kind = function
   | Slash -> "commands"
-  | Page_ref | Embed_ref -> "page-search"
+  | Page_ref | Page_embed | Embed_ref -> "page-search"
   | Block_ref -> "block-search"
   | Tag_search -> "page-search-hashtag"
 ;;
@@ -410,7 +416,7 @@ let repo () = Option.value !(Runtime.current_repo) ~default:""
 let refresh_items t ac =
   match ac.kind with
   | Slash -> { ac with items = filter_slash ac.query (slash_items ()) }
-  | Page_ref | Tag_search | Embed_ref ->
+  | Page_ref | Page_embed | Tag_search | Embed_ref ->
       { ac with items = page_items_for t ac.kind ac.query }
   | Block_ref -> ac (* filled asynchronously by run_block_search *)
 ;;
@@ -474,7 +480,7 @@ let load_titles t =
                   | _ -> Cmdk_state.str_field row "block/title")
                 rows;
             (match (get t).ac with
-             | Some ({ kind = Page_ref | Tag_search | Embed_ref; _ } as ac) ->
+             | Some ({ kind = Page_ref | Page_embed | Tag_search | Embed_ref; _ } as ac) ->
                  set_ac t (Some (refresh_items t ac))
              | _ -> ());
             Js.Promise.resolve ())
@@ -598,7 +604,7 @@ let open_ac t kind editor =
          Dom_ext.set_selection_range editor pos pos)
    | _ -> ());
   (match kind with
-   | Page_ref | Embed_ref -> load_titles t
+   | Page_ref | Page_embed | Embed_ref -> load_titles t
    | Tag_search -> load_tag_titles t editor
    | Block_ref -> ()
    | Slash -> ());
@@ -614,7 +620,7 @@ let ac_update t ac q =
 
 let query_closed ac q =
   match ac.kind with
-  | Page_ref -> S.contains q ']'
+  | Page_ref | Page_embed -> S.contains q ']'
   | Block_ref -> S.contains q ')'
   | Slash | Tag_search | Embed_ref -> S.contains q '\n'
 ;;
@@ -700,7 +706,7 @@ let insert_text (ac : ac) text =
   Dom_ext.set_selection_range el caret caret;
   Dom_ext.focus el
 
-let emit editor tpos text =
+let emit ?(exit = false) editor tpos text =
   match Dom_ext.closest editor ".ls-page-title" with
   | Some _ ->
       (* the page-title editor isn't a block editor — splice the buffer
@@ -720,8 +726,8 @@ let emit editor tpos text =
         (detail_obj
            [ "text", Js.Json.string text
            ; "from", Js.Json.number (float_of_int tpos)
-           ; "to",
-             Js.Json.number (float_of_int (Dom_ext.selection_start editor)) ]);
+           ; "to", Js.Json.number (float_of_int (Dom_ext.selection_start editor))
+           ; "exit", Js.Json.boolean exit ]);
       (* cljs refocuses the editor input after a chosen item *)
       Dom_ext.focus editor
 ;;
@@ -850,7 +856,7 @@ let apply_item t ac it =
   | Switch kind ->
       erase_trigger_text ac;
       (match kind with
-       | Page_ref | Tag_search | Embed_ref -> load_titles t
+       | Page_ref | Page_embed | Tag_search | Embed_ref -> load_titles t
        | _ -> ());
       set_ac t
         (Some
@@ -861,7 +867,12 @@ let apply_item t ac it =
       close_ac t;
       Editor_embed.insert title
   | Emit text -> insert_text ac text; close_ac t
-  | Editor_cmd c -> emit_cmd c []; close_ac t
+  | Emit_exit text -> emit ~exit:true ac.editor ac.tpos text; close_ac t
+  | Editor_cmd c ->
+      (* cljs strips the "/cmd" trigger text like an Emit "" insert *)
+      emit ac.editor ac.tpos "";
+      emit_cmd c [];
+      close_ac t
   | Tag_apply title -> apply_tag t ac ~create:false title
   | Tag_create title -> apply_tag t ac ~create:true title
   | Noop -> ()

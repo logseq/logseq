@@ -271,13 +271,20 @@ let ancestors_of (page : Model.page) =
   match page.Model.page_db_id with Some id -> [ id ] | None -> []
 
 (* block/tags arrives as {:db/id} stubs — cljs resolves tag entities live
-   off datascript; we batch-resolve titles via get-blocks and rewrite the
-   model before rendering. *)
+   off datascript; we batch-resolve title/ident/hidden via get-blocks and
+   rewrite the model before rendering. Internal classes (Page, Property,
+   …) and hidden tags never render as .block-tag chips, matching
+   db-class/internal-tags + block.cljs tags-cp. *)
+let internal_tag_ident (ident : string) : bool =
+  List.mem ident
+    [ "logseq.class/Page"; "logseq.class/Property"; "logseq.class/Tag";
+      "logseq.class/Root"; "logseq.class/Asset" ]
+
 let rec collect_tag_ids acc (b : Model.block) =
   List.fold_left collect_tag_ids (List.rev_append b.Model.block_tag_ids acc)
     b.block_children
 
-let tag_titles repo ids : (int * string * string * string) list Js.Promise.t =
+let tag_titles repo ids : (int * (string * string * bool * string)) list Js.Promise.t =
   Runtime.invoke2 "thread-api/get-blocks" (Wire.String repo)
     (Wire.Array
        (List.map
@@ -305,12 +312,20 @@ let tag_titles repo ids : (int * string * string * string) list Js.Promise.t =
                 with
                 | Some id, Some t ->
                     Some
-                      ( id, t
-                      , (match Wire.get blk "db/ident" with
-                         | Some (Wire.Keyword s) | Some (Wire.String s) -> s
-                         | _ -> "")
-                      , Option.value (Wire.map_get_uuid blk "block/uuid")
-                          ~default:"" )
+                      ( id
+                      , ( t
+                        , (match Wire.get blk "db/ident" with
+                           | Some (Wire.Keyword s) | Some (Wire.String s) ->
+                               s
+                           | _ -> "")
+                        , (Option.bind
+                            (Wire.get blk "block/hidden?") Wire.as_bool
+                            = Some true
+                          || Option.bind
+                               (Wire.get blk "hidden?") Wire.as_bool
+                               = Some true)
+                        , Option.value (Wire.map_get_uuid blk "block/uuid")
+                            ~default:"" ) )
                 | _ -> None)
               (Sdk_util.wire_elems w)))
 
@@ -326,22 +341,31 @@ let resolve_block_tags (blocks : Model.block list) : Model.block list Js.Promise
       | Some repo ->
           tag_titles repo ids
           |> Js.Promise.then_ (fun titles ->
+
                  let rec fill (b : Model.block) =
+                   let resolved =
+                     List.filter_map
+                       (fun i -> List.assoc_opt i titles)
+                       b.Model.block_tag_ids
+                   in
+                   let idents = List.map (fun (_, i, _, _) -> i) resolved in
+                   let visible =
+                     List.filter
+                       (fun (_, ident, hidden, _uuid) ->
+                         not hidden && not (internal_tag_ident ident))
+                       resolved
+                   in
                    { b with
                      Model.block_tags =
-                       List.filter_map
-                         (fun i ->
-                           List.find_map
-                             (fun (i', t, _, _) -> if i' = i then Some t else None)
-                             titles)
-                         b.block_tag_ids
+                       List.map (fun (t, _, _, _) -> t) visible
                    ; block_tag_uuids =
-                       List.filter_map
-                         (fun i ->
-                           List.find_map
-                             (fun (i', _, _, u) -> if i' = i then Some u else None)
-                             titles)
-                         b.block_tag_ids
+                       List.map (fun (_, _, _, u) -> u) visible
+                   ; block_tag_idents =
+                       List.map (fun (_, i, _, _) -> i) visible
+                   ; block_is_comments_area =
+                       List.mem "logseq.class/Comments" idents
+                   ; block_is_comment =
+                       List.mem "logseq.class/Comment" idents
                    ; block_children = List.map fill b.block_children
                    }
                  in
@@ -377,7 +401,7 @@ let resolve_page_tags repo (page : Model.page) : Model.page Js.Promise.t =
                       { page with
                         Model.page_tags =
                           List.filter_map
-                            (fun (i, t, ident, _) ->
+                            (fun (i, (t, ident, _hidden, _uuid)) ->
                               if List.mem i ids
                                  && ident <> "logseq.class/Page"
                               then Some t
@@ -385,7 +409,7 @@ let resolve_page_tags repo (page : Model.page) : Model.page Js.Promise.t =
                             titles
                       ; page_internal =
                           List.exists
-                            (fun (i, _, ident, _) ->
+                            (fun (i, (_, ident, _hidden, _uuid)) ->
                               List.mem i ids
                               && ident = "logseq.class/Page")
                             titles
@@ -437,6 +461,7 @@ let refresh_page () : unit Js.Promise.t =
   let route_at_start = !Runtime.current_route in
   match (!Runtime.current_repo, !Runtime.current_page) with
   | Some repo, Some page -> (
+      incr Runtime.load_gen;
       fetch_unlinked_refs page;
       let blocks_p =
         match !Runtime.current_route, page.Model.page_uuid with
@@ -524,7 +549,6 @@ let rec apply ?(opts = Wire.Map []) ops : unit Js.Promise.t =
           |> Js.Promise.catch (fun e ->
                  Platform.console_error ("apply-outliner-ops failed", e);
                  Js.Promise.resolve ()))
-
 let schedule_save uuid title =
   cancel_pending_save ();
   pending_save := Some (uuid, title);

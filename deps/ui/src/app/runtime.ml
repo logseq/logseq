@@ -43,6 +43,13 @@ let sync_hash_graph_id () =
             Platform.replace_url_fragment (h ^ "?graph-id=" ^ u))
   | _ -> ()
 
+(* generation counter for async page loads — several Page_loaded
+   producers (route loads, refresh_page, block zoom) can be in flight at
+   once and their fetches can resolve out of order; bump on initiation
+   and only commit when the captured generation is still current, so the
+   latest-initiated load always wins *)
+let load_gen : int ref = ref 0
+
 let track action =
   match action with
   | Action.Boot_graph_ready repo ->

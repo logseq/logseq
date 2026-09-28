@@ -9,6 +9,7 @@ type route =
   | All_pages
   | All_graphs
   | Graph
+  | Settings
   | Not_found of string
 
 type block =
@@ -19,7 +20,12 @@ type block =
   ; block_tag_ids : int list (* block/tags ref ids from the pull *)
   ; block_tags : string list (* resolved tag titles, for .block-tags *)
   ; block_tag_uuids : string list (* aligned with block_tags *)
-  ; block_page_name : string option (* source page, for ref views *)
+  ; block_tag_idents : string list (* resolved tag idents, same filtering *)
+  ; block_page_name : string option (* containing page, for ref rows *)
+  ; block_reactions : (string * int) list (* emoji-id, count *)
+  ; block_is_comments_area : bool
+  ; block_is_comment : bool
+  ; block_comment_targets : int (* live :comments/blocks target count *)
   ; block_children : block list
   ; (* db id of a :block/link target — the block renders the linked
        page's blocks instead of its own children *)
@@ -46,6 +52,8 @@ type page =
   ; page_uuid : string option
   ; page_db_id : int option
   ; page_is_tag : bool
+  ; page_is_property : bool
+  ; page_icon : (string * string) option (* (type, id) from logseq.property/icon *)
   ; page_journal_day : int option
   ; page_is_library : bool
   ; (* entity predicates used by menu/convert actions:
@@ -56,6 +64,7 @@ type page =
   ; page_tags : string list
   ; page_blocks : block list
   ; page_linked_refs : block list (* linked references, for journal items *)
+  ; page_parents : block list (* block-zoom breadcrumb chain, root first *)
   }
 
 type phase =
@@ -119,6 +128,7 @@ type t =
   ; unlinked_search : bool
   ; unlinked_query : string
   ; help_open : bool
+  ; unlinked_blocks : block list
   ; gv : graph_view
   }
 
@@ -147,6 +157,7 @@ let initial =
   ; unlinked_search = false
   ; unlinked_query = ""
   ; help_open = false
+  ; unlinked_blocks = []
   ; gv = graph_view_initial
   }
 

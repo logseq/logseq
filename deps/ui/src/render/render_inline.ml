@@ -53,6 +53,31 @@ let external_link href label_els =
   D.el ~tag:"a" ~style_class:"external-link"
     ~attrs:[ ("href", href); ("target", "_blank") ] label_els
 
+(* ((uuid)) / #[[uuid]] -> resolved block title via thread-api/pull —
+   lazy: the anchor mounts empty and fills when the pull returns *)
+let block_ref_anchor uuid : t =
+ fun context parent ->
+  let st = Signal.state context.Lui_ui.ui_scheduler uuid in
+  Render_state.with_repo (fun repo ->
+      Runtime.invoke3 "thread-api/pull" (Wire.String repo)
+        (Wire.String "[:block/title]")
+        (Wire.Array [ Wire.Keyword "block/uuid"; Wire.Uuid uuid ])
+      |> Js.Promise.then_ (fun w ->
+             (match Wire.map_get_string w "block/title" with
+              | Some t when String.trim t <> "" -> Runtime.signal_set st t
+              | _ -> ());
+             Js.Promise.resolve ())
+      |> ignore);
+  D.el ~tag:"a" ~style_class:"relative page-ref"
+    ~attrs:[ ("data-ref", uuid); ("tabindex", "0") ]
+    ~text_signal:(D.text_of_class_signal (Signal.value st) Fun.id)
+    [] context parent
+
+let block_ref uuid =
+  D.el ~tag:"span" ~style_class:"page-reference"
+    ~attrs:[ ("data-ref", uuid) ]
+    [ block_ref_anchor uuid ]
+
 let image_el ~src ~alt =
   (* cljs asset-container / image-or-fallback *)
   D.el ~tag:"span" ~style_class:"asset-container image normalize"
@@ -168,6 +193,7 @@ let embed_iframe src =
      container is present (e2e waits on iframe inside .embed-block). *)
   D.el ~tag:"div" ~style_class:"embed-block"
     [ D.el ~tag:"iframe" ~attrs:[ ("src", src) ] [] ]
+
 
 (* ---------- matchers (return (element, chars consumed)) ---------- *)
 
@@ -358,14 +384,17 @@ and macro_el ~refs ~self body =
   | _ -> D.txt ("{{" ^ body ^ "}}")
 
 (* #[[page]] / #tag *)
+
+(* #[[page]] / #tag *)
 and try_hash ~refs ~self s i =
   if starts_at s i "#[[" then
     match find_sub s (i + 3) "]]" with
     | j when j > i + 3 ->
+        let inner = String.sub s (i + 3) (j - i - 3) in
         Some
-          (page_ref ~tag:true ~refs ~self
-             (String.sub s (i + 3) (j - i - 3)),
-           j + 2 - i)
+          ( (if Sdk_util.is_uuid_string inner then block_ref inner
+             else page_ref ~tag:true ~refs ~self inner)
+          , j + 2 - i )
     | _ -> None
   else
     let n = String.length s in

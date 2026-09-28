@@ -74,7 +74,7 @@ let row_many row =
   | _ -> false
 
 let row_closed_values row =
-  match getf (row_prop row) "logseq.property/closed-values" with
+  match getf (row_prop row) "property/closed-values" with
   | Some w -> elems w
   | None -> []
 
@@ -89,6 +89,39 @@ let row_hide_empty row =
 let row_position row =
   getk (row_prop row) "logseq.property/ui-position"
   |> Option.value ~default:"logseq.property.ui-position/properties"
+
+(* cljs resolved-property-value-for-render: when the block has no own
+   value, the property's :logseq.property/default-value renders instead *)
+let row_effective_value row =
+  let v = row_value row in
+  let empty =
+    match v with
+    | W.Nil -> true
+    | W.Set [] | W.Array [] | W.List [] -> true
+    | _ -> false
+  in
+  if empty then
+    match getf (row_prop row) "logseq.property/default-value" with
+    | Some d -> d
+    | None -> v
+  else v
+
+(* like row_effective_value but returns a row with the value substituted,
+   so all cell renderers see the default *)
+let row_with_effective_value row =
+  match row with
+  | W.Map kvs ->
+      let eff = row_effective_value row in
+      if eff = row_value row then row
+      else
+        W.Map
+          (List.map
+             (fun (k, v) ->
+               match k with
+               | W.Keyword "value" | W.String "value" -> (k, eff)
+               | _ -> (k, v))
+             kvs)
+  | _ -> row
 
 (* A display row's value for ref types is a ref_value_summary map or a
    set of them; plain types come through as scalars. *)
@@ -161,6 +194,41 @@ let display_props ?(page_title = false) ?(tag_dialog = false)
           , W.Bool show_hidden )
         ]
     ]
+
+(* positioned-rows block_wire position — synthesize display rows
+   {property-id, property, value} for the idents the worker grouped
+   under POSITION (its render_property_position gating already applied).
+   Values come straight off the block's own attrs. *)
+let positioned_rows block_wire position =
+  match getf block_wire "block.temp/positioned-properties" with
+  | Some positioned -> (
+      match getf positioned position with
+      | Some props_w ->
+          List.filter_map
+            (fun prop ->
+              match getk prop "db/ident" with
+              | Some ident ->
+                  let value =
+                    match getf block_wire ident with
+                    | Some (W.Map _ as m) -> (
+                        (* scalar property values live in a value
+                           entity: {db/id, block/uuid,
+                           logseq.property/value} *)
+                        match getf m "logseq.property/value" with
+                        | Some v -> v
+                        | None -> m)
+                    | Some v -> v
+                    | None -> W.Nil
+                  in
+                  Some
+                    (W.Map
+                       [ (W.String "property-id", W.Keyword ident)
+                       ; (W.String "property", prop)
+                       ; (W.String "value", value) ])
+              | None -> None)
+            (elems props_w)
+      | None -> [])
+  | None -> []
 
 (* returns (rows, hidden-rows, description, class-properties-prop) *)
 let split_display wire =

@@ -144,7 +144,22 @@ let rec find_in blocks uuid =
         | Some _ as r -> r
         | None -> find_in rest uuid)
 
-let find uuid = find_in (page_blocks ()) uuid
+(* block sources outside the current page tree (right-sidebar items) —
+   the owning area registers its lookup at init *)
+let extra_sources : (string -> Model.block option) list ref = ref []
+
+let add_block_source f = extra_sources := f :: !extra_sources
+
+let find uuid =
+  match find_in (page_blocks ()) uuid with
+  | Some _ as r -> r
+  | None ->
+      let rec go = function
+        | [] -> None
+        | f :: fs -> (
+            match f uuid with Some _ as r -> r | None -> go fs)
+      in
+      go !extra_sources
 
 (* committed edit buffers, applied to rendered titles immediately — the
    page model only catches up once the worker transact+refresh lands, and

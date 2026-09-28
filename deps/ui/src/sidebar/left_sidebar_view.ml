@@ -439,3 +439,4 @@ let contents (ms : Model.t Signal.signal) : t =
 let menus (ms : Model.t Signal.signal) : t =
   let st = Sidebar_state.ensure ms in
   menu_host st
+

@@ -14,9 +14,9 @@
      Ctrl+Alt+P and `;;` open the .ls-property-dialog, `p` then `a`
          toggles hidden properties.
 
-       Editor `/` and `#` autocomplete popovers live in popups/popups_* —
-       a second implementation here raced the real one and left a stray
-       .ui__popover-content mounted. *)
+       The `/` and `#` in-editor popups are owned by popups/popups_state.ml
+       (the unified autocomplete); "Add property" there reaches the dialog
+       via the ls:editor-command listener in editor/editor_keys.ml. *)
 
 open Editor_dom
 module S = Properties_state
