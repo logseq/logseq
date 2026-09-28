@@ -26,14 +26,29 @@ let location_search () = search_of location_obj
 external get_element_by_id : string -> W.Element.t option
   = "getElementById" [@@mel.scope "document"] [@@mel.return nullable]
 
-external local_storage_get : string -> string option = "getItem"
-  [@@mel.scope "localStorage"] [@@mel.return nullable]
+external local_storage_obj : Js.Json.t option = "localStorage"
+  [@@mel.scope "globalThis"] [@@mel.return nullable]
 
-external local_storage_set : string -> string -> unit = "setItem"
-  [@@mel.scope "localStorage"]
+external ls_get_item : Js.Json.t -> string -> string option = "getItem"
+  [@@mel.send] [@@mel.return nullable]
 
-external local_storage_remove : string -> unit = "removeItem"
-  [@@mel.scope "localStorage"]
+external ls_set_item : Js.Json.t -> string -> string -> unit = "setItem"
+  [@@mel.send]
+
+external ls_remove_item : Js.Json.t -> string -> unit = "removeItem"
+  [@@mel.send]
+
+(* localStorage is absent outside the browser (node test runner) *)
+let local_storage_get k =
+  match local_storage_obj with
+  | Some s -> ls_get_item s k
+  | None -> None
+
+let local_storage_set k v =
+  match local_storage_obj with Some s -> ls_set_item s k v | None -> ()
+
+let local_storage_remove k =
+  match local_storage_obj with Some s -> ls_remove_item s k | None -> ()
 
 external document_element : Js.Json.t = "document.documentElement"
 external document_body : Js.Json.t = "document.body"

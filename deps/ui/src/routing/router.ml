@@ -17,17 +17,9 @@ let route_path () =
   | Some i -> String.sub h 0 i
   | None -> h
 
-let parse_hash () : Model.route =
-  let p =
-    match route_path () with
-    | "" | "/" -> ""
-    | p ->
-        if String.length p > 0 && String.get p 0 = '/' then
-          String.sub p 1 (String.length p - 1)
-        else p
-  in
+let parse_path (p : string) : Model.route =
   match p with
-  | "" -> Model.Home
+  | "" | "/" -> Model.Home
   | p -> (
       match String.index_opt p '/' with
       | Some i -> (
@@ -50,6 +42,17 @@ let parse_hash () : Model.route =
           | "settings" -> Model.Settings
           | "page" | "block" -> Model.Not_found p
           | _ -> Model.Not_found p))
+
+let parse_hash () : Model.route =
+  let p =
+    match route_path () with
+    | "" | "/" -> ""
+    | p ->
+        if String.length p > 0 && String.get p 0 = '/' then
+          String.sub p 1 (String.length p - 1)
+        else p
+  in
+  parse_path p
 
 let repo () = Option.value !Runtime.current_repo ~default:""
 
