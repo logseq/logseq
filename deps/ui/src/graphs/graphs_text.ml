@@ -64,6 +64,8 @@ let name_reserved_warning =
 let creating = "Creating graph"
 let use_sync_label = "Use Logseq Sync?"
 let encrypt_data_label = "Encrypt graph data"
+let import_existing_notes = "Import existing notes"
+let import_later = "You can also do this later in the app."
 let import_title = "Do you already have notes that you want to import?"
 let import_desc =
   "If they are in an EDN or Markdown format Logseq can work with them."
@@ -94,7 +96,7 @@ let import_failed = "Import failed"
 let import_invalid_edn = "Invalid EDN file."
 let import_unsupported kind =
   sub "{1} import is not supported yet." [ kind ]
-let import_sqlite_title = "SQLite DB"
+let import_sqlite_title = "SQLite"
 let export_title = "Export"
 let export_sqlite_db = "Export SQLite DB"
 let export_sqlite_zip = "Export both SQLite DB and assets"
