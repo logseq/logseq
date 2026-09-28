@@ -714,7 +714,7 @@ let table_el inst ~refresh : D.el =
            (V.ops ()).V.o_add_object inst);
        D.el_append_child footer row;
        D.el_append_child rel footer
-   | V.KQuery _ -> ());
+   | V.KQuery _ | V.KPropertyPage _ -> ());
   D.el_append_child scroller rel;
   D.el_append_child tbl scroller;
 

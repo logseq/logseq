@@ -31,7 +31,7 @@ let icon ~key name =
     dom ~key ~tag:"span" ~style_class:("ui__icon ti ls-icon-" ^ name)
       [ dom ~key:(key ^ "-i") ~tag:"i" ~style_class:("ti ti-" ^ name) [] ]
 
-(* svg/info — <g> flattened (dom has no g tag) *)
+(* svg/info *)
 let info_icon ~key ~title =
   dom ~key ~tag:"span" ~style_class:"flex px-2"
     ~attrs:[ ("title", title); ("data-base-ui-tooltip-trigger", "") ]
@@ -39,21 +39,24 @@ let info_icon ~key ~title =
         ~attrs:
           [ ("class", "info"); ("viewBox", "0 0 16 16")
           ; ("width", "16px"); ("height", "16px") ]
-        [ dom ~key:(key ^ "p") ~tag:"path"
-            ~attrs:
-              [ ("style", "transform:scale(0.25)")
-              ; ( "d"
-                , "m32 2c-16.568 0-30 13.432-30 30s13.432 30 30 30 \
-                   30-13.432 30-30-13.432-30-30-30m5 49.75h-10v-24h10v24m-5-29.5c-2.761 \
-                   0-5-2.238-5-5s2.239-5 5-5c2.762 0 5 2.238 5 5s-2.238 \
-                   5-5 5" )
-              ]
-            []
+        [ dom ~key:(key ^ "g") ~tag:"g"
+            [ dom ~key:(key ^ "p") ~tag:"path"
+                ~attrs:
+                  [ ("style", "transform:scale(0.25)")
+                  ; ( "d"
+                    , "m32 2c-16.568 0-30 13.432-30 30s13.432 30 30 30 \
+                       30-13.432 30-30-13.432-30-30-30m5 49.75h-10v-24h10v24m-5-29.5c-2.761 \
+                       0-5-2.238-5-5s2.239-5 5-5c2.762 0 5 2.238 5 5s-2.238 \
+                       5-5 5" )
+                  ]
+                []
+            ]
         ]
     ]
 
 (* ui/render-keyboard-shortcut -> span.keyboard-shortcut >
-   div.shui-shortcut-separate[data-shortcut-binding] > kbd.shui-shortcut-key *)
+   span[style=inline-flex] > div.shui-shortcut-separate.shui-shortcut-glow
+   > kbd.shui-shortcut-key *)
 (* cljs print-shortcut-key (macOS): single letters uppercase, named keys
    map to their glyphs *)
 let print_key k =
@@ -77,19 +80,26 @@ let print_key k =
 
 let kbd_seq ~key ~binding keys =
   dom ~key ~tag:"span" ~style_class:"keyboard-shortcut"
-    [ dom ~key:(key ^ "b") ~tag:"div"
-        ~style_class:"shui-shortcut-separate"
+    [ dom ~key:(key ^ "w") ~tag:"span"
         ~attrs:
-          [ ("data-shortcut-binding", binding); ("aria-hidden", "true")
-          ; ("style", "white-space: nowrap; gap: 4px")
+          [ ( "style"
+            , "display: inline-flex; align-items: center; white-space: \
+               nowrap;" )
           ]
-        (List.mapi
-           (fun i k ->
-             dom ~key:(key ^ "-" ^ string_of_int i) ~tag:"kbd"
-               ~style_class:"shui-shortcut-key"
-               ~attrs:[ ("aria-hidden", "true") ]
-               ~text:(print_key k) [])
-           keys)
+        [ dom ~key:(key ^ "b") ~tag:"div"
+            ~style_class:"shui-shortcut-separate shui-shortcut-glow"
+            ~attrs:
+              [ ("data-shortcut-binding", binding); ("aria-hidden", "true")
+              ; ("style", "white-space: nowrap; gap: 4px;")
+              ]
+            (List.mapi
+               (fun i k ->
+                 dom ~key:(key ^ "-" ^ string_of_int i) ~tag:"kbd"
+                   ~style_class:"shui-shortcut-key"
+                   ~attrs:[ ("aria-hidden", "false") ]
+                   ~text:(Platform.utf8 (print_key k)) [])
+               keys)
+        ]
     ]
 
 let btn_base =
@@ -119,9 +129,18 @@ let size_cls = function
   | `Sm -> "h-7 rounded px-3 py-1"
 
 (* ui/toggle -> shui Switch size sm *)
+let hidden_checkbox ~key ~on =
+  dom ~key ~tag:"input"
+    ~attrs:
+      ([ ("type", "checkbox")
+       ; ("style", "clip-path: inset(50%); overflow: hidden;") ]
+      @ if on then [ ("checked", "") ] else [])
+    []
+
+(* ui/toggle -> base-ui span.ui__switch[role=switch] + hidden input *)
 let switch_el ~key ~on ~on_toggle =
   let chk = if on then "checked" else "unchecked" in
-  dom ~key ~tag:"button"
+  dom ~key ~tag:"span"
     ~style_class:
       ("ui__switch peer inline-flex shrink-0 cursor-pointer items-center \
         rounded-full border-2 border-transparent transition-colors \
@@ -132,7 +151,7 @@ let switch_el ~key ~on ~on_toggle =
         data-[unchecked]:justify-start data-[unchecked]:bg-input \
         pr-[1px] pl-[1px] h-4.5 w-8")
     ~attrs:
-      [ ("type", "button"); ("role", "switch")
+      [ ("role", "switch")
       ; ("aria-checked", string_of_bool on); ("data-" ^ chk, "") ]
     ~events:"click"
     ~on_dom_event:(fun n _ -> if n = "click" then on_toggle ())
@@ -176,11 +195,11 @@ let checkbox_el ~key ~on ~on_change =
        ]
      else [])
 
-let label_el ~key ~for_ children =
+let label_el ~key ~for_ ~text ?text_signal children =
   dom ~key ~tag:"label"
     ~style_class:"block text-sm font-medium leading-5 opacity-70"
     ~attrs:[ ("for", for_) ]
-    children
+    ~text ?text_signal children
 
 let txt ~key s = text ~key ~value:s []
 
@@ -190,13 +209,14 @@ let toggle_row ~key ~for_ ~label ?(label_extra = []) ?(detail = []) ~on
     ~on_toggle () =
   dom ~key
     ~style_class:"it sm:grid sm:grid-cols-3 sm:gap-4 sm:items-center"
-    [ label_el ~key:(key ^ "-l") ~for_
-        (txt ~key:(key ^ "-lt") label :: label_extra)
+    [ label_el ~key:(key ^ "-l") ~for_ ~text:label label_extra
     ; dom ~key:(key ^ "-c")
         ~style_class:"rounded-md sm:max-w-tss sm:col-span-2"
         [ dom ~key:(key ^ "-i") ~style_class:"rounded-md"
             ~attrs:[ ("style", "display: flex; gap: 1rem; align-items: center") ]
-            (switch_el ~key:(key ^ "-sw") ~on ~on_toggle :: detail)
+            (switch_el ~key:(key ^ "-sw") ~on ~on_toggle
+             :: hidden_checkbox ~key:(key ^ "-sc") ~on
+             :: detail)
         ]
     ]
 
@@ -204,10 +224,11 @@ let toggle_row ~key ~for_ ~label ?(label_extra = []) ?(detail = []) ~on
 let shortcut_toggle_row ~key ~for_ ~label ~binding ~on ~on_toggle () =
   dom ~key
     ~style_class:"it sm:grid sm:grid-cols-3 sm:gap-4 sm:items-center"
-    [ label_el ~key:(key ^ "-l") ~for_ [ txt ~key:(key ^ "-lt") label ]
+    [ label_el ~key:(key ^ "-l") ~for_ ~text:label []
     ; dom ~key:(key ^ "-c")
         [ dom ~key:(key ^ "-i") ~style_class:"rounded-md sm:max-w-xs"
-            [ switch_el ~key:(key ^ "-sw") ~on ~on_toggle ]
+            [ switch_el ~key:(key ^ "-sw") ~on ~on_toggle
+            ; hidden_checkbox ~key:(key ^ "-sc") ~on ]
         ]
     ; dom ~key:(key ^ "-k")
         ~attrs:[ ("style", "text-align: right") ]
@@ -216,16 +237,16 @@ let shortcut_toggle_row ~key ~for_ ~label ~binding ~on ~on_toggle () =
     ]
 
 (* cljs row-with-button-action *)
-let action_row ~key ~for_ ~label_children ?description ~action ?(desc = [])
+let action_row ~key ~for_ ~label ?description ~actions ?(desc = [])
     ?(stretch = false) () =
-  dom ~key ~style_class:"it sm:grid sm:grid-cols-3 sm:gap-4 sm:items-start"
+  dom ~key ~style_class:"sm:items-start it sm:grid sm:grid-cols-3 sm:gap-4"
     [ dom ~key:(key ^ "-lc") ~style_class:"flex flex-col"
-        ([ label_el ~key:(key ^ "-l") ~for_ label_children ]
+        ([ label_el ~key:(key ^ "-l") ~for_ ~text:label [] ]
         @
         match description with
         | Some d ->
             [ dom ~key:(key ^ "-d") ~style_class:"text-xs text-gray-10"
-                [ d ]
+                ~text:d []
             ]
         | None -> [])
     ; dom ~key:(key ^ "-rc")
@@ -234,10 +255,9 @@ let action_row ~key ~for_ ~label_children ?description ~action ?(desc = [])
           [ ("style", "display: flex; gap: 0.5rem; align-items: center") ]
         ([ dom ~key:(key ^ "-a")
              ~attrs:(if stretch then [ ("style", "width: 100%") ] else [])
-             [ action ] ]
-        @
-        if desc = [] then []
-        else [ dom ~key:(key ^ "-desc") ~style_class:"text-sm flex" desc ])
+             actions ]
+        (* cljs renders the desc cell unconditionally *)
+        @ [ dom ~key:(key ^ "-desc") ~style_class:"text-sm flex" desc ])
     ]
 
 (* ---- general pane ---- *)
@@ -245,32 +265,32 @@ let action_row ~key ~for_ ~label_children ?description ~action ?(desc = [])
 let revision = "dev" (* logseq.common.version/REVISION — goog-define default *)
 
 let version_row () =
-  action_row ~key:"ver" ~for_:"current-version"
-    ~label_children:[ txt ~key:"ver-lt" T.current_version ]
-    ~action:
-      (dom ~key:"ver-a" ~tag:"span"
-         ~style_class:"cp__settings-app-updater"
-         [ dom ~key:"ver-c" ~style_class:"ctls flex items-center"
-             [ dom ~key:"ver-i"
-                 ~style_class:
-                   "mt-1 sm:mt-0 sm:col-span-2 flex gap-4 items-center \
-                    flex-wrap"
-                 [ dom ~key:"ver-b" []
-                 ; dom ~key:"ver-v" ~style_class:"text-sm cursor"
-                     ~attrs:
-                       [ ("title", T.revision_title revision) ]
-                     ~text:version []
-                 ; dom ~key:"ver-cl" ~tag:"a"
-                     ~style_class:"text-sm fade-link underline inline"
-                     ~attrs:
-                       [ ("target", "_blank")
-                       ; ( "href"
-                         , "https://docs.logseq.com/#/page/changelog" )
-                       ]
-                     ~text:T.changelog []
-                 ]
-             ]
-         ])
+  action_row ~key:"ver" ~for_:"current-version" ~label:T.current_version
+    ~actions:
+      [ dom ~key:"ver-a" ~tag:"span"
+          ~style_class:"cp__settings-app-updater"
+          [ dom ~key:"ver-c" ~style_class:"ctls flex items-center"
+              [ dom ~key:"ver-i"
+                  ~style_class:
+                    "mt-1 sm:mt-0 sm:col-span-2 flex gap-4 items-center \
+                     flex-wrap"
+                  [ dom ~key:"ver-b" []
+                  ; dom ~key:"ver-v" ~style_class:"text-sm cursor"
+                      ~attrs:
+                        [ ("title", T.revision_title revision) ]
+                      ~text:version []
+                  ; dom ~key:"ver-cl" ~tag:"a"
+                      ~style_class:"text-sm fade-link underline inline"
+                      ~attrs:
+                        [ ("target", "_blank")
+                        ; ( "href"
+                          , "https://docs.logseq.com/#/page/changelog" )
+                        ]
+                      ~text:T.changelog []
+                  ]
+              ]
+          ]
+      ]
     ()
 
 let language_row ctx =
@@ -279,37 +299,47 @@ let language_row ctx =
       (V.lang_label_for (V.current_lang ()))
   in
   action_row ~key:"lang" ~for_:"preferred_language"
-    ~label_children:[ txt ~key:"lang-lt" T.language_label ]
-    ~action:
-      (V.lang_trigger ~key:"lang-sel" ~h_cls:"w-64 h-8" ~st:lang_label
-         ~anchor_sel:"#settings-lang-trigger")
+    ~label:T.language_label
+    ~actions:
+      [ V.lang_trigger ~key:"lang-sel" ~h_cls:"w-64 h-8" ~st:lang_label
+          ~anchor_sel:"#settings-lang-trigger"
+      ; dom ~key:"lang-sel-i" ~tag:"input"
+          ~attrs:[ ("style", "clip-path: inset(50%); overflow: hidden;") ]
+          []
+      ]
     ()
 
 let theme_row ctx =
   let mode = Signal.state ctx.Lui_ui.ui_scheduler (V.current_mode ()) in
-  action_row ~key:"theme" ~for_:"toggle_theme"
-    ~label_children:
-      [ dom ~key:"theme-lt" ~tag:"span"
-          ~text_signal:
-            (Signal.map
-               (fun m ->
-                 let effective =
-                   if m = "system" then
-                     if Browser_ui.prefers_dark () then "dark"
-                     else "light"
-                   else m
-                 in
-                 Lui_protocol.StringValue
-                   (T.switch_to_theme
-                      (if effective = "dark" then T.theme_light
-                       else T.theme_dark)))
-               (Signal.value mode))
-          []
-      ]
-    ~action:(V.theme_modes_ul ~st:mode)
-    ~desc:
-      [ kbd_seq ~key:"theme-k" ~binding:"t t" [ "t"; "t" ] ]
-    ()
+  dom ~key:"theme"
+    ~style_class:"sm:items-start it sm:grid sm:grid-cols-3 sm:gap-4"
+    [ dom ~key:"theme-lc" ~style_class:"flex flex-col"
+        [ label_el ~key:"theme-l" ~for_:"toggle_theme" ~text:""
+            ~text_signal:
+              (Signal.map
+                 (fun m ->
+                   let effective =
+                     if m = "system" then
+                       if Browser_ui.prefers_dark () then "dark"
+                       else "light"
+                     else m
+                   in
+                   Lui_protocol.StringValue
+                     (T.switch_to_theme
+                        (if effective = "dark" then T.theme_light
+                         else T.theme_dark)))
+                 (Signal.value mode))
+            []
+        ]
+    ; dom ~key:"theme-rc"
+        ~style_class:"mt-1 sm:mt-0 sm:col-span-2 flex items-center"
+        ~attrs:
+          [ ("style", "display: flex; gap: 0.5rem; align-items: center") ]
+        [ dom ~key:"theme-a" [ V.theme_modes_ul ~st:mode ]
+        ; dom ~key:"theme-desc" ~style_class:"text-sm flex"
+            [ kbd_seq ~key:"theme-k" ~binding:"t t" [ "t"; "t" ] ]
+        ]
+    ]
 
 let font_button ~key ~label ~active ~on_click =
   dom ~key ~tag:"button"
@@ -321,7 +351,8 @@ let font_button ~key ~label ~active ~on_click =
     ~events:"click"
     ~on_dom_event:(fun n _ -> if n = "click" then on_click ())
     [ dom ~key:(key ^ "-s") ~tag:"span"
-        ~style_class:("flex flex-col ls-font-" ^ String.lowercase_ascii label)
+        ~style_class:
+          ("ls-font-" ^ String.lowercase_ascii label ^ " flex flex-col")
         [ dom ~key:(key ^ "-ag") ~tag:"strong" ~text:"Ag" []
         ; dom ~key:(key ^ "-sm") ~tag:"small" ~text:label []
         ]
@@ -334,8 +365,7 @@ let editor_font_row () =
       ~on_click:(fun () -> S.set_editor_font_type t)
   in
   dom ~key:"font" ~style_class:"it sm:grid sm:grid-cols-3 sm:gap-4"
-    [ label_el ~key:"font-l" ~for_:"font_family"
-        [ txt ~key:"font-lt" T.editor_font ]
+    [ label_el ~key:"font-l" ~for_:"font_family" ~text:T.editor_font []
     ; dom ~key:"font-r" ~style_class:"flex flex-col col-span-2"
         [ dom ~key:"font-btns" ~style_class:"flex gap-2"
             [ fb "default" "Default"; fb "serif" "Serif"; fb "mono" "Mono" ]
@@ -344,6 +374,7 @@ let editor_font_row () =
                 ~style_class:"w-full flex items-center cursor-pointer"
                 [ checkbox_el ~key:"font-gc" ~on:font.S.fglobal
                     ~on_change:(fun b -> S.set_editor_font_global b)
+                ; hidden_checkbox ~key:"font-gi" ~on:font.S.fglobal
                 ; dom ~key:"font-gt" ~tag:"span"
                     ~style_class:"pl-1 text-sm opacity-70"
                     ~text:T.editor_font_global []
@@ -380,8 +411,8 @@ let accent_swatch ~key ~modal ~current color =
   dom ~key ~style_class:"flex items-center"
     [ dom ~key:(key ^ "-b") ~tag:"button"
         ~style_class:
-          (btn_base ^ " " ^ variant_cls `Text ^ " " ^ size_cls `Default
-         ^ " w-5 h-5 px-1 !rounded-full flex justify-center items-center \
+          (btn_base ^ " " ^ variant_cls `Text
+         ^ " py-2 w-5 h-5 px-1 !rounded-full flex justify-center items-center \
             transition ease-in duration-100 hover:cursor-pointer \
             hover:opacity-100")
         ~attrs:
@@ -429,8 +460,8 @@ let accent_row ~modal =
   in
   dom ~key:"acc"
     [ action_row ~key:"acc-r" ~for_:"toggle_radix_theme"
-        ~label_children:[ txt ~key:"acc-lt" T.accent_color ]
-        ~action:swatches ~stretch:modal
+        ~label:T.accent_color
+        ~actions:[ swatches ] ~stretch:modal
         ~desc:
           (if modal then []
            else
@@ -443,12 +474,15 @@ let accent_row ~modal =
     ]
 
 let edit_link_row ~key ~label ~button ~href ~for_ () =
-  action_row ~key ~for_ ~label_children:[ txt ~key:(key ^ "-lt") label ]
-    ~action:
-      (dom ~key:(key ^ "-a") ~tag:"a"
-         ~style_class:(btn_base ^ " " ^ variant_cls `Solid ^ " " ^ size_cls `Sm)
-         ~attrs:[ ("href", href); ("type", "button") ]
-         ~text:button [])
+  action_row ~key ~for_ ~label
+    ~actions:
+      [ dom ~key:(key ^ "-a") ~tag:"a"
+          ~style_class:
+            ("ui__link " ^ btn_base ^ " " ^ variant_cls `Solid ^ " "
+             ^ size_cls `Sm)
+          ~attrs:[ ("href", href); ("role", "button") ]
+          ~text:button []
+      ]
     ()
 
 let general_pane ~modal ctx =
@@ -459,10 +493,10 @@ let general_pane ~modal ctx =
     ; editor_font_row ()
     ; accent_row ~modal
     ; edit_link_row ~key:"cfg" ~label:T.config_custom_configuration
-        ~button:T.edit_config_edn ~href:"#/file/logseq/config.edn"
+        ~button:T.edit_config_edn ~href:"#/file/logseq%2Fconfig.edn"
         ~for_:"config_edn" ()
     ; edit_link_row ~key:"css" ~label:T.config_custom_theme
-        ~button:T.edit_custom_css ~href:"#/file/logseq/custom.css"
+        ~button:T.edit_custom_css ~href:"#/file/logseq%2Fcustom.css"
         ~for_:"customize_css" ()
     ]
 
@@ -476,17 +510,23 @@ let journal_formatters =
   ; "EEEE, MM/dd/yyyy"; "EEEE, yyyy/MM/dd"; "dd-MM-yyyy"; "MM/dd/yyyy"
   ; "MM-dd-yyyy"; "MM_dd_yyyy"; "yyyy/MM/dd"; "yyyy-MM-dd"
   ; "yyyy-MM-dd EEE"; "yyyy-MM-dd EEEE"; "yyyy_MM_dd"; "yyyyMMdd"
-  ; "yyyy年MM月dd日" ]
+  ; "yyyy\xe5\xb9\xb4MM\xe6\x9c\x88dd\xe6\x97\xa5" ]
+
+(* option text reaches js as raw utf8 bytes from Melange literals *)
+let date_option_text fmt = Platform.utf8 fmt
 
 let date_format_row () =
   let current = (S.value ()).S.date_format in
   let options =
     List.sort_uniq String.compare (current :: journal_formatters)
   in
+  (* cljs date-format-row carries a duplicated hiccup class shorthand;
+     reproduced verbatim for DOM parity *)
   dom ~key:"dfmt"
-    ~style_class:"it sm:grid sm:grid-cols-3 sm:gap-4 sm:items-center"
+    ~style_class:"it sm:grid sm:grid-cols-3 sm:gap-4 sm:items-:div it sm:grid \
+                  sm:grid-cols-3 sm:gap-4 sm:items-center"
     [ label_el ~key:"dfmt-l" ~for_:"custom_date_format"
-        [ txt ~key:"dfmt-lt" T.custom_date_format ]
+        ~text:T.custom_date_format []
     ; dom ~key:"dfmt-r" ~style_class:"mt-1 sm:mt-0 sm:col-span-2"
         [ dom ~key:"dfmt-w" ~style_class:"max-w-lg rounded-md"
             [ dom ~key:"dfmt-s" ~tag:"select"
@@ -505,7 +545,8 @@ let date_format_row () =
                       Dialogs_state.close_all ()))
                 (List.map
                    (fun fmt ->
-                     dom ~key:("dfmt-o-" ^ fmt) ~tag:"option" ~text:fmt
+                     dom ~key:("dfmt-o-" ^ fmt) ~tag:"option"
+                       ~text:(date_option_text fmt)
                        ~attrs:
                          (if fmt = current
                           then [ ("selected", "selected") ]
@@ -574,9 +615,148 @@ let editor_pane () =
         ()
     ]
 
-(* ---- keymap pane (shortcut editor subsystem not ported) ---- *)
+(* ---- keymap pane (components/shortcut.cljs page) ---- *)
 
-let keymap_pane () = dom ~key:"pane-keymap" ~style_class:"cp__shortcut-page-x" []
+let keymap_pill ~key ~title ~count ~active =
+  dom ~key ~tag:"button"
+    ~style_class:
+      (if active then "shortcut-filter-pill--active shortcut-filter-pill"
+       else "shortcut-filter-pill")
+    [ dom ~key:(key ^ "t") ~tag:"span"
+        ~style_class:"shortcut-filter-pill-title" ~text:title []
+    ; dom ~key:(key ^ "c") ~tag:"span"
+        ~style_class:"shortcut-filter-pill-count"
+        ~text:(Platform.utf8 "\xc2\xb7 " ^ count) []
+    ]
+
+let keymap_controls () =
+  dom ~key:"km-ctl" ~tag:"header"
+    [ dom ~key:"km-pc" ~style_class:"cp__shortcut-page-x-pane-controls"
+        [ dom ~key:"km-tb" ~style_class:"shortcut-toolbar-row"
+            [ dom ~key:"km-sw" ~tag:"span" ~style_class:"search-input-wrap"
+                [ dom ~key:"km-si" ~tag:"span" ~style_class:"search-icon"
+                    [ icon ~key:"km-sic" "search" ]
+                ; dom ~key:"km-in" ~tag:"input"
+                    ~style_class:"form-input is-small"
+                    ~attrs:[ ("placeholder", T.keymap_search_placeholder) ]
+                    []
+                ]
+            ; dom ~key:"km-kb" ~tag:"button"
+                ~style_class:"shortcut-keystroke-inactive"
+                [ icon ~key:"km-kbi" "keyboard"
+                ; dom ~key:"km-kbt" ~tag:"span"
+                    ~text:T.keymap_search_by_keys []
+                ]
+            ]
+        ; dom ~key:"km-pills" ~style_class:"shortcut-pills-row"
+            [ dom ~key:"km-fp" ~style_class:"shortcut-filter-pills"
+                [ keymap_pill ~key:"km-pa" ~title:T.keymap_all ~count:"116"
+                    ~active:true
+                ; keymap_pill ~key:"km-pc" ~title:T.keymap_custom ~count:"0"
+                    ~active:false
+                ; keymap_pill ~key:"km-pu" ~title:T.keymap_unset ~count:"9"
+                    ~active:false
+                ; keymap_pill ~key:"km-pd" ~title:T.keymap_disabled
+                    ~count:"4" ~active:false
+                ]
+            ; dom ~key:"km-sec" ~style_class:"flex items-center gap-2"
+                [ dom ~key:"km-fold" ~tag:"button"
+                    ~style_class:"flex items-center icon-link"
+                    ~attrs:[ ("aria-label", T.keymap_toggle_categories) ]
+                    [ icon ~key:"km-foldi" "fold" ]
+                ; dom ~key:"km-rf" ~tag:"button"
+                    ~style_class:"flex items-center icon-link"
+                    ~attrs:[ ("aria-label", T.keymap_refresh_all) ]
+                    [ icon ~key:"km-rfi" "refresh" ]
+                ]
+            ]
+        ]
+    ]
+
+let keymap_binding ~key (b : Keymap_data.binding) =
+  let open Keymap_data in
+  let cls = "shui-shortcut-" ^ b.kind ^ " shui-shortcut-glow" in
+  let sep =
+    if b.kind = "combo" then "white-space: nowrap;"
+    else "white-space: nowrap; gap: 4px;"
+  in
+  dom ~key ~tag:"span" ~attrs:[ ("style", "display: contents;") ]
+    [ dom ~key:(key ^ "w") ~tag:"span"
+        ~attrs:
+          [ ( "style"
+            , "display: inline-flex; align-items: center; white-space: \
+               nowrap;" )
+          ]
+        [ dom ~key:(key ^ "d") ~tag:"div" ~style_class:cls
+            ~attrs:
+              ((if b.data = "" then []
+                else [ ("data-shortcut-binding", b.data) ])
+               @ [ ("style", sep) ])
+            (List.concat
+             @@ List.mapi
+                  (fun i k ->
+                 (if i > 0 && b.kind = "combo" then
+                    [ dom
+                        ~key:(key ^ "s" ^ string_of_int i)
+                        ~tag:"span" ~style_class:"shui-shortcut-separator" []
+                    ]
+                  else [])
+                 @ [ dom
+                       ~key:(key ^ "k" ^ string_of_int i)
+                       ~tag:"kbd" ~style_class:"shui-shortcut-key"
+                       ~text:(Platform.utf8 k) []
+                   ])
+               b.keys)
+        ]
+    ]
+
+let keymap_th ~key label =
+  dom ~key ~tag:"li" ~style_class:"flex justify-between th"
+    ~attrs:[ ("role", "button") ]
+    [ dom ~key:(key ^ "s") ~tag:"strong" ~style_class:"font-semibold"
+        ~text:label []
+    ; dom ~key:(key ^ "i") ~tag:"i" ~style_class:"flex items-center"
+        [ icon ~key:(key ^ "c") "chevron-down" ]
+    ]
+
+let keymap_row ~key (r : Keymap_data.row) =
+  let open Keymap_data in
+  dom ~key ~tag:"li"
+    ~style_class:"shortcut-row flex items-start justify-between text-sm"
+    ~attrs:[ ("role", "button") ]
+    [ dom ~key:(key ^ "l") ~tag:"span" ~style_class:"label-wrap"
+        [ dom ~key:(key ^ "lt") ~tag:"span" ~attrs:[ ("title", r.title) ]
+            [ dom ~key:(key ^ "lx") ~tag:"span" ~style_class:"px-1"
+                ~text:r.label []
+            ]
+        ]
+    ; dom ~key:(key ^ "a") ~tag:"span" ~style_class:"action-wrap"
+        (if r.unset then
+           [ dom ~key:(key ^ "u") ~tag:"span"
+               ~style_class:"shortcut-status-label" ~text:T.keymap_unset []
+           ]
+         else
+           List.mapi
+             (fun i b ->
+               keymap_binding ~key:(key ^ "b" ^ string_of_int i) b)
+             r.bindings)
+    ]
+
+let keymap_pane () =
+  dom ~key:"pane-keymap" ~style_class:"cp__shortcut-page-x"
+    ~attrs:[ ("style", "--shortcut-header-h: 85px;") ]
+    [ keymap_controls ()
+    ; dom ~key:"km-art" ~tag:"article"
+        [ dom ~key:"km-ul" ~tag:"ul" ~style_class:"list-none m-0 py-3"
+            (List.mapi
+               (fun i it ->
+                 let k = "km-i" ^ string_of_int i in
+                 match (it : Keymap_data.item) with
+                 | Keymap_data.Category label -> keymap_th ~key:k label
+                 | Keymap_data.Shortcut r -> keymap_row ~key:k r)
+               Keymap_data.items)
+        ]
+    ]
 
 (* ---- advanced pane ---- *)
 
@@ -621,18 +801,20 @@ let advanced_pane () =
           ]
         ~on:(S.developer_mode ()) ~on_toggle:S.toggle_developer_mode ()
     ; action_row ~key:"syncurl" ~for_:"sync_server_url"
-        ~label_children:[ txt ~key:"syncurl-lt" T.sync_server_url ]
-        ~action:
-          (url_button ~key:"syncurl-b"
-             ~label:(storage_url "sync-server-url" "Logseq Sync")
-             ~on_open:(fun () -> Dialogs_state.open_ "sync-server"))
+        ~label:T.sync_server_url
+        ~actions:
+          [ url_button ~key:"syncurl-b"
+              ~label:(storage_url "sync-server-url" "Logseq Sync")
+              ~on_open:(fun () -> Dialogs_state.open_ "sync-server")
+          ]
         ()
     ; action_row ~key:"puburl" ~for_:"publish_server_url"
-        ~label_children:[ txt ~key:"puburl-lt" T.publish_server_url ]
-        ~action:
-          (url_button ~key:"puburl-b"
-             ~label:(storage_url "publish-server-url" T.publish_default)
-             ~on_open:(fun () -> Dialogs_state.open_ "publish-server"))
+        ~label:T.publish_server_url
+        ~actions:
+          [ url_button ~key:"puburl-b"
+              ~label:(storage_url "publish-server-url" T.publish_default)
+              ~on_open:(fun () -> Dialogs_state.open_ "publish-server")
+          ]
         ()
     ]
 
@@ -659,7 +841,7 @@ let home_page_row () =
   dom ~key:"homep"
     ~style_class:"it sm:grid sm:grid-cols-3 sm:gap-4 sm:items-center"
     [ label_el ~key:"homep-l" ~for_:"default page"
-        [ txt ~key:"homep-lt" T.home_default_page ]
+        ~text:T.home_default_page []
     ; dom ~key:"homep-r" ~style_class:"mt-1 sm:mt-0 sm:col-span-2"
         [ dom ~key:"homep-w" ~style_class:"max-w-lg rounded-md sm:max-w-xs"
             [ dom ~key:"homep-in" ~tag:"input" ~id:"home-default-page"
@@ -688,19 +870,25 @@ let features_pane () =
   dom ~key:"pane-features" ~style_class:"panel-wrap is-features mb-8"
     [ home_page_row ()
     ; action_row ~key:"plugs" ~for_:"plugin_system"
-        ~label_children:[ txt ~key:"plugs-lt" T.plugins_label ]
-        ~action:
-          (dom ~key:"plugs-a" ~style_class:"flex items-center gap-2"
-             [ switch_el ~key:"plugs-sw" ~on:(S.plugin_system ())
-                 ~on_toggle:S.toggle_plugin_system ])
+        ~label:T.plugins_label
+        ~actions:
+          [ dom ~key:"plugs-a" ~style_class:"flex items-center gap-2"
+              [ switch_el ~key:"plugs-sw" ~on:(S.plugin_system ())
+                  ~on_toggle:S.toggle_plugin_system
+              ; hidden_checkbox ~key:"plugs-sc" ~on:(S.plugin_system ())
+              ]
+          ]
         ()
     ; action_row ~key:"cards" ~for_:"flashcards"
-        ~label_children:[ txt ~key:"cards-lt" T.flashcards ]
-        ~action:
-          (switch_el ~key:"cards-sw"
-             ~on:(S.config_bool "feature/enable-flashcards?" ~default:true)
-             ~on_toggle:(fun () ->
-               S.config_toggle "feature/enable-flashcards?" ~default:true))
+        ~label:T.flashcards
+        ~actions:
+          [ switch_el ~key:"cards-sw"
+              ~on:(S.config_bool "feature/enable-flashcards?" ~default:true)
+              ~on_toggle:(fun () ->
+                S.config_toggle "feature/enable-flashcards?" ~default:true)
+          ; hidden_checkbox ~key:"cards-sc"
+              ~on:(S.config_bool "feature/enable-flashcards?" ~default:true)
+          ]
         ()
     ]
 
@@ -728,7 +916,7 @@ let nav_item ~key (id, label, icn) =
       (Logseq_dom.class_signal
          (Signal.map (fun (s : S.t) -> s.tab) (S.signal ()))
          (fun tab ->
-           if tab = id then "settings-menu-item active"
+           if tab = id then "active settings-menu-item"
            else "settings-menu-item"))
     ~events:"click"
     ~on_dom_event:(fun n _ -> if n = "click" then S.set_tab id)

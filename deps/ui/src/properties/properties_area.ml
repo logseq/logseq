@@ -507,10 +507,11 @@ let mount_block_area block_el uuid =
                   ~owner_title:"" area
               in
               refresh ();
-              (* register the always-connected indent host, not `area` —
-                 area only attaches when a render has content, so a plain
-                 block would be reaped by live_areas before its first
-                 property lands *)
+              (* register the always-connected indent, not area: the
+                 area element stays detached when the block has no
+                 visible rows, and live_areas prunes detached containers,
+                 which would unregister the refresh before a later
+                 property tx lands *)
               S.register_area ind (fun () ->
                   if el_is_connected ind then refresh ()
                   else S.unregister_area ind)))
@@ -641,83 +642,104 @@ and fill_bidirectional_page (p : Model.page) ~attach_bidi bidi =
              Js.Promise.resolve ())
       |> ignore
 
+(* idempotent mount — cljs db-properties-cp sits in a plain div inside
+   the title .ls-block, after .block-main-container; registration + the
+   mounted marker live on .page-inner, which stays connected for as long
+   as the page is mounted (the actions node can be swapped out by an LUI
+   re-render) *)
+let mount_page_props page_inner (p : Model.page) uuid =
+  if el_get_attr page_inner "data-props-mounted" <> Some uuid then (
+    el_set_attr page_inner "data-props-mounted" uuid;
+    (* a remount (same .page-inner node, different page) must not stack
+       a second area on top of the previous page's *)
+    (match el_query page_inner ".ls-properties-area" with
+     | Some el -> el_remove el
+     | None -> ());
+    (match el_query page_inner ".ls-bidirectional-properties" with
+     | Some el -> el_remove el
+     | None -> ());
+    (* cljs properties-area renders .ls-properties-area only when
+       there is something to show (show-properties-area?) and the
+       .ls-new-property button only on sidebar/tag-dialog surfaces —
+       the main page surface shows neither when empty. area/bidi are
+       attached lazily once data proves non-empty. *)
+    let area =
+      mk "div"
+        ~cls:"ls-properties-area ls-page-properties"
+        ~attrs:[ ("id", uuid); ("tabindex", "0") ]
+    in
+    let bidi =
+      mk ~cls:"w-full ls-bidirectional-properties mt-8" "div"
+    in
+    let holder =
+      match el_query page_inner ".ls-page-title .ls-block" with
+      | Some block_el ->
+          let h = mk "div" in
+          el_append_child block_el h;
+          h
+      | None -> mk "div"
+    in
+    let attach_area () =
+      if not (el_is_connected area) then el_append_child holder area
+    in
+    let attach_bidi () =
+      if not (el_is_connected bidi) then (
+        attach_area ();
+        el_append_child holder bidi)
+    in
+    let detach () =
+      if el_is_connected bidi then el_remove bidi;
+      if el_is_connected area then el_remove area
+    in
+    let rec ctx : V.ctx =
+      { block_uuid = uuid
+      ; block_id = p.Model.page_db_id
+      ; refresh
+      ; is_page = true
+      ; class_schema = false
+      }
+    and refresh () =
+      render_page_area ctx p ~attach_area ~attach_bidi ~detach
+        area bidi
+    in
+    refresh ();
+    S.unregister_area page_inner;
+    S.register_area page_inner (fun () ->
+        if el_is_connected page_inner then refresh ()
+        else S.unregister_area page_inner))
+
 let mount_page_area page_inner =
   (* cljs db-page-title: title actions hide while the page title itself is
      being edited (page-title-actions-cp only when edit-block ≠ page) *)
   let editing_title =
     el_query page_inner ".ls-page-title .editor-wrapper" <> None
   in
+  let with_page f =
+    match
+      ( !Runtime.current_page
+      , el_query page_inner ".ls-page-title" )
+    with
+    | Some p, Some title_el -> (
+        match p.Model.page_uuid with
+        | Some uuid -> f p uuid ~title_el
+        | None -> ())
+    | _ -> ()
+  in
   match el_query page_inner ".ls-page-title-actions" with
   | Some actions ->
-      set_style actions (if editing_title then "display: none" else "")
-  | None -> (
-      match !Runtime.current_page, el_query page_inner ".ls-page-title" with
-      | Some p, Some title_el -> (
-          match p.Model.page_uuid with
-          | None -> ()
-          | Some uuid ->
-              let actions = title_actions p in
-              (* cljs: actions sit inside .block-content-wrapper, opacity-0
-                 until hover; keep them there, not as a sibling of the title *)
-              (match el_query page_inner ".ls-page-title .block-content-wrapper"
-               with
-               | Some cw -> el_insert_adjacent cw "afterbegin" actions
-               | None -> el_insert_adjacent title_el "afterend" actions);
-              (* cljs properties-area renders .ls-properties-area only when
-                 there is something to show (show-properties-area?) and the
-                 .ls-new-property button only on sidebar/tag-dialog surfaces —
-                 the main page surface shows neither when empty. area/bidi are
-                 attached lazily once data proves non-empty. *)
-              let area =
-                mk "div"
-                  ~cls:"ls-properties-area ls-page-properties"
-                  ~attrs:[ ("id", uuid); ("tabindex", "0") ]
-              in
-              let bidi =
-                mk ~cls:"w-full ls-bidirectional-properties mt-8" "div"
-              in
-              (* cljs: db-properties-cp sits in a plain div inside the
-                 title .ls-block, after .block-main-container — not
-                 inside .block-content-wrapper *)
-              let holder =
-                match
-                  el_query page_inner ".ls-page-title .ls-block"
-                with
-                | Some block_el ->
-                    let h = mk "div" in
-                    el_append_child block_el h;
-                    h
-                | None -> mk "div"
-              in
-              let attach_area () =
-                if not (el_is_connected area) then
-                  el_append_child holder area
-              in
-              let attach_bidi () =
-                if not (el_is_connected bidi) then (
-                  attach_area ();
-                  el_append_child holder bidi)
-              in
-              let detach () =
-                if el_is_connected bidi then el_remove bidi;
-                if el_is_connected area then el_remove area
-              in
-              let rec ctx : V.ctx =
-                { block_uuid = uuid
-                ; block_id = p.Model.page_db_id
-                ; refresh
-                ; is_page = true
-                ; class_schema = false
-                }
-              and refresh () =
-                render_page_area ctx p ~attach_area ~attach_bidi ~detach
-                  area bidi
-              in
-              refresh ();
-              S.register_area actions (fun () ->
-                  if el_is_connected actions then refresh ()
-                  else S.unregister_area actions))
-      | _ -> ())
+      set_style actions (if editing_title then "display: none" else "");
+      with_page (fun p uuid ~title_el:_ ->
+          mount_page_props page_inner p uuid)
+  | None ->
+      with_page (fun p uuid ~title_el ->
+          let actions = title_actions p in
+          (* cljs: actions sit inside .block-content-wrapper, opacity-0
+             until hover; keep them there, not as a sibling of the title *)
+          (match el_query page_inner ".ls-page-title .block-content-wrapper"
+           with
+           | Some cw -> el_insert_adjacent cw "afterbegin" actions
+           | None -> el_insert_adjacent title_el "afterend" actions);
+          mount_page_props page_inner p uuid)
 
 (* ---------- observer entry ---------- *)
 
