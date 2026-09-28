@@ -11,8 +11,12 @@
 
 module D = Logseq_dom
 
-external tabler_icons : (Js.Json.t -> Js.Json.t) Js.Dict.t = "tablerIcons"
+external tabler_icons_u : (Js.Json.t -> Js.Json.t) Js.Dict.t Js.Undefined.t
+  = "tablerIcons"
   [@@mel.scope "window"]
+
+let tabler_icons () =
+  Js.Undefined.toOption tabler_icons_u
 
 (* shui v2 tabler-extension-icon-names *)
 let tie_names =
@@ -112,12 +116,15 @@ let icon_props size =
 
 (* Some <svg tree> when the custom pack defines Icon<Pascal name> *)
 let ext_svg ?(size = 18.) name =
-  match Js.Dict.get tabler_icons ("Icon" ^ pascal name) with
-  | Some f -> (
-      match els_of_react (f (icon_props size)) with
-      | [] -> None
-      | els -> Some els)
+  match tabler_icons () with
   | None -> None
+  | Some dict -> (
+      match Js.Dict.get dict ("Icon" ^ pascal name) with
+      | Some f -> (
+          match els_of_react (f (icon_props size)) with
+          | [] -> None
+          | els -> Some els)
+      | None -> None)
 ;;
 
 (* equivalent of (shui/tabler-icon name) *)
