@@ -95,7 +95,7 @@ let header (ms : Model.t Signal.signal) =
                 ~style_class:"ui-items-container"
                 ~attrs:[ ("data-type", "toolbar") ]
                 [ Logseq_dom.dom ~key:"ui-items-wrap" ~style_class:"list-wrap"
-                    [] ]
+                    [ Left_sidebar_view.plugins_toolbar ms ] ]
             ; dots_button; right_toggle_button ]
         ]
     ]
@@ -129,7 +129,6 @@ let left_sidebar (ms : Model.t Signal.signal) =
             ; Left_sidebar_view.contents ms
             ]
         ]
-    ; Left_sidebar_view.menus ms
     ; Logseq_dom.dom ~key:"shade" ~tag:"span" ~style_class:"shade-mask"
         ~events:"click"
         ~on_dom_event:(fun name _ ->
@@ -185,6 +184,7 @@ let overlays (ms : Model.t Signal.signal) =
   Logseq_dom.dom ~key:"overlays" ~style_class:"cp__overlays"
     [ Cmdk_view.render ms
     ; Popups_view.render ms
+    ; Left_sidebar_view.menus ms
     ; Dialogs_view.render ms
     ; Cards_view.render ms
     ; Toasts_view.render ms

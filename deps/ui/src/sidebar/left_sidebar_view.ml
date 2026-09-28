@@ -81,36 +81,6 @@ let nav_edit_menu st checked =
         (List.map mk nav_labels)
     ]
 
-(* ---------- dots (page) menu ---------- *)
-
-let dots_menu st favorited =
-  let page_items =
-    match !Runtime.current_page with
-    | Some _ ->
-        [ menu_item st
-            (if favorited then t "Unfavorite page" else t "Add to Favorites")
-            (fun () -> Sidebar_state.toggle_favorite st)
-        ; menu_item st (t "Delete page")
-            (fun () -> Sidebar_state.open_dialog "delete-page")
-        ]
-    | None -> []
-  in
-  dom ~key:"dots-menu"
-    [ backdrop st
-    ; menu_box
-        ~style:"position:fixed;top:96px;right:16px;z-index:999;min-width:200px"
-        (page_items
-         @ [ menu_item st (t "Settings")
-               (fun () -> Sidebar_state.open_dialog "settings")
-           ; menu_item st (t "Export graph")
-               (fun () -> Sidebar_state.open_dialog "export-graph")
-           ; menu_item st (t "Import")
-               (fun () -> Sidebar_state.open_dialog "import")
-           ; menu_item st (t "Login")
-               (fun () -> Sidebar_state.open_dialog "login")
-           ])
-    ]
-
 (* ---------- plugins dropdown (toolbar-plugins-manager) ---------- *)
 
 let plugins_menu st =
@@ -159,7 +129,7 @@ let plugins_menu st =
         ~attrs:
           [ ("role", "menu")
           ; ( "style"
-            , "position:fixed;top:96px;left:16px;z-index:999;min-width:200px" )
+            , "position:fixed;top:64px;right:16px;z-index:999;min-width:200px" )
           ]
         (dyn ~equal:Stdlib.( = )
            (fun _dirty ->
@@ -189,7 +159,6 @@ let menu_host st =
     (fun (menu, checked, _favorited) ->
       match menu with
       | "nav-edit" -> nav_edit_menu st checked
-      | "dots" -> dots_menu st _favorited
       | "plugins" -> plugins_menu st
       | _ -> dom ~key:"menu-closed" [])
     menu_sig
@@ -367,28 +336,31 @@ let recents_group st =
     ~items_sig:(Signal.value st.Sidebar_state.recents)
     ~li_class:"recent-item select-none font-medium"
 
-(* ---------- plugins / dots toolbar ---------- *)
-
-let toolbar_row st =
-  dom ~key:"sb-toolbar"
-    ~style_class:"toolbar-plugins-manager flex items-center gap-1 px-2"
-    [ dom ~key:"pm-trigger" ~tag:"a"
-        ~style_class:"flex relative toolbar-plugins-manager-trigger"
-        ~attrs:[ ("title", t "Plugins") ]
-        ~events:"click"
-        ~on_dom_event:(fun name _ ->
-          if name = "click" then (
-            Runtime.signal_set st.Sidebar_state.open_menu "plugins";
-            Plugin_host.inject_toolbar_ui ()))
-        [ icon "apps" ]
-    ; dom ~key:"dots-btn" ~tag:"button"
-        ~style_class:"button sidebar-dots-btn"
-        ~attrs:[ ("title", t "More") ]
-        ~events:"click"
-        ~on_dom_event:(fun name _ ->
-          if name = "click" then Sidebar_state.open_dots_menu st)
-        [ icon "dots" ]
-    ]
+(* cljs plugins.cljs hook-ui-items :toolbar — the puzzle trigger lives
+   in the header .ui-items-container and renders ONLY when at least one
+   plugin contributes a toolbar ui-item; click opens the plugins dropdown *)
+let plugins_toolbar (ms : Model.t Signal.signal) : t =
+  let st = Sidebar_state.ensure ms in
+  let owner =
+    st.Sidebar_state.open_menu.Signal.state_signal.Signal.owner
+  in
+  dyn ~equal:Stdlib.( = )
+    (fun _dirty ->
+      match Plugin_host.toolbar_items () with
+      | [] -> dom ~key:"pm-none" []
+      | _ ->
+          dom ~key:"pm" ~tag:"div"
+            ~style_class:"toolbar-plugins-manager flex items-center"
+            ~events:"click"
+            ~on_dom_event:(fun n _ ->
+              if n = "click" then (
+                Runtime.signal_set st.Sidebar_state.open_menu "plugins";
+                Plugin_host.inject_toolbar_ui ()))
+            [ dom ~key:"pm-trigger" ~tag:"a"
+                ~style_class:"flex relative toolbar-plugins-manager-trigger"
+                ~attrs:[ ("title", t "Plugins") ]
+                [ icon "puzzle" ] ])
+    (Plugin_host.dirty_value owner)
 
 (* ---------- root ---------- *)
 (* chrome.ml owns the #left-sidebar.cp__sidebar-left-layout shell +
@@ -430,7 +402,7 @@ let contents (ms : Model.t Signal.signal) : t =
   let st = Sidebar_state.ensure ms in
   dom ~key:"ls-contents" ~style_class:"sidebar-contents-container"
     [ dom ~key:"ls-left" ~style_class:"cp__sidebar-left"
-        [ favorites_group st; recents_group st; toolbar_row st ] ]
+        [ favorites_group st; recents_group st ] ]
 
 let menus (ms : Model.t Signal.signal) : t =
   let st = Sidebar_state.ensure ms in
