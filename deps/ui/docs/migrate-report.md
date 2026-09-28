@@ -443,3 +443,69 @@ Needs an upstream PR.
 - `lui_web_dom_ext`（lui PR #68）：通用 `lui-dom-<tag>` 扩展族（attrs/events/text + dom-event payload 含 selectionStart/End/Direction），textarea textContent 同步。
 - stale-node 容错（lui PR #67）：unmounted 节点上的事件/属性写入不再崩溃或卡住批次。
 - dropdown dismiss / modal hit-testing / retained-store 顺序（lui PR #65）。
+
+
+## Graph navigation
+
+`logseq.e2e.graph-navigation-basic-test` green: 8 tests, 29 assertions.
+
+### Route loading contract
+
+- `Router.resolve` = `parse_hash` → `Navigate_to` → `load_route` → `flush`.
+  `Model.Page s` resolves via `thread-api/get-page-route-info` (name /
+  uuid / lookup-ref all accepted), then `fetch_blocks`
+  (`thread-api/get-page-blocks-tree`), then `Page_loaded` + `fetch_refs`.
+- Worker `sync-db-changes` broadcasts dispatch to `Router.reload`, which
+  re-runs `load_route` for the current route WITHOUT `Navigate_to` — the
+  existing `route_page` stays mounted until the fresh one lands (no blank
+  flash). This broadcast fires on every committed tx, including ops the
+  page itself just issued.
+- **Stale-load guard (load-bearing)**: every async page loader re-checks
+  `!Runtime.current_route` before sending `Page_loaded`
+  (`router.ml` `stale`, `outliner_ops.refresh_page`). Without it, a reload
+  for route A started before a navigate to route B resolves last and
+  overwrites `route_page` — the view renders page A under route B and the
+  editor never appears on the new page. The guard buys nothing for
+  loaders keyed off a different ref (`Journals_loaded` etc. are
+  route-independent).
+
+### Block tags on page load
+
+- `Decode.block_of_wire` reads `block/tags` into `block_tag_ids`; items
+  may arrive as `Wire.Int`, `Wire.Int64`, or `Map {db/id}`.
+- `Outliner_ops.resolve_block_tags` batch-resolves titles through
+  `thread-api/get-blocks` `[{id, opts:{}}]` → rows of `{block, id}` and
+  fills `block_tags`. `Tree.tags_el` renders `.block-tags > .block-tag`
+  chips, skipping tags whose `#tag` text still appears in `block_title`.
+- ALL THREE `get-page-blocks-tree` consumers must call
+  `resolve_block_tags`: `router.fetch_blocks`, `sidebar_state` local
+  `fetch_blocks`, `cmdk_state.load_page`. Missing one leaves
+  `block_tags=[]` → no `.block-tag` chip after `apply_tag` (the
+  `sync-db-changes` reload races the `Page_loaded` from `refresh_page`
+  and used to win).
+
+### Create-page → editor flow
+
+`apply-outliner-ops create-page` → `goto_page` (`get-case-page` →
+`load_page` → `Navigate_to` + `Page_loaded` + `set_location_hash
+"#/page/uuid"`) → `Editor_actions.append_block` inserts the first block
+and sets `S.editing` → `.editor-wrapper textarea` mounts. Search's
+"Create page called 'X'" row is upserted synchronously on input (worker
+search may lag).
+
+### Tag application (`popups_state.apply_tag`)
+
+- Existing class (`db/ident` present) → `save_and_tag`.
+- Plain page → `thread-api/convert-page-to-tag` → `save_and_tag`.
+- Otherwise → `create_and_tag`. `save_and_tag` =
+  `apply_and_refresh [save_block; set_block_property "block/tags"
+  (Wire.Int dbid)]`.
+
+### Misc contracts
+
+- `Sdk_config.write_config` must include a `block/uuid` on the file-block
+  map (worker file-block schema requires it); `get_configs` treats all
+  four positional args as keys.
+- `.toolbar-dots-btn` belongs only to the header (cljs convention); the
+  sidebar "More" button uses `.sidebar-dots-btn` — Playwright strict
+  mode fails on a second `.toolbar-dots-btn`.

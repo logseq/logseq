@@ -679,20 +679,32 @@ let apply_tag t ac ~create title =
           (Runtime.invoke2 "thread-api/get-case-page" (Wire.String repo_v)
              (Wire.String title)
            |> Js.Promise.then_ (fun w ->
-                  Js.Promise.resolve
-                    (match Wire.get w "db/ident" with
-                     | Some _ -> (
-                         emit ac.editor ac.tpos "";
-                         close_ac t;
-                         match Wire.map_get_int w "db/id" with
-                         | Some dbid -> save_and_tag dbid
-                         | None -> ())
-                     | None -> (
-                         match w with
-                         | Wire.Map _ ->
-                             emit ac.editor ac.tpos ("#" ^ title);
-                             close_ac t
-                         | _ -> create_and_tag ()))))
+                  match w with
+                  | Wire.Map _ -> (
+                      match Wire.map_get_int w "db/id" with
+                      | None -> Js.Promise.resolve ()
+                      | Some dbid ->
+                          (match Wire.get w "db/ident" with
+                           | Some _ ->
+                               emit ac.editor ac.tpos "";
+                               close_ac t;
+                               save_and_tag dbid;
+                               Js.Promise.resolve ()
+                           | None ->
+                               (* cljs tag-on-chosen-handler: a plain page
+                                  chosen in the hashtag search is converted
+                                  to a class, then attached via block/tags *)
+                               emit ac.editor ac.tpos "";
+                               close_ac t;
+                               Runtime.invoke2
+                                 "thread-api/convert-page-to-tag"
+                                 (Wire.String repo_v) (Wire.Int dbid)
+                               |> Js.Promise.then_ (fun _ ->
+                                      save_and_tag dbid;
+                                      Js.Promise.resolve ())))
+                  | _ ->
+                      create_and_tag ();
+                      Js.Promise.resolve ()))
 
 let apply_item t ac it =
   match it.ai_act with

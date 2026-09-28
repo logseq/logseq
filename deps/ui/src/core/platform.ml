@@ -74,6 +74,26 @@ let query_param name =
   | "" -> None
   | search -> search_params_get (new_url_search_params search) name
 
+(* query param inside the location hash: "#/page/x?graph-id=u" *)
+let hash_query_param name =
+  match location_hash () with
+  | "" -> None
+  | h -> (
+      match String.index_opt h '?' with
+      | Some i ->
+          search_params_get
+            (new_url_search_params
+               (String.sub h (i + 1) (String.length h - i - 1)))
+            name
+      | None -> None)
+
+(* rewrite the hash in place (no history entry, no hashchange) *)
+external replace_state :
+  Js.Json.t -> string -> string -> unit = "replaceState"
+  [@@mel.scope "history"]
+
+let replace_url_fragment hash = replace_state Js.Json.null "" hash
+
 let on_hash_change f =
   add_event_listener "hashchange" (fun _ -> f ())
 

@@ -63,80 +63,9 @@ let list_remote_graphs () =
 let removable repo =
   not (is_demo repo && List.length !repos = 1)
 
-(* -- ls-graphs-metadata (localStorage EDN map) -- *)
+(* -- ls-graphs-metadata (localStorage EDN map, see Graphs_meta) -- *)
 
-let meta_key = "ls-graphs-metadata"
-
-let read_meta () =
-  match Platform.local_storage_get meta_key with
-  | Some s -> (
-      try
-        match Edn.parse s with
-        | Wire.Map pairs -> pairs
-        | _ -> []
-      with _ -> [])
-  | None -> []
-
-let write_meta pairs =
-  Platform.local_storage_set meta_key (Edn.to_string (Wire.Map pairs))
-
-let meta_entry repo key =
-  match
-    List.find_opt
-      (fun (k, _) -> k = Wire.String repo || k = Wire.Keyword repo)
-      (read_meta ())
-  with
-  | Some (_, Wire.Map fields) -> Wire.map_get (Wire.Map fields) key
-  | _ -> None
-
-let meta_last_seen repo =
-  match meta_entry repo "last-seen-at" with
-  | Some (Wire.Int n) -> Some (float_of_int n)
-  | Some (Wire.Int64 n) -> Some (Int64.to_float n)
-  | Some (Wire.Float f) -> Some f
-  | Some (Wire.Date_ms n) -> Some (Int64.to_float n)
-  | _ -> None
-
-(* merge {:last-seen-at now :_v now} (+ :created-at on first sight) *)
-let touch_meta repo =
-  let now = Int64.of_float (Browser_ui.now_ms ()) in
-  let pairs = read_meta () in
-  let found = ref false in
-  let pairs' =
-    List.map
-      (fun (k, v) ->
-        match k = Wire.String repo, v with
-        | true, Wire.Map fields ->
-            found := true;
-            let fields' =
-              ( Wire.kw "last-seen-at", Wire.Int64 now )
-              :: ( Wire.kw "_v", Wire.Int64 now )
-              :: List.filter
-                   (fun (fk, _) ->
-                     fk <> Wire.kw "last-seen-at" && fk <> Wire.kw "_v")
-                   fields
-            in
-            (k, Wire.Map fields')
-        | _ -> (k, v))
-      pairs
-  in
-  if !found then write_meta pairs'
-  else
-    write_meta
-      (pairs
-      @ [ ( Wire.String repo
-          , Wire.Map
-              [ (Wire.kw "created-at", Wire.Int64 now)
-              ; (Wire.kw "last-seen-at", Wire.Int64 now)
-              ; (Wire.kw "_v", Wire.Int64 now)
-              ] )
-        ])
-
-let drop_meta repo =
-  write_meta
-    (List.filter
-       (fun (k, _) -> k <> Wire.String repo && k <> Wire.Keyword repo)
-       (read_meta ()))
+let meta_last_seen = Graphs_meta.last_seen
 
 (* -- list + refresh -- *)
 
@@ -155,14 +84,14 @@ let refresh () =
 (* -- switch / navigate -- *)
 
 let navigate_journal repo =
-  touch_meta repo;
+  Graphs_meta.touch repo;
   Graph.open_graph repo
   |> Js.Promise.then_ (fun _ -> Boot.ensure_today_journal repo)
   |> Js.Promise.then_ (fun () ->
          Runtime.send (Action.Boot_graph_ready repo);
          Runtime.current_repo := Some repo;
          Graph.build_search_index repo;
-         Platform.set_location_hash "#/";
+         Platform.set_location_hash (Runtime.nav_hash "#/");
          Router.resolve ();
          Js.Promise.resolve ())
 
@@ -178,7 +107,7 @@ let create_remote name e2ee =
                 |> Js.Promise.then_ (fun _ -> Js.Promise.resolve r)))
 
 let remember_open repo =
-  touch_meta repo;
+  Graphs_meta.touch repo;
   refresh () |> ignore
 
 (* -- delete (remove-repo!) -- *)
@@ -205,7 +134,7 @@ let delete_graph repo ~remote =
   let finish () =
     Runtime.invoke1 "thread-api/unsafe-unlink-db" (Wire.String repo)
     |> Js.Promise.then_ (fun _ ->
-           drop_meta repo;
+           Graphs_meta.drop repo;
            refresh ())
     |> Js.Promise.then_ (fun remaining ->
            match !Runtime.current_repo = Some repo, remaining with
@@ -242,3 +171,19 @@ let ask_delete ~remote repo =
       ^ " " ^ T.delete_warning)
     ~on_confirm:(fun () -> ignore (delete_graph repo ~remote))
     ()
+
+(* after a graph opens, fetch + remember its worker uuid; in-graph routes
+   carry ?graph-id=<uuid> inside the hash so deep links and reloads can
+   resolve back to the repo (cljs handler.graph/remember-current-graph-id-in-tab!) *)
+let () =
+  Runtime.on_graph_opened := fun repo ->
+    ignore
+      (Runtime.invoke1 "thread-api/get-graph-uuid" (Wire.String repo)
+       |> Js.Promise.then_ (fun w ->
+              (match Wire.as_uuid w with
+               | Some uuid ->
+                   Runtime.current_graph_uuid := Some uuid;
+                   Graphs_meta.remember_uuid repo uuid;
+                   Runtime.sync_hash_graph_id ()
+               | None -> ());
+              Js.Promise.resolve ()))

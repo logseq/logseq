@@ -38,7 +38,9 @@ let write_config repo (cfg : Wire.t) =
     [ Wire.String repo
     ; Wire.Array
         [ Wire.Map
-            [ (Wire.kw "file/path", Wire.String config_path)
+            (* file-block schema requires :block/uuid *)
+            [ (Wire.kw "block/uuid", Wire.Uuid (Platform.random_uuid ()))
+            ; (Wire.kw "file/path", Wire.String config_path)
             ; (Wire.kw "file/content", Wire.String (Edn.to_string cfg))
             ; (Wire.kw "file/created-at", Wire.Date_ms now_ms)
             ; (Wire.kw "file/last-modified-at", Wire.Date_ms now_ms)
@@ -49,13 +51,17 @@ let write_config repo (cfg : Wire.t) =
     ]
   |> Js.Promise.then_ (fun _ -> Js.Promise.resolve ())
 
-(* :app.getCurrentGraphConfigs [...keys] -> value at key path *)
-let get_configs _a b _c _d =
+(* :app.getCurrentGraphConfigs [...keys] -> value at key path.
+   Variadic: each positional arg is one key, so collect all of them. *)
+let get_configs a b c d =
   let keys =
-    match Sdk_convert.wire_of_json b with
-    | Wire.String s -> [ s ]
-    | Wire.Array xs | Wire.List xs -> List.filter_map Wire.as_string xs
-    | _ -> []
+    List.concat_map
+      (fun arg ->
+        match Sdk_convert.wire_of_json arg with
+        | Wire.String s -> [ s ]
+        | Wire.Array xs | Wire.List xs -> List.filter_map Wire.as_string xs
+        | _ -> [])
+      [ a; b; c; d ]
   in
   read_config (repo ())
   |> Js.Promise.then_ (fun cfg ->

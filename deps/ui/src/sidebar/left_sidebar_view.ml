@@ -148,7 +148,7 @@ let nav_route ~class_ ~active ~title ~icon_name hash =
   nav_link ~key:("nl-" ^ class_) ~class_ ~active ~title ~icon_name
     ~on_click:(fun name _ ->
       if name = "click" then (
-        Platform.set_location_hash hash;
+        Platform.set_location_hash (Runtime.nav_hash hash);
         Platform.dispatch "ls:navigate" Js.Json.null))
 
 let tag_nav ~active_route class_ label titles =
