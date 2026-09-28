@@ -16,7 +16,7 @@ module D = Logseq_dom
 let dom = D.dom
 let t = Sidebar_state.t
 
-let icon name = dom ~tag:"i" ~style_class:("ti ti-" ^ name) []
+let icon name = Icons.icon ~size:16. name
 
 (* ---------- popup menu helpers ---------- *)
 
@@ -274,7 +274,7 @@ let content_group st ~key ~class_ ~label ~items_sig ~li_class =
                     [ dom ~tag:"strong" ~style_class:"flex-1" ~text:label
                         [] ] ]
             ; dom ~key:(key ^ "-b") ~tag:"span" ~style_class:"b"
-                [ dom ~tag:"i" ~style_class:"ti ti-chevron-right more" [] ] ]
+                [ Icons.icon ~cls:"more" ~size:15. "chevron-right" ] ]
         ; dom ~key:(key ^ "-bd") ~style_class:"bd"
             [ dyn ~equal:(fun a b -> a = b)
                 (fun ps ->

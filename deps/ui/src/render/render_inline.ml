@@ -323,12 +323,29 @@ and try_hash s i =
       if k = 0 then None
       else Some (page_link ~tag:true (String.sub raw 0 k), k + 1)
 
-(* ((uuid)) *)
+(* ((uuid)) — only a uuid-shaped inner resolves to a block ref;
+   anything else renders literally like cljs *)
+and uuid_shaped s =
+  let hex c =
+    (c >= '0' && c <= '9')
+    || (c >= 'a' && c <= 'f')
+    || (c >= 'A' && c <= 'F')
+  in
+  let rec go i =
+    if i = 36 then true
+    else
+      match i with
+      | 8 | 13 | 18 | 23 -> String.get s i = '-' && go (i + 1)
+      | _ -> hex (String.get s i) && go (i + 1)
+  in
+  String.length s = 36 && go 0
+
 and try_paren s i =
   if starts_at s i "((" then
     match find_sub s (i + 2) "))" with
     | j when j > i + 2 ->
-        Some (block_ref (String.sub s (i + 2) (j - i - 2)), j + 2 - i)
+        let inner = String.sub s (i + 2) (j - i - 2) in
+        if uuid_shaped inner then Some (block_ref inner, j + 2 - i) else None
     | _ -> None
   else None
 
