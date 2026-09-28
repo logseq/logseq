@@ -70,10 +70,14 @@ let home_button (ms : Model.t Signal.signal) =
               Platform.dispatch "ls:navigate" Js.Json.null))
     ms
 
-let right_toggle_button =
+(* cljs open-right-sidebar! seeds a "contents" item when the sidebar
+   is empty (state/sidebar-add-content-when-open!) *)
+let right_toggle_button ms =
   icon_btn ~key:"rs-toggle" ~id:"" ~cls:"toggle-right-sidebar"
     ~icon:"layout-sidebar-right" ~title:"Toggle right sidebar"
-    ~on_click:(fun _ -> Runtime.send Action.Toggle_right_sidebar)
+    ~on_click:(fun _ ->
+      Runtime.send Action.Toggle_right_sidebar;
+      Sidebar_state.ensure_contents (Sidebar_state.ensure ms))
 
 let header (ms : Model.t Signal.signal) =
   Logseq_dom.dom ~key:"head" ~tag:"header" ~id:"head"
@@ -95,7 +99,7 @@ let header (ms : Model.t Signal.signal) =
                 ~attrs:[ ("data-type", "toolbar") ]
                 [ Logseq_dom.dom ~key:"ui-items-wrap" ~style_class:"list-wrap"
                     [ Left_sidebar_view.plugins_toolbar ms ] ]
-            ; dots_button; right_toggle_button ]
+            ; dots_button; right_toggle_button ms ]
         ]
     ]
 

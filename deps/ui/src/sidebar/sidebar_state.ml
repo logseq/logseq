@@ -365,10 +365,14 @@ let block_item_of_uuid repo uuid : item option Js.Promise.t =
 (* cljs :contents item renders the TOC of the CURRENT page (the page in
    the main area), not a page literally named "Contents" *)
 let contents_item _repo : item option Js.Promise.t =
+  let m = !model_ref in
   let current =
     match !Runtime.current_page with
     | Some p -> Some p
-    | None -> (!model_ref).Model.route_page
+    | None -> (
+        match m.Model.route_page with
+        | Some p -> Some p
+        | None -> List.nth_opt m.Model.journals 0)
   in
   match current with
   | Some p ->
