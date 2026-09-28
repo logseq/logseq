@@ -86,7 +86,25 @@ let header (ms : Model.t Signal.signal) =
           "r flex drag-region justify-between items-center gap-2 overflow-x-hidden w-full"
         [ Logseq_dom.dom ~key:"head-crumb" ~style_class:"flex flex-1" []
         ; Logseq_dom.dom ~key:"head-acts" ~style_class:"flex items-center"
-            [ home_button ms; dots_button; right_toggle_button ]
+            [ home_button ms
+            ; (* cljs header.cljs hook-ui-items :toolbar →
+                 .toolbar-plugins-manager trigger (plugins dialog) *)
+              Logseq_dom.dom ~key:"ui-items"
+                ~style_class:"ui-items-container"
+                ~attrs:[ ("data-type", "toolbar") ]
+                [ Logseq_dom.dom ~key:"ui-items-wrap" ~style_class:"list-wrap"
+                    [ Logseq_dom.dom ~key:"pm"
+                        ~style_class:"toolbar-plugins-manager flex items-center"
+                        [ Logseq_dom.dom ~key:"pm-trigger" ~tag:"a"
+                            ~style_class:
+                              "flex relative toolbar-plugins-manager-trigger"
+                            ~events:"click"
+                            ~on_dom_event:(fun name _ ->
+                              if name = "click" then
+                                Sidebar_state.open_dialog "plugins")
+                            [ Logseq_dom.dom ~key:"pm-i" ~tag:"i"
+                                ~style_class:"ti ti-puzzle" [] ] ] ] ]
+            ; dots_button; right_toggle_button ]
         ]
     ]
 
@@ -173,6 +191,19 @@ let overlays (ms : Model.t Signal.signal) =
     ; Toasts_view.render ms
     ]
 
+(* cljs container.cljs help-button: fixed bottom-right "?" — click toggles
+   the help menu popup; popup itself not ported yet *)
+let help_button : t =
+  Logseq_dom.dom ~key:"help" ~style_class:"cp__sidebar-help-btn"
+    [ Logseq_dom.dom ~key:"help-inner" ~style_class:"inner"
+        ~events:"click"
+        ~on_dom_event:(fun n _ ->
+          if n = "click" then
+            Platform.dispatch "ls:toggle-help" Js.Json.null)
+        [ Logseq_dom.dom ~key:"help-i" ~tag:"i"
+            ~style_class:"ti ti-help" [] ]
+    ]
+
 let shell (ms : Model.t Signal.signal) : t =
   Logseq_dom.dom ~key:"wrapper" ~tag:"main" ~id:"app-container-wrapper"
     ~style_class_signal:
@@ -187,5 +218,6 @@ let shell (ms : Model.t Signal.signal) : t =
             [ header ms; main_content ms ]
         ; right_sidebar ms
         ; overlays ms
+        ; help_button
         ]
     ]
