@@ -332,12 +332,19 @@ let group_order v q rows total =
       in
       Option.to_list (create_g ()) @ only
   | None ->
-      if starts_slash then [ filters_g (); nodes_g () ]
+      (* cljs `load-results :initial` resets the results atom to just
+         recently-updated when the input is blank, and empty groups are
+         dropped at render — so an empty query shows only recents *)
+      let nonempty gs = List.filter (fun g -> g.gitems <> []) gs in
+      if String.trim q = "" then [ recents_g () ]
+      else if starts_slash then nonempty [ filters_g (); nodes_g () ]
       else if has_slash then
-        Option.to_list (create_g ()) @ [ nodes_g (); filters_g () ]
+        nonempty
+          (Option.to_list (create_g ()) @ [ nodes_g (); filters_g () ])
       else
-        Option.to_list (create_g ())
-        @ [ nodes_g (); recents_g (); commands_g (); filters_g () ]
+        nonempty
+          (Option.to_list (create_g ())
+          @ [ nodes_g (); recents_g (); commands_g (); filters_g () ])
 
 let apply_results st q move_mode expanded rows total =
   ignore move_mode;

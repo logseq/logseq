@@ -698,7 +698,7 @@ let table_el inst ~refresh : D.el =
     (all_row_uuids inst);
   (* cljs add-new-row footer when data-fns has add-new-object! *)
   (match inst.V.kind with
-   | V.KTagPage _ | V.KAllPages ->
+   | V.KTagPage _ | V.KAllPages | V.KPropertyPage _ ->
        let footer = D.h ~cls:"ls-table-footer fade-in faster" () in
        let row =
          D.h

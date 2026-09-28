@@ -139,8 +139,10 @@ let view (x, y) (p : Model.page option) =
       [ ( "style"
         , Printf.sprintf "position:fixed;left:%.0fpx;top:%.0fpx" x y )
       ]
+    (* cljs keeps the page context menu and the toolbar dots menu
+       separate — right-click on a page shows only page items *)
     (match p with
-     | Some p -> page_items p @ [ separator "sep-pg" ] @ global_items ()
+     | Some p -> page_items p
      | None -> global_items ())
 
 let btn key label cls act =

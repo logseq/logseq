@@ -337,10 +337,14 @@ let hint_button label keys =
 
 (* cljs tip: "Press / to filter search results"; clear-filter tip when a
    filter is active. The {1} slot renders as a kbd shortcut. *)
+let () = Random.self_init ()
+
 let tip_el filtered =
-  let key, glyph =
-    if filtered then ("cmdk.tip/clear-filter", "esc")
-    else ("cmdk.tip/filter-results", "/")
+  (* cljs rand-tip picks filter-results or open-sidebar per open *)
+  let key, glyphs =
+    if filtered then ("cmdk.tip/clear-filter", [ "esc" ])
+    else if Random.int 2 = 0 then ("cmdk.tip/filter-results", [ "/" ])
+    else ("cmdk.tip/open-sidebar", [ "mod"; "enter" ])
   in
   let parts =
     Ui_strings.replace_all (Ui_strings.t key) "{1}" "\x00"
@@ -354,7 +358,7 @@ let tip_el filtered =
     ~style_class:
       "flex flex-row gap-1 items-center opacity-50 hover:opacity-100"
     [ Logseq_dom.dom ~key:"pre" ~tag:"span" ~text:pre []
-    ; shortcut_el [ glyph ]
+    ; shortcut_el glyphs
     ; Logseq_dom.dom ~key:"post" ~tag:"span" ~text:post [] ]
 
 let hint_action_of (it : S.item) =
