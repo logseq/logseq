@@ -550,6 +550,7 @@ let goto_page repo uuid =
                     Runtime.send (Action.Navigate_to (Model.Page uuid));
                     Runtime.send (Action.Page_loaded page);
                     Router.fetch_refs page;
+                    Runtime.mark_nav ();
                     Platform.set_location_hash ("#/page/" ^ uuid);
                     Js.Promise.resolve ()))
 let goto_today_journal repo =
