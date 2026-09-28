@@ -175,9 +175,11 @@ focus fix above.
 ## LUI runtime issues found and fixed (upstream; see branch notes)
 
 (The same-batch create+drop / dead-event fixes live on
-`devin/lui-removechild-guard` in logseq/lui — **not yet merged to main**;
-the opam pin tracks `#main`, so pin `lui` to that branch locally until it
-lands. Earlier items in this list are on main.)
+`devin/web-same-batch-drop` in logseq/lui (open PR logseq/lui#75,
+apply-side tolerance + the `enqueue_drop` emission-side cancel from
+`317b801`) — **not yet merged to main**; the opam pin tracks `#main`,
+so pin `lui` to that branch locally until it lands. Earlier items in
+this list are on main.)
 
 - Retained-store `insert_at` duplicated elements on non-end insertion,
   producing stale node ids (crash on Toast page nav).
@@ -561,13 +563,14 @@ Contracts discovered while making `logseq.e2e.commands-basic-test` green
   node id; the web backend commits the store batch before DOM replay,
   so `dom_node` then throws `invalid_arg "unknown DOM node"` and the
   failed batch wedges `runtime_generation` (every later flush fails
-  `expected patch generation`). Fixed LUI-side by
-  `devin/lui-removechild-guard` (commit `317b801`: `enqueue_drop`
-  cancels same-batch create+drop op groups, `dispatch` absorbs events
-  on dead nodes) — **the opam pin tracks `#main`, so that branch must
-  merge to logseq/lui main for fresh sessions/snapshots to keep the
-  fix**; locally repin with
-  `opam pin lui git+https://github.com/logseq/lui.git#devin/lui-removechild-guard`.
+  `expected patch generation`). Fixed LUI-side on
+  `devin/web-same-batch-drop` (PR logseq/lui#75): apply-side tolerance
+  for dead-node ops plus `enqueue_drop` cancelling same-batch
+  create+drop op groups at emission (from `317b801`, originally on
+  `devin/lui-removechild-guard`) — **the opam pin tracks `#main`, so
+  PR #75 must merge to logseq/lui main for fresh sessions/snapshots to
+  keep the fix**; locally repin with
+  `opam pin lui git+https://github.com/logseq/lui.git#devin/web-same-batch-drop`.
 - **Rows must not subscribe the whole view signal**: keyed rows read
   per-item fields that `Cmdk_state.decorate` bakes at publish
   (`ihl`/`imouse`/`iq`/`gfilter_active`), and the inner `keyed` uses
