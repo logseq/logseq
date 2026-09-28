@@ -16,7 +16,7 @@
 
        The `/` and `#` in-editor popups are owned by popups/popups_state.ml
        (the unified autocomplete); "Add property" there reaches the dialog
-       via the ls:editor-command listener in editor/editor_keys.ml. *)
+       via the ls:editor-command listener in editor/editor_commands.ml. *)
 
 open Editor_dom
 module S = Properties_state

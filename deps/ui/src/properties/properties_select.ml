@@ -115,6 +115,7 @@ let item_el idx cfg it =
   el_set_text strong
     (if it.it_new then I18n.t "select/new-option" ^ " " ^ it.it_title
      else it.it_title);
+  el_append_child inner strong;
   el_append_child a inner;
   el_append_child wrap a;
   on_click a (fun _ -> it.on_choose ());

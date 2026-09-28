@@ -639,9 +639,12 @@ let create_page_with_flags name journal class_ uuid custom_uuid props schema =
                 match block_uuid_of page with
                 | Some puuid ->
                     save_block_properties puuid props schema
-                | None -> Js.Promise.resolve ()))
-  |> Js.Promise.then_ (fun () -> get_entity uuid)
-  |> Js.Promise.then_ (fun w -> resolved_result w)
+                | None -> Js.Promise.resolve ())
+         |> Js.Promise.then_ (fun () ->
+                (* journals get a worker-assigned day uuid — resolve the
+                   entity under u, not the caller's uuid *)
+                get_entity u)
+         |> Js.Promise.then_ (fun w -> resolved_result w))
 
 let create_page a b c _d =
   match arg_string a with

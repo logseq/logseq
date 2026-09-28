@@ -403,6 +403,7 @@ let on_editor_insert ev =
         | None -> ())
     | None -> ()
 
+(* -- ls:editor-command channel is owned by editor_commands.ml -- *)
 (* clicking outside the editor commits the buffer; clicks inside the
    autocomplete/context-menu popups keep editing — the apply action
    refocuses the textarea (cljs keeps the block in edit mode) *)
