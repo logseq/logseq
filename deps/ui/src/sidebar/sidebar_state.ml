@@ -377,33 +377,17 @@ let block_item_of_uuid repo uuid : item option Js.Promise.t =
              | _ -> Js.Promise.resolve None)
          | _ -> Js.Promise.resolve None)
 
-(* cljs :contents item renders the TOC of the CURRENT page (the page in
-   the main area), not a page literally named "Contents" *)
-let contents_item _repo : item option Js.Promise.t =
-  let m = !model_ref in
-  let current =
-    match !Runtime.current_page with
-    | Some p -> Some p
-    | None -> (
-        match m.Model.route_page with
-        | Some p -> Some p
-        | None -> List.nth_opt m.Model.journals 0)
-  in
-  match current with
-  | Some p ->
-      Js.Promise.resolve
-        (Some
-           { key = "contents"
-           ; kind = "contents"
-           ; uuid = p.Model.page_uuid
-           ; title = t "Contents"
-           ; breadcrumb = []
-           ; blocks = p.Model.page_blocks
-           ; linked_refs = []
-           ; page_ref = Some p.Model.page_title
-           ; icon = None
-           })
-  | None -> Js.Promise.resolve None
+(* cljs :contents item renders the built-in "Contents" page's own blocks
+   (<build-sidebar-item> pulls the entity named "Contents"), and
+   sidebar-action-block-lookup resolves :contents -> "Contents" so
+   "Open as page" navigates to that page. *)
+let contents_item repo : item option Js.Promise.t =
+  page_item_of_ref repo "Contents"
+  |> Js.Promise.then_ (function
+         | Some it ->
+             Js.Promise.resolve
+               (Some { it with key = "contents"; kind = "contents" })
+         | None -> Js.Promise.resolve None)
 
 let static_item key kind title =
   Some
