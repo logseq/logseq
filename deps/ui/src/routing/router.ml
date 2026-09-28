@@ -94,6 +94,8 @@ let fetch_refs (p : Model.page) =
                      (Action.Refs_loaded (Decode.blocks_of_wire w)))))
   | None -> ()
 
+let fetch_unlinked_refs = Outliner_ops.fetch_unlinked_refs
+
 let load_journals () =
   Runtime.invoke2 "thread-api/get-latest-journals" (Wire.String (repo ()))
     (Wire.Int 40)
@@ -124,9 +126,12 @@ let load_page_ref ref_v ~missing =
          | Some p ->
              fetch_blocks p
              |> Js.Promise.then_ (fun p' ->
-                    Runtime.send (Action.Page_loaded p');
-                    fetch_refs p';
-                    Js.Promise.resolve ())
+                    Outliner_ops.resolve_page_tags (repo ()) p'
+                    |> Js.Promise.then_ (fun p'' ->
+                           Runtime.send (Action.Page_loaded p'');
+                           fetch_refs p'';
+                           fetch_unlinked_refs p'';
+                           Js.Promise.resolve ()))
          | None ->
              Runtime.send (Action.Navigate_to (Model.Not_found missing));
              Js.Promise.resolve ())
@@ -193,6 +198,8 @@ let load_block_zoom uuid =
                 match blk with
                 | Wire.Map _ -> (
                     let b = Decode.block_of_wire blk in
+                    (* cljs block-route-root renders the zoomed block itself
+                       as the root row (children nested under it) *)
                     let ancestors =
                       match b.Model.block_db_id with
                       | Some id -> [ id ]
@@ -201,19 +208,32 @@ let load_block_zoom uuid =
                     let collapsed = ref Editor_state.String_set.empty in
                     ignore
                       (Outliner_ops.fill_embed_children (repo ()) ancestors
-                         collapsed b.Model.block_children
-                       |> Js.Promise.then_ (fun children ->
-                              Outliner_ops.set_collapsed !collapsed;
-                              Runtime.send
-                                (Action.Page_loaded
-                                   { Model.page_title = b.Model.block_title
-                                   ; page_uuid = b.block_uuid
-                                   ; page_db_id = b.block_db_id
-                                   ; page_is_tag = false
-                                   ; page_journal_day = None
-                                   ; page_blocks = children
-                                   });
-                              Js.Promise.resolve ())))
+                         collapsed [ b ]
+                       |> Js.Promise.then_ (fun bs ->
+                              Outliner_ops.resolve_block_tags bs
+                              |> Js.Promise.then_ (fun bs ->
+                                     Outliner_ops.set_collapsed !collapsed;
+                                     Runtime.send
+                                       (Action.Page_loaded
+                                          { Model.page_title =
+                                              b.Model.block_title
+                                          ; page_uuid = b.block_uuid
+                                          ; page_db_id = b.block_db_id
+                                          ; page_is_tag = false
+                                          ; page_journal_day = None
+                                          ; page_tags = b.Model.block_tags
+                                          ; page_blocks = bs
+                                          });
+                                     (match
+                                        Editor_actions.consume_pending_zoom
+                                          ()
+                                      with
+                                      | Some u when Editor_state.ready () ->
+                                          Editor_actions.enter_edit u
+                                            (String.length
+                                               b.Model.block_title)
+                                      | _ -> ());
+                                     Js.Promise.resolve ()))))
                 | _ ->
                     Runtime.send
                       (Action.Navigate_to (Model.Not_found uuid)))
@@ -248,7 +268,9 @@ let load_route (route : Model.route) =
   | Model.Home -> ignore (load_home ())
   | Model.Page s -> ignore (load_page_ref (page_ref s) ~missing:s)
   | Model.Block_zoom uuid -> ignore (load_block_zoom uuid)
-  | Model.Journals -> ignore (load_journals ())
+  | Model.Journals ->
+      Runtime.reload_current_view := load_journals;
+      ignore (load_journals ())
   | Model.Library ->
       ignore (load_page_ref (Wire.String "Library") ~missing:"Library")
   | Model.Graph -> ignore (load_graph ())

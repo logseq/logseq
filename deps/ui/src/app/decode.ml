@@ -23,13 +23,22 @@ let rec block_of_wire (w : Wire.t) : Model.block =
     | Some l -> Wire.map_get_int l "db/id"
     | None -> None
   in
+  let tag_ids =
+    match Wire.get w "block/tags" with
+    | Some (Wire.List xs) | Some (Wire.Array xs) | Some (Wire.Set xs) ->
+        List.filter_map (fun t -> Wire.map_get_int t "db/id") xs
+    | _ -> []
+  in
   { block_uuid = uuid
   ; block_db_id = db_id
   ; block_title = title
   ; block_level = level
+  ; block_tag_ids = tag_ids
+  ; block_tags = []
   ; block_children = children
   ; block_link = link
   ; block_embed_children = []
+  ; block_page_name = Wire.map_get_string w "block/page-name"
   }
 
 let blocks_of_wire (w : Wire.t) : Model.block list =
@@ -80,6 +89,7 @@ let page_of_summary (w : Wire.t) : Model.page option =
             (match Wire.map_get_int w "journal-day" with
              | Some d -> Some d
              | None -> Wire.map_get_int w "block/journal-day")
+        ; page_tags = []
         ; page_blocks = []
         }
   | _ -> None

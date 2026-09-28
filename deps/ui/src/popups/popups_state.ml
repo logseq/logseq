@@ -19,6 +19,8 @@ type item_action =
   | Switch of ac_kind (* reopen as another autocomplete *)
   | Editor_cmd of string (* ls:editor-command {command} *)
   | Embed of string (* page title — insert a :block/link embed *)
+  | Tag_apply of string (* existing entity — cljs tag-on-chosen-handler *)
+  | Tag_create of string (* "New tag" row — always creates a class *)
   | Noop (* empty-state placeholder row; never applied *)
 
 type ac_item =
@@ -230,14 +232,14 @@ let filter_slash q items =
 ;;
 
 let page_items_for t kind q =
-  let act_of title =
+  let act_of ~created title =
     match kind with
-    | Tag_search -> Emit ("#[[" ^ title ^ "]]")
+    | Tag_search -> if created then Tag_create title else Tag_apply title
     | Embed_ref -> Embed title
     | _ -> Emit ("[[" ^ title ^ "]]")
   in
   let wrap title =
-    mk_item ~key:("page:" ^ title) ~label:title (act_of title)
+    mk_item ~key:("page:" ^ title) ~label:title (act_of ~created:false title)
   in
   let matched =
     take 20 (List.map wrap (List.filter (fun ti -> contains_ci ti q) !(t.titles)))
@@ -251,7 +253,7 @@ let page_items_for t kind q =
          | _ -> U.t "editor/new-page")
         ^ " " ^ q
       in
-      mk_item ~key:("new:" ^ q) ~label (act_of q) :: matched
+      mk_item ~key:("new:" ^ q) ~label (act_of ~created:true q) :: matched
     else matched
   in
   renumber items
@@ -371,6 +373,7 @@ let query_closed ac q =
 (* after an `input` event in a .editor-wrapper textarea *)
 let on_editor_input t el =
   let pos = Dom_ext.selection_start el in
+  Platform.console_log (Printf.sprintf "DBG on_input pos=%d v='%s'" pos (Dom_ext.value el));
   match (get t).ac with
   | Some ac ->
       if pos < ac.tpos + ac.tlen then close_ac t
@@ -406,8 +409,7 @@ let detail_obj pairs =
 ;;
 
 (* replace [tpos, caret) with text and sync the editing buffer —
-   equivalent to cljs's ls:editor-insert handler (the OCaml app has no
-   listener for that event, so Emit applies the edit itself) *)
+   equivalent to cljs's ls:editor-insert handler *)
 let insert_text (ac : ac) text =
   let el = ac.editor in
   let v = Dom_ext.value el in
@@ -422,6 +424,31 @@ let insert_text (ac : ac) text =
   let caret = tpos + S.length text in
   Dom_ext.set_selection_range el caret caret;
   Dom_ext.focus el
+
+let emit editor tpos text =
+  match Dom_ext.closest editor ".ls-page-title" with
+  | Some _ ->
+      (* the page-title editor isn't a block editor — splice the buffer
+         directly instead of dispatching ls:editor-insert *)
+      let v = Dom_ext.value editor in
+      let n = String.length v in
+      let f = Int.max 0 (Int.min tpos n) in
+      let t_ = Int.max f (Int.min (Dom_ext.selection_start editor) n) in
+      let nv = String.sub v 0 f ^ text ^ String.sub v t_ (n - t_) in
+      let caret = f + String.length text in
+      Dom_ext.set_value editor nv;
+      Dom_ext.set_text_content editor nv;
+      Dom_ext.set_selection_range editor caret caret;
+      Dom_ext.focus editor
+  | None ->
+      Dom_ext.dispatch_custom "ls:editor-insert"
+        (detail_obj
+           [ "text", Js.Json.string text
+           ; "from", Js.Json.number (float_of_int tpos)
+           ; "to",
+             Js.Json.number (float_of_int (Dom_ext.selection_start editor)) ]);
+      (* cljs refocuses the editor input after a chosen item *)
+      Dom_ext.focus editor
 ;;
 
 let emit_cmd command extra =
@@ -447,6 +474,84 @@ let erase_trigger_text (ac : ac) =
   Dom_ext.focus el
 ;;
 
+(* cljs tag-on-chosen-handler: strip the "#query" fragment, then either
+   keep "#title" inline (existing page) or attach the tag as a class via
+   block/tags (existing class or a new "New tag" class). The "New tag"
+   row always takes the class path even when a plain page exists. *)
+let apply_tag t ac ~create title =
+  (* the page-title textarea isn't registered as a block editor —
+     resolve it to the current page entity instead *)
+  let buuid_opt, title_edit =
+    match Editor_state.editing_uuid () with
+    | Some u -> (Some u, false)
+    | None -> (
+        match Dom_ext.closest ac.editor ".ls-page-title" with
+        | Some _ -> (
+            match !Runtime.current_page with
+            | Some p -> (p.Model.page_uuid, true)
+            | None -> (None, false))
+        | None -> (None, false))
+  in
+  match buuid_opt with
+  | None -> ()
+  | Some buuid ->
+      let repo_v = repo () in
+      let save_and_tag dbid =
+        (* emit already stripped "#q" from the buffer; persist the new
+           buffer and the tag in one batch. For the page-title editor the
+           stripped title is committed by the title's own rename path —
+           save-block rejects page entities, so only the tag is sent. *)
+        let ops =
+          if title_edit then
+            [ Outliner_ops.set_block_property buuid "block/tags"
+                (Wire.Int dbid)
+            ]
+          else
+            [ Outliner_ops.save_block buuid (Dom_ext.value ac.editor)
+            ; Outliner_ops.set_block_property buuid "block/tags"
+                (Wire.Int dbid)
+            ]
+        in
+        ignore (Outliner_ops.apply_and_refresh ops)
+      in
+      let create_and_tag () =
+        emit ac.editor ac.tpos "";
+        close_ac t;
+        ignore
+          (Runtime.invoke3 "thread-api/apply-outliner-ops"
+             (Wire.String repo_v)
+             (Wire.Array [ Outliner_ops.create_class title ])
+             (Wire.Map [])
+           |> Js.Promise.then_ (fun _ ->
+                  Runtime.invoke2 "thread-api/get-case-page"
+                    (Wire.String repo_v) (Wire.String title))
+           |> Js.Promise.then_ (fun e ->
+                  (match Wire.map_get_int e "db/id" with
+                   | Some dbid -> save_and_tag dbid
+                   | None -> ());
+                  Js.Promise.resolve ()))
+      in
+      if create then create_and_tag ()
+      else
+        ignore
+          (Runtime.invoke2 "thread-api/get-case-page" (Wire.String repo_v)
+             (Wire.String title)
+           |> Js.Promise.then_ (fun w ->
+                  Js.Promise.resolve
+                    (match Wire.get w "db/ident" with
+                     | Some _ -> (
+                         emit ac.editor ac.tpos "";
+                         close_ac t;
+                         match Wire.map_get_int w "db/id" with
+                         | Some dbid -> save_and_tag dbid
+                         | None -> ())
+                     | None -> (
+                         match w with
+                         | Wire.Map _ ->
+                             emit ac.editor ac.tpos ("#" ^ title);
+                             close_ac t
+                         | _ -> create_and_tag ()))))
+
 let apply_item t ac it =
   match it.ai_act with
   | Switch kind ->
@@ -464,6 +569,8 @@ let apply_item t ac it =
       Editor_embed.insert title
   | Emit text -> insert_text ac text; close_ac t
   | Editor_cmd c -> emit_cmd c []; close_ac t
+  | Tag_apply title -> apply_tag t ac ~create:false title
+  | Tag_create title -> apply_tag t ac ~create:true title
   | Noop -> ()
 ;;
 

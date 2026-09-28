@@ -16,9 +16,17 @@
 open Lui_elements
 module D = Render_dom
 
-(* .block-title-wrap with inline-parsed children *)
+(* .block-title-wrap with inline-parsed children; plain titles become a
+   direct text node (cljs parity — Playwright :text-is needs it).
+
+   The key flips between "t" (text prop) and "c" (children) so a
+   text↔children transition remounts: LUI applies the textContent write
+   before the child removal within a batch, which would detach the
+   tracked child early. *)
 let wrap ?(cls = "block-title-wrap") ?(tag = "span") s : t =
-  D.el ~tag ~style_class:cls (Render_inline.parse s)
+  match Render_inline.plain_text s with
+  | Some text -> D.el ~key:"btw-t" ~tag ~style_class:cls ~text []
+  | None -> D.el ~key:"btw-c" ~tag ~style_class:cls (Render_inline.parse s)
 
 (* #..###### markdown heading at title start *)
 let heading_level s =
@@ -128,7 +136,14 @@ let content s =
   | Some (lvl, rest) ->
       wrap ~tag:("h" ^ string_of_int lvl)
         ~cls:"block-title-wrap as-heading" rest
-  | None -> wrap s
+  | None ->
+      (* empty title: a <br> gives the inline wrap a line box, so
+         .block-content keeps its clickable area (cljs does the same via
+         the mldoc linebreak node it emits for empty content) *)
+      if s = "" then
+        D.el ~key:"btw-c" ~tag:"span" ~style_class:"block-title-wrap"
+          [ D.el ~key:"btw-br" ~tag:"br" [] ]
+      else wrap s
 
 let title (s : string) : t list =
   match quote_body s with

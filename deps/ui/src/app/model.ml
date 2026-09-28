@@ -16,6 +16,8 @@ type block =
   ; block_db_id : int option
   ; block_title : string
   ; block_level : int
+  ; block_tag_ids : int list (* block/tags ref ids from the pull *)
+  ; block_tags : string list (* resolved tag titles, for .block-tags *)
   ; block_children : block list
   ; (* db id of a :block/link target — the block renders the linked
        page's blocks instead of its own children *)
@@ -23,6 +25,7 @@ type block =
   ; (* fetched blocks of the linked entity; never written back by
        structure ops (they belong to the source page) *)
     block_embed_children : block list
+  ; block_page_name : string option (* containing page, for ref rows *)
   }
 
 type page =
@@ -31,6 +34,7 @@ type page =
   ; page_db_id : int option
   ; page_is_tag : bool
   ; page_journal_day : int option
+  ; page_tags : string list
   ; page_blocks : block list
   }
 
@@ -40,7 +44,9 @@ type phase =
   | Failed of string
 
 (* modal confirm intent — carried as data so it survives the reducer *)
-type confirm = Confirm_delete_page of string (* page uuid *)
+type confirm =
+  | Confirm_delete_page of string (* page uuid *)
+  | Confirm_convert_tag_to_page of int (* class db/id *)
 
 (* worker :notification broadcast -> toast *)
 type toast =
@@ -78,6 +84,7 @@ type t =
   ; route_page : page option
   ; journals : page list
   ; page_refs : block list
+  ; unlinked_refs : block list
   ; repos : string list
   ; theme_dark : bool
   ; left_sidebar_open : bool
@@ -100,6 +107,7 @@ let initial =
   ; route_page = None
   ; journals = []
   ; page_refs = []
+  ; unlinked_refs = []
   ; repos = []
   ; theme_dark = false
   ; left_sidebar_open = true
@@ -114,3 +122,47 @@ let initial =
   ; unlinked_query = ""
   ; gv = graph_view_initial
   }
+
+(* optimistic reorder for move-up/down: only handles the common case of a
+   contiguous run of top-level blocks; anything else is left for the worker
+   refresh to reconcile *)
+let move_selected_top_blocks (page : page) (uuids : string list) (up : bool)
+    : page =
+  let sel = List.sort_uniq compare uuids in
+  let idx =
+    List.mapi (fun i b -> (b, i)) page.page_blocks
+    |> List.filter_map (fun (b, i) ->
+           match b.block_uuid with
+           | Some u when List.mem u sel -> Some (i, b)
+           | _ -> None)
+  in
+  match idx with
+  | [] -> page
+  | _ ->
+      let positions = List.map fst idx in
+      let contiguous =
+        match positions with
+        | first :: rest ->
+            snd
+              (List.fold_left
+                 (fun (expected, ok) i -> (expected + 1, ok && i = expected))
+                 (first + 1, true) rest)
+        | [] -> false
+      in
+      if not contiguous then page
+      else
+        let first = List.hd positions in
+        let n = List.length positions in
+        if up && first = 0 then page
+        else if (not up) && first + n >= List.length page.page_blocks then page
+        else
+          let arr = Array.of_list page.page_blocks in
+          if up then (
+            let pivot = arr.(first - 1) in
+            Array.blit arr first arr (first - 1) n;
+            arr.(first - 1 + n) <- pivot)
+          else (
+            let pivot = arr.(first + n) in
+            Array.blit arr first arr (first + 1) n;
+            arr.(first) <- pivot);
+          { page with page_blocks = Array.to_list arr }

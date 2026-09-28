@@ -4,7 +4,6 @@
 
 module W = Webapi.Dom
 
-external window : Js.Json.t = "window"
 external document_ : W.Document.t = "document"
 external location_ : Js.Json.t = "location"
 
@@ -49,6 +48,13 @@ let document_set_data name value =
 
 external console_log : 'a -> unit = "log" [@@mel.scope "console"]
 external console_error : 'a -> unit = "error" [@@mel.scope "console"]
+
+external error_message :
+  Js.Promise.error -> string Js.Nullable.t = "message" [@@mel.get]
+
+(* Melange wraps JS rejections as Js.Exn.Error whose payload is the real
+   error in field _1 *)
+external error_inner : Js.Promise.error -> 'a = "_1" [@@mel.get]
 
 external add_event_listener :
   string -> (Js.Json.t -> unit) -> unit = "addEventListener"

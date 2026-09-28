@@ -82,7 +82,7 @@ let control_wrap uuid : t =
     ; dom ~key:("blw-" ^ uuid) ~tag:"a" ~style_class:"bullet-link-wrap"
         [ dom ~key:("dotw-" ^ uuid) ~tag:"span"
             ~id:("dot-" ^ uuid)
-            ~attrs:[ ("blockid", uuid) ]
+            ~attrs:[ ("blockid", uuid); ("draggable", "true") ]
             ~style_class_signal:
               (Logseq_dom.class_signal (collapsed_sig uuid) (fun c ->
                    "bullet-container cursor-pointer"
@@ -104,6 +104,8 @@ let editing_sig uuid =
     (S.signal ())
 
 let content_el uuid (b : Model.block) : t =
+  (* style width:100% — cljs parity (block.cljs): gives the inline element a
+     nonzero box so empty blocks stay clickable *)
   dom ~key:("content-" ^ uuid) ~style_class:"block-content inline"
     ~style_class_signal:
       (Logseq_dom.class_signal
@@ -113,7 +115,8 @@ let content_el uuid (b : Model.block) : t =
               e2e's .block-title-wrap contents still read the title *)
            "block-content inline" ^ if editing then " hidden" else ""))
     ~id:("block-content-" ^ uuid)
-    ~attrs:[ ("blockid", uuid); ("containerid", uuid) ]
+    ~attrs:
+      [ ("blockid", uuid); ("containerid", uuid); ("style", "width:100%") ]
     [ dom ~key:("bci-" ^ uuid)
         ~style_class:"block-content-inner flex flex-row justify-between"
         [ dom ~key:("bh-" ^ uuid) ~style_class:"block-head-wrap"
@@ -156,6 +159,37 @@ let content_or_editor uuid (b : Model.block) : t =
   ignore ((if_ ~test:(editing_sig uuid) (editor_el uuid)) context parent);
   node
 
+(* -- tags chips (components/block.cljs tags-cp): sibling of the content
+   wrapper so they stay visible while the block is being edited. Tags that
+   still appear inline in the title ("#tag") are skipped — they render in
+   the title itself. -- *)
+
+let contains_sub hay needle =
+  let n = String.length hay and m = String.length needle in
+  let rec go i =
+    i + m <= n && (String.sub hay i m = needle || go (i + 1))
+  in
+  go 0
+
+let tags_el uuid (b : Model.block) : t =
+  let visible =
+    List.filter
+      (fun tag -> not (contains_sub b.block_title ("#" ^ tag)))
+      b.block_tags
+  in
+  match visible with
+  | [] -> box ~key:("tags-" ^ uuid) []
+  | tags ->
+      dom ~key:("tags-" ^ uuid) ~style_class:"block-tags gap-1"
+        (List.mapi
+           (fun i tag ->
+             dom ~key:("tag-" ^ uuid ^ "-" ^ string_of_int i)
+               ~style_class:"block-tag"
+               [ dom ~key:("ta-" ^ uuid ^ "-" ^ string_of_int i) ~tag:"a"
+                   ~style_class:"tag" ~text:tag []
+               ])
+           tags)
+
 (* -- row -- *)
 
 (* module init runs at app load (page.ml references block_row): install
@@ -197,6 +231,7 @@ and row_el (b : Model.block) : t =
                                 ~style_class:
                                   "block-content-wrapper flex flex-1 w-full"
                                 [ content_or_editor uuid b ]
+                            ; tags_el uuid b
                             ]
                         ]
                     ]
