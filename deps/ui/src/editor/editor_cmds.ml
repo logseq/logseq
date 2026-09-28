@@ -89,7 +89,7 @@ let run ~command ~block ~value =
             (Js.Json.object_
                (Js.Dict.fromList [ ("uuid", Js.Json.string uuid) ]))
       | "copy-ref" ->
-          ignore (clipboard_write ("((" ^ uuid ^ "))"))
+          ignore (clipboard_write ("[[" ^ uuid ^ "]]"))
       | "copy" ->
           let title =
             match Editor_state.find uuid with
