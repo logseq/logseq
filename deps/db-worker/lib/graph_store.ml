@@ -119,6 +119,8 @@ let delete db addrs =
    (tail append) payload, so we buffer entries until one arrives and
    flush them as a single transaction. Reads during a buffered batch see
    pending payloads first. *)
+let wal_checkpoint_idle_ms = 2000
+
 let storage db =
   let pending = ref [] in
   (* node addresses are sequential and payloads immutable once written,
@@ -127,11 +129,29 @@ let storage db =
      nodes to compute index depth, and lazy indexes restore a node per
      lookup — without the cache each read is a sqlite roundtrip. *)
   let cache : (string, storage_payload) Hashtbl.t = Hashtbl.create 1024 in
+  (* cljs schedule-wal-checkpoint!: debounced 2s idle WAL checkpoint.
+     Without it the WAL grows across every commit until close-db, and
+     commit writes slow progressively over a long session. *)
+  let checkpoint_timer : Timers.timer option ref = ref None in
+  let schedule_checkpoint () =
+    (match !checkpoint_timer with
+     | Some t -> Timers.clear t
+     | None -> ());
+    checkpoint_timer :=
+      Some
+        (Timers.set_timeout wal_checkpoint_idle_ms (fun () ->
+             checkpoint_timer := None;
+             (try Sqlite.checkpoint db
+              with e ->
+                Worker_log.warn "db-worker/wal-checkpoint-failed"
+                  [ "error", Printexc.to_string e ])))
+  in
   let flush () =
     if !pending <> [] then begin
       let entries = !pending in
       pending := [];
-      store db entries
+      store db entries;
+      schedule_checkpoint ()
     end
   in
   {

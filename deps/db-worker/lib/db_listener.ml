@@ -99,10 +99,12 @@ let log_tx_outliner_op_perf (data : Wire.t) =
           [ ("data", Ds_wire.edn_of_transit data') ]
       else if !Sync_state.outliner_perf_logging
               && List.mem (op_names_of data') e2e_perf_op_names then
+        (* cljs select-keys [:op-names :worker-apply-ms] *)
         let slim =
           Wire.Map
             (List.filter
-               (fun (k, _) -> k = kw "op-names" || k = kw "worker-apply-ms")
+               (fun (k, _) ->
+                 k = kw "op-names" || k = kw "worker-apply-ms")
                (Wire.as_map data'))
         in
         Worker_log.info ":db-worker/outliner-op-perf"
