@@ -131,6 +131,11 @@
                      (event-target event)]
                     (event-composed-path event)))))
 
+(defn- focus-guard-target?
+  [target]
+  (and (element? target)
+       (some? (.closest target "[data-base-ui-focus-guard]"))))
+
 (def ^:private menu-transition-close-reasons
   #{"trigger-hover" "trigger-focus" "list-navigation" "sibling-open"})
 
@@ -358,7 +363,11 @@
                                           opening-outside-press? (and (= reason "outside-press")
                                                                       (number? ignore-opening-outside-press-until)
                                                                       (< (js/Date.now) ignore-opening-outside-press-until))
-                                          focus-transition? (= reason "focus-out")
+                                          ;; Tab/Shift+Tab lands on Base UI focus guards and requests
+                                          ;; a focus-out close. Canceling that close keeps the guards
+                                          ;; mounted and they re-focus each other until the stack overflows.
+                                          focus-transition? (and (= reason "focus-out")
+                                                                 (not (some focus-guard-target? targets)))
                                           menu-transition? (and use-menu?
                                                                 (contains? menu-transition-close-reasons reason))
                                           handler (case reason
