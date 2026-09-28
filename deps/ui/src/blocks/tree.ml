@@ -168,6 +168,7 @@ let editor_el uuid scope : t =
               ]
             []
         ]
+    ; Asset_dom.upload_input ("up-" ^ uuid)
     ]
 
 let content_or_editor uuid scope (b : Model.block) : t =
@@ -176,7 +177,15 @@ let content_or_editor uuid scope (b : Model.block) : t =
      edited block or e2e counts a stale title *)
   dyn ~equal:(fun a b -> a = b)
     (fun editing ->
-      if editing then editor_el uuid scope else content_el uuid b)
+      match b.Model.block_asset_type with
+      | Some _ ->
+          (* asset blocks keep the media visible while the block is being
+             edited (cljs renders content + editor inside the same wrap) *)
+          if editing then
+            dom ~key:("ae-" ^ uuid) ~style_class:"flex flex-col w-full"
+              [ Asset_dom.block_view uuid b; editor_el uuid scope ]
+          else Asset_dom.block_view uuid b
+      | None -> if editing then editor_el uuid scope else content_el uuid b)
     (Signal.map
        (fun (st : S.t) ->
          match st.editing with
@@ -233,7 +242,8 @@ let tags_el uuid (b : Model.block) : t =
    zero blocks, where block_row is never mounted *)
 let () =
   Editor_keys.install_once ();
-  Add_button.install ()
+  Add_button.install ();
+  Asset_dom.install ()
 
 let rec block_row ?(scope = "main") (b : Model.block) : t =
  fun ctx parent ->

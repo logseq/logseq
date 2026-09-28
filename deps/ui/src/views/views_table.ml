@@ -148,7 +148,13 @@ let build_columns (inst : V.inst) (properties : W.t list) : V.column list =
       [ select_column; page_title_column; refs_count_column; tags_column
       ; created_column; updated_column ]
   | V.KTagPage _ ->
-      [ select_column; id_column; title_column ] @ with_tags
+      (* cljs objects.cljs: Asset-class tag pages get a "File" column
+         before the logseq property columns *)
+      [ select_column; id_column; title_column ]
+      @ (if inst.V.asset_class
+         then [ builtin_column "file" "File" "default" ~disable_hide:true () ]
+         else [])
+      @ with_tags
       @ [ created_column; updated_column; page_column ]
   | V.KQuery _ ->
       (* cljs get-query-columns: build-columns over view-data :properties
@@ -386,6 +392,7 @@ let cell_el inst ~refresh ~row_uuid ~blk ~idx (c : V.column) : D.el =
        D.el_append_child cell inner
    | "block/title" ->
        D.el_append_child cell (title_cell inst ~row_uuid ~blk c)
+   | "file" -> D.el_append_child cell (Asset_dom.file_cell blk)
    | _ -> D.el_append_child cell (prop_cell ~blk c));
   cell
 

@@ -136,7 +136,17 @@ let build_columns inst =
   in
   match inst.V.kind with
   | V.KTagPage owner_uuid ->
-      Db.get_class_properties (W.Uuid owner_uuid) apply
+      (* cljs objects.cljs build-class-object-columns: the Asset class
+         gets an extra "File" column — detect it by the class ident *)
+      Db.get_blocks [ owner_uuid ] (fun ents ->
+          inst.V.asset_class <-
+            (match ents with
+             | [ e ] ->
+                 W.as_keyword
+                   (Option.value (W.get e "db/ident") ~default:W.Nil)
+                 = Some "logseq.class/Asset"
+             | _ -> false);
+          Db.get_class_properties (W.Uuid owner_uuid) apply)
   | _ -> apply []
 
 let load_view_data inst =
