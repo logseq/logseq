@@ -228,3 +228,13 @@ let body (_ms : Model.t Signal.signal) : t =
       ]
   in
   node ctx parent
+
+(* cljs ui/toggle-theme — resolve system first, then flip light/dark *)
+let toggle_theme () =
+  let cur =
+    match current_mode () with
+    | "system" ->
+        if Browser_ui.prefers_dark () then "dark" else "light"
+    | m -> m
+  in
+  use_mode (if cur = "dark" then "light" else "dark")

@@ -172,7 +172,12 @@ focus fix above.
   multi-scalar forms return rows. Nested vector queries need the nested
   `Array` wrapping.
 
-## LUI runtime issues found and fixed (already merged upstream)
+## LUI runtime issues found and fixed (upstream; see branch notes)
+
+(The same-batch create+drop / dead-event fixes live on
+`devin/lui-removechild-guard` in logseq/lui — **not yet merged to main**;
+the opam pin tracks `#main`, so pin `lui` to that branch locally until it
+lands. Earlier items in this list are on main.)
 
 - Retained-store `insert_at` duplicated elements on non-end insertion,
   producing stale node ids (crash on Toast page nav).
@@ -502,6 +507,73 @@ Contracts discovered while making `logseq.e2e.commands-basic-test` green
   `order-list-type` silently decodes to nothing. db-worker has its own
   build: `cd deps/db-worker && dune build js_api && vite build --mode
   browser`.
+
+### cmdk palette (cljs `frontend.components.cmdk.core` parity)
+
+- **Commands group = `global-shortcut-commands`**: every shortcut.handler
+  command in groups editor-global + global-prevent-default +
+  global-non-editing-only. cljs `build-category-map` drops `:inactive`
+  entries when the config is built — on web that removes electron-only
+  bindings (find-in-page, db-save, shell/run, window/close,
+  copy-page-url), plugin file/GitHub installers, and dev-only
+  replace-graph — so `commands_data.ml` omits them (95 ids: 86
+  web-visible + 9 dev-gated). Each row renders its keycap binding on
+  the right (mac shows ⌘/⌥/⇧/⌃ glyphs via `Platform.is_mac`, non-mac
+  shows Ctrl/Alt/Shift/Delete words). dev/* rows are gated on
+  developer-mode at query time, like cljs.
+- **Command order = cljs `top-commands`**: sort by :id, then stable
+  sort by :invokes-count ascending and `reverse` — net effect:
+  invoke-count desc, every equal-count run in reverse :id order. The
+  0-count majority therefore renders reverse-alphabetical by id
+  (e.g. "Select parent block" before "Edit selected block" on "block").
+  Invokes persist in localStorage `commands-history` like cljs.
+- **Blank input runs `:initial` + `:filters` only** (cljs `load-results
+  :default`): the palette shows Recently updated + Filters — no
+  Commands/Nodes/Files groups — until a query or filter is chosen.
+- **Fuzzy filter** = cljs `fuzzy-search-multi` semantics
+  (`Fuzzy.fuzzy_search_multi`): max score over several extract fields,
+  score > 0, stable sort desc, group limit nodes=10 / others=5; query
+  "Seed" still returns ~15 commands.
+- **Group header** shows `<title> <total-count>` plus `Show more ⌘↓` /
+  `Show less ⌘↑` when `gitems > limit`; `mod+down/up` expands/collapses
+  per group (state lives on the view record, not the DOM).
+- **Filters group** prepends "Search only current page" (file icon,
+  `G_current_page` scope) only on a named `:page` route (cljs
+  `state/get-current-page` — the journals/home route doesn't count);
+  **Nodes rows matching the current page get a "Current Page" badge**
+  under the same gate; **Files group lists `logseq/config.edn`** as a
+  static entry.
+- **Query highlight**: titles render `<mark>`-wrapped match segments
+  (`highlight_el`); indices must index the SAME bytes `String.sub`
+  slices — normalize with `String.lowercase_ascii text`, not a
+  normalizer that re-encodes, or non-ASCII queries shift every segment
+  bound and crash inside the dyn render.
+- **Hint bar** at the bottom = cljs tips row — `rand-nth
+  [:filter-results :open-sidebar]` per open (either "Press / to filter
+  search results" or "Press ⌘⏎ to open search in the sidebar").
+- **Escape semantics** (cljs `clear_or_close`): first Escape clears a
+  non-empty input/filter, second Escape closes — a bare Escape does NOT
+  close while input is non-empty.
+- **Same-batch create+drop = live crash without lui fix**: any view
+  change that mounts a subtree and drops it again inside one signal
+  stabilize (two publishes in one flush — e.g. keyed re-orders + row
+  remounts from rapid input) emits `create-*` + `drop-node` for the same
+  node id; the web backend commits the store batch before DOM replay,
+  so `dom_node` then throws `invalid_arg "unknown DOM node"` and the
+  failed batch wedges `runtime_generation` (every later flush fails
+  `expected patch generation`). Fixed LUI-side by
+  `devin/lui-removechild-guard` (commit `317b801`: `enqueue_drop`
+  cancels same-batch create+drop op groups, `dispatch` absorbs events
+  on dead nodes) — **the opam pin tracks `#main`, so that branch must
+  merge to logseq/lui main for fresh sessions/snapshots to keep the
+  fix**; locally repin with
+  `opam pin lui git+https://github.com/logseq/lui.git#devin/lui-removechild-guard`.
+- **Rows must not subscribe the whole view signal**: keyed rows read
+  per-item fields that `Cmdk_state.decorate` bakes at publish
+  (`ihl`/`imouse`/`iq`/`gfilter_active`), and the inner `keyed` uses
+  `item_dom_key` (content-versioned key) so any render-visible change
+  does a clean remove+insert instead of publishing into a row that the
+  same flush may tear down.
 
 ## tag-basic-test (page-title tagging)
 

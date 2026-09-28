@@ -119,6 +119,14 @@ let replace_url_fragment hash = replace_state Js.Json.null "" hash
 let on_hash_change f =
   add_event_listener "hashchange" (fun _ -> f ())
 
+external history_back : unit -> unit = "back" [@@mel.scope "history"]
+external history_forward : unit -> unit = "forward" [@@mel.scope "history"]
+
+external clipboard_write_text : string -> unit Js.Promise.t = "writeText"
+  [@@mel.scope "navigator.clipboard"]
+
+let copy_to_clipboard s = ignore (clipboard_write_text s)
+
 external add_document_listener :
   string -> (Js.Json.t -> unit) -> unit = "addEventListener"
   [@@mel.scope "document"]
@@ -151,6 +159,15 @@ let desktop_os () =
     i + m <= n && (String.sub p i m = sub || contains (i + 1) sub)
   in
   contains 0 "mac" || contains 0 "win"
+
+(* cljs util/mac? — goog.userAgent MAC *)
+let is_mac () =
+  let p = String.lowercase_ascii (navigator_platform navigator_) in
+  let n = String.length p in
+  let rec go i =
+    i + 3 <= n && (String.sub p i 3 = "mac" || go (i + 1))
+  in
+  go 0
 
 external json_parse : string -> Js.Json.t = "parse" [@@mel.scope "JSON"]
 external json_prop : Js.Json.t -> string -> Js.Json.t = "" [@@mel.get_index]

@@ -537,9 +537,10 @@ let header_cell inst ~refresh (c : V.column) : D.el =
             ~cls:"h-8 w-6 flex items-center justify-center"
             ~attrs:[ ("for", "header-index"); ("title", I.row_number) ]
             ~text:"#" ())
-   | _ -> (
-       D.el_append_child cell (header_button inst ~refresh c);
-       match c.V.c_prop with
+   | _ ->
+       D.el_append_child cell
+         (D.h ~tag:"span" ~cls:"truncate" ~text:c.V.c_name ());
+       (match c.V.c_prop with
         | Some p ->
             (* cljs header-cp: property columns open the property
                configure dropdown (.ls-property-dropdown) *)
@@ -559,7 +560,7 @@ let header_cell inst ~refresh (c : V.column) : D.el =
                   (W.Map
                      [ (W.Keyword "property", p)
                      ; (W.Keyword "property-id", W.Keyword c.V.c_id) ]))
-        | None -> ()));
+        | None -> D.el_append_child cell (header_button inst ~refresh c)));
   cell
 
 (* ---------- action bar ---------- *)
@@ -686,42 +687,6 @@ let table_el inst ~refresh : D.el =
   List.iter
     (fun c -> D.el_append_child header_row (header_cell inst ~refresh c))
     cols;
-  (* cljs add-property-button: trailing "New property" header cell on
-     class-objects tables only (property-objects/all-pages set
-     show-add-property? false) *)
-  (match inst.V.kind with
-   | V.KTagPage _ -> (
-       match !Runtime.current_page with
-       | Some p -> (
-           let cell = D.h ~cls:"ls-table-header-cell !border-0" () in
-           let btn =
-             D.h ~tag:"button"
-               ~cls:
-                 (D.button_cls ~variant:"text"
-                    ~cls:"h-8 !pl-2 !px-2 !py-0 hover:text-foreground \
-                          w-full justify-start"
-                    ())
-               ~children:
-                 [ D.icon "plus"
-                 ; D.h ~tag:"span" ~text:I.new_property () ]
-               ()
-           in
-           (match p.Model.page_uuid with
-            | Some uuid ->
-                D.el_add_listener btn "click" (fun _ ->
-                    let r = D.el_rect cell in
-                    Properties_dialog.open_dialog
-                      ~anchor:(D.rect_left r, D.rect_bottom r +. 4.)
-                      { Properties_dialog.uuid
-                      ; db_id = p.Model.page_db_id
-                      ; is_tag = true
-                      ; title = p.Model.page_title
-                      })
-            | None -> ());
-           D.el_append_child cell btn;
-           D.el_append_child header_row cell)
-       | None -> ())
-   | _ -> ());
   D.el_append_child header header_row;
   (match action_bar inst ~refresh with
    | Some bar -> D.el_append_child header bar
@@ -732,20 +697,9 @@ let table_el inst ~refresh : D.el =
       D.el_append_child rel
         (row_el inst ~refresh ~idx:(i + 1) ~row_uuid:u cols))
     (all_row_uuids inst);
-  (* cljs add-new-row footer when data-fns has add-new-object!:
-     property-objects always; class-objects only for non-private
-     classes (route-info add-object?); all-pages/query never *)
-  let has_add_object =
-    match inst.V.kind with
-    | V.KPropertyPage _ -> true
-    | V.KTagPage _ -> (
-        match !Runtime.current_page with
-        | Some p -> p.Model.page_add_object
-        | None -> false)
-    | V.KAllPages | V.KQuery _ -> false
-  in
-  (match has_add_object with
-   | true ->
+  (* cljs add-new-row footer when data-fns has add-new-object! *)
+  (match inst.V.kind with
+   | V.KTagPage _ | V.KAllPages | V.KPropertyPage _ ->
        let footer = D.h ~cls:"ls-table-footer fade-in faster" () in
        let row =
          D.h
@@ -760,7 +714,7 @@ let table_el inst ~refresh : D.el =
            (V.ops ()).V.o_add_object inst);
        D.el_append_child footer row;
        D.el_append_child rel footer
-   | false -> ());
+   | V.KQuery _ -> ());
   D.el_append_child scroller rel;
   D.el_append_child tbl scroller;
 
@@ -812,38 +766,21 @@ let gallery_card_el ~title : D.el = D.h ~cls:"ls-card-item" ~text:title ()
 
 (* ---------- foldable groups ---------- *)
 
-(* cljs svg/caret-right inside .rotating-arrow *)
-let caret_arrow ~collapsed : D.el =
+let foldable inst ~refresh ~key ~title_text ~(body : unit -> D.el) : D.el =
+  let collapsed = V.Sset.mem key inst.V.collapsed_groups in
   let arrow =
     D.h ~tag:"span"
-      ~cls:("rotating-arrow" ^ if collapsed then " collapsed" else " not-collapsed")
-      ()
-  in
-  D.el_inner_html_set arrow
-    "<svg class=\"h-4 w-4\" aria-hidden=\"true\" version=\"1.1\" \
-     viewBox=\"0 0 192 512\" fill=\"currentColor\" \
-     display=\"inline-block\" style=\"margin-left: \
-     2px\"><path d=\"M0 384.662V127.338c0-17.818 21.543-26.741 \
-     34.142-14.142l128.662 128.662c7.81 7.81 7.81 20.474 0 \
-     28.284L34.142 398.804C21.543 411.404 0 402.48 0 384.662z\" \
-     fill-rule=\"evenodd\"/></svg>";
-  arrow
-
-(* cljs ui/foldable: .flex.flex-col > (.ls-foldable-title.content +
-   .ls-foldable-content > .ls-foldable-content-inner). The caret toggles
-   control-show only while the title is hovered (or while collapsed). *)
-let foldable inst ~refresh ~key ~title_el ~(body : unit -> D.el) : D.el =
-  let collapsed = V.Sset.mem key inst.V.collapsed_groups in
-  let ctrl_wrap =
-    D.h ~tag:"span"
       ~cls:(if collapsed then "control-show cursor-pointer" else "control-hide")
-      ~children:[ caret_arrow ~collapsed ] ()
+      ~children:
+        [ D.h ~tag:"i"
+            ~cls:("ti ti-chevron-" ^ if collapsed then "right" else "down")
+            () ]
+      ()
   in
   let ctrl =
     D.h ~tag:"a"
       ~cls:"ls-foldable-title-control block-control opacity-50 hover:opacity-100"
-      ~attrs:[ ("style", "width:14px;height:16px") ]
-      ~children:[ ctrl_wrap ] ()
+      ~attrs:[ ("style", "width:14px;height:16px") ] ~children:[ arrow ] ()
   in
   D.el_add_listener ctrl "pointerdown" (fun ev ->
       Editor_dom.stop_propagation ev;
@@ -852,27 +789,15 @@ let foldable inst ~refresh ~key ~title_el ~(body : unit -> D.el) : D.el =
       else
         inst.V.collapsed_groups <- V.Sset.add key inst.V.collapsed_groups;
       refresh inst);
-  let fold_title =
-    D.h ~cls:"flex-1 flex-row foldable-title"
-      ~children:
-        [ D.h ~cls:"flex flex-row items-center ls-foldable-header gap-1"
-            ~children:[ ctrl; title_el ] () ]
+  let header =
+    D.h ~cls:"flex flex-row items-center ls-foldable-header gap-1"
+      ~children:[ ctrl; D.h ~text:title_text () ]
       ()
   in
-  D.el_add_listener fold_title "mouseover" (fun _ ->
-      if not collapsed then begin
-        D.el_class_remove ctrl_wrap "control-hide";
-        D.el_class_add ctrl_wrap "control-show";
-        D.el_class_add ctrl_wrap "cursor-pointer"
-      end);
-  D.el_add_listener fold_title "mouseout" (fun _ ->
-      if not collapsed then begin
-        D.el_class_remove ctrl_wrap "control-show";
-        D.el_class_remove ctrl_wrap "cursor-pointer";
-        D.el_class_add ctrl_wrap "control-hide"
-      end);
-  let title =
-    D.h ~cls:"ls-foldable-title content" ~children:[ fold_title ] ()
+  let title_el =
+    D.h ~cls:"ls-foldable-title content"
+      ~children:[ D.h ~cls:"flex-1 flex-row foldable-title" ~children:[ header ] () ]
+      ()
   in
   let content =
     D.h
@@ -881,7 +806,7 @@ let foldable inst ~refresh ~key ~title_el ~(body : unit -> D.el) : D.el =
       ~children:[ D.h ~cls:"ls-foldable-content-inner" ~children:[ body () ] () ]
       ()
   in
-  D.h ~cls:"flex flex-col" ~children:[ title; content ] ()
+  D.h ~cls:"flex flex-col" ~children:[ title_el; content ] ()
 
 let group_title inst gv =
   match gv with
@@ -903,7 +828,7 @@ let render_list inst ~refresh body =
         (fun i g ->
           D.el_append_child body
             (foldable inst ~refresh ~key:("g" ^ string_of_int i)
-               ~title_el:(D.h ~text:(group_title inst g.Wr.gv) ())
+               ~title_text:(group_title inst g.Wr.gv)
                ~body:(fun () ->
                  let w = D.h () in
                  List.iter
@@ -918,7 +843,7 @@ let render_list inst ~refresh body =
         (fun i g ->
           D.el_append_child body
             (foldable inst ~refresh ~key:("g" ^ string_of_int i)
-               ~title_el:(D.h ~text:(group_title inst g.Wr.glv) ())
+               ~title_text:(group_title inst g.Wr.glv)
                ~body:(fun () ->
                  let w = D.h () in
                  List.iteri
@@ -926,7 +851,7 @@ let render_list inst ~refresh body =
                      D.el_append_child w
                        (foldable inst ~refresh
                           ~key:("g" ^ string_of_int i ^ "-" ^ string_of_int j)
-                          ~title_el:(D.h ~text:(row_title inst buuid) ())
+                          ~title_text:(row_title inst buuid)
                           ~body:(fun () ->
                             let w2 = D.h () in
                             List.iter
@@ -961,7 +886,7 @@ let render_table inst ~refresh body =
         (fun i g ->
           D.el_append_child body
             (foldable inst ~refresh ~key:("g" ^ string_of_int i)
-               ~title_el:(D.h ~text:(group_title inst g.Wr.gv) ())
+               ~title_text:(group_title inst g.Wr.gv)
                ~body:(grouped_table inst ~refresh ~rows:g.Wr.grows)))
         gs
   | Wr.VGroupedList gs ->
@@ -969,7 +894,7 @@ let render_table inst ~refresh body =
         (fun i g ->
           D.el_append_child body
             (foldable inst ~refresh ~key:("g" ^ string_of_int i)
-               ~title_el:(D.h ~text:(group_title inst g.Wr.glv) ())
+               ~title_text:(group_title inst g.Wr.glv)
                ~body:(fun () ->
                  let w = D.h () in
                  List.iteri
@@ -977,7 +902,7 @@ let render_table inst ~refresh body =
                      D.el_append_child w
                        (foldable inst ~refresh
                           ~key:("g" ^ string_of_int i ^ "-" ^ string_of_int j)
-                          ~title_el:(D.h ~text:(row_title inst buuid) ())
+                          ~title_text:(row_title inst buuid)
                           ~body:(grouped_table inst ~refresh ~rows)))
                    g.Wr.glparts;
                  w)))

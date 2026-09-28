@@ -14,24 +14,17 @@ type group_id =
   | G_codes
   | G_themes
 
-type command_id =
-  | Cmd_journals
-  | Cmd_search
-  | Cmd_db_add
-  | Cmd_move
-  | Cmd_all_graphs
-  | Cmd_all_pages
-  | Cmd_validate
-  | Cmd_rtc_start
-  | Cmd_rtc_stop
-  | Cmd_add_reaction
-  | Cmd_add_comment
+type badge_kind =
+  | No_badge
+  | Text_badge (* inline "Current Page" after the title (page results) *)
+  | Header_badge (* "Current Page" on the header row (block results) *)
 
 type action =
   | Create_page of string
   | Open_page of string (* block/uuid *)
   | Open_block of string (* block/uuid -> resolve owning page *)
-  | Run of command_id
+  | Open_file of string (* file/path, e.g. logseq/config.edn *)
+  | Run of string (* cljs shortcut id, e.g. "editor/move-blocks" *)
   | Set_filter of group_id
 
 type item =
@@ -42,7 +35,12 @@ type item =
   ; info : string option
   ; header : string option
   ; iicon : string (* tabler icon name, "" = none *)
+  ; isc : string (* decorated shortcut display string, "" = none *)
+  ; ibadge : badge_kind
   ; act : action
+  ; ihl : bool (* view.hl = idx — baked in by [decorate] *)
+  ; imouse : bool (* mouse-mode flag, baked in by [decorate] *)
+  ; iq : string (* query that produced this item (marks source) *)
   }
 
 type group =
@@ -52,6 +50,7 @@ type group =
   ; gtotal : int
   ; glimit : int
   ; gexpanded : bool
+  ; gfilter_active : bool (* view.filter = Some gid, baked by [decorate] *)
   }
 
 type view =
@@ -64,6 +63,7 @@ type view =
   ; mouse : bool
   ; filter : group_id option
   ; recents : item list
+  ; tip : int (* 0 = filter-results, 1 = open-sidebar (cljs rand-tip) *)
   }
 
 type t =
@@ -74,15 +74,54 @@ type t =
 let initial_view =
   { open_ = false; input = ""; move_mode = false; groups = []
   ; expanded = []; hl = -1; mouse = false; filter = None
-  ; recents = [] }
+  ; recents = []; tip = 0 }
 
 let make scheduler : t =
   { vs = Signal.state scheduler initial_view; gen = ref 0 }
 
 let get st = Signal.get st.vs.state_signal
 
-let set st v = Runtime.signal_set st.vs v
+(* View-derived flags are baked into every item and group at publish
+   time so keyed rows never subscribe the view signal themselves: a row
+   removed mid-flush would otherwise re-mount its branch and emit DOM
+   ops for nodes that the same batch tears down. *)
+let decorate (v : view) : view =
+  { v with
+    groups =
+      List.map
+        (fun g ->
+          { g with
+            gfilter_active = v.filter = Some g.gid
+          ; gitems =
+              List.map
+                (fun it ->
+                  { it with
+                    ihl = v.hl = it.idx
+                  ; imouse = v.mouse
+                  ; iq = v.input })
+                g.gitems })
+        v.groups }
+
+let set st v = Runtime.signal_set st.vs (decorate v)
 let set_in st f = set st (f (get st))
+
+(* Content-versioned DOM key: any render-visible change yields a new key,
+   so keyed lists drop+remount the row instead of publishing an in-place
+   update — a row must never re-mount its dynamic branches inside the
+   same flush that tears other rows down (that ordering emits create ops
+   for nodes the batch already dropped). *)
+let item_dom_key (it : item) =
+  let badge_n =
+    match it.ibadge with
+    | No_badge -> 0
+    | Text_badge -> 1
+    | Header_badge -> 2
+  in
+  Printf.sprintf "%s#%d|%b|%b|%s|%s|%s|%s|%s|%s|%d" it.ikey it.idx it.ihl
+    it.imouse it.iq it.ititle
+    (Option.value ~default:"" it.info)
+    (Option.value ~default:"" it.header)
+    it.iicon it.isc badge_n
 
 let flat_items (v : view) : item array =
   Array.of_list (List.concat_map (fun g -> g.gitems) v.groups)
@@ -91,38 +130,99 @@ let item_at v i =
   let xs = flat_items v in
   if i >= 0 && i < Array.length xs then Some xs.(i) else None
 
-(* -- commands table ------------------------------------------------- *)
+(* -- commands -------------------------------------------------------- *)
 
-let commands : (command_id * string) list =
-  [ (Cmd_journals, Ui_strings.t "command.go/journals")
-  ; (Cmd_search, Ui_strings.t "cmdk.action/search")
-  ; (Cmd_db_add, Ui_strings.t "command.graph/db-add")
-  ; (Cmd_move, Ui_strings.t "command.editor/move-blocks")
-  ; (Cmd_all_graphs, Ui_strings.t "command.go/all-graphs")
-  ; (Cmd_all_pages, Ui_strings.t "command.go/all-pages")
-  ; (Cmd_validate, "(Dev) Validate current graph")
-  ; (Cmd_rtc_start, "(Dev) RTC Start")
-  ; (Cmd_rtc_stop, "(Dev) RTC Stop")
-  ; (Cmd_add_reaction, Ui_strings.t "command.editor/add-reaction")
-  ; (Cmd_add_comment, Ui_strings.t "block.comments/add-comment") ]
+(* cljs state/developer-mode? — the storage value may be raw "true"
+   (our settings) or JSON-quoted "\"true\"" (cljs storage) *)
+let dev_mode () =
+  match Platform.local_storage_get "developer-mode" with
+  | Some "true" | Some "\"true\"" -> true
+  | _ -> false
 
-let match_commands q =
-  let q' = String.lowercase_ascii q in
-  commands
-  |> List.filter (fun (_, label) ->
-         q' = ""
-         || String.length q' = 0
-         ||
-         let l = String.lowercase_ascii label in
-         let rec find i =
-           i + String.length q' <= String.length l
-           && (String.sub l i (String.length q') = q' || find (i + 1))
-         in
-         find 0)
-  |> List.map (fun (cid, label) ->
-         { ikey = "cmd-" ^ label; idx = -1; gid = G_commands
-         ; ititle = label; info = None; header = None
-         ; iicon = "command"; act = Run cid })
+(* cljs command-palette/history: localStorage "commands-history" is a
+   JSON array of {id,timestamp}; top-commands sorts by invoke count
+   descending, ties keep the :id sort order *)
+let invoke_counts () : (string, int) Hashtbl.t =
+  let h = Hashtbl.create 16 in
+  (match Platform.local_storage_get "commands-history" with
+   | None -> ()
+   | Some s -> (
+       try
+         match Js.Json.decodeArray (Platform.json_parse s) with
+         | Some entries ->
+             Array.iter
+               (fun e ->
+                 match Js.Json.decodeObject e with
+                 | Some o -> (
+                     match Js.Dict.get o "id" with
+                     | Some idj -> (
+                         match Js.Json.decodeString idj with
+                         | Some id ->
+                             Hashtbl.replace h id
+                               (Option.value (Hashtbl.find_opt h id)
+                                  ~default:0
+                               + 1)
+                         | None -> ())
+                     | None -> ())
+                 | None -> ())
+               entries
+         | None -> ()
+       with _ -> ()));
+  h
+
+let record_invoke (c : Commands_data.cmd) =
+  let ts = int_of_float (Js.Date.now ()) in
+  let entry =
+    Js.Json.object_
+      (Js.Dict.fromList
+         [ ("id", Js.Json.string c.id)
+         ; ("timestamp", Js.Json.number (float_of_int ts)) ])
+  in
+  let hist =
+    match Platform.local_storage_get "commands-history" with
+    | Some s -> (
+        try
+          match Js.Json.decodeArray (Platform.json_parse s) with
+          | Some a -> Array.to_list a
+          | None -> []
+        with _ -> [])
+    | None -> []
+  in
+  Platform.local_storage_set "commands-history"
+    (Js.Json.stringify (Js.Json.array (Array.of_list (entry :: hist))))
+
+(* cljs top-commands: get-commands sorted by :id, then sorted by
+   :invokes-count ascending and reversed — so counts end up descending
+   and every equal-count run keeps reverse :id order *)
+let command_table () : Commands_data.cmd list =
+  let counts = invoke_counts () in
+  let n c = Option.value (Hashtbl.find_opt counts c.Commands_data.id) ~default:0 in
+  Commands_data.table
+  |> List.filter (fun c -> (not c.Commands_data.dev) || dev_mode ())
+  |> List.stable_sort (fun a b -> compare a.Commands_data.id b.Commands_data.id)
+  |> List.stable_sort (fun a b -> compare (n a) (n b))
+  |> List.rev
+
+let cmd_label (c : Commands_data.cmd) =
+  if c.i18n then Ui_strings.t c.label else c.label
+
+let command_item (c : Commands_data.cmd) : item =
+  { ikey = "cmd-" ^ c.id; idx = -1; gid = G_commands
+  ; ititle = cmd_label c; info = None; header = None
+  ; iicon = "command"; isc = Commands_data.display c.sc
+  ; ibadge = No_badge; act = Run c.id
+  ; ihl = false; imouse = false; iq = "" }
+
+(* cljs load-results :commands — fuzzy-search-multi over the english
+   label (en locale), limit 20 *)
+let commands_matched q : Commands_data.cmd list =
+  let cmds = command_table () in
+  if String.trim q = "" then cmds
+  else
+    Fuzzy.fuzzy_search_multi ~extract_fns:[ cmd_label ] ~limit:20 cmds q
+
+let commands_items q : item list =
+  List.map command_item (commands_matched q)
 
 (* -- search --------------------------------------------------------- *)
 
@@ -142,26 +242,56 @@ let create_items q =
       [ { ikey = "create-" ^ q; idx = -1; gid = G_create
         ; ititle = Ui_strings.t "cmdk.create/tag"
         ; info = Some (Ui_strings.tf "cmdk.info/create-tag" [ tag ])
-        ; header = None; iicon = "new-page"; act = Create_page tag } ]
+        ; header = None; iicon = "new-page"; isc = ""; ibadge = No_badge
+        ; act = Create_page tag; ihl = false; imouse = false; iq = "" } ]
   else
     [ { ikey = "create-" ^ q; idx = -1; gid = G_create
       ; ititle = Ui_strings.t "cmdk.create/page"
       ; info = Some (Ui_strings.tf "cmdk.info/create-page" [ q ])
-      ; header = None; iicon = "new-page"; act = Create_page q } ]
+      ; header = None; iicon = "new-page"; isc = ""; ibadge = No_badge
+      ; act = Create_page q; ihl = false; imouse = false; iq = "" } ]
 
-(* fixed rows under the Filters group (cljs `filters`; current-page entry
-   needs current-page tracking we do not have yet) *)
-let filter_items : item list =
+(* cljs state/get-current-page equivalent — only the :page route counts
+   (the journals/home route has no current page) *)
+let current_page_uuid () =
+  match !(Runtime.current_route) with
+  | Some (Model.Page _) ->
+      Option.bind !(Runtime.current_page) (fun p -> p.Model.page_uuid)
+  | _ -> None
+
+(* cljs `filters` — leading "Search only current page" row exists only
+   when a current page is loaded *)
+let filter_items () : item list =
   let row gid label icon =
     { ikey = "filter-" ^ label; idx = -1; gid = G_filters
     ; ititle = label; info = Some (Ui_strings.t "cmdk.filter/add")
-    ; header = None; iicon = icon; act = Set_filter gid }
+    ; header = None; iicon = icon; isc = ""; ibadge = No_badge
+    ; act = Set_filter gid; ihl = false; imouse = false; iq = "" }
   in
-  [ row G_nodes (Ui_strings.t "cmdk.filter/nodes") "point-filled"
-  ; row G_codes (Ui_strings.t "cmdk.filter/codes") "code"
-  ; row G_commands (Ui_strings.t "cmdk.filter/commands") "command"
-  ; row G_files (Ui_strings.t "cmdk.filter/files") "file"
-  ; row G_themes (Ui_strings.t "cmdk.filter/themes") "palette" ]
+  (match current_page_uuid () with
+   | Some _ ->
+       [ row G_current_page (Ui_strings.t "cmdk.filter/current-page")
+           "file" ]
+   | None -> [])
+  @ [ row G_nodes (Ui_strings.t "cmdk.filter/nodes") "point-filled"
+    ; row G_codes (Ui_strings.t "cmdk.filter/codes") "code"
+    ; row G_commands (Ui_strings.t "cmdk.filter/commands") "command"
+    ; row G_files (Ui_strings.t "cmdk.filter/files") "file"
+    ; row G_themes (Ui_strings.t "cmdk.filter/themes") "palette" ]
+
+(* cljs search/file-search on a db graph — the only :file/path entity is
+   logseq/config.edn; fuzzy-match like cljs (clean-str + limit 99) *)
+let known_files = [ "logseq/config.edn" ]
+
+let file_items q : item list =
+  if String.trim q = "" then []
+  else
+    Fuzzy.fuzzy_search ~extract:(fun f -> f) ~limit:99 known_files q
+    |> List.map (fun f ->
+           { ikey = "file-" ^ f; idx = -1; gid = G_files; ititle = f
+           ; info = None; header = None; iicon = "file"; isc = ""
+           ; ibadge = No_badge; act = Open_file f
+           ; ihl = false; imouse = false; iq = "" })
 
 let str_field w k = Wire.map_get_string w k
 
@@ -175,6 +305,21 @@ let breadcrumb_of w =
       in
       if parts = [] then None else Some (String.concat " / " parts)
   | _ -> None
+
+(* cljs list-item current-page-badge-placement: page results badge the
+   title, block results badge the header *)
+let badge_of w is_page uuid =
+  match current_page_uuid () with
+  | None -> No_badge
+  | Some cur ->
+      let row_page =
+        if is_page then Some uuid
+        else Wire.map_get_uuid w "block/page"
+      in
+      (match row_page with
+       | Some p when p = cur ->
+           if is_page then Text_badge else Header_badge
+       | _ -> No_badge)
 
 let item_of_row w i : item =
   let uuid =
@@ -199,7 +344,9 @@ let item_of_row w i : item =
   ; gid = G_nodes; ititle = title; info = None
   ; header = (if is_page then None else breadcrumb_of w)
   ; iicon = (if is_page then "file" else "point-filled")
-  ; act = (if is_page then Open_page uuid else Open_block uuid) }
+  ; isc = ""; ibadge = badge_of w is_page uuid
+  ; act = (if is_page then Open_page uuid else Open_block uuid)
+  ; ihl = false; imouse = false; iq = "" }
 
 let wmap kvs = Wire.Map (List.map (fun (k, v) -> (Wire.kw k, v)) kvs)
 
@@ -213,8 +360,13 @@ let search_opts move_mode nodes_limit =
      ; ("built-in?", Wire.Bool true) ]
     @ if move_mode then [ ("page-only?", Wire.Bool true) ] else [])
 
+(* cljs get-group-limit: nodes-ish groups page at 10, expand to 100 on
+   mod+down (the filtered current-page group behaves the same) *)
 let nodes_limit move_mode expanded =
   if List.mem G_nodes expanded then 100 else if move_mode then 20 else 10
+
+let current_page_limit expanded =
+  if List.mem G_current_page expanded then 100 else 10
 
 (* include-matched-count? returns {items, matched-count}; fall back to
    a bare array if the shape differs *)
@@ -276,43 +428,62 @@ let group_order v q rows total =
       Some
         { gid = G_create; gtitle = Ui_strings.t "cmdk.groups/create"
         ; gitems = create_items q; gtotal = 1; glimit = 1
-        ; gexpanded = false }
+        ; gexpanded = false; gfilter_active = false }
   in
   let nodes_g () =
     { gid = G_nodes; gtitle = Ui_strings.t "cmdk.groups/nodes"
     ; gitems = rows; gtotal = max total (List.length rows)
     ; glimit = nodes_limit v.move_mode v.expanded
-    ; gexpanded = List.mem G_nodes v.expanded }
+    ; gexpanded = List.mem G_nodes v.expanded; gfilter_active = false }
+  in
+  (* cljs :current-page group — same block search as nodes, then
+     filtered client-side to items on the current page *)
+  let current_page_g () =
+    let items =
+      List.filter_map
+        (fun (it : item) ->
+          if it.ibadge <> No_badge then Some { it with gid = G_current_page }
+          else None)
+        rows
+    in
+    { gid = G_current_page
+    ; gtitle = Ui_strings.t "cmdk.groups/current-page"
+    ; gitems = items; gtotal = max total (List.length items)
+    ; glimit = current_page_limit v.expanded
+    ; gexpanded = List.mem G_current_page v.expanded
+    ; gfilter_active = false }
   in
   let commands_g () =
+    let items = commands_items q in
     { gid = G_commands; gtitle = Ui_strings.t "cmdk.groups/commands"
-    ; gitems = match_commands q; gtotal = List.length commands
-    ; glimit = 5; gexpanded = List.mem G_commands v.expanded }
+    ; gitems = items; gtotal = List.length items
+    ; glimit = 5; gexpanded = List.mem G_commands v.expanded
+    ; gfilter_active = false }
+  in
+  let files_g () =
+    let items = file_items q in
+    { gid = G_files; gtitle = Ui_strings.t "cmdk.groups/files"
+    ; gitems = items; gtotal = List.length items
+    ; glimit = 5; gexpanded = List.mem G_files v.expanded
+    ; gfilter_active = false }
   in
   let filters_g () =
+    let items = filter_items () in
     { gid = G_filters; gtitle = Ui_strings.t "cmdk.groups/filters"
-    ; gitems = filter_items; gtotal = List.length filter_items
-    ; glimit = 99; gexpanded = false }
+    ; gitems = items; gtotal = List.length items
+    ; glimit = 99; gexpanded = false; gfilter_active = false }
   in
   let recents_g () =
-    let q' = String.lowercase_ascii (String.trim q) in
-    let items =
-      if q' = "" then v.recents
-      else
-        List.filter
-          (fun (it : item) ->
-            let l = String.lowercase_ascii it.ititle in
-            let rec find i =
-              i + String.length q' <= String.length l
-              && (String.sub l i (String.length q') = q' || find (i + 1))
-            in
-            find 0)
-          v.recents
-    in
     { gid = G_recently_updated
     ; gtitle = Ui_strings.t "cmdk.groups/recently-updated"
-    ; gitems = items; gtotal = List.length items
-    ; glimit = 5; gexpanded = List.mem G_recently_updated v.expanded }
+    ; gitems =
+        (if String.trim q = "" then v.recents
+         else
+           Fuzzy.fuzzy_search ~extract:(fun (it : item) -> it.ititle)
+             ~limit:99 v.recents q)
+    ; gtotal = List.length v.recents
+    ; glimit = 5; gexpanded = List.mem G_recently_updated v.expanded
+    ; gfilter_active = false }
   in
   let starts_slash =
     String.length q > 0 && String.get q 0 = '/'
@@ -326,24 +497,25 @@ let group_order v q rows total =
       let only =
         match gid with
         | G_nodes -> [ nodes_g () ]
+        | G_current_page -> [ current_page_g () ]
         | G_commands -> [ commands_g () ]
-        | _ -> [] (* codes/files/themes have no backend yet *)
+        | G_files -> [ files_g () ]
+        | _ -> [] (* codes/themes have no backend yet *)
       in
-      Option.to_list (create_g ()) @ only
+      (* cljs filtered order puts the Create row after the group *)
+      only @ Option.to_list (create_g ())
   | None ->
-      (* cljs `load-results :initial` resets the results atom to just
-         recently-updated when the input is blank, and empty groups are
-         dropped at render — so an empty query shows only recents *)
-      let nonempty gs = List.filter (fun g -> g.gitems <> []) gs in
-      if String.trim q = "" then [ recents_g () ]
-      else if starts_slash then nonempty [ filters_g (); nodes_g () ]
+      if starts_slash then [ filters_g (); nodes_g () ]
       else if has_slash then
-        nonempty
-          (Option.to_list (create_g ()) @ [ nodes_g (); filters_g () ])
+        Option.to_list (create_g ())
+        @ [ nodes_g (); files_g (); filters_g () ]
+      else if String.trim q = "" then
+        (* cljs :default on blank input runs :initial + :filters only *)
+        [ recents_g (); filters_g () ]
       else
-        nonempty
-          (Option.to_list (create_g ())
-          @ [ nodes_g (); recents_g (); commands_g (); filters_g () ])
+        Option.to_list (create_g ())
+        @ [ nodes_g (); recents_g (); commands_g (); files_g ()
+          ; filters_g () ]
 
 let apply_results st q move_mode expanded rows total =
   ignore move_mode;
@@ -354,7 +526,10 @@ let apply_results st q move_mode expanded rows total =
         let groups =
           group_order v q rows total
           |> List.map (fun g ->
-                 if g.gexpanded || List.length g.gitems <= g.glimit then g
+                 (* cljs visible-items: the filtered group is never
+                    truncated *)
+                 if v.filter = Some g.gid || g.gexpanded
+                    || List.length g.gitems <= g.glimit then g
                  else
                    { g with
                      gitems =
@@ -380,7 +555,9 @@ let refresh st =
   | Some repo ->
       ignore
         (run_search repo v.input v.move_mode
-           (nodes_limit v.move_mode v.expanded)
+           (match v.filter with
+            | Some G_current_page -> current_page_limit v.expanded
+            | _ -> nodes_limit v.move_mode v.expanded)
          |> Js.Promise.then_ (fun (rows, total) ->
                 if gen = !(st.gen) then
                   apply_results st v.input v.move_mode v.expanded rows total;
@@ -395,11 +572,16 @@ let refresh st =
 (* the create row must not depend on the worker search resolving *)
 let upsert_create v =
   let others = List.filter (fun g -> g.gid <> G_create) v.groups in
+  let g =
+    { gid = G_create; gtitle = ""; gitems = create_items v.input
+    ; gtotal = 0; glimit = 1; gexpanded = false; gfilter_active = false }
+  in
+  (* cljs filtered order puts create after the filtered group *)
   { v with
     groups =
-      { gid = G_create; gtitle = ""; gitems = create_items v.input
-      ; gtotal = 0; glimit = 1; gexpanded = false }
-      :: others
+      (match v.filter with
+       | Some _ -> others @ [ g ]
+       | None -> g :: others)
   }
 
 (* cljs load-results :initial — recently-updated pages from storage ids *)
@@ -411,7 +593,13 @@ let recents_item_of_wire w =
           Some
             { ikey = "recent-" ^ uuid; idx = -1; gid = G_recently_updated
             ; ititle = p.page_title; info = None; header = None
-            ; iicon = "file"; act = Open_page uuid }
+            ; iicon = "file"; isc = ""
+            ; ibadge =
+                (match current_page_uuid () with
+                 | Some cur when cur = uuid -> Text_badge
+                 | _ -> No_badge)
+            ; act = Open_page uuid
+            ; ihl = false; imouse = false; iq = "" }
       | None -> None)
   | None -> None
 
@@ -443,12 +631,14 @@ let on_input st q =
 
 (* -- open/close ------------------------------------------------------ *)
 
+external js_random : unit -> float = "random" [@@mel.scope "Math"]
+
 let open_palette ?(move = false) st =
   st.gen := !(st.gen) + 1;
-  Dialogs_state.touch "cmdk";
   set_in st (fun v ->
           { v with open_ = true; input = ""; move_mode = move; mouse = false
-          ; filter = None });
+          ; filter = None
+          ; tip = (if js_random () < 0.5 then 0 else 1) });
   (* prime synchronously so commands show before the search lands *)
   apply_results st "" move [] [] 0;
   refresh st;
@@ -463,9 +653,7 @@ let open_palette ?(move = false) st =
   in
   Dom_ext.set_timeout (fun () -> focus_input 20) 0
 
-let close st =
-  Dialogs_state.release "cmdk";
-  set_in st (fun v -> { v with open_ = false })
+let close st = set_in st (fun v -> { v with open_ = false })
 
 let clear_filter st =
   set_in st (fun v -> { v with filter = None });
@@ -553,7 +741,6 @@ let goto_page repo uuid =
                     Runtime.send (Action.Navigate_to (Model.Page uuid));
                     Runtime.send (Action.Page_loaded page);
                     Router.fetch_refs page;
-                    Runtime.mark_nav ();
                     Platform.set_location_hash ("#/page/" ^ uuid);
                     Js.Promise.resolve ()))
 let goto_today_journal repo =
@@ -690,7 +877,98 @@ let run_add_comment repo st =
            (Wire.Array (List.map (fun u -> Wire.Uuid u) uuids))
         |> Js.Promise.then_ (fun _ -> Outliner_ops.refresh_page ()))
   | _ -> ()
-let run_item st it =
+
+let with_sidebar f () =
+  match !Sidebar_state.st_ref with
+  | Some sst -> f sst
+  | None -> ()
+
+(* palette dispatch for commands that map onto existing editor/sidebar/
+   settings actions; None when the id has no local equivalent *)
+let editor_action cid : (unit -> unit) option =
+  let first_target f () =
+    match target_uuids () with u :: _ -> f u | [] -> ()
+  in
+  match cid with
+  | "editor/indent" -> Some (fun () -> Editor_actions.indent_or_outdent ~indent:true)
+  | "editor/outdent" -> Some (fun () -> Editor_actions.indent_or_outdent ~indent:false)
+  | "editor/move-block-up" -> Some (fun () -> Editor_actions.move_blocks_up_down true)
+  | "editor/move-block-down" -> Some (fun () -> Editor_actions.move_blocks_up_down false)
+  | "editor/delete-selection" -> Some (fun () -> Editor_actions.delete_selection ())
+  | "editor/select-all-blocks" -> Some (fun () -> Editor_actions.select_all ())
+  | "editor/select-up" -> Some (fun () -> Editor_actions.extend_selection true)
+  | "editor/select-down" -> Some (fun () -> Editor_actions.extend_selection false)
+  | "editor/select-block-up" -> Some (fun () -> Editor_actions.move_selection_focus true)
+  | "editor/select-block-down" -> Some (fun () -> Editor_actions.move_selection_focus false)
+  | "editor/select-parent" ->
+      Some
+        (first_target (fun u ->
+             match Editor_state.find_parent u with
+             | Some (Some p, _) ->
+                 Option.iter Editor_actions.select_single p.Model.block_uuid
+             | _ -> ()))
+  | "editor/open-edit" ->
+      Some (first_target (fun u -> Editor_actions.enter_edit u 0))
+  | "editor/open-selected-blocks-in-sidebar" ->
+      Some
+        (with_sidebar (fun sst ->
+             Sidebar_state.ensure_right_open ();
+             List.iter (Sidebar_state.open_uuid sst) (target_uuids ())))
+  | "editor/toggle-block-children" ->
+      Some (first_target Editor_actions.toggle_collapse)
+  | "editor/expand-block-children" ->
+      Some (first_target (fun u -> Editor_actions.set_collapsed u false))
+  | "editor/collapse-block-children" ->
+      Some (first_target (fun u -> Editor_actions.set_collapsed u true))
+  | "editor/toggle-open-blocks" -> Some (fun () -> Editor_actions.toggle_open_blocks ())
+  | "editor/undo" -> Some (fun () -> Editor_actions.undo ())
+  | "editor/redo" -> Some (fun () -> Editor_actions.redo ())
+  | "editor/quick-add" -> Some (fun () -> Editor_actions.quick_add ())
+  | "editor/copy" -> Some (fun () -> Editor_actions.copy_selection_text ())
+  | "editor/cut" ->
+      Some
+        (fun () ->
+          Editor_actions.copy_selection_text ();
+          Editor_actions.delete_selection ())
+  | "editor/toggle-display-hidden-properties" ->
+      Some
+        (fun () ->
+          Properties_state.toggle_hidden ();
+          Properties_state.refresh_all ())
+  | _ -> None
+
+let shortcut_action cid : (unit -> unit) option =
+  match cid with
+  | "page/toggle-favorite" -> Some (with_sidebar Sidebar_state.toggle_favorite)
+  | "misc/copy" -> Some (fun () -> Editor_actions.copy_selection_text ())
+  | "go/backward" -> Some (fun () -> Platform.history_back ())
+  | "go/forward" -> Some (fun () -> Platform.history_forward ())
+  | "sidebar/clear" ->
+      Some
+        (with_sidebar (fun sst ->
+             List.iter
+               (fun (i : Sidebar_state.item) ->
+                 Sidebar_state.remove_item sst i.key)
+               (Signal.get_state sst.Sidebar_state.items)))
+  | "sidebar/close-top" ->
+      Some
+        (with_sidebar (fun sst ->
+             match List.rev (Signal.get_state sst.Sidebar_state.items) with
+             | last :: _ -> Sidebar_state.remove_item sst last.key
+             | [] -> ()))
+  | "ui/toggle-contents" ->
+      Some
+        (with_sidebar (fun sst ->
+             Sidebar_state.ensure_right_open ();
+             Sidebar_state.ensure_contents sst))
+  | "ui/select-theme-color" | "ui/customize-appearance" ->
+      Some
+        (fun () ->
+          Runtime.send (Action.Navigate_to Model.Settings);
+          Platform.set_location_hash (Runtime.nav_hash "#/settings"))
+  | _ -> editor_action cid
+
+let rec run_item st it =
   let repo = !(Runtime.current_repo) in
   let v = get st in
   (match v.move_mode, it.act with
@@ -723,43 +1001,119 @@ let run_item st it =
         | Some el -> Dom_ext.set_value el ""
         | None -> ());
        refresh st
-   | Run cid ->
-       (match cid with
-        | Cmd_move ->
-            (* stay open in move-blocks mode; page-only search *)
-            set_in st (fun v ->
-                { v with move_mode = true; input = "" });
-            (match Dom_ext.doc_query_selector ".cp__cmdk-search-input" with
-             | Some el ->
-                 Dom_ext.set_value el "";
-                 Dom_ext.focus el
-             | None -> ());
-            refresh st
-        | Cmd_search -> () (* keep palette open on the input *)
-        | Cmd_journals ->
-            close st;
-            (* cljs route-handler/go-to-journals! -> :home (no custom
-               home page) / :all-journals (custom home configured) *)
-            Platform.set_location_hash (Runtime.nav_hash "#/")
-        | Cmd_all_graphs ->
-            close st;
-            Runtime.send (Action.Navigate_to Model.All_graphs);
-            Platform.set_location_hash (Runtime.nav_hash "#/graphs")
-        | Cmd_all_pages ->
-            close st;
-            Runtime.send (Action.Navigate_to Model.All_pages);
-            Platform.set_location_hash (Runtime.nav_hash "#/all-pages")
-        | Cmd_db_add ->
-            close st;
-            Dialogs_state.open_ "new-graph"
-        | Cmd_validate ->
-            close st;
-            Option.iter validate_graph repo
-        | Cmd_rtc_start | Cmd_rtc_stop ->
-            (* RTC lifecycle lives outside this area; no-op per spec *)
-            ()
-        | Cmd_add_reaction -> run_add_reaction st
-        | Cmd_add_comment -> run_add_comment repo st)))
+   | Run cid -> run_command st repo cid
+   | Open_file _ ->
+       (* cljs file rows open the file editor — no such route here;
+          just close *)
+       close st))
+
+(* cljs invoke-command: record the invoke in "commands-history" then
+   dispatch the shortcut's :f. Many cljs handlers need an editing
+   context the open palette lacks; they degrade to close+no-op like
+   cljs does when the context is missing *)
+and run_command st repo (cid : string) =
+  let nav hash route =
+    close st;
+    Runtime.send (Action.Navigate_to route);
+    Platform.set_location_hash (Runtime.nav_hash hash)
+  in
+  let goto_journal_day day =
+    match repo with
+    | Some repo ->
+        ignore
+          (Runtime.invoke2 "thread-api/get-journal-page-by-day"
+             (Wire.String repo) (Wire.Int day)
+           |> Js.Promise.then_ (fun w ->
+                  match Decode.page_of_summary w with
+                  | Some p -> (
+                      match p.Model.page_uuid with
+                      | Some u -> goto_page repo u
+                      | None -> Js.Promise.resolve ())
+                  | None -> Js.Promise.resolve ()))
+    | None -> ()
+  in
+  let rel_journal delta = (* today's journal +/- delta days *)
+    close st;
+    goto_journal_day
+      (Dates.journal_day_of (Dates.add_days (Dates.date_now ()) delta))
+  in
+  let cur_day () =
+    Option.bind !(Runtime.current_page) (fun p -> p.Model.page_journal_day)
+  in
+  (match Commands_data.command_by_id cid with
+   | Some c -> record_invoke c
+   | None -> ());
+  match cid with
+  | "editor/move-blocks" ->
+      (* stay open in move-blocks mode; page-only search *)
+      set_in st (fun v -> { v with move_mode = true; input = "" });
+      (match Dom_ext.doc_query_selector ".cp__cmdk-search-input" with
+       | Some el -> Dom_ext.set_value el ""; Dom_ext.focus el
+       | None -> ());
+      refresh st
+  | "go/search" -> () (* keep palette open on the input *)
+  | "go/search-in-page" ->
+      set_in st (fun v ->
+          { v with filter = Some G_current_page; input = "" });
+      (match Dom_ext.doc_query_selector ".cp__cmdk-search-input" with
+       | Some el -> Dom_ext.set_value el ""
+       | None -> ());
+      refresh st
+  | "go/home" -> nav "#/" Model.Home
+  | "go/journals" -> nav "#/journals" Model.Journals
+  | "go/all-graphs" -> nav "#/all-graphs" Model.All_graphs
+  | "go/all-pages" -> nav "#/all-pages" Model.All_pages
+  | "go/graph-view" -> nav "#/graph" Model.Graph
+  | "ui/toggle-settings" -> nav "#/settings" Model.Settings
+  | "sidebar/open-today-page" ->
+      close st;
+      goto_journal_day (Dates.today_journal_day ())
+  | "go/tomorrow" -> rel_journal 1
+  | "go/next-journal" -> (
+      close st;
+      match cur_day () with
+      | Some d -> goto_journal_day (d + 1)
+      | None -> ())
+  | "go/prev-journal" -> (
+      close st;
+      match cur_day () with
+      | Some d -> goto_journal_day (d - 1)
+      | None -> ())
+  | "graph/db-add" | "graph/add" ->
+      close st;
+      Dialogs_state.open_ "new-graph"
+  | "dev/validate-db" ->
+      close st;
+      Option.iter validate_graph repo
+  | "ui/toggle-left-sidebar" ->
+      close st;
+      Runtime.send Action.Toggle_left_sidebar
+  | "ui/toggle-right-sidebar" ->
+      close st;
+      Runtime.send Action.Toggle_right_sidebar
+  | "ui/toggle-help" ->
+      close st;
+      Runtime.send Action.Help_toggle
+  | "ui/toggle-wide-mode" ->
+      close st;
+      Settings_state.toggle_wide_mode ()
+  | "ui/toggle-theme" ->
+      close st;
+      Settings_view.toggle_theme ()
+  | "editor/add-property" | "editor/add-property-deadline"
+  | "editor/add-property-status" | "editor/add-property-priority"
+  | "editor/add-property-icon" ->
+      close st;
+      (match target_uuids () with
+       | u :: _ -> Properties_dialog.open_for_block u
+       | [] -> ())
+  | "editor/add-reaction" -> run_add_reaction st
+  | "editor/add-comment" -> run_add_comment repo st
+  | _ -> (
+      (match shortcut_action cid with
+       | Some f -> f ()
+       | None -> ());
+      close st (* no local equivalent / editing-context commands *))
 
 let run_highlighted st =
   let v = get st in
@@ -776,19 +1130,6 @@ let run_highlighted_sidebar st =
           close st;
           Sidebar_state.open_uuid sst uuid
       | _ -> run_item st it)
-  | None -> ()
-
-(* cmd+c / "Copy ref" hint copies [[uuid]] of the highlighted node and
-   closes the dialog (cljs copy-block-ref -> ->page-ref) *)
-let copy_highlighted_ref st =
-  let v = get st in
-  match item_at v v.hl with
-  | Some it -> (
-      match it.act with
-      | Open_page uuid | Open_block uuid ->
-          Platform.clipboard_write_text ("[[" ^ uuid ^ "]]");
-          close st
-      | _ -> ())
   | None -> ()
 
 (* group of the currently highlighted item (for mod+down expand) *)

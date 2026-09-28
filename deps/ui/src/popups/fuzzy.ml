@@ -89,12 +89,21 @@ let score oquery ostr =
   in
   loop 0 0 1. max_string_length 0.
 
-let fuzzy_search ~extract ~limit data query =
+(* cljs fuzzy-search-multi: max score over the extract fns, keep score>
+   0, stable sort by score desc, take `limit` *)
+let fuzzy_search_multi ~extract_fns ~limit data query =
   data
   |> List.filter_map (fun item ->
-         let s = score query (extract item) in
+         let s =
+           extract_fns
+           |> List.filter_map (fun f ->
+                  match f item with
+                  | "" -> None
+                  | s -> Some (score query s))
+           |> List.fold_left Float.max 0.0
+         in
          if s > 0.0 then Some (item, s) else None)
-  |> List.sort (fun (_, a) (_, b) -> Float.compare b a)
+  |> List.stable_sort (fun (_, a) (_, b) -> Float.compare b a)
   |> (fun xs ->
        let rec take n = function
          | [] -> []
@@ -102,3 +111,6 @@ let fuzzy_search ~extract ~limit data query =
          | _ -> []
        in
        take limit xs)
+
+let fuzzy_search ~extract ~limit data query =
+  fuzzy_search_multi ~extract_fns:[ extract ] ~limit data query

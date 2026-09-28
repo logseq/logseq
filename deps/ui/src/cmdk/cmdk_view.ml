@@ -26,6 +26,340 @@ let scroller_class =
 let row_base_class =
   "flex flex-col transition-colors duration-75 ease-in rounded-lg py-1.5 px-3 gap-0.5"
 
+(* -- shui shortcut port (deps/shui/src/logseq/shui/shortcut.cljs) ---- *)
+
+let gph = Platform.utf8
+let g_cmd = gph "\xe2\x8c\x98"
+let g_win = gph "\xe2\x8a\x9e"
+let g_ret = gph "\xe2\x8f\x8e"
+let g_shift = gph "\xe2\x87\xa7"
+let g_opt = gph "\xe2\x8c\xa5"
+let g_ctrl = gph "\xe2\x8c\x83"
+let g_up = gph "\xe2\x86\x91"
+let g_down = gph "\xe2\x86\x93"
+let g_left = gph "\xe2\x86\x90"
+let g_right = gph "\xe2\x86\x92"
+let g_bs = gph "\xe2\x8c\xab"
+let g_caps = gph "\xe2\x87\xaa"
+
+(* cljs print-shortcut-key — logical key -> display glyph/text *)
+let print_shortcut_key key =
+  let lower = String.lowercase_ascii key in
+  let mac = Platform.is_mac () in
+  let result =
+    if lower = "cmd" || lower = "command" || lower = "mod" || lower = g_cmd
+    then (if mac then g_cmd else "Ctrl")
+    else if lower = "meta" then (if mac then g_cmd else g_win)
+    else if lower = "return" || lower = "enter" || lower = g_ret then g_ret
+    else if lower = "shift" || lower = g_shift then g_shift
+    else if
+      lower = "alt" || lower = "option" || lower = "opt" || lower = g_opt
+    then (if mac then g_opt else "Alt")
+    else if lower = "ctrl" || lower = "control" || lower = g_ctrl then "Ctrl"
+    else if lower = "space" || lower = " " then "Space"
+    else if lower = "up" || lower = g_up then g_up
+    else if lower = "down" || lower = g_down then g_down
+    else if lower = "left" || lower = g_left then g_left
+    else if lower = "right" || lower = g_right then g_right
+    else if lower = "tab" then "Tab"
+    else if lower = "open-square-bracket" then "["
+    else if lower = "close-square-bracket" then "]"
+    else if lower = "dash" then "-"
+    else if lower = "semicolon" then ";"
+    else if lower = "equals" then "="
+    else if lower = "single-quote" then "'"
+    else if lower = "backslash" then "\\"
+    else if lower = "comma" then ","
+    else if lower = "period" then "."
+    else if lower = "slash" then "/"
+    else if lower = "grave-accent" then "`"
+    else if lower = "page-up" then "PgUp"
+    else if lower = "page-down" then "PgDn"
+    else if lower = "esc" || lower = "escape" then "Esc"
+    else if lower = "backspace" then g_bs
+    else if lower = "delete" then "Delete"
+    else if lower = "caps-lock" || lower = "capslock" then g_caps
+    else key
+  in
+  if String.length result = 1 then
+    if result.[0] >= 'a' && result.[0] <= 'z' then
+      String.uppercase_ascii result
+    else result
+  else String.capitalize_ascii result
+
+(* split on a literal separator (clojure string/split on string) *)
+let split_str sep s =
+  let n = String.length s and m = String.length sep in
+  let rec go i j acc =
+    if j + m > n then List.rev (String.sub s i (n - i) :: acc)
+    else if String.sub s j m = sep then
+      go (j + m) (j + m) (String.sub s i (j - i) :: acc)
+    else go i (j + 1) acc
+  in
+  go 0 0 []
+
+(* cljs parse-shortcuts: "a+b c" -> [Combo [a;b]; Single c] *)
+type sc_group =
+  | Sc_single of string
+  | Sc_combo of string list
+
+let parse_binding b =
+  split_str " " (String.trim b)
+  |> List.filter (fun t -> t <> "")
+  |> List.map (fun t ->
+         if String.index_opt t '+' <> None then
+           Sc_combo (split_str "+" t)
+         else Sc_single t)
+
+let is_combo = function Sc_combo _ -> true | Sc_single _ -> false
+
+(* cljs normalize-binding on a display string: lowercase + mod/meta/⌥
+   canonicalization — used only for the data-shortcut-binding attr *)
+let norm_binding s =
+  let mac = Platform.is_mac () in
+  String.lowercase_ascii (String.trim s)
+  |> (fun x -> Ui_strings.replace_all x "mod" (if mac then "meta" else "ctrl"))
+  |> (fun x -> Ui_strings.replace_all x "command" "meta")
+  |> (fun x -> Ui_strings.replace_all x "cmd" "meta")
+  |> (fun x ->
+       Ui_strings.replace_all x "option" "alt"
+       |> fun y -> Ui_strings.replace_all y "opt" "alt")
+  |> fun y -> Ui_strings.replace_all y g_opt "alt"
+
+let kbd_el key txt =
+  Logseq_dom.dom ~key ~tag:"kbd" ~style_class:"shui-shortcut-key"
+    ~attrs:[ ("aria-hidden", "true") ]
+    ~text:txt []
+
+(* combo: one shared keycap, separator spans between keys *)
+let combo_el key keys binding =
+  let sep i =
+    Logseq_dom.dom ~key:(Printf.sprintf "sep%d" i) ~tag:"span"
+      ~style_class:"shui-shortcut-separator" []
+  in
+  Logseq_dom.dom ~key
+    ~style_class:"shui-shortcut-combo shui-shortcut-glow"
+    ~attrs:
+      [ ("data-shortcut-binding", norm_binding binding)
+      ; ("aria-hidden", "true"); ("style", "white-space: nowrap") ]
+    (List.concat
+       (List.mapi
+          (fun i k ->
+            (if i > 0 then [ sep i ] else [])
+            @ [ kbd_el (Printf.sprintf "k%d" i) (print_shortcut_key k) ])
+          keys))
+
+(* separate: sequential keys, 4px gap, no separators *)
+let separate_el key keys binding =
+  Logseq_dom.dom ~key
+    ~style_class:"shui-shortcut-separate shui-shortcut-glow"
+    ~attrs:
+      [ ("data-shortcut-binding", norm_binding binding)
+      ; ("aria-hidden", "true")
+      ; ("style", "white-space: nowrap; gap: 4px") ]
+    (List.mapi
+       (fun i k ->
+         kbd_el (Printf.sprintf "k%d" i) (print_shortcut_key k))
+       keys)
+
+(* chord: space-separated groups each rendered as a combo with a
+   "then" separator *)
+let chord_el key groups binding =
+  let group_el gi grp =
+    let keys =
+      match grp with Sc_combo ks -> ks | Sc_single k -> [ k ]
+    in
+    Logseq_dom.dom ~key:(Printf.sprintf "grp%d" gi) ~tag:"span"
+      ~style_class:"shui-shortcut-combo shui-shortcut-glow"
+      ~attrs:
+        [ ("style", "display: inline-flex; align-items: center; \
+                     white-space: nowrap") ]
+      (List.concat
+         (List.mapi
+            (fun ki k ->
+              (if ki > 0 then
+                 [ Logseq_dom.dom ~key:(Printf.sprintf "gs%d" ki)
+                     ~tag:"span"
+                     ~style_class:"shui-shortcut-separator" [] ]
+               else [])
+              @ [ kbd_el (Printf.sprintf "ck%d" ki) (print_shortcut_key k) ])
+            keys))
+  in
+  let then_sep gi =
+    Logseq_dom.dom ~key:(Printf.sprintf "then%d" gi) ~tag:"span"
+      ~style_class:"shui-shortcut-chord-sep"
+      ~attrs:[ ("style", "font-size: 10px; opacity: 0.45") ]
+      ~text:"then" []
+  in
+  Logseq_dom.dom ~key ~style_class:"shui-shortcut-chord"
+    ~attrs:
+      [ ("data-shortcut-binding", norm_binding binding)
+      ; ("aria-hidden", "true")
+      ; ("style", "white-space: nowrap; display: inline-flex; \
+                  align-items: center; gap: 8px") ]
+    (List.concat
+       (List.mapi
+          (fun gi grp ->
+            (if gi > 0 then [ then_sep gi ] else []) @ [ group_el gi grp ])
+          groups))
+
+(* cljs compact: text-only spans for the show-more/less header link *)
+let compact_el key keys binding =
+  Logseq_dom.dom ~key ~style_class:"shui-shortcut-compact"
+    ~attrs:
+      [ ("data-shortcut-binding", norm_binding binding)
+      ; ("aria-hidden", "true"); ("style", "white-space: nowrap") ]
+    (List.mapi
+       (fun i k ->
+         Logseq_dom.dom ~key:(Printf.sprintf "c%d" i) ~tag:"span"
+           ~attrs:[ ("style", "display: inline-block; margin-right: 2px") ]
+           ~text:(print_shortcut_key k) [])
+       keys)
+
+(* cljs shui/shortcut :auto over a display string: " | " splits multiple
+   bindings; each binding renders combo (single token with +), chord
+   (multiple combos) or separate (flat tokens) *)
+let shui_shortcut display =
+  let bindings =
+    split_str " | " display
+    |> List.map String.trim
+    |> List.filter (fun b -> b <> "")
+  in
+  List.concat
+    (List.mapi
+       (fun bi b ->
+         let groups = parse_binding b in
+         let body =
+           if List.length groups > 1 && List.for_all is_combo groups then
+             [ chord_el "chord" groups b ]
+           else
+             let keys =
+               List.concat_map
+                 (fun g ->
+                   match g with Sc_combo ks -> ks | Sc_single k -> [ k ])
+                 groups
+             in
+             (match groups with
+              | Sc_combo _ :: _ -> [ combo_el "combo" keys b ]
+              | _ -> [ separate_el "sep" keys b ])
+         in
+         [ Logseq_dom.dom ~key:(Printf.sprintf "b%d" bi) ~tag:"span"
+             ~attrs:
+               [ ( "style"
+                 , "display: inline-flex; align-items: center; \
+                    white-space: nowrap" ) ]
+             ((if bi > 0 then
+                 [ Logseq_dom.dom ~key:"bsep" ~tag:"span"
+                     ~style_class:"text-gray-11 text-sm"
+                     ~attrs:[ ("style", "margin: 0 4px") ]
+                     ~text:"|" [] ]
+               else [])
+              @ body) ]
+         )
+       bindings)
+
+(* cljs hint-button shortcut pick: :combo when len>1 and any modifier,
+   else :auto *)
+let hint_shortcut keys =
+  let modifiers =
+    [ "shift"; "ctrl"; "alt"; "cmd"; "mod"; g_cmd; g_opt; g_ctrl ]
+  in
+  let has_mod =
+    List.exists
+      (fun k ->
+        List.mem (String.lowercase_ascii k) modifiers)
+      keys
+  in
+  let norm = String.concat "+" keys in
+  if List.length keys > 1 && has_mod then combo_el "hc" keys norm
+  else separate_el "hs" keys norm
+
+(* cljs group-header link: (shui/shortcut "mod down" {:style :compact}) *)
+let compact_shortcut s =
+  let keys =
+    List.concat_map
+      (fun g -> match g with Sc_combo ks -> ks | Sc_single k -> [ k ])
+      (parse_binding s)
+  in
+  compact_el "cmp" keys s
+
+(* -- query highlight (list_item.cljs highlight-query) ----------------- *)
+
+external str_normalize : string -> string = "normalize" [@@mel.send]
+
+(* case-insensitive index of `sub` in `low` from `start`; -1 if none *)
+let find_sub_ci sub low start =
+  let n = String.length low and m = String.length sub in
+  let rec go i =
+    if i + m > n then -1
+    else if String.sub low i m = sub then i
+    else go (i + 1)
+  in
+  go start
+
+(* leftmost match across query terms (whitespace-split); ties keep the
+   earliest term like a JS "a|b" alternation *)
+let hl_segments ~query ~text : (bool * string) list =
+  if String.trim query = "" || text = "" then [ (false, text) ]
+  else
+    (* indices must stay byte-aligned with [text]: cljs highlights via a
+       case-insensitive regex on the raw title, so lowercase the original
+       rather than the normalized form (which can change byte lengths) *)
+    let low = String.lowercase_ascii text in
+    let terms =
+      String.split_on_char ' '
+        (String.lowercase_ascii (str_normalize query))
+      |> List.filter (fun t -> t <> "")
+    in
+    if terms = [] then [ (false, text) ]
+    else
+      let match_at pos =
+        terms
+        |> List.filter_map (fun t ->
+               let i = find_sub_ci t low pos in
+               if i < 0 then None else Some (i, t))
+        |> List.fold_left
+             (fun best (i, t) ->
+               match best with
+               | None -> Some (i, t)
+               | Some (bi, _) when i < bi -> Some (i, t)
+               | _ -> best)
+             None
+      in
+      let rec go pos acc =
+        match match_at pos with
+        | None ->
+            List.rev
+              ((false, String.sub text pos (String.length text - pos))
+               :: acc)
+        | Some (i, t) ->
+            go (i + String.length t)
+              ((true, String.sub text i (String.length t))
+               :: (false, String.sub text pos (i - pos)) :: acc)
+      in
+      go 0 []
+
+(* cljs [:span {:data-testid text} seg/span ... seg/mark] — mark gets
+   padding 0 border-radius 0 *)
+let highlight_el key query text =
+  Logseq_dom.dom ~key ~tag:"span"
+    ~attrs:[ ("data-testid", text) ]
+    (List.mapi
+       (fun i (hl, seg) ->
+         if hl then
+           Logseq_dom.dom ~key:(Printf.sprintf "hl%d" i) ~tag:"mark"
+             ~attrs:[ ("style", "padding:0;border-radius:0") ]
+             ~text:seg []
+         else
+           Logseq_dom.dom ~key:(Printf.sprintf "tx%d" i) ~tag:"span"
+             ~text:seg [])
+       (List.filter (fun (_, s) -> s <> "") (hl_segments ~query ~text)))
+
+let badge_el key =
+  Logseq_dom.dom ~key ~tag:"span"
+    ~style_class:"cp__cmdk-current-page-badge"
+    ~text:"Current Page" []
+
 (* -- item row -------------------------------------------------------- *)
 
 (* wrapper attrs: data-item-index for highlight; data-item-key gives a
@@ -36,23 +370,19 @@ let wrapper_attrs it =
   ; ("data-item-key", it.S.ikey)
   ]
 
-let row_class _it v =
-  row_base_class ^ if v.S.mouse then " cursor-pointer" else ""
+let row_class (it : S.item) =
+  row_base_class ^ if it.S.imouse then " cursor-pointer" else ""
 
-let row_data_attrs (it : S.item) (v : S.view) =
-  let hoverable = v.S.mouse in
-  let highlighted = v.S.hl = it.S.idx in
+let row_data_attrs (it : S.item) =
+  let hoverable = it.S.imouse in
+  let highlighted = it.S.ihl in
   ("data-cmdk-item", "true")
   :: (if hoverable then [ ("data-hoverable", "true") ] else [])
   @ (if highlighted then [ ("data-highlighted", "true") ] else [])
   @ (if highlighted && not hoverable then [ ("data-kb-highlighted", "true") ]
      else [])
 
-let pair_sig (st : S.t) (item_sig : S.item Signal.signal) =
-  Signal.map2 (fun (it : S.item) (v : S.view) -> (it, v)) item_sig
-    st.S.vs.Signal.state_signal
-
-let item_header (it : S.item) =
+let item_header (it : S.item) q =
   match it.S.header with
   | None -> box ~key:"no-header" []
   | Some h ->
@@ -62,30 +392,46 @@ let item_header (it : S.item) =
         ~attrs:
           [ ("style",
              "color: var(--lx-gray-11); white-space: nowrap; text-overflow: ellipsis") ]
-        ~text:h []
+        [ highlight_el "hdr-hl" q h
+        ; (match it.S.ibadge with
+           | S.Header_badge -> badge_el "hb"
+           | _ -> box ~key:"no-hb" [])
+        ]
 
-let item_row (st : S.t) (item_sig : S.item Signal.signal) : t =
-  let pair = pair_sig st item_sig in
+let shortcut_row key it =
+  if it.S.isc = "" then box ~key:"no-sc" []
+  else
+    let hl = it.S.ihl in
+    Logseq_dom.dom ~key
+      ~style_class:"flex gap-1 shui-shortcut-row items-center"
+      ~attrs:
+        [ ( "style"
+          , Printf.sprintf
+              "opacity: %s; min-height: 20px; flex-wrap: nowrap"
+              (if hl then "1" else "0.9") ) ]
+      (shui_shortcut it.S.isc)
+
+let item_row (_st : S.t) (item_sig : S.item Signal.signal) : t =
   Logseq_dom.dom ~key:"item-wrap"
     ~attrs_signal_v:
       (Signal.map
-         (fun (it, _) ->
+         (fun it ->
            Lui_protocol.StringValue (Logseq_dom.attrs_json (wrapper_attrs it)))
-         pair)
+         item_sig)
     [ Logseq_dom.dom ~key:"item"
         ~style_class_signal:
           (Signal.map
-             (fun (it, v) -> Lui_protocol.StringValue (row_class it v))
-             pair)
+             (fun it -> Lui_protocol.StringValue (row_class it))
+             item_sig)
         ~attrs_signal_v:
           (Signal.map
-             (fun (it, v) ->
+             (fun it ->
                Lui_protocol.StringValue
-                 (Logseq_dom.attrs_json (row_data_attrs it v)))
-             pair)
+                 (Logseq_dom.attrs_json (row_data_attrs it)))
+             item_sig)
         [ dyn
-            ~equal:(fun (a : S.item) b -> a.S.header = b.S.header)
-            (fun it -> item_header it)
+            ~equal:(fun (a : S.item) b -> a = b)
+            (fun (it : S.item) -> item_header it it.S.iq)
             item_sig
         ; Logseq_dom.dom ~key:"main" ~style_class:"flex items-start gap-3"
             [ Logseq_dom.dom ~key:"icon"
@@ -105,24 +451,38 @@ let item_row (st : S.t) (item_sig : S.item Signal.signal) : t =
                     ~style_class:
                       "cp__cmdk-item-main-text text-sm font-medium text-gray-12 flex items-center gap-2 flex-wrap"
                     [ dyn
-                        ~equal:(fun (a : S.item) b -> a.S.ititle = b.S.ititle)
+                        ~equal:(fun (a : S.item) b -> a = b)
                         (fun (it : S.item) ->
-                          Logseq_dom.dom ~key:"label" ~tag:"span"
-                            ~attrs:[ ("data-testid", it.S.ititle) ]
-                            ~text:it.S.ititle [])
+                          highlight_el "label" it.S.iq it.S.ititle)
                         item_sig
                     ; dyn
-                        ~equal:(fun (a : S.item) b -> a.S.info = b.S.info)
+                        ~equal:(fun (a : S.item) b ->
+                          a.S.ibadge = b.S.ibadge)
+                        (fun (it : S.item) ->
+                          match it.S.ibadge with
+                          | S.Text_badge -> badge_el "tb"
+                          | _ -> box ~key:"no-tb" [])
+                        item_sig
+                    ; dyn
+                        ~equal:(fun (a : S.item) b -> a = b)
                         (fun (it : S.item) ->
                           match it.S.info with
                           | None -> box ~key:"no-info" []
                           | Some info ->
                               Logseq_dom.dom ~key:"info" ~tag:"span"
                                 ~style_class:"text-xs text-gray-11"
-                                ~text:(Platform.utf8 " — " ^ info) [])
+                                [ Logseq_dom.dom ~key:"dash"
+                                    ~text:(Platform.utf8 " — ") []
+                                ; highlight_el "info-hl" it.S.iq info ])
                         item_sig
                     ]
                 ]
+            ; dyn
+                ~equal:(fun (a : S.item) (b : S.item) ->
+                  a.S.isc = b.S.isc && a.S.idx = b.S.idx
+                  && a.S.ihl = b.S.ihl)
+                (fun it -> shortcut_row "sc-row" it)
+                item_sig
             ]
         ]
     ]
@@ -156,14 +516,27 @@ let gid_label = function
   | S.G_codes -> Ui_strings.t "cmdk.groups/codes"
   | S.G_themes -> Ui_strings.t "cmdk.groups/themes"
 
-let group_header () (g : S.group) : t =
+let gid_of_name = function
+  | "current-page" -> Some S.G_current_page
+  | "nodes" -> Some S.G_nodes
+  | "recently-updated" -> Some S.G_recently_updated
+  | "commands" -> Some S.G_commands
+  | "files" -> Some S.G_files
+  | "filters" -> Some S.G_filters
+  | "codes" -> Some S.G_codes
+  | "themes" -> Some S.G_themes
+  | _ -> None
+
+(* cljs group header: title click toggles more/less; the trailing link
+   (hidden while a filter is active) shows a compact mod+down/up hint *)
+let group_header (g : S.group) : t =
   if g.S.gid = S.G_create then box ~key:"no-gheader" []
   else
-    let count = if g.S.gtotal > 99 then "99+" else string_of_int g.S.gtotal in
+    let count = if g.S.gtotal >= 99 then "99+" else string_of_int g.S.gtotal in
     let can_toggle = g.S.gtotal > g.S.glimit || g.S.gexpanded in
-    let label =
-      if g.S.gexpanded then Ui_strings.t "ui/show-less"
-      else Ui_strings.t "ui/show-more"
+    let label, sc =
+      if g.S.gexpanded then (Ui_strings.t "ui/show-less", "mod up")
+      else (Ui_strings.t "ui/show-more", "mod down")
     in
     Logseq_dom.dom ~key:"gheader"
       ~style_class:
@@ -177,11 +550,16 @@ let group_header () (g : S.group) : t =
           ~attrs:[ ("style", "font-size: 0.7rem") ]
           ~text:count []
       ; Logseq_dom.dom ~key:"gsp" ~style_class:"flex-1" []
-      ; if can_toggle then
+      ; if can_toggle && not g.S.gfilter_active then
           Logseq_dom.dom ~key:"gmore" ~tag:"a"
             ~style_class:"text-link select-node opacity-50 hover:opacity-90"
             ~attrs:[ ("data-cmdk-group", gid_name g.S.gid) ]
-            ~text:label []
+            [ Logseq_dom.dom ~key:"gmore-i"
+                ~style_class:"flex flex-row gap-1 items-center"
+                [ Logseq_dom.dom ~key:"lbl" ~text:label []
+                ; compact_shortcut sc
+                ]
+            ]
         else box ~key:"gmore-none" []
       ]
 
@@ -198,11 +576,12 @@ let group_el (st : S.t) (group_sig : S.group Signal.signal) : t =
     [ dyn
         ~equal:(fun (a : S.group) (b : S.group) ->
           a.S.gtitle = b.S.gtitle && a.S.gtotal = b.S.gtotal
-          && a.S.gexpanded = b.S.gexpanded)
-        (fun g -> group_header () g)
+          && a.S.gexpanded = b.S.gexpanded
+          && a.S.gfilter_active = b.S.gfilter_active)
+        (fun g -> group_header g)
         group_sig
     ; Logseq_dom.dom ~key:"results" ~style_class:"search-results"
-        [ keyed ~source:items_sig ~key:(fun (it : S.item) -> it.S.ikey)
+        [ keyed ~source:items_sig ~key:S.item_dom_key
             ~cmp:Stdlib.compare
             ~mount:(fun item_sig -> item_row st item_sig)
         ]
@@ -325,28 +704,26 @@ let shortcut_el keys =
     ~attrs:[ ("aria-hidden", "true"); ("style", "white-space: nowrap") ]
     (interleave kids)
 
-let hint_button ~on_click label keys =
+let hint_button label keys =
   Logseq_dom.dom ~key:("hb-" ^ label) ~tag:"button"
     ~style_class:
       "hint-button [&>span:first-child]:hover:opacity-100 opacity-40 \
        hover:opacity-80 inline-flex items-center gap-1"
     ~attrs:[ ("data-hint", label) ]
-    ~events:"click"
-    ~on_dom_event:(fun n _ -> if n = "click" then on_click ())
     [ Logseq_dom.dom ~key:"t" ~tag:"span" ~style_class:"opacity-60"
         ~text:label []
-    ; shortcut_el keys ]
+    ; hint_shortcut keys ]
 
-(* cljs tip: "Press / to filter search results"; clear-filter tip when a
-   filter is active. The {1} slot renders as a kbd shortcut. *)
-let () = Random.self_init ()
-
-let tip_el filtered =
-  (* cljs rand-tip picks filter-results or open-sidebar per open *)
-  let key, glyphs =
-    if filtered then ("cmdk.tip/clear-filter", [ "esc" ])
-    else if Random.int 2 = 0 then ("cmdk.tip/filter-results", [ "/" ])
-    else ("cmdk.tip/open-sidebar", [ "mod"; "enter" ])
+(* cljs tip: random per mount between "Press / to filter search
+   results" and "Press ⌘⏎ to open search in the sidebar"; clear-filter
+   tip while a filter is active. The {1} slot renders as a kbd
+   shortcut. *)
+let tip_el (filtered, tip) =
+  let key, keys, combo =
+    if filtered then ("cmdk.tip/clear-filter", [ "esc" ], false)
+    else if tip = 1 then
+      ("cmdk.tip/open-sidebar", [ "mod"; "enter" ], true)
+    else ("cmdk.tip/filter-results", [ "/" ], false)
   in
   let parts =
     Ui_strings.replace_all (Ui_strings.t key) "{1}" "\x00"
@@ -360,7 +737,8 @@ let tip_el filtered =
     ~style_class:
       "flex flex-row gap-1 items-center opacity-50 hover:opacity-100"
     [ Logseq_dom.dom ~key:"pre" ~tag:"span" ~text:pre []
-    ; shortcut_el glyphs
+    ; (if combo then combo_el "tipsc" keys (String.concat "+" keys)
+       else separate_el "tipsc" keys (String.concat "+" keys))
     ; Logseq_dom.dom ~key:"post" ~tag:"span" ~text:post [] ]
 
 let hint_action_of (it : S.item) =
@@ -370,38 +748,30 @@ let hint_action_of (it : S.item) =
   | S.Run _ -> (`trigger, false)
   | S.Open_page _ -> (`open_, true)
   | S.Open_block _ -> (`open_, true)
+  | S.Open_file _ -> (`open_, false)
 
-(* cljs hints: each button's on-click runs handle-action on the
-   highlighted item *)
-let action_hints st v =
-  match S.item_at v v.S.hl with
+let action_hints (it : S.item option) =
+  match it with
   | None -> box ~key:"no-actions" []
   | Some it ->
       let btns =
         match hint_action_of it with
         | `open_, has_block ->
-            [ hint_button ~on_click:(fun () -> S.run_highlighted st)
-                (Ui_strings.t "cmdk.action/open") [ "return" ]
+            [ hint_button (Ui_strings.t "cmdk.action/open") [ "return" ]
             ; hint_button
-                ~on_click:(fun () -> S.run_highlighted_sidebar st)
                 (Ui_strings.t "cmdk.action/open-in-sidebar")
                 [ "shift"; "return" ]
             ]
             @ (if has_block then
-                 [ hint_button
-                     ~on_click:(fun () -> S.copy_highlighted_ref st)
-                     (Ui_strings.t "cmdk.action/copy-ref")
+                 [ hint_button (Ui_strings.t "cmdk.action/copy-ref")
                      [ "cmd"; "c" ] ]
                else [])
         | `create, _ ->
-            [ hint_button ~on_click:(fun () -> S.run_highlighted st)
-                (Ui_strings.t "cmdk.action/create") [ "return" ] ]
+            [ hint_button (Ui_strings.t "cmdk.action/create") [ "return" ] ]
         | `filter, _ ->
-            [ hint_button ~on_click:(fun () -> S.run_highlighted st)
-                (Ui_strings.t "cmdk.action/filter") [ "return" ] ]
+            [ hint_button (Ui_strings.t "cmdk.action/filter") [ "return" ] ]
         | `trigger, _ ->
-            [ hint_button ~on_click:(fun () -> S.run_highlighted st)
-                (Ui_strings.t "cmdk.action/trigger") [ "return" ] ]
+            [ hint_button (Ui_strings.t "cmdk.action/trigger") [ "return" ] ]
       in
       Logseq_dom.dom ~key:"actions"
         ~style_class:"gap-2 hidden md:flex"
@@ -418,31 +788,18 @@ let hints st : t =
                 ~style_class:"font-medium text-gray-12"
                 ~text:(Ui_strings.t "cmdk.tip/label") []
             ; dyn
-                ~equal:(fun (a : bool) b -> a = b)
+                ~equal:(fun (a : bool * int) b -> a = b)
                 tip_el
                 (Signal.map
-                   (fun (v : S.view) -> v.S.filter <> None)
+                   (fun (v : S.view) -> (v.S.filter <> None, v.S.tip))
                    st.S.vs.Signal.state_signal)
             ]
         ]
     ; dyn
-        ~equal:(fun (a : int * int) b -> a = b)
-        (fun (hl, _kind) ->
-          action_hints st { (S.get st) with S.hl = hl })
+        ~equal:(fun (a : S.item option) b -> a = b)
+        action_hints
         (Signal.map
-           (fun (v : S.view) ->
-             let kind =
-               match S.item_at v v.S.hl with
-               | None -> -1
-               | Some it -> (
-                   match it.S.act with
-                   | S.Open_block _ -> 0
-                   | S.Open_page _ -> 1
-                   | S.Create_page _ -> 2
-                   | S.Set_filter _ -> 3
-                   | S.Run _ -> 4)
-             in
-             (v.S.hl, kind))
+           (fun (v : S.view) -> S.item_at v v.S.hl)
            st.S.vs.Signal.state_signal)
     ]
 
@@ -527,16 +884,14 @@ let handle_click st (ev : Dom_ext.event) =
        with
        | Some g -> (
            Dom_ext.prevent_default ev;
-           match Dom_ext.get_attribute g "data-cmdk-group" with
-           | Some "nodes" ->
+           match
+             Option.bind
+               (Dom_ext.get_attribute g "data-cmdk-group") gid_of_name
+           with
+           | Some gid ->
                let v = S.get st in
-               S.toggle_expand st S.G_nodes
-                 (not (List.mem S.G_nodes v.S.expanded))
-           | Some "commands" ->
-               let v = S.get st in
-               S.toggle_expand st S.G_commands
-                 (not (List.mem S.G_commands v.S.expanded))
-           | _ -> ())
+               S.toggle_expand st gid (not (List.mem gid v.S.expanded))
+           | None -> ())
        | None ->
            match Dom_ext.closest el ".cp__cmdk [data-item-key]" with
            | Some wrap -> (
@@ -584,9 +939,7 @@ let install_listeners st =
 (* modal shell mirrors shui dialog markup: overlay + centered
    .ui__dialog-content > .ui__dialog-main-content > .cp__cmdk__modal *)
 let modal_shell st =
- fun ctx parent ->
-  let z = Dialogs_state.z_index "cmdk" in
-  (Logseq_dom.dom ~key:"cmdk-shell"
+  Logseq_dom.dom ~key:"cmdk-shell"
     [ Logseq_dom.dom ~key:"dismiss"
         ~attrs:
           [ ("role", "presentation")
@@ -596,9 +949,7 @@ let modal_shell st =
         ~style_class:
           "ui__dialog-overlay fixed inset-0 z-50 bg-background/90 flex \
            justify-center items-center animate-in fade-in-0"
-        ~attrs:
-          [ ("role", "presentation")
-          ; ("style", Printf.sprintf "z-index:%d" z) ]
+        ~attrs:[ ("role", "presentation") ]
         []
     ; Logseq_dom.dom ~key:"content"
         ~style_class:
@@ -609,10 +960,8 @@ let modal_shell st =
           [ ("role", "dialog")
           ; ("data-state", "open")
           ; ( "style"
-            , Printf.sprintf
-                "--nested-dialogs: 0; transform: translate(-50%%, -50%%) \
-                 scale(calc(1 - var(--nested-dialogs, 0) * 0.03)); z-index:%d;"
-                z )
+            , "--nested-dialogs: 0; transform: translate(-50%, -50%) \
+               scale(calc(1 - var(--nested-dialogs, 0) * 0.03));" )
           ]
         [ Logseq_dom.dom ~key:"title" ~tag:"h2"
             ~style_class:
@@ -626,7 +975,7 @@ let modal_shell st =
                 [ palette st ]
             ]
         ]
-    ]) ctx parent
+    ]
 
 let render (_ms : Model.t Signal.signal) : t =
  fun context parent ->
