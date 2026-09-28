@@ -41,6 +41,7 @@ let rec block_of_wire (w : Wire.t) : Model.block =
   ; block_level = level
   ; block_tag_ids = tag_ids
   ; block_tags = []
+  ; block_tag_uuids = []
   ; block_page_name =
       (match Wire.get w "block/page" with
        | Some (Wire.Map _ as p) -> (
