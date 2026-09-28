@@ -380,17 +380,9 @@ let contents_item repo : item option Js.Promise.t =
                          ; blocks = p'.Model.page_blocks
                          ; page_ref = Some "Contents"
                          }))
-         | None ->
-             Js.Promise.resolve
-               (Some
-                  { key = "contents"
-                  ; kind = "contents"
-                  ; uuid = None
-                  ; title = t "Contents"
-                  ; breadcrumb = []
-                  ; blocks = []
-                  ; page_ref = Some "Contents"
-                  }))
+         (* cljs only mounts a Contents panel when the Contents page
+            actually exists *)
+         | None -> Js.Promise.resolve None)
 
 let static_item key kind title =
   Some
