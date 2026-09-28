@@ -48,24 +48,25 @@ let page_items (p : Model.page) =
               Sidebar_state.toggle_favorite st) ]
     | None -> []
   in
-  match p.page_is_tag, p.page_db_id with
-  | false, Some id ->
-          fav
-          @ [ del
-            ; item "cvt" Strings.convert_to_tag (fun () ->
-                  Runtime.send (Action.Page_menu_set None);
-                  ignore (Page_ops.convert_to_tag id))
-            ]
-      | true, Some id ->
-          fav
-          @ [ del
-            ; item "cvt2p" Strings.convert_tag_to_page (fun () ->
-                  Runtime.send
-                    (Action.Confirm_set
-                       (Some (Model.Confirm_convert_tag_to_page id)));
-                  Runtime.flush ())
-            ]
-      | _ -> fav @ [ del ]
+  let own =
+    match p.page_is_tag, p.page_db_id with
+    | false, Some id ->
+        [ del
+        ; item "cvt" Strings.convert_to_tag (fun () ->
+              Runtime.send (Action.Page_menu_set None);
+              ignore (Page_ops.convert_to_tag id))
+        ]
+    | true, Some id ->
+        [ del
+        ; item "cvt2p" Strings.convert_tag_to_page (fun () ->
+              Runtime.send
+                (Action.Confirm_set
+                   (Some (Model.Confirm_convert_tag_to_page id)));
+              Runtime.flush ())
+        ]
+    | _ -> [ del ]
+  in
+  fav @ own
 
 (* app-wide entries mirror the cljs header dots menu
    (components/header.cljs toolbar-dots-menu): dialogs dispatch
@@ -117,6 +118,10 @@ let confirm_view (c : Model.confirm) =
         ( Strings.convert_tag_to_page
         , Strings.convert_tag_to_page_desc
         , fun () -> ignore (Page_ops.convert_tag_to_page id) )
+    | Model.Confirm_delete_asset u ->
+        ( Strings.asset_confirm_delete
+        , ""
+        , fun () -> Asset_dom.delete_asset u )
   in
   let close () =
     Runtime.send (Action.Confirm_set None);

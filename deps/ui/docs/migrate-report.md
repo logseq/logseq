@@ -109,6 +109,27 @@ batches; multi-op batches (e.g. split = `save-block` + `insert-blocks`,
 merges = `move`+`delete`+`save`) MUST pass it via opts or the tx is
 invisible to undo.
 
+### Asset upload must commit the pending edit before inserting
+cljs `db-based-save-assets!` calls `save-block-aux!` on the edit block
+first (`has-unsaved-edit?`): the file is written to
+`assets/<block-uuid>.<ext>` and rendering resolves that path from the
+*final* block uuid. The worker only honors `replace-empty-target?` when
+the stored target title is still blank — so an uncommitted edit ("image
+uploads" typed but still only in the buffer) silently remaps the idx-0
+block's uuid onto the target's, leaving the pfs file named after the
+stale random bid and `img.src` blank. Port sends `save-block` + the
+`insert-blocks` op in one `apply-and-refresh` batch. (cljs also has a
+`new-asset-block` uuid-reuse path keyed on `empty-target?`, which now
+rarely triggers since the saved title is non-blank.)
+`crypto.subtle.digest` via Melange: `[@@mel.scope ("crypto","subtle")]
+[@@mel.send]` compiles to `"SHA-256".crypto.subtle.digest(...)` — scope
+binds to the receiver (first arg). Get `crypto.subtle` as a value with
+`[@@mel.scope "crypto"]`, then call `digest` as a `send` on it.
+LUI mounts `on_dom_event`-created elements after the mount fn returns —
+`qs`/`querySelector` from an async continuation (pfs read, onload) can
+still see a detached node; use a bounded `setTimeout` retry like the
+focus fix above.
+
 ## Worker protocol edge cases
 
 - `apply-outliner-ops` op entries require nested `Array` args
