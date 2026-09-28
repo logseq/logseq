@@ -202,7 +202,7 @@ jobs:
           "$LOGSEQ_BIN" graph validate --graph "$GRAPH" --output json --timeout-ms 60000
 
       - name: Print stress logs on failure
-        if: failure()
+        if: ${{ failure() || cancelled() }}
         run: |
           tail -n 200 tmp/cli-concurrent-edit-stress/events.jsonl || true
           tail -n 200 tmp/cli-concurrent-edit-stress/db-sync-server.log || true
