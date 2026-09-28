@@ -565,19 +565,24 @@ let fold_arrow ?on_click key : t =
         ]
     ]
 
-let view_ghost_btn key ?title icon_name size : t =
+let view_ghost_btn key ?title ?on_click icon_name size : t =
   let attrs =
     [ ("type", "button"); ("tabindex", "0") ]
     @ (match title with Some s -> [ ("title", s) ] | None -> [])
   in
-  dom ~key ~tag:"button" ~attrs
+  let events, handler =
+    match on_click with
+    | Some f -> ("click", Some (fun name _ -> if name = "click" then f ()))
+    | None -> ("", None)
+  in
+  dom ~key ~tag:"button" ~attrs ~events ?on_dom_event:handler
     ~style_class:(ui_btn ^ " as-ghost h-7 rounded py-1 \
                   text-muted-foreground !px-1")
     [ Icons.icon ~size icon_name ]
 
 (* cljs views/view header for :linked-references — foldable title with the
    "Linked references <count>" view tab and hidden-until-hover actions *)
-let refs_view_head key title count : t =
+let refs_view_head key ?on_search title count : t =
   dom ~key:(key ^ "-head")
     ~style_class:
       "ls-view-head flex flex-1 flex-nowrap items-center justify-between \
@@ -615,7 +620,7 @@ let refs_view_head key title count : t =
         ; view_ghost_btn "vh-flt" "filter" 18.
         ; dom ~key:"vh-search" ~style_class:"view-action-search"
             [ dom ~key:"vh-si" ~style_class:"flex flex-row items-center"
-                [ view_ghost_btn "vh-sb" "search" 15. ] ]
+                [ view_ghost_btn "vh-sb" ?on_click:on_search "search" 15. ] ]
         ; dom ~key:"vh-type"
             ~style_class:"view-action-type text-muted-foreground text-sm"
             [ dom ~key:"vh-tv" ~style_class:"w-full property-value-inner"
@@ -644,13 +649,18 @@ let refs_view_head key title count : t =
         ]
     ]
 
-(* cljs ls-foldable-title wrapping a view-head or a group page-ref *)
-let foldable_title ?on_click key inner : t =
+(* cljs ls-foldable-title wrapping a view-head or a group page-ref.
+   ~control:false drops the fold arrow — only the section-level title
+   carries .ls-foldable-title-control in cljs — ref-group titles are
+   plain headers. *)
+let foldable_title ?on_click ?(control = true) key inner : t =
   dom ~key:(key ^ "-ft") ~style_class:"ls-foldable-title content"
     [ dom ~key:"ftr" ~style_class:"flex-1 flex-row foldable-title"
         [ dom ~key:"fth"
             ~style_class:"flex flex-row items-center ls-foldable-header gap-1"
-            [ fold_arrow ?on_click (key ^ "-fa"); inner ]
+            ((if control then [ fold_arrow ?on_click (key ^ "-fa") ]
+              else [])
+             @ [ inner ])
         ]
     ]
 
@@ -666,7 +676,7 @@ let ref_group idx (name, blocks) : t =
                   ; ("data-item-index", string_of_int idx)
                   ; ("style", "overflow-anchor: none;") ]
     [ dom ~key:"gi" ~style_class:"flex flex-col"
-        [ foldable_title (key ^ "-t")
+        [ foldable_title ~control:false (key ^ "-t")
             (dom ~key:"grp" ~style_class:""
                [ dom ~key:"grl" ~tag:"a" ~style_class:"page-ref relative"
                    ~attrs:
@@ -859,6 +869,9 @@ let unlinked_references_view (m : Model.t) : t =
                       if not m.unlinked_open then fetch_unlinked m;
                       Runtime.flush ())
                     (refs_view_head "urefs"
+                       ~on_search:(fun () ->
+                         Runtime.send Action.Unlinked_toggle_search;
+                         Runtime.flush ())
                        (Ui_strings.t "view/unlinked-references")
                        (List.length refs))
                 ; dom ~key:"urefs-content" ~style_class:"ls-foldable-content"
