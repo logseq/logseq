@@ -12,10 +12,8 @@ module P = Views_popup
 let ghost_btn ?(extra = "") icon_name =
   D.h ~tag:"button"
     ~cls:
-      ("inline-flex items-center justify-center rounded-md text-sm \
-        font-medium transition-colors hover:bg-accent \
-        hover:text-accent-foreground h-8 !px-1 text-muted-foreground "
-       ^ extra)
+      (D.button_cls ~variant:"ghost" ~size:"sm"
+         ~cls:("text-muted-foreground !px-1" ^ extra) ())
     ~children:[ D.icon icon_name ] ()
 
 let count_of inst =
@@ -39,15 +37,39 @@ let set_filters inst ~refresh fs or_ =
 
 (* ---------- tabs ---------- *)
 
+(* view-type ident → tabler icon (cljs get-icon-by-view-type via
+   built-in-property :logseq.property/icon) *)
+let view_type_icon v =
+  match v.Wr.vtype with
+  | "logseq.property.view/type.list" -> "list"
+  | "logseq.property.view/type.gallery" -> "layout-grid"
+  | _ -> "table"
+
+(* cljs view-tab-button: icon (ls-icon-color-wrap) + title text + item
+   count on the current tab *)
 let view_tab inst ~refresh (v : Wr.view_ent) : D.el =
   let is_current = v.Wr.vu = inst.V.view_uuid in
+  let count = count_of inst in
+  let children =
+    [ D.h ~cls:"inline-flex items-center ls-icon-color-wrap"
+        ~children:[ D.icon (view_type_icon v) ] ()
+    ; D.h ~tag:"span" ~text:(V.display_title v) () ]
+    @ (if is_current && inst.V.feature <> "query-result" && count > 0
+       then
+         [ D.h ~tag:"span" ~cls:"text-muted-foreground text-xs"
+             ~text:(string_of_int count) () ]
+       else [])
+  in
   let b =
     D.h ~tag:"button"
       ~cls:
-        ("text-sm px-0 py-0 h-6"
-         ^ if is_current then "" else " text-muted-foreground")
+        (D.button_cls ~variant:"text" ~size:"sm"
+           ~cls:
+             ("text-sm px-0 py-0 h-6 "
+              ^ if is_current then "" else "text-muted-foreground")
+           ())
       ~attrs:[ ("data-view-tab-id", "view-tab-" ^ v.Wr.vu) ]
-      ~text:(V.display_title v) ()
+      ~children ()
   in
   D.el_add_listener b "click" (fun _ ->
       if is_current then
@@ -74,18 +96,25 @@ let view_tab inst ~refresh (v : Wr.view_ent) : D.el =
       end);
   b
 
-let tabs_el inst ~refresh : D.el =
-  let wrap = D.h ~cls:"views flex flex-row items-center" () in
+let tabs_el inst ~refresh ~opacity : D.el * D.el =
+  let wrap = D.h ~cls:"views" () in
   List.iter
     (fun v -> D.el_append_child wrap (view_tab inst ~refresh v))
     inst.V.views;
   let add =
-    D.h ~tag:"button" ~cls:"!px-1 -ml-1 text-muted-foreground"
+    D.h ~tag:"button"
+      ~cls:
+        (D.button_cls ~variant:"text" ~size:"sm"
+           ~cls:
+             ("!px-1 -ml-1 text-muted-foreground hover:text-foreground \
+               transition-opacity ease-in duration-300 "
+              ^ opacity)
+           ())
       ~attrs:[ ("title", I.add_new_view) ] ~children:[ D.icon "plus" ] ()
   in
   D.el_add_listener add "click" (fun _ -> (V.ops ()).o_create_view inst);
   D.el_append_child wrap add;
-  wrap
+  (wrap, add)
 
 (* ---------- sorting popup ---------- *)
 
@@ -612,14 +641,42 @@ let render_head inst ~refresh : D.el =
       "ls-view-head flex flex-1 flex-nowrap items-center justify-between \
        gap-1 overflow-hidden" ()
   in
+  (* cljs view-head fades actions/tabs to opacity-75, full on hover *)
+  let fade_targets = ref [] in
+  let set_opacity shown =
+    List.iter
+      (fun el ->
+        if shown then begin
+          D.el_class_remove el "opacity-75";
+          D.el_class_add el "opacity-100"
+        end
+        else begin
+          D.el_class_remove el "opacity-100";
+          D.el_class_add el "opacity-75"
+        end)
+      !fade_targets
+  in
+  D.el_add_listener head "mouseover" (fun _ -> set_opacity true);
+  D.el_add_listener head "mouseout" (fun _ ->
+      if !P.open_popups = [] then set_opacity false);
   let left = D.h ~cls:"flex flex-row items-center gap-2" () in
   (match inst.V.kind with
    | V.KQuery _ ->
        D.el_append_child left
          (D.h ~cls:"font-medium opacity-50 text-sm"
             ~text:(I.live_query (count_of inst)) ())
-   | _ -> D.el_append_child left (tabs_el inst ~refresh));
-  let actions = D.h ~cls:"view-actions flex items-center gap-1 justify-end" () in
+   | _ ->
+       let tabs, add = tabs_el inst ~refresh ~opacity:"opacity-75" in
+       fade_targets := add :: !fade_targets;
+       D.el_append_child left tabs);
+  let actions =
+    D.h
+      ~cls:
+        "view-actions flex items-center gap-1 transition-opacity ease-in \
+         duration-300 opacity-75"
+      ()
+  in
+  fade_targets := actions :: !fade_targets;
   (if inst.V.sorting <> [] then begin
      let sbtn = ghost_btn "arrows-up-down" in
      D.el_add_listener sbtn "click" (fun _ ->
