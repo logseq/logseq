@@ -93,7 +93,16 @@ let fetch_refs_blocks (p : Model.page) : Model.block list Js.Promise.t =
       Runtime.invoke2 "thread-api/get-block-refs"
         (Wire.String (repo ())) (Wire.Int id)
       |> Js.Promise.then_ (fun w ->
-             Js.Promise.resolve (Decode.blocks_of_wire w))
+             (* cljs block-ref-count gates the references section with
+                hidden-ref-id-pred, which excludes same-page refs — drop
+                them here so a self-reference never shows the section *)
+             let blocks =
+               List.filter
+                 (fun b ->
+                   b.Model.block_page_name <> Some p.Model.page_title)
+                 (Decode.blocks_of_wire w)
+             in
+             Js.Promise.resolve blocks)
   | None -> Js.Promise.resolve []
 
 let fetch_refs (p : Model.page) =
