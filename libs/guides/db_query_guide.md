@@ -518,7 +518,7 @@ async function main() {
       const todos = results?.flat() || []
 
       if (todos.length) {
-        const content = todos.map(t => `- ((${t.uuid}))`).join('\n')
+        const content = todos.map(t => `- [[${t.uuid}]]`).join('\n')
         await logseq.Editor.insertAtEditingCursor(content)
       } else {
         await logseq.UI.showMsg('No TODOs found', 'warning')
