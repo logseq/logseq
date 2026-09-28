@@ -703,6 +703,22 @@ let cut_selection ev =
   copy_selection ev;
   delete_selection ()
 
+(* palette-invoked copy: no copy event, so write the system clipboard
+   directly; same topmost-roots reduction as copy_selection *)
+let copy_selection_text () =
+  let sel = S.selected () in
+  match selected_uuids () with
+  | [] -> ()
+  | uuids ->
+      let roots =
+        List.filter (fun u -> not (has_selected_ancestor sel u)) uuids
+      in
+      let blocks = List.filter_map S.find roots in
+      S.clipboard := blocks;
+      Platform.copy_to_clipboard
+        (String.concat "\n"
+           (List.map (fun b -> b.Model.block_title) blocks))
+
 let paste_trees trees target_uuid ~replace_empty =
   Ops.apply_and_refresh ~opts:(Ops.op_opts "paste")
     [ Ops.paste_trees trees target_uuid ~replace_empty ]
@@ -818,6 +834,50 @@ let toggle_collapse uuid =
             });
         ignore (Ops.apply [ Ops.collapse_expand [ (uuid, now) ] ])
   | _ -> ()
+
+let set_collapsed uuid collapsed =
+  match S.find uuid with
+  | Some b when S.children_of b <> [] ->
+      S.set (fun st ->
+          { st with
+            S.collapsed =
+              (if collapsed then S.String_set.add uuid st.collapsed
+               else S.String_set.remove uuid st.collapsed)
+          ; S.expanded = S.String_set.remove uuid st.expanded
+          });
+      ignore (Ops.apply [ Ops.collapse_expand [ (uuid, collapsed) ] ])
+  | _ -> ()
+
+(* cljs editor/toggle-open-blocks: any collapsed block -> expand all,
+   else collapse all collapsible blocks *)
+let toggle_open_blocks () =
+  let expandable =
+    List.filter
+      (fun (b : Model.block) ->
+        S.children_of b <> [] || S.effective_collapsed b)
+      (S.flat_all ())
+  in
+  let collapsed = not (List.exists S.effective_collapsed expandable) in
+  let pairs =
+    List.filter_map
+      (fun (b : Model.block) ->
+        match b.Model.block_uuid with
+        | Some u when S.effective_collapsed b <> collapsed ->
+            Some (u, collapsed)
+        | _ -> None)
+      expandable
+  in
+  S.set (fun st ->
+      { st with
+        S.collapsed =
+          (if collapsed then
+             List.fold_left
+               (fun acc (u, _) -> S.String_set.add u acc)
+               st.S.collapsed pairs
+           else S.String_set.empty)
+      ; S.expanded = S.String_set.empty
+      });
+  if pairs <> [] then ignore (Ops.apply [ Ops.collapse_expand pairs ])
 
 let undo () = ignore (Ops.undo ())
 let redo () = ignore (Ops.redo ())

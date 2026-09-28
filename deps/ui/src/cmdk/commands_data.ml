@@ -1,8 +1,10 @@
 (* Static port of the cljs cmdk command set: ids from
    shortcut.handler/editor-global + global-prevent-default +
-   global-non-editing-only (modules/shortcut/config.cljs), minus entries
-   marked :inactive on web (electron/lsp/plugins/publishing-only). dev/*
-   commands are gated on developer-mode at query time, like cljs.
+   global-non-editing-only (modules/shortcut/config.cljs). cljs drops
+   :inactive entries when the config is built (build-category-map) —
+   on web that removes the electron-only bindings, plugins-file/github
+   installers, and dev/* — so this table omits them too, except dev/*
+   entries that stay gated on developer-mode at query time like cljs.
 
    `sc` holds the raw cljs :binding values; `display` applies
    shortcut-utils/decorate-binding (macOS/non-macOS branches) + the
@@ -59,6 +61,7 @@ let table : cmd list =
   ; k "editor/copy" (Binds [ "mod+c" ])
   ; k "editor/copy-text" (Binds [ "mod+shift+c" ])
   ; k "editor/cut" (Binds [ "mod+x" ])
+  ; k "page/toggle-favorite" (Binds [ "mod+shift+f" ])
   ; k "editor/jump" (Binds [ "mod+j" ])
     (* ---- shortcut.handler/global-prevent-default ---- *)
   ; k "editor/insert-link" (Binds [ "mod+l" ])
@@ -73,6 +76,7 @@ let table : cmd list =
   ; k "go/search-themes" (Binds [ "mod+shift+i" ])
   ; k "go/backward" (Binds [ "mod+open-square-bracket" ])
   ; k "go/forward" (Binds [ "mod+close-square-bracket" ])
+  ; k "search/re-index" (Binds [ "mod+c mod+s" ])
   ; k "sidebar/open-today-page" (Binds [ "mod+shift+j" ])
   ; k "sidebar/clear" (Binds [ "mod+c mod+c" ])
   ; k "publish/open-dialog" (Binds [ "mod+m" ])
@@ -107,6 +111,7 @@ let table : cmd list =
   ; k "editor/toggle-display-hidden-properties" (Binds [ "p a" ])
   ; k "ui/toggle-wide-mode" (Binds [ "t w" ])
   ; k "ui/select-theme-color" (Binds [ "t i" ])
+  ; k "ui/goto-plugins" (Binds [ "t p" ])
   ; k "editor/toggle-open-blocks" (Binds [ "t o" ])
   ; k "ui/clear-all-notifications" Unbound
   ; k "sidebar/close-top" (Binds [ "c t" ])
