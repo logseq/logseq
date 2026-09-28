@@ -1,7 +1,7 @@
 (* Hash routing — mirrors frontend.routes: "#/page/<name|uuid>",
-   "#/block/<uuid>", "#/journals", "#/all-graphs", "#/library",
-   default "#/". Listens hashchange + the "ls:navigate" CustomEvent
-   (dispatched by sdk push_state). *)
+   "#/block/<uuid>", "#/all-journals", "#/all-pages", "#/graphs",
+   "#/settings", default "#/". Listens hashchange + the "ls:navigate"
+   CustomEvent (dispatched by sdk push_state). *)
 
 let decode s = try Platform.decode_uri s with _ -> s
 
@@ -36,16 +36,13 @@ let parse_hash () : Model.route =
           match seg with
           | "page" -> Model.Page (decode rest)
           | "block" -> Model.Block_zoom (decode rest)
-          | "journals" -> Model.Journals
-          | "library" -> Model.Library
-          | "all-pages" -> Model.All_pages
           | "all-journals" -> Model.Journals
+          | "all-pages" -> Model.All_pages
           | "graphs" -> Model.All_graphs
           | _ -> Model.Not_found p)
       | None -> (
           match p with
-          | "journals" | "all-journals" -> Model.Journals
-          | "library" -> Model.Library
+          | "all-journals" -> Model.Journals
           | "all-pages" -> Model.All_pages
           | "graphs" -> Model.All_graphs
           | "settings" -> Model.Settings
