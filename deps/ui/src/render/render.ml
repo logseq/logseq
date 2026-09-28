@@ -145,7 +145,7 @@ let content s =
           [ D.el ~key:"btw-br" ~tag:"br" [] ]
       else wrap s
 
-let title (s : string) : t list =
+let title ?heading (s : string) : t list =
   match quote_body s with
   | Some body ->
       [ D.el ~tag:"div" ~attrs:[ ("data-node-type", "quote") ]
@@ -156,9 +156,19 @@ let title (s : string) : t list =
       | None -> (
           if is_whole_query s then [ wrap ""; query_shell ]
           else (
-              match ordered_prefix s with
-              | Some (num, rest) ->
-                  [ D.el ~tag:"span" ~style_class:"typed-list"
-                      [ D.el ~tag:"label" ~text:num [] ]
-                  ; content rest ]
-              | None -> [ content s ])))
+            match ordered_prefix s with
+            | Some (num, rest) ->
+                [ D.el ~tag:"span" ~style_class:"typed-list"
+                    [ D.el ~tag:"label" ~text:num [] ]
+                ; content rest ]
+            | None -> (
+                (* cljs text-block-title: a resolved property heading
+                   renders the wrap as h<lvl>.block-title-wrap.as-heading *)
+                match heading with
+                | Some lvl -> (
+                    match heading_level s with
+                    | Some _ -> [ content s ]
+                    | None ->
+                        [ wrap ~tag:("h" ^ string_of_int lvl)
+                            ~cls:"block-title-wrap as-heading" s ])
+                | None -> [ content s ]))))

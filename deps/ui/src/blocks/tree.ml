@@ -68,9 +68,26 @@ let collapsed_sig (b : Model.block) =
 
 (* -- control wrap: collapse arrow + bullet -- *)
 
+(* cljs block-control-icon-size: heading chrome sizes differ, collapsed
+   bullets shrink *)
 let control_wrap uuid (b : Model.block) : t =
+  let heading_attrs =
+    ( "data-has-children"
+    , string_of_bool (b.block_children <> []) )
+    ::
+    (match b.block_heading with
+    | Some lvl ->
+        let size =
+          match lvl with 1 -> 28 | 2 -> 24 | 3 -> 20 | 4 -> 16
+          | 5 -> 13 | 6 -> 12 | _ -> 14
+        in
+        [ ("data-heading", string_of_int lvl)
+        ; ("style", "--ls-block-icon-size:" ^ string_of_int size ^ "px") ]
+    | None -> [])
+  in
   dom ~key:("ctrlw-" ^ uuid)
     ~style_class:"block-control-wrap flex flex-row items-center h-6"
+    ~attrs:heading_attrs
     [ dom ~key:("ctrl-" ^ uuid) ~tag:"a" ~style_class:"block-control"
         ~id:("control-" ^ uuid)
         [ dom ~key:("ctrlspan-" ^ uuid) ~tag:"span"
@@ -105,7 +122,7 @@ let content_el uuid (b : Model.block) : t =
     [ dom ~key:("bci-" ^ uuid)
         ~style_class:"block-content-inner flex flex-row justify-between"
         [ dom ~key:("bh-" ^ uuid) ~style_class:"block-head-wrap"
-            (Render.title b.block_title)
+            (Render.title ?heading:b.block_heading b.block_title)
         ]
     ]
 
@@ -199,6 +216,10 @@ and row_el (b : Model.block) : t =
     ~attrs_signal_v:(row_attrs_sig uuid b)
     [ dom ~key:("main-" ^ key)
         ~style_class:"block-main-container flex flex-row gap-1"
+        ~attrs:
+          (match b.block_heading with
+           | Some lvl -> [ ("data-has-heading", string_of_int lvl) ]
+           | None -> [])
         [ control_wrap uuid b
         ; dom ~key:("col-" ^ key) ~style_class:"flex flex-col w-full"
             [ dom ~key:("bmc-" ^ key)
