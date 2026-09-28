@@ -163,11 +163,71 @@ let test_wire () =
   check "map_get_int hit" (Wire.map_get_int m "k2" = Some 42);
   check "map_get_uuid" (Wire.map_get_uuid m "k1" = Some "v1")
 
+(* ---- Decode page/summary/toast ---- *)
+
+let test_decode2 () =
+  let p =
+    Wire.Map
+      [ (Wire.kw "block/title", Wire.String "My Page")
+      ; (Wire.kw "block/uuid", Wire.Uuid "uuid-1")
+      ; (Wire.kw "db/id", Wire.Int 9)
+      ; (Wire.kw "block/journal-day", Wire.Int 20260927)
+      ]
+  in
+  (match Decode.page_of_summary p with
+   | Some page ->
+       eqs "page title" "My Page" page.Model.page_title;
+       check "page uuid" (page.page_uuid = Some "uuid-1");
+       check "journal day" (page.page_journal_day = Some 20260927)
+   | None -> check "page_of_summary" false);
+  check "non-map -> None"
+    (Decode.page_of_summary (Wire.String "x") = None);
+  (* repos: upload-temp filtered, non-Array -> [] *)
+  let repos =
+    Wire.Array
+      [ Wire.Map [ (Wire.kw "name", Wire.String "logseq_db_a") ]
+      ; Wire.Map [ (Wire.kw "name", Wire.String "upload-temp") ]
+      ; Wire.Map [ (Wire.kw "name", Wire.String "Upload-Temp") ]
+      ; Wire.Map [ (Wire.kw "name", Wire.String "logseq_db_b") ]
+      ]
+  in
+  eq "repos filtered" [ "logseq_db_a"; "logseq_db_b" ]
+    (Decode.repos_of_list_db repos)
+    (String.concat ",");
+  (* toast: [message kind ...] *)
+  let t =
+    Wire.Array [ Wire.String "Saved!"; Wire.Keyword "success" ]
+  in
+  (match Decode.toast_of_wire t with
+   | Some toast ->
+       eqs "toast text" "Saved!" toast.Model.toast_text;
+       eqs "toast kind" "success" toast.toast_kind
+   | None -> check "toast_of_wire" false);
+  check "toast empty -> None"
+    (Decode.toast_of_wire (Wire.Array []) = None)
+
+(* ---- Edn round-trip ---- *)
+
+let test_edn () =
+  let w =
+    Wire.Map
+      [ (Wire.kw "a", Wire.String "x")
+      ; (Wire.kw "b", Wire.Int 5)
+      ; (Wire.kw "c", Wire.Array [ Wire.Bool true; Wire.Nil ])
+      ]
+  in
+  let s = Edn.to_string w in
+  let back = Edn.parse s in
+  check "edn roundtrip k1" (Wire.map_get_string back "a" = Some "x");
+  check "edn roundtrip k2" (Wire.map_get_int back "b" = Some 5)
+
 let () =
   test_move ();
   test_update ();
   test_decode ();
+  test_decode2 ();
   test_wire ();
+  test_edn ();
   Js.log
     (Printf.sprintf "%d checks, %d failures" !checks !failures);
   if !failures > 0 then exit 1
