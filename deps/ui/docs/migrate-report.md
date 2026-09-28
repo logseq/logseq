@@ -865,3 +865,13 @@ search may lag).
   search toggle (`button:has(.ls-icon-search)` →
   `Unlinked_toggle_search`) rendered `.view-action-search` but the
   button dispatched nothing.
+
+## Explicitly not ported (product decisions)
+
+- **Graph view canvas** — the pixi.js page/local graph renderer is
+  dropped per product decision; the sidebar "Page graph" tab and any
+  `#/graph` route render an empty/minimal surface, and graph-navigation
+  e2e coverage is out of the acceptance set.
+- **`((uuid))` block refs in content** — deprecated by product
+  decision; titles parse `((…))` through the same page-reference path
+  as `[[…]]` (no distinct block-ref rendering or popup).
