@@ -363,6 +363,19 @@
   (disallow-node-cant-tag-with-private-tags db block-eids v {:delete? true})
   (disallow-removing-page-tag db block-eids v))
 
+(defn validate-page-to-property-conversion
+  "Namespaced pages (pages with a parent, including Library-parented
+   namespace roots) cannot become properties. Retracting #Page would
+   otherwise be treated as page->block and drop :block/name."
+  [page]
+  (when (and (entity-util/internal-page? page)
+             (:block/parent page))
+    (throw (ex-info "Namespaced pages can't be properties"
+                    {:type :notification
+                     :payload {:message "Namespaced pages can't be properties"
+                               :i18n-key :page.convert/page-to-property-namespaced
+                               :type :error}}))))
+
 (defn disallow-editing-private-built-in-nodes
   "Disallow editing private :built-in nodes. This explicit validation is needed for contexts
    like CLI and API which allow users to edit any built-in entity whereas the app guards this
