@@ -283,12 +283,10 @@ let create_on_request_handler (client_channel : Broadcast_channel.t)
                  E.pure ()))
     | _ -> ()
 
-(* cljs arms this watch inside <slave-registered-handler — only once the
-   master acks a slave's "slave-register". If the master is destroyed
-   mid-handshake the ack never arrives, the service lock is released, and
-   nobody re-checks: this client would wait on register forever. Arm the
-   watch at register time instead; the pending-request check below keeps
-   it single. *)
+(* Armed from <slave-registered-handler — once the master acks a slave's
+   "slave-register", matching cljs. The pending-request check keeps the
+   exclusive-lock request single; when it resolves, the master has gone
+   and the slave triggers a master re-check (which may re-register). *)
 let watch_master_lock ~service_name ~slave_client_id : unit E.t =
   E.map
     (fun (qr : Navigator_locks.query_result) ->
@@ -402,10 +400,9 @@ let on_become_slave ~slave_client_id ~service_name ~common_channel
           Worker_log.error "shared-service/unknown-event"
             [ "event", Ds_wire.edn_of_transit data ]);
   E.catch
-    (E.bind (watch_master_lock ~service_name ~slave_client_id) (fun () ->
-         E.bind (register ()) (fun () ->
-             E.wakeup status_ready ();
-             E.pure ())))
+    (E.bind (register ()) (fun () ->
+         E.wakeup status_ready ();
+         E.pure ()))
     (fun e ->
        Worker_log.error "shared-service/on-become-slave"
          [ "error", Printexc.to_string e ];

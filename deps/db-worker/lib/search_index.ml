@@ -174,7 +174,8 @@ let create_tables_and_triggers (db : Sqlite.db) =
     add_blocks_fts_triggers db
   with exn ->
     Worker_log.error "Failed to create tables and triggers"
-      [ ("error", Printexc.to_string exn) ]
+      [ ("error", Printexc.to_string exn)
+      ; ("db", Sqlite.filename db) ]
 
 let drop_tables_and_triggers (db : Sqlite.db) =
   Sqlite.exec db ~sql:"DROP TABLE IF EXISTS blocks" ~bind:[||];
@@ -1322,6 +1323,20 @@ let search_result_to_block_result ~(conn : conn) ~(q : string)
             ?alias:(match alias with Some (_, t) -> t | None -> None)
             ?display_title:display_title
             (Some db) block
+        in
+        let _dbg =
+          (match unique_title with
+           | Some "" | None ->
+               Worker_log.error "SRCH-EMPTY-TITLE"
+                 [ ("id", r.id)
+                 ; ("rt", (match r.title with Some s -> s | None -> "<none>"))
+                 ; ("ev", (match Ev.title block with Some s -> s | None -> "<none>"))
+                 ; ("disp", (match display_title with Some s -> s | None -> "<none>"))
+                 ; ("pgobj", string_of_bool page_or_obj)
+                 ; ("ispage", string_of_bool (Ev.is_page block))
+                 ; ("hidden", string_of_bool (hidden_entity block))
+                 ; ("kind", (match block with Ev.E _ -> "E" | Ev.P _ -> "P")) ]
+           | Some _ -> ())
         in
         let base =
           [ ("db/id", Int64 (Int64.of_int (Option.value (Ev.db_id block) ~default:0)))

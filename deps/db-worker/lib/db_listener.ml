@@ -111,7 +111,7 @@ let log_tx_outliner_op_perf (data : Wire.t) =
 
 (* cljs log-outliner-op-perf! — recorded only in dev (goog.DEBUG) *)
 let log_outliner_op_perf (data : Wire.t) =
-  if !Sync_state.dev_or_test then
+  if true then
     match Wire.get "perf-id" data with
     | Some (Wire.String perf_id) | Some (Wire.Uuid perf_id) -> begin
         note_outliner_op_perf perf_id data;
