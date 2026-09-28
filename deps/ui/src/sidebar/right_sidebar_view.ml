@@ -207,13 +207,17 @@ let item_body idx (it : Sidebar_state.item) =
       ]
     ~style_class:"sidebar-panel-content px-2 initial"
     [ dom ~key:("page-" ^ it.key) ~style_class:"page"
-        [ sidebar_props_row it
-        ; dom ~key:("pbi-" ^ it.key) ~style_class:"ls-page-blocks"
-            [ dom ~key:("pbin-" ^ it.key)
-                ~style_class:"page-blocks-inner relative"
-                (List.map (Tree.block_row ~scope:"sidebar") it.blocks)
-            ]
-        ]
+        ([ sidebar_props_row it
+         ; dom ~key:("pbi-" ^ it.key) ~style_class:"ls-page-blocks"
+             [ dom ~key:("pbin-" ^ it.key)
+                 ~style_class:"page-blocks-inner relative"
+                 (List.map (Tree.block_row ~scope:"sidebar") it.blocks)
+             ]
+         ]
+         (* cljs sidebar page items render the same page-cp body,
+            including the linked-references section *)
+         @ (if it.kind = "page" then [ Page.references_view it.linked_refs ]
+            else []))
     ]
 
 let sidebar_item st idx (it : Sidebar_state.item) =
