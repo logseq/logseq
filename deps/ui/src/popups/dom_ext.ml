@@ -146,6 +146,11 @@ external active_element : unit -> element option = "activeElement"
 external set_timeout : (unit -> unit) -> int -> unit = "setTimeout"
   [@@mel.scope "window"]
 
+external set_timeout_id : (unit -> unit) -> int -> int = "setTimeout"
+  [@@mel.scope "window"]
+
+external clear_timeout : int -> unit = "clearTimeout" [@@mel.scope "window"]
+
 external new_custom_event : string -> Js.Json.t -> event = "CustomEvent"
   [@@mel.new]
 

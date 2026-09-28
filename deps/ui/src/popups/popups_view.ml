@@ -373,9 +373,121 @@ let cm_popover (st : S.t) : t =
 (* -- delegated listeners --------------------------------------------- *)
 
 let in_popups el =
-  Dom_ext.closest el ".ui__popover-content, .ls-context-menu-content"
+  Dom_ext.closest el
+    ".ui__popover-content, .ls-context-menu-content, .ls-preview-popup"
   <> None
 ;;
+
+(* ---- page-ref hover preview ----
+   cljs popup-preview-impl: mousemove on .preview-ref-link arms a 1000ms
+   show timer; leaving the link/popup starts a 300/500ms hide timer *)
+
+let pv_show_id : int option ref = ref None
+let pv_hide_id : int option ref = ref None
+let pv_pending : Dom_ext.element option ref = ref None
+
+let pv_cancel_show () =
+  (match !pv_show_id with
+   | Some id -> Dom_ext.clear_timeout id
+   | None -> ());
+  pv_show_id := None;
+  pv_pending := None
+
+let pv_cancel_hide () =
+  match !pv_hide_id with
+  | Some id ->
+      Dom_ext.clear_timeout id;
+      pv_hide_id := None
+  | None -> ()
+
+let pv_open st (wrap : Dom_ext.element) =
+  pv_pending := Some wrap;
+  match
+    Option.bind
+      (Dom_ext.query_selector wrap "a[data-ref]")
+      (fun a -> Dom_ext.get_attribute a "data-ref")
+  with
+  | None -> ()
+  | Some name ->
+      let r = Dom_ext.bounding_rect wrap in
+      let x = Dom_ext.rect_left r and y = Dom_ext.rect_bottom r +. 8.0 in
+      ignore
+        (S.fetch_preview_blocks (Router.repo ()) name
+         |> Js.Promise.then_ (fun blocks ->
+                (match !pv_pending with
+                 | Some el when el == wrap ->
+                     (* two signal sets: close -> set forces the if_
+                        branch to remount so a different page's preview
+                        replaces the old one *)
+                     S.close_pv st;
+                     S.set_pv st
+                       (Some
+                          { S.pv_x = x; S.pv_y = y; S.pv_blocks = blocks })
+                 | _ -> ());
+                Js.Promise.resolve ()))
+
+let pv_track st el =
+  if Dom_ext.closest el ".ls-preview-popup" <> None then (
+    pv_cancel_show ();
+    pv_cancel_hide ())
+  else
+    match Dom_ext.closest el ".preview-ref-link" with
+    | Some wrap -> (
+        pv_cancel_hide ();
+        match !pv_pending with
+        | Some p when p == wrap -> ()
+        | _ ->
+            pv_cancel_show ();
+            pv_pending := Some wrap;
+            pv_show_id :=
+              Some
+                (Dom_ext.set_timeout_id (fun () -> pv_open st wrap) 1000))
+    | None -> (
+        pv_cancel_show ();
+        match (S.get st).S.pv, !pv_hide_id with
+        | Some _, None ->
+            pv_hide_id :=
+              Some
+                (Dom_ext.set_timeout_id (fun () -> S.close_pv st) 400)
+        | _ -> ())
+
+let pv_popover (st : S.t) : t =
+  Logseq_dom.dom ~key:"pv-pop" ~style_class:"ls-preview-popup"
+    ~attrs_signal_v:
+      (Signal.map
+         (fun (v : S.view) ->
+           match v.S.pv with
+           | Some p ->
+               attrs_v
+                 [ ( "style"
+                   , Printf.sprintf
+                       "position: fixed; left: %.0fpx; top: %.0fpx; \
+                        z-index: 999"
+                       p.S.pv_x p.S.pv_y ) ]
+           | None -> attrs_v [])
+         st.S.vs.Signal.state_signal)
+    [ Logseq_dom.dom ~key:"pvw" ~style_class:"tippy-wrapper as-page"
+        ~attrs:
+          [ ("tabindex", "-1")
+          ; ( "style"
+            , "width: 600px; text-align: left; font-weight: 500; \
+               padding-bottom: 64px" )
+          ]
+        [ Logseq_dom.dom ~key:"pvp" ~style_class:"page"
+            [ Logseq_dom.dom ~key:"pvb" ~style_class:"ls-page-blocks"
+                [ Logseq_dom.dom ~key:"pvbi"
+                    ~style_class:"page-blocks-inner relative"
+                    (match (S.get st).S.pv with
+                     | Some p ->
+                         List.map
+                           (Tree.block_row ~scope:"preview"
+                              ~editable:false)
+                           p.S.pv_blocks
+                     | None -> [])
+                ]
+            ]
+        ]
+    ]
 
 let handle_input st (ev : Dom_ext.event) =
   match Dom_ext.target ev with
@@ -464,12 +576,13 @@ let handle_click st (ev : Dom_ext.event) =
 let handle_mousemove st (ev : Dom_ext.event) =
   match Dom_ext.target ev with
   | Some el -> (
-      match Dom_ext.closest el ".menu-link-wrap" with
-      | Some wrap -> (
-          match Dom_ext.query_selector wrap "a.menu-link" with
-          | Some lnk -> S.ac_mousemove st lnk
-          | None -> ())
-      | None -> ())
+      (match Dom_ext.closest el ".menu-link-wrap" with
+       | Some wrap -> (
+           match Dom_ext.query_selector wrap "a.menu-link" with
+           | Some lnk -> S.ac_mousemove st lnk
+           | None -> ())
+       | None -> ());
+      pv_track st el)
   | None -> ()
 ;;
 
@@ -502,9 +615,14 @@ let render (_ms : Model.t Signal.signal) : t =
     Signal.map (fun (v : S.view) -> v.S.cm <> None)
       st.S.vs.Signal.state_signal
   in
+  let pv_open_sig =
+    Signal.map (fun (v : S.view) -> v.S.pv <> None)
+      st.S.vs.Signal.state_signal
+  in
   let body =
     box ~key:"popups_view"
       [ if_ ~test:ac_open (ac_popover st)
-      ; if_ ~test:cm_open (cm_popover st) ]
+      ; if_ ~test:cm_open (cm_popover st)
+      ; if_ ~test:pv_open_sig (pv_popover st) ]
   in
   body context parent
