@@ -32,13 +32,13 @@
 
   (testing "Reuses an existing user property by case-insensitive name"
     (let [conn (db-test/create-conn-with-blocks [])
-          first (outliner-property/upsert-property! conn nil {:logseq.property/type :default} {:property-name "p1"})
-          second (outliner-property/upsert-property! conn nil {} {:property-name "p1"})
-          third (outliner-property/upsert-property! conn nil {} {:property-name "P1"})]
-      (is (= (:db/ident first) (:db/ident second) (:db/ident third))
+          created (outliner-property/upsert-property! conn nil {:logseq.property/type :default} {:property-name "p1"})
+          same-name (outliner-property/upsert-property! conn nil {} {:property-name "p1"})
+          other-case (outliner-property/upsert-property! conn nil {} {:property-name "P1"})]
+      (is (= (:db/ident created) (:db/ident same-name) (:db/ident other-case))
           "Typed case variants reuse the existing user property")
       (is (= {:block/name "p1" :block/title "p1" :logseq.property/type :default}
-             (select-keys (d/entity @conn (:db/ident first)) [:block/name :block/title :logseq.property/type]))
+             (select-keys (d/entity @conn (:db/ident created)) [:block/name :block/title :logseq.property/type]))
           "Existing title is kept when reusing")
       (is (nil? (d/entity @conn :user.property/p1-1))
           "A second user property is not created")))
@@ -61,9 +61,8 @@
 
 (deftest upsert-property-reuses-existing-when-tag-shares-name
   (let [conn (db-test/create-conn-with-blocks
-              {:classes {:Foo {}}
-               :properties {:Foo {:logseq.property/type :default}}})
-        existing (d/entity @conn :user.property/Foo)
+              {:classes {:Foo {}}})
+        existing (outliner-property/upsert-property! conn nil {:logseq.property/type :default} {:property-name "Foo"})
         reused (outliner-property/upsert-property! conn nil {:logseq.property/type :default} {:property-name "foo"})
         user-property-titles (d/q '[:find [?title ...]
                                     :where

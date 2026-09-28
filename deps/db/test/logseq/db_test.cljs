@@ -156,7 +156,7 @@
 (deftest get-user-property-by-name
   (let [conn (db-test/create-conn-with-blocks
               {:classes {:Foo {}}
-               :properties {:Foo {:logseq.property/type :default}}
+               :properties {:user.property/Foo {:logseq.property/type :default}}
                :pages-and-blocks [{:page {:block/title "Bar"}}]})]
     (is (= :user.property/Foo
            (:db/ident (ldb/get-user-property-by-name @conn "foo")))
@@ -168,7 +168,7 @@
         "A page with the same lc name is not treated as a property")
     (is (= [:user.property/Foo]
            (mapv :db/ident (ldb/get-user-properties-by-name @conn "foo")))
-        "A same-named tag is not returned as a property"))))
+        "A same-named tag is not returned as a property")))
 
 (deftest test-transact-with-multiple-tx-datoms
   (testing "last write wins with same tx"

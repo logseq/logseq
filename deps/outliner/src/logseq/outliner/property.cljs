@@ -954,7 +954,13 @@
                        (name property-id))
             existing-by-name (ldb/get-user-property-by-name db k-name)]
         (if (and existing-by-name (nil? property-id))
-          (update-property conn (:db/ident existing-by-name) existing-by-name schema (dissoc opts :properties))
+          ;; Reuse the existing user property. Do not rename it from the typed
+          ;; case variant, and ignore convert-page :properties.
+          (update-property conn
+                           (:db/ident existing-by-name)
+                           existing-by-name
+                           schema
+                           (dissoc opts :properties :property-name))
           (let [db-ident' (db-ident/ensure-unique-db-ident @conn db-ident)]
             (assert (some? k-name)
                     (prn "property-id: " property-id ", property-name: " property-name))
