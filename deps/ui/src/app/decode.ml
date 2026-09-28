@@ -14,7 +14,14 @@ let rec block_of_wire (w : Wire.t) : Model.block =
   let children =
     match Wire.get w "block/children" with
     | Some (Wire.List xs) | Some (Wire.Array xs) ->
-        List.map block_of_wire xs
+        (* hidden property-value blocks live in the tree but cljs never
+           renders them as block rows *)
+        List.filter_map
+          (fun c ->
+            match Wire.get c "logseq.property/created-from-property" with
+            | Some _ -> None
+            | None -> Some (block_of_wire c))
+          xs
     | _ -> []
   in
   let tag_ids =
@@ -29,6 +36,7 @@ let rec block_of_wire (w : Wire.t) : Model.block =
   ; block_level = level
   ; block_tag_ids = tag_ids
   ; block_tags = []
+  ; block_tag_idents = []
   ; block_children = children
   ; block_page_name = Wire.map_get_string w "block/page-name"
   }

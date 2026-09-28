@@ -18,6 +18,7 @@ type block =
   ; block_level : int
   ; block_tag_ids : int list (* block/tags ref ids from the pull *)
   ; block_tags : string list (* resolved tag titles, for .block-tags *)
+  ; block_tag_idents : string list (* resolved tag db/idents, e.g. logseq.class/Query *)
   ; block_children : block list
   ; block_page_name : string option (* containing page, for ref rows *)
   }

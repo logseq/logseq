@@ -19,6 +19,8 @@ type t =
   ; opts_open : bool Signal.state
   ; cards : string list Signal.state (* block titles *)
   ; pos : int Signal.state
+  ; phase : string Signal.state
+      (* cljs fsrs.cljs *phase: "init" | "show-cloze" | "show-answer" *)
   }
 
 let st_ref : t option ref = ref None
@@ -167,6 +169,7 @@ let load_cards st repo =
   |> Js.Promise.then_ (fun titles ->
          Runtime.signal_set st.cards titles;
          Runtime.signal_set st.pos 0;
+         Runtime.signal_set st.phase "init";
          Js.Promise.resolve ())
   |> ignore
 
@@ -174,6 +177,7 @@ let open_modal st =
   Runtime.signal_set st.open_ true;
   Runtime.signal_set st.sel (-1);
   Runtime.signal_set st.opts_open false;
+  Runtime.signal_set st.phase "init";
   let r = repo () in
   if r = "" then ()
   else (
@@ -261,6 +265,7 @@ let init (ms : Model.t Signal.signal) : t =
         ; opts_open = Signal.state owner false
         ; cards = Signal.state owner []
         ; pos = Signal.state owner 0
+        ; phase = Signal.state owner "init"
         }
       in
       st_ref := Some st;

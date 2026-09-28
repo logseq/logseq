@@ -95,16 +95,16 @@ let item_el idx cfg it =
       ~attrs:
         [ ("id", "ac-" ^ string_of_int idx); ("tabindex", "0") ]
   in
-  let inner = mk ~cls:"flex-1" "span" in
-  let lab =
-    mk "span" ~cls:"flex gap-1 items-center" ~attrs:[ ("title", it.it_tip) ]
+  (* leaf text must live directly on the span: e2e picks items via
+     `span.and(get-by-text <title> exact)` and getByText only matches
+     the element that owns the text node *)
+  let inner =
+    mk ~cls:"flex-1 flex gap-1 items-center font-normal" "span"
+      ~attrs:[ ("title", it.it_tip) ]
   in
-  let strong = mk ~cls:"font-normal" "strong" in
-  el_set_text strong
+  el_set_text inner
     (if it.it_new then I18n.t "select/new-option" ^ " " ^ it.it_title
      else it.it_title);
-  el_append_child lab strong;
-  el_append_child inner lab;
   el_append_child a inner;
   el_append_child wrap a;
   on_click a (fun _ -> it.on_choose ());

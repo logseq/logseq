@@ -119,7 +119,11 @@ let get_by_id id_wire =
                     | _ -> Wire.Nil))
             | _ -> Wire.Nil))
 
-(* id-or-name -> entity wire (uuid / namespaced ident / page name) *)
+(* id-or-name -> entity wire (uuid / namespaced ident / page name).
+   cljs resolves page args via [:block/name (page-name-sanity-lc name)] —
+   get-case-page matches :block/title exactly, so a miss falls back to
+   get-blocks' :block/name lookup (covers "jan 5th, 2020" journal names)
+   or :db/ident for namespaced idents *)
 let get_entity id_or_name =
   let repo = repo () in
   if is_uuid_string id_or_name then get_by_id (Wire.String id_or_name)
@@ -130,6 +134,7 @@ let get_entity id_or_name =
            match w with
            | Wire.Nil when String.contains id_or_name '/' ->
                get_by_id (Wire.Keyword id_or_name)
+           | Wire.Nil -> get_by_id (Wire.String id_or_name)
            | _ -> Js.Promise.resolve w)
 
 let get_entity_ident ident = get_by_id (Wire.Keyword ident)

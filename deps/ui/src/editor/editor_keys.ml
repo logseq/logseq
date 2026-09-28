@@ -241,14 +241,20 @@ let on_click ev =
                     | Some u -> A.zoom_to u
                     | None -> ())
                 | None -> (
-                    match D.closest_sel ".block-content" target with
-                    | Some el -> (
-                        match D.el_get_attr el "blockid" with
-                        | Some u ->
-                            A.enter_edit u
-                              (String.length (A.model_title u))
-                        | None -> ())
-                    | None -> ()))))
+                    (* capture listener fires before the query shell's own
+                       handlers; clicks inside .custom-query-results are the
+                       view's controls, not an edit request *)
+                    match D.closest_sel ".custom-query-results" target with
+                    | Some _ -> ()
+                    | None -> (
+                        match D.closest_sel ".block-content" target with
+                        | Some el -> (
+                            match D.el_get_attr el "blockid" with
+                            | Some u ->
+                                A.enter_edit u
+                                  (String.length (A.model_title u))
+                            | None -> ())
+                        | None -> ())))))
 
 (* -- ls:editor-insert channel (autocomplete pick: replace the typed
    trigger range with the chosen text) -- *)

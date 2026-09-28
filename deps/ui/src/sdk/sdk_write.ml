@@ -476,6 +476,8 @@ external date_of_epoch : float -> Js.Date.t = "Date" [@@mel.new]
 
 external date_get_time : Js.Date.t -> float = "getTime" [@@mel.send]
 
+(* cljs api/editor.cljs create_journal_page: new Date(arg) — numbers are
+   epoch ms, strings go through the JS date parser (ISO etc.) *)
 let create_journal_page a _b _c _d =
   let day_int =
     match Js.Json.classify a with
@@ -484,7 +486,11 @@ let create_journal_page a _b _c _d =
     | Js.Json.JSONString s -> (
         match float_of_string_opt s with
         | Some ms -> Some (Dates.journal_day_of (date_of_epoch ms))
-        | None -> None)
+        | None -> (
+            let d = Js.Date.fromString s in
+            match classify_float (Js.Date.getTime d) with
+            | FP_nan -> None
+            | _ -> Some (Dates.journal_day_of d)))
     | _ -> None
   in
   match day_int with
