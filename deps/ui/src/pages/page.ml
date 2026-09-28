@@ -367,6 +367,7 @@ let page_view_of_model (m : Model.t) : t =
   | Model.Ready, Model.Graph -> Graph_view.view m
   | Model.Ready, (Model.All_graphs | Model.All_pages) ->
       box ~key:"graphs-view" [] (* graphs area renders via its own view *)
+  | Model.Ready, Model.Settings -> Settings_page.view m
   | Model.Ready, _ -> (
       match m.route_page with
       | Some page -> page_view m page

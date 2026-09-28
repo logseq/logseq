@@ -21,11 +21,15 @@ let arg_map j = if arg_is_nil j then Wire.Map [] else arg_wire j
 
 let resolved j = Js.Promise.resolve j
 let resolved_wire w = resolved (Sdk_convert.json_of_wire w)
+let resolved_result w = resolved (Sdk_convert.result_json_of_wire w)
 let resolved_nil = resolved Js.Json.null
 
+(* worker invoke + result->js (property-refs->ids) — every read API
+   that returns entities uses this except get-block (which keeps
+   compact-normalized-refs semantics) *)
 let call name args =
   Runtime.invoke name args
-  |> Js.Promise.then_ (fun w -> resolved (Sdk_convert.json_of_wire w))
+  |> Js.Promise.then_ (fun w -> resolved (Sdk_convert.result_json_of_wire w))
 
 let is_hex c =
   ('0' <= c && c <= '9') || ('a' <= c && c <= 'f') || ('A' <= c && c <= 'F')
@@ -83,6 +87,26 @@ let wire_elems w =
   | Wire.Array xs | Wire.List xs | Wire.Set xs -> xs
   | _ -> []
 
+(* get-blocks result element: {id, block} pair map *)
+let block_of_pair pair =
+  match Wire.get pair "block" with
+  | Some res -> Some res
+  | None -> (
+      match wire_elems pair with
+      | [ _; res ] -> Some res
+      | _ -> None)
+
+let get_many ids =
+  Runtime.invoke2 "thread-api/get-blocks" (Wire.String (repo ()))
+    (Wire.Array
+       (List.map
+          (fun id ->
+            Wire.Map
+              [ (Wire.String "id", id); (Wire.String "opts", Wire.Map []) ])
+          ids))
+  |> Js.Promise.then_ (fun w ->
+         Js.Promise.resolve (List.map block_of_pair (wire_elems w)))
+
 (* dispatch outliner ops; each op entry is [kw-name, [args...]].
    Response is {result: <last op result>, ...} — unwrap it. *)
 let apply_ops ops opts =
@@ -121,23 +145,67 @@ let get_by_id id_wire =
 
 (* id-or-name -> entity wire (uuid / namespaced ident / page name).
    cljs resolves page args via [:block/name (page-name-sanity-lc name)] —
-   get-case-page matches :block/title exactly, so a miss falls back to
-   get-blocks' :block/name lookup (covers "jan 5th, 2020" journal names)
-   or :db/ident for namespaced idents *)
+   get-case-page matches :block/title exactly; a miss falls back to
+   get-blocks' :block/name lookup, and a qualified (ns/name) miss retries
+   as a db ident (leading ':' stripped). *)
 let get_entity id_or_name =
-  let repo = repo () in
   if is_uuid_string id_or_name then get_by_id (Wire.String id_or_name)
   else
-    Runtime.invoke2 "thread-api/get-case-page" (Wire.String repo)
+    Runtime.invoke2 "thread-api/get-case-page" (Wire.String (repo ()))
       (Wire.String id_or_name)
     |> Js.Promise.then_ (fun w ->
            match w with
-           | Wire.Nil when String.contains id_or_name '/' ->
-               get_by_id (Wire.Keyword id_or_name)
-           | Wire.Nil -> get_by_id (Wire.String id_or_name)
+           | Wire.Nil ->
+               get_by_id (Wire.String id_or_name)
+               |> Js.Promise.then_ (fun w2 ->
+                      match w2 with
+                      | Wire.Nil when String.contains id_or_name '/' ->
+                          get_by_id
+                            (Wire.Keyword (trim_leading id_or_name))
+                      | _ -> Js.Promise.resolve w2)
            | _ -> Js.Promise.resolve w)
 
+(* api args can be uuid strings, page names, db ids (numbers) or
+   lookup maps like {id: n} / {uuid: "..."} — normalize to wire eid *)
+let eid_wire_of_json (j : Js.Json.t) : Wire.t option =
+  match Js.Json.classify j with
+  | Js.Json.JSONNumber n -> Some (Wire.Int64 (Int64.of_float n))
+  | Js.Json.JSONString s -> Some (Wire.String s)
+  | Js.Json.JSONObject o -> (
+      match Js.Dict.get o "id" with
+      | Some n -> (
+          match Js.Json.decodeNumber n with
+          | Some f -> Some (Wire.Int64 (Int64.of_float f))
+          | None -> None)
+      | None -> (
+          match Js.Dict.get o "uuid" with
+          | Some u ->
+              Option.map
+                (fun s -> Wire.String s)
+                (Js.Json.decodeString u)
+          | None -> None))
+  | _ -> None
+
+let get_entity_json j =
+  match eid_wire_of_json j with
+  | Some (Wire.String s) -> get_entity s
+  | Some w -> get_by_id w
+  | None -> Js.Promise.resolve Wire.Nil
+
 let get_entity_ident ident = get_by_id (Wire.Keyword ident)
+
+(* entity/class? — :block/tags contains :logseq.class/Tag *)
+let is_class_entity (w : Wire.t) =
+  match Wire.get w "block/tags" with
+  | Some tags ->
+      List.exists
+        (fun t ->
+           match Wire.get t "db/ident" with
+           | Some (Wire.Keyword s) | Some (Wire.String s) ->
+               s = "logseq.class/Tag"
+           | _ -> false)
+        (wire_elems tags)
+  | None -> false
 
 let block_uuid_of (w : Wire.t) = Wire.map_get_uuid w "block/uuid"
 

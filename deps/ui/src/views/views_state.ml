@@ -58,6 +58,7 @@ type inst =
   ; mutable collapsed_groups : Sset.t
   ; mutable query_rows : string list (* query-result feature input *)
   ; mutable query_error : string option
+  ; mutable asset_class : bool (* KTagPage owner ident is logseq.class/Asset *)
   ; mutable query_idents : string list (* property idents from view-data *)
   ; mutable is_advanced : bool (* datalog query source *)
   ; mutable query_scalar_rows : W.t list (* non-block query rows *)
@@ -112,6 +113,7 @@ let make ~kind ~feature ~owner ~container : inst =
     ; all_props = Hashtbl.create 17
     ; props_loaded = false
     ; ref_titles = Hashtbl.create 8
+    ; asset_class = false
     }
   in
   Hashtbl.replace instances inst.id inst;
