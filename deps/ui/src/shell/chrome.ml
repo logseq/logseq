@@ -21,13 +21,20 @@ let skip_to_main =
   Logseq_dom.dom ~key:"skip" ~tag:"button" ~id:"skip-to-main"
     ~style_class:"sr-only" ~text:"Skip to main content" []
 
-let search_button =
-  Logseq_dom.dom ~key:"search-btn" ~tag:"button" ~id:"search-button"
-    ~style_class:"button cp__header-btn" ~text:"Search"
+let icon_btn ~key ~id ~cls ~icon ~title ~on_click =
+  Logseq_dom.dom ~key ~tag:"button" ~id
+    ~style_class:("button cp__header-btn " ^ cls)
+    ~attrs:[ ("title", title) ]
     ~events:"click"
-    ~on_dom_event:(fun name _payload ->
-      if name = "click" then Runtime.send Action.Toggle_search)
-    []
+    ~on_dom_event:(fun name payload -> if name = "click" then on_click payload)
+    [ Logseq_dom.dom ~key:(key ^ "-i") ~tag:"i"
+        ~style_class:("ti ti-" ^ icon) [] ]
+
+let search_button =
+  icon_btn ~key:"search-btn" ~id:"search-button" ~cls:"" ~icon:"search"
+
+    ~title:"Search"
+    ~on_click:(fun _ -> Runtime.send Action.Toggle_search)
 
 let dots_button =
   Logseq_dom.dom ~key:"dots-btn" ~tag:"button"
@@ -46,20 +53,41 @@ let dots_button =
     [ Logseq_dom.dom ~key:"dots-i" ~tag:"i" ~style_class:"ti ti-dots" [] ]
 
 let left_menu_button =
-  Logseq_dom.dom ~key:"left-menu-btn" ~tag:"button" ~id:"left-menu"
-    ~style_class:"button cp__header-btn" ~text:"Menu"
-    ~events:"click"
-    ~on_dom_event:(fun name _payload ->
-      if name = "click" then Runtime.send Action.Toggle_left_sidebar)
-    []
+  icon_btn ~key:"left-menu-btn" ~id:"left-menu" ~cls:"cp__header-left-menu"
+    ~icon:"menu-2" ~title:"Toggle left sidebar"
+    ~on_click:(fun _ -> Runtime.send Action.Toggle_left_sidebar)
 
-let header =
+(* cljs header.cljs: home button shows when route != home *)
+let home_button (ms : Model.t Signal.signal) =
+  dyn ~equal:(fun a b -> a = b)
+    (fun (m : Model.t) ->
+      match m.route with
+      | Model.Journals | Model.Home -> Logseq_dom.dom ~key:"home-off" []
+      | _ ->
+          icon_btn ~key:"home-btn" ~id:"" ~cls:"" ~icon:"home" ~title:"Home"
+            ~on_click:(fun _ ->
+              Platform.set_location_hash "#/";
+              Platform.dispatch "ls:navigate" Js.Json.null))
+    ms
+
+let right_toggle_button =
+  icon_btn ~key:"rs-toggle" ~id:"" ~cls:"toggle-right-sidebar"
+    ~icon:"layout-sidebar-right" ~title:"Toggle right sidebar"
+    ~on_click:(fun _ -> Runtime.send Action.Toggle_right_sidebar)
+
+let header (ms : Model.t Signal.signal) =
   Logseq_dom.dom ~key:"head" ~tag:"header" ~id:"head"
     ~style_class:"cp__header"
-    [ Logseq_dom.dom ~key:"head-inner" ~style_class:"l"
-        [ left_menu_button ]
-    ; Logseq_dom.dom ~key:"head-r" ~style_class:"r"
-        [ search_button; dots_button ]
+    [ Logseq_dom.dom ~key:"head-inner"
+        ~style_class:"l flex items-center drag-region"
+        [ left_menu_button; search_button ]
+    ; Logseq_dom.dom ~key:"head-r"
+        ~style_class:
+          "r flex drag-region justify-between items-center gap-2 overflow-x-hidden w-full"
+        [ Logseq_dom.dom ~key:"head-crumb" ~style_class:"flex flex-1" []
+        ; Logseq_dom.dom ~key:"head-acts" ~style_class:"flex items-center"
+            [ home_button ms; dots_button; right_toggle_button ]
+        ]
     ]
 
 (* right sidebar — hidden until toggled; e2e checks .cp__right-sidebar *)
@@ -156,7 +184,7 @@ let shell (ms : Model.t Signal.signal) : t =
     ; Logseq_dom.dom ~key:"app" ~id:"app-container"
         ~style_class:"cp__sidebar-main-layout"
         [ Logseq_dom.dom ~key:"left-container" ~id:"left-container"
-            [ header; main_content ms ]
+            [ header ms; main_content ms ]
         ; right_sidebar ms
         ; overlays ms
         ]

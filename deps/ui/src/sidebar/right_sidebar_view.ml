@@ -17,19 +17,8 @@ module D = Logseq_dom
 let dom = D.dom
 let t = Sidebar_state.t
 
-(* The header is shared chrome.ml; the toggle lives in this region as a
-   floating control pinned to the top-right viewport corner. *)
-let toggle_button =
-  dom ~key:"rs-toggle" ~tag:"button"
-    ~style_class:"button cp__header-btn toggle-right-sidebar"
-    ~attrs:
-      [ ("title", t "Toggle right sidebar")
-      (* floats below the header — chrome.ml owns the header buttons *)
-      ; ("style", "position:fixed;top:64px;right:6px;z-index:1500") ]
-    ~events:"click"
-    ~on_dom_event:(fun name _ ->
-      if name = "click" then Runtime.send Action.Toggle_right_sidebar)
-    [ dom ~tag:"i" ~style_class:"ti ti-layout-sidebar-right" [] ]
+(* .toggle-right-sidebar now lives in chrome.ml's header .r, matching
+   cljs header.cljs layout. *)
 
 (* ---------- topbar ---------- *)
 
@@ -208,8 +197,7 @@ let inner st =
 let render (ms : Model.t Signal.signal) : t =
   let st = Sidebar_state.ensure ms in
   dom ~key:"rs-root"
-    [ toggle_button
-    ; dom ~key:"rs-resizer" ~style_class:"resizer" []
+    [ dom ~key:"rs-resizer" ~style_class:"resizer" []
     ; if_
         ~test:
           (Signal.map

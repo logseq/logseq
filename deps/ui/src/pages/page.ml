@@ -108,17 +108,40 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
         ]
   in
   let body =
-    (* cljs wraps the title in block-container -> .ls-block; tags render
-       while editing too (sibling of the content wrapper) *)
+    (* cljs: .ls-block > .block-main-container.is-page-title-row >
+       .block-content-or-editor-wrap.ls-page-title-container > .block-row >
+       .block-content-wrapper > .block-title-wrap#page-title-text;
+       tags render while editing too *)
     [ box ~key:"pt-inner" ~style_class:"w-full relative"
         [ dom ~key:"pt-block" ~style_class:"ls-block"
-            ((if m.editing_title then [ title_editor page ]
-              else
-                [ dom ~key:"pt-title" ~style_class:"block-title-wrap"
-                    ~attrs:[ ("id", "page-title-text") ]
-                    ~text:page.page_title []
-                ])
-            @ tag_els)
+            [ dom ~key:"pt-row"
+                ~style_class:
+                  "block-main-container flex flex-row gap-1 is-page-title-row"
+                ~attrs:[ ("style", "margin-left: -30px") ]
+                [ dom ~key:"pt-wrap"
+                    ~style_class:
+                      "block-content-or-editor-wrap ls-page-title-container"
+                    [ dom ~key:"pt-inner2"
+                        ~style_class:"block-content-or-editor-inner"
+                        [ dom ~key:"pt-row2"
+                            ~style_class:
+                              "block-row flex flex-1 flex-row gap-1 items-center"
+                            [ dom ~key:"pt-cw"
+                                ~style_class:
+                                  "flex flex-1 w-full block-content-wrapper"
+                                ((if m.editing_title then [ title_editor page ]
+                                  else
+                                    [ dom ~key:"pt-title"
+                                        ~style_class:"block-title-wrap"
+                                        ~attrs:[ ("id", "page-title-text") ]
+                                        ~text:page.page_title []
+                                    ])
+                                @ tag_els)
+                            ]
+                        ]
+                    ]
+                ]
+            ]
         ]
     ]
   in
@@ -341,10 +364,42 @@ let empty_state () : t =
         [ text ~key:"empty-t" ~value:Strings.loading ~style_class:"" [] ]
     ]
 
-(* Library renders the ordinary page chrome; its page_blocks were already
-   filtered to nested pages at fetch time (Decode.view_blocks), and block
-   inserts on it are page-ified by editor_actions. *)
-let library_view (m : Model.t) (page : Model.page) : t = page_view m page
+(* cljs library/add-pages: secondary button opens a page-picker popup *)
+let library_add_pages_button : t =
+  dom ~key:"lib-add" ~style_class:"ls-add-pages px-1 mt-4"
+    [ dom ~key:"lib-add-btn" ~tag:"button"
+        ~style_class:
+          "ui__button button inline-flex items-center text-muted-foreground hover:text-foreground"
+        ~events:"click"
+        ~on_dom_event:(fun name _ ->
+          if name = "click" then Runtime.send Action.Toggle_search)
+        [ dom ~key:"lib-add-i" ~tag:"i" ~style_class:"ti ti-plus" []
+        ; dom ~key:"lib-add-t" ~tag:"span"
+            ~text:(Ui_strings.t "library/add-existing-pages") [] ]
+    ]
+
+(* Library renders the ordinary page chrome plus the add-pages button; its
+   page_blocks were already filtered to nested pages at fetch time
+   (Decode.view_blocks), and block inserts on it are page-ified by
+   editor_actions. *)
+let library_view (m : Model.t) (page : Model.page) : t =
+  let cls =
+    "flex-1 page relative cp__page-inner-wrap"
+    ^ (if is_today_page m page then " is-today-page" else "")
+  in
+  dom ~key:"page" ~style_class:cls
+    [ dom ~key:"page-inner"
+        ~style_class:"relative grid gap-4 sm:gap-8 page-inner mb-16"
+        [ breadcrumbs page.page_title
+        ; page_title_el m page
+        ; library_add_pages_button
+        ; blocks_inner ?puuid:page.page_uuid ~virtualize:true
+            page.page_blocks
+        ; references_view m.page_refs
+        ; unlinked_references_view m
+        ]
+    ; Page_menu.dialog_view m
+    ]
 
 let page_view_of_model (m : Model.t) : t =
   match m.phase, m.route with

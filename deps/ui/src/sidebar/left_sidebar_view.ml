@@ -169,7 +169,7 @@ let nav_items (checked, tag_titles) =
                  if name = "click" then Sidebar_state.open_dialog "cards"))
       | "all-pages" ->
           Some
-            (nav_route ~class_:"all-pages-nav" ~title:(t "All pages")
+            (nav_route ~class_:"all-pages-nav" ~title:(t "Pages")
                ~icon_name:"files" "#/all-pages")
       | "graph-view" ->
           Some
@@ -245,7 +245,7 @@ let page_item_el st (p : Model.page) ~li_class ~key =
                 (match p.Model.page_title with
                  | "" -> Option.value p.Model.page_uuid ~default:""
                  | title -> title)))
-        [ dom ~tag:"span" ~style_class:"page-icon" [ icon "page" ]
+        [ dom ~tag:"span" ~style_class:"page-icon" [ icon "file" ]
         ; dom ~tag:"span" ~style_class:"page-title" ~text:p.Model.page_title
             [] ]
     ]
@@ -263,7 +263,7 @@ let content_group st ~key ~class_ ~label ~items_sig ~li_class =
                     [ dom ~tag:"strong" ~style_class:"flex-1" ~text:label
                         [] ] ]
             ; dom ~key:(key ^ "-b") ~tag:"span" ~style_class:"b"
-                [ icon "chevron-right" ] ]
+                [ dom ~tag:"i" ~style_class:"ti ti-chevron-right more" [] ] ]
         ; dom ~key:(key ^ "-bd") ~style_class:"bd"
             [ dyn ~equal:(fun a b -> a = b)
                 (fun ps ->
@@ -287,7 +287,7 @@ let favorites_group st =
 
 let recents_group st =
   content_group st ~key:"recent" ~class_:"recent"
-    ~label:(t "Recent pages")
+    ~label:(t "Recent")
     ~items_sig:(Signal.value st.Sidebar_state.recents)
     ~li_class:"recent-item select-none font-medium"
 
@@ -316,9 +316,37 @@ let toolbar_row st =
 (* chrome.ml owns the #left-sidebar.cp__sidebar-left-layout shell +
    shade-mask + resizer; these pieces fill its .wrap skeleton *)
 
+(* cljs repo/graphs-selector: icon + graph display name + selector chevron *)
+let graphs_selector (ms : Model.t Signal.signal) : t =
+  dyn ~equal:(fun a b -> a = b)
+    (fun (m : Model.t) ->
+      let name =
+        match m.repo with
+        | Some r ->
+            if String.length r > 10
+               && String.sub r 0 10 = "logseq_db_"
+            then String.sub r 10 (String.length r - 10)
+            else r
+        | None -> "Select a Graph"
+      in
+      dom ~key:"gsel" ~style_class:"sidebar-graphs"
+        [ dom ~key:"gsel-box"
+            ~style_class:"cp__graphs-selector flex items-center justify-between"
+            [ dom ~key:"gsel-a" ~tag:"a"
+                ~style_class:"item flex items-center gap-1 select-none"
+                ~events:"click"
+                ~on_dom_event:(fun n _ ->
+                  if n = "click" then Sidebar_state.open_dialog "graphs")
+                [ dom ~key:"gsel-th" ~tag:"span" ~style_class:"thumb"
+                    [ icon "topology-star" ]
+                ; dom ~key:"gsel-n" ~tag:"strong" ~text:name []
+                ; icon "selector" ] ] ])
+    ms
+
 let header (ms : Model.t Signal.signal) : t =
   let st = Sidebar_state.ensure ms in
-  nav_group st
+  dom ~key:"ls-header" ~style_class:"flex flex-col"
+    [ graphs_selector ms; nav_group st ]
 
 let contents (ms : Model.t Signal.signal) : t =
   let st = Sidebar_state.ensure ms in
