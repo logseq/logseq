@@ -16,6 +16,22 @@ let find_sub s i pat =
   in
   go i
 
+let bracket s =
+  D.el ~tag:"span" ~style_class:"text-gray-500 bracket" [ D.txt s ]
+
+(* cljs page-reference wraps the anchor in .preview-ref-link *)
+let preview_link inner =
+  D.el ~tag:"span" [ D.el ~tag:"span" ~style_class:"preview-ref-link" [ inner ] ]
+
+let is_uuid_like s =
+  String.length s = 36
+  && s.[8] = '-' && s.[13] = '-' && s.[18] = '-' && s.[23] = '-'
+  && String.for_all
+       (fun c ->
+         (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')
+         || (c >= 'A' && c <= 'F') || c = '-')
+       s
+
 (* ---------- emitters ---------- *)
 
 let page_link ~(tag : bool) ?label name =
@@ -25,108 +41,13 @@ let page_link ~(tag : bool) ?label name =
     | Some l when String.trim l <> "" -> l
     | _ -> if tag then "#" ^ name else name
   in
-  if (not tag) && label = None && Sdk_util.is_uuid_string name then
-    (* [[uuid]] titles: the worker stores uuid id-refs (cljs
-       title-ref->id-ref); resolve the referenced entity's title. *)
-    fun context parent ->
-      let st = Signal.state context.Lui_ui.ui_scheduler name in
-      Render_state.with_repo (fun repo ->
-          Runtime.invoke3 "thread-api/pull" (Wire.String repo)
-            (Wire.String "[:block/title]")
-            (Wire.Array [ Wire.Keyword "block/uuid"; Wire.Uuid name ])
-          |> Js.Promise.then_ (fun w ->
-                 (match Wire.map_get_string w "block/title" with
-                  | Some t when String.trim t <> "" ->
-                      Runtime.signal_set st t
-                  | _ -> ());
-                 Js.Promise.resolve ())
-          |> ignore);
-      D.el ~tag:"a" ~style_class:"relative page-ref"
-        ~attrs:[ ("data-ref", String.lowercase_ascii name); ("tabindex", "0") ]
-        ~text_signal:(D.text_of_class_signal (Signal.value st) Fun.id)
-        [] context parent
-  else
-    D.el ~tag:"a"
-      ~style_class:(if tag then "relative tag" else "relative page-ref")
-      ~attrs:
-        [ ("data-ref", String.lowercase_ascii name)
-        ; ("tabindex", "0")
-        ; ("draggable", "true") ]
-      [ D.el ~tag:"span" ~text:text [] ]
-
-let preview_link inner = D.el ~tag:"span" [ D.el ~tag:"span" ~style_class:"preview-ref-link" [ inner ] ]
-
-let bracket s = D.el ~tag:"span" ~style_class:"text-gray-500 bracket" ~text:s []
-
-let page_ref ?(tag = false) ?label name =
-  let link = preview_link (page_link ~tag ?label name) in
-  if tag then link
-  else
-    D.el ~tag:"span" ~style_class:"page-reference"
-      ~attrs:[ ("data-ref", String.trim name) ]
-      [ bracket "[["; link; bracket "]]" ]
-
-(* [[uuid]] / #[[uuid]] — titles are stored in id-ref form (block_parse);
-   resolve the entity title lazily and render the same DOM as page_ref:
-   span.page-reference[data-ref=<raw uuid>] > brackets + preview-ref-link +
-   a.page-ref[data-ref=<resolved name>][data-uuid=<uuid>] *)
-let page_ref_uuid ?(tag = false) uuid : t =
- fun context parent ->
-  let st = Signal.state context.Lui_ui.ui_scheduler "" in
-  Render_state.with_repo (fun repo ->
-      Runtime.invoke3 "thread-api/pull" (Wire.String repo)
-        (Wire.String "[:block/title]")
-        (Wire.Array [ Wire.Keyword "block/uuid"; Wire.Uuid uuid ])
-      |> Js.Promise.then_ (fun w ->
-             (match Wire.map_get_string w "block/title" with
-              | Some t when String.trim t <> "" -> Runtime.signal_set st t
-              | _ -> ());
-             Js.Promise.resolve ())
-      |> ignore);
-  let link =
-    D.el ~tag:"a"
-      ~style_class:(if tag then "relative tag" else "relative page-ref")
-      ~attrs:
-        [ ("tabindex", "0"); ("draggable", "true"); ("data-uuid", uuid) ]
-      ~attrs_signal_v:
-        (Logseq_dom.attrs_signal (Signal.value st) (fun n ->
-             [ ("data-ref", String.lowercase_ascii n) ]))
-      [ D.el ~tag:"span"
-          ~text_signal:
-            (D.text_of_class_signal (Signal.value st) (fun n ->
-                 if tag then "#" ^ n else n))
-          [] ]
-  in
-  (if tag then preview_link link
-   else
-     D.el ~tag:"span" ~style_class:"page-reference"
-       ~attrs:[ ("data-ref", uuid) ]
-       [ bracket "[["; preview_link link; bracket "]]" ])
-    context parent
-
-(* ((uuid)) -> resolved block title via thread-api/pull *)
-let block_ref_anchor uuid : t =
- fun context parent ->
-  let st = Signal.state context.Lui_ui.ui_scheduler uuid in
-  Render_state.with_repo (fun repo ->
-      Runtime.invoke3 "thread-api/pull" (Wire.String repo)
-        (Wire.String "[:block/title]")
-        (Wire.Array [ Wire.Keyword "block/uuid"; Wire.Uuid uuid ])
-      |> Js.Promise.then_ (fun w ->
-             (match Wire.map_get_string w "block/title" with
-              | Some t when String.trim t <> "" -> Runtime.signal_set st t
-              | _ -> ());
-             Js.Promise.resolve ())
-      |> ignore);
-  D.el ~tag:"a" ~style_class:"relative page-ref"
-    ~attrs:[ ("data-ref", uuid); ("tabindex", "0") ]
-    ~text_signal:(D.text_of_class_signal (Signal.value st) Fun.id)
-    [] context parent
-
-let block_ref uuid =
-  D.el ~tag:"span" ~style_class:"page-reference"
-    ~attrs:[ ("data-ref", uuid) ]
-    [ block_ref_anchor uuid ]
+  D.el ~tag:"a"
+    ~style_class:(if tag then "relative tag" else "relative page-ref")
+    ~attrs:
+      [ ("data-ref", String.lowercase_ascii name)
+      ; ("tabindex", "0")
+      ; ("draggable", "true") ]
+    [ D.txt text ]
 
 let external_link href label_els =
   D.el ~tag:"a" ~style_class:"external-link"
@@ -248,7 +169,160 @@ let embed_iframe src =
   D.el ~tag:"div" ~style_class:"embed-block"
     [ D.el ~tag:"iframe" ~attrs:[ ("src", src) ] [] ]
 
-let macro_el body =
+(* ---------- matchers (return (element, chars consumed)) ---------- *)
+
+(* refs: uuids/names of the enclosing reference chain (cljs :ref-set) —
+   a ref whose target is in it renders nothing, breaking self- and
+   cycle-references. self: uuid of the block/page whose title is being
+   parsed; added to refs of any resolved ref's children. *)
+
+let rec parse ?(refs = []) ?(self = "") s =
+  let els = ref [] in
+  let buf = Buffer.create 64 in
+  let push e = els := e :: !els in
+  let flush () =
+    if Buffer.length buf > 0 then (
+      push (D.txt (Buffer.contents buf));
+      Buffer.clear buf)
+  in
+  let n = String.length s in
+  let rec go i =
+    if i >= n then (
+      flush ();
+      ())
+    else
+      match try_match ~refs ~self s i with
+      | Some (e, len) ->
+          flush ();
+          push e;
+          go (i + len)
+      | None ->
+          Buffer.add_char buf s.[i];
+          go (i + 1)
+  in
+  go 0;
+  List.rev !els
+
+and try_match ~refs ~self s i : (t * int) option =
+  match s.[i] with
+  | '[' -> try_bracket ~refs ~self s i
+  | '#' -> try_hash ~refs ~self s i
+  | '(' -> try_paren ~refs ~self s i
+  | '!' -> try_image s i
+  | '`' -> try_code s i
+  | '*' -> try_star ~refs ~self s i
+  | '_' -> try_uscore ~refs ~self s i
+  | '~' -> try_strike ~refs ~self s i
+  | '^' -> try_hl ~refs ~self s i
+  | '$' -> try_math s i
+  | '{' -> try_macro ~refs ~self s i
+  | '<' -> try_lt ~refs ~self s i
+  | ':' -> try_emoji s i
+  | 'h' -> try_url s i
+  | '\n' -> Some (D.el ~tag:"br" [], 1)
+  | _ -> None
+
+(* [[page]] / [label](url) *)
+and try_bracket ~refs ~self s i =
+  if starts_at s i "[[" then
+    match find_sub s (i + 2) "]]" with
+    | j when j > i + 2 ->
+        Some (page_ref ~refs ~self (String.sub s (i + 2) (j - i - 2)), j + 2 - i)
+    | _ -> None
+  else
+    match find_sub s (i + 1) "](" with
+    | j when j > i + 1 -> (
+        match find_sub s (j + 2) ")" with
+        | k when k > j + 2 ->
+            let label = String.sub s (i + 1) (j - i - 1) in
+            let url = String.sub s (j + 2) (k - j - 2) in
+            Some (external_link url (parse ~refs ~self label), k + 1 - i)
+        | _ -> None)
+    | _ -> None
+
+(* span.page-reference[data-ref] with bracket spans around a.page-ref;
+   uuid targets resolve via thread-api/pull and re-parse the resolved
+   title (cljs page-reference/page-reference-content). *)
+and page_ref ?(tag = false) ~refs ~self name =
+  let name = String.trim name in
+  if is_uuid_like name then
+    if List.mem name refs then D.el ~tag:"span" []
+    else if tag then resolved_tag_ref ~refs ~self name
+    else
+      D.el ~tag:"span" ~style_class:"page-reference"
+        ~attrs:[ ("data-ref", name) ]
+        [ bracket "[["; preview_link (resolved_ref ~refs ~self name); bracket "]]" ]
+  else if tag then preview_link (page_link ~tag:true name)
+  else
+    D.el ~tag:"span" ~style_class:"page-reference"
+      ~attrs:[ ("data-ref", name) ]
+      [ bracket "[["; preview_link (page_link ~tag:false name); bracket "]]" ]
+
+(* ((uuid)) -> resolved block/page title; pages render as plain text,
+   block titles are re-parsed with the ref chain extended *)
+and resolved_ref ~refs ~self uuid : t =
+ fun context parent ->
+  let st = Signal.state context.Lui_ui.ui_scheduler ("", true) in
+  Render_state.with_repo (fun repo ->
+      Runtime.invoke3 "thread-api/pull" (Wire.String repo)
+        (Wire.String "[:block/title :block/name]")
+        (Wire.Array [ Wire.Keyword "block/uuid"; Wire.Uuid uuid ])
+      |> Js.Promise.then_ (fun w ->
+             (match Wire.map_get_string w "block/title" with
+              | Some t when String.trim t <> "" ->
+                  let is_page =
+                    match Wire.map_get_string w "block/name" with
+                    | Some n -> String.trim n <> ""
+                    | None -> false
+                  in
+                  Runtime.signal_set st (t, is_page)
+              | _ -> Runtime.signal_set st (uuid, true));
+             Js.Promise.resolve ())
+      |> ignore);
+  let child_refs =
+    self :: (match refs with [] -> [] | _ -> uuid :: refs)
+  in
+  D.el ~tag:"a" ~style_class:"relative page-ref"
+    ~attrs:[ ("data-uuid", uuid); ("tabindex", "0"); ("draggable", "true") ]
+    ~attrs_signal_v:
+      (D.text_of_class_signal
+         (Signal.map fst (Signal.value st))
+         (fun n ->
+           Logseq_dom.attrs_json
+             [ ("data-ref", String.lowercase_ascii n) ]))
+    [ dyn
+        ~equal:(fun (a : string * bool) b -> a = b)
+        (fun (title, is_page) ->
+          if is_page then D.el ~tag:"span" [ D.txt title ]
+          else D.el ~tag:"span" (parse ~refs:child_refs ~self:uuid title))
+        (Signal.value st) ]
+    context parent
+
+(* #[[uuid]] — same lazy resolution, rendered as a .tag anchor *)
+and resolved_tag_ref ~refs ~self uuid : t =
+ fun context parent ->
+  ignore (refs, self);
+  let st = Signal.state context.Lui_ui.ui_scheduler uuid in
+  Render_state.with_repo (fun repo ->
+      Runtime.invoke3 "thread-api/pull" (Wire.String repo)
+        (Wire.String "[:block/title]")
+        (Wire.Array [ Wire.Keyword "block/uuid"; Wire.Uuid uuid ])
+      |> Js.Promise.then_ (fun w ->
+             (match Wire.map_get_string w "block/title" with
+              | Some t when String.trim t <> "" -> Runtime.signal_set st t
+              | _ -> ());
+             Js.Promise.resolve ())
+      |> ignore);
+  D.el ~tag:"a" ~style_class:"relative tag"
+    ~attrs:[ ("data-uuid", uuid); ("tabindex", "0") ]
+    ~attrs_signal_v:
+      (D.text_of_class_signal (Signal.value st) (fun n ->
+           Logseq_dom.attrs_json
+             [ ("data-ref", String.lowercase_ascii n) ]))
+    ~text_signal:(D.text_of_class_signal (Signal.value st) (fun n -> "#" ^ n))
+    [] context parent
+
+and macro_el ~refs ~self body =
   let name, args = macro_args body in
   match name with
   | "cloze" -> (
@@ -270,11 +344,11 @@ let macro_el body =
       if starts_at args 0 "[[" && find_sub args 0 "]]" >= 0 then
         let j = find_sub args 0 "]]" in
         D.el ~tag:"div" ~style_class:"embed-block"
-          [ page_ref (String.sub args 2 (j - 2)) ]
+          [ page_ref ~refs ~self (String.sub args 2 (j - 2)) ]
       else if starts_at args 0 "((" && find_sub args 0 "))" >= 0 then
         let j = find_sub args 0 "))" in
         D.el ~tag:"div" ~style_class:"embed-block"
-          [ block_ref (String.sub args 2 (j - 2)) ]
+          [ page_ref ~refs ~self (String.sub args 2 (j - 2)) ]
       else if args <> "" then embed_iframe args
       else D.el ~tag:"div" ~style_class:"embed-block" [])
   | "youtube" | "video" ->
@@ -283,87 +357,15 @@ let macro_el body =
       embed_iframe args
   | _ -> D.txt ("{{" ^ body ^ "}}")
 
-(* ---------- matchers (return (element, chars consumed)) ---------- *)
-
-let rec parse s =
-  let els = ref [] in
-  let buf = Buffer.create 64 in
-  let push e = els := e :: !els in
-  let flush () =
-    if Buffer.length buf > 0 then (
-      push (D.txt (Buffer.contents buf));
-      Buffer.clear buf)
-  in
-  let n = String.length s in
-  let rec go i =
-    if i >= n then (
-      flush ();
-      ())
-    else
-      match try_match s i with
-      | Some (e, len) ->
-          flush ();
-          push e;
-          go (i + len)
-      | None ->
-          Buffer.add_char buf s.[i];
-          go (i + 1)
-  in
-  go 0;
-  List.rev !els
-
-and try_match s i : (t * int) option =
-  match s.[i] with
-  | '[' -> try_bracket s i
-  | '#' -> try_hash s i
-  | '(' -> try_paren s i
-  | '!' -> try_image s i
-  | '`' -> try_code s i
-  | '*' -> try_star s i
-  | '_' -> try_uscore s i
-  | '~' -> try_strike s i
-  | '^' -> try_hl s i
-  | '$' -> try_math s i
-  | '{' -> try_macro s i
-  | '<' -> try_lt s i
-  | ':' -> try_emoji s i
-  | 'h' -> try_url s i
-  | '\n' -> Some (D.el ~tag:"br" [], 1)
-  | _ -> None
-
-(* [[page]] / [label](url) *)
-and try_bracket s i =
-  if starts_at s i "[[" then
-    match find_sub s (i + 2) "]]" with
-    | j when j > i + 2 ->
-        let inner = String.sub s (i + 2) (j - i - 2) in
-        let el =
-          if uuid_shaped inner then page_ref_uuid inner else page_ref inner
-        in
-        Some (el, j + 2 - i)
-    | _ -> None
-  else
-    match find_sub s (i + 1) "](" with
-    | j when j > i + 1 -> (
-        match find_sub s (j + 2) ")" with
-        | k when k > j + 2 ->
-            let label = String.sub s (i + 1) (j - i - 1) in
-            let url = String.sub s (j + 2) (k - j - 2) in
-            Some (external_link url (parse label), k + 1 - i)
-        | _ -> None)
-    | _ -> None
-
 (* #[[page]] / #tag *)
-and try_hash s i =
+and try_hash ~refs ~self s i =
   if starts_at s i "#[[" then
     match find_sub s (i + 3) "]]" with
     | j when j > i + 3 ->
-        let inner = String.sub s (i + 3) (j - i - 3) in
-        let el =
-          if uuid_shaped inner then page_ref_uuid ~tag:true inner
-          else page_ref ~tag:true inner
-        in
-        Some (el, j + 2 - i)
+        Some
+          (page_ref ~tag:true ~refs ~self
+             (String.sub s (i + 3) (j - i - 3)),
+           j + 2 - i)
     | _ -> None
   else
     let n = String.length s in
@@ -391,29 +393,14 @@ and try_hash s i =
       if k = 0 then None
       else Some (page_link ~tag:true (String.sub raw 0 k), k + 1)
 
-(* ((uuid)) — only a uuid-shaped inner resolves to a block ref;
-   anything else renders literally like cljs *)
-and uuid_shaped s =
-  let hex c =
-    (c >= '0' && c <= '9')
-    || (c >= 'a' && c <= 'f')
-    || (c >= 'A' && c <= 'F')
-  in
-  let rec go i =
-    if i = 36 then true
-    else
-      match i with
-      | 8 | 13 | 18 | 23 -> String.get s i = '-' && go (i + 1)
-      | _ -> hex (String.get s i) && go (i + 1)
-  in
-  String.length s = 36 && go 0
-
-and try_paren s i =
+(* ((uuid)) — same page-reference rendering as [[uuid]] *)
+and try_paren ~refs ~self s i =
   if starts_at s i "((" then
     match find_sub s (i + 2) "))" with
     | j when j > i + 2 ->
-        let inner = String.sub s (i + 2) (j - i - 2) in
-        if uuid_shaped inner then Some (block_ref inner, j + 2 - i) else None
+        Some
+          (page_ref ~refs ~self (String.sub s (i + 2) (j - i - 2)),
+           j + 2 - i)
     | _ -> None
   else None
 
@@ -439,46 +426,58 @@ and try_code s i =
   | _ -> None
 
 (* **bold** / *italic* *)
-and try_star s i =
+and try_star ~refs ~self s i =
   if starts_at s i "**" then
     match find_sub s (i + 2) "**" with
     | j when j > i + 2 ->
-        Some (emph "b" (parse (String.sub s (i + 2) (j - i - 2))), j + 2 - i)
+        Some
+          (emph "b" (parse ~refs ~self (String.sub s (i + 2) (j - i - 2))),
+           j + 2 - i)
     | _ -> None
   else
     match find_sub s (i + 1) "*" with
     | j when j > i + 1 ->
-        Some (emph "i" (parse (String.sub s (i + 1) (j - i - 1))), j + 1 - i)
+        Some
+          (emph "i" (parse ~refs ~self (String.sub s (i + 1) (j - i - 1))),
+           j + 1 - i)
     | _ -> None
 
 (* __bold__ / _italic_ *)
-and try_uscore s i =
+and try_uscore ~refs ~self s i =
   if starts_at s i "__" then
     match find_sub s (i + 2) "__" with
     | j when j > i + 2 ->
-        Some (emph "b" (parse (String.sub s (i + 2) (j - i - 2))), j + 2 - i)
+        Some
+          (emph "b" (parse ~refs ~self (String.sub s (i + 2) (j - i - 2))),
+           j + 2 - i)
     | _ -> None
   else
     match find_sub s (i + 1) "_" with
     | j when j > i + 1 ->
-        Some (emph "i" (parse (String.sub s (i + 1) (j - i - 1))), j + 1 - i)
+        Some
+          (emph "i" (parse ~refs ~self (String.sub s (i + 1) (j - i - 1))),
+           j + 1 - i)
     | _ -> None
 
 (* ~~strike~~ *)
-and try_strike s i =
+and try_strike ~refs ~self s i =
   if starts_at s i "~~" then
     match find_sub s (i + 2) "~~" with
     | j when j > i + 2 ->
-        Some (emph "del" (parse (String.sub s (i + 2) (j - i - 2))), j + 2 - i)
+        Some
+          (emph "del" (parse ~refs ~self (String.sub s (i + 2) (j - i - 2))),
+           j + 2 - i)
     | _ -> None
   else None
 
 (* ^^highlight^^ *)
-and try_hl s i =
+and try_hl ~refs ~self s i =
   if starts_at s i "^^" then
     match find_sub s (i + 2) "^^" with
     | j when j > i + 2 ->
-        Some (emph "mark" (parse (String.sub s (i + 2) (j - i - 2))), j + 2 - i)
+        Some
+          (emph "mark" (parse ~refs ~self (String.sub s (i + 2) (j - i - 2))),
+           j + 2 - i)
     | _ -> None
   else None
 
@@ -496,20 +495,20 @@ and try_math s i =
     | _ -> None
 
 (* {{macro ...}} *)
-and try_macro s i =
+and try_macro ~refs ~self s i =
   if starts_at s i "{{" then
     match find_sub s (i + 2) "}}" with
     | j when j > i + 2 ->
-        Some (macro_el (String.sub s (i + 2) (j - i - 2)), j + 2 - i)
+        Some (macro_el ~refs ~self (String.sub s (i + 2) (j - i - 2)), j + 2 - i)
     | _ -> None
   else None
 
 (* <tag>x</tag> / <day> / <br> *)
-and try_lt s i =
+and try_lt ~refs ~self s i =
   match try_date s i with
   | Some hit -> Some hit
   | None -> (
-      match try_html_tag s i with
+      match try_html_tag ~refs ~self s i with
       | Some hit -> Some hit
       | None ->
           if starts_at s i "<br>" then Some (D.el ~tag:"br" [], 4)
@@ -536,7 +535,7 @@ and try_date s i =
 and is_digit c = c >= '0' && c <= '9'
 
 (* <u>x</u> <ins>x</ins> etc — small whitelist *)
-and try_html_tag s i =
+and try_html_tag ~refs ~self s i =
   let open_tags =
     [ "u"; "ins"; "del"; "s"; "mark"; "b"; "i"; "em"; "strong"; "code"
     ; "sup"; "sub"; "small"; "kbd" ]
@@ -549,7 +548,9 @@ and try_html_tag s i =
       | j when j >= i + open_len ->
           let inner = String.sub s (i + open_len) (j - i - open_len) in
           let dom_tag = match t with "ins" -> "u" | "s" -> "del" | x -> x in
-          Some (emph dom_tag (parse inner), j + String.length close - i)
+          Some
+            (emph dom_tag (parse ~refs ~self inner),
+             j + String.length close - i)
       | _ -> None
     else None
   in
@@ -572,12 +573,12 @@ and try_emoji s i =
    callers use the result to emit ~text: (a direct DOM text node, like
    cljs) instead of span.lui-text children, which Playwright :text-is
    requires *)
-and plain_text s =
+and plain_text ?(refs = []) ?(self = "") s =
   let n = String.length s in
   let rec go i =
     if i >= n then Some s
     else
-      match try_match s i with
+      match try_match ~refs ~self s i with
       | Some _ -> None
       | None -> go (i + 1)
   in
