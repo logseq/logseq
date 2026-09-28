@@ -403,7 +403,9 @@ let entity_of_wire db (v : Wire.t) : entity option =
   | Wire.Int id -> Ldb.ent_of_id db id
   | Wire.Int64 id -> Ldb.ent_of_id db (Int64.to_int id)
   | Wire.Keyword k -> entity db (Ident k)
-  | Wire.Uuid u -> entity db (Lookup_ref ("block/uuid", Uuid u))
+  | Wire.Uuid u ->
+      entity db
+        (Lookup_ref ("block/uuid", Uuid (Datascript.Util.uuid_canonicalize u)))
   | Wire.Array [ Wire.Keyword a; x ] ->
       (match Ds_wire.value_of_transit x with
        | exception _ -> None

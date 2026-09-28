@@ -1149,7 +1149,8 @@ let rec value_of_form (f : query_form) : value =
   | QueryFormList xs -> List (List.map value_of_form xs)
   | QueryFormSet xs -> Set (List.map value_of_form xs)
   | QueryFormMap kvs -> Map (List.map (fun (k, v) -> (value_of_form k, value_of_form v)) kvs)
-  | QueryFormTagged ("uuid", QueryFormString s) -> Uuid s
+  | QueryFormTagged ("uuid", QueryFormString s) ->
+      Uuid (Datascript.Util.uuid_canonicalize s)
   | QueryFormTagged ("regex", QueryFormString s) -> Regex s
   | QueryFormTagged ("inst", QueryFormString s) ->
       (match Date_time_util.epoch_ms_of_iso s with
