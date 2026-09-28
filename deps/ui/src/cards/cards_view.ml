@@ -25,7 +25,11 @@ let opts_box st =
                (fun i d -> opt_row st i d.Cards_state.deck_label)
                decks
         in
-        dom ~key:"opts" ~attrs:[ ("role", "listbox") ] options)
+        dom ~key:"opts" ~attrs:[ ("role", "listbox") ]
+          ~style_class:
+            "absolute z-50 top-full left-0 w-full rounded-md border \
+             bg-popover text-popover-foreground shadow-md"
+          options)
     (Signal.map2 (fun a b -> (a, b)) (Signal.value st.Cards_state.decks)
        (Signal.value st.Cards_state.opts_open))
 
@@ -36,7 +40,7 @@ let selector_row st =
         ~events:"click"
         ~on_dom_event:(fun name _ ->
           if name = "click" then Cards_state.toggle_opts st)
-        ~style_class:"!px-2 !py-0 !h-8 w-64"
+        ~style_class:"!px-2 !py-0 !h-8 w-64 relative"
         [ opts_box st ]
     ; dom ~key:"add" ~tag:"button" ~id:"ls-cards-add"
         ~attrs:[ ("title", t_ "Add cards query") ]

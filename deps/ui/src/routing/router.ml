@@ -68,8 +68,11 @@ let fetch_blocks (p : Model.page) =
   Runtime.invoke3 "thread-api/get-page-blocks-tree"
     (Wire.String (repo ())) (ref_of_page p) Wire.Nil
   |> Js.Promise.then_ (fun blocks_w ->
-         Js.Promise.resolve
-           { p with Model.page_blocks = Decode.blocks_of_wire blocks_w })
+         let blocks = Decode.blocks_of_wire blocks_w in
+         Outliner_ops.resolve_block_tags blocks
+         |> Js.Promise.then_ (fun blocks ->
+                Js.Promise.resolve
+                  { p with Model.page_blocks = blocks }))
 
 let fetch_refs (p : Model.page) =
   match p.Model.page_db_id with

@@ -1,8 +1,8 @@
 (* Flashcards modal state — deck list (logseq.class/Cards blocks), the
    selected deck, and the due card blocks for it.
 
-   Entry point: `ls:open-dialog` CustomEvent {detail: {name: "cards"}}
-   dispatched by the left sidebar's .flashcards-nav link.
+   Entry point: `ls:open-cards` CustomEvent (no detail) dispatched by the
+   left sidebar's .flashcards-nav link — cljs `[:modal/show-cards]`.
    Escape closes the modal; the global Dismiss_all path also listens for
    Escape but this state is area-local, so we handle it here. *)
 
@@ -42,7 +42,32 @@ let cards_class_uuid repo =
   |> Js.Promise.then_ (fun w ->
          Js.Promise.resolve (Wire.as_uuid w))
 
-(* label = block title; blank title -> query property block's title *)
+let elems = function
+  | Wire.Array xs | Wire.List xs | Wire.Set xs -> xs
+  | _ -> []
+
+(* cljs db-content/recur-replace-uuid-in-block-title (single pass — no
+   recursive ref-of-ref resolution): [[u]] -> [[title]], #[[u]] -> #title
+   or #[[title]] when the title contains spaces *)
+let refs_to_names title pairs =
+  let title =
+    List.fold_left
+      (fun t (u, rt) ->
+        let rep =
+          if String.contains rt ' ' then "#[[" ^ rt ^ "]]" else "#" ^ rt
+        in
+        Title_refs.replace_all t ~pat:("#[[" ^ u ^ "]]") ~rep)
+      title pairs
+  in
+  List.fold_left
+    (fun t (u, rt) ->
+      Title_refs.replace_all t
+        ~pat:("[[" ^ u ^ "]]")
+        ~rep:("[[" ^ rt ^ "]]"))
+    title pairs
+
+(* label = block title; blank title -> query property block's title with
+   uuid refs rendered as page names *)
 let deck_label repo eid title =
   if String.trim title <> "" then Js.Promise.resolve title
   else
@@ -52,7 +77,31 @@ let deck_label repo eid title =
           [?qb :block/title ?t]]"
          eid)
     |> Js.Promise.then_ (fun w ->
-           Js.Promise.resolve (Option.value (Wire.as_string w) ~default:""))
+           let qt = Option.value (Wire.as_string w) ~default:"" in
+           if qt = "" then Js.Promise.resolve ""
+           else
+             q repo
+               (Printf.sprintf
+                  "[:find ?u ?rt :where [%d :logseq.property/query ?qb] \
+                   [?qb :block/refs ?r] [?r :block/uuid ?u] \
+                   [?r :block/title ?rt]]"
+                  eid)
+             |> Js.Promise.then_ (fun w ->
+                    let pairs =
+                      List.filter_map
+                        (fun row ->
+                          match elems row with
+                          | [ u; Wire.String rt ] -> (
+                              match Wire.as_uuid u with
+                              | Some u -> Some (u, rt)
+                              | None -> (
+                                  match Wire.as_string u with
+                                  | Some u -> Some (u, rt)
+                                  | None -> None))
+                          | _ -> None)
+                        (elems w)
+                    in
+                    Js.Promise.resolve (refs_to_names qt pairs)))
 
 let decks_of_wire repo w =
   let items =
@@ -195,17 +244,6 @@ let add_cards_block st =
                       Js.Promise.resolve ())))
     |> ignore
 
-let on_open_dialog ev st =
-  let name =
-    match Js.Json.decodeObject (Platform.json_prop ev "detail") with
-    | Some o -> (
-        match Js.Dict.get o "name" with
-        | Some v -> Option.value (Js.Json.decodeString v) ~default:""
-        | None -> "")
-    | None -> ""
-  in
-  if name = "cards" then open_modal st
-
 let on_keydown ev st =
   if Platform.event_str ev "key" = "Escape"
      && Signal.get_state st.open_
@@ -226,8 +264,8 @@ let init (ms : Model.t Signal.signal) : t =
         }
       in
       st_ref := Some st;
-      Platform.on_document_event "ls:open-dialog" (fun ev ->
-          on_open_dialog ev st);
+      Platform.on_document_event "ls:open-cards" (fun _ ->
+          open_modal st);
       Platform.on_document_event "keydown" (fun ev -> on_keydown ev st);
       st
 
