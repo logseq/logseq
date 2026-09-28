@@ -7,13 +7,20 @@
 
 module String_set = Stdlib.Set.Make (String)
 
-type editing = { uuid : string; buffer : string }
+(* [scope] is the container the edit started in ("main" or
+   "sidebar") — the same block can render in both trees, so only the
+   initiating scope mounts the textarea (cljs keys the editor by
+   container-local edit-input-id) *)
+type editing = { uuid : string; buffer : string; scope : string }
 
 type t =
   { editing : editing option
   ; selected : String_set.t
   ; anchor : string option (* selection focus end for shift-arrow *)
   ; collapsed : String_set.t
+  ; expanded : String_set.t
+    (* cljs temp-collapsed? inverse: user-expanded overrides a
+       block_default_collapsed render flag without persisting *)
   }
 
 let initial =
@@ -21,6 +28,7 @@ let initial =
   ; selected = String_set.empty
   ; anchor = None
   ; collapsed = String_set.empty
+  ; expanded = String_set.empty
   }
 
 let st : t Signal.state option ref = ref None
@@ -81,6 +89,11 @@ let read () =
 
 let editing () = (read ()).editing
 
+let is_editing_in uuid scope =
+  match editing () with
+  | Some e -> e.uuid = uuid && e.scope = scope
+  | None -> false
+
 let editing_uuid () =
   match editing () with Some e -> Some e.uuid | None -> None
 
@@ -89,6 +102,16 @@ let selected () = (read ()).selected
 let is_selected uuid = String_set.mem uuid (selected ())
 let collapsed () = (read ()).collapsed
 let is_collapsed uuid = String_set.mem uuid (collapsed ())
+let is_expanded uuid = String_set.mem uuid (read ()).expanded
+
+(* render-time collapse: persisted flag || view default, overridable by
+   an explicit user expand (cljs temp-collapsed? has priority) *)
+let effective_collapsed (b : Model.block) =
+  match b.Model.block_uuid with
+  | None -> false
+  | Some u ->
+      if is_expanded u then false
+      else is_collapsed u || b.Model.block_default_collapsed
 let anchor () = (read ()).anchor
 let selection_active () = not (String_set.is_empty (selected ()))
 
@@ -103,24 +126,59 @@ let page_blocks () =
       List.concat_map (fun (p : Model.page) -> p.Model.page_blocks)
         !Runtime.current_journals
 
+(* blocks a row actually displays: a :block/link (embed) block renders the
+   linked page's fetched blocks in place of its own children — so lookups
+   and visible order must consult block_embed_children for them *)
+let children_of (b : Model.block) =
+  match b.Model.block_link with
+  | Some _ -> b.Model.block_embed_children
+  | None -> b.Model.block_children
+
 let rec find_in blocks uuid =
   match blocks with
   | [] -> None
   | b :: rest -> (
       if b.Model.block_uuid = Some uuid then Some b
       else
-        match find_in b.Model.block_children uuid with
+        match find_in (children_of b) uuid with
         | Some _ as r -> r
         | None -> find_in rest uuid)
 
-let find uuid = find_in (page_blocks ()) uuid
+(* block sources outside the current page tree (right-sidebar items) —
+   the owning area registers its lookup at init *)
+let extra_sources : (string -> Model.block option) list ref = ref []
+
+let add_block_source f = extra_sources := f :: !extra_sources
+
+let find uuid =
+  match find_in (page_blocks ()) uuid with
+  | Some _ as r -> r
+  | None ->
+      let rec go = function
+        | [] -> None
+        | f :: fs -> (
+            match f uuid with Some _ as r -> r | None -> go fs)
+      in
+      go !extra_sources
+
+(* committed edit buffers, applied to rendered titles immediately — the
+   page model only catches up once the worker transact+refresh lands, and
+   a stale paint between the two shows a blank/reverted title *)
+let display_overrides : (string, string) Hashtbl.t = Hashtbl.create 8
+
+let override_title uuid title = Hashtbl.replace display_overrides uuid title
+
+let title_for uuid fallback =
+  Option.value (Hashtbl.find_opt display_overrides uuid) ~default:fallback
+
+let clear_overrides () = Hashtbl.reset display_overrides
 
 (* returns (parent, index) of uuid among its siblings *)
 let rec find_parent_in blocks uuid =
   match blocks with
   | [] -> None
   | parent :: rest -> (
-      let children = parent.Model.block_children in
+      let children = children_of parent in
       let rec idx i = function
         | [] -> None
         | c :: _ when c.Model.block_uuid = Some uuid -> Some i
@@ -147,16 +205,13 @@ let find_parent uuid =
 
 (* DFS over visible (non-collapsed-subtree) blocks *)
 let flat_visible () =
-  let collapsed = collapsed () in
   let rec go acc blocks =
     match blocks with
     | [] -> acc
     | b :: rest ->
         let acc = b :: acc in
         let acc =
-          match b.Model.block_uuid with
-          | Some u when String_set.mem u collapsed -> acc
-          | _ -> go acc b.Model.block_children
+          if effective_collapsed b then acc else go acc (children_of b)
         in
         go acc rest
   in
@@ -166,7 +221,7 @@ let flat_all () =
   let rec go acc blocks =
     match blocks with
     | [] -> acc
-    | b :: rest -> go (go (b :: acc) b.Model.block_children) rest
+    | b :: rest -> go (go (b :: acc) (children_of b)) rest
   in
   List.rev (go [] (page_blocks ()))
 
@@ -186,6 +241,33 @@ let neighbor_of uuid dir =
 
 let prev_visible uuid = neighbor_of uuid `Prev
 let next_visible uuid = neighbor_of uuid `Next
+
+(* optimistic title write: a commit updates the model so the row re-renders
+   immediately instead of waiting for the worker refresh round-trip *)
+let rec map_block_title uuid title blocks =
+  List.map
+    (fun (b : Model.block) ->
+      { b with
+        Model.block_title =
+          (if b.Model.block_uuid = Some uuid then title
+           else b.Model.block_title)
+      ; block_children = map_block_title uuid title b.Model.block_children
+      ; block_embed_children =
+          map_block_title uuid title b.Model.block_embed_children
+      })
+    blocks
+
+let update_block_title uuid title =
+  match !Runtime.current_page with
+  | None -> ()
+  | Some p ->
+      Runtime.current_page :=
+        Some
+          { p with
+            Model.page_blocks =
+              map_block_title uuid title p.Model.page_blocks
+          };
+      set (fun st -> st)
 
 let prev_sibling uuid =
   match find_parent uuid with

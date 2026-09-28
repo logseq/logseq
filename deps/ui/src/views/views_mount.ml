@@ -26,11 +26,12 @@ let mark el inst =
 (* ---------- mount points ---------- *)
 
 (* all-pages route: page.ml renders an empty graphs-view box; append the
-   .ls-all-pages container to .cp__sidebar-main-content *)
+   .ls-all-pages container into the .mx-auto.pb-24 content wrapper, like
+   cljs all_pages.cljs which renders inside the page wrapper *)
 let ensure_all_pages () =
   match !Runtime.current_route with
   | Some Model.All_pages ->
-      Ed.for_each_selector ".cp__sidebar-main-content" (fun main ->
+      Ed.for_each_selector ".cp__sidebar-main-content > .mx-auto" (fun main ->
           match Ed.el_query main ".ls-all-pages" with
           | Some _ -> ()
           | None ->
@@ -48,39 +49,48 @@ let ensure_all_pages () =
       | Some el -> D.el_remove el
       | None -> ())
 
-(* tag/class pages get a class-objects view above the block list *)
-let rec ensure_tag_page () =
+(* tag/class and property pages get an objects view above the block
+   list (class-objects / property-objects) *)
+let rec ensure_object_view () =
   Ed.for_each_selector ".page-inner" (fun inner ->
-      let tag_uuid =
+      let kind =
         match !Runtime.current_page with
-        | Some p when p.Model.page_is_tag -> p.Model.page_uuid
+        | Some p when p.Model.page_is_tag ->
+            Option.map (fun u -> V.KTagPage u) p.Model.page_uuid
+        | Some p when p.Model.page_is_property ->
+            Option.map (fun u -> V.KPropertyPage u) p.Model.page_uuid
         | _ -> None
       in
-      match tag_uuid with
+      match kind with
       | None -> (
           match Ed.el_query inner ".ls-views-wrap" with
           | Some el -> D.el_remove el
           | None -> ())
-      | Some uuid -> (
+      | Some kind -> (
+          let uuid =
+            match kind with
+            | V.KTagPage u | V.KPropertyPage u -> u
+            | _ -> ""
+          in
           match Ed.el_query inner ".ls-views-wrap" with
           | Some el ->
               (* remount when the page changed underneath *)
               if Ed.el_get_attr el "data-views-owner" <> Some uuid then begin
                 D.el_remove el;
-                ensure_tag_page_container inner uuid
+                ensure_object_view_container inner uuid kind
               end
-          | None -> ensure_tag_page_container inner uuid))
+          | None -> ensure_object_view_container inner uuid kind))
 
-and ensure_tag_page_container inner uuid =
-  let container = D.h ~cls:"ls-views-wrap w-full" () in
+and ensure_object_view_container inner uuid kind =
+  (* cljs objects.cljs class-objects: [:div.ml-1 [view]] *)
+  let container = D.h ~cls:"ls-views-wrap ml-1 w-full" () in
   D.el_set_attr container "data-views-owner" uuid;
   (* .page-blocks-inner is nested inside .ls-page-blocks, a direct child of
      .page-inner — insertBefore requires a direct-child reference node *)
   D.el_insert_before inner container
     (Ed.el_query inner ".ls-page-blocks");
   let inst =
-    Views_view.mount ~kind:(V.KTagPage uuid) ~owner:(W.Uuid uuid)
-      ~container
+    Views_view.mount ~kind ~owner:(W.Uuid uuid) ~container
   in
   mark container inst
 
@@ -141,7 +151,7 @@ let chain_worker () =
 let scan () =
   chain_worker ();
   ensure_all_pages ();
-  ensure_tag_page ();
+  ensure_object_view ();
   ensure_query_shells ()
 
 let installed = ref false

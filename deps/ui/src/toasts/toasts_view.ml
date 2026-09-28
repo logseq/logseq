@@ -37,21 +37,25 @@ let toast_item (t : Model.toast) (idx : int) : t =
        ~style_class:("ui__toast pointer-events-auto " ^ kind)
        ~attrs:
          [ ("data-toast-index", string_of_int idx); ("style", style) ]
-       [ dom ~key:"ti-icon" ~tag:"i" ~style_class:(toast_icon_class kind) []
-       ; dom ~key:"ti-content" ~style_class:"ui__toast-content"
-           [ dom ~key:"ti-body" ~style_class:"ui__toast-body"
+       [ dom ~key:"ti-content" ~style_class:"ui__toast-content"
+           [ dom ~key:"ti-header" ~style_class:"ui__toast-header"
+               [ dom ~key:"ti-icon" ~tag:"i"
+                   ~style_class:(toast_icon_class kind) []
+               ; dom ~key:"ti-close" ~tag:"button"
+                   ~style_class:"ui__toast-close"
+                   ~attrs:[ ("aria-label", "Close") ]
+                   ~events:"click"
+                   ~on_dom_event:(fun name _ ->
+                     if name = "click" then Toast.dismiss t.toast_id)
+                   []
+               ]
+           ; dom ~key:"ti-body" ~style_class:"ui__toast-body"
                [ dom ~key:"ti-text" ~style_class:"ui__toast-text"
                    [ dom ~key:"ti-desc"
                        ~style_class:"ui__toast-description"
                        ~text:t.toast_text [] ]
                ]
            ]
-       ; dom ~key:"ti-close" ~tag:"button" ~style_class:"ui__toast-close"
-           ~attrs:[ ("aria-label", "Close") ]
-           ~events:"click"
-           ~on_dom_event:(fun name _ ->
-             if name = "click" then Toast.dismiss t.toast_id)
-           []
        ])
       ctx parent
 

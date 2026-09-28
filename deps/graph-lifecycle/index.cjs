@@ -293,12 +293,20 @@ function validateRegistration(ctx, current, record) {
 }
 function readRuntime(ctx, record) {
   const file = runtimeFile(ctx, record.ticket);
-  const runtime = readJSON(file);
-  if (fs.existsSync(file) && (!runtime || typeof runtime !== 'object' || Array.isArray(runtime)))
-    fail('Invalid worker runtime metadata');
-  if (runtime && Object.entries(runtimeRecord(record)).some(([key, value]) => runtime[key] !== value))
-    fail('Worker runtime identity differs from registration');
-  return runtime;
+  // A worker can create or remove its file mid-check (admission, publish,
+  // close, cleanup); confirm an empty read is stable before judging it.
+  for (let attempt = 0; ; attempt++) {
+    const runtime = readJSON(file);
+    if (runtime === null && fs.existsSync(file)) {
+      if (attempt < 3) continue;
+      fail('Invalid worker runtime metadata');
+    }
+    if (runtime !== null && (typeof runtime !== 'object' || Array.isArray(runtime)))
+      fail('Invalid worker runtime metadata');
+    if (runtime !== null && Object.entries(runtimeRecord(record)).some(([key, value]) => runtime[key] !== value))
+      fail('Worker runtime identity differs from registration');
+    return runtime;
+  }
 }
 async function health(ctx, target, port) {
   const response = await request(port, '/healthz');
@@ -538,7 +546,19 @@ async function stopOutdatedWorkers(storage, revision, repo) {
         }
         if (!pidExists(target.pid)) continue;
         if (!target.port) fail('Worker endpoint is not published; retry after initialization', 'server-start-failed');
-        const value = await health(ctx, target, target.port);
+        let value;
+        try { value = await health(ctx, target, target.port); }
+        catch (error) {
+          if (!ignorableDiscoveryError(error)) throw error;
+          // A worker mid-teardown can reset health checks while its process is
+          // still exiting; only a live unverified worker must be preserved.
+          if (!await waitExit(target.pid, 5000)) throw error;
+          await cleanup(ctx, current, [target]);
+          current.workers = current.workers.filter(record => record.ticket !== target.ticket);
+          writeJSON(ctx.stateFile, current);
+          retired.push(target);
+          continue;
+        }
         if (typeof value.revision !== 'string' || !value.revision) fail('Worker revision is missing');
         if (value.revision === revision) continue;
         await terminate(ctx, target, false);

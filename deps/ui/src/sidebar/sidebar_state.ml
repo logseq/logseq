@@ -29,6 +29,7 @@ type item =
   ; kind : string
   ; uuid : string option
   ; title : string
+  ; icon : (string * string) option
   ; breadcrumb : string list
   ; blocks : Model.block list
   ; page_ref : string option
@@ -222,7 +223,7 @@ let navigate_to_page target =
     if Sdk_util.is_uuid_string target then target
     else encode_uri_component target
   in
-  Platform.set_location_hash ("#/page/" ^ target);
+  Platform.set_location_hash (Runtime.nav_hash ("#/page/" ^ target));
   Platform.dispatch "ls:navigate" Js.Json.null
 
 (* Ref value for get-page-route-info / get-page-blocks-tree: a bare uuid
@@ -244,9 +245,10 @@ let fetch_blocks (p : Model.page) =
         | None -> p.Model.page_title))
     Wire.Nil
   |> Js.Promise.then_ (fun blocks_w ->
-         Js.Promise.resolve
-           { p with Model.page_blocks = Decode.blocks_of_wire blocks_w })
-
+         Outliner_ops.resolve_block_tags (Decode.blocks_of_wire blocks_w)
+         |> Js.Promise.then_ (fun blocks ->
+                Js.Promise.resolve
+                  { p with Model.page_blocks = blocks }))
 let open_dialog name =
   let o = Js.Dict.empty () in
   Js.Dict.set o "name" (Js.Json.string name);
@@ -265,6 +267,7 @@ let item_of_page (p : Model.page) =
   ; kind = "page"
   ; uuid = p.Model.page_uuid
   ; title = p.Model.page_title
+  ; icon = p.Model.page_icon
   ; breadcrumb = []
   ; blocks = p.Model.page_blocks
   ; page_ref =
@@ -357,6 +360,7 @@ let block_item_of_uuid repo uuid : item option Js.Promise.t =
                              ; kind = "block"
                              ; uuid = Some uuid
                              ; title = b.Model.block_title
+                             ; icon = None
                              ; breadcrumb = crumbs
                              ; blocks = [ b ]
                              ; page_ref = List.nth_opt crumbs 0
@@ -364,35 +368,32 @@ let block_item_of_uuid repo uuid : item option Js.Promise.t =
              | _ -> Js.Promise.resolve None)
          | _ -> Js.Promise.resolve None)
 
-let contents_item repo : item option Js.Promise.t =
-  Runtime.invoke2 "thread-api/get-page-route-info" (Wire.String repo)
-    (Wire.String "Contents")
-  |> Js.Promise.then_ (fun info ->
-         match Decode.page_of_summary info with
-         | Some p ->
-             fetch_blocks p
-             |> Js.Promise.then_ (fun p' ->
-                    Js.Promise.resolve
-                      (Some
-                         { key = "contents"
-                         ; kind = "contents"
-                         ; uuid = p'.Model.page_uuid
-                         ; title = t "Contents"
-                         ; breadcrumb = []
-                         ; blocks = p'.Model.page_blocks
-                         ; page_ref = Some "Contents"
-                         }))
-         | None ->
-             Js.Promise.resolve
-               (Some
-                  { key = "contents"
-                  ; kind = "contents"
-                  ; uuid = None
-                  ; title = t "Contents"
-                  ; breadcrumb = []
-                  ; blocks = []
-                  ; page_ref = Some "Contents"
-                  }))
+(* cljs :contents item renders the TOC of the CURRENT page (the page in
+   the main area), not a page literally named "Contents" *)
+let contents_item _repo : item option Js.Promise.t =
+  let m = !model_ref in
+  let current =
+    match !Runtime.current_page with
+    | Some p -> Some p
+    | None -> (
+        match m.Model.route_page with
+        | Some p -> Some p
+        | None -> List.nth_opt m.Model.journals 0)
+  in
+  match current with
+  | Some p ->
+      Js.Promise.resolve
+        (Some
+           { key = "contents"
+           ; kind = "contents"
+           ; uuid = p.Model.page_uuid
+           ; title = t "Contents"
+           ; breadcrumb = []
+           ; blocks = p.Model.page_blocks
+           ; page_ref = Some p.Model.page_title
+           ; icon = None
+           })
+  | None -> Js.Promise.resolve None
 
 let static_item key kind title =
   Some
@@ -400,6 +401,7 @@ let static_item key kind title =
     ; kind
     ; uuid = None
     ; title = t title
+    ; icon = None
     ; breadcrumb = []
     ; blocks = []
     ; page_ref = None
@@ -581,25 +583,30 @@ let on_model st (m : Model.t) =
    | Some p when m.Model.phase = Model.Ready ->
        let key = page_key p in
        if !last_page_key <> Some key then (
+         let first = !last_page_key = None in
          last_page_key := Some key;
          refresh_favorited (Router.repo ()) st;
          match m.Model.repo, p.Model.page_db_id with
          | Some repo, Some id ->
-             push_recent repo id;
+             (* cljs adds recents only via redirect-to-page! — the page
+                shown on initial load is never recorded *)
+             if not first then push_recent repo id;
              load_recents repo st
          | _ -> ())
    | _ -> ());
-  sync_right_sidebar_width ();
-  if m.Model.right_sidebar_open then ensure_contents st
+  sync_right_sidebar_width ()
 
 let on_doc_click st ev =
-  if jbool "shiftKey" ev then
-    match click_target "a.page-ref" ev with
-    | Some el -> (
-        match Platform.get_attribute el "data-ref" with
-        | Some ref_ -> open_ref st ref_
-        | None -> ())
-    | None -> (
+  match click_target "a.page-ref" ev with
+  | Some el -> (
+      match Platform.get_attribute el "data-ref" with
+      | Some ref_ ->
+          if jbool "shiftKey" ev then open_ref st ref_
+          else if not (jbool "metaKey" ev || jbool "ctrlKey" ev) then
+            navigate_to_page ref_
+      | None -> ())
+  | None ->
+      if jbool "shiftKey" ev then
         match click_target "[data-testid='page title']" ev with
         | Some _ -> (
             match !Runtime.current_page with
@@ -608,7 +615,7 @@ let on_doc_click st ev =
                 | Some u -> open_uuid st u
                 | None -> ())
             | None -> ())
-        | None -> ())
+        | None -> ()
 
 let on_doc_keydown st ev =
   match jfield "key" ev with
@@ -636,6 +643,12 @@ let init (ms : Model.t Signal.signal) : t =
         }
       in
       st_ref := Some st;
+      (* sidebar item blocks are editable: expose them to Editor_state.find
+         so click-to-edit works on .cp__right-sidebar block rows *)
+      Editor_state.add_block_source (fun uuid ->
+          List.find_map
+            (fun (it : item) -> Editor_state.find_in it.blocks uuid)
+            (Signal.get_state st.items));
       ignore (Signal.subscribe ~emit_initial:false ms (on_model st));
       Platform.on_document_event "ls:open-right-sidebar" (fun ev ->
           match detail_string "uuid" ev with

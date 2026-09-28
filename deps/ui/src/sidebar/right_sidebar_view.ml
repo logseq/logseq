@@ -17,19 +17,8 @@ module D = Logseq_dom
 let dom = D.dom
 let t = Sidebar_state.t
 
-(* The header is shared chrome.ml; the toggle lives in this region as a
-   floating control pinned to the top-right viewport corner. *)
-let toggle_button =
-  dom ~key:"rs-toggle" ~tag:"button"
-    ~style_class:"button cp__header-btn toggle-right-sidebar"
-    ~attrs:
-      [ ("title", t "Toggle right sidebar")
-      (* floats below the header — chrome.ml owns the header buttons *)
-      ; ("style", "position:fixed;top:64px;right:6px;z-index:1500") ]
-    ~events:"click"
-    ~on_dom_event:(fun name _ ->
-      if name = "click" then Runtime.send Action.Toggle_right_sidebar)
-    [ dom ~tag:"i" ~style_class:"ti ti-layout-sidebar-right" [] ]
+(* .toggle-right-sidebar now lives in chrome.ml's header .r, matching
+   cljs header.cljs layout. *)
 
 (* ---------- topbar ---------- *)
 
@@ -118,10 +107,37 @@ let breadcrumb crumbs =
 let item_title (it : Sidebar_state.item) =
   match it.breadcrumb, it.kind with
   | [], "page" ->
+      let icon_els =
+        match it.icon with
+        | Some ("emoji", eid) ->
+            [ dom ~key:"pt-e" ~tag:"em-emoji" ~attrs:[ "id", eid ] [] ]
+        | Some (_, iid) ->
+            [ dom ~key:"pt-ti" ~style_class:("ui__icon ti ls-icon-" ^ iid)
+                [ dom ~key:"pt-tii" ~tag:"i" ~style_class:("ti ti-" ^ iid)
+                    []
+                ]
+            ]
+        | None -> []
+      in
       dom ~key:"pt" ~style_class:"flex items-center page-title gap-1"
-        [ dom ~tag:"span"
-            ~style_class:"overflow-hidden text-ellipsis"
-            ~text:it.title [] ]
+        (icon_els
+        @ [ dom ~tag:"span"
+              ~style_class:"overflow-hidden text-ellipsis"
+              ~text:it.title []
+          ])
+  | [], "contents" ->
+      (* cljs: (icon "list-details") + "Contents" *)
+      dom ~key:"pt-contents" ~style_class:"flex items-center"
+        [ Icons.icon ~cls:"text-md mr-2" "list-details"
+        ; dom ~tag:"span" ~text:it.title [] ]
+  | [], "page-graph" ->
+      dom ~key:"pt-pg" ~style_class:"flex items-center"
+        [ Icons.icon ~cls:"text-md mr-2" "hierarchy"
+        ; dom ~tag:"span" ~text:it.title [] ]
+  | [], "help" ->
+      dom ~key:"pt-help" ~style_class:"flex items-center"
+        [ Icons.icon ~cls:"text-md mr-2" "help"
+        ; dom ~tag:"span" ~text:it.title [] ]
   | [], _ -> dom ~key:"pt-plain" ~style_class:"flex items-center" ~text:it.title []
   | crumbs, _ -> breadcrumb crumbs
 
@@ -139,7 +155,7 @@ let item_header st idx (it : Sidebar_state.item) =
           ]
         [ dom ~key:("arrow-" ^ it.key) ~tag:"span"
             ~style_class:"opacity-50 hover:opacity-100 flex items-center pr-1"
-            [ dom ~tag:"i" ~style_class:"ti ti-chevron-down" [] ]
+            [ Icons.icon "chevron-down" ]
         ; dom ~key:("ht-" ^ it.key)
             ~style_class:
               "ml-1 font-medium text-sm overflow-hidden whitespace-nowrap"
@@ -152,15 +168,34 @@ let item_header st idx (it : Sidebar_state.item) =
             ~events:"click"
             ~on_dom_event:(fun name _ ->
               if name = "click" then Sidebar_state.open_item_menu st it.key)
-            [ dom ~tag:"i" ~style_class:"ti ti-dots" [] ]
+            [ Icons.icon "dots" ]
         ; dom ~key:("close-" ^ it.key) ~tag:"button"
             ~style_class:"px-2 py-2 h-8 w-8 text-muted-foreground"
             ~attrs:[ ("title", t "Close") ]
             ~events:"click"
             ~on_dom_event:(fun name _ ->
               if name = "click" then Sidebar_state.remove_item st it.key)
-            [ dom ~tag:"i" ~style_class:"ti ti-x" [] ] ]
+            [ Icons.icon "x" ] ]
     ]
+
+(* cljs sidebar-page-properties: ghost button "Open properties" over the
+   (collapsed) properties list — rendered for page-backed sidebar items *)
+let sidebar_props_row (it : Sidebar_state.item) =
+  if it.kind = "contents" || it.kind = "page" then
+    dom ~key:("props-" ^ it.key) ~style_class:"-mb-8"
+      [ dom ~style_class:"ls-sidebar-page-properties flex flex-col gap-2 mt-2"
+          [ dom
+              [ dom ~tag:"button"
+                  ~style_class:
+                    "ui__button inline-flex items-center px-1 \
+                     text-muted-foreground h-7 text-sm"
+                  ~events:"click" ~on_dom_event:(fun _ _ -> ())
+                  [ dom ~tag:"span" ~style_class:"text-xs"
+                      ~text:(t "Open properties") [] ]
+              ]
+          ]
+      ]
+  else dom ~key:("props-none-" ^ it.key) []
 
 let item_body idx (it : Sidebar_state.item) =
   let n = string_of_int idx in
@@ -172,10 +207,14 @@ let item_body idx (it : Sidebar_state.item) =
       ]
     ~style_class:"sidebar-panel-content px-2 initial"
     [ dom ~key:("page-" ^ it.key) ~style_class:"page"
-        [ dom ~key:("pbi-" ^ it.key) ~style_class:"ls-page-blocks"
+        [ sidebar_props_row it
+        ; dom ~key:("pbi-" ^ it.key) ~style_class:"ls-page-blocks"
             [ dom ~key:("pbin-" ^ it.key)
                 ~style_class:"page-blocks-inner relative"
-                (List.map Tree.block_row it.blocks) ] ] ]
+                (List.map (Tree.block_row ~scope:"sidebar") it.blocks)
+            ]
+        ]
+    ]
 
 let sidebar_item st idx (it : Sidebar_state.item) =
   dom ~key:("item-" ^ it.key)
@@ -208,8 +247,7 @@ let inner st =
 let render (ms : Model.t Signal.signal) : t =
   let st = Sidebar_state.ensure ms in
   dom ~key:"rs-root"
-    [ toggle_button
-    ; dom ~key:"rs-resizer" ~style_class:"resizer" []
+    [ dom ~key:"rs-resizer" ~style_class:"resizer" []
     ; if_
         ~test:
           (Signal.map

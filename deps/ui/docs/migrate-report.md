@@ -40,6 +40,33 @@ selecting without an explicit Escape.
 `"ArrowUp" when shift` shadows `meta/alt+shift` combinations. Modifier combos
 must be ordered most-specific first in any match-based key dispatch.
 
+### Toasts render newest-first and nest under the shui contract
+The tests read `.ui__toast` by position — index 0 must be the newest toast.
+Each toast also needs the DOM nesting the shui stylesheet expects (viewport
+→ `.ui__toast` → close `button`); flattening it breaks dismissal selectors.
+
+### `focus_end` must not call `setSelectionRange` on non-text inputs
+Selection APIs throw `InvalidStateError` on inputs like `type=checkbox`.
+The cljs helper silently no-ops there; the LUI port must guard the same way
+or property forms crash on focus.
+
+### Property names are validated client-side before the worker call
+cljs runs `valid_property_name` (non-blank, no leading `#`, etc.) before
+`set-block-property` and shows the invalid-name toast without touching the
+worker. Doing it server-side changes toast text/timing and fails the
+name-validation test.
+
+### Async page loads need a latest-wins generation guard
+`resolve`, `goto_page`, `refresh_page` and block-zoom all fetch
+asynchronously; an older in-flight load resolving last overwrote the newer
+page. `Runtime.load_gen` (bump on initiation, commit only when still
+current) plus `exit_edit` at navigation entry points — the e2e
+`wait-editor-visible` probe was passing on the *old* page's stale editor.
+
+### Same-route hash changes must not emit `Navigate_to`
+A hashchange to the already-current route re-triggered the whole load path
+(stale commits + flicker); cljs only acts on real route transitions.
+
 ### Undo restores the DB but the open editor keeps a stale buffer
 Worker `apply_history_action` replays inverse outliner ops correctly; the
 bug was UI-side: after undo restored a title, the still-mounted textarea
@@ -130,6 +157,7 @@ LUI mounts `on_dom_event`-created elements after the mount fn returns —
 still see a detached node; use a bounded `setTimeout` retry like the
 focus fix above.
 
+
 ## Worker protocol edge cases
 
 - `apply-outliner-ops` op entries require nested `Array` args
@@ -154,14 +182,28 @@ focus fix above.
   `pointer-events: none` portal — clicks passed through the modal.
 - `ToggleChanged` echo suppression only matched `Checked`, swallowing
   tree-node `Expanded`/accordion `Selected` collapse events.
+- **Generation-desync wedge** (root cause of the cmdk create-page
+  timeouts): a `dom batch`/`store batch` `Invalid_argument` inside
+  `apply_pending_batch` leaves `pending_ops` populated while the store
+  already committed, so `runtime_generation` stays one behind and every
+  later flush fails `expected patch generation N, received N-1` —
+  permanently wedging rendering. Two trigger paths found and fixed in
+  `lui_runtime.ml`: (a) `dispatch` threw `unknown extension node` for
+  DOM events on `logseq-*` nodes dropped between listener install and
+  event delivery — now absorbed (`node_live` guard); (b) a node created
+  and dropped within one pending batch left a `create-*`/`drop-node`
+  group that cannot replay post-commit — `enqueue_drop` now prunes all
+  queued ops mentioning such a node instead of emitting the drop.
+- Same-batch prop ops on dropped nodes resolve through a pre-batch
+  mirror (`lui_web_apply.node_record`) so the DOM element, still
+  attached at that point in the op stream, can take the write.
+- DOM `removeChild`/`MoveChild` ops now detach nodes from their actual
+  DOM parent instead of assuming the recorded parent (stale tree state
+  after navigation raced removals).
 
 ## Open / intermittent issues
 
-- cmdk "Create page called 'X'" row occasionally never appears for ~10s.
-  The create row previously depended on the worker search resolving; we now
-  upsert it synchronously on input. Root cause of the search hang itself is
-  still unknown — possibly a stale-`gen` drop or a rejected `search-blocks`
-  promise that logs only to console.
+- None blocking; the cmdk create-page wedge is fixed (see above).
 
 ## Process notes
 
@@ -441,6 +483,22 @@ Contracts discovered while making `logseq.e2e.commands-basic-test` green
   remount; the title editor now focuses explicitly after `Title_edit_start`
   and places the caret at the end.
 
+## Right sidebar (e2e: `right_sidebar_basic_test`)
+
+- **`app.set_state_from_store` was a stub**: the test drives
+  `set_state_from_store(['ui/radix-color'], 'none')` /
+  `(['ui/system-theme?'], false)` and asserts
+  `documentElement.dataset.color`. cljs `set-state!` assoc-in's the app
+  atom and subscriptions apply effects (`data-color` =
+  `(or :ui/radix-color "logseq")`, system-theme → `data-theme` follows
+  `prefers-color-scheme`). Our sdk returned `resolved_nil` for every key.
+  Implemented the observable effects for `ui/radix-color` (dataset.color +
+  `ui/radix-color` storage) and `ui/system-theme?` (storage + theme
+  recompute); unknown keys remain no-ops.
+- **Boot hardcoded `data-color="logseq"`**: cljs reads
+  `storage/get :ui/radix-color` at init; boot.ml now unquotes the stored
+  value the same way.
+
 ## Multi-tabs / cross-tab sync (e2e: `multi_tabs_basic_test`)
 
 - **Worker side is healthy**: `logseq.api.append_block_in_page` propagates to
@@ -476,6 +534,77 @@ Contracts discovered while making `logseq.e2e.commands-basic-test` green
   `slash-menu-filter-scroll-and-cleanup-test` sees
   `a.menu-link.chosen` count=2. The properties popover should be removed
   or folded into the main autocomplete.
+
+## Embeds
+
+Implementation: slash "Node embed" is `ac_kind Embed_ref` in
+`popups_state.ml`; picking a page calls `Editor_embed.insert`, which
+issues `insert-blocks` with `sibling`, `replace-empty-target`, the page
+name as title, and `block/link` → the target page db id (new
+`block_map ~link` arg in `outliner_ops.ml`). Blocks with `block/link`
+render their linked page's children inside the block-children container;
+the row carries `.embed-block` plus `originalblockid`/`data-embed`
+attrs. `Editor_state.children_of` returns `block_embed_children` when
+`block_link` is set, so `find`/`flat_visible`/prev-next traversals see
+embedded rows. `fill_embed_children` (per-`block/link`
+`thread-api/get-page-blocks-tree`, ancestor self-embed guard,
+`Promise.catch → []`) runs in `refresh_page`, `goto_page`, and the zoom
+route. Embed ops never move embedded children — outdent of a block
+after an embed uses `parent_original` (the embed row's real parent),
+matching the cljs fix for `indent-outdent-embed-page-test`.
+
+### `.block-content` must be UNMOUNTED while editing
+`.block-content.inline{display:flex}` (style.css) beats `.hidden
+{display:none}` — class-based hiding cannot collapse it, and its
+flex sibling squeezes `.editor-wrapper` to width 0 (Playwright reports
+the textarea "hidden"). Keeping it mounted-but-hidden also leaves a
+stale `.block-title-wrap` that `consecutive-backspace` counts. Upstream
+solution adopted: `content_or_editor` swaps content↔editor via `dyn`,
+unmounting `.block-content` entirely.
+
+### Editing is scoped per container
+`S.editing` is global, but the same block renders in main content AND
+the right sidebar. Without a scope, both trees mounted a textarea with
+id `edit-block-<uuid>` → Playwright strict-mode violation in
+`references-embeds-and-mounted-instance-refresh-test` (`w/fill
+util/editor-q`). `editing` now carries `scope` ("main"/"sidebar"):
+`block_row ~scope` threads it down, `content_or_editor` only mounts the
+editor in the scope where the click landed (`closest
+".cp__right-sidebar"`), and `merge/split/delete` paths preserve the
+incoming scope.
+
+### Linked references are grouped by source page
+cljs `grouped-blocks-container` renders `.references` as
+`.references-blocks-item` groups, each headed by `page-cp` (the
+referencing page title). A flat row list never shows the source page
+name, so `.references :has-text(<source-page>)` fails. `page.ml`
+`refs_grouped` groups on `block/page-name` (already emitted per ref row
+by `with_explicit_ref_fields`) and emits a `.page-ref` link per group.
+
+### cmdk create-row `idx = -1` race
+`on_input` → `upsert_create` inserts the "Create page called …" row with
+`idx = -1` before the ~100ms-debounced `apply_results` renumbers; an
+index-based click dispatch silently no-ops in that window. Clicks now
+resolve via a stable `data-item-key` attr + key lookup in `cmdk_view.ml`
+instead of `data-item-index`.
+
+### Stale `db-worker.js` after merges
+`static/js/db-worker.js` is a build artifact — after merging branches
+that touch `deps/db-worker`, rebuild it (`dune build js_api` + `vite
+build` there). A stale bundle misses new endpoints and throws
+`MelangeError: Dispatcher.Exn_info` ("not found thread-api: …") as
+unhandled rejections that break unrelated flows (observed: missing
+`thread-api/get-unlinked-refs` broke `graph/new-graph`).
+
+### LUI `previous_nodes` batch-ordering fix is local-only
+The fix for prop ops targeting nodes dropped earlier in the same patch
+batch lives ONLY in `~/.opam/5.5.0/.opam-switch/sources/lui`
+(`lui_web_apply.ml` / `lui_web_extensions.ml`) and is installed into the
+switch, but is NOT committed to `logseq/lui` — the opam pin tracks
+`#main`, so any fresh `install-opam-deps.sh` run silently reverts it.
+Needs an upstream PR.
+
+||||||| dd51ac8b86
 
 ## Plugins (e2e: `plugins_basic_test`, `plugins_marketplace_test`)
 
@@ -543,7 +672,7 @@ Contracts discovered while making `logseq.e2e.commands-basic-test` green
 | textarea 文本同步 | React 同时维护 value+textContent | `extension/dom_adapter.ml`（input 事件同步 textContent；text prop 跳过冗余 .value 写入）；上游 `lui_web_props.set_text_control_value` 已同步（lui PR #68） |
 | 页面标题编辑（点击→textarea→Enter 提交）| page.cljs title editor | `src/pages/page.ml` `title_editor`/`commit`（`String.trim` 后 `Page_ops.rename`）|
 | 标题上打 tag（# → popup）| editor tag popup | `src/popups/popups_state.ml` `emit`/`apply_tag` — `.ls-page-title` 内直接 splice value/textContent（`ls:editor-insert` 不覆盖标题 textarea）|
-| slash/`#` 命令弹窗 | editor autocomplete | `src/cmdk/` + `popups_state.ml`（`/`,`#`,`[[`,`((`,`:` 触发，`.ui__popover-content`，`a.menu-link.chosen`）|
+| slash/`#` 命令弹窗 | editor autocomplete | `src/cmdk/` + `popups_state.ml`（`/`,`#`,`[[`,`:` 触发；`((` 为已废弃写法，仍打开同一 node-reference 弹窗，`.ui__popover-content`，`a.menu-link.chosen`）|
 | cmdk (Meta+K) | ui.search | `src/cmdk/cmdk_state.ml`/`cmdk_view.ml`（`.cp__cmdk-search-input` + testid 结果行）|
 | Undo/Redo（图级作用域）| outliner history per repo | `editor_actions.undo/redo` → worker `apply_history_action`；`resync_open_editor` 回写打开的 buffer |
 | 左/右 sidebar | frontend.components.right-sidebar / left | `src/sidebar/`（`#left-sidebar` 单实例、right sidebar panels）|
@@ -559,3 +688,107 @@ Contracts discovered while making `logseq.e2e.commands-basic-test` green
 - `lui_web_dom_ext`（lui PR #68）：通用 `lui-dom-<tag>` 扩展族（attrs/events/text + dom-event payload 含 selectionStart/End/Direction），textarea textContent 同步。
 - stale-node 容错（lui PR #67）：unmounted 节点上的事件/属性写入不再崩溃或卡住批次。
 - dropdown dismiss / modal hit-testing / retained-store 顺序（lui PR #65）。
+
+
+## Graph navigation
+
+`logseq.e2e.graph-navigation-basic-test` green: 8 tests, 29 assertions.
+
+### Route loading contract
+
+- `Router.resolve` = `parse_hash` → `Navigate_to` → `load_route` → `flush`.
+  `Model.Page s` resolves via `thread-api/get-page-route-info` (name /
+  uuid / lookup-ref all accepted), then `fetch_blocks`
+  (`thread-api/get-page-blocks-tree`), then `Page_loaded` + `fetch_refs`.
+- Worker `sync-db-changes` broadcasts dispatch to `Router.reload`, which
+  re-runs `load_route` for the current route WITHOUT `Navigate_to` — the
+  existing `route_page` stays mounted until the fresh one lands (no blank
+  flash). This broadcast fires on every committed tx, including ops the
+  page itself just issued.
+- **Stale-load guard (load-bearing)**: every async page loader re-checks
+  `!Runtime.current_route` before sending `Page_loaded`
+  (`router.ml` `stale`, `outliner_ops.refresh_page`). Without it, a reload
+  for route A started before a navigate to route B resolves last and
+  overwrites `route_page` — the view renders page A under route B and the
+  editor never appears on the new page. The guard buys nothing for
+  loaders keyed off a different ref (`Journals_loaded` etc. are
+  route-independent).
+
+### Block tags on page load
+
+- `Decode.block_of_wire` reads `block/tags` into `block_tag_ids`; items
+  may arrive as `Wire.Int`, `Wire.Int64`, or `Map {db/id}`.
+- `Outliner_ops.resolve_block_tags` batch-resolves titles through
+  `thread-api/get-blocks` `[{id, opts:{}}]` → rows of `{block, id}` and
+  fills `block_tags`. `Tree.tags_el` renders `.block-tags > .block-tag`
+  chips, skipping tags whose `#tag` text still appears in `block_title`.
+- ALL THREE `get-page-blocks-tree` consumers must call
+  `resolve_block_tags`: `router.fetch_blocks`, `sidebar_state` local
+  `fetch_blocks`, `cmdk_state.load_page`. Missing one leaves
+  `block_tags=[]` → no `.block-tag` chip after `apply_tag` (the
+  `sync-db-changes` reload races the `Page_loaded` from `refresh_page`
+  and used to win).
+
+### Create-page → editor flow
+
+`apply-outliner-ops create-page` → `goto_page` (`get-case-page` →
+`load_page` → `Navigate_to` + `Page_loaded` + `set_location_hash
+"#/page/uuid"`) → `Editor_actions.append_block` inserts the first block
+and sets `S.editing` → `.editor-wrapper textarea` mounts. Search's
+"Create page called 'X'" row is upserted synchronously on input (worker
+search may lag).
+
+### Tag application (`popups_state.apply_tag`)
+
+- Existing class (`db/ident` present) → `save_and_tag`.
+- Plain page → `thread-api/convert-page-to-tag` → `save_and_tag`.
+- Otherwise → `create_and_tag`. `save_and_tag` =
+  `apply_and_refresh [save_block; set_block_property "block/tags"
+  (Wire.Int dbid)]`.
+
+### Misc contracts
+
+- `Sdk_config.write_config` must include a `block/uuid` on the file-block
+  map (worker file-block schema requires it); `get_configs` treats all
+  four positional args as keys.
+- `.toolbar-dots-btn` belongs only to the header (cljs convention); the
+  sidebar "More" button uses `.sidebar-dots-btn` — Playwright strict
+  mode fails on a second `.toolbar-dots-btn`.
+
+
+## Block/page references (e2e: `reference_basic_test`)
+
+- **Copy inside an editing block is a block-ref copy**: cljs
+  `shortcut-copy` (handler/editor.cljs) on a collapsed caret writes
+  `[[<block-uuid>]]` to the clipboard (`copy-current-block-ref` →
+  `ref/->page-ref`); only a non-collapsed selection is a native text
+  copy. The OCaml `on_copy` handled only selection-mode copy, so
+  editing-mode mod+c silently wrote nothing. Fixed in
+  `editor_keys.ml`: collapsed selection in an editing block does
+  `clipboardData.setData("text/plain", "[[" ^ uuid ^ "]]")` +
+  preventDefault; paste then falls through `paste_into_editor` to a
+  native textarea insert (internal `S.clipboard` stays empty).
+- **`[[x]]`/`((uuid))` render `[[`/`]]` bracket spans**: cljs
+  `page-reference` always emits `span.page-reference[data-ref]` +
+  `span.text-gray-500.bracket` "[" "]"" around `a.page-ref`; `((uuid))`
+  routes through the same component. The OCaml renderer emitted only
+  bare `a.page-ref`/`a.tag`, so `:text('b1[[b2]]')` never matched.
+  `#tag` is different: cljs routes it through `page-cp` with
+  `:tag? true` — `a.tag` with `#name`, no `.page-reference` wrapper,
+  no brackets.
+- **Uuid refs resolve the target's title and re-parse it**: cljs
+  `page-inner` calls `block-title` on the resolved block, so
+  `[[uuid]]` renders the block's full markup recursively. A uuid that
+  resolves to a *page* entity renders plain title text instead. The
+  OCaml `resolved_ref` pulls `[:block/title :block/name]` in one
+  `thread-api/pull` (`block/name` present = page → plain text;
+  absent = block → `parse` recursion). Non-uuid `[[name]]` still
+  renders the raw name — cljs resolves it to the unique title.
+- **`:ref-set` suppression is required to terminate cycles**: cljs
+  seeds the ref-set with the enclosing block's uuid on the first ref
+  and conjs `{enclosing-uuid, ref-target}` per nesting level; a ref
+  whose target is in the set renders nothing (not even the wrapper).
+  Mirrored via `~refs`/`~self` params on `Render_inline.parse` +
+  `Render.title` (block uuid passed from `content_el`): without it,
+  `b1[[u3]]` → `u3` title → `[[u2]]` → `u2` title → `[[u1]]` looped
+  forever (each level a new thread-api pull + dyn mount).

@@ -21,7 +21,13 @@ let sync_buffer uuid v =
       match st.S.editing with
       | Some e when e.uuid = uuid ->
           { st with S.editing = Some { e with S.buffer = v } }
-      | _ -> st)
+      | _ -> st);
+  (* cljs renders the buffer as the textarea's text child; keep
+     textContent tracking .value (buffer writes are silent, so the
+     text_signal in tree.ml never fires on keystrokes) *)
+  match D.textarea_of uuid with
+  | Some el -> D.el_set_text_content el v
+  | None -> ()
 
 (* retry until the textarea mounts — a slow apply+refresh can take
    longer than the fixed delays the old version used *)
@@ -75,13 +81,19 @@ let with_focus_after uuid caret p =
            D.set_timeout apply_focus 0;
            Js.Promise.resolve ()))
 
+(* persisted/worker truth; display_title layers committed-but-unrefreshed
+   buffers on top so exit-edit paints the saved text on the first frame *)
 let model_title uuid =
   match S.find uuid with Some b -> b.Model.block_title | None -> ""
 
-let save_if_dirty uuid =
-  let buf = live_buffer uuid in
-  if buf <> model_title uuid then
-    ignore (Ops.apply_parsed_and_refresh ~rest:[] [ (uuid, buf) ])
+let display_title uuid = S.title_for uuid (model_title uuid)
+
+let commit uuid buf =
+  if buf <> display_title uuid then (
+    S.override_title uuid buf;
+    ignore (Ops.apply_and_refresh [ Ops.save_block uuid buf ]))
+
+let save_if_dirty uuid = commit uuid (live_buffer uuid)
 
 (* deferred blur: committing synchronously on mousedown re-renders the
    tree between mousedown and mouseup, so the browser retargets the click
@@ -94,32 +106,37 @@ let clear_pending_blur () = pending_blur_uuid := None
 
 (* ---- enter / exit ---- *)
 
-let enter_edit uuid caret =
+let enter_edit ?(scope = "main") uuid caret =
   clear_pending_blur ();
   (match S.editing () with
   | Some e when e.uuid <> uuid -> save_if_dirty e.uuid
   | _ -> ());
   match S.find uuid with
-  | Some b ->
-      S.set (fun st ->
-          { st with
-            S.editing =
-              Some { uuid; buffer = String.trim b.Model.block_title }
-          ; selected = S.String_set.empty
-          ; anchor = None
-          });
-      request_focus uuid caret
+      | Some _b ->
+          (* stored titles are id-ref form; the edit buffer shows page names
+             (cljs id-ref->title-ref) *)
+          ignore
+            (Ops.title_for_edit (String.trim (display_title uuid))
+             |> Js.Promise.then_ (fun buffer ->
+                    S.set (fun st ->
+                        { st with
+                          S.editing = Some { uuid; buffer; scope }
+                        ; selected = S.String_set.empty
+                        ; anchor = None
+                        });
+                    request_focus uuid caret;
+                    Js.Promise.resolve ()))
   | None -> ()
-
-let commit_buf uuid buf =
-  if buf <> model_title uuid then
-    ignore (Ops.apply_parsed_and_refresh ~rest:[] [ (uuid, buf) ])
 
 let exit_edit ~select =
-  match S.editing () with
-  | None -> ()
-  | Some e ->
+  if S.ready () then
+    match S.editing () with
+    | None -> ()
+    | Some e ->
       let buf = live_buffer e.uuid in
+      (* set the override before the state change so the post-edit render
+         already paints the committed text *)
+      if buf <> model_title e.uuid then S.override_title e.uuid buf;
       S.set (fun st ->
           { st with
             S.editing = None
@@ -127,7 +144,7 @@ let exit_edit ~select =
               (if select then S.String_set.singleton e.uuid else st.selected)
           ; anchor = (if select then Some e.uuid else st.anchor)
           });
-      commit_buf e.uuid buf
+      commit e.uuid buf
 
 (* click outside the editor commits without selecting *)
 let blur_commit () =
@@ -135,8 +152,21 @@ let blur_commit () =
   | None -> ()
   | Some e ->
       let buf = live_buffer e.uuid in
+      if buf <> model_title e.uuid then S.override_title e.uuid buf;
       S.set (fun st -> { st with S.editing = None });
-      commit_buf e.uuid buf
+      commit e.uuid buf
+
+(* route change: persist the live buffer without refreshing — the
+   navigation itself reloads whatever route is current *)
+let flush_edit () =
+  if S.ready () then
+    match S.editing () with
+    | None -> ()
+  | Some e ->
+      let buf = live_buffer e.uuid in
+      S.set (fun st -> { st with S.editing = None });
+      if buf <> model_title e.uuid then
+        ignore (Ops.apply [ Ops.save_block e.uuid buf ])
 
 let schedule_blur_commit () =
   match S.editing () with
@@ -165,6 +195,12 @@ let drop_own_order_list uuid buf parent_ordered =
       | Some b -> b.Model.block_order_list <> None
       | None -> false)
 
+(* cljs insert-as-sibling?: every insert on the Library page lands as a
+   sibling *page* — library children are always page-typed *)
+let library_context () =
+  match !Runtime.current_page with
+  | Some p -> p.Model.page_is_library
+  | None -> false
 let split_at_cursor uuid =
   match (S.editing (), S.find uuid) with
   | Some e, Some b when e.uuid = uuid ->
@@ -200,7 +236,9 @@ let split_at_cursor uuid =
                    ; Ops.insert_blocks [ a.(1) ] uuid ~sibling ])
         in
         S.set_silent (fun st ->
-            { st with S.editing = Some { uuid = new_uuid; buffer = after } });
+            { st with
+              S.editing =
+                Some { uuid = new_uuid; buffer = after; scope = e.scope } });
         with_focus_after new_uuid 0 p
   | _ -> ()
 
@@ -211,17 +249,24 @@ let insert_sibling_after uuid =
   | Some e, Some b when e.uuid = uuid ->
       let buf = live_buffer uuid in
       let new_uuid = Platform.random_uuid () in
-      let sibling = S.is_collapsed uuid || b.Model.block_children = [] in
+      let library = library_context () in
+      let sibling =
+        library || S.is_collapsed uuid || b.Model.block_children = []
+      in
       let p =
         Ops.block_map_parsed uuid buf
         |> Js.Promise.then_ (fun m ->
                Ops.apply_and_refresh ~opts:(Ops.op_opts "insert-blocks")
                  [ Ops.op "save-block" [ m; Wire.Map [] ]
-                 ; Ops.insert_blocks [ Ops.block_map ~title:"" new_uuid ]
+                 ; Ops.insert_blocks
+                     [ Ops.block_map ~title:"" ~page:library new_uuid ]
                      uuid ~sibling ])
       in
       S.set_silent (fun st ->
-          { st with S.editing = Some { uuid = new_uuid; buffer = "" } });
+          { st with
+            S.editing =
+              Some { uuid = new_uuid; buffer = ""; scope = e.scope }
+          });
       with_focus_after new_uuid 0 p
   | _ -> ()
 
@@ -283,17 +328,23 @@ let merge_prev uuid =
                 ; Ops.save_block prev_uuid (prev.Model.block_title ^ buf)
                 ]
             in
-            S.set_silent (fun st ->
-                { st with
-                  S.editing =
-                    Some
-                      { uuid = prev_uuid
-                      ; buffer = prev.Model.block_title ^ buf
-                      }
-                });
-            with_focus_after prev_uuid
-              (String.length prev.Model.block_title)
-              (Ops.apply_and_refresh ~opts:(Ops.op_opts "delete-blocks") ops)))
+            ignore
+              (Ops.title_for_edit (String.trim prev.Model.block_title)
+               |> Js.Promise.then_ (fun pbuf ->
+                      S.set_silent (fun st ->
+                          { st with
+                            S.editing =
+                              Some
+                                { uuid = prev_uuid
+                                ; buffer = pbuf ^ buf
+                                ; scope = e.scope
+                                }
+                          });
+                      with_focus_after prev_uuid
+                        (String.length pbuf)
+                        (Ops.apply_and_refresh
+                           ~opts:(Ops.op_opts "delete-blocks") ops);
+                      Js.Promise.resolve ()))))
   | _ -> ()
 
 (* children of b except [except_uuid] -> move under target *)
@@ -331,29 +382,39 @@ let merge_next uuid =
                  else [])
               @ [ Ops.delete_blocks [ uuid ] ]
             in
-            S.set_silent (fun st ->
-                { st with
-                  S.editing =
-                    Some
-                      { uuid = next_uuid
-                      ; buffer = String.trim next.Model.block_title
-                      }
-                });
-            with_focus_after next_uuid 0
-              (Ops.apply_and_refresh ~opts:(Ops.op_opts "delete-blocks") ops))
+            ignore
+              (Ops.title_for_edit (String.trim next.Model.block_title)
+               |> Js.Promise.then_ (fun nbuf ->
+                      S.set_silent (fun st ->
+                          { st with
+                            S.editing =
+                              Some
+                                { uuid = next_uuid
+                                ; buffer = nbuf
+                                ; scope = e.scope
+                                }
+                          });
+                      with_focus_after next_uuid 0
+                        (Ops.apply_and_refresh
+                           ~opts:(Ops.op_opts "delete-blocks") ops);
+                      Js.Promise.resolve ())))
           else (
             let ops =
               move_children_ops next uuid @ [ Ops.delete_blocks [ next_uuid ] ]
             in
-            S.set_silent (fun st ->
-                { st with
-                  S.editing =
-                    Some { e with S.buffer = buf ^ next.Model.block_title }
-                });
-            with_focus_after uuid (String.length buf)
-              (Ops.apply_parsed_and_refresh
-                 ~opts:(Ops.op_opts "delete-blocks")
-                 ~rest:ops [ (uuid, buf ^ next.Model.block_title) ])))
+            ignore
+              (Ops.title_for_edit (String.trim next.Model.block_title)
+               |> Js.Promise.then_ (fun nbuf ->
+                      S.set_silent (fun st ->
+                          { st with
+                            S.editing =
+                              Some { e with S.buffer = buf ^ nbuf }
+                          });
+                      with_focus_after uuid (String.length buf)
+                        (Ops.apply_parsed_and_refresh
+                           ~opts:(Ops.op_opts "delete-blocks") ~rest:ops
+                           [ (uuid, buf ^ nbuf) ]);
+                      Js.Promise.resolve ()))))
   | _ -> ()
 
 (* ---- selection ---- *)
@@ -485,9 +546,20 @@ let indent_or_outdent ~indent =
                 | None -> ())
             | None -> ())
           uuids;
+      (* outdent of a block rendered inside a page embed must move it next
+         to the embed block, not inside the linked page — cljs
+         get-first-block-original reads originalblockid off the ancestor
+         .ls-block; the model parent is the embed block *)
+      let parent_original =
+        match S.find_parent focus with
+        | Some (Some p, _) when p.Model.block_link <> None ->
+            p.Model.block_uuid
+        | _ -> None
+      in
       with_focus_after focus
         (String.length (live_buffer focus))
-        (Ops.apply_and_refresh [ Ops.indent_outdent uuids indent ])
+        (Ops.apply_and_refresh
+           [ Ops.indent_outdent ?parent_original uuids indent ])
 
 let move_blocks_up_down up =
   match selected_uuids () with
@@ -528,7 +600,11 @@ let delete_selection () =
                S.set_silent (fun st ->
                    { st with
                      S.editing =
-                        Some { uuid = pu; buffer = String.trim b.Model.block_title }
+                       Some
+                         { uuid = pu
+                         ; buffer = String.trim b.Model.block_title
+                         ; scope = "main"
+                         }
                    ; selected = S.String_set.empty
                    ; anchor = None
                    });
@@ -626,8 +702,10 @@ let paste_trees trees target_uuid ~replace_empty =
     [ Ops.paste_trees trees target_uuid ~replace_empty ]
 
 let paste_lines lines =
+  let library = library_context () in
   let blocks =
-    List.map (fun l -> Ops.block_map ~title:l (Platform.random_uuid ()))
+    List.map
+      (fun l -> Ops.block_map ~title:l ~page:library (Platform.random_uuid ()))
       lines
   in
   match selected_uuids () with
@@ -714,15 +792,25 @@ let paste_blocks ev =
 
 let toggle_collapse uuid =
   match S.find uuid with
-  | Some b when b.Model.block_children <> [] ->
-      let now = not (S.is_collapsed uuid) in
-      S.set (fun st ->
-          { st with
-            S.collapsed =
-              (if now then S.String_set.add uuid st.collapsed
-               else S.String_set.remove uuid st.collapsed)
-          });
-      ignore (Ops.apply [ Ops.collapse_expand [ (uuid, now) ] ])
+  | Some b when S.children_of b <> [] ->
+      if b.Model.block_default_collapsed && not (S.is_collapsed uuid) then
+        (* view-default collapse (page child on a non-Library page): a
+           click expands it locally without persisting — cljs
+           temp-collapsed? takes precedence over the default *)
+        S.set (fun st ->
+            { st with
+              S.expanded = S.String_set.add uuid st.expanded
+            })
+      else
+        let now = not (S.effective_collapsed b) in
+        S.set (fun st ->
+            { st with
+              S.collapsed =
+                (if now then S.String_set.add uuid st.collapsed
+                 else S.String_set.remove uuid st.collapsed)
+            ; S.expanded = S.String_set.remove uuid st.expanded
+            });
+        ignore (Ops.apply [ Ops.collapse_expand [ (uuid, now) ] ])
   | _ -> ()
 
 let undo () = ignore (Ops.undo ())
@@ -742,6 +830,7 @@ let wrap_selection uuid marker =
         ^ String.sub v e (n - e)
       in
       D.el_set_value el nv;
+      D.el_set_text_content el nv;
       D.el_set_selection_range el (s + String.length marker)
         (e + String.length marker);
       sync_buffer uuid nv
@@ -799,7 +888,10 @@ let append_block ?for_page () =
             | [] -> (puuid, false)
           in
           let stage st =
-            { st with S.editing = Some { uuid = new_uuid; buffer = "" } }
+            { st with
+              S.editing =
+                Some { uuid = new_uuid; buffer = ""; scope = "main" }
+            }
           in
           (* empty page: editor state is created at the first block_row
              mount, which happens inside this op's refresh — defer the
@@ -810,7 +902,9 @@ let append_block ?for_page () =
           with_focus_after new_uuid 0
             (Ops.apply_and_refresh
                [ Ops.insert_blocks
-                   [ Ops.block_map ~title:"" new_uuid ]
+                   [ Ops.block_map ~title:"" ~page:p.Model.page_is_library
+                       new_uuid
+                   ]
                    target ~sibling
                ]))
 
@@ -823,7 +917,7 @@ let pending_zoom : string option ref = ref None
 
 let zoom_to uuid =
   pending_zoom := Some uuid;
-  Platform.set_location_hash ("#/block/" ^ uuid)
+  Platform.set_location_hash (Runtime.nav_hash ("#/block/" ^ uuid))
 
 let consume_pending_zoom () =
   let z = !pending_zoom in

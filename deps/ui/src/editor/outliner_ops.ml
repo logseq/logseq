@@ -8,12 +8,49 @@ module S = Editor_state
 let kw k v = (Wire.Keyword k, v)
 let str k v = (Wire.String k, v)
 
-let block_map ?title uuid =
+(* cljs page-name-sanity-lc, cheap half: boundary slashes off + lowercase.
+   The worker recomputes the full sanity on save (outliner_core page_
+   branch), so this only needs to be close enough to key the insert. *)
+let page_name_sanity_lc (s : string) : string =
+  let s = String.trim s in
+  let n = String.length s in
+  let i = ref 0 in
+  while !i < n && String.unsafe_get s !i = '/' do
+    incr i
+  done;
+  let j = ref (n - 1) in
+  while !j >= !i && String.unsafe_get s !j = '/' do
+    decr j
+  done;
+  (if !j >= !i then String.sub s !i (!j - !i + 1) else "")
+  |> String.lowercase_ascii
+
+(* ~page:true page-ifies the new block (cljs outliner-insert-block!
+   library branch): tags #{logseq.class/Page} + block/name; the worker's
+   insert tx then dissocs block/page so the block lives only under
+   block/parent. ?link carries a [:block/link db-id] embed edge. *)
+let block_map ?title ?(page = false) ?link uuid =
   Wire.Map
     ([ str "block/uuid" (Wire.Uuid uuid) ]
     @ (match title with
-      | Some t -> [ str "block/title" (Wire.String t) ]
-      | None -> []))
+      | Some t ->
+          List.map
+            (fun (k, v) -> (Wire.String k, v))
+            (Block_parse.title_fields t)
+      | None -> [])
+    @
+    (if page then
+      [ ( Wire.String "block/tags"
+        , Wire.Set [ Wire.Keyword "logseq.class/Page" ] )
+      ; ( Wire.String "block/name"
+        , Wire.String (page_name_sanity_lc (Option.value title ~default:""))
+        )
+      ]
+    else [])
+    @ match link with
+      | Some db_id -> [ str "block/link" (Wire.Int db_id) ]
+      | None -> [])
+
 
 (* op entries are [:name [args]] — the args live in a nested seq; the
    worker's op_of_entry only accepts that shape (outliner_op.ml) *)
@@ -42,76 +79,6 @@ let markdown_heading_level s =
 let strip_markdown_heading s lvl =
   String.trim (String.sub (String.trim s) lvl (String.length (String.trim s) - lvl))
 
-let is_uuid_text s =
-  let n = String.length s in
-  n = 36 && s.[8] = '-' && s.[13] = '-' && s.[18] = '-' && s.[23] = '-'
-  && (let hex i =
-        let c = s.[i] in
-        (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')
-        || (c >= 'A' && c <= 'F')
-      in
-      let rec all i =
-        i >= n || (i = 8 || i = 13 || i = 18 || i = 23 || hex i)
-                   && all (i + 1)
-      in
-      all 0)
-
-(* cljs wrap-parse-block (subset): [[name]] and [[uuid]] in a title are
-   persisted as :block/refs entries, and [[name]] is rewritten to
-   [[uuid]] in block/title. The worker's resolve-page-refs looks up or
-   creates the page and the pipeline rebuilds :block/refs from the
-   [[uuid]] patterns. #[[...]] stays literal (tag conversion is a
-   separate cljs path). Returns (title', refs wire values). *)
-let extract_title_refs title =
-  let n = String.length title in
-  let buf = Buffer.create n in
-  let refs = ref [] in
-  let memo : (string, string) Hashtbl.t = Hashtbl.create 4 in
-  let uuid_of_name name =
-    let key = String.lowercase_ascii name in
-    match Hashtbl.find_opt memo key with
-    | Some u -> u
-    | None ->
-        let u = Platform.random_uuid () in
-        Hashtbl.add memo key u; u
-  in
-  let emit_ref inner u =
-    refs :=
-      (if is_uuid_text inner then
-         Wire.Array [ Wire.Keyword "block/uuid"; Wire.Uuid u ]
-       else
-         Wire.Map
-           [ str "block/uuid" (Wire.Uuid u)
-           ; str "block/title" (Wire.String inner)
-           ; str "block/name" (Wire.String (String.lowercase_ascii inner))
-           ; str "block/type" (Wire.String "page") ])
-      :: !refs
-  in
-  let rec scan i =
-    if i < n then begin
-      if i + 1 < n && title.[i] = '[' && title.[i + 1] = '['
-         && (i = 0 || title.[i - 1] <> '#')
-      then begin
-        match
-          try Some (String.index_from title (i + 2) ']')
-          with Not_found -> None
-        with
-        | Some k when k + 1 < n && title.[k + 1] = ']' && k > i + 2 ->
-            let inner = String.sub title (i + 2) (k - i - 2) in
-            let u = if is_uuid_text inner then inner else uuid_of_name inner in
-            Buffer.add_string buf "[["; Buffer.add_string buf u;
-            Buffer.add_string buf "]]";
-            emit_ref inner u;
-            scan (k + 2)
-        | _ -> Buffer.add_char buf title.[i]; scan (i + 1)
-      end else begin
-        Buffer.add_char buf title.[i]; scan (i + 1)
-      end
-    end
-  in
-  scan 0;
-  (Buffer.contents buf, List.rev !refs)
-
 (* The block map sent in a save-block op — shared by editor saves and
    sdk updateBlock. *)
 let saved_block_map uuid title =
@@ -120,38 +87,43 @@ let saved_block_map uuid title =
     | Some b -> b.Model.block_display_type
     | None -> None
   in
-  let refs_pairs title =
+  let fields t =
     match dt with
-    | Some _ -> [ str "block/title" (Wire.String title) ]
+    | Some _ -> [ str "block/title" (Wire.String t) ]
     | None ->
-        let title', refs = extract_title_refs title in
-        [ str "block/title" (Wire.String title')
-        ; str "block/refs" (Wire.List refs) ]
+        List.map
+          (fun (k, v) -> (Wire.String k, v))
+          (Block_parse.title_fields t)
   in
   match markdown_heading_level title with
   | Some lvl when dt <> Some "code" && dt <> Some "math" ->
       Wire.Map
         ([ str "block/uuid" (Wire.Uuid uuid) ]
-        @ refs_pairs (strip_markdown_heading title lvl)
+        @ fields (strip_markdown_heading title lvl)
         @ [ str "logseq.property/heading" (Wire.Int lvl) ])
   | _ ->
       Wire.Map
-        ([ str "block/uuid" (Wire.Uuid uuid) ]
-        @ refs_pairs (String.trim title))
+        ([ str "block/uuid" (Wire.Uuid uuid) ] @ fields (String.trim title))
 
 (* cljs save-block-aux! trims the value before persisting *)
 let save_block uuid title =
+  (* cljs save-block-aux! runs wrap-parse-block: title -> parsed
+     refs/tags + id-ref rewrite *)
   op "save-block" [ saved_block_map uuid title; Wire.Map [] ]
 
-let insert_blocks blocks target_uuid ~sibling =
+let insert_blocks ?(replace_empty_target = false) blocks target_uuid
+    ~sibling =
   op "insert-blocks"
     [ Wire.List blocks
     ; Wire.Uuid target_uuid
     ; Wire.Map
-        [ kw "sibling?" (Wire.Bool sibling)
-        ; kw "keep-uuid?" (Wire.Bool true)
-        ; kw "outliner-op" (Wire.Keyword "insert-blocks")
-        ]
+        ([ kw "sibling?" (Wire.Bool sibling)
+         ; kw "keep-uuid?" (Wire.Bool true)
+         ; kw "outliner-op" (Wire.Keyword "insert-blocks")
+         ]
+        @ if replace_empty_target then
+            [ kw "replace-empty-target?" (Wire.Bool true) ]
+          else [])
     ]
 
 let delete_blocks uuids =
@@ -174,9 +146,11 @@ let paste_block_maps (trees : Model.block list) =
         in
         let m =
           Wire.Map
-            ([ str "block/uuid" (Wire.Uuid u)
-             ; str "block/title" (Wire.String (String.trim b.Model.block_title))
-             ; str "block/level" (Wire.Int level) ]
+            (str "block/uuid" (Wire.Uuid u)
+             :: List.map
+                  (fun (k, v) -> (Wire.String k, v))
+                  (Block_parse.title_fields (String.trim b.Model.block_title))
+            @ [ str "block/level" (Wire.Int level) ]
             @ parent_kv)
         in
         let acc = m :: acc in
@@ -205,6 +179,15 @@ let move_blocks uuids target_uuid ~sibling =
     ; Wire.Map [ kw "sibling?" (Wire.Bool sibling) ]
     ]
 
+(* cljs :bottom? — append as last children of target *)
+let move_blocks_bottom uuids target_uuid =
+  op "move-blocks"
+    [ uuids_list uuids
+    ; Wire.Uuid target_uuid
+    ; Wire.Map
+        [ kw "sibling?" (Wire.Bool false); kw "bottom?" (Wire.Bool true) ]
+    ]
+
 (* move to the top of target's children — cljs :top? *)
 let move_blocks_top uuids target_uuid =
   op "move-blocks"
@@ -217,9 +200,19 @@ let move_blocks_top uuids target_uuid =
 let move_up_down uuids up =
   op "move-blocks-up-down" [ uuids_list uuids; Wire.Bool up ]
 
-let indent_outdent uuids indent =
-  op "indent-outdent-blocks"
-    [ uuids_list uuids; Wire.Bool indent; Wire.Map [] ]
+let indent_outdent ?parent_original uuids indent =
+  (* cljs indent-outdent-blocks! passes :parent-original = the embed block
+     when the moved block is rendered inside a page embed — outdent then
+     targets the linking block, not the embedded child's data parent *)
+  let opts =
+    match parent_original with
+    | Some u ->
+        Wire.Map
+          [ kw "parent-original"
+              (Wire.Map [ kw "block/uuid" (Wire.Uuid u) ]) ]
+    | None -> Wire.Map []
+  in
+  op "indent-outdent-blocks" [ uuids_list uuids; Wire.Bool indent; opts ]
 
 let collapse_expand pairs =
   op "collapse-expand-blocks"
@@ -269,22 +262,20 @@ let apply_template template_uuid target_uuid =
 (* mirror :block/collapsed? from the raw wire into editor state — the
    decoded Model.block drops it *)
 let rec collect_collapsed set (w : Wire.t) =
-  let set =
-    match
-      (Wire.map_get_uuid w "block/uuid", Wire.get w "block/collapsed?")
-    with
-    | Some u, Some (Wire.Bool true) -> S.String_set.add u set
-    | _ -> set
-  in
-  match Wire.get w "block/children" with
-  | Some (Wire.List xs) | Some (Wire.Array xs) ->
+  match w with
+  | Wire.Array xs | Wire.List xs ->
       List.fold_left collect_collapsed set xs
   | _ -> (
-      (* a top-level list of blocks (zoom refresh) — walk each item *)
-      match w with
-      | Wire.List xs | Wire.Array xs ->
-          List.fold_left collect_collapsed set xs
-      | _ -> set)
+      let set =
+        match
+          (Wire.map_get_uuid w "block/uuid", Wire.get w "block/collapsed?")
+        with
+        | Some u, Some (Wire.Bool true) -> S.String_set.add u set
+        | _ -> set
+      in
+      match Wire.get w "block/children" with
+      | Some children -> collect_collapsed set children
+      | None -> set)
 
 let set_collapsed set =
   let apply st = { st with S.collapsed = set } in
@@ -293,33 +284,77 @@ let set_collapsed set =
   if S.ready () then S.set_silent apply
   else S.defer_init apply
 
+(* Fetch the linked entity's blocks for every :block/link (embed) block in
+   a decoded tree and attach them as block_embed_children. Recurses into
+   fetched trees; [ancestors] is the chain of linked db ids guarding
+   self-embed loops, [collapsed] accumulates :block/collapsed? flags from
+   the embed wires (Decode drops the flag). *)
+let rec fill_embed_children repo ancestors collapsed
+    (blocks : Model.block list) : Model.block list Js.Promise.t =
+  let rec go acc = function
+    | [] -> Js.Promise.resolve (List.rev acc)
+    | (b : Model.block) :: rest -> (
+        let children_p =
+          fill_embed_children repo ancestors collapsed
+            b.Model.block_children
+        in
+        let embed_p =
+          match b.Model.block_link with
+          | Some link_id when not (List.mem link_id ancestors) ->
+              Runtime.invoke3 "thread-api/get-page-blocks-tree"
+                (Wire.String repo) (Wire.Int link_id) Wire.Nil
+              |> Js.Promise.then_ (fun w ->
+                     collapsed := collect_collapsed !collapsed w;
+                     fill_embed_children repo (link_id :: ancestors)
+                       collapsed (Decode.blocks_of_wire w))
+              |> Js.Promise.catch (fun _ -> Js.Promise.resolve [])
+          | _ -> Js.Promise.resolve []
+        in
+        children_p
+        |> Js.Promise.then_ (fun children ->
+               embed_p
+               |> Js.Promise.then_ (fun embed_children ->
+                      go
+                        ({ b with
+                           Model.block_children = children
+                         ; block_embed_children = embed_children
+                         }
+                        :: acc)
+                        rest)))
+  in
+  go [] blocks
+
+let ancestors_of (page : Model.page) =
+  match page.Model.page_db_id with Some id -> [ id ] | None -> []
+
 (* block/tags arrives as {:db/id} stubs — cljs resolves tag entities live
-   off datascript; we batch-resolve titles via get-blocks and rewrite the
-   model before rendering. *)
+   off datascript; we batch-resolve title/ident/hidden via get-blocks and
+   rewrite the model before rendering. Internal classes (Page, Property,
+   …) and hidden tags never render as .block-tag chips, matching
+   db-class/internal-tags + block.cljs tags-cp. *)
+let internal_tag_ident (ident : string) : bool =
+  List.mem ident
+    [ "logseq.class/Page"; "logseq.class/Property"; "logseq.class/Tag";
+      "logseq.class/Root"; "logseq.class/Asset" ]
+
 let rec collect_tag_ids acc (b : Model.block) =
   List.fold_left collect_tag_ids (List.rev_append b.Model.block_tag_ids acc)
     b.block_children
 
-(* cljs block.cljs hides class tags on a node: entities whose
-   :logseq.property.class/hide-from-node is true (Quote-block, Code-block,
-   Math-block, ...) and the ldb/internal-tags idents when
-   show-tag-and-property-classes? is off (the only mode we support). *)
-let internal_tag_idents =
-  [ "logseq.class/Page"; "logseq.class/Property"; "logseq.class/Tag"
-  ; "logseq.class/Root"; "logseq.class/Asset" ]
-
+(* cljs block.cljs also hides a tag on a node when its entity carries
+   :logseq.property.class/hide-from-node (Quote-block, Code-block,
+   Math-block, ...). The worker's own hidden? flag is the primary signal —
+   the property is the fallback. *)
 let tag_hidden blk =
-  (match Wire.get blk "logseq.property.class/hide-from-node" with
-   | Some (Wire.Bool hidden) -> hidden
-   | _ -> false)
+  Option.bind (Wire.get blk "block/hidden?") Wire.as_bool = Some true
+  || Option.bind (Wire.get blk "hidden?") Wire.as_bool = Some true
   ||
-  match Wire.get blk "db/ident" with
-  | Some (Wire.Keyword ident) | Some (Wire.String ident) ->
-      List.mem ident internal_tag_idents
+  match Wire.get blk "logseq.property.class/hide-from-node" with
+  | Some (Wire.Bool hidden) -> hidden
   | _ -> false
 
-(* (db-id, title, ident, hidden) per tag entity *)
-let tag_titles repo ids : (int * string * string * bool) list Js.Promise.t =
+(* (db-id, (title, ident, hidden, uuid)) per tag entity *)
+let tag_titles repo ids : (int * (string * string * bool * string)) list Js.Promise.t =
   Runtime.invoke2 "thread-api/get-blocks" (Wire.String repo)
     (Wire.Array
        (List.map
@@ -353,11 +388,15 @@ let tag_titles repo ids : (int * string * string * bool) list Js.Promise.t =
                 with
                 | Some id, Some t ->
                     Some
-                      ( id, t
-                      , (match Wire.get blk "db/ident" with
-                         | Some (Wire.Keyword s) | Some (Wire.String s) -> s
-                         | _ -> "")
-                      , tag_hidden blk )
+                      ( id
+                      , ( t
+                        , (match Wire.get blk "db/ident" with
+                           | Some (Wire.Keyword s) | Some (Wire.String s) ->
+                               s
+                           | _ -> "")
+                        , tag_hidden blk
+                        , Option.value (Wire.map_get_uuid blk "block/uuid")
+                            ~default:"" ) )
                 | _ -> None)
               (Sdk_util.wire_elems w)))
 
@@ -373,25 +412,31 @@ let resolve_block_tags (blocks : Model.block list) : Model.block list Js.Promise
       | Some repo ->
           tag_titles repo ids
           |> Js.Promise.then_ (fun titles ->
+
                  let rec fill (b : Model.block) =
+                   let resolved =
+                     List.filter_map
+                       (fun i -> List.assoc_opt i titles)
+                       b.Model.block_tag_ids
+                   in
+                   let idents = List.map (fun (_, i, _, _) -> i) resolved in
+                   let visible =
+                     List.filter
+                       (fun (_, ident, hidden, _uuid) ->
+                         not hidden && not (internal_tag_ident ident))
+                       resolved
+                   in
                    { b with
                      Model.block_tags =
-                       List.filter_map
-                         (fun i ->
-                           List.find_map
-                             (fun (i', t, _, hidden) ->
-                               if i' = i && not hidden then Some t else None)
-                             titles)
-                         b.block_tag_ids
+                       List.map (fun (t, _, _, _) -> t) visible
+                   ; block_tag_uuids =
+                       List.map (fun (_, _, _, u) -> u) visible
                    ; block_tag_idents =
-                       List.filter_map
-                         (fun i ->
-                           List.find_map
-                             (fun (i', _, ident, _) ->
-                               if i' = i && ident <> "" then Some ident
-                               else None)
-                             titles)
-                         b.block_tag_ids
+                       List.map (fun (_, i, _, _) -> i) visible
+                   ; block_is_comments_area =
+                       List.mem "logseq.class/Comments" idents
+                   ; block_is_comment =
+                       List.mem "logseq.class/Comment" idents
                    ; block_children = List.map fill b.block_children
                    }
                  in
@@ -427,11 +472,17 @@ let resolve_page_tags repo (page : Model.page) : Model.page Js.Promise.t =
                       { page with
                         Model.page_tags =
                           List.filter_map
-                            (fun (i, t, ident, _) ->
+                            (fun (i, (t, ident, _hidden, _uuid)) ->
                               if List.mem i ids
                                  && ident <> "logseq.class/Page"
                               then Some t
                               else None)
+                            titles
+                      ; page_internal =
+                          List.exists
+                            (fun (i, (_, ident, _hidden, _uuid)) ->
+                              List.mem i ids
+                              && ident = "logseq.class/Page")
                             titles
                       }))
 
@@ -478,8 +529,10 @@ let fetch_unlinked_refs (p : Model.page) =
   | _ -> ()
 
 let refresh_page () : unit Js.Promise.t =
+  let route_at_start = !Runtime.current_route in
   match (!Runtime.current_repo, !Runtime.current_page) with
   | Some repo, Some page -> (
+      incr Runtime.load_gen;
       fetch_unlinked_refs page;
       let blocks_p =
         match !Runtime.current_route, page.Model.page_uuid with
@@ -498,18 +551,40 @@ let refresh_page () : unit Js.Promise.t =
       in
       blocks_p
       |> Js.Promise.then_ (fun blocks_w ->
-             set_collapsed (collect_collapsed S.String_set.empty blocks_w);
-             let blocks = Decode.blocks_of_wire blocks_w in
-             resolve_block_tags blocks
+             let collapsed = ref S.String_set.empty in
+             collapsed := collect_collapsed !collapsed blocks_w;
+             fill_embed_children repo (ancestors_of page) collapsed
+               (Decode.blocks_of_wire blocks_w)
              |> Js.Promise.then_ (fun blocks ->
-                    let page = { page with Model.page_blocks = blocks } in
-                    (match !Runtime.current_route with
-                     | Some (Model.Block_zoom _) ->
-                         Js.Promise.resolve page
-                     | _ -> resolve_page_tags repo page)
-                    |> Js.Promise.then_ (fun page ->
-                           Runtime.send (Action.Page_loaded page);
-                           Js.Promise.resolve ()))))
+                    let blocks =
+                      Decode.view_blocks ~library:page.Model.page_is_library
+                        blocks
+                    in
+                    Js.Promise.resolve blocks)
+             |> Js.Promise.then_ (fun blocks ->
+                    set_collapsed !collapsed;
+                    resolve_block_tags blocks
+                    |> Js.Promise.then_ (fun blocks ->
+                           let page =
+                             { page with Model.page_blocks = blocks }
+                           in
+                           (match !Runtime.current_route with
+                            | Some (Model.Block_zoom _) ->
+                                Js.Promise.resolve page
+                            | _ -> resolve_page_tags repo page)
+                           |> Js.Promise.then_ (fun page ->
+                                  (* the worker's tree is authoritative
+                                     again — drop committed-buffer title
+                                     overrides *)
+                                  S.clear_overrides ();
+                                  (* the user may have navigated while the
+                                     refetch was in-flight — never
+                                     overwrite the new route's page *)
+                                  if !Runtime.current_route = route_at_start
+                                  then
+                                    Runtime.send
+                                      (Action.Page_loaded page);
+                                  Js.Promise.resolve ())))))
   | Some _, None ->
       (* journals / other non-page views reload through the router hook *)
       !Runtime.reload_current_view ()
@@ -525,31 +600,39 @@ let cancel_pending_save () =
   Editor_dom.clear_timeout !save_timer;
   pending_save := None
 
-let apply ?(opts = Wire.Map []) ops : unit Js.Promise.t =
-  (* any structural op already carries the correct titles — a queued
-     keystroke save firing afterwards would clobber them *)
-  cancel_pending_save ();
-  match !Runtime.current_repo with
-  | None -> Js.Promise.resolve ()
-  | Some repo ->
-      Runtime.invoke3 "thread-api/apply-outliner-ops" (Wire.String repo)
-        (Wire.Array ops) opts
-      |> Js.Promise.then_ (fun _ -> Js.Promise.resolve ())
-      |> Js.Promise.catch (fun e ->
-             Platform.console_error
-               ( "apply-outliner-ops failed"
-               , String.concat ","
-                   (List.map
-                      (fun o ->
-                        match o with
-                        | Wire.Array (Wire.Array (Wire.Keyword name :: _) :: _)
-                        | Wire.List (Wire.Array (Wire.Keyword name :: _) :: _)
-                        | Wire.Array (Wire.Keyword name :: _) ->
-                            name
-                        | _ -> "?")
-                      ops)
-               , e );
-             Js.Promise.resolve ())
+let rec apply ?(opts = Wire.Map []) ops : unit Js.Promise.t =
+  (* cljs saves the editing buffer on keydown before structure ops —
+     flush the queued keystroke save instead of dropping it, so ops like
+     indent/move don't lose text typed within the debounce window *)
+  match !pending_save with
+  | Some (uuid, title) ->
+      pending_save := None;
+      apply [ save_block uuid title ]
+      |> Js.Promise.then_ (fun () -> apply ~opts ops)
+  | None -> (
+      Editor_dom.clear_timeout !save_timer;
+      match !Runtime.current_repo with
+      | None -> Js.Promise.resolve ()
+      | Some repo ->
+          Runtime.invoke3 "thread-api/apply-outliner-ops" (Wire.String repo)
+            (Wire.Array ops) opts
+          |> Js.Promise.then_ (fun _ -> Js.Promise.resolve ())
+          |> Js.Promise.catch (fun e ->
+                 Platform.console_error
+                   ( "apply-outliner-ops failed"
+                   , String.concat ","
+                       (List.map
+                          (fun o ->
+                            match o with
+                            | Wire.Array
+                                (Wire.Array (Wire.Keyword name :: _) :: _)
+                            | Wire.List
+                                (Wire.Array (Wire.Keyword name :: _) :: _)
+                            | Wire.Array (Wire.Keyword name :: _) -> name
+                            | _ -> "?")
+                          ops)
+                   , e );
+                 Js.Promise.resolve ()))
 
 let apply_and_refresh ?opts ops =
   apply ?opts ops
@@ -608,6 +691,73 @@ let schedule_save uuid title =
       400
 
 
+(* [[uuid]] / #[[uuid]] -> [[title]] / #title — the cljs
+   id-ref->title-ref pass the edit buffer gets when a block opens.
+   Resolves each uuid via thread-api/pull; unresolvable uuids stay
+   verbatim. *)
+let title_for_edit (title : string) : string Js.Promise.t =
+  let n = String.length title in
+  (* collect (start, end_excl, has_hash, uuid) tokens *)
+  let toks = ref [] in
+  let rec scan i =
+    if i + 3 >= n then ()
+    else if
+      title.[i] = '[' && title.[i + 1] = '['
+      && i + 40 <= n
+      && Block_parse.uuid_shaped (String.sub title (i + 2) 36)
+      && title.[i + 38] = ']' && title.[i + 39] = ']'
+    then begin
+      let has_hash = i > 0 && title.[i - 1] = '#' in
+      toks := (i, i + 40, has_hash, String.sub title (i + 2) 36) :: !toks;
+      scan (i + 40)
+    end
+    else scan (i + 1)
+  in
+  scan 0;
+  let toks = List.rev !toks in
+  match toks with
+  | [] -> Js.Promise.resolve title
+  | _ -> (
+      match !Runtime.current_repo with
+      | None -> Js.Promise.resolve title
+      | Some repo ->
+          let uuids = List.map (fun (_, _, _, u) -> u) toks in
+          Js.Promise.all
+            (Array.of_list
+               (List.map
+                  (fun u ->
+                 Runtime.invoke3 "thread-api/pull" (Wire.String repo)
+                   (Wire.String "[:block/title]")
+                   (Wire.Array [ Wire.Keyword "block/uuid"; Wire.Uuid u ])
+                 |> Js.Promise.then_ (fun w ->
+                        Js.Promise.resolve
+                          (match Wire.map_get_string w "block/title" with
+                           | Some t when String.trim t <> "" -> Some t
+                           | _ -> None)))
+                  uuids))
+          |> Js.Promise.then_ (fun names ->
+                 let tbl = Hashtbl.create 8 in
+                 List.iter2
+                   (fun u n ->
+                     match n with Some t -> Hashtbl.replace tbl u t | None -> ())
+                   uuids
+                   (Array.to_list names);
+                 let b = Buffer.create n in
+                 let cursor = ref 0 in
+                 List.iter
+                   (fun (i, e, has_hash, u) ->
+                     match Hashtbl.find_opt tbl u with
+                     | None -> ()
+                     | Some t ->
+                         Buffer.add_substring b title !cursor
+                           ((if has_hash then i - 1 else i) - !cursor);
+                         Buffer.add_string b
+                           (if has_hash then "#" ^ t else "[[" ^ t ^ "]]");
+                         cursor := e)
+                   toks;
+                 Buffer.add_substring b title !cursor (n - !cursor);
+                 Js.Promise.resolve (Buffer.contents b)))
+
 (* undo/redo writes datoms straight into the db — resync the open
    editor's buffer so a stale textarea does not mask the restored title *)
 let resync_open_editor () =
@@ -617,16 +767,23 @@ let resync_open_editor () =
       match S.find e.uuid with
       | Some b ->
           let title = String.trim b.Model.block_title in
-          if e.S.buffer <> title then begin
-            S.set_silent (fun st ->
-                match st.S.editing with
-                | Some e' when e'.uuid = e.uuid ->
-                    { st with S.editing = Some { e' with S.buffer = title } }
-                | _ -> st);
-            match Editor_dom.textarea_of e.uuid with
-            | Some el -> Editor_dom.el_set_value el title
-            | None -> ()
-          end
+          ignore
+            (title_for_edit title
+             |> Js.Promise.then_ (fun title ->
+                    if e.S.buffer <> title then begin
+                      S.set_silent (fun st ->
+                          match st.S.editing with
+                          | Some e' when e'.uuid = e.uuid ->
+                              { st with
+                                S.editing =
+                                  Some { e' with S.buffer = title }
+                              }
+                          | _ -> st);
+                      match Editor_dom.textarea_of e.uuid with
+                      | Some el -> Editor_dom.el_set_value el title
+                      | None -> ()
+                    end;
+                    Js.Promise.resolve ()))
       | None -> S.set_silent (fun st -> { st with S.editing = None }))
 
 let undo () =

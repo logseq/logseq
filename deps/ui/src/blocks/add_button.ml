@@ -14,7 +14,7 @@ let build_el ?puuid () =
   el_set_class btn
     "ls-block block-add-button flex-1 flex-col rounded-sm cursor-text \
      transition-opacity ease-in duration-100 !py-0 opacity-0";
-  el_set_attr btn "tab-index" "0";
+  el_set_attr btn "tabindex" "0";
   (match puuid with Some u -> set_parent_attr btn u | None -> ());
   let row = create_element "div" in
   el_set_class row "flex flex-row";

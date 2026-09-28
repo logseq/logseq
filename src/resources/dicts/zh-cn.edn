@@ -702,6 +702,8 @@
  :flashcard/shortcut-tooltip "快捷键：{1}"
 
  :flashcard.empty/desc "你可以给任意块添加“{1}”将其变为闪卡，或使用“/cloze”添加填空。"
+ :flashcard.empty/no-due-desc "该查询的所有卡片都已复习完毕。稍后再来看看，或现在再练习一遍。"
+ :flashcard.empty/no-due-title "没有待复习的卡片"
  :flashcard.empty/title "来创建一张闪卡吧！"
 
  :flashcard.rating/again "重来"
@@ -715,6 +717,7 @@
 
  :flashcard.review/finished "恭喜，你已完成本次复习，下次见！💯"
  :flashcard.review/hide-answers "隐藏答案"
+ :flashcard.review/practice-again "再次练习"
  :flashcard.review/show-answers "显示答案"
  :flashcard.review/show-clozes "显示填空"
 
