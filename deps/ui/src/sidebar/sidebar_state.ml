@@ -124,7 +124,7 @@ let rec take n xs =
   | n, x :: tl -> x :: take (n - 1) tl
 
 let recent_ids_of_storage repo =
-  match Platform.local_storage_get "ui/recent-pages" with
+  match Platform.local_storage_get "recent-pages" with
   | Some s -> (
       try
         match Edn.parse s with
@@ -148,7 +148,7 @@ let push_recent repo id =
   let ids =
     id :: take 14 (List.filter (fun x -> x <> id) (recent_ids_of_storage repo))
   in
-  Platform.local_storage_set "ui/recent-pages"
+  Platform.local_storage_set "recent-pages"
     (Edn.to_string
        (Wire.Map
           [ ( Wire.String repo

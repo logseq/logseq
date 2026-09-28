@@ -237,14 +237,15 @@ let toggle_plugin_system () =
 (* ---- accent color (theme.cljs accent-color effect) ---- *)
 
 let current_accent () =
+  (* cljs storage key is (name :ui/radix-color) = "radix-color";
+     unset = no active swatch *)
   match Platform.local_storage_get "radix-color" with
   | Some v -> (
-      (* stored as pr-str keyword, e.g. ":logseq" *)
       let v = Settings_view.unquote v in
       if String.length v > 0 && v.[0] = ':' then
         String.sub v 1 (String.length v - 1)
       else v)
-  | None -> "logseq"
+  | None -> ""
 
 let set_accent name =
   Platform.local_storage_set "radix-color" (Settings_view.quoted (":" ^ name));

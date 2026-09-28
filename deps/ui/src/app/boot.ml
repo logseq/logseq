@@ -36,6 +36,7 @@ let apply_storage_env () =
   in
   Settings_view.apply_theme_dom theme;
   let accent =
+    (* cljs storage key is (name :ui/radix-color) = "radix-color" *)
     match Platform.local_storage_get "radix-color" with
     | Some v -> (
         let v = unquote v in
