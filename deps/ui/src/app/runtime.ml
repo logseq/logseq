@@ -37,7 +37,8 @@ let sync_hash_graph_id () =
   match !current_graph_uuid with
   | Some u when u <> "" -> (
       match Platform.location_hash () with
-      | "" | "#" -> ()
+      | "" | "#" | "#/" ->
+          Platform.replace_url_fragment ("#/?graph-id=" ^ u)
       | h ->
           if String.index_opt h '?' = None then
             Platform.replace_url_fragment (h ^ "?graph-id=" ^ u))
@@ -69,12 +70,19 @@ let track action =
       current_repo := Some repo;
       current_graph_uuid := None;
       !on_graph_opened repo
-  | Action.Page_loaded page -> current_page := Some page
+  | Action.Page_loaded page ->
+      current_page := Some page;
+      sync_hash_graph_id ()
   | Action.Journals_loaded js -> current_journals := js
   | Action.Navigate_to r ->
       current_page := None;
       current_journals := [];
-      current_route := Some r
+      current_route := Some r;
+      (* in-graph routes always carry ?graph-id — navigation call sites
+         write raw hashes, so re-append it here after the hash settles *)
+      (match r with
+       | Model.All_graphs | Model.Import | Model.Not_found _ -> ()
+       | _ -> sync_hash_graph_id ())
   | _ -> ()
 
 let flush () = !app_flush ()
