@@ -372,6 +372,7 @@ let query_closed ac q =
 (* after an `input` event in a .editor-wrapper textarea *)
 let on_editor_input t el =
   let pos = Dom_ext.selection_start el in
+  Platform.console_log (Printf.sprintf "DBG on_input pos=%d v='%s'" pos (Dom_ext.value el));
   match (get t).ac with
   | Some ac ->
       if pos < ac.tpos + ac.tlen then close_ac t
@@ -407,13 +408,29 @@ let detail_obj pairs =
 ;;
 
 let emit editor tpos text =
-  Dom_ext.dispatch_custom "ls:editor-insert"
-    (detail_obj
-       [ "text", Js.Json.string text
-       ; "from", Js.Json.number (float_of_int tpos)
-       ; "to", Js.Json.number (float_of_int (Dom_ext.selection_start editor)) ]);
-  (* cljs refocuses the editor input after a chosen item *)
-  Dom_ext.focus editor
+  match Dom_ext.closest editor ".ls-page-title" with
+  | Some _ ->
+      (* the page-title editor isn't a block editor — splice the buffer
+         directly instead of dispatching ls:editor-insert *)
+      let v = Dom_ext.value editor in
+      let n = String.length v in
+      let f = Int.max 0 (Int.min tpos n) in
+      let t_ = Int.max f (Int.min (Dom_ext.selection_start editor) n) in
+      let nv = String.sub v 0 f ^ text ^ String.sub v t_ (n - t_) in
+      let caret = f + String.length text in
+      Dom_ext.set_value editor nv;
+      Dom_ext.set_text_content editor nv;
+      Dom_ext.set_selection_range editor caret caret;
+      Dom_ext.focus editor
+  | None ->
+      Dom_ext.dispatch_custom "ls:editor-insert"
+        (detail_obj
+           [ "text", Js.Json.string text
+           ; "from", Js.Json.number (float_of_int tpos)
+           ; "to",
+             Js.Json.number (float_of_int (Dom_ext.selection_start editor)) ]);
+      (* cljs refocuses the editor input after a chosen item *)
+      Dom_ext.focus editor
 ;;
 
 let emit_cmd command extra =
@@ -426,20 +443,40 @@ let emit_cmd command extra =
    block/tags (existing class or a new "New tag" class). The "New tag"
    row always takes the class path even when a plain page exists. *)
 let apply_tag t ac ~create title =
-  match Editor_state.editing_uuid () with
+  (* the page-title textarea isn't registered as a block editor —
+     resolve it to the current page entity instead *)
+  let buuid_opt, title_edit =
+    match Editor_state.editing_uuid () with
+    | Some u -> (Some u, false)
+    | None -> (
+        match Dom_ext.closest ac.editor ".ls-page-title" with
+        | Some _ -> (
+            match !Runtime.current_page with
+            | Some p -> (p.Model.page_uuid, true)
+            | None -> (None, false))
+        | None -> (None, false))
+  in
+  match buuid_opt with
   | None -> ()
   | Some buuid ->
       let repo_v = repo () in
       let save_and_tag dbid =
         (* emit already stripped "#q" from the buffer; persist the new
-           buffer and the tag in one batch *)
-        let v = Dom_ext.value ac.editor in
-        ignore
-          (Outliner_ops.apply_and_refresh
-             [ Outliner_ops.save_block buuid v
-             ; Outliner_ops.set_block_property buuid "block/tags"
-                 (Wire.Int dbid)
-             ])
+           buffer and the tag in one batch. For the page-title editor the
+           stripped title is committed by the title's own rename path —
+           save-block rejects page entities, so only the tag is sent. *)
+        let ops =
+          if title_edit then
+            [ Outliner_ops.set_block_property buuid "block/tags"
+                (Wire.Int dbid)
+            ]
+          else
+            [ Outliner_ops.save_block buuid (Dom_ext.value ac.editor)
+            ; Outliner_ops.set_block_property buuid "block/tags"
+                (Wire.Int dbid)
+            ]
+        in
+        ignore (Outliner_ops.apply_and_refresh ops)
       in
       let create_and_tag () =
         emit ac.editor ac.tpos "";

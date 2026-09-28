@@ -42,6 +42,14 @@ let page_items (p : Model.page) =
             Runtime.send (Action.Page_menu_set None);
             ignore (Page_ops.convert_to_tag id))
       ]
+  | true, Some id ->
+      [ del
+      ; item "cvt2p" Strings.convert_tag_to_page (fun () ->
+            Runtime.send
+              (Action.Confirm_set
+                 (Some (Model.Confirm_convert_tag_to_page id)));
+            Runtime.flush ())
+      ]
   | _ -> [ del ]
 
 let view (x, y) (p : Model.page) =
@@ -62,10 +70,16 @@ let btn key label cls act =
 
 (* div[role='alertdialog'] — Confirm / Cancel *)
 let confirm_view (c : Model.confirm) =
-  let title, desc, uuid =
+  let title, desc, act =
     match c with
     | Model.Confirm_delete_page u ->
-        (Strings.delete_page_title, Strings.delete_page_desc, u)
+        ( Strings.delete_page_title
+        , Strings.delete_page_desc
+        , fun () -> ignore (Page_ops.delete u) )
+    | Model.Confirm_convert_tag_to_page id ->
+        ( Strings.convert_tag_to_page
+        , Strings.convert_tag_to_page_desc
+        , fun () -> ignore (Page_ops.convert_tag_to_page id) )
   in
   let close () =
     Runtime.send (Action.Confirm_set None);
@@ -116,7 +130,7 @@ let confirm_view (c : Model.confirm) =
                  text-sm font-medium bg-primary text-primary-foreground \
                  px-4 py-2" (fun () ->
                   close ();
-                  ignore (Page_ops.delete uuid))
+                  act ())
             ]
         ]
     ]

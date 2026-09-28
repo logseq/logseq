@@ -304,7 +304,7 @@ let toolbar_row st =
           if name = "click" then Sidebar_state.open_dialog "plugins")
         [ icon "apps" ]
     ; dom ~key:"dots-btn" ~tag:"button"
-        ~style_class:"button toolbar-dots-btn"
+        ~style_class:"button sidebar-dots-btn"
         ~attrs:[ ("title", t "More") ]
         ~events:"click"
         ~on_dom_event:(fun name _ ->
@@ -313,31 +313,19 @@ let toolbar_row st =
     ]
 
 (* ---------- root ---------- *)
+(* chrome.ml owns the #left-sidebar.cp__sidebar-left-layout shell +
+   shade-mask + resizer; these pieces fill its .wrap skeleton *)
 
-let render (ms : Model.t Signal.signal) : t =
+let header (ms : Model.t Signal.signal) : t =
   let st = Sidebar_state.ensure ms in
-  dom ~key:"left-sidebar" ~id:"left-sidebar"
-    ~style_class_signal:
-      (D.class_signal ms (fun (m : Model.t) ->
-           if m.left_sidebar_open then "is-open" else "is-closing"))
-    [ dom ~key:"ls-inner"
-        ~style_class:
-          "left-sidebar-inner as-container flex-1 flex flex-col min-h-0"
-        [ dom ~key:"ls-wrap" ~style_class:"wrap"
-            [ dom ~key:"ls-header" ~style_class:"sidebar-header-container"
-                [ nav_group st ]
-            ; dom ~key:"ls-contents"
-                ~style_class:"sidebar-contents-container"
-                [ favorites_group st
-                ; recents_group st
-                ; toolbar_row st ]
-            ]
-        ]
-    ; menu_host st
-    ; dom ~key:"ls-mask" ~tag:"span" ~style_class:"shade-mask"
-        ~events:"click"
-        ~on_dom_event:(fun name _ ->
-          if name = "click" then
-            Runtime.send Action.Toggle_left_sidebar)
-        []
-    ]
+  nav_group st
+
+let contents (ms : Model.t Signal.signal) : t =
+  let st = Sidebar_state.ensure ms in
+  dom ~key:"ls-contents" ~style_class:"sidebar-contents-container"
+    [ dom ~key:"ls-left" ~style_class:"cp__sidebar-left"
+        [ favorites_group st; recents_group st; toolbar_row st ] ]
+
+let menus (ms : Model.t Signal.signal) : t =
+  let st = Sidebar_state.ensure ms in
+  menu_host st

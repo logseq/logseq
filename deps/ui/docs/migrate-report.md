@@ -40,6 +40,75 @@ selecting without an explicit Escape.
 `"ArrowUp" when shift` shadows `meta/alt+shift` combinations. Modifier combos
 must be ordered most-specific first in any match-based key dispatch.
 
+### Undo restores the DB but the open editor keeps a stale buffer
+Worker `apply_history_action` replays inverse outliner ops correctly; the
+bug was UI-side: after undo restored a title, the still-mounted textarea
+kept showing the pre-undo `buffer`, and `visible-outline-content-tree`
+prefers `editor.value`. `resync_open_editor` after undo/redo re-reads the
+block from the model and rewrites the textarea when they diverge.
+**LUI lesson**: controlled-input state that can diverge from source of
+truth (DB) needs an explicit resync hook on every external-mutation path —
+undo/redo, RTC apply, sync events.
+
+### Structured clipboard: copy must keep only topmost selected roots
+`select-blocks` selects every visible row including children that are
+already inside a selected parent. If the clipboard keeps all selected
+uuids, `paste_block_maps` expands each parent AND emits the children again
+as separate roots — the worker receives duplicate maps for the same uuid
+(one bare, one with a `block/parent` lookup-ref) and the flat writes win,
+flattening the pasted tree (cut-and-paste e2e). Fix: filter the clipboard
+to uuids with no selected ancestor (`has_selected_ancestor` walks
+`find_parent`).
+**cljs semantics**: copying a parent implicitly includes its subtree; the
+clipboard payload is *trees*, not rows.
+
+### Replace-empty paste swaps the entity under the live editor
+`insert-blocks` with `replace-empty-target?` reuses the target's db/id,
+uuid and order — the editing block's entity is rewritten in place. The
+worker tx was correct from the start (`DBG-POST` showed `title=b1` on the
+target uuid); the visible `""` was the still-open textarea buffer. Same
+class of bug as undo-resync: `resync_open_editor` now also runs after a
+replace-empty paste.
+
+### Worker-side debugging workflow that worked
+`eprintf` in `deps/db-worker/lib` reaches the page console (captured by
+the e2e `console-logs-*.txt` dump — note the dump is **newest-first**,
+`conj` onto a list). Add prints around `insert_blocks` input/output,
+rebuild `dune build js_api` + `vite build --mode browser`, run the single
+e2e namespace, then strip. No cljs needed.
+
+### mousedown commit → synchronous re-render steals the click target
+Committing the edit on `mousedown` re-renders the DOM between `mousedown`
+and `mouseup`; the browser then retargets `click` to a common ancestor
+(`.page-blocks-inner`), so the block's click handler never fires and the
+clicked block never enters edit. Fix: defer the blur commit one tick
+(`schedule_blur_commit`), cancelled by `enter_edit`.
+**General rule**: pointerdown handlers must not synchronously mutate DOM
+that the same gesture's click depends on — defer or dispatch on the
+stable ancestor.
+
+### Pending focus must retry until mount, not poll twice
+`apply_focus` polled at 0ms/120ms after an apply+refresh; a slower refresh
+(more blocks, cold wasm paths) lost the focus entirely, leaving
+`pending_focus` set but dead. Bounded retry-until-mounted (40ms × 50)
+fixes Enter→Tab flows on collapsed blocks.
+
+### Collapsed-state override is per-view, not per-DB
+cljs `expand-collapsed-indent-target!` expands the indent target in the DB
+*and* clears the local `:ui/collapsed-blocks` override — porting only the
+DB part left the freshly-indented child invisible on journals.
+
+### Menu links must not steal editor focus
+`a.menu-link` items with `tabindex=0` accept focus on click; cljs keeps
+editor focus. preventDefault on mousedown inside `.ui__popover-content` /
+`.ls-context-menu-content` preserves it (click still fires).
+
+### Undo recording needs `outliner-op` on multi-op batches
+Worker `gen_undo_ops` auto-derives `outliner-op` only for single-op
+batches; multi-op batches (e.g. split = `save-block` + `insert-blocks`,
+merges = `move`+`delete`+`save`) MUST pass it via opts or the tx is
+invisible to undo.
+
 ## Worker protocol edge cases
 
 - `apply-outliner-ops` op entries require nested `Array` args
@@ -125,7 +194,6 @@ that the e2e contract doesn't spell out directly. Newest area last.
   closes the dialog. `Object.fromEntries` needs an OCaml
   `(string * Js.Json.t) array` via `%identity`, never a list (lists are not
   JS-iterable → "object is not iterable").
-||||||| a024dc1c3f
 
 ---
 
@@ -207,6 +275,41 @@ sorting, view tabs, selection bar, export EDN) and the query surface of
   `.editor-wrapper textarea` timeout). Views behaviors were verified via
   Playwright probes driving `LogseqDbWorker.invoke` directly (see
   worker-call contract in e2e-contract.md §7).
+
+## tag-basic-test (page-title tagging)
+
+- **Editor_state reads throw when unmounted**: `Editor_state.editing_uuid ()`
+  etc. raised `Failure "editor state not mounted"` on pages with no block
+  editor (empty page, title-only editing). Popups calling these accessors on
+  `#`-tag commit died synchronously. Fix: `read ()` falls back to `initial`.
+  This is a recurring hazard — any read of editor state must not assume a
+  mounted block editor. *LUI-level candidate*: keep the state signal always
+  mounted instead of per-block mount.
+- **`block/tags` wire shape**: `get-case-page` returns it as a `Set` of plain
+  `Int` entity ids — not `{:db/id}` lookup-ref stubs like `entity_map_wire`
+  emits elsewhere. `db/ident` decodes as `Wire.Keyword`, not `Wire.String`.
+  Decoders must accept both or we silently drop data (chip never rendered).
+- **Built-in Page tag must be filtered**: every page carries
+  `logseq.class/Page` in `block/tags`; cljs never renders it as a chip.
+- **`save-block` rejects page entities**: title edits must use
+  `set-block-property`/`rename-page` paths only.
+- **`ls:editor-insert` has no handler for the title textarea**: `emit`
+  dispatched the event but only block editors listen — the `" #tag"` token
+  stayed in the buffer and the following commit renamed the page to
+  `title #tag` (worker validation rejected it). Fix: when `ac.editor` is
+  inside `.ls-page-title`, `emit` splices the value directly. Suggestion:
+  generalize editor targets behind a shared `editor-surface` contract so
+  emit/insert works for any textarea, not only `edit-block-*`.
+- **Commit must trim**: emit leaves the leading space (`"ttd5 "`); cljs trims
+  before rename. An untrimmed title reaches worker `save-block` on the page
+  entity and corrupts the lookup (page became unresolvable).
+- **Stale-node dispatch crash**: a capture-phase handler that re-renders can
+  unmount the event target before its own bubbling listener runs; LUI
+  `dispatch` raised `unknown extension node`. Fixed in LUI
+  (`devin/web-stale-node-ops`): events on unmounted nodes are ignored.
+- **Remounted textarea loses focus**: `autofocus` doesn't re-fire reliably on
+  remount; the title editor now focuses explicitly after `Title_edit_start`
+  and places the caret at the end.
 
 ## Multi-tabs / cross-tab sync (e2e: `multi_tabs_basic_test`)
 
