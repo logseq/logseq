@@ -189,7 +189,7 @@ let time_travel (m : Model.t) =
     ]
 
 let canvas =
-  dom ~key:"graph-canvas" ~style_class:"graph-canvas"
+  dom ~key:"graph-canvas" ~tag:"canvas" ~style_class:"graph-canvas"
     ~attrs:
       [ ("role", "application")
       ; ("tabindex", "0")
