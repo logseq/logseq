@@ -9,9 +9,6 @@ let kw s = Wire.Keyword s
 let arg args i = List.nth_opt args i
 
 let fail_render_read message data =
-  Worker_log.info "RENDERFAIL"
-    [ "message", message
-    ; "data", Ds_wire.edn_of_transit (Wire.Map data) ];
   raise (Dispatcher.Exn_info (message, data))
 
 (* ---------------------------------------------------------------
@@ -776,29 +773,8 @@ let resolve_parent_id db (parent_uuid : string) : entity_id =
   with
   | Some (d, _) -> d.e
   | None ->
-      let uuid_datom_count, present_elsewhere, near =
-        Seq.fold_left
-          (fun (n, found, near) (d : datom) ->
-             ( n + 1
-             , found
-               || (match d.v with
-                  | Uuid u -> u = parent_uuid
-                  | String s -> s = parent_uuid
-                  | _ -> false)
-             , near
-               || (match d.v with
-                  | Uuid u ->
-                      String.lowercase_ascii u
-                      = String.lowercase_ascii parent_uuid
-                  | _ -> false) ))
-          (0, false, false)
-          (datoms db Avet ~a:"block/uuid" ())
-      in
       fail_render_read "Missing direct-children parent"
-        [ (kw "parent-uuid", Wire.Uuid parent_uuid)
-        ; (kw "uuid-datom-count", Wire.Int uuid_datom_count)
-        ; (kw "present-in-index?", Wire.Bool present_elsewhere)
-        ; (kw "case-variant?", Wire.Bool near) ]
+        [ (kw "parent-uuid", Wire.Uuid parent_uuid) ]
 
 let parent_membership db (parent_uuid : string) (parent_id : entity_id)
     (parent_recycled : bool) : int * membership_child list =
