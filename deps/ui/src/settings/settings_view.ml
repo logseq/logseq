@@ -29,9 +29,10 @@ let quoted v = "\"" ^ v ^ "\""
 
 let current_mode () =
   let system =
+    (* cljs state.cljs :ui/system-theme? defaults to true *)
     match Platform.local_storage_get "system-theme?" with
     | Some v -> unquote v = "true"
-    | None -> false
+    | None -> true
   in
   if system then "system"
   else
