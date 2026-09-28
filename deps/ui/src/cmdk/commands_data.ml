@@ -87,7 +87,6 @@ let table : cmd list =
   ; k "go/journals" (Binds [ "g j" ])
   ; k "go/all-pages" (Binds [ "g a" ])
   ; k "go/flashcards" (Binds [ "g f"; "t c" ])
-  ; k "go/graph-view" (Binds [ "g g" ])
   ; k "go/all-graphs" (Binds [ "g shift+g" ])
   ; k "go/keyboard-shortcuts" (Binds [ "g s" ])
   ; k "go/tomorrow" (Binds [ "g t" ])

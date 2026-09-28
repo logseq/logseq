@@ -656,7 +656,7 @@ let apply_and_refresh ?opts ops =
    logseq.property/heading, and [[page]]/#tag references resolve into
    block/refs + block/tags with the stored title rewritten to
    [[uuid]] id-ref form — async since Title_refs resolves entities *)
-let block_map_parsed uuid title =
+let block_map_parsed ?(page = false) uuid title =
   let dt =
     match S.find uuid with
     | Some b -> b.Model.block_display_type
@@ -677,7 +677,15 @@ let block_map_parsed uuid title =
               @ (match heading with
                  | Some lvl -> [ str "logseq.property/heading" (Wire.Int lvl) ]
                  | None -> [])
-              @ Title_refs.kvs_of_parsed p)))
+              @ Title_refs.kvs_of_parsed p
+              @
+              if page then
+                [ ( Wire.String "block/tags"
+                  , Wire.Set [ Wire.Keyword "logseq.class/Page" ] )
+                ; ( Wire.String "block/name"
+                  , Wire.String (page_name_sanity_lc p.Title_refs.title) )
+                ]
+              else [])))
 
 let save_block_parsed uuid title =
   block_map_parsed uuid title
