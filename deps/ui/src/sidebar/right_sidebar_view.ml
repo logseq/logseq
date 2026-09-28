@@ -143,6 +143,7 @@ let item_header st idx (it : Sidebar_state.item) =
   dom ~key:("hd-" ^ it.key)
     ~style_class:
       "flex flex-row justify-between sidebar-item-header color-level rounded-t-md"
+    ~attrs:[ ("draggable", "true") ]
     [ dom ~key:("hdr-" ^ it.key) ~tag:"button"
         ~style_class:"flex flex-row px-2 items-center w-full overflow-hidden"
         ~attrs:
@@ -240,7 +241,8 @@ let inner st =
             (fun items ->
               dom ~key:"rs-items"
                 ~style_class:"sidebar-item-list flex-1 scrollbar-spacing px-2"
-                (List.mapi (sidebar_item st) items))
+                (dom ~key:"rs-drop" ~style_class:"sidebar-drop-indicator" []
+                 :: List.mapi (sidebar_item st) items))
             (Signal.value st.Sidebar_state.items)
         ]
     ]
@@ -248,7 +250,18 @@ let inner st =
 let render (ms : Model.t Signal.signal) : t =
   let st = Sidebar_state.ensure ms in
   dom ~key:"rs-root"
-    [ dom ~key:"rs-resizer" ~style_class:"resizer" []
+    [ dom ~key:"rs-resizer" ~style_class:"resizer"
+        ~attrs:
+          [ ("role", "separator")
+          ; ("data-expanded", "true")
+          ; ("tabindex", "0")
+          ; ("aria-valuemax", "70")
+          ; ("aria-orientation", "vertical")
+          ; ("aria-label", "Right sidebar resize handler")
+          ; ("aria-valuemin", "10")
+          ; ("aria-valuenow", "50")
+          ]
+        []
     ; if_
         ~test:
           (Signal.map
