@@ -48,6 +48,7 @@
 
 (deftest display-property-resource-value-is-authoritative-test
   (let [value-uuid (random-uuid)
+        missing-uuid (random-uuid)
         value-entity {:block/uuid value-uuid :block/title "canonical"}
         restore #'property-component/restore-resource-entity-values]
     (is (= "new" (restore "new" {}))
@@ -56,7 +57,11 @@
         "Entity UUIDs resolve from canonical block snapshots.")
     (is (= [value-entity]
            (restore [value-uuid] {value-uuid value-entity}))
-        "Entity collections retain their resource-owned shape.")))
+        "Entity collections retain their resource-owned shape.")
+    (is (= #{value-entity}
+           (restore #{value-uuid missing-uuid} {value-uuid value-entity
+                                                missing-uuid nil}))
+        "A retracted many-value UUID must not restore as nil for blocks-container.")))
 
 (deftest property-configuration-subscribes-to-current-property-data-test
   (let [property-uuid (random-uuid)

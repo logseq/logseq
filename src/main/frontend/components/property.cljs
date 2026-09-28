@@ -631,11 +631,23 @@
   [value entities]
   (letfn [(restore [item]
             (cond
-              (uuid? item) (get entities item item)
-              (set? item) (into #{} (map restore) item)
-              (vector? item) (mapv restore item)
-              (sequential? item) (map restore item)
-              :else item))]
+              (uuid? item)
+              (let [entity (get entities item ::missing)]
+                (if (= entity ::missing)
+                  item
+                  entity))
+
+              (set? item)
+              (into #{} (keep restore) item)
+
+              (vector? item)
+              (into [] (keep restore) item)
+
+              (sequential? item)
+              (keep restore item)
+
+              :else
+              item))]
     (restore value)))
 
 (defn- restore-closed-values
