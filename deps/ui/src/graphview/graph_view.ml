@@ -19,11 +19,7 @@ let settings_toggle open_ =
       if name = "click" then (
         Runtime.send Action.Graph_toggle_settings;
         Runtime.flush ()))
-    [ dom ~key:"gs-icon" ~tag:"i"
-        ~style_class:
-          ("ti " ^ if open_ then "ti-chevron-down" else "ti-settings")
-        []
-    ]
+    [ Icons.icon (if open_ then "chevron-down" else "settings") ]
 
 let mode_tab (m : Model.t) mode label =
   dom ~key:("gmt-" ^ mode) ~tag:"button"
@@ -62,7 +58,7 @@ let settings_panel (m : Model.t) =
               if name = "click" then (
                 Runtime.send Action.Graph_toggle_settings;
                 Runtime.flush ()))
-            [ dom ~key:"gs-x" ~tag:"i" ~style_class:"ti ti-x" [] ]
+            [ Icons.icon "x" ]
         ]
     ; dom ~key:"gs-group" ~tag:"section"
         ~style_class:"graph-settings-group is-open"
@@ -72,8 +68,7 @@ let settings_panel (m : Model.t) =
             [ dom ~key:"gs-gt" ~style_class:"graph-settings-group-title"
                 [ dom ~key:"gs-gc"
                     ~style_class:"graph-settings-group-chevron"
-                    [ dom ~key:"gs-gi" ~tag:"i"
-                        ~style_class:"ti ti-chevron-right" [] ]
+                    [ Icons.icon "chevron-right" ]
                 ; dom ~key:"gs-gl" ~tag:"span"
                     ~text:Strings.graph_view_mode []
                 ]
@@ -129,11 +124,7 @@ let time_travel (m : Model.t) =
           if name = "click" then (
             Runtime.send Action.Graph_toggle_tt;
             Runtime.flush ()))
-        [ dom ~key:"tt-icon" ~tag:"i"
-            ~style_class:
-              ("ti " ^ if open_ then "ti-chevron-down" else "ti-history")
-            []
-        ]
+        [ Icons.icon (if open_ then "chevron-down" else "history") ]
     ; dom ~key:"tt-panel" ~style_class:"graph-time-travel-panel"
         ~attrs:[ ("aria-hidden", if open_ then "false" else "true") ]
         [ dom ~key:"tt-reset" ~tag:"button"
@@ -147,9 +138,7 @@ let time_travel (m : Model.t) =
               if name = "click" then (
                 Runtime.send Action.Graph_tt_reset;
                 Runtime.flush ()))
-            [ dom ~key:"tt-ri" ~tag:"i" ~style_class:"ti ti-player-play"
-                []
-            ]
+            [ Icons.icon "player-play" ]
         ; dom ~key:"tt-body" ~style_class:"graph-time-travel-body"
             [ tt_label m
             ; dom ~key:"tt-slider" ~tag:"input"

@@ -12,7 +12,7 @@ open Lui_elements
 let dom = Logseq_dom.dom
 let t s = s
 
-let icon name = dom ~tag:"i" ~style_class:("ti ti-" ^ name) []
+let icon name = Icons.icon name
 
 let contains_ci hay needle =
   let h = String.lowercase_ascii hay and n = String.lowercase_ascii needle in

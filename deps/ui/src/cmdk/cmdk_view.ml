@@ -96,11 +96,7 @@ let item_row (st : S.t) (item_sig : S.item Signal.signal) : t =
                     ~equal:(fun (a : S.item) b -> a.S.iicon = b.S.iicon)
                     (fun (it : S.item) ->
                       if it.S.iicon = "" then box ~key:"no-icon" []
-                      else
-                        Logseq_dom.dom ~key:"ti" ~tag:"i"
-                          ~style_class:("ti ti-" ^ it.S.iicon)
-                          ~attrs:[ ("style", "font-size: 14px") ]
-                          [])
+                      else Icons.icon ~size:14. it.S.iicon)
                     item_sig
                 ]
             ; Logseq_dom.dom ~key:"txt"
@@ -232,7 +228,7 @@ let search_only_chip gid =
         ; Logseq_dom.dom ~key:"clr" ~tag:"button"
             ~style_class:"p-1 scale-75"
             ~attrs:[ ("data-cmdk-clear-filter", "true") ]
-            [ Logseq_dom.dom ~key:"x" ~tag:"i" ~style_class:"ti ti-x" [] ]
+            [ Icons.icon "x" ]
         ]
     ]
 

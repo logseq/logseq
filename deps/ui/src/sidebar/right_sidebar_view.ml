@@ -114,15 +114,15 @@ let item_title (it : Sidebar_state.item) =
   | [], "contents" ->
       (* cljs: (icon "list-details") + "Contents" *)
       dom ~key:"pt-contents" ~style_class:"flex items-center"
-        [ dom ~tag:"i" ~style_class:"ti ti-list-details text-md mr-2" []
+        [ Icons.icon ~cls:"text-md mr-2" "list-details"
         ; dom ~tag:"span" ~text:it.title [] ]
   | [], "page-graph" ->
       dom ~key:"pt-pg" ~style_class:"flex items-center"
-        [ dom ~tag:"i" ~style_class:"ti ti-hierarchy text-md mr-2" []
+        [ Icons.icon ~cls:"text-md mr-2" "hierarchy"
         ; dom ~tag:"span" ~text:it.title [] ]
   | [], "help" ->
       dom ~key:"pt-help" ~style_class:"flex items-center"
-        [ dom ~tag:"i" ~style_class:"ti ti-help text-md mr-2" []
+        [ Icons.icon ~cls:"text-md mr-2" "help"
         ; dom ~tag:"span" ~text:it.title [] ]
   | [], _ -> dom ~key:"pt-plain" ~style_class:"flex items-center" ~text:it.title []
   | crumbs, _ -> breadcrumb crumbs
@@ -141,7 +141,7 @@ let item_header st idx (it : Sidebar_state.item) =
           ]
         [ dom ~key:("arrow-" ^ it.key) ~tag:"span"
             ~style_class:"opacity-50 hover:opacity-100 flex items-center pr-1"
-            [ dom ~tag:"i" ~style_class:"ti ti-chevron-down" [] ]
+            [ Icons.icon "chevron-down" ]
         ; dom ~key:("ht-" ^ it.key)
             ~style_class:
               "ml-1 font-medium text-sm overflow-hidden whitespace-nowrap"
@@ -154,14 +154,14 @@ let item_header st idx (it : Sidebar_state.item) =
             ~events:"click"
             ~on_dom_event:(fun name _ ->
               if name = "click" then Sidebar_state.open_item_menu st it.key)
-            [ dom ~tag:"i" ~style_class:"ti ti-dots" [] ]
+            [ Icons.icon "dots" ]
         ; dom ~key:("close-" ^ it.key) ~tag:"button"
             ~style_class:"px-2 py-2 h-8 w-8 text-muted-foreground"
             ~attrs:[ ("title", t "Close") ]
             ~events:"click"
             ~on_dom_event:(fun name _ ->
               if name = "click" then Sidebar_state.remove_item st it.key)
-            [ dom ~tag:"i" ~style_class:"ti ti-x" [] ] ]
+            [ Icons.icon "x" ] ]
     ]
 
 (* cljs sidebar-page-properties: ghost button "Open properties" over the
