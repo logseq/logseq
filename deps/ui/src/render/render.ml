@@ -104,15 +104,10 @@ let src_block s =
         Some (lang, body)
   else None
 
-(* {{query ...}} occupying the whole title — emit the outer
-   .custom-query-results + .ls-query-setting shell; the queries area
-   fills in real results later. *)
-let is_whole_query s =
-  let t = String.trim s in
-  String.length t > 8
-  && String.sub t 0 8 = "{{query "
-  && String.sub t (String.length t - 2) 2 = "}}"
-
+(* blocks tagged logseq.class/Query (created by the /query commands)
+   render the outer .custom-query-results + .ls-query-setting shell;
+   the query source lives on the hidden logseq.property/query value
+   block and the queries area fills in real results later. *)
 let code_block lang code =
   D.el ~tag:"div" ~style_class:"extensions__code"
     [ D.el ~tag:"div" ~style_class:"CodeMirror"
@@ -145,7 +140,7 @@ let content s =
           [ D.el ~key:"btw-br" ~tag:"br" [] ]
       else wrap s
 
-let title (s : string) : t list =
+let title ?(is_query = false) (s : string) : t list =
   match quote_body s with
   | Some body ->
       [ D.el ~tag:"div" ~attrs:[ ("data-node-type", "quote") ]
@@ -154,7 +149,7 @@ let title (s : string) : t list =
       match src_block s with
       | Some (lang, code) -> [ code_block lang code ]
       | None -> (
-          if is_whole_query s then [ wrap ""; query_shell ]
+          if is_query then [ wrap ""; query_shell ]
           else (
               match ordered_prefix s with
               | Some (num, rest) ->

@@ -55,6 +55,12 @@ let type_of prop =
 
 let is_checkbox prop = type_of prop = "checkbox"
 
+(* db-property/valid-property-name? *)
+let valid_property_name (s : string) : bool =
+  not
+    (String.length s > 0
+     && (s.[0] = '#' || String.length s > 1 && s.[0] = '[' && s.[1] = '['))
+
 
 
 (* ---------- writes shared by phases ---------- *)
@@ -178,14 +184,19 @@ and render_type_select d body name =
   el_append_child wrap sel
 
 and on_type_chosen d name ty =
+  (* cljs add-existing-or-new-property validates the name client-side and
+     shows invalid-name without calling the worker *)
+  if not (valid_property_name name) then
+    S.toast_error (I18n.t "property/invalid-name-error")
+  else
   D.upsert_property
     ~schema:(W.Map [ (W.Keyword "logseq.property/type", W.Keyword ty) ])
     ~property_name:name ()
   |> (fun p ->
       Js.Promise.catch
         (fun _ ->
-          (* worker rejected (invalid name already pushes its own toast) *)
-          S.toast_error (I18n.t "property/create-error");
+          (* normalize rejection to Nil — the W.Nil arm owns the single
+             "failed to create" toast *)
           Js.Promise.resolve W.Nil)
         p)
   |> Js.Promise.then_ (fun res ->

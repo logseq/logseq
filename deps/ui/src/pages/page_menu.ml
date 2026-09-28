@@ -24,7 +24,9 @@ let item key label on_click =
       if name = "click" then on_click ())
     [ dom ~key:(key ^ "-l") ~text:label [] ]
 
-(* items for the current route page; convert only for non-tag pages *)
+(* items for the current route page; convert only for non-tag pages.
+   Recycle navigates to the builtin "Recycle" page by name — cljs
+   header.cljs shows it whenever the page identity resolves. *)
 let page_items (p : Model.page) =
   let del =
     item "del" Strings.delete_page (fun () ->
@@ -35,12 +37,28 @@ let page_items (p : Model.page) =
             Runtime.flush ()
         | None -> ())
   in
+  let recycle =
+    item "recycle" Strings.recycle_title (fun () ->
+        Runtime.send (Action.Page_menu_set None);
+        Runtime.flush ();
+        Platform.set_location_hash "#/page/Recycle")
+  in
+  (* cljs header.cljs dots menu also carries Import -> #/import; our
+     importer renders as a dialog body (.importer) *)
+  let import_ =
+    item "import" Strings.import_title (fun () ->
+        Runtime.send (Action.Page_menu_set None);
+        Runtime.flush ();
+        Dialogs_state.open_ "import")
+  in
   match p.page_is_tag, p.page_db_id with
   | false, Some id ->
       [ del
       ; item "cvt" Strings.convert_to_tag (fun () ->
             Runtime.send (Action.Page_menu_set None);
             ignore (Page_ops.convert_to_tag id))
+      ; recycle
+      ; import_
       ]
   | true, Some id ->
       [ del
@@ -49,8 +67,10 @@ let page_items (p : Model.page) =
               (Action.Confirm_set
                  (Some (Model.Confirm_convert_tag_to_page id)));
             Runtime.flush ())
+      ; recycle
+      ; import_
       ]
-  | _ -> [ del ]
+  | _ -> [ del; recycle; import_ ]
 
 let view (x, y) (p : Model.page) =
   dom ~key:"page-menu" ~tag:"div"

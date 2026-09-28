@@ -68,7 +68,7 @@ let model_title uuid =
 let save_if_dirty uuid =
   let buf = live_buffer uuid in
   if buf <> model_title uuid then
-    ignore (Ops.apply_and_refresh [ Ops.save_block uuid buf ])
+    ignore (Ops.apply_parsed_and_refresh ~rest:[] [ (uuid, buf) ])
 
 (* deferred blur: committing synchronously on mousedown re-renders the
    tree between mousedown and mouseup, so the browser retargets the click
@@ -100,7 +100,7 @@ let enter_edit uuid caret =
 
 let commit_buf uuid buf =
   if buf <> model_title uuid then
-    ignore (Ops.apply_and_refresh [ Ops.save_block uuid buf ])
+    ignore (Ops.apply_parsed_and_refresh ~rest:[] [ (uuid, buf) ])
 
 let exit_edit ~select =
   match S.editing () with
@@ -157,16 +157,18 @@ let split_at_cursor uuid =
       let after = String.sub buf pos (String.length buf - pos) in
       let new_uuid = Platform.random_uuid () in
       let sibling = S.is_collapsed uuid || b.Model.block_children = [] in
-      let ops =
-        [ Ops.save_block uuid before
-        ; Ops.insert_blocks [ Ops.block_map ~title:after new_uuid ] uuid
-            ~sibling
-        ]
+      let p =
+        Js.Promise.all
+          [| Ops.block_map_parsed uuid before
+           ; Ops.block_map_parsed new_uuid after |]
+        |> Js.Promise.then_ (fun a ->
+               Ops.apply_and_refresh ~opts:(Ops.op_opts "insert-blocks")
+                 [ Ops.op "save-block" [ a.(0); Wire.Map [] ]
+                 ; Ops.insert_blocks [ a.(1) ] uuid ~sibling ])
       in
       S.set_silent (fun st ->
           { st with S.editing = Some { uuid = new_uuid; buffer = after } });
-      with_focus_after new_uuid 0
-        (Ops.apply_and_refresh ~opts:(Ops.op_opts "insert-blocks") ops)
+      with_focus_after new_uuid 0 p
   | _ -> ()
 
 let move_children_ops (b : Model.block) target_uuid =
@@ -287,10 +289,7 @@ let merge_next uuid =
               (Ops.apply_and_refresh ~opts:(Ops.op_opts "delete-blocks") ops))
           else (
             let ops =
-              move_children_ops next uuid
-              @ [ Ops.delete_blocks [ next_uuid ]
-                ; Ops.save_block uuid (buf ^ next.Model.block_title)
-                ]
+              move_children_ops next uuid @ [ Ops.delete_blocks [ next_uuid ] ]
             in
             S.set_silent (fun st ->
                 { st with
@@ -298,7 +297,9 @@ let merge_next uuid =
                     Some { e with S.buffer = buf ^ next.Model.block_title }
                 });
             with_focus_after uuid (String.length buf)
-              (Ops.apply_and_refresh ~opts:(Ops.op_opts "delete-blocks") ops)))
+              (Ops.apply_parsed_and_refresh
+                 ~opts:(Ops.op_opts "delete-blocks")
+                 ~rest:ops [ (uuid, buf ^ next.Model.block_title) ])))
   | _ -> ()
 
 (* ---- selection ---- *)

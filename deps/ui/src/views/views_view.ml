@@ -55,10 +55,11 @@ and render_query inst =
   (match src_kind with
    | Views_query.QDatalog _ -> ()
    | _ ->
-       D.el_append_child inst.V.container
-         (Views_builder.builder_el inst
-            ~tree:(Views_builder.tree_for inst)
-            ~refresh));
+       if not inst.V.is_advanced then
+         D.el_append_child inst.V.container
+           (Views_builder.builder_el inst
+              ~tree:(Views_builder.tree_for inst)
+              ~refresh));
   let is_dsl_blank =
     match src_kind with
     | Views_query.QBlank -> true
@@ -336,9 +337,6 @@ let mount ~kind ~owner ~container : V.inst =
   let inst = V.make ~kind ~feature ~owner ~container in
   (match kind with
    | V.KQuery _ ->
-       inst.V.is_advanced <-
-         (let t = String.trim inst.V.qsrc in
-          String.length t > 0 && t.[0] = '{');
        inst.V.view_uuid <-
          (match kind with V.KQuery { block_uuid } -> block_uuid | _ -> "");
        refresh inst
