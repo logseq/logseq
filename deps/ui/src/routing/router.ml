@@ -87,17 +87,20 @@ let fetch_blocks (p : Model.page) =
       |> Js.Promise.then_ (fun blocks ->
              Js.Promise.resolve { p with Model.page_blocks = blocks })
 
-let fetch_refs (p : Model.page) =
+let fetch_refs_blocks (p : Model.page) : Model.block list Js.Promise.t =
   match p.Model.page_db_id with
   | Some id ->
-      ignore
-        (Runtime.invoke2 "thread-api/get-block-refs"
-           (Wire.String (repo ())) (Wire.Int id)
-         |> Js.Promise.then_ (fun w ->
-                Js.Promise.resolve
-                  (Runtime.send
-                     (Action.Refs_loaded (Decode.blocks_of_wire w)))))
-  | None -> ()
+      Runtime.invoke2 "thread-api/get-block-refs"
+        (Wire.String (repo ())) (Wire.Int id)
+      |> Js.Promise.then_ (fun w ->
+             Js.Promise.resolve (Decode.blocks_of_wire w))
+  | None -> Js.Promise.resolve []
+
+let fetch_refs (p : Model.page) =
+  fetch_refs_blocks p
+  |> Js.Promise.then_ (fun blocks ->
+         Js.Promise.resolve (Runtime.send (Action.Refs_loaded blocks)))
+  |> ignore
 
 let fetch_unlinked_refs = Outliner_ops.fetch_unlinked_refs
 
@@ -115,7 +118,12 @@ let load_journals () =
            | [] -> Js.Promise.resolve (List.rev acc)
            | p :: rest ->
                fetch_blocks p
-               |> Js.Promise.then_ (fun p' -> collect (p' :: acc) rest)
+               |> Js.Promise.then_ (fun p' ->
+                      fetch_refs_blocks p'
+                      |> Js.Promise.then_ (fun refs ->
+                             collect
+                               ({ p' with Model.page_linked_refs = refs } :: acc)
+                               rest))
          in
          collect [] pages
          |> Js.Promise.then_ (fun js ->
@@ -246,6 +254,7 @@ let load_block_zoom uuid =
                                             ; page_is_library = false
                                             ; page_tags = b.Model.block_tags
                                             ; page_blocks = bs
+                                            ; page_linked_refs = []
                                             });
                                        (match
                                           Editor_actions.consume_pending_zoom
@@ -305,6 +314,11 @@ let load_route (route : Model.route) =
 
 let resolve () =
   let route = parse_hash () in
+  (* leaving a page commits the editor's live buffer first — but only
+     when the route is really changing (goto_page sends Navigate_to
+     before the hash lands, so the trailing hashchange would otherwise
+     wipe the fresh page's just-entered edit state) *)
+  if !Runtime.current_route <> Some route then Editor_actions.flush_edit ();
   Runtime.send (Action.Navigate_to route);
   load_route route;
   Runtime.flush ()

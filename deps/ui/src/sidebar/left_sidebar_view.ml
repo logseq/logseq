@@ -34,18 +34,6 @@ let menu_box ~style children =
     ~attrs:[ ("role", "menu"); ("style", style) ]
     children
 
-(* [role='menuitem'] > div text — contract uses `div:text('<label>')` *)
-let menu_item st label on_click =
-  dom ~key:("mi-" ^ label) ~tag:"div"
-    ~attrs:[ ("role", "menuitem") ]
-    ~style_class:"ui__dropdown-menu-item"
-    ~events:"click"
-    ~on_dom_event:(fun name _ ->
-      if name = "click" then (
-        Sidebar_state.close_menu st;
-        on_click ()))
-    [ dom ~tag:"div" ~text:label [] ]
-
 (* ---------- nav edit (checkbox) menu ---------- *)
 
 let nav_labels =
@@ -81,36 +69,6 @@ let nav_edit_menu st checked =
         (List.map mk nav_labels)
     ]
 
-(* ---------- dots (page) menu ---------- *)
-
-let dots_menu st favorited =
-  let page_items =
-    match !Runtime.current_page with
-    | Some _ ->
-        [ menu_item st
-            (if favorited then t "Unfavorite page" else t "Add to Favorites")
-            (fun () -> Sidebar_state.toggle_favorite st)
-        ; menu_item st (t "Delete page")
-            (fun () -> Sidebar_state.open_dialog "delete-page")
-        ]
-    | None -> []
-  in
-  dom ~key:"dots-menu"
-    [ backdrop st
-    ; menu_box
-        ~style:"position:fixed;top:96px;right:16px;z-index:999;min-width:200px"
-        (page_items
-         @ [ menu_item st (t "Settings")
-               (fun () -> Sidebar_state.open_dialog "settings")
-           ; menu_item st (t "Export graph")
-               (fun () -> Sidebar_state.open_dialog "export-graph")
-           ; menu_item st (t "Import")
-               (fun () -> Sidebar_state.open_dialog "import")
-           ; menu_item st (t "Login")
-               (fun () -> Sidebar_state.open_dialog "login")
-           ])
-    ]
-
 let menu_host st =
   let menu_sig =
     Signal.map2
@@ -122,10 +80,9 @@ let menu_host st =
          (Signal.value st.favorited))
   in
   dyn ~equal:(fun a b -> a = b)
-    (fun (menu, checked, favorited) ->
+    (fun (menu, checked, _favorited) ->
       match menu with
       | "nav-edit" -> nav_edit_menu st checked
-      | "dots" -> dots_menu st favorited
       | _ -> dom ~key:"menu-closed" [])
     menu_sig
 

@@ -153,7 +153,18 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
     ~on_dom_event:(fun name payload ->
       match name with
       | "click" ->
-          if page.page_uuid <> None then (
+          (* shift+click opens the page in the right sidebar (handled by
+             the document-level listener); starting title edit would
+             replace the clicked node mid-dispatch *)
+          let shift =
+            match payload with
+            | Some p ->
+                Js.Json.decodeBoolean
+                  (Platform.json_prop (Platform.json_parse p) "shiftKey")
+                = Some true
+            | None -> false
+          in
+          if page.page_uuid <> None && not shift then (
             Runtime.send Action.Title_edit_start;
             Runtime.flush ();
             (* autofocus doesn't re-fire on remount — focus explicitly so
@@ -191,8 +202,6 @@ let blocks_inner ?puuid ?(virtualize = false) (blocks : Model.block list)
         ~attrs:inner_attrs body
     ]
 
-(* --- references --------------------------------------------------- *)
-
 (* cljs components/block.cljs grouped-blocks-container: refs render
    grouped under their source page (references-blocks-item > page-cp),
    so the referencing page's name must appear inside .references *)
@@ -217,6 +226,20 @@ let ref_group (name, blocks) : t =
         (List.map Tree.block_row blocks)
     ]
 
+(* cljs views/view {:add-page-column? true} — each ref row carries the
+   source page name. *)
+let references_row (b : Model.block) : t =
+  match b.Model.block_page_name with
+  | Some pname ->
+      dom
+        ~key:("ref-row-" ^ Option.value b.block_uuid ~default:"")
+        ~style_class:"references-item"
+        [ dom ~key:"pn" ~tag:"a" ~style_class:"page-ref"
+            ~attrs:[ ("data-ref", pname) ] ~text:pname []
+        ; Tree.block_row_static b
+        ]
+  | None -> Tree.block_row_static b
+
 let references_view (refs : Model.block list) : t =
   match refs with
   | [] -> box ~key:"refs-empty" []
@@ -228,6 +251,22 @@ let references_view (refs : Model.block list) : t =
                 (List.map ref_group (refs_grouped refs))
             ]
         ]
+
+(* journal linked refs render inside a foldable content wrapper, like
+   cljs views/view {:foldable-options ...} — journals default expanded. *)
+let journal_references_view (p : Model.page) : t =
+  let key = Option.value p.Model.page_uuid ~default:p.Model.page_title in
+  match p.Model.page_linked_refs with
+  | [] -> box ~key:("jrefs-empty-" ^ key) []
+  | refs ->
+      dom ~key:("jrefs-" ^ key) ~style_class:"references references-wrap"
+        [ dom ~key:"jrfc" ~style_class:"ls-foldable-content"
+            ~attrs:[ ("aria-hidden", "false") ]
+            [ dom ~key:"jrb" ~style_class:"ls-view-body"
+                (List.map references_row refs)
+            ]
+        ]
+
 
 let unlinked_search_input () : t =
   dom ~key:"urefs-search-box" ~style_class:"view-action-search"
@@ -336,6 +375,7 @@ let journal_item (m : Model.t) (p : Model.page) : t =
             [ dom ~key:("jit-" ^ key) ~style_class:"flex flex-row space-between"
                 [ page_title_el m p ]
             ; blocks_inner ?puuid:p.page_uuid p.page_blocks
+            ; journal_references_view p
             ]
         ]
     ]

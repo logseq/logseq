@@ -18,6 +18,7 @@ type block =
   ; block_level : int
   ; block_tag_ids : int list (* block/tags ref ids from the pull *)
   ; block_tags : string list (* resolved tag titles, for .block-tags *)
+  ; block_page_name : string option (* source page, for ref views *)
   ; block_children : block list
   ; (* db id of a :block/link target — the block renders the linked
        page's blocks instead of its own children *)
@@ -25,7 +26,6 @@ type block =
   ; (* fetched blocks of the linked entity; never written back by
        structure ops (they belong to the source page) *)
     block_embed_children : block list
-  ; block_page_name : string option (* containing page, for ref rows *)
   ; block_is_page : bool
   ; block_heading : int option (* resolved h1..h6 level *)
     (* page-typed outline child (carries block/name; cljs entity/page?) *)
@@ -43,6 +43,7 @@ type page =
   ; page_is_library : bool
   ; page_tags : string list
   ; page_blocks : block list
+  ; page_linked_refs : block list (* linked references, for journal items *)
   }
 
 type phase =

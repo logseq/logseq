@@ -418,14 +418,21 @@ external date_of_epoch : float -> Js.Date.t = "Date" [@@mel.new]
 external date_get_time : Js.Date.t -> float = "getTime" [@@mel.send]
 
 let create_journal_page a _b _c _d =
-  let day_int =
+  (* cljs (js/Date. date): accepts ms numbers AND ISO date strings;
+     invalid dates get isNaN-checked on getTime. *)
+  let date_opt =
     match Js.Json.classify a with
-    | Js.Json.JSONNumber ms ->
-        Some (Dates.journal_day_of (date_of_epoch ms))
+    | Js.Json.JSONNumber ms -> Some (date_of_epoch ms)
     | Js.Json.JSONString s -> (
         match float_of_string_opt s with
-        | Some ms -> Some (Dates.journal_day_of (date_of_epoch ms))
-        | None -> None)
+        | Some ms -> Some (date_of_epoch ms)
+        | None -> Some (Js.Date.fromString s))
+    | _ -> None
+  in
+  let day_int =
+    match date_opt with
+    | Some d when not (Float.is_nan (date_get_time d)) ->
+        Some (Dates.journal_day_of d)
     | _ -> None
   in
   match day_int with
@@ -480,36 +487,6 @@ let ensure_property ident name =
                ]
              |> Js.Promise.then_ (fun _ -> Js.Promise.resolve ()))
 
-let upsert_block_property a b c _d =
-  match arg_string a, arg_string b with
-  | Some id, Some key -> (
-      let ident = property_ident key in
-      get_entity id
-      |> Js.Promise.then_ (fun block ->
-             match block_uuid_of block with
-             | None -> resolved_nil
-             | Some uuid ->
-                 ensure_property ident key
-                 |> Js.Promise.then_ (fun () ->
-                        apply_op "set-block-property"
-                          [ Wire.Uuid uuid; Wire.Keyword ident; arg_wire c ]
-                        |> Js.Promise.then_ (fun _ -> resolved_nil))))
-  | _ -> resolved_nil
-
-let remove_block_property a b _c _d =
-  match arg_string a, arg_string b with
-  | Some id, Some key -> (
-      let ident = property_ident key in
-      get_entity id
-      |> Js.Promise.then_ (fun block ->
-             match block_uuid_of block with
-             | None -> resolved_nil
-             | Some uuid ->
-                 apply_op "remove-block-property"
-                   [ Wire.Uuid uuid; Wire.Keyword ident ]
-                 |> Js.Promise.then_ (fun _ -> resolved_nil)))
-  | _ -> resolved_nil
-
 (* schema remap — cljs upsert-property-aux: type→logseq.property/type
    keyword, cardinality→db/cardinality kw, hide→logseq.property/hide?,
    public→public?; type restricted to the known set *)
@@ -536,6 +513,97 @@ let schema_entry (k, v) =
   | "hide" -> Some (Wire.kw "logseq.property/hide?", v)
   | "public" -> Some (Wire.kw "public?", v)
   | _ -> Some (Wire.Keyword ks, v)
+
+(* ensure the property exists, honoring a caller-provided schema;
+   resolves the effective property type *)
+let ensure_property_typed ident key schema =
+  get_entity_ident ident
+  |> Js.Promise.then_ (fun p ->
+         match p with
+         | Wire.Map _ ->
+             Js.Promise.resolve
+               (Option.value
+                  (Wire.map_get_string p "logseq.property/type")
+                  ~default:"default")
+         | _ ->
+             let schema' =
+               Wire.Map
+                 ((match Wire.map_get_string schema "type" with
+                   | Some t when List.mem t valid_property_types ->
+                       [ (Wire.kw "logseq.property/type", Wire.Keyword t) ]
+                   | _ ->
+                       [ (Wire.kw "logseq.property/type", Wire.kw "default")
+                       ])
+                  @ List.filter_map schema_entry
+                      (List.filter
+                         (fun (k, _) -> k <> Wire.String "type")
+                         (map_entries schema)))
+             in
+             apply_op "upsert-property"
+               [ Wire.Keyword ident
+               ; schema'
+               ; Wire.Map
+                   [ ( Wire.kw "property-name"
+                     , Wire.String (sanitize_property_name key)) ]
+               ]
+             |> Js.Promise.then_ (fun _ ->
+                    Js.Promise.resolve
+                      (Option.value
+                         (Wire.map_get_string schema "type")
+                         ~default:"default")))
+
+(* property types whose string values name an entity — a uuid string
+   resolves to that entity instead of creating a new value block *)
+let entity_ref_property_types =
+  [ "node"; "page"; "entity"; "class"; "asset"; "property" ]
+
+let resolve_property_value ptype (v : Wire.t) =
+  match v with
+  | Wire.String s
+    when List.mem ptype entity_ref_property_types && is_uuid_string s ->
+      get_entity s
+      |> Js.Promise.then_ (fun e ->
+             Js.Promise.resolve
+               (match Wire.map_get_int e "id" with
+                | Some i -> Wire.Int i
+                | None -> v))
+  | _ -> Js.Promise.resolve v
+
+let upsert_block_property a b c d =
+  match arg_string a, arg_string b with
+  | Some id, Some key -> (
+      let ident = property_ident key in
+      let opts = arg_map d in
+      let schema =
+        Option.value (Wire.get opts "schema") ~default:(Wire.Map [])
+      in
+      get_entity id
+      |> Js.Promise.then_ (fun block ->
+             match block_uuid_of block with
+             | None -> resolved_nil
+             | Some uuid ->
+                 ensure_property_typed ident key schema
+                 |> Js.Promise.then_ (fun ptype ->
+                        resolve_property_value ptype (arg_wire c)
+                        |> Js.Promise.then_ (fun v ->
+                               apply_op "set-block-property"
+                                 [ Wire.Uuid uuid; Wire.Keyword ident; v ]
+                               |> Js.Promise.then_ (fun _ -> resolved_nil)))))
+  | _ -> resolved_nil
+
+let remove_block_property a b _c _d =
+  match arg_string a, arg_string b with
+  | Some id, Some key -> (
+      let ident = property_ident key in
+      get_entity id
+      |> Js.Promise.then_ (fun block ->
+             match block_uuid_of block with
+             | None -> resolved_nil
+             | Some uuid ->
+                 apply_op "remove-block-property"
+                   [ Wire.Uuid uuid; Wire.Keyword ident ]
+                 |> Js.Promise.then_ (fun _ -> resolved_nil)))
+  | _ -> resolved_nil
 
 let upsert_property a b c _d =
   match arg_string a with

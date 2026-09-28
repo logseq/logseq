@@ -72,7 +72,7 @@ let on_editor_key ev uuid el =
   let key = D.ev_key ev in
   let shift = D.ev_shift ev in
   if D.ev_composing ev then ()
-  else if ac_popup_open () && ac_owned_key key then ()
+      else if ac_popup_open () && ac_owned_key key then ()
   else
     match key with
     | "Enter" when not shift ->
@@ -107,6 +107,9 @@ let on_editor_key ev uuid el =
     | "i" when mods ev ->
         D.prevent_default ev;
         A.wrap_selection uuid "*"
+    | "h" when mods ev && shift ->
+        D.prevent_default ev;
+        A.wrap_selection uuid "=="
     | "e" when D.ev_meta ev -> A.quick_add ()
     | "." when mods ev && shift ->
         D.prevent_default ev;
@@ -252,24 +255,32 @@ let on_click ev =
                     | Some u -> A.zoom_to u
                     | None -> ())
                 | None -> (
-                    match D.closest_sel ".block-content" target with
-                    | Some el -> (
-                        match D.el_get_attr el "blockid" with
-                        | Some u ->
-                            (* scope by container: the same block can render
-                               in main and the right sidebar; only the tree
-                               where the click landed mounts the editor *)
-                            let scope =
-                              match
-                                D.closest_sel ".cp__right-sidebar" target
-                              with
-                              | Some _ -> "sidebar"
-                              | None -> "main"
-                            in
-                            A.enter_edit ~scope u
-                              (String.length (A.model_title u))
-                        | None -> ())
-                    | None -> ()))))
+                        match D.closest_sel "a.page-ref" target with
+                        | Some _ ->
+                            (* page-ref navigation happens in the document-level
+                               listener; the editor only has to not enter edit *)
+                            ()
+                        | None -> (
+                            match D.closest_sel ".block-content" target with
+                            | Some el -> (
+                                match D.el_get_attr el "blockid" with
+                                | Some u ->
+                                    (* scope by container: the same block can
+                                       render in main and the right sidebar;
+                                       only the tree where the click landed
+                                       mounts the editor *)
+                                    let scope =
+                                      match
+                                        D.closest_sel ".cp__right-sidebar"
+                                          target
+                                      with
+                                      | Some _ -> "sidebar"
+                                      | None -> "main"
+                                    in
+                                    A.enter_edit ~scope u
+                                      (String.length (A.model_title u))
+                                | None -> ())
+                            | None -> ())))))
 
 (* -- ls:editor-insert channel (autocomplete pick: replace the typed
    trigger range with the chosen text) -- *)
@@ -319,14 +330,15 @@ let on_mousedown ev =
     match D.closest_sel ".editor-wrapper" (D.ev_target ev) with
     | Some _ -> ()
     | None -> (
-        (* .cp__overlays hosts the cmdk/autocomplete/context-menu popups;
-           .ui__popover-content/.ls-context-menu-content cover anchored
-           property popups mounted outside the overlays container *)
-        match
-          D.closest_sel
-            ".cp__overlays, .ui__popover-content, .ls-context-menu-content"
-            (D.ev_target ev)
-        with
+            (* .cp__overlays hosts the cmdk/autocomplete/context-menu popups;
+               .ui__popover-content/.ls-context-menu-content cover anchored
+               property popups and cmdk/dialog portals mount outside the
+               overlays container under body *)
+            match
+              D.closest_sel
+                ".cp__overlays, .cp__cmdk__modal, .ui__popover-content, .ls-context-menu-content"
+                (D.ev_target ev)
+            with
         | Some _ -> ()
         | None -> A.schedule_blur_commit ())
 

@@ -84,14 +84,28 @@ type t =
     (* class/tag entities for the # popup: (title, tabler icon) *)
   }
 
+(* the live popups layer — exactly one exists per app; lets editor key
+   handling yield to an open autocomplete (cljs: the commands popup consumes
+   arrows/enter/tab/escape before the editor sees them) *)
+let active : t option ref = ref None
+
 let make scheduler : t =
-  { vs = Signal.state scheduler { ac = None; cm = None }
+  let t =
+    { vs = Signal.state scheduler { ac = None; cm = None }
   ; gen = ref 0
   ; titles = ref []
   ; tag_titles = ref []
   }
+  in
+  active := Some t;
+  t
 
 let get t = Signal.get t.vs.Signal.state_signal
+let ac_open () =
+  match !active with
+  | Some t -> (get t).ac <> None
+  | None -> false
+
 let set t v = Runtime.signal_set t.vs v
 let set_ac t ac = set t { (get t) with ac }
 let set_cm t cm = set t { (get t) with cm }

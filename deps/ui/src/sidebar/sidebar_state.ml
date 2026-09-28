@@ -591,13 +591,16 @@ let on_model st (m : Model.t) =
   if m.Model.right_sidebar_open then ensure_contents st
 
 let on_doc_click st ev =
-  if jbool "shiftKey" ev then
-    match click_target "a.page-ref" ev with
-    | Some el -> (
-        match Platform.get_attribute el "data-ref" with
-        | Some ref_ -> open_ref st ref_
-        | None -> ())
-    | None -> (
+  match click_target "a.page-ref" ev with
+  | Some el -> (
+      match Platform.get_attribute el "data-ref" with
+      | Some ref_ ->
+          if jbool "shiftKey" ev then open_ref st ref_
+          else if not (jbool "metaKey" ev || jbool "ctrlKey" ev) then
+            navigate_to_page ref_
+      | None -> ())
+  | None ->
+      if jbool "shiftKey" ev then
         match click_target "[data-testid='page title']" ev with
         | Some _ -> (
             match !Runtime.current_page with
@@ -606,7 +609,7 @@ let on_doc_click st ev =
                 | Some u -> open_uuid st u
                 | None -> ())
             | None -> ())
-        | None -> ())
+        | None -> ()
 
 let on_doc_keydown st ev =
   match jfield "key" ev with
@@ -656,7 +659,6 @@ let toggle_nav st nav checked =
 
 let close_menu st = Runtime.signal_set st.open_menu ""
 let open_nav_menu st = Runtime.signal_set st.open_menu "nav-edit"
-let open_dots_menu st = Runtime.signal_set st.open_menu "dots"
 let open_item_menu st key =
   Runtime.signal_set st.open_menu ("item-" ^ key)
 

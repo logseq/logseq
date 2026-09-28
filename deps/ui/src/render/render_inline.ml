@@ -25,13 +25,34 @@ let page_link ~(tag : bool) ?label name =
     | Some l when String.trim l <> "" -> l
     | _ -> if tag then "#" ^ name else name
   in
-  D.el ~tag:"a"
-    ~style_class:(if tag then "relative tag" else "relative page-ref")
-    ~attrs:
-      [ ("data-ref", String.lowercase_ascii name)
-      ; ("tabindex", "0")
-      ; ("draggable", "true") ]
-    [ D.el ~tag:"span" ~text:text [] ]
+  if (not tag) && label = None && Sdk_util.is_uuid_string name then
+    (* [[uuid]] titles: the worker stores uuid id-refs (cljs
+       title-ref->id-ref); resolve the referenced entity's title. *)
+    fun context parent ->
+      let st = Signal.state context.Lui_ui.ui_scheduler name in
+      Render_state.with_repo (fun repo ->
+          Runtime.invoke3 "thread-api/pull" (Wire.String repo)
+            (Wire.String "[:block/title]")
+            (Wire.Array [ Wire.Keyword "block/uuid"; Wire.Uuid name ])
+          |> Js.Promise.then_ (fun w ->
+                 (match Wire.map_get_string w "block/title" with
+                  | Some t when String.trim t <> "" ->
+                      Runtime.signal_set st t
+                  | _ -> ());
+                 Js.Promise.resolve ())
+          |> ignore);
+      D.el ~tag:"a" ~style_class:"relative page-ref"
+        ~attrs:[ ("data-ref", String.lowercase_ascii name); ("tabindex", "0") ]
+        ~text_signal:(D.text_of_class_signal (Signal.value st) Fun.id)
+        [] context parent
+  else
+    D.el ~tag:"a"
+      ~style_class:(if tag then "relative tag" else "relative page-ref")
+      ~attrs:
+        [ ("data-ref", String.lowercase_ascii name)
+        ; ("tabindex", "0")
+        ; ("draggable", "true") ]
+      [ D.el ~tag:"span" ~text:text [] ]
 
 let preview_link inner = D.el ~tag:"span" [ D.el ~tag:"span" ~style_class:"preview-ref-link" [ inner ] ]
 
