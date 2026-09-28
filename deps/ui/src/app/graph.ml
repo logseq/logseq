@@ -27,6 +27,18 @@ let open_graph repo =
   Runtime.invoke2 "thread-api/create-or-open-db" (Wire.String repo)
     (Wire.Map [])
 
+(* cljs events.cljs <build-search-index!: on graph open the frontend asks
+   the worker to build blocks_fts; seed entities (Library etc.) only reach
+   the index through this call since the tx listener ignores seed txns *)
+let build_search_index repo =
+  Runtime.invoke1 "thread-api/search-build-blocks-indice-in-worker"
+    (Wire.String repo)
+  |> Js.Promise.then_ (fun _ -> Js.Promise.resolve ())
+  |> Js.Promise.catch (fun e ->
+         Platform.console_error ("search-build-blocks-indice failed", e);
+         Js.Promise.resolve ())
+  |> ignore
+
 let create_graph name =
   let repo = full_graph_name name in
   Runtime.invoke2 "thread-api/create-or-open-db" (Wire.String repo)

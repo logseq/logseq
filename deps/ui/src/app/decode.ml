@@ -31,12 +31,38 @@ let rec block_of_wire (w : Wire.t) : Model.block =
   ; block_tags = []
   ; block_children = children
   ; block_page_name = Wire.map_get_string w "block/page-name"
+  ; block_is_page =
+      Option.is_some (Wire.map_get_string w "block/name")
+  ; block_default_collapsed = false
   }
 
 let blocks_of_wire (w : Wire.t) : Model.block list =
   match w with
   | Wire.Array xs | Wire.List xs -> List.map block_of_wire xs
   | _ -> []
+
+(* cljs block-default-collapsed?: page-typed children render collapsed on
+   non-Library pages. *)
+let rec mark_default_collapsed (b : Model.block) : Model.block =
+  { b with
+    block_children = List.map mark_default_collapsed b.block_children
+  ; block_default_collapsed = b.block_is_page
+  }
+
+(* Library page outlines nested pages only (cljs with-library-child-uuids
+   keeps entity/page? children): drop non-page subtrees. *)
+let rec pages_only (bs : Model.block list) : Model.block list =
+  List.filter_map
+    (fun (b : Model.block) ->
+      if b.block_is_page then
+        Some { b with block_children = pages_only b.block_children }
+      else None)
+    bs
+
+(* view-specific shaping of a fetched block tree *)
+let view_blocks ~(library : bool) (bs : Model.block list) :
+    Model.block list =
+  if library then pages_only bs else List.map mark_default_collapsed bs
 
 (* page is a tag/class when route-info says tag? or its entity tags
    contain logseq.class/Tag *)
@@ -63,11 +89,13 @@ let page_of_summary (w : Wire.t) : Model.page option =
   in
   match w with
   | Wire.Map _ ->
+      let title =
+        Option.value
+          (str [ "block/title"; "page-title"; "block/raw-title" ])
+          ~default:""
+      in
       Some
-        { Model.page_title =
-            Option.value
-              (str [ "block/title"; "page-title"; "block/raw-title" ])
-              ~default:""
+        { Model.page_title = title
         ; page_uuid =
             (match Wire.map_get_uuid w "block/uuid" with
              | Some u -> Some u
@@ -81,6 +109,11 @@ let page_of_summary (w : Wire.t) : Model.page option =
             (match Wire.map_get_int w "journal-day" with
              | Some d -> Some d
              | None -> Wire.map_get_int w "block/journal-day")
+        ; page_is_library =
+            (* cljs entity-util/library? = built-in? && title = "Library" *)
+            (match Wire.get w "built-in?" with
+             | Some (Wire.Bool true) -> title = "Library"
+             | _ -> false)
         ; page_tags = []
         ; page_blocks = []
         }

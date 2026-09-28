@@ -303,21 +303,6 @@ let journals_view (js : Model.page list) : t =
                ~render:journal_item items ]
          else List.map journal_item js)
 
-let library_view (m : Model.t) (page : Model.page) : t =
-  (* child pages render title rows only, no block bodies *)
-  dom ~key:"library" ~style_class:"page"
-    [ page_title_el m page
-    ; dom ~key:"lib-blocks" ~style_class:"ls-page-blocks"
-        [ dom ~key:"lib-inner" ~style_class:"page-blocks-inner relative"
-            (List.map
-               (fun (b : Model.block) ->
-                 dom ~key:("lib-" ^ Option.value b.block_uuid ~default:"")
-                   ~style_class:"block-title-wrap"
-                   ~text:b.block_title [])
-               page.page_blocks)
-        ]
-    ]
-
 let not_found_view name : t =
   dom ~key:"not-found" ~style_class:"page"
     [ box ~key:"nf-inner" ~style_class:"flex flex-col items-center"
@@ -355,6 +340,11 @@ let empty_state () : t =
     [ box ~key:"empty-inner" ~style_class:"flex flex-col items-center"
         [ text ~key:"empty-t" ~value:Strings.loading ~style_class:"" [] ]
     ]
+
+(* Library renders the ordinary page chrome; its page_blocks were already
+   filtered to nested pages at fetch time (Decode.view_blocks), and block
+   inserts on it are page-ified by editor_actions. *)
+let library_view (m : Model.t) (page : Model.page) : t = page_view m page
 
 let page_view_of_model (m : Model.t) : t =
   match m.phase, m.route with

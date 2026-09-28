@@ -23,6 +23,13 @@ let dispatch kind payload =
 let detail_json ev = Platform.json_prop ev "detail"
 
 let init () =
+  (* the worker's search-index build reports progress through this
+     remoteInvoke; without a handler the worker->main comlink call hangs
+     and the build never settles *)
+  Worker_client.register_api "thread-api/search-index-build-progress"
+    (fun args ->
+      ignore args;
+      Js.Promise.resolve Wire.Nil);
   Platform.on_document_event "ls:toast" (fun ev ->
       let d = detail_json ev in
       let text =

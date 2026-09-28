@@ -144,6 +144,13 @@ let schedule_blur_commit () =
 
 (* ---- structure ops ---- *)
 
+(* cljs insert-as-sibling?: every insert on the Library page lands as a
+   sibling *page* — library children are always page-typed *)
+let library_context () =
+  match !Runtime.current_page with
+  | Some p -> p.Model.page_is_library
+  | None -> false
+
 let split_at_cursor uuid =
   match (S.editing (), S.find uuid) with
   | Some e, Some b when e.uuid = uuid ->
@@ -156,11 +163,15 @@ let split_at_cursor uuid =
       let before = String.sub buf 0 pos in
       let after = String.sub buf pos (String.length buf - pos) in
       let new_uuid = Platform.random_uuid () in
-      let sibling = S.is_collapsed uuid || b.Model.block_children = [] in
+      let library = library_context () in
+      let sibling =
+        library || S.is_collapsed uuid || b.Model.block_children = []
+      in
       let ops =
         [ Ops.save_block uuid before
-        ; Ops.insert_blocks [ Ops.block_map ~title:after new_uuid ] uuid
-            ~sibling
+        ; Ops.insert_blocks
+            [ Ops.block_map ~title:after ~page:library new_uuid ]
+            uuid ~sibling
         ]
       in
       S.set_silent (fun st ->
@@ -571,8 +582,10 @@ let paste_trees trees target_uuid ~replace_empty =
     [ Ops.paste_trees trees target_uuid ~replace_empty ]
 
 let paste_lines lines =
+  let library = library_context () in
   let blocks =
-    List.map (fun l -> Ops.block_map ~title:l (Platform.random_uuid ()))
+    List.map
+      (fun l -> Ops.block_map ~title:l ~page:library (Platform.random_uuid ()))
       lines
   in
   match selected_uuids () with
@@ -660,14 +673,24 @@ let paste_blocks ev =
 let toggle_collapse uuid =
   match S.find uuid with
   | Some b when b.Model.block_children <> [] ->
-      let now = not (S.is_collapsed uuid) in
-      S.set (fun st ->
-          { st with
-            S.collapsed =
-              (if now then S.String_set.add uuid st.collapsed
-               else S.String_set.remove uuid st.collapsed)
-          });
-      ignore (Ops.apply [ Ops.collapse_expand [ (uuid, now) ] ])
+      if b.Model.block_default_collapsed && not (S.is_collapsed uuid) then
+        (* view-default collapse (page child on a non-Library page): a
+           click expands it locally without persisting — cljs
+           temp-collapsed? takes precedence over the default *)
+        S.set (fun st ->
+            { st with
+              S.expanded = S.String_set.add uuid st.expanded
+            })
+      else
+        let now = not (S.effective_collapsed b) in
+        S.set (fun st ->
+            { st with
+              S.collapsed =
+                (if now then S.String_set.add uuid st.collapsed
+                 else S.String_set.remove uuid st.collapsed)
+            ; S.expanded = S.String_set.remove uuid st.expanded
+            });
+        ignore (Ops.apply [ Ops.collapse_expand [ (uuid, now) ] ])
   | _ -> ()
 
 let undo () = ignore (Ops.undo ())
@@ -755,7 +778,9 @@ let append_block ?for_page () =
           with_focus_after new_uuid 0
             (Ops.apply_and_refresh
                [ Ops.insert_blocks
-                   [ Ops.block_map ~title:"" new_uuid ]
+                   [ Ops.block_map ~title:"" ~page:p.Model.page_is_library
+                       new_uuid
+                   ]
                    target ~sibling
                ]))
 

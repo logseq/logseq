@@ -161,6 +161,7 @@ let navigate_journal repo =
   |> Js.Promise.then_ (fun () ->
          Runtime.send (Action.Boot_graph_ready repo);
          Runtime.current_repo := Some repo;
+         Graph.build_search_index repo;
          Platform.set_location_hash "#/";
          Router.resolve ();
          Js.Promise.resolve ())

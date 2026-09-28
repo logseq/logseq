@@ -39,6 +39,13 @@ let row_class_sig uuid blank =
       ^ (if S.String_set.mem uuid st.selected then " selected" else "")
       ^ if blank then " is-blank" else "")
 
+(* effective collapse for a block: persisted set || view default, minus
+   the explicit user-expand override — same rule as Editor_state's
+   effective_collapsed, expressed on the signal value *)
+let effective_collapsed_st uuid default (st : S.t) =
+  if S.String_set.mem uuid st.expanded then false
+  else S.String_set.mem uuid st.collapsed || default
+
 let row_attrs_sig uuid (b : Model.block) =
   let has_children = b.block_children <> [] in
   Logseq_dom.attrs_signal (S.signal ()) (fun (st : S.t) ->
@@ -49,25 +56,26 @@ let row_attrs_sig uuid (b : Model.block) =
       ; ("data-block-format", "markdown")
       ; ("haschild", string_of_bool has_children)
       ; ( "data-collapsed"
-        , string_of_bool (S.String_set.mem uuid st.collapsed) )
+        , string_of_bool
+            (effective_collapsed_st uuid b.block_default_collapsed st) )
       ; ("level", string_of_int b.block_level)
       ])
 
-let collapsed_sig uuid =
-  Signal.map
-    (fun (st : S.t) -> S.String_set.mem uuid st.collapsed)
+let collapsed_sig (b : Model.block) =
+  let uuid = Option.value b.block_uuid ~default:"" in
+  Signal.map (effective_collapsed_st uuid b.block_default_collapsed)
     (S.signal ())
 
 (* -- control wrap: collapse arrow + bullet -- *)
 
-let control_wrap uuid : t =
+let control_wrap uuid (b : Model.block) : t =
   dom ~key:("ctrlw-" ^ uuid)
     ~style_class:"block-control-wrap flex flex-row items-center h-6"
     [ dom ~key:("ctrl-" ^ uuid) ~tag:"a" ~style_class:"block-control"
         ~id:("control-" ^ uuid)
         [ dom ~key:("ctrlspan-" ^ uuid) ~tag:"span"
             ~style_class_signal:
-              (Logseq_dom.class_signal (collapsed_sig uuid)
+              (Logseq_dom.class_signal (collapsed_sig b)
                  (fun c -> if c then "control-show" else "control-hide"))
             []
         ]
@@ -76,7 +84,7 @@ let control_wrap uuid : t =
             ~id:("dot-" ^ uuid)
             ~attrs:[ ("blockid", uuid); ("draggable", "true") ]
             ~style_class_signal:
-              (Logseq_dom.class_signal (collapsed_sig uuid) (fun c ->
+              (Logseq_dom.class_signal (collapsed_sig b) (fun c ->
                    "bullet-container cursor-pointer"
                    ^ if c then " bullet-closed" else ""))
             [ dom ~key:("b-" ^ uuid) ~tag:"span" ~style_class:"bullet"
@@ -184,7 +192,7 @@ and row_el (b : Model.block) : t =
     ~attrs_signal_v:(row_attrs_sig uuid b)
     [ dom ~key:("main-" ^ key)
         ~style_class:"block-main-container flex flex-row gap-1"
-        [ control_wrap uuid
+        [ control_wrap uuid b
         ; dom ~key:("col-" ^ key) ~style_class:"flex flex-col w-full"
             [ dom ~key:("bmc-" ^ key)
                 ~style_class:"block-main-content flex flex-row gap-2"
@@ -212,7 +220,7 @@ and row_el (b : Model.block) : t =
 
 and children_el uuid (b : Model.block) : t =
   if_
-    ~test:(Signal.map (fun c -> not c) (collapsed_sig uuid))
+    ~test:(Signal.map (fun c -> not c) (collapsed_sig b))
     (dom ~key:("children-" ^ uuid)
        ~style_class:"block-children-container flex"
        [ dom ~key:("border-" ^ uuid)

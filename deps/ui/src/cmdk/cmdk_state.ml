@@ -5,8 +5,14 @@
 
 type group_id =
   | G_create
+  | G_current_page
   | G_nodes
+  | G_recently_updated
   | G_commands
+  | G_files
+  | G_filters
+  | G_codes
+  | G_themes
 
 type command_id =
   | Cmd_journals
@@ -25,6 +31,7 @@ type action =
   | Open_page of string (* block/uuid *)
   | Open_block of string (* block/uuid -> resolve owning page *)
   | Run of command_id
+  | Set_filter of group_id
 
 type item =
   { ikey : string
@@ -33,6 +40,7 @@ type item =
   ; ititle : string
   ; info : string option
   ; header : string option
+  ; iicon : string (* tabler icon name, "" = none *)
   ; act : action
   }
 
@@ -53,6 +61,7 @@ type view =
   ; expanded : group_id list (* groups showing their full result set *)
   ; hl : int (* flat index of the highlighted item, -1 = none *)
   ; mouse : bool
+  ; filter : group_id option
   }
 
 type t =
@@ -62,7 +71,7 @@ type t =
 
 let initial_view =
   { open_ = false; input = ""; move_mode = false; groups = []
-  ; expanded = []; hl = -1; mouse = false }
+  ; expanded = []; hl = -1; mouse = false; filter = None }
 
 let make scheduler : t =
   { vs = Signal.state scheduler initial_view; gen = ref 0 }
@@ -108,7 +117,7 @@ let match_commands q =
   |> List.map (fun (cid, label) ->
          { ikey = "cmd-" ^ label; idx = -1; gid = G_commands
          ; ititle = label; info = None; header = None
-         ; act = Run cid })
+         ; iicon = "command"; act = Run cid })
 
 (* -- search --------------------------------------------------------- *)
 
@@ -128,12 +137,26 @@ let create_items q =
       [ { ikey = "create-" ^ q; idx = -1; gid = G_create
         ; ititle = Ui_strings.t "cmdk.create/tag"
         ; info = Some (Ui_strings.tf "cmdk.info/create-tag" [ tag ])
-        ; header = None; act = Create_page tag } ]
+        ; header = None; iicon = "new-page"; act = Create_page tag } ]
   else
     [ { ikey = "create-" ^ q; idx = -1; gid = G_create
       ; ititle = Ui_strings.t "cmdk.create/page"
       ; info = Some (Ui_strings.tf "cmdk.info/create-page" [ q ])
-      ; header = None; act = Create_page q } ]
+      ; header = None; iicon = "new-page"; act = Create_page q } ]
+
+(* fixed rows under the Filters group (cljs `filters`; current-page entry
+   needs current-page tracking we do not have yet) *)
+let filter_items : item list =
+  let row gid label icon =
+    { ikey = "filter-" ^ label; idx = -1; gid = G_filters
+    ; ititle = label; info = Some (Ui_strings.t "cmdk.filter/add")
+    ; header = None; iicon = icon; act = Set_filter gid }
+  in
+  [ row G_nodes (Ui_strings.t "cmdk.filter/nodes") "point-filled"
+  ; row G_codes (Ui_strings.t "cmdk.filter/codes") "code"
+  ; row G_commands (Ui_strings.t "cmdk.filter/commands") "command"
+  ; row G_files (Ui_strings.t "cmdk.filter/files") "file"
+  ; row G_themes (Ui_strings.t "cmdk.filter/themes") "palette" ]
 
 let str_field w k = Wire.map_get_string w k
 
@@ -170,6 +193,7 @@ let item_of_row w i : item =
   { ikey = "node-" ^ uuid ^ "-" ^ string_of_int i; idx = -1
   ; gid = G_nodes; ititle = title; info = None
   ; header = (if is_page then None else breadcrumb_of w)
+  ; iicon = (if is_page then "file" else "point-filled")
   ; act = (if is_page then Open_page uuid else Open_block uuid) }
 
 let wmap kvs = Wire.Map (List.map (fun (k, v) -> (Wire.kw k, v)) kvs)
@@ -227,29 +251,83 @@ let renumber groups =
       { g with gitems = items })
     groups
 
+(* cljs `node-exists?`: a page result whose original-title matches the
+   input suppresses the Create group *)
+let node_exists q rows =
+  let q' = String.lowercase_ascii (String.trim q) in
+  q' <> ""
+  && List.exists
+       (fun (it : item) ->
+         match it.act with
+         | Open_page _ ->
+             String.lowercase_ascii (String.trim it.ititle) = q'
+         | _ -> false)
+       rows
+
+let group_order v q rows total =
+  let create_g () =
+    if node_exists q rows then None
+    else
+      Some
+        { gid = G_create; gtitle = Ui_strings.t "cmdk.groups/create"
+        ; gitems = create_items q; gtotal = 1; glimit = 1
+        ; gexpanded = false }
+  in
+  let nodes_g () =
+    { gid = G_nodes; gtitle = Ui_strings.t "cmdk.groups/nodes"
+    ; gitems = rows; gtotal = max total (List.length rows)
+    ; glimit = nodes_limit v.move_mode v.expanded
+    ; gexpanded = List.mem G_nodes v.expanded }
+  in
+  let commands_g () =
+    { gid = G_commands; gtitle = Ui_strings.t "cmdk.groups/commands"
+    ; gitems = match_commands q; gtotal = List.length commands
+    ; glimit = 5; gexpanded = List.mem G_commands v.expanded }
+  in
+  let filters_g () =
+    { gid = G_filters; gtitle = Ui_strings.t "cmdk.groups/filters"
+    ; gitems = filter_items; gtotal = List.length filter_items
+    ; glimit = 99; gexpanded = false }
+  in
+  let starts_slash =
+    String.length q > 0 && String.get q 0 = '/'
+  in
+  let has_slash =
+    starts_slash
+    || (try ignore (String.index q '/'); true with Not_found -> false)
+  in
+  match v.filter with
+  | Some gid ->
+      let only =
+        match gid with
+        | G_nodes -> [ nodes_g () ]
+        | G_commands -> [ commands_g () ]
+        | _ -> [] (* codes/files/themes have no backend yet *)
+      in
+      Option.to_list (create_g ()) @ only
+  | None ->
+      if starts_slash then [ filters_g (); nodes_g () ]
+      else if has_slash then
+        Option.to_list (create_g ()) @ [ nodes_g (); filters_g () ]
+      else
+        Option.to_list (create_g ())
+        @ [ nodes_g (); commands_g (); filters_g () ]
+
 let apply_results st q move_mode expanded rows total =
+  ignore move_mode;
+  ignore expanded;
   set_in st (fun v ->
       if v.input <> q then v (* stale — input moved on *)
       else
         let groups =
-          [ { gid = G_create; gtitle = ""; gitems = create_items q
-            ; gtotal = 0; glimit = 1; gexpanded = false }
-          ; { gid = G_nodes
-            ; gtitle = Ui_strings.t "cmdk.groups/nodes"
-            ; gitems = rows; gtotal = max total (List.length rows)
-            ; glimit = nodes_limit move_mode expanded
-            ; gexpanded = List.mem G_nodes expanded }
-          ; { gid = G_commands
-            ; gtitle = Ui_strings.t "cmdk.groups/commands"
-            ; gitems = match_commands q; gtotal = List.length commands
-            ; glimit = 5; gexpanded = List.mem G_commands expanded } ]
-          |> List.filter (fun g -> g.gitems <> [])
+          group_order v q rows total
           |> List.map (fun g ->
                  if g.gexpanded || List.length g.gitems <= g.glimit then g
                  else
                    { g with
                      gitems =
                        List.filteri (fun i _ -> i < g.glimit) g.gitems })
+          |> List.filter (fun g -> g.gitems <> [])
           |> renumber
         in
         { v with
@@ -302,7 +380,8 @@ let on_input st q =
 let open_palette st =
   st.gen := !(st.gen) + 1;
   set_in st (fun v ->
-      { v with open_ = true; input = ""; move_mode = false; mouse = false });
+      { v with open_ = true; input = ""; move_mode = false; mouse = false
+      ; filter = None });
   (* prime synchronously so commands show before the search lands *)
   apply_results st "" false [] [] 0;
   refresh st;
@@ -315,9 +394,14 @@ let open_palette st =
 
 let close st = set_in st (fun v -> { v with open_ = false })
 
+let clear_filter st =
+  set_in st (fun v -> { v with filter = None });
+  refresh st
+
 let clear_or_close st =
   let v = get st in
-  if v.input <> "" then (
+  if v.filter <> None then (clear_filter st; true)
+  else if v.input <> "" then (
     set_in st (fun v -> { v with input = "" });
     (match Dom_ext.doc_query_selector ".cp__cmdk-search-input" with
      | Some el -> Dom_ext.set_value el ""
@@ -468,6 +552,13 @@ let run_item st it =
                      | Some puuid -> goto_page repo puuid
                      | None -> Js.Promise.resolve ())))
          repo
+   | Set_filter gid ->
+       set_in st (fun v ->
+           { v with filter = Some gid; input = "" });
+       (match Dom_ext.doc_query_selector ".cp__cmdk-search-input" with
+        | Some el -> Dom_ext.set_value el ""
+        | None -> ());
+       refresh st
    | Run cid ->
        (match cid with
         | Cmd_move ->

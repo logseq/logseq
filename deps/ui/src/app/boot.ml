@@ -63,6 +63,7 @@ let run () =
          |> Js.Promise.then_ (fun () -> Js.Promise.resolve repo))
   |> Js.Promise.then_ (fun repo ->
          Runtime.send (Action.Boot_graph_ready repo);
+         Graph.build_search_index repo;
          (* initial route resolution (deep link or home) *)
          Router.resolve ();
          Js.Promise.resolve ())

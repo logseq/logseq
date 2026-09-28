@@ -14,6 +14,9 @@ type t =
   ; selected : String_set.t
   ; anchor : string option (* selection focus end for shift-arrow *)
   ; collapsed : String_set.t
+  ; expanded : String_set.t
+    (* cljs temp-collapsed? inverse: user-expanded overrides a
+       block_default_collapsed render flag without persisting *)
   }
 
 let initial =
@@ -21,6 +24,7 @@ let initial =
   ; selected = String_set.empty
   ; anchor = None
   ; collapsed = String_set.empty
+  ; expanded = String_set.empty
   }
 
 let st : t Signal.state option ref = ref None
@@ -89,6 +93,16 @@ let selected () = (read ()).selected
 let is_selected uuid = String_set.mem uuid (selected ())
 let collapsed () = (read ()).collapsed
 let is_collapsed uuid = String_set.mem uuid (collapsed ())
+let is_expanded uuid = String_set.mem uuid (read ()).expanded
+
+(* render-time collapse: persisted flag || view default, overridable by
+   an explicit user expand (cljs temp-collapsed? has priority) *)
+let effective_collapsed (b : Model.block) =
+  match b.Model.block_uuid with
+  | None -> false
+  | Some u ->
+      if is_expanded u then false
+      else is_collapsed u || b.Model.block_default_collapsed
 let anchor () = (read ()).anchor
 let selection_active () = not (String_set.is_empty (selected ()))
 
@@ -147,16 +161,14 @@ let find_parent uuid =
 
 (* DFS over visible (non-collapsed-subtree) blocks *)
 let flat_visible () =
-  let collapsed = collapsed () in
   let rec go acc blocks =
     match blocks with
     | [] -> acc
     | b :: rest ->
         let acc = b :: acc in
         let acc =
-          match b.Model.block_uuid with
-          | Some u when String_set.mem u collapsed -> acc
-          | _ -> go acc b.Model.block_children
+          if effective_collapsed b then acc
+          else go acc b.Model.block_children
         in
         go acc rest
   in

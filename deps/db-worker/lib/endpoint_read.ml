@@ -787,6 +787,30 @@ let get_page_block_index db (ref_t : Wire.t) (initial_limit : Wire.t) : Wire.t =
         ; (kw "blocks", Wire.Array blocks)
         ]
 
+(* A page's outline children = :block/page members UNION the recursive
+   :block/_parent subtree (cljs use-children walks _parent only).
+   Page-typed outline children carry no :block/page (the insert tx
+   dissocs it for entities with block/name), so the AVET pull alone
+   misses Library children and nested pages. Entities already pulled via
+   :block/page are skipped; the walk still descends through them. *)
+let page_parent_subtree db (page : entity) (have : entity_id list) :
+    pulled_entity list =
+  let seen = Hashtbl.create 64 in
+  List.iter (fun id -> Hashtbl.replace seen id ()) have;
+  let rec walk acc (e : entity) =
+    List.fold_left
+      (fun acc (c : entity) ->
+        if Hashtbl.mem seen c.id then acc
+        else (
+          Hashtbl.replace seen c.id ();
+          walk (c :: acc) c))
+      acc (Ldb.get_children e)
+  in
+  let extras = List.rev (walk [] page) in
+  Datascript.pull_many_string db "[*]"
+    (List.map (fun (e : entity) -> Entity_id e.id) extras)
+  |> List.filter_map (fun x -> x)
+
 (* :thread-api/get-page-blocks-tree *)
 let get_page_blocks_tree args =
   with_conn args (fun db ->
@@ -806,8 +830,15 @@ let get_page_blocks_tree args =
                  match Ldb.get_page db (Ds_wire.value_of_transit ref_t) with
                  | Some page ->
                      let blocks = Ldb.get_page_blocks db page.id in
+                     let extras =
+                       page_parent_subtree db page
+                         (List.map
+                            (fun (p : pulled_entity) -> p.pulled_id)
+                            blocks)
+                     in
                      Wire.Array
-                       (Outliner_tree.page_blocks_vec_tree db blocks page.id)
+                       (Outliner_tree.page_blocks_vec_tree db
+                          (blocks @ extras) page.id)
                  | None -> Wire.nil))
          | None -> Wire.nil))
 
