@@ -21,6 +21,7 @@ module I18n = Properties_i18n
 type item =
   { it_title : string
   ; it_tip : string (* ident / sublabel, rendered as title attr *)
+  ; it_icon : string (* tabler icon before the title, "" = none *)
   ; it_new : bool (* renders via the "New option:" affordance *)
   ; on_choose : unit -> unit
   }
@@ -39,8 +40,10 @@ type select_config =
   ; mutable results_inner : Editor_dom.el option
   }
 
-let item ?(tip = "") title on_choose =
-  { it_title = title; it_tip = tip; it_new = false; on_choose }
+let item ?(tip = "") ?(icon = "") title on_choose =
+  { it_title = title; it_tip = tip; it_icon = icon; it_new = false
+  ; on_choose
+  }
 
 let matches needle item =
   let n = String.lowercase_ascii (String.trim needle) in
@@ -71,6 +74,7 @@ let visible_items cfg =
       base
       @ [ { it_title = String.trim cfg.filter
           ; it_tip = ""
+          ; it_icon = ""
           ; it_new = true
           ; on_choose = (fun () -> on_new (String.trim cfg.filter))
           }
@@ -115,6 +119,16 @@ let item_el idx cfg it =
   el_set_text strong
     (if it.it_new then I18n.t "select/new-option" ^ " " ^ it.it_title
      else it.it_title);
+  (* cljs property select renders a leading type icon (letter-t /
+     puzzle) inside .pt-1 — tabler font glyph like other Editor_dom
+     icons *)
+  if it.it_icon <> "" then (
+    let ic = mk ~cls:"pt-1" "span" in
+    let ic_span = mk ~cls:("ui__icon ti opacity-40") "span" in
+    el_append_child ic_span (mk ~cls:("ti ti-" ^ it.it_icon) "i");
+    el_append_child ic ic_span;
+    el_append_child inner ic);
+  el_append_child inner strong;
   el_append_child a inner;
   el_append_child wrap a;
   on_click a (fun _ -> it.on_choose ());

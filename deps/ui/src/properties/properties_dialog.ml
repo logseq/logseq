@@ -125,8 +125,8 @@ and render_prop_select d body =
                | "" -> None
                | t ->
                    Some
-                     (Sel.item ~tip:(ident_of p) t (fun () ->
-                          property_chosen d p)))
+                     (Sel.item ~tip:(ident_of p) ~icon:"letter-t" t
+                        (fun () -> property_chosen d p)))
              props
          in
          let sel, input =
@@ -409,15 +409,27 @@ and render_value_edit d body prop =
 
 (* ---------- open ---------- *)
 
-let open_dialog target =
+(* cljs pops the input under the invoking control (popup-show! on the
+   click target); callers without an anchor get the centered fallback *)
+let open_dialog ?anchor target =
   let d = { target; phase = Prop_select; body = None; pending_type = None } in
+  let style =
+    match anchor with
+    | Some (x, y) ->
+        Printf.sprintf
+          "position:fixed;left:%.0fpx;top:%.0fpx;z-index:9999;min-width:320px"
+          x y
+    | None ->
+        "position:fixed;left:50%;top:30%;transform:translateX(-50%);\
+         z-index:9999;min-width:320px"
+  in
+  (* cljs popup content chrome: rounded popover card *)
   let root =
-    mk ~cls:"ls-property-dialog" "div"
-      ~attrs:
-        [ ( "style"
-          , "position:fixed;left:50%;top:30%;transform:translateX(-50%);\
-             z-index:9999;min-width:320px" )
-        ]
+    mk
+      ~cls:
+        "ls-property-dialog rounded-md border bg-popover p-1 \
+         text-popover-foreground shadow-md"
+      "div" ~attrs:[ ("style", style) ]
   in
   let inner =
     mk ~cls:"ls-property-input flex flex-1 flex-row items-center \
@@ -453,8 +465,13 @@ let current_target () : target option =
           | None -> None))
 
 (* open the dialog for a specific block uuid (slash command path) *)
-let open_for_block uuid =
-  open_dialog { uuid; db_id = None; is_tag = false; title = "" }
+let open_for_block ?anchor uuid =
+  open_dialog ?anchor { uuid; db_id = None; is_tag = false; title = "" }
+
+(* open anchored under a DOM element (its bottom-left corner) *)
+let open_for_block_at el uuid =
+  let l, _t, _r, b, _w = el_rect el in
+  open_for_block ~anchor:(l, b +. 4.) uuid
 
 let open_for_current () =
   match current_target () with Some t -> open_dialog t | None -> ()

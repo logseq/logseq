@@ -127,7 +127,8 @@ type t =
   ; left_sidebar_open : bool
   ; right_sidebar_open : bool
   ; editing_title : bool
-  ; page_menu : (float * float) option (* click position *)
+  ; page_menu : (float * float * bool) option
+    (* click position + with_app_items (toolbar dots vs page context menu) *)
   ; confirm : confirm option
   ; toasts : toast list
   ; toast_next : int

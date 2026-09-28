@@ -16,7 +16,7 @@ type t =
   | Block_content_changed of string * string
   | Title_edit_start
   | Title_edit_done (* value already committed via page op *)
-  | Page_menu_set of (float * float) option
+  | Page_menu_set of (float * float * bool) option
   | Confirm_set of Model.confirm option
   | Dismiss_all (* Escape / outside click *)
   | Toast_push of Model.toast
