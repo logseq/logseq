@@ -690,12 +690,17 @@ let render_head inst ~refresh : D.el =
   D.el_append_child actions (display_type_el inst ~refresh);
   D.el_append_child actions (more_actions inst ~refresh);
   (match inst.V.kind with
-   | V.KTagPage _ ->
-       let plus = ghost_btn "plus" in
-       Editor_dom.el_set_attr plus "title" I.new_node;
-       D.el_add_listener plus "click" (fun _ ->
-           (V.ops ()).o_add_object inst);
-       D.el_append_child actions plus
+   | V.KTagPage _ -> (
+       (* cljs objects.cljs: no "new object" for private class idents
+          (worker sends add-object? in route-info) *)
+       match !Runtime.current_page with
+       | Some p when p.Model.page_add_object ->
+           let plus = ghost_btn "plus" in
+           Editor_dom.el_set_attr plus "title" I.new_node;
+           D.el_add_listener plus "click" (fun _ ->
+               (V.ops ()).o_add_object inst);
+           D.el_append_child actions plus
+       | _ -> ())
    | _ -> ());
   D.el_append_child head left;
   D.el_append_child head actions;

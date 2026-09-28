@@ -28,10 +28,25 @@ let block ?(children = []) uuid title : Model.block =
   ; block_level = 1
   ; block_tag_ids = []
   ; block_tags = []
+  ; block_tag_uuids = []
+  ; block_tag_idents = []
   ; block_children = children
   ; block_page_name = None
+  ; block_reactions = []
+  ; block_is_comments_area = false
+  ; block_is_comment = false
+  ; block_comment_targets = 0
+  ; block_link = None
+  ; block_embed_children = []
   ; block_is_page = false
+  ; block_heading = None
   ; block_default_collapsed = false
+  ; block_asset_type = None
+  ; block_asset_url = None
+  ; block_asset_width = None
+  ; block_asset_height = None
+  ; block_asset_resize = None
+  ; block_asset_align = None
   }
 
 let page blocks : Model.page =
@@ -39,10 +54,17 @@ let page blocks : Model.page =
   ; page_uuid = Some "p"
   ; page_db_id = None
   ; page_is_tag = false
+  ; page_is_property = false
+  ; page_icon = None
   ; page_journal_day = None
   ; page_is_library = false
+  ; page_internal = false
+  ; page_built_in = false
+  ; page_add_object = false
   ; page_tags = []
   ; page_blocks = blocks
+  ; page_linked_refs = []
+  ; page_parents = []
   }
 
 let titles (p : Model.page) =

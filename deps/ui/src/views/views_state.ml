@@ -205,6 +205,18 @@ let ctx_of inst : W.t =
     | None -> base
   in
   let base =
+    (* cljs loaded-view-resource-plan: un-grouped all-pages/class-objects
+       are windowed — initial-row-count = min 1000 (ceil viewport/33) *)
+    match inst.feature, inst.group_by with
+    | ("all-pages" | "class-objects"), None ->
+        let n =
+          Views_dom.window_inner_height /. 33.
+          |> max 0. |> ceil |> int_of_float |> max 1 |> min 1000
+        in
+        base @ [ (W.kw "initial-row-count", W.Int n) ]
+    | _ -> base
+  in
+  let base =
     if inst.feature = "query-result" then
       base
       @ [ ( W.kw "query-row-uuids"
