@@ -260,6 +260,15 @@ let is_property_page (w : Wire.t) : bool =
             xs
       | _ -> false)
 
+(* tag titles for data-page-tags — wire ships [{ident, title}] *)
+let page_tag_titles (w : Wire.t) : string list =
+  match Wire.get w "tags" with
+  | Some (Wire.Array xs) | Some (Wire.List xs) ->
+      List.filter_map
+        (fun t -> Wire.map_get_string t "title")
+        xs
+  | _ -> []
+
 (* logseq.property/icon is a map {type: :emoji|:tabler-icon, id: str} *)
 let icon_of_wire (w : Wire.t) : (string * string) option =
   let ty =
@@ -338,7 +347,7 @@ let page_of_summary (w : Wire.t) : Model.page option =
             (match Wire.get w "add-object?" with
              | Some (Wire.Bool b) -> b
              | _ -> false)
-        ; page_tags = []
+        ; page_tags = page_tag_titles w
         ; page_blocks = []
         ; page_linked_refs = []
         ; page_parents = []

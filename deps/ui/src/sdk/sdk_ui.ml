@@ -15,6 +15,7 @@ let push_state a b _c _d =
       let name = Wire.map_get_string (Sdk_convert.wire_of_json b) "name" in
       match name with
       | Some n ->
+          Runtime.mark_nav ();
           Platform.set_location_hash (Runtime.nav_hash ("#/page/" ^ n));
           Platform.dispatch "ls:navigate"
             (detail_obj [ ("name", Js.Json.string n) ]);

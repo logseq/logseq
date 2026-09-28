@@ -26,6 +26,23 @@ let plain_map_wire db (e : entity) : Wire.t =
   Plain_value.with_explicit_ref_fields_recursive
     (Plain_value.entity_forward_map db e)
 
+(* page tags as [{ident, title}] — the UI needs both (ident for
+   class checks, title for data-page-tags) *)
+let tags_wire (page : entity) : Wire.t =
+  Wire.List
+    (List.map
+       (fun (t : entity) ->
+         Wire.Map
+           [ ( kw "ident",
+               match Ldb.ident_of t with
+               | Some i -> Wire.String i
+               | None -> Wire.nil )
+           ; ( kw "title",
+               Ds_wire.transit_of_value
+                 (Option.value (Ldb.value t "block/title") ~default:Nil) )
+           ])
+       (Ldb.ref_ents page "block/tags"))
+
 (* handler/page.cljs page-entity->summary *)
 let page_summary db (page : entity) : Wire.t =
   let field k v =
@@ -40,7 +57,8 @@ let page_summary db (page : entity) : Wire.t =
      @ field "block/raw-title" (Ldb.raw_title db page)
      @ field "block/name" (Ldb.value page "block/name")
      @ field "block/journal-day" (Ldb.value page "block/journal-day")
-     @ field "icon" (Ldb.value page "logseq.property/icon"))
+     @ field "icon" (Ldb.value page "logseq.property/icon")
+     @ [ (kw "tags", tags_wire page) ])
 
 (* :thread-api/get-journal-page-by-day [repo journal-day] *)
 let get_journal_page_by_day args =
@@ -562,6 +580,7 @@ let get_page_route_info args =
                           (Option.value
                              (Ldb.value page "logseq.property/icon")
                              ~default:Nil) )
+                    ; ( kw "tags", tags_wire page )
                     ]
                   in
                   let base =

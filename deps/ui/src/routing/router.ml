@@ -1,7 +1,7 @@
 (* Hash routing — mirrors frontend.routes: "#/page/<name|uuid>",
-   "#/block/<uuid>", "#/journals", "#/all-graphs", "#/library",
-   default "#/". Listens hashchange + the "ls:navigate" CustomEvent
-   (dispatched by sdk push_state). *)
+   "#/block/<uuid>", "#/all-journals", "#/all-pages", "#/graphs",
+   "#/settings", default "#/". Listens hashchange + the "ls:navigate"
+   CustomEvent (dispatched by sdk push_state). *)
 
 let decode s = try Platform.decode_uri s with _ -> s
 
@@ -36,18 +36,15 @@ let parse_hash () : Model.route =
           match seg with
           | "page" -> Model.Page (decode rest)
           | "block" -> Model.Block_zoom (decode rest)
-          | "journals" -> Model.Journals
-          | "library" -> Model.Library
-          | "all-pages" -> Model.All_pages
           | "all-journals" -> Model.Journals
-          | "all-graphs" -> Model.All_graphs
+          | "all-pages" -> Model.All_pages
+          | "graphs" -> Model.All_graphs
           | _ -> Model.Not_found p)
       | None -> (
           match p with
-          | "journals" | "all-journals" -> Model.Journals
-          | "library" -> Model.Library
+          | "all-journals" -> Model.Journals
           | "all-pages" -> Model.All_pages
-          | "all-graphs" -> Model.All_graphs
+          | "graphs" -> Model.All_graphs
           | "settings" -> Model.Settings
           | "page" | "block" -> Model.Not_found p
           | _ -> Model.Not_found p))
@@ -187,7 +184,7 @@ let bump_load_gen () = incr Runtime.load_gen
 let stale (route : Model.route) = !Runtime.current_route <> Some route
 
 (* get-page-route-info resolves name/uuid/lookup-ref -> summary *)
-let load_page_ref for_route ref_v ~missing =
+let load_page_ref for_route ref_v =
   incr Runtime.load_gen;
   Runtime.invoke2 "thread-api/get-page-route-info"
     (Wire.String (repo ())) ref_v
@@ -207,8 +204,16 @@ let load_page_ref for_route ref_v ~missing =
                              fetch_unlinked_refs p'');
                            Js.Promise.resolve ()))
          | None ->
+             (* cljs keeps the :page route and paints inline
+                (t :page/not-found); only unknown route segments get
+                the full-screen 404 *)
              if not (stale for_route) then
-               Runtime.send (Action.Navigate_to (Model.Not_found missing));             Js.Promise.resolve ())
+               Runtime.send Action.Page_load_failed;
+             Js.Promise.resolve ())
+  |> Js.Promise.catch (fun _ ->
+         if not (stale for_route) then
+           Runtime.send Action.Page_load_failed;
+         Js.Promise.resolve ())
 
 (* Home: default-home config page when set & resolvable, else today's
    journal page (no config) or the journals list (config set but the
@@ -352,23 +357,22 @@ let load_block_zoom uuid =
                                      Js.Promise.resolve ())))))
                 | _ ->
                     if not (stale (Model.Block_zoom uuid)) then
-                      Runtime.send
-                        (Action.Navigate_to (Model.Not_found uuid)))
+                      Runtime.send Action.Page_load_failed)
             | _ ->
                 if not (stale (Model.Block_zoom uuid)) then
-                  Runtime.send (Action.Navigate_to (Model.Not_found uuid))))
+                  Runtime.send Action.Page_load_failed))
 
 let load_route (route : Model.route) =
   match route with
   | Model.Home -> ignore (load_home ())
   | Model.Page s ->
-      ignore (load_page_ref route (page_ref s) ~missing:s)
+      ignore (load_page_ref route (page_ref s))
   | Model.Block_zoom uuid -> ignore (load_block_zoom uuid)
   | Model.Journals ->
       Runtime.reload_current_view := load_journals;
       ignore (load_journals ())
   | Model.Library ->
-      ignore (load_page_ref route (Wire.String "Library") ~missing:"Library")
+      ignore (load_page_ref route (Wire.String "Library"))
   | Model.All_pages | Model.All_graphs | Model.Not_found _ -> ()
   | Model.Settings -> ()
 

@@ -43,6 +43,19 @@ let sync_hash_graph_id () =
             Platform.replace_url_fragment (h ^ "?graph-id=" ^ u))
   | _ -> ()
 
+(* cljs add-page-to-recent! fires only inside redirect-to-page! — i.e.
+   explicit in-app page navigations, not boot/hashchange loads. Call
+   sites that correspond to redirect-to-page! mark the navigation here;
+   the recents hook consumes the mark when the page becomes Ready. *)
+let nav_user_initiated : bool ref = ref false
+
+let mark_nav () = nav_user_initiated := true
+
+let take_nav_mark () =
+  let v = !nav_user_initiated in
+  nav_user_initiated := false;
+  v
+
 (* generation counter for async page loads — several Page_loaded
    producers (route loads, refresh_page, block zoom) can be in flight at
    once and their fetches can resolve out of order; bump on initiation

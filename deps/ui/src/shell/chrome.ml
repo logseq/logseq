@@ -181,6 +181,7 @@ let main_content (ms : Model.t Signal.signal) =
                   a.phase = b.phase
                   && a.route = b.route
                   && a.route_page = b.route_page
+                  && a.page_missing = b.page_missing
                   && a.journals = b.journals
                   && a.page_refs = b.page_refs
                   && a.unlinked_refs = b.unlinked_refs
@@ -316,6 +317,39 @@ let help_area (ms : Model.t Signal.signal) : t =
         ms
     ]
 
+(* cljs page.cljs not-found: replaces the whole app chrome. Rendered
+   as a fixed overlay (remounting the whole app tree inside a dyn
+   hits a retained-store crash on the swap). *)
+let not_found_page : t =
+  Logseq_dom.dom ~key:"nf-full"
+    ~style_class:
+      "flex flex-col items-center justify-center min-h-screen bg-background"
+    ~attrs:
+      [ ( "style"
+        , "position:fixed;inset:0;z-index:99999;background:var(--ls-primary-background-color)" )
+      ]
+    [ Logseq_dom.dom ~key:"nf-h1" ~tag:"h1"
+        ~style_class:"text-6xl font-bold text-gray-12 mb-4" ~text:"404" []
+    ; Logseq_dom.dom ~key:"nf-h2" ~tag:"h2"
+        ~style_class:"text-2xl font-semibold text-gray-10 mb-6"
+        ~text:(Ui_strings.t "page/not-found-title") []
+    ; Logseq_dom.dom ~key:"nf-p" ~tag:"p"
+        ~style_class:"text-gray-500 mb-8"
+        ~text:(Ui_strings.t "page/not-found-desc") []
+    ; Logseq_dom.dom ~key:"nf-btn" ~tag:"button"
+        ~style_class:
+          "ui__button inline-flex cursor-pointer items-center justify-center whitespace-nowrap rounded-md text-sm gap-1 font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 select-none border bg-background hover:bg-accent hover:text-accent-foreground active:opacity-80 as-outline h-10 px-4 py-2"
+        ~events:"click"
+        ~on_dom_event:(fun n _ ->
+          if n = "click" then Platform.set_location_hash "#/")
+        [ Logseq_dom.dom ~key:"nf-ico" ~tag:"span"
+            ~style_class:"ls-icon-home  ui__icon ti"
+            [ Icons.icon ~size:18. ~cls:"" "home" ]
+        ; Logseq_dom.dom ~key:"nf-txt" ~tag:"span"
+            ~text:(Ui_strings.t "page/go-back-home") []
+        ]
+    ]
+
 let shell (ms : Model.t Signal.signal) : t =
   Logseq_dom.dom ~key:"wrapper" ~tag:"main" ~id:"app-container-wrapper"
     ~style_class_signal:
@@ -331,5 +365,16 @@ let shell (ms : Model.t Signal.signal) : t =
         ; right_sidebar ms
         ; overlays ms
         ; help_area ms
+        ; dyn
+            ~equal:(fun (a : Model.t) (b : Model.t) ->
+              match a.route, b.route with
+              | Model.Not_found _, Model.Not_found _ -> true
+              | Model.Not_found _, _ | _, Model.Not_found _ -> false
+              | _ -> true)
+            (fun (m : Model.t) ->
+              match m.route with
+              | Model.Not_found _ -> not_found_page
+              | _ -> Logseq_dom.dom ~key:"nf-none" ~style_class:"contents" [])
+            ms
         ]
     ]

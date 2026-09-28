@@ -686,6 +686,42 @@ let table_el inst ~refresh : D.el =
   List.iter
     (fun c -> D.el_append_child header_row (header_cell inst ~refresh c))
     cols;
+  (* cljs add-property-button: trailing "New property" header cell on
+     class-objects tables only (property-objects/all-pages set
+     show-add-property? false) *)
+  (match inst.V.kind with
+   | V.KTagPage _ -> (
+       match !Runtime.current_page with
+       | Some p -> (
+           let cell = D.h ~cls:"ls-table-header-cell !border-0" () in
+           let btn =
+             D.h ~tag:"button"
+               ~cls:
+                 (D.button_cls ~variant:"text"
+                    ~cls:"h-8 !pl-2 !px-2 !py-0 hover:text-foreground \
+                          w-full justify-start"
+                    ())
+               ~children:
+                 [ D.icon "plus"
+                 ; D.h ~tag:"span" ~text:I.new_property () ]
+               ()
+           in
+           (match p.Model.page_uuid with
+            | Some uuid ->
+                D.el_add_listener btn "click" (fun _ ->
+                    let r = D.el_rect cell in
+                    Properties_dialog.open_dialog
+                      ~anchor:(D.rect_left r, D.rect_bottom r +. 4.)
+                      { Properties_dialog.uuid
+                      ; db_id = p.Model.page_db_id
+                      ; is_tag = true
+                      ; title = p.Model.page_title
+                      })
+            | None -> ());
+           D.el_append_child cell btn;
+           D.el_append_child header_row cell)
+       | None -> ())
+   | _ -> ());
   D.el_append_child header header_row;
   (match action_bar inst ~refresh with
    | Some bar -> D.el_append_child header bar

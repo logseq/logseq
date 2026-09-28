@@ -565,19 +565,24 @@ let fold_arrow ?on_click key : t =
         ]
     ]
 
-let view_ghost_btn key ?title icon_name size : t =
+let view_ghost_btn key ?title ?on_click icon_name size : t =
   let attrs =
     [ ("type", "button"); ("tabindex", "0") ]
     @ (match title with Some s -> [ ("title", s) ] | None -> [])
   in
-  dom ~key ~tag:"button" ~attrs
+  let events, handler =
+    match on_click with
+    | Some f -> ("click", Some (fun name _ -> if name = "click" then f ()))
+    | None -> ("", None)
+  in
+  dom ~key ~tag:"button" ~attrs ~events ?on_dom_event:handler
     ~style_class:(ui_btn ^ " as-ghost h-7 rounded py-1 \
                   text-muted-foreground !px-1")
     [ Icons.icon ~size icon_name ]
 
 (* cljs views/view header for :linked-references — foldable title with the
    "Linked references <count>" view tab and hidden-until-hover actions *)
-let refs_view_head key title count : t =
+let refs_view_head key ?on_search title count : t =
   dom ~key:(key ^ "-head")
     ~style_class:
       "ls-view-head flex flex-1 flex-nowrap items-center justify-between \
@@ -615,7 +620,7 @@ let refs_view_head key title count : t =
         ; view_ghost_btn "vh-flt" "filter" 18.
         ; dom ~key:"vh-search" ~style_class:"view-action-search"
             [ dom ~key:"vh-si" ~style_class:"flex flex-row items-center"
-                [ view_ghost_btn "vh-sb" "search" 15. ] ]
+                [ view_ghost_btn "vh-sb" ?on_click:on_search "search" 15. ] ]
         ; dom ~key:"vh-type"
             ~style_class:"view-action-type text-muted-foreground text-sm"
             [ dom ~key:"vh-tv" ~style_class:"w-full property-value-inner"
@@ -644,13 +649,18 @@ let refs_view_head key title count : t =
         ]
     ]
 
-(* cljs ls-foldable-title wrapping a view-head or a group page-ref *)
-let foldable_title ?on_click key inner : t =
+(* cljs ls-foldable-title wrapping a view-head or a group page-ref.
+   ~control:false drops the fold arrow — only the section-level title
+   carries .ls-foldable-title-control in cljs — ref-group titles are
+   plain headers. *)
+let foldable_title ?on_click ?(control = true) key inner : t =
   dom ~key:(key ^ "-ft") ~style_class:"ls-foldable-title content"
     [ dom ~key:"ftr" ~style_class:"flex-1 flex-row foldable-title"
         [ dom ~key:"fth"
             ~style_class:"flex flex-row items-center ls-foldable-header gap-1"
-            [ fold_arrow ?on_click (key ^ "-fa"); inner ]
+            ((if control then [ fold_arrow ?on_click (key ^ "-fa") ]
+              else [])
+             @ [ inner ])
         ]
     ]
 
@@ -666,7 +676,7 @@ let ref_group idx (name, blocks) : t =
                   ; ("data-item-index", string_of_int idx)
                   ; ("style", "overflow-anchor: none;") ]
     [ dom ~key:"gi" ~style_class:"flex flex-col"
-        [ foldable_title (key ^ "-t")
+        [ foldable_title ~control:false (key ^ "-t")
             (dom ~key:"grp" ~style_class:""
                [ dom ~key:"grl" ~tag:"a" ~style_class:"page-ref relative"
                    ~attrs:
@@ -859,6 +869,9 @@ let unlinked_references_view (m : Model.t) : t =
                       if not m.unlinked_open then fetch_unlinked m;
                       Runtime.flush ())
                     (refs_view_head "urefs"
+                       ~on_search:(fun () ->
+                         Runtime.send Action.Unlinked_toggle_search;
+                         Runtime.flush ())
                        (Ui_strings.t "view/unlinked-references")
                        (List.length refs))
                 ; dom ~key:"urefs-content" ~style_class:"ls-foldable-content"
@@ -886,6 +899,20 @@ let unlinked_references_view (m : Model.t) : t =
 
 (* --- route views -------------------------------------------------- *)
 
+(* cljs page-inner: data-page-tags="[\"a\", \"b\"]" on the wrap *)
+let page_wrap_attrs (page : Model.page) : (string * string) list =
+  match page.page_tags with
+  | [] -> []
+  | tags ->
+      [ ( "data-page-tags"
+        , "[" ^ String.concat ", " (List.map (fun t -> "\"" ^ t ^ "\"") tags)
+          ^ "]" ) ]
+
+let is_today_page (m : Model.t) (page : Model.page) : bool =
+  match page.page_journal_day with
+  | Some d -> d = Dates.today_journal_day () && m.route <> Model.Home
+  | None -> false
+
 let journal_item ?(last = false) (m : Model.t) (p : Model.page) : t =
   let key = Option.value p.page_uuid ~default:p.page_title in
   (* cljs journal-item > page-inner: .cp__page-inner-wrap.is-journals
@@ -895,7 +922,9 @@ let journal_item ?(last = false) (m : Model.t) (p : Model.page) : t =
     ~style_class:
       ("journal-item content relative" ^ if last then " journal-last-item" else "")
     [ dom ~key:("jiw-" ^ key)
-        ~style_class:"flex-1 page relative cp__page-inner-wrap is-journals"
+        ~style_class:
+          "flex-1 page relative cp__page-inner-wrap is-journals"
+        ~attrs:(page_wrap_attrs p)
         [ dom ~key:("jip-" ^ key)
             ~style_class:"relative grid gap-4 sm:gap-8 page-inner mb-16"
             [ dom ~key:("jit-" ^ key) ~style_class:"flex flex-row space-between"
@@ -935,11 +964,6 @@ let not_found_view name : t =
         ]
     ]
 
-let is_today_page (m : Model.t) (page : Model.page) : bool =
-  match page.page_journal_day with
-  | Some d -> d = Dates.today_journal_day () && m.route <> Model.Home
-  | None -> false
-
 (* cljs library/add-pages: secondary button opens a page-picker popup *)
 let library_add_pages_button : t =
   dom ~key:"lib-add" ~style_class:"ls-add-pages px-1 mt-4"
@@ -954,21 +978,13 @@ let library_add_pages_button : t =
             ~text:(Ui_strings.t "library/add-existing-pages") [] ]
     ]
 
-(* cljs page-inner: data-page-tags="[\"a\", \"b\"]" on the wrap *)
-let page_wrap_attrs (page : Model.page) : (string * string) list =
-  match page.page_tags with
-  | [] -> []
-  | tags ->
-      [ ( "data-page-tags"
-        , "[" ^ String.concat ", " (List.map (fun t -> "\"" ^ t ^ "\"") tags)
-          ^ "]" ) ]
-
 let page_view (m : Model.t) (page : Model.page) : t =
   let cls =
     "flex-1 page relative cp__page-inner-wrap"
     ^ (if page.page_journal_day <> None then " is-journals" else "")
     ^ (if is_today_page m page then " is-today-page" else "")
-    ^ (if page.page_is_tag then " is-node-page" else "")
+    ^ (if page.page_is_tag || page.page_is_property then " is-node-page"
+       else "")
   in
   dom ~key:"page" ~style_class:cls
       ~attrs:(page_wrap_attrs page)
@@ -1007,7 +1023,8 @@ let library_view (m : Model.t) (page : Model.page) : t =
   let cls =
     "flex-1 page relative cp__page-inner-wrap"
     ^ (if is_today_page m page then " is-today-page" else "")
-    ^ (if page.page_is_tag then " is-node-page" else "")
+    ^ (if page.page_is_tag || page.page_is_property then " is-node-page"
+       else "")
   in
   dom ~key:"page" ~style_class:cls
       ~attrs:(page_wrap_attrs page)
@@ -1039,7 +1056,13 @@ let page_view_of_model (m : Model.t) : t =
       box ~key:"graphs-view" [] (* graphs area renders via its own view *)
   | Model.Ready, Model.Settings -> Settings_page.view m
   | Model.Ready, _ -> (
-      match m.route_page with
-      | Some page -> page_view m page
-      | None -> empty_state ())
+      match m.route_page, m.page_missing with
+      | Some page, _ -> page_view m page
+      | None, true ->
+          (* cljs page-aux: missing page/block renders inline
+             (t :page/not-found) inside the content wrap *)
+          dom ~key:"pg-missing" ~style_class:"opacity-75"
+            [ text ~key:"pgm-t" ~value:(Ui_strings.t "page/not-found")
+                ~style_class:"" [] ]
+      | None, false -> empty_state ())
   | _ -> empty_state ()

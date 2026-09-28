@@ -224,6 +224,7 @@ let navigate_to_page target =
     if Sdk_util.is_uuid_string target then target
     else encode_uri_component target
   in
+  Runtime.mark_nav ();
   Platform.set_location_hash (Runtime.nav_hash ("#/page/" ^ target));
   Platform.dispatch "ls:navigate" Js.Json.null
 
@@ -377,33 +378,17 @@ let block_item_of_uuid repo uuid : item option Js.Promise.t =
              | _ -> Js.Promise.resolve None)
          | _ -> Js.Promise.resolve None)
 
-(* cljs :contents item renders the TOC of the CURRENT page (the page in
-   the main area), not a page literally named "Contents" *)
-let contents_item _repo : item option Js.Promise.t =
-  let m = !model_ref in
-  let current =
-    match !Runtime.current_page with
-    | Some p -> Some p
-    | None -> (
-        match m.Model.route_page with
-        | Some p -> Some p
-        | None -> List.nth_opt m.Model.journals 0)
-  in
-  match current with
-  | Some p ->
-      Js.Promise.resolve
-        (Some
-           { key = "contents"
-           ; kind = "contents"
-           ; uuid = p.Model.page_uuid
-           ; title = t "Contents"
-           ; breadcrumb = []
-           ; blocks = p.Model.page_blocks
-           ; linked_refs = []
-           ; page_ref = Some p.Model.page_title
-           ; icon = None
-           })
-  | None -> Js.Promise.resolve None
+(* cljs :contents item renders the built-in "Contents" page's own blocks
+   (<build-sidebar-item> pulls the entity named "Contents"), and
+   sidebar-action-block-lookup resolves :contents -> "Contents" so
+   "Open as page" navigates to that page. *)
+let contents_item repo : item option Js.Promise.t =
+  page_item_of_ref repo "Contents"
+  |> Js.Promise.then_ (function
+         | Some it ->
+             Js.Promise.resolve
+               (Some { it with key = "contents"; kind = "contents" })
+         | None -> Js.Promise.resolve None)
 
 let static_item key kind title =
   Some
@@ -594,10 +579,11 @@ let on_model st (m : Model.t) =
          refresh_favorited (Router.repo ()) st;
          match m.Model.repo, p.Model.page_db_id with
          | Some repo, Some id ->
-             (* cljs add-page-to-recent! runs on every redirect-to-page!,
-                including the initial journal navigation *)
-             push_recent repo id;
-             load_recents repo st
+             (* recents only on explicit navigation (cljs
+                redirect-to-page!), never boot/hashchange loads *)
+             if Runtime.take_nav_mark () then (
+               push_recent repo id;
+               load_recents repo st)
          | _ -> ())
    | _ -> ());
   sync_right_sidebar_width ()
