@@ -136,6 +136,19 @@ external js_escape : string -> string = "escape"
    (transit-decoded) strings are already proper JS strings and would throw. *)
 let utf8 s = decode_uri (js_escape s)
 
+external navigator_ : Js.Json.t = "navigator"
+external navigator_platform : Js.Json.t -> string = "platform" [@@mel.get]
+
+(* cljs (or util/mac? util/win32?) — goog platform detection *)
+let desktop_os () =
+  let p = String.lowercase_ascii (navigator_platform navigator_) in
+  let n = String.length p in
+  let rec contains i sub =
+    let m = String.length sub in
+    i + m <= n && (String.sub p i m = sub || contains (i + 1) sub)
+  in
+  contains 0 "mac" || contains 0 "win"
+
 external json_parse : string -> Js.Json.t = "parse" [@@mel.scope "JSON"]
 external json_prop : Js.Json.t -> string -> Js.Json.t = "" [@@mel.get_index]
 
