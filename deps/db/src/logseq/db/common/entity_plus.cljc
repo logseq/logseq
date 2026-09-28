@@ -109,6 +109,30 @@
            (or result' default-value))
          (lookup-entity e k default-value))))))
 
+(defn- entity-class-ids
+  "Ids of the entity's tags plus all their ancestor classes via
+   :logseq.property.class/extends."
+  [db eid]
+  (let [tag-ids (set (map :v (d/datoms db :eavt eid :block/tags)))]
+    (loop [frontier tag-ids
+           seen tag-ids]
+      (if (empty? frontier)
+        seen
+        (let [extends-ids (into #{}
+                                (comp (mapcat #(d/datoms db :eavt % :logseq.property.class/extends))
+                                      (map :v))
+                                frontier)
+              new-ids (into #{} (remove seen) extends-ids)]
+          (recur new-ids (into seen new-ids)))))))
+
+(defn- property-default-applies?
+  "A default defined on a class-declared property only applies to members of
+   those classes. Properties declared by no class keep their global default."
+  [db eid property-eid]
+  (let [declaring-class-ids (set (map :e (d/datoms db :avet :logseq.property.class/properties property-eid)))]
+    (or (empty? declaring-class-ids)
+        (some declaring-class-ids (entity-class-ids db eid)))))
+
 (defn- lookup-kv-with-default-value
   [db ^Entity e k default-value]
   (or
@@ -121,10 +145,13 @@
        ;; property default value
        (when (qualified-keyword? k)
          (when-let [property (entity-memoized db k)]
-           (let [property-type (lookup-entity property :logseq.property/type nil)]
-             (if (keyword-identical? :checkbox property-type)
-               (lookup-entity property :logseq.property/scalar-default-value nil)
-               (lookup-entity property :logseq.property/default-value nil)))))))))
+           (let [property-type (lookup-entity property :logseq.property/type nil)
+                 property-default (if (keyword-identical? :checkbox property-type)
+                                    (lookup-entity property :logseq.property/scalar-default-value nil)
+                                    (lookup-entity property :logseq.property/default-value nil))]
+             (when (and (some? property-default)
+                        (property-default-applies? db (.-eid e) (:db/id property)))
+               property-default))))))))
 
 (defn- get-property-keys
   [^Entity e]

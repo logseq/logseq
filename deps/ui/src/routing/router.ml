@@ -86,6 +86,18 @@ let fetch_blocks (p : Model.page) =
                     in
                     Outliner_ops.resolve_block_tags blocks))
       |> Js.Promise.then_ (fun blocks ->
+             (* cljs page-membership :class: children tagged with the class
+                itself are excluded from the block tree — they render in
+                the class-objects table instead *)
+             let blocks =
+               match p.Model.page_db_id with
+               | Some id when p.Model.page_is_tag ->
+                   List.filter
+                     (fun (b : Model.block) ->
+                       not (List.mem id b.Model.block_tag_ids))
+                     blocks
+               | _ -> blocks
+             in
              Js.Promise.resolve { p with Model.page_blocks = blocks })
 
 let fetch_refs_blocks (p : Model.page) : Model.block list Js.Promise.t =
