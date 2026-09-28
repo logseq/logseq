@@ -885,3 +885,43 @@ search may lag).
 - **`((uuid))` block refs in content** — deprecated by product
   decision; titles parse `((…))` through the same page-reference path
   as `[[…]]` (no distinct block-ref rendering or popup).
+
+## Export page / Publish page dialogs (deps/ui/src/export/)
+
+- **OPML/HTML are client-side in cljs too** (`handler/export/{opml,html}.cljs`
+  fetch `export-get-blocks-data` then walk a `mldoc` AST). `mldoc` is a
+  native-only opam lib, so `export_formats.ml` re-implements the same
+  shape as line-based converters: `- `-bullet items, indent counted in
+  `export-bullet-indentation` units, non-bullet continuation lines join
+  the current item's text with a space. A bare `-` line is an empty
+  item (`<outline text=""/>` / `<li></li>`). Inline HTML covers the
+  mldoc constructs the exporters emit (`**`, `~~`, `++`, `^^`,
+  `` ` ``, `$$`, `[[p]]`, `[l](u)`, `{{m}}`, `_{}`, `^{}`, `*i*`,
+  `_i_`, `#tag` → `a.tag[data-ref]`); constructs outside that subset
+  render as literal text.
+- **`export-get-blocks-data` map keys are keywords** (`:content`
+  `:format` `:title`), not strings — a `W.String` lookup misses.
+- **OPML `<title>` is `untitled` for page exports**: cljs passes a
+  coll `[page-uuid]`; the worker only resolves `block/title` when given
+  a bare uuid, so `untitled` is faithful cljs behavior.
+- **EDN preview is single-line**: cljs `pprint`s the worker result into
+  the textarea; the port prints `Edn.to_string` (same data, no
+  pretty-print).
+- **Selects have no `value` attribute**: React sets `.value` as a
+  property; the port emits `selected` on the matching `<option>` for
+  the initial render only (browser tracks changes after).
+- **Publish asset-upload sub-flow is not ported**: cljs
+  `publish-page!` first uploads page assets to logseq.io; the port
+  POSTs `build-publish-page-payload` transit + `x-publish-meta` (with
+  the underscore-named meta keys `graph` `page_uuid` `block_count`
+  `schema_version` `format` `compression` `content_hash`
+  `content_length` `owner_sub` `owner_username` `created_at`) and
+  optional `:page-password` only.
+- **Conditional chrome uses `if_`, not `dyn`+empty `box`**: cljs
+  `when`/`when-not` unmounts the checkbox check svg, the eye toggle,
+  and the Copy/Save row; `if_` is the matching primitive (a `dyn`
+  branch returning `box` leaves a stray `.lui-box` div).
+- **Persisted export options** read/write the cljs localStorage keys
+  `copy/export-block-text-{indent-style,remove-options,other-options}`
+  with cljs shapes (`#{…}` removal set, `:other-options` map with
+  `keep-only-level<=N`).

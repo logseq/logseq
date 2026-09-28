@@ -71,12 +71,18 @@ let page_items (p : Model.page) =
   let export_page =
     item "exp-page" Strings.export_page (fun () ->
         Runtime.send (Action.Page_menu_set None);
-        Sidebar_state.open_dialog "export")
+        (match p.page_uuid with
+         | Some u -> Export_state.arm u p.page_db_id
+         | None -> ());
+        Sidebar_state.open_dialog "export-page")
   in
   let publish_page =
     item "pub-page" Strings.publish_page (fun () ->
         Runtime.send (Action.Page_menu_set None);
-        Sidebar_state.open_dialog "export")
+        (match p.page_uuid with
+         | Some u -> Publish_view.arm u p.page_db_id
+         | None -> ());
+        Sidebar_state.open_dialog "publish-page")
   in
   (* cljs page_menu.cljs: convert-to-tag only for internal pages that are
      not built-in; convert-tag-to-page for non-built-in classes *)
