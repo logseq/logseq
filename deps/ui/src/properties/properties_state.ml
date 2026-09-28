@@ -68,7 +68,7 @@ let toggle_hidden () = show_hidden := not !show_hidden
    container; dead entries are pruned by isConnected. *)
 type area =
   { container : Editor_dom.el
-  ; refresh : unit -> unit
+  ; refresh : unit -> unit Js.Promise.t
   }
 
 let areas : area list ref = ref []
@@ -95,8 +95,20 @@ let refresh_all () =
     Editor_dom.set_timeout (fun () ->
         refresh_pending := false;
         if !refresh_lock then ()
-        else List.iter (fun a -> a.refresh ()) (live_areas ()))
+        else List.iter (fun a -> ignore (a.refresh ())) (live_areas ()))
       150)
+
+(* immediate rebuild for commit paths (sdk writes) — skips the 150ms
+   debounce so callers observe applied property changes *)
+let refresh_all_now () =
+  List.map (fun a -> a.refresh ()) (live_areas ())
+  |> Array.of_list
+  |> Js.Promise.all
+  |> Js.Promise.then_ (fun _ -> Js.Promise.resolve ())
+
+(* sdk apply_ops awaits this before resolving — avoids a
+   properties->sdk dependency cycle *)
+let () = Runtime.refresh_property_areas := refresh_all_now
 
 (* ---------- sync-db-changes hook ---------- *)
 
