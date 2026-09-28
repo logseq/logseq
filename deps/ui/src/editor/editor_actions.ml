@@ -722,8 +722,15 @@ let copy_selection_text () =
         (String.concat "\n"
            (List.map (fun b -> b.Model.block_title) blocks))
 
+(* cljs edit-last-block-after-inserted! — after a paste, editing moves to
+   the last inserted block so sequential pastes append in order *)
+let edit_last_inserted resp =
+  match Ops.last_inserted_uuid resp with
+  | Some u -> enter_edit u (String.length (model_title u))
+  | None -> ()
+
 let paste_trees trees target_uuid ~replace_empty =
-  Ops.apply_and_refresh ~opts:(Ops.op_opts "paste")
+  Ops.apply_and_refresh_result ~opts:(Ops.op_opts "paste")
     [ Ops.paste_trees trees target_uuid ~replace_empty ]
 
 let paste_lines lines =
@@ -775,12 +782,13 @@ let paste_into_editor ev =
           in
           ignore
             (paste_trees trees e.uuid ~replace_empty
-            |> Js.Promise.then_ (fun () ->
+            |> Js.Promise.then_ (fun resp ->
                    (* replace-empty swaps the editing block's entity
                       in place (same uuid, new title) — resync the live
                       textarea buffer so it doesn't mask the pasted
                       content *)
                    if replace_empty then Ops.resync_open_editor ();
+                   edit_last_inserted resp;
                    Js.Promise.resolve ()))
       | None -> ())
   | _ -> ()
@@ -796,7 +804,10 @@ let paste_blocks ev =
               ignore
                 (paste_trees trees
                    (List.nth sel (List.length sel - 1))
-                   ~replace_empty:false)
+                   ~replace_empty:false
+                 |> Js.Promise.then_ (fun resp ->
+                        edit_last_inserted resp;
+                        Js.Promise.resolve ()))
           | [] -> ())
       | [] -> (
           match D.ev_clipboard ev with
@@ -992,3 +1003,139 @@ let consume_pending_zoom () =
   let z = !pending_zoom in
   pending_zoom := None;
   z
+
+(* -- /query (cljs commands.cljs db-based-query -> editor.cljs
+   run-query-command!): create the logseq.property/query value block
+   (its title is the pre-slash buffer), tag the block Query, empty its
+   title, and exit editing — one transact! batch. -- *)
+let run_query_command ~advanced =
+  match S.editing () with
+  | None -> ()
+  | Some e ->
+      let buf = live_buffer e.uuid in
+      S.set (fun st -> { st with S.editing = None });
+      let quuid = Platform.random_uuid () in
+      let extra =
+        (* advanced-query-steps: display-type :code + code/lang clojure
+           on the query value block (pre-named via new-block-id) *)
+        if advanced then
+          [ Ops.set_block_property quuid "logseq.property.node/display-type"
+              (Wire.Keyword "code")
+          ; Ops.set_block_property quuid "logseq.property.code/lang"
+              (Wire.String "clojure")
+          ]
+        else []
+      in
+      let _ = () in
+      ignore
+        (Ops.apply_and_refresh
+           ([ Ops.op "create-property-text-block"
+                [ Wire.Uuid e.uuid
+                ; Wire.Keyword "logseq.property/query"
+                ; Wire.String buf
+                ; Wire.Map
+                    [ Ops.kw "set-block-property?" (Wire.Bool true)
+                    ; Ops.kw "new-block-id" (Wire.Uuid quuid)
+                    ]
+                ]
+            ; Ops.set_block_property e.uuid "block/tags"
+                (Wire.Keyword "logseq.class/Query")
+            ; Ops.save_block e.uuid ""
+            ]
+           @ extra)
+           |> Js.Promise.then_ (fun () -> Js.Promise.resolve ()))
+
+(* -- upload asset (cljs handler/editor/assets.cljs
+   db-based-save-assets!): write each file to pfs
+   /<graph>/assets/<uuid>.<ext>, then insert-blocks an Asset-tagged
+   block below the editing block. An empty target reuses its uuid and
+   is replaced in place. -- *)
+let trigger_asset_upload () =
+  match Properties_dom.doc_query "input#upload-file" with
+  | Some el -> Properties_dom.el_click el
+  | None -> ()
+
+let file_ext name =
+  match String.rindex_opt name '.' with
+  | Some i when i + 1 < String.length name ->
+      String.lowercase_ascii
+        (String.sub name (i + 1) (String.length name - i - 1))
+  | _ -> ""
+
+let file_title name =
+  match String.rindex_opt name '.' with
+  | Some 0 | None -> name
+  | Some i -> String.sub name 0 i
+
+let asset_block_map ~uuid ~title ~ext ~size ~checksum =
+  Wire.Map
+    [ Ops.str "block/uuid" (Wire.Uuid uuid)
+    ; Ops.str "block/title" (Wire.String title)
+    ; Ops.str "logseq.property.asset/type" (Wire.String ext)
+    ; Ops.str "logseq.property.asset/size" (Wire.Int size)
+    ; Ops.str "logseq.property.asset/checksum" (Wire.String checksum)
+    ; ( Wire.Keyword "block/tags"
+      , Wire.Set [ Wire.Keyword "logseq.class/Asset" ] )
+    ]
+
+let save_one_asset repo pfs target_uuid ~empty_target ~first
+    (f : Js.Json.t) =
+  let name = Browser_ui.file_name f in
+  let ext = file_ext name in
+  let size = int_of_float (Browser_ui.file_size f) in
+  let uuid =
+    match (first, empty_target) with
+    | true, true -> target_uuid
+    | _ -> Platform.random_uuid ()
+  in
+  ignore
+    (Browser_ui.file_buffer f
+    |> Js.Promise.then_ (fun buf ->
+           let u8 = Js.Typed_array.Uint8Array.fromBuffer buf () in
+           Platform.sha256_hex u8
+           |> Js.Promise.then_ (fun checksum ->
+                  let dir =
+                    "/" ^ Platform.strip_db_prefix repo ^ "/assets"
+                  in
+                  Platform.pfs_ensure_dir pfs dir
+                  |> Js.Promise.then_ (fun () ->
+                         Platform.pfs_write_file pfs
+                           (dir ^ "/" ^ uuid ^ "." ^ ext)
+                           u8
+                         |> Js.Promise.then_ (fun () ->
+                                Ops.apply_and_refresh
+                                  [ Ops.insert_blocks ~bottom:true
+                                      ~replace_empty_target:true
+                                      [ asset_block_map ~uuid
+                                          ~title:(file_title name) ~ext
+                                          ~size ~checksum ]
+                                      target_uuid ~sibling:true ]
+                                |> Js.Promise.then_ (fun () ->
+                                       Js.Promise.resolve ()))))))
+
+let save_uploaded_files (input : Editor_dom.el) =
+  match (!Runtime.current_repo, S.editing ()) with
+  | Some repo, Some e -> (
+      match Platform.pfs_handle () with
+      | Some pfs ->
+          let buffer = live_buffer e.uuid in
+          let empty_target = String.trim buffer = "" in
+          (* cljs db-based-save-assets! persists the unsaved edit content
+             before inserting — otherwise the worker sees a blank target
+             and replace-empty-target? swaps it for the asset block while
+             it is still being edited *)
+          let pre =
+            if empty_target then Js.Promise.resolve ()
+            else Ops.apply [ Ops.save_block e.uuid buffer ]
+          in
+          ignore
+            (pre
+             |> Js.Promise.then_ (fun () ->
+                    Array.iteri
+                      (fun i f ->
+                        save_one_asset repo pfs e.uuid ~empty_target
+                          ~first:(i = 0) f)
+                      (Browser_ui.files_of input);
+                    Js.Promise.resolve ()))
+      | None -> ())
+  | _ -> ()

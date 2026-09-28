@@ -7,6 +7,32 @@
      until the fresh one lands — no blank flicker)
    - anything else     -> Worker_event action for future consumers *)
 
+(* "rtc-sync-state" floods during sync bursts (presence updates, pending-tx
+   counts); "sync-db-changes" fires once per tx report. Both trigger a full
+   flush/reload, so coalesce: dedupe identical rtc states and debounce route
+   reloads — otherwise the reconcile churn starves the editor during typing. *)
+let last_rtc : Model.rtc option ref = ref None
+let reload_scheduled = ref false
+
+(* Boot_graph_ready clears Model.rtc; the dedup ref must clear too or an
+   unchanged rebroadcast would be dropped and the indicator stay hidden *)
+let reset_rtc () = last_rtc := None
+
+(* A full route reload tears down the editing textarea mid-keystroke;
+   while a block is being edited, keep coalescing instead — the next
+   broadcast wave (or the end of editing) lands the reload anyway. *)
+let rec schedule_reload () =
+  if !reload_scheduled then ()
+  else (
+    reload_scheduled := true;
+    Editor_dom.set_timeout
+      (fun () ->
+         reload_scheduled := false;
+         if Editor_state.ready () && Editor_state.editing () <> None then
+           schedule_reload ()
+         else Router.reload ())
+      150)
+
 let dispatch kind payload =
   match kind with
   | "notification" -> (
@@ -16,8 +42,26 @@ let dispatch kind payload =
           Runtime.flush ()
       | None -> ())
   | "sync-db-changes" ->
-      Router.reload ();
+      schedule_reload ();
       Views_mount.refresh_query_insts ()
+  | "rtc-sync-state" -> (
+      let rtc = Decode.rtc_of_wire payload in
+      match !last_rtc with
+      | Some prev when prev = rtc -> ()
+      | _ ->
+          last_rtc := Some rtc;
+          Runtime.send (Action.Rtc_state rtc);
+          Runtime.flush ())
+  | "db-worker/ui-request" -> Ui_requests.handle payload
+  | "remote-graph-gone" ->
+      (* cljs :rtc/remote-graph-gone: refresh remote graph list *)
+      !Runtime.remote_graph_gone ()
+  | "add-repo" -> (
+      (* cljs :add-repo -> state/add-repo! — worker broadcasts this after
+         a remote-graph download completes *)
+      match Wire.map_get_string payload "repo" with
+      | Some repo -> !Runtime.add_repo repo
+      | None -> ())
   | _ -> Runtime.send (Action.Worker_event (kind, payload))
 
 (* sdk show_msg/close_msg dispatch `ls:toast`/`ls:toast-close`

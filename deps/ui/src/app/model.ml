@@ -49,6 +49,9 @@ type block =
   ; block_asset_height : int option (* logseq.property.asset/height *)
   ; block_asset_resize : int option (* resize-metadata width *)
   ; block_asset_align : string option (* logseq.property.asset/align *)
+  ; block_is_query : bool
+    (* db/id == parent's logseq.property/query ref — renders the query
+       builder instead of plain content (cljs query-block? branch) *)
   }
 
 type page =
@@ -85,6 +88,18 @@ type confirm =
   | Confirm_convert_tag_to_page of int (* class db/id *)
   | Confirm_delete_asset of string (* asset block uuid *)
 
+(* rtc-sync-state broadcast projection — the fields the header indicator
+   and e2e rtc-tx element need (components/rtc/indicator.cljs) *)
+type rtc =
+  { rtc_lock : bool (* ws open *)
+  ; rtc_ws_state : string
+  ; rtc_local_tx : int option
+  ; rtc_remote_tx : int option
+  ; rtc_pending_local : int (* unpushed-block-update-count *)
+  ; rtc_pending_asset : int
+  ; rtc_pending_server : int
+  }
+
 (* worker :notification broadcast -> toast *)
 type toast =
   { toast_id : int
@@ -120,6 +135,7 @@ type t =
   ; unlinked_query : string
   ; help_open : bool
   ; unlinked_blocks : block list
+  ; rtc : rtc option
   }
 
 let initial =
@@ -150,6 +166,7 @@ let initial =
   ; unlinked_query = ""
   ; help_open = false
   ; unlinked_blocks = []
+  ; rtc = None
   }
 
 (* optimistic reorder for move-up/down: only handles the common case of a

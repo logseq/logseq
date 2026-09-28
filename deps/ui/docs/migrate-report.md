@@ -816,6 +816,76 @@ Needs an upstream PR.
   has no installed-presence gate: a plugin's `provideUI` can beat the
   `registered` event on fresh installs.
 
+
+## RTC surface (e2e: `rtc_basic_test`, `rtc_extra_test`, `rtc_extra_part2_test`)
+
+- **Cloud indicator must reset on graph switch**: the worker's
+  `rtc-sync-state` broadcast carries no repo field, and `db_sync_client`
+  broadcasts `rtc-lock=false` only via `set_ws_state` on close — a deleted
+  graph's conn leaves the UI holding a stale `idle` state, so
+  `button.cloud.on.idle` stays visible on the next (unsynced) graph.
+  cljs gets away with it because `state/set-state! :rtc/state` merges and
+  the close broadcast lands. We clear `Model.rtc` on `Boot_graph_ready`
+  (`Worker_events.reset_rtc` resets the dedup ref too) and on
+  `Rtc_ops.download` start (`Action.Rtc_state_clear`), so `on.idle` can
+  only appear once the *current* graph's conn reports — this is what
+  `switch-graph`'s `wait-for` actually gates on.
+- **LUI reconcile does not preserve keyed nodes across reparents**:
+  `collect_node_mapping` matches children per-parent only, so an
+  outdented block row is dropped+recreated — including the editing
+  textarea (new DOM node). Playwright `boundingBox` resolves the old
+  node and returns null → NPE instead of TimeoutError (e2e
+  `bounding-xy`). Mitigation in `outliner_ops.refresh_page`: a
+  `refresh_gen` guard drops stale in-flight refreshes (each refresh
+  refetches latest state, so skipping strictly-older results is safe) —
+  shrinks the window by coalescing the per-op `apply_and_refresh` pileup
+  during the stress seed loop.
+- **Graphs view must not rebuild on every refresh**: cljs React
+  reconciles rows in place; our wholesale `B.remove`+rebuild detached the
+  remote row's span mid-click (Playwright "element not stable" → 10s
+  TimeoutError on `.last` row click). `graphs_view.render_into` now skips
+  when `view_sig` (repos + meta last-seen + remote_graphs) is unchanged.
+- **Delete must drop the repo optimistically**: `delete_graph` removes
+  from `repos` at entry (before the unlink round-trip) — the remote row
+  click during the in-flight unlink checks `repos` to decide
+  navigate-vs-download, and a stale `local=true` navigated into a
+  deleted graph and recreated an empty DB.
+- **Navigation requests need a generation guard**: the delete-redirect
+  nav and the remote-row download nav race; `nav_req` lets only the
+  newest continuation apply (`navigate_journal`).
+- **`remote_row` uses the same `data-testid` as local rows**
+  (`logseq_db_<name>`) so `.last`/`w/-query` locators hit it.
+- **e2ee password modal**: `db-worker/ui-request` broadcast →
+  `Ui_requests.handle` → password dialog (`e2ee` flow in
+  `dialogs_view.ml`); the modal must not appear when keys already exist.
+- **cmdk `(Dev)` RTC commands**: Start/Stop/Validate entries invoke
+  `db-sync-start`/`db-sync-stop`/`db-sync-validate` via
+  `thread-api/*`; `Rtc_ops.start` pushes `sync-app-state` +
+  `set_sync_config` first.
+- **RTC tx element**: hidden `data-testid="rtc-tx"` div renders
+  `{:local-tx N, :remote-tx N}` EDN — the e2e `rtc/with-wait-tx-updated`
+  reads it. `worker_events` dedupes identical `rtc-sync-state` payloads
+  (`last_rtc`) and debounces `sync-db-changes` → `schedule_reload` (150ms,
+  defers while an editor is open) — without it the broadcast flood
+  starves typing.
+- **Asset upload**: hidden `#upload-file` input + `Upload an asset` slash
+  command → `db-based-save-assets!` (pfs write + Asset-tagged block) →
+  `.ls-block img` renders from `logseq.property.asset/type` blocks.
+- **`/query` slash command** → Query block with `.cp__query-builder`
+  (issue-651): `run_query_command` in `editor_actions.ml` transacts a
+  query block + code-type value block in one batch (advanced variant gets
+  `logseq.property.node/display-type = :code` + `code/lang clojure`).
+- **Extends picker**: class/property rows render with
+  `.ui__dropdown-menu-content` toggle menu; the `/extends` command path
+  filters `logseq.class/*` extends candidates.
+- **Status/priority slash commands apply closed-value properties**:
+  `rtc-task-blocks-test` needs `apply-closed-value` on status/priority
+  change (worker-side `closed-value` property ops).
+- **Stress-test seeding is deterministic**: `seed-long-nested-page!`
+  uses `java.util.Random` seeded per run — failures reproduce at the same
+  tree position across runs, which made the reparent-detach race
+  diagnosable.
+
 ## cljs ↔ OCaml 行为对照表 (interaction semantics map)
 
 | 交互 / 隐式契约 | cljs 语义来源 | LUI/OCaml 实现位置 |

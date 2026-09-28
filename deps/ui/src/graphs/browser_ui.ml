@@ -17,6 +17,9 @@ external remove : E.t -> unit = "remove" [@@mel.send]
 external set_attr : E.t -> string -> string -> unit = "setAttribute"
   [@@mel.send]
 
+external remove_attr : E.t -> string -> unit = "removeAttribute"
+  [@@mel.send]
+
 external set_text : E.t -> string -> unit = "textContent" [@@mel.set]
 
 external inner_html_set : E.t -> string -> unit = "innerHTML" [@@mel.set]
@@ -72,10 +75,12 @@ let prefers_dark : unit -> bool =
      dark)').matches }"]
 
 (* -- files -- *)
-let files_of : E.t -> Js.Json.t array =
+(* 'a so both Webapi Dom.element and the abstract Editor_dom.el work *)
+let files_of : 'a -> Js.Json.t array =
   [%mel.raw "function (el) { return Array.from(el.files || []) }"]
 
 external file_name : Js.Json.t -> string = "name" [@@mel.get]
+external file_size : Js.Json.t -> float = "size" [@@mel.get]
 external file_text : Js.Json.t -> string Js.Promise.t = "text" [@@mel.send]
 
 external file_buffer :

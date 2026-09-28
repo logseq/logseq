@@ -94,6 +94,11 @@ let t key =
   | "ui/false" -> "false"
   | "select/new-option" -> "New option:"
   | "search-result-item/new-page" -> "Create page called '{1}'"
+  | "property.built-in/tags" -> "Tags"
+  | "property.built-in/priority" -> "Priority"
+  | "query.builder/filter" -> "Filter"
+  | "query.builder/add-filter-or-operator-placeholder" ->
+      "Add filter/operator"
   | _ -> key
 
 (* Substitute {1} placeholders in the template. *)

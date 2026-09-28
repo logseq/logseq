@@ -18,6 +18,9 @@
 
 open Lui_elements
 
+let if_ = Logseq_dom.if_
+let keyed = Logseq_dom.keyed
+
 module S = Cmdk_state
 
 let scroller_class =
@@ -590,12 +593,14 @@ let group_el (st : S.t) (group_sig : S.group Signal.signal) : t =
 (* -- palette body ---------------------------------------------------- *)
 
 let groups_body st : t =
+ fun ctx parent ->
   let groups_sig =
     Signal.map (fun (v : S.view) -> v.S.groups) st.S.vs.Signal.state_signal
   in
-  keyed ~source:groups_sig ~key:(fun (g : S.group) -> gid_name g.S.gid)
-    ~cmp:Stdlib.compare
-    ~mount:(fun group_sig -> group_el st group_sig)
+  (keyed ~source:groups_sig ~key:(fun (g : S.group) -> gid_name g.S.gid)
+     ~cmp:Stdlib.compare
+     ~mount:(fun group_sig -> group_el st group_sig))
+    ctx parent
 
 let search_only_chip gid =
   Logseq_dom.dom ~key:"search-only"
@@ -612,6 +617,7 @@ let search_only_chip gid =
     ]
 
 let scroller st : t =
+ fun ctx parent ->
   let has_items_sig =
     Signal.map
       (fun (v : S.view) ->
@@ -644,8 +650,10 @@ let scroller st : t =
           else box ~key:"empty-none" [])
         (Signal.map2 (fun q has -> (q, has)) input_sig has_items_sig)
     ]
+    ctx parent
 
 let input_row st : t =
+ fun ctx parent ->
   Logseq_dom.dom ~key:"input-row"
     ~style_class:"cp__cmdk-input-row bg-gray-02 border-b border-1 border-gray-07"
     [ Logseq_dom.dom ~key:"input" ~tag:"input"
@@ -674,6 +682,7 @@ let input_row st : t =
             S.on_input st q))
         []
     ]
+    ctx parent
 
 (* shui shortcut: combo container + kbd.shui-shortcut-key cells *)
 let key_glyph = function

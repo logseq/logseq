@@ -110,6 +110,13 @@ let refresh_all_now () =
    properties->sdk dependency cycle *)
 let () = Runtime.refresh_property_areas := refresh_all_now
 
+(* Immediate refresh for flows that must render before the next user
+   action (e.g. a pending inline editor must mount before the user can
+   click elsewhere — a late mount would open into a moved focus). *)
+let refresh_now () =
+  if not !refresh_lock then
+    List.iter (fun a -> ignore (a.refresh ())) (live_areas ())
+
 (* ---------- sync-db-changes hook ---------- *)
 
 (* boot.ml assigns worker.on_message = Worker_events.dispatch (which

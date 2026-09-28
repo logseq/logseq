@@ -76,8 +76,12 @@ let initial_view =
   ; expanded = []; hl = -1; mouse = false; filter = None
   ; recents = []; tip = 0 }
 
+let latest_vs : view Signal.signal option ref = ref None
+
 let make scheduler : t =
-  { vs = Signal.state scheduler initial_view; gen = ref 0 }
+  let vs = Signal.state scheduler initial_view in
+  latest_vs := Some vs.Signal.state_signal;
+  { vs; gen = ref 0 }
 
 let get st = Signal.get st.vs.state_signal
 
@@ -1084,6 +1088,12 @@ and run_command st repo (cid : string) =
   | "dev/validate-db" ->
       close st;
       Option.iter validate_graph repo
+  | "dev/rtc-start" -> (
+      close st;
+      match repo with Some r -> Rtc_ops.start r | None -> ())
+  | "dev/rtc-stop" ->
+      close st;
+      Rtc_ops.stop ()
   | "ui/toggle-left-sidebar" ->
       close st;
       Runtime.send Action.Toggle_left_sidebar

@@ -68,7 +68,27 @@ let install () =
     installed := true;
     S.chain_worker ();
     Area.ensure_all ();
-    let obs = new_observer (fun () -> Area.ensure_all ()) in
+    (* mutations inside our own managed areas are self-inflicted (value
+       editors, pill renders); rebuilding on them would wipe a live
+       textarea — only structural changes outside need ensure_all *)
+    let rec in_managed el =
+      if node_name el = "#text" then
+        match Properties_dom.el_parent el with Some p -> in_managed p | None -> false
+      else if
+        el_matches el
+          ".ls-properties-area, .ls-bidirectional-properties"
+      then true
+      else
+        match Properties_dom.el_parent el with Some p -> in_managed p | None -> false
+    in
+    let obs =
+      new_observer_records (fun recs ->
+          if
+            Array.fold_left
+              (fun acc r -> acc || not (in_managed (rec_target r)))
+              false recs
+          then Area.ensure_all ())
+    in
     observe obs document_element (observe_opts ~childList:true ~subtree:true);
     document_add_listener "keydown" on_keydown true)
 

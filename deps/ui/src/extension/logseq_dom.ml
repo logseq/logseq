@@ -98,6 +98,33 @@ let class_signal (source : 'a Signal.signal) (f : 'a -> string) =
 let attrs_signal source (f : 'a -> (string * string) list) =
   Signal.map (fun v -> StringValue (attrs_json (f v))) source
 
+(* A derived signal (Signal.map/cutoff over another signal) keeps its
+   upstream subscription alive until the derived signal itself is disposed —
+   an unowned map leaks a subscriber that re-runs its transform on every
+   source publish forever. Every derived signal handed to dom/dyn/if_/keyed
+   is therefore tied to the node's scope; shared state signals
+   (Signal.value/state_signal) carry no upstream links and are left alone so
+   they survive the unmount. *)
+let own context (source : 'a Signal.signal) =
+  if !(source.Signal.disposed_signal) then source
+  else if !(source.Signal.upstream_subscriptions) <> [] then
+    Signal.own_signal context.Lui_ui.ui_scope source
+  else
+    source
+
+let dyn ~equal f (source : 'a Signal.signal) : Lui_elements.t =
+ fun context parent ->
+  Lui_elements.dyn ~equal f (own context source) context parent
+
+let if_ ~test children : Lui_elements.t =
+ fun context parent ->
+  Lui_elements.if_ ~test:(own context test) children context parent
+
+let keyed ~source ~key ~cmp ~mount : Lui_elements.t =
+ fun context parent ->
+  Lui_elements.keyed ~source:(own context source) ~key ~cmp
+    ~mount context parent
+
 let dom ?key ?(tag = "div") ?(attrs = []) ?(events = "")
     ?(style_class = "")
     ?(style_class_signal : Lui_protocol.wire_value Signal.signal option)
@@ -117,18 +144,13 @@ let dom ?key ?(tag = "div") ?(attrs = []) ?(events = "")
   if style_class <> "" then
     Lui_ui.extension_property context node "style-class"
       (StringValue style_class);
-  Option.iter
-    (Lui_ui.extension_property_signal context node "style-class")
-    style_class_signal;
-  Option.iter
-    (Lui_ui.extension_property_signal context node "attrs")
-    attrs_signal_v;
-  Option.iter
-    (Lui_ui.extension_property_signal context node "text")
-    text_signal;
-  Option.iter
-    (Lui_ui.extension_property_signal context node "accessibility-identifier")
-    id_signal;
+  let bind prop s =
+    Lui_ui.extension_property_signal context node prop (own context s)
+  in
+  Option.iter (bind "style-class") style_class_signal;
+  Option.iter (bind "attrs") attrs_signal_v;
+  Option.iter (bind "text") text_signal;
+  Option.iter (bind "accessibility-identifier") id_signal;
   if id <> "" then
     Lui_ui.extension_property context node "accessibility-identifier"
       (StringValue id);

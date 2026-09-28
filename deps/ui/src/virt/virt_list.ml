@@ -18,6 +18,8 @@ open Lui_elements
 module V = Virtualizer
 module D = Logseq_dom
 
+let keyed = D.keyed
+
 type element = V.element
 
 (* -- local DOM helpers (elements as opaque JSON values) -- *)

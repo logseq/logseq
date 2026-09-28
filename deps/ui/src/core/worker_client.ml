@@ -50,6 +50,12 @@ let remote_invoke_js =
               [@u])
 
 let install_remote_invoke worker =
+  (* cljs main-thread thread-api callbacks the worker invoke_remote's;
+     progress + ui-state pushes we don't surface yet *)
+  register_api "thread-api/search-index-build-progress"
+    (fun _ -> Js.Promise.resolve Wire.Nil);
+  register_api "thread-api/set-ui-state"
+    (fun _ -> Js.Promise.resolve Wire.Nil);
   let exposed = Js.Dict.empty () in
   Js.Dict.set exposed "remoteInvoke" remote_invoke_js;
   Comlink.expose exposed worker
