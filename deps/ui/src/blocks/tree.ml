@@ -131,7 +131,9 @@ let content_el uuid (b : Model.block) : t =
     [ dom ~key:("bci-" ^ uuid)
         ~style_class:"block-content-inner flex flex-row justify-between"
         [ dom ~key:("bh-" ^ uuid) ~style_class:"block-head-wrap"
-            (Render.title ?heading:b.block_heading ~self:uuid
+            (Render.title ?heading:b.block_heading
+               ~is_query:(List.mem "logseq.class/Query" b.Model.block_tag_idents)
+               ~self:uuid
                (S.title_for uuid b.block_title))
         ]
     ]

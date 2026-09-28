@@ -424,14 +424,18 @@ let add_existing_to_closed_values ~ident values =
 let transact tx =
   apply "transact" [ W.List tx; W.Map [] ]
 
+(* property text values save through the same wrap-parse-block path as
+   block titles so [[refs]]/#tags inside them materialize entities *)
 let save_block ~uuid ~title =
-  apply "save-block"
-    [ W.Map
-        [ (W.String "block/uuid", W.Uuid uuid)
-        ; (W.String "block/title", W.String title)
-        ]
-    ; W.Map []
-    ]
+  Title_refs.parse (String.trim title)
+  |> Js.Promise.then_ (fun p ->
+         apply "save-block"
+           [ W.Map
+               ([ (W.String "block/uuid", W.Uuid uuid)
+                ; (W.String "block/title", W.String p.Title_refs.title) ]
+               @ Title_refs.kvs_of_parsed p)
+           ; W.Map []
+           ])
 
 let set_choice_scope ~choice_id ~class_id ~add =
   transact

@@ -27,8 +27,13 @@ let toast_item (t : Model.toast) (idx : int) : t =
   (* stylesheet stacks toasts via --toast-index *)
   let style = Printf.sprintf "--toast-index:%d" idx in
   fun ctx parent ->
-    Toast.schedule_dismiss ~ms:5000 t.toast_id;
+    (* cljs notification.cljs: error toasts persist (duration 0), other
+       kinds auto-dismiss *)
+    if t.toast_kind <> "error" then
+      Toast.schedule_dismiss ~ms:5000 t.toast_id;
     (dom ~key:("toast-" ^ string_of_int t.toast_id)
+       (* radix restores pointer events per toast — the viewport is
+          pointer-events:none so toasts must re-enable *)
        ~style_class:("ui__toast pointer-events-auto " ^ kind)
        ~attrs:
          [ ("data-toast-index", string_of_int idx); ("style", style) ]
@@ -62,5 +67,10 @@ let render (ms : Model.t Signal.signal) : t =
       | [] -> box ~key:"toaster-empty" []
       | ts ->
           dom ~key:"toaster" ~style_class:"ui__toaster-viewport"
-            (List.mapi (fun i (t : Model.toast) -> toast_item t i) ts))
+            (* radix sonner stacking puts the newest toast at index 0
+               (frontmost, highest z); model appends new toasts last, so
+               reverse before assigning --toast-index *)
+            (List.mapi
+               (fun i (t : Model.toast) -> toast_item t i)
+               (List.rev ts)))
     ms

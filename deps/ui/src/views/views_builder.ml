@@ -1,7 +1,7 @@
 (* Query builder — the .cp__query-builder clause editor for dsl queries.
    Clause model: a tree of operators (and/or/not) wrapping named filter
-   clauses; serialized to dsl text and saved into the {{query <src>}}
-   block title. *)
+   clauses; serialized to dsl text and saved into the
+   logseq.property/query value block's title. *)
 
 module D = Views_dom
 module V = Views_state
@@ -29,6 +29,8 @@ let is_op s = List.mem s operators
 (* ---------- dsl serialize ---------- *)
 
 let rec to_dsl = function
+  (* cljs ->dsl* unwraps [:page-ref x] to a bare [[x]] symbol *)
+  | CItem ("page-ref", [ a ]) -> a.a_dsl
   | CText s -> "\"" ^ s ^ "\""
   | CItem (f, args) ->
       let arg_str = List.map (fun a -> a.a_dsl) args |> String.concat " " in
@@ -94,17 +96,24 @@ let rec clause_of_wire (w : W.t) : clause option =
 
 let tree_of_src (src : string) : clause =
   let t = String.trim src in
-  match clause_of_wire (Edn.parse t) with
-  | Some (COp _ as op) -> op
-  | Some c -> COp ("and", [ c ])
+  match (try Some (Edn.parse t) with _ -> None) with
+  | Some w -> (
+      match clause_of_wire w with
+      | Some (COp _ as op) -> op
+      | Some c -> COp ("and", [ c ])
+      | None -> COp ("and", []))
   | None -> COp ("and", [])
 
 (* ---------- tree surgery (cljs loc semantics: index includes the
    operator at position 0 of each group) ---------- *)
 
+(* loc segments index the cljs query vector — 0 is the operator slot of
+   each group, clauses start at 1. A leading 0 selects the group node
+   itself, so descend through it. *)
 let rec append_at t loc x =
   match loc, t with
   | [ 0 ], COp (op, cs) -> COp (op, cs @ [ x ])
+  | 0 :: rest, _ -> append_at t rest x
   | i :: rest, COp (op, cs) when i >= 1 ->
       COp
         ( op
@@ -115,7 +124,8 @@ let rec append_at t loc x =
 
 let rec remove_at t loc =
   match loc, t with
-  | [ 0 ], _ -> COp ("and", [])
+  | [], _ | [ 0 ], _ -> COp ("and", [])
+  | 0 :: rest, _ -> remove_at t rest
   | [ i ], COp (op, cs) ->
       COp (op, List.filteri (fun j _ -> j + 1 <> i) cs)
   | i :: rest, COp (op, cs) when i >= 1 ->
@@ -129,6 +139,7 @@ let rec remove_at t loc =
 let rec replace_at t loc x =
   match loc, t with
   | [ 0 ], _ -> x
+  | 0 :: rest, _ -> replace_at t rest x
   | i :: rest, COp (op, cs) when i >= 1 ->
       COp
         ( op
@@ -159,13 +170,23 @@ let strip_ref s =
   then String.sub s 2 (n - 4)
   else s
 
-let disp_args args = List.map (fun a -> strip_ref a.a_disp) args
+(* stored sources keep [[uuid]] id-refs; display the page title like
+   cljs' (page-title (second clause)) via the refs table refresh_block
+   collects from the query value block *)
+let disp_args inst args =
+  List.map
+    (fun a ->
+      let d = strip_ref a.a_disp in
+      match Hashtbl.find_opt inst.V.ref_titles d with
+      | Some t -> t
+      | None -> d)
+    args
 
 let clause_label inst (c : clause) : string =
   match c with
   | CText s -> I.builder_search s
   | CItem (f, args) -> (
-      match f, disp_args args with
+      match f, disp_args inst args with
       | ("task" | "priority"), vs -> f ^ ": " ^ String.concat " | " vs
       | ("property" | "private-property"), k :: vs -> (
           let title =
@@ -197,14 +218,13 @@ let clause_label inst (c : clause) : string =
 let commit inst ~tree ~refresh () =
   inst.V.qsrc <- tree_to_dsl !tree;
   let buuid =
-    match inst.V.kind with
-    | V.KQuery { block_uuid } -> block_uuid
-    | _ -> ""
+    if inst.V.query_block_uuid <> "" then inst.V.query_block_uuid
+    else
+      match inst.V.kind with
+      | V.KQuery { block_uuid } -> block_uuid
+      | _ -> ""
   in
-  let title =
-    if inst.V.qsrc = "" then "{{query }}" else "{{query " ^ inst.V.qsrc ^ "}}"
-  in
-  Db.save_block_title buuid title (fun () -> refresh inst)
+  Db.save_block_title buuid inst.V.qsrc (fun () -> refresh inst)
 
 (* value picker for a chosen property ident *)
 let value_picker inst ~tree ~loc ~anchor ident ~refresh =
@@ -225,6 +245,7 @@ let value_picker inst ~tree ~loc ~anchor ident ~refresh =
       let open_select its =
         ignore
           (P.show_select ~anchor ~placeholder:ident
+             ~wrap_cls:"query-builder-picker"
              ~items:
                (List.map
                   (fun t ->
@@ -307,6 +328,7 @@ let closed_value_multi inst ~tree ~loc ~anchor ident name ~refresh =
       in
       ignore
         (P.show_select ~anchor ~placeholder:I.select_multi_prompt ~multiple:true
+         ~wrap_cls:"query-builder-picker"
            ~items:
              (List.map
                 (fun t ->
@@ -367,6 +389,10 @@ let tag_picker inst ~tree ~loc ~anchor ~refresh =
         (P.show_select ~anchor ~placeholder:I.select_prompt ~items
            ~wrap_cls:"query-builder-picker"
            ~on_chosen:(fun it _ ->
+             (* seed uuid -> title so a re-parsed [[uuid]] clause still
+                resolves before refresh_block re-reads the value block's
+                block/refs (async) *)
+             Hashtbl.replace inst.V.ref_titles it.P.si_value it.si_label;
              tree :=
                append_at !tree loc
                  (CItem ("tags", [ { a_dsl = "[[" ^ it.P.si_value ^ "]]"; a_disp = it.si_label } ]));
@@ -467,7 +493,13 @@ let picker inst ~tree ~loc ~anchor ~refresh =
 let clause_popup inst ~tree ~loc ~anchor ~is_op_clause ~refresh =
   let items =
     [ P.MItem (I.delete, fun () ->
-          tree := remove_at !tree loc;
+          (* cljs: operator delete drops the trailing 0 (butlast loc) *)
+          let loc' =
+            if is_op_clause then
+              match List.rev loc with _ :: rest -> List.rev rest | [] -> loc
+            else loc
+          in
+          tree := remove_at !tree loc';
           commit inst ~tree ~refresh ()) ]
     @ (if is_op_clause then
          [ P.MItem
@@ -539,8 +571,10 @@ and add_filter_btn inst ~tree ~loc ~refresh ~with_label : D.el =
       ~attrs:[ ("type", "button") ]
       ~children:[ D.icon "plus" ] ()
   in
+  (* cljs emits the "filter" label as a direct text node — playwright
+     :text() only matches own text, not descendant elements *)
   if with_label then
-    D.el_append_child b (D.h ~tag:"span" ~text:I.filter ());
+    D.el_append_child b (Editor_dom.create_text_node I.filter);
   D.el_add_listener b "mousedown" (fun ev -> Editor_dom.stop_propagation ev);
   D.el_add_listener b "click" (fun _ ->
       picker inst ~tree ~loc ~anchor:b ~refresh);

@@ -114,11 +114,19 @@ let get_all_page_titles f =
   |> ignore
 
 (* get-blocks returns one {block, children?} wrapper per request —
-   callers want the entity map *)
+   callers want the entity map; fold a present children list onto
+   block/children so the wire shape matches entity-forward-map trees *)
 let block_of_result (w : W.t) : W.t =
-  match W.get w "block" with Some b -> b | None -> w
+  match W.get w "block" with
+  | Some (W.Map ps) -> (
+      match W.get w "children" with
+      | Some cs -> W.Map (ps @ [ (W.Keyword "block/children", cs) ])
+      | None -> W.Map ps)
+  | Some b -> b
+  | None -> w
 
-let get_blocks uuids ?(metadata = false) f =
+let get_blocks uuids ?(metadata = false) ?(children = false)
+    ?(include_property_block = false) f =
   Runtime.invoke2 "thread-api/get-blocks" (W.String (repo ()))
     (W.Array
        (List.map
@@ -126,7 +134,12 @@ let get_blocks uuids ?(metadata = false) f =
             W.Map
               [ (W.kw "id", W.Uuid u)
               ; ( W.kw "opts"
-                , W.Map [ (W.kw "block-metadata?", W.Bool metadata) ] )
+                , W.Map
+                    ([ (W.kw "block-metadata?", W.Bool metadata)
+                     ; (W.kw "children?", W.Bool children)
+                     ; ( W.kw "include-property-block?"
+                       , W.Bool include_property_block )
+                     ]) )
               ])
           uuids))
   |> then_ (fun w ->
@@ -161,7 +174,12 @@ let remove_view_property view_uuid ident f =
     f
 
 let save_block_title uuid title f =
-  apply_ops [ Outliner_ops.save_block uuid title ] f
+  let _ =
+    Outliner_ops.save_block_parsed uuid title
+    |> Js.Promise.then_ (fun op ->
+           Js.Promise.resolve (apply_ops [ op ] f))
+  in
+  ()
 
 let delete_blocks uuids f =
   apply_ops [ Outliner_ops.delete_blocks uuids ] f

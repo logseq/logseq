@@ -15,7 +15,9 @@ let dispatch kind payload =
           Runtime.send (Action.Toast_push t);
           Runtime.flush ()
       | None -> ())
-  | "sync-db-changes" -> Router.reload ()
+  | "sync-db-changes" ->
+      Router.reload ();
+      Views_mount.refresh_query_insts ()
   | _ -> Runtime.send (Action.Worker_event (kind, payload))
 
 (* sdk show_msg/close_msg dispatch `ls:toast`/`ls:toast-close`

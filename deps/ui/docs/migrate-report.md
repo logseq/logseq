@@ -225,7 +225,33 @@ that the e2e contract doesn't spell out directly. Newest area last.
   every toast needs a `button` child (the close control). Stacking is purely
   stylesheet: `.ui__toast` is `position:absolute` inside the fixed top-right
   `.ui__toaster-viewport`, offset by `--toast-index` — don't force
-  `position:relative` or the stack collapses.
+  `position:relative` or the stack collapses. `--toast-index` 0 must be the
+  NEWEST toast (cljs sonner stacking puts newest frontmost with
+  `z-index: calc(1000 - var(--toast-index))`); the model appends new toasts
+  last, so `toasts_view` renders `List.rev`. If newest isn't index 0, an
+  older toast's viewport overlays the new one and tests can't click its
+  close button. cljs `notification/show!`: `toast_kind = "error"` persists
+  (duration 0 — no `schedule_dismiss`); all other kinds auto-dismiss (5s).
+- **Property name validation is client-side**: cljs
+  `property/add-existing-or-new-property` runs `valid-property-name?`
+  (`#…` and `[[…` prefixes rejected) and shows the `invalid property name`
+  error toast WITHOUT calling the worker. Our
+  `properties_dialog.on_type_chosen` must do the same — letting `#bad`
+  reach the worker hits `validate_page_title_characters` first and emits a
+  "Page name can't include #" warning toast, not the expected error.
+- **Cards / flashcards phase machine**: cljs `fsrs.cljs` cycles
+  `init → (cloze? show-cloze : show-answer) → show-answer → init`.
+  `#card-answers` renders while next-phase ∈ {show-cloze, show-answer};
+  at `show-answer` it renders `#card-again|hard|good|easy` rating buttons.
+  Our `cards_state.phase` + `cards_view` mirror this. **Gap**: rating
+  currently only advances `pos` and resets phase — cljs `rate-card!` also
+  writes `logseq.property.fsrs/state` + `/due` via the JS `fsrs` package,
+  which has no OCaml port; add a worker endpoint when persistence is
+  needed.
+- **Header dots menu Import**: cljs `header.cljs` toolbar-dots menu ends
+  with global items incl. Import → `#/import`. Our `page_menu` folds it in
+  as an item that opens `Dialogs_state.open_ "import"` (the importer is a
+  dialog body, not a route).
 - **Theme previews**: `.cp__theme-modes-options > li > i` classes are
   `mode-light|mode-dark|mode-system`; the light preview image only exists
   under `.mode-light.radix` — cljs adds `radix` to all three when

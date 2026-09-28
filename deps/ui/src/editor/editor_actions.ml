@@ -197,20 +197,28 @@ let split_at_cursor uuid =
       let sibling =
         library || S.is_collapsed uuid || b.Model.block_children = []
       in
-      let ops =
-        [ Ops.save_block uuid before
-        ; Ops.insert_blocks
-            [ Ops.block_map ~title:after ~page:library new_uuid ]
-            uuid ~sibling
-        ]
+      let p =
+        Js.Promise.all
+          [| Ops.block_map_parsed uuid before
+           ; Ops.block_map_parsed new_uuid after |]
+        |> Js.Promise.then_ (fun a ->
+               let ins =
+                 match a.(1) with
+                 | Wire.Map kvs when library ->
+                     Wire.Map
+                       ((Wire.String "block/page", Wire.Bool true) :: kvs)
+                 | m -> m
+               in
+               Ops.apply_and_refresh ~opts:(Ops.op_opts "insert-blocks")
+                 [ Ops.op "save-block" [ a.(0); Wire.Map [] ]
+                 ; Ops.insert_blocks [ ins ] uuid ~sibling ])
       in
       S.set_silent (fun st ->
           { st with
             S.editing =
               Some { uuid = new_uuid; buffer = after; scope = e.scope }
           });
-      with_focus_after new_uuid 0
-        (Ops.apply_and_refresh ~opts:(Ops.op_opts "insert-blocks") ops)
+      with_focus_after new_uuid 0 p
   | _ -> ()
 
 let move_children_ops (b : Model.block) target_uuid =
@@ -343,10 +351,7 @@ let merge_next uuid =
                       Js.Promise.resolve ())))
           else (
             let ops =
-              move_children_ops next uuid
-              @ [ Ops.delete_blocks [ next_uuid ]
-                ; Ops.save_block uuid (buf ^ next.Model.block_title)
-                ]
+              move_children_ops next uuid @ [ Ops.delete_blocks [ next_uuid ] ]
             in
             ignore
               (Ops.title_for_edit (String.trim next.Model.block_title)
@@ -357,8 +362,9 @@ let merge_next uuid =
                               Some { e with S.buffer = buf ^ nbuf }
                           });
                       with_focus_after uuid (String.length buf)
-                        (Ops.apply_and_refresh
-                           ~opts:(Ops.op_opts "delete-blocks") ops);
+                        (Ops.apply_parsed_and_refresh
+                           ~opts:(Ops.op_opts "delete-blocks") ~rest:ops
+                           [ (uuid, buf ^ nbuf) ]);
                       Js.Promise.resolve ()))))
   | _ -> ()
 

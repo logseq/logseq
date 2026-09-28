@@ -433,16 +433,26 @@ let get_by_id id_wire =
             | _ -> Wire.Nil))
 
 (* id-or-name -> entity wire (uuid / namespaced ident / page name).
-   resolve_block_entity accepts page-name strings directly; when a
-   name lookup misses and the string is qualified (ns/name) retry as
-   a db ident (leading ':' stripped). *)
+   cljs resolves page args via [:block/name (page-name-sanity-lc name)] —
+   get-case-page matches :block/title exactly; a miss falls back to
+   get-blocks' :block/name lookup, and a qualified (ns/name) miss retries
+   as a db ident (leading ':' stripped). *)
 let get_entity id_or_name =
-  get_by_id (Wire.String id_or_name)
-  |> Js.Promise.then_ (fun w ->
-         match w with
-         | Wire.Nil when String.contains id_or_name '/' ->
-             get_by_id (Wire.Keyword (trim_leading id_or_name))
-         | _ -> Js.Promise.resolve w)
+  if is_uuid_string id_or_name then get_by_id (Wire.String id_or_name)
+  else
+    Runtime.invoke2 "thread-api/get-case-page" (Wire.String (repo ()))
+      (Wire.String id_or_name)
+    |> Js.Promise.then_ (fun w ->
+           match w with
+           | Wire.Nil ->
+               get_by_id (Wire.String id_or_name)
+               |> Js.Promise.then_ (fun w2 ->
+                      match w2 with
+                      | Wire.Nil when String.contains id_or_name '/' ->
+                          get_by_id
+                            (Wire.Keyword (trim_leading id_or_name))
+                      | _ -> Js.Promise.resolve w2)
+           | _ -> Js.Promise.resolve w)
 
 (* api args can be uuid strings, page names, db ids (numbers) or
    lookup maps like {id: n} / {uuid: "..."} — normalize to wire eid *)
@@ -488,3 +498,25 @@ let is_class_entity (w : Wire.t) =
 
 
 let block_uuid_of (w : Wire.t) = Wire.map_get_uuid w "block/uuid"
+
+(* api block args arrive as uuid strings or entity objects {uuid}/{id}/
+   {block/uuid} — cljs sdk-utils normalizes all of them *)
+let entity_of_arg j =
+  match arg_wire j with
+  | Wire.Map _ as m -> (
+      match Wire.map_get_uuid m "uuid" with
+      | Some u -> get_by_id (Wire.String u)
+      | None -> (
+          match Wire.map_get_uuid m "block/uuid" with
+          | Some u -> get_by_id (Wire.String u)
+          | None -> (
+              match Wire.get m "id" with
+              | Some (Wire.Int _ as id) -> get_by_id id
+              | Some (Wire.Keyword _ as id) -> get_by_id id
+              | Some (Wire.String s) -> get_entity s
+              | Some (Wire.Uuid u) -> get_by_id (Wire.String u)
+              | _ -> resolved Wire.Nil)))
+  | Wire.String s -> get_entity s
+  | Wire.Uuid u -> get_by_id (Wire.String u)
+  | Wire.Int _ | Wire.Keyword _ as id -> get_by_id id
+  | _ -> resolved Wire.Nil

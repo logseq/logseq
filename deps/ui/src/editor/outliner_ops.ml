@@ -549,6 +549,38 @@ let rec apply ?(opts = Wire.Map []) ops : unit Js.Promise.t =
           |> Js.Promise.catch (fun e ->
                  Platform.console_error ("apply-outliner-ops failed", e);
                  Js.Promise.resolve ()))
+
+let apply_and_refresh ?opts ops =
+  apply ?opts ops
+  |> Js.Promise.then_ (fun () -> refresh_page ())
+
+(* cljs wrap-parse-block on save: [[page]]/#tag references resolve into
+   block/refs + block/tags and the stored title is rewritten to
+   [[uuid]] id-ref form — async since Title_refs resolves entities *)
+let block_map_parsed uuid title =
+  Title_refs.parse (String.trim title)
+  |> Js.Promise.then_ (fun p ->
+         Js.Promise.resolve
+           (Wire.Map
+              ([ str "block/uuid" (Wire.Uuid uuid)
+               ; str "block/title" (Wire.String p.Title_refs.title) ]
+              @ Title_refs.kvs_of_parsed p)))
+
+let save_block_parsed uuid title =
+  block_map_parsed uuid title
+  |> Js.Promise.then_ (fun bm ->
+         Js.Promise.resolve (op "save-block" [ bm; Wire.Map [] ]))
+
+(* parse (uuid, title) pairs into save ops, prepend to rest, apply *)
+let apply_parsed ?opts ~rest pairs =
+  Js.Promise.all
+    (Array.of_list (List.map (fun (u, t) -> save_block_parsed u t) pairs))
+  |> Js.Promise.then_ (fun a -> apply ?opts (Array.to_list a @ rest))
+
+let apply_parsed_and_refresh ?opts ~rest pairs =
+  apply_parsed ?opts ~rest pairs
+  |> Js.Promise.then_ (fun () -> refresh_page ())
+
 let schedule_save uuid title =
   cancel_pending_save ();
   pending_save := Some (uuid, title);
@@ -556,12 +588,9 @@ let schedule_save uuid title =
     Editor_dom.set_timeout_id
       (fun () ->
         pending_save := None;
-        ignore (apply [ save_block uuid title ]))
+        ignore (apply_parsed ~rest:[] [ (uuid, title) ]))
       400
 
-let apply_and_refresh ?opts ops =
-  apply ?opts ops
-  |> Js.Promise.then_ (fun () -> refresh_page ())
 
 (* [[uuid]] / #[[uuid]] -> [[title]] / #title — the cljs
    id-ref->title-ref pass the edit buffer gets when a block opens.
