@@ -122,13 +122,13 @@ let body (_ms : Model.t Signal.signal) : t =
     [ dom ~key:"ex-h" ~tag:"h1" ~style_class:"title mb-8"
         ~text:T.export_title []
     ; dom ~key:"ex-list" ~style_class:"flex flex-col gap-4 ml-1"
-        [ link ~key:"ex-edn" T.export_edn T.export_edn_desc export_edn
+        [ link ~key:"ex-db" T.export_sqlite_db T.export_sqlite_desc
+            export_binary
+        ; link ~key:"ex-zip" T.export_sqlite_zip T.export_zip_desc
+            export_zip
+        ; link ~key:"ex-edn" T.export_edn T.export_edn_desc export_edn
         ; link ~key:"ex-md" T.export_markdown "" export_markdown
         ; link ~key:"ex-tr" T.export_debug_transit
             T.export_debug_transit_desc export_transit
-        ; link ~key:"ex-zip" T.export_sqlite_zip T.export_zip_desc
-            export_zip
-        ; link ~key:"ex-db" T.export_sqlite_db T.export_sqlite_desc
-            export_binary
         ]
     ]
