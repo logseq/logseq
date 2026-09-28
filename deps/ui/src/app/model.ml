@@ -96,6 +96,9 @@ type t =
   ; repo : string option
   ; route : route
   ; route_page : page option
+  ; page_missing : bool (* page/block route resolved to nothing — cljs
+                           renders inline (t :page/not-found), keeping
+                           the chrome, not the route-level 404 *)
   ; journals : page list
   ; page_refs : block list
   ; unlinked_refs : block list
@@ -121,6 +124,7 @@ let initial =
   ; repo = None
   ; route = Home
   ; route_page = None
+  ; page_missing = false
   ; journals = []
   ; page_refs = []
   ; unlinked_refs = []

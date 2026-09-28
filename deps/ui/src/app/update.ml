@@ -7,7 +7,10 @@ let update (model : t) (action : Action.t) : t =
   | Action.Boot_graph_ready repo ->
       { model with phase = Ready; repo = Some repo }
   | Repos_loaded repos -> { model with repos }
-  | Page_loaded page -> { model with route_page = Some page }
+  | Page_loaded page ->
+      { model with route_page = Some page; page_missing = false }
+  | Page_load_failed ->
+      { model with route_page = None; page_missing = true }
   | Journals_loaded js -> { model with journals = js }
   | Refs_loaded refs -> { model with page_refs = refs }
   | Unlinked_loaded refs -> { model with unlinked_refs = refs }
@@ -15,6 +18,7 @@ let update (model : t) (action : Action.t) : t =
       { model with
         route
       ; route_page = None
+      ; page_missing = false
       ; page_refs = []
       ; unlinked_refs = []
       ; editing_title = false

@@ -52,6 +52,13 @@ external rect_bottom : rect -> float = "bottom" [@@mel.get]
 external rect_right : rect -> float = "right" [@@mel.get]
 external make_date : float -> Js.Json.t = "Date" [@@mel.new]
 external date_to_string : Js.Json.t -> string = "toLocaleString" [@@mel.send]
+(* cljs i18n/locale-format-date: d.toLocaleDateString(locale,
+   {year numeric, month short, day numeric}) e.g. "Sep 28, 2026";
+   undefined locale = runtime default *)
+let date_to_localedate : Js.Json.t -> string =
+  [%mel.raw
+    "function (d) { return d.toLocaleDateString(undefined, \
+     { year: 'numeric', month: 'short', day: 'numeric' }) }"]
 
 let prefers_dark : unit -> bool =
   [%mel.raw
@@ -129,7 +136,7 @@ let u8_of_buffer buf =
   Bytes.unsafe_to_string out
 
 let now_ms () = Js.Date.now ()
-let fmt_time ms = date_to_string (make_date ms)
+let fmt_time ms = date_to_localedate (make_date ms)
 
 (* 5s auto-dismiss helper shared by toasts *)
 let later ?(ms = 5000) f = ignore (set_timeout f ms)

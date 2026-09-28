@@ -522,6 +522,16 @@ Contracts discovered while making `logseq.e2e.commands-basic-test` green
 - **Boot hardcoded `data-color="logseq"`**: cljs reads
   `storage/get :ui/radix-color` at init; boot.ml now unquotes the stored
   value the same way.
+- **`:contents` sidebar item mirrored the main page**: cljs
+  `<build-sidebar-item` pulls the built-in page entity named `"Contents"`
+  and renders its own blocks; `sidebar-action-block-lookup` resolves
+  `:contents -> "Contents"` so "Open as page" navigates there. Our
+  `contents_item` snapshot `Model.route_page`/`current_page` blocks
+  instead, so `#ls-block-<uuid>` on the main page was mounted a third
+  time in the Contents item (and went stale on sync) and "Open as page"
+  navigated to the page already open — a no-op. Now `contents_item`
+  delegates to `page_item_of_ref "Contents"` (Contents page blocks,
+  `page_ref = "Contents"`).
 
 ## Multi-tabs / cross-tab sync (e2e: `multi_tabs_basic_test`)
 

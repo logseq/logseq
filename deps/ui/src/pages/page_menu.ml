@@ -119,6 +119,7 @@ let global_items () =
         Sidebar_state.open_dialog "settings")
   ; icon_item "recycle" Strings.recycle "trash" (fun () ->
         close ();
+        Runtime.mark_nav ();
         Platform.set_location_hash "#/page/Recycle")
   ; icon_item "export" Strings.export_graph "database-export" (fun () ->
         close ();
