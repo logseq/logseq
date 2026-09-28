@@ -85,14 +85,14 @@ let set_state_from_store a b _c _d =
          | None -> "logseq"
        in
        Platform.document_set_data "color" color;
-       Platform.local_storage_set "ui/radix-color" ("\"" ^ color ^ "\"")
+       Platform.local_storage_set "radix-color" ("\"" ^ color ^ "\"")
    | "ui/system-theme?" ->
        let enabled =
          match arg_wire b with
          | Wire.Bool v -> v
          | _ -> false
        in
-       Platform.local_storage_set "ui/system-theme?"
+       Platform.local_storage_set "system-theme?"
          (if enabled then "true" else "false");
        if enabled then
          Platform.document_set_data "theme"

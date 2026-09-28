@@ -42,14 +42,18 @@ let separator key =
    Recycle navigates to the builtin "Recycle" page by name — cljs
    header.cljs shows it whenever the page identity resolves. *)
 let page_items (p : Model.page) =
+  (* cljs page_menu.cljs: delete hidden for contents page and
+     :logseq.property/built-in? pages *)
   let del =
-    item "del" Strings.delete_page (fun () ->
-        match p.page_uuid with
-        | Some u ->
-            Runtime.send
-              (Action.Confirm_set (Some (Model.Confirm_delete_page u)));
-            Runtime.flush ()
-        | None -> ())
+    if p.page_built_in then []
+    else
+      [ item "del" Strings.delete_page (fun () ->
+            match p.page_uuid with
+            | Some u ->
+                Runtime.send
+                  (Action.Confirm_set (Some (Model.Confirm_delete_page u)));
+                Runtime.flush ()
+            | None -> ()) ]
   in
   let fav =
     match !Sidebar_state.st_ref with
@@ -97,7 +101,7 @@ let page_items (p : Model.page) =
         | None -> [])
     | false, false, _ -> []
   in
-  fav @ [ del; export_page; publish_page ] @ convert
+  fav @ del @ [ export_page; publish_page ] @ convert
 
 (* app-wide entries mirror the cljs header dots menu
    (components/header.cljs toolbar-dots-menu): dialogs dispatch
