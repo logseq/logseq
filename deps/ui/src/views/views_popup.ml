@@ -98,7 +98,11 @@ let item_cls base =
 
 let focus_item (items : D.el array) idx =
   if idx >= 0 && idx < Array.length items then begin
-    Array.iter (fun el -> D.el_set_attr el "tabindex" "-1") items;
+    Array.iter
+      (fun el ->
+        D.el_set_attr el "tabindex" "-1";
+        D.el_remove_attr el "data-highlighted")
+      items;
     let el = items.(idx) in
     D.el_set_attr el "tabindex" "0";
     D.el_focus el;
@@ -122,11 +126,13 @@ let focused_idx items =
   in
   loop 0
 
-let rec menu_items_el (items : menu_item list) : D.el =
+let rec menu_items_el ?(cls_prefix = "") (items : menu_item list) : D.el =
   let content =
-    D.h ~cls:
-      "ui__dropdown-menu-content z-50 min-w-[8rem] rounded-md border \
-       bg-popover p-1 text-popover-foreground shadow-md"
+    D.h
+      ~cls:
+        (cls_prefix
+         ^ "ui__dropdown-menu-content z-50 min-w-[8rem] rounded-md border \
+            bg-popover p-1 text-popover-foreground shadow-md")
       ~attrs:[ ("role", "menu"); ("tabindex", "-1") ] ()
   in
   List.iter
@@ -204,11 +210,12 @@ let rec menu_items_el (items : menu_item list) : D.el =
           let open_sub () =
             if not !sub_open then begin
               sub_open := true;
-              let sc = menu_items_el sub in
+              let sc = menu_items_el ~cls_prefix sub in
               Editor_dom.el_set_class sc
-                "ui__dropdown-menu-sub-content z-50 min-w-[8rem] \
-                 rounded-md border bg-popover p-1 \
-                 text-popover-foreground shadow-lg";
+                (cls_prefix
+                 ^ "ui__dropdown-menu-sub-content z-50 min-w-[8rem] \
+                    rounded-md border bg-popover p-1 \
+                    text-popover-foreground shadow-lg");
               D.el_append_child document_body sc;
               position_content ~anchor:el ~content:sc ~align_end:false
                 ~submenu:true;
@@ -225,6 +232,10 @@ let rec menu_items_el (items : menu_item list) : D.el =
       let k = Editor_dom.ev_key ev in
       let items = focusable_items content in
       let idx = focused_idx items in
+      (* inputs inside MCustom panes (view rename box) type freely — menu
+         keys must not preventDefault their characters *)
+      if Editor_dom.is_editable_target (Editor_dom.ev_target ev) then ()
+      else
       match k with
       | "Home" ->
           Editor_dom.prevent_default ev;
@@ -250,12 +261,16 @@ let rec menu_items_el (items : menu_item list) : D.el =
       | _ -> ());
   content
 
-let show_menu ~anchor ?(align_end = false) (items : menu_item list) =
+let show_menu ~anchor ?(align_end = false) ?(cls_prefix = "")
+    (items : menu_item list) =
   close_all ();
-  let content = menu_items_el items in
+  let content = menu_items_el ~cls_prefix items in
   D.el_append_child document_body content;
   position_content ~anchor ~content ~align_end ~submenu:false;
-  push_popup content
+  push_popup content;
+  (* shui/Base UI dropdowns focus the popup on open — menu keyboard nav
+     (Home/arrows/Enter) needs a focused listener root *)
+  D.el_focus content
 
 (* -- select (cp__select) -- *)
 

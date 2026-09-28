@@ -189,36 +189,68 @@ let delete_page uuid f =
     [ Outliner_ops.op "delete-page" [ W.Uuid uuid; W.Map [] ] ]
     f
 
-(* insert a view block as a child of the $$$views page; [owner_uuid] is
-   the entity the view is for (tag page / $$$views page / property) *)
+(* insert a view block under the $$$views page; [owner_uuid] is the
+   entity the view is for (tag page / $$$views page / property). cljs
+   api-insert-new-block! inserts after the last child (sibling insert)
+   so new views append at the end — a non-sibling insert would prepend
+   and the default view would lose its first position *)
 let insert_view_block ?(after = fun () -> ()) ~title ~uuid ~page_uuid
     ~owner_uuid ~feature_type () =
-  let block_map =
-    W.Map
-      [ (W.String "block/uuid", W.Uuid uuid)
-      ; (W.String "block/title", W.String title)
-      ; ( W.String "logseq.property/view-for"
-        , W.Array [ W.kw "block/uuid"; W.Uuid owner_uuid ] )
-      ; ( W.String "logseq.property.view/feature-type"
-        , W.Keyword feature_type )
-      ]
-  in
-  Runtime.invoke3 "thread-api/apply-outliner-ops" (W.String (repo ()))
-    (W.Array
-       [ Outliner_ops.op "insert-blocks"
-           [ W.List [ block_map ]
-           ; W.Uuid page_uuid
-           ; W.Map
-               [ (W.kw "sibling?", W.Bool false)
-               ; (W.kw "keep-uuid?", W.Bool true)
-               ; (W.kw "outliner-op", W.Keyword "insert-blocks")
+  get_blocks [ page_uuid ] ~metadata:true ~children:true (fun ents ->
+      let last_child_uuid =
+        match ents with
+        | [ e ] -> (
+            match W.get e "block/children" with
+            | Some (W.Array cs) | Some (W.List cs) ->
+                List.fold_left
+                  (fun acc c ->
+                    match W.map_get_uuid c "block/uuid" with
+                    | Some u -> (
+                        let o =
+                          match W.get c "block/order" with
+                          | Some (W.String s) -> s
+                          | _ -> ""
+                        in
+                        match acc with
+                        | Some (_, o') when String.compare o o' <= 0 -> acc
+                        | _ -> Some (u, o))
+                    | None -> acc)
+                  None cs
+                |> Option.map fst
+            | _ -> None)
+        | _ -> None
+      in
+      let target_uuid, sibling =
+        match last_child_uuid with
+        | Some u -> (u, true)
+        | None -> (page_uuid, false)
+      in
+      let block_map =
+        W.Map
+          [ (W.String "block/uuid", W.Uuid uuid)
+          ; (W.String "block/title", W.String title)
+          ; ( W.String "logseq.property/view-for"
+            , W.Array [ W.kw "block/uuid"; W.Uuid owner_uuid ] )
+          ; ( W.String "logseq.property.view/feature-type"
+            , W.Keyword feature_type )
+          ]
+      in
+      Runtime.invoke3 "thread-api/apply-outliner-ops" (W.String (repo ()))
+        (W.Array
+           [ Outliner_ops.op "insert-blocks"
+               [ W.List [ block_map ]
+               ; W.Uuid target_uuid
+               ; W.Map
+                   [ (W.kw "sibling?", W.Bool sibling)
+                   ; (W.kw "keep-uuid?", W.Bool true)
+                   ; (W.kw "outliner-op", W.Keyword "insert-blocks")
+                   ]
                ]
-           ]
-       ])
-    (W.Map [])
-  |> then_ (fun _ -> after (); Js.Promise.resolve ())
-  |> catch_quiet
-  |> ignore
+           ])
+        (W.Map [])
+      |> then_ (fun _ -> after (); Js.Promise.resolve ())
+      |> catch_quiet
+      |> ignore)
 
 let insert_object_block ~uuid ~page_uuid ~title ~tags ~props f =
   let tags_w =

@@ -224,7 +224,18 @@ let load_views inst ~on_done =
       | Some (W.Array uuids) | Some (W.List uuids) -> (
           let us = List.filter_map W.as_uuid uuids in
           Db.get_blocks us ~metadata:true (fun ents ->
-              inst.V.views <- List.filter_map Wr.decode_view_ent ents;
+              (* get_blocks order is storage order — tabs follow the
+                 resource's uuid order (cljs view-uuids), which also picks
+                 the default view (first tab) *)
+              let by_uuid = Hashtbl.create (List.length us) in
+              List.iter
+                (fun e ->
+                  match Wr.decode_view_ent e with
+                  | Some v -> Hashtbl.replace by_uuid v.Wr.vu v
+                  | None -> ())
+                ents;
+              inst.V.views <-
+                List.filter_map (Hashtbl.find_opt by_uuid) us;
               on_done ()))
       | _ -> on_done ())
     [ Db.resource_views inst.V.owner inst.V.feature ]
@@ -345,7 +356,7 @@ let add_new_object inst =
               match
                 Editor_dom.get_element_by_id ("ls-block-" ^ uuid)
               with
-              | Some _ -> Editor_actions.enter_edit uuid 0
+              | Some _ -> Editor_actions.enter_edit ~scope:"sidebar" uuid 0
               | None ->
                   Editor_dom.set_timeout (fun () -> try_edit (n - 1)) 100
           in
