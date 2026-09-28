@@ -113,6 +113,7 @@ type t =
   ; unlinked_open : bool
   ; unlinked_search : bool
   ; unlinked_query : string
+  ; help_open : bool
   ; gv : graph_view
   }
 
@@ -140,6 +141,7 @@ let initial =
   ; unlinked_open = false
   ; unlinked_search = false
   ; unlinked_query = ""
+  ; help_open = false
   ; gv = graph_view_initial
   }
 

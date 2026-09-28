@@ -192,15 +192,102 @@ let overlays (ms : Model.t Signal.signal) =
 
 (* cljs container.cljs help-button: fixed bottom-right "?" — click toggles
    the help menu popup; popup itself not ported yet *)
-let help_button : t =
-  Logseq_dom.dom ~key:"help" ~style_class:"cp__sidebar-help-btn"
-    [ Logseq_dom.dom ~key:"help-inner" ~style_class:"inner"
-        ~events:"click"
-        ~on_dom_event:(fun n _ ->
-          if n = "click" then
-            Platform.dispatch "ls:toggle-help" Js.Json.null)
-        [ Logseq_dom.dom ~key:"help-i" ~tag:"i"
-            ~style_class:"ti ti-help" [] ]
+(* cljs container.cljs help-button: inline tabler help-small svg *)
+let help_svg : t =
+  Logseq_dom.dom ~key:"help-svg" ~tag:"svg"
+    ~attrs:
+      [ ("stroke", "currentColor")
+      ; ("fill", "none")
+      ; ("stroke-linejoin", "round")
+      ; ("width", "24")
+      ; ("viewBox", "0 0 24 24")
+      ; ("xmlns", "http://www.w3.org/2000/svg")
+      ; ("stroke-linecap", "round")
+      ; ("stroke-width", "2")
+      ; ("class", "icon icon-tabler icon-tabler-help-small")
+      ; ("height", "24")
+      ]
+    ~style_class:"scale-125"
+    [ Logseq_dom.dom ~key:"hsv-p0" ~tag:"path"
+        ~attrs:[ ("stroke", "none"); ("d", "M0 0h24v24H0z"); ("fill", "none") ]
+        []
+    ; Logseq_dom.dom ~key:"hsv-p1" ~tag:"path" ~attrs:[ ("d", "M12 16v.01") ] []
+    ; Logseq_dom.dom ~key:"hsv-p2" ~tag:"path"
+        ~attrs:
+          [ ( "d"
+            , "M12 13a2 2 0 0 0 .914 -3.782a1.98 1.98 0 0 0 -2.414 .483" )
+          ]
+        []
+    ]
+
+external open_url : string -> unit = "open" [@@mel.scope "window"]
+
+(* cljs container.cljs help-menu-items -> .cp__sidebar-help-menu-popup *)
+let help_item key title icon_name act =
+  Logseq_dom.dom ~key ~tag:"a"
+    ~style_class:"it flex items-center px-4 py-1 select-none"
+    ~events:"click"
+    ~on_dom_event:(fun n _ -> if n = "click" then act ())
+    [ Logseq_dom.dom ~key:(key ^ "-i") ~tag:"span"
+        ~style_class:"flex items-center pr-2 opacity-40"
+        [ Icons.icon ~size:20. icon_name ]
+    ; Logseq_dom.dom ~key:(key ^ "-t") ~tag:"strong"
+        ~style_class:"font-normal" ~text:title []
+    ]
+
+let help_menu_popup : t =
+  let close () =
+    Runtime.send Action.Help_toggle;
+    Runtime.flush ()
+  in
+  Logseq_dom.dom ~key:"help-menu" ~style_class:"cp__sidebar-help-menu-popup"
+    [ Logseq_dom.dom ~key:"hm-wrap" ~style_class:"list-wrap"
+        [ help_item "hm-handbook" (Strings.help_handbook) "book-2" close
+        ; help_item "hm-shortcuts" (Strings.help_shortcuts) "command" close
+        ; help_item "hm-docs" (Strings.help_docs) "help" (fun () ->
+            open_url "https://docs.logseq.com/"; close ())
+        ; Logseq_dom.dom ~key:"hm-hr1" ~tag:"hr" ~style_class:"!my-2" []
+        ; help_item "hm-bug" (Strings.help_bug) "bug" close
+        ; help_item "hm-feature" (Strings.help_feature) "git-pull-request"
+            (fun () ->
+              open_url
+                "https://discuss.logseq.com/c/feedback/feature-requests/";
+              close ())
+        ; help_item "hm-feedback" (Strings.help_feedback) "messages"
+            (fun () ->
+              open_url "https://discuss.logseq.com/c/feedback/13"; close ())
+        ; Logseq_dom.dom ~key:"hm-hr2" ~tag:"hr" ~style_class:"!my-2" []
+        ; help_item "hm-discord" (Strings.help_discord) "brand-discord"
+            (fun () -> open_url "https://discord.com/invite/KpN4eHY"; close ())
+        ; help_item "hm-forum" (Strings.help_forum) "message" (fun () ->
+            open_url "https://discuss.logseq.com/"; close ())
+        ; Logseq_dom.dom ~key:"hm-hr3" ~tag:"hr" ~style_class:"!my-2" []
+        ; help_item "hm-notes" (Strings.help_release_notes) "asterisk"
+            (fun () ->
+              open_url "https://docs.logseq.com/#/page/changelog"; close ())
+        ]
+    ; Logseq_dom.dom ~key:"hm-ft"
+        ~style_class:"ft pl-11 pb-3 flex flex-col gap-1"
+        [ Logseq_dom.dom ~key:"hm-ver" ~tag:"span"
+            ~style_class:"opacity text-xs opacity-30" ~text:"Logseq " []
+        ]
+    ]
+
+let help_area (ms : Model.t Signal.signal) : t =
+  Logseq_dom.dom ~key:"help-area"
+    [ Logseq_dom.dom ~key:"help" ~style_class:"cp__sidebar-help-btn"
+        [ Logseq_dom.dom ~key:"help-inner" ~style_class:"inner"
+            ~events:"click"
+            ~on_dom_event:(fun n _ ->
+              if n = "click" then (
+                Runtime.send Action.Help_toggle; Runtime.flush ()))
+            [ help_svg ] ]
+    ; dyn
+        ~equal:(fun (a : Model.t) (b : Model.t) -> a.help_open = b.help_open)
+        (fun (m : Model.t) ->
+          if m.help_open then help_menu_popup
+          else Logseq_dom.dom ~key:"hm-none" [])
+        ms
     ]
 
 let shell (ms : Model.t Signal.signal) : t =
@@ -217,6 +304,6 @@ let shell (ms : Model.t Signal.signal) : t =
             [ header ms; main_content ms ]
         ; right_sidebar ms
         ; overlays ms
-        ; help_button
+        ; help_area ms
         ]
     ]
