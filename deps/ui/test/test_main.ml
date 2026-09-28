@@ -135,8 +135,9 @@ let test_update () =
   let m3 = Update.update m2 (Action.Toast_push toast) in
   let m3 = Update.update m3 (Action.Toast_push toast) in
   eqi "two toasts" 2 (List.length m3.toasts);
+  (* newest first; ids still allocated sequentially *)
   check "toast ids sequential"
-    (List.map (fun (t : Model.toast) -> t.toast_id) m3.toasts = [ 0; 1 ]);
+    (List.map (fun (t : Model.toast) -> t.toast_id) m3.toasts = [ 1; 0 ]);
   let m4 = Update.update m3 (Action.Toast_dismiss 0) in
   check "toast dismiss keeps second"
     (List.length m4.toasts = 1
@@ -235,7 +236,69 @@ let test_decode2 () =
   check "toast empty -> None"
     (Decode.toast_of_wire (Wire.Array []) = None)
 
-(* ---- Edn round-trip ---- *)
+(* ---- Router.parse_path ---- *)
+
+let test_router () =
+  let open Model in
+  check "route empty" (Router.parse_path "" = Home);
+  check "route slash" (Router.parse_path "/" = Home);
+  check "route page"
+    (Router.parse_path "page/foo" = Page "foo");
+  check "route page decode"
+    (Router.parse_path "page/my%20page" = Page "my page");
+  check "route page nested name"
+    (Router.parse_path "page/ns%2Fchild" = Page "ns/child");
+  check "route block"
+    (Router.parse_path "block/abc-123" = Block_zoom "abc-123");
+  check "route journals"
+    (Router.parse_path "all-journals" = Journals);
+  check "route all-pages"
+    (Router.parse_path "all-pages" = All_pages);
+  check "route graphs" (Router.parse_path "graphs" = All_graphs);
+  check "route import" (Router.parse_path "import" = Import);
+  check "route settings"
+    (Router.parse_path "settings" = Settings);
+  (* hash paths that must NOT silently 404 — regression guards for the
+     cmdk go/* items that navigate via these exact strings *)
+  check "#/journals is Not_found"
+    (match Router.parse_path "journals" with
+     | Not_found _ -> true
+     | _ -> false);
+  check "#/all-graphs is Not_found"
+    (match Router.parse_path "all-graphs" with
+     | Not_found _ -> true
+     | _ -> false);
+  check "bare page is Not_found"
+    (match Router.parse_path "page" with
+     | Not_found _ -> true
+     | _ -> false);
+  check "unknown is Not_found"
+    (match Router.parse_path "wat/ever" with
+     | Not_found _ -> true
+     | _ -> false)
+
+(* ---- Fuzzy.fuzzy_search ---- *)
+
+let test_fuzzy () =
+  let data = [ "alpha"; "beta"; "alpine"; "gamma"; "alp" ] in
+  let hits = Fuzzy.fuzzy_search ~extract:Fun.id ~limit:99 data "alp" in
+  eq "fuzzy hits" [ "alp"; "alpha"; "alpine" ] hits
+    (String.concat ",");
+  (* subsequence, not substring: 'alpn' still matches "alpine" *)
+  check "fuzzy subsequence"
+    (List.mem "alpine" (Fuzzy.fuzzy_search ~extract:Fun.id ~limit:99 data "alpn"));
+  (* no match -> dropped *)
+  check "fuzzy non-match dropped"
+    (Fuzzy.fuzzy_search ~extract:Fun.id ~limit:99 data "zzz" = []);
+  (* limit truncates *)
+  check "fuzzy limit"
+    (List.length (Fuzzy.fuzzy_search ~extract:Fun.id ~limit:1 data "alp")
+     = 1);
+  (* clean-str strips spaces/brackets like cljs search *)
+  check "fuzzy clean-str"
+    (List.mem "page one"
+       (Fuzzy.fuzzy_search ~extract:Fun.id ~limit:99
+          [ "page one"; "other" ] "pageone"))
 
 let test_edn () =
   let w =
@@ -256,6 +319,8 @@ let () =
   test_decode ();
   test_decode2 ();
   test_wire ();
+  test_router ();
+  test_fuzzy ();
   test_edn ();
   Js.log
     (Printf.sprintf "%d checks, %d failures" !checks !failures);
