@@ -579,8 +579,7 @@ let on_model st (m : Model.t) =
              load_recents repo st
          | _ -> ())
    | _ -> ());
-  sync_right_sidebar_width ();
-  if m.Model.right_sidebar_open then ensure_contents st
+  sync_right_sidebar_width ()
 
 let on_doc_click st ev =
   match click_target "a.page-ref" ev with
