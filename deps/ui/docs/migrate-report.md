@@ -394,6 +394,17 @@ Contracts discovered while making `logseq.e2e.commands-basic-test` green
   escapes Comlink as `MelangeError` with only the constructor name — the
   human message is lost. Log context (op names, ids) before the call when
   diagnosing.
+- **Markdown heading normalization lives in EVERY save path, not one**:
+  `block_map_parsed`/`Title_refs.parse` strips `#` and sets
+  `logseq.property/heading` just like `saved_block_map` — the worker's
+  `clear_markdown_heading` only strips the title and is skipped entirely
+  once `display-type` is set (e.g. `/quote`), so a parsed save that
+  skips normalization rewrites the stored title back to `# ...`.
+- **Ops that depend on document order must not use
+  `String_set.elements`**: the worker's `indent-outdent-blocks` rejects
+  non-consecutive input silently (`get_non_consecutive_blocks` → `None`),
+  and uuid sort order is random relative to document order — selections
+  must go through `selected_uuids` (flat-visible order).
 
 ## tag-basic-test (page-title tagging)
 
