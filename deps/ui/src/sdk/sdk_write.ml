@@ -267,17 +267,22 @@ let save_block_properties ?(reset = false) block_uuid props schema =
              apply_ops ops (Wire.Map [])
              |> Js.Promise.then_ (fun _ -> Js.Promise.resolve ()))
 
-
-let new_block_map content custom_uuid =
-  Wire.Map
-    (( Wire.String "block/uuid"
-     , Wire.Uuid
-         (match custom_uuid with
-          | Some u -> u
-          | None -> Platform.random_uuid ()))
-    :: List.map
-         (fun (k, v) -> (Wire.String k, v))
-         (Block_parse.title_fields content))
+(* cljs wrap-parse-block: extract refs/tags from the title before
+   insert — see Title_refs *)
+let parsed_block_map content custom_uuid =
+  Title_refs.parse content
+  |> Js.Promise.then_ (fun p ->
+         Js.Promise.resolve
+           (Wire.Map
+              ([ ( Wire.String "block/title"
+                 , Wire.String p.Title_refs.title )
+               ; ( Wire.String "block/uuid"
+                 , Wire.Uuid
+                     (match custom_uuid with
+                      | Some u -> u
+                      | None -> Platform.random_uuid ()) )
+               ]
+              @ Title_refs.kvs_of_parsed p)))
 
 let insert_block a b c _d =
   match arg_string b with
@@ -311,9 +316,8 @@ let insert_block a b c _d =
              | Some uuid ->
                  resolve_target (repo ()) uuid opts
                  |> Js.Promise.then_ (fun (target, sibling) ->
-                        let new_block =
-                          new_block_map content custom_uuid
-                        in
+                        parsed_block_map content custom_uuid
+                        |> Js.Promise.then_ (fun new_block ->
                         let new_uuid =
                           match custom_uuid with
                           | Some u -> u
@@ -348,7 +352,7 @@ let insert_block a b c _d =
                         |> Js.Promise.then_ (fun _ ->
                                get_entity new_uuid
                                |> Js.Promise.then_ (fun w ->
-                                      resolved_result w)))))
+                                      resolved_result w))))))
   | _ -> resolved_nil
 
 (* batch blocks [{content, uuid?, properties?, children?}] -> flat
@@ -374,25 +378,9 @@ let rec flatten_batch level parent_uuid acc (w : Wire.t) =
         | Some p -> properties_of p
         | None -> []
       in
-      (* cljs with-parent-and-order: children carry :block/parent as a
-         [:block/uuid u] lookup-ref — the worker re-derives level from it *)
-      let parent_kv =
-        match parent_uuid with
-        | Some p ->
-            [ ( Wire.String "block/parent"
-              , Wire.Array [ Wire.kw "block/uuid"; Wire.Uuid p ] ) ]
-        | None -> []
-      in
-      let flat =
-        Wire.Map
-          ((Wire.String "block/uuid", Wire.Uuid uuid)
-           :: List.map
-                (fun (k, v) -> (Wire.String k, v))
-                (Block_parse.title_fields content)
-          @ [ (Wire.String "block/level", Wire.Int level) ]
-          @ parent_kv)
-      in
-      let acc = (uuid, flat, props) :: acc in
+      (* title parsing is deferred — flats carry the raw content and
+         parse_flats rewrites it to id-ref form + block/refs,block/tags *)
+      let acc = (uuid, content, level, parent_uuid, props) :: acc in
       (match Wire.get w "children" with
        | Some c ->
            List.fold_left
@@ -400,6 +388,32 @@ let rec flatten_batch level parent_uuid acc (w : Wire.t) =
              acc (list_items c)
        | None -> acc)
   | _ -> acc
+
+(* cljs with-parent-and-order: children carry :block/parent as a
+   [:block/uuid u] lookup-ref — the worker re-derives level from it *)
+let flat_map_of uuid level parent_uuid (p : Title_refs.parsed) =
+  let parent_kv =
+    match parent_uuid with
+    | Some pu ->
+        [ ( Wire.String "block/parent"
+          , Wire.Array [ Wire.kw "block/uuid"; Wire.Uuid pu ] ) ]
+    | None -> []
+  in
+  Wire.Map
+    ([ (Wire.String "block/title", Wire.String p.title)
+     ; (Wire.String "block/uuid", Wire.Uuid uuid)
+     ; (Wire.String "block/level", Wire.Int level) ]
+    @ Title_refs.kvs_of_parsed p @ parent_kv)
+
+let parse_flats flats =
+  flats
+  |> List.map (fun (uuid, content, level, parent, props) ->
+         Title_refs.parse content
+         |> Js.Promise.then_ (fun p ->
+                Js.Promise.resolve
+                  (uuid, flat_map_of uuid level parent p, props)))
+  |> Array.of_list |> Js.Promise.all
+  |> Js.Promise.then_ (fun a -> Js.Promise.resolve (Array.to_list a))
 
 let insert_batch_block a b c _d =
   match arg_string a with
@@ -415,6 +429,8 @@ let insert_batch_block a b c _d =
              match block_uuid_of target with
              | None -> resolved_nil
              | Some uuid ->
+                 parse_flats flats
+                 |> Js.Promise.then_ (fun flats ->
                  (* cljs insert-batch-blocks: a page target forces sibling?
                     false — children of the page *)
                  let is_page = Wire.get target "block/name" <> None in
@@ -496,7 +512,7 @@ let insert_batch_block a b c _d =
                                  (Sdk_convert.json_arr
                                     (Array.of_list
                                        (List.map Sdk_convert.json_of_wire
-                                          blocks))))))
+                                          blocks)))))))
 
 let append_block_in_page a b c _d =
   (* overloads: (content) | (page, content) | (page, content, opts) *)
@@ -506,34 +522,46 @@ let append_block_in_page a b c _d =
     | None ->
         (None, Option.value ~default:"" (arg_string a), arg_map b)
   in
+  (* cljs <get-current-page-or-today: current page, else today's journal *)
   let target_id =
     match page_arg with
-    | Some p -> p
+    | Some p -> Js.Promise.resolve p
     | None -> (
         match !Runtime.current_page with
-        | Some p -> Option.value ~default:"" p.Model.page_uuid
-        | None -> "")
+        | Some p ->
+            Js.Promise.resolve
+              (Option.value ~default:"" p.Model.page_uuid)
+        | None ->
+            let r = Option.value ~default:"" !Runtime.current_repo in
+            Runtime.invoke2 "thread-api/get-journal-page-by-day"
+              (Wire.String r)
+              (Wire.Int (Dates.today_journal_day ()))
+            |> Js.Promise.then_ (fun page_w ->
+                   Js.Promise.resolve
+                     (Option.value ~default:""
+                        (Wire.map_get_uuid page_w "block/uuid"))))
   in
   let opts' =
     match opts with
     | Wire.Map kvs -> Wire.Map ((Wire.String "sibling", Wire.Bool false) :: kvs)
     | _ -> opts
   in
-  (* cljs append-block-in-page creates a missing named page first *)
-  let ensure_page =
-    get_entity target_id
-    |> Js.Promise.then_ (fun e ->
-           match e, is_uuid_string target_id, target_id with
-           | Wire.Nil, false, name when name <> "" ->
-               apply_op "create-page" [ Wire.String name; Wire.Map [] ]
-               |> Js.Promise.then_ (fun _ -> Js.Promise.resolve ())
-           | _ -> Js.Promise.resolve ())
-  in
-  ensure_page
-  |> Js.Promise.then_ (fun () ->
-         insert_block (Js.Json.string target_id) (Js.Json.string content)
-           (Sdk_convert.json_of_wire opts')
-           Js.Json.null)
+  target_id
+  |> Js.Promise.then_ (fun target_id ->
+         (* cljs append-block-in-page creates a missing named page first *)
+         get_entity target_id
+         |> Js.Promise.then_ (fun e ->
+                match e, is_uuid_string target_id, target_id with
+                | Wire.Nil, false, name when name <> "" ->
+                    apply_op "create-page"
+                      [ Wire.String name; Wire.Map [] ]
+                    |> Js.Promise.then_ (fun _ -> Js.Promise.resolve ())
+                | _ -> Js.Promise.resolve ())
+         |> Js.Promise.then_ (fun () ->
+                insert_block (Js.Json.string target_id)
+                  (Js.Json.string content)
+                  (Sdk_convert.json_of_wire opts')
+                  Js.Json.null))
 
 let update_block a b c _d =
   match arg_string b with
@@ -561,15 +589,20 @@ let update_block a b c _d =
                            || opt_bool "reset" opts)
                    uuid props schema
                  |> Js.Promise.then_ (fun () ->
-                        apply_op "save-block"
-                          [ Wire.Map
-                              ((Wire.String "block/uuid", Wire.Uuid uuid)
-                               :: List.map
-                                    (fun (k, v) -> (Wire.String k, v))
-                                    (Block_parse.title_fields content))
-                          ; Wire.Map []
-                          ]
-                        |> Js.Promise.then_ (fun _ -> resolved_nil)))
+                        (* cljs updateBlock -> save-block! -> wrap-parse-block *)
+                        Title_refs.parse content
+                        |> Js.Promise.then_ (fun p ->
+                               apply_op "save-block"
+                                 [ Wire.Map
+                                     ([ ( Wire.String "block/uuid"
+                                        , Wire.Uuid uuid )
+                                      ; ( Wire.String "block/title"
+                                        , Wire.String p.Title_refs.title )
+                                      ]
+                                     @ Title_refs.kvs_of_parsed p)
+                                 ; Wire.Map []
+                                 ]
+                               |> Js.Promise.then_ (fun _ -> resolved_nil))))
   | _ -> resolved_nil
 
 let remove_block a _b _c _d =
@@ -647,20 +680,29 @@ external date_get_time : Js.Date.t -> float = "getTime" [@@mel.send]
    uuid worker-side (Common_uuid/gen_journal_page_uuid), so resolve
    the entity by its formatted title, not a client-generated uuid *)
 let create_journal_page a _b _c _d =
-  let d = date_of_arg a in
-  let ms = date_get_time d in
-  if Float.is_nan ms then resolved_nil
-  else
-    let title = Dates.journal_title_of d in
-    apply_op "create-page"
-      [ Wire.String title
-      ; Wire.Map
-          [ (Wire.kw "journal?", Wire.Bool true)
-          ; (Wire.kw "class?", Wire.Bool false) ]
-      ]
-    |> Js.Promise.then_ (fun _ -> get_entity title)
-    |> Js.Promise.then_ (fun w -> resolved_result w)
-
+  let day_int =
+    match Js.Json.classify a with
+    | Js.Json.JSONNumber ms ->
+        Some (Dates.journal_day_of (date_of_epoch ms))
+    | Js.Json.JSONString s -> (
+        match float_of_string_opt s with
+        | Some ms -> Some (Dates.journal_day_of (date_of_epoch ms))
+        | None -> (
+            let d = Js.Date.fromString s in
+            match classify_float (Js.Date.getTime d) with
+            | FP_nan -> None
+            | _ -> Some (Dates.journal_day_of d)))
+    | _ -> None
+  in
+  match day_int with
+  | None -> resolved_nil
+  | Some day ->
+      let y, m, d = day / 10000, day mod 10000 / 100, day mod 100 in
+      create_page_with_flags
+        (Printf.sprintf "%04d-%02d-%02d" y m d)
+        true false
+        (Platform.random_uuid ())
+        None [] (Wire.Map [])
 
 (* schema remap — cljs upsert-property-aux: type→logseq.property/type
    keyword, cardinality→db/cardinality kw, hide→logseq.property/hide?,

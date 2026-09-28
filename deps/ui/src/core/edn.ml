@@ -8,6 +8,7 @@ type token =
   | TStr of string
   | TAtom of string
   | TDiscard
+  | TSetOpen
 
 let is_delim c =
   List.mem c
@@ -60,6 +61,8 @@ let read_token s i =
     | ('}' | ']' | ')') as c -> (Some (TClose c), i + 1)
     | '#' when i + 1 < String.length s && String.get s (i + 1) = '_' ->
         (Some TDiscard, i + 2)
+    | '#' when i + 1 < String.length s && String.get s (i + 1) = '{' ->
+        (Some TSetOpen, i + 2)
     | '"' -> let str, j = read_string s i in (Some (TStr str), j)
     | _ ->
         let rec go j =
@@ -94,13 +97,14 @@ let rec parse_value s i =
   | Some TDiscard, j ->
       let _, j = parse_value s j in
       parse_value s j
+  | Some TSetOpen, j -> parse_collection s j '#'
   | Some (TClose c), _ -> raise (Parse_error (Printf.sprintf "unexpected %c" c))
   | None, j -> (Wire.Nil, j)
 
 and parse_collection s j open_c =
   let close_c =
     match open_c with
-    | '{' -> '}'
+    | '{' | '#' -> '}'
     | '[' -> ']'
     | _ -> ')'
   in
@@ -121,6 +125,7 @@ and parse_collection s j open_c =
       in
       (Wire.Map (List.rev (pairs [] elems)), j'))
   | '[' -> (Wire.Array elems, j')
+  | '#' -> (Wire.Set elems, j')
   | _ -> (Wire.List elems, j')
 
 let parse s = fst (parse_value s 0)
@@ -135,7 +140,8 @@ let rec write b (w : Wire.t) =
   | Wire.String s -> Buffer.add_string b (esc_str s)
   | Wire.Keyword s -> Buffer.add_string b (":" ^ s)
   | Wire.Symbol s -> Buffer.add_string b s
-  | Wire.Array xs | Wire.List xs -> write_seq b "[" xs "]"
+  | Wire.Array xs -> write_seq b "[" xs "]"
+  | Wire.List xs -> write_seq b "(" xs ")"
   | Wire.Set xs -> write_seq b "#{" xs "}"
   | Wire.Map kvs ->
       Buffer.add_char b '{';

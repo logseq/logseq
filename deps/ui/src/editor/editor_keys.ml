@@ -282,6 +282,12 @@ let on_click ev =
                     | Some u -> A.zoom_to u
                     | None -> ())
                 | None -> (
+                    (* capture listener fires before the query shell's own
+                       handlers; clicks inside .custom-query-results are the
+                       view's controls, not an edit request *)
+                    match D.closest_sel ".custom-query-results" target with
+                    | Some _ -> ()
+                    | None -> (
                         match D.closest_sel "a.page-ref" target with
                         | Some _ ->
                             (* page-ref navigation happens in the document-level
@@ -314,7 +320,7 @@ let on_click ev =
                                     A.enter_edit ~scope u
                                       (String.length (A.model_title u))
                                 | None -> ())
-                            | None -> ())))))
+                            | None -> ()))))))
 
 (* -- ls:editor-insert channel (autocomplete pick: replace the typed
    trigger range with the chosen text) -- *)

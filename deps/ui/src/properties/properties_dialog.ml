@@ -55,8 +55,6 @@ let type_of prop =
 
 let is_checkbox prop = type_of prop = "checkbox"
 
-
-
 (* ---------- writes shared by phases ---------- *)
 
 let write_prop_value d prop w =
@@ -183,14 +181,21 @@ and valid_property_name s =
           || (String.length s > 1 && s.[0] = '[' && s.[1] = '[')))
 
 and on_type_chosen d name ty =
+  (* cljs add-existing-or-new-property validates the name client-side and
+     shows invalid-name without calling the worker *)
   if not (valid_property_name name) then
-    (* cljs checks the name client-side before any worker call *)
     S.toast_error (I18n.t "property/invalid-name-error")
   else
   D.upsert_property
     ~schema:(W.Map [ (W.Keyword "logseq.property/type", W.Keyword ty) ])
     ~property_name:name ()
-  |> Js.Promise.catch (fun _ -> Js.Promise.resolve W.Nil)
+  |> (fun p ->
+      Js.Promise.catch
+        (fun _ ->
+          (* normalize rejection to Nil — the W.Nil arm owns the single
+             "failed to create" toast *)
+          Js.Promise.resolve W.Nil)
+        p)
   |> Js.Promise.then_ (fun res ->
          (match D.untag res with
           | W.Nil ->

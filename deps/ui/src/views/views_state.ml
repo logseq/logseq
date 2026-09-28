@@ -63,9 +63,12 @@ type inst =
   ; mutable query_idents : string list (* property idents from view-data *)
   ; mutable is_advanced : bool (* datalog query source *)
   ; mutable query_scalar_rows : W.t list (* non-block query rows *)
-  ; mutable qsrc : string (* {{query <src>}} inner text, latest *)
+  ; mutable qsrc : string (* query source text (value block title) *)
+  ; mutable query_block_uuid : string
+        (* logseq.property/query value block uuid — query writes target it *)
   ; all_props : (string, W.t) Hashtbl.t (* ident -> property entity *)
   ; mutable props_loaded : bool
+  ; ref_titles : (string, string) Hashtbl.t (* referenced uuid -> title *)
   }
 
 let next_id = ref 0
@@ -107,8 +110,10 @@ let make ~kind ~feature ~owner ~container : inst =
     ; is_advanced = false
     ; query_scalar_rows = []
     ; qsrc = ""
+    ; query_block_uuid = ""
     ; all_props = Hashtbl.create 17
     ; props_loaded = false
+    ; ref_titles = Hashtbl.create 8
     ; asset_class = false
     }
   in

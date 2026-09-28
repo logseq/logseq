@@ -6,7 +6,9 @@
    Cross-area contract:
    - dispatches `ls:open-dialog` CustomEvent {detail: {name: <string>}}
      for dialogs owned by other areas: "settings", "import",
-     "export-graph", "login", "delete-page", "cards", "plugins".
+     "export-graph", "login", "delete-page", "plugins".
+   - dispatches `ls:open-cards` (no detail) for the flashcards modal —
+     cljs `[:modal/show-cards]` is its own event, not a named dialog.
    - listens for `ls:open-right-sidebar` {detail: {uuid}} (sdk
      `open_in_right_sidebar`, cmdk shift+enter) and document shift+click
      on a.page-ref / [data-testid='page title'] to add right-sidebar
@@ -251,6 +253,8 @@ let open_dialog name =
   let o = Js.Dict.empty () in
   Js.Dict.set o "name" (Js.Json.string name);
   Platform.dispatch "ls:open-dialog" (Sdk_convert.json_obj o)
+
+let open_cards () = Platform.dispatch "ls:open-cards" Js.Json.null
 
 let ensure_right_open () =
   if not (!model_ref).Model.right_sidebar_open then

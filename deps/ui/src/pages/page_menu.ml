@@ -38,7 +38,9 @@ let separator key =
   dom ~key ~attrs:[ ("role", "separator") ]
     ~style_class:"ui__dropdown-menu-separator -mx-1 my-1 h-px bg-muted" []
 
-(* items for the current route page; convert only for non-tag pages *)
+(* items for the current route page; convert only for non-tag pages.
+   Recycle navigates to the builtin "Recycle" page by name — cljs
+   header.cljs shows it whenever the page identity resolves. *)
 let page_items (p : Model.page) =
   let del =
     item "del" Strings.delete_page (fun () ->

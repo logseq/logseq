@@ -236,7 +236,7 @@ let nav_items ~active_route (checked, tag_titles) =
                ~active:false ~title:(t "Flashcards") ~icon_name:"cards"
                ~shortcut:"g f"
                ~on_click:(fun name _ ->
-                 if name = "click" then Sidebar_state.open_dialog "cards")
+                 if name = "click" then Sidebar_state.open_cards ())
                ())
       | "all-pages" ->
           Some
