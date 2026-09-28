@@ -956,6 +956,16 @@ search may lag).
   `copy/export-block-text-{indent-style,remove-options,other-options}`
   with cljs shapes (`#{…}` removal set, `:other-options` map with
   `keep-only-level<=N`).
+- **Appearance popup** — cljs `:ui/toggle-appearance` shows a compact
+  `#appearance_settings.cp__settings-appearance-dialog-inner` panel
+  anchored under `.toolbar-dots-btn` (theme picker, font, wide mode,
+  brackets, accent color). Ported in `Settings_page.appearance_body`
+  reusing the settings row renderers; dismissal uses a transparent
+  backdrop instead of shui's popup layer. Note for the framework: LUI
+  retained-store teardown can re-parent detached nodes, so
+  `Event.target.closest()` inside a document-level click handler is
+  unreliable when the clicked subtree was unmounted mid-dispatch —
+  DOM hit-testing (backdrop) is the robust equivalent.
 - **`#/graphs` row menu divergence** — our local-graph row menu keeps a
   "Delete remote graph" item so e2e can reach remote-delete when logged
   in; cljs only shows it on remote rows.

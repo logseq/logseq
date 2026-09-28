@@ -221,6 +221,14 @@ let overlays (ms : Model.t Signal.signal) =
           && a.route_page = b.route_page)
         (fun m -> Page_menu.dialog_view m)
         ms
+    ; dyn
+        ~equal:(fun (a : Model.t) (b : Model.t) ->
+          a.appearance = b.appearance)
+        (fun m ->
+          match m.Model.appearance with
+          | Some pos -> Settings_page.appearance_body pos
+          | None -> Logseq_dom.dom ~key:"app-none" [])
+        ms
     ]
 
 (* cljs container.cljs help-button: fixed bottom-right "?" — click toggles

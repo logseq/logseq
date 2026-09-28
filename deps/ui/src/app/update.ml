@@ -23,6 +23,7 @@ let update (model : t) (action : Action.t) : t =
       ; unlinked_refs = []
       ; editing_title = false
       ; page_menu = None
+      ; appearance = None
       ; unlinked_open = false
       ; unlinked_search = false
       ; unlinked_query = ""
@@ -30,10 +31,14 @@ let update (model : t) (action : Action.t) : t =
       }
   | Title_edit_start -> { model with editing_title = true }
   | Title_edit_done -> { model with editing_title = false }
-  | Page_menu_set pos -> { model with page_menu = pos }
-  | Confirm_set c -> { model with confirm = c; page_menu = None }
+  | Page_menu_set pos -> { model with page_menu = pos; appearance = None }
+  | Appearance_set pos ->
+      (* cljs popup toggle: clicking the menu item again hides it *)
+      { model with appearance = pos; page_menu = None }
+  | Confirm_set c ->
+      { model with confirm = c; page_menu = None; appearance = None }
   | Dismiss_all ->
-      { model with page_menu = None; confirm = None }
+      { model with page_menu = None; confirm = None; appearance = None }
   | Toggle_left_sidebar ->
       (* cljs set-left-sidebar-open! persists to storage *)
       let open_ = not model.left_sidebar_open in

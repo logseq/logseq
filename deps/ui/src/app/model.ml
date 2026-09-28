@@ -110,6 +110,8 @@ type t =
   ; editing_title : bool
   ; page_menu : (float * float * bool) option
     (* click position + with_app_items (toolbar dots vs page context menu) *)
+  ; appearance : (float * float) option
+    (* cljs :ui/toggle-appearance popup anchored to .toolbar-dots-btn *)
   ; confirm : confirm option
   ; toasts : toast list
   ; toast_next : int
@@ -139,6 +141,7 @@ let initial =
   ; right_sidebar_open = false
   ; editing_title = false
   ; page_menu = None
+  ; appearance = None
   ; confirm = None
   ; toasts = []
   ; toast_next = 0

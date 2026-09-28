@@ -18,6 +18,7 @@ type t =
   | Title_edit_start
   | Title_edit_done (* value already committed via page op *)
   | Page_menu_set of (float * float * bool) option
+  | Appearance_set of (float * float) option
   | Confirm_set of Model.confirm option
   | Dismiss_all (* Escape / outside click *)
   | Toast_push of Model.toast

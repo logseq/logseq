@@ -991,3 +991,60 @@ let modal_body (_ms : Model.t Signal.signal) : t =
         [ inner ~modal:true ]
     in
     node ctx parent
+
+external inner_width : float = "innerWidth" [@@mel.scope "window"]
+
+(* cljs settings.cljs appearance(): the header dots "Appearance" item opens
+   a compact popup (id appearance_settings) anchored under
+   .toolbar-dots-btn — five rows sharing the settings renderers, wrapped
+   in the same ui__dropdown-menu-content shell as the dots menu *)
+let appearance_rows ctx =
+  [ theme_row ctx
+  ; editor_font_row ()
+  ; shortcut_toggle_row ~key:"app-wide" ~for_:"wide_mode"
+      ~label:T.wide_mode ~binding:"t w"
+      ~on:(S.storage_bool "wide-mode" ~default:false)
+      ~on_toggle:S.toggle_wide_mode ()
+  ; shortcut_toggle_row ~key:"app-brackets" ~for_:"show_brackets"
+      ~label:T.show_brackets ~binding:"t b"
+      ~on:(S.config_bool "ui/show-brackets?" ~default:true)
+      ~on_toggle:(fun () ->
+        S.config_toggle "ui/show-brackets?" ~default:true)
+      ()
+  ; accent_row ~modal:true
+  ]
+
+let appearance_body (x, y) : t =
+ fun ctx parent ->
+  S.ensure ctx;
+  let right = Float.max 8. (inner_width -. x) in
+  let node =
+    dom ~key:"appearance-popup" ~tag:"div"
+      [ (* cljs shui popup-show! dismisses on outside click — the
+           transparent backdrop does the hit-testing *)
+        dom ~key:"appearance-backdrop" ~tag:"div"
+          ~style_class:"fixed inset-0 z-40"
+          ~events:"click"
+          ~on_dom_event:(fun name _ ->
+            if name = "click" then
+              Runtime.send (Action.Appearance_set None))
+          []
+      ; dom ~key:"appearance-wrap" ~tag:"div"
+          ~style_class:
+            "ui__dropdown-menu-content z-50 min-w-[8rem] rounded-md \
+             border bg-popover p-1 text-popover-foreground shadow-md \
+             outline-none"
+          ~attrs:
+            [ ( "style"
+              , Printf.sprintf "position:fixed;right:%.0fpx;top:%.0fpx"
+                  right y )
+            ]
+          [ dom ~key:"appearance_settings" ~id:"appearance_settings"
+              ~style_class:"cp__settings-appearance-dialog-inner"
+              [ dyn ~equal:( == ) (fun (_ : S.t) ->
+                    dom ~key:"app-rows" (appearance_rows ctx))
+                  (S.signal ()) ]
+          ]
+      ]
+  in
+  node ctx parent
