@@ -264,11 +264,10 @@ let positioned_rows block_w position =
       | None -> [])
   | None -> []
 
-let render_area ?(left_host = None) (ctx : V.ctx) ~owner_is_tag
+(* cljs show-properties-area?: the area only exists in the DOM when
+   there is at least one row (panel/left/below/hidden) to render. *)
+let render_area ?(left_host = None) ~host (ctx : V.ctx) ~owner_is_tag
     ~owner_title ~page_area area_el =
-  el_clear area_el;
-  let panel = mk ~cls:"properties-panel" "div" in
-  el_append_child area_el panel;
   let display =
     D.display_props ~page_title:page_area ~tag_dialog:false
       ~show_hidden:!S.show_hidden (D.uuid_ref ctx.block_uuid)
@@ -289,25 +288,34 @@ let render_area ?(left_host = None) (ctx : V.ctx) ~owner_is_tag
                , rows )
            | None -> partition_rows rows
          in
-         (match left_host with
-          | Some host ->
-              render_left ctx ~owner_is_tag ~owner_title host left_rows
-          | None -> ());
-         let panel_rows =
-           match left_host with
-           | Some _ -> panel_rows
-           | None -> left_rows @ panel_rows
+         let has_content =
+           left_rows <> [] || below_rows <> [] || panel_rows <> []
+           || hidden <> []
          in
-         render_panel ctx ~owner_is_tag ~owner_title ~page_area
-           ~show_hidden:!S.show_hidden panel panel_rows hidden;
-         (* pills render next to the area inside the indent container *)
-         (match el_parent area_el with
-          | Some parent ->
-              remove_all parent ".positioned-properties.block-below";
-              if below_rows <> [] then
-                render_pills ctx ~owner_is_tag ~owner_title parent
-                  below_rows
-          | None -> ());
+         if has_content && not (el_is_connected area_el) then
+           el_append_child host area_el;
+         if not has_content then (
+           if el_is_connected area_el then el_remove area_el;
+           remove_all host ".positioned-properties.block-below")
+         else (
+           el_clear area_el;
+           let panel = mk ~cls:"properties-panel" "div" in
+           el_append_child area_el panel;
+           (match left_host with
+            | Some lh ->
+                render_left ctx ~owner_is_tag ~owner_title lh left_rows
+            | None -> ());
+           let panel_rows =
+             match left_host with
+             | Some _ -> panel_rows
+             | None -> left_rows @ panel_rows
+           in
+           render_panel ctx ~owner_is_tag ~owner_title ~page_area
+             ~show_hidden:!S.show_hidden panel panel_rows hidden;
+           (* pills render next to the area inside the indent container *)
+           remove_all host ".positioned-properties.block-below";
+           if below_rows <> [] then
+             render_pills ctx ~owner_is_tag ~owner_title host below_rows);
          Js.Promise.resolve ())
   |> ignore
 
@@ -344,15 +352,17 @@ let mount_block_area block_el uuid =
       match ensure_indent_for col uuid with
       | None -> ()
       | Some ind -> (
-          match el_query ind ".ls-properties-area" with
+          match el_get_attr ind "data-props-mounted" with
           | Some _ -> () (* already mounted *)
           | None ->
+              el_set_attr ind "data-props-mounted" "1";
+              (* created detached — render_area attaches it only when
+                 there is something to show *)
               let area =
                 mk "div"
                   ~cls:"ls-properties-area ls-block-properties"
                   ~attrs:[ ("id", uuid); ("tabindex", "0") ]
               in
-              el_append_child ind area;
               (* block-left chips live inside .block-main-content *)
               let left_host =
                 match
@@ -369,7 +379,7 @@ let mount_block_area block_el uuid =
                 ; class_schema = false
                 }
               and refresh () =
-                render_area ~left_host ctx ~owner_is_tag:false
+                render_area ~left_host ~host:ind ctx ~owner_is_tag:false
                   ~owner_title:"" ~page_area:false area
               in
               refresh ();
