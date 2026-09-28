@@ -65,7 +65,40 @@ let set_theme_mode a _b _c _d =
    | None -> ());
   resolved_nil
 
-let set_state_from_store _a _b _c _d = resolved_nil
+(* app.setStateFromStore — the cljs impl assoc-in's the app-state atom and
+   lets subscriptions apply side effects; here the ui/* keys apply their
+   DOM/storage effects directly. *)
+let set_state_from_store a b _c _d =
+  let key =
+    match arg_wire a with
+    | Wire.String s -> s
+    | w -> (
+        match List.filter_map Wire.as_string (wire_elems w) with
+        | k :: _ -> k
+        | [] -> "")
+  in
+  (match key with
+   | "ui/radix-color" ->
+       let color =
+         match arg_string b with
+         | Some s -> s
+         | None -> "logseq"
+       in
+       Platform.document_set_data "color" color;
+       Platform.local_storage_set "ui/radix-color" ("\"" ^ color ^ "\"")
+   | "ui/system-theme?" ->
+       let enabled =
+         match arg_wire b with
+         | Wire.Bool v -> v
+         | _ -> false
+       in
+       Platform.local_storage_set "ui/system-theme?"
+         (if enabled then "true" else "false");
+       if enabled then
+         Platform.document_set_data "theme"
+           (if Browser_ui.prefers_dark () then "dark" else "light")
+   | _ -> ());
+  resolved_nil
 
 let get_selected_blocks _a _b _c _d =
   let uuids = Platform.selected_block_uuids () in
