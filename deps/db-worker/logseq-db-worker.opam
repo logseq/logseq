@@ -12,7 +12,7 @@ doc: "https://docs.logseq.com"
 bug-reports: "https://github.com/logseq/logseq/issues"
 depends: [
   "dune" {>= "3.23"}
-  "ocaml" {>= "5.5"}
+  "ocaml" {>= "5.1.1"}
   "melange"
   "mldoc"
   "datascript_ocaml"

@@ -12,11 +12,13 @@ let home_dir () =
   | None -> (Unix.getpwuid (Unix.getuid ())).Unix.pw_dir
 
 (* The native worker is the CLI daemon's worker: default :cli, the
-   electron owner passes LOGSEQ_OWNER_SOURCE=electron. *)
+   electron owner passes LOGSEQ_OWNER_SOURCE=electron. An empty value
+   counts as unset: OCaml < 5.5 has no Unix.unsetenv, so tests (and any
+   shell) can only "unset" by assigning "". *)
 let owner_source () =
   match env "LOGSEQ_OWNER_SOURCE" with
-  | Some s -> s
-  | None -> "cli"
+  | Some s when not (String.equal s "") -> s
+  | _ -> "cli"
 
 let electron_owner () = String.equal (owner_source ()) "electron"
 

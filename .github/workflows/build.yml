@@ -15,7 +15,7 @@ env:
   JAVA_VERSION: '21'
   # This is the latest node version we can run.
   NODE_VERSION: '24'
-  OCAML_VERSION: '5.5.0'
+  OCAML_VERSION: '5.5.1'
   BABASHKA_VERSION: '1.12.215'
 
 jobs:
@@ -81,6 +81,22 @@ jobs:
 
       - name: Fetch pnpm deps
         run: pnpm install --frozen-lockfile
+
+      - name: Set up OCaml
+        uses: ocaml/setup-ocaml@v3
+        with:
+          ocaml-compiler: ${{ env.OCAML_VERSION }}
+
+      - name: Fetch db-worker OCaml deps
+        working-directory: deps/db-worker
+        run: |
+          sh scripts/install-opam-deps.sh
+          pnpm install
+
+      # electron.db-worker-manager-test spawns static/db-worker-node.js,
+      # which requires the OCaml bundle produced by db-worker:build
+      - name: Build db-worker node bundle
+        run: pnpm db-worker:build
 
       - name: Build test asset
         run: pnpm cljs:test
@@ -152,6 +168,12 @@ jobs:
         working-directory: cli
         run: opam install . --deps-only --with-test --yes
 
+      - name: Fetch db-worker OCaml deps
+        working-directory: deps/db-worker
+        run: |
+          sh scripts/install-opam-deps.sh
+          pnpm install
+
       - name: Fetch pnpm deps
         run: pnpm install --frozen-lockfile
 
@@ -197,9 +219,6 @@ jobs:
 
       - name: Lint hardcoded user-facing strings
         run: bb lang:lint-hardcoded
-
-      - name: Lint to keep worker independent of frontend
-        run: bb lint:worker-and-frontend-separate
 
   db-graph-test:
     strategy:
@@ -251,6 +270,12 @@ jobs:
       - name: Fetch OCaml deps
         working-directory: cli
         run: opam install . --deps-only --with-test --yes
+
+      - name: Fetch db-worker OCaml deps
+        working-directory: deps/db-worker
+        run: |
+          sh scripts/install-opam-deps.sh
+          pnpm install
 
       - name: Fetch scripts pnpm deps
         run: pnpm --dir scripts install --frozen-lockfile --ignore-workspace

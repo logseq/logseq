@@ -18,12 +18,42 @@ let req_to_hooks (r : request) : Native_test_hooks.http_req =
 let resp_of_hooks (r : Native_test_hooks.http_resp) : response =
   { status = r.status; headers = r.headers; body = r.body }
 
+(* Stall deadline matching undici's default header/body timeouts — any
+   socket IO (upload or download progress) resets it, so slow transfers
+   stay alive while a truly stalled server eventually fails. *)
+let fetch_idle_timeout_s = 300.
+
+(* DNS + TCP + TLS setup runs before the idle watchdog can start, so it
+   gets its own bound; otherwise a stalled connect would pin the request
+   thread forever even after the caller times out. *)
+let connect_timeout_s = 30.
+
 (* One HTTP/1.1 request per connection, on a dedicated eio loop thread —
    same as the cljs fetch+single-request model this replaces. *)
 let fetch (req : request) : response =
   Eio_posix.run (fun env ->
     Eio.Switch.run (fun sw ->
-      let host, target, flow = Net_eio.connect_flow ~env ~sw req.url in
+      let clock = Eio.Stdenv.clock env in
+      let host, target, flow =
+        Eio.Fiber.first
+          (fun () -> Net_eio.connect_flow ~env ~sw req.url)
+          (fun () ->
+             Eio.Time.sleep clock connect_timeout_s;
+             failwith "Http: connect timed out")
+      in
+      let last_io = ref (Eio.Time.now clock) in
+      let flow =
+        { Net_eio.read =
+            (fun c ->
+               let n = flow.Net_eio.read c in
+               last_io := Eio.Time.now clock;
+               n)
+        ; write =
+            (fun cs -> flow.Net_eio.write cs; last_io := Eio.Time.now clock)
+        ; shutdown = flow.Net_eio.shutdown
+        ; close = flow.Net_eio.close
+        }
+      in
       let conn = Httpun.Client_connection.create () in
       let done_p, done_u = Eio.Promise.create () in
       let status = ref 0 in
@@ -64,8 +94,20 @@ let fetch (req : request) : response =
         with
         | exn ->
             Httpun.Client_connection.report_exn conn exn);
-      Eio.Promise.await done_p;
+      let timed_out =
+        Eio.Fiber.first
+          (fun () -> Eio.Promise.await done_p; false)
+          (fun () ->
+             let rec watch () =
+               Eio.Time.sleep clock 1.0;
+               if Eio.Time.now clock -. !last_io > fetch_idle_timeout_s
+               then true
+               else watch ()
+             in
+             watch ())
+      in
       flow.close ();
+      if timed_out then failwith "Http: request timed out";
       match !error_ref with
       | Some (Some (`Malformed_response m)) ->
           failwith ("Http: malformed response: " ^ m)

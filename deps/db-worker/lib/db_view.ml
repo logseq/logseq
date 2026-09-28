@@ -7,6 +7,18 @@
 
 open Datascript
 
+(* List.take/drop/take_while are OCaml >= 5.3; this tree still builds
+   on 5.1 *)
+let rec list_take n l =
+  if n <= 0 then []
+  else match l with [] -> [] | x :: tl -> x :: list_take (n - 1) tl
+
+let rec list_drop n l =
+  if n <= 0 then l else match l with [] -> [] | _ :: tl -> list_drop (n - 1) tl
+
+let rec list_take_while p l =
+  match l with x :: tl when p x -> x :: list_take_while p tl | _ -> []
+
 (* clojure.string/includes? equivalent *)
 let contains_substring haystack needle =
   let lh = String.length haystack and ln = String.length needle in
@@ -1914,7 +1926,7 @@ let take_sorted_eids db (eids : entity_id list) (sorting : sorting_item list)
   | None ->
       let sorted = sort_eids_by_sorting db eids sorting in
       (match row_limit with
-       | Some l -> sorted |> List.drop (Option.value ~default:0 row_offset) |> List.take l
+       | Some l -> sorted |> list_drop (Option.value ~default:0 row_offset) |> list_take l
        | None -> sorted)
 
 (* view/feature-filters? *)
@@ -2309,7 +2321,7 @@ let get_feature_row_data db (feat_type : string) (class_id : entity_id option)
 let maybe_limit_rows (rows : 'a list) (row_limit : int option) (row_offset : int option) :
     'a list =
   match row_limit with
-  | Some l -> rows |> List.drop (Option.value ~default:0 row_offset) |> List.take l
+  | Some l -> rows |> list_drop (Option.value ~default:0 row_offset) |> list_take l
   | None -> rows
 
 (* view/recycled-eid? — deleted-at on the entity or a block/parent
@@ -2340,7 +2352,7 @@ let latest_journal_day_pairs db : (entity_id * value) list =
   let seen = Hashtbl.create 31 in
   List.of_seq
     (rseek_datoms db Avet ~a:"block/journal-day" ~v:(Int64 (Int64.of_int today)) ())
-  |> List.take_while (fun (d : datom) -> d.a = "block/journal-day")
+  |> list_take_while (fun (d : datom) -> d.a = "block/journal-day")
   |> List.filter (fun (d : datom) ->
          if Hashtbl.mem seen d.e then false
          else begin
@@ -2696,8 +2708,8 @@ let get_view_data db (view_id_opt : entity_id option) (opt : Wire.t) : Wire.t =
     let limit = opt_int "row-limit" in
     let window =
       journal_days
-      |> (fun l -> if offset > 0 then List.drop offset l else l)
-      |> (fun l -> match limit with Some n -> List.take n l | None -> l)
+      |> (fun l -> if offset > 0 then list_drop offset l else l)
+      |> (fun l -> match limit with Some n -> list_take n l | None -> l)
     in
     let index =
       Wire.Array

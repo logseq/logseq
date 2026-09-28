@@ -53,7 +53,7 @@
      expected to report).
 
    Resolved lib/engine bugs (documented while red; now green):
-     - runtime/native/transit_codec.ml decode mis-resolved Normal-mode
+     - runtime/native/transit_codec.ml decode wrongly-resolved Normal-mode
        read-cache refs (^@, ^:, ^G …): repeated keyword/uuid values in a
        broadcast payload (e.g. [:attr :block/uuid] inside affected-keys)
        decoded to wrong values (~u<uuid>, Tagged sets), so `delta
@@ -93,11 +93,15 @@ let uuid_lit u = Printf.sprintf "#uuid \"%s\"" u
 
 let log_mark () = List.length (Worker_log.entries ())
 
+(* List.drop is OCaml >= 5.3; this tree still builds on 5.1 *)
+let rec list_drop n l =
+  if n <= 0 then l else match l with [] -> [] | _ :: tl -> list_drop (n - 1) tl
+
 let new_errors_since mark =
   List.filter
     (fun (e : Worker_log.entry) ->
       e.message = "db-worker/post-commit-handler-failed")
-    (List.drop mark (Worker_log.entries ()))
+    (list_drop mark (Worker_log.entries ()))
 
 let field (e : Worker_log.entry) k = List.assoc_opt k e.fields
 
@@ -340,7 +344,7 @@ let test_builds_one_delta () =
                     | _ -> None
                   in
                   (* Engine-owned failure: native transit_codec decode
-                     mis-resolves Normal-mode read-cache refs (^@, ^:,
+                     wrongly-resolves Normal-mode read-cache refs (^@, ^:,
                      ^G …) — repeated keyword/uuid values inside
                      affected-keys decode to wrong values, so the
                      transit roundtrip corrupts the delta. Documented
