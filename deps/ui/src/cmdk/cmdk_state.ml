@@ -445,6 +445,7 @@ let on_input st q =
 
 let open_palette ?(move = false) st =
   st.gen := !(st.gen) + 1;
+  Dialogs_state.touch "cmdk";
   set_in st (fun v ->
           { v with open_ = true; input = ""; move_mode = move; mouse = false
           ; filter = None });
@@ -462,7 +463,9 @@ let open_palette ?(move = false) st =
   in
   Dom_ext.set_timeout (fun () -> focus_input 20) 0
 
-let close st = set_in st (fun v -> { v with open_ = false })
+let close st =
+  Dialogs_state.release "cmdk";
+  set_in st (fun v -> { v with open_ = false })
 
 let clear_filter st =
   set_in st (fun v -> { v with filter = None });

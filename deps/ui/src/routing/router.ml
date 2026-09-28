@@ -384,6 +384,8 @@ let resolve () =
       (* commit and close any in-progress edit before the route swaps
          (cljs exits editing on navigation) *)
       Editor_actions.exit_edit ~select:false;
+      (* cljs unmounts its modal stack on route change *)
+      if Dialogs_state.ready () then Dialogs_state.close_all ();
       Runtime.send (Action.Navigate_to route);
       (* cljs settings-effect cleanup: data-settings-tab only while the
          settings route/dialog is active *)

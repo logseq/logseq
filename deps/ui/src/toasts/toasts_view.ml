@@ -67,10 +67,11 @@ let render (ms : Model.t Signal.signal) : t =
       | [] -> box ~key:"toaster-empty" []
       | ts ->
           dom ~key:"toaster" ~style_class:"ui__toaster-viewport"
-            (* radix sonner stacking puts the newest toast at index 0
-               (frontmost, highest z); model appends new toasts last, so
-               reverse before assigning --toast-index *)
-            (List.mapi
-               (fun i (t : Model.toast) -> toast_item t i)
-               (List.rev ts)))
+            (* sonner DOM order is oldest->newest with --toast-index 0 on
+               the newest (frontmost, highest z); the model appends new
+               toasts last so assign the index in reverse *)
+            (let n = List.length ts in
+             List.mapi
+               (fun i (t : Model.toast) -> toast_item t (n - 1 - i))
+               ts))
     ms
