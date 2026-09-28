@@ -575,11 +575,14 @@ let on_model st (m : Model.t) =
    | Some p when m.Model.phase = Model.Ready ->
        let key = page_key p in
        if !last_page_key <> Some key then (
+         let first = !last_page_key = None in
          last_page_key := Some key;
          refresh_favorited (Router.repo ()) st;
          match m.Model.repo, p.Model.page_db_id with
          | Some repo, Some id ->
-             push_recent repo id;
+             (* cljs adds recents only via redirect-to-page! — the page
+                shown on initial load is never recorded *)
+             if not first then push_recent repo id;
              load_recents repo st
          | _ -> ())
    | _ -> ());

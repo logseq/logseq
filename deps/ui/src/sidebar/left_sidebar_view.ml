@@ -165,25 +165,53 @@ let menu_host st =
 
 (* ---------- navigations ---------- *)
 
+(* cljs shui/shortcut separate-keys: space-separated bindings render one
+   kbd per key inside .shui-shortcut-separate *)
+let shortcut_hint binding =
+  let keys = String.split_on_char ' ' binding in
+  dom ~key:("sc-" ^ binding) ~tag:"span"
+    ~style_class:"ml-1 mr-2 flex items-center"
+    [ dom ~key:"wrap" ~tag:"span" ~style_class:"keyboard-shortcut"
+        [ dom ~key:"inlf" ~tag:"span"
+            ~attrs:
+              [ ( "style"
+                , "display: inline-flex; align-items: center; \
+                   white-space: nowrap;" ) ]
+            [ dom ~key:"sep"
+                ~style_class:"shui-shortcut-separate shui-shortcut-glow"
+            ~attrs:
+              [ ("data-shortcut-binding", binding)
+              ; ("aria-hidden", "true")
+              ; ("style", "white-space: nowrap; gap: 4px") ]
+            (List.map
+               (fun k ->
+                 dom ~tag:"kbd" ~style_class:"shui-shortcut-key"
+                   ~attrs:[ ("aria-hidden", "false") ]
+                   ~text:(String.uppercase_ascii k) [])
+               keys) ] ] ]
+
 (* cljs sidebar-item: wrapper div gets the nav class (+ `active`), the
    inner `a.item` also gets `active` when the route matches *)
-let nav_link ~key ~class_ ~active ~title ~icon_name ~on_click =
+let nav_link ~key ~class_ ~active ~title ~icon_name ?shortcut ~on_click () =
   let act = if active then " active" else "" in
+  let tail = match shortcut with Some s -> [ shortcut_hint s ] | None -> [] in
   dom ~key ~style_class:(class_ ^ act)
     [ dom ~tag:"a"
         ~style_class:
           ("item group flex items-center text-sm rounded-md font-medium" ^ act)
         ~events:"click" ~on_dom_event:on_click
-        [ icon icon_name
-        ; dom ~tag:"span" ~style_class:"flex-1" ~text:title [] ]
+        ([ icon icon_name
+         ; dom ~tag:"span" ~style_class:"flex-1" ~text:title [] ]
+        @ tail)
     ]
 
-let nav_route ~class_ ~active ~title ~icon_name hash =
-  nav_link ~key:("nl-" ^ class_) ~class_ ~active ~title ~icon_name
+let nav_route ~class_ ~active ~title ~icon_name ?shortcut hash =
+  nav_link ~key:("nl-" ^ class_) ~class_ ~active ~title ~icon_name ?shortcut
     ~on_click:(fun name _ ->
       if name = "click" then (
         Platform.set_location_hash (Runtime.nav_hash hash);
         Platform.dispatch "ls:navigate" Js.Json.null))
+    ()
 
 let tag_nav ~active_route class_ label titles =
   match List.assoc_opt class_ titles with
@@ -193,7 +221,8 @@ let tag_nav ~active_route class_ label titles =
            ~active:(active_route = Model.Page title)
            ~title:(t label) ~icon_name:"hash"
            ~on_click:(fun name _ ->
-             if name = "click" then Sidebar_state.navigate_to_page title))
+             if name = "click" then Sidebar_state.navigate_to_page title)
+           ())
   | None -> None
 
 (* active nav per route — cljs sidebar-navigations-loaded *)
@@ -205,8 +234,10 @@ let nav_items ~active_route (checked, tag_titles) =
           Some
             (nav_link ~key:"nl-flashcards" ~class_:"flashcards-nav"
                ~active:false ~title:(t "Flashcards") ~icon_name:"cards"
+               ~shortcut:"g f"
                ~on_click:(fun name _ ->
-                 if name = "click" then Sidebar_state.open_dialog "cards"))
+                 if name = "click" then Sidebar_state.open_dialog "cards")
+               ())
       | "all-pages" ->
           Some
             (nav_route ~class_:"all-pages-nav"
@@ -216,7 +247,7 @@ let nav_items ~active_route (checked, tag_titles) =
           Some
             (nav_route ~class_:"graph-view-nav"
                ~active:(active_route = Model.Graph) ~title:(t "Graph view")
-               ~icon_name:"hierarchy" "#/graph")
+               ~icon_name:"hierarchy" ~shortcut:"g g" "#/graph")
       | "tag/tasks" -> tag_nav ~active_route "tasks" "Tasks" tag_titles
       | "tag/assets" -> tag_nav ~active_route "assets" "Assets" tag_titles
       | _ -> None)
@@ -257,7 +288,8 @@ let nav_group ms st =
                     ~style_class:"sidebar-navigations flex flex-col mt-1"
                     (nav_route ~class_:"journals-nav"
                        ~active:(route = Model.Journals || route = Model.Home)
-                       ~title:(t "Journals") ~icon_name:"calendar" "#/"
+                       ~title:(t "Journals") ~icon_name:"calendar"
+                       ~shortcut:"g j" "#/"
                     :: nav_items ~active_route:route (checked, tag_titles)))
                 navs_sig
             ]

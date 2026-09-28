@@ -127,16 +127,43 @@ let ext_svg ?(size = 18.) name =
       | None -> None)
 ;;
 
+(* @tabler/icons-react svg attrs (size -> width/height) *)
+let base_svg ~size name : Lui_elements.t list =
+  match Icon_tabler_data.tabler_children name with
+  | [] -> []
+  | kids ->
+      [ D.dom ~tag:"svg"
+          ~attrs:
+            [ ("xmlns", "http://www.w3.org/2000/svg")
+            ; ("width", Printf.sprintf "%g" size)
+            ; ("height", Printf.sprintf "%g" size)
+            ; ("viewBox", "0 0 24 24")
+            ; ("fill", "none")
+            ; ("stroke", "currentColor")
+            ; ("stroke-width", "2")
+            ; ("stroke-linecap", "round")
+            ; ("stroke-linejoin", "round")
+            ; ("class", "tabler-icon tabler-icon-" ^ name ^ " ") ]
+          (List.map
+             (fun (tag, attrs) -> D.dom ~tag ~attrs [])
+             kids) ]
+;;
+
 (* equivalent of (shui/tabler-icon name) *)
 let icon ?(size = 18.) ?(cls = "") name : Lui_elements.t =
   let cls = if cls = "" then "" else " " ^ cls in
   match ext_svg ~size name with
   | Some els ->
       D.dom ~tag:"span" ~style_class:("ui__icon ti ls-icon-" ^ name ^ cls) els
-  | None ->
-      let n = kebab name in
-      let prefix = if List.mem n tie_names then "tie tie-" else "ti ti-" in
-      D.dom ~tag:"span" ~style_class:("ui__icon " ^ prefix ^ n ^ cls) []
+  | None -> (
+      match base_svg ~size name with
+      | (_ :: _) as els ->
+          D.dom ~tag:"span" ~style_class:("ui__icon ti ls-icon-" ^ name ^ cls)
+            els
+      | [] ->
+          let n = kebab name in
+          let prefix = if List.mem n tie_names then "tie tie-" else "ti ti-" in
+          D.dom ~tag:"span" ~style_class:("ui__icon " ^ prefix ^ n ^ cls) [])
 ;;
 
 (* bare font glyph without the ui__icon wrapper (existing call sites) *)
