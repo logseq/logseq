@@ -169,5 +169,14 @@
     (is (some #{:ui/toggle-contents}
               (shortcut-config/get-category-shortcuts :shortcut.category/toggle)))))
 
+(deftest test-highlight-recent-blocks-shortcut
+  (testing "highlight recent blocks uses the toggle chord t h"
+    (is (= ["t h"] (dh/shortcut-binding :ui/highlight-recent-blocks))))
+  (testing "highlight recent blocks belongs to the non-editing handler"
+    (is (= :shortcut.handler/global-non-editing-only
+           (dh/get-group :ui/highlight-recent-blocks))))
+  (testing "highlight recent blocks appears in the toggle category"
+    (is (some #{:ui/highlight-recent-blocks}
+              (shortcut-config/get-category-shortcuts :shortcut.category/toggle)))))
 (comment
   (cljs.test/run-tests))
