@@ -66,6 +66,26 @@ let count_refs (w : Wire.t) (k : string) : int =
       List.length xs
   | _ -> 0
 
+(* logseq.property/icon is a {type, id} map on the entity itself; block
+   icons use the Model.icon record (page icons use the tuple form below) *)
+let block_icon_of_wire (w : Wire.t) : Model.icon option =
+  let str_or_kw = function
+    | Some (Wire.Keyword s) | Some (Wire.String s) -> Some s
+    | _ -> None
+  in
+  match Wire.get w "logseq.property/icon" with
+  | Some (Wire.Map _ as m) -> (
+      match str_or_kw (Wire.get m "id") with
+      | Some id ->
+          Some
+            { Model.icon_kind =
+                Option.value (str_or_kw (Wire.get m "type"))
+                  ~default:"tabler-icon"
+            ; icon_id = id
+            }
+      | None -> None)
+  | _ -> None
+
 let rec block_of_wire ?(order_index = 1) (w : Wire.t) : Model.block =
   let uuid = Wire.map_get_uuid w "block/uuid" in
   let db_id = Wire.map_get_int w "db/id" in
@@ -96,17 +116,38 @@ let rec block_of_wire ?(order_index = 1) (w : Wire.t) : Model.block =
     | Some l -> Wire.map_get_int l "db/id"
     | None -> None
   in
-  let tag_ids =
+  let tag_entries =
     match Wire.get w "block/tags" with
-    | Some (Wire.List xs) | Some (Wire.Array xs) | Some (Wire.Set xs) ->
-        List.filter_map
-          (fun t ->
-            match t with
-            | Wire.Int i -> Some i
-            | Wire.Int64 i -> Some (Int64.to_int i)
-            | _ -> Wire.map_get_int t "db/id")
-          xs
+    | Some (Wire.List xs) | Some (Wire.Array xs) | Some (Wire.Set xs) -> xs
     | _ -> []
+  in
+  let tag_ids =
+    List.filter_map
+      (fun t ->
+        match t with
+        | Wire.Int i -> Some i
+        | Wire.Int64 i -> Some (Int64.to_int i)
+        | _ -> Wire.map_get_int t "db/id")
+      tag_entries
+  in
+  (* tag wires carry {db/id, db/ident?, block/title?, icon?} once the
+     worker expands the ref; use them eagerly when present *)
+  let tag_titles =
+    List.filter_map
+      (fun t ->
+        match t with
+        | Wire.Map _ -> Wire.map_get_string t "block/title"
+        | Wire.Keyword s -> Some s
+        | _ -> None)
+      tag_entries
+  in
+  let tag_idents =
+    List.filter_map
+      (fun t ->
+        match Wire.get t "db/ident" with
+        | Some (Wire.Keyword s) | Some (Wire.String s) -> Some s
+        | _ -> None)
+      tag_entries
   in
   let num_prop k =
     match Wire.get w k with
@@ -130,7 +171,7 @@ let rec block_of_wire ?(order_index = 1) (w : Wire.t) : Model.block =
   ; block_title = title
   ; block_level = level
   ; block_tag_ids = tag_ids
-  ; block_tags = []
+  ; block_tags = tag_titles
   ; block_display_type = prop_label w "logseq.property.node/display-type"
   ; block_order_list = order_list
   ; block_order_index =
@@ -144,7 +185,9 @@ let rec block_of_wire ?(order_index = 1) (w : Wire.t) : Model.block =
            | Some t -> Some t
            | None -> Wire.map_get_string w "block/page-name")
        | _ -> Wire.map_get_string w "block/page-name")
-  ; block_tag_idents = []
+  ; block_tag_idents = tag_idents
+  ; block_icon = block_icon_of_wire w
+  ; block_tag_icons = List.filter_map block_icon_of_wire tag_entries
   ; block_reactions = reactions_of_wire w
   ; block_is_comments_area = false
   ; block_is_comment = false

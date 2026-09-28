@@ -587,6 +587,7 @@ let title_actions (p : Model.page) =
         let l, _t, _r, b, _w = el_rect row in
         Properties_dialog.open_dialog ~anchor:(l, b +. 4.)
           { Properties_dialog.uuid
+          ; uuids = []
           ; db_id = p.Model.page_db_id
           ; is_tag = true
           ; title = p.Model.page_title

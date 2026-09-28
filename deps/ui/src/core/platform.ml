@@ -62,6 +62,10 @@ external dataset_of : Js.Json.t -> Js.Json.t = "dataset" [@@mel.get]
 external dataset_set :
   Js.Json.t -> string -> string -> unit = "" [@@mel.set_index]
 
+(* generic object field set, e.g. el.style.visibility *)
+external set_prop : Js.Json.t -> string -> Js.Json.t -> unit = ""
+  [@@mel.set_index]
+
 let document_set_data name value =
   dataset_set (dataset_of document_element) name value
 

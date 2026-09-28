@@ -54,6 +54,16 @@ let ref_value_summary db (eid : entity_id) : Wire.t =
         | None -> m
       in
       let m =
+        match Ldb.ident_of e with
+        | Some i -> field "db/ident" (kw i) :: m
+        | None -> m
+      in
+      let m =
+        match Ldb.value e "logseq.property/icon" with
+        | Some v -> field "logseq.property/icon" (Ds_wire.transit_of_value v) :: m
+        | None -> m
+      in
+      let m =
         match raw_title with
         | Some v ->
             field "block/title" (Ds_wire.transit_of_value v)
