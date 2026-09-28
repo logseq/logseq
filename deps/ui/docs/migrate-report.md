@@ -956,3 +956,19 @@ search may lag).
   `copy/export-block-text-{indent-style,remove-options,other-options}`
   with cljs shapes (`#{…}` removal set, `:other-options` map with
   `keep-only-level<=N`).
+
+## Cmdk (e2e: `cmdk_scroll_basic_test`)
+
+- **The `:recently-updated-pages` group is filtered by
+  `search/fuzzy-search`**, not substring (`core.cljs` `load-results
+  :recently-updated-pages` → `search/fuzzy-search recent-pages q
+  {:extract-fn :block/title}`). Fuzzy = subsequence match over
+  `clean-str` (lowercase, `[ \/_\]\(\)\[]+` stripped). A substring
+  filter drops recents as soon as the query is not a contiguous match
+  (e.g. typing one extra char), shrinking the visible result set —
+  `cmdk-keeps-results-visible-while-searching` counts on them staying.
+- **cljs `:nodes` results come from `search-blocks`** (worker FTS), so
+  keystrokes do not clear the rendered list: results are only replaced
+  when the async search resolves. The OCaml port already keeps
+  `v.groups` while `refresh` is in flight — the stale-input check in
+  `apply_results` (`v.input <> q`) must stay.
