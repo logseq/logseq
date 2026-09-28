@@ -71,7 +71,6 @@ let encode_error _name exn =
 
 let invoke_transit name transit_args =
   let open Db_worker_effect.Infix in
-  let t0 = Time.monotonic_now () in
   let args =
     match Transit_codec.of_string transit_args with
     | Wire.Array xs -> xs
@@ -79,7 +78,6 @@ let invoke_transit name transit_args =
     | Wire.Nil -> []
     | other -> [ other ]
   in
-  let t1 = Time.monotonic_now () in
   (* cljs remote-function: `invoke` raising synchronously — unknown
      endpoint or an eager raise inside the handler call — makes
      remoteInvoke throw/reject: the error escapes untouched rather
@@ -88,21 +86,8 @@ let invoke_transit name transit_args =
      arriving as a rejected effect (settled or pending) is cljs's
      p/catch path: it resolves to error transit. *)
   match (try `Task (invoke_raw name args) with exn -> `Raise exn) with
-  | `Raise exn ->
-      Worker_log.info "DISPERR-SYNC"
-        [ "api", name; "exn", Printexc.to_string exn ];
-      raise exn
+  | `Raise exn -> raise exn
   | `Task task ->
       Db_worker_effect.catch task (fun exn ->
-          Worker_log.info "DISPERR"
-            [ "api", name; "exn", Printexc.to_string exn ];
           Db_worker_effect.pure (encode_error name exn))
-      >>= fun result ->
-      let encoded = Transit_codec.to_string result in
-      let t2 = Time.monotonic_now () in
-      (if Time.diff_monotonic_ms t0 t2 > 3. then
-         Worker_log.info "DISPTIME"
-           [ "api", name
-           ; "decode", Float.to_string (Time.diff_monotonic_ms t0 t1)
-           ; "invoke", Float.to_string (Time.diff_monotonic_ms t1 t2) ]);
-      Db_worker_effect.pure encoded
+      >>= fun result -> Db_worker_effect.pure (Transit_codec.to_string result)
