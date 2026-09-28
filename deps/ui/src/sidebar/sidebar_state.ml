@@ -224,6 +224,7 @@ let navigate_to_page target =
     if Sdk_util.is_uuid_string target then target
     else encode_uri_component target
   in
+  Runtime.mark_nav ();
   Platform.set_location_hash (Runtime.nav_hash ("#/page/" ^ target));
   Platform.dispatch "ls:navigate" Js.Json.null
 
@@ -594,10 +595,11 @@ let on_model st (m : Model.t) =
          refresh_favorited (Router.repo ()) st;
          match m.Model.repo, p.Model.page_db_id with
          | Some repo, Some id ->
-             (* cljs add-page-to-recent! runs on every redirect-to-page!,
-                including the initial journal navigation *)
-             push_recent repo id;
-             load_recents repo st
+             (* recents only on explicit navigation (cljs
+                redirect-to-page!), never boot/hashchange loads *)
+             if Runtime.take_nav_mark () then (
+               push_recent repo id;
+               load_recents repo st)
          | _ -> ())
    | _ -> ());
   sync_right_sidebar_width ()
