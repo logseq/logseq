@@ -477,7 +477,7 @@ let header_select_cell inst ~refresh cell =
 
 (* cljs header-cp: text-variant button holding the title span and a sort
    arrow for the active sort column *)
-let header_button inst ~refresh (c : V.column) : D.el =
+let header_button inst (c : V.column) : D.el =
   let sort =
     List.find_opt (fun s -> s.V.s_id = c.V.c_id) inst.V.sorting
   in
@@ -491,34 +491,54 @@ let header_button inst ~refresh (c : V.column) : D.el =
       ~attrs:[ ("title", c.V.c_name) ] ~text:c.V.c_name ()
     :: (match arrow with Some a -> [ a ] | None -> [])
   in
-  let btn =
-    D.h ~tag:"button"
-      ~cls:
-        (D.button_cls ~variant:"text"
-           ~cls:"h-8 !pl-2 !px-2 !py-0 hover:text-foreground w-full \
-                 justify-start"
-           ())
-      ~children ()
+  D.h ~tag:"button"
+    ~cls:
+      (D.button_cls ~variant:"text"
+         ~cls:"h-8 !pl-2 !px-2 !py-0 hover:text-foreground w-full \
+               justify-start"
+         ())
+    ~children ()
+
+let set_column_sort inst ~refresh (c : V.column) asc =
+  inst.V.sorting <- [ { V.s_id = c.V.c_id; s_asc = asc } ];
+  V.persist_sorting inst;
+  refresh inst
+
+let sort_menu_items inst ~refresh (c : V.column) =
+  [ P.MItem
+      (I.sort_ascending, fun () -> set_column_sort inst ~refresh c true)
+  ; P.MItem
+      (I.sort_descending, fun () -> set_column_sort inst ~refresh c false)
+  ]
+
+(* sort options as dropdown menuitems — cljs appends them as
+   more-options at the end of the property configure list *)
+let sort_menuitem_els inst ~refresh (c : V.column) =
+  List.map
+    (fun (label, asc) ->
+      Properties_menu.menuitem label (fun () ->
+          Properties_state.close_overlays ();
+          set_column_sort inst ~refresh c asc))
+    [ (I.sort_ascending, true); (I.sort_descending, false) ]
+
+(* cljs header-cp: property columns open one .ls-property-dropdown —
+   the configure menu with sort/pin more-options trailing *)
+let open_property_menu inst ~refresh ~anchor (c : V.column) (p : W.t) =
+  let owner_uuid =
+    match inst.V.kind with
+    | V.KTagPage u | V.KPropertyPage u -> u
+    | _ -> ""
   in
-  if sortable c then
-    D.el_add_listener btn "click" (fun _ ->
-        P.show_menu ~anchor:btn
-          [ P.MItem
-              ( I.sort_ascending
-              , fun () ->
-                  inst.V.sorting <- [ { V.s_id = c.V.c_id; s_asc = true } ];
-                  V.persist_sorting inst;
-                  refresh inst )
-          ; P.MItem
-              ( I.sort_descending
-              , fun () ->
-                  inst.V.sorting <-
-                    [ { V.s_id = c.V.c_id; s_asc = false } ];
-                  V.persist_sorting inst;
-                  refresh inst )
-          ]
-        |> ignore);
-  btn
+  Properties_menu.open_menu ~anchor ~owner_uuid
+    ~owner_id:(Properties_data.entity_id_of p)
+    ~owner_is_tag:
+      (match inst.V.kind with V.KTagPage _ -> true | _ -> false)
+    ~owner_title:c.V.c_name
+    ~refresh:(fun () -> refresh inst)
+    ~trailing:(if sortable c then sort_menuitem_els inst ~refresh c else [])
+    (W.Map
+       [ (W.Keyword "property", p)
+       ; (W.Keyword "property-id", W.Keyword c.V.c_id) ])
 
 let header_cell inst ~refresh (c : V.column) : D.el =
   let cell =
@@ -537,29 +557,21 @@ let header_cell inst ~refresh (c : V.column) : D.el =
             ~cls:"h-8 w-6 flex items-center justify-center"
             ~attrs:[ ("for", "header-index"); ("title", I.row_number) ]
             ~text:"#" ())
-   | _ -> (
-       D.el_append_child cell (header_button inst ~refresh c);
-       match c.V.c_prop with
-        | Some p ->
-            (* cljs header-cp: property columns open the property
-               configure dropdown (.ls-property-dropdown) *)
+   | _ ->
+       D.el_append_child cell (header_button inst c);
+       (match c.V.c_prop, sortable c with
+        | Some p, _ ->
             D.el_add_listener cell "click" (fun _ ->
-                let owner_uuid =
-                  match inst.V.kind with
-                  | V.KTagPage u | V.KPropertyPage u -> u
-                  | _ -> ""
-                in
-                Properties_menu.open_menu ~anchor:cell ~owner_uuid
-                  ~owner_id:(Properties_data.entity_id_of p)
-                  ~owner_is_tag:(match inst.V.kind with
-                    | V.KTagPage _ -> true
-                    | _ -> false)
-                  ~owner_title:c.V.c_name
-                  ~refresh:(fun () -> refresh inst)
-                  (W.Map
-                     [ (W.Keyword "property", p)
-                     ; (W.Keyword "property-id", W.Keyword c.V.c_id) ]))
-        | None -> ()));
+                open_property_menu inst ~refresh ~anchor:cell c p)
+        | None, true ->
+            (* built-in columns get only the sort options, still inside
+               .ls-property-dropdown *)
+            D.el_add_listener cell "click" (fun _ ->
+                ignore
+                  (P.show_menu ~anchor:cell
+                     ~cls_prefix:"ls-property-dropdown "
+                     (sort_menu_items inst ~refresh c)))
+        | None, false -> ()));
   cell
 
 (* ---------- action bar ---------- *)
