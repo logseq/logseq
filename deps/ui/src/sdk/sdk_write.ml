@@ -873,7 +873,20 @@ let remove_block_property a b _c _d =
              | Some uuid ->
                  apply_op "remove-block-property"
                    [ Wire.Uuid uuid; Wire.Keyword ident ]
-                 |> Js.Promise.then_ (fun _ -> resolved_nil)))
+                 |> Js.Promise.then_ (fun _ ->
+                        get_entity_ident ident
+                        |> Js.Promise.then_ (fun prop ->
+                               (* the broadcast refresh is debounced;
+                                  drop the rendered row so the DOM is
+                                  settled when this promise resolves *)
+                               (match
+                                  Wire.map_get_string prop "block/title"
+                                with
+                                | Some t ->
+                                    Properties_area.drop_row
+                                      ~owner_uuid:uuid ~title:t
+                                | None -> ());
+                               resolved_nil))))
   | _ -> resolved_nil
 
 

@@ -87,6 +87,11 @@ let toolbar_items () =
   |> List.sort (fun x y ->
          String.compare (jstr x.it_opts "key") (jstr y.it_opts "key"))
 
+(* any registered plugin (loaded or disabled) — disabled plugins keep
+   their `installed` entry until unregister/unlink, matching cljs
+   :plugin/installed-plugins *)
+let has_installed () = Array.length (Js.Dict.keys installed) > 0
+
 let slot_id it =
   "pl-injected-ui-item-pl-" ^ jstr it.it_opts "key" ^ "-" ^ it.it_pid
 
