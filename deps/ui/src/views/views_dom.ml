@@ -134,15 +134,115 @@ let h ?(tag = "div") ?(cls = "") ?(attrs = []) ?text ?title_ ?on_click
   (match children with Some cs -> append_all el cs | None -> ());
   el
 
-(* <span class="ui__icon ti ls-icon-{name}"><i class="ti ti-{name}"></i></span>
-   matches shui icon markup; ti-* gives the tabler glyph via the icon font *)
+external create_el_ns : string -> string -> el = "createElementNS"
+  [@@mel.scope "document"]
+
+external tabler_icons : Js.Json.t Js.Dict.t Js.Undefined.t = "tablerIcons"
+  [@@mel.scope "window"]
+
+external call_fn : Js.Json.t -> Js.Json.t -> Js.Json.t -> Js.Json.t = "call"
+  [@@mel.send]
+
+let undefined_json : Js.Json.t = [%mel.raw "undefined"]
+
+let svg_el tag = create_el_ns "http://www.w3.org/2000/svg" tag
+
+let icon_attr_name k =
+  match k with
+  | "className" -> "class"
+  | "viewBox" -> "viewBox"
+  | _ ->
+    let b = Buffer.create (String.length k + 2) in
+    String.iter
+      (fun c ->
+        if c >= 'A' && c <= 'Z' then begin
+          Buffer.add_char b '-';
+          Buffer.add_char b (Char.lowercase_ascii c)
+        end
+        else Buffer.add_char b c)
+      k;
+    Buffer.contents b
+
+let json_num_str n =
+  let i = int_of_float n in
+  if n = float_of_int i then string_of_int i else string_of_float n
+
+(* tabler.ext.js factories return react-element-shaped objects
+   ({type, props:{children}}) produced by the ReactJSXRuntime shim in
+   index.html — convert them to real DOM elements *)
+let rec append_icon_child parent (v : Js.Json.t) : unit =
+  match Js.Json.classify v with
+  | Js.Json.JSONObject _ -> (
+    match dom_of_react_el v with
+    | Some el -> Editor_dom.el_append_child parent el
+    | None -> ())
+  | Js.Json.JSONArray items ->
+    Array.iter (append_icon_child parent) items
+  | _ -> ()
+
+and dom_of_react_el (v : Js.Json.t) : el option =
+  match Js.Json.classify v with
+  | Js.Json.JSONObject o -> (
+    match Js.Dict.get o "type" with
+    | Some ty -> (
+      match Js.Json.decodeString ty with
+      | None -> None
+      | Some tag ->
+        let el = svg_el tag in
+        (match Js.Dict.get o "props" with
+         | Some p -> (
+           match Js.Json.decodeObject p with
+           | None -> ()
+           | Some props ->
+             Array.iter
+               (fun (k, pv) ->
+                 if k <> "children" then
+                   match Js.Json.classify pv with
+                   | Js.Json.JSONString s ->
+                     Editor_dom.el_set_attr el (icon_attr_name k) s
+                   | Js.Json.JSONNumber n ->
+                     Editor_dom.el_set_attr el (icon_attr_name k)
+                       (json_num_str n)
+                   | Js.Json.JSONTrue ->
+                     Editor_dom.el_set_attr el (icon_attr_name k) ""
+                   | _ -> ())
+               (Js.Dict.entries props);
+             append_icon_child el
+               (match Js.Dict.get props "children" with
+                | Some ch -> ch
+                | None -> Js.Json.null))
+         | None -> ());
+        Some el)
+    | None -> None)
+  | _ -> None
+
+(* window.tablerIcons.Icon<name> — custom Logseq icons (Backlog, priorityLvl*,
+   InProgress50...) that have no tabler font glyph *)
+let tabler_icon_el name : el option =
+  match Js.Undefined.toOption tabler_icons with
+  | Some icons -> (
+    match Js.Dict.get icons ("Icon" ^ String.capitalize_ascii name) with
+    | Some ctor ->
+      let props =
+        Js.Json.object_ (Js.Dict.fromList [ ("size", Js.Json.number 18.) ])
+      in
+      dom_of_react_el (call_fn ctor undefined_json props)
+    | None -> None)
+  | None -> None
+
+(* <span class="ui__icon ti ls-icon-{name}">…</span> matches shui icon markup;
+   cljs prefers window.tablerIcons (inline SVG) and falls back to the
+   ti-<name> font glyph — same split here *)
 let icon ?(cls = "") name =
-  let i = Editor_dom.create_element "i" in
-  Editor_dom.el_set_class i ("ti ti-" ^ name);
   let span = Editor_dom.create_element "span" in
   Editor_dom.el_set_class span
     ("ui__icon ti ls-icon-" ^ name ^ if cls = "" then "" else " " ^ cls);
-  Editor_dom.el_append_child span i;
+  (match tabler_icon_el name with
+   | Some el -> Editor_dom.el_append_child span el
+   | None ->
+     let i = Editor_dom.create_element "i" in
+     Editor_dom.el_set_class i ("ti ti-" ^ name);
+     Editor_dom.el_append_child span i);
   span
 
 let clear el = el_replace_children el

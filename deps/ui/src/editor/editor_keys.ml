@@ -158,20 +158,37 @@ let on_normal_key ev =
   | "Escape" -> A.clear_selection ()
   | _ -> ()
 
+(* while an autocomplete popup is open its own document listener
+   (registered after ours) owns Enter/Tab/Escape/arrows — skip *)
+let ac_popup_open () =
+  match D.get_element_by_id "ui__ac-inner" with
+  | Some _ -> true
+  | None -> false
+
 let on_keydown ev =
   if S.ready () then
-    let target = D.ev_target ev in
-    match
-      (S.editing_uuid (), D.closest_sel ".editor-wrapper" target)
-    with
-    | Some uuid, Some _ -> (
-        match target with
-        | Some el when D.el_tag el = "TEXTAREA" ->
-            on_editor_key ev uuid el
-        | _ -> ())
-    | _ ->
-        if D.is_editable_target target then ()
-        else on_normal_key ev
+    if Editor_commands.popup_key ev then ()
+    else
+      let target = D.ev_target ev in
+      match D.closest_sel "pre.CodeMirror-line" target with
+      | Some el -> Editor_commands.code_pre_key el ev
+      | None -> (
+          match
+            (S.editing_uuid (), D.closest_sel ".editor-wrapper" target)
+          with
+          | Some uuid, Some _ -> (
+              match target with
+              | Some el when D.el_tag el = "TEXTAREA" -> (
+                  if ac_popup_open () then
+                    match D.ev_key ev with
+                    | "Enter" | "Tab" | "Escape" | "ArrowUp"
+                    | "ArrowDown" -> ()
+                    | _ -> on_editor_key ev uuid el
+                  else on_editor_key ev uuid el)
+              | _ -> ())
+          | _ ->
+              if D.is_editable_target target then ()
+              else on_normal_key ev)
 
 (* -- input: keep the editing buffer in sync (silently) -- *)
 
@@ -188,7 +205,10 @@ let on_input ev =
             D.el_set_text_content el v;
             Outliner_ops.schedule_save uuid v
         | None -> ())
-    | None -> ()
+    | None -> (
+        match D.closest_sel "pre.CodeMirror-line" (D.ev_target ev) with
+        | Some el -> Editor_commands.code_pre_input el
+        | None -> ())
 
 (* -- clipboard events -- *)
 
@@ -269,10 +289,17 @@ let on_editor_insert ev =
                 let nv =
                   String.sub v 0 f ^ text ^ String.sub v t (n - t)
                 in
+                let back =
+                  Option.value
+                    (Option.map int_of_float
+                       (Option.bind (detail_field ev "back")
+                          Js.Json.decodeNumber))
+                    ~default:0
+                in
+                let caret = f + String.length text - back in
                 D.el_set_value el nv;
                 D.el_set_text_content el nv;
-                D.el_set_selection_range el (f + String.length text)
-                  (f + String.length text);
+                D.el_set_selection_range el caret caret;
                 A.sync_buffer e.uuid nv;
                 Outliner_ops.schedule_save e.uuid nv
             | _ -> ())
@@ -284,12 +311,21 @@ let on_editor_insert ev =
    refocuses the textarea (cljs keeps the block in edit mode) *)
 let on_mousedown ev =
   if S.ready () && S.editing () <> None then
-    match D.closest_sel ".editor-wrapper" (D.ev_target ev) with
+    match
+      D.closest_sel ".editor-wrapper, .extensions__code"
+        (D.ev_target ev)
+    with
     | Some _ -> ()
     | None -> (
-        match D.closest_sel ".cp__overlays" (D.ev_target ev) with
+        match
+          D.closest_sel
+            ".cp__overlays, #date-time-picker, .ls-editor-link-form"
+            (D.ev_target ev)
+        with
         | Some _ -> ()
-        | None -> A.schedule_blur_commit ())
+        | None ->
+            if Editor_commands.click_guard (D.ev_target ev) then ()
+            else A.schedule_blur_commit ())
 
 (* -- drag & drop (cljs components/block.cljs on-drag-start/
    block-drag-over/block-drop) -- *)

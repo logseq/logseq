@@ -234,6 +234,7 @@ let input_row st : t =
              st.S.vs.Signal.state_signal)
         ~events:"input"
         ~on_dom_event:(fun name payload ->
+          Platform.console_log ("DBG dom-ev " ^ name);
           if name = "input" then (
             let q =
               Option.value
@@ -299,6 +300,7 @@ let handle_keydown st (ev : Dom_ext.event) =
         S.run_highlighted st
     | Some "k" when Dom_ext.meta_key ev || Dom_ext.ctrl_key ev ->
         Dom_ext.prevent_default ev;
+        Platform.console_log "DBG cmdk-close";
         S.close st
     | _ -> ()
   else
@@ -307,6 +309,7 @@ let handle_keydown st (ev : Dom_ext.event) =
       when (Dom_ext.meta_key ev || Dom_ext.ctrl_key ev)
            && not (Dom_ext.shift_key ev || Dom_ext.alt_key ev) ->
         Dom_ext.prevent_default ev;
+        Platform.console_log "DBG cmdk-open-key";
         S.open_palette st
     | _ -> ()
 
@@ -315,13 +318,17 @@ let handle_click st (ev : Dom_ext.event) =
   | None -> ()
   | Some el ->
       (match Dom_ext.closest el "#search-button" with
-       | Some _ -> S.open_palette st
+       | Some _ ->
+           Platform.console_log "DBG cmdk-open-btn";
+           S.open_palette st
        | None ->
            (* outside click closes: the (unstyled) LUI backdrop does not
               cover the page, so dismiss here too *)
            if (S.get st).S.open_
               && Dom_ext.closest el ".cp__cmdk__modal" = None
-           then S.close st);
+           then (
+             Platform.console_log "DBG close-outside-click";
+             S.close st));
       (match
          Dom_ext.closest el ".cp__cmdk [data-cmdk-group]"
        with
@@ -375,7 +382,11 @@ let handle_mousemove st (ev : Dom_ext.event) =
         | None -> ())
     | None -> ()
 
+let install_count = ref 0
+
 let install_listeners st =
+  incr install_count;
+  Platform.console_log ("DBG cmdk-install #" ^ string_of_int !install_count);
   Dom_ext.add_document_listener "keydown" (handle_keydown st) true;
   Dom_ext.add_document_listener "click" (handle_click st) true;
   Dom_ext.add_document_listener "mousemove" (handle_mousemove st) true
@@ -394,7 +405,10 @@ let render (_ms : Model.t Signal.signal) : t =
              ~text:(Ui_strings.t "cmdk.action/search")
              ~style_class:
                "cp__cmdk__modal rounded-lg w-[90dvw] max-w-4xl fixed left-0 right-0 top-10 mx-auto overflow-hidden"
-             ~on_dismiss:(fun _ -> S.close st)
+             ~on_dismiss:(fun _ ->
+               Platform.console_log
+                 ("DBG close-dismiss " ^ Dom_ext.debug_stack ());
+               S.close st)
              [ palette st ])
       ]
   in

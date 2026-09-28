@@ -39,12 +39,25 @@ let rec apply_focus () =
           let len = String.length (D.el_value el) in
           let c = max 0 (min caret len) in
           D.el_set_selection_range el c c
-      | None ->
-          incr focus_attempts;
-          if !focus_attempts < 50 then D.set_timeout apply_focus 40
-          else (
-            S.pending_focus := None;
-            focus_attempts := 0))
+      | None -> (
+          (* code/calc blocks edit through pre.CodeMirror-line — no
+             textarea exists on that surface *)
+          match D.get_element_by_id ("editor-edit-block-" ^ uuid) with
+          | Some wrap -> (
+              match D.el_query wrap "pre.CodeMirror-line" with
+              | Some pre ->
+                  S.pending_focus := None;
+                  focus_attempts := 0;
+                  D.el_focus pre
+              | None -> retry_focus ())       
+          | None -> retry_focus ()))
+
+and retry_focus () =
+  incr focus_attempts;
+  if !focus_attempts < 50 then D.set_timeout apply_focus 40
+  else (
+    S.pending_focus := None;
+    focus_attempts := 0)
 
 let request_focus uuid caret =
   S.pending_focus := Some (uuid, caret);
@@ -144,6 +157,14 @@ let schedule_blur_commit () =
 
 (* ---- structure ops ---- *)
 
+(* Enter on an empty ordered-list block just removes its list marker
+   (cljs remove-block-own-order-list-type!); the block keeps editing *)
+let drop_own_order_list uuid buf parent_ordered =
+  String.trim buf = "" && not parent_ordered
+  && (match S.find uuid with
+      | Some b -> b.Model.block_order_list <> None
+      | None -> false)
+
 let split_at_cursor uuid =
   match (S.editing (), S.find uuid) with
   | Some e, Some b when e.uuid = uuid ->
@@ -152,19 +173,51 @@ let split_at_cursor uuid =
         | Some el -> (D.el_value el, D.el_selection_start el)
         | None -> (e.buffer, String.length e.buffer)
       in
-      let pos = max 0 (min pos (String.length buf)) in
-      let before = String.sub buf 0 pos in
-      let after = String.sub buf pos (String.length buf - pos) in
+      let parent_ordered =
+        match S.find_parent uuid with
+        | Some (Some p, _) -> p.Model.block_order_list <> None
+        | _ -> false
+      in
+      if drop_own_order_list uuid buf parent_ordered then (
+        ignore
+          (Ops.apply_and_refresh
+             [ Ops.remove_block_property uuid
+                 "logseq.property/order-list-type" ]);
+        request_focus uuid 0)
+      else
+        let pos = max 0 (min pos (String.length buf)) in
+        let before = String.sub buf 0 pos in
+        let after = String.sub buf pos (String.length buf - pos) in
+        let new_uuid = Platform.random_uuid () in
+        let sibling = S.is_collapsed uuid || b.Model.block_children = [] in
+        let ops =
+          [ Ops.save_block uuid before
+          ; Ops.insert_blocks [ Ops.block_map ~title:after new_uuid ] uuid
+              ~sibling
+          ]
+        in
+        S.set_silent (fun st ->
+            { st with S.editing = Some { uuid = new_uuid; buffer = after } });
+        with_focus_after new_uuid 0
+          (Ops.apply_and_refresh ~opts:(Ops.op_opts "insert-blocks") ops)
+  | _ -> ()
+
+(* shift+Enter on a code surface (or any non-splitting editor) appends a
+   fresh sibling after the block — cljs insert-new-block! *)
+let insert_sibling_after uuid =
+  match (S.editing (), S.find uuid) with
+  | Some e, Some b when e.uuid = uuid ->
+      let buf = live_buffer uuid in
       let new_uuid = Platform.random_uuid () in
       let sibling = S.is_collapsed uuid || b.Model.block_children = [] in
       let ops =
-        [ Ops.save_block uuid before
-        ; Ops.insert_blocks [ Ops.block_map ~title:after new_uuid ] uuid
+        [ Ops.save_block uuid buf
+        ; Ops.insert_blocks [ Ops.block_map ~title:"" new_uuid ] uuid
             ~sibling
         ]
       in
       S.set_silent (fun st ->
-          { st with S.editing = Some { uuid = new_uuid; buffer = after } });
+          { st with S.editing = Some { uuid = new_uuid; buffer = "" } });
       with_focus_after new_uuid 0
         (Ops.apply_and_refresh ~opts:(Ops.op_opts "insert-blocks") ops)
   | _ -> ()

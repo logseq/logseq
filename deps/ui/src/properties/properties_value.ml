@@ -275,11 +275,62 @@ let date_picker ctx row anchor =
       | _ -> ())
     true
 
+(* ms epoch -> (y, m, d) *)
+let ymd_of_ms ms =
+  let d = Js.Date.fromFloat ms in
+  ( int_of_float (Js.Date.getFullYear d)
+  , int_of_float (Js.Date.getMonth d) + 1
+  , int_of_float (Js.Date.getDate d) )
+
+let ms_of_value = function
+  | W.Float f -> Some f
+  | W.Int64 i -> Some (Int64.to_float i)
+  | W.Int i -> Some (float_of_int i)
+  | _ -> None
+
+(* datetime cell: .ls-datetime > span.inline-flex > a.page-ref "Today" —
+   cljs datetime-value markup *)
+let datetime_content cell ms =
+  let y, m, d = ymd_of_ms ms in
+  let title =
+    Dates.journal_title_of
+      (Js.Date.fromFloat
+         (Js.Date.utc ~year:(float y) ~month:(float (m - 1))
+            ~date:(float d) ()))
+  in
+  let wrap = mk ~cls:"ls-datetime flex flex-row gap-1 items-center" "div" in
+  let inner = mk ~cls:"inline-flex" "span" in
+  let a =
+    mk ~cls:"page-ref" "a"
+      ~attrs:
+        [ ("data-ref", String.lowercase_ascii title); ("tabindex", "0") ]
+  in
+  el_set_text a (Render_inline.date_label y m d);
+  el_append_child inner a;
+  el_append_child wrap inner;
+  el_append_child cell wrap
+
+(* datetime values arrive as journal-page ref summaries — the day is
+   block/journal-day (yyyymmdd); fall back to a raw ms number *)
+let ms_of_datetime_value (v : W.t) : float option =
+  match ms_of_value v with
+  | Some ms -> Some ms
+  | None -> (
+      match W.get v "block/journal-day" with
+      | Some (W.Int d) ->
+          let y = d / 10000 and m = d mod 10000 / 100 and dd = d mod 100 in
+          Some
+            (Js.Date.utc ~year:(float y) ~month:(float (m - 1))
+               ~date:(float dd) ())
+      | _ -> None)
+
 let date_cell ctx row =
   let value = D.row_value row in
   let cell = mk ~cls:"jtrigger flex flex-1" "div" in
   if not (D.value_empty_p value) then
-    el_set_text cell (D.value_display value);
+    (match D.row_type row = "datetime", ms_of_datetime_value value with
+     | true, Some ms -> datetime_content cell ms
+     | _ -> el_set_text cell (D.value_display value));
   on_click cell (fun _ -> date_picker ctx row cell);
   cell
 
@@ -354,11 +405,37 @@ let new_choice ctx row text =
          Js.Promise.resolve ())
   |> ignore
 
+(* icon id for a closed-choice value — the value's own
+   logseq.property/icon map; "line-dashed" for the empty placeholder
+   (cljs hardcodes it for empty closed-choice values) *)
+let closed_value_icon_id value =
+  match
+    Option.bind (D.getf (D.untag value) "logseq.property/icon")
+      (fun icon -> D.gets (D.untag icon) "id")
+  with
+  | Some id -> Some id
+  | None -> (
+      let is_empty_placeholder =
+        match D.getk (D.untag value) "db/ident" with
+        | Some "logseq.property/empty-placeholder" -> true
+        | _ -> (
+            match value with
+            | W.Keyword "logseq.property/empty-placeholder" -> true
+            | _ -> false)
+      in
+      if is_empty_placeholder then Some "line-dashed" else None)
+
 let closed_value_cell ctx row anchor =
   let value = D.row_value row in
   let cell = mk ~cls:"jtrigger flex flex-1 w-full" "div" in
+  (match closed_value_icon_id value with
+   | Some id -> el_append_child cell (Views_dom.icon id)
+   | None -> ());
   let txt = D.value_display value in
-  if txt <> "" then el_set_text cell txt;
+  let txt =
+    if txt = "logseq.property/empty-placeholder" then "" else txt
+  in
+  if txt <> "" then ignore (child_text "span" "" txt cell);
   on_click cell (fun _ ->
       block_tag_ids ctx (fun tag_ids ->
           gather_exclusions tag_ids (fun exclusions ->

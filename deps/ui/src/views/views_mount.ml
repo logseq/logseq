@@ -106,47 +106,6 @@ let ensure_query_shells () =
                   mark shell inst;
                   Views_query.wire_settings_button inst shell)))
 
-(* ---------- ls:editor-insert (slash commands emitting text) ---------- *)
-
-let json_str_field (j : Js.Json.t) (k : string) : string option =
-  Js.Json.decodeString (Platform.json_prop j k)
-
-let json_num_field (j : Js.Json.t) (k : string) : float option =
-  Js.Json.decodeNumber (Platform.json_prop j k)
-
-let on_editor_insert ev =
-  let detail = Platform.json_prop ev "detail" in
-  match json_str_field detail "text" with
-  | None -> ()
-  | Some text -> (
-      match Editor_state.editing () with
-      | None -> ()
-      | Some e -> (
-          match Ed.textarea_of e.Editor_state.uuid with
-          | None -> ()
-          | Some ta ->
-              let buf = Ed.el_value ta in
-              let from =
-                int_of_float
-                  (Option.value (json_num_field detail "from") ~default:0.)
-              in
-              let to_ =
-                int_of_float
-                  (Option.value (json_num_field detail "to") ~default:0.)
-              in
-              let n = String.length buf in
-              let from = max 0 (min from n) and to_ = max from (min to_ n) in
-              let nv =
-                String.sub buf 0 from ^ text
-                ^ String.sub buf to_ (n - to_)
-              in
-              Ed.el_set_value ta nv;
-              Editor_actions.sync_buffer e.uuid nv;
-              (* {{query ...}} blocks render the shell once the title is
-                 committed — exit edit like cljs does *)
-              if String.length text >= 8 && String.sub text 0 8 = "{{query "
-              then Editor_actions.exit_edit ~select:false))
-
 (* ---------- observer ---------- *)
 
 let scan () =
@@ -159,7 +118,6 @@ let installed = ref false
 let install () =
   if not !installed then begin
     installed := true;
-    Platform.on_document_event "ls:editor-insert" on_editor_insert;
     let obs = Ed.new_observer scan in
     Ed.observe obs Ed.document_element
       (Ed.observe_opts ~childList:true ~subtree:true);

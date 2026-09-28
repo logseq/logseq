@@ -272,7 +272,7 @@ let handle_input st (ev : Dom_ext.event) =
   match Dom_ext.target ev with
   | Some el -> (
       match Dom_ext.closest el ".editor-wrapper textarea" with
-      | Some ta -> S.on_editor_input st ta
+      | Some ta -> S.on_editor_input st ta ev
       | None -> ())
   | None -> ()
 ;;
