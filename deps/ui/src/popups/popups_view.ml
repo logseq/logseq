@@ -402,6 +402,8 @@ let handle_contextmenu st (ev : Dom_ext.event) =
   match Dom_ext.target ev with
   | None -> ()
   | Some el -> (
+      if Dom_ext.closest el ".ls-page-title" <> None then ()
+      else
       match
         Dom_ext.closest el ".bullet-container[blockid], .ls-block[blockid]"
       with
