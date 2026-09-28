@@ -129,7 +129,15 @@ let text_cell ctx row =
       ~attrs:[ ("tabindex", "-1") ]
   in
   if not (D.value_empty_p value) then
-    ignore (child_text "span" "block-title-wrap" (D.ref_title value) cell);
+    List.iter
+      (fun v ->
+        ignore
+          (child_text "span" "block-title-wrap"
+             (match v with
+              | W.String s -> s
+              | other -> D.ref_title other)
+             cell))
+      (D.value_elems value);
   on_click cell (fun _ ->
       edit_text_cell ctx row cell (D.ref_title value));
   cell
@@ -558,7 +566,8 @@ let render ctx row =
         | "checkbox" -> checkbox_cell ctx row
         | "number" -> number_cell ctx row
         | "date" | "datetime" -> date_cell ctx row
-        | "node" | "asset" -> node_cell ctx row
+        | "node" | "asset" | "page" | "class" | "property" ->
+            node_cell ctx row
         | _ ->
             if D.value_empty_p value then (
               let empty =

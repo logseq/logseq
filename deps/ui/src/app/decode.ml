@@ -54,9 +54,15 @@ let rec block_of_wire ?(order_index = 1) (w : Wire.t) : Model.block =
   in
   let order_list = order_list_type_of_wire w in
   let children =
+    (* cljs :block/children accessor (entity-plus) excludes
+       property-created and closed-value children *)
+    let renderable c =
+      Wire.get c "logseq.property/created-from-property" = None
+      && Wire.get c "block/closed-value-property" = None
+    in
     match Wire.get w "block/children" with
     | Some (Wire.List xs) | Some (Wire.Array xs) ->
-        assign_order_indices [] xs
+        assign_order_indices [] (List.filter renderable xs)
     | _ -> []
   in
   let tag_ids =
@@ -64,6 +70,23 @@ let rec block_of_wire ?(order_index = 1) (w : Wire.t) : Model.block =
     | Some (Wire.List xs) | Some (Wire.Array xs) | Some (Wire.Set xs) ->
         List.filter_map (fun t -> Wire.map_get_int t "db/id") xs
     | _ -> []
+  in
+  let num_prop k =
+    match Wire.get w k with
+    | Some (Wire.Int n) -> Some n
+    | Some (Wire.Int64 n) -> Some (Int64.to_int n)
+    | Some (Wire.Float f) -> Some (int_of_float f)
+    | _ -> None
+  in
+  let resize_w =
+    match Wire.get w "logseq.property.asset/resize-metadata" with
+    | Some m -> (
+        match Wire.get m "width" with
+        | Some (Wire.Int n) -> Some n
+        | Some (Wire.Int64 n) -> Some (Int64.to_int n)
+        | Some (Wire.Float f) -> Some (int_of_float f)
+        | _ -> None)
+    | _ -> None
   in
   { block_uuid = uuid
   ; block_db_id = db_id
@@ -79,7 +102,19 @@ let rec block_of_wire ?(order_index = 1) (w : Wire.t) : Model.block =
   ; block_order_index =
       (match order_list with Some _ -> Some order_index | None -> None)
   ; block_code_lang = prop_label w "logseq.property.code/lang"
+  ; block_tag_idents = []
   ; block_children = children
+  ; block_page_name = Wire.map_get_string w "block/page-name"
+  ; block_asset_type = Wire.map_get_string w "logseq.property.asset/type"
+  ; block_asset_url =
+      Wire.map_get_string w "logseq.property.asset/external-url"
+  ; block_asset_width = num_prop "logseq.property.asset/width"
+  ; block_asset_height = num_prop "logseq.property.asset/height"
+  ; block_asset_resize = resize_w
+  ; block_asset_align =
+      (match Wire.get w "logseq.property.asset/align" with
+       | Some (Wire.Keyword s) | Some (Wire.String s) -> Some s
+       | _ -> None)
   }
 
 (* number = 1 + the run of consecutive same-type ordered-list siblings
@@ -148,6 +183,7 @@ let page_of_summary (w : Wire.t) : Model.page option =
             (match Wire.map_get_int w "journal-day" with
              | Some d -> Some d
              | None -> Wire.map_get_int w "block/journal-day")
+        ; page_tags = []
         ; page_blocks = []
         }
   | _ -> None

@@ -84,8 +84,8 @@ and ensure_tag_page_container inner uuid =
   in
   mark container inst
 
-(* {{query ...}} blocks render a .custom-query-results shell; mount a
-   query-result view inside it *)
+(* logseq.class/Query blocks render a .custom-query-results shell; mount
+   a query-result view inside it *)
 let ensure_query_shells () =
   Ed.for_each_selector ".custom-query-results" (fun shell ->
       match Ed.el_closest shell ".ls-block" with
@@ -108,6 +108,17 @@ let ensure_query_shells () =
                   in
                   mark shell inst;
                   Views_query.wire_settings_button inst shell)))
+
+(* worker tx broadcast (sync-db-changes) invalidates query resources —
+   re-run every still-connected query inst so results stay live *)
+let refresh_query_insts () =
+  Hashtbl.iter
+    (fun _ (inst : V.inst) ->
+      match inst.V.kind with
+      | V.KQuery _ when D.el_is_connected inst.V.container ->
+          Views_view.refresh inst
+      | _ -> ())
+    insts
 
 (* ---------- observer ---------- *)
 

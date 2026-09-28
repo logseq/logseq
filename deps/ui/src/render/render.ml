@@ -17,11 +17,16 @@ open Lui_elements
 module D = Render_dom
 
 (* .block-title-wrap with inline-parsed children; plain titles become a
-   direct text node (cljs parity — Playwright :text-is needs it) *)
+   direct text node (cljs parity — Playwright :text-is needs it).
+
+   The key flips between "t" (text prop) and "c" (children) so a
+   text↔children transition remounts: LUI applies the textContent write
+   before the child removal within a batch, which would detach the
+   tracked child early. *)
 let wrap ?(cls = "block-title-wrap") ?(tag = "span") s : t =
   match Render_inline.plain_text s with
-  | Some text -> D.el ~tag ~style_class:cls ~text []
-  | None -> D.el ~tag ~style_class:cls (Render_inline.parse s)
+  | Some text -> D.el ~key:"btw-t" ~tag ~style_class:cls ~text []
+  | None -> D.el ~key:"btw-c" ~tag ~style_class:cls (Render_inline.parse s)
 
 (* #..###### markdown heading at title start *)
 let heading_level s =
@@ -99,15 +104,10 @@ let src_block s =
         Some (lang, body)
   else None
 
-(* {{query ...}} occupying the whole title — emit the outer
-   .custom-query-results + .ls-query-setting shell; the queries area
-   fills in real results later. *)
-let is_whole_query s =
-  let t = String.trim s in
-  String.length t > 8
-  && String.sub t 0 8 = "{{query "
-  && String.sub t (String.length t - 2) 2 = "}}"
-
+(* blocks tagged logseq.class/Query (created by the /query commands)
+   render the outer .custom-query-results + .ls-query-setting shell;
+   the query source lives on the hidden logseq.property/query value
+   block and the queries area fills in real results later. *)
 let code_block lang code =
   let trimmed = String.trim code in
   D.el ~tag:"div" ~style_class:"extensions__code"
@@ -148,8 +148,8 @@ let content ?(heading : int option) s =
              .block-content keeps its clickable area (cljs does the same
              via the mldoc linebreak node it emits for empty content) *)
           if s = "" then
-            D.el ~tag:"span" ~style_class:"block-title-wrap"
-              [ D.el ~tag:"br" [] ]
+            D.el ~key:"btw-c" ~tag:"span" ~style_class:"block-title-wrap"
+              [ D.el ~key:"btw-br" ~tag:"br" [] ]
           else wrap s)
 
 (* @@html:<fragment> whole-title — parsed into real elements so the e2e
@@ -174,7 +174,8 @@ let calc_results_el code =
                   ~text:line [])
               lines))
 
-let title ?(heading : int option = None) (s : string) : t list =
+let title ?(heading : int option = None) ?(is_query = false) (s : string)
+    : t list =
   match html_body s with
   | Some frag -> Render_html.els_of_string frag
   | None -> (
@@ -186,14 +187,14 @@ let title ?(heading : int option = None) (s : string) : t list =
           match src_block s with
           | Some (lang, code) -> [ code_block lang code ]
           | None -> (
-              if is_whole_query s then [ wrap ""; query_shell ]
+              if is_whole_query s || is_query then [ wrap ""; query_shell ]
               else
                 match ordered_prefix s with
                 | Some (num, rest) ->
                     [ D.el ~tag:"span" ~style_class:"typed-list"
                         [ D.el ~tag:"label" ~text:num [] ]
                     ; content ?heading rest ]
-                | None -> [ content ?heading s ])))
+                | None -> [ content ?heading s ]))))
 
 (* display-type/heading aware variant — the block model carries
    logseq.property.node/display-type + logseq.property/heading. *)
@@ -208,4 +209,7 @@ let title_block (b : Model.block) : t list =
   | Some "math" ->
       [ D.el ~tag:"div" ~style_class:"math-block"
           [ Render_inline.katex_el s ] ]
-  | _ -> title ~heading s
+  | _ ->
+      title ~heading
+        ~is_query:(List.mem "logseq.class/Query" b.Model.block_tag_idents)
+        s

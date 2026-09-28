@@ -187,7 +187,19 @@ let on_keydown ev =
                   else on_editor_key ev uuid el)
               | _ -> ())
           | _ ->
-              if D.is_editable_target target then ()
+              (* an editing textarea that was unmounted by the previous key
+                 (e.g. Shift+Arrow exiting edit mode) can still receive the
+                 follow-up keydown before focus moves; route it through the
+                 normal handler so selection-extension keys aren't
+                 swallowed *)
+              let stale_block_editor =
+                match target with
+                | Some el when D.el_tag el = "TEXTAREA" ->
+                    Option.is_some (D.closest_sel ".ls-block" target)
+                | _ -> false
+              in
+              if stale_block_editor then on_normal_key ev
+              else if D.is_editable_target target then ()
               else on_normal_key ev)
 
 (* -- input: keep the editing buffer in sync (silently) -- *)
@@ -250,6 +262,9 @@ let on_click ev =
                     | Some u -> A.zoom_to u
                     | None -> ())
                 | None -> (
+                    (* capture listener fires before the query shell's own
+                       handlers; clicks inside .custom-query-results are the
+                       view's controls, not an edit request *)
                     match
                       D.closest_sel
                         "button, a, input, audio, video, details, summary, \

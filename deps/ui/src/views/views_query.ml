@@ -1,6 +1,8 @@
-(* Custom queries — parses `{{query <src>}}` block titles, builds the
-   [:query spec] resource, decodes rows, and implements the query source
-   editor shell (.ls-query-setting → fake CodeMirror editing). *)
+(* Custom queries — the query source lives on the hidden
+   logseq.property/query value block of a logseq.class/Query-tagged
+   block (cljs db-model); this builds the [:query spec] resource,
+   decodes rows, and implements the query source editor shell
+   (.ls-query-setting → fake CodeMirror editing). *)
 
 module D = Views_dom
 module V = Views_state
@@ -23,15 +25,6 @@ external d_date : Js.Json.t -> int = "getDate" [@@mel.send]
 let today_day () =
   let d = date_now () in
   (d_year d * 10000) + ((d_month d + 1) * 100) + d_date d
-
-let extract_src (title : string) : string =
-  let t = String.trim title in
-  let n = String.length t in
-  if
-    n >= 9 && String.sub t 0 7 = "{{query"
-    && String.sub t (n - 2) 2 = "}}"
-  then String.trim (String.sub t 7 (n - 9))
-  else ""
 
 let parse_src (s : string) : qsrc =
   let t = String.trim s in
@@ -148,17 +141,74 @@ let run inst (f : unit -> unit) =
                  [ Db.resource_query spec ]))
   | _ -> f ()
 
-(* refresh block title + view props, then run *)
+(* the hidden value block created by create-property-text-block for
+   logseq.property/query — the parent's property ref carries its
+   block/uuid; find the matching child entity (children include property
+   blocks only when include-property-block? was requested) *)
+let query_value_block (b : W.t) : W.t option =
+  match W.get b "logseq.property/query" with
+  | Some q -> (
+      match
+        match W.map_get_uuid q "block/uuid" with
+        | Some u -> Some u
+        | None -> W.as_uuid q
+      with
+      | Some u -> (
+          match W.get b "block/children" with
+          | Some (W.Array xs) | Some (W.List xs) ->
+              List.find_opt
+                (fun c -> W.map_get_uuid c "block/uuid" = Some u)
+                xs
+          | _ -> None)
+      | None -> None)
+  | None -> None
+
+(* refresh query source + view props, then run *)
 let refresh_block inst f =
   match inst.V.kind with
   | V.KQuery { block_uuid } ->
-      Db.get_blocks [ block_uuid ] ~metadata:true (fun ents ->
+      Db.get_blocks [ block_uuid ] ~metadata:true ~children:true
+        ~include_property_block:true
+        (fun ents ->
           (match ents with
            | b :: _ ->
-               inst.V.qsrc <-
-                 extract_src
-                   (Option.value (W.map_get_string b "block/title")
-                      ~default:"");
+               (match query_value_block b with
+                | Some vb ->
+                    inst.V.query_block_uuid <-
+                      Option.value (W.map_get_uuid vb "block/uuid")
+                        ~default:"";
+                    inst.V.qsrc <-
+                      Option.value (W.map_get_string vb "block/title")
+                        ~default:"";
+                    (* id-refs in the stored source resolve through the
+                       value block's block/refs — collect uuid -> title
+                       so clause chips can show titles (cljs page-title) *)
+                    Hashtbl.reset inst.V.ref_titles;
+                    (match W.get vb "block/refs" with
+                     | Some (W.Array xs) | Some (W.List xs)
+                     | Some (W.Set xs) ->
+                         List.iter
+                           (fun r ->
+                             match
+                               ( W.map_get_uuid r "block/uuid"
+                               , W.map_get_string r "block/title" )
+                             with
+                             | Some u, Some t ->
+                                 Hashtbl.replace inst.V.ref_titles u t
+                             | _ -> ())
+                           xs
+                     | _ -> ());
+                    inst.V.is_advanced <-
+                      (match
+                         W.get vb "logseq.property.node/display-type"
+                       with
+                       | Some (W.Keyword s) | Some (W.String s) ->
+                           s = "code"
+                       | _ -> false)
+                | None ->
+                    inst.V.query_block_uuid <- "";
+                    inst.V.qsrc <- "";
+                    inst.V.is_advanced <- false);
                (match Wr.decode_view_ent b with
                 | Some v -> V.apply_view_entity inst v
                 | None -> ())
@@ -168,15 +218,17 @@ let refresh_block inst f =
 
 (* -- query source editor (fake CodeMirror contract) --
    .ls-query-setting toggles a .CodeMirror > pre.CodeMirror-line[contenteditable]
-   inside the shell; Esc commits back to {{query <src>}}. *)
+   inside the shell; Esc commits the raw source to the value block title. *)
 
 let editor_open : V.inst -> bool ref = fun _ -> ref false
 
 let open_editor inst (shell : D.el) =
   let buuid =
-    match inst.V.kind with
-    | V.KQuery { block_uuid } -> block_uuid
-    | _ -> ""
+    if inst.V.query_block_uuid <> "" then inst.V.query_block_uuid
+    else
+      match inst.V.kind with
+      | V.KQuery { block_uuid } -> block_uuid
+      | _ -> ""
   in
   let cur =
     match parse_src inst.V.qsrc with
@@ -203,11 +255,9 @@ let open_editor inst (shell : D.el) =
       | "Escape" ->
           Editor_dom.prevent_default ev;
           let src = D.el_text_content line |> String.trim in
-          let title =
-            if src = "" then "{{query }}"
-            else "{{query " ^ src ^ "}}"
-          in
-          Db.save_block_title buuid title (fun () -> ())
+          (* cljs keeps the editor open after Esc commits; the next tx
+             broadcast re-renders the shell anyway *)
+          Db.save_block_title buuid src (fun () -> ())
       | "Enter" ->
           (* single-line editor contract *)
           Editor_dom.prevent_default ev

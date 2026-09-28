@@ -81,7 +81,7 @@ let model_title uuid =
 let save_if_dirty uuid =
   let buf = live_buffer uuid in
   if buf <> model_title uuid then
-    ignore (Ops.apply_and_refresh [ Ops.save_block uuid buf ])
+    ignore (Ops.apply_parsed_and_refresh ~rest:[] [ (uuid, buf) ])
 
 (* deferred blur: committing synchronously on mousedown re-renders the
    tree between mousedown and mouseup, so the browser retargets the click
@@ -113,7 +113,7 @@ let enter_edit uuid caret =
 
 let commit_buf uuid buf =
   if buf <> model_title uuid then
-    ignore (Ops.apply_and_refresh [ Ops.save_block uuid buf ])
+    ignore (Ops.apply_parsed_and_refresh ~rest:[] [ (uuid, buf) ])
 
 let exit_edit ~select =
   match S.editing () with
@@ -190,16 +190,18 @@ let split_at_cursor uuid =
         let after = String.sub buf pos (String.length buf - pos) in
         let new_uuid = Platform.random_uuid () in
         let sibling = S.is_collapsed uuid || b.Model.block_children = [] in
-        let ops =
-          [ Ops.save_block uuid before
-          ; Ops.insert_blocks [ Ops.block_map ~title:after new_uuid ] uuid
-              ~sibling
-          ]
+        let p =
+          Js.Promise.all
+            [| Ops.block_map_parsed uuid before
+             ; Ops.block_map_parsed new_uuid after |]
+          |> Js.Promise.then_ (fun a ->
+                 Ops.apply_and_refresh ~opts:(Ops.op_opts "insert-blocks")
+                   [ Ops.op "save-block" [ a.(0); Wire.Map [] ]
+                   ; Ops.insert_blocks [ a.(1) ] uuid ~sibling ])
         in
         S.set_silent (fun st ->
             { st with S.editing = Some { uuid = new_uuid; buffer = after } });
-        with_focus_after new_uuid 0
-          (Ops.apply_and_refresh ~opts:(Ops.op_opts "insert-blocks") ops)
+        with_focus_after new_uuid 0 p
   | _ -> ()
 
 (* shift+Enter on a code surface (or any non-splitting editor) appends a
@@ -210,16 +212,17 @@ let insert_sibling_after uuid =
       let buf = live_buffer uuid in
       let new_uuid = Platform.random_uuid () in
       let sibling = S.is_collapsed uuid || b.Model.block_children = [] in
-      let ops =
-        [ Ops.save_block uuid buf
-        ; Ops.insert_blocks [ Ops.block_map ~title:"" new_uuid ] uuid
-            ~sibling
-        ]
+      let p =
+        Ops.block_map_parsed uuid buf
+        |> Js.Promise.then_ (fun m ->
+               Ops.apply_and_refresh ~opts:(Ops.op_opts "insert-blocks")
+                 [ Ops.op "save-block" [ m; Wire.Map [] ]
+                 ; Ops.insert_blocks [ Ops.block_map ~title:"" new_uuid ]
+                     uuid ~sibling ])
       in
       S.set_silent (fun st ->
           { st with S.editing = Some { uuid = new_uuid; buffer = "" } });
-      with_focus_after new_uuid 0
-        (Ops.apply_and_refresh ~opts:(Ops.op_opts "insert-blocks") ops)
+      with_focus_after new_uuid 0 p
   | _ -> ()
 
 let move_children_ops (b : Model.block) target_uuid =
@@ -340,10 +343,7 @@ let merge_next uuid =
               (Ops.apply_and_refresh ~opts:(Ops.op_opts "delete-blocks") ops))
           else (
             let ops =
-              move_children_ops next uuid
-              @ [ Ops.delete_blocks [ next_uuid ]
-                ; Ops.save_block uuid (buf ^ next.Model.block_title)
-                ]
+              move_children_ops next uuid @ [ Ops.delete_blocks [ next_uuid ] ]
             in
             S.set_silent (fun st ->
                 { st with
@@ -351,7 +351,9 @@ let merge_next uuid =
                     Some { e with S.buffer = buf ^ next.Model.block_title }
                 });
             with_focus_after uuid (String.length buf)
-              (Ops.apply_and_refresh ~opts:(Ops.op_opts "delete-blocks") ops)))
+              (Ops.apply_parsed_and_refresh
+                 ~opts:(Ops.op_opts "delete-blocks")
+                 ~rest:ops [ (uuid, buf ^ next.Model.block_title) ])))
   | _ -> ()
 
 (* ---- selection ---- *)
@@ -584,25 +586,44 @@ let drop_dragged_block src tgt move_to =
 
 (* ---- clipboard ---- *)
 
+let rec has_selected_ancestor sel uuid =
+  match S.find_parent uuid with
+  | Some (Some p, _) -> (
+      match p.Model.block_uuid with
+      | Some pu -> S.String_set.mem pu sel || has_selected_ancestor sel pu
+      | None -> false)
+  | _ -> false
+
 let copy_selection ev =
+  let sel = S.selected () in
   match selected_uuids () with
   | [] -> ()
   | uuids -> (
       match D.ev_clipboard ev with
       | Some clip ->
-          let titles =
-            uuids
-            |> List.filter_map S.find
-            |> List.map (fun b -> b.Model.block_title)
+          (* keep only topmost selected roots — a parent tree already
+             carries its children; copying child rows too would emit
+             duplicate maps on paste *)
+          let roots =
+            List.filter
+              (fun u -> not (has_selected_ancestor sel u))
+              uuids
           in
-          S.clipboard := titles;
-          D.clipboard_set_text clip "text/plain" (String.concat "\n" titles);
+          let blocks = List.filter_map S.find roots in
+          S.clipboard := blocks;
+          D.clipboard_set_text clip "text/plain"
+            (String.concat "\n"
+               (List.map (fun b -> b.Model.block_title) blocks));
           D.prevent_default ev
       | None -> ())
 
 let cut_selection ev =
   copy_selection ev;
   delete_selection ()
+
+let paste_trees trees target_uuid ~replace_empty =
+  Ops.apply_and_refresh ~opts:(Ops.op_opts "paste")
+    [ Ops.paste_trees trees target_uuid ~replace_empty ]
 
 let paste_lines lines =
   let blocks =
@@ -636,23 +657,58 @@ let paste_lines lines =
         (Ops.apply_and_refresh
            [ Ops.insert_blocks blocks last ~sibling:true ])
 
+(* in-editor paste of copied/cut block trees: insert after the current
+   block, replacing it when it is empty (cljs :replace-empty-target?) —
+   undo restores the empty block via the inverse ops *)
+let paste_into_editor ev =
+  match (S.editing (), !(S.clipboard)) with
+  | Some e, (_ :: _ as trees) -> (
+      match S.find e.uuid with
+      | Some b ->
+          D.prevent_default ev;
+          let replace_empty =
+            String.trim b.Model.block_title = ""
+            && String.trim e.S.buffer = ""
+          in
+          ignore
+            (paste_trees trees e.uuid ~replace_empty
+            |> Js.Promise.then_ (fun () ->
+                   (* replace-empty swaps the editing block's entity
+                      in place (same uuid, new title) — resync the live
+                      textarea buffer so it doesn't mask the pasted
+                      content *)
+                   if replace_empty then Ops.resync_open_editor ();
+                   Js.Promise.resolve ()))
+      | None -> ())
+  | _ -> ()
+
 let paste_blocks ev =
   match S.editing () with
-  | Some _ -> () (* textarea: default text paste, input event syncs *)
+  | Some _ -> paste_into_editor ev
   | None -> (
-      match D.ev_clipboard ev with
-      | Some clip -> (
-          let text = D.clipboard_get_text clip "text/plain" in
-          let lines =
-            String.split_on_char '\n' text
-            |> List.filter (fun l -> String.trim l <> "")
-          in
-          match lines with
-          | [] -> ()
-          | _ ->
-              D.prevent_default ev;
-              paste_lines lines)
-      | None -> ())
+      match !(S.clipboard) with
+      | _ :: _ as trees -> (
+          match selected_uuids () with
+          | _ :: _ as sel ->
+              ignore
+                (paste_trees trees
+                   (List.nth sel (List.length sel - 1))
+                   ~replace_empty:false)
+          | [] -> ())
+      | [] -> (
+          match D.ev_clipboard ev with
+          | Some clip -> (
+              let text = D.clipboard_get_text clip "text/plain" in
+              let lines =
+                String.split_on_char '\n' text
+                |> List.filter (fun l -> String.trim l <> "")
+              in
+              match lines with
+              | [] -> ()
+              | _ ->
+                  D.prevent_default ev;
+                  paste_lines lines)
+          | None -> ()))
 
 (* ---- misc ---- *)
 

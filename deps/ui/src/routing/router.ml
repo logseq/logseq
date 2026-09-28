@@ -49,6 +49,7 @@ let parse_hash () : Model.route =
           | "all-pages" -> Model.All_pages
           | "all-graphs" -> Model.All_graphs
           | "graph" -> Model.Graph
+          | "settings" -> Model.Settings
           | "page" | "block" -> Model.Not_found p
           | _ -> Model.Not_found p))
 
@@ -68,8 +69,11 @@ let fetch_blocks (p : Model.page) =
   Runtime.invoke3 "thread-api/get-page-blocks-tree"
     (Wire.String (repo ())) (ref_of_page p) Wire.Nil
   |> Js.Promise.then_ (fun blocks_w ->
-         Js.Promise.resolve
-           { p with Model.page_blocks = Decode.blocks_of_wire blocks_w })
+         let blocks = Decode.blocks_of_wire blocks_w in
+         Outliner_ops.resolve_block_tags blocks
+         |> Js.Promise.then_ (fun blocks ->
+                Js.Promise.resolve
+                  { p with Model.page_blocks = blocks }))
 
 let fetch_refs (p : Model.page) =
   match p.Model.page_db_id with
@@ -82,6 +86,8 @@ let fetch_refs (p : Model.page) =
                   (Runtime.send
                      (Action.Refs_loaded (Decode.blocks_of_wire w)))))
   | None -> ()
+
+let fetch_unlinked_refs = Outliner_ops.fetch_unlinked_refs
 
 let load_journals () =
   Runtime.invoke2 "thread-api/get-latest-journals" (Wire.String (repo ()))
@@ -113,9 +119,12 @@ let load_page_ref ref_v ~missing =
          | Some p ->
              fetch_blocks p
              |> Js.Promise.then_ (fun p' ->
-                    Runtime.send (Action.Page_loaded p');
-                    fetch_refs p';
-                    Js.Promise.resolve ())
+                    Outliner_ops.resolve_page_tags (repo ()) p'
+                    |> Js.Promise.then_ (fun p'' ->
+                           Runtime.send (Action.Page_loaded p'');
+                           fetch_refs p'';
+                           fetch_unlinked_refs p'';
+                           Js.Promise.resolve ()))
          | None ->
              Runtime.send (Action.Navigate_to (Model.Not_found missing));
              Js.Promise.resolve ())
@@ -194,6 +203,7 @@ let load_block_zoom uuid =
                                    ; page_db_id = b.block_db_id
                                    ; page_is_tag = false
                                    ; page_journal_day = None
+                                   ; page_tags = b.Model.block_tags
                                    ; page_blocks = bs
                                    });
                               (match Editor_actions.consume_pending_zoom () with
@@ -243,10 +253,14 @@ let load_route (route : Model.route) =
       ignore (load_page_ref (Wire.String "Library") ~missing:"Library")
   | Model.Graph -> ignore (load_graph ())
   | Model.All_pages | Model.All_graphs | Model.Not_found _ -> ()
+  | Model.Settings -> ()
 
 let resolve () =
   let route = parse_hash () in
   Runtime.send (Action.Navigate_to route);
+  (* cljs settings-effect cleanup: data-settings-tab only while the
+     settings route/dialog is active *)
+  if route <> Model.Settings then Settings_state.deactivate ();
   load_route route;
   Runtime.flush ()
 
