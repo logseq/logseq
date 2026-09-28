@@ -295,18 +295,30 @@ let group_order v q rows total =
     ; glimit = 99; gexpanded = false }
   in
   let recents_g () =
-    let q' = String.lowercase_ascii (String.trim q) in
     let items =
-      if q' = "" then v.recents
+      if String.trim q = "" then v.recents
       else
-        List.filter
-          (fun (it : item) ->
-            let l = String.lowercase_ascii it.ititle in
-            let rec find i =
-              i + String.length q' <= String.length l
-              && (String.sub l i (String.length q') = q' || find (i + 1))
-            in
-            find 0)
+        (* cljs filters recents through search/fuzzy-search — subsequence
+           match over clean-str (lowercase, no space/bracket chars) *)
+        let clean s =
+          String.lowercase_ascii s
+          |> String.to_seq
+          |> Seq.filter (fun c ->
+                 not (List.mem c [ ' '; '/'; '_'; '['; ']'; '('; ')' ]))
+          |> String.of_seq
+        in
+        let subseq q' s =
+          let n = String.length s in
+          let rec loop qi si =
+            qi >= String.length q'
+            || (si < n
+                && if s.[si] = q'.[qi] then loop (qi + 1) (si + 1)
+                   else loop qi (si + 1))
+          in
+          loop 0 0
+        in
+        let cq = clean q in
+        List.filter (fun (it : item) -> subseq cq (clean it.ititle))
           v.recents
     in
     { gid = G_recently_updated
