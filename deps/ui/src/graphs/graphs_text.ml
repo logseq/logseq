@@ -104,8 +104,10 @@ let export_debug_transit = "Export debug transit file"
 let export_debug_transit_desc =
   "Exports to a .transit file to send to us for debugging. Any sensitive \
    data will be removed in the exported file."
-let export_sqlite_desc = "Exports the graph's SQLite DB file."
-let export_zip_desc = "Exports the SQLite DB plus the graph's assets."
+let export_sqlite_desc =
+  "Primary way to backup graph's content to a single .sqlite file."
+let export_zip_desc =
+  "Primary way to backup graph's content and assets to a .zip file."
 let export_edn_desc =
   "Exports to a readable and editable .edn file. Don't rely on this as a \
    primary backup."
