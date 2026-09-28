@@ -200,9 +200,7 @@ let title_content (page : Model.page) : t =
         ~style_class:"block-content-inner flex flex-row justify-between"
         [ dom ~key:"pt-bh" ~style_class:"block-head-wrap"
             [ dom ~key:"pt-w" ~style_class:"w-full inline"
-                [ dom ~key:"pt-title" ~tag:"span"
-                    ~style_class:"block-title-wrap" ~text:page.page_title []
-                ]
+                [ Render.wrap ~self:uuid page.page_title ]
             ]
         ]
     ]
