@@ -186,10 +186,12 @@ let rec load_home () =
                         Runtime.send (Action.Navigate_to (Model.Page name));
                         fetch_blocks p
                         |> Js.Promise.then_ (fun p' ->
-                               if not (stale (Model.Page name)) then (
-                                 Runtime.send (Action.Page_loaded p');
-                                 fetch_refs p');
-                               Js.Promise.resolve ())
+                               Outliner_ops.resolve_page_tags repo p'
+                               |> Js.Promise.then_ (fun p'' ->
+                                      if not (stale (Model.Page name)) then (
+                                        Runtime.send (Action.Page_loaded p'');
+                                        fetch_refs p'');
+                                      Js.Promise.resolve ()))
                     | None, false ->
                         Runtime.send (Action.Navigate_to Model.Journals);
                         load_journals ()
@@ -205,9 +207,11 @@ and load_today_journal repo =
          | Some p ->
              fetch_blocks p
              |> Js.Promise.then_ (fun p' ->
-                    if not (stale Model.Home) then
-                      Runtime.send (Action.Page_loaded p');
-                    Js.Promise.resolve ())
+                    Outliner_ops.resolve_page_tags repo p'
+                    |> Js.Promise.then_ (fun p'' ->
+                           if not (stale Model.Home) then
+                             Runtime.send (Action.Page_loaded p'');
+                           Js.Promise.resolve ()))
          | None -> Js.Promise.resolve ())
 
 let load_block_zoom uuid =
