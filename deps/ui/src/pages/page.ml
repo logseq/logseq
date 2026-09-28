@@ -320,7 +320,8 @@ let blocks_inner ?puuid ?(virtualize = false) (blocks : Model.block list)
       ]
     else List.map Tree.block_row blocks
   in
-  dom ~key:"page-blocks" ~style_class:"ls-page-blocks"
+  dom ~key:"page-blocks" ~style_class:"mt-4 ls-page-blocks"
+    ~attrs:[ ("style", "margin-left: -20px") ]
     [ dom ~key:"page-blocks-inner" ~style_class:"page-blocks-inner relative"
         ~attrs:inner_attrs body
     ]
@@ -340,13 +341,169 @@ let refs_grouped (refs : Model.block list) : (string * Model.block list) list =
   in
   List.fold_left insert [] refs
 
-let ref_group (name, blocks) : t =
-  dom ~key:("rg-" ^ name) ~style_class:"my-2 references-blocks-item"
-    [ dom ~key:("rgp-" ^ name) ~style_class:"with-foldable-page"
-        [ dom ~key:("rgl-" ^ name) ~tag:"a" ~style_class:"page-ref"
-            ~attrs:[ ("href", "#/page/" ^ name) ] ~text:name [] ]
-    ; dom ~key:("rgb-" ^ name) ~style_class:"blocks-container"
-        (List.map Tree.block_row blocks)
+(* cljs ui__button base classes (shui/button) *)
+let ui_btn =
+  "ui__button inline-flex cursor-pointer items-center justify-center \
+   whitespace-nowrap rounded-md text-sm gap-1 font-medium \
+   ring-offset-background transition-colors focus-visible:outline-none \
+   focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 \
+   disabled:pointer-events-none disabled:opacity-50 select-none \
+   hover:bg-secondary/70 hover:text-secondary-foreground active:opacity-80"
+
+let fold_arrow key : t =
+  dom ~key ~tag:"a"
+    ~style_class:
+      "ls-foldable-title-control block-control opacity-50 hover:opacity-100"
+    ~attrs:[ ("style", "width: 14px; height: 16px;") ]
+    [ dom ~key:"ch" ~tag:"span" ~style_class:"control-hide"
+        [ dom ~key:"ra" ~tag:"span" ~style_class:"rotating-arrow not-collapsed"
+            [ rotating_arrow (key ^ "-svg") ]
+        ]
+    ]
+
+let view_ghost_btn key ?title icon_name size : t =
+  let attrs =
+    [ ("type", "button"); ("tabindex", "0") ]
+    @ (match title with Some s -> [ ("title", s) ] | None -> [])
+  in
+  dom ~key ~tag:"button" ~attrs
+    ~style_class:(ui_btn ^ " as-ghost h-7 rounded py-1 \
+                  text-muted-foreground !px-1")
+    [ Icons.icon ~size icon_name ]
+
+(* cljs views/view header for :linked-references — foldable title with the
+   "Linked references <count>" view tab and hidden-until-hover actions *)
+let refs_view_head key title count : t =
+  dom ~key:(key ^ "-head")
+    ~style_class:
+      "ls-view-head flex flex-1 flex-nowrap items-center justify-between \
+       gap-1 overflow-hidden"
+    [ dom ~key:"vh-l" ~style_class:"flex flex-row items-center gap-2"
+        [ dom ~key:"vh-views" ~style_class:"views"
+            [ dom ~key:"vh-tab" ~tag:"button"
+                ~attrs:
+                  [ ("type", "button"); ("tabindex", "0")
+                  ; ("data-view-tab-id", "view-tab-" ^ key) ]
+                ~style_class:(ui_btn ^ " as-text rounded text-sm px-0 py-0 h-6")
+                [ dom ~key:"vh-tt" ~tag:"span" ~text:title []
+                ; dom ~key:"vh-n" ~tag:"span"
+                    ~style_class:"text-muted-foreground text-xs"
+                    ~text:(string_of_int count) []
+                ]
+            ; dom ~key:"vh-add" ~tag:"button"
+                ~attrs:
+                  [ ("type", "button"); ("tabindex", "0")
+                  ; ("title", Ui_strings.t "view/add-new-view") ]
+                ~style_class:
+                  (ui_btn ^ " as-text h-7 rounded py-1 !px-1 -ml-1 \
+                   text-muted-foreground hover:text-foreground \
+                   transition-opacity ease-in duration-300 opacity-0")
+                [ Icons.icon ~size:15. "plus" ]
+            ]
+        ]
+    ; dom ~key:"vh-acts"
+        ~style_class:
+          "opacity-0 view-actions flex items-center gap-1 \
+           transition-opacity ease-in duration-300"
+        [ view_ghost_btn "vh-fc" ~title:(Ui_strings.t "reference/page-filter")
+            "filter-cog" 18.
+        ; view_ghost_btn "vh-srt" "arrows-up-down" 18.
+        ; view_ghost_btn "vh-flt" "filter" 18.
+        ; dom ~key:"vh-search" ~style_class:"view-action-search"
+            [ dom ~key:"vh-si" ~style_class:"flex flex-row items-center"
+                [ view_ghost_btn "vh-sb" "search" 15. ] ]
+        ; dom ~key:"vh-type"
+            ~style_class:"view-action-type text-muted-foreground text-sm"
+            [ dom ~key:"vh-tv" ~style_class:"w-full property-value-inner"
+                ~attrs:[ ("data-type", "default") ]
+                [ dom ~key:"vh-tj" ~id:("trigger-" ^ key)
+                    ~attrs:[ ("tabindex", "0") ]
+                    ~style_class:"jtrigger flex flex-1 w-full cursor-pointer"
+                    [ dom ~key:"vh-ts"
+                        ~style_class:"select-item cursor-pointer"
+                        [ dom ~key:"vh-tc" ~tag:"span"
+                            ~style_class:
+                              "inline-flex items-center ls-icon-color-wrap"
+                            ~attrs:[ ("style", "color: inherit;") ]
+                            [ Icons.icon ~size:18. "list" ]
+                        ]
+                    ]
+                ]
+            ]
+        ; dom ~key:"vh-menu" ~tag:"button"
+            ~attrs:
+              [ ("type", "button"); ("tabindex", "0")
+              ; ("aria-haspopup", "menu"); ("aria-expanded", "false") ]
+            ~style_class:(ui_btn ^ " as-ghost h-7 rounded py-1 \
+                          text-muted-foreground !px-1")
+            [ Icons.icon ~size:15. "dots" ]
+        ]
+    ]
+
+(* cljs ls-foldable-title wrapping a view-head or a group page-ref *)
+let foldable_title key inner : t =
+  dom ~key:(key ^ "-ft") ~style_class:"ls-foldable-title content"
+    [ dom ~key:"ftr" ~style_class:"flex-1 flex-row foldable-title"
+        [ dom ~key:"fth"
+            ~style_class:"flex flex-row items-center ls-foldable-header gap-1"
+            [ fold_arrow (key ^ "-fa"); inner ]
+        ]
+    ]
+
+let foldable_content key inner : t =
+  dom ~key:(key ^ "-fc") ~style_class:"ls-foldable-content"
+    ~attrs:[ ("aria-hidden", "false") ]
+    [ dom ~key:"fci" ~style_class:"ls-foldable-content-inner" [ inner ] ]
+
+(* one linked-ref group: source page-ref foldable title + its blocks *)
+let ref_group idx (name, blocks) : t =
+  let key = "rg-" ^ name in
+  dom ~key ~attrs:[ ("data-index", string_of_int idx)
+                  ; ("data-item-index", string_of_int idx)
+                  ; ("style", "overflow-anchor: none;") ]
+    [ dom ~key:"gi" ~style_class:"flex flex-col"
+        [ foldable_title (key ^ "-t")
+            (dom ~key:"grp" ~style_class:""
+               [ dom ~key:"grl" ~tag:"a" ~style_class:"page-ref relative"
+                   ~attrs:
+                     [ ("tabindex", "0"); ("draggable", "true")
+                     ; ("data-ref", name); ("href", "#/page/" ^ name) ]
+                   [ dom ~key:"grs" ~tag:"span" ~text:name [] ]
+               ])
+        ; foldable_content (key ^ "-b")
+            (dom ~key:"grm" ~style_class:"-ml-2"
+               [ dom ~key:"grb" ~style_class:"ml-6 text-sm opacity-70 \
+                              hover:opacity-100 mt-1" []
+               ; dom ~key:"grc" ~style_class:"content"
+                   (List.map
+                      (fun (b : Model.block) ->
+                        dom
+                          ~key:("grw-"
+                                ^ Option.value b.block_uuid ~default:"x")
+                          ~style_class:"relative w-full"
+                          ~attrs:[ ("style", "min-height: 24px;") ]
+                          [ Tree.block_row_static b ])
+                      blocks)
+               ])
+        ]
+    ]
+
+let ref_groups_virt key (groups : (string * Model.block list) list) : t =
+  (* cljs mounts a Virtuoso scroller; we keep its DOM scaffolding but lay
+     groups out statically (absolute positioning would collapse without a
+     measured scroller height) *)
+  dom ~key ~style_class:"group-list-view"
+    ~attrs:[ ("data-virtuoso-scroller", "true")
+           ; ("style", "position: relative;") ]
+    [ dom ~key:"vp" ~attrs:[ ("data-viewport-type", "window") ]
+        [ dom ~key:"il"
+            ~attrs:
+              [ ("data-testid", "virtuoso-item-list")
+              ; ( "style"
+                , "box-sizing: border-box; margin-top: 0px; \
+                   padding-bottom: 0px; padding-top: 0px;" ) ]
+            (List.mapi ref_group groups)
+        ]
     ]
 
 (* cljs views/view {:add-page-column? true} — each ref row carries the
@@ -363,15 +520,31 @@ let references_row (b : Model.block) : t =
         ]
   | None -> Tree.block_row_static b
 
+(* cljs reference/references -> views/view :linked-references DOM *)
 let references_view (refs : Model.block list) : t =
   match refs with
   | [] -> box ~key:"refs-empty" []
   | _ ->
-      dom ~key:"refs" ~style_class:"references references-wrap"
-        [ dom ~key:"refs-body" ~style_class:"ls-view-body"
-            [ dom ~key:"refs-groups"
-                ~style_class:"flex flex-col references-blocks-wrap"
-                (List.map ref_group (refs_grouped refs))
+      let groups = refs_grouped refs in
+      dom ~key:"refs" ~style_class:"references"
+        [ dom ~key:"rv1" ~style_class:"flex flex-col gap-2"
+            [ dom ~key:"rv2" ~style_class:"flex flex-col gap-2 grid"
+                [ dom ~key:"rv3" ~style_class:"flex flex-col"
+                    [ foldable_title "refs-t"
+                        (refs_view_head "refs"
+                           (Ui_strings.t "view/linked-references")
+                           (List.length refs))
+                    ; foldable_content "refs-c"
+                        (dom ~key:"rvb"
+                           ~style_class:"ls-view-body flex flex-col gap-2 \
+                                         grid mt-1"
+                           [ dom ~key:"rvl"
+                               ~style_class:"flex flex-col border-t pt-2 \
+                                             gap-2"
+                               [ ref_groups_virt "rvg" groups ]
+                           ])
+                    ]
+                ]
             ]
         ]
 
@@ -501,7 +674,10 @@ let journal_item ?(last = false) (m : Model.t) (p : Model.page) : t =
             [ dom ~key:("jit-" ^ key) ~style_class:"flex flex-row space-between"
                 [ page_title_el m p ]
             ; blocks_inner ?puuid:p.page_uuid p.page_blocks
-            ; journal_references_view p
+            ]
+        ; dom ~key:("jrefs-w-" ^ key) ~style_class:"flex flex-col gap-8 ml-1"
+            [ dom ~key:"jrefs-f" ~style_class:"fade-in delay"
+                [ journal_references_view p ]
             ]
         ]
     ]
@@ -577,8 +753,12 @@ let page_view (m : Model.t) (page : Model.page) : t =
            else dom ~key:"lib-add-off" [])
         ; blocks_inner ?puuid:page.page_uuid ~virtualize:true
             page.page_blocks
-        ; references_view m.page_refs
-        ; unlinked_references_view m
+        ]
+    ; dom ~key:"refs-wrap" ~style_class:"flex flex-col gap-8 ml-1"
+        [ dom ~key:"lrefs" ~style_class:"fade-in delay"
+            [ references_view m.page_refs ]
+        ; dom ~key:"urefs" ~style_class:"fade-in delay"
+            [ unlinked_references_view m ]
         ]
     ; Page_menu.dialog_view m
     ]
@@ -608,8 +788,12 @@ let library_view (m : Model.t) (page : Model.page) : t =
         ; library_add_pages_button
         ; blocks_inner ?puuid:page.page_uuid ~virtualize:true
             page.page_blocks
-        ; references_view m.page_refs
-        ; unlinked_references_view m
+        ]
+    ; dom ~key:"refs-wrap" ~style_class:"flex flex-col gap-8 ml-1"
+        [ dom ~key:"lrefs" ~style_class:"fade-in delay"
+            [ references_view m.page_refs ]
+        ; dom ~key:"urefs" ~style_class:"fade-in delay"
+            [ unlinked_references_view m ]
         ]
     ; Page_menu.dialog_view m
     ]
