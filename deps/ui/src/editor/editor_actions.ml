@@ -21,7 +21,13 @@ let sync_buffer uuid v =
       match st.S.editing with
       | Some e when e.uuid = uuid ->
           { st with S.editing = Some { e with S.buffer = v } }
-      | _ -> st)
+      | _ -> st);
+  (* cljs renders the buffer as the textarea's text child; keep
+     textContent tracking .value (buffer writes are silent, so the
+     text_signal in tree.ml never fires on keystrokes) *)
+  match D.textarea_of uuid with
+  | Some el -> D.el_set_text_content el v
+  | None -> ()
 
 (* retry until the textarea mounts — a slow apply+refresh can take
    longer than the fixed delays the old version used *)
@@ -81,7 +87,7 @@ let clear_pending_blur () = pending_blur_uuid := None
 
 (* ---- enter / exit ---- *)
 
-let enter_edit uuid caret =
+let enter_edit ?(scope = "main") uuid caret =
   clear_pending_blur ();
   (match S.editing () with
   | Some e when e.uuid <> uuid -> save_if_dirty e.uuid
@@ -95,7 +101,7 @@ let enter_edit uuid caret =
          |> Js.Promise.then_ (fun buffer ->
                 S.set (fun st ->
                     { st with
-                      S.editing = Some { uuid; buffer }
+                      S.editing = Some { uuid; buffer; scope }
                     ; selected = S.String_set.empty
                     ; anchor = None
                     });
@@ -180,7 +186,10 @@ let split_at_cursor uuid =
         ]
       in
       S.set_silent (fun st ->
-          { st with S.editing = Some { uuid = new_uuid; buffer = after } });
+          { st with
+            S.editing =
+              Some { uuid = new_uuid; buffer = after; scope = e.scope }
+          });
       with_focus_after new_uuid 0
         (Ops.apply_and_refresh ~opts:(Ops.op_opts "insert-blocks") ops)
   | _ -> ()
@@ -252,6 +261,7 @@ let merge_prev uuid =
                               Some
                                 { uuid = prev_uuid
                                 ; buffer = pbuf ^ buf
+                                ; scope = e.scope
                                 }
                           });
                       with_focus_after prev_uuid
@@ -302,7 +312,11 @@ let merge_next uuid =
                       S.set_silent (fun st ->
                           { st with
                             S.editing =
-                              Some { uuid = next_uuid; buffer = nbuf }
+                              Some
+                                { uuid = next_uuid
+                                ; buffer = nbuf
+                                ; scope = e.scope
+                                }
                           });
                       with_focus_after next_uuid 0
                         (Ops.apply_and_refresh
@@ -434,9 +448,9 @@ let indent_or_outdent ~indent =
   let sel = S.selected () in
   let uuids =
     match S.editing_uuid () with
-    | Some u when S.String_set.mem u sel -> S.String_set.elements sel
+    | Some u when S.String_set.mem u sel -> selected_uuids ()
     | Some u -> [ u ]
-    | None -> S.String_set.elements sel
+    | None -> selected_uuids ()
   in
   match uuids with
   | [] -> ()
@@ -458,9 +472,20 @@ let indent_or_outdent ~indent =
                 | None -> ())
             | None -> ())
           uuids;
+      (* outdent of a block rendered inside a page embed must move it next
+         to the embed block, not inside the linked page — cljs
+         get-first-block-original reads originalblockid off the ancestor
+         .ls-block; the model parent is the embed block *)
+      let parent_original =
+        match S.find_parent focus with
+        | Some (Some p, _) when p.Model.block_link <> None ->
+            p.Model.block_uuid
+        | _ -> None
+      in
       with_focus_after focus
         (String.length (live_buffer focus))
-        (Ops.apply_and_refresh [ Ops.indent_outdent uuids indent ])
+        (Ops.apply_and_refresh
+           [ Ops.indent_outdent ?parent_original uuids indent ])
 
 let move_blocks_up_down up =
   match selected_uuids () with
@@ -501,7 +526,11 @@ let delete_selection () =
                S.set_silent (fun st ->
                    { st with
                      S.editing =
-                        Some { uuid = pu; buffer = String.trim b.Model.block_title }
+                       Some
+                         { uuid = pu
+                         ; buffer = String.trim b.Model.block_title
+                         ; scope = "main"
+                         }
                    ; selected = S.String_set.empty
                    ; anchor = None
                    });
@@ -689,7 +718,7 @@ let paste_blocks ev =
 
 let toggle_collapse uuid =
   match S.find uuid with
-  | Some b when b.Model.block_children <> [] ->
+  | Some b when S.children_of b <> [] ->
       if b.Model.block_default_collapsed && not (S.is_collapsed uuid) then
         (* view-default collapse (page child on a non-Library page): a
            click expands it locally without persisting — cljs
@@ -784,7 +813,10 @@ let append_block ?for_page () =
             | [] -> (puuid, false)
           in
           let stage st =
-            { st with S.editing = Some { uuid = new_uuid; buffer = "" } }
+            { st with
+              S.editing =
+                Some { uuid = new_uuid; buffer = ""; scope = "main" }
+            }
           in
           (* empty page: editor state is created at the first block_row
              mount, which happens inside this op's refresh — defer the

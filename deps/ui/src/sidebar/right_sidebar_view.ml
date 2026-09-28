@@ -164,7 +164,10 @@ let item_body idx (it : Sidebar_state.item) =
         [ dom ~key:("pbi-" ^ it.key) ~style_class:"ls-page-blocks"
             [ dom ~key:("pbin-" ^ it.key)
                 ~style_class:"page-blocks-inner relative"
-                (List.map Tree.block_row it.blocks) ] ] ]
+                (List.map (Tree.block_row ~scope:"sidebar") it.blocks)
+            ]
+        ]
+    ]
 
 let sidebar_item st idx (it : Sidebar_state.item) =
   dom ~key:("item-" ^ it.key)

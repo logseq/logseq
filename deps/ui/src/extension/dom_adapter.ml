@@ -212,7 +212,10 @@ let remove_property el prop =
   | "attrs" -> apply_attrs el "{}"
   | "events" -> apply_events el ""
   | "text" ->
-      if is_input_tag el then set_value el ""
+      if is_input_tag el then begin
+        set_value el "";
+        W.Element.setTextContent el ""
+      end
       else W.Element.setTextContent el ""
   | "style-class" -> set_class el ""
   | "accessibility-identifier" -> W.Element.removeAttribute "id" el
