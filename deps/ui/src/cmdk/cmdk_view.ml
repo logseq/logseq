@@ -572,7 +572,9 @@ let install_listeners st =
 (* modal shell mirrors shui dialog markup: overlay + centered
    .ui__dialog-content > .ui__dialog-main-content > .cp__cmdk__modal *)
 let modal_shell st =
-  Logseq_dom.dom ~key:"cmdk-shell"
+ fun ctx parent ->
+  let z = Dialogs_state.z_index "cmdk" in
+  (Logseq_dom.dom ~key:"cmdk-shell"
     [ Logseq_dom.dom ~key:"dismiss"
         ~attrs:
           [ ("role", "presentation")
@@ -582,7 +584,9 @@ let modal_shell st =
         ~style_class:
           "ui__dialog-overlay fixed inset-0 z-50 bg-background/90 flex \
            justify-center items-center animate-in fade-in-0"
-        ~attrs:[ ("role", "presentation") ]
+        ~attrs:
+          [ ("role", "presentation")
+          ; ("style", Printf.sprintf "z-index:%d" z) ]
         []
     ; Logseq_dom.dom ~key:"content"
         ~style_class:
@@ -593,8 +597,10 @@ let modal_shell st =
           [ ("role", "dialog")
           ; ("data-state", "open")
           ; ( "style"
-            , "--nested-dialogs: 0; transform: translate(-50%, -50%) \
-               scale(calc(1 - var(--nested-dialogs, 0) * 0.03));" )
+            , Printf.sprintf
+                "--nested-dialogs: 0; transform: translate(-50%%, -50%%) \
+                 scale(calc(1 - var(--nested-dialogs, 0) * 0.03)); z-index:%d;"
+                z )
           ]
         [ Logseq_dom.dom ~key:"title" ~tag:"h2"
             ~style_class:
@@ -608,7 +614,7 @@ let modal_shell st =
                 [ palette st ]
             ]
         ]
-    ]
+    ]) ctx parent
 
 let render (_ms : Model.t Signal.signal) : t =
  fun context parent ->

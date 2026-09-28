@@ -69,8 +69,12 @@ let label_of = function
   | "plugins" -> Some "plugins-dashboard"
   | _ -> None
 let dialog_view name (ms : Model.t Signal.signal) : t =
-  let is_settings = name = "settings" in  dom ~key:("dlg-ov-" ^ name) ~style_class:overlay_cls ~events:"click"
-    ~attrs:(if is_settings then [ ("data-align", "top") ] else [])
+  let is_settings = name = "settings" in
+  let z = Dialogs_state.z_index name in
+  dom ~key:("dlg-ov-" ^ name) ~style_class:overlay_cls ~events:"click"
+    ~attrs:
+      (("style", Printf.sprintf "z-index:%d" z)
+       :: (if is_settings then [ ("data-align", "top") ] else []))
     ~on_dom_event:(fun n p ->
       if n = "click" && is_overlay_click p then Dialogs_state.close_top ())
     [ dom ~key:("dlg-c-" ^ name)
@@ -83,9 +87,11 @@ let dialog_view name (ms : Model.t Signal.signal) : t =
         ~attrs:
           ([ ("data-state", "open")
            ; ( "style"
-             , if is_settings then
-                 "transform: translateX(-50%); width: min(1024px,                   calc(100vw - 2rem)); max-width: calc(100vw - 2rem)"
-               else "transform: translate(-50%, -50%)" )
+             , Printf.sprintf "z-index:%d;%s" z
+                 (if is_settings then
+                    "transform: translateX(-50%); width: min(1024px, \
+                     calc(100vw - 2rem)); max-width: calc(100vw - 2rem)"
+                  else "transform: translate(-50%, -50%)") )
            ]
           @
           match label_of name with
@@ -103,10 +109,12 @@ let btn key label extra act =
     []
 
 let confirm_view (c : Dialogs_state.confirm) =
+  let z = Dialogs_state.z_index "confirm" in
   dom ~key:"cfrm-ov"
     ~style_class:
       "ui__alert-dialog-overlay fixed inset-0 z-50 bg-background/80 \
        backdrop-blur-sm"
+    ~attrs:[ ("style", Printf.sprintf "z-index:%d" z) ]
     ~events:"click"
     ~on_dom_event:(fun n payload ->
       if
@@ -128,8 +136,9 @@ let confirm_view (c : Dialogs_state.confirm) =
         ~attrs:
           [ ("role", "alertdialog")
           ; ( "style"
-            , "position:fixed;left:50%;top:50%;transform:translate(-50%,-50%)"
-            )
+            , Printf.sprintf
+                "position:fixed;left:50%%;top:50%%;transform:translate(-50%%,-50%%);z-index:%d"
+                z )
           ]
         ~style_class:
           "ui__alert-dialog-content z-50 grid w-full max-w-lg gap-4 \
@@ -172,11 +181,15 @@ let prompt_view (p : Dialogs_state.prompt) =
         | _ -> ())
     | _ -> ()
   in
+  let z = Dialogs_state.z_index "prompt" in
   dom ~key:"prmt-ov" ~style_class:overlay_cls
+    ~attrs:[ ("style", Printf.sprintf "z-index:%d" z) ]
     [ dom ~key:"prmt-c" ~style_class:content_cls
         ~attrs:
           [ ("data-state", "open")
-          ; ("style", "transform: translate(-50%, -50%)")
+          ; ( "style"
+            , Printf.sprintf "z-index:%d;transform: translate(-50%%, -50%%)"
+                z )
           ]
         [ dom ~key:"prmt-box" ~style_class:"container"
             [ dom ~key:"prmt-h" ~tag:"h3" ~id:"modal-headline"

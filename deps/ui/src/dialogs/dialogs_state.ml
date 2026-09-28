@@ -39,6 +39,33 @@ let ready () = Option.is_some !st
 let value () = Signal.get_state (state ())
 let signal () = (state ()).Signal.state_signal
 
+(* modal layer order (cljs shui modal stack): the most recently opened
+   layer renders on top. ids: dialog names | "cmdk" | "prompt" |
+   "confirm" — cmdk and other hosts stamp their own id here. *)
+let layer_order : string list ref = ref []
+
+let touch id = layer_order := List.filter (( <> ) id) !layer_order @ [ id ]
+let release id = layer_order := List.filter (( <> ) id) !layer_order
+
+let z_index id =
+  let rec go i = function
+    | [] -> 0
+    | x :: rest -> if x = id then i else go (i + 1) rest
+  in
+  50 + go 0 !layer_order
+
+(* drop layer ids whose layer is gone — runs inside every set so any
+   removal path (close_top/close_named/close_all) stays in sync *)
+let sync_layers (d : t) =
+  layer_order :=
+    List.filter
+      (fun id ->
+        id = "cmdk"
+        || (id = "confirm" && Option.is_some d.confirm)
+        || (id = "prompt" && Option.is_some d.prompt)
+        || List.mem id d.dialogs)
+      !layer_order
+
 let set f =
   let s = state () in
   (* cljs settings-effect cleanup: body[data-settings-tab] is removed
@@ -49,6 +76,7 @@ let set f =
   Signal.update s (fun d ->
       let d' = f d in
       removed := had && not (List.mem "settings" d'.dialogs);
+      sync_layers d';
       d');
   if !removed then Settings_state.deactivate ();
   Runtime.flush ()
@@ -57,7 +85,9 @@ let is_open name = List.mem name (value ()).dialogs
 
 let open_ name =
   if is_open name then ()
-  else set (fun d -> { d with dialogs = d.dialogs @ [ name ] })
+  else (
+    set (fun d -> { d with dialogs = d.dialogs @ [ name ] });
+    touch name)
 
 let replace_top name =
   set (fun d ->
@@ -66,7 +96,8 @@ let replace_top name =
         | _ :: r -> List.rev r
         | [] -> []
       in
-      { d with dialogs = rest @ [ name ] })
+      { d with dialogs = rest @ [ name ] });
+  touch name
 
 let close_top () =
   set (fun d ->
@@ -87,7 +118,8 @@ let close_named name =
 let close_all () = set (fun _ -> initial)
 
 let ask ~title ~desc ~on_confirm () =
-  set (fun d -> { d with confirm = Some { title; desc; on_confirm } })
+  set (fun d -> { d with confirm = Some { title; desc; on_confirm } });
+  touch "confirm"
 
 let close_confirm () = set (fun d -> { d with confirm = None })
 
@@ -99,7 +131,8 @@ let confirm () =
   | None -> ()
 
 let prompt ~title ~on_submit () =
-  set (fun d -> { d with prompt = Some { title; on_submit } })
+  set (fun d -> { d with prompt = Some { title; on_submit } });
+  touch "prompt"
 
 let submit_prompt v =
   match (value ()).prompt with
