@@ -330,7 +330,7 @@ let seed_initial_data () : Block_map.t list =
   ; [ "db/ident", Keyword "logseq.property/empty-placeholder"
     ; ( "block/uuid"
       , Uuid
-          (Common_uuid.gen_uuid "builtin-block-uuid"
+          (Common_uuid.gen_uuid_keyword "builtin-block-uuid"
              "logseq.property/empty-placeholder") ) ]
   ; (let s = Common_uuid.new_block_id () in
      kv "logseq.kv/local-graph-uuid"
