@@ -9,20 +9,31 @@ let app_flush : (unit -> unit) ref = ref (fun () -> ())
 let current_repo : string option ref = ref None
 let current_page : Model.page option ref = ref None
 let current_route : Model.route option ref = ref None
+(* journals view renders several pages at once — editor actions like
+   append/find need access to every journal item's blocks *)
+let current_journals : Model.page list ref = ref []
+(* set by the router per route — lets outliner_ops refresh views whose
+   content isn't covered by current_page (e.g. the journals list) *)
+let reload_current_view : (unit -> unit Js.Promise.t) ref =
+  ref (fun () -> Js.Promise.resolve ())
 
 let track action =
   match action with
   | Action.Boot_graph_ready repo -> current_repo := Some repo
   | Action.Page_loaded page -> current_page := Some page
+  | Action.Journals_loaded js -> current_journals := js
   | Action.Navigate_to r ->
       current_page := None;
+      current_journals := [];
       current_route := Some r
   | _ -> ()
 
+let flush () = !app_flush ()
+
 let send action =
   track action;
-  ignore (!app_send action)
-let flush () = !app_flush ()
+  ignore (!app_send action);
+  flush ()
 
 (* Convenience for feature modules: update a signal state and flush so the
    DOM re-renders outside the LUI event loop (async callbacks, timers). *)

@@ -357,11 +357,20 @@ let handle_mousemove st (ev : Dom_ext.event) =
   | None -> ()
 ;;
 
+(* preventDefault on popup mousedown so clicking a menu item never
+   steals focus from the editor textarea (cljs behaves this way — the
+   editor keeps focus while the autocomplete/page-ref popup is open) *)
+let handle_mousedown _st (ev : Dom_ext.event) =
+  match Dom_ext.target ev with
+  | Some el when in_popups el -> Dom_ext.prevent_default ev
+  | _ -> ()
+
 let install_listeners st =
   Dom_ext.add_document_listener "input" (handle_input st) true;
   Dom_ext.add_document_listener "keydown" (handle_keydown st) true;
   Dom_ext.add_document_listener "contextmenu" (handle_contextmenu st) true;
   Dom_ext.add_document_listener "click" (handle_click st) true;
+  Dom_ext.add_document_listener "mousedown" (handle_mousedown st) true;
   Dom_ext.add_document_listener "mousemove" (handle_mousemove st) false
 ;;
 

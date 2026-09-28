@@ -49,11 +49,29 @@ external ev_clipboard : ev -> clipboard_data option = "clipboardData"
 external prevent_default : ev -> unit = "preventDefault" [@@mel.send]
 external stop_propagation : ev -> unit = "stopPropagation" [@@mel.send]
 
+(* CustomEvent.detail for the ls:editor-* channel (popups) *)
+external ev_detail : ev -> Js.Json.t option = "detail"
+  [@@mel.get] [@@mel.return nullable]
+
 (* clipboard *)
 external clipboard_get_text : clipboard_data -> string -> string = "getData"
   [@@mel.send]
 external clipboard_set_text :
   clipboard_data -> string -> string -> unit = "setData" [@@mel.send]
+
+(* drag events reuse the clipboard_data opaque type (both are DOM objects
+   we only pass through) *)
+external ev_data_transfer : ev -> clipboard_data option = "dataTransfer"
+  [@@mel.get] [@@mel.return nullable]
+external dt_set_data : clipboard_data -> string -> string -> unit = "setData"
+  [@@mel.send]
+external ev_client_y : ev -> float = "clientY" [@@mel.get]
+external ev_page_x : ev -> float = "pageX" [@@mel.get]
+
+type rect
+external el_bounding_rect : el -> rect = "getBoundingClientRect" [@@mel.send]
+external rect_top : rect -> float = "top" [@@mel.get]
+external rect_left : rect -> float = "left" [@@mel.get]
 
 (* element *)
 external el_id : el -> string = "id" [@@mel.get]
@@ -86,6 +104,10 @@ external el_set_selection_range : el -> int -> int -> unit
 
 (* misc *)
 external set_timeout : (unit -> unit) -> int -> unit = "setTimeout"
+
+external set_timeout_id : (unit -> unit) -> int -> int = "setTimeout"
+
+external clear_timeout : int -> unit = "clearTimeout"
 
 external new_observer : (unit -> unit) -> mutation_observer
   = "MutationObserver" [@@mel.new]

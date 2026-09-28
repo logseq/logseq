@@ -30,7 +30,7 @@ let st : t Signal.state option ref = ref None
 let pending_focus : (string * int) option ref = ref None
 
 (* structured block clipboard (titles + hierarchy), set by copy/cut *)
-let clipboard : string list ref = ref []
+let clipboard : Model.block list ref = ref []
 
 (* state transforms deferred until the first block_row mounts the state —
    an empty page mounts no rows, so click-to-add on .block-add-button must
@@ -73,17 +73,23 @@ let set f =
 (* updates with no visual dependency — folded into the next flush *)
 let set_silent f = Signal.update (state ()) f
 
-let editing () = (value ()).editing
+(* reads fall back to `initial` before the first editor mounts — e.g. on
+   an empty page only the title editor exists, but renderers still query
+   selection/editing state *)
+let read () =
+  match !st with Some s -> Signal.get_state s | None -> initial
+
+let editing () = (read ()).editing
 
 let editing_uuid () =
   match editing () with Some e -> Some e.uuid | None -> None
 
 let is_editing uuid = editing_uuid () = Some uuid
-let selected () = (value ()).selected
+let selected () = (read ()).selected
 let is_selected uuid = String_set.mem uuid (selected ())
-let collapsed () = (value ()).collapsed
+let collapsed () = (read ()).collapsed
 let is_collapsed uuid = String_set.mem uuid (collapsed ())
-let anchor () = (value ()).anchor
+let anchor () = (read ()).anchor
 let selection_active () = not (String_set.is_empty (selected ()))
 
 (* -- model helpers over !Runtime.current_page -- *)
@@ -91,7 +97,11 @@ let selection_active () = not (String_set.is_empty (selected ()))
 let page_blocks () =
   match !Runtime.current_page with
   | Some p -> p.Model.page_blocks
-  | None -> []
+  | None ->
+      (* journals view renders every journal item's blocks in the same
+         page flow *)
+      List.concat_map (fun (p : Model.page) -> p.Model.page_blocks)
+        !Runtime.current_journals
 
 (* blocks a row actually displays: a :block/link (embed) block renders the
    linked page's fetched blocks in place of its own children — so lookups
@@ -211,3 +221,14 @@ let update_block_title uuid title =
               map_block_title uuid title p.Model.page_blocks
           };
       set (fun st -> st)
+
+let prev_sibling uuid =
+  match find_parent uuid with
+  | Some (parent_opt, idx) when idx > 0 ->
+      let siblings =
+        match parent_opt with
+        | Some p -> p.Model.block_children
+        | None -> page_blocks ()
+      in
+      List.nth_opt siblings (idx - 1)
+  | _ -> None

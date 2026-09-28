@@ -6,6 +6,7 @@ type t =
   | Page_loaded of Model.page
   | Journals_loaded of Model.page list
   | Refs_loaded of Model.block list
+  | Unlinked_loaded of Model.block list
   | Navigate_to of Model.route
   | Worker_event of string * Wire.t
   | Refresh_page
