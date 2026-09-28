@@ -119,6 +119,14 @@ let replace_url_fragment hash = replace_state Js.Json.null "" hash
 let on_hash_change f =
   add_event_listener "hashchange" (fun _ -> f ())
 
+external history_back : unit -> unit = "back" [@@mel.scope "history"]
+external history_forward : unit -> unit = "forward" [@@mel.scope "history"]
+
+external clipboard_write_text : string -> unit Js.Promise.t = "writeText"
+  [@@mel.scope "navigator.clipboard"]
+
+let copy_to_clipboard s = ignore (clipboard_write_text s)
+
 external add_document_listener :
   string -> (Js.Json.t -> unit) -> unit = "addEventListener"
   [@@mel.scope "document"]

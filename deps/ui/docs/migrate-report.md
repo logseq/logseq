@@ -481,9 +481,24 @@ Contracts discovered while making `logseq.e2e.commands-basic-test` green
 
 - **Commands group = `global-shortcut-commands`**: every shortcut.handler
   command in groups editor-global + global-prevent-default +
-  global-non-editing-only (~83 web-active ids in `commands_data.ml`),
-  each row renders its keycap binding on the right (mac shows ⌘/⌥/⇧/⌃
-  glyphs via `Platform.is_mac`, non-mac shows Ctrl/Alt/Shift/Delete words).
+  global-non-editing-only. cljs `build-category-map` drops `:inactive`
+  entries when the config is built — on web that removes electron-only
+  bindings (find-in-page, db-save, shell/run, window/close,
+  copy-page-url), plugin file/GitHub installers, and dev-only
+  replace-graph — so `commands_data.ml` omits them (95 ids: 86
+  web-visible + 9 dev-gated). Each row renders its keycap binding on
+  the right (mac shows ⌘/⌥/⇧/⌃ glyphs via `Platform.is_mac`, non-mac
+  shows Ctrl/Alt/Shift/Delete words). dev/* rows are gated on
+  developer-mode at query time, like cljs.
+- **Command order = cljs `top-commands`**: sort by :id, then stable
+  sort by :invokes-count ascending and `reverse` — net effect:
+  invoke-count desc, every equal-count run in reverse :id order. The
+  0-count majority therefore renders reverse-alphabetical by id
+  (e.g. "Select parent block" before "Edit selected block" on "block").
+  Invokes persist in localStorage `commands-history` like cljs.
+- **Blank input runs `:initial` + `:filters` only** (cljs `load-results
+  :default`): the palette shows Recently updated + Filters — no
+  Commands/Nodes/Files groups — until a query or filter is chosen.
 - **Fuzzy filter** = cljs `fuzzy-search-multi` semantics
   (`Fuzzy.fuzzy_search_multi`): max score over several extract fields,
   score > 0, stable sort desc, group limit nodes=10 / others=5; query
@@ -492,16 +507,19 @@ Contracts discovered while making `logseq.e2e.commands-basic-test` green
   `Show less ⌘↑` when `gitems > limit`; `mod+down/up` expands/collapses
   per group (state lives on the view record, not the DOM).
 - **Filters group** prepends "Search only current page" (file icon,
-  `G_current_page` scope) only when a current page exists; **Nodes rows
-  matching the current page get a "Current Page" badge**; **Files group
-  lists `logseq/config.edn`** as a static entry.
+  `G_current_page` scope) only on a named `:page` route (cljs
+  `state/get-current-page` — the journals/home route doesn't count);
+  **Nodes rows matching the current page get a "Current Page" badge**
+  under the same gate; **Files group lists `logseq/config.edn`** as a
+  static entry.
 - **Query highlight**: titles render `<mark>`-wrapped match segments
   (`highlight_el`); indices must index the SAME bytes `String.sub`
   slices — normalize with `String.lowercase_ascii text`, not a
   normalizer that re-encodes, or non-ASCII queries shift every segment
   bound and crash inside the dyn render.
-- **Hint bar** at the bottom = cljs tips row ("Tip: Press ⌘⏎ to open
-  search in the sidebar" etc.).
+- **Hint bar** at the bottom = cljs tips row — `rand-nth
+  [:filter-results :open-sidebar]` per open (either "Press / to filter
+  search results" or "Press ⌘⏎ to open search in the sidebar").
 - **Escape semantics** (cljs `clear_or_close`): first Escape clears a
   non-empty input/filter, second Escape closes — a bare Escape does NOT
   close while input is non-empty.

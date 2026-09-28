@@ -191,15 +191,17 @@ let record_invoke (c : Commands_data.cmd) =
   Platform.local_storage_set "commands-history"
     (Js.Json.stringify (Js.Json.array (Array.of_list (entry :: hist))))
 
-(* cljs top-commands: get-commands sorted by :id, then by
-   :invokes-count desc (cljs sort is stable — ties keep id order) *)
+(* cljs top-commands: get-commands sorted by :id, then sorted by
+   :invokes-count ascending and reversed — so counts end up descending
+   and every equal-count run keeps reverse :id order *)
 let command_table () : Commands_data.cmd list =
   let counts = invoke_counts () in
   let n c = Option.value (Hashtbl.find_opt counts c.Commands_data.id) ~default:0 in
   Commands_data.table
   |> List.filter (fun c -> (not c.Commands_data.dev) || dev_mode ())
   |> List.stable_sort (fun a b -> compare a.Commands_data.id b.Commands_data.id)
-  |> List.stable_sort (fun a b -> compare (n b) (n a))
+  |> List.stable_sort (fun a b -> compare (n a) (n b))
+  |> List.rev
 
 let cmd_label (c : Commands_data.cmd) =
   if c.i18n then Ui_strings.t c.label else c.label
@@ -249,9 +251,13 @@ let create_items q =
       ; header = None; iicon = "new-page"; isc = ""; ibadge = No_badge
       ; act = Create_page q; ihl = false; imouse = false; iq = "" } ]
 
-(* cljs state/get-current-page equivalent — uuid of the loaded page *)
+(* cljs state/get-current-page equivalent — only the :page route counts
+   (the journals/home route has no current page) *)
 let current_page_uuid () =
-  Option.bind !(Runtime.current_page) (fun p -> p.Model.page_uuid)
+  match !(Runtime.current_route) with
+  | Some (Model.Page _) ->
+      Option.bind !(Runtime.current_page) (fun p -> p.Model.page_uuid)
+  | _ -> None
 
 (* cljs `filters` — leading "Search only current page" row exists only
    when a current page is loaded *)
@@ -503,6 +509,9 @@ let group_order v q rows total =
       else if has_slash then
         Option.to_list (create_g ())
         @ [ nodes_g (); files_g (); filters_g () ]
+      else if String.trim q = "" then
+        (* cljs :default on blank input runs :initial + :filters only *)
+        [ recents_g (); filters_g () ]
       else
         Option.to_list (create_g ())
         @ [ nodes_g (); recents_g (); commands_g (); files_g ()
@@ -868,6 +877,97 @@ let run_add_comment repo st =
            (Wire.Array (List.map (fun u -> Wire.Uuid u) uuids))
         |> Js.Promise.then_ (fun _ -> Outliner_ops.refresh_page ()))
   | _ -> ()
+
+let with_sidebar f () =
+  match !Sidebar_state.st_ref with
+  | Some sst -> f sst
+  | None -> ()
+
+(* palette dispatch for commands that map onto existing editor/sidebar/
+   settings actions; None when the id has no local equivalent *)
+let editor_action cid : (unit -> unit) option =
+  let first_target f () =
+    match target_uuids () with u :: _ -> f u | [] -> ()
+  in
+  match cid with
+  | "editor/indent" -> Some (fun () -> Editor_actions.indent_or_outdent ~indent:true)
+  | "editor/outdent" -> Some (fun () -> Editor_actions.indent_or_outdent ~indent:false)
+  | "editor/move-block-up" -> Some (fun () -> Editor_actions.move_blocks_up_down true)
+  | "editor/move-block-down" -> Some (fun () -> Editor_actions.move_blocks_up_down false)
+  | "editor/delete-selection" -> Some (fun () -> Editor_actions.delete_selection ())
+  | "editor/select-all-blocks" -> Some (fun () -> Editor_actions.select_all ())
+  | "editor/select-up" -> Some (fun () -> Editor_actions.extend_selection true)
+  | "editor/select-down" -> Some (fun () -> Editor_actions.extend_selection false)
+  | "editor/select-block-up" -> Some (fun () -> Editor_actions.move_selection_focus true)
+  | "editor/select-block-down" -> Some (fun () -> Editor_actions.move_selection_focus false)
+  | "editor/select-parent" ->
+      Some
+        (first_target (fun u ->
+             match Editor_state.find_parent u with
+             | Some (Some p, _) ->
+                 Option.iter Editor_actions.select_single p.Model.block_uuid
+             | _ -> ()))
+  | "editor/open-edit" ->
+      Some (first_target (fun u -> Editor_actions.enter_edit u 0))
+  | "editor/open-selected-blocks-in-sidebar" ->
+      Some
+        (with_sidebar (fun sst ->
+             Sidebar_state.ensure_right_open ();
+             List.iter (Sidebar_state.open_uuid sst) (target_uuids ())))
+  | "editor/toggle-block-children" ->
+      Some (first_target Editor_actions.toggle_collapse)
+  | "editor/expand-block-children" ->
+      Some (first_target (fun u -> Editor_actions.set_collapsed u false))
+  | "editor/collapse-block-children" ->
+      Some (first_target (fun u -> Editor_actions.set_collapsed u true))
+  | "editor/toggle-open-blocks" -> Some (fun () -> Editor_actions.toggle_open_blocks ())
+  | "editor/undo" -> Some (fun () -> Editor_actions.undo ())
+  | "editor/redo" -> Some (fun () -> Editor_actions.redo ())
+  | "editor/quick-add" -> Some (fun () -> Editor_actions.quick_add ())
+  | "editor/copy" -> Some (fun () -> Editor_actions.copy_selection_text ())
+  | "editor/cut" ->
+      Some
+        (fun () ->
+          Editor_actions.copy_selection_text ();
+          Editor_actions.delete_selection ())
+  | "editor/toggle-display-hidden-properties" ->
+      Some
+        (fun () ->
+          Properties_state.toggle_hidden ();
+          Properties_state.refresh_all ())
+  | _ -> None
+
+let shortcut_action cid : (unit -> unit) option =
+  match cid with
+  | "page/toggle-favorite" -> Some (with_sidebar Sidebar_state.toggle_favorite)
+  | "misc/copy" -> Some (fun () -> Editor_actions.copy_selection_text ())
+  | "go/backward" -> Some (fun () -> Platform.history_back ())
+  | "go/forward" -> Some (fun () -> Platform.history_forward ())
+  | "sidebar/clear" ->
+      Some
+        (with_sidebar (fun sst ->
+             List.iter
+               (fun (i : Sidebar_state.item) ->
+                 Sidebar_state.remove_item sst i.key)
+               (Signal.get_state sst.Sidebar_state.items)))
+  | "sidebar/close-top" ->
+      Some
+        (with_sidebar (fun sst ->
+             match List.rev (Signal.get_state sst.Sidebar_state.items) with
+             | last :: _ -> Sidebar_state.remove_item sst last.key
+             | [] -> ()))
+  | "ui/toggle-contents" ->
+      Some
+        (with_sidebar (fun sst ->
+             Sidebar_state.ensure_right_open ();
+             Sidebar_state.ensure_contents sst))
+  | "ui/select-theme-color" | "ui/customize-appearance" ->
+      Some
+        (fun () ->
+          Runtime.send (Action.Navigate_to Model.Settings);
+          Platform.set_location_hash (Runtime.nav_hash "#/settings"))
+  | _ -> editor_action cid
+
 let rec run_item st it =
   let repo = !(Runtime.current_repo) in
   let v = get st in
@@ -1009,7 +1109,11 @@ and run_command st repo (cid : string) =
        | [] -> ())
   | "editor/add-reaction" -> run_add_reaction st
   | "editor/add-comment" -> run_add_comment repo st
-  | _ -> close st (* no local equivalent / editing-context commands *)
+  | _ -> (
+      (match shortcut_action cid with
+       | Some f -> f ()
+       | None -> ());
+      close st (* no local equivalent / editing-context commands *))
 
 let run_highlighted st =
   let v = get st in
