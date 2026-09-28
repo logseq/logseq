@@ -25,6 +25,7 @@ type item_action =
 type ac_item =
   { ai_key : string
   ; ai_label : string
+  ; ai_icon : string option (* tabler/tabler-ext icon name *)
   ; ai_group : string option
   ; ai_info : string option
   ; ai_idx : int
@@ -32,8 +33,8 @@ type ac_item =
   ; ai_act : item_action
   }
 
-let mk_item ~key ~label ?group ?info act =
-  { ai_key = key; ai_label = label; ai_group = group
+let mk_item ~key ~label ?icon ?group ?info act =
+  { ai_key = key; ai_label = label; ai_icon = icon; ai_group = group
   ; ai_info = info; ai_idx = -1; ai_hdr = None; ai_act = act }
 
 let empty_key = "__ac_empty__"
@@ -123,69 +124,76 @@ let current_time () =
     (int_of_float (Js.Date.getMinutes d))
 ;;
 
+(* (i18n key, icon, action) — icon names mirror commands.cljs :icon/*
+   values verbatim (custom-pack names like pageRef stay camelCase) *)
 let group_items grp entries =
   let g = Some (U.t grp) in
-  List.map (fun (key, act) -> mk_item ~key ~label:(U.t key) ?group:g act) entries
+  List.map
+    (fun (key, icon, act) ->
+      mk_item ~key ~label:(U.t key) ~icon ?group:g act)
+    entries
 ;;
 
 let slash_items () : ac_item list =
-  let cmd label = Editor_cmd label in
   List.concat
     [ group_items "editor.slash/group-basic"
-        [ "editor.slash/node-reference", Switch Page_ref
-        ; "editor.slash/node-embed", Switch Page_ref ]
+        [ "editor.slash/node-reference", "pageRef", Switch Page_ref
+        ; "editor.slash/node-embed", "blockEmbed", Switch Page_ref ]
     ; group_items "editor.slash/group-format"
-        [ "ui/link", Emit "[]()"
-        ; "editor.slash/image-link", Emit "![]()"
-        ; "editor.slash/underline", Emit "<ins></ins>"
-        ; "editor.slash/code-block", Emit "```\n\n```"
-        ; "class.built-in/quote-block", cmd "Quote"
-        ; "editor.slash/math-block", Emit "$$\n\n$$" ]
+        [ "ui/link", "link", Emit "[]()"
+        ; "editor.slash/image-link", "photoLink", Emit "![]()"
+        ; "editor.slash/underline", "underline", Emit "<ins></ins>"
+        ; "editor.slash/code-block", "code", Emit "```\n\n```"
+        ; "class.built-in/quote-block", "quote", Editor_cmd "Quote"
+        ; "editor.slash/math-block", "math", Emit "$$\n\n$$" ]
     ; group_items "editor.slash/group-heading"
-        ([ "editor.slash/normal-text", cmd "Normal text"
-         ; "editor.slash/clear-heading", cmd "Clear heading" ]
+        ([ "editor.slash/normal-text", "text", Editor_cmd "Normal text"
+         ; "editor.slash/clear-heading", "heading-off", Editor_cmd "Clear heading" ]
         @ List.init 6 (fun i ->
-            ( "h-" ^ string_of_int (i + 1)
-            , cmd (U.tf "editor/heading" [ string_of_int (i + 1) ]) )))
+            let l = string_of_int (i + 1) in
+            ( "h-" ^ l
+            , "h-" ^ l
+            , Editor_cmd (U.tf "editor/heading" [ l ]) )))
     ; group_items "editor.slash/group-task-status"
-        [ "property.status/backlog", cmd "Backlog"
-        ; "property.status/todo", cmd "Todo"
-        ; "property.status/doing", cmd "Doing"
-        ; "property.status/in-review", cmd "In Review"
-        ; "property.status/done", cmd "Done"
-        ; "property.status/canceled", cmd "Canceled" ]
+        [ "property.status/backlog", "backlog", Editor_cmd "Backlog"
+        ; "property.status/todo", "todo", Editor_cmd "Todo"
+        ; "property.status/doing", "inProgress50", Editor_cmd "Doing"
+        ; "property.status/in-review", "inReview", Editor_cmd "In Review"
+        ; "property.status/done", "done", Editor_cmd "Done"
+        ; "property.status/canceled", "cancelled", Editor_cmd "Canceled" ]
     ; group_items "editor.slash/group-task-date"
-        [ "property.built-in/deadline", cmd "Deadline"
-        ; "property.built-in/scheduled", cmd "Scheduled" ]
+        [ "property.built-in/deadline", "calendar-stats", Editor_cmd "Deadline"
+        ; "property.built-in/scheduled", "calendar-month", Editor_cmd "Scheduled" ]
     ; group_items "editor.slash/group-priority"
-        ([ "editor.slash/no-priority", cmd "No priority" ]
+        ([ "editor.slash/no-priority", "priorityLvlNone", Editor_cmd "No priority" ]
         @ List.map
             (fun lvl ->
               ( "p-" ^ lvl
-              , cmd (U.tf "editor.slash/priority-label" [ U.t ("property.priority/" ^ lvl) ]) ))
+              , "priorityLvl" ^ String.capitalize_ascii lvl
+              , Editor_cmd (U.tf "editor.slash/priority-label" [ U.t ("property.priority/" ^ lvl) ]) ))
             [ "low"; "medium"; "high"; "urgent" ])
     ; group_items "editor.slash/group-time-and-date"
-        [ "date.nlp/tomorrow", Emit (journal_offset 1)
-        ; "date.nlp/yesterday", Emit (journal_offset (-1))
-        ; "date.nlp/today", Emit ("[[" ^ Dates.today () ^ "]]")
-        ; "editor.slash/current-time", Emit (current_time ())
-        ; "editor.slash/date-picker", cmd "Date picker" ]
+        [ "date.nlp/tomorrow", "tomorrow", Emit (journal_offset 1)
+        ; "date.nlp/yesterday", "yesterday", Emit (journal_offset (-1))
+        ; "date.nlp/today", "calendar", Emit ("[[" ^ Dates.today () ^ "]]")
+        ; "editor.slash/current-time", "clock", Emit (current_time ())
+        ; "editor.slash/date-picker", "calendar-dots", Editor_cmd "Date picker" ]
     ; group_items "editor.slash/group-list-type"
-        [ "editor.slash/number-list", cmd "Number list"
-        ; "editor.slash/number-children", cmd "Number children" ]
+        [ "editor.slash/number-list", "numberedParents", Editor_cmd "Number list"
+        ; "editor.slash/number-children", "numberedChildren", Editor_cmd "Number children" ]
     ; group_items "editor.slash/group-advanced"
-        [ "block.comments/add-comment", cmd "Add comment"
-        ; "property.built-in/query", Emit "{{query }}"
-        ; "editor.slash/advanced-query", Emit "{{query }}"
-        ; "editor.slash/query-function", Emit "{{function }}"
-        ; "editor.slash/calculator", cmd "Calculator"
-        ; "editor.slash/upload-asset", cmd "Upload an asset"
-        ; "class.built-in/template", cmd "Template"
-        ; "editor.slash/embed-html", Emit "```html\n\n```"
-        ; "editor.slash/embed-video-url", Emit "{{video }}"
-        ; "editor.slash/embed-youtube-timestamp", cmd "Embed YouTube timestamp"
-        ; "editor.slash/embed-twitter-tweet", Emit "{{tweet }}"
-        ; "command.editor/add-property", cmd "Add property" ]
+        [ "block.comments/add-comment", "messageCircle", Editor_cmd "Add comment"
+        ; "property.built-in/query", "query", Emit "{{query }}"
+        ; "editor.slash/advanced-query", "query", Emit "{{query }}"
+        ; "editor.slash/query-function", "queryCode", Emit "{{function }}"
+        ; "editor.slash/calculator", "calculator", Editor_cmd "Calculator"
+        ; "editor.slash/upload-asset", "upload", Editor_cmd "Upload an asset"
+        ; "class.built-in/template", "template", Editor_cmd "Template"
+        ; "editor.slash/embed-html", "htmlEmbed", Emit "```html\n\n```"
+        ; "editor.slash/embed-video-url", "videoEmbed", Emit "{{video }}"
+        ; "editor.slash/embed-youtube-timestamp", "videoEmbed", Editor_cmd "Embed YouTube timestamp"
+        ; "editor.slash/embed-twitter-tweet", "xEmbed", Emit "{{tweet }}"
+        ; "command.editor/add-property", "cube-plus", Editor_cmd "Add property" ]
     ]
 ;;
 
@@ -232,8 +240,11 @@ let renumber items = with_headers false items
 
 let filter_slash q items =
   let fs = List.filter (fun it -> contains_ci it.ai_label q) items in
+  (* cljs only renders group headers when `filtered?` is false — i.e. when
+     the filtered command list equals *initial-commands*. filter-commands
+     always rebuilds the list, so headers effectively never show *)
   (match fs with [] -> [ slash_fallback ] | _ -> fs)
-  |> with_headers (q = "")
+  |> with_headers false
 ;;
 
 let page_items_for t kind q =
@@ -396,9 +407,11 @@ let on_editor_input t el =
         let c = S.get v (pos - 1) in
         let two = pos >= 2 && S.get v (pos - 1) = S.get v (pos - 2) in
         let bounded =
-          pos < 2 || (let p = S.get v (pos - 2) in p = ' ' || p = '\n')
+          pos < 2
+          || (let p = S.get v (pos - 2) in p = ' ' || p = '\n')
+          || (pos >= 3 && S.get v (pos - 2) = ']' && S.get v (pos - 3) = ']')
         in
-        if c = '/' then open_ac t Slash el
+        if c = '/' && bounded then open_ac t Slash el
         else if c = '[' && two then open_ac t Page_ref el
         else if c = '(' && two then open_ac t Block_ref el
         else if c = '#' && bounded then open_ac t Tag_search el

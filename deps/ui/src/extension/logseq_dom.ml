@@ -24,8 +24,12 @@ let tags =
   ; "header"; "h1"; "h2"; "h3"; "p"; "ul"; "li"; "nav"; "section"
   ; "strong"; "em"; "code"; "pre"; "label"; "form"; "select"; "option"
   ; "video"; "audio"; "iframe"; "small"; "kbd"; "table"; "thead"; "tbody"
-  ; "tr"; "td"; "th"; "br"; "hr"; "canvas"; "svg"; "path"; "article"
-  ; "aside"; "footer"; "details"; "summary"; "u"; "mark"; "b"; "i" ]
+  ; "tr"; "td"; "th"; "br"; "hr"; "canvas"; "article"
+  ; "aside"; "footer"; "details"; "summary"; "u"; "mark"; "b"; "i"
+    (* SVG (tabler icons render circle/rect/line/polyline/polygon/g/…
+       alongside svg/path) *)
+  ; "svg"; "path"; "circle"; "rect"; "line"; "polyline"; "polygon"; "g"
+  ; "defs"; "use"; "ellipse"; "tspan" ]
 
 let identifier tag = "logseq-" ^ tag
 

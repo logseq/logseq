@@ -27,13 +27,23 @@ let page_link ~(tag : bool) ?label name =
   in
   D.el ~tag:"a"
     ~style_class:(if tag then "relative tag" else "relative page-ref")
-    ~attrs:[ ("data-ref", String.lowercase_ascii name); ("tabindex", "0") ]
-    [ D.txt text ]
+    ~attrs:
+      [ ("data-ref", String.lowercase_ascii name)
+      ; ("tabindex", "0")
+      ; ("draggable", "true") ]
+    [ D.el ~tag:"span" ~text:text [] ]
+
+let preview_link inner = D.el ~tag:"span" [ D.el ~tag:"span" ~style_class:"preview-ref-link" [ inner ] ]
+
+let bracket s = D.el ~tag:"span" ~style_class:"text-gray-500 bracket" ~text:s []
 
 let page_ref ?(tag = false) ?label name =
-  D.el ~tag:"span" ~style_class:"page-reference"
-    ~attrs:[ ("data-ref", String.trim name) ]
-    [ page_link ~tag ?label name ]
+  let link = preview_link (page_link ~tag ?label name) in
+  if tag then link
+  else
+    D.el ~tag:"span" ~style_class:"page-reference"
+      ~attrs:[ ("data-ref", String.trim name) ]
+      [ bracket "[["; link; bracket "]]" ]
 
 (* ((uuid)) -> resolved block title via thread-api/pull *)
 let block_ref_anchor uuid : t =
