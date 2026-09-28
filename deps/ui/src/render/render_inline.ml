@@ -53,8 +53,9 @@ let external_link href label_els =
   D.el ~tag:"a" ~style_class:"external-link"
     ~attrs:[ ("href", href); ("target", "_blank") ] label_els
 
-(* ((uuid)) / #[[uuid]] -> resolved block title via thread-api/pull —
-   lazy: the anchor mounts empty and fills when the pull returns *)
+(* ((uuid)) (deprecated form) / #[[uuid]] -> resolved block title via
+   thread-api/pull — lazy: the anchor mounts empty and fills when the
+   pull returns *)
 let block_ref_anchor uuid : t =
  fun context parent ->
   let st = Signal.state context.Lui_ui.ui_scheduler uuid in
@@ -422,7 +423,8 @@ and try_hash ~refs ~self s i =
       if k = 0 then None
       else Some (page_link ~tag:true (String.sub raw 0 k), k + 1)
 
-(* ((uuid)) — same page-reference rendering as [[uuid]] *)
+(* deprecated ((uuid)) block-ref form — same page-reference rendering
+   as [[uuid]] *)
 and try_paren ~refs ~self s i =
   if starts_at s i "((" then
     match find_sub s (i + 2) "))" with
