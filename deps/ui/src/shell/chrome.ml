@@ -181,6 +181,7 @@ let main_content (ms : Model.t Signal.signal) =
                   a.phase = b.phase
                   && a.route = b.route
                   && a.route_page = b.route_page
+                  && a.page_missing = b.page_missing
                   && a.journals = b.journals
                   && a.page_refs = b.page_refs
                   && a.unlinked_refs = b.unlinked_refs

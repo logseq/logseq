@@ -1043,7 +1043,13 @@ let page_view_of_model (m : Model.t) : t =
       box ~key:"graphs-view" [] (* graphs area renders via its own view *)
   | Model.Ready, Model.Settings -> Settings_page.view m
   | Model.Ready, _ -> (
-      match m.route_page with
-      | Some page -> page_view m page
-      | None -> empty_state ())
+      match m.route_page, m.page_missing with
+      | Some page, _ -> page_view m page
+      | None, true ->
+          (* cljs page-aux: missing page/block renders inline
+             (t :page/not-found) inside the content wrap *)
+          dom ~key:"pg-missing" ~style_class:"opacity-75"
+            [ text ~key:"pgm-t" ~value:(Ui_strings.t "page/not-found")
+                ~style_class:"" [] ]
+      | None, false -> empty_state ())
   | _ -> empty_state ()
