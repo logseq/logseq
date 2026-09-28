@@ -74,6 +74,12 @@ module Opfs = struct
   external has_unpause_vfs : pool -> (unit -> unit) Js.Undefined.t = "unpauseVfs" [@@mel.get]
   external has_get_capacity : pool -> (unit -> int) Js.Undefined.t = "getCapacity" [@@mel.get]
 
+  (* DEBUG: dump stored pool error + file map (remove before merge) *)
+  external pool_raw_error : pool -> Js.Json.t Js.Undefined.t = "$error" [@@mel.get]
+  external json_message : Js.Json.t -> string Js.Undefined.t = "message" [@@mel.get]
+  external pool_file_names : pool -> string array = "getFileNames" [@@mel.send]
+  external pool_file_count : pool -> int = "getFileCount" [@@mel.send]
+
   external pause_vfs : pool -> pool = "pauseVfs" [@@mel.send]
   external unpause_vfs : pool -> pool Js.Promise.t = "unpauseVfs" [@@mel.send]
   external get_capacity : pool -> int = "getCapacity" [@@mel.send]
@@ -295,6 +301,39 @@ let close t =
   | Node_db d -> Database.close d
   | Opfs_db d -> Opfs.close d
 
+(* DEBUG: dump each pool's stored xOpen error + file map (remove before merge) *)
+let debug_pool_states () =
+  Hashtbl.fold
+    (fun name pool acc ->
+       let err =
+         match Js.Undefined.toOption (Opfs.pool_raw_error pool) with
+         | None -> "none"
+         | Some e ->
+             let m =
+               match Js.Undefined.toOption (Opfs.json_message e) with
+               | Some m -> m
+               | None -> "?"
+             in
+             m
+       in
+       let names =
+         try String.concat "," (Array.to_list (Opfs.pool_file_names pool))
+         with _ -> "?"
+       in
+       let count =
+         try string_of_int (Opfs.pool_file_count pool) with _ -> "?"
+       in
+       let cap =
+         match Js.Undefined.toOption (Opfs.has_get_capacity pool) with
+         | Some f -> (try string_of_int (f ()) with _ -> "?")
+         | None -> "?"
+       in
+       (name ^ ": names=[" ^ names ^ "] count=" ^ count ^ " cap=" ^ cap
+      ^ " err=" ^ err)
+       :: acc)
+    pools []
+  |> String.concat " | "
+
 let bind_args bind = Array.map json_of_bind bind
 
 let exec t ~sql ~bind =
@@ -314,7 +353,14 @@ let exec t ~sql ~bind =
                  ; rowMode = "array"
                  ; returnValue = "resultRows"
                  }])
-  with Js.Exn.Error e -> raise (Sqlite_error (js_error_message e))
+  with Js.Exn.Error e ->
+    (* DEBUG: surface pool xOpen state on pooled-db exec failures *)
+    (match t.handle with
+     | Opfs_db _ ->
+         Worker_log.error "sqlite-exec-failed"
+           [ ("sql", sql); ("pools", debug_pool_states ()) ]
+     | _ -> ());
+    raise (Sqlite_error (js_error_message e))
 
 let query t ~sql ~bind =
   try

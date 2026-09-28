@@ -354,15 +354,10 @@ let create_or_open_db args =
            if created_sqlite && not (Worker_state.publishing ()) then
              ignore (Sync_state.client_ops_conn repo);
            (* cljs get-dbs opens the :search sqlite inside the pool on every
-              open so tx-listener upserts hit it immediately; cljs runs
-              enable-sqlite-wal-mode! on it inside the when-not-sqlite-conn
-              block together with the other dbs. *)
-           (match Endpoint_search.get_search_db repo with
-            | Some search_db when created_sqlite ->
-                Sqlite.exec search_db ~sql:"pragma locking_mode=exclusive"
-                  ~bind:[||];
-                Sqlite.exec search_db ~sql:"pragma journal_mode=WAL" ~bind:[||]
-            | _ -> ());
+              open so tx-listener upserts hit it immediately; the
+              enable-sqlite-wal-mode! pragmas run inside open_search_db
+              before its tables are created. *)
+           ignore (Endpoint_search.get_search_db repo);
            let finish () : Wire.t Db_worker_effect.t =
              Graph_store.create_kvs_table db;
              let storage = Graph_store.storage db in
