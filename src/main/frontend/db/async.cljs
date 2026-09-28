@@ -1,16 +1,11 @@
 (ns frontend.db.async
   "Async queries"
-  (:require [cljs-time.coerce :as tc]
-            [cljs-time.core :as t]
-            [cljs-time.format :as tf]
-            [frontend.date :as date]
+  (:require [frontend.date :as date]
             [frontend.db.async.util :as db-async-util]
             [frontend.state :as state]
             [frontend.util :as util]
             [lambdaisland.glogi :as log]
             [promesa.core :as p]))
-
-(def ^:private yyyyMMdd-formatter (tf/formatter "yyyyMMdd"))
 
 (def <q db-async-util/<q)
 
@@ -401,15 +396,9 @@
 (defn <get-date-scheduled-or-deadlines
   [journal-title]
   (when-let [date (date/journal-title->int journal-title)]
-    (let [future-days (state/get-scheduled-future-days)
-          current-day (tf/parse yyyyMMdd-formatter (str date))
-          future-date (t/plus current-day (t/days future-days))
-          future-day (some->> future-date
-                              (tf/unparse yyyyMMdd-formatter)
-                              (parse-long))
-          start-time (date/journal-day->utc-ms date)
-          future-time (tc/to-long future-date)]
-      (when-let [repo (and future-day (state/get-current-repo))]
+    (when-let [repo (state/get-current-repo)]
+      (when-let [[start-time future-time]
+                 (date/journal-day-local-range-ms date (state/get-scheduled-future-days))]
         (<get-date-scheduled-or-deadlines-from-worker repo start-time future-time)))))
 
 (defn <get-tag-objects
