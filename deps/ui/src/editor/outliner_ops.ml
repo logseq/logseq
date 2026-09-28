@@ -383,6 +383,12 @@ let resolve_page_tags repo (page : Model.page) : Model.page Js.Promise.t =
                               then Some t
                               else None)
                             titles
+                      ; page_internal =
+                          List.exists
+                            (fun (i, _, ident, _) ->
+                              List.mem i ids
+                              && ident = "logseq.class/Page")
+                            titles
                       }))
 
 (* block zoom: the route root is a block, not a page — refetch it via
