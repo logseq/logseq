@@ -244,21 +244,11 @@ let cm_heading_btn key title value icon : t =
 
 (* ui.cljs menu-heading: h-1..h-6 font icons, h-auto/heading-off ext icons *)
 let cm_heading_row () : t =
-  let font_icon name =
-    Logseq_dom.dom ~key:"ic" ~tag:"span"
-      ~style_class:("ui__icon ti ti-" ^ name)
-      ~attrs:
-        [ ( "style"
-          , "align-items: center; display: inline-flex; font-size: 18px; \
-             height: 18px; justify-content: center; line-height: 1; \
-             width: 18px" ) ]
-      []
-  in
   let hs =
     List.init 6 (fun i ->
         let n = string_of_int (i + 1) in
         cm_heading_btn ("h-" ^ n) (U.tf "editor/heading" [ n ]) n
-          (font_icon ("h-" ^ n)))
+          (Icons.icon ("h-" ^ n)))
   in
   Logseq_dom.dom ~key:"headings"
     ~style_class:"flex flex-row justify-between pb-2 pt-1 px-2 items-center"
