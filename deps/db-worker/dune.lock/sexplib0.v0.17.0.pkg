@@ -1,0 +1,15 @@
+(version v0.17.0)
+
+(build
+ (all_platforms ((action (run dune build -p %{pkg-self:name} -j %{jobs})))))
+
+(depends
+ (all_platforms
+  (ocaml dune)))
+
+(source
+ (fetch
+  (url
+   https://github.com/janestreet/sexplib0/archive/refs/tags/v0.17.0.tar.gz)
+  (checksum
+   sha512=ad387e40789fe70a11473db7e85fe017b801592624414e9030730b2e92ea08f98095fb6e9236430f33c801605ebee0a2a6284e0f618a26a7da4599d4fd9d395d)))

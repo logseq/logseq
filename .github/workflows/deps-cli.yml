@@ -64,7 +64,7 @@ env:
   CLOJURE_VERSION: '1.12.4.1618'
   JAVA_VERSION: '21'
   NODE_VERSION: '24'
-  OCAML_VERSION: '5.1.1'
+  OCAML_VERSION: '5.5.0'
   BABASHKA_VERSION: '1.12.215'
 
 jobs:
@@ -118,6 +118,12 @@ jobs:
 
       - name: Run logseq CLI tests
         run: opam exec -- pnpm --dir cli test
+
+      - name: Fetch db-worker OCaml deps
+        working-directory: deps/db-worker
+        run: |
+          sh scripts/install-opam-deps.sh
+          pnpm install
 
       - name: Build logseq CLI
         run: |
@@ -179,6 +185,12 @@ jobs:
 
       - name: Fetch CLI pnpm deps
         run: pnpm --dir cli install --frozen-lockfile --ignore-workspace
+
+      - name: Fetch db-worker OCaml deps
+        working-directory: deps/db-worker
+        run: |
+          sh scripts/install-opam-deps.sh
+          pnpm install
 
       - name: Build logseq CLI
         run: |

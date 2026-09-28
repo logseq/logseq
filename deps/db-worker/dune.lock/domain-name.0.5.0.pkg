@@ -1,0 +1,19 @@
+(version 0.5.0)
+
+(build
+ (all_platforms
+  ((action
+    (progn
+     (when %{pkg-self:dev} (run dune subst))
+     (run dune build -p %{pkg-self:name} -j %{jobs}))))))
+
+(depends
+ (all_platforms
+  (ocaml dune)))
+
+(source
+ (fetch
+  (url
+   https://github.com/hannesm/domain-name/releases/download/v0.5.0/domain-name-0.5.0.tbz)
+  (checksum
+   sha512=923acab434ebb197f44075711030fd1b7f61783e20cc6f74387ce0acf1bc5f48eb8a8a5e29d3440e7c249ab00673e250ddfdc7e53d71c5a1613f1dbb557c0ae1)))

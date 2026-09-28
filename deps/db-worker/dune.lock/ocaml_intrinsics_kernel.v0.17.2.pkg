@@ -1,0 +1,15 @@
+(version v0.17.2)
+
+(build
+ (all_platforms ((action (run dune build -p %{pkg-self:name} -j %{jobs})))))
+
+(depends
+ (all_platforms
+  (ocaml dune)))
+
+(source
+ (fetch
+  (url
+   https://github.com/janestreet/ocaml_intrinsics_kernel/archive/refs/tags/v0.17.2.tar.gz)
+  (checksum
+   sha512=21397340656d9fbe8dc079d5772bb4ca3e9c8c9c235fe2bddbbabe75fff7d38afc95f10d16f71ad0ab67f9e6fcb4ce08bece8b56cb2b37904c7210c45aa44bb5)))

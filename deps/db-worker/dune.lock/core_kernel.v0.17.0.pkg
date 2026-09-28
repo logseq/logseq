@@ -1,0 +1,15 @@
+(version v0.17.0)
+
+(build
+ (all_platforms ((action (run dune build -p %{pkg-self:name} -j %{jobs})))))
+
+(depends
+ (all_platforms
+  (ocaml base core int_repr ppx_jane ppx_optcomp uopt base-threads dune)))
+
+(source
+ (fetch
+  (url
+   https://github.com/janestreet/core_kernel/archive/refs/tags/v0.17.0.tar.gz)
+  (checksum
+   sha256=fd2b8c6715794df7a810a62b226f53720f211cd344b4afc9fab0498796d6b466)))

@@ -2361,6 +2361,7 @@
                             (inside-of-single-block (:node state)))]
           (cond
             (or (get-in state [:config :page-title?])
+                (comments-model/comments-area? (:block state))
                 (leaf-property-value-insert-blocked? (:config state) (:block state)))
             (do
               (when e (.preventDefault e))
@@ -4070,13 +4071,20 @@
 (defn escape-editing
   [& {:keys [select? save-block? editing-another-block?]
       :or {save-block? true}}]
-  (p/do!
-   (when save-block? (save-current-block!))
-   (if select?
-     (when-let [node (some-> (state/get-input) (util/rec-get-node "ls-block"))]
-       (state/exit-editing-and-set-selected-blocks! [node]))
-     (when-not editing-another-block?
-       (state/clear-edit!)))))
+  ;; `save-current-block!` resolves after the worker persists the block; during
+  ;; that window the user may have left or re-entered editing, so only proceed
+  ;; while this exact edit session is still the active one. Every new edit
+  ;; session installs a fresh `:editor/block`, so identity catches re-editing
+  ;; the same block too.
+  (let [editing-block (state/get-edit-block)]
+    (p/do!
+     (when save-block? (save-current-block!))
+     (when (identical? editing-block (state/get-edit-block))
+       (if select?
+         (when-let [node (some-> (state/get-input) (util/rec-get-node "ls-block"))]
+           (state/exit-editing-and-set-selected-blocks! [node]))
+         (when-not editing-another-block?
+           (state/clear-edit!)))))))
 
 (defn copy-current-ref
   [block-id]

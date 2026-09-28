@@ -1,0 +1,19 @@
+(version v0.17.0)
+
+(build
+ (all_platforms
+  ((action
+    (progn
+     (when %{pkg-self:dev} (run dune subst))
+     (run dune build -p %{pkg-self:name} -j %{jobs} @install))))))
+
+(depends
+ (all_platforms
+  (dune ocaml)))
+
+(source
+ (fetch
+  (url
+   https://github.com/janestreet/spawn/releases/download/v0.17.0/spawn-v0.17.0.tbz)
+  (checksum
+   sha512=bb85d1f706774793170f2d52ccbeeeaf67558046b8012bdd8a9cefc46215522a4d59a4a6f21296b0825158e6853a2430f2642ee714e1d1d8b726442d52006fc1)))

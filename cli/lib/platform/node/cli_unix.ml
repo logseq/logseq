@@ -28,6 +28,7 @@ module Lifecycle = struct
     script:string ->
     owner:string ->
     createEmpty:bool ->
+    ?env:string Js.Dict.t ->
     unit ->
     start_options = ""
   [@@mel.obj]
@@ -46,6 +47,10 @@ module Lifecycle = struct
   let revision : string =
     [%mel.raw
       {|typeof LOGSEQ_CLI_REVISION !== "undefined" ? LOGSEQ_CLI_REVISION : "dev"|}]
+
+  let build_time : string =
+    [%mel.raw
+      {|typeof LOGSEQ_CLI_BUILD_TIME !== "undefined" ? LOGSEQ_CLI_BUILD_TIME : "unknown"|}]
 
   external delete :
     storage ->
@@ -92,7 +97,12 @@ let start_graph_runtime ~root_dir ~repo ~script ~owner_source ~create_empty_db
   |> Js.Promise.then_ (fun _ ->
       Lifecycle.start
         (Lifecycle.start_options ?generation ~storage ~repo ~script
-           ~owner:owner_source ~createEmpty:create_empty_db ()))
+           ~owner:owner_source ~createEmpty:create_empty_db
+           ~env:
+             (Js.Dict.fromList
+                [ "LOGSEQ_BUILD_REVISION", Lifecycle.revision
+                ; "LOGSEQ_BUILD_TIME", Lifecycle.build_time ])
+           ()))
   |> Lifecycle.of_promise
   |> Cli_effect.map (Result.map Js.Json.stringify)
 

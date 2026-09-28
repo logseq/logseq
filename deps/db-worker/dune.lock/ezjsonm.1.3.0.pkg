@@ -1,0 +1,19 @@
+(version 1.3.0)
+
+(build
+ (all_platforms
+  ((action
+    (progn
+     (when %{pkg-self:dev} (run dune subst))
+     (run dune build -p %{pkg-self:name} -j %{jobs}))))))
+
+(depends
+ (all_platforms
+  (ocaml dune jsonm uutf sexplib0 hex)))
+
+(source
+ (fetch
+  (url
+   https://github.com/mirage/ezjsonm/releases/download/v1.3.0/ezjsonm-1.3.0.tbz)
+  (checksum
+   sha512=b731036384115603af9187464695418d27b7cf6f763c8dbc0812db62a7657cac1b6019d3b205b1c95ae81b7dab0bd4037390d977ee8c122bef29a9ddef771e18)))

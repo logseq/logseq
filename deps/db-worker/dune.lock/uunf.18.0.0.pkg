@@ -1,0 +1,25 @@
+(version 18.0.0)
+
+(build
+ (all_platforms
+  ((action
+    (run
+     ocaml
+     pkg/pkg.ml
+     build
+     --dev-pkg
+     %{pkg-self:dev}
+     --with-uutf
+     %{pkg:uutf:installed}
+     --with-cmdliner
+     %{pkg:cmdliner:installed})))))
+
+(depends
+ (all_platforms
+  (ocaml ocamlfind ocamlbuild topkg uutf cmdliner)))
+
+(source
+ (fetch
+  (url https://erratique.ch/software/uunf/releases/uunf-18.0.0.tbz)
+  (checksum
+   sha512=739434317d84fb2f60f195d5645093fce5cfeb8ebb7e491345c80799528768a255cc39be05d12f873f028a302bbe0716b0591b8f47c6fe04fe309c6e6c93069c)))

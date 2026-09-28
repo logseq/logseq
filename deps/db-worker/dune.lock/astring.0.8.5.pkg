@@ -1,0 +1,15 @@
+(version 0.8.5)
+
+(build
+ (all_platforms
+  ((action (run ocaml pkg/pkg.ml build --pinned %{pkg-self:pinned})))))
+
+(depends
+ (all_platforms
+  (ocaml ocamlfind ocamlbuild topkg)))
+
+(source
+ (fetch
+  (url https://erratique.ch/software/astring/releases/astring-0.8.5.tbz)
+  (checksum
+   sha256=865692630c07c3ab87c66cdfc2734c0fdfc9c34a57f8e89ffec7c7d15e7a70fa)))

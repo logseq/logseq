@@ -1,0 +1,15 @@
+(version v0.17.0)
+
+(build
+ (all_platforms ((action (run dune build -p %{pkg-self:name} -j %{jobs})))))
+
+(depends
+ (all_platforms
+  (ocaml base ppx_cold ppx_compare ppx_here ppx_sexp_conv dune ppxlib)))
+
+(source
+ (fetch
+  (url
+   https://github.com/janestreet/ppx_assert/archive/refs/tags/v0.17.0.tar.gz)
+  (checksum
+   sha256=94c47289a6393642b1cca7d2cdb8decdbf387c3cee4faf50d9b00efc871cce8b)))

@@ -1375,6 +1375,7 @@
  :property/hide-by-default "Приховувати за замовчуванням"
  :property/hide-choice-for-tag "Приховати вибір для цього тегу"
  :property/hide-empty-value "Приховати порожні значення"
+
  :property/hide-for-tag "Сховати для #{1}"
  :property/hide-hidden-choices "Приховати приховані варіанти"
  :property/map-checked-to "Співставити відмічено до"
