@@ -793,7 +793,7 @@ let run_query t ac ~advanced =
   match Editor_state.editing_uuid () with
   | None -> ()
   | Some buuid ->
-      emit ac.editor ac.tpos "";
+      emit ac "" 0;
       close_ac t;
       let title = Dom_ext.value ac.editor in
       Editor_actions.exit_edit ~select:false;

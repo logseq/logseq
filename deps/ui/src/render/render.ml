@@ -124,6 +124,15 @@ let code_block lang code =
         ]
     ]
 
+(* {{query ...}} whole-title -> the query shell:
+   .custom-query-results + .ls-query-setting shell; the queries area
+   fills in real results later. *)
+let is_whole_query s =
+  let t = String.trim s in
+  String.length t > 8
+  && String.sub t 0 8 = "{{query "
+  && String.sub t (String.length t - 2) 2 = "}}"
+
 let query_shell =
   D.el ~tag:"div" ~style_class:"custom-query-results"
     [ D.el ~tag:"button"
@@ -194,7 +203,7 @@ let title ?(heading : int option = None) ?(is_query = false) (s : string)
                     [ D.el ~tag:"span" ~style_class:"typed-list"
                         [ D.el ~tag:"label" ~text:num [] ]
                     ; content ?heading rest ]
-                | None -> [ content ?heading s ]))))
+                | None -> [ content ?heading s ])))
 
 (* display-type/heading aware variant — the block model carries
    logseq.property.node/display-type + logseq.property/heading. *)
