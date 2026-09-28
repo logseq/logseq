@@ -886,6 +886,20 @@ let unlinked_references_view (m : Model.t) : t =
 
 (* --- route views -------------------------------------------------- *)
 
+(* cljs page-inner: data-page-tags="[\"a\", \"b\"]" on the wrap *)
+let page_wrap_attrs (page : Model.page) : (string * string) list =
+  match page.page_tags with
+  | [] -> []
+  | tags ->
+      [ ( "data-page-tags"
+        , "[" ^ String.concat ", " (List.map (fun t -> "\"" ^ t ^ "\"") tags)
+          ^ "]" ) ]
+
+let is_today_page (m : Model.t) (page : Model.page) : bool =
+  match page.page_journal_day with
+  | Some d -> d = Dates.today_journal_day () && m.route <> Model.Home
+  | None -> false
+
 let journal_item ?(last = false) (m : Model.t) (p : Model.page) : t =
   let key = Option.value p.page_uuid ~default:p.page_title in
   (* cljs journal-item > page-inner: .cp__page-inner-wrap.is-journals
@@ -895,7 +909,9 @@ let journal_item ?(last = false) (m : Model.t) (p : Model.page) : t =
     ~style_class:
       ("journal-item content relative" ^ if last then " journal-last-item" else "")
     [ dom ~key:("jiw-" ^ key)
-        ~style_class:"flex-1 page relative cp__page-inner-wrap is-journals"
+        ~style_class:
+          "flex-1 page relative cp__page-inner-wrap is-journals"
+        ~attrs:(page_wrap_attrs p)
         [ dom ~key:("jip-" ^ key)
             ~style_class:"relative grid gap-4 sm:gap-8 page-inner mb-16"
             [ dom ~key:("jit-" ^ key) ~style_class:"flex flex-row space-between"
@@ -935,11 +951,6 @@ let not_found_view name : t =
         ]
     ]
 
-let is_today_page (m : Model.t) (page : Model.page) : bool =
-  match page.page_journal_day with
-  | Some d -> d = Dates.today_journal_day () && m.route <> Model.Home
-  | None -> false
-
 (* cljs library/add-pages: secondary button opens a page-picker popup *)
 let library_add_pages_button : t =
   dom ~key:"lib-add" ~style_class:"ls-add-pages px-1 mt-4"
@@ -954,21 +965,13 @@ let library_add_pages_button : t =
             ~text:(Ui_strings.t "library/add-existing-pages") [] ]
     ]
 
-(* cljs page-inner: data-page-tags="[\"a\", \"b\"]" on the wrap *)
-let page_wrap_attrs (page : Model.page) : (string * string) list =
-  match page.page_tags with
-  | [] -> []
-  | tags ->
-      [ ( "data-page-tags"
-        , "[" ^ String.concat ", " (List.map (fun t -> "\"" ^ t ^ "\"") tags)
-          ^ "]" ) ]
-
 let page_view (m : Model.t) (page : Model.page) : t =
   let cls =
     "flex-1 page relative cp__page-inner-wrap"
     ^ (if page.page_journal_day <> None then " is-journals" else "")
     ^ (if is_today_page m page then " is-today-page" else "")
-    ^ (if page.page_is_tag then " is-node-page" else "")
+    ^ (if page.page_is_tag || page.page_is_property then " is-node-page"
+       else "")
   in
   dom ~key:"page" ~style_class:cls
       ~attrs:(page_wrap_attrs page)
@@ -1007,7 +1010,8 @@ let library_view (m : Model.t) (page : Model.page) : t =
   let cls =
     "flex-1 page relative cp__page-inner-wrap"
     ^ (if is_today_page m page then " is-today-page" else "")
-    ^ (if page.page_is_tag then " is-node-page" else "")
+    ^ (if page.page_is_tag || page.page_is_property then " is-node-page"
+       else "")
   in
   dom ~key:"page" ~style_class:cls
       ~attrs:(page_wrap_attrs page)
