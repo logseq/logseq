@@ -17,6 +17,14 @@ let init_worker () =
               ; (Wire.kw "ws-url", Wire.Nil)
               ; (Wire.kw "http-base", Wire.Nil)
               ]))
+  |> Js.Promise.then_ (fun _ ->
+         (* cljs ships a transact context with :dev? = config/dev?
+            (DEV-RELEASE); e2e builds compile that flag in, which turns
+            on the worker's :db-worker/outliner-op-perf logging *)
+         if Platform.rtc_test_mode () then
+           Runtime.invoke1 "thread-api/set-context"
+             (Wire.Map [ (Wire.kw "dev?", Wire.Bool true) ])
+         else Js.Promise.resolve Wire.Nil)
   |> Js.Promise.then_ (fun _ -> Js.Promise.resolve ())
 
 let list_graphs () =

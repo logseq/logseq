@@ -52,6 +52,10 @@ let deleted_at w =
   | Some (Wire.Int n) -> float_of_int n
   | _ -> 0.
 
+(* generation guard: on_model re-fires show() on every model update while
+   on the route; only the latest refresh may write rows into the host *)
+let refresh_seq = ref 0
+
 let outliner_op op uuid =
   Runtime.invoke3 "thread-api/apply-outliner-ops"
     (Wire.String (repo ()))
@@ -117,10 +121,12 @@ and root_header root host =
   hdr
 
 and refresh (host : B.E.t) =
+  incr refresh_seq;
+  let my = !refresh_seq in
   ignore
     (Js.Promise.then_
        (fun w ->
-         render_roots host (roots_of w);
+         if !refresh_seq = my then render_roots host (roots_of w);
          Js.Promise.resolve ())
        (snapshots ()))
 

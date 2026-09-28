@@ -172,6 +172,9 @@ let on_normal_key ev =
   | "a" when mods ev ->
       D.prevent_default ev;
       A.select_all ()
+  | "e" when meta || mods ev && alt ->
+      D.prevent_default ev;
+      A.quick_add ()
   | "z" when mods ev ->
       D.prevent_default ev;
       if shift then A.redo () else A.undo ()
@@ -214,12 +217,15 @@ let on_keydown ev =
                  (e.g. Shift+Arrow exiting edit mode) can still receive the
                  follow-up keydown before focus moves; route it through the
                  normal handler so selection-extension keys aren't
-                 swallowed *)
+                 swallowed. Only a block editor textarea (id
+                 edit-block-<uuid>) counts — other textareas inside
+                 .ls-block (e.g. the comment box) keep their own key
+                 handling *)
               let stale_block_editor =
                 match target with
                 | Some el when D.el_tag el = "TEXTAREA" ->
-                    Option.is_some (D.closest_sel ".ls-block" target)
-                    && D.closest_sel ".ls-page-title" target = None
+                    Option.is_some
+                      (uuid_of_prefixed "edit-block-" (D.el_id el))
                 | _ -> false
               in
               if stale_block_editor then on_normal_key ev
@@ -244,12 +250,16 @@ let on_input ev =
             (* keep textContent in lockstep so innerText/:has-text see the
                buffer (textarea innerText follows textContent, not value) *)
             D.el_set_text_content el v;
+            D.autosize_textarea el;
             Outliner_ops.schedule_save uuid v
-        | None -> ())
-    | None -> (
-        match D.closest_sel "pre.CodeMirror-line" (D.ev_target ev) with
-        | Some el -> Editor_commands.code_pre_input el
-        | None -> ())
+        | None -> (
+            match D.closest_sel "pre.CodeMirror-line" (D.ev_target ev) with
+            | Some el -> Editor_commands.code_pre_input el
+            | None ->
+                (* non-block editors (e.g. a comment textarea) still need
+                   textContent synced for :has-text *)
+                D.el_set_text_content el (D.el_value el)))
+    | None -> ()
 
 (* -- clipboard events -- *)
 
@@ -281,20 +291,24 @@ let on_click ev =
   (* the add-button path defers through S.defer_init, so it works even on
      an empty page where no block_row has mounted the state yet *)
   match D.closest_sel ".block-add-button" target with
-  | Some btn -> A.append_block ?for_page:(D.el_get_attr btn "parentblockid") ()
+  | Some btn ->
+      A.append_block ?for_page:(D.el_get_attr btn "parentblockid")
+        ~scope:(A.scope_of_el btn) ()
   | None ->
       if S.ready () then
         (
         match D.closest_sel ".block-control" target with
         | Some el -> (
             match uuid_of_prefixed "control-" (D.el_id el) with
-            | Some u -> A.toggle_collapse u
+            | Some u ->
+                A.toggle_collapse ~scope:(A.scope_of_el el) u
             | None -> ())
         | None -> (
             match D.closest_sel ".block-children-left-border" target with
             | Some el -> (
                 match D.el_get_attr el "blockid" with
-                | Some u -> A.toggle_collapse u
+                | Some u ->
+                    A.toggle_collapse ~scope:(A.scope_of_el el) u
                 | None -> ())
             | None -> (
                 match D.closest_sel ".bullet-container" target with
@@ -316,39 +330,75 @@ let on_click ev =
                     with
                     | Some _ -> ()
                     | None -> (
-                        match D.closest_sel "a.page-ref" target with
-                        | Some _ ->
-                            (* page-ref navigation happens in the document-level
-                               listener; the editor only has to not enter edit *)
-                            ()
+                        match D.closest_sel ".ls-comments-label" target with
+                        | Some el -> (
+                            match D.el_get_attr el "data-area-uuid" with
+                            | Some u ->
+                                (* edit-comments-area-title! *)
+                                A.enter_edit u
+                                  (String.length (A.model_title u))
+                            | None -> ())
                         | None -> (
-                            match D.closest_sel ".block-content" target with
-                            | Some _
-                              when D.closest_sel ".ls-page-title" target
-                                   <> None ->
-                                (* the page title's own click handler starts
-                                   Title_edit; the page uuid is not an
-                                   editable block *)
-                                ()
+                            match D.closest_sel ".ls-comment-submit" target with
                             | Some el -> (
-                                match D.el_get_attr el "blockid" with
-                                | Some u ->
-                                    (* scope by container: the same block can
-                                       render in main and the right sidebar;
-                                       only the tree where the click landed
-                                       mounts the editor *)
-                                    let scope =
-                                      match
-                                        D.closest_sel ".cp__right-sidebar"
-                                          target
-                                      with
-                                      | Some _ -> "sidebar"
-                                      | None -> "main"
-                                    in
-                                    A.enter_edit ~scope u
-                                      (String.length (A.model_title u))
+                                match D.el_get_attr el "data-area-uuid" with
+                                | Some u -> Comments.submit u
                                 | None -> ())
-                            | None -> ()))))))
+                            | None -> (
+                                match
+                                  D.closest_sel ".ls-comment-delete" target
+                                with
+                                | Some el -> (
+                                    match
+                                      D.el_get_attr el "data-comment-uuid"
+                                    with
+                                    | Some u -> Comments.delete u
+                                    | None -> ())
+                                | None -> (
+                                    match
+                                      D.closest_sel "a.page-ref" target
+                                    with
+                                    | Some _ ->
+                                        (* page-ref navigation happens in the
+                                           document-level listener; the editor
+                                           only has to not enter edit *)
+                                        ()
+                                    | None -> (
+                                        match
+                                          D.closest_sel ".block-content"
+                                            target
+                                        with
+                                        | Some _
+                                          when D.closest_sel
+                                                 ".ls-page-title" target
+                                               <> None ->
+                                            (* the page title's own click
+                                               handler starts Title_edit *)
+                                            ()
+                                        | Some el -> (
+                                            match
+                                              D.el_get_attr el "blockid"
+                                            with
+                                            | Some u ->
+                                                (* scope by container: the
+                                                   same block can render in
+                                                   main and the sidebar; only
+                                                   the tree where the click
+                                                   landed mounts the editor *)
+                                                let scope =
+                                                  match
+                                                    D.closest_sel
+                                                      ".cp__right-sidebar"
+                                                      target
+                                                  with
+                                                  | Some _ -> "sidebar"
+                                                  | None -> "main"
+                                                in
+                                                A.enter_edit ~scope u
+                                                  (String.length
+                                                     (A.model_title u))
+                                            | None -> ())
+                                        | None -> ())))))))))
 
 (* -- ls:editor-insert channel (autocomplete pick: replace the typed
    trigger range with the chosen text) -- *)
@@ -483,7 +533,17 @@ let on_drop ev =
    | Some src, Some (tgt, move_to) ->
        D.prevent_default ev;
        A.drop_dragged_block src tgt move_to
-   | _ -> ());
+   | _ ->
+       (* cljs container.cljs :upload-files dnd subscription — a file drop
+          anywhere on the main container uploads as asset blocks *)
+       match D.ev_data_transfer ev with
+       | Some dt ->
+           let files = D.dt_files dt in
+           if Array.length files > 0 then begin
+             D.prevent_default ev;
+             Asset_dom.upload_files files
+           end
+       | None -> ());
   dragging_uuid := None;
   drop_target := None
 

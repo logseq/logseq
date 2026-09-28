@@ -596,6 +596,9 @@ let view (p : picker) : E.el =
   render_tab p;
   root
 
+(* registered at boot so bare <em-emoji> nodes outside the picker render *)
+let init_emoji () = Emoji_mart.install ()
+
 let open_picker ~(anchor : E.el) ~(del : bool)
     ~(on_chosen : choice -> unit) : unit =
   Emoji_mart.install ();

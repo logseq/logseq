@@ -18,24 +18,27 @@ let attrs_v pairs = sv (Logseq_dom.attrs_json pairs)
 
 (* -- autocomplete item ----------------------------------------------- *)
 
-(* cljs item-render: div[title] > (icon+strong.font-normal | bare text) *)
+(* cljs item-render: div[title] > (icon+strong.font-normal | bare text);
+   block results show their source page as a .breadcrumb line above the
+   title (cljs node-render) *)
 let ac_label_el (it : S.ac_item) : t =
-  let txt =
-    match it.S.ai_info with
-    | Some info -> it.S.ai_label ^ " — " ^ info
-    | None -> it.S.ai_label
-  in
-  let inner =
+  let lbl =
     match it.S.ai_icon with
     | Some ic ->
         Logseq_dom.dom ~key:"ic" ~tag:"span"
           ~style_class:"flex items-center gap-1"
           [ Icons.icon ic
           ; Logseq_dom.dom ~key:"s" ~tag:"strong" ~style_class:"font-normal"
-              ~text:txt [] ]
-    | None -> Logseq_dom.dom ~key:"s" ~tag:"span" ~text:txt []
+              ~text:it.S.ai_label [] ]
+    | None -> Logseq_dom.dom ~key:"s" ~tag:"span" ~text:it.S.ai_label []
   in
-  Logseq_dom.dom ~key:"lbl" ~tag:"div" [ inner ]
+  match it.S.ai_info with
+  | Some info ->
+      Logseq_dom.dom ~key:"col" ~tag:"div" ~style_class:"flex flex-col"
+        [ Logseq_dom.dom ~key:"bc" ~tag:"div"
+            ~style_class:"breadcrumb text-xs opacity-70" ~text:info []
+        ; lbl ]
+  | None -> Logseq_dom.dom ~key:"lbl" ~tag:"div" [ lbl ]
 ;;
 
 let ac_item_el (st : S.t) (item_sig : S.ac_item Signal.signal) : t =
@@ -83,6 +86,7 @@ let ac_item_el (st : S.t) (item_sig : S.ac_item Signal.signal) : t =
                     (fun it -> ac_label_el it)
                     item_sig
                 ]
+
             ]
         ]
     ]

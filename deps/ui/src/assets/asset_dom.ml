@@ -208,7 +208,7 @@ let collect_files files =
            | Some b -> go (i + 1) (b :: acc)
            | None -> go (i + 1) acc)
   in
-  (go 0 [], edit_uuid)
+  (go 0 [], edit_uuid, empty_target)
 
 (* cljs db-based-save-assets! — target = edit block when it exists
    (sibling? + replace-empty-target? both true, bottom? true); else the
@@ -216,7 +216,7 @@ let collect_files files =
 let upload_files (files : Js.Json.t array) =
   if Array.length files > 0 then begin
     clear_slash_text ();
-    let blocks_p, edit_uuid = collect_files files in
+    let blocks_p, edit_uuid, empty_target = collect_files files in
     let target =
       match edit_uuid with
       | Some u -> Some u
@@ -260,7 +260,18 @@ let upload_files (files : Js.Json.t array) =
                                 ; W.Keyword "replace-empty-target?",
                                     W.Bool sibling
                                 ; W.Keyword "outliner-op",
-                                    W.Keyword "insert-blocks" ] ] ] )))
+                                    W.Keyword "insert-blocks" ] ] ] )
+                      |> Js.Promise.then_ (fun () ->
+                             (* cljs db-based-save-assets! re-enters edit
+                                on the reused empty-target block so the
+                                buffer holds the new asset title — a later
+                                exit-edit then sees an unchanged buffer
+                                instead of wiping the title with "". The
+                                open textarea keeps its own value, so
+                                resync (state + DOM), not enter_edit *)
+                             if empty_target then
+                               Outliner_ops.resync_open_editor ();
+                             Js.Promise.resolve ())))
   end
 
 (* hidden <input type=file> inside every editor — cljs
@@ -571,7 +582,9 @@ let block_view uuid (b : Model.block) : t =
         ~events:"click"
         ~on_dom_event:(fun name _ ->
           if name = "click" then Editor_actions.enter_edit uuid 0)
-        [ dom ~key:("abtt-" ^ uuid) ~text:b.Model.block_title [] ] ]
+        [ dom ~key:("abtt-" ^ uuid) ~tag:"span"
+            ~style_class:"block-title-wrap"
+            ~text:b.Model.block_title [] ] ]
 
 (* File-column cell for the Asset class tag page (cljs objects.cljs
    build-class-object-columns :file) *)

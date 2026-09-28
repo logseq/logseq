@@ -143,6 +143,8 @@ let query_shell =
         ~attrs:[ ("type", "button"); ("title", "Set query") ] []
     ]
 
+let heading_tag lvl = "h" ^ string_of_int (max 1 (min lvl 6))
+
 (* content for a (possibly quoted) body — headings nest inside quote *)
 let content ?(heading : int option) ?(self = "") s =
   match heading with
@@ -162,6 +164,7 @@ let content ?(heading : int option) ?(self = "") s =
             D.el ~key:"btw-empty" ~tag:"span" ~style_class:"block-title-wrap"
               [ D.el ~key:"btw-br" ~tag:"br" [] ]
           else wrap ~self s)
+
 
 (* @@html:<fragment> whole-title — parsed into real elements so the e2e
    can address the emitted markup (#embed-test). *)
@@ -193,6 +196,7 @@ let title ?heading ?(is_query = false) ?(self = "")
     (s : string) : t list =
   match html_body s with
   | Some frag -> Render_html.els_of_string frag
+
   | None -> (
       match quote_body s with
       | Some body ->
@@ -232,3 +236,4 @@ let title_block ?(self = "") ?resolved (b : Model.block) : t list =
       title ?heading
         ~is_query:(List.mem "logseq.class/Query" b.Model.block_tag_idents)
         ~self (Option.value resolved ~default:s)
+

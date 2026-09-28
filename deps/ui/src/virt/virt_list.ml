@@ -36,6 +36,8 @@ external bounding_rect : element -> Js.Json.t = "getBoundingClientRect"
 
 external rect_top : Js.Json.t -> float = "top" [@@mel.get]
 
+external rect_height : Js.Json.t -> float = "height" [@@mel.get]
+
 external scroll_top : element -> float = "scrollTop" [@@mel.get]
 
 type mutation_observer
@@ -94,7 +96,8 @@ let force_virtualized () =
 
 let enabled ~virtualize count =
   let force = force_virtualized () in
-  (force || (virtualize && count >= 64))
+  virtualize
+  && (force || count >= 64)
   && not (Platform.rtc_test_mode () && not force)
 
 (* measure every mounted [data-index] row, then prune dropped nodes *)
@@ -136,7 +139,14 @@ let attach (ctx : Lui_ui.ui_context) st margin list_id scroll_parent_id
              ~observeElementOffset:V.observe_element_offset
              ~onChange:(fun inst _sync -> publish inst)
              ~getItemKey:(fun i -> key_of data.(i))
-             ~overscan ~scrollMargin:!margin ())
+             ~overscan ~scrollMargin:!margin
+             (* the default measurement is offsetHeight (integer) —
+                fractional row heights (headings, code blocks) get
+                truncated and the next row then overlaps the remainder; a
+                border-box rect keeps sub-pixel heights *)
+             ~measureElement:(fun el _entry _inst ->
+               rect_height (bounding_rect el))
+             ())
       in
       Hashtbl.replace instances list_id v;
       let cleanup = V.did_mount v in
@@ -155,7 +165,7 @@ let row_attrs margin (it : vrow) =
   [ ("data-index", string_of_int it.v_index)
   ; ( "style"
     , Printf.sprintf
-        "position:absolute;top:0;left:0;width:100%%;transform:translateY(%.2fpx)"
+        "position:absolute;top:0;left:0;width:100%%;transform:translateY(%.4fpx)"
         (it.v_start -. margin) )
   ]
 
@@ -170,7 +180,7 @@ let list ?(scroll_parent_id = "main-content-container") ?(overscan = 5)
   let spacer_attrs =
     D.attrs_signal vstate_sig (fun s ->
         [ ( "style"
-          , Printf.sprintf "height:%.2fpx;position:relative;width:100%%"
+          , Printf.sprintf "height:%.4fpx;position:relative;width:100%%"
               s.v_total )
         ])
   in

@@ -352,7 +352,13 @@ let block_item_of_uuid repo uuid : item option Js.Promise.t =
        [ Wire.Map
            [ (Wire.String "id", Wire.Uuid uuid)
            ; ( Wire.String "opts"
-             , Wire.Map [ (Wire.Keyword "children?", Wire.Bool true) ] )
+             , Wire.Map
+                 [ (Wire.Keyword "children?", Wire.Bool true)
+                 ; (* a container's root always renders its children,
+                      even when collapsed in the page — fetch them *)
+                   ( Wire.Keyword "include-collapsed-children?"
+                   , Wire.Bool true )
+                 ] )
            ]
        ])
   |> Js.Promise.then_ (fun w ->
@@ -360,13 +366,23 @@ let block_item_of_uuid repo uuid : item option Js.Promise.t =
          | [ pair ] -> (
              match block_of_pair pair with
              | Wire.Map _ as blk ->
-                 let b = Decode.block_of_wire blk in
+                 let b =
+                   (* the pair's flat `children` carry the full maps;
+                      splice them into block/children before decoding *)
+                   match Decode.nest_get_blocks pair with
+                   | Some w -> Decode.block_of_wire w
+                   | None -> Decode.block_of_wire blk
+                 in
                  Runtime.invoke3 "thread-api/get-block-parents"
                    (Wire.String repo)
                    (Wire.Array [ Wire.Keyword "block/uuid"; Wire.Uuid uuid ])
                    (Wire.Int 8)
                  |> Js.Promise.then_ (fun parents ->
                         let crumbs = breadcrumb_titles parents in
+                        (* a sidebar block is its container's root — it
+                           expands there regardless of the db collapsed
+                           datom *)
+                        Editor_state.expand_root ~scope:"sidebar" uuid;
                         Js.Promise.resolve
                           (Some
                              { key = "block-" ^ uuid
@@ -649,6 +665,11 @@ let on_doc_keydown st ev =
           if Signal.get_state st.open_menu <> "" then close_menu st;
           if (!model_ref).Model.appearance <> None then
             Runtime.send (Action.Appearance_set None)
+
+      (* mod+shift+f = :page/toggle-favorite (cljs shortcut config) *)
+      | Some ("f" | "F")
+        when jbool "shiftKey" ev && (jbool "metaKey" ev || jbool "ctrlKey" ev) ->
+          toggle_favorite st
       | _ -> ())
   | None -> ()
 
@@ -684,6 +705,9 @@ let init (ms : Model.t Signal.signal) : t =
       st
 
 let ensure ms = init ms
+
+(* the singleton — set once init runs *)
+let current () = !st_ref
 
 let toggle_nav st nav checked =
   let cur = Signal.get_state st.nav_checked in

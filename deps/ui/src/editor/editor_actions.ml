@@ -41,6 +41,7 @@ let rec apply_focus () =
       | Some el ->
           S.pending_focus := None;
           focus_attempts := 0;
+          D.autosize_textarea el;
           D.el_focus el;
           let len = String.length (D.el_value el) in
           let c = max 0 (min caret len) in
@@ -108,9 +109,26 @@ let pending_blur_uuid : string option ref = ref None
 
 let clear_pending_blur () = pending_blur_uuid := None
 
-(* ---- enter / exit ---- *)
+(* the marked container region ([data-cid]) containing an element —
+   "main" when the target isn't inside one (page blocks are the default
+   surface); scope keys the per-container editing entry *)
+let scope_of_el el =
+  match D.closest_sel "[data-cid]" (Some el) with
+  | Some host -> (
+      match D.el_get_attr host "data-cid" with
+      | Some c -> c
+      | None -> "main")
+  | None -> "main"
 
-let enter_edit ?(scope = "main") uuid caret =
+let scope_of_uuid uuid =
+  match D.get_element_by_id ("ls-block-" ^ uuid) with
+  | Some el -> scope_of_el el
+  | None -> "main"
+
+let enter_edit ?scope uuid caret =
+  let scope =
+    match scope with Some sc -> sc | None -> scope_of_uuid uuid
+  in
   clear_pending_blur ();
   (match S.editing () with
   | Some e when e.uuid <> uuid -> save_if_dirty e.uuid
@@ -130,13 +148,20 @@ let enter_edit ?(scope = "main") uuid caret =
                         });
                     request_focus uuid caret;
                     Js.Promise.resolve ()))
+
   | None -> ()
+
+(* block that was under edit most recently — cljs keeps state/editing
+   until another edit starts; our mousedown-blur commits earlier, so
+   context commands (e.g. Add comment via cmdk) still need the block *)
+let last_edit_uuid : string option ref = ref None
 
 let exit_edit ~select =
   if S.ready () then
     match S.editing () with
     | None -> ()
     | Some e ->
+        last_edit_uuid := Some e.uuid;
       let buf = live_buffer e.uuid in
       (* set the override before the state change so the post-edit render
          already paints the committed text *)
@@ -156,6 +181,7 @@ let blur_commit () =
   match S.editing () with
   | None -> ()
   | Some e ->
+      last_edit_uuid := Some e.uuid;
       let buf = live_buffer e.uuid in
       if buf <> model_title e.uuid then
         S.override_title e.uuid (Ops.normalized_title e.uuid buf);
@@ -207,8 +233,25 @@ let library_context () =
   match !Runtime.current_page with
   | Some p -> p.Model.page_is_library
   | None -> false
+
+(* cljs keydown-new-block: Enter on an empty last child outdents it
+   instead of inserting a sibling (when no right sibling exists) *)
+let outdent_empty_last_child uuid e b =
+  let _ = b in
+  if String.trim e.S.buffer <> "" then false
+  else
+    match S.find_parent uuid with
+    | Some (Some parent, idx) ->
+        let last = List.length parent.Model.block_children - 1 in
+        if idx < last then false
+        else (
+          ignore (Ops.apply_and_refresh [ Ops.indent_outdent [ uuid ] false ]);
+          true)
+    | _ -> false
 let split_at_cursor uuid =
   match (S.editing (), S.find uuid) with
+  | Some e, Some b when e.uuid = uuid && outdent_empty_last_child uuid e b ->
+      ()
   | Some e, Some b when e.uuid = uuid ->
       let buf, pos =
         match D.textarea_of uuid with
@@ -260,7 +303,8 @@ let insert_sibling_after uuid =
       let new_uuid = Platform.random_uuid () in
       let library = library_context () in
       let sibling =
-        library || S.is_collapsed uuid || b.Model.block_children = []
+        library || S.is_collapsed_in ~scope:e.S.scope uuid
+        || b.Model.block_children = []
       in
       let p =
         Ops.block_map_parsed uuid buf
@@ -271,13 +315,14 @@ let insert_sibling_after uuid =
                      [ Ops.block_map ~title:"" ~page:library new_uuid ]
                      uuid ~sibling ])
       in
-      S.set_silent (fun st ->
+      (* S.set (not silent): the old textarea must unmount before the
+         next keypress, or keystrokes keep landing in the stale editor *)
+      S.set (fun st ->
           { st with
             S.editing =
               Some { uuid = new_uuid; buffer = ""; scope = e.scope }
           });
-      with_focus_after new_uuid 0 p
-  | _ -> ()
+      with_focus_after new_uuid 0 p  | _ -> ()
 
 let move_children_ops (b : Model.block) target_uuid =
   match
@@ -309,7 +354,11 @@ let boundary_merge_allowed source target_uuid =
 
 (* Backspace at caret 0: merge current into previous visible block *)
 let merge_prev uuid =
-  match (S.editing (), S.find uuid, S.prev_visible uuid) with
+  match
+    ( S.editing ()
+    , S.find uuid
+    , S.prev_visible ~scope:(match S.editing () with Some e -> e.scope | None -> "main") uuid )
+  with
   | Some e, Some b, Some prev when e.uuid = uuid -> (
       match prev.Model.block_uuid with
       | None -> ()
@@ -326,7 +375,7 @@ let merge_prev uuid =
               ; Ops.delete_blocks [ prev_uuid ]
               ]
             in
-            S.set_silent (fun st ->
+            S.set (fun st ->
                 { st with S.editing = Some { e with S.buffer = buf } });
             with_focus_after uuid 0
               (Ops.apply_and_refresh ~opts:(Ops.op_opts "delete-blocks") ops))
@@ -340,7 +389,7 @@ let merge_prev uuid =
             ignore
               (Ops.title_for_edit (String.trim prev.Model.block_title)
                |> Js.Promise.then_ (fun pbuf ->
-                      S.set_silent (fun st ->
+                      S.set (fun st ->
                           { st with
                             S.editing =
                               Some
@@ -370,7 +419,11 @@ let move_children_except_ops (b : Model.block) except_uuid target_uuid =
 
 (* Delete at end: merge next visible block into current *)
 let merge_next uuid =
-  match (S.editing (), S.find uuid, S.next_visible uuid) with
+  match
+    ( S.editing ()
+    , S.find uuid
+    , S.next_visible ~scope:(match S.editing () with Some e -> e.scope | None -> "main") uuid )
+  with
   | Some e, Some b, Some next when e.uuid = uuid -> (
       match next.Model.block_uuid with
       | None -> ()
@@ -394,7 +447,7 @@ let merge_next uuid =
             ignore
               (Ops.title_for_edit (String.trim next.Model.block_title)
                |> Js.Promise.then_ (fun nbuf ->
-                      S.set_silent (fun st ->
+                      S.set (fun st ->
                           { st with
                             S.editing =
                               Some
@@ -406,15 +459,15 @@ let merge_next uuid =
                       with_focus_after next_uuid 0
                         (Ops.apply_and_refresh
                            ~opts:(Ops.op_opts "delete-blocks") ops);
-                      Js.Promise.resolve ())))
-          else (
+                      Js.Promise.resolve ())))          else (
             let ops =
               move_children_ops next uuid @ [ Ops.delete_blocks [ next_uuid ] ]
+
             in
             ignore
               (Ops.title_for_edit (String.trim next.Model.block_title)
                |> Js.Promise.then_ (fun nbuf ->
-                      S.set_silent (fun st ->
+                      S.set (fun st ->
                           { st with
                             S.editing =
                               Some { e with S.buffer = buf ^ nbuf }
@@ -423,15 +476,14 @@ let merge_next uuid =
                         (Ops.apply_parsed_and_refresh
                            ~opts:(Ops.op_opts "delete-blocks") ~rest:ops
                            [ (uuid, buf ^ nbuf) ]);
-                      Js.Promise.resolve ()))))
-  | _ -> ()
+                      Js.Promise.resolve ()))))  | _ -> ()
 
 (* ---- selection ---- *)
 
 let flat_uuids () =
   List.filter_map
     (fun b -> b.Model.block_uuid)
-    (S.flat_visible ())
+    (S.flat_visible ~scope:"main" ())
 
 (* cljs sends selected blocks to move/delete ops in document order;
    String_set.elements is uuid-sorted, which corrupts worker ordering *)
@@ -473,7 +525,10 @@ let extend_selection up =
       | None -> ()
       | Some h -> (
           let nbr =
-            (if up then S.prev_visible else S.next_visible) h
+            (if up
+             then S.prev_visible ~scope:"main"
+             else S.next_visible ~scope:"main")
+              h
           in
           match nbr with
           | None -> ()
@@ -515,7 +570,10 @@ let move_selection_focus up =
   match S.selected () |> S.String_set.elements with
   | [ cur ] -> (
       let nb =
-        (if up then S.prev_visible else S.next_visible) cur
+        (if up
+         then S.prev_visible ~scope:"main"
+         else S.next_visible ~scope:"main")
+          cur
       in
       match nb with
       | Some b -> (
@@ -549,9 +607,12 @@ let indent_or_outdent ~indent =
                 match s.Model.block_uuid with
                 | Some su ->
                     S.set_silent (fun st ->
-                        { st with
-                          S.collapsed = S.String_set.remove su st.S.collapsed
-                        })
+                        S.collapsed_ui_transform ~scope:"main" su
+                          false
+                          { st with
+                            S.collapsed =
+                              S.String_set.remove su st.S.collapsed
+                          })
                 | None -> ())
             | None -> ())
           uuids;
@@ -597,7 +658,7 @@ let delete_selection () =
         | None -> List.hd uuids
       in
       let prev =
-        match S.prev_visible first with
+        match S.prev_visible ~scope:"main" first with
         | Some p -> p.Model.block_uuid
         | None -> None
       in
@@ -606,7 +667,7 @@ let delete_selection () =
        | Some pu -> (
            match S.find pu with
            | Some b ->
-               S.set_silent (fun st ->
+               S.set (fun st ->
                    { st with
                      S.editing =
                        Some
@@ -679,6 +740,22 @@ let rec has_selected_ancestor sel uuid =
       | None -> false)
   | _ -> false
 
+(* export-blocks-as-markdown shape: every title of every selected root
+   tree, children flattened with two-space indentation *)
+let export_titles blocks =
+  let buf = Buffer.create 256 in
+  let rec go depth (b : Model.block) =
+    for _ = 1 to depth do
+      Buffer.add_string buf "  "
+    done;
+    Buffer.add_string buf "- ";
+    Buffer.add_string buf b.Model.block_title;
+    Buffer.add_string buf "\n";
+    List.iter (go (depth + 1)) b.Model.block_children
+  in
+  List.iter (go 0) blocks;
+  Buffer.contents buf
+
 let copy_selection ev =
   let sel = S.selected () in
   match selected_uuids () with
@@ -696,9 +773,8 @@ let copy_selection ev =
           in
           let blocks = List.filter_map S.find roots in
           S.clipboard := blocks;
-          D.clipboard_set_text clip "text/plain"
-            (String.concat "\n"
-               (List.map (fun b -> b.Model.block_title) blocks));
+          S.clipboard_text := export_titles blocks;
+          D.clipboard_set_text clip "text/plain" !(S.clipboard_text);
           D.prevent_default ev
       | None -> ())
 
@@ -760,30 +836,61 @@ let paste_lines lines =
         (Ops.apply_and_refresh
            [ Ops.insert_blocks blocks last ~sibling:true ])
 
-(* in-editor paste of copied/cut block trees: insert after the current
-   block, replacing it when it is empty (cljs :replace-empty-target?) —
-   undo restores the empty block via the inverse ops *)
+(* splice external clipboard text into the live textarea at the cursor,
+   keeping buffer, textContent (innerText/`:has-text`) and the debounced
+   save in sync like on_input does *)
+let splice_clipboard_text uuid el text =
+  let start = D.el_selection_start el in
+  let fin = max start (D.el_selection_end el) in
+  let v = D.el_value el in
+  let before = String.sub v 0 start in
+  let after = String.sub v fin (String.length v - fin) in
+  let v' = before ^ text ^ after in
+  D.el_set_value el v';
+  D.el_set_text_content el v';
+  D.el_set_selection_range el (start + String.length text)
+    (start + String.length text);
+  sync_buffer uuid v';
+  Ops.schedule_save uuid v'
+
+(* in-editor paste: when the event text matches what our copy/cut wrote,
+   paste the stored trees (cljs internal paste); otherwise splice the
+   plain text at the cursor. text/html is ignored — the plain text
+   carries the same content without running any markup *)
 let paste_into_editor ev =
-  match (S.editing (), !(S.clipboard)) with
-  | Some e, (_ :: _ as trees) -> (
-      match S.find e.uuid with
-      | Some b ->
-          D.prevent_default ev;
-          let replace_empty =
-            String.trim b.Model.block_title = ""
-            && String.trim e.S.buffer = ""
-          in
-          ignore
-            (paste_trees trees e.uuid ~replace_empty
-            |> Js.Promise.then_ (fun () ->
-                   (* replace-empty swaps the editing block's entity
-                      in place (same uuid, new title) — resync the live
-                      textarea buffer so it doesn't mask the pasted
-                      content *)
-                   if replace_empty then Ops.resync_open_editor ();
-                   Js.Promise.resolve ()))
-      | None -> ())
-  | _ -> ()
+  match S.editing () with
+  | Some e -> (
+      let clip_text =
+        match D.ev_clipboard ev with
+        | Some clip -> D.clipboard_get_text clip "text/plain"
+        | None -> ""
+      in
+      match !(S.clipboard) with
+      | _ :: _ as trees when clip_text = !(S.clipboard_text) -> (
+          match S.find e.uuid with
+          | Some b ->
+              D.prevent_default ev;
+              let replace_empty =
+                String.trim b.Model.block_title = ""
+                && String.trim e.S.buffer = ""
+              in
+              ignore
+                (paste_trees trees e.uuid ~replace_empty
+                |> Js.Promise.then_ (fun () ->
+                       (* replace-empty swaps the editing block's entity
+                          in place (same uuid, new title) — resync the live
+                          textarea buffer so it doesn't mask the pasted
+                          content *)
+                       if replace_empty then Ops.resync_open_editor ();
+                       Js.Promise.resolve ()))
+          | None -> ())
+      | _ -> (
+          match (clip_text = "", D.textarea_of e.uuid) with
+          | false, Some el ->
+              D.prevent_default ev;
+              splice_clipboard_text e.uuid el clip_text
+          | _ -> ()))
+  | None -> ()
 
 let paste_blocks ev =
   match S.editing () with
@@ -815,39 +922,31 @@ let paste_blocks ev =
 
 (* ---- misc ---- *)
 
-let toggle_collapse uuid =
+let toggle_collapse ?(scope = "main") uuid =
   match S.find uuid with
   | Some b when S.children_of b <> [] ->
-      if b.Model.block_default_collapsed && not (S.is_collapsed uuid) then
+      if b.Model.block_default_collapsed
+         && not (S.is_collapsed_in ~scope uuid)
+      then
         (* view-default collapse (page child on a non-Library page): a
            click expands it locally without persisting — cljs
            temp-collapsed? takes precedence over the default *)
         S.set (fun st ->
             { st with
-              S.expanded = S.String_set.add uuid st.expanded
+              S.expanded_ui =
+                S.String_set.add (S.collapse_key scope uuid)
+                  st.S.expanded_ui
             })
       else
-        let now = not (S.effective_collapsed b) in
-        S.set (fun st ->
-            { st with
-              S.collapsed =
-                (if now then S.String_set.add uuid st.collapsed
-                 else S.String_set.remove uuid st.collapsed)
-            ; S.expanded = S.String_set.remove uuid st.expanded
-            });
+        let now = not (S.effective_collapsed ~scope b) in
+        S.set_collapsed ~scope uuid now;
         ignore (Ops.apply [ Ops.collapse_expand [ (uuid, now) ] ])
   | _ -> ()
 
-let set_collapsed uuid collapsed =
+let set_collapsed ?(scope = "main") uuid collapsed =
   match S.find uuid with
   | Some b when S.children_of b <> [] ->
-      S.set (fun st ->
-          { st with
-            S.collapsed =
-              (if collapsed then S.String_set.add uuid st.collapsed
-               else S.String_set.remove uuid st.collapsed)
-          ; S.expanded = S.String_set.remove uuid st.expanded
-          });
+      S.set_collapsed ~scope uuid collapsed;
       ignore (Ops.apply [ Ops.collapse_expand [ (uuid, collapsed) ] ])
   | _ -> ()
 
@@ -923,7 +1022,15 @@ let focus_page_title () =
       | None -> ())
 
 let arrow_nav uuid up =
-  let nb = (if up then S.prev_visible else S.next_visible) uuid in
+  let scope =
+    match S.editing () with Some e -> e.scope | None -> "main"
+  in
+  let nb =
+    (if up
+     then S.prev_visible ~scope
+     else S.next_visible ~scope)
+      uuid
+  in
   match nb with
   | Some b -> (
       match b.Model.block_uuid with
@@ -941,7 +1048,7 @@ let arrow_nav uuid up =
 (* append a fresh block at the bottom of the current page — or, on
    journals, at the bottom of the journal item the add-button lives in
    (its parentblockid attr carries the page uuid) *)
-let append_block ?for_page () =
+let append_block ?for_page ?(scope = "main") () =
   let page =
     match for_page with
     | Some u -> (
@@ -975,7 +1082,7 @@ let append_block ?for_page () =
           let stage st =
             { st with
               S.editing =
-                Some { uuid = new_uuid; buffer = ""; scope = "main" }
+                Some { uuid = new_uuid; buffer = ""; scope = scope }
             }
           in
           (* empty page: editor state is created at the first block_row
@@ -993,15 +1100,147 @@ let append_block ?for_page () =
                    target ~sibling
                ]))
 
-(* Meta+e quick-add: stub *)
-let quick_add () = ()
+(* ---------- quick add (Meta+e, components/quick_add.cljs) ---------- *)
+
+let quick_add_page_title = "Quick add"
+
+let fetch_qa_blocks repo puuid =
+  Runtime.invoke3 "thread-api/get-page-blocks-tree" (Wire.String repo)
+    (Wire.Uuid puuid) Wire.Nil
+  |> Js.Promise.then_ (fun w ->
+         Js.Promise.resolve (Decode.blocks_of_wire w))
+
+(* dialog mounted + blocks loaded: open the last block for editing *)
+let quick_add_open_dialog puuid blocks =
+  Quick_add_state.set (fun _ ->
+      { Quick_add_state.page_uuid = Some puuid; blocks });
+  Dialogs_state.open_ "quick-add";
+  match List.rev blocks with
+  | last :: _ -> (
+      match last.Model.block_uuid with
+      | Some u ->
+          let caret = String.length (String.trim last.Model.block_title) in
+          if S.ready () then enter_edit ~scope:"quick-add" u caret
+          else (
+            S.defer_init (fun st ->
+                { st with
+                  S.editing =
+                    Some
+                      { uuid = u
+                      ; buffer = String.trim last.Model.block_title
+                      ; scope = "quick-add"
+                      }
+                });
+            S.pending_focus := Some (u, caret))
+      | None -> ())
+  | [] -> ()
+
+(* cljs show-quick-add: ensure an empty block exists on the "Quick add"
+   page, then open the dialog *)
+let open_quick_add () =
+  match !Runtime.current_repo with
+  | None -> ()
+  | Some repo ->
+      ignore
+        (Runtime.invoke2 "thread-api/get-case-page" (Wire.String repo)
+           (Wire.String quick_add_page_title)
+         |> Js.Promise.then_ (fun page_w ->
+                match Decode.page_of_summary page_w with
+                | None -> Js.Promise.resolve ()
+                | Some page -> (
+                    match page.Model.page_uuid with
+                    | None -> Js.Promise.resolve ()
+                    | Some puuid ->
+                        fetch_qa_blocks repo puuid
+                        |> Js.Promise.then_ (fun blocks ->
+                               match blocks with
+                               | _ :: _ ->
+                                   quick_add_open_dialog puuid blocks;
+                                   Js.Promise.resolve ()
+                               | [] ->
+                                   let nu = Platform.random_uuid () in
+                                   Ops.apply
+                                     ~opts:(Ops.op_opts "insert-blocks")
+                                     [ Ops.insert_blocks
+                                         [ Ops.block_map ~title:"" nu ]
+                                         puuid ~sibling:false ]
+                                   |> Js.Promise.then_ (fun () ->
+                                          fetch_qa_blocks repo puuid
+                                          |> Js.Promise.then_ (fun blocks ->
+                                                 quick_add_open_dialog
+                                                   puuid blocks;
+                                                 Js.Promise.resolve ()))))))
+
+(* move every "Quick add" child to the end of today's journal *)
+let move_qa_blocks_to_today repo uuids =
+  let day = Dates.today_journal_day () in
+  Runtime.invoke2 "thread-api/get-journal-page-by-day" (Wire.String repo)
+    (Wire.Int day)
+  |> Js.Promise.then_ (fun page_w ->
+         match Decode.page_of_summary page_w with
+         | Some p -> (
+             match p.Model.page_uuid with
+             | Some tuuid -> Js.Promise.resolve (Some tuuid)
+             | None -> Js.Promise.resolve None)
+         | None -> Js.Promise.resolve None)
+  |> Js.Promise.then_ (fun tuuid_opt ->
+         match tuuid_opt with
+         | None -> Js.Promise.resolve ()
+         | Some tuuid ->
+             fetch_qa_blocks repo tuuid
+             |> Js.Promise.then_ (fun today_blocks ->
+                    let last_uuid =
+                      match List.rev today_blocks with
+                      | b :: _ -> b.Model.block_uuid
+                      | [] -> None
+                    in
+                    let move_op =
+                      match last_uuid with
+                      | Some l -> Ops.move_blocks uuids l ~sibling:true
+                      | None -> Ops.move_blocks uuids tuuid ~sibling:false
+                    in
+                    Ops.apply_and_refresh [ move_op ]
+                    |> Js.Promise.then_ (fun () ->
+                           Dialogs_state.close_named "quick-add";
+                           Quick_add_state.reset ();
+                           Toast.success
+                             (Ui_strings.t
+                                "journal/add-blocks-to-today-success");
+                           Js.Promise.resolve ())))
+
+(* cljs quick-add-blocks!: save the live edit, then move everything *)
+let quick_add_blocks_to_today () =
+  match !Runtime.current_repo with
+  | None -> ()
+  | Some repo ->
+      blur_commit ();
+      let uuids =
+        List.filter_map
+          (fun b -> b.Model.block_uuid)
+          (Quick_add_state.value ()).Quick_add_state.blocks
+      in
+      match uuids with
+      | [] ->
+          Dialogs_state.close_named "quick-add";
+          Quick_add_state.reset ()
+      | _ -> ignore (move_qa_blocks_to_today repo uuids)
+
+let quick_add () =
+  if Dialogs_state.ready () && Dialogs_state.is_open "quick-add" then
+    quick_add_blocks_to_today ()
+  else open_quick_add ()
 
 (* Meta+Shift+. zoom: cljs keeps the zoomed block in edit mode across the
    redirect (state/set-editing-block-id! before redirect-to-page!) *)
 let pending_zoom : string option ref = ref None
 
+let zoom_container uuid = "zoom-" ^ uuid
+
 let zoom_to uuid =
   pending_zoom := Some uuid;
+  (* the zoomed block is the zoom container's root — it expands there
+     while its page-level collapse stays *)
+  S.expand_root ~scope:(zoom_container uuid) uuid;
   Platform.set_location_hash (Runtime.nav_hash ("#/block/" ^ uuid))
 
 let consume_pending_zoom () =

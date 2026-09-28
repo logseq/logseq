@@ -500,7 +500,7 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
     body
 
 let blocks_inner ?puuid ?(virtualize = false) ?(library = false)
-    (blocks : Model.block list) : t =
+    ?(scope = "main") (blocks : Model.block list) : t =
   let inner_attrs =
     match puuid with
     | Some u -> [ ("data-pu", u) ]
@@ -515,14 +515,14 @@ let blocks_inner ?puuid ?(virtualize = false) ?(library = false)
           ~attrs:[ ("data-level", "0"); ("data-virtuoso-scroller", "true") ]
           [ Virt_list.list ~key_of:Tree.block_key
               ~estimate_size:(fun _ -> 32.)
-              ~render:(Tree.block_row ~library) items ]
+              ~render:(Tree.block_row ~library ~scope) items ]
       ]
-    else List.map (Tree.block_row ~library) blocks
+    else List.map (Tree.block_row ~library ~scope) blocks
   in
   dom ~key:"page-blocks" ~style_class:"mt-4 ls-page-blocks"
     ~attrs:[ ("style", "margin-left: -20px") ]
     [ dom ~key:"page-blocks-inner" ~style_class:"page-blocks-inner relative"
-        ~attrs:inner_attrs body
+        ~attrs:(("data-cid", scope) :: inner_attrs) body
     ]
 
 (* cljs components/block.cljs grouped-blocks-container: refs render
@@ -838,7 +838,7 @@ let unlinked_row (b : Model.block) : t =
              ~attrs:[ ("href", "#/page/" ^ name) ]
              ~text:name []
        | None -> box ~key:("urp-" ^ key) [])
-    ; Tree.block_row b
+    ; Tree.block_row ~scope:"unlinked" b
     ]
 
 (* cljs reference/unlinked-references — same views/view chrome as linked
@@ -896,6 +896,7 @@ let unlinked_references_view (m : Model.t) : t =
                 ]
             ]
         ]
+
     ]
 
 (* --- route views -------------------------------------------------- *)
@@ -1000,13 +1001,25 @@ let page_view (m : Model.t) (page : Model.page) : t =
         @ (if page.page_is_library then [ library_add_pages_button ]
            else [])
         @ [ blocks_inner ?puuid:page.page_uuid ~virtualize:true
+              ~library:page.page_is_library
+              ~scope:
+                (match m.route with
+                 | Model.Block_zoom u -> "zoom-" ^ u
+                 | _ -> "main")
               page.page_blocks
-          ])
+          ]
+        @ (* cljs today-queries: today's journal shows the repo's
+             [:default-queries :journals] custom queries; the section
+             shell renders (query execution is not ported yet) *)
+          (if is_today_page m page
+           then [ dom ~key:"tq" ~attrs:[ ("id", "today-queries") ] [] ]
+           else []))
     ; dom ~key:"refs-wrap" ~style_class:"flex flex-col gap-8 ml-1"
         [ dom ~key:"lrefs" ~style_class:"fade-in delay"
             [ references_view m.page_refs ]
         ; dom ~key:"urefs" ~style_class:"fade-in delay"
             [ unlinked_references_view m ]
+
         ]
     ]
 

@@ -68,6 +68,10 @@ external ev_data_transfer : ev -> clipboard_data option = "dataTransfer"
   [@@mel.get] [@@mel.return nullable]
 external dt_set_data : clipboard_data -> string -> string -> unit = "setData"
   [@@mel.send]
+
+(* FileList isn't a Js.Array — copy it *)
+let dt_files : clipboard_data -> Js.Json.t array =
+  [%mel.raw "function (dt) { return Array.from((dt && dt.files) || []) }"]
 external ev_buttons : ev -> int = "buttons" [@@mel.get]
 
 external ev_client_y : ev -> float = "clientY" [@@mel.get]
@@ -106,6 +110,16 @@ external el_selection_end : el -> int = "selectionEnd" [@@mel.get]
 
 external el_set_selection_range : el -> int -> int -> unit
   = "setSelectionRange" [@@mel.send]
+
+external el_scroll_height : el -> int = "scrollHeight" [@@mel.get]
+
+external el_set_style_height :
+  el -> string -> unit = "height" [@@mel.set] [@@mel.scope "style"]
+
+(* cljs mock-textarea autosize: collapse then grow to the content height *)
+let autosize_textarea el =
+  el_set_style_height el "auto";
+  el_set_style_height el (string_of_int (el_scroll_height el) ^ "px")
 
 (* misc *)
 external set_timeout : (unit -> unit) -> int -> unit = "setTimeout"

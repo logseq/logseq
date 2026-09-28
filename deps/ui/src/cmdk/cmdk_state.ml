@@ -19,6 +19,7 @@ type badge_kind =
   | Text_badge (* inline "Current Page" after the title (page results) *)
   | Header_badge (* "Current Page" on the header row (block results) *)
 
+
 type action =
   | Create_page of string
   | Open_page of string (* block/uuid *)
@@ -138,6 +139,7 @@ let dev_mode () =
   match Platform.local_storage_get "developer-mode" with
   | Some "true" | Some "\"true\"" -> true
   | _ -> false
+
 
 (* cljs command-palette/history: localStorage "commands-history" is a
    JSON array of {id,timestamp}; top-commands sorts by invoke count
@@ -726,6 +728,7 @@ let goto_page repo uuid =
      waits on .editor-visible and must not see the stale one) *)
   Editor_actions.exit_edit ~select:false;
   Runtime.invoke2 "thread-api/get-page-route-info" (Wire.String repo)
+
     (Wire.String uuid)
   |> Js.Promise.then_ (fun page_w ->
          match Decode.page_of_summary page_w with
@@ -806,9 +809,7 @@ let validate_graph repo =
 let run_move st target =
   let uuids =
     if Editor_state.ready () then
-      match
-        Editor_state.String_set.elements (Editor_state.selected ())
-      with
+      match Editor_actions.selected_uuids () with
       | [] -> Option.to_list (Editor_state.editing_uuid ())
       | sel -> sel
     else []
@@ -1113,6 +1114,7 @@ and run_command st repo (cid : string) =
        | Some f -> f ()
        | None -> ());
       close st (* no local equivalent / editing-context commands *))
+
 
 let run_highlighted st =
   let v = get st in

@@ -333,6 +333,7 @@ let item_body st idx (it : Sidebar_state.item) =
                     else [ "style", margin_left ])
                  [ dom ~key:("pbin-" ^ it.key)
                      ~style_class:"page-blocks-inner relative"
+                     ~attrs:[ ("data-cid", "sidebar") ]
                      (List.map
                         (Tree.block_row ~scope:"sidebar")
                         it.blocks)
@@ -344,6 +345,7 @@ let item_body st idx (it : Sidebar_state.item) =
                else []))
         ]
     ]
+
 
 let sidebar_item st idx (it : Sidebar_state.item) =
   dom ~key:("item-" ^ it.key)
