@@ -118,10 +118,24 @@ let breadcrumb crumbs =
 let item_title (it : Sidebar_state.item) =
   match it.breadcrumb, it.kind with
   | [], "page" ->
+      let icon_els =
+        match it.icon with
+        | Some ("emoji", eid) ->
+            [ dom ~key:"pt-e" ~tag:"em-emoji" ~attrs:[ "id", eid ] [] ]
+        | Some (_, iid) ->
+            [ dom ~key:"pt-ti" ~style_class:("ui__icon ti ls-icon-" ^ iid)
+                [ dom ~key:"pt-tii" ~tag:"i" ~style_class:("ti ti-" ^ iid)
+                    []
+                ]
+            ]
+        | None -> []
+      in
       dom ~key:"pt" ~style_class:"flex items-center page-title gap-1"
-        [ dom ~tag:"span"
-            ~style_class:"overflow-hidden text-ellipsis"
-            ~text:it.title [] ]
+        (icon_els
+        @ [ dom ~tag:"span"
+              ~style_class:"overflow-hidden text-ellipsis"
+              ~text:it.title []
+          ])
   | [], _ -> dom ~key:"pt-plain" ~style_class:"flex items-center" ~text:it.title []
   | crumbs, _ -> breadcrumb crumbs
 

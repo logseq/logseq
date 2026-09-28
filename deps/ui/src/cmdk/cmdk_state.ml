@@ -19,6 +19,8 @@ type command_id =
   | Cmd_validate
   | Cmd_rtc_start
   | Cmd_rtc_stop
+  | Cmd_add_reaction
+  | Cmd_add_comment
 
 type action =
   | Create_page of string
@@ -90,7 +92,9 @@ let commands : (command_id * string) list =
   ; (Cmd_graph_view, Ui_strings.t "command.go/graph-view")
   ; (Cmd_validate, "(Dev) Validate current graph")
   ; (Cmd_rtc_start, "(Dev) RTC Start")
-  ; (Cmd_rtc_stop, "(Dev) RTC Stop") ]
+  ; (Cmd_rtc_stop, "(Dev) RTC Stop")
+  ; (Cmd_add_reaction, Ui_strings.t "command.editor/add-reaction")
+  ; (Cmd_add_comment, Ui_strings.t "block.comments/add-comment") ]
 
 let match_commands q =
   let q' = String.lowercase_ascii q in
@@ -302,7 +306,8 @@ let on_input st q =
 let open_palette st =
   st.gen := !(st.gen) + 1;
   set_in st (fun v ->
-      { v with open_ = true; input = ""; move_mode = false; mouse = false });
+      { v with open_ = true; input = ""; move_mode = false
+      ; mouse = false });
   (* prime synchronously so commands show before the search lands *)
   apply_results st "" false [] [] 0;
   refresh st;
@@ -376,7 +381,11 @@ let load_page repo ref_v =
          Js.Promise.resolve (Decode.blocks_of_wire blocks_w))
 
 let goto_page repo uuid =
-  Runtime.invoke2 "thread-api/get-case-page" (Wire.String repo)
+  (* navigation intent: commit and close any in-progress edit so the old
+     page stops rendering an editor during the async load gap (e2e
+     waits on .editor-visible and must not see the stale one) *)
+  Editor_actions.exit_edit ~select:false;
+  Runtime.invoke2 "thread-api/get-page-route-info" (Wire.String repo)
     (Wire.String uuid)
   |> Js.Promise.then_ (fun page_w ->
          match Decode.page_of_summary page_w with
@@ -386,8 +395,12 @@ let goto_page repo uuid =
                (Wire.Array [ Wire.Keyword "block/uuid"; Wire.Uuid uuid ])
              |> Js.Promise.then_ (fun blocks ->
                     let page = { page with Model.page_blocks = blocks } in
+                    (* invalidate in-flight route loads so their late
+                       Page_loaded cannot clobber this fresh page *)
+                    Router.bump_load_gen ();
                     Runtime.send (Action.Navigate_to (Model.Page uuid));
                     Runtime.send (Action.Page_loaded page);
+                    Router.fetch_refs page;
                     Platform.set_location_hash ("#/page/" ^ uuid);
                     Js.Promise.resolve ()))
 
@@ -407,6 +420,10 @@ let create_page title =
   match !(Runtime.current_repo) with
   | None -> ()
   | Some repo ->
+      (* navigation intent: commit and close any in-progress edit so the
+         old page stops rendering an editor during the async gap (e2e
+         waits on .editor-visible and must not see the stale one) *)
+      Editor_actions.exit_edit ~select:false;
       ignore
         (Runtime.invoke3 "thread-api/apply-outliner-ops" (Wire.String repo)
            (Wire.Array
@@ -429,7 +446,6 @@ let create_page title =
                        Editor_actions.append_block ();
                        Js.Promise.resolve ()))
          |> Js.Promise.catch (fun e ->
-                (* TEMP-DEBUG: e wraps the real rejection in _1 *)
                 Platform.console_error
                   ("cmdk create-page failed", Platform.error_inner e);
                 Js.Promise.resolve ()))
@@ -445,6 +461,58 @@ let validate_graph repo =
             toast "Validation failed" "error";
             Platform.console_error ("validate-db failed", e);
             Js.Promise.resolve ()))
+
+(* :editor/add-reaction — applies to the block selection (or the block
+   being edited); the picker anchors on the first target's row *)
+let target_uuids () : string list =
+  let sel = Editor_state.selected () in
+  if not (Editor_state.String_set.is_empty sel) then
+    Editor_state.String_set.elements sel
+  else
+    match Editor_state.editing () with
+    | Some e -> [ e.Editor_state.uuid ]
+    | None -> []
+
+let run_add_reaction st =
+  close st;
+  match target_uuids () with
+  | [] -> ()
+  | uuids -> (
+      let anchor =
+        match uuids with
+        | u :: _ -> Properties_dom.doc_query ("[blockid='" ^ u ^ "']")
+        | [] -> None
+      in
+      match anchor with
+      | None -> ()
+      | Some anchor ->
+          Icon_picker.open_picker ~anchor ~del:false ~on_chosen:(fun c ->
+              match c with
+              | Icon_picker.Emoji emoji_id ->
+                  ignore
+                    (Outliner_ops.apply_and_refresh
+                       (List.map
+                          (fun u ->
+                            Outliner_ops.op "toggle-reaction"
+                              [ Wire.Uuid u; Wire.String emoji_id
+                              ; Wire.Nil ])
+                          uuids))
+              | _ -> ()))
+
+(* :editor/add-comment — ensure-comments-area-for-blocks over the block
+   selection (or the edited block); the area renders once the refresh
+   lands *)
+let run_add_comment repo st =
+  close st;
+  let uuids = target_uuids () in
+  match repo, uuids with
+  | Some repo, _ :: _ ->
+      ignore
+        (Runtime.invoke2 "thread-api/ensure-comments-area-for-blocks"
+           (Wire.String repo)
+           (Wire.Array (List.map (fun u -> Wire.Uuid u) uuids))
+        |> Js.Promise.then_ (fun _ -> Outliner_ops.refresh_page ()))
+  | _ -> ()
 
 let run_item st it =
   let repo = !(Runtime.current_repo) in
@@ -501,10 +569,13 @@ let run_item st it =
             close st;
             Dialogs_state.open_ "new-graph"
         | Cmd_validate ->
+            close st;
             Option.iter validate_graph repo
         | Cmd_rtc_start | Cmd_rtc_stop ->
             (* RTC lifecycle lives outside this area; no-op per spec *)
-            ()))
+            ()
+        | Cmd_add_reaction -> run_add_reaction st
+        | Cmd_add_comment -> run_add_comment repo st))
 
 let run_highlighted st =
   let v = get st in

@@ -197,7 +197,7 @@ let partition_rows rows =
 (* left chips: .positioned-properties.block-left inline in
    .block-main-content; one .property-value-inner per row *)
 let render_left (ctx : V.ctx) ~owner_is_tag ~owner_title host rows =
-  remove_all host ".positioned-properties.block-left";
+  remove_all host ":scope > .positioned-properties.block-left";
   if rows <> [] then begin
     let pos = mk ~cls:"positioned-properties block-left" "div" in
     List.iter
@@ -261,12 +261,54 @@ let render_area ?(left_host = None) ctx ~owner_is_tag ~owner_title
          (* pills render next to the area inside the indent container *)
          (match el_parent area_el with
           | Some parent ->
-              remove_all parent ".positioned-properties.block-below";
+              remove_all parent ":scope > .positioned-properties.block-below";
               if below_rows <> [] then
                 render_pills ctx ~owner_is_tag ~owner_title parent
                   below_rows
           | None -> ());
          Js.Promise.resolve ())
+  |> ignore
+
+(* block area: one get-blocks render-data call supplies the positioned
+   property maps (position already resolved worker-side like cljs
+   :block.temp/positioned-properties), the display-properties rows for
+   the panel, and the block's own attrs for values *)
+let render_block_area ~left_host ctx ~owner_is_tag ~owner_title area_el =
+  el_clear area_el;
+  let panel = mk ~cls:"properties-panel" "div" in
+  el_append_child area_el panel;
+  D.block_render_data ctx.block_uuid
+  |> Js.Promise.then_ (fun block_wire ->
+         match block_wire with
+         | W.Map _ ->
+             let left_rows =
+               D.positioned_rows block_wire "block-left"
+             in
+             let below_rows =
+               D.positioned_rows block_wire "block-below"
+             in
+             let display =
+               Option.value ~default:W.Nil
+                 (W.get block_wire "block.temp/display-properties")
+             in
+             let rows, hidden = D.split_display display in
+             (match left_host with
+              | Some host ->
+                  render_left ctx ~owner_is_tag ~owner_title host
+                    left_rows
+              | None -> ());
+             render_panel ctx ~owner_is_tag ~owner_title ~page_area:false
+               ~show_hidden:!S.show_hidden panel rows hidden;
+             (match el_parent area_el with
+              | Some parent ->
+                  remove_all parent
+                    ":scope > .positioned-properties.block-below";
+                  if below_rows <> [] then
+                    render_pills ctx ~owner_is_tag ~owner_title parent
+                      below_rows
+              | None -> ());
+             Js.Promise.resolve ()
+         | _ -> Js.Promise.resolve ())
   |> ignore
 
 (* ---------- block mounts ---------- *)
@@ -327,8 +369,8 @@ let mount_block_area block_el uuid =
                 ; class_schema = false
                 }
               and refresh () =
-                render_area ~left_host ctx ~owner_is_tag:false
-                  ~owner_title:"" ~page_area:false area
+                render_block_area ~left_host ctx ~owner_is_tag:false
+                  ~owner_title:"" area
               in
               refresh ();
               S.register_area area (fun () ->

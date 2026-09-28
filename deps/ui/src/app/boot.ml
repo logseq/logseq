@@ -46,6 +46,8 @@ let ensure_today_journal repo =
 
 let run () =
   apply_storage_env ();
+  (* emoji-mart: registers <em-emoji> + SearchIndex *)
+  Icons.install ();
   let w = Worker_client.create () in
   w.on_message <- Worker_events.dispatch;
   Worker_events.init ();

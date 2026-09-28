@@ -274,9 +274,28 @@ let on_editor_insert ev =
                 D.el_set_selection_range el (f + String.length text)
                   (f + String.length text);
                 A.sync_buffer e.uuid nv;
-                Outliner_ops.schedule_save e.uuid nv
+                Outliner_ops.schedule_save e.uuid nv;
+                (* cljs node-embed pick: insert then clear-edit! *)
+                (match
+                   Option.bind (detail_field ev "exit") Js.Json.decodeBoolean
+                 with
+                 | Some true -> A.exit_edit ~select:false
+                 | _ -> ())
             | _ -> ())
         | None -> ())
+    | None -> ()
+
+(* -- ls:editor-command channel (autocomplete commands like "Add
+   property"; the trigger text is already stripped by ls:editor-insert) -- *)
+
+let on_editor_command ev =
+  if S.ready () then
+    match Option.bind (detail_field ev "command") Js.Json.decodeString with
+    | Some "Add property" -> (
+        match S.editing_uuid () with
+        | Some uuid -> Properties_dialog.open_for_block uuid
+        | None -> ())
+    | Some cmd -> Platform.console_error ("unhandled editor command", cmd)
     | None -> ()
 
 (* clicking outside the editor commits the buffer; clicks inside the
@@ -366,6 +385,7 @@ let install_once () =
     D.document_add_listener "click" on_click true;
     D.document_add_listener "mousedown" on_mousedown true;
     D.document_add_listener "ls:editor-insert" on_editor_insert true;
+    D.document_add_listener "ls:editor-command" on_editor_command true;
     D.document_add_listener "dragstart" on_dragstart true;
     D.document_add_listener "dragover" on_dragover true;
     D.document_add_listener "drop" on_drop true;

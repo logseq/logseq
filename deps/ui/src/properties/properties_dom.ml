@@ -101,5 +101,8 @@ let find els sel =
 (* Focus a text input/textarea and move caret to the end. *)
 let focus_end el =
   el_focus el;
-  let n = String.length (el_value el) in
-  el_set_selection_range el n n
+  (* input[type=number|date|...] reject setSelectionRange *)
+  (try
+     let n = String.length (el_value el) in
+     el_set_selection_range el n n
+   with _ -> ())

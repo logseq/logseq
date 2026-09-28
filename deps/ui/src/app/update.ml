@@ -10,6 +10,7 @@ let update (model : t) (action : Action.t) : t =
   | Page_loaded page -> { model with route_page = Some page }
   | Journals_loaded js -> { model with journals = js }
   | Refs_loaded refs -> { model with page_refs = refs }
+  | Unlinked_loaded bs -> { model with unlinked_blocks = bs }
   | Navigate_to route ->
       { model with
         route
@@ -20,6 +21,7 @@ let update (model : t) (action : Action.t) : t =
       ; unlinked_open = false
       ; unlinked_search = false
       ; unlinked_query = ""
+      ; unlinked_blocks = []
       }
   | Title_edit_start -> { model with editing_title = true }
   | Title_edit_done -> { model with editing_title = false }
@@ -33,8 +35,7 @@ let update (model : t) (action : Action.t) : t =
       { model with right_sidebar_open = not model.right_sidebar_open }
   | Toast_push t ->
       { model with
-        toasts =
-          model.toasts @ [ { t with toast_id = model.toast_next } ]
+        toasts = { t with toast_id = model.toast_next } :: model.toasts
       ; toast_next = model.toast_next + 1
       }
   | Toast_dismiss id ->

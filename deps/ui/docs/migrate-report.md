@@ -40,6 +40,33 @@ selecting without an explicit Escape.
 `"ArrowUp" when shift` shadows `meta/alt+shift` combinations. Modifier combos
 must be ordered most-specific first in any match-based key dispatch.
 
+### Toasts render newest-first and nest under the shui contract
+The tests read `.ui__toast` by position — index 0 must be the newest toast.
+Each toast also needs the DOM nesting the shui stylesheet expects (viewport
+→ `.ui__toast` → close `button`); flattening it breaks dismissal selectors.
+
+### `focus_end` must not call `setSelectionRange` on non-text inputs
+Selection APIs throw `InvalidStateError` on inputs like `type=checkbox`.
+The cljs helper silently no-ops there; the LUI port must guard the same way
+or property forms crash on focus.
+
+### Property names are validated client-side before the worker call
+cljs runs `valid_property_name` (non-blank, no leading `#`, etc.) before
+`set-block-property` and shows the invalid-name toast without touching the
+worker. Doing it server-side changes toast text/timing and fails the
+name-validation test.
+
+### Async page loads need a latest-wins generation guard
+`resolve`, `goto_page`, `refresh_page` and block-zoom all fetch
+asynchronously; an older in-flight load resolving last overwrote the newer
+page. `Runtime.load_gen` (bump on initiation, commit only when still
+current) plus `exit_edit` at navigation entry points — the e2e
+`wait-editor-visible` probe was passing on the *old* page's stale editor.
+
+### Same-route hash changes must not emit `Navigate_to`
+A hashchange to the already-current route re-triggered the whole load path
+(stale commits + flicker); cljs only acts on real route transitions.
+
 ## Worker protocol edge cases
 
 - `apply-outliner-ops` op entries require nested `Array` args
@@ -64,14 +91,28 @@ must be ordered most-specific first in any match-based key dispatch.
   `pointer-events: none` portal — clicks passed through the modal.
 - `ToggleChanged` echo suppression only matched `Checked`, swallowing
   tree-node `Expanded`/accordion `Selected` collapse events.
+- **Generation-desync wedge** (root cause of the cmdk create-page
+  timeouts): a `dom batch`/`store batch` `Invalid_argument` inside
+  `apply_pending_batch` leaves `pending_ops` populated while the store
+  already committed, so `runtime_generation` stays one behind and every
+  later flush fails `expected patch generation N, received N-1` —
+  permanently wedging rendering. Two trigger paths found and fixed in
+  `lui_runtime.ml`: (a) `dispatch` threw `unknown extension node` for
+  DOM events on `logseq-*` nodes dropped between listener install and
+  event delivery — now absorbed (`node_live` guard); (b) a node created
+  and dropped within one pending batch left a `create-*`/`drop-node`
+  group that cannot replay post-commit — `enqueue_drop` now prunes all
+  queued ops mentioning such a node instead of emitting the drop.
+- Same-batch prop ops on dropped nodes resolve through a pre-batch
+  mirror (`lui_web_apply.node_record`) so the DOM element, still
+  attached at that point in the op stream, can take the write.
+- DOM `removeChild`/`MoveChild` ops now detach nodes from their actual
+  DOM parent instead of assuming the recorded parent (stale tree state
+  after navigation raced removals).
 
 ## Open / intermittent issues
 
-- cmdk "Create page called 'X'" row occasionally never appears for ~10s.
-  The create row previously depended on the worker search resolving; we now
-  upsert it synchronously on input. Root cause of the search hang itself is
-  still unknown — possibly a stale-`gen` drop or a rejected `search-blocks`
-  promise that logs only to console.
+- None blocking; the cmdk create-page wedge is fixed (see above).
 
 ## Process notes
 

@@ -103,9 +103,10 @@ let commit_buf uuid buf =
     ignore (Ops.apply_and_refresh [ Ops.save_block uuid buf ])
 
 let exit_edit ~select =
-  match S.editing () with
-  | None -> ()
-  | Some e ->
+  if S.ready () then
+    match S.editing () with
+    | None -> ()
+    | Some e ->
       let buf = live_buffer e.uuid in
       S.set (fun st ->
           { st with

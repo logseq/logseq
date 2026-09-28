@@ -14,6 +14,19 @@ let dom = Logseq_dom.dom
 
 (* --- shared pieces ------------------------------------------------ *)
 
+(* block zoom: .breadcrumb lists ancestor block titles (root first),
+   each linking to its own zoom route — cljs breadcrumb parity *)
+let zoom_breadcrumbs (page : Model.page) : t =
+  dom ~key:"bc" ~style_class:"breadcrumb"
+    (List.map
+       (fun (p : Model.block) ->
+         dom ~tag:"a" ~style_class:"breadcrumb-item"
+           ~attrs:
+             [ ( "href"
+               , "#/block/" ^ Option.value p.block_uuid ~default:"" ) ]
+           ~text:p.block_title [])
+       page.page_parents)
+
 let breadcrumbs title : t =
   (* namespaced pages "a/b/c" -> breadcrumb trail *)
   match String.split_on_char '/' title with
@@ -52,6 +65,42 @@ let open_menu name payload =
         Runtime.flush ())
       payload
 
+let set_page_icon (page : Model.page) (c : Icon_picker.choice) =
+  match page.page_uuid with
+  | None -> ()
+  | Some u ->
+      let op =
+        match c with
+        | Icon_picker.Remove ->
+            Outliner_ops.op "remove-block-property"
+              [ Wire.Uuid u; Wire.Keyword "logseq.property/icon" ]
+        | Icon_picker.Emoji id ->
+            Outliner_ops.op "set-block-property"
+              [ Wire.Uuid u; Wire.Keyword "logseq.property/icon"
+              ; Wire.Map
+                  [ Wire.Keyword "type", Wire.Keyword "emoji"
+                  ; Wire.Keyword "id", Wire.String id ]
+              ]
+        | Icon_picker.Tabler id ->
+            Outliner_ops.op "set-block-property"
+              [ Wire.Uuid u; Wire.Keyword "logseq.property/icon"
+              ; Wire.Map
+                  [ Wire.Keyword "type", Wire.Keyword "tabler-icon"
+                  ; Wire.Keyword "id", Wire.String id ]
+              ]
+      in
+      ignore
+        (Outliner_ops.apply [ op ]
+         |> Js.Promise.then_ (fun _ -> !Runtime.reload_current_view ()))
+
+let page_icon_picker (page : Model.page) (anchor : string) =
+  match Properties_dom.doc_query anchor with
+  | None -> ()
+  | Some anchor ->
+      Icon_picker.open_picker ~anchor
+        ~del:(page.page_icon <> None)
+        ~on_chosen:(fun c -> set_page_icon page c)
+
 let title_editor (page : Model.page) : t =
   let commit value =
     (match page.page_uuid with
@@ -84,12 +133,50 @@ let title_editor (page : Model.page) : t =
     ]
 
 let page_title_el (m : Model.t) (page : Model.page) : t =
+  let icon_btn_id = "page-icon-btn" in
+  let icon_children =
+    match page.page_icon, page.page_is_tag with
+    | Some ("emoji", eid), _ ->
+        [ dom ~key:"pt-e" ~tag:"em-emoji" ~attrs:[ "id", eid ] [] ]
+    | Some (_, iid), _ ->
+        [ dom ~key:"pt-ti" ~style_class:("ui__icon ti ls-icon-" ^ iid)
+            [ dom ~key:"pt-tii" ~tag:"i" ~style_class:("ti ti-" ^ iid) []
+            ]
+        ]
+    | None, true -> [ dom ~key:"pt-ic" ~tag:"i" ~style_class:"ti ti-hash" [] ]
+    | None, false -> []
+  in
   let icon =
-    if page.page_is_tag then
-      [ dom ~key:"pt-icon" ~style_class:"ls-page-icon flex self-start"
-          [ dom ~key:"pt-ic" ~tag:"i" ~style_class:"ti ti-hash" [] ]
-      ]
-    else []
+    match icon_children with
+    | [] -> []
+    | _ ->
+        [ dom ~key:"pt-icon" ~style_class:"ls-page-icon flex self-start"
+            [ dom ~key:"pt-icbtn" ~tag:"button"
+                ~attrs:
+                  [ "id", icon_btn_id; "type", "button"
+                  ; "title", Ui_strings.t "icon/tab-emojis" ]
+                ~events:"click"
+                ~on_dom_event:(fun _ _ ->
+                  page_icon_picker page ("#" ^ icon_btn_id))
+                icon_children
+            ]
+        ]
+  in
+  let actions =
+    match page.page_icon, page.page_is_tag, page.page_uuid with
+    | None, false, Some _ ->
+        [ dom ~key:"pt-actions" ~style_class:"ls-page-title-actions"
+            [ dom ~key:"pt-add-icon" ~tag:"button"
+                ~style_class:"ui__button"
+                ~attrs:[ "id", "add-page-icon-btn"; "type", "button" ]
+                ~text:(Ui_strings.t "command.editor/add-property-icon")
+                ~events:"click"
+                ~on_dom_event:(fun _ _ ->
+                  page_icon_picker page "#add-page-icon-btn")
+                []
+            ]
+        ]
+    | _ -> []
   in
   let body =
     if m.editing_title then [ title_editor page ]
@@ -112,11 +199,22 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
     ~on_dom_event:(fun name payload ->
       match name with
       | "click" ->
-          if page.page_uuid <> None then (
+          (* icon buttons live inside #page-title; skip title-edit when
+             they (or their children) are the click target *)
+          let target =
+            match payload with
+            | Some p -> Platform.payload_str p "targetId"
+            | None -> ""
+          in
+          if
+            page.page_uuid <> None
+            && (target = "" || target = "page-title"
+                || target = "page-title-text")
+          then (
             Runtime.send Action.Title_edit_start;
             Runtime.flush ())
       | _ -> open_menu name payload)
-    (icon @ body)
+    (icon @ body @ actions)
 
 let blocks_inner ?puuid (blocks : Model.block list) : t =
   let inner_attrs =
@@ -132,13 +230,30 @@ let blocks_inner ?puuid (blocks : Model.block list) : t =
 
 (* --- references --------------------------------------------------- *)
 
+(* cljs renders a Page column naming the source page; shared by the
+   linked-refs (.references) and unlinked-refs bodies *)
+let ref_item (b : Model.block) : t =
+  dom ~style_class:"references-item"
+    [ (if b.Model.block_page_name = "" then box []
+       else
+         dom ~tag:"a" ~style_class:"references-item-page"
+           ~attrs:[ ("data-ref", b.Model.block_page_name) ]
+           ~text:b.Model.block_page_name [])
+    ; Tree.block_row b
+    ]
+
+let fetch_unlinked (m : Model.t) =
+  match m.route_page with
+  | Some p -> Router.fetch_unlinked p
+  | None -> ()
+
 let references_view (refs : Model.block list) : t =
   match refs with
   | [] -> box ~key:"refs-empty" []
   | _ ->
       dom ~key:"refs" ~style_class:"references references-wrap"
         [ dom ~key:"refs-body" ~style_class:"ls-view-body"
-            (List.map Tree.block_row refs)
+            (List.map ref_item refs)
         ]
 
 let unlinked_search_input () : t =
@@ -147,35 +262,52 @@ let unlinked_search_input () : t =
         ~attrs:[ ("placeholder", Strings.filter_placeholder) ]
         ~events:"input"
         ~on_dom_event:(fun name payload ->
-          if name = "input" then
-            Runtime.send
-              (Action.Unlinked_set_query
-                 (Platform.payload_str
-                    (Option.value payload ~default:"{}") "value")))
+          if name = "input" then (
+            let q =
+              Platform.payload_str
+                (Option.value payload ~default:"{}") "value"
+            in
+            Runtime.send (Action.Unlinked_set_query q);
+            Runtime.flush ()))
         []
     ]
 
 let unlinked_references_view (m : Model.t) : t =
-  (* collapsed by default; title click toggles ls-foldable-content.
-     .ls-view-body rows are populated by the views area (TODO). *)
+  (* collapsed by default; the caret (.ls-foldable-title-control, like
+     cljs ui/foldable) toggles ls-foldable-content.is-collapsed *)
   let body =
-    dom ~key:"urefs-content" ~style_class:"ls-foldable-content"
-      ~attrs:
-        [ ( "aria-hidden"
-          , if m.unlinked_open then "false" else "true" )
-        ]
-      [ dom ~key:"urefs-body" ~style_class:"ls-view-body" [] ]
+    dom ~key:"urefs-content"
+      ~style_class:
+        ("ls-foldable-content"
+         ^ if m.unlinked_open then "" else " is-collapsed")
+      [ dom ~key:"urefs-inner" ~style_class:"ls-foldable-content-inner"
+          [ dom ~key:"urefs-body" ~style_class:"ls-view-body"
+              (let q = Sdk_util.str_lower m.Model.unlinked_query in
+               List.map ref_item
+                 (List.filter
+                    (fun (b : Model.block) ->
+                      q = ""
+                      || Sdk_util.find_from
+                           (Sdk_util.str_lower b.block_title) 0 q
+                         >= 0)
+                    m.Model.unlinked_blocks)) ]
+      ]
   in
   dom ~key:"urefs" ~style_class:"unlinked-references mt-6"
-    [ dom ~key:"urefs-fold" ~style_class:"ls-foldable-title-control"
-        [ dom ~key:"urefs-t" ~style_class:"foldable-title"
-            ~text:Strings.unlinked_references
+    [ dom ~key:"urefs-fold"
+        ~style_class:"ls-foldable-title content flex-1 flex-row"
+        [ dom ~key:"urefs-caret" ~tag:"a"
+            ~style_class:"ls-foldable-title-control block-control"
             ~events:"click"
             ~on_dom_event:(fun name _ ->
               if name = "click" then (
                 Runtime.send Action.Unlinked_toggle_open;
+                if not m.unlinked_open then fetch_unlinked m;
                 Runtime.flush ()))
-            []
+            [ dom ~key:"urefs-caret-i" ~tag:"i"
+                ~style_class:"ti ti-caret-right" [] ]
+        ; dom ~key:"urefs-t" ~style_class:"foldable-title"
+            ~text:Strings.unlinked_references []
         ; dom ~key:"urefs-search" ~tag:"button"
             ~style_class:"view-action-search"
             ~events:"click"
@@ -186,7 +318,8 @@ let unlinked_references_view (m : Model.t) : t =
             [ dom ~key:"urefs-icon" ~tag:"i"
                 ~style_class:"ls-icon-search ti ti-search" [] ]
         ]
-    ; if m.unlinked_search then unlinked_search_input () else box ~key:"urefs-sb" []
+    ; if m.unlinked_search then unlinked_search_input ()
+      else box ~key:"urefs-sb" []
     ; body
     ]
 
@@ -249,7 +382,9 @@ let page_view (m : Model.t) (page : Model.page) : t =
   dom ~key:"page" ~style_class:cls
     [ dom ~key:"page-inner"
         ~style_class:"relative grid gap-4 sm:gap-8 page-inner mb-16"
-        [ breadcrumbs page.page_title
+        [ (match m.route with
+           | Model.Block_zoom _ -> zoom_breadcrumbs page
+           | _ -> breadcrumbs page.page_title)
         ; page_title_el m page
         ; blocks_inner ?puuid:page.page_uuid page.page_blocks
         ; references_view m.page_refs

@@ -99,7 +99,9 @@ let item_el idx cfg it =
   let lab =
     mk "span" ~cls:"flex gap-1 items-center" ~attrs:[ ("title", it.it_tip) ]
   in
-  let strong = mk ~cls:"font-normal" "strong" in
+  (* e2e targets `span` + exact text; a leaf span keeps the deepest
+     getByText match a span *)
+  let strong = mk ~cls:"font-normal" "span" in
   el_set_text strong
     (if it.it_new then I18n.t "select/new-option" ^ " " ^ it.it_title
      else it.it_title);

@@ -95,6 +95,11 @@ let payload_str json key =
   | Some s -> s
   | None -> ""
 
+let payload_bool json key =
+  match Js.Json.decodeBoolean (json_prop (json_parse json) key) with
+  | Some b -> b
+  | None -> false
+
 let payload_num json key =
   match Js.Json.decodeNumber (json_prop (json_parse json) key) with
   | Some n -> n

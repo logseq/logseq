@@ -18,6 +18,12 @@ type block =
   ; block_level : int
   ; block_tag_ids : int list (* block/tags ref ids from the pull *)
   ; block_tags : string list (* resolved tag titles, for .block-tags *)
+  ; block_tag_idents : string list (* resolved tag idents, same filtering *)
+  ; block_reactions : (string * int) list (* emoji-id, count *)
+  ; block_is_comments_area : bool
+  ; block_is_comment : bool
+  ; block_comment_targets : int (* live :comments/blocks target count *)
+  ; block_page_name : string (* block/page-name — linked-refs Page column *)
   ; block_children : block list
   }
 
@@ -26,8 +32,11 @@ type page =
   ; page_uuid : string option
   ; page_db_id : int option
   ; page_is_tag : bool
+  ; page_is_property : bool
+  ; page_icon : (string * string) option (* (type, id) from logseq.property/icon *)
   ; page_journal_day : int option
   ; page_blocks : block list
+  ; page_parents : block list (* block-zoom breadcrumb chain, root first *)
   }
 
 type phase =
@@ -86,6 +95,7 @@ type t =
   ; unlinked_open : bool
   ; unlinked_search : bool
   ; unlinked_query : string
+  ; unlinked_blocks : block list
   ; gv : graph_view
   }
 
@@ -108,6 +118,7 @@ let initial =
   ; unlinked_open = false
   ; unlinked_search = false
   ; unlinked_query = ""
+  ; unlinked_blocks = []
   ; gv = graph_view_initial
   }
 

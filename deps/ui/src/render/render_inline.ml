@@ -200,8 +200,9 @@ let macro_el body =
   | "embed" -> (
       if starts_at args 0 "[[" && find_sub args 0 "]]" >= 0 then
         let j = find_sub args 0 "]]" in
+        (* live page embed: hook is registered by blocks/tree.ml *)
         D.el ~tag:"div" ~style_class:"embed-block"
-          [ page_ref (String.sub args 2 (j - 2)) ]
+          [ !Render_state.page_embed (String.sub args 2 (j - 2)) ]
       else if starts_at args 0 "((" && find_sub args 0 "))" >= 0 then
         let j = find_sub args 0 "))" in
         D.el ~tag:"div" ~style_class:"embed-block"
@@ -267,7 +268,12 @@ and try_bracket s i =
   if starts_at s i "[[" then
     match find_sub s (i + 2) "]]" with
     | j when j > i + 2 ->
-        Some (page_ref (String.sub s (i + 2) (j - i - 2)), j + 2 - i)
+        let inner = String.sub s (i + 2) (j - i - 2) in
+        (* stored titles carry [[uuid]] id-refs — resolve to the title *)
+        Some
+          ( (if Sdk_util.is_uuid_string inner then block_ref inner
+             else page_ref inner)
+          , j + 2 - i )
     | _ -> None
   else
     match find_sub s (i + 1) "](" with
@@ -285,7 +291,11 @@ and try_hash s i =
   if starts_at s i "#[[" then
     match find_sub s (i + 3) "]]" with
     | j when j > i + 3 ->
-        Some (page_ref ~tag:true (String.sub s (i + 3) (j - i - 3)), j + 2 - i)
+        let inner = String.sub s (i + 3) (j - i - 3) in
+        Some
+          ( (if Sdk_util.is_uuid_string inner then block_ref inner
+             else page_ref ~tag:true inner)
+          , j + 2 - i )
     | _ -> None
   else
     let n = String.length s in

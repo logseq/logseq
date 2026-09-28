@@ -16,3 +16,12 @@ let with_repo f =
                        | Some r -> f r
                        | None -> ())
                    | _ -> ())))
+
+(* {{embed [[page]]}} live block-tree renderer. Registered by the blocks
+   layer (tree.ml init) — render_inline cannot import that layer. The
+   default degrades to the page-name link (pre-init/defensive). *)
+let page_embed : (string -> Lui_elements.t) ref =
+  ref
+    (fun name ->
+      Render_dom.el ~tag:"a" ~style_class:"page-ref"
+        ~attrs:[ ("data-ref", name) ] ~text:name [])
