@@ -696,9 +696,20 @@ let table_el inst ~refresh : D.el =
       D.el_append_child rel
         (row_el inst ~refresh ~idx:(i + 1) ~row_uuid:u cols))
     (all_row_uuids inst);
-  (* cljs add-new-row footer when data-fns has add-new-object! *)
-  (match inst.V.kind with
-   | V.KTagPage _ | V.KAllPages | V.KPropertyPage _ ->
+  (* cljs add-new-row footer when data-fns has add-new-object!:
+     property-objects always; class-objects only for non-private
+     classes (route-info add-object?); all-pages/query never *)
+  let has_add_object =
+    match inst.V.kind with
+    | V.KPropertyPage _ -> true
+    | V.KTagPage _ -> (
+        match !Runtime.current_page with
+        | Some p -> p.Model.page_add_object
+        | None -> false)
+    | V.KAllPages | V.KQuery _ -> false
+  in
+  (match has_add_object with
+   | true ->
        let footer = D.h ~cls:"ls-table-footer fade-in faster" () in
        let row =
          D.h
@@ -713,7 +724,7 @@ let table_el inst ~refresh : D.el =
            (V.ops ()).V.o_add_object inst);
        D.el_append_child footer row;
        D.el_append_child rel footer
-   | V.KQuery _ -> ());
+   | false -> ());
   D.el_append_child scroller rel;
   D.el_append_child tbl scroller;
 
