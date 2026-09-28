@@ -348,11 +348,9 @@ let page_items_for t kind q =
   let matched =
     match kind with
     | Tag_search ->
-        take 20
-          (List.map wrap_tag
-             (List.filter
-                (fun (ti, _) -> contains_ci ti q)
-                !(t.tag_titles)))
+        (* cljs get-matched-classes → fuzzy-search (limit 20) *)
+        Fuzzy.fuzzy_search ~extract:fst ~limit:20 !(t.tag_titles) q
+        |> List.map wrap_tag
     | Page_ref | Embed_ref ->
         if q = "" then
           List.map
@@ -365,9 +363,8 @@ let page_items_for t kind q =
                  | _ -> Emit ("[[" ^ jt ^ "]]")))
             nlp_en_names
         else
-          take 20
-            (List.map wrap
-               (List.filter (fun ti -> contains_ci ti q) !(t.titles)))
+          Fuzzy.fuzzy_search ~extract:(fun ti -> ti) ~limit:50 !(t.titles) q
+          |> List.map wrap
     | _ ->
         take 20
           (List.map wrap
@@ -379,7 +376,9 @@ let page_items_for t kind q =
         List.exists (fun (ti, _) -> S.equal ti q) !(t.tag_titles)
     | _ -> List.exists (fun ti -> S.equal ti q) !(t.titles)
   in
-  let items =
+  (* cljs matched-pages-with-new-page: the "New tag/page" row goes after a
+     leading starts-with match, else first *)
+  let with_new xs =
     if q <> "" && not exact then
       let label =
         (match kind with
@@ -387,8 +386,19 @@ let page_items_for t kind q =
          | _ -> U.t "editor/new-page")
         ^ " " ^ q
       in
-      mk_item ~key:("new:" ^ q) ~label (act_of ~created:true q) :: matched
-    else matched
+      mk_item ~key:("new:" ^ q) ~label (act_of ~created:true q) :: xs
+    else xs
+  in
+  let items =
+    match matched with
+    | first :: rest
+      when S.length first.ai_label >= S.length q
+           && S.equal
+                (S.lowercase_ascii
+                   (S.sub first.ai_label 0 (S.length q)))
+                (S.lowercase_ascii q) ->
+        first :: with_new rest
+    | _ -> with_new matched
   in
   renumber items
 ;;
