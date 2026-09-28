@@ -1,5 +1,5 @@
 (* Render-scoped access to the current repo for worker lookups
-   (e.g. resolving ((uuid)) block references). Reads the app-tracked
+   (e.g. resolving [[uuid]] block references). Reads the app-tracked
    current repo; falls back to the first listed graph before boot. *)
 
 let with_repo f =
