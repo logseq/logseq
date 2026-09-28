@@ -246,6 +246,24 @@
                      (:db/id d1)))
       (is (= (:block/uuid d1') (:block/uuid (:block/page b1')))))))
 
+(deftest delete-page-preserves-external-page-refs
+  (let [conn (db-test/create-conn-with-blocks
+              [{:page {:block/title "Foo"}}
+               {:page {:block/title "Bar"}
+                :blocks [{:block/title "see [[Foo]]"}]}])
+        foo (ldb/get-page @conn "Foo")
+        foo-uuid (:block/uuid foo)
+        ref-title (str "see " (page-ref/->page-ref foo-uuid))
+        block (db-test/find-block-by-content @conn ref-title)]
+    (is (some? block))
+    (is (contains? (set (map :db/id (:block/refs block))) (:db/id foo)))
+    (outliner-page/delete! conn foo-uuid)
+    (let [foo' (d/entity @conn [:block/uuid foo-uuid])
+          block' (d/entity @conn (:db/id block))]
+      (is (true? (ldb/recycled? foo')))
+      (is (= ref-title (:v (first (d/datoms @conn :eavt (:db/id block') :block/title)))))
+      (is (contains? (set (map :db/id (:block/refs block'))) (:db/id foo))))))
+
 (deftest delete-page-succeeds-when-recycle-missing
   (let [conn (db-test/create-conn-with-blocks
               [{:page {:block/title "D-missing"}}])

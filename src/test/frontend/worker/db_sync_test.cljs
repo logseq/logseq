@@ -4036,8 +4036,8 @@
                    (get-in forward-outliner-ops [0 1 0])))
             (is (seq inverse-outliner-ops))))))))
 
-(deftest delete-page-rewrites-node-refs-and-semantic-undo-redo-test
-  (testing "moving a page to recycle rewrites node refs and semantic undo/redo restores and reapplies them"
+(deftest delete-page-preserves-node-refs-and-semantic-undo-redo-test
+  (testing "moving a page to recycle keeps node refs so restore/undo/redo stay identity on content"
     (let [conn (db-test/create-conn-with-blocks
                 {:pages-and-blocks [{:page {:block/title "Delete Me"}}
                                     {:page {:block/title "Ref Page"}
@@ -4048,8 +4048,7 @@
           page-uuid (:block/uuid page)
           ref-block (db-test/find-block-by-content @conn "seed")
           ref-block-uuid (:block/uuid ref-block)
-          node-ref-content (str "ref " (page-ref/->page-ref page-uuid))
-          title-content "ref Delete Me"]
+          node-ref-content (str "ref " (page-ref/->page-ref page-uuid))]
       (with-datascript-conns conn client-ops-conn
         (fn []
           (ldb/transact! conn [{:db/id (:db/id ref-block)
@@ -4059,39 +4058,25 @@
           (let [{:keys [tx-id forward-outliner-ops inverse-outliner-ops]}
                 (->> (#'sync-apply/pending-txs test-repo)
                      (filter #(= :delete-page (:outliner-op %)))
-                     last)]
+                     last)
+                assert-node-ref-kept
+                (fn []
+                  (is (= node-ref-content
+                         (:block/raw-title (d/entity @conn [:block/uuid ref-block-uuid]))))
+                  (is (contains? (set (map :db/id (:block/refs (d/entity @conn [:block/uuid ref-block-uuid]))))
+                                 page-id)))]
             (is (= :delete-page (ffirst forward-outliner-ops)))
-            (is (some (fn [[op [block]]]
-                        (and (= :save-block op)
-                             (= ref-block-uuid (:block/uuid block))
-                             (= title-content (:block/title block))))
-                      forward-outliner-ops))
-            (is (some (fn [[op [target-page-uuid]]]
-                        (and (= :restore-recycled op)
-                             (= page-uuid target-page-uuid)))
-                      inverse-outliner-ops))
-            (is (some (fn [[op [block]]]
-                        (and (= :save-block op)
-                             (= ref-block-uuid (:block/uuid block))
-                             (= node-ref-content (:block/title block))))
-                      inverse-outliner-ops))
-            (is (= title-content
-                   (:block/raw-title (d/entity @conn [:block/uuid ref-block-uuid]))))
-            (is (not (contains? (set (map :db/id (:block/refs (d/entity @conn [:block/uuid ref-block-uuid]))))
-                                page-id)))
+            (is (not-any? (fn [[op]] (= :save-block op)) forward-outliner-ops))
+            (is (= [[:restore-recycled [page-uuid]]] inverse-outliner-ops))
+            (assert-node-ref-kept)
+            (is (integer? (:logseq.property/deleted-at (d/entity @conn [:block/uuid page-uuid]))))
             (is (= true
                    (:applied? (#'sync-apply/apply-history-action! test-repo tx-id true {}))))
-            (is (= node-ref-content
-                   (:block/raw-title (d/entity @conn [:block/uuid ref-block-uuid]))))
-            (is (contains? (set (map :db/id (:block/refs (d/entity @conn [:block/uuid ref-block-uuid]))))
-                           page-id))
+            (assert-node-ref-kept)
             (is (nil? (:logseq.property/deleted-at (d/entity @conn [:block/uuid page-uuid]))))
             (is (= true
                    (:applied? (#'sync-apply/apply-history-action! test-repo tx-id false {}))))
-            (is (= title-content
-                   (:block/raw-title (d/entity @conn [:block/uuid ref-block-uuid]))))
-            (is (not (contains? (set (map :db/id (:block/refs (d/entity @conn [:block/uuid ref-block-uuid]))))
-                                page-id)))
+            (assert-node-ref-kept)
             (is (integer? (:logseq.property/deleted-at (d/entity @conn [:block/uuid page-uuid]))))))))))
 
 (deftest direct-outliner-property-set-persists-set-block-property-outliner-op-test

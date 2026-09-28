@@ -3,7 +3,9 @@
             [datascript.core :as d]
             [logseq.common.config :as common-config]
             [logseq.common.util :as common-util]
+            [logseq.common.util.page-ref :as page-ref]
             [logseq.db :as ldb]
+            [logseq.db.common.reference :as db-reference]
             [logseq.db.test.helper :as db-test]
             [logseq.outliner.op :as outliner-op]
             [logseq.outliner.page :as outliner-page]
@@ -55,6 +57,90 @@
     (ldb/transact! conn (recycle/recycle-page-tx-data @conn page {}) {:outliner-op :delete-page})
     (assert-page-recycled-under-tagged-recycle @conn page-id)
     (is (= (:db/id recycle) (:db/id (recycle-page @conn))))))
+
+(defn- page-id-ref-title
+  [prefix page]
+  (str prefix (page-ref/->page-ref (:block/uuid page))))
+
+(defn- assert-external-page-ref
+  [db page-uuid block-id expected-title]
+  (let [page (d/entity db [:block/uuid page-uuid])
+        block (d/entity db block-id)
+        linked (db-reference/get-linked-references db (:db/id page))]
+    (is (= expected-title
+           (:v (first (d/datoms db :eavt (:db/id block) :block/title)))))
+    (is (contains? (set (map :db/id (:block/refs block))) (:db/id page)))
+    (is (contains? (set (map :db/id (:ref-blocks linked))) (:db/id block)))))
+
+(deftest restore-recycled-page-reconstitutes-external-page-refs
+  (let [conn (db-test/create-conn-with-blocks
+              [{:page {:block/title "Foo"}}
+               {:page {:block/title "Bar"}
+                :blocks [{:block/title "see [[Foo]]"}]}])
+        foo (ldb/get-page @conn "Foo")
+        foo-uuid (:block/uuid foo)
+        ref-title (page-id-ref-title "see " foo)
+        block (db-test/find-block-by-content @conn ref-title)]
+    (is (some? block))
+    (assert-external-page-ref @conn foo-uuid (:db/id block) ref-title)
+    (is (true? (outliner-page/delete! conn foo-uuid)))
+    (is (true? (ldb/recycled? (d/entity @conn [:block/uuid foo-uuid]))))
+    (assert-external-page-ref @conn foo-uuid (:db/id block) ref-title)
+    (is (true? (recycle/restore! conn foo-uuid)))
+    (let [foo' (d/entity @conn [:block/uuid foo-uuid])]
+      (is (false? (ldb/recycled? foo')))
+      (is (nil? (:block/parent foo')))
+      (assert-external-page-ref @conn foo-uuid (:db/id block) ref-title))))
+
+(deftest restore-recycled-page-keeps-unrelated-edit-and-page-ref
+  (let [conn (db-test/create-conn-with-blocks
+              [{:page {:block/title "Foo"}}
+               {:page {:block/title "Bar"}
+                :blocks [{:block/title "see [[Foo]]"}]}])
+        foo (ldb/get-page @conn "Foo")
+        foo-uuid (:block/uuid foo)
+        ref-title (page-id-ref-title "see " foo)
+        block (db-test/find-block-by-content @conn ref-title)
+        edited-title (str ref-title " later")]
+    (is (true? (outliner-page/delete! conn foo-uuid)))
+    (ldb/transact! conn [{:db/id (:db/id block)
+                          :block/title edited-title
+                          :block/refs #{(:db/id foo)}}])
+    (is (true? (recycle/restore! conn foo-uuid)))
+    (assert-external-page-ref @conn foo-uuid (:db/id block) edited-title)))
+
+(deftest apply-ops-restore-recycled-page-reconstitutes-external-page-refs
+  (let [conn (db-test/create-conn-with-blocks
+              [{:page {:block/title "Foo"}}
+               {:page {:block/title "Bar"}
+                :blocks [{:block/title "see [[Foo]]"}]}])
+        foo (ldb/get-page @conn "Foo")
+        foo-uuid (:block/uuid foo)
+        ref-title (page-id-ref-title "see " foo)
+        block (db-test/find-block-by-content @conn ref-title)]
+    (outliner-op/apply-ops! conn [[:delete-page [foo-uuid {}]]] {})
+    (is (true? (ldb/recycled? (d/entity @conn [:block/uuid foo-uuid]))))
+    (outliner-op/apply-ops! conn [[:restore-recycled [foo-uuid]]] {})
+    (is (false? (ldb/recycled? (d/entity @conn [:block/uuid foo-uuid]))))
+    (assert-external-page-ref @conn foo-uuid (:db/id block) ref-title)))
+
+(deftest permanently-delete-recycled-page-rewrites-external-page-refs
+  (let [conn (db-test/create-conn-with-blocks
+              [{:page {:block/title "Foo"}}
+               {:page {:block/title "Bar"}
+                :blocks [{:block/title "see [[Foo]]"}]}])
+        foo (ldb/get-page @conn "Foo")
+        foo-uuid (:block/uuid foo)
+        foo-id (:db/id foo)
+        ref-title (page-id-ref-title "see " foo)
+        block (db-test/find-block-by-content @conn ref-title)]
+    (is (true? (outliner-page/delete! conn foo-uuid)))
+    (is (true? (recycle/permanently-delete! conn foo-uuid)))
+    (is (nil? (d/entity @conn [:block/uuid foo-uuid])))
+    (let [block' (d/entity @conn (:db/id block))]
+      (is (= "see Foo"
+             (:v (first (d/datoms @conn :eavt (:db/id block') :block/title)))))
+      (is (not (contains? (set (map :db/id (:block/refs block'))) foo-id))))))
 
 (deftest restore-recycled-page-removes-recycle-parent
   (let [conn (db-test/create-conn-with-blocks

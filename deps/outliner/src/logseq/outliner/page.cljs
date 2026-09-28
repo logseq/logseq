@@ -34,19 +34,11 @@
         id-ref->page #(db-content/content-id-ref->page % [page-entity])]
     (->> refs
          (keep (fn [ref]
-                 (let [raw-title (:block/raw-title ref)
-                       block-uuid (:block/uuid ref)]
-                   (when raw-title
-                     (let [content' (id-ref->page raw-title)]
-                       (when (not= raw-title content')
-                         (let [remaining-refs (->> (:block/refs ref)
-                                                   (remove (fn [ref']
-                                                             (= (:db/id ref') (:db/id page-entity))))
-                                                   vec)]
-                           {:ref-id (:db/id ref)
-                            :ref-uuid block-uuid
-                            :title content'
-                            :refs remaining-refs})))))))
+                 (when-let [raw-title (:block/raw-title ref)]
+                   (let [content' (id-ref->page raw-title)]
+                     (when (not= raw-title content')
+                       {:ref-id (:db/id ref)
+                        :title content'})))))
          seq)))
 
 (defn- db-refs->page
@@ -57,19 +49,7 @@
              (mapcat (fn [{:keys [ref-id title]}]
                        [[:db/retract ref-id :block/refs page-id]
                         {:db/id ref-id
-                         :block/title title}])))))
-
-(defn- db-refs->page-save-ops
-  [page-entity]
-  (some->> (page-ref-rewrite-targets page-entity)
-           (keep (fn [{:keys [ref-uuid title refs]}]
-                   (when ref-uuid
-                     [:save-block [{:block/uuid ref-uuid
-                                    :block/title title
-                                    :block/refs refs}
-                                   {}]])))
-           seq
-           vec))
+                         :block/title title}]))))))
 
 (defn ^:api build-page-retract-tx
   "Build cleanup tx-data for deleting a schema page.
@@ -142,16 +122,11 @@
             true)
 
           :else
-          (let [ref-rewrite-tx-data (db-refs->page page)
-                ref-rewrite-save-ops (db-refs->page-save-ops page)
-                tx-data (concat ref-rewrite-tx-data
-                                (outliner-recycle/recycle-page-tx-data @conn page {:deleted-by-uuid deleted-by-uuid
-                                                                                   :now-ms now-ms}))
-                tx-meta' (cond-> tx-meta
-                           (seq ref-rewrite-save-ops)
-                           (update :outliner-ops (fnil into []) ref-rewrite-save-ops))]
+          ;; Soft-delete keeps page refs so Recycle restore is identity.
+          (let [tx-data (outliner-recycle/recycle-page-tx-data @conn page {:deleted-by-uuid deleted-by-uuid
+                                                                          :now-ms now-ms})]
             (when (seq tx-data)
-              (ldb/transact! conn tx-data tx-meta'))
+              (ldb/transact! conn tx-data tx-meta))
             true))))))
 
 (defn- throw-private-create-page-tag

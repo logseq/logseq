@@ -2,6 +2,7 @@
   (:require [cljs.test :refer [deftest is testing]]
             [datascript.core :as d]
             [logseq.common.util :as common-util]
+            [logseq.common.util.page-ref :as page-ref]
             [logseq.db :as ldb]
             [logseq.db.common.delete-blocks :as delete-blocks]
             [logseq.db.test.helper :as db-test]))
@@ -175,6 +176,28 @@
           extra (delete-blocks/update-refs-history @conn txs {:outliner-op :delete-blocks})]
       (d/transact! conn (concat txs extra))
       (is (nil? (d/entity @conn [:block/uuid history-uuid]))))))
+
+(deftest delete-page-rewrites-external-refs-on-hard-retract
+  (testing "hard-retracting a page rewrites inbound page refs to plain title"
+    (let [conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks
+                 [{:page {:block/title "Foo"}}
+                  {:page {:block/title "Bar"}
+                   :blocks [{:block/title "see [[Foo]]"}]}]})
+          foo (db-test/find-page-by-title @conn "Foo")
+          foo-id (:db/id foo)
+          ref-title (str "see " (page-ref/->page-ref (:block/uuid foo)))
+          block (db-test/find-block-by-content @conn ref-title)
+          retracts [[:db/retractEntity foo-id]]
+          extra (delete-blocks/update-refs-history @conn retracts {})]
+      (is (some? block))
+      (is (some #(= [:db/retract (:db/id block) :block/refs foo-id] %) extra))
+      (is (some #(= [:db/add (:db/id block) :block/title "see Foo"] %) extra))
+      (d/transact! conn (concat retracts extra))
+      (is (nil? (d/entity @conn foo-id)))
+      (let [block' (d/entity @conn (:db/id block))]
+        (is (= "see Foo" (:block/title block')))
+        (is (not (contains? (set (map :db/id (:block/refs block'))) foo-id)))))))
 
 (deftest delete-page-removes-history-with-ref-value
   (testing "deleting a page retracts property history entries that referenced that page"

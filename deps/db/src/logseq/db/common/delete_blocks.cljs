@@ -176,9 +176,16 @@
       (distinct (concat txs subtree-tx)))
     txs))
 
+(defn- retract-ref-target?
+  "Blocks and pages both store inbound node refs that must be rewritten
+   when the target is hard-retracted."
+  [entity]
+  (or (block-entity? entity)
+      (entity-util/page? entity)))
+
 (defn- direct-cleanup-tx
   [entities]
-  (let [retracted-blocks (filter block-entity? entities)
+  (let [retracted-blocks (filter retract-ref-target? entities)
         retracted-history-self-entities (filter property-history-entity? entities)
         retracted-history-self-tx (map (fn [history] [:db/retractEntity (:db/id history)])
                                        retracted-history-self-entities)
