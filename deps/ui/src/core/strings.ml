@@ -3,6 +3,11 @@
 
 let delete_page = "Delete page"
 let convert_to_tag = "Convert to Tag"
+let convert_tag_to_page = "Convert Tag to Page"
+let convert_tag_to_page_desc =
+  "Converting a tag to page also removes its tag properties and its tag \
+   from all nodes tagged with it. Are you ok with that?"
+
 let confirm = "Confirm"
 let cancel = "Cancel"
 let delete_page_title = "Delete page?"

@@ -113,9 +113,11 @@ let load_page_ref ref_v ~missing =
          | Some p ->
              fetch_blocks p
              |> Js.Promise.then_ (fun p' ->
-                    Runtime.send (Action.Page_loaded p');
-                    fetch_refs p';
-                    Js.Promise.resolve ())
+                    Outliner_ops.resolve_page_tags (repo ()) p'
+                    |> Js.Promise.then_ (fun p'' ->
+                           Runtime.send (Action.Page_loaded p'');
+                           fetch_refs p'';
+                           Js.Promise.resolve ()))
          | None ->
              Runtime.send (Action.Navigate_to (Model.Not_found missing));
              Js.Promise.resolve ())
@@ -194,6 +196,7 @@ let load_block_zoom uuid =
                                    ; page_db_id = b.block_db_id
                                    ; page_is_tag = false
                                    ; page_journal_day = None
+                                   ; page_tags = b.Model.block_tags
                                    ; page_blocks = bs
                                    });
                               (match Editor_actions.consume_pending_zoom () with
