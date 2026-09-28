@@ -115,7 +115,7 @@ let comment_actions st (cuuid : string) : t =
       ~style_class:"ls-comment-action"
       ~attrs:
         [ ("title", title); ("aria-label", title); ("type", "button")
-        ; ("id", key) ]
+        ; ("id", key); ("style", "pointer-events:auto") ]
       ~events:"click" ~on_dom_event:(fun _ _ -> action ())
       [ dom ~key:(key ^ "-i") ~tag:"i" ~style_class:("ti ti-" ^ icon) [] ]
   in
