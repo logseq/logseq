@@ -7,7 +7,11 @@
 
 module String_set = Stdlib.Set.Make (String)
 
-type editing = { uuid : string; buffer : string }
+(* [scope] is the container the edit started in ("main" or
+   "sidebar") — the same block can render in both trees, so only the
+   initiating scope mounts the textarea (cljs keys the editor by
+   container-local edit-input-id) *)
+type editing = { uuid : string; buffer : string; scope : string }
 
 type t =
   { editing : editing option
@@ -80,6 +84,11 @@ let read () =
   match !st with Some s -> Signal.get_state s | None -> initial
 
 let editing () = (read ()).editing
+
+let is_editing_in uuid scope =
+  match editing () with
+  | Some e -> e.uuid = uuid && e.scope = scope
+  | None -> false
 
 let editing_uuid () =
   match editing () with Some e -> Some e.uuid | None -> None

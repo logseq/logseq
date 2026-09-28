@@ -87,7 +87,7 @@ let clear_pending_blur () = pending_blur_uuid := None
 
 (* ---- enter / exit ---- *)
 
-let enter_edit uuid caret =
+let enter_edit ?(scope = "main") uuid caret =
   clear_pending_blur ();
   (match S.editing () with
   | Some e when e.uuid <> uuid -> save_if_dirty e.uuid
@@ -97,7 +97,7 @@ let enter_edit uuid caret =
       S.set (fun st ->
           { st with
             S.editing =
-              Some { uuid; buffer = String.trim b.Model.block_title }
+              Some { uuid; buffer = String.trim b.Model.block_title; scope }
           ; selected = S.String_set.empty
           ; anchor = None
           });
@@ -105,9 +105,8 @@ let enter_edit uuid caret =
   | None -> ()
 
 let commit_buf uuid buf =
-  if buf <> model_title uuid then (
-    S.update_block_title uuid buf;
-    ignore (Ops.apply_and_refresh [ Ops.save_block uuid buf ]))
+  if buf <> model_title uuid then
+    ignore (Ops.apply_and_refresh [ Ops.save_block uuid buf ])
 
 let exit_edit ~select =
   match S.editing () with
@@ -171,7 +170,10 @@ let split_at_cursor uuid =
         ]
       in
       S.set_silent (fun st ->
-          { st with S.editing = Some { uuid = new_uuid; buffer = after } });
+          { st with
+            S.editing =
+              Some { uuid = new_uuid; buffer = after; scope = e.scope }
+          });
       with_focus_after new_uuid 0
         (Ops.apply_and_refresh ~opts:(Ops.op_opts "insert-blocks") ops)
   | _ -> ()
@@ -240,6 +242,7 @@ let merge_prev uuid =
                     Some
                       { uuid = prev_uuid
                       ; buffer = prev.Model.block_title ^ buf
+                      ; scope = e.scope
                       }
                 });
             with_focus_after prev_uuid
@@ -288,6 +291,7 @@ let merge_next uuid =
                     Some
                       { uuid = next_uuid
                       ; buffer = String.trim next.Model.block_title
+                      ; scope = e.scope
                       }
                 });
             with_focus_after next_uuid 0
@@ -491,7 +495,11 @@ let delete_selection () =
                S.set_silent (fun st ->
                    { st with
                      S.editing =
-                        Some { uuid = pu; buffer = String.trim b.Model.block_title }
+                       Some
+                         { uuid = pu
+                         ; buffer = String.trim b.Model.block_title
+                         ; scope = "main"
+                         }
                    ; selected = S.String_set.empty
                    ; anchor = None
                    });
@@ -762,7 +770,10 @@ let append_block ?for_page () =
             | [] -> (puuid, false)
           in
           let stage st =
-            { st with S.editing = Some { uuid = new_uuid; buffer = "" } }
+            { st with
+              S.editing =
+                Some { uuid = new_uuid; buffer = ""; scope = "main" }
+            }
           in
           (* empty page: editor state is created at the first block_row
              mount, which happens inside this op's refresh — defer the

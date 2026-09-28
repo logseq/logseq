@@ -256,7 +256,17 @@ let on_click ev =
                     | Some el -> (
                         match D.el_get_attr el "blockid" with
                         | Some u ->
-                            A.enter_edit u
+                            (* scope by container: the same block can render
+                               in main and the right sidebar; only the tree
+                               where the click landed mounts the editor *)
+                            let scope =
+                              match
+                                D.closest_sel ".cp__right-sidebar" target
+                              with
+                              | Some _ -> "sidebar"
+                              | None -> "main"
+                            in
+                            A.enter_edit ~scope u
                               (String.length (A.model_title u))
                         | None -> ())
                     | None -> ()))))
