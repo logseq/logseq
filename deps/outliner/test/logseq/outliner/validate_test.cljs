@@ -306,3 +306,28 @@
                 child (d/entity @conn child-id)]
             (is (nil? (#'outliner-validate/validate-extends-property-have-correct-type parent [child]))
                 (str "Parent and child page is valid: " (pr-str (:block/title parent)) " " (pr-str (:block/title child))))))))))
+
+(deftest validate-page-to-property-conversion
+  (testing "Plain pages can convert"
+    (is (nil? (outliner-validate/validate-page-to-property-conversion
+               {:block/title "Plain"
+                :block/tags [{:db/ident :logseq.class/Page}]}))))
+
+  (testing "Namespaced pages are refused"
+    (let [err (try
+                (outliner-validate/validate-page-to-property-conversion
+                 {:block/title "Bar"
+                  :block/parent {:db/id 1}
+                  :block/tags [{:db/ident :logseq.class/Page}]})
+                nil
+                (catch :default e e))]
+      (is (= :notification (:type (ex-data err))))
+      (is (= :page.convert/page-to-property-namespaced
+             (get-in (ex-data err) [:payload :i18n-key])))))
+
+  (testing "Non-pages are ignored"
+    (is (nil? (outliner-validate/validate-page-to-property-conversion
+               {:block/title "Bar"
+                :block/parent {:db/id 1}
+                :block/tags [{:db/ident :logseq.class/Tag}]})))
+    (is (nil? (outliner-validate/validate-page-to-property-conversion nil)))))
