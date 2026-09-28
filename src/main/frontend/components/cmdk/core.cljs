@@ -435,12 +435,16 @@
                :dev? config/dev?})]
     (swap! !results assoc-in [group :status] :loading)
     (p/let [current-page-uuid (<page-uuid repo current-page)
-            blocks (search/block-search repo @!input opts)
+            search-result (search/block-search repo @!input opts)
+            {:keys [blocks matched-count]} (block-search-result->items search-result)
             blocks (remove nil? blocks)
             items (map (fn [block]
                          (block-item repo block current-page-uuid @!input))
                        blocks)]
-      (swap! !results update group merge {:status :success :items items}))))
+      (swap! !results update group merge {:status :success
+                                          :items items
+                                          :matched-count matched-count
+                                          :has-more? (> matched-count (count items))}))))
 
 (defmethod load-results :files [group state]
   (let [!input (::input state)
@@ -497,15 +501,15 @@
     (let [!results (::results state)
           !input (::input state)
           repo (state/get-current-repo)
-          expanded? (::expanded? state)
-          opts (cmdk-state/cmdk-block-search-options
-                {:filter-group :current-page
-                 :dev? config/dev?
-                 :expanded? expanded?})]
+          expanded? (::expanded? state)]
       (swap! !results assoc-in [group :status] :loading)
       (swap! !results assoc-in [:current-page :status] :loading)
       (p/let [current-page-uuid (<page-uuid repo current-page)
-              opts (assoc opts :page-uuid current-page-uuid)
+              opts (cmdk-state/cmdk-block-search-options
+                    {:filter-group :current-page
+                     :dev? config/dev?
+                     :page-uuid current-page-uuid
+                     :expanded? expanded?})
               search-result (search/block-search repo @!input opts)
               {:keys [blocks matched-count]} (block-search-result->items search-result)
               blocks (remove nil? blocks)

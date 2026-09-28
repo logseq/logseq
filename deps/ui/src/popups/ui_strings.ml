@@ -1,0 +1,130 @@
+(* English UI strings, keyed like src/resources/dicts/en.edn.
+   TODO(i18n): swap for the real I18n module when it lands upstream —
+   keys below already match en.edn so the switch is mechanical. *)
+
+let t (key : string) : string =
+  match key with
+  | "cmdk.create/page" -> "Create page"
+  | "cmdk.create/tag" -> "Create tag"
+  | "cmdk.info/create-page" -> "Create page called '{1}'"
+  | "cmdk.info/create-tag" -> "Create tag called '{1}'"
+  | "cmdk.input/default-placeholder" -> "What are you looking for?"
+  | "cmdk.input/move-blocks-placeholder" -> "Move blocks to"
+  | "cmdk.action/search" -> "Search"
+  | "cmdk.groups/nodes" -> "Pages and blocks"
+  | "cmdk.groups/commands" -> "Commands"
+  | "search/no-result" -> "No matched result"
+  | "command.go/journals" -> "Go to journals"
+  | "command.go/all-graphs" -> "Go to all graphs"
+  | "command.go/all-pages" -> "Go to all pages"
+  | "command.go/graph-view" -> "Go to graph view"
+  | "command.graph/db-add" -> "Add a DB graph"
+  | "command.editor/move-blocks" -> "Move blocks to"
+  | "command.editor/add-reaction" -> "Add reaction"
+  | "sidebar.right/open" -> "Open in sidebar"
+  | "block.comments/add-comment" -> "Add comment"
+  | "block/copy-ref" -> "Copy block ref"
+  | "export/copy-or-export-as" -> "Copy as"
+  | "editor/cut" -> "Cut"
+  | "editor/delete-selection" -> "Delete selected blocks"
+  | "context-menu/toggle-number-list" -> "Toggle number list"
+  | "context-menu/set-icon" -> "Set icon"
+  | "editor/expand-block-children" -> "Expand all"
+  | "editor/collapse-block-children" -> "Collapse all"
+  | "editor/auto-heading" -> "Auto heading"
+  | "editor/remove-heading" -> "Remove heading"
+  | "ui/remove-background" -> "Remove"
+  | "ui/copy" -> "Copy"
+  | "ui/show-more" -> "Show more"
+  | "ui/show-less" -> "Show less"
+  | "cmdk.tip/label" -> "Tip:"
+  | "editor/cycle-todo" -> "Rotate the TODO state"
+  | "editor/search-for-node" -> "Search for a node"
+  | "editor/search-for-tag" -> "Search for a tag"
+  | "editor/block-search" -> "Search for a block"
+  | "editor/search-template-placeholder" -> "Search for a template"
+  | "editor.slash/group-basic" -> "BASIC"
+  | "editor.slash/group-format" -> "FORMAT"
+  | "editor.slash/group-heading" -> "Heading"
+  | "editor.slash/group-task-status" -> "TASK STATUS"
+  | "editor.slash/group-task-date" -> "TASK DATE"
+  | "editor.slash/group-priority" -> "PRIORITY"
+  | "editor.slash/group-time-and-date" -> "TIME & DATE"
+  | "editor.slash/group-list-type" -> "LIST TYPE"
+  | "editor.slash/group-advanced" -> "ADVANCED"
+  | "ui/link" -> "Link"
+  | "editor/new-page" -> "New page"
+  | "editor/new-tag" -> "New tag"
+  | "editor/heading" -> "Heading {1}"
+  | "editor.slash/node-reference" -> "Node reference"
+  | "editor.slash/node-embed" -> "Node embed"
+  | "editor.slash/image-link" -> "Image link"
+  | "editor.slash/underline" -> "Underline"
+  | "editor.slash/code-block" -> "Code block"
+  | "class.built-in/quote-block" -> "Quote"
+  | "editor.slash/math-block" -> "Math block"
+  | "editor.slash/normal-text" -> "Normal text"
+  | "editor.slash/clear-heading" -> "Clear heading"
+  | "property.status/backlog" -> "Backlog"
+  | "property.status/todo" -> "Todo"
+  | "property.status/doing" -> "Doing"
+  | "property.status/in-review" -> "In Review"
+  | "property.status/done" -> "Done"
+  | "property.status/canceled" -> "Canceled"
+  | "property.built-in/deadline" -> "Deadline"
+  | "property.built-in/scheduled" -> "Scheduled"
+  | "property.built-in/query" -> "Query"
+  | "editor.slash/no-priority" -> "No priority"
+  | "editor.slash/priority-label" -> "Priority {1}"
+  | "property.priority/low" -> "Low"
+  | "property.priority/medium" -> "Medium"
+  | "property.priority/high" -> "High"
+  | "property.priority/urgent" -> "Urgent"
+  | "date.nlp/tomorrow" -> "Tomorrow"
+  | "date.nlp/yesterday" -> "Yesterday"
+  | "date.nlp/today" -> "Today"
+  | "editor.slash/current-time" -> "Current time"
+  | "editor.slash/date-picker" -> "Date picker"
+  | "editor.slash/number-list" -> "Number list"
+  | "editor.slash/number-children" -> "Number children"
+  | "editor.slash/advanced-query" -> "Advanced Query"
+  | "editor.slash/query-function" -> "Query function"
+  | "editor.slash/calculator" -> "Calculator"
+  | "editor.slash/upload-asset" -> "Upload an asset"
+  | "class.built-in/template" -> "Template"
+  | "editor.slash/embed-html" -> "Embed HTML"
+  | "editor.slash/embed-video-url" -> "Embed Video URL"
+  | "editor.slash/embed-youtube-timestamp" -> "Embed YouTube timestamp"
+  | "editor.slash/embed-twitter-tweet" -> "Embed Twitter tweet"
+  | "command.editor/add-property" -> "Add property"
+  | "color/yellow" -> "Yellow"
+  | "color/red" -> "Red"
+  | "color/pink" -> "Pink"
+  | "color/green" -> "Green"
+  | "color/blue" -> "Blue"
+  | "color/purple" -> "Purple"
+  | "color/gray" -> "Gray"
+  | _ -> key
+
+(* "{1}" / "{2}" placeholder substitution *)
+let replace_all s pat rep =
+  let plen = String.length pat in
+  let b = Buffer.create (String.length s) in
+  let i = ref 0 in
+  while !i <= String.length s - plen do
+    if String.sub s !i plen = pat then (
+      Buffer.add_string b rep;
+      i := !i + plen)
+    else (
+      Buffer.add_char b (String.get s !i);
+      incr i)
+  done;
+  Buffer.add_string b (String.sub s !i (String.length s - !i));
+  Buffer.contents b
+
+let tf (key : string) (args : string list) : string =
+  List.fold_left
+    (fun (acc, i) a ->
+      (replace_all acc ("{" ^ string_of_int i ^ "}") a, i + 1))
+    (t key, 1) args
+  |> fst

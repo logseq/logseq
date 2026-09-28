@@ -1,0 +1,19 @@
+(version 6.2.0)
+
+(build
+ (all_platforms
+  ((action
+    (progn
+     (when %{pkg-self:dev} (run dune subst))
+     (run dune build -p %{pkg-self:name} -j %{jobs}))))))
+
+(depends
+ (all_platforms
+  (ocaml dune cppo ocamlfind ppx_derivers ppxlib)))
+
+(source
+ (fetch
+  (url
+   https://github.com/ocaml-ppx/ppx_deriving/releases/download/6.2.0/ppx_deriving-6.2.0.tbz)
+  (checksum
+   sha512=664ad073ec248f5e292af6979bd17da97d5b11fee95da7a83314eb831b51db9cb333435678e565e084d90dc3aa2ad7cd9587646d34bb26f6f310e7630954bdde)))

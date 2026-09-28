@@ -1,0 +1,14 @@
+(library
+ (name logseq_db_worker_platform_melange)
+ (implements logseq_db_worker_platform_spec)
+ (modes melange)
+ (preprocess
+  (pps melange.ppx))
+ (libraries
+  datascript-ocaml-melange
+  datascript-ocaml-melange.storage
+  melange-transit-melange
+  melange-fetch
+  melange.js
+  melange.node
+  rrbvec))

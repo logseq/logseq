@@ -1,0 +1,15 @@
+(version v0.17.0)
+
+(build
+ (all_platforms ((action (run dune build -p %{pkg-self:name} -j %{jobs})))))
+
+(depends
+ (all_platforms
+  (ocaml base base_quickcheck core ppx_jane sexp_pretty stdio dune re)))
+
+(source
+ (fetch
+  (url
+   https://github.com/janestreet/expect_test_helpers_core/archive/refs/tags/v0.17.0.tar.gz)
+  (checksum
+   sha256=c8380970589385b459413824ea3b2c959ed0a6600fe088f56eda0e16070880bf)))

@@ -1,0 +1,37 @@
+(library
+ (name logseq_db_worker_platform_native)
+ (implements logseq_db_worker_platform_spec)
+ (modes native byte)
+ (libraries
+  mldoc
+  angstrom
+  datascript-ocaml-native
+  datascript-ocaml-native.sqlite
+  melange-transit-core
+  rrbvec
+  sqlite3
+  unix
+  threads.posix
+  uunf
+  uucp
+  re
+  re.pcre
+  yojson
+  ptime
+  digestif
+  mirage-crypto
+  mirage-crypto-rng.unix
+  mirage-crypto-pk
+  kdf.pbkdf
+  x509
+  eio
+  eio.unix
+  eio_posix
+  httpun
+  httpun-ws
+  tls-eio
+  ca-certs-nss
+  domain-name
+  bigstringaf
+  faraday
+  cstruct))

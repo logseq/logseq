@@ -1,0 +1,20 @@
+(version dev)
+
+(build
+ (all_platforms ((dune))))
+
+(depends
+ (all_platforms
+  (ocaml
+   datascript_ocaml
+   persistent_sorted_set_ocaml
+   sqlite3
+   melange-transit-native
+   yojson)))
+
+(source
+ (fetch
+  (url
+   git+https://github.com/logseq/datascript-ocaml.git#9b1108cb8e9c7da6d2812f35a324757a3630dcb0)))
+
+(dev)
