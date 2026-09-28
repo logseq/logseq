@@ -32,6 +32,7 @@ type item_action =
   | Tag_apply of string (* existing entity — cljs tag-on-chosen-handler *)
   | Tag_create of string (* "New tag" row — always creates a class *)
   | Template_apply of string (* template block uuid — apply-template op *)
+  | Run_query of bool (* cljs editor/run-query-command; arg = advanced? *)
   | Noop (* "No matched commands" row — applies to nothing *)
 
 type ac_item =
@@ -241,8 +242,8 @@ let slash_items ~has_heading : ac_item list =
         ; "editor.slash/number-children", cmd "number-children" ]
     ; group_items "editor.slash/group-advanced"
         [ "block.comments/add-comment", cmd "add-comment"
-        ; "property.built-in/query", cmd "query"
-        ; "editor.slash/advanced-query", cmd "advanced-query"
+        ; "property.built-in/query", Run_query false
+        ; "editor.slash/advanced-query", Run_query true
         ; "editor.slash/query-function", Emit ("{{function }}", 2)
         ; "editor.slash/calculator", cmd "calculator"
         ; "editor.slash/upload-asset", cmd "upload"
@@ -525,6 +526,7 @@ let query_closed ac q =
 (* after an `input` event in a .editor-wrapper textarea *)
 let on_editor_input t el ev =
   let pos = Dom_ext.selection_start el in
+  Platform.console_log (Printf.sprintf "DBG on_input pos=%d v='%s'" pos (Dom_ext.value el));
   match (get t).ac with
   | Some ac ->
       let v = Dom_ext.value el in
@@ -626,14 +628,29 @@ let closer_len ac v pos =
 ;;
 
 let emit_range editor from to_ text back =
-  Dom_ext.dispatch_custom "ls:editor-insert"
-    (detail_obj
-       [ "text", Js.Json.string text
-       ; "from", Js.Json.number (float_of_int from)
-       ; "to", Js.Json.number (float_of_int to_)
-       ; "back", Js.Json.number (float_of_int back) ]);
-  (* cljs refocuses the editor input after a chosen item *)
-  Dom_ext.focus editor
+  match Dom_ext.closest editor ".ls-page-title" with
+  | Some _ ->
+      (* the page-title editor isn't a block editor — splice the buffer
+         directly instead of dispatching ls:editor-insert *)
+      let v = Dom_ext.value editor in
+      let n = String.length v in
+      let f = Int.max 0 (Int.min from n) in
+      let t_ = Int.max f (Int.min to_ n) in
+      let nv = String.sub v 0 f ^ text ^ String.sub v t_ (n - t_) in
+      let caret = f + String.length text in
+      Dom_ext.set_value editor nv;
+      Dom_ext.set_text_content editor nv;
+      Dom_ext.set_selection_range editor caret caret;
+      Dom_ext.focus editor
+  | None ->
+      Dom_ext.dispatch_custom "ls:editor-insert"
+        (detail_obj
+           [ "text", Js.Json.string text
+           ; "from", Js.Json.number (float_of_int from)
+           ; "to", Js.Json.number (float_of_int to_)
+           ; "back", Js.Json.number (float_of_int back) ]);
+      (* cljs refocuses the editor input after a chosen item *)
+      Dom_ext.focus editor
 ;;
 
 let emit ac text back =
@@ -683,21 +700,40 @@ let switched_ac ac text kind embed =
    block/tags (existing class or a new "New tag" class). The "New tag"
    row always takes the class path even when a plain page exists. *)
 let apply_tag t ac ~create title =
-  match Editor_state.editing_uuid () with
+  (* the page-title textarea isn't registered as a block editor —
+     resolve it to the current page entity instead *)
+  let buuid_opt, title_edit =
+    match Editor_state.editing_uuid () with
+    | Some u -> (Some u, false)
+    | None -> (
+        match Dom_ext.closest ac.editor ".ls-page-title" with
+        | Some _ -> (
+            match !Runtime.current_page with
+            | Some p -> (p.Model.page_uuid, true)
+            | None -> (None, false))
+        | None -> (None, false))
+  in
+  match buuid_opt with
   | None -> ()
   | Some buuid ->
       let repo_v = repo () in
-      (* cljs set-block-property! tags with the class entity's db/id *)
+      (* cljs set-block-property! tags with the class entity's db/id. emit
+         already stripped "#q" from the buffer; persist the new buffer and
+         the tag in one batch. For the page-title editor the stripped title
+         is committed by the title's own rename path — save-block rejects
+         page entities, so only the tag is sent. *)
       let save_and_tag w =
         match Wire.map_get_int w "db/id" with
         | Some dbid ->
-            let v = Dom_ext.value ac.editor in
+            let rest =
+              [ Outliner_ops.set_block_property buuid "block/tags"
+                  (Wire.Int dbid) ]
+            in
             ignore
-              (Outliner_ops.apply_and_refresh
-                 [ Outliner_ops.save_block buuid v
-                 ; Outliner_ops.set_block_property buuid "block/tags"
-                     (Wire.Int dbid)
-                 ])
+              (if title_edit then Outliner_ops.apply_and_refresh rest
+               else
+                 Outliner_ops.apply_parsed_and_refresh ~rest
+                   [ (buuid, Dom_ext.value ac.editor) ])
         | None -> ()
       in
       let create_and_tag () =
@@ -747,6 +783,79 @@ let apply_template t ac uuid =
            [ Outliner_ops.save_block buuid buf
            ; Outliner_ops.apply_template uuid buuid ])
 
+(* cljs run-query-command! / advanced-query-steps: save the current
+   block, tag it logseq.class/Query, create the hidden
+   logseq.property/query value block and copy the current title into it
+   (the query source), clear the block title, exit edit. Advanced also
+   marks the value block display-type=code + code/lang=clojure so the
+   worker's render-view-data exposes the pulled :query columns. *)
+let run_query t ac ~advanced =
+  match Editor_state.editing_uuid () with
+  | None -> ()
+  | Some buuid ->
+      emit ac.editor ac.tpos "";
+      close_ac t;
+      let title = Dom_ext.value ac.editor in
+      Editor_actions.exit_edit ~select:false;
+      let repo_v = repo () in
+      ignore
+        (Outliner_ops.apply
+           [ Outliner_ops.save_block buuid title
+           ; Outliner_ops.op "create-property-text-block"
+               [ Wire.Uuid buuid
+               ; Wire.Keyword "logseq.property/query"
+               ; Wire.String ""
+               ; Wire.Map
+                   [ (Wire.Keyword "set-block-property?", Wire.Bool true) ] ]
+           ]
+        |> Js.Promise.then_ (fun _ ->
+               Runtime.invoke2 "thread-api/get-blocks" (Wire.String repo_v)
+                 (Wire.Array
+                    [ Wire.Map
+                        [ (Wire.Keyword "id", Wire.Uuid buuid)
+                        ; ( Wire.Keyword "opts"
+                          , Wire.Map
+                              [ (Wire.Keyword "children?", Wire.Bool true)
+                              ; ( Wire.Keyword "include-property-block?"
+                                , Wire.Bool true ) ] ) ]
+                    ]))
+        |> Js.Promise.then_ (fun w ->
+               let quuid =
+                 match Wire.args_list w with
+                 | res :: _ -> (
+                     let b =
+                       match Wire.get res "block" with
+                       | Some b -> b
+                       | None -> res
+                     in
+                     match Wire.get b "logseq.property/query" with
+                     | Some v -> (
+                         match Wire.map_get_uuid v "block/uuid" with
+                         | Some u -> u
+                         | None -> (
+                             match Wire.as_uuid v with
+                             | Some u -> u
+                             | None -> ""))
+                     | None -> "")
+                 | [] -> ""
+               in
+               if quuid = "" then Js.Promise.resolve ()
+               else
+                 let rest =
+                   [ Outliner_ops.set_block_property buuid "block/tags"
+                       (Wire.Keyword "logseq.class/Query") ]
+                   @ if advanced then
+                       [ Outliner_ops.set_block_property quuid
+                           "logseq.property.node/display-type"
+                           (Wire.Keyword "code")
+                       ; Outliner_ops.set_block_property quuid
+                           "logseq.property.code/lang"
+                           (Wire.String "clojure") ]
+                     else []
+                 in
+                 Outliner_ops.apply_parsed ~rest
+                   [ (quuid, title); (buuid, "") ]))
+
 let apply_item t ac it =
   match it.ai_act with
   | Switch kind ->
@@ -767,6 +876,7 @@ let apply_item t ac it =
       set_ac t (Some (refresh_items t ac'))
   | Emit (text, back) -> emit ac text back; close_ac t
   | Editor_cmd c -> emit_cmd ac c []; close_ac t
+  | Run_query advanced -> run_query t ac ~advanced
   | Tag_apply title -> apply_tag t ac ~create:false title
   | Tag_create title -> apply_tag t ac ~create:true title
   | Template_apply uuid -> apply_template t ac uuid

@@ -68,6 +68,9 @@ external el_inner_html_set : el -> string -> unit = "innerHTML" [@@mel.set]
 
 type rect
 
+external window_inner_height : float = "innerHeight"
+  [@@mel.scope "window"]
+
 external el_rect : el -> rect = "getBoundingClientRect" [@@mel.send]
 
 external rect_top : rect -> float = "top" [@@mel.get]

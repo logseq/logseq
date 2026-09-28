@@ -125,6 +125,7 @@ let editor_el uuid : t =
             ~attrs:[ ("data-testid", "block editor") ]
             ~text:buffer []
         ]
+    ; Asset_dom.upload_input ("up-" ^ uuid)
     ]
 
 (* code/calc blocks edit through a contenteditable pre.CodeMirror-line —
@@ -155,11 +156,20 @@ let code_editor_el uuid (b : Model.block) : t =
 let content_or_editor uuid (b : Model.block) : t =
   dyn ~equal:(fun a b -> a = b)
     (fun editing ->
-      if editing then
-        match b.Model.block_display_type with
-        | Some "code" -> code_editor_el uuid b
-        | _ -> editor_el uuid
-      else content_el uuid b)
+      match b.Model.block_asset_type with
+      | Some _ ->
+          (* asset blocks keep the media visible while the block is being
+             edited (cljs renders content + editor inside the same wrap) *)
+          if editing then
+            dom ~key:("ae-" ^ uuid) ~style_class:"flex flex-col w-full"
+              [ Asset_dom.block_view uuid b; editor_el uuid ]
+          else Asset_dom.block_view uuid b
+      | None ->
+          if editing then
+            match b.Model.block_display_type with
+            | Some "code" -> code_editor_el uuid b
+            | _ -> editor_el uuid
+          else content_el uuid b)
     (Signal.map
        (fun (st : S.t) ->
          match st.editing with
@@ -205,7 +215,8 @@ let tags_el uuid (b : Model.block) : t =
    zero blocks, where block_row is never mounted *)
 let () =
   Editor_keys.install_once ();
-  Add_button.install ()
+  Add_button.install ();
+  Asset_dom.install ()
 
 let rec block_row (b : Model.block) : t =
  fun ctx parent ->

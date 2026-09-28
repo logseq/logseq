@@ -72,9 +72,13 @@ let position_content ~anchor ~content ~align_end ~submenu =
            (D.rect_bottom r +. 4.)
        ^ "transform:translateX(-100%);"
    else
+     let top = D.rect_bottom r +. 4. in
+     (* clamp to the space left below the anchor so long result lists
+        scroll instead of overflowing the viewport *)
+     let avail = D.window_inner_height -. top -. 8. in
      style := !style
-       ^ Printf.sprintf "left:%.0fpx;top:%.0fpx;" (D.rect_left r)
-           (D.rect_bottom r +. 4.));
+       ^ Printf.sprintf "left:%.0fpx;top:%.0fpx;max-height:%.0fpx;overflow-y:auto;"
+           (D.rect_left r) top (Float.max avail 120.));
   D.el_set_attr content "style" !style
 
 (* -- menu -- *)
@@ -307,7 +311,11 @@ let show_select ~anchor ~items ~placeholder ?(multiple = false)
   in
   D.el_append_child input_wrap input;
   let results_wrap = D.h () in
-  let results = D.h ~cls:"cp__select-results" () in
+  (* cljs select: .item-results-wrap > #ui__ac.cp__select-results
+     > #ui__ac-inner.hide-scrollbar (the scrollable region) *)
+  let results =
+    D.h ~cls:"cp__select-results" ~attrs:[ ("id", "ui__ac") ] ()
+  in
   let item_results = D.h ~cls:"item-results-wrap" ~children:[ results ] () in
   D.el_append_child results_wrap item_results;
   let apply_wrap = D.h ~cls:"p-4" () in
@@ -324,6 +332,10 @@ let show_select ~anchor ~items ~placeholder ?(multiple = false)
              (D.h ~cls:"px-2 py-1 opacity-50 text-sm"
                 ~text:I.no_matched_result ())
      | _ ->
+         let ac_inner =
+           D.h ~cls:"hide-scrollbar" ~attrs:[ ("id", "ui__ac-inner") ] ()
+         in
+         D.el_append_child results ac_inner;
          List.iteri
            (fun i it ->
              let link_wrap = D.h ~cls:"menu-link-wrap" () in
@@ -357,7 +369,7 @@ let show_select ~anchor ~items ~placeholder ?(multiple = false)
                    on_chosen it true
                  end);
              D.el_append_child link_wrap a;
-             D.el_append_child results link_wrap)
+             D.el_append_child ac_inner link_wrap)
            its);
     (if multiple then begin
        D.clear apply_wrap;

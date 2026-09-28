@@ -55,10 +55,11 @@ and render_query inst =
   (match src_kind with
    | Views_query.QDatalog _ -> ()
    | _ ->
-       D.el_append_child inst.V.container
-         (Views_builder.builder_el inst
-            ~tree:(Views_builder.tree_for inst)
-            ~refresh));
+       if not inst.V.is_advanced then
+         D.el_append_child inst.V.container
+           (Views_builder.builder_el inst
+              ~tree:(Views_builder.tree_for inst)
+              ~refresh));
   let is_dsl_blank =
     match src_kind with
     | Views_query.QBlank -> true
@@ -136,7 +137,17 @@ let build_columns inst =
   in
   match inst.V.kind with
   | V.KTagPage owner_uuid ->
-      Db.get_class_properties (W.Uuid owner_uuid) apply
+      (* cljs objects.cljs build-class-object-columns: the Asset class
+         gets an extra "File" column — detect it by the class ident *)
+      Db.get_blocks [ owner_uuid ] (fun ents ->
+          inst.V.asset_class <-
+            (match ents with
+             | [ e ] ->
+                 W.as_keyword
+                   (Option.value (W.get e "db/ident") ~default:W.Nil)
+                 = Some "logseq.class/Asset"
+             | _ -> false);
+          Db.get_class_properties (W.Uuid owner_uuid) apply)
   | _ -> apply []
 
 let load_view_data inst =

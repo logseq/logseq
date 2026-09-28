@@ -29,6 +29,9 @@ external document_element : el = "document.documentElement"
 external create_element : string -> el = "createElement"
   [@@mel.scope "document"]
 
+external create_text_node : string -> el = "createTextNode"
+  [@@mel.scope "document"]
+
 external node_list_length : node_list -> int = "length" [@@mel.get]
 
 external node_list_item : node_list -> int -> el option = "item"

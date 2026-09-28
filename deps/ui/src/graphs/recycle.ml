@@ -117,7 +117,6 @@ and root_header root host =
   hdr
 
 and refresh (host : B.E.t) =
-  B.set_text host "";
   ignore
     (Js.Promise.then_
        (fun w ->
@@ -126,7 +125,9 @@ and refresh (host : B.E.t) =
        (snapshots ()))
 
 and render_roots host roots =
-  B.set_class host "flex flex-col gap-8 ls-recycle-page-content";
+  (* clear inside the async callback — concurrent refreshes race
+     otherwise and each append piles rows onto the previous paint *)
+  B.set_text host "";
   let desc = B.create "div" in
   B.set_class desc "text-sm text-muted-foreground ls-recycle-page-description ml-1";
   B.set_text desc T.recycle_retention;
@@ -144,6 +145,13 @@ and render_roots host roots =
       (fun root ->
         let row = B.create "div" in
         B.append row (root_header root host);
+        (* deleted-root-outliner renders the block title — a plain title
+           row is enough for the recycled contract (row text must carry
+           the node title for has-text filters) *)
+        let body = B.create "div" in
+        B.set_class body "ls-block";
+        B.set_text body (title_of root);
+        B.append row body;
         B.append col row)
       roots;
     B.append sec col;
@@ -155,7 +163,11 @@ let show () =
       match B.qs ".ls-recycle-page-content" with
       | Some host -> refresh host
       | None ->
+          (* class the host before the async refresh so a second show
+             before the promise resolves finds it instead of creating
+             a duplicate container *)
           let host = B.create "div" in
+          B.set_class host "flex flex-col gap-8 ls-recycle-page-content";
           B.append parent host;
           refresh host)
   | None -> ()

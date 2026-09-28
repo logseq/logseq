@@ -9,6 +9,7 @@ type route =
   | All_pages
   | All_graphs
   | Graph
+  | Settings
   | Not_found of string
 
 type block =
@@ -23,7 +24,15 @@ type block =
   ; block_order_list : string option (* logseq.property/order-list-type *)
   ; block_order_index : int option (* 1-based position among list siblings *)
   ; block_code_lang : string option (* logseq.property.code/lang *)
+  ; block_tag_idents : string list (* resolved tag db/idents, e.g. logseq.class/Query *)
   ; block_children : block list
+  ; block_page_name : string option (* containing page, for ref rows *)
+  ; block_asset_type : string option (* logseq.property.asset/type *)
+  ; block_asset_url : string option (* logseq.property.asset/external-url *)
+  ; block_asset_width : int option (* logseq.property.asset/width *)
+  ; block_asset_height : int option (* logseq.property.asset/height *)
+  ; block_asset_resize : int option (* resize-metadata width *)
+  ; block_asset_align : string option (* logseq.property.asset/align *)
   }
 
 type page =
@@ -32,6 +41,7 @@ type page =
   ; page_db_id : int option
   ; page_is_tag : bool
   ; page_journal_day : int option
+  ; page_tags : string list
   ; page_blocks : block list
   }
 
@@ -41,7 +51,10 @@ type phase =
   | Failed of string
 
 (* modal confirm intent — carried as data so it survives the reducer *)
-type confirm = Confirm_delete_page of string (* page uuid *)
+type confirm =
+  | Confirm_delete_page of string (* page uuid *)
+  | Confirm_convert_tag_to_page of int (* class db/id *)
+  | Confirm_delete_asset of string (* asset block uuid *)
 
 (* worker :notification broadcast -> toast *)
 type toast =
@@ -79,6 +92,7 @@ type t =
   ; route_page : page option
   ; journals : page list
   ; page_refs : block list
+  ; unlinked_refs : block list
   ; repos : string list
   ; theme_dark : bool
   ; left_sidebar_open : bool
@@ -101,6 +115,7 @@ let initial =
   ; route_page = None
   ; journals = []
   ; page_refs = []
+  ; unlinked_refs = []
   ; repos = []
   ; theme_dark = false
   ; left_sidebar_open = true
