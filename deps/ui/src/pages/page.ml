@@ -269,6 +269,9 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
     | None, false -> []
   in
   let uuid = Option.value page.page_uuid ~default:"" in
+  (* cljs db-page-title: the icon replaces the bullet inside
+     .block-control-wrap.is-with-icon.bullet-hidden — rendering it
+     outside leaves the bullet's a.block-control overlapping the button *)
   let icon =
     match icon_children with
     | [] -> []
@@ -286,20 +289,53 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
         ]
   in
   let actions =
-    match page.page_icon, page.page_is_tag, page.page_uuid with
-    | None, false, Some _ ->
+    match page.page_uuid with
+    | None -> []
+    | Some uuid ->
+        (* cljs db-page-title-actions: "Add icon" (only while the page has
+           no icon) + "Set property"/"Add tag property" — properties_view
+           mounts its areas next to this element, so it must exist for
+           every page *)
+        let add_icon_btn =
+          match page.page_icon with
+          | Some _ -> []
+          | None ->
+              [ dom ~key:"pt-add-icon" ~tag:"button"
+                  ~style_class:"ui__button"
+                  ~attrs:[ "id", "add-page-icon-btn"; "type", "button" ]
+                  ~text:(Ui_strings.t "command.editor/add-property-icon")
+                  ~events:"click"
+                  ~on_dom_event:(fun _ _ ->
+                    page_icon_picker page "#add-page-icon-btn")
+                  []
+              ]
+        in
+        let prop_btn =
+          if page.page_is_tag then
+            dom ~key:"pt-add-prop" ~tag:"button" ~style_class:"ui__button"
+              ~attrs:[ "type", "button" ]
+              ~text:(Properties_i18n.t "class/add-property")
+              ~events:"click"
+              ~on_dom_event:(fun _ _ ->
+                Properties_dialog.open_dialog
+                  { Properties_dialog.uuid
+                  ; db_id = page.page_db_id
+                  ; is_tag = true
+                  ; title = page.page_title
+                  })
+              []
+          else
+            dom ~key:"pt-set-prop" ~tag:"button" ~style_class:"ui__button"
+              ~attrs:[ "type", "button" ]
+              ~text:(Properties_i18n.t "property/set-property")
+              ~events:"click"
+              ~on_dom_event:(fun _ _ ->
+                Properties_dialog.open_for_block uuid)
+              []
+        in
         [ dom ~key:"pt-actions" ~style_class:"ls-page-title-actions"
-            [ dom ~key:"pt-add-icon" ~tag:"button"
-                ~style_class:"ui__button"
-                ~attrs:[ "id", "add-page-icon-btn"; "type", "button" ]
-                ~text:(Ui_strings.t "command.editor/add-property-icon")
-                ~events:"click"
-                ~on_dom_event:(fun _ _ ->
-                  page_icon_picker page "#add-page-icon-btn")
-                []
-            ]
+            (add_icon_btn @ [ prop_btn ])
         ]
-    | _ -> []
   in
   let body =
     (* cljs db-page-title: the page title is a full block row —
@@ -327,7 +363,7 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
                       "is-with-icon bullet-hidden block-control-wrap flex \
                        flex-row items-center h-6"
                     ~attrs:[ ("data-has-children", "false") ]
-                    [ dom ~key:"pt-ca" ~tag:"a"
+                    ([ dom ~key:"pt-ca" ~tag:"a"
                         ~style_class:"block-control"
                         ~id:("control-" ^ uuid)
                         [ dom ~key:"pt-cs" ~tag:"span"
@@ -337,7 +373,8 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
                                 [ rotating_arrow "pt-arw" ]
                             ]
                         ]
-                    ]
+                     ]
+                     @ icon)
                 ; dom ~key:"pt-col1" ~style_class:"flex flex-col w-full"
                     [ dom ~key:"pt-col2" ~style_class:"flex flex-col w-full"
                         [ dom ~key:"pt-bmc"
@@ -411,7 +448,7 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
                 Dom_ext.set_selection_range el n n
             | None -> ())
       | _ -> open_menu name payload)
-    (icon @ body @ actions)
+    (body @ actions)
 
 let blocks_inner ?puuid ?(virtualize = false) (blocks : Model.block list)
     : t =
@@ -479,19 +516,24 @@ let fold_arrow ?on_click key : t =
         ]
     ]
 
-let view_ghost_btn key ?title icon_name size : t =
+let view_ghost_btn key ?title ?on_click icon_name size : t =
   let attrs =
     [ ("type", "button"); ("tabindex", "0") ]
     @ (match title with Some s -> [ ("title", s) ] | None -> [])
   in
-  dom ~key ~tag:"button" ~attrs
+  let events, handler =
+    match on_click with
+    | Some f -> ("click", Some (fun name _ -> if name = "click" then f ()))
+    | None -> ("", None)
+  in
+  dom ~key ~tag:"button" ~attrs ~events ?on_dom_event:handler
     ~style_class:(ui_btn ^ " as-ghost h-7 rounded py-1 \
                   text-muted-foreground !px-1")
     [ Icons.icon ~size icon_name ]
 
 (* cljs views/view header for :linked-references — foldable title with the
    "Linked references <count>" view tab and hidden-until-hover actions *)
-let refs_view_head key title count : t =
+let refs_view_head ?on_search key title count : t =
   dom ~key:(key ^ "-head")
     ~style_class:
       "ls-view-head flex flex-1 flex-nowrap items-center justify-between \
@@ -529,7 +571,7 @@ let refs_view_head key title count : t =
         ; view_ghost_btn "vh-flt" "filter" 18.
         ; dom ~key:"vh-search" ~style_class:"view-action-search"
             [ dom ~key:"vh-si" ~style_class:"flex flex-row items-center"
-                [ view_ghost_btn "vh-sb" "search" 15. ] ]
+                [ view_ghost_btn "vh-sb" ?on_click:on_search "search" 15. ] ]
         ; dom ~key:"vh-type"
             ~style_class:"view-action-type text-muted-foreground text-sm"
             [ dom ~key:"vh-tv" ~style_class:"w-full property-value-inner"
@@ -558,13 +600,18 @@ let refs_view_head key title count : t =
         ]
     ]
 
-(* cljs ls-foldable-title wrapping a view-head or a group page-ref *)
-let foldable_title ?on_click key inner : t =
+(* cljs ls-foldable-title wrapping a view-head or a group page-ref.
+   ~control:false drops the fold arrow: only the outer section header
+   carries .ls-foldable-title-control in cljs — ref-group titles are
+   plain headers. *)
+let foldable_title ?on_click ?(control = true) key inner : t =
   dom ~key:(key ^ "-ft") ~style_class:"ls-foldable-title content"
     [ dom ~key:"ftr" ~style_class:"flex-1 flex-row foldable-title"
         [ dom ~key:"fth"
             ~style_class:"flex flex-row items-center ls-foldable-header gap-1"
-            [ fold_arrow ?on_click (key ^ "-fa"); inner ]
+            ((if control then [ fold_arrow ?on_click (key ^ "-fa") ]
+              else [])
+             @ [ inner ])
         ]
     ]
 
@@ -580,7 +627,7 @@ let ref_group idx (name, blocks) : t =
                   ; ("data-item-index", string_of_int idx)
                   ; ("style", "overflow-anchor: none;") ]
     [ dom ~key:"gi" ~style_class:"flex flex-col"
-        [ foldable_title (key ^ "-t")
+        [ foldable_title ~control:false (key ^ "-t")
             (dom ~key:"grp" ~style_class:""
                [ dom ~key:"grl" ~tag:"a" ~style_class:"page-ref relative"
                    ~attrs:
@@ -773,6 +820,9 @@ let unlinked_references_view (m : Model.t) : t =
                       if not m.unlinked_open then fetch_unlinked m;
                       Runtime.flush ())
                     (refs_view_head "urefs"
+                       ~on_search:(fun () ->
+                         Runtime.send Action.Unlinked_toggle_search;
+                         Runtime.flush ())
                        (Ui_strings.t "view/unlinked-references")
                        (List.length refs))
                 ; dom ~key:"urefs-content" ~style_class:"ls-foldable-content"

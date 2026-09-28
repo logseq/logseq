@@ -374,10 +374,10 @@ let on_editor_insert ev =
 let on_editor_command ev =
   if S.ready () then
     match Option.bind (detail_field ev "command") Js.Json.decodeString with
-    | Some "Add property" -> (
-        match S.editing_uuid () with
-        | Some uuid -> Properties_dialog.open_for_block uuid
-        | None -> ())
+    (* handled by properties_view's ls:editor-command listener
+       (open_for_current: editing block > selected > page) — opening
+       here too would mount the dialog twice *)
+    | Some "Add property" -> ()
     | Some cmd -> Platform.console_error ("unhandled editor command", cmd)
     | None -> ()
 
