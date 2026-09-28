@@ -164,6 +164,25 @@ let item_header st idx (it : Sidebar_state.item) =
             [ dom ~tag:"i" ~style_class:"ti ti-x" [] ] ]
     ]
 
+(* cljs sidebar-page-properties: ghost button "Open properties" over the
+   (collapsed) properties list — rendered for page-backed sidebar items *)
+let sidebar_props_row (it : Sidebar_state.item) =
+  if it.kind = "contents" || it.kind = "page" then
+    dom ~key:("props-" ^ it.key) ~style_class:"-mb-8"
+      [ dom ~style_class:"ls-sidebar-page-properties flex flex-col gap-2 mt-2"
+          [ dom
+              [ dom ~tag:"button"
+                  ~style_class:
+                    "ui__button inline-flex items-center px-1 \
+                     text-muted-foreground h-7 text-sm"
+                  ~events:"click" ~on_dom_event:(fun _ _ -> ())
+                  [ dom ~tag:"span" ~style_class:"text-xs"
+                      ~text:(t "Open properties") [] ]
+              ]
+          ]
+      ]
+  else dom ~key:("props-none-" ^ it.key) []
+
 let item_body idx (it : Sidebar_state.item) =
   let n = string_of_int idx in
   dom ~key:("body-" ^ it.key)
@@ -174,7 +193,8 @@ let item_body idx (it : Sidebar_state.item) =
       ]
     ~style_class:"sidebar-panel-content px-2 initial"
     [ dom ~key:("page-" ^ it.key) ~style_class:"page"
-        [ dom ~key:("pbi-" ^ it.key) ~style_class:"ls-page-blocks"
+        [ sidebar_props_row it
+        ; dom ~key:("pbi-" ^ it.key) ~style_class:"ls-page-blocks"
             [ dom ~key:("pbin-" ^ it.key)
                 ~style_class:"page-blocks-inner relative"
                 (List.map (Tree.block_row ~scope:"sidebar") it.blocks)
