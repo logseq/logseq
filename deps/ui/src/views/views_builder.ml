@@ -30,7 +30,6 @@ let is_op s = List.mem s operators
 
 let rec to_dsl = function
   (* cljs ->dsl* unwraps [:page-ref x] to a bare [[x]] symbol *)
-  | CItem ("page-ref", [ a ]) -> a.a_dsl
   | CText s -> "\"" ^ s ^ "\""
   | CItem ("page-ref", [ a ]) ->
       (* cljs ->dsl* collapses [:page-ref v] to the bare [[v]] form *)
