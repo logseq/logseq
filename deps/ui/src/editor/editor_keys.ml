@@ -18,6 +18,16 @@ let uuid_of_prefixed prefix id =
 let caret_span el =
   (D.el_selection_start el, D.el_selection_end el)
 
+(* while #ui__ac (autocomplete popup) is in the DOM the popup's own
+   document keydown handler owns these keys — the editor listener runs
+   first (it installs at module init), so without this guard Enter would
+   split the block AND pick the popup item *)
+let ac_popup_open () = D.get_element_by_id "ui__ac" <> None
+
+let ac_owned_key = function
+  | "Enter" | "Tab" | "Escape" | "ArrowUp" | "ArrowDown" -> true
+  | _ -> false
+
 (* -- editor-mode keys -- *)
 
 let on_editor_arrows ev uuid el =
@@ -62,6 +72,7 @@ let on_editor_key ev uuid el =
   let key = D.ev_key ev in
   let shift = D.ev_shift ev in
   if D.ev_composing ev then ()
+      else if ac_popup_open () && ac_owned_key key then ()
   else
     match key with
     | "Enter" when not shift ->
@@ -84,6 +95,15 @@ let on_editor_key ev uuid el =
           D.prevent_default ev;
           A.merge_next uuid)
     | "ArrowUp" | "ArrowDown" -> on_editor_arrows ev uuid el
+    | "]" | ")" -> (
+        (* cljs autopair overtype: a closing char that already sits under
+           the caret (autopaired ghost) skips it instead of inserting *)
+        let v = D.el_value el in
+        let s = D.el_selection_start el in
+        let c = if key = "]" then ']' else ')' in
+        if s < String.length v && String.get v s = c then (
+          D.prevent_default ev;
+          D.el_set_selection_range el (s + 1) (s + 1)))
     | "z" when mods ev ->
         D.prevent_default ev;
         if shift then A.redo () else A.undo ()
@@ -96,6 +116,9 @@ let on_editor_key ev uuid el =
     | "i" when mods ev ->
         D.prevent_default ev;
         A.wrap_selection uuid "*"
+    | "h" when mods ev && shift ->
+        D.prevent_default ev;
+        A.wrap_selection uuid "=="
     | "e" when D.ev_meta ev -> A.quick_add ()
     | "." when mods ev && shift ->
         D.prevent_default ev;
@@ -178,6 +201,7 @@ let on_keydown ev =
           match target with
           | Some el when D.el_tag el = "TEXTAREA" ->
               Option.is_some (D.closest_sel ".ls-block" target)
+              && D.closest_sel ".ls-page-title" target = None
           | _ -> false
         in
         if stale_block_editor then on_normal_key ev
@@ -189,6 +213,11 @@ let on_keydown ev =
 let on_input ev =
   if S.ready () then
     match D.closest_sel ".editor-wrapper textarea" (D.ev_target ev) with
+    | Some _
+      when D.closest_sel ".ls-page-title" (D.ev_target ev) <> None ->
+        (* the page-title textarea is not a block editor — its own dom-event
+           keydown/blur handlers commit the rename *)
+        ()
     | Some el -> (
         match uuid_of_prefixed "edit-block-" (D.el_id el) with
         | Some uuid ->
@@ -207,7 +236,19 @@ let on_paste ev =
   if S.ready () then A.paste_blocks ev
 
 let on_copy ev =
-  if S.ready () && S.editing () = None then A.copy_selection ev
+  if S.ready () then
+    match S.editing () with
+    | Some e -> (
+        (* cljs copy-current-block-ref: a collapsed selection inside an
+           editing block copies [[uuid]]; a non-collapsed selection falls
+           through to the native text copy *)
+        match (D.textarea_of e.uuid, D.ev_clipboard ev) with
+        | Some el, Some clip ->
+            if D.el_selection_start el = D.el_selection_end el then (
+              D.clipboard_set_text clip "text/plain" ("[[" ^ e.uuid ^ "]]");
+              D.prevent_default ev)
+        | _ -> ())
+    | None -> A.copy_selection ev
 
 let on_cut ev =
   if S.ready () && S.editing () = None then A.cut_selection ev
@@ -247,14 +288,39 @@ let on_click ev =
                     match D.closest_sel ".custom-query-results" target with
                     | Some _ -> ()
                     | None -> (
-                        match D.closest_sel ".block-content" target with
-                        | Some el -> (
-                            match D.el_get_attr el "blockid" with
-                            | Some u ->
-                                A.enter_edit u
-                                  (String.length (A.model_title u))
-                            | None -> ())
-                        | None -> ())))))
+                        match D.closest_sel "a.page-ref" target with
+                        | Some _ ->
+                            (* page-ref navigation happens in the document-level
+                               listener; the editor only has to not enter edit *)
+                            ()
+                        | None -> (
+                            match D.closest_sel ".block-content" target with
+                            | Some _
+                              when D.closest_sel ".ls-page-title" target
+                                   <> None ->
+                                (* the page title's own click handler starts
+                                   Title_edit; the page uuid is not an
+                                   editable block *)
+                                ()
+                            | Some el -> (
+                                match D.el_get_attr el "blockid" with
+                                | Some u ->
+                                    (* scope by container: the same block can
+                                       render in main and the right sidebar;
+                                       only the tree where the click landed
+                                       mounts the editor *)
+                                    let scope =
+                                      match
+                                        D.closest_sel ".cp__right-sidebar"
+                                          target
+                                      with
+                                      | Some _ -> "sidebar"
+                                      | None -> "main"
+                                    in
+                                    A.enter_edit ~scope u
+                                      (String.length (A.model_title u))
+                                | None -> ())
+                            | None -> ()))))))
 
 (* -- ls:editor-insert channel (autocomplete pick: replace the typed
    trigger range with the chosen text) -- *)
@@ -291,9 +357,28 @@ let on_editor_insert ev =
                 D.el_set_selection_range el (f + String.length text)
                   (f + String.length text);
                 A.sync_buffer e.uuid nv;
-                Outliner_ops.schedule_save e.uuid nv
+                Outliner_ops.schedule_save e.uuid nv;
+                (* cljs node-embed pick: insert then clear-edit! *)
+                (match
+                   Option.bind (detail_field ev "exit") Js.Json.decodeBoolean
+                 with
+                 | Some true -> A.exit_edit ~select:false
+                 | _ -> ())
             | _ -> ())
         | None -> ())
+    | None -> ()
+
+(* -- ls:editor-command channel (autocomplete commands like "Add
+   property"; the trigger text is already stripped by ls:editor-insert) -- *)
+
+let on_editor_command ev =
+  if S.ready () then
+    match Option.bind (detail_field ev "command") Js.Json.decodeString with
+    | Some "Add property" -> (
+        match S.editing_uuid () with
+        | Some uuid -> Properties_dialog.open_for_block uuid
+        | None -> ())
+    | Some cmd -> Platform.console_error ("unhandled editor command", cmd)
     | None -> ()
 
 (* clicking outside the editor commits the buffer; clicks inside the
@@ -304,7 +389,15 @@ let on_mousedown ev =
     match D.closest_sel ".editor-wrapper" (D.ev_target ev) with
     | Some _ -> ()
     | None -> (
-        match D.closest_sel ".cp__overlays" (D.ev_target ev) with
+            (* .cp__overlays hosts the cmdk/autocomplete/context-menu popups;
+               .ui__popover-content/.ls-context-menu-content cover anchored
+               property popups and cmdk/dialog portals mount outside the
+               overlays container under body *)
+            match
+              D.closest_sel
+                ".cp__overlays, .cp__cmdk__modal, .ui__popover-content, .ls-context-menu-content"
+                (D.ev_target ev)
+            with
         | Some _ -> ()
         | None -> A.schedule_blur_commit ())
 
@@ -383,6 +476,7 @@ let install_once () =
     D.document_add_listener "click" on_click true;
     D.document_add_listener "mousedown" on_mousedown true;
     D.document_add_listener "ls:editor-insert" on_editor_insert true;
+    D.document_add_listener "ls:editor-command" on_editor_command true;
     D.document_add_listener "dragstart" on_dragstart true;
     D.document_add_listener "dragover" on_dragover true;
     D.document_add_listener "drop" on_drop true;

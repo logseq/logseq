@@ -19,9 +19,26 @@ type block =
   ; block_level : int
   ; block_tag_ids : int list (* block/tags ref ids from the pull *)
   ; block_tags : string list (* resolved tag titles, for .block-tags *)
-  ; block_tag_idents : string list (* resolved tag db/idents, e.g. logseq.class/Query *)
-  ; block_children : block list
+  ; block_tag_uuids : string list (* aligned with block_tags *)
+  ; block_tag_idents : string list (* resolved tag idents, same filtering *)
   ; block_page_name : string option (* containing page, for ref rows *)
+  ; block_reactions : (string * int) list (* emoji-id, count *)
+  ; block_is_comments_area : bool
+  ; block_is_comment : bool
+  ; block_comment_targets : int (* live :comments/blocks target count *)
+  ; block_children : block list
+  ; (* db id of a :block/link target — the block renders the linked
+       page's blocks instead of its own children *)
+    block_link : int option
+  ; (* fetched blocks of the linked entity; never written back by
+       structure ops (they belong to the source page) *)
+    block_embed_children : block list
+  ; block_is_page : bool
+  ; block_heading : int option (* resolved h1..h6 level *)
+    (* page-typed outline child (carries block/name; cljs entity/page?) *)
+  ; block_default_collapsed : bool
+    (* page children render collapsed outside the Library page
+       (cljs block-default-collapsed?) — set per containing page view *)
   ; block_asset_type : string option (* logseq.property.asset/type *)
   ; block_asset_url : string option (* logseq.property.asset/external-url *)
   ; block_asset_width : int option (* logseq.property.asset/width *)
@@ -35,9 +52,19 @@ type page =
   ; page_uuid : string option
   ; page_db_id : int option
   ; page_is_tag : bool
+  ; page_is_property : bool
+  ; page_icon : (string * string) option (* (type, id) from logseq.property/icon *)
   ; page_journal_day : int option
+  ; page_is_library : bool
+  ; (* entity predicates used by menu/convert actions:
+       internal-page? = tagged with :logseq.class/Page;
+       built-in? = :logseq.property/built-in? *)
+    page_internal : bool
+  ; page_built_in : bool
   ; page_tags : string list
   ; page_blocks : block list
+  ; page_linked_refs : block list (* linked references, for journal items *)
+  ; page_parents : block list (* block-zoom breadcrumb chain, root first *)
   }
 
 type phase =
@@ -100,6 +127,8 @@ type t =
   ; unlinked_open : bool
   ; unlinked_search : bool
   ; unlinked_query : string
+  ; help_open : bool
+  ; unlinked_blocks : block list
   ; gv : graph_view
   }
 
@@ -113,16 +142,22 @@ let initial =
   ; unlinked_refs = []
   ; repos = []
   ; theme_dark = false
-  ; left_sidebar_open = true
+  ; left_sidebar_open =
+      (* cljs: (boolean (storage/get :ls-left-sidebar-open?)) — nil -> false *)
+      (match Platform.local_storage_get "ls-left-sidebar-open?" with
+       | Some "true" -> true
+       | _ -> false)
   ; right_sidebar_open = false
   ; editing_title = false
   ; page_menu = None
   ; confirm = None
   ; toasts = []
   ; toast_next = 0
-  ; unlinked_open = false
+  ; unlinked_open = true
   ; unlinked_search = false
   ; unlinked_query = ""
+  ; help_open = false
+  ; unlinked_blocks = []
   ; gv = graph_view_initial
   }
 

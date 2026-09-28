@@ -25,6 +25,7 @@ type t =
   | Unlinked_toggle_open
   | Unlinked_toggle_search
   | Unlinked_set_query of string
+  | Help_toggle
   | Graph_toggle_settings
   | Graph_set_mode of string
   | Graph_toggle_tt

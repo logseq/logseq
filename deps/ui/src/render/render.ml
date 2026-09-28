@@ -23,10 +23,12 @@ module D = Render_dom
    text↔children transition remounts: LUI applies the textContent write
    before the child removal within a batch, which would detach the
    tracked child early. *)
-let wrap ?(cls = "block-title-wrap") ?(tag = "span") s : t =
+let wrap ?(cls = "block-title-wrap") ?(tag = "span") ?(self = "") s : t =
   match Render_inline.plain_text s with
-  | Some text -> D.el ~key:"btw-t" ~tag ~style_class:cls ~text []
-  | None -> D.el ~key:"btw-c" ~tag ~style_class:cls (Render_inline.parse s)
+  | Some text -> D.el ~key:("btw-t-" ^ tag) ~tag ~style_class:cls ~text []
+  | None ->
+      D.el ~key:("btw-c-" ^ tag) ~tag ~style_class:cls
+        (Render_inline.parse ~self s)
 
 (* #..###### markdown heading at title start *)
 let heading_level s =
@@ -126,25 +128,30 @@ let query_shell =
     ]
 
 (* content for a (possibly quoted) body — headings nest inside quote *)
-let content s =
+let content ?(self = "") s =
   match heading_level s with
   | Some (lvl, rest) ->
       wrap ~tag:("h" ^ string_of_int lvl)
-        ~cls:"block-title-wrap as-heading" rest
+        ~cls:"block-title-wrap as-heading" ~self rest
   | None ->
       (* empty title: a <br> gives the inline wrap a line box, so
          .block-content keeps its clickable area (cljs does the same via
          the mldoc linebreak node it emits for empty content) *)
       if s = "" then
-        D.el ~key:"btw-c" ~tag:"span" ~style_class:"block-title-wrap"
+        D.el ~key:"btw-empty" ~tag:"span" ~style_class:"block-title-wrap"
           [ D.el ~key:"btw-br" ~tag:"br" [] ]
-      else wrap s
+      else wrap ~self s
 
-let title ?(is_query = false) (s : string) : t list =
+(* self: uuid of the block whose title this is — seeds the ref chain
+   (cljs :ref-set) that suppresses self/cycle references. is_query:
+   query blocks render the .custom-query-results shell instead of
+   inline content (cljs query view). *)
+let title ?heading ?(is_query = false) ?(self = "") (s : string) : t list =
   match quote_body s with
   | Some body ->
-      [ D.el ~tag:"div" ~attrs:[ ("data-node-type", "quote") ]
-          [ content body ] ]
+      [ D.el ~key:"rc-quote" ~tag:"div"
+          ~attrs:[ ("data-node-type", "quote") ]
+          [ content ~self body ] ]
   | None -> (
       match src_block s with
       | Some (lang, code) -> [ code_block lang code ]
@@ -153,7 +160,18 @@ let title ?(is_query = false) (s : string) : t list =
           else (
               match ordered_prefix s with
               | Some (num, rest) ->
-                  [ D.el ~tag:"span" ~style_class:"typed-list"
+                  [ D.el ~key:"rc-typed-list" ~tag:"span"
+                      ~style_class:"typed-list"
                       [ D.el ~tag:"label" ~text:num [] ]
-                  ; content rest ]
-              | None -> [ content s ])))
+                  ; content ~self rest ]
+              | None -> (
+                  (* cljs text-block-title: a resolved property heading
+                     renders the wrap as h<lvl>.block-title-wrap.as-heading *)
+                  match heading with
+                  | Some lvl -> (
+                      match heading_level s with
+                      | Some _ -> [ content ~self s ]
+                      | None ->
+                          [ wrap ~tag:("h" ^ string_of_int lvl)
+                              ~cls:"block-title-wrap as-heading" ~self s ])
+                  | None -> [ content ~self s ]))))

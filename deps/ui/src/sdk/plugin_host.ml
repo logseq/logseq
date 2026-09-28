@@ -91,7 +91,12 @@ let slot_id it =
   "pl-injected-ui-item-pl-" ^ jstr it.it_opts "key" ^ "-" ^ it.it_pid
 
 let inject_toolbar_ui () =
-  let setup = getf (getf (lsplugin ()) "pluginHelpers") "setupInjectedUI" in
+  let setup =
+    match Js.Json.classify (lsplugin ()) with
+    | Js.Json.JSONObject _ ->
+        getf (getf (lsplugin ()) "pluginHelpers") "setupInjectedUI"
+    | _ -> Js.Json.null
+  in
   List.iter
     (fun it ->
       match
@@ -228,10 +233,13 @@ let setup () =
 (* ---------- pinned toolbar items (in user preferences) ---------- *)
 
 let pinned () =
-  match Js.Json.decodeArray (getf (read_json prefs_key) "pinnedToolbarItems") with
-  | Some xs ->
-      Array.to_list xs
-      |> List.filter_map Js.Json.decodeString
+  match Js.Dict.get (read_dict prefs_key) "pinnedToolbarItems" with
+  | Some j -> (
+      match Js.Json.decodeArray j with
+      | Some xs ->
+          Array.to_list xs
+          |> List.filter_map Js.Json.decodeString
+      | None -> [])
   | None -> []
 
 let toggle_pinned pkey =

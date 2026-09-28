@@ -30,6 +30,8 @@ let block ?(children = []) uuid title : Model.block =
   ; block_tags = []
   ; block_children = children
   ; block_page_name = None
+  ; block_is_page = false
+  ; block_default_collapsed = false
   }
 
 let page blocks : Model.page =
@@ -38,6 +40,7 @@ let page blocks : Model.page =
   ; page_db_id = None
   ; page_is_tag = false
   ; page_journal_day = None
+  ; page_is_library = false
   ; page_tags = []
   ; page_blocks = blocks
   }
