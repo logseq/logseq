@@ -136,6 +136,22 @@
   (and (element? target)
        (some? (.closest target "[data-base-ui-focus-guard]"))))
 
+(defn- popup-content-target?
+  [target]
+  (and (element? target)
+       (some? (.closest target ".ui__dropdown-menu-content, .ui__dropdown-menu-sub-content, .ui__popover-content, .ui__context-menu-content, .ui__context-menu-sub-content"))))
+
+(defn- tab-key-event?
+  [^js event]
+  (let [native (or (some-> event (.-nativeEvent)) event)]
+    (= (some-> native (.-key)) "Tab")))
+
+(defn- retain-focus-out?
+  [^js event-details targets]
+  (and (popup-content-target? (event-related-target (some-> event-details (.-event))))
+       (not (some focus-guard-target? targets))
+       (not (tab-key-event? (some-> event-details (.-event))))))
+
 (def ^:private menu-transition-close-reasons
   #{"trigger-hover" "trigger-focus" "list-navigation" "sibling-open"})
 
@@ -363,11 +379,12 @@
                                           opening-outside-press? (and (= reason "outside-press")
                                                                       (number? ignore-opening-outside-press-until)
                                                                       (< (js/Date.now) ignore-opening-outside-press-until))
-                                          ;; Tab/Shift+Tab lands on Base UI focus guards and requests
-                                          ;; a focus-out close. Canceling that close keeps the guards
-                                          ;; mounted and they re-focus each other until the stack overflows.
+                                          ;; Keep internal focus-out cancels, but let Tab/Shift+Tab
+                                          ;; and trigger-guard focus-out close. Canceling those
+                                          ;; leaves Base UI guards mounted and they re-focus each
+                                          ;; other until the stack overflows.
                                           focus-transition? (and (= reason "focus-out")
-                                                                 (not (some focus-guard-target? targets)))
+                                                                 (retain-focus-out? e targets))
                                           menu-transition? (and use-menu?
                                                                 (contains? menu-transition-close-reasons reason))
                                           handler (case reason
