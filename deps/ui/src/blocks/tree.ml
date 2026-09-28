@@ -95,25 +95,10 @@ let control_wrap uuid : t =
 
 (* -- content vs editor -- *)
 
-let editing_sig uuid =
-  Signal.map
-    (fun (st : S.t) ->
-      match st.editing with
-      | Some e -> e.uuid = uuid
-      | None -> false)
-    (S.signal ())
-
 let content_el uuid (b : Model.block) : t =
   (* style width:100% — cljs parity (block.cljs): gives the inline element a
      nonzero box so empty blocks stay clickable *)
   dom ~key:("content-" ^ uuid) ~style_class:"block-content inline"
-    ~style_class_signal:
-      (Logseq_dom.class_signal
-         (editing_sig uuid)
-         (fun editing ->
-           (* cljs keeps .block-content mounted (hidden) while editing, so
-              e2e's .block-title-wrap contents still read the title *)
-           "block-content inline" ^ if editing then " hidden" else ""))
     ~id:("block-content-" ^ uuid)
     ~attrs:
       [ ("blockid", uuid); ("containerid", uuid); ("style", "width:100%") ]
@@ -124,10 +109,10 @@ let content_el uuid (b : Model.block) : t =
         ]
     ]
 
-let editor_el uuid : t =
+let editor_el uuid scope : t =
   let buffer =
     match S.editing () with
-    | Some e when e.uuid = uuid -> e.buffer
+    | Some e when e.uuid = uuid && e.scope = scope -> e.buffer
     | _ -> ""
   in
   (* textarea text must track the buffer: e2e asserts
@@ -136,7 +121,8 @@ let editor_el uuid : t =
     Signal.map
       (fun (st : S.t) ->
         match st.S.editing with
-        | Some e when e.uuid = uuid -> Lui_protocol.StringValue e.buffer
+        | Some e when e.uuid = uuid && e.scope = scope ->
+            Lui_protocol.StringValue e.buffer
         | _ -> Lui_protocol.StringValue "")
       (S.signal ())
   in
@@ -151,13 +137,19 @@ let editor_el uuid : t =
         ]
     ]
 
-let content_or_editor uuid (b : Model.block) : t =
- fun context parent ->
-  let node = (content_el uuid b) context parent in
-  (* cljs removes the editor entirely in normal mode (e2e asserts the
-     textarea is absent) but keeps .block-content mounted hidden *)
-  ignore ((if_ ~test:(editing_sig uuid) (editor_el uuid)) context parent);
-  node
+let content_or_editor uuid scope (b : Model.block) : t =
+  (* cljs unmounts .block-content while editing and removes the editor
+     entirely in normal mode — .block-title-wrap must be absent for the
+     edited block or e2e counts a stale title *)
+  dyn ~equal:(fun a b -> a = b)
+    (fun editing ->
+      if editing then editor_el uuid scope else content_el uuid b)
+    (Signal.map
+       (fun (st : S.t) ->
+         match st.editing with
+         | Some e -> e.uuid = uuid && e.scope = scope
+         | None -> false)
+       (S.signal ()))
 
 (* -- tags chips (components/block.cljs tags-cp): sibling of the content
    wrapper so they stay visible while the block is being edited. Tags that
@@ -199,12 +191,12 @@ let () =
   Editor_keys.install_once ();
   Add_button.install ()
 
-let rec block_row (b : Model.block) : t =
+let rec block_row ?(scope = "main") (b : Model.block) : t =
  fun ctx parent ->
   S.ensure ctx;
-  (row_el b) ctx parent
+  (row_el scope b) ctx parent
 
-and row_el (b : Model.block) : t =
+and row_el scope (b : Model.block) : t =
   let uuid = Option.value b.block_uuid ~default:"" in
   let key = block_key b in
   let embed = b.block_link <> None in
@@ -230,7 +222,7 @@ and row_el (b : Model.block) : t =
                             [ dom ~key:("cw-" ^ key)
                                 ~style_class:
                                   "block-content-wrapper flex flex-1 w-full"
-                                [ content_or_editor uuid b ]
+                                [ content_or_editor uuid scope b ]
                             ; tags_el uuid b
                             ]
                         ]
@@ -238,10 +230,10 @@ and row_el (b : Model.block) : t =
                 ]
             ]
         ]
-    ; (if has_children then children_el uuid b else box ~key:("nc-" ^ key) [])
+    ; (if has_children then children_el uuid scope b else box ~key:("nc-" ^ key) [])
     ]
 
-and children_el uuid (b : Model.block) : t =
+and children_el uuid scope (b : Model.block) : t =
   if_
     ~test:(Signal.map (fun c -> not c) (collapsed_sig uuid))
     (dom ~key:("children-" ^ uuid)
@@ -250,5 +242,5 @@ and children_el uuid (b : Model.block) : t =
            ~style_class:"block-children-left-border"
            ~attrs:[ ("blockid", uuid) ] []
        ; dom ~key:("clist-" ^ uuid) ~style_class:"block-children w-full"
-           (List.map block_row (S.children_of b))
+           (List.map (block_row ~scope) (S.children_of b))
        ])

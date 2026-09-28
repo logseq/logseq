@@ -347,6 +347,75 @@ sorting, view tabs, selection bar, export EDN) and the query surface of
   `a.menu-link.chosen` count=2. The properties popover should be removed
   or folded into the main autocomplete.
 
+## Embeds
+
+Implementation: slash "Node embed" is `ac_kind Embed_ref` in
+`popups_state.ml`; picking a page calls `Editor_embed.insert`, which
+issues `insert-blocks` with `sibling`, `replace-empty-target`, the page
+name as title, and `block/link` → the target page db id (new
+`block_map ~link` arg in `outliner_ops.ml`). Blocks with `block/link`
+render their linked page's children inside the block-children container;
+the row carries `.embed-block` plus `originalblockid`/`data-embed`
+attrs. `Editor_state.children_of` returns `block_embed_children` when
+`block_link` is set, so `find`/`flat_visible`/prev-next traversals see
+embedded rows. `fill_embed_children` (per-`block/link`
+`thread-api/get-page-blocks-tree`, ancestor self-embed guard,
+`Promise.catch → []`) runs in `refresh_page`, `goto_page`, and the zoom
+route. Embed ops never move embedded children — outdent of a block
+after an embed uses `parent_original` (the embed row's real parent),
+matching the cljs fix for `indent-outdent-embed-page-test`.
+
+### `.block-content` must be UNMOUNTED while editing
+`.block-content.inline{display:flex}` (style.css) beats `.hidden
+{display:none}` — class-based hiding cannot collapse it, and its
+flex sibling squeezes `.editor-wrapper` to width 0 (Playwright reports
+the textarea "hidden"). Keeping it mounted-but-hidden also leaves a
+stale `.block-title-wrap` that `consecutive-backspace` counts. Upstream
+solution adopted: `content_or_editor` swaps content↔editor via `dyn`,
+unmounting `.block-content` entirely.
+
+### Editing is scoped per container
+`S.editing` is global, but the same block renders in main content AND
+the right sidebar. Without a scope, both trees mounted a textarea with
+id `edit-block-<uuid>` → Playwright strict-mode violation in
+`references-embeds-and-mounted-instance-refresh-test` (`w/fill
+util/editor-q`). `editing` now carries `scope` ("main"/"sidebar"):
+`block_row ~scope` threads it down, `content_or_editor` only mounts the
+editor in the scope where the click landed (`closest
+".cp__right-sidebar"`), and `merge/split/delete` paths preserve the
+incoming scope.
+
+### Linked references are grouped by source page
+cljs `grouped-blocks-container` renders `.references` as
+`.references-blocks-item` groups, each headed by `page-cp` (the
+referencing page title). A flat row list never shows the source page
+name, so `.references :has-text(<source-page>)` fails. `page.ml`
+`refs_grouped` groups on `block/page-name` (already emitted per ref row
+by `with_explicit_ref_fields`) and emits a `.page-ref` link per group.
+
+### cmdk create-row `idx = -1` race
+`on_input` → `upsert_create` inserts the "Create page called …" row with
+`idx = -1` before the ~100ms-debounced `apply_results` renumbers; an
+index-based click dispatch silently no-ops in that window. Clicks now
+resolve via a stable `data-item-key` attr + key lookup in `cmdk_view.ml`
+instead of `data-item-index`.
+
+### Stale `db-worker.js` after merges
+`static/js/db-worker.js` is a build artifact — after merging branches
+that touch `deps/db-worker`, rebuild it (`dune build js_api` + `vite
+build` there). A stale bundle misses new endpoints and throws
+`MelangeError: Dispatcher.Exn_info` ("not found thread-api: …") as
+unhandled rejections that break unrelated flows (observed: missing
+`thread-api/get-unlinked-refs` broke `graph/new-graph`).
+
+### LUI `previous_nodes` batch-ordering fix is local-only
+The fix for prop ops targeting nodes dropped earlier in the same patch
+batch lives ONLY in `~/.opam/5.5.0/.opam-switch/sources/lui`
+(`lui_web_apply.ml` / `lui_web_extensions.ml`) and is installed into the
+switch, but is NOT committed to `logseq/lui` — the opam pin tracks
+`#main`, so any fresh `install-opam-deps.sh` run silently reverts it.
+Needs an upstream PR.
+
 ## cljs ↔ OCaml 行为对照表 (interaction semantics map)
 
 | 交互 / 隐式契约 | cljs 语义来源 | LUI/OCaml 实现位置 |
