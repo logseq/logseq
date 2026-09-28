@@ -141,15 +141,23 @@ let global_items () =
 external inner_width : float = "innerWidth" [@@mel.scope "window"]
 
 let view (x, y, with_app_items) (p : Model.page option) =
-  let x = Float.min x (inner_width -. 250.) in
+  let style =
+    if with_app_items then
+      (* toolbar dots menu: x is the trigger's right edge -> anchor
+         the menu's right edge to it like the cljs dropdown *)
+      Printf.sprintf "position:fixed;right:%.0fpx;top:%.0fpx"
+        (Float.max 8. (inner_width -. x))
+        y
+    else
+      Printf.sprintf "position:fixed;left:%.0fpx;top:%.0fpx"
+        (Float.min x (inner_width -. 250.))
+        y
+  in
   dom ~key:"page-menu" ~tag:"div"
     ~style_class:
       "ui__dropdown-menu-content z-50 min-w-[8rem] rounded-md border \
        bg-popover p-1 text-popover-foreground shadow-md"
-    ~attrs:
-      [ ( "style"
-        , Printf.sprintf "position:fixed;left:%.0fpx;top:%.0fpx" x y )
-      ]
+    ~attrs:[ ("style", style) ]
     (* cljs header.cljs toolbar-dots-menu = page items + hr + app
        items; a page right-click shows page items only *)
     (match p, with_app_items with

@@ -39,16 +39,22 @@ let dots_button =
   Logseq_dom.dom ~key:"dots-btn" ~tag:"button"
     ~style_class:"button cp__header-btn toolbar-dots-btn"
     ~events:"click"
-    ~on_dom_event:(fun name payload ->
-      if name = "click" then (
-        let x, y =
-          match payload with
-          | Some p ->
-              ( Platform.payload_num p "clientX"
-              , Platform.payload_num p "clientY" )
-          | None -> (0., 0.)
-        in
-        Runtime.send (Action.Page_menu_set (Some (x, y, true)))))
+    ~on_dom_event:(fun name _ ->
+      (* cljs anchors the dropdown to the trigger's right edge, not
+         the click position *)
+      if name = "click" then
+        match
+          Dom_ext.doc_query_selector ".toolbar-dots-btn"
+        with
+        | Some el ->
+            let r = Dom_ext.bounding_rect el in
+            Runtime.send
+              (Action.Page_menu_set
+                 (Some
+                    ( Dom_ext.rect_right r
+                    , Dom_ext.rect_bottom r +. 4.
+                    , true )))
+        | None -> ())
     [ Icons.icon ~size:20. ~cls:"" "dots" ]
 
 let left_menu_button =
