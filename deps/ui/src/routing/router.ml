@@ -68,8 +68,19 @@ let fetch_blocks (p : Model.page) =
   Runtime.invoke3 "thread-api/get-page-blocks-tree"
     (Wire.String (repo ())) (ref_of_page p) Wire.Nil
   |> Js.Promise.then_ (fun blocks_w ->
-         Js.Promise.resolve
-           { p with Model.page_blocks = Decode.blocks_of_wire blocks_w })
+         (* fill :block/link rows' embed children so page embeds render
+            the linked page's blocks *)
+         let collapsed = ref Editor_state.String_set.empty in
+         collapsed :=
+           Outliner_ops.collect_collapsed !collapsed blocks_w;
+         Outliner_ops.fill_embed_children (repo ())
+           (Outliner_ops.ancestors_of p) collapsed
+           (Decode.blocks_of_wire blocks_w)
+         |> Js.Promise.then_ (fun blocks ->
+                Outliner_ops.set_collapsed !collapsed;
+                Js.Promise.resolve blocks))
+  |> Js.Promise.then_ (fun blocks ->
+         Js.Promise.resolve { p with Model.page_blocks = blocks })
 
 let fetch_refs (p : Model.page) =
   match p.Model.page_db_id with
@@ -180,17 +191,29 @@ let load_block_zoom uuid =
                       | _ -> Wire.Nil)
                 in
                 match blk with
-                | Wire.Map _ ->
+                | Wire.Map _ -> (
                     let b = Decode.block_of_wire blk in
-                    Runtime.send
-                      (Action.Page_loaded
-                         { Model.page_title = b.Model.block_title
-                         ; page_uuid = b.block_uuid
-                         ; page_db_id = b.block_db_id
-                         ; page_is_tag = false
-                         ; page_journal_day = None
-                         ; page_blocks = b.block_children
-                         })
+                    let ancestors =
+                      match b.Model.block_db_id with
+                      | Some id -> [ id ]
+                      | None -> []
+                    in
+                    let collapsed = ref Editor_state.String_set.empty in
+                    ignore
+                      (Outliner_ops.fill_embed_children (repo ()) ancestors
+                         collapsed b.Model.block_children
+                       |> Js.Promise.then_ (fun children ->
+                              Outliner_ops.set_collapsed !collapsed;
+                              Runtime.send
+                                (Action.Page_loaded
+                                   { Model.page_title = b.Model.block_title
+                                   ; page_uuid = b.block_uuid
+                                   ; page_db_id = b.block_db_id
+                                   ; page_is_tag = false
+                                   ; page_journal_day = None
+                                   ; page_blocks = children
+                                   });
+                              Js.Promise.resolve ())))
                 | _ ->
                     Runtime.send
                       (Action.Navigate_to (Model.Not_found uuid)))

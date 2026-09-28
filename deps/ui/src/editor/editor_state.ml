@@ -93,13 +93,21 @@ let page_blocks () =
   | Some p -> p.Model.page_blocks
   | None -> []
 
+(* blocks a row actually displays: a :block/link (embed) block renders the
+   linked page's fetched blocks in place of its own children — so lookups
+   and visible order must consult block_embed_children for them *)
+let children_of (b : Model.block) =
+  match b.Model.block_link with
+  | Some _ -> b.Model.block_embed_children
+  | None -> b.Model.block_children
+
 let rec find_in blocks uuid =
   match blocks with
   | [] -> None
   | b :: rest -> (
       if b.Model.block_uuid = Some uuid then Some b
       else
-        match find_in b.Model.block_children uuid with
+        match find_in (children_of b) uuid with
         | Some _ as r -> r
         | None -> find_in rest uuid)
 
@@ -110,7 +118,7 @@ let rec find_parent_in blocks uuid =
   match blocks with
   | [] -> None
   | parent :: rest -> (
-      let children = parent.Model.block_children in
+      let children = children_of parent in
       let rec idx i = function
         | [] -> None
         | c :: _ when c.Model.block_uuid = Some uuid -> Some i
@@ -146,7 +154,7 @@ let flat_visible () =
         let acc =
           match b.Model.block_uuid with
           | Some u when String_set.mem u collapsed -> acc
-          | _ -> go acc b.Model.block_children
+          | _ -> go acc (children_of b)
         in
         go acc rest
   in
@@ -156,7 +164,7 @@ let flat_all () =
   let rec go acc blocks =
     match blocks with
     | [] -> acc
-    | b :: rest -> go (go (b :: acc) b.Model.block_children) rest
+    | b :: rest -> go (go (b :: acc) (children_of b)) rest
   in
   List.rev (go [] (page_blocks ()))
 
@@ -176,3 +184,30 @@ let neighbor_of uuid dir =
 
 let prev_visible uuid = neighbor_of uuid `Prev
 let next_visible uuid = neighbor_of uuid `Next
+
+(* optimistic title write: a commit updates the model so the row re-renders
+   immediately instead of waiting for the worker refresh round-trip *)
+let rec map_block_title uuid title blocks =
+  List.map
+    (fun (b : Model.block) ->
+      { b with
+        Model.block_title =
+          (if b.Model.block_uuid = Some uuid then title
+           else b.Model.block_title)
+      ; block_children = map_block_title uuid title b.Model.block_children
+      ; block_embed_children =
+          map_block_title uuid title b.Model.block_embed_children
+      })
+    blocks
+
+let update_block_title uuid title =
+  match !Runtime.current_page with
+  | None -> ()
+  | Some p ->
+      Runtime.current_page :=
+        Some
+          { p with
+            Model.page_blocks =
+              map_block_title uuid title p.Model.page_blocks
+          };
+      set (fun st -> st)

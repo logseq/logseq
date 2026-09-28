@@ -9,7 +9,7 @@ external self_obj : remote = "self"
 external wrap : remote -> remote = "wrap" [@@mel.module "comlink"]
 external remote_invoke : remote -> string -> string -> string Js.Promise.t
   = "remoteInvoke" [@@mel.send]
-external promise_error_message : Js.Promise.error -> string option = "message"
+external promise_error_message : Js.Promise.error -> string option = "message" [@@mel.get]
 
 let main_thread = lazy (wrap self_obj)
 

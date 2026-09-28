@@ -189,8 +189,9 @@ let insert_block a b c _d =
                                       resolved_wire w)))))
   | _ -> resolved_nil
 
-(* batch blocks [{content, uuid?, properties?, children?}] -> wire maps *)
-let rec batch_block_wire (w : Wire.t) : Wire.t =
+(* batch blocks [{content, uuid?, properties?, children?}] -> wire maps
+   paired with the uuids of each created block in depth-first order *)
+let rec batch_block_wire (w : Wire.t) : Wire.t * string list =
   let title =
     match Wire.get w "content" with
     | Some (Wire.String s) -> s
@@ -201,11 +202,13 @@ let rec batch_block_wire (w : Wire.t) : Wire.t =
     | Some u -> u
     | None -> Platform.random_uuid ()
   in
-  let children =
+  let child_pairs =
     match Wire.get w "children" with
     | Some c -> List.map batch_block_wire (list_items c)
     | None -> []
   in
+  let children = List.map fst child_pairs in
+  let uuids = uuid :: List.concat_map snd child_pairs in
   let props =
     match Wire.get w "properties" with
     | Some p ->
@@ -215,23 +218,26 @@ let rec batch_block_wire (w : Wire.t) : Wire.t =
              (properties_of p))
     | None -> Wire.Map []
   in
-  Wire.Map
-    ([ (Wire.String "block/title", Wire.String title)
-     ; (Wire.String "block/uuid", Wire.Uuid uuid)
-     ]
-    @ (match children with
-       | [] -> []
-       | cs -> [ (Wire.String "children", Wire.List cs) ])
-    @
-    match props with
-    | Wire.Map [] -> []
-    | _ -> [ (Wire.String "block/properties", props) ])
+  ( Wire.Map
+      ([ (Wire.String "block/title", Wire.String title)
+       ; (Wire.String "block/uuid", Wire.Uuid uuid)
+       ]
+      @ (match children with
+         | [] -> []
+         | cs -> [ (Wire.String "children", Wire.List cs) ])
+      @
+      match props with
+      | Wire.Map [] -> []
+      | _ -> [ (Wire.String "block/properties", props) ])
+  , uuids )
 
 let insert_batch_block a b c _d =
   match arg_string a with
   | None -> resolved_nil
   | Some id ->
-      let blocks = List.map batch_block_wire (list_items (arg_wire b)) in
+      let pairs = List.map batch_block_wire (list_items (arg_wire b)) in
+      let blocks = List.map fst pairs in
+      let uuids = List.concat_map snd pairs in
       let opts = arg_map c in
       let insert_opts =
         Wire.Map
@@ -247,7 +253,13 @@ let insert_batch_block a b c _d =
              | Some uuid ->
                  apply_op "insert-blocks"
                    [ Wire.List blocks; Wire.Uuid uuid; insert_opts ]
-                 |> Js.Promise.then_ (fun _ -> resolved_nil))
+                 |> Js.Promise.then_ (fun _ ->
+                        (* cljs returns the created block entities *)
+                        Js.Promise.all
+                          (Array.of_list (List.map get_entity uuids))
+                        |> Js.Promise.then_ (fun entities ->
+                               resolved_wire
+                                 (Wire.List (Array.to_list entities)))))
 
 let append_block_in_page a b c _d =
   (* overloads: (content) | (page, content) | (page, content, opts) *)

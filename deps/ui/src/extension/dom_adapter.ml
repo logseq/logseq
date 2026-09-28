@@ -171,7 +171,13 @@ let set_property el prop value =
   | "attrs", StringValue s -> apply_attrs el s
   | "events", StringValue s -> apply_events el s
   | "text", StringValue s ->
-      if is_input_tag el then set_value el s
+      if is_input_tag el then begin
+        set_value el s;
+        (* cljs renders the buffer as the textarea's text child, so
+           textContent tracks .value; playwright :has-text reads
+           textContent *)
+        W.Element.setTextContent el s
+      end
       else W.Element.setTextContent el s
   | "style-class", StringValue s -> W.Element.setClassName el s
   | "accessibility-identifier", StringValue s ->
@@ -183,7 +189,10 @@ let remove_property el prop =
   | "attrs" -> apply_attrs el "{}"
   | "events" -> apply_events el ""
   | "text" ->
-      if is_input_tag el then set_value el ""
+      if is_input_tag el then begin
+        set_value el "";
+        W.Element.setTextContent el ""
+      end
       else W.Element.setTextContent el ""
   | "style-class" -> W.Element.setClassName el ""
   | "accessibility-identifier" -> W.Element.removeAttribute "id" el

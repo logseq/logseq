@@ -17,11 +17,19 @@ let rec block_of_wire (w : Wire.t) : Model.block =
         List.map block_of_wire xs
     | _ -> []
   in
+  (* a pulled [:block/link ...] ref arrives as a {:db/id n} stub *)
+  let link =
+    match Wire.get w "block/link" with
+    | Some l -> Wire.map_get_int l "db/id"
+    | None -> None
+  in
   { block_uuid = uuid
   ; block_db_id = db_id
   ; block_title = title
   ; block_level = level
   ; block_children = children
+  ; block_link = link
+  ; block_embed_children = []
   }
 
 let blocks_of_wire (w : Wire.t) : Model.block list =
