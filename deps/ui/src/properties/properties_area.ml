@@ -899,7 +899,9 @@ let mount_sidebar_area (area : el) =
                    el_append_child area panel;
                    render_panel ctx ~owner_is_tag:is_tag
                      ~owner_title:title ~page_area:true
-                     ~show_hidden:!S.show_hidden panel panel_rows hidden;
+                     ~show_hidden:!S.show_hidden
+                     ~can_toggle:(can_toggle_hidden ctx ~below_rows:[])
+                     panel panel_rows hidden;
                    if is_tag then
                      render_class_section ctx ~owner_title:title area
                    else

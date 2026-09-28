@@ -231,11 +231,14 @@ let split_at_cursor uuid =
         let before = String.sub buf 0 pos in
         let after = String.sub buf pos (String.length buf - pos) in
         let new_uuid = Platform.random_uuid () in
-        let sibling = S.is_collapsed uuid || b.Model.block_children = [] in
+        let library = library_context () in
+        let sibling =
+          library || S.is_collapsed uuid || b.Model.block_children = []
+        in
         let p =
           Js.Promise.all
             [| Ops.block_map_parsed uuid before
-             ; Ops.block_map_parsed new_uuid after |]
+             ; Ops.block_map_parsed ~page:library new_uuid after |]
           |> Js.Promise.then_ (fun a ->
                  Ops.apply_and_refresh ~opts:(Ops.op_opts "insert-blocks")
                    [ Ops.op "save-block" [ a.(0); Wire.Map [] ]

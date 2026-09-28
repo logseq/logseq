@@ -42,19 +42,14 @@ let rec render inst =
       let refresh = (V.ops ()).V.o_refresh in
       (* cljs views.cljs view: .flex.flex-col.gap-2.grid with filters-row
          as first child of .ls-view-body *)
-      (* cljs views.cljs: view-head + view-body sit inside ui/foldable,
-         which wraps the body in .ls-foldable-content-inner (overflow
-         hidden) so wide tables scroll instead of stretching the grid *)
       let grid = D.h ~cls:"flex flex-col gap-2 grid" () in
+      D.el_append_child grid (Views_head.render_head inst ~refresh);
       let body =
         Views_table.render_body inst ~refresh
           ~filters:(Views_head.filters_row inst ~refresh)
           ()
       in
-      D.el_append_child grid
-        (Views_table.foldable inst ~refresh ~key:"view"
-           ~title_el:(Views_head.render_head inst ~refresh)
-           ~body:(fun () -> body));
+      D.el_append_child grid body;
       D.el_append_child inst.V.container grid
 
 and render_query inst =
