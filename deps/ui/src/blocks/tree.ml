@@ -228,10 +228,19 @@ let tags_el uuid (b : Model.block) : t =
       dom ~key:("tags-" ^ uuid) ~style_class:"block-tags gap-1"
         (List.mapi
            (fun i tag ->
+             (* cljs block-tag: .block-tag > .flex.items-center >
+                a.hash-symbol("#") + a.tag *)
              dom ~key:("tag-" ^ uuid ^ "-" ^ string_of_int i)
                ~style_class:"block-tag"
-               [ dom ~key:("ta-" ^ uuid ^ "-" ^ string_of_int i) ~tag:"a"
-                   ~style_class:"tag" ~text:tag []
+               [ dom ~key:("tc-" ^ uuid ^ "-" ^ string_of_int i)
+                   ~style_class:"flex items-center"
+                   [ dom ~key:("th-" ^ uuid ^ "-" ^ string_of_int i) ~tag:"a"
+                       ~style_class:"hash-symbol select-none flex" ~text:"#" []
+                   ; dom ~key:("ta-" ^ uuid ^ "-" ^ string_of_int i) ~tag:"a"
+                       ~style_class:"tag relative"
+                       ~attrs:[ ("tabindex", "0"); ("draggable", "true") ]
+                       ~text:tag []
+                   ]
                ])
            tags)
 
