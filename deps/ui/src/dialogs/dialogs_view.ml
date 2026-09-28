@@ -53,6 +53,7 @@ let body_of name (ms : Model.t Signal.signal) : t =
   match name with
   | "new-graph" | "add-graph" -> New_graph.body ms
   | "settings" -> Settings_view.body ms
+  | "plugins" -> Plugins_view.body ms
   | "login" -> Login_view.body ms
   | "import" | "importer" -> Importer.body ms
   | "export" | "export-graph" -> Exporter.body ms

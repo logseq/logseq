@@ -659,6 +659,7 @@ let toggle_nav st nav checked =
 
 let close_menu st = Runtime.signal_set st.open_menu ""
 let open_nav_menu st = Runtime.signal_set st.open_menu "nav-edit"
+let open_dots_menu st = Runtime.signal_set st.open_menu "dots"
 let open_item_menu st key =
   Runtime.signal_set st.open_menu ("item-" ^ key)
 
