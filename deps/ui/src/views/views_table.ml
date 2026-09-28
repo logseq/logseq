@@ -766,7 +766,7 @@ let gallery_card_el ~title : D.el = D.h ~cls:"ls-card-item" ~text:title ()
 
 (* ---------- foldable groups ---------- *)
 
-let foldable inst ~refresh ~key ~title_text ~(body : unit -> D.el) : D.el =
+let foldable inst ~refresh ~key ~title_el ~(body : unit -> D.el) : D.el =
   let collapsed = V.Sset.mem key inst.V.collapsed_groups in
   let arrow =
     D.h ~tag:"span"
@@ -791,7 +791,7 @@ let foldable inst ~refresh ~key ~title_text ~(body : unit -> D.el) : D.el =
       refresh inst);
   let header =
     D.h ~cls:"flex flex-row items-center ls-foldable-header gap-1"
-      ~children:[ ctrl; D.h ~text:title_text () ]
+      ~children:[ ctrl; title_el ]
       ()
   in
   let title_el =
@@ -828,7 +828,7 @@ let render_list inst ~refresh body =
         (fun i g ->
           D.el_append_child body
             (foldable inst ~refresh ~key:("g" ^ string_of_int i)
-               ~title_text:(group_title inst g.Wr.gv)
+               ~title_el:(D.h ~text:(group_title inst g.Wr.gv) ())
                ~body:(fun () ->
                  let w = D.h () in
                  List.iter
@@ -843,7 +843,7 @@ let render_list inst ~refresh body =
         (fun i g ->
           D.el_append_child body
             (foldable inst ~refresh ~key:("g" ^ string_of_int i)
-               ~title_text:(group_title inst g.Wr.glv)
+               ~title_el:(D.h ~text:(group_title inst g.Wr.glv) ())
                ~body:(fun () ->
                  let w = D.h () in
                  List.iteri
@@ -851,7 +851,7 @@ let render_list inst ~refresh body =
                      D.el_append_child w
                        (foldable inst ~refresh
                           ~key:("g" ^ string_of_int i ^ "-" ^ string_of_int j)
-                          ~title_text:(row_title inst buuid)
+                          ~title_el:(D.h ~text:(row_title inst buuid) ())
                           ~body:(fun () ->
                             let w2 = D.h () in
                             List.iter
@@ -886,7 +886,7 @@ let render_table inst ~refresh body =
         (fun i g ->
           D.el_append_child body
             (foldable inst ~refresh ~key:("g" ^ string_of_int i)
-               ~title_text:(group_title inst g.Wr.gv)
+               ~title_el:(D.h ~text:(group_title inst g.Wr.gv) ())
                ~body:(grouped_table inst ~refresh ~rows:g.Wr.grows)))
         gs
   | Wr.VGroupedList gs ->
@@ -894,7 +894,7 @@ let render_table inst ~refresh body =
         (fun i g ->
           D.el_append_child body
             (foldable inst ~refresh ~key:("g" ^ string_of_int i)
-               ~title_text:(group_title inst g.Wr.glv)
+               ~title_el:(D.h ~text:(group_title inst g.Wr.glv) ())
                ~body:(fun () ->
                  let w = D.h () in
                  List.iteri
@@ -902,7 +902,7 @@ let render_table inst ~refresh body =
                      D.el_append_child w
                        (foldable inst ~refresh
                           ~key:("g" ^ string_of_int i ^ "-" ^ string_of_int j)
-                          ~title_text:(row_title inst buuid)
+                          ~title_el:(D.h ~text:(row_title inst buuid) ())
                           ~body:(grouped_table inst ~refresh ~rows)))
                    g.Wr.glparts;
                  w)))

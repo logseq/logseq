@@ -899,7 +899,9 @@ let mount_sidebar_area (area : el) =
                    el_append_child area panel;
                    render_panel ctx ~owner_is_tag:is_tag
                      ~owner_title:title ~page_area:true
-                     ~show_hidden:!S.show_hidden panel panel_rows hidden;
+                     ~show_hidden:!S.show_hidden
+                     ~can_toggle:(can_toggle_hidden ctx ~below_rows:[])
+                     panel panel_rows hidden;
                    if is_tag then
                      render_class_section ctx ~owner_title:title area
                    else
@@ -941,6 +943,35 @@ let ensure_sidebar_areas () =
   for i = 0 to node_list_length els - 1 do
     match node_list_item els i with
     | Some el -> mount_sidebar_area el
+    | None -> ()
+  done
+
+(* A remove-block-property op commits in the worker before the debounced
+   sync-db-changes refresh (~80ms) reaches the DOM, so an sdk caller
+   asserting on the page right after the promise resolves would still
+   see the stale row. Drop it eagerly — the next refresh re-renders the
+   same state. Scoped to rows owned by the entity: block rows live under
+   .ls-block#ls-block-<uuid>, page/sidebar areas carry id=<uuid>. *)
+let drop_row ~owner_uuid ~title =
+  let in_scope k =
+    match el_closest k ".ls-block" with
+    | Some blk -> el_id blk = "ls-block-" ^ owner_uuid
+    | None -> (
+        match el_closest k ".ls-properties-area" with
+        | Some a -> el_id a = owner_uuid
+        | None -> false)
+  in
+  let keys = query_selector_all ".property-k" in
+  for i = 0 to node_list_length keys - 1 do
+    match node_list_item keys i with
+    | Some k ->
+        if el_text k = title && in_scope k then (
+          match el_closest k ".property-pair" with
+          | Some row -> el_remove row
+          | None -> (
+              match el_closest k ".bottom-property-pill" with
+              | Some row -> el_remove row
+              | None -> ()))
     | None -> ()
   done
 
