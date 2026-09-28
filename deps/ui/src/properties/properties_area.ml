@@ -284,7 +284,7 @@ let class_section ctx ~owner_is_tag ~owner_title ~show_hidden hidden_rows =
   section
 
 let render_panel ctx ~owner_is_tag ~owner_title ~page_area ~show_hidden
-    panel rows hidden_rows =
+    ~show_toggle panel rows hidden_rows =
   List.iter
     (fun r -> el_append_child panel (row_el ctx ~owner_is_tag ~owner_title r))
     rows;
@@ -296,7 +296,8 @@ let render_panel ctx ~owner_is_tag ~owner_title ~page_area ~show_hidden
         (fun r ->
           el_append_child panel (row_el ctx ~owner_is_tag ~owner_title r))
         hidden_rows;
-    if hidden_rows <> [] then el_append_child panel (toggle_row ())
+    if show_toggle && hidden_rows <> [] then
+      el_append_child panel (toggle_row ())
   end;
   ignore page_area
 
@@ -372,7 +373,8 @@ let render_area ?(left_host = None) ~host (ctx : V.ctx) ~owner_is_tag
              | None -> left_rows @ panel_rows
            in
            render_panel ctx ~owner_is_tag ~owner_title ~page_area
-             ~show_hidden:!S.show_hidden panel panel_rows hidden;
+             ~show_hidden:!S.show_hidden ~show_toggle:(hidden <> [])
+             panel panel_rows hidden;
            (* pills render next to the area inside the indent container *)
            remove_all host ":scope > .positioned-properties.block-below";
            if below_rows <> [] then
@@ -403,9 +405,18 @@ let render_block_area ~ind ~left_host ctx ~owner_is_tag ~owner_title area_el =
                  (W.get block_wire "block.temp/display-properties")
              in
              let rows, hidden = D.split_display display in
+             (* cljs properties-area: the hidden-properties toggle only
+                shows for the zoomed/root block (or moves to the
+                block-below pill row); a regular block with only hidden
+                props renders nothing *)
+             let is_root =
+               match !Runtime.current_route with
+               | Some (Model.Block_zoom u) -> u = ctx.V.block_uuid
+               | _ -> false
+             in
              let has_content =
                left_rows <> [] || below_rows <> [] || rows <> []
-               || hidden <> []
+               || (is_root && hidden <> [])
              in
              if has_content && not (el_is_connected area_el) then
                el_append_child ind area_el;
@@ -422,7 +433,9 @@ let render_block_area ~ind ~left_host ctx ~owner_is_tag ~owner_title area_el =
                       left_rows
                 | None -> ());
                render_panel ctx ~owner_is_tag ~owner_title ~page_area:false
-                 ~show_hidden:!S.show_hidden panel rows hidden;
+                 ~show_hidden:!S.show_hidden
+                 ~show_toggle:(is_root && hidden <> [])
+                 panel rows hidden;
                remove_all ind ":scope > .positioned-properties.block-below";
                if below_rows <> [] then
                  render_pills ctx ~owner_is_tag ~owner_title ind below_rows);
@@ -494,9 +507,13 @@ let mount_block_area block_el uuid =
                   ~owner_title:"" area
               in
               refresh ();
-              S.register_area area (fun () ->
+              (* register the always-connected indent host, not `area` —
+                 area only attaches when a render has content, so a plain
+                 block would be reaped by live_areas before its first
+                 property lands *)
+              S.register_area ind (fun () ->
                   if el_is_connected ind then refresh ()
-                  else S.unregister_area area)))
+                  else S.unregister_area ind)))
 
 (* ---------- page mount ---------- *)
 
@@ -622,7 +639,8 @@ let rec render_page_area ctx (p : Model.page) ~attach_area ~attach_bidi
            el_append_child area panel;
            render_panel ctx ~owner_is_tag:p.Model.page_is_tag
              ~owner_title:p.Model.page_title ~page_area:true
-             ~show_hidden:!S.show_hidden panel panel_rows hidden;
+             ~show_hidden:!S.show_hidden ~show_toggle:(hidden <> [])
+             panel panel_rows hidden;
            (* cljs properties-area: class pages get the class section;
               other page-title surfaces get .ls-new-property *)
            if p.Model.page_is_tag then

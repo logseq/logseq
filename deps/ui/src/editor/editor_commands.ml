@@ -451,7 +451,10 @@ let set_closed_prop ~caret uuid ident title =
                     | None -> Properties_data.gets e "logseq.property/value"
                   in
                   match content with
-                  | Some t when t = title -> Properties_data.geti e "db/id"
+                  | Some t
+                    when String.lowercase_ascii t
+                         = String.lowercase_ascii title ->
+                      Properties_data.geti e "db/id"
                   | _ -> None)
                 rows
             in

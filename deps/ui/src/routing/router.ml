@@ -201,6 +201,9 @@ let load_page_ref for_route ref_v ~missing =
                     Outliner_ops.resolve_page_tags (repo ()) p'
                     |> Js.Promise.then_ (fun p'' ->
                            if not (stale for_route) then (
+                             (* a fresh page snapshot is authoritative —
+                                drop pending committed-buffer title paints *)
+                             Editor_state.clear_overrides ();
                              Runtime.send (Action.Page_loaded p'');
                              fetch_refs p'';
                              fetch_unlinked_refs p'');
@@ -234,6 +237,7 @@ let rec load_home () =
                                Outliner_ops.resolve_page_tags repo p'
                                |> Js.Promise.then_ (fun p'' ->
                                       if not (stale (Model.Page name)) then (
+                                        Editor_state.clear_overrides ();
                                         Runtime.send (Action.Page_loaded p'');
                                         fetch_refs p'');
                                       Js.Promise.resolve ()))
@@ -255,8 +259,9 @@ and load_today_journal repo =
              |> Js.Promise.then_ (fun p' ->
                     Outliner_ops.resolve_page_tags repo p'
                     |> Js.Promise.then_ (fun p'' ->
-                           if not (stale Model.Home) then
-                             Runtime.send (Action.Page_loaded p'');
+                           if not (stale Model.Home) then (
+                             Editor_state.clear_overrides ();
+                             Runtime.send (Action.Page_loaded p''));
                            Js.Promise.resolve ()))
          | None -> Js.Promise.resolve ())
 
@@ -318,7 +323,8 @@ let load_block_zoom uuid =
                                        gen = !Runtime.load_gen
                                        && !Runtime.current_route
                                           = Some (Model.Block_zoom uuid)
-                                     then
+                                     then (
+                                       Editor_state.clear_overrides ();
                                        Runtime.send
                                          (Action.Page_loaded
                                             { Model.page_title =
@@ -337,7 +343,7 @@ let load_block_zoom uuid =
                                             ; page_blocks = bs
                                             ; page_linked_refs = []
                                             ; page_parents
-                                            });
+                                            }));
                                      (match
                                         Editor_actions.consume_pending_zoom ()
                                       with

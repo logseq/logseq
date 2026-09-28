@@ -89,8 +89,12 @@ let model_title uuid =
 let display_title uuid = S.title_for uuid (model_title uuid)
 
 let commit uuid buf =
-  if buf <> display_title uuid then (
-    S.override_title uuid buf;
+  (* compare against the persisted title, not display_title — the
+     override may already hold buf (exit_edit sets it first) and
+     normalization (heading strip, ref rewrite) can make the saved
+     title differ from the buffer *)
+  if buf <> model_title uuid then (
+    S.override_title uuid (Ops.normalized_title uuid buf);
     ignore (Ops.apply_and_refresh [ Ops.save_block uuid buf ]))
 
 let save_if_dirty uuid = commit uuid (live_buffer uuid)
@@ -136,7 +140,8 @@ let exit_edit ~select =
       let buf = live_buffer e.uuid in
       (* set the override before the state change so the post-edit render
          already paints the committed text *)
-      if buf <> model_title e.uuid then S.override_title e.uuid buf;
+      if buf <> model_title e.uuid then
+        S.override_title e.uuid (Ops.normalized_title e.uuid buf);
       S.set (fun st ->
           { st with
             S.editing = None
@@ -152,7 +157,8 @@ let blur_commit () =
   | None -> ()
   | Some e ->
       let buf = live_buffer e.uuid in
-      if buf <> model_title e.uuid then S.override_title e.uuid buf;
+      if buf <> model_title e.uuid then
+        S.override_title e.uuid (Ops.normalized_title e.uuid buf);
       S.set (fun st -> { st with S.editing = None });
       commit e.uuid buf
 
