@@ -461,9 +461,9 @@ let indent_or_outdent ~indent =
   let sel = S.selected () in
   let uuids =
     match S.editing_uuid () with
-    | Some u when S.String_set.mem u sel -> S.String_set.elements sel
+    | Some u when S.String_set.mem u sel -> selected_uuids ()
     | Some u -> [ u ]
-    | None -> S.String_set.elements sel
+    | None -> selected_uuids ()
   in
   match uuids with
   | [] -> ()

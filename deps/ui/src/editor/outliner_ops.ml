@@ -555,16 +555,31 @@ let apply_and_refresh ?opts ops =
   apply ?opts ops
   |> Js.Promise.then_ (fun () -> refresh_page ())
 
-(* cljs wrap-parse-block on save: [[page]]/#tag references resolve into
-   block/refs + block/tags and the stored title is rewritten to
+(* cljs wrap-parse-block on save: markdown headings normalize into
+   logseq.property/heading, and [[page]]/#tag references resolve into
+   block/refs + block/tags with the stored title rewritten to
    [[uuid]] id-ref form — async since Title_refs resolves entities *)
 let block_map_parsed uuid title =
-  Title_refs.parse (String.trim title)
+  let dt =
+    match S.find uuid with
+    | Some b -> b.Model.block_display_type
+    | None -> None
+  in
+  let title, heading =
+    match markdown_heading_level title with
+    | Some lvl when dt <> Some "code" && dt <> Some "math" ->
+        (strip_markdown_heading title lvl, Some lvl)
+    | _ -> (String.trim title, None)
+  in
+  Title_refs.parse title
   |> Js.Promise.then_ (fun p ->
          Js.Promise.resolve
            (Wire.Map
               ([ str "block/uuid" (Wire.Uuid uuid)
                ; str "block/title" (Wire.String p.Title_refs.title) ]
+              @ (match heading with
+                 | Some lvl -> [ str "logseq.property/heading" (Wire.Int lvl) ]
+                 | None -> [])
               @ Title_refs.kvs_of_parsed p)))
 
 let save_block_parsed uuid title =
