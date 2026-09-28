@@ -1060,6 +1060,20 @@ search may lag).
 - **`#/graphs` row menu divergence** — our local-graph row menu keeps a
   "Delete remote graph" item so e2e can reach remote-delete when logged
   in; cljs only shows it on remote rows.
+- **sdk `get_entity` resolves names via `get-case-page`, then re-fetches
+  by uuid through `get-blocks`**: get-case-page returns raw entity attrs
+  (property values as bare eids, no synthesized `block/properties`);
+  the sdk entity shape needs the get-blocks wire (eid->{id} stubs,
+  display-properties merge). cljs `editor.getPage/getBlock` on a name
+  yields the full entity map, so a second fetch restores the shape
+  while keeping exact `:block/title` resolution.
+- **sdk `remove-block-property` drops the rendered row eagerly**:
+  the `sync-db-changes` → route-reload path is debounced (~80ms), so an
+  api caller asserting on the DOM right after the promise resolves
+  would still see the stale row. `Properties_area.drop_row` removes
+  `.property-pair`/`.bottom-property-pill` rows matching the property
+  title scoped to the owning block/page area; the debounced refresh
+  re-renders the same state.
 
 ## Cmdk (e2e: `cmdk_scroll_basic_test`)
 
