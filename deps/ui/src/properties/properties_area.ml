@@ -211,33 +211,94 @@ let render_left (ctx : V.ctx) ~owner_is_tag ~owner_title host rows =
   ignore owner_is_tag;
   ignore owner_title
 
+(* cljs properties' drops icon/query/class-properties from the visible
+   panel rows *)
+let non_panel_idents =
+  [ "logseq.property/icon"; "logseq.property/query"
+  ; "logseq.property.class/properties" ]
+
+let is_panel_row r =
+  not
+    (List.mem (Option.value ~default:"" (D.row_ident r)) non_panel_idents)
+
+(* cljs new-property: .ls-new-property > button (shui secondary sm +
+   "jtrigger flex") > icon plus + label *)
+let new_property_btn (ctx : V.ctx) ~for_class ~owner_title =
+  let wrap = mk ~cls:"ls-new-property" "div" in
+  let btn =
+    mk "button"
+      ~cls:
+        "ui__button inline-flex cursor-pointer items-center \
+         justify-center whitespace-nowrap rounded-md text-sm gap-1 \
+         font-medium ring-offset-background transition-colors \
+         focus-visible:outline-none focus-visible:ring-2 \
+         focus-visible:ring-ring focus-visible:ring-offset-2 \
+         disabled:pointer-events-none disabled:opacity-50 select-none \
+         bg-secondary/70 text-secondary-foreground \
+         hover:bg-secondary/100 active:opacity-80 as-secondary \
+         h-7 rounded px-3 py-1 jtrigger flex"
+      ~attrs:[ ("tabindex", "0")
+             ; ("aria-label", I18n.t "property/add-new") ]
+  in
+  (* shui ui/icon markup: span.ui__icon.ti.ls-icon-plus > i.ti.ti-plus *)
+  let plus =
+    mk ~cls:"ui__icon ti ls-icon-plus bottom-property-action-icon" "span"
+  in
+  el_append_child plus (mk ~cls:"ti ti-plus" "i");
+  el_append_child btn plus;
+  ignore
+    (child_text "span" "" (I18n.t "property/add-new") btn);
+  el_append_child wrap btn;
+  on_click btn (fun _ ->
+      if for_class then
+        Properties_dialog.open_dialog
+          { Properties_dialog.uuid = ctx.block_uuid
+          ; db_id = ctx.block_id
+          ; is_tag = true
+          ; title = owner_title }
+      else Properties_dialog.open_for_block ctx.block_uuid);
+  wrap
+
+(* cljs properties-area class section: .flex.flex-col.gap-1.mt-2 with the
+   class-properties key, the "Tag properties are inherited" description,
+   hidden rows and the add-property button under .ml-5 *)
+let class_section ctx ~owner_is_tag ~owner_title ~show_hidden hidden_rows =
+  let section = mk ~cls:"flex flex-col gap-1 mt-2" "div" in
+  let head = mk ~attrs:[ ("style", "font-size:15px") ] "div" in
+  el_append_child head (mk ~cls:"property-key text-sm" "div");
+  ignore
+    (child_text "div" "text-muted-foreground ml-5"
+       (I18n.t "class/tag-properties-desc") head);
+  el_append_child section head;
+  let body = mk ~cls:"gap-1 flex flex-col" "div" in
+  if show_hidden then
+    List.iter
+      (fun r ->
+        el_append_child body (row_el ctx ~owner_is_tag ~owner_title r))
+      hidden_rows;
+  let add = mk ~cls:"ml-5" "div" in
+  el_append_child add
+    (new_property_btn ctx ~for_class:true ~owner_title);
+  el_append_child body add;
+  el_append_child section body;
+  section
+
 let render_panel ctx ~owner_is_tag ~owner_title ~page_area ~show_hidden
     panel rows hidden_rows =
   List.iter
     (fun r -> el_append_child panel (row_el ctx ~owner_is_tag ~owner_title r))
     rows;
-  if show_hidden && hidden_rows <> [] then
-    List.iter
-      (fun r ->
-        el_append_child panel (row_el ctx ~owner_is_tag ~owner_title r))
-      hidden_rows;
-  if hidden_rows <> [] then el_append_child panel (toggle_row ());
-  (* cljs: new-property button only renders on sidebar/tag-dialog surfaces
-     (show-properties?) — never on the main page title surface *)
-  if page_area && ctx.class_schema then (
-    let wrap = mk ~cls:"ls-new-property" "div" in
-    let btn =
-      mk "button" ~cls:"jtrigger flex items-center gap-1"
-        ~attrs:[ ("aria-label", I18n.t "property/add-new") ]
-    in
-    let plus = mk ~cls:"ls-icon-plus" "span" in
-    el_append_child btn plus;
-    ignore
-      (child_text "span" "" (I18n.t "property/add-new") btn);
-    el_append_child wrap btn;
-    on_click btn (fun _ ->
-        Properties_dialog.open_for_block ctx.block_uuid);
-    el_append_child panel wrap)
+  (* cljs: hidden properties (and their toggle) are skipped for class
+     pages — the class section hosts them instead *)
+  if not owner_is_tag then begin
+    if show_hidden && hidden_rows <> [] then
+      List.iter
+        (fun r ->
+          el_append_child panel (row_el ctx ~owner_is_tag ~owner_title r))
+        hidden_rows;
+    if hidden_rows <> [] then el_append_child panel (toggle_row ())
+  end;
+  ignore page_area
 
 (* block.temp/positioned-properties on the get-blocks wire:
    {position -> [display-property-map]} — cljs reads the same key in
@@ -512,6 +573,7 @@ let rec render_page_area ctx (p : Model.page) ~attach_area ~attach_bidi
     ~show_hidden:!S.show_hidden (D.uuid_ref ctx.block_uuid)
   |> Js.Promise.then_ (fun wire ->
          let rows, hidden = D.split_display wire in
+         let rows = List.filter is_panel_row rows in
          let _left, _below, panel_rows = partition_rows rows in
          if panel_rows = [] && hidden = [] && not p.Model.page_is_tag then
            detach ()
@@ -522,7 +584,18 @@ let rec render_page_area ctx (p : Model.page) ~attach_area ~attach_bidi
            el_append_child area panel;
            render_panel ctx ~owner_is_tag:p.Model.page_is_tag
              ~owner_title:p.Model.page_title ~page_area:true
-             ~show_hidden:!S.show_hidden panel panel_rows hidden);
+             ~show_hidden:!S.show_hidden panel panel_rows hidden;
+           (* cljs properties-area: class pages get the class section;
+              other page-title surfaces get .ls-new-property *)
+           if p.Model.page_is_tag then
+             el_append_child area
+               (class_section ctx ~owner_is_tag:true
+                  ~owner_title:p.Model.page_title
+                  ~show_hidden:!S.show_hidden hidden)
+           else
+             el_append_child area
+               (new_property_btn ctx ~for_class:false
+                  ~owner_title:p.Model.page_title));
          fill_bidirectional_page p ~attach_bidi bidi;
          Js.Promise.resolve ())
   |> ignore
@@ -608,14 +681,27 @@ let mount_page_area page_inner =
               let bidi =
                 mk ~cls:"w-full ls-bidirectional-properties mt-8" "div"
               in
+              (* cljs: db-properties-cp sits in a plain div inside the
+                 title .ls-block, after .block-main-container — not
+                 inside .block-content-wrapper *)
+              let holder =
+                match
+                  el_query page_inner ".ls-page-title .ls-block"
+                with
+                | Some block_el ->
+                    let h = mk "div" in
+                    el_append_child block_el h;
+                    h
+                | None -> mk "div"
+              in
               let attach_area () =
                 if not (el_is_connected area) then
-                  el_insert_adjacent actions "afterend" area
+                  el_append_child holder area
               in
               let attach_bidi () =
                 if not (el_is_connected bidi) then (
                   attach_area ();
-                  el_insert_adjacent area "afterend" bidi)
+                  el_append_child holder bidi)
               in
               let detach () =
                 if el_is_connected bidi then el_remove bidi;
@@ -651,7 +737,11 @@ let ensure_all () =
   for i = 0 to node_list_length blocks - 1 do
     match node_list_item blocks i with
     | Some el ->
-        if not (el_matches el ".block-add-button") then (
+        if
+          not
+            (el_matches el ".block-add-button"
+             || el_closest el ".ls-page-title" <> None)
+        then (
           match block_uuid_of_ls_block el with
           | Some uuid -> mount_block_area el uuid
           | None -> ())

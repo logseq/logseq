@@ -100,6 +100,15 @@
     (-> (tf/parse yyyyMMdd-formatter (str day))
         (tc/to-long))))
 
+(defn utc-ms->journal-day
+  "Converts a milliseconds timestamp to the :block/journal-day of its UTC
+  calendar day. The inverse of `journal-day->ms`, which gives UTC midnight."
+  [ms]
+  (some->> ms
+           tc/from-long
+           (tf/unparse yyyyMMdd-formatter)
+           parse-long))
+
 (defn ms->journal-day
   "Converts a milliseconds timestamp to the nearest :block/journal-day"
   [ms]
