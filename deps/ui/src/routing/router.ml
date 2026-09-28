@@ -50,6 +50,7 @@ let parse_hash () : Model.route =
           | "all-pages" -> Model.All_pages
           | "all-graphs" -> Model.All_graphs
           | "graph" -> Model.Graph
+          | "settings" -> Model.Settings
           | "page" | "block" -> Model.Not_found p
           | _ -> Model.Not_found p))
 
@@ -111,6 +112,21 @@ let fetch_refs (p : Model.page) =
          Js.Promise.resolve (Runtime.send (Action.Refs_loaded blocks)))
   |> ignore
 
+(* unlinked references: blocks whose title mentions the page title
+   without a [[ref]] — the view search input filters by row title
+   substring (cljs row-matched) *)
+let fetch_unlinked (p : Model.page) =
+  match p.Model.page_db_id with
+  | Some id ->
+      ignore
+        (Runtime.invoke2 "thread-api/get-unlinked-references"
+           (Wire.String (repo ())) (Wire.Int id)
+         |> Js.Promise.then_ (fun w ->
+                Js.Promise.resolve
+                  (Runtime.send
+                     (Action.Unlinked_loaded (Decode.blocks_of_wire w)))))
+  | None -> ()
+
 let fetch_unlinked_refs = Outliner_ops.fetch_unlinked_refs
 
 let load_journals () =
@@ -137,7 +153,24 @@ let load_journals () =
          collect [] pages
          |> Js.Promise.then_ (fun js ->
                 Js.Promise.resolve
-                  (Runtime.send (Action.Journals_loaded js))))
+                  (match !Runtime.current_route with
+                   | Some (Model.Journals | Model.Home) ->
+                       Runtime.send (Action.Journals_loaded js)
+                   | _ -> ())))
+
+(* a fetch started for route R can resolve after navigation moved on —
+   sending its Page_loaded would clobber the current page with stale data *)
+let route_still_target missing =
+  match !Runtime.current_route with
+  | Some (Model.Page s) -> s = missing
+  | Some Model.Library -> missing = "Library"
+  | _ -> false
+
+(* fetches for the same route can resolve out of order — only the
+   latest-initiated load may commit, otherwise an older response lands
+   last and clobbers fresher state (e.g. page_blocks before a pending
+   insert was committed) *)
+let bump_load_gen () = incr Runtime.load_gen
 
 (* drop a send when the route moved on while the fetch was in-flight —
    otherwise a slow stale load overwrites the page the user navigated to *)
@@ -145,6 +178,7 @@ let stale (route : Model.route) = !Runtime.current_route <> Some route
 
 (* get-page-route-info resolves name/uuid/lookup-ref -> summary *)
 let load_page_ref for_route ref_v ~missing =
+  incr Runtime.load_gen;
   Runtime.invoke2 "thread-api/get-page-route-info"
     (Wire.String (repo ())) ref_v
   |> Js.Promise.then_ (fun info ->
@@ -161,8 +195,7 @@ let load_page_ref for_route ref_v ~missing =
                            Js.Promise.resolve ()))
          | None ->
              if not (stale for_route) then
-               Runtime.send (Action.Navigate_to (Model.Not_found missing));
-             Js.Promise.resolve ())
+               Runtime.send (Action.Navigate_to (Model.Not_found missing));             Js.Promise.resolve ())
 
 (* Home: default-home config page when set & resolvable, else today's
    journal page (no config) or the journals list (config set but the
@@ -200,6 +233,7 @@ let rec load_home () =
 
 and load_today_journal repo =
   let day = Dates.today_journal_day () in
+  incr Runtime.load_gen;
   Runtime.invoke2 "thread-api/get-journal-page-by-day" (Wire.String repo)
     (Wire.Int day)
   |> Js.Promise.then_ (fun page_w ->
@@ -215,6 +249,8 @@ and load_today_journal repo =
          | None -> Js.Promise.resolve ())
 
 let load_block_zoom uuid =
+  incr Runtime.load_gen;
+  let gen = !Runtime.load_gen in
   Runtime.invoke2 "thread-api/get-blocks" (Wire.String (repo ()))
     (Wire.Array
        [ Wire.Map
@@ -247,15 +283,30 @@ let load_block_zoom uuid =
                     in
                     let collapsed = ref Editor_state.String_set.empty in
                     ignore
-                      (Outliner_ops.fill_embed_children (repo ()) ancestors
-                         collapsed [ b ]
-                       |> Js.Promise.then_ (fun bs ->
-                              Outliner_ops.resolve_block_tags bs
+                      (Runtime.invoke2 "thread-api/get-block-parents"
+                         (Wire.String (repo ()))
+                         (Wire.List
+                            [ Wire.Keyword "block/uuid"; Wire.Uuid uuid ])
+                       |> Js.Promise.then_ (fun parents_w ->
+                              let page_parents =
+                                Sdk_util.wire_elems parents_w
+                                |> List.filter_map (fun w ->
+                                       match w with
+                                       | Wire.Map _ ->
+                                           Some (Decode.block_of_wire w)
+                                       | _ -> None)
+                              in
+                              Outliner_ops.fill_embed_children (repo ()) ancestors collapsed [ b ]
+                              |> Js.Promise.then_ (fun bs0 ->
+                                     Outliner_ops.resolve_block_tags bs0
                               |> Js.Promise.then_ (fun bs ->
-                                     Outliner_ops.set_collapsed !collapsed;
-                                     if stale (Model.Block_zoom uuid) then
-                                       Js.Promise.resolve ()
-                                     else (
+                                     (* drop the late result when the
+                                        zoom target is no longer routed *)
+                                     if
+                                       gen = !Runtime.load_gen
+                                       && !Runtime.current_route
+                                          = Some (Model.Block_zoom uuid)
+                                     then
                                        Runtime.send
                                          (Action.Page_loaded
                                             { Model.page_title =
@@ -263,6 +314,8 @@ let load_block_zoom uuid =
                                             ; page_uuid = b.block_uuid
                                             ; page_db_id = b.block_db_id
                                             ; page_is_tag = false
+                                            ; page_is_property = false
+                                            ; page_icon = None
                                             ; page_journal_day = None
                                             ; page_is_library = false
                                             ; page_internal = false
@@ -270,17 +323,16 @@ let load_block_zoom uuid =
                                             ; page_tags = b.Model.block_tags
                                             ; page_blocks = bs
                                             ; page_linked_refs = []
+                                            ; page_parents
                                             });
-                                       (match
-                                          Editor_actions.consume_pending_zoom
-                                            ()
-                                        with
-                                        | Some u when Editor_state.ready () ->
-                                            Editor_actions.enter_edit u
-                                              (String.length
-                                                 b.Model.block_title)
-                                        | _ -> ());
-                                       Js.Promise.resolve ())))))
+                                     (match
+                                        Editor_actions.consume_pending_zoom ()
+                                      with
+                                      | Some u when Editor_state.ready () ->
+                                          Editor_actions.enter_edit u
+                                            (String.length b.Model.block_title)
+                                      | _ -> ());
+                                     Js.Promise.resolve ())))))
                 | _ ->
                     if not (stale (Model.Block_zoom uuid)) then
                       Runtime.send
@@ -326,25 +378,42 @@ let load_route (route : Model.route) =
       ignore (load_page_ref route (Wire.String "Library") ~missing:"Library")
   | Model.Graph -> ignore (load_graph ())
   | Model.All_pages | Model.All_graphs | Model.Not_found _ -> ()
+  | Model.Settings -> ()
 
 let resolve () =
   let route = parse_hash () in
-  (* leaving a page commits the editor's live buffer first — but only
-     when the route is really changing (goto_page sends Navigate_to
-     before the hash lands, so the trailing hashchange would otherwise
-     wipe the fresh page's just-entered edit state) *)
-  if !Runtime.current_route <> Some route then Editor_actions.flush_edit ();
-  Runtime.send (Action.Navigate_to route);
-  load_route route;
-  Runtime.flush ()
-
+  match !Runtime.current_route with
+  | Some r when r = route ->
+      (* our own set_location_hash (or a repeat hashchange) for the route
+         already shown — Navigate_to would blank route_page/current_page
+         while the same data refetches; just refresh in place *)
+      load_route route
+  | _ ->
+      (* commit and close any in-progress edit before the route swaps
+         (cljs exits editing on navigation) *)
+      Editor_actions.exit_edit ~select:false;
+      Runtime.send (Action.Navigate_to route);
+      (* cljs settings-effect cleanup: data-settings-tab only while the
+         settings route/dialog is active *)
+      if route <> Model.Settings then Settings_state.deactivate ();
+      load_route route;
+      Runtime.flush ()
 (* worker sync-db-changes broadcast: reload the current route's data
    without Navigate_to (keeps route_page until the fresh one lands, so
-   the page does not blank). *)
+   the page does not blank). Broadcasts can arrive in bursts (one per
+   applied op), and each reload remounts the block tree — debounce so a
+   burst collapses into one refetch *)
+let reload_timer = ref 0
+
 let reload () =
-  match !Runtime.current_route with
-  | Some r -> load_route r
-  | None -> resolve ()
+  Editor_dom.clear_timeout !reload_timer;
+  reload_timer :=
+    Editor_dom.set_timeout_id
+      (fun () ->
+        match !Runtime.current_route with
+        | Some r -> load_route r
+        | None -> resolve ())
+      30
 
 let init () =
   Platform.on_hash_change resolve;

@@ -29,7 +29,7 @@ let tags =
     (* SVG (tabler icons render circle/rect/line/polyline/polygon/g/…
        alongside svg/path) *)
   ; "svg"; "path"; "circle"; "rect"; "line"; "polyline"; "polygon"; "g"
-  ; "defs"; "use"; "ellipse"; "tspan"; "sup" ]
+  ; "defs"; "use"; "ellipse"; "tspan"; "sup"; "em-emoji" ]
 let identifier tag = "logseq-" ^ tag
 
 let child_identifiers = List.map identifier tags

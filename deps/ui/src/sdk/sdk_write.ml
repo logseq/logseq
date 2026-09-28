@@ -76,9 +76,11 @@ let properties_of (props : Wire.t) =
          match k with
          | Wire.String s -> Some (s, property_ident s, v)
          | Wire.Keyword s -> Some (s, property_ident s, v)
+
          | _ -> None)
 
 (* ---------- cljs api/block.cljs set-block-properties! ----------
+
 
    per key: ident via plugin ns; type = existing | schema.type | infer;
    cardinality = existing | (schema.cardinality == "many" || sequential
@@ -265,6 +267,7 @@ let save_block_properties ?(reset = false) block_uuid props schema =
              apply_ops ops (Wire.Map [])
              |> Js.Promise.then_ (fun _ -> Js.Promise.resolve ()))
 
+
 let new_block_map content custom_uuid =
   Wire.Map
     (( Wire.String "block/uuid"
@@ -341,6 +344,7 @@ let insert_block a b c _d =
                                     ]
                                  :: prop_ops)
                                  (Wire.Map []))
+
                         |> Js.Promise.then_ (fun _ ->
                                get_entity new_uuid
                                |> Js.Promise.then_ (fun w ->
@@ -464,6 +468,7 @@ let insert_batch_block a b c _d =
                              ]
                           :: prop_ops)
                           (Wire.Map []))
+
                  |> Js.Promise.then_ (fun _ ->
                         Runtime.invoke2 "thread-api/get-blocks"
                           (Wire.String (repo ()))
@@ -586,6 +591,7 @@ let create_page_with_flags name journal class_ uuid custom_uuid props schema =
     ; ( Wire.kw "uuid"
       , Wire.Uuid (match custom_uuid with Some u -> u | None -> uuid) )
     ]
+
   in
   apply_op "create-page" [ Wire.String name; Wire.Map opts ]
   |> Js.Promise.then_ (fun r ->
@@ -632,35 +638,29 @@ let create_page a b c _d =
 
 external date_of_epoch : float -> Js.Date.t = "Date" [@@mel.new]
 
+external date_of_arg : 'a -> Js.Date.t = "Date" [@@mel.new]
+
 external date_get_time : Js.Date.t -> float = "getTime" [@@mel.send]
 
+(* cljs create_journal_page: new Date(arg) — accepts epoch ms or an
+   ISO date string; NaN → no page. journal pages get a day-derived
+   uuid worker-side (Common_uuid/gen_journal_page_uuid), so resolve
+   the entity by its formatted title, not a client-generated uuid *)
 let create_journal_page a _b _c _d =
-  (* cljs (js/Date. date): accepts ms numbers AND ISO date strings;
-     invalid dates get isNaN-checked on getTime. *)
-  let date_opt =
-    match Js.Json.classify a with
-    | Js.Json.JSONNumber ms -> Some (date_of_epoch ms)
-    | Js.Json.JSONString s -> (
-        match float_of_string_opt s with
-        | Some ms -> Some (date_of_epoch ms)
-        | None -> Some (Js.Date.fromString s))
-    | _ -> None
-  in
-  let day_int =
-    match date_opt with
-    | Some d when not (Float.is_nan (date_get_time d)) ->
-        Some (Dates.journal_day_of d)
-    | _ -> None
-  in
-  match day_int with
-  | None -> resolved_nil
-  | Some day ->
-      let y, m, d = day / 10000, day mod 10000 / 100, day mod 100 in
-      create_page_with_flags
-        (Printf.sprintf "%04d-%02d-%02d" y m d)
-        true false
-        (Platform.random_uuid ())
-        None [] (Wire.Map [])
+  let d = date_of_arg a in
+  let ms = date_get_time d in
+  if Float.is_nan ms then resolved_nil
+  else
+    let title = Dates.journal_title_of d in
+    apply_op "create-page"
+      [ Wire.String title
+      ; Wire.Map
+          [ (Wire.kw "journal?", Wire.Bool true)
+          ; (Wire.kw "class?", Wire.Bool false) ]
+      ]
+    |> Js.Promise.then_ (fun _ -> get_entity title)
+    |> Js.Promise.then_ (fun w -> resolved_result w)
+
 
 (* schema remap — cljs upsert-property-aux: type→logseq.property/type
    keyword, cardinality→db/cardinality kw, hide→logseq.property/hide?,
@@ -831,6 +831,7 @@ let remove_block_property a b _c _d =
                  |> Js.Promise.then_ (fun _ -> resolved_nil)))
   | _ -> resolved_nil
 
+
 let upsert_property a b c _d =
   match arg_string a with
   | None -> resolved_nil
@@ -881,6 +882,7 @@ let remove_property a _b _c _d =
 
 (* cljs add-tag-extends passes (:db/id tag) (:db/id extend); the
    set-block-property op's SBlockId arg accepts uuids only *)
+
 let add_tag_extends a b _c _d =
   Js.Promise.all2 (get_entity_json a, get_entity_json b)
   |> Js.Promise.then_ (fun (tag, ext) ->
@@ -893,6 +895,7 @@ let add_tag_extends a b _c _d =
                ]
              |> Js.Promise.then_ (fun _ -> resolved_nil)
          | _ -> resolved_nil)
+
 
 (* cljs set-property-node-tags: set-block-property! (:db/id property)
    :logseq.property/classes [tag-db-ids...] *)

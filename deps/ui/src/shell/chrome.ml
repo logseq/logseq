@@ -198,6 +198,7 @@ let main_content (ms : Model.t Signal.signal) =
                   && a.unlinked_open = b.unlinked_open
                   && a.unlinked_search = b.unlinked_search
                   && a.unlinked_query = b.unlinked_query
+                  && a.unlinked_blocks = b.unlinked_blocks
                   && a.gv = b.gv)
                 (fun m -> Page.page_view_of_model m)
                 ms ]

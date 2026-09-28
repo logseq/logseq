@@ -200,9 +200,13 @@ let checkbox_cell ctx row =
         [ ("role", "checkbox")
         ; ("aria-checked", string_of_bool checked)
         ; ("type", "button")
+        ; ( "style"
+          , "width:16px;height:16px;border:1px solid \
+             var(--border-color,#888);border-radius:3px" )
         ]
       ~cls:"jtrigger"
   in
+  if checked then el_set_text btn "✓";
   if checked then el_set_attr btn "data-checked" "true";
   on_click btn (fun _ ->
       let ident = D.row_ident row |> Option.value ~default:"" in
@@ -525,6 +529,7 @@ let render ctx row =
   if take_pending_edit ~block_uuid:ctx.block_uuid ~ident then
     editing_cell ctx row inner
   else (
+    let row = D.row_with_effective_value row in
     let value = D.row_value row in
     let ty = D.row_type row in
     let cell =

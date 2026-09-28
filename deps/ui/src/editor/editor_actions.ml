@@ -116,9 +116,10 @@ let enter_edit ?(scope = "main") uuid caret =
   | None -> ()
 
 let exit_edit ~select =
-  match S.editing () with
-  | None -> ()
-  | Some e ->
+  if S.ready () then
+    match S.editing () with
+    | None -> ()
+    | Some e ->
       let buf = live_buffer e.uuid in
       (* set the override before the state change so the post-edit render
          already paints the committed text *)

@@ -1,5 +1,30 @@
 (* Decode worker wire values into model types. *)
 
+(* block.temp/reactions — raw {emoji-id} entity maps grouped by emoji
+   for the count chips (cljs groups identically for .ls-block-reactions) *)
+let reactions_of_wire (w : Wire.t) : (string * int) list =
+  let xs =
+    match Wire.get w "block.temp/reactions" with
+    | Some (Wire.Array xs) | Some (Wire.List xs) | Some (Wire.Set xs) -> xs
+    | _ -> []
+  in
+  List.fold_left
+    (fun acc r ->
+      match Wire.map_get_string r "logseq.property.reaction/emoji-id" with
+      | Some id -> (
+          match List.assoc_opt id acc with
+          | Some n -> (id, n + 1) :: List.remove_assoc id acc
+          | None -> (id, 1) :: acc)
+      | None -> acc)
+    [] xs
+  |> List.rev
+
+let count_refs (w : Wire.t) (k : string) : int =
+  match Wire.get w k with
+  | Some (Wire.List xs) | Some (Wire.Array xs) | Some (Wire.Set xs) ->
+      List.length xs
+  | _ -> 0
+
 let rec block_of_wire (w : Wire.t) : Model.block =
   let uuid = Wire.map_get_uuid w "block/uuid" in
   let db_id = Wire.map_get_int w "db/id" in
@@ -72,6 +97,11 @@ let rec block_of_wire (w : Wire.t) : Model.block =
            | Some t -> Some t
            | None -> Wire.map_get_string w "block/page-name")
        | _ -> Wire.map_get_string w "block/page-name")
+  ; block_tag_idents = []
+  ; block_reactions = reactions_of_wire w
+  ; block_is_comments_area = false
+  ; block_is_comment = false
+  ; block_comment_targets = count_refs w "logseq.property.comments/blocks"
   ; block_children = children
   ; block_link = link
   ; block_embed_children = []
@@ -151,6 +181,31 @@ let has_ident_page (w : Wire.t) (ident : string) : bool =
         (fun t -> Wire.map_get_string t "ident" = Some ident)
         xs
   | _ -> false
+(* page is a property entity when route-info says property? or its
+   entity tags contain logseq.class/Property *)
+let is_property_page (w : Wire.t) : bool =
+  match Option.bind (Wire.get w "property?") Wire.as_bool with
+  | Some b -> b
+  | None -> (
+      match Wire.get w "tags" with
+      | Some (Wire.Array xs) | Some (Wire.List xs) ->
+          List.exists
+            (fun t ->
+              Wire.map_get_string t "ident" = Some "logseq.class/Property")
+            xs
+      | _ -> false)
+
+(* logseq.property/icon is a map {type: :emoji|:tabler-icon, id: str} *)
+let icon_of_wire (w : Wire.t) : (string * string) option =
+  let ty =
+    match Wire.get w "type" with
+    | Some (Wire.Keyword s) -> Some s
+    | Some (Wire.String s) -> Some s
+    | _ -> None
+  in
+  match ty, Wire.map_get_string w "id" with
+  | Some t, Some i -> Some (t, i)
+  | _ -> None
 
 (* accepts entity maps (block/title) and get-page-route-info maps
    (page-title/page-uuid/page-id) *)
@@ -179,6 +234,13 @@ let page_of_summary (w : Wire.t) : Model.page option =
              | Some i -> Some i
              | None -> Wire.map_get_int w "page-id")
         ; page_is_tag = is_tag_page w
+        ; page_is_property = is_property_page w
+        ; page_icon =
+            (match Wire.get w "icon" with
+             | Some v -> icon_of_wire v
+             | None ->
+                 Option.bind
+                   (Wire.get w "logseq.property/icon") icon_of_wire)
         ; page_journal_day =
             (match Wire.map_get_int w "journal-day" with
              | Some d -> Some d
@@ -205,6 +267,7 @@ let page_of_summary (w : Wire.t) : Model.page option =
         ; page_tags = []
         ; page_blocks = []
         ; page_linked_refs = []
+        ; page_parents = []
         }
   | _ -> None
 
