@@ -61,12 +61,17 @@ let title_editor (page : Model.page) : t =
     Runtime.send Action.Title_edit_done;
     Runtime.flush ()
   in
-  (* e2e: exactly one .editor-wrapper textarea while renaming *)
-  dom ~key:"pt-edit" ~style_class:"editor-wrapper"
-    [ dom ~key:"pt-ta" ~tag:"textarea"
-        ~style_class:"block-title-wrap"
-        ~attrs:[ ("autofocus", "true") ]
-        ~text:page.page_title ~events:"keydown blur"
+  (* cljs: the page-title editor is the regular editor box —
+     .editor-wrapper > .editor-inner.block-editor > textarea +
+     mock-text mirror (popup caret positioning) *)
+  let uuid = Option.value page.page_uuid ~default:"" in
+  dom ~key:"pt-edit" ~style_class:"editor-wrapper flex flex-1 w-full"
+    ~id:("editor-edit-block-" ^ uuid)
+    [ dom ~key:"pt-ei" ~style_class:"editor-inner flex flex-1 block-editor"
+        [ dom ~key:"pt-ta" ~tag:"textarea"
+            ~id:("edit-block-" ^ uuid)
+            ~attrs:[ ("autofocus", "true") ]
+            ~text:page.page_title ~events:"keydown blur"
         ~on_dom_event:(fun name payload ->
           match name with
           | "blur" -> commit (Platform.payload_str (Option.value payload ~default:"{}") "value")
@@ -82,9 +87,128 @@ let title_editor (page : Model.page) : t =
               | _ -> ())
           | _ -> ())
         []
+        ; (* cljs mock-textarea: hidden caret mirror for popup placement *)
+          dom ~key:"pt-mt" ~style_class:"mock-text"
+            ~attrs:
+              [ ( "style"
+                , "width:100%;height:100%;position:absolute;visibility:hidden;top:0;left:0" )
+              ]
+            []
+        ]
+    ; Asset_dom.upload_input ("pt-up-" ^ uuid)
+    ]
+
+(* cljs arrow svg inside .control-hide/.rotating-arrow *)
+let rotating_arrow key : t =
+  dom ~key ~tag:"svg"
+    ~style_class:"h-4 w-4"
+    ~attrs:
+      [ ("aria-hidden", "true"); ("version", "1.1")
+      ; ("viewBox", "0 0 192 512"); ("fill", "currentColor")
+      ; ("display", "inline-block"); ("style", "margin-left: 2px") ]
+    [ dom ~key:"p" ~tag:"path"
+        ~attrs:
+          [ ( "d"
+            , "M0 384.662V127.338c0-17.818 21.543-26.741 \
+               34.142-14.142l128.662 128.662c7.81 7.81 7.81 20.474 0 \
+               28.284L34.142 398.804C21.543 411.404 0 402.48 0 384.662z" )
+          ; ("fill-rule", "evenodd") ]
+        []
+    ]
+
+(* cljs title-tag chip: .block-tag > .flex.items-center > a.hash-symbol +
+   a.tag[draggable][data-ref] > span *)
+let title_tag_chips (page : Model.page) : t list =
+  match page.Model.page_tags with
+  | [] -> []
+  | tags ->
+      [ dom ~key:"pt-right"
+          ~style_class:
+            "ls-block-right flex flex-row items-center self-start gap-1"
+          [ dom ~key:"ptr-ghost" ~style_class:"opacity-70 hover:opacity-100"
+              []
+          ; dom ~key:"pt-tags" ~style_class:"block-tags gap-1"
+              (List.mapi
+                 (fun i tag ->
+                   dom ~key:("pt-tag-" ^ string_of_int i)
+                     ~style_class:"block-tag"
+                     [ dom ~key:("pti-" ^ string_of_int i)
+                         ~style_class:"flex items-center"
+                         [ dom ~key:("ph-" ^ string_of_int i) ~tag:"a"
+                             ~style_class:"hash-symbol select-none flex"
+                             ~text:"#" []
+                         ; dom ~key:("ptt-" ^ string_of_int i) ~tag:"a"
+                             ~style_class:"tag relative"
+                             ~attrs:
+                               [ ("tabindex", "0"); ("draggable", "true")
+                               ; ( "data-ref"
+                                 , String.lowercase_ascii tag ) ]
+                             [ dom ~key:"ts" ~tag:"span" ~text:tag [] ]
+                         ]
+                     ])
+                 tags)
+          ]
+      ]
+
+(* display-mode title: #block-content-<page-uuid>.block-content >
+   .block-content-inner > .block-head-wrap > .w-full.inline >
+   span.block-title-wrap — mirrors block.cljs for page-title blocks *)
+(* cljs: pointer-down on .block-content starts editing via
+   block-content-on-pointer-down (journal titles redirect instead, which is
+   a no-op on their own page — so journals get no edit handler) *)
+let title_content (page : Model.page) : t =
+  let uuid = Option.value page.page_uuid ~default:"" in
+  let events, on_event =
+    match page.page_journal_day with
+    | Some _ -> ([], None)
+    | None ->
+        ( [ "click" ]
+        , Some
+            (fun _name payload ->
+              let shift =
+                match payload with
+                | Some p ->
+                    Js.Json.decodeBoolean
+                      (Platform.json_prop (Platform.json_parse p) "shiftKey")
+                    = Some true
+                | None -> false
+              in
+              (* shift+click opens the page in the right sidebar (handled by
+                 the document-level listener); starting title edit would
+                 replace the clicked node mid-dispatch *)
+              if page.page_uuid <> None && not shift then (
+                Runtime.send Action.Title_edit_start;
+                Runtime.flush ();
+                (* autofocus doesn't re-fire on remount — focus explicitly
+                   so Enter/Escape reach the textarea *)
+                match
+                  Dom_ext.doc_query_selector ".ls-page-title textarea"
+                with
+                | Some el ->
+                    Dom_ext.focus el;
+                    let n = String.length (Dom_ext.value el) in
+                    Dom_ext.set_selection_range el n n
+                | None -> ())) )
+  in
+  dom ~key:"pt-content" ~style_class:"block-content inline !cursor-pointer"
+    ~id:("block-content-" ^ uuid) ~events:(String.concat " " events)
+    ?on_dom_event:on_event
+    ~attrs:
+      [ ("blockid", uuid); ("containerid", uuid); ("data-type", "default")
+      ; ("style", "width: 100%") ]
+    [ dom ~key:"pt-bci"
+        ~style_class:"block-content-inner flex flex-row justify-between"
+        [ dom ~key:"pt-bh" ~style_class:"block-head-wrap"
+            [ dom ~key:"pt-w" ~style_class:"w-full inline"
+                [ dom ~key:"pt-title" ~tag:"span"
+                    ~style_class:"block-title-wrap" ~text:page.page_title []
+                ]
+            ]
+        ]
     ]
 
 let page_title_el (m : Model.t) (page : Model.page) : t =
+  let uuid = Option.value page.page_uuid ~default:"" in
   let icon =
     if page.page_is_tag then
       [ dom ~key:"pt-icon" ~style_class:"ls-page-icon flex self-start"
@@ -92,51 +216,77 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
       ]
     else []
   in
-  let tag_els =
-    match page.Model.page_tags with
-    | [] -> []
-    | tags ->
-        [ dom ~key:"pt-tags" ~style_class:"block-tags gap-1"
-            (List.mapi
-               (fun i tag ->
-                 dom ~key:("pt-tag-" ^ string_of_int i)
-                   ~style_class:"block-tag"
-                   [ dom ~key:("pt-ta-" ^ string_of_int i) ~tag:"a"
-                       ~style_class:"tag" ~text:tag []
-                   ])
-               tags)
-        ]
-  in
   let body =
-    (* cljs: .ls-block > .block-main-container.is-page-title-row >
-       .block-content-or-editor-wrap.ls-page-title-container > .block-row >
-       .block-content-wrapper > .block-title-wrap#page-title-text;
-       tags render while editing too *)
+    (* cljs db-page-title: the page title is a full block row —
+       .ls-block > .is-page-title-row > bullet control + nested
+       flex-col wrappers > .ls-page-title-container > .block-row >
+       .block-content-wrapper(.ls-page-title-actions + content|editor) +
+       .ls-block-right(.block-tags). Tags render while editing too. *)
     [ box ~key:"pt-inner" ~style_class:"w-full relative"
-        [ dom ~key:"pt-block" ~style_class:"ls-block"
+        [ dom ~key:"pt-block" ~style_class:"ls-block swipe-item"
+            ~id:("ls-block-" ^ uuid)
+            ~attrs:
+              [ ("blockid", uuid); ("containerid", uuid)
+              ; ("data-block-title", page.page_title)
+              ; ("haschild", "false"); ("data-comment-item", "false")
+              ; ("data-comments-area", "false"); ("level", "0")
+              ; ("data-collapsed", "false")
+              ; ("data-db-collapsable", "false")
+              ; ("data-block-format", "markdown") ]
             [ dom ~key:"pt-row"
                 ~style_class:
                   "block-main-container flex flex-row gap-1 is-page-title-row"
                 ~attrs:[ ("style", "margin-left: -30px") ]
-                [ dom ~key:"pt-wrap"
+                [ dom ~key:"pt-ctrl"
                     ~style_class:
-                      "block-content-or-editor-wrap ls-page-title-container"
-                    [ dom ~key:"pt-inner2"
-                        ~style_class:"block-content-or-editor-inner"
-                        [ dom ~key:"pt-row2"
+                      "is-with-icon bullet-hidden block-control-wrap flex \
+                       flex-row items-center h-6"
+                    ~attrs:[ ("data-has-children", "false") ]
+                    [ dom ~key:"pt-ca" ~tag:"a"
+                        ~style_class:"block-control"
+                        ~id:("control-" ^ uuid)
+                        [ dom ~key:"pt-cs" ~tag:"span"
+                            ~style_class:"control-hide"
+                            [ dom ~key:"pt-ra" ~tag:"span"
+                                ~style_class:"rotating-arrow not-collapsed"
+                                [ rotating_arrow "pt-arw" ]
+                            ]
+                        ]
+                    ]
+                ; dom ~key:"pt-col1" ~style_class:"flex flex-col w-full"
+                    [ dom ~key:"pt-col2" ~style_class:"flex flex-col w-full"
+                        [ dom ~key:"pt-bmc"
                             ~style_class:
-                              "block-row flex flex-1 flex-row gap-1 items-center"
-                            [ dom ~key:"pt-cw"
-                                ~style_class:
-                                  "flex flex-1 w-full block-content-wrapper"
-                                ((if m.editing_title then [ title_editor page ]
-                                  else
-                                    [ dom ~key:"pt-title"
-                                        ~style_class:"block-title-wrap"
-                                        ~attrs:[ ("id", "page-title-text") ]
-                                        ~text:page.page_title []
-                                    ])
-                                @ tag_els)
+                              "block-main-content flex flex-row gap-2"
+                            [ dom ~key:"pt-col3"
+                                ~style_class:"flex flex-col w-full"
+                                [ dom ~key:"pt-wrap"
+                                    ~style_class:
+                                      "ls-page-title-container \
+                                       block-content-or-editor-wrap"
+                                    [ dom ~key:"pt-inner2"
+                                        ~style_class:
+                                          "block-content-or-editor-inner"
+                                        [ dom ~key:"pt-row2"
+                                            ~style_class:
+                                              "block-row flex flex-1 \
+                                               flex-row gap-1 items-center"
+                                            ([ dom ~key:"pt-cw"
+                                                 ~style_class:
+                                                   "flex flex-1 w-full \
+                                                    block-content-wrapper"
+                                                 ~attrs:
+                                                   [ ( "style"
+                                                     , "display: flex" ) ]
+                                                 [ (if m.editing_title then
+                                                      title_editor page
+                                                    else title_content page)
+                                                 ]
+                                             ]
+                                            @ title_tag_chips page)
+                                        ]
+                                    ]
+                                ]
                             ]
                         ]
                     ]
@@ -149,34 +299,7 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
   dom ~key:"page-title" ~id:"page-title"
     ~style_class:"ls-page-title flex flex-1 w-full content items-start title"
     ~attrs:[ ("data-testid", "page title") ]
-    ~events:"click contextmenu"
-    ~on_dom_event:(fun name payload ->
-      match name with
-      | "click" ->
-          (* shift+click opens the page in the right sidebar (handled by
-             the document-level listener); starting title edit would
-             replace the clicked node mid-dispatch *)
-          let shift =
-            match payload with
-            | Some p ->
-                Js.Json.decodeBoolean
-                  (Platform.json_prop (Platform.json_parse p) "shiftKey")
-                = Some true
-            | None -> false
-          in
-          if page.page_uuid <> None && not shift then (
-            Runtime.send Action.Title_edit_start;
-            Runtime.flush ();
-            (* autofocus doesn't re-fire on remount — focus explicitly so
-               Enter/Escape reach the textarea *)
-            match Dom_ext.doc_query_selector ".ls-page-title textarea" with
-            | Some el ->
-                Dom_ext.focus el;
-                let n = String.length (Dom_ext.value el) in
-                Dom_ext.set_selection_range el n n
-            | None -> ())
-      | _ -> open_menu name payload)
-    (icon @ body)
+    ~events:"contextmenu" ~on_dom_event:open_menu (icon @ body)
 
 let blocks_inner ?puuid ?(virtualize = false) (blocks : Model.block list)
     : t =
