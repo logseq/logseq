@@ -61,7 +61,8 @@ let builtin_column id name ty ?(disable_hide = false) () : V.column =
 let select_column : V.column =
   builtin_column "select" I.select_col "default" ~disable_hide:true ()
 
-let id_column : V.column = builtin_column "id" "#" "default" ()
+(* cljs views.cljs keeps the :id column in `columns` but unconditionally
+   hides it in `visible-columns` (assoc :id false) — never added here *)
 
 let title_column : V.column = builtin_column "block/title" I.name_ "node" ()
 
@@ -98,7 +99,10 @@ let column_of_ident (inst : V.inst) (ident : string) : V.column option =
   | "block/format" | "block/properties" | "block/properties-order"
   | "block/properties-text-values" | "block/pre-block?" | "block/order"
   | "block/collapsed?" | "block/created-at" | "block/updated-at" -> None
-  | "block/tags" -> Some (builtin_column "block/tags" I.filter_tags "node" ())
+  | "block/tags" ->
+      Some
+        { (builtin_column "block/tags" I.filter_tags "node" ()) with
+          V.c_many = true }
   | "block/page" -> Some page_column
   | "block/journal-day" ->
       Some (builtin_column ident (titleize_ident ident) "datetime" ())
@@ -115,7 +119,10 @@ let build_columns (inst : V.inst) (properties : W.t list) : V.column list =
   let props = List.filter_map column_of_property properties in
   let with_tags =
     if List.exists (fun c -> c.V.c_id = "block/tags") props then props
-    else props @ [ builtin_column "block/tags" I.filter_tags "node" () ]
+    else
+      props
+      @ [ { (builtin_column "block/tags" I.filter_tags "node" ()) with
+            V.c_many = true } ]
   in
   match inst.V.kind with
   | V.KAllPages ->
@@ -124,7 +131,7 @@ let build_columns (inst : V.inst) (properties : W.t list) : V.column list =
   | V.KTagPage _ ->
       (* cljs objects.cljs: Asset-class tag pages get a "File" column
          before the logseq property columns *)
-      [ select_column; id_column; title_column ]
+      [ select_column; title_column ]
       @ (if inst.V.asset_class
          then [ builtin_column "file" "File" "default" ~disable_hide:true () ]
          else [])
@@ -140,7 +147,7 @@ let build_columns (inst : V.inst) (properties : W.t list) : V.column list =
         if inst.V.is_advanced then []
         else [ created_column; updated_column ]
       in
-      [ select_column; id_column; title_column ] @ qcols @ tail
+      [ select_column; title_column ] @ qcols @ tail
       @ (if inst.V.is_advanced
          then
            (if List.mem "block/created-at" inst.V.query_idents
@@ -152,7 +159,8 @@ let build_columns (inst : V.inst) (properties : W.t list) : V.column list =
 let visible_columns inst =
   let cols =
     List.filter
-      (fun c -> not (V.Sset.mem c.V.c_id inst.V.hidden))
+      (fun c ->
+        c.V.c_id <> "id" && not (V.Sset.mem c.V.c_id inst.V.hidden))
       inst.V.columns
   in
   match inst.V.ordered with
@@ -284,9 +292,28 @@ let prop_cell ~blk (c : V.column) : D.el =
          (fun x ->
            let t = Wr.prop_text x in
            if t <> "" then
-             D.el_append_child inner
-               (D.h ~tag:"a" ~cls:"page-ref mr-1"
-                  ~attrs:[ ("href", "#/page/" ^ t) ] ~text:t ()))
+             if c.V.c_id = "block/tags" then
+               (* cljs select-item -> page-cp with :tag? ->
+                  a.relative.tag > span "#Name" *)
+               let attrs =
+                 ("data-ref", String.lowercase_ascii t)
+                 :: (match Wr.ref_uuid x with
+                     | Some u -> [ ("data-uuid", u) ]
+                     | None -> [])
+                 @ [ ("draggable", "true"); ("tabindex", "0") ]
+               in
+               D.el_append_child inner
+                 (D.h ~cls:"select-item cursor-pointer"
+                    ~children:
+                      [ D.h ~tag:"a" ~cls:"relative tag" ~attrs
+                          ~children:
+                            [ D.h ~tag:"span" ~text:("#" ^ t) () ]
+                          () ]
+                    ())
+             else
+               D.el_append_child inner
+                 (D.h ~tag:"a" ~cls:"page-ref mr-1"
+                    ~attrs:[ ("href", "#/page/" ^ t) ] ~text:t ()))
          xs
    | W.Bool b when c.V.c_type = "checkbox" ->
        let cb = D.h ~tag:"input" ~attrs:[ ("type", "checkbox") ] () in
@@ -298,8 +325,25 @@ let prop_cell ~blk (c : V.column) : D.el =
          (D.h ~tag:"span" ~cls:"truncate" ~text:(fmt_cell_value c v) ()));
   inner
 
+(* cljs get-column-size: :select 32, :block/title|name 360,
+   :block/created-at|updated-at 160, :logseq.property/query 400,
+   :id 48, default 180 (sized-columns overrides not implemented) *)
+let column_width (c : V.column) : int =
+  match c.V.c_id with
+  | "id" -> 48
+  | "select" -> 32
+  | "block/title" | "block/name" -> 360
+  | "block/created-at" | "block/updated-at" -> 160
+  | "logseq.property/query" -> 400
+  | _ -> 180
+
 let cell_el inst ~refresh ~row_uuid ~blk ~idx (c : V.column) : D.el =
-  let cell = D.h ~cls:"ls-table-cell flex relative h-full" () in
+  let w = column_width c in
+  let cell =
+    D.h ~cls:"ls-table-cell flex relative h-full"
+      ~attrs:[ ("style", Printf.sprintf "width:%dpx;min-width:%dpx" w w) ]
+      ()
+  in
   (match c.V.c_id with
    | "select" -> D.el_append_child cell (select_cell inst ~refresh ~row_uuid ~blk)
    | "id" ->
@@ -332,9 +376,11 @@ let sortable c =
        [ "select"; "id"; "block/page"; "block.temp/refs-count" ])
 
 let header_cell inst ~refresh (c : V.column) : D.el =
+  let w = column_width c in
   let cell =
     D.h ~cls:"ls-table-header-cell"
-      ~attrs:[ ("style", "width:auto;min-width:60px") ] ()
+      ~attrs:[ ("style", Printf.sprintf "width:%dpx;min-width:%dpx" w w) ]
+      ()
   in
   (match c.V.c_id with
    | "select" ->
@@ -486,6 +532,15 @@ let row_el inst ~refresh ~idx ~row_uuid (cols : V.column list) : D.el =
 let table_el inst ~refresh : D.el =
   let tbl = D.h ~cls:"ls-table w-full caption-bottom text-sm table-fixed" () in
   let cols = visible_columns inst in
+  (* cljs table-view: .ls-table-rows.content > .relative (the 34px top
+     pad the absolute .ls-table-header overlays) > [header, rows,
+     footer] *)
+  let rows_el =
+    D.h
+      ~cls:"ls-table-rows content overflow-x-auto force-visible-scrollbar"
+      ()
+  in
+  let rel = D.h ~cls:"relative" () in
   let header =
     D.h ~cls:"ls-table-header border-y transition-colors bg-gray-01"
       ~attrs:[ ("style", "z-index:9") ] ()
@@ -498,20 +553,42 @@ let table_el inst ~refresh : D.el =
   (match action_bar inst ~refresh with
    | Some bar -> D.el_append_child header bar
    | None -> ());
-  D.el_append_child tbl header;
-  let rows_el = D.h ~cls:"ls-table-rows" () in
+  D.el_append_child rel header;
   List.iteri
     (fun i u ->
-      D.el_append_child rows_el
+      D.el_append_child rel
         (row_el inst ~refresh ~idx:(i + 1) ~row_uuid:u cols))
     (all_row_uuids inst);
+  (* cljs add-new-row footer when data-fns has add-new-object! *)
+  (match inst.V.kind with
+   | V.KTagPage _ | V.KAllPages ->
+       let footer = D.h ~cls:"ls-table-footer fade-in faster" () in
+       let row =
+         D.h
+           ~cls:
+             "py-1 px-2 cursor-pointer flex flex-row items-center gap-1 \
+              text-muted-foreground hover:text-foreground w-full text-sm \
+              border-b"
+           ~children:[ D.icon "plus"; D.h ~text:I.new_ () ]
+           ()
+       in
+       D.el_add_listener row "click" (fun _ ->
+           (V.ops ()).V.o_add_object inst);
+       D.el_append_child footer row;
+       D.el_append_child rel footer
+   | V.KQuery _ -> ());
+  D.el_append_child rows_el rel;
   D.el_append_child tbl rows_el;
   tbl
 
 (* grouped rows render without the header (group table per cljs) *)
 let grouped_table inst ~refresh ~rows () =
   let tbl = D.h ~cls:"ls-table w-full caption-bottom text-sm table-fixed" () in
-  let rows_el = D.h ~cls:"ls-table-rows" () in
+  let rows_el =
+    D.h
+      ~cls:"ls-table-rows content overflow-x-auto force-visible-scrollbar"
+      ()
+  in
   List.iteri
     (fun i u ->
       D.el_append_child rows_el
@@ -693,8 +770,11 @@ let render_table inst ~refresh body =
         gs
   | _ -> D.el_append_child body (table_el inst ~refresh)
 
-let render_body inst ~refresh : D.el =
-  let body = D.h ~cls:"ls-view-body" () in
+let render_body inst ~refresh ?(filters = None) () : D.el =
+  let body = D.h ~cls:"ls-view-body flex flex-col gap-2 grid mt-1" () in
+  (match filters with
+   | Some f -> D.el_append_child body f
+   | None -> ());
   (if inst.V.loading then
      D.el_append_child body
        (D.h ~cls:"p-2 text-sm opacity-50" ~text:I.loading ())

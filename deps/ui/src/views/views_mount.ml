@@ -72,7 +72,8 @@ let rec ensure_tag_page () =
           | None -> ensure_tag_page_container inner uuid))
 
 and ensure_tag_page_container inner uuid =
-  let container = D.h ~cls:"ls-views-wrap w-full" () in
+  (* cljs objects.cljs class-objects: [:div.ml-1 [view]] *)
+  let container = D.h ~cls:"ls-views-wrap ml-1" () in
   D.el_set_attr container "data-views-owner" uuid;
   (* .page-blocks-inner is nested inside .ls-page-blocks, a direct child of
      .page-inner — insertBefore requires a direct-child reference node *)

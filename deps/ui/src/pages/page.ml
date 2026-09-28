@@ -84,44 +84,120 @@ let title_editor (page : Model.page) : t =
         []
     ]
 
-let page_title_el (m : Model.t) (page : Model.page) : t =
-  let icon =
-    if page.page_is_tag then
-      [ dom ~key:"pt-icon" ~style_class:"ls-page-icon flex self-start"
-          [ dom ~key:"pt-ic" ~tag:"i" ~style_class:"ti ti-hash" [] ]
+(* cljs block.cljs page-icon for a class page: ghost sm button whose icon
+   is the # glyph at font-size:38px *)
+let title_icon_el : t =
+  dom ~key:"pt-icon" ~style_class:"ls-page-icon flex self-start"
+    [ dom ~key:"pt-icbtn" ~tag:"button"
+        ~style_class:
+          ("ui__button inline-flex cursor-pointer items-center \
+            justify-center whitespace-nowrap rounded-md text-sm gap-1 \
+            font-medium ring-offset-background transition-colors \
+            focus-visible:outline-none focus-visible:ring-2 \
+            focus-visible:ring-ring focus-visible:ring-offset-2 \
+            disabled:pointer-events-none disabled:opacity-50 select-none \
+            hover:bg-secondary/70 hover:text-secondary-foreground \
+            active:opacity-80 as-ghost h-7 rounded px-3 py-1 px-1 \
+            leading-none text-muted-foreground hover:text-foreground")
+        [ dom ~key:"pt-icw" ~tag:"span"
+            ~style_class:"inline-flex items-center ls-icon-color-wrap"
+            [ dom ~key:"pt-ic" ~tag:"i" ~style_class:"ti ti-hash"
+                ~attrs:[ ("style", "width:1lh;height:1lh;font-size:38px") ]
+                []
+            ]
+        ]
+    ]
+
+(* cljs block.cljs block-tag chip: .block-tag > .flex.items-center >
+   a.hash-symbol "#" + a.tag "Name" *)
+let title_tag_el i tag : t =
+  dom ~key:("pt-tag-" ^ string_of_int i) ~style_class:"block-tag"
+    [ dom ~key:("pt-tg-" ^ string_of_int i) ~style_class:"flex items-center"
+        [ dom ~key:("pt-th-" ^ string_of_int i) ~tag:"a"
+            ~style_class:"hash-symbol select-none flex" ~text:"#" []
+        ; dom ~key:("pt-ta-" ^ string_of_int i) ~tag:"a"
+            ~style_class:"tag relative" ~text:tag []
+        ]
+    ]
+
+let title_content_el (m : Model.t) (page : Model.page) uuid : t =
+  if m.editing_title then title_editor page
+  else
+    dom ~key:"pt-title" ~id:("block-content-" ^ uuid)
+      ~style_class:"block-content inline"
+      ~attrs:[ ("blockid", uuid); ("style", "width:100%") ]
+      [ dom ~key:"pt-bci"
+          ~style_class:"block-content-inner flex flex-row justify-between"
+          [ dom ~key:"pt-bh" ~style_class:"block-head-wrap"
+              [ dom ~key:"pt-t" ~tag:"span" ~style_class:"block-title-wrap"
+                  ~attrs:[ ("id", "page-title-text") ]
+                  ~text:page.page_title []
+              ]
+          ]
       ]
-    else []
-  in
+
+(* cljs page.cljs db-page-title -> block.cljs block-container for the
+   page-title row: .ls-block > .block-main-container.is-page-title-row
+   (margin-left -36px w/ icon) > [.block-control-wrap.bullet-hidden,
+   .flex.flex-col.w-full > .block-main-content > [icon, col >
+   .block-content-or-editor-wrap.ls-page-title-container > ... >
+   .block-row > [.block-content-wrapper, .ls-block-right > tags]]] *)
+let title_row_el m page uuid tag_els : t =
+  dom ~key:"pt-row" ~style_class:"block-row flex flex-1 flex-row gap-1 items-center"
+    [ dom ~key:"pt-cw"
+        ~style_class:"flex flex-1 w-full block-content-wrapper"
+        ~attrs:[ ("style", "display:flex") ]
+        [ title_content_el m page uuid ]
+    ; dom ~key:"pt-right"
+        ~style_class:"ls-block-right flex flex-row items-center self-start gap-1"
+        tag_els
+    ]
+
+let title_main_container m page uuid has_icon tag_els : t =
+  dom ~key:"pt-bmc"
+    ~style_class:"block-main-container flex flex-row gap-1 is-page-title-row"
+    ~attrs:
+      [ ( "style"
+        , if has_icon then "margin-left:-36px" else "margin-left:-30px" )
+      ]
+    [ dom ~key:"pt-ctrl"
+        ~style_class:
+          "block-control-wrap flex flex-row items-center h-6 bullet-hidden"
+        ~attrs:[ ("data-has-children", "false") ]
+        [ dom ~key:"pt-ctrla" ~tag:"a" ~style_class:"block-control"
+            ~id:("control-" ^ uuid)
+            [ dom ~key:"pt-ctrls" ~tag:"span" ~style_class:"control-hide" []
+            ]
+        ]
+    ; dom ~key:"pt-col" ~style_class:"flex flex-col w-full"
+        [ dom ~key:"pt-bmc2"
+            ~style_class:"block-main-content flex flex-row gap-2"
+            ((if has_icon then [ title_icon_el ] else [])
+             @ [ dom ~key:"pt-icol" ~style_class:"flex flex-col w-full"
+                   [ dom ~key:"pt-cew"
+                       ~style_class:
+                         "block-content-or-editor-wrap \
+                          ls-page-title-container"
+                       [ dom ~key:"pt-cei"
+                           ~style_class:"block-content-or-editor-inner"
+                           [ title_row_el m page uuid tag_els ]
+                       ]
+                   ]
+               ])
+        ]
+    ]
+
+let page_title_el (m : Model.t) (page : Model.page) : t =
+  let uuid = Option.value page.page_uuid ~default:"" in
   let tag_els =
     match page.Model.page_tags with
     | [] -> []
     | tags ->
         [ dom ~key:"pt-tags" ~style_class:"block-tags gap-1"
-            (List.mapi
-               (fun i tag ->
-                 dom ~key:("pt-tag-" ^ string_of_int i)
-                   ~style_class:"block-tag"
-                   [ dom ~key:("pt-ta-" ^ string_of_int i) ~tag:"a"
-                       ~style_class:"tag" ~text:tag []
-                   ])
-               tags)
+            (List.mapi title_tag_el tags)
         ]
   in
-  let body =
-    (* cljs wraps the title in block-container -> .ls-block; tags render
-       while editing too (sibling of the content wrapper) *)
-    [ box ~key:"pt-inner" ~style_class:"w-full relative"
-        [ dom ~key:"pt-block" ~style_class:"ls-block"
-            ((if m.editing_title then [ title_editor page ]
-              else
-                [ dom ~key:"pt-title" ~style_class:"block-title-wrap"
-                    ~attrs:[ ("id", "page-title-text") ]
-                    ~text:page.page_title []
-                ])
-            @ tag_els)
-        ]
-    ]
-  in
+  let bmc = title_main_container m page uuid page.page_is_tag tag_els in
   (* e2e selects [data-testid='page title'] -> mapped to #page-title *)
   dom ~key:"page-title" ~id:"page-title"
     ~style_class:"ls-page-title flex flex-1 w-full content items-start title"
@@ -142,10 +218,19 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
                 Dom_ext.set_selection_range el n n
             | None -> ())
       | _ -> open_menu name payload)
-    (icon @ body)
+    [ box ~key:"pt-inner" ~style_class:"w-full relative"
+        [ dom ~key:"pt-block" ~style_class:"ls-block swipe-item"
+            ~attrs:
+              [ ("blockid", uuid); ("data-block-title", page.page_title)
+              ; ("data-block-format", "markdown"); ("haschild", "false") ]
+            [ bmc ]
+        ]
+    ]
 
-let blocks_inner ?puuid ?(virtualize = false) (blocks : Model.block list)
-    : t =
+(* ~chrome: cljs ls-page-blocks gets mt-4 + margin-left:-20px on the
+   page route (page.cljs page-inner) *)
+let blocks_inner ?puuid ?(virtualize = false) ?(chrome = false)
+    (blocks : Model.block list) : t =
   let inner_attrs =
     match puuid with
     | Some u -> [ ("data-pu", u) ]
@@ -163,7 +248,9 @@ let blocks_inner ?puuid ?(virtualize = false) (blocks : Model.block list)
       ]
     else List.map Tree.block_row blocks
   in
-  dom ~key:"page-blocks" ~style_class:"ls-page-blocks"
+  dom ~key:"page-blocks"
+    ~style_class:(if chrome then "ls-page-blocks mt-4" else "ls-page-blocks")
+    ~attrs:(if chrome then [ ("style", "margin-left:-20px") ] else [])
     [ dom ~key:"page-blocks-inner" ~style_class:"page-blocks-inner relative"
         ~attrs:inner_attrs body
     ]
@@ -336,13 +423,16 @@ let page_view (m : Model.t) (page : Model.page) : t =
     "flex-1 page relative cp__page-inner-wrap"
     ^ (if page.page_journal_day <> None then " is-journals" else "")
     ^ (if is_today_page m page then " is-today-page" else "")
+    ^ (if page.page_is_tag then " is-node-page" else "")
   in
   dom ~key:"page" ~style_class:cls
     [ dom ~key:"page-inner"
         ~style_class:"relative grid gap-4 sm:gap-8 page-inner mb-16"
         [ breadcrumbs page.page_title
-        ; page_title_el m page
-        ; blocks_inner ?puuid:page.page_uuid ~virtualize:true
+        ; (* cljs: title row wrapped in .flex.flex-row.space-between *)
+          dom ~key:"pt-row-wrap" ~style_class:"flex flex-row space-between"
+            [ page_title_el m page ]
+        ; blocks_inner ?puuid:page.page_uuid ~virtualize:true ~chrome:true
             page.page_blocks
         ; references_view m.page_refs
         ; unlinked_references_view m

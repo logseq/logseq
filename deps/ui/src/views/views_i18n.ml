@@ -4,6 +4,7 @@
    report for consolidation. *)
 
 let all = "All"
+let new_ = "New"
 let new_view = "New view"
 let add_new_view = "Add new view"
 let live_query n = "Live query (" ^ string_of_int n ^ ")"
