@@ -1056,3 +1056,21 @@ search may lag).
   when the async search resolves. The OCaml port already keeps
   `v.groups` while `refresh` is in flight — the stale-input check in
   `apply_results` (`v.input <> q`) must stay.
+
+## Toolchain / test-suite state
+
+- **`bb dev:lint-and-test` baseline** — clj-kondo lint is clean on the
+  branch. `cljs:test` now compiles after two strays were removed:
+  `src/electron/electron/mcp_transport.cljs` + its test (orphaned by a
+  master merge that pulled `2a8e123d92` into the branch although the
+  cljs electron implementation was removed in `9d85ac268`), and
+  `src/test/logseq/outliner/paste_refs_test.cljs` reverted to the base
+  variant (the merged variant required `frontend.worker.plain-value`,
+  removed with the cljs db-worker). The node runner then crashes in
+  `frontend.components.block.reactivity-test`
+  (`unhighlight-blocks!` → `document is not defined`) — **preexisting
+  on `devin/native-ocaml-electron`**, verified identical.
+- **Unit tests for the OCaml UI** live in `deps/ui/test/test_main.ml`
+  (Melange→node). `Platform.local_storage_*` resolves the storage
+  object via `globalThis` and no-ops when absent, because
+  `Model.initial` touches storage at module init under node.
