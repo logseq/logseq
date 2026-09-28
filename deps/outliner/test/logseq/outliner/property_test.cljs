@@ -108,6 +108,19 @@
     (is (ldb/property? created))
     (is (= "Widget" (:block/title created)))))
 
+(deftest upsert-property-allows-plugin-property-to-share-title
+  (let [conn (db-test/create-conn-with-blocks
+              {:properties {:Status {:logseq.property/type :default}}})
+        plugin (outliner-property/upsert-property!
+                conn
+                :plugin.property.test/Status
+                {:logseq.property/type :number}
+                {:property-name "Status"})]
+    (is (ldb/property? plugin))
+    (is (= :plugin.property.test/Status (:db/ident plugin)))
+    (is (some? (d/entity @conn :user.property/Status))
+        "The user property remains")))
+
 (deftest upsert-property-can-share-title-with-built-in
   (let [conn (db-test/create-conn-with-blocks [])
         created (outliner-property/upsert-property!

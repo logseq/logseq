@@ -918,14 +918,19 @@
                  (raw-set-block-property! conn block property v'))))))))))
 
 (defn- validate-new-user-property-title-unique
-  "Refuse creating another user property with the same title. Tags and pages
-   may still share that title."
+  "Refuse creating another user.property with the same title. Tags, pages,
+   built-ins, and plugin properties may still share that title."
   [db title exclude-eid]
-  (outliner-validate/validate-unique-by-name-and-tags
-   db
-   title
-   {:db/id (or exclude-eid -1)
-    :block/tags [(d/entity db :logseq.class/Property)]}))
+  (when (some (fn [property]
+                (and (= title (:block/title property))
+                     (not= exclude-eid (:db/id property))))
+              (ldb/get-user-properties-by-name db title))
+    (throw (ex-info "Duplicate property"
+                    {:type :notification
+                     :payload {:message (str "Another property named " (pr-str title) " already exists.")
+                               :i18n-key :property.validation/duplicate
+                               :i18n-args [title]
+                               :type :warning}}))))
 
 (defn upsert-property!
   "Updates property if property-id is given. Otherwise creates a property
@@ -967,7 +972,8 @@
             (outliner-validate/validate-page-title k-name {:node {:db/ident db-ident'}})
             (outliner-validate/validate-page-title-characters k-name {:node {:db/ident db-ident'}})
             (outliner-validate/validate-property-title k-name {:node {:db/ident db-ident'}})
-            (validate-new-user-property-title-unique db k-name (:db/id properties))
+            (when-not (db-property/plugin-property? db-ident')
+              (validate-new-user-property-title-unique db k-name (:db/id properties)))
             (let [db-id (:db/id properties)
                   opts' (cond-> {:title k-name
                                  :properties properties}

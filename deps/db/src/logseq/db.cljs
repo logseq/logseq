@@ -515,7 +515,7 @@
 
 (defn get-user-properties-by-name
   "User properties whose :block/name matches `property-name` (case-insensitive).
-   Built-in properties are excluded so a user property may share a built-in title."
+   Built-in and plugin properties are excluded so those may share a title."
   [db property-name]
   (when (and db (string? property-name))
     (->> (entity-util/get-pages-by-name db property-name)
@@ -523,6 +523,8 @@
                  (d/entity db (:e datom))))
          (filter entity-util/property?)
          (remove entity-util/built-in?)
+         (remove (fn [property]
+                   (db-property/plugin-property? (:db/ident property))))
          vec)))
 
 (defn get-user-property-by-name
