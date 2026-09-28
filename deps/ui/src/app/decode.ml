@@ -12,9 +12,15 @@ let rec block_of_wire (w : Wire.t) : Model.block =
     Option.value (Wire.map_get_int w "block/level") ~default:1
   in
   let children =
+    (* cljs :block/children accessor (entity-plus) excludes
+       property-created and closed-value children *)
+    let renderable c =
+      Wire.get c "logseq.property/created-from-property" = None
+      && Wire.get c "block/closed-value-property" = None
+    in
     match Wire.get w "block/children" with
     | Some (Wire.List xs) | Some (Wire.Array xs) ->
-        List.map block_of_wire xs
+        List.map block_of_wire (List.filter renderable xs)
     | _ -> []
   in
   let tag_ids =

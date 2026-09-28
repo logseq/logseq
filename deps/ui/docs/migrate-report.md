@@ -368,6 +368,61 @@ sorting, view tabs, selection bar, export EDN) and the query surface of
   `a.menu-link.chosen` count=2. The properties popover should be removed
   or folded into the main autocomplete.
 
+## Plugins (e2e: `plugins_basic_test`, `plugins_marketplace_test`)
+
+- **SDK bridge**: `src/sdk/` installs `window.logseq.api` (flat snake_case
+  method table) + `sdk.ui`; `sdk/plugin_host.ml` wires `LSPluginCore`
+  events (`registered`/`unregistered`/`disabled`, `lsp-updates`), persists
+  installed web plugins under `LSPUserDotRoot/installed-plugins-for-web`
+  localStorage keys, and injects toolbar UI via `pluginHelpers.setupInjectedUI`
+  into `pl-injected-ui-item-*` slots in the left-sidebar plugins menu
+  (`.toolbar-plugins-manager-trigger` dropdown).
+- **`datascript_query` camelCase**: cljs calls
+  `normalize-keyword-for-json result false` — camel-case? is nil, so keys
+  keep hyphens (`journal-day`, `original-name`). `json_of_wire ~camel:false`
+  added for this; every other api result stays camelized. Inputs are
+  resolved through worker `thread-api/resolve-query-inputs` (binds
+  `:current-page`/`:today`-style inputs) before `thread-api/q`, matching
+  cljs `db-async/<resolve-query-inputs` + `<q`.
+- **`datascript_query` input args**: `logseq.DB.datascriptQuery` also emits
+  `logseq.api.datascript_query`; `q` (`thread-api/query-dsl-query` with
+  `:current-page-title`/`:today-day` opts) is registered too.
+- **`wire_of_json` must guard `undefined`**: plugins pass `undefined`/null
+  args (e.g. `pushState('page', {name: page?.uuid})` when uuid is absent);
+  `Js.Json.classify` lets `undefined` fall into the `JSONObject` branch →
+  `Js.Dict.keys` crashes the whole exec call and silently aborts the
+  plugin's promise chain. Guard on `Js.typeof j = "undefined"` first.
+- **Missing api methods throw, not resolve**: `LSPluginCore` rejects
+  `logseq.<fn>` calls for unregistered method names ("Not existed method
+  #<name>"), which aborts the plugin's `.then` chain (hideMainUI inside
+  `_onDaySelect` killed `pushState` before it ran). Any method a plugin
+  may call needs at least a `nil_fn` stub — added `show/hide/toggle_main_ui`,
+  `set_main_ui_inline_style`, `set_main_ui_attrs`.
+- **`get_user_configs.preferredDateFormat`**: cljs returns
+  `state/get-date-formatter` (config `:journal/page-title-format`,
+  default `"MMM do, yyyy"`); plugins format journal titles with it via
+  dayjs. A wrong default (`yyyy-MM-dd`) makes created journal pages miss
+  `journal-day`. `get_user_configs` now reads `logseq/config.edn` through
+  `Sdk_config.read_config` with that fallback.
+- **`sup` tag**: `installed_card` uses `[:sup]` (cljs plugins.cljs L388);
+  every `Logseq_dom.dom ~tag:` must be whitelisted in
+  `logseq_dom.ml`'s `tags` list or `create_extension_node` raises
+  `Invalid_argument` and unmounts the whole dialog subtree.
+- **`a.btn.disabled` e2e pitfall**: app CSS gives
+  `.cp__plugins-item-card>.r .ctl a.btn.disabled` `pointer-events:none`;
+  the e2e `has-text('Install')` selector also matches "Installed", so
+  `click-install-button` hit-tests a dead anchor forever. The installed
+  anchor carries inline `pointer-events:auto` (handler no-ops when
+  installed) — a deliberate deviation from cljs CSS.
+- **`create_tag` `tagProperties`**: cljs creates the class then
+  `set-block-property! :logseq.property.class/properties` with db/ids;
+  `set-block-property`'s first arg spec is `SBlockId` → `Wire.Uuid` only
+  (`Wire.Int` raises `Invalid_outliner_op`). OCaml create_tag upserts
+  missing property entities then links them by uuid.
+- **`get_block_property` enum reads**: `logseq.property/type` arrives as
+  `Wire.Keyword "json"` — `Wire.map_get_string` misses keywords; match
+  `(Wire.Keyword _ | Wire.String _)`.
+
 ## cljs ↔ OCaml 行为对照表 (interaction semantics map)
 
 | 交互 / 隐式契约 | cljs 语义来源 | LUI/OCaml 实现位置 |
