@@ -393,7 +393,7 @@ and try_hash ~refs ~self s i =
     | j when j > i + 3 ->
         let inner = String.sub s (i + 3) (j - i - 3) in
         Some
-          ( (if Sdk_util.is_uuid_string inner then block_ref inner
+          ( (if Sdk_util.is_uuid_string inner then resolved_tag_ref ~refs ~self inner
              else page_ref ~tag:true ~refs ~self inner)
           , j + 2 - i )
     | _ -> None

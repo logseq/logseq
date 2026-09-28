@@ -547,12 +547,37 @@ and fill_bidirectional_page (p : Model.page) ~attach_bidi bidi =
              Js.Promise.resolve ())
       |> ignore
 
+(* the actions element renders data specific to one page record (tag
+   vs page vs class) — when the current page's identity or class-ness
+   changes (navigation, convert-tag-to-page), the old node must be
+   dropped and rebuilt, not reused *)
+let actions_key (p : Model.page) =
+  ( p.Model.page_uuid, p.Model.page_is_tag, p.Model.page_is_property
+  , p.Model.page_internal, p.Model.page_title )
+
+let rendered_key = ref None
+
 let mount_page_area page_inner =
   (* cljs db-page-title: title actions hide while the page title itself is
      being edited (page-title-actions-cp only when edit-block ≠ page) *)
   let editing_title =
     el_query page_inner ".ls-page-title .editor-wrapper" <> None
   in
+  let stale =
+    match !Runtime.current_page, !rendered_key with
+    | Some p, Some k -> actions_key p <> k
+    | _ -> false
+  in
+  if stale then
+    (match el_query page_inner ".ls-page-title-actions" with
+     | Some el -> el_remove el
+     | None -> ());
+    List.iter
+      (fun sel ->
+         match el_query page_inner sel with
+         | Some el -> el_remove el
+         | None -> ())
+      [ ".ls-properties-area"; ".ls-bidirectional-properties" ];
   match el_query page_inner ".ls-page-title-actions" with
   | Some actions ->
       set_style actions (if editing_title then "display: none" else "")
@@ -562,6 +587,7 @@ let mount_page_area page_inner =
           match p.Model.page_uuid with
           | None -> ()
           | Some uuid ->
+              rendered_key := Some (actions_key p);
               let actions = title_actions p in
               (* cljs: actions sit inside .block-content-wrapper, opacity-0
                  until hover; keep them there, not as a sibling of the title *)

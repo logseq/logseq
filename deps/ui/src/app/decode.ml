@@ -256,7 +256,12 @@ let page_of_summary (w : Wire.t) : Model.page option =
              | Some (Wire.Bool true), _ | _, Some (Wire.Bool true) ->
                  title = "Library"
              | _ -> false)
-        ; page_internal = has_ident_page w "logseq.class/Page"
+        ; page_internal =
+            (* route-info carries "internal?" (cljs entity-util/internal-page?);
+               entity maps expose their tag idents instead *)
+            (match Option.bind (Wire.get w "internal?") Wire.as_bool with
+             | Some b -> b
+             | None -> has_ident_page w "logseq.class/Page")
         ; page_built_in =
             (match
                ( Wire.get w "logseq.property/built-in?"

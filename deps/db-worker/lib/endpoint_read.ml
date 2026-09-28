@@ -534,6 +534,8 @@ let get_page_route_info args =
                         Ds_wire.transit_of_value
                           (Option.value (Ldb.value page "block/title") ~default:Nil) )
                     ; ( kw "hidden?", Wire.Bool (Ldb.hidden page) )
+                    ; ( kw "internal?",
+                        Wire.Bool (Ldb.internal_page page) )
                     ; ( kw "tag?", Wire.Bool (Ldb.is_class page) )
                     ; ( kw "property?", Wire.Bool (Ldb.is_property page) )
                     ; ( kw "built-in?", Wire.Bool (Ldb.built_in page) )
