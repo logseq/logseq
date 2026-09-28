@@ -9,6 +9,7 @@ type route =
   | All_pages
   | All_graphs
   | Graph
+  | Settings
   | Not_found of string
 
 type block =

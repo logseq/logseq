@@ -49,6 +49,7 @@ let parse_hash () : Model.route =
           | "all-pages" -> Model.All_pages
           | "all-graphs" -> Model.All_graphs
           | "graph" -> Model.Graph
+          | "settings" -> Model.Settings
           | "page" | "block" -> Model.Not_found p
           | _ -> Model.Not_found p))
 
@@ -249,10 +250,14 @@ let load_route (route : Model.route) =
       ignore (load_page_ref (Wire.String "Library") ~missing:"Library")
   | Model.Graph -> ignore (load_graph ())
   | Model.All_pages | Model.All_graphs | Model.Not_found _ -> ()
+  | Model.Settings -> ()
 
 let resolve () =
   let route = parse_hash () in
   Runtime.send (Action.Navigate_to route);
+  (* cljs settings-effect cleanup: data-settings-tab only while the
+     settings route/dialog is active *)
+  if route <> Model.Settings then Settings_state.deactivate ();
   load_route route;
   Runtime.flush ()
 

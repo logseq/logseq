@@ -40,7 +40,17 @@ let value () = Signal.get_state (state ())
 let signal () = (state ()).Signal.state_signal
 
 let set f =
-  Signal.update (state ()) f;
+  let s = state () in
+  (* cljs settings-effect cleanup: body[data-settings-tab] is removed
+     when the settings panel unmounts. Signal.update only queues the
+     value, so capture the next state inside the update fn. *)
+  let had = List.mem "settings" (Signal.get_state s).dialogs in
+  let removed = ref false in
+  Signal.update s (fun d ->
+      let d' = f d in
+      removed := had && not (List.mem "settings" d'.dialogs);
+      d');
+  if !removed then Settings_state.deactivate ();
   Runtime.flush ()
 
 let is_open name = List.mem name (value ()).dialogs
