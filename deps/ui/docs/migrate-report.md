@@ -795,6 +795,23 @@ Needs an upstream PR.
 - **`get_block_property` enum reads**: `logseq.property/type` arrives as
   `Wire.Keyword "json"` — `Wire.map_get_string` misses keywords; match
   `(Wire.Keyword _ | Wire.String _)`.
+- **No fullscreen menu backdrops**: sidebar dropdown menus must NOT render
+  a `position:fixed;inset:0` overlay — cljs dropdowns dismiss on outside
+  pointerdown, and an invisible overlay blocks hit-testing on everything
+  beneath it (the toolbar-plugins backdrop swallowed every pointer hit
+  while the menu stayed open — the fixture's Escape was legitimately
+  consumed by an open cmdk palette, so nothing ever closed the menu and
+  Playwright's actionability check timed out on the next click).
+  `Sidebar_state.on_doc_click` now closes `open_menu` on clicks outside
+  `.ui__dropdown-menu-content` / the trigger controls
+  (`.toolbar-plugins-manager`, `.as-edit`, `[data-testid='sidebar-item-more']`).
+- **plugins dialog + toolbar trigger**: `dialogs_state.known` must list
+  `"plugins"` or `Dialogs_state.open_` drops it. The toolbar trigger is
+  gated on `Plugin_host.has_installed_plugins` (installed entries survive
+  disable), not `toolbar_items` — after disabling every plugin the trigger
+  must still render so the menu can offer "Plugins". `register_ui_item`
+  has no installed-presence gate: a plugin's `provideUI` can beat the
+  `registered` event on fresh installs.
 
 ## cljs ↔ OCaml 行为对照表 (interaction semantics map)
 

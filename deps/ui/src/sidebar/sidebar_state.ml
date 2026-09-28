@@ -604,7 +604,23 @@ let on_model st (m : Model.t) =
    | _ -> ());
   sync_right_sidebar_width ()
 
+let close_menu st = Runtime.signal_set st.open_menu ""
+let open_nav_menu st = Runtime.signal_set st.open_menu "nav-edit"
+let open_dots_menu st = Runtime.signal_set st.open_menu "dots"
+let open_item_menu st key = Runtime.signal_set st.open_menu ("item-" ^ key)
+
 let on_doc_click st ev =
+  (* dropdown menus dismiss on outside interaction; the trigger controls and
+     the menu content itself are excluded so their own handlers can run *)
+  if Signal.get_state st.open_menu <> "" then
+    match
+      click_target
+        ".ui__dropdown-menu-content, .toolbar-plugins-manager, .as-edit, \
+         [data-testid='sidebar-item-more']"
+        ev
+    with
+    | Some _ -> ()
+    | None -> close_menu st;
   match click_target "a.page-ref" ev with
   | Some el -> (
       match Platform.get_attribute el "data-ref" with
@@ -630,8 +646,7 @@ let on_doc_keydown st ev =
   | Some k -> (
       match jstring k with
       | Some "Escape" ->
-          if Signal.get_state st.open_menu <> "" then
-            Runtime.signal_set st.open_menu "";
+          if Signal.get_state st.open_menu <> "" then close_menu st;
           if (!model_ref).Model.appearance <> None then
             Runtime.send (Action.Appearance_set None)
       | _ -> ())
@@ -678,12 +693,6 @@ let toggle_nav st nav checked =
   in
   Runtime.signal_set st.nav_checked next;
   persist_nav_checked next
-
-let close_menu st = Runtime.signal_set st.open_menu ""
-let open_nav_menu st = Runtime.signal_set st.open_menu "nav-edit"
-let open_dots_menu st = Runtime.signal_set st.open_menu "dots"
-let open_item_menu st key =
-  Runtime.signal_set st.open_menu ("item-" ^ key)
 
 let open_as_page st (it : item) =
   match it.page_ref with

@@ -87,6 +87,11 @@ let toolbar_items () =
   |> List.sort (fun x y ->
          String.compare (jstr x.it_opts "key") (jstr y.it_opts "key"))
 
+(* disabled plugins keep their `installed` entry (only unregistered /
+   unlink removes it), so the manager trigger can stay rendered to
+   show an empty item list like the e2e plugins contract expects *)
+let has_installed_plugins () = Array.length (Js.Dict.keys installed) > 0
+
 let slot_id it =
   "pl-injected-ui-item-pl-" ^ jstr it.it_opts "key" ^ "-" ^ it.it_pid
 
@@ -397,18 +402,22 @@ let save_user_preferences a _b _c _d =
 let register_ui_item a b c _d =
   (match arg_string a, arg_string b with
    | Some pid, Some ty ->
-       if Js.Dict.get installed pid <> None then (
-         let key = jstr c "key" in
-         items :=
-           List.filter
-             (fun it ->
-               not
-                 (it.it_pid = pid
-                  && it.it_type = ty
-                  && jstr it.it_opts "key" = key))
-             !items
-           @ [ { it_pid = pid; it_type = ty; it_opts = c } ];
-         bump ())
+       (* no installed-presence gate: on a fresh install the plugin's
+          provideUI can reach us before the core 'registered' event
+          fills `installed` — gating would drop the item and the
+          toolbar trigger would never appear (cljs stores it
+          unconditionally) *)
+       let key = jstr c "key" in
+       items :=
+         List.filter
+           (fun it ->
+             not
+               (it.it_pid = pid
+                && it.it_type = ty
+                && jstr it.it_opts "key" = key))
+           !items
+         @ [ { it_pid = pid; it_type = ty; it_opts = c } ];
+       bump ()
    | _ -> ());
   resolved_nil
 
