@@ -368,6 +368,13 @@ let goto_page repo uuid =
              load_page repo
                (Wire.Array [ Wire.Keyword "block/uuid"; Wire.Uuid uuid ])
              |> Js.Promise.then_ (fun blocks ->
+                    let collapsed = ref Editor_state.String_set.empty in
+                    Outliner_ops.fill_embed_children repo
+                      (Outliner_ops.ancestors_of page) collapsed blocks
+                    |> Js.Promise.then_ (fun blocks ->
+                           Outliner_ops.set_collapsed !collapsed;
+                           Js.Promise.resolve blocks))
+             |> Js.Promise.then_ (fun blocks ->
                     let page = { page with Model.page_blocks = blocks } in
                     Runtime.send (Action.Page_loaded page);
                     Runtime.send (Action.Navigate_to (Model.Page uuid));
@@ -405,7 +412,12 @@ let create_page title =
                   | Some (Wire.List [ _; Wire.Uuid u ]) -> u
                   | _ -> ""
                 in
-                goto_page repo uuid)
+                goto_page repo uuid
+                |> Js.Promise.then_ (fun () ->
+                       (* cljs edit-page!: a fresh page opens in edit mode
+                          on its first block *)
+                       Editor_actions.append_block_to_fresh_page uuid;
+                       Js.Promise.resolve ()))
          |> Js.Promise.catch (fun e ->
                 Platform.console_error ("cmdk create-page failed", e);
                 Js.Promise.resolve ()))

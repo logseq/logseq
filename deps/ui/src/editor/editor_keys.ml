@@ -18,6 +18,16 @@ let uuid_of_prefixed prefix id =
 let caret_span el =
   (D.el_selection_start el, D.el_selection_end el)
 
+(* while #ui__ac (autocomplete popup) is in the DOM the popup's own
+   document keydown handler owns these keys — the editor listener runs
+   first (it installs at module init), so without this guard Enter would
+   split the block AND pick the popup item *)
+let ac_popup_open () = D.get_element_by_id "ui__ac" <> None
+
+let ac_owned_key = function
+  | "Enter" | "Tab" | "Escape" | "ArrowUp" | "ArrowDown" -> true
+  | _ -> false
+
 (* -- editor-mode keys -- *)
 
 let on_editor_arrows ev uuid el =
@@ -29,7 +39,11 @@ let on_editor_arrows ev uuid el =
     ignore
       (Outliner_ops.apply_and_refresh
          [ Outliner_ops.move_up_down [ uuid ] up ]))
-  else if shift then ()
+  else if shift then (
+    (* cljs: shift+arrow inside the editor leaves editing and selects the
+       block; further shift+arrows extend selection in normal mode *)
+    D.prevent_default ev;
+    A.exit_edit ~select:true)
   else
     let v = D.el_value el in
     let s, e = caret_span el in
@@ -54,6 +68,7 @@ let on_editor_key ev uuid el =
   let key = D.ev_key ev in
   let shift = D.ev_shift ev in
   if D.ev_composing ev then ()
+  else if ac_popup_open () && ac_owned_key key then ()
   else
     match key with
     | "Enter" when not shift ->
@@ -106,18 +121,18 @@ let on_normal_key ev =
   | "Backspace" | "Delete" when selected () ->
       D.prevent_default ev;
       A.delete_selection ()
-  | "ArrowUp" when shift ->
-      D.prevent_default ev;
-      A.extend_selection true
-  | "ArrowDown" when shift ->
-      D.prevent_default ev;
-      A.extend_selection false
   | "ArrowUp" when (meta || alt) && shift ->
       D.prevent_default ev;
       A.move_blocks_up_down true
   | "ArrowDown" when (meta || alt) && shift ->
       D.prevent_default ev;
       A.move_blocks_up_down false
+  | "ArrowUp" when shift ->
+      D.prevent_default ev;
+      A.extend_selection true
+  | "ArrowDown" when shift ->
+      D.prevent_default ev;
+      A.extend_selection false
   | "ArrowUp" when selected () ->
       D.prevent_default ev;
       A.move_selection_focus true
@@ -225,12 +240,20 @@ let on_click ev =
                         | None -> ())
                     | None -> ()))))
 
-(* clicking outside the editor commits the buffer *)
+(* clicking outside the editor commits the buffer — except clicks inside
+   the autocomplete/context popups: picking an item must not first flush
+   the half-typed trigger text into the block *)
 let on_mousedown ev =
   if S.ready () && S.editing () <> None then
     match D.closest_sel ".editor-wrapper" (D.ev_target ev) with
     | Some _ -> ()
-    | None -> A.blur_commit ()
+    | None -> (
+        match
+          D.closest_sel ".ui__popover-content, .ls-context-menu-content"
+            (D.ev_target ev)
+        with
+        | Some _ -> ()
+        | None -> A.blur_commit ())
 
 let installed = ref false
 

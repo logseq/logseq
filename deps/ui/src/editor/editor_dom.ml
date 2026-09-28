@@ -76,6 +76,8 @@ external el_focus : el -> unit = "focus" [@@mel.send]
 (* textarea *)
 external el_value : el -> string = "value" [@@mel.get]
 external el_set_value : el -> string -> unit = "value" [@@mel.set]
+external el_set_text_content : el -> string -> unit = "textContent"
+  [@@mel.set]
 external el_selection_start : el -> int = "selectionStart" [@@mel.get]
 external el_selection_end : el -> int = "selectionEnd" [@@mel.get]
 

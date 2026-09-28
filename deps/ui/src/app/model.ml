@@ -17,6 +17,12 @@ type block =
   ; block_title : string
   ; block_level : int
   ; block_children : block list
+  ; (* db id of a :block/link target — the block renders the linked
+       page's blocks instead of its own children *)
+    block_link : int option
+  ; (* fetched blocks of the linked entity; never written back by
+       structure ops (they belong to the source page) *)
+    block_embed_children : block list
   }
 
 type page =

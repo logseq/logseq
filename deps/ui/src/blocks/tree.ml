@@ -33,14 +33,16 @@ let block_key (b : Model.block) =
 
 (* -- per-row signals -- *)
 
-let row_class_sig uuid blank =
+let row_class_sig uuid blank embed =
   Logseq_dom.class_signal (S.signal ()) (fun (st : S.t) ->
       "ls-block swipe-item"
       ^ (if S.String_set.mem uuid st.selected then " selected" else "")
+      ^ (if embed then " embed-block" else "")
       ^ if blank then " is-blank" else "")
 
 let row_attrs_sig uuid (b : Model.block) =
-  let has_children = b.block_children <> [] in
+  let has_children = S.children_of b <> [] in
+  let embed = b.Model.block_link <> None in
   Logseq_dom.attrs_signal (S.signal ()) (fun (st : S.t) ->
       [ ("id", "ls-block-" ^ uuid)
       ; ("blockid", uuid)
@@ -51,7 +53,13 @@ let row_attrs_sig uuid (b : Model.block) =
       ; ( "data-collapsed"
         , string_of_bool (S.String_set.mem uuid st.collapsed) )
       ; ("level", string_of_int b.block_level)
-      ])
+      ]
+      (* cljs sets blockid to the linked entity's uuid and
+         originalblockid to the linking block's — we keep blockid as the
+         embed block's own uuid so delegated editing/ops resolve it *)
+      @ if embed then
+          [ ("originalblockid", uuid); ("data-embed", "true") ]
+        else [])
 
 let collapsed_sig uuid =
   Signal.map
@@ -87,17 +95,29 @@ let control_wrap uuid : t =
 
 (* -- content vs editor -- *)
 
+let editing_sig uuid =
+  Signal.map
+    (fun (st : S.t) ->
+      match st.editing with
+      | Some e -> e.uuid = uuid
+      | None -> false)
+    (S.signal ())
+
 let content_el uuid (b : Model.block) : t =
   dom ~key:("content-" ^ uuid) ~style_class:"block-content inline"
+    ~style_class_signal:
+      (Logseq_dom.class_signal
+         (editing_sig uuid)
+         (fun editing ->
+           (* cljs keeps .block-content mounted (hidden) while editing, so
+              e2e's .block-title-wrap contents still read the title *)
+           "block-content inline" ^ if editing then " hidden" else ""))
     ~id:("block-content-" ^ uuid)
     ~attrs:[ ("blockid", uuid); ("containerid", uuid) ]
     [ dom ~key:("bci-" ^ uuid)
         ~style_class:"block-content-inner flex flex-row justify-between"
         [ dom ~key:("bh-" ^ uuid) ~style_class:"block-head-wrap"
-            [ dom ~key:("btw-" ^ uuid) ~tag:"span"
-                ~style_class:"block-title-wrap"
-                (Render.title b.block_title)
-            ]
+            (Render.title b.block_title)
         ]
     ]
 
@@ -107,6 +127,16 @@ let editor_el uuid : t =
     | Some e when e.uuid = uuid -> e.buffer
     | _ -> ""
   in
+  (* textarea text must track the buffer: e2e asserts
+     .editor-wrapper textarea :has-text, which reads textContent *)
+  let buffer_sig =
+    Signal.map
+      (fun (st : S.t) ->
+        match st.S.editing with
+        | Some e when e.uuid = uuid -> Lui_protocol.StringValue e.buffer
+        | _ -> Lui_protocol.StringValue "")
+      (S.signal ())
+  in
   dom ~key:("ew-" ^ uuid) ~style_class:"editor-wrapper flex flex-1 w-full"
     ~id:("editor-edit-block-" ^ uuid)
     [ dom ~key:("ei-" ^ uuid)
@@ -114,20 +144,17 @@ let editor_el uuid : t =
         [ dom ~key:("ta-" ^ uuid) ~tag:"textarea"
             ~id:("edit-block-" ^ uuid)
             ~attrs:[ ("data-testid", "block editor") ]
-            ~text:buffer []
+            ~text:buffer ~text_signal:buffer_sig []
         ]
     ]
 
 let content_or_editor uuid (b : Model.block) : t =
-  dyn ~equal:(fun a b -> a = b)
-    (fun editing ->
-      if editing then editor_el uuid else content_el uuid b)
-    (Signal.map
-       (fun (st : S.t) ->
-         match st.editing with
-         | Some e -> e.uuid = uuid
-         | None -> false)
-       (S.signal ()))
+ fun context parent ->
+  let node = (content_el uuid b) context parent in
+  (* cljs removes the editor entirely in normal mode (e2e asserts the
+     textarea is absent) but keeps .block-content mounted hidden *)
+  ignore ((if_ ~test:(editing_sig uuid) (editor_el uuid)) context parent);
+  node
 
 (* -- row -- *)
 
@@ -146,10 +173,11 @@ let rec block_row (b : Model.block) : t =
 and row_el (b : Model.block) : t =
   let uuid = Option.value b.block_uuid ~default:"" in
   let key = block_key b in
-  let has_children = b.block_children <> [] in
+  let embed = b.block_link <> None in
+  let has_children = S.children_of b <> [] in
   let blank = String.trim b.block_title = "" in
   dom ~key:("ls-" ^ key)
-    ~style_class_signal:(row_class_sig uuid blank)
+    ~style_class_signal:(row_class_sig uuid blank embed)
     ~attrs_signal_v:(row_attrs_sig uuid b)
     [ dom ~key:("main-" ^ key)
         ~style_class:"block-main-container flex flex-row gap-1"
@@ -187,5 +215,5 @@ and children_el uuid (b : Model.block) : t =
            ~style_class:"block-children-left-border"
            ~attrs:[ ("blockid", uuid) ] []
        ; dom ~key:("clist-" ^ uuid) ~style_class:"block-children w-full"
-           (List.map block_row b.block_children)
+           (List.map block_row (S.children_of b))
        ])

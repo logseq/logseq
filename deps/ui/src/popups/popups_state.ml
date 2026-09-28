@@ -12,12 +12,13 @@
 module S = String
 module U = Ui_strings
 
-type ac_kind = Slash | Page_ref | Block_ref | Tag_search
+type ac_kind = Slash | Page_ref | Block_ref | Tag_search | Embed_ref
 
 type item_action =
   | Emit of string (* ls:editor-insert {text} *)
   | Switch of ac_kind (* reopen as another autocomplete *)
   | Editor_cmd of string (* ls:editor-command {command} *)
+  | Embed of string (* page title — insert a :block/link embed *)
   | Noop (* empty-state placeholder row; never applied *)
 
 type ac_item =
@@ -90,13 +91,14 @@ let close_cm t = set_cm t None
 
 let ac_class_of_kind = function
   | Slash -> "cp__commands-slash"
-  | Page_ref | Tag_search -> "black"
+  | Page_ref | Tag_search | Embed_ref -> "black"
   | Block_ref -> "ac-block-search"
 ;;
 
 let trigger_len_of_kind = function
   | Slash | Tag_search -> 1
   | Page_ref | Block_ref -> 2
+  | Embed_ref -> 0 (* only reachable via Switch — no typed trigger *)
 ;;
 
 (* ---- slash command table ---- *)
@@ -124,7 +126,7 @@ let slash_items () : ac_item list =
   List.concat
     [ group_items "editor.slash/group-basic"
         [ "editor.slash/node-reference", Switch Page_ref
-        ; "editor.slash/node-embed", Switch Page_ref ]
+        ; "editor.slash/node-embed", Switch Embed_ref ]
     ; group_items "editor.slash/group-format"
         [ "ui/link", Emit "[]()"
         ; "editor.slash/image-link", Emit "![]()"
@@ -228,13 +230,14 @@ let filter_slash q items =
 ;;
 
 let page_items_for t kind q =
+  let act_of title =
+    match kind with
+    | Tag_search -> Emit ("#[[" ^ title ^ "]]")
+    | Embed_ref -> Embed title
+    | _ -> Emit ("[[" ^ title ^ "]]")
+  in
   let wrap title =
-    let text =
-      match kind with
-      | Tag_search -> "#[[" ^ title ^ "]]"
-      | _ -> "[[" ^ title ^ "]]"
-    in
-    mk_item ~key:("page:" ^ title) ~label:title (Emit text)
+    mk_item ~key:("page:" ^ title) ~label:title (act_of title)
   in
   let matched =
     take 20 (List.map wrap (List.filter (fun ti -> contains_ci ti q) !(t.titles)))
@@ -248,12 +251,7 @@ let page_items_for t kind q =
          | _ -> U.t "editor/new-page")
         ^ " " ^ q
       in
-      let text =
-        match kind with
-        | Tag_search -> "#[[" ^ q ^ "]]"
-        | _ -> "[[" ^ q ^ "]]"
-      in
-      mk_item ~key:("new:" ^ q) ~label (Emit text) :: matched
+      mk_item ~key:("new:" ^ q) ~label (act_of q) :: matched
     else matched
   in
   renumber items
@@ -266,7 +264,8 @@ let repo () = Option.value !(Runtime.current_repo) ~default:""
 let refresh_items t ac =
   match ac.kind with
   | Slash -> { ac with items = filter_slash ac.query (slash_items ()) }
-  | Page_ref | Tag_search -> { ac with items = page_items_for t ac.kind ac.query }
+  | Page_ref | Tag_search | Embed_ref ->
+      { ac with items = page_items_for t ac.kind ac.query }
   | Block_ref -> ac (* filled asynchronously by run_block_search *)
 ;;
 
@@ -329,7 +328,7 @@ let load_titles t =
                   | _ -> Cmdk_state.str_field row "block/title")
                 rows;
             (match (get t).ac with
-             | Some ({ kind = Page_ref | Tag_search; _ } as ac) ->
+             | Some ({ kind = Page_ref | Tag_search | Embed_ref; _ } as ac) ->
                  set_ac t (Some (refresh_items t ac))
              | _ -> ());
             Js.Promise.resolve ())
@@ -349,7 +348,7 @@ let open_ac t kind editor =
     ; tlen; items = []; chosen = 0; editor }
   in
   (match kind with
-   | Page_ref | Tag_search -> load_titles t
+   | Page_ref | Tag_search | Embed_ref -> load_titles t
    | Block_ref -> ()
    | Slash -> ());
   set_cm t None;
@@ -366,7 +365,7 @@ let query_closed ac q =
   match ac.kind with
   | Page_ref -> S.contains q ']'
   | Block_ref -> S.contains q ')'
-  | Slash | Tag_search -> S.contains q '\n'
+  | Slash | Tag_search | Embed_ref -> S.contains q '\n'
 ;;
 
 (* after an `input` event in a .editor-wrapper textarea *)
@@ -406,12 +405,23 @@ let detail_obj pairs =
   Js.Json.object_ o
 ;;
 
-let emit editor tpos text =
-  Dom_ext.dispatch_custom "ls:editor-insert"
-    (detail_obj
-       [ "text", Js.Json.string text
-       ; "from", Js.Json.number (float_of_int tpos)
-       ; "to", Js.Json.number (float_of_int (Dom_ext.selection_start editor)) ])
+(* replace [tpos, caret) with text and sync the editing buffer —
+   equivalent to cljs's ls:editor-insert handler (the OCaml app has no
+   listener for that event, so Emit applies the edit itself) *)
+let insert_text (ac : ac) text =
+  let el = ac.editor in
+  let v = Dom_ext.value el in
+  let n = S.length v in
+  let tpos = max 0 (min ac.tpos n) in
+  let pos = max tpos (min (Dom_ext.selection_start el) n) in
+  let v' = S.sub v 0 tpos ^ text ^ S.sub v pos (n - pos) in
+  Dom_ext.set_value el v';
+  (match Editor_state.editing_uuid () with
+   | Some uuid -> Editor_actions.sync_buffer uuid v'
+   | None -> ());
+  let caret = tpos + S.length text in
+  Dom_ext.set_selection_range el caret caret;
+  Dom_ext.focus el
 ;;
 
 let emit_cmd command extra =
@@ -419,19 +429,40 @@ let emit_cmd command extra =
     (detail_obj (("command", Js.Json.string command) :: extra))
 ;;
 
+(* erase the typed trigger range [tpos, caret) from the editor and hand
+   focus back to the textarea — a clicked menu-link steals focus to its
+   anchor, and Switch keeps no literal text (cljs [:editor/input ""]) *)
+let erase_trigger_text (ac : ac) =
+  let el = ac.editor in
+  let v = Dom_ext.value el in
+  let n = S.length v in
+  let tpos = max 0 (min ac.tpos n) in
+  let pos = max tpos (min (Dom_ext.selection_start el) n) in
+  let v' = S.sub v 0 tpos ^ S.sub v pos (n - pos) in
+  Dom_ext.set_value el v';
+  (match Editor_state.editing_uuid () with
+   | Some uuid -> Editor_actions.sync_buffer uuid v'
+   | None -> ());
+  Dom_ext.set_selection_range el tpos tpos;
+  Dom_ext.focus el
+;;
+
 let apply_item t ac it =
   match it.ai_act with
   | Switch kind ->
-      (* keep tpos: the typed "/query" text is the range the eventual
-         ls:editor-insert replaces (e.g. "/nod" -> "[[page]]") *)
+      erase_trigger_text ac;
       (match kind with
-       | Page_ref | Tag_search -> load_titles t
+       | Page_ref | Tag_search | Embed_ref -> load_titles t
        | _ -> ());
       set_ac t
         (Some
            (refresh_items t
-              { ac with kind; query = ""; items = []; chosen = 0 }))
-  | Emit text -> emit ac.editor ac.tpos text; close_ac t
+              { ac with kind; query = ""; tlen = 0; items = []; chosen = 0 }))
+  | Embed title ->
+      erase_trigger_text ac;
+      close_ac t;
+      Editor_embed.insert title
+  | Emit text -> insert_text ac text; close_ac t
   | Editor_cmd c -> emit_cmd c []; close_ac t
   | Noop -> ()
 ;;

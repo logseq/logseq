@@ -21,7 +21,13 @@ let sync_buffer uuid v =
       match st.S.editing with
       | Some e when e.uuid = uuid ->
           { st with S.editing = Some { e with S.buffer = v } }
-      | _ -> st)
+      | _ -> st);
+  (* cljs renders the buffer as the textarea's text child; keep
+     textContent tracking .value (buffer writes are silent, so the
+     text_signal in tree.ml never fires on keystrokes) *)
+  match D.textarea_of uuid with
+  | Some el -> D.el_set_text_content el v
+  | None -> ()
 
 let apply_focus () =
   match !S.pending_focus with
@@ -78,8 +84,9 @@ let enter_edit uuid caret =
   | None -> ()
 
 let commit_buf uuid buf =
-  if buf <> model_title uuid then
-    ignore (Ops.apply_and_refresh [ Ops.save_block uuid buf ])
+  if buf <> model_title uuid then (
+    S.update_block_title uuid buf;
+    ignore (Ops.apply_and_refresh [ Ops.save_block uuid buf ]))
 
 let exit_edit ~select =
   match S.editing () with
@@ -221,6 +228,14 @@ let flat_uuids () =
     (fun b -> b.Model.block_uuid)
     (S.flat_visible ())
 
+(* selected uuids in document order — outliner ops interpret the list
+   positionally (first/last), so uuid-sorted set order is wrong *)
+let selected_uuids_in_order () =
+  let sel = S.selected () in
+  List.filter
+    (fun u -> S.String_set.mem u sel)
+    (flat_uuids ())
+
 let index_of lst u =
   let rec go i = function
     | x :: _ when x = u -> i
@@ -313,19 +328,30 @@ let indent_or_outdent ~indent =
   let sel = S.selected () in
   let uuids =
     match S.editing_uuid () with
-    | Some u when S.String_set.mem u sel -> S.String_set.elements sel
+    | Some u when S.String_set.mem u sel -> selected_uuids_in_order ()
     | Some u -> [ u ]
-    | None -> S.String_set.elements sel
+    | None -> selected_uuids_in_order ()
   in
   match uuids with
   | [] -> ()
   | focus :: _ ->
+      (* outdent of a block rendered inside a page embed must move it next
+         to the embed block, not inside the linked page — cljs
+         get-first-block-original reads originalblockid off the ancestor
+         .ls-block; the model parent is the embed block *)
+      let parent_original =
+        match S.find_parent focus with
+        | Some (Some p, _) when p.Model.block_link <> None ->
+            p.Model.block_uuid
+        | _ -> None
+      in
       with_focus_after focus
         (String.length (live_buffer focus))
-        (Ops.apply_and_refresh [ Ops.indent_outdent uuids indent ])
+        (Ops.apply_and_refresh
+           [ Ops.indent_outdent ?parent_original uuids indent ])
 
 let move_blocks_up_down up =
-  match selected_uuids () with
+  match selected_uuids_in_order () with
   | [] -> ()
   | uuids -> ignore (Ops.apply_and_refresh [ Ops.move_up_down uuids up ])
 
@@ -425,7 +451,7 @@ let paste_blocks ev =
 
 let toggle_collapse uuid =
   match S.find uuid with
-  | Some b when b.Model.block_children <> [] ->
+  | Some b when S.children_of b <> [] ->
       let now = not (S.is_collapsed uuid) in
       S.set (fun st ->
           { st with
@@ -475,6 +501,23 @@ let arrow_nav uuid up =
       | None -> ())
   | None -> ()
 
+let append_block_to target sibling =
+  let new_uuid = Platform.random_uuid () in
+  let stage st =
+    { st with S.editing = Some { uuid = new_uuid; buffer = "" } }
+  in
+  (* empty page: editor state is created at the first block_row
+     mount, which happens inside this op's refresh — defer the
+     edit-mode entry into the initial state so the row mounts
+     straight into the editor *)
+  if S.ready () then S.set stage else S.defer_init stage;
+  with_focus_after new_uuid 0
+    (Ops.apply_and_refresh
+       [ Ops.insert_blocks
+           [ Ops.block_map ~title:"" new_uuid ]
+           target ~sibling
+       ])
+
 (* append a fresh block at the bottom of the current page *)
 let append_block () =
   match !Runtime.current_page with
@@ -483,7 +526,6 @@ let append_block () =
       match p.Model.page_uuid with
       | None -> ()
       | Some puuid ->
-          let new_uuid = Platform.random_uuid () in
           let target, sibling =
             match List.rev (S.page_blocks ()) with
             | last :: _ -> (
@@ -492,21 +534,13 @@ let append_block () =
                 | None -> (puuid, false))
             | [] -> (puuid, false)
           in
-          let stage st =
-            { st with S.editing = Some { uuid = new_uuid; buffer = "" } }
-          in
-          (* empty page: editor state is created at the first block_row
-             mount, which happens inside this op's refresh — defer the
-             edit-mode entry into the initial state so the row mounts
-             straight into the editor *)
-          if S.ready () then S.set stage
-          else S.defer_init stage;
-          with_focus_after new_uuid 0
-            (Ops.apply_and_refresh
-               [ Ops.insert_blocks
-                   [ Ops.block_map ~title:"" new_uuid ]
-                   target ~sibling
-               ]))
+          append_block_to target sibling)
+
+(* a just-created page is empty, so its first block goes straight under
+   the page node; the uuid is passed in because the trailing Navigate_to
+   in goto_page clears current_page until the router reload lands *)
+let append_block_to_fresh_page puuid =
+  append_block_to puuid false
 
 (* Meta+e quick-add: stub *)
 let quick_add () = ()
