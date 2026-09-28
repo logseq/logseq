@@ -1,14 +1,19 @@
 (ns frontend.handler.page-test
   (:require [cljs.test :refer [async deftest is]]
+            [frontend.config :as config]
+            [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
             [frontend.db.async :as db-async]
             [frontend.handler.common.page :as page-common-handler]
             [frontend.handler.db-based.page :as db-page-handler]
             [frontend.handler.editor :as editor-handler]
+            [frontend.handler.graph :as graph-handler]
+            [frontend.handler.notification :as notification]
             [frontend.handler.page :as page-handler]
             [frontend.handler.plugin :as plugin-handler]
             [frontend.state :as state]
             [frontend.util :as util]
+            [frontend.util.url :as url-util]
             [promesa.core :as p]))
 
 (deftest favorite-page-actions-load-page-through-worker-test
@@ -562,3 +567,51 @@
                (state/replace-state! previous-state)
                (reset! state/*db-worker previous-worker)
                (done))))))))
+
+(deftest copy-page-url-uses-web-url-when-graph-id-is-known-test
+  (let [page-uuid #uuid "33333333-3333-3333-3333-333333333333"
+        copied (atom nil)
+        shown (atom [])]
+    (with-redefs [graph-handler/current-graph-id (constantly "remote-graph-uuid")
+                  state/get-current-repo (constantly "logseq_db_work")
+                  util/copy-to-clipboard! (fn [text & _opts]
+                                            (reset! copied text))
+                  notification/show! (fn [content status & _]
+                                       (swap! shown conj [content status]))]
+      (page-handler/copy-page-url page-uuid)
+      (is (= (url-util/get-logseq-web-page-url config/app-website
+                                               "remote-graph-uuid"
+                                               (str page-uuid))
+             @copied))
+      (is (empty? @shown)))))
+
+(deftest copy-page-url-uses-desktop-url-when-graph-id-is-missing-test
+  (let [page-uuid #uuid "33333333-3333-3333-3333-333333333333"
+        copied (atom nil)
+        shown (atom [])]
+    (with-redefs [graph-handler/current-graph-id (constantly nil)
+                  state/get-current-repo (constantly "logseq_db_work")
+                  util/copy-to-clipboard! (fn [text & _opts]
+                                            (reset! copied text))
+                  notification/show! (fn [content status & _]
+                                       (swap! shown conj [content status]))]
+      (page-handler/copy-page-url page-uuid)
+      (is (= "logseq://graph/work?block-id=33333333-3333-3333-3333-333333333333"
+             @copied))
+      (is (empty? @shown)))))
+
+(deftest copy-page-url-warns-when-no-url-can-be-built-test
+  (let [shown (atom [])]
+    (with-redefs [graph-handler/current-graph-id (constantly nil)
+                  state/get-current-repo (constantly nil)
+                  util/copy-to-clipboard! (fn [& _]
+                                            (throw (js/Error. "must not copy")))
+                  notification/show! (fn [content status & _]
+                                       (swap! shown conj [content status]))]
+      (page-handler/copy-page-url #uuid "33333333-3333-3333-3333-333333333333")
+      (is (= [[(t :page/copy-url-unavailable-warning) :warning]]
+             @shown))
+      (page-handler/copy-page-url nil)
+      (is (= [[(t :page/copy-url-unavailable-warning) :warning]
+              [(t :page/no-page-found-to-copy) :warning]]
+             @shown)))))
