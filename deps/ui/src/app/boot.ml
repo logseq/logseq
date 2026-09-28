@@ -22,9 +22,10 @@ let apply_storage_env () =
   in
   Platform.document_set_lang lang;
   let system =
+    (* cljs state.cljs :ui/system-theme? defaults to true *)
     match Platform.local_storage_get "system-theme?" with
     | Some v -> unquote v = "true"
-    | None -> false
+    | None -> true
   in
   let theme =
     if system then if Browser_ui.prefers_dark () then "dark" else "light"
