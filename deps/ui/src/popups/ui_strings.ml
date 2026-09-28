@@ -66,6 +66,8 @@ let t (key : string) : string =
   | "editor/cycle-todo" -> "Rotate the TODO state"
   | "editor/search-for-node" -> "Search for a node"
   | "editor/search-for-tag" -> "Search for a tag"
+  | "editor/display-tag-inline-hint" ->
+      "to display this tag inline instead of at the end of this node."
   | "editor/block-search" -> "Search for a block"
   | "editor/search-template-placeholder" -> "Search for a template"
   | "editor.slash/group-basic" -> "BASIC"

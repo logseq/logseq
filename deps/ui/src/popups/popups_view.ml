@@ -158,6 +158,36 @@ let ac_popover (st : S.t) : t =
                   | None -> ""))
              st.S.vs.Signal.state_signal)
         [ ac_inner st ]
+    ; (* cljs page-search-aux: mod+enter hint under the tag list *)
+      if_
+        ~test:
+          (Signal.map
+             (fun (v : S.view) ->
+               match v.S.ac with
+               | Some a ->
+                   a.S.kind = S.Tag_search && a.S.query <> ""
+                   && String.lowercase_ascii a.S.query <> "page"
+               | None -> false)
+             st.S.vs.Signal.state_signal)
+        (Logseq_dom.dom ~key:"ac-hint" ~tag:"p"
+           ~style_class:
+             "px-1 opacity-50 text-sm flex flex-row items-center gap-2"
+           [ (* shui/shortcut "mod+enter" → combo glow container *)
+             Logseq_dom.dom ~key:"sc" ~tag:"div"
+               ~style_class:"shui-shortcut-combo shui-shortcut-glow"
+               ~attrs:
+                 [ ("data-shortcut-binding", "mod+enter")
+                 ; ("style", "white-space: nowrap") ]
+               [ Logseq_dom.dom ~key:"k0" ~tag:"kbd"
+                   ~style_class:"shui-shortcut-key"
+                   ~text:(Platform.utf8 "\xe2\x8c\x98") []
+               ; Logseq_dom.dom ~key:"sep1" ~tag:"span"
+                   ~style_class:"shui-shortcut-separator" []
+               ; Logseq_dom.dom ~key:"k1" ~tag:"kbd"
+                   ~style_class:"shui-shortcut-key"
+                   ~text:(Platform.utf8 "\xe2\x8f\x8e") [] ]
+           ; Logseq_dom.dom ~key:"ht" ~tag:"span"
+               ~text:(U.t "editor/display-tag-inline-hint") [] ])
     ]
 ;;
 
