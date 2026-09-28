@@ -27,12 +27,12 @@ let unquote s =
 
 let quoted v = "\"" ^ v ^ "\""
 
+(* cljs :ui/system-theme? default is (or util/mac? util/win32?) *)
 let current_mode () =
   let system =
-    (* cljs state.cljs :ui/system-theme? defaults to true *)
     match Platform.local_storage_get "system-theme?" with
     | Some v -> unquote v = "true"
-    | None -> true
+    | None -> Platform.desktop_os ()
   in
   if system then "system"
   else
@@ -82,7 +82,7 @@ let set_language code =
 
 let lang_label_for code =
   match List.find_opt (fun (k, _) -> k = code) languages with
-  | Some (_, l) -> l
+  | Some (_, l) -> Platform.utf8 l
   | None -> code
 
 let lang_dropdown_on : Webapi.Dom.Element.t option ref = ref None
@@ -122,8 +122,12 @@ let open_text_dropdown anchor options on_pick =
   lang_dropdown_on := Some menu
 
 let open_lang_dropdown anchor on_pick =
-  open_text_dropdown anchor (List.map snd languages) (fun label ->
-      (match List.find_opt (fun (_, l) -> l = label) languages with
+  open_text_dropdown anchor
+    (List.map (fun (_, l) -> Platform.utf8 l) languages)
+    (fun label ->
+      (match
+         List.find_opt (fun (_, l) -> Platform.utf8 l = label) languages
+       with
        | Some (code, _) -> set_language code
        | None -> ());
       on_pick label)
@@ -140,8 +144,14 @@ let theme_item ~st mode label =
         Signal.set st mode;
         Runtime.flush ()))
     [ dom ~key:("tmi-" ^ mode) ~tag:"i"
-        (* .mode-light needs .radix for its preview background-image *)
-        ~style_class:("mode-" ^ mode ^ " radix") []
+        (* cljs: .radix only when an accent color is stored
+           (:ui/radix-color) *)
+        ~style_class:
+          ("mode-" ^ mode
+          ^ if Platform.local_storage_get "radix-color" <> None
+            then " radix"
+            else "")
+        []
     ; dom ~key:("tms-" ^ mode) ~tag:"strong" ~text:label []
     ]
 
@@ -157,10 +167,15 @@ let theme_modes_ul ~st =
 let lang_trigger ~key ~h_cls ~st ~anchor_sel =
   dom ~key ~tag:"button"
     ~style_class:
-      ("ui__select-trigger flex " ^ h_cls
-     ^ " items-center justify-between rounded-md border border-input \
-        bg-background px-3 py-2 text-sm")
-    ~attrs:[ ("type", "button") ]
+      ("ui__select-trigger flex "
+     ^ "items-center justify-between rounded-md border border-input \
+        bg-background px-3 py-2 text-sm ring-offset-background \
+        placeholder:text-muted-foreground focus:outline-none \
+        focus:ring-2 focus:ring-ring focus:ring-offset-2 \
+        disabled:cursor-not-allowed disabled:opacity-50 \
+        [&>span]:line-clamp-1 "
+     ^ h_cls)
+    ~attrs:[ ("type", "button"); ("role", "combobox") ]
     ~events:"click"
     ~on_dom_event:(fun n _ ->
       if n = "click" then
