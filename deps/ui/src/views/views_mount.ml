@@ -26,11 +26,12 @@ let mark el inst =
 (* ---------- mount points ---------- *)
 
 (* all-pages route: page.ml renders an empty graphs-view box; append the
-   .ls-all-pages container to .cp__sidebar-main-content *)
+   .ls-all-pages container into the .mx-auto.pb-24 content wrapper, like
+   cljs all_pages.cljs which renders inside the page wrapper *)
 let ensure_all_pages () =
   match !Runtime.current_route with
   | Some Model.All_pages ->
-      Ed.for_each_selector ".cp__sidebar-main-content" (fun main ->
+      Ed.for_each_selector ".cp__sidebar-main-content > .mx-auto" (fun main ->
           match Ed.el_query main ".ls-all-pages" with
           | Some _ -> ()
           | None ->
