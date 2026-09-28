@@ -18,6 +18,26 @@ let attrs_v pairs = sv (Logseq_dom.attrs_json pairs)
 
 (* -- autocomplete item ----------------------------------------------- *)
 
+(* cljs item-render: div[title] > (icon+strong.font-normal | bare text) *)
+let ac_label_el (it : S.ac_item) : t =
+  let txt =
+    match it.S.ai_info with
+    | Some info -> it.S.ai_label ^ " — " ^ info
+    | None -> it.S.ai_label
+  in
+  let inner =
+    match it.S.ai_icon with
+    | Some ic ->
+        Logseq_dom.dom ~key:"ic" ~tag:"span"
+          ~style_class:"flex items-center gap-1"
+          [ Icons.icon ic
+          ; Logseq_dom.dom ~key:"s" ~tag:"strong" ~style_class:"font-normal"
+              ~text:txt [] ]
+    | None -> Logseq_dom.dom ~key:"s" ~tag:"span" ~text:txt []
+  in
+  Logseq_dom.dom ~key:"lbl" ~tag:"div" [ inner ]
+;;
+
 let ac_item_el (st : S.t) (item_sig : S.ac_item Signal.signal) : t =
   let pair =
     Signal.map2
@@ -55,18 +75,14 @@ let ac_item_el (st : S.t) (item_sig : S.ac_item Signal.signal) : t =
                      [ ("id", "ac-" ^ string_of_int it.S.ai_idx)
                      ; ("tabindex", "0") ])
                  pair)
-            [ dyn
-                ~equal:(fun (a : S.ac_item) b ->
-                  a.S.ai_label = b.S.ai_label && a.S.ai_info = b.S.ai_info)
-                (fun it ->
-                  let txt =
-                    match it.S.ai_info with
-                    | Some info -> it.S.ai_label ^ " — " ^ info
-                    | None -> it.S.ai_label
-                  in
-                  Logseq_dom.dom ~key:"lbl" ~tag:"span"
-                    ~style_class:"flex-1" ~text:txt [])
-                item_sig
+            [ Logseq_dom.dom ~key:"flex1" ~tag:"span" ~style_class:"flex-1"
+                [ dyn
+                    ~equal:(fun (a : S.ac_item) b ->
+                      a.S.ai_label = b.S.ai_label && a.S.ai_info = b.S.ai_info
+                      && a.S.ai_icon = b.S.ai_icon)
+                    (fun it -> ac_label_el it)
+                    item_sig
+                ]
             ]
         ]
     ]
@@ -112,8 +128,11 @@ let ac_inner (st : S.t) : t =
 ;;
 
 let ac_popover (st : S.t) : t =
+  (* cljs PopoverContent: ui__popover-content + card classes *)
   Logseq_dom.dom ~key:"ac-pop"
-    ~style_class:"ui__popover-content"
+    ~style_class:
+      "ui__popover-content z-50 rounded-md border bg-popover \
+       text-popover-foreground shadow-md outline-none"
     ~attrs_signal_v:
       (Signal.map
          (fun (v : S.view) ->
@@ -240,8 +259,13 @@ let cm_popover (st : S.t) : t =
         | None -> [])
       st.S.vs.Signal.state_signal
   in
+  (* cljs as-dropdown? context menu: dropdown-menu-content card classes
+     merged with content-props class w-[280px] ls-context-menu-content *)
   Logseq_dom.dom ~key:"cm"
-    ~style_class:"ls-context-menu-content w-[280px]"
+    ~style_class:
+      "ui__dropdown-menu-content ls-context-menu-content w-[280px] z-50 \
+       min-w-[8rem] rounded-md border bg-popover p-1 \
+       text-popover-foreground shadow-md outline-none"
     ~attrs_signal_v:
       (Signal.map
          (fun (v : S.view) ->

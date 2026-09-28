@@ -123,6 +123,13 @@ let editor_el uuid : t =
             ~id:("edit-block-" ^ uuid)
             ~attrs:[ ("data-testid", "block editor") ]
             ~text:buffer []
+        ; (* cljs mock-textarea: hidden caret mirror for popup placement *)
+          dom ~key:("mt-" ^ uuid) ~style_class:"mock-text"
+            ~attrs:
+              [ ( "style"
+                , "width:100%;height:100%;position:absolute;visibility:hidden;top:0;left:0" )
+              ]
+            []
         ]
     ]
 

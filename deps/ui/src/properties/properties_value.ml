@@ -95,7 +95,11 @@ let edit_text_cell ctx row cell initial =
   let wrap = mk ~cls:"editor-wrapper" "div" in
   let inner = mk ~cls:"editor-inner flex flex-1 block-editor" "div" in
   let ta = mk "textarea" in
+  let mt = mk ~cls:"mock-text" "div" in
+  el_set_attr mt "style"
+    "width:100%;height:100%;position:absolute;visibility:hidden;top:0;left:0";
   el_append_child inner ta;
+  el_append_child inner mt;
   el_append_child wrap inner;
   el_append_child cell wrap;
   el_set_value ta initial;
