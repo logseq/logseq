@@ -86,15 +86,12 @@ let left_sidebar (ms : Model.t Signal.signal) =
           "left-sidebar-inner as-container flex-1 flex flex-col min-h-0"
         [ Logseq_dom.dom ~key:"ls-wrap" ~style_class:"wrap"
             [ Logseq_dom.dom ~key:"ls-head"
-                ~style_class:"sidebar-header-container" []
-            ; Logseq_dom.dom ~key:"ls-body"
-                ~style_class:"sidebar-contents-container"
-                [ Logseq_dom.dom ~key:"ls-left"
-                    ~style_class:"cp__sidebar-left"
-                    [ Left_sidebar_view.render ms ]
-                ]
+                ~style_class:"sidebar-header-container"
+                [ Left_sidebar_view.header ms ]
+            ; Left_sidebar_view.contents ms
             ]
         ]
+    ; Left_sidebar_view.menus ms
     ; Logseq_dom.dom ~key:"shade" ~tag:"span" ~style_class:"shade-mask"
         ~events:"click"
         ~on_dom_event:(fun name _ ->

@@ -27,6 +27,7 @@ type page =
   ; page_db_id : int option
   ; page_is_tag : bool
   ; page_journal_day : int option
+  ; page_tags : string list
   ; page_blocks : block list
   }
 
@@ -36,7 +37,9 @@ type phase =
   | Failed of string
 
 (* modal confirm intent — carried as data so it survives the reducer *)
-type confirm = Confirm_delete_page of string (* page uuid *)
+type confirm =
+  | Confirm_delete_page of string (* page uuid *)
+  | Confirm_convert_tag_to_page of int (* class db/id *)
 
 (* worker :notification broadcast -> toast *)
 type toast =
@@ -86,6 +89,7 @@ type t =
   ; unlinked_open : bool
   ; unlinked_search : bool
   ; unlinked_query : string
+  ; unlinked_refs : block list
   ; gv : graph_view
   }
 
@@ -108,6 +112,7 @@ let initial =
   ; unlinked_open = false
   ; unlinked_search = false
   ; unlinked_query = ""
+  ; unlinked_refs = []
   ; gv = graph_view_initial
   }
 
