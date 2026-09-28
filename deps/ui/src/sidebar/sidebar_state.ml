@@ -362,27 +362,27 @@ let block_item_of_uuid repo uuid : item option Js.Promise.t =
              | _ -> Js.Promise.resolve None)
          | _ -> Js.Promise.resolve None)
 
-let contents_item repo : item option Js.Promise.t =
-  Runtime.invoke2 "thread-api/get-page-route-info" (Wire.String repo)
-    (Wire.String "Contents")
-  |> Js.Promise.then_ (fun info ->
-         match Decode.page_of_summary info with
-         | Some p ->
-             fetch_blocks p
-             |> Js.Promise.then_ (fun p' ->
-                    Js.Promise.resolve
-                      (Some
-                         { key = "contents"
-                         ; kind = "contents"
-                         ; uuid = p'.Model.page_uuid
-                         ; title = t "Contents"
-                         ; breadcrumb = []
-                         ; blocks = p'.Model.page_blocks
-                         ; page_ref = Some "Contents"
-                         }))
-         (* cljs only mounts a Contents panel when the Contents page
-            actually exists *)
-         | None -> Js.Promise.resolve None)
+(* cljs :contents item renders the TOC of the CURRENT page (the page in
+   the main area), not a page literally named "Contents" *)
+let contents_item _repo : item option Js.Promise.t =
+  let current =
+    match !Runtime.current_page with
+    | Some p -> Some p
+    | None -> (!model_ref).Model.route_page
+  in
+  match current with
+  | Some p ->
+      Js.Promise.resolve
+        (Some
+           { key = "contents"
+           ; kind = "contents"
+           ; uuid = p.Model.page_uuid
+           ; title = t "Contents"
+           ; breadcrumb = []
+           ; blocks = p.Model.page_blocks
+           ; page_ref = Some p.Model.page_title
+           })
+  | None -> Js.Promise.resolve None
 
 let static_item key kind title =
   Some
