@@ -509,19 +509,30 @@ let fetch_zoom_blocks repo uuid : Wire.t Js.Promise.t =
        [ Wire.Map
            [ (Wire.String "id", Wire.Uuid uuid)
            ; ( Wire.String "opts"
-             , Wire.Map [ (Wire.Keyword "children?", Wire.Bool true) ] )
+             , Wire.Map
+                 [ (Wire.Keyword "children?", Wire.Bool true)
+                 ; (* a container's root always renders its children,
+                      even when collapsed in the page — fetch them *)
+                   ( Wire.Keyword "include-collapsed-children?"
+                   , Wire.Bool true )
+                 ] )
            ]
        ])
   |> Js.Promise.then_ (fun w ->
          match Sdk_util.wire_elems w with
          | [ pair ] -> (
              let blk =
-               match Wire.get pair "block" with
-               | Some b -> b
+               (* the pair's flat `children` carry the full maps; splice
+                  them into block/children before decoding *)
+               match Decode.nest_get_blocks pair with
+               | Some w -> w
                | None -> (
-                   match Sdk_util.wire_elems pair with
-                   | [ _; b ] -> b
-                   | _ -> Wire.Nil)
+                   match Wire.get pair "block" with
+                   | Some b -> b
+                   | None -> (
+                       match Sdk_util.wire_elems pair with
+                       | [ _; b ] -> b
+                       | _ -> Wire.Nil))
              in
              (match blk with
               | Wire.Map _ -> Js.Promise.resolve (Wire.List [ blk ])
@@ -651,6 +662,12 @@ let rec apply ?(opts = Wire.Map []) ops : unit Js.Promise.t =
 let apply_and_refresh ?opts ops =
   apply ?opts ops
   |> Js.Promise.then_ (fun () -> refresh_page ())
+  |> Js.Promise.then_ (fun () ->
+         (* the quick-add dialog's block list lives outside
+            .page-blocks-inner; a page refresh alone won't repaint it *)
+         if Dialogs_state.ready () && Dialogs_state.is_open "quick-add" then
+           Quick_add_state.reload ();
+         Js.Promise.resolve ())
 
 (* cljs wrap-parse-block on save: markdown headings normalize into
    logseq.property/heading, and [[page]]/#tag references resolve into
@@ -701,6 +718,7 @@ let apply_parsed ?opts ~rest pairs =
 let apply_parsed_and_refresh ?opts ~rest pairs =
   apply_parsed ?opts ~rest pairs
   |> Js.Promise.then_ (fun () -> refresh_page ())
+
 
 let schedule_save uuid title =
   cancel_pending_save ();
@@ -779,6 +797,7 @@ let title_for_edit (title : string) : string Js.Promise.t =
                    toks;
                  Buffer.add_substring b title !cursor (n - !cursor);
                  Js.Promise.resolve (Buffer.contents b)))
+
 
 (* undo/redo writes datoms straight into the db — resync the open
    editor's buffer so a stale textarea does not mask the restored title *)

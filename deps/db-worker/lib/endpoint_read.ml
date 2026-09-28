@@ -882,17 +882,34 @@ let get_page_blocks_tree args =
                  get_page_block_index db ref_t w
              | _ -> (
                  match Ldb.get_page db (Ds_wire.value_of_transit ref_t) with
-                 | Some page ->
-                     let blocks = Ldb.get_page_blocks db page.id in
-                     let extras =
-                       page_parent_subtree db page
-                         (List.map
-                            (fun (p : pulled_entity) -> p.pulled_id)
-                            blocks)
-                     in
-                     Wire.Array
-                       (Outliner_tree.page_blocks_vec_tree db
-                          (blocks @ extras) page.id)
+                 | Some page -> (
+                     (* the cljs UI renders a page's children by
+                        :block/_parent traversal, so include blocks that
+                        lost :block/page when tagged #Page (block->page
+                        conversion retracts :block/page but keeps
+                        :block/parent) *)
+                     match Ldb.value page "block/uuid" with
+                     | Some (Uuid u) ->
+                         let blocks =
+                           Ldb.get_block_and_children db u
+                           |> List.map (fun (e : entity) -> Entity_id e.id)
+                           |> Datascript.pull_many_string db "[*]"
+                           |> List.filter_map (fun x -> x)
+                         in
+                         Wire.Array
+                           (Outliner_tree.page_blocks_vec_tree db blocks
+                              page)
+                     | _ ->
+                         let blocks = Ldb.get_page_blocks db page.id in
+                         let extras =
+                           page_parent_subtree db page
+                             (List.map
+                                (fun (p : pulled_entity) -> p.pulled_id)
+                                blocks)
+                         in
+                         Wire.Array
+                           (Outliner_tree.page_blocks_vec_tree db
+                              (blocks @ extras) page))
                  | None -> Wire.nil))
          | None -> Wire.nil))
 

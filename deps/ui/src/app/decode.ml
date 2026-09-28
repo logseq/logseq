@@ -35,6 +35,66 @@ let prop_label (w : Wire.t) (key : string) : string option =
   | _ -> None
 ;;
 
+let map_assoc s v kvs =
+  let hit k =
+    match k with
+    | Wire.Keyword k' | Wire.String k' | Wire.Symbol k' -> k' = s
+    | _ -> false
+  in
+  let rec go acc = function
+    | [] -> List.rev ((Wire.kw s, v) :: acc)
+    | (k, _) :: rest when hit k -> List.rev_append acc ((k, v) :: rest)
+    | kv :: rest -> go (kv :: acc) rest
+  in
+  go [] kvs
+
+(* :thread-api/get-blocks answers {block, children:<flat list>} — the
+   children are not nested under block/children there. Regroup them by
+   block/parent-uuid, ordered by block/order like the worker's tree pull,
+   so block_of_wire sees the get-page-blocks-tree shape. *)
+let nest_get_blocks (pair : Wire.t) : Wire.t option =
+  match Wire.get pair "block" with
+  | Some (Wire.Map _ as root) ->
+      let flat =
+        match Wire.get pair "children" with
+        | Some (Wire.List xs) | Some (Wire.Array xs) -> xs
+        | _ -> []
+      in
+      let by_parent = Hashtbl.create 16 in
+      List.iter
+        (fun c ->
+          match Wire.map_get_uuid c "block/parent-uuid" with
+          | Some u ->
+              Hashtbl.replace by_parent u
+                (c :: Option.value (Hashtbl.find_opt by_parent u)
+                     ~default:[])
+          | None -> ())
+        flat;
+      let order_of c =
+        Option.value (Wire.map_get_string c "block/order") ~default:""
+      in
+      let rec fill w =
+        match Wire.map_get_uuid w "block/uuid" with
+        | Some u -> (
+            (* block/children ref summaries in the flat maps are not the
+               rendered children — replace unconditionally so filtered
+               (property/recycled) children don't ghost through *)
+            let kids =
+              Option.value (Hashtbl.find_opt by_parent u) ~default:[]
+              |> List.sort (fun a b -> compare (order_of a) (order_of b))
+              |> List.map fill
+            in
+            match w with
+            | Wire.Map kvs ->
+                Wire.Map
+                  (map_assoc "block/children" (Wire.Array kids) kvs)
+            | _ -> w)
+        | None -> w
+      in
+      Some (fill root)
+  | _ -> None
+;;
+
 let order_list_type_of_wire (w : Wire.t) : string option =
   match prop_label w "logseq.property/order-list-type" with
   | Some s -> Some (String.lowercase_ascii s)

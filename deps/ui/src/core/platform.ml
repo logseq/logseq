@@ -213,6 +213,9 @@ let event_str ev key =
   | Some s -> s
   | None -> ""
 
+let event_bool ev key =
+  Js.Json.decodeBoolean (json_prop ev key) = Some true
+
 let rtc_test_mode () =
   match query_param "rtc-test" with Some "true" -> true | _ -> false
 

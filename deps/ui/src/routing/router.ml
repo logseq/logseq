@@ -281,7 +281,14 @@ let load_block_zoom uuid =
        [ Wire.Map
            [ (Wire.String "id", Wire.Uuid uuid)
            ; ( Wire.String "opts"
-             , Wire.Map [ (Wire.Keyword "children?", Wire.Bool true) ] )
+             , Wire.Map
+                 [ (Wire.Keyword "children?", Wire.Bool true)
+                 ; (* the zoomed block is the container's root — its
+                      children render even when the block is collapsed in
+                      the page *)
+                   ( Wire.Keyword "include-collapsed-children?"
+                   , Wire.Bool true )
+                 ] )
            ]
        ])
   |> Js.Promise.then_ (fun w ->
@@ -289,16 +296,26 @@ let load_block_zoom uuid =
            (match Sdk_util.wire_elems w with
             | [ pair ] -> (
                 let blk =
-                  match Wire.get pair "block" with
-                  | Some b -> b
+                  (* the pair's flat `children` carry the full maps;
+                     splice them into block/children before decoding *)
+                  match Decode.nest_get_blocks pair with
+                  | Some w -> w
                   | None -> (
-                      match Sdk_util.wire_elems pair with
-                      | [ _; b ] -> b
-                      | _ -> Wire.Nil)
+                      match Wire.get pair "block" with
+                      | Some b -> b
+                      | None -> (
+                          match Sdk_util.wire_elems pair with
+                          | [ _; b ] -> b
+                          | _ -> Wire.Nil))
                 in
                 match blk with
                 | Wire.Map _ -> (
                     let b = Decode.block_of_wire blk in
+                    (match b.Model.block_uuid with
+                     | Some u ->
+                         Editor_state.expand_root
+                           ~scope:("zoom-" ^ u) u
+                     | None -> ());
                     (* cljs block-route-root renders the zoomed block itself
                        as the root row (children nested under it) *)
                     let ancestors =

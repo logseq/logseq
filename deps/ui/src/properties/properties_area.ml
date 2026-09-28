@@ -253,6 +253,7 @@ let new_property_btn (ctx : V.ctx) ~for_class ~owner_title =
       if for_class then
         Properties_dialog.open_dialog
           { Properties_dialog.uuid = ctx.block_uuid
+          ; uuids = []
           ; db_id = ctx.block_id
           ; is_tag = true
           ; title = owner_title }
@@ -368,7 +369,17 @@ let render_area ?(left_host = None) ~host (ctx : V.ctx) ~owner_is_tag
            remove_all host ":scope > .positioned-properties.block-below";
            if below_rows <> [] then
              render_pills ctx ~owner_is_tag ~owner_title host below_rows);
+
          Js.Promise.resolve ())
+  |> (fun p ->
+      Js.Promise.catch
+        (fun e ->
+          (* surface fetch/decode failures instead of silently leaving
+             the panel empty *)
+          Platform.console_error
+            ("properties render_area failed", e);
+          Js.Promise.resolve ())
+        p)
   |> ignore
 
 (* block area: one get-blocks render-data call supplies the positioned
@@ -597,6 +608,7 @@ let title_actions (p : Model.page) =
         Properties_dialog.open_for_block_at row uuid);
   el_append_child actions row;
   actions
+
 
 (* Page surface: attach .ls-properties-area only when there are rows to
    show (cljs show-properties-area?); attach .ls-bidirectional-properties
@@ -967,6 +979,7 @@ let ensure_sidebar_areas () =
     | Some el -> mount_sidebar_area el
     | None -> ()
   done
+
 
 (* ---------- observer entry ---------- *)
 

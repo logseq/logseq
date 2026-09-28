@@ -34,6 +34,7 @@ type ac_item =
   { ai_key : string
   ; ai_label : string
   ; ai_icon : string option (* tabler/tabler-ext icon name *)
+
   ; ai_group : string option
   ; ai_info : string option
   ; ai_idx : int
@@ -43,6 +44,7 @@ type ac_item =
 
 let mk_item ~key ~label ?icon ?group ?info act =
   { ai_key = key; ai_label = label; ai_icon = icon; ai_group = group
+
   ; ai_info = info; ai_idx = -1; ai_hdr = None; ai_act = act }
 
 let empty_key = "__ac_empty__"
@@ -229,6 +231,7 @@ let group_items grp entries =
     (fun (key, icon, act) ->
       mk_item ~key ~label:(U.t key) ~icon ?group:g act)
     entries
+
 ;;
 
 let cmd label = Editor_cmd label
@@ -279,6 +282,7 @@ let slash_items ~has_heading : ac_item list =  List.concat
                      [ U.t ("property.priority/" ^ lvl) ])
                 ~icon:("priorityLvl" ^ String.capitalize_ascii lvl)
                 ?group:g (cmd ("priority:" ^ lvl)))            [ "low"; "medium"; "high"; "urgent" ])
+
     ; group_items "editor.slash/group-time-and-date"
         [ "date.nlp/tomorrow", "tomorrow", Emit (journal_offset 1, 0)
         ; "date.nlp/yesterday", "yesterday", Emit (journal_offset (-1), 0)
@@ -315,6 +319,12 @@ let contains_ci hay needle =
   let nl = S.length n and hl = S.length h in
   let rec go i = i + nl <= hl && (S.sub h i nl = n || go (i + 1)) in
   nl = 0 || go 0
+;;
+
+let starts_with_ci hay needle =
+  let h = S.lowercase_ascii hay and n = S.lowercase_ascii needle in
+  let nl = S.length n in
+  nl <= S.length h && S.sub h 0 nl = n
 ;;
 
 let rec take n xs =
@@ -362,6 +372,7 @@ let filter_slash q items =
     List.map snd
       (List.sort (fun (a, _) (b, _) -> Int.compare a b) fs)
   in
+
   (match fs with [] -> [ slash_fallback ] | _ -> fs)
   |> with_headers (q = "")
 ;;
@@ -494,6 +505,38 @@ let template_items_for t q =
 
 let repo () = Option.value !(Runtime.current_repo) ~default:""
 
+let page_item_of_row i w =
+  let title =
+    match
+      [ Cmdk_state.str_field w "block.temp/original-title"
+      ; Cmdk_state.str_field w "block/title" ]
+      |> List.filter_map Fun.id
+    with
+    | t :: _ -> t
+    | [] -> ""
+  in
+  let uuid =
+    match Wire.map_get_uuid w "block/uuid" with
+    | Some u -> u
+    | None -> Option.value (Cmdk_state.str_field w "block/uuid") ~default:""
+  in
+  let is_page =
+    match Wire.get w "page?" with
+    | Some (Wire.Bool b) -> b
+    | _ -> false
+  in
+  (* cljs page-on-chosen-handler: non-page results are inserted as uuid
+     page-refs ([[uuid]]) so retitling the target renames the link *)
+  let act =
+    if is_page then Emit ("[[" ^ title ^ "]]", 0) else Emit ("[[" ^ uuid ^ "]]", 0)
+  in
+  mk_item
+    ~key:("node-" ^ uuid ^ "-" ^ string_of_int i)
+    ~label:title
+    ?info:(if is_page then None else Cmdk_state.breadcrumb_of w)
+    act
+;;
+
 let refresh_items t ac =
   match ac.kind with
   | Slash ->
@@ -544,6 +587,71 @@ let run_block_search t ac =
             Js.Promise.resolve ())
      |> Js.Promise.catch (fun e ->
             Platform.console_error ("popups block search failed", e);
+            Js.Promise.resolve ()))
+;;
+
+(* cljs search-pages/<get-matched-blocks: [[ ]] completion matches pages
+   AND blocks via block-search; block rows carry their page breadcrumb.
+   Results replace the sync title matches; a "New page" row is kept first
+   (or second, when the first match starts with the query). *)
+let run_node_search t ac =
+  incr t.gen;
+  let gen = !(t.gen) in
+  ignore
+    (Runtime.invoke3 "thread-api/search-blocks"
+       (Wire.String (repo ()))
+       (Wire.String ac.query)
+       (Cmdk_state.search_opts false 20)
+     |> Js.Promise.then_ (fun w ->
+            let rows =
+              match w with
+              | Wire.Map _ -> (
+                  match Wire.get w "items" with
+                  | Some (Wire.Array xs) | Some (Wire.List xs) -> xs
+                  | _ -> [])
+              | Wire.Array xs | Wire.List xs -> xs
+              | _ -> []
+            in
+            (match (get t).ac with
+             | Some a
+               when gen = !(t.gen) && a.kind = Page_ref
+                    && a.query = ac.query ->
+                 let pages, blocks =
+                   List.partition
+                     (fun w ->
+                       match Wire.get w "page?" with
+                       | Some (Wire.Bool b) -> b
+                       | _ -> false)
+                     rows
+                 in
+                 let matched =
+                   take 20
+                     (List.mapi page_item_of_row (pages @ blocks))
+                 in
+                 let items =
+                   match
+                     List.filter
+                       (fun it -> S.sub it.ai_key 0 4 = "new:")
+                       (page_items_for t a.kind a.query)
+                   with
+                   | [] -> matched
+                   | new_items ->
+                       let first_starts =
+                         match matched with
+                         | m :: _ -> starts_with_ci m.ai_label a.query
+                         | [] -> false
+                       in
+                       if first_starts then
+                         (match matched with
+                          | m :: rest -> m :: new_items @ rest
+                          | [] -> new_items)
+                       else new_items @ matched
+                 in
+                 set_ac t (Some { a with items = renumber items; chosen = 0 })
+             | _ -> ());
+            Js.Promise.resolve ())
+     |> Js.Promise.catch (fun e ->
+            Platform.console_error ("popups node search failed", e);
             Js.Promise.resolve ()))
 ;;
 
@@ -732,6 +840,7 @@ let ac_update t ac q =
   let ac = { ac with query = q; chosen = 0 } in
   set_ac t (Some (refresh_items t ac));
   if ac.kind = Block_ref then run_block_search t ac
+  else if ac.kind = Page_ref && String.trim q <> "" then run_node_search t ac
 ;;
 
 let query_closed ac q =
@@ -760,6 +869,7 @@ let overtype_skip el =
 (* after an `input` event in a .editor-wrapper textarea *)
 let on_editor_input t el ev =
   overtype_skip el;  let pos = Dom_ext.selection_start el in
+
   match (get t).ac with
   | Some ac ->
       let v = Dom_ext.value el in
@@ -1129,6 +1239,7 @@ let apply_item t ac it =
       emit ac.editor ac.tpos "";
       emit_cmd ~pos:ac.tpos c [];
       close_ac t  | Run_query advanced -> run_query t ac ~advanced
+
   | Tag_apply title -> apply_tag t ac ~create:false title
   | Tag_create title -> apply_tag t ac ~create:true title
   | Template_apply uuid -> apply_template t ac uuid

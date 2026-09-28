@@ -388,7 +388,7 @@ let item_header (it : S.item) q =
   | Some h ->
       Logseq_dom.dom ~key:"hdr"
         ~style_class:
-          "text-xs pl-8 font-light flex items-center gap-2 overflow-hidden min-w-0 -mt-1"
+          "breadcrumb text-xs pl-8 font-light flex items-center gap-2 overflow-hidden min-w-0 -mt-1"
         ~attrs:
           [ ("style",
              "color: var(--lx-gray-11); white-space: nowrap; text-overflow: ellipsis") ]

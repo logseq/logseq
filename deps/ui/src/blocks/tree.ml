@@ -33,21 +33,22 @@ let block_key (b : Model.block) =
 
 (* -- per-row signals -- *)
 
-let row_class_sig uuid blank embed =
+let row_class_sig uuid blank embed (b : Model.block) =
   Logseq_dom.class_signal (S.signal ()) (fun (st : S.t) ->
       "ls-block swipe-item"
       ^ (if S.String_set.mem uuid st.selected then " selected" else "")
       ^ (if embed then " embed-block" else "")
+      ^ (if Comments.is_comments_area b then " is-comments-area"
+         else "")
       ^ if blank then " is-blank" else "")
 
-(* effective collapse for a block: persisted set || view default, minus
-   the explicit user-expand override — same rule as Editor_state's
-   effective_collapsed, expressed on the signal value *)
-let effective_collapsed_st uuid default (st : S.t) =
-  if S.String_set.mem uuid st.expanded then false
-  else S.String_set.mem uuid st.collapsed || default
+(* effective collapse for a block: scoped UI overrides, then persisted
+   set || view default — Editor_state.effective_collapsed_in on the
+   signal value *)
+let effective_collapsed_st ~scope uuid default (st : S.t) =
+  S.effective_collapsed_in ~scope uuid default st
 
-let row_attrs_sig uuid (b : Model.block) =
+let row_attrs_sig ~scope uuid (b : Model.block) =
   let has_children = S.children_of b <> [] in
   let embed = b.Model.block_link <> None in
   Logseq_dom.attrs_signal (S.signal ()) (fun (st : S.t) ->
@@ -59,20 +60,32 @@ let row_attrs_sig uuid (b : Model.block) =
       ; ("haschild", string_of_bool has_children)
       ; ( "data-collapsed"
         , string_of_bool
-            (effective_collapsed_st uuid b.block_default_collapsed st) )
+            (effective_collapsed_st ~scope uuid
+               b.block_default_collapsed st) )
       ; ("level", string_of_int b.block_level)
       ]
+      @ (if Comments.is_comments_area b then
+           [ ("data-comments-area", "true") ]
+         else [])
       (* cljs sets blockid to the linked entity's uuid and
          originalblockid to the linking block's — we keep blockid as the
          embed block's own uuid so delegated editing/ops resolve it *)
-      @ if embed then
-          [ ("originalblockid", uuid); ("data-embed", "true") ]
-        else [])
-
-let collapsed_sig (b : Model.block) =
+      @ (if embed then
+           [ ("originalblockid", uuid); ("data-embed", "true") ]
+         else []))
+let collapsed_sig ~scope (b : Model.block) =
   let uuid = Option.value b.block_uuid ~default:"" in
-  Signal.map (effective_collapsed_st uuid b.block_default_collapsed)
+  Signal.map
+    (effective_collapsed_st ~scope uuid b.block_default_collapsed)
     (S.signal ())
+
+(* cljs data-has-heading on .block-main-container: block.css shifts the
+   control wrap down so the bullet tracks the heading's first line *)
+let heading_attrs (b : Model.block) =
+  match b.block_heading with
+  | Some n when n >= 1 && n <= 6 ->
+      [ ("data-has-heading", string_of_int n) ]
+  | _ -> []
 
 (* -- control wrap: collapse arrow + bullet -- *)
 
@@ -124,7 +137,7 @@ let icon_el uuid (icon : Model.icon) : t =
 
 (* cljs block-control-icon-size: heading chrome sizes differ, collapsed
    bullets shrink *)
-let control_wrap ~library uuid (b : Model.block) : t =
+let control_wrap ~scope ~library uuid (b : Model.block) : t =
   let order_list = b.Model.block_order_list = Some "number" in
   let bullet_cls =
     "bullet-container cursor-pointer"
@@ -151,7 +164,7 @@ let control_wrap ~library uuid (b : Model.block) : t =
         ~id:("control-" ^ uuid)
         [ dom ~key:("ctrlspan-" ^ uuid) ~tag:"span"
             ~style_class_signal:
-              (Logseq_dom.class_signal (collapsed_sig b)
+              (Logseq_dom.class_signal (collapsed_sig ~scope b)
                  (fun c -> if c then "control-show" else "control-hide"))
             []
         ]
@@ -161,7 +174,7 @@ let control_wrap ~library uuid (b : Model.block) : t =
             ~id:("dot-" ^ uuid)
             ~attrs:[ ("blockid", uuid); ("draggable", "true") ]
             ~style_class_signal:
-              (Logseq_dom.class_signal (collapsed_sig b) (fun c ->
+              (Logseq_dom.class_signal (collapsed_sig ~scope b) (fun c ->
                    bullet_cls ^ if c then " bullet-closed" else ""))
             [ (match node_icon ~library b with
                | Some icon -> icon_el uuid icon
@@ -192,8 +205,7 @@ let content_el uuid (b : Model.block) : t =
         [ dom ~key:("bh-" ^ uuid) ~style_class:"block-head-wrap"
             (Render.title_block ~self:uuid
                ~resolved:(S.title_for uuid b.block_title)
-               b)
-        ]
+               b)        ]
     ]
 
 let editor_el uuid scope : t =
@@ -261,6 +273,7 @@ let content_or_editor ~editable uuid scope (b : Model.block) : t =
   (* cljs unmounts .block-content while editing and removes the editor
      entirely in normal mode — .block-title-wrap must be absent for the
      edited block or e2e counts a stale title *)
+
   dyn ~equal:(fun a b -> a = b)
     (fun editing ->
       match b.Model.block_asset_type with
@@ -281,6 +294,7 @@ let content_or_editor ~editable uuid scope (b : Model.block) : t =
        (fun (st : S.t) ->
          match st.editing with
          | Some e -> e.uuid = uuid && e.scope = scope
+
          | None -> false)
        (S.signal ()))
 
@@ -348,11 +362,14 @@ let () =
 let rec block_row
     ?(scope = "main") ?(editable = true) ?(library = false)
     (b : Model.block) : t =
+
  fun ctx parent ->
   S.ensure ctx;
   (row_el ~editable ~library scope b) ctx parent
 
+
 and row_el ~editable scope ~(library : bool) (b : Model.block) : t =
+
   let uuid = Option.value b.block_uuid ~default:"" in
   if b.Model.block_is_comments_area then Comments_view.area_el b
   else
@@ -361,16 +378,15 @@ and row_el ~editable scope ~(library : bool) (b : Model.block) : t =
   let has_children = S.children_of b <> [] in
   let blank = String.trim b.block_title = "" in
   dom ~key:("ls-" ^ key)
-    ~style_class_signal:(row_class_sig uuid blank embed)
-    ~attrs_signal_v:(row_attrs_sig uuid b)
+    ~style_class_signal:(row_class_sig uuid blank embed b)
+    ~attrs_signal_v:(row_attrs_sig ~scope uuid b)
     [ dom ~key:("main-" ^ key)
         ~style_class:"block-main-container flex flex-row gap-1"
         ~attrs:
           (match b.block_heading with
            | Some lvl -> [ ("data-has-heading", string_of_int lvl) ]
            | None -> [])
-        [ control_wrap ~library uuid b
-        ; dom ~key:("col-" ^ key) ~style_class:"flex flex-col w-full"
+        [ control_wrap ~scope ~library uuid b        ; dom ~key:("col-" ^ key) ~style_class:"flex flex-col w-full"
             [ dom ~key:("bmc-" ^ key)
                 ~style_class:"block-main-content flex flex-row gap-2"
                 [ dom ~key:("cew-" ^ key)
@@ -388,9 +404,17 @@ and row_el ~editable scope ~(library : bool) (b : Model.block) : t =
                             [ dom ~key:("cw-" ^ key)
                                 ~style_class:
                                   "block-content-wrapper flex flex-1 w-full"
-                                [ content_or_editor ~editable uuid scope b ]
-                            ; tags_el uuid b
-                            ]
+                                [ (if Comments.is_comments_area b then
+                                     Comments.area_view uuid b
+                                   else
+                                     content_or_editor ~editable uuid
+                                       scope b)
+                                ]
+                            ; (* a comments area's tag chips stay hidden —
+                                 the area view already announces itself *)
+                              if Comments.is_comments_area b then
+                                box ~key:("tags-" ^ uuid) []
+                              else tags_el uuid b                            ]
                         ; Comments_view.reactions_el uuid
                             b.Model.block_reactions
                         ]
@@ -398,13 +422,14 @@ and row_el ~editable scope ~(library : bool) (b : Model.block) : t =
                 ]
             ]
         ]
-    ; (if has_children then children_el ~editable ~library uuid scope b
-       else box ~key:("nc-" ^ key) [])
-    ]
+    ; (if has_children && not (Comments.is_comments_area b) then
+         children_el ~editable ~library uuid scope b
+       else box ~key:("nc-" ^ key) [])    ]
 
 and children_el ~editable ~library uuid scope (b : Model.block) : t =
+
   if_
-    ~test:(Signal.map (fun c -> not c) (collapsed_sig b))
+    ~test:(Signal.map (fun c -> not c) (collapsed_sig ~scope b))
     (dom ~key:("children-" ^ uuid)
        ~style_class:"block-children-container flex"
        [ dom ~key:("border-" ^ uuid)
@@ -413,6 +438,7 @@ and children_el ~editable ~library uuid scope (b : Model.block) : t =
        ; dom ~key:("clist-" ^ uuid) ~style_class:"block-children w-full"
            (List.map (block_row ~scope ~editable ~library)
               (S.children_of b))
+
        ])
 
 (* Read-only row for linked-reference lists: same shell as row_el but the
@@ -426,11 +452,12 @@ and block_row_static ?(library = false) (b : Model.block) : t =
   let has_children = b.block_children <> [] in
   let blank = String.trim b.block_title = "" in
   dom ~key:("ls-" ^ key)
-    ~style_class_signal:(row_class_sig uuid blank embed)
-    ~attrs_signal_v:(row_attrs_sig uuid b)
+    ~style_class_signal:(row_class_sig uuid blank embed b)
+    ~attrs_signal_v:(row_attrs_sig ~scope:"ref" uuid b)
     [ dom ~key:("main-" ^ key)
         ~style_class:"block-main-container flex flex-row gap-1"
-        [ control_wrap ~library uuid b
+        ~attrs:(heading_attrs b)
+        [ control_wrap ~scope:"ref" ~library uuid b
         ; dom ~key:("col-" ^ key) ~style_class:"flex flex-col w-full"
             [ dom ~key:("bmc-" ^ key)
                 ~style_class:"block-main-content flex flex-row gap-2"
