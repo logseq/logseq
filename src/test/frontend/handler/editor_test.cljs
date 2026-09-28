@@ -1503,6 +1503,53 @@
                         "Delete must use the editor state captured by its keydown.")))
           (p/finally done)))))
 
+(deftest editor-delete-guards-nil-input-test
+  (testing "stale editing state without a textarea is a no-op"
+    (let [deleted (atom [])]
+      (with-redefs [state/editing? (constantly true)
+                    state/get-input (constantly nil)
+                    state/get-edit-block (constantly {:block/uuid (random-uuid)
+                                                      :block/title ""})
+                    util/stop (constantly nil)
+                    editor/delete-and-update (fn [& args]
+                                               (swap! deleted conj args))]
+        (editor/editor-delete #js {})
+        (editor/keydown-delete-handler #js {})
+        (is (empty? @deleted)
+            "Delete must not mutate content when the edit textarea is gone"))))
+
+  (testing "Delete in a real editor still deletes the next character"
+    (let [input #js {:value "abc"
+                     :selectionStart 1
+                     :selectionEnd 1}
+          deleted (atom nil)]
+      (with-redefs [state/editing? (constantly true)
+                    state/get-input (constantly input)
+                    state/get-edit-block (constantly {:block/uuid (random-uuid)
+                                                      :block/title "abc"})
+                    util/stop (constantly nil)
+                    editor/delete-and-update (fn [in start end]
+                                               (reset! deleted [in start end]))]
+        (editor/editor-delete #js {})
+        (is (= [input 1 2] @deleted)
+            "Delete in an open editor still removes the character after the cursor"))))
+
+  (testing "Delete with a selection still deletes the selected range"
+    (let [input #js {:value "abc"
+                     :selectionStart 0
+                     :selectionEnd 2}
+          deleted (atom nil)]
+      (with-redefs [state/editing? (constantly true)
+                    state/get-input (constantly input)
+                    state/get-edit-block (constantly {:block/uuid (random-uuid)
+                                                      :block/title "abc"})
+                    util/stop (constantly nil)
+                    editor/delete-and-update (fn [in start end]
+                                               (reset! deleted [in start end]))]
+        (editor/editor-delete #js {})
+        (is (= [input 0 2] @deleted)
+            "Delete with a selection still removes the selected text")))))
+
 (deftest repeated-backspace-does-not-restore-erased-current-title-test
   (let [current {:db/id 2
                  :block/uuid #uuid "22222222-2222-2222-2222-222222222222"
