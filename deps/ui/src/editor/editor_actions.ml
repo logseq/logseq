@@ -88,14 +88,19 @@ let enter_edit uuid caret =
   | _ -> ());
   match S.find uuid with
   | Some b ->
-      S.set (fun st ->
-          { st with
-            S.editing =
-              Some { uuid; buffer = String.trim b.Model.block_title }
-          ; selected = S.String_set.empty
-          ; anchor = None
-          });
-      request_focus uuid caret
+      (* stored titles are id-ref form; the edit buffer shows page names
+         (cljs id-ref->title-ref) *)
+      ignore
+        (Ops.title_for_edit (String.trim b.Model.block_title)
+         |> Js.Promise.then_ (fun buffer ->
+                S.set (fun st ->
+                    { st with
+                      S.editing = Some { uuid; buffer }
+                    ; selected = S.String_set.empty
+                    ; anchor = None
+                    });
+                request_focus uuid caret;
+                Js.Promise.resolve ()))
   | None -> ()
 
 let commit_buf uuid buf =
@@ -238,17 +243,22 @@ let merge_prev uuid =
                 ; Ops.save_block prev_uuid (prev.Model.block_title ^ buf)
                 ]
             in
-            S.set_silent (fun st ->
-                { st with
-                  S.editing =
-                    Some
-                      { uuid = prev_uuid
-                      ; buffer = prev.Model.block_title ^ buf
-                      }
-                });
-            with_focus_after prev_uuid
-              (String.length prev.Model.block_title)
-              (Ops.apply_and_refresh ~opts:(Ops.op_opts "delete-blocks") ops)))
+            ignore
+              (Ops.title_for_edit (String.trim prev.Model.block_title)
+               |> Js.Promise.then_ (fun pbuf ->
+                      S.set_silent (fun st ->
+                          { st with
+                            S.editing =
+                              Some
+                                { uuid = prev_uuid
+                                ; buffer = pbuf ^ buf
+                                }
+                          });
+                      with_focus_after prev_uuid
+                        (String.length pbuf)
+                        (Ops.apply_and_refresh
+                           ~opts:(Ops.op_opts "delete-blocks") ops);
+                      Js.Promise.resolve ()))))
   | _ -> ()
 
 (* children of b except [except_uuid] -> move under target *)
@@ -286,16 +296,18 @@ let merge_next uuid =
                  else [])
               @ [ Ops.delete_blocks [ uuid ] ]
             in
-            S.set_silent (fun st ->
-                { st with
-                  S.editing =
-                    Some
-                      { uuid = next_uuid
-                      ; buffer = String.trim next.Model.block_title
-                      }
-                });
-            with_focus_after next_uuid 0
-              (Ops.apply_and_refresh ~opts:(Ops.op_opts "delete-blocks") ops))
+            ignore
+              (Ops.title_for_edit (String.trim next.Model.block_title)
+               |> Js.Promise.then_ (fun nbuf ->
+                      S.set_silent (fun st ->
+                          { st with
+                            S.editing =
+                              Some { uuid = next_uuid; buffer = nbuf }
+                          });
+                      with_focus_after next_uuid 0
+                        (Ops.apply_and_refresh
+                           ~opts:(Ops.op_opts "delete-blocks") ops);
+                      Js.Promise.resolve ())))
           else (
             let ops =
               move_children_ops next uuid
@@ -303,13 +315,18 @@ let merge_next uuid =
                 ; Ops.save_block uuid (buf ^ next.Model.block_title)
                 ]
             in
-            S.set_silent (fun st ->
-                { st with
-                  S.editing =
-                    Some { e with S.buffer = buf ^ next.Model.block_title }
-                });
-            with_focus_after uuid (String.length buf)
-              (Ops.apply_and_refresh ~opts:(Ops.op_opts "delete-blocks") ops)))
+            ignore
+              (Ops.title_for_edit (String.trim next.Model.block_title)
+               |> Js.Promise.then_ (fun nbuf ->
+                      S.set_silent (fun st ->
+                          { st with
+                            S.editing =
+                              Some { e with S.buffer = buf ^ nbuf }
+                          });
+                      with_focus_after uuid (String.length buf)
+                        (Ops.apply_and_refresh
+                           ~opts:(Ops.op_opts "delete-blocks") ops);
+                      Js.Promise.resolve ()))))
   | _ -> ()
 
 (* ---- selection ---- *)

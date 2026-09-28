@@ -79,7 +79,8 @@ type t =
   { vs : view Signal.state
   ; gen : int ref (* stale-response guard *)
   ; titles : string list ref
-  ; tag_titles : string list ref (* class/tag entities for the # popup *)
+  ; tag_titles : (string * string option) list ref
+    (* class/tag entities for the # popup: (title, tabler icon) *)
   }
 
 let make scheduler : t =
@@ -268,15 +269,28 @@ let page_items_for t kind q =
     | _ ->
         mk_item ~key:("page:" ^ title) ~label:title (Emit ("[[" ^ title ^ "]]"))
   in
-  let pool =
-    match kind with
-    | Tag_search -> !(t.tag_titles)
-    | _ -> !(t.titles)
+  let wrap_tag (title, icon) =
+    mk_item ~key:("page:" ^ title) ~label:title ?icon (Tag_apply title)
   in
   let matched =
-    take 20 (List.map wrap (List.filter (fun ti -> contains_ci ti q) pool))
+    match kind with
+    | Tag_search ->
+        take 20
+          (List.map wrap_tag
+             (List.filter
+                (fun (ti, _) -> contains_ci ti q)
+                !(t.tag_titles)))
+    | _ ->
+        take 20
+          (List.map wrap
+             (List.filter (fun ti -> contains_ci ti q) !(t.titles)))
   in
-  let exact = List.exists (fun ti -> S.equal ti q) pool in
+  let exact =
+    match kind with
+    | Tag_search ->
+        List.exists (fun (ti, _) -> S.equal ti q) !(t.tag_titles)
+    | _ -> List.exists (fun ti -> S.equal ti q) !(t.titles)
+  in
   let items =
     if q <> "" && not exact then
       let label =
@@ -379,9 +393,20 @@ let load_titles t =
    Page class when editing a non-page block), alias titles included.
    Entity maps carry block/title and block/alias rows. *)
 let class_titles_of rows =
+  (* cljs icon-component/get-node-icon: logseq.property/icon of the class,
+     shape {:type :tabler-icon :id <name>} *)
+  let icon_of row =
+    match Wire.get row "logseq.property/icon" with
+    | Some m -> (
+        match Wire.get m "id" with
+        | Some (Wire.String id) -> Some id
+        | _ -> None)
+    | None -> None
+  in
   List.concat_map
     (fun row ->
       let title = Cmdk_state.str_field row "block/title" in
+      let icon = icon_of row in
       let aliases =
         match Wire.get row "block/alias" with
         | Some (Wire.Array xs) | Some (Wire.List xs) ->
@@ -390,7 +415,10 @@ let class_titles_of rows =
               xs
         | _ -> []
       in
-      Option.to_list title @ aliases)
+      (match title with
+       | Some t -> [ (t, icon) ]
+       | None -> [])
+      @ List.map (fun a -> (a, None)) aliases)
     rows
 
 let load_tag_titles t _editor =
