@@ -29,6 +29,7 @@ let sub s args =
 let all_graphs = "All graphs"
 let create_new_graph = "Create a new graph"
 let local_graphs = "Local graphs:"
+let open_in_another_tab = "Open in another tab"
 let remote_graphs = "Remote graphs:"
 let refresh = "Refresh"
 let submit = "Submit"

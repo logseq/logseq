@@ -14,6 +14,29 @@ let short_name repo =
     String.sub repo lp (String.length repo - lp)
   else repo
 
+let ghost_btn_cls =
+  "ui__button inline-flex cursor-pointer items-center justify-center \
+   whitespace-nowrap rounded-md text-sm gap-1 font-medium \
+   ring-offset-background transition-colors focus-visible:outline-none \
+   focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 \
+   disabled:pointer-events-none disabled:opacity-50 select-none \
+   hover:bg-secondary/70 hover:text-secondary-foreground active:opacity-80 \
+   as-ghost h-7 rounded py-1"
+
+(* tabler dots glyph — cljs ui/icon renders the inline svg inside
+   span.ls-icon-dots.ui__icon.ti *)
+let dots_icon () =
+  let s = B.create "span" in
+  B.set_class s "ls-icon-dots ui__icon ti";
+  B.inner_html_set s
+    "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"15\" height=\"15\" \
+     viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" \
+     stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" \
+     class=\"tabler-icon tabler-icon-dots \"><path d=\"M4 12a1 1 0 1 0 2 \
+     0a1 1 0 1 0 -2 0\"/><path d=\"M11 12a1 1 0 1 0 2 0a1 1 0 1 0 -2 \
+     0\"/><path d=\"M18 12a1 1 0 1 0 2 0a1 1 0 1 0 -2 0\"/></svg>";
+  s
+
 let dropdown_open : B.E.t option ref = ref None
 
 let close_dropdown () =
@@ -23,22 +46,34 @@ let close_dropdown () =
       dropdown_open := None
   | None -> ()
 
+(* cljs shui/dropdown-menu-item: text sits directly on the menuitem div,
+   disabled items keep cursor-pointer and get data-disabled/aria-disabled *)
 let menu_item ~cls label ~disabled on_click =
   let b = B.create "div" in
   B.set_attr b "role" "menuitem";
   B.set_class b
     ("ui__dropdown-menu-item relative flex select-none items-center \
-      rounded-sm px-2 py-1.5 text-sm outline-none "
-    ^ (if disabled then "opacity-50 cursor-not-allowed " ^ cls
-       else "cursor-pointer " ^ cls));
-  let t = B.create "div" in
-  B.set_text t label;
-  B.append b t;
-  if not disabled then
+      rounded-sm px-2 py-1.5 text-sm outline-none cursor-pointer "
+    ^ cls);
+  B.set_text b label;
+  if disabled then (
+    B.set_attr b "data-disabled" "";
+    B.set_attr b "aria-disabled" "true")
+  else
     B.add_listener b "click" (fun _ ->
         close_dropdown ();
         on_click ());
   b
+
+(* cljs open-new-window-or-tab!: window.open(origin + pathname +
+   '#/?graph-id=' + uuid) *)
+let open_in_another_tab repo =
+  match Graphs_meta.uuid_of repo with
+  | Some uuid ->
+      B.open_url
+        (B.location_origin () ^ B.location_pathname ()
+       ^ "#/?graph-id=" ^ uuid)
+  | None -> ()
 
 let open_menu repo anchor =
   close_dropdown ();
@@ -46,10 +81,16 @@ let open_menu repo anchor =
   B.set_class menu
     "ui__dropdown-menu-content z-50 min-w-[8rem] rounded-md border \
      bg-popover p-1 text-popover-foreground shadow-md";
+  B.set_attr menu "role" "menu";
+  B.set_attr menu "data-side" "bottom";
+  B.set_attr menu "data-align" "end";
   let r = B.rect_of anchor in
   B.set_attr menu "style"
     (Printf.sprintf "position:fixed;left:%.0fpx;top:%.0fpx"
        (B.rect_right r) (B.rect_top r));
+  B.append menu
+    (menu_item ~cls:"open-in-another-tab-menu-item" T.open_in_another_tab
+       ~disabled:false (fun () -> open_in_another_tab repo));
   B.append menu
     (menu_item ~cls:"delete-local-graph-menu-item" T.delete_local_graph
        ~disabled:(not (Graphs_ops.removable repo))
@@ -64,20 +105,28 @@ let open_menu repo anchor =
   (match B.qs "body" with Some b -> B.append b menu | None -> ());
   dropdown_open := Some menu
 
+(* cljs repo.cljs repo-item row *)
 let graph_row repo =
   let row = B.create "div" in
   B.set_attr row "data-testid" repo;
   B.set_class row "flex justify-between mb-2 items-center group";
   let left = B.create "div" in
-  let name_span = B.create "div" in
-  B.set_class name_span "flex items-center gap-1";
+  let gap = B.create "span" in
+  B.set_class gap "flex items-center gap-1";
+  let title_wrap = B.create "span" in
+  B.set_class title_wrap "flex items-center";
   (* e2e: div[data-testid='logseq_db_<n>'] span:has-text('<n>') *)
+  let link = B.create "a" in
+  B.set_attr link "title" ("logseq/graphs/" ^ short_name repo);
+  B.set_class link "flex items-center";
   let label = B.create "span" in
   B.set_text label (short_name repo);
   B.set_attr label "style" "cursor:pointer";
   B.add_listener label "click" (fun _ ->
       ignore (Graphs_ops.navigate_journal repo));
-  B.append name_span label;
+  B.append link label;
+  B.append title_wrap link;
+  B.append gap title_wrap;
   let small = B.create "small" in
   B.set_class small "text-muted-foreground";
   B.set_text small
@@ -85,18 +134,17 @@ let graph_row repo =
        (match Graphs_ops.meta_last_seen repo with
         | Some ms -> B.fmt_time ms
         | None -> "-"));
-  B.append left name_span;
+  B.append left gap;
   B.append left small;
   let controls = B.create "div" in
   B.set_class controls "controls";
   let wrap = B.create "div" in
   B.set_class wrap "flex flex-row items-center";
   let btn = B.create "button" in
-  B.set_class btn "graph-action-btn";
+  B.set_class btn (ghost_btn_cls ^ " graph-action-btn !px-1");
   B.set_attr btn "type" "button";
-  let icon = B.create "i" in
-  B.set_class icon "ti ti-dots";
-  B.append btn icon;
+  B.set_attr btn "aria-haspopup" "menu";
+  B.append btn (dots_icon ());
   B.add_listener btn "click" (fun _ -> open_menu repo btn);
   B.append wrap btn;
   B.append controls wrap;
@@ -136,11 +184,10 @@ let remote_row (name, uuid) =
   let wrap = B.create "div" in
   B.set_class wrap "flex flex-row items-center";
   let btn = B.create "button" in
-  B.set_class btn "graph-action-btn";
+  B.set_class btn (ghost_btn_cls ^ " graph-action-btn !px-1");
   B.set_attr btn "type" "button";
-  let icon = B.create "i" in
-  B.set_class icon "ti ti-dots";
-  B.append btn icon;
+  B.set_attr btn "aria-haspopup" "menu";
+  B.append btn (dots_icon ());
   B.add_listener btn "click" (fun _ -> remote_menu name uuid btn);
   B.append wrap btn;
   B.append controls wrap;
@@ -148,16 +195,22 @@ let remote_row (name, uuid) =
   B.append row controls;
   row
 
+(* cljs repos-cp remote section: hr + h2 Remote graphs: + refresh button +
+   rows — only rendered for a logged-in user with remote graphs *)
 let remote_section rerender =
   let sec = B.create "div" in
+  let hr = B.create "hr" in
+  B.set_class hr "mt-8";
+  B.append sec hr;
+  let head = B.create "div" in
+  B.set_class head "flex align-items justify-between";
   let h = B.create "h2" in
+  B.set_class h "text-lg font-medium mb-4";
   B.set_text h T.remote_graphs;
-  B.append sec h;
-  List.iter
-    (fun rg -> B.append sec (remote_row rg))
-    !Graphs_ops.remote_graphs;
+  B.append head h;
   let refresh_btn = B.create "button" in
   B.set_attr refresh_btn "type" "button";
+  B.set_class refresh_btn ghost_btn_cls;
   B.set_text refresh_btn T.refresh;
   B.add_listener refresh_btn "click" (fun _ ->
       Graphs_ops.refresh ()
@@ -166,7 +219,11 @@ let remote_section rerender =
              rerender ();
              Js.Promise.resolve ())
       |> ignore);
-  B.append sec refresh_btn;
+  B.append head refresh_btn;
+  B.append sec head;
+  List.iter
+    (fun rg -> B.append sec (remote_row rg))
+    !Graphs_ops.remote_graphs;
   sec
 
 let rec render_into host =
@@ -177,17 +234,39 @@ let rec render_into host =
   B.set_class h1 "title";
   B.set_text h1 T.all_graphs;
   B.append root h1;
+  let content = B.create "div" in
+  B.set_class content "mt-8 pl-1 content";
+  let btn_row = B.create "div" in
+  B.set_class btn_row "flex flex-row my-8";
+  let btn_col = B.create "div" in
+  B.set_class btn_col "mr-8";
   let create_btn = B.create "button" in
   B.set_attr create_btn "type" "button";
+  B.set_class create_btn
+    "ui__button inline-flex cursor-pointer items-center justify-center \
+     whitespace-nowrap rounded-md text-sm gap-1 font-medium \
+     ring-offset-background transition-colors focus-visible:outline-none \
+     focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 \
+     disabled:pointer-events-none disabled:opacity-50 select-none \
+     bg-primary/90 hover:bg-primary/100 active:opacity-90 \
+     text-primary-foreground hover:text-primary-foreground as-solid h-7 \
+     rounded px-3 py-1";
   B.set_text create_btn T.create_new_graph;
   B.add_listener create_btn "click" (fun _ ->
       Dialogs_state.open_ "new-graph");
-  B.append root create_btn;
+  B.append btn_col create_btn;
+  B.append btn_row btn_col;
+  B.append content btn_row;
+  let local = B.create "div" in
   let h2 = B.create "h2" in
+  B.set_class h2 "text-lg font-medium mb-4";
   B.set_text h2 T.local_graphs;
-  B.append root h2;
-  List.iter (fun r -> B.append root (graph_row r)) !Graphs_ops.repos;
-  B.append root (remote_section (fun () -> rerender ()));
+  B.append local h2;
+  List.iter (fun r -> B.append local (graph_row r)) !Graphs_ops.repos;
+  B.append content local;
+  if !Graphs_ops.remote_graphs <> [] then
+    B.append content (remote_section (fun () -> rerender ()));
+  B.append root content;
   B.append host root
 
 and rerender () =
@@ -204,7 +283,10 @@ let show () =
                (fun _ -> render_into host; Js.Promise.resolve ())
                (Graphs_ops.list_remote_graphs ()))
       | None -> ());
-  match B.qs "#main-content-container" with
+  (* cljs mounts #graphs inside .cp__sidebar-main-content > .mx-auto.pb-24
+     (the route content column) — append our host there so centering and
+     margins match exactly *)
+  match B.qs ".cp__sidebar-main-content .mx-auto" with
   | Some parent -> (
       match B.qs ".graphs-host" with
       | Some _ -> rerender ()

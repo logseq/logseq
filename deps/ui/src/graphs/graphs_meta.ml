@@ -74,6 +74,11 @@ let drop repo =
 let remember_uuid repo uuid =
   upsert repo [ (Wire.kw "graph-uuid", Wire.String uuid) ]
 
+let uuid_of repo =
+  match field repo "graph-uuid" with
+  | Some w -> Wire.as_uuid w
+  | None -> None
+
 let repo_of_uuid uuid =
   List.find_map
     (fun (k, v) ->

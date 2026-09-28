@@ -18,6 +18,8 @@ external set_attr : E.t -> string -> string -> unit = "setAttribute"
   [@@mel.send]
 
 external set_text : E.t -> string -> unit = "textContent" [@@mel.set]
+
+external inner_html_set : E.t -> string -> unit = "innerHTML" [@@mel.set]
 external set_class : E.t -> string -> unit = "className" [@@mel.set]
 
 let add_class : E.t -> string -> unit =
@@ -41,6 +43,10 @@ external focus : E.t -> unit = "focus" [@@mel.send]
 external click : E.t -> unit = "click" [@@mel.send]
 external value : E.t -> string = "value" [@@mel.get]
 external confirm : string -> bool = "confirm" [@@mel.scope "window"]
+external open_url : string -> unit = "open" [@@mel.scope "window"]
+external location_origin : unit -> string = "origin" [@@mel.scope "location"]
+external location_pathname : unit -> string = "pathname"
+  [@@mel.scope "location"]
 external reload_page : unit -> unit = "reload" [@@mel.scope "location"]
 
 type rect
