@@ -1103,7 +1103,11 @@ search may lag).
   removed with the cljs db-worker). The node runner then crashes in
   `frontend.components.block.reactivity-test`
   (`unhighlight-blocks!` → `document is not defined`) — **preexisting
-  on `devin/native-ocaml-electron`**, verified identical.
+  on `devin/native-ocaml-electron`**, verified identical. The
+  `frontend.handler.code-test` `save-code-editor-*` cases also fail
+  when batched with other namespaces (a sibling registers `repo-a`
+  first and the fixture resolves the wrong current repo; passes solo)
+  — also **preexisting on base**, verified with the same `-n` batch.
 - **Unit tests for the OCaml UI** live in `deps/ui/test/test_main.ml`
   (Melange→node). `Platform.local_storage_*` resolves the storage
   object via `globalThis` and no-ops when absent, because
