@@ -49,7 +49,7 @@
              (mapcat (fn [{:keys [ref-id title]}]
                        [[:db/retract ref-id :block/refs page-id]
                         {:db/id ref-id
-                         :block/title title}]))))))
+                         :block/title title}])))))
 
 (defn ^:api build-page-retract-tx
   "Build cleanup tx-data for deleting a schema page.
