@@ -311,6 +311,22 @@ sorting, view tabs, selection bar, export EDN) and the query surface of
   remount; the title editor now focuses explicitly after `Title_edit_start`
   and places the caret at the end.
 
+## Right sidebar (e2e: `right_sidebar_basic_test`)
+
+- **`app.set_state_from_store` was a stub**: the test drives
+  `set_state_from_store(['ui/radix-color'], 'none')` /
+  `(['ui/system-theme?'], false)` and asserts
+  `documentElement.dataset.color`. cljs `set-state!` assoc-in's the app
+  atom and subscriptions apply effects (`data-color` =
+  `(or :ui/radix-color "logseq")`, system-theme → `data-theme` follows
+  `prefers-color-scheme`). Our sdk returned `resolved_nil` for every key.
+  Implemented the observable effects for `ui/radix-color` (dataset.color +
+  `ui/radix-color` storage) and `ui/system-theme?` (storage + theme
+  recompute); unknown keys remain no-ops.
+- **Boot hardcoded `data-color="logseq"`**: cljs reads
+  `storage/get :ui/radix-color` at init; boot.ml now unquotes the stored
+  value the same way.
+
 ## Multi-tabs / cross-tab sync (e2e: `multi_tabs_basic_test`)
 
 - **Worker side is healthy**: `logseq.api.append_block_in_page` propagates to
