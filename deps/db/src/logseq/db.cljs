@@ -513,6 +513,31 @@
 
 (def get-first-page-by-name common-initial-data/get-first-page-by-name)
 
+(defn get-user-properties-by-name
+  "User properties whose :block/name matches `property-name` (case-insensitive).
+   Built-in and plugin properties are excluded so those may share a title."
+  [db property-name]
+  (when (and db (string? property-name))
+    (->> (entity-util/get-pages-by-name db property-name)
+         (keep (fn [datom]
+                 (d/entity db (:e datom))))
+         (filter entity-util/property?)
+         (remove entity-util/built-in?)
+         (remove (fn [property]
+                   (db-property/plugin-property? (:db/ident property))))
+         vec)))
+
+(defn get-user-property-by-name
+  "Return one user property matching `property-name` by :block/name.
+   Prefer an exact :block/title match, then the oldest entity."
+  [db property-name]
+  (let [matches (get-user-properties-by-name db property-name)]
+    (or (some (fn [property]
+                (when (= property-name (:block/title property))
+                  property))
+              matches)
+        (first (sort-by :db/id matches)))))
+
 (defn page-exists?
   "Returns all page db ids that given title and one of the given `tags`."
   [db page-name tags]

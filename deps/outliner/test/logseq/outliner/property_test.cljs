@@ -30,21 +30,106 @@
         (is (= :checkbox (:logseq.property/type (d/entity @conn :user.property/num))))
         (is (= nil (:db/valueType (d/entity @conn :user.property/num)))))))
 
+  (testing "Reuses an existing user property by case-insensitive name"
+    (let [conn (db-test/create-conn-with-blocks [])
+          created (outliner-property/upsert-property! conn nil {:logseq.property/type :default} {:property-name "p1"})
+          same-name (outliner-property/upsert-property! conn nil {} {:property-name "p1"})
+          other-case (outliner-property/upsert-property! conn nil {} {:property-name "P1"})]
+      (is (= (:db/ident created) (:db/ident same-name) (:db/ident other-case))
+          "Typed case variants reuse the existing user property")
+      (is (= {:block/name "p1" :block/title "p1" :logseq.property/type :default}
+             (select-keys (d/entity @conn (:db/ident created)) [:block/name :block/title :logseq.property/type]))
+          "Existing title is kept when reusing")
+      (is (nil? (d/entity @conn :user.property/p1-1))
+          "A second user property is not created")))
+
   (testing "Multiple properties that generate the same initial :db/ident"
     (let [conn (db-test/create-conn-with-blocks [])]
       (outliner-property/upsert-property! conn nil {:logseq.property/type :default} {:property-name "p1"})
-      (outliner-property/upsert-property! conn nil {} {:property-name "p1"})
-      (outliner-property/upsert-property! conn nil {} {:property-name "p1"})
+      (outliner-property/upsert-property! conn nil {} {:property-name "p 1"})
+      (outliner-property/upsert-property! conn nil {} {:property-name "p1@"})
 
       (is (= {:block/name "p1" :block/title "p1" :logseq.property/type :default}
              (select-keys (d/entity @conn :user.property/p1) [:block/name :block/title :logseq.property/type]))
           "Existing db/ident does not get modified")
-      (is (= "p1"
+      (is (= "p 1"
              (:block/title (d/entity @conn :user.property/p1-1)))
           "2nd property gets unique ident")
-      (is (= "p1"
+      (is (= "p1@"
              (:block/title (d/entity @conn :user.property/p1-2)))
           "3rd property gets unique ident"))))
+
+(deftest upsert-property-reuses-existing-when-tag-shares-name
+  (let [conn (db-test/create-conn-with-blocks
+              {:classes {:Foo {}}})
+        existing (outliner-property/upsert-property! conn nil {:logseq.property/type :default} {:property-name "Foo"})
+        reused (outliner-property/upsert-property! conn nil {:logseq.property/type :default} {:property-name "foo"})
+        user-property-titles (d/q '[:find [?title ...]
+                                    :where
+                                    [?e :block/title ?title]
+                                    [?e :block/tags :logseq.class/Property]
+                                    [(missing? $ ?e :logseq.property/built-in?)]]
+                                  @conn)]
+    (is (some? existing))
+    (is (= (:db/ident existing) (:db/ident reused))
+        "Create looks up the existing user property by lc name, not the older tag")
+    (is (= ["Foo"] user-property-titles)
+        "Does not create a second user property titled Foo")))
+
+(deftest upsert-property-can-share-name-with-tag
+  (let [conn (db-test/create-conn-with-blocks
+              {:classes {:Foo {}}})
+        created (outliner-property/upsert-property! conn nil {:logseq.property/type :default} {:property-name "Foo"})]
+    (is (ldb/property? created))
+    (is (ldb/class? (d/entity @conn :user.class/Foo))
+        "A tag with the same title remains")
+    (is (= "Foo" (:block/title created)))))
+
+(deftest upsert-property-refuses-duplicate-title-with-new-ident
+  (let [conn (db-test/create-conn-with-blocks
+              {:properties {:Foo {:logseq.property/type :default}}})]
+    (is (thrown-with-msg?
+         js/Error
+         #"Duplicate property"
+         (outliner-property/upsert-property! conn
+                                             :user.property/foo-2
+                                             {:logseq.property/type :default}
+                                             {:property-name "Foo"}))
+        "An explicit new ident still cannot reuse another user property title")))
+
+(deftest upsert-property-converts-page-when-name-is-free
+  (let [conn (db-test/create-conn-with-blocks
+              [{:page {:block/title "Widget"}}])
+        page (db-test/find-page-by-title @conn "Widget")
+        created (outliner-property/upsert-property!
+                 conn nil {:logseq.property/type :default}
+                 {:property-name "Widget"
+                  :properties {:db/id (:db/id page)}})]
+    (is (ldb/property? created))
+    (is (= "Widget" (:block/title created)))))
+
+(deftest upsert-property-allows-plugin-property-to-share-title
+  (let [conn (db-test/create-conn-with-blocks
+              {:properties {:Status {:logseq.property/type :default}}})
+        plugin (outliner-property/upsert-property!
+                conn
+                :plugin.property.test/Status
+                {:logseq.property/type :number}
+                {:property-name "Status"})]
+    (is (ldb/property? plugin))
+    (is (= :plugin.property.test/Status (:db/ident plugin)))
+    (is (some? (d/entity @conn :user.property/Status))
+        "The user property remains")))
+
+(deftest upsert-property-can-share-title-with-built-in
+  (let [conn (db-test/create-conn-with-blocks [])
+        created (outliner-property/upsert-property!
+                 conn nil {:logseq.property/type :default}
+                 {:property-name "Tags"})]
+    (is (ldb/property? created))
+    (is (not (:logseq.property/built-in? created)))
+    (is (some? (d/entity @conn :block/tags))
+        "The built-in property remains")))
 
 (deftest upsert-property-rejects-type-change-with-existing-data
   (testing "Changing type is rejected when property has values"

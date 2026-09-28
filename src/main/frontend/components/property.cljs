@@ -31,6 +31,29 @@
             [promesa.core :as p]
             [io.factorhouse.hsx.core :as hsx]))
 
+(defn- typed-property-name?
+  [id-or-name]
+  (and (string? id-or-name)
+       (not (util/uuid-string? id-or-name))))
+
+(defn- pick-user-property-for-name
+  "Prefer an exact title match, then the oldest user property with that lc name."
+  [properties typed-name]
+  (when (seq properties)
+    (or (some (fn [property]
+                (when (= typed-name (:block/title property))
+                  property))
+              properties)
+        (first (sort-by :db/id properties)))))
+
+(defn- property-title-for-create
+  "Use the typed name unless we are converting an existing page to a property.
+   A tag or other non-property page must not supply the new property title."
+  [property property? typed-name]
+  (if (or property? (entity/internal-page? property))
+    (or (:block/title property) typed-name)
+    typed-name))
+
 (defn- <add-property-from-dropdown
   "Adds an existing or new property from dropdown. Used from a block or page context."
   [entity id-or-name* schema {:keys [class-schema? block-uuid]}]
@@ -38,9 +61,13 @@
           id-or-name (or block-uuid id-or-name*)
           ;; Both conditions necessary so that a class can add its own page properties
           add-class-property? (and (entity/class? entity) class-schema?)
-          property (db-async/<get-block repo id-or-name {:children? false})
+          properties-by-name (when (and (nil? block-uuid) (typed-property-name? id-or-name*))
+                               (db-async/<get-user-properties-by-name repo id-or-name*))
+          property-by-name (pick-user-property-for-name properties-by-name id-or-name*)
+          property (or property-by-name
+                       (db-async/<get-block repo id-or-name {:children? false}))
           property? (entity/property? property)
-          property-title (or (:block/title property) id-or-name)]
+          property-title (property-title-for-create property property? id-or-name*)]
     ;; existing property selected or entered
     (if property?
       (do

@@ -10,7 +10,9 @@
             [frontend.components.property.value :as property-value]
             [frontend.db.async :as db-async]
             [frontend.db.hooks :as db-hooks]
+            [frontend.handler.db-based.property :as db-property-handler]
             [frontend.handler.property :as property-handler]
+            [frontend.state :as state]
             [goog.object :as gobj]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]))
@@ -25,6 +27,93 @@
         (if (some? previous-react)
           (gobj/set js/globalThis "React" previous-react)
           (js-delete js/globalThis "React"))))))
+
+(deftest pick-user-property-for-name-prefers-exact-then-oldest
+  (let [pick #'property-component/pick-user-property-for-name
+        older {:db/id 1 :block/title "Foo" :db/ident :user.property/Foo}
+        newer {:db/id 2 :block/title "foo" :db/ident :user.property/foo}]
+    (is (= older (pick [newer older] "Foo"))
+        "Exact title wins over another lc-name match")
+    (is (= newer (pick [newer older] "foo"))
+        "Exact title wins when the typed name matches a different-cased property")
+    (is (= older (pick [newer older] "FOO"))
+        "Without an exact title, the oldest user property is reused")
+    (is (nil? (pick [] "foo")))))
+
+(deftest add-property-from-dropdown-reuses-user-property-when-tag-shares-name
+  (async done
+         (let [add #'property-component/<add-property-from-dropdown
+               existing-property {:db/id 11
+                                  :db/ident :user.property/Foo
+                                  :block/title "Foo"
+                                  :block/tags [{:db/ident :logseq.class/Property}]}
+               tag {:db/id 10
+                    :db/ident :user.class/Foo
+                    :block/title "Foo"
+                    :block/tags [{:db/ident :logseq.class/Tag}]}
+               upsert-calls (atom [])]
+           (-> (p/with-redefs [state/get-current-repo (constantly "test")
+                               db-async/<get-user-properties-by-name
+                               (fn [_repo name]
+                                 (is (= "foo" name))
+                                 (p/resolved [existing-property]))
+                               db-async/<get-block
+                               (fn [_repo id-or-name & _opts]
+                                 (is (not= "foo" id-or-name)
+                                     "Must not resolve the typed name to the older tag")
+                                 (p/resolved (if (= 11 id-or-name)
+                                               existing-property
+                                               tag)))
+                               db-property-handler/upsert-property!
+                               (fn [& args]
+                                 (swap! upsert-calls conj args)
+                                 (p/resolved existing-property))]
+                 (add {:block/uuid (random-uuid)} "foo" {:logseq.property/type :default} {}))
+               (p/then (fn [property]
+                         (is (= existing-property property))
+                         (is (empty? @upsert-calls)
+                             "Existing user property is reused without creating another")))
+               (p/catch (fn [error]
+                          (is false (str error))))
+               (p/finally done)))))
+
+(deftest add-property-from-dropdown-creates-property-when-only-tag-exists
+  (async done
+         (let [add #'property-component/<add-property-from-dropdown
+               tag {:db/id 10
+                    :db/ident :user.class/Foo
+                    :block/title "Foo"
+                    :block/tags [{:db/ident :logseq.class/Tag}]}
+               created {:db/id 12
+                        :db/ident :user.property/foo
+                        :block/title "foo"
+                        :block/tags [{:db/ident :logseq.class/Property}]}
+               upsert-calls (atom [])]
+           (-> (p/with-redefs [state/get-current-repo (constantly "test")
+                               db-async/<get-user-properties-by-name
+                               (fn [_repo _name]
+                                 (p/resolved []))
+                               db-async/<get-block
+                               (fn [_repo id-or-name & _opts]
+                                 (p/resolved (cond
+                                               (= 12 id-or-name) created
+                                               (= "foo" id-or-name) tag
+                                               :else nil)))
+                               db-property-handler/upsert-property!
+                               (fn [property-id schema opts]
+                                 (swap! upsert-calls conj [property-id schema opts])
+                                 (p/resolved created))]
+                 (add {:block/uuid (random-uuid)} "foo" {:logseq.property/type :default} {}))
+               (p/then (fn [property]
+                         (is (= created property))
+                         (is (= [[nil
+                                  {:logseq.property/type :default}
+                                  {:property-name "foo"}]]
+                                @upsert-calls)
+                             "Typed name is used; the tag title is not copied onto a new property")))
+               (p/catch (fn [error]
+                          (is false (str error))))
+               (p/finally done)))))
 
 (deftest restore-closed-values-uses-row-identities-when-snapshot-omits-them-test
   (let [restore #'property-component/restore-closed-values

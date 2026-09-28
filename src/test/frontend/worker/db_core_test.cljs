@@ -88,7 +88,7 @@
           :thread-api/get-page-route-info :thread-api/get-block-by-page-name-and-block-route-name
           :thread-api/query-custom :thread-api/query-dsl-query :thread-api/query-dsl-custom-query
           :thread-api/get-journal-page-by-day :thread-api/get-latest-journals
-          :thread-api/page-exists? :thread-api/get-case-page :thread-api/get-tags-by-name
+          :thread-api/page-exists? :thread-api/get-case-page :thread-api/get-tags-by-name :thread-api/get-user-properties-by-name
           :thread-api/resolve-query-inputs :thread-api/get-block-parent
           :thread-api/get-block-page-info
           :thread-api/ensure-comments-area :thread-api/ensure-comments-area-for-blocks

@@ -917,10 +917,26 @@
                (when-not value-matches?
                  (raw-set-block-property! conn block property v'))))))))))
 
+(defn- validate-new-user-property-title-unique
+  "Refuse creating another user.property with the same title. Tags, pages,
+   built-ins, and plugin properties may still share that title."
+  [db title exclude-eid]
+  (when (some (fn [property]
+                (and (= title (:block/title property))
+                     (not= exclude-eid (:db/id property))))
+              (ldb/get-user-properties-by-name db title))
+    (throw (ex-info "Duplicate property"
+                    {:type :notification
+                     :payload {:message (str "Another property named " (pr-str title) " already exists.")
+                               :i18n-key :property.validation/duplicate
+                               :i18n-args [title]
+                               :type :warning}}))))
+
 (defn upsert-property!
   "Updates property if property-id is given. Otherwise creates a property
     with the given property-id or :property-name option. When a property is created
-    it is ensured to have a unique :db/ident"
+    it is ensured to have a unique :db/ident. Creating with only :property-name
+    reuses an existing user property whose :block/name matches."
   [conn property-id schema {:keys [property-name properties] :as opts}]
   (let [db @conn
         db-ident (or property-id
@@ -941,25 +957,36 @@
       (update-property conn db-ident property schema opts)
       (let [k-name (or (and property-name (name property-name))
                        (name property-id))
-            db-ident' (db-ident/ensure-unique-db-ident @conn db-ident)]
-        (assert (some? k-name)
-                (prn "property-id: " property-id ", property-name: " property-name))
-        (outliner-validate/validate-page-title k-name {:node {:db/ident db-ident'}})
-        (outliner-validate/validate-page-title-characters k-name {:node {:db/ident db-ident'}})
-        (outliner-validate/validate-property-title k-name {:node {:db/ident db-ident'}})
-        (let [db-id (:db/id properties)
-              opts' (cond-> {:title k-name
-                             :properties properties}
-                      (integer? db-id)
-                      (assoc :block-uuid (:block/uuid (d/entity db db-id))))
-              tx-data (concat
-                       [(sqlite-util/build-new-property db-ident' schema opts')]
-                       ;; Convert page to property
-                       (when db-id
-                         [[:db/retract db-id :block/tags :logseq.class/Page]]))]
-          (ldb/transact! conn tx-data
-                         {:outliner-op :upsert-property}))
-        (d/entity @conn db-ident')))))
+            existing-by-name (ldb/get-user-property-by-name db k-name)]
+        (if (and existing-by-name (nil? property-id))
+          ;; Reuse the existing user property. Do not rename it from the typed
+          ;; case variant, and ignore convert-page :properties.
+          (update-property conn
+                           (:db/ident existing-by-name)
+                           existing-by-name
+                           schema
+                           (dissoc opts :properties :property-name))
+          (let [db-ident' (db-ident/ensure-unique-db-ident @conn db-ident)]
+            (assert (some? k-name)
+                    (prn "property-id: " property-id ", property-name: " property-name))
+            (outliner-validate/validate-page-title k-name {:node {:db/ident db-ident'}})
+            (outliner-validate/validate-page-title-characters k-name {:node {:db/ident db-ident'}})
+            (outliner-validate/validate-property-title k-name {:node {:db/ident db-ident'}})
+            (when-not (db-property/plugin-property? db-ident')
+              (validate-new-user-property-title-unique db k-name (:db/id properties)))
+            (let [db-id (:db/id properties)
+                  opts' (cond-> {:title k-name
+                                 :properties properties}
+                          (integer? db-id)
+                          (assoc :block-uuid (:block/uuid (d/entity db db-id))))
+                  tx-data (concat
+                           [(sqlite-util/build-new-property db-ident' schema opts')]
+                           ;; Convert page to property
+                           (when db-id
+                             [[:db/retract db-id :block/tags :logseq.class/Page]]))]
+              (ldb/transact! conn tx-data
+                             {:outliner-op :upsert-property}))
+            (d/entity @conn db-ident')))))))
 
 (defn batch-delete-property-value!
   "batch delete value when a property has multiple values"
