@@ -207,3 +207,39 @@ sorting, view tabs, selection bar, export EDN) and the query surface of
   `.editor-wrapper textarea` timeout). Views behaviors were verified via
   Playwright probes driving `LogseqDbWorker.invoke` directly (see
   worker-call contract in e2e-contract.md §7).
+
+## Multi-tabs / cross-tab sync (e2e: `multi_tabs_basic_test`)
+
+- **Worker side is healthy**: `logseq.api.append_block_in_page` propagates to
+  other tabs via navigator.locks master election + BroadcastChannel
+  (`deps/db-worker/lib/shared_service.ml`); UI receives `"sync-db-changes"`
+  and `Router.reload ()` re-fetches blocks.
+- **Crash 1 — `NotFoundError: removeChild`**: a single batch emitted
+  `SetExtensionProp(span.block-title-wrap, "text", ...)` BEFORE
+  `RemoveChild(span, br)`; `dom_adapter.ml` `set_property "text"` maps to
+  `setTextContent`, which detaches ALL DOM children, so the later
+  `removeChild` threw, the batch aborted, and the generation desync
+  ("expected patch generation N, received M") killed every subsequent
+  render on all tabs. This is an upstream emit-order issue (prop sets
+  applied before child ops on the same node). Workaround committed in
+  `src/render/render.ml`: `.block-title-wrap` gets reload keys `btw-t`
+  (plain `~text`) vs `btw-c` (children, incl. the empty-title `<br>`), so
+  a text↔children transition forces a remount instead of a prop+remove
+  mix on one node. If upstream reorders emits (children before prop
+  writes), the keys can be dropped.
+- **Crash 2 — `store batch: cannot drop a node with children`**: surfaced
+  on cmdk "Add a DB graph" → dialog open. Cause was the retained-store
+  `insert_at` bug already listed above (fixed upstream in
+  logseq/lui#65): every non-append `insert_child` duplicated the child id
+  in `retained_children`, so `drop_node` still saw leftovers after all
+  `RemoveChild` ops. **Environment gotcha**: `lui` in the `5.5.0` opam
+  switch is `dune install`ed from `~/repos/lui`, NOT the git pin — after
+  upstream merges you must `cd ~/repos/lui && dune build -p lui && dune install lui`
+  then rebuild `deps/ui`, or you debug already-fixed code.
+- **Open**: `src/properties/properties_view.ml` installs a capture-phase
+  `input` listener that opens a second `.ui__popover-content` on `/`/`#`
+  in any `edit-block-*` textarea, alongside the real `popups_state`
+  slash menu (which already lists "Add property"). Two popovers →
+  `slash-menu-filter-scroll-and-cleanup-test` sees
+  `a.menu-link.chosen` count=2. The properties popover should be removed
+  or folded into the main autocomplete.
