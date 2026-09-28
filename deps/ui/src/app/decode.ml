@@ -20,7 +20,13 @@ let rec block_of_wire (w : Wire.t) : Model.block =
   let tag_ids =
     match Wire.get w "block/tags" with
     | Some (Wire.List xs) | Some (Wire.Array xs) | Some (Wire.Set xs) ->
-        List.filter_map (fun t -> Wire.map_get_int t "db/id") xs
+        List.filter_map
+          (fun t ->
+            match t with
+            | Wire.Int i -> Some i
+            | Wire.Int64 i -> Some (Int64.to_int i)
+            | _ -> Wire.map_get_int t "db/id")
+          xs
     | _ -> []
   in
   { block_uuid = uuid

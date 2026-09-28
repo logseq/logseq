@@ -68,8 +68,10 @@ let fetch_blocks (p : Model.page) =
   Runtime.invoke3 "thread-api/get-page-blocks-tree"
     (Wire.String (repo ())) (ref_of_page p) Wire.Nil
   |> Js.Promise.then_ (fun blocks_w ->
-         Js.Promise.resolve
-           { p with Model.page_blocks = Decode.blocks_of_wire blocks_w })
+         Outliner_ops.resolve_block_tags (Decode.blocks_of_wire blocks_w)
+         |> Js.Promise.then_ (fun blocks ->
+                Js.Promise.resolve
+                  { p with Model.page_blocks = blocks }))
 
 let fetch_refs (p : Model.page) =
   match p.Model.page_db_id with
@@ -104,8 +106,12 @@ let load_journals () =
                 Js.Promise.resolve
                   (Runtime.send (Action.Journals_loaded js))))
 
+(* drop a send when the route moved on while the fetch was in-flight —
+   otherwise a slow stale load overwrites the page the user navigated to *)
+let stale (route : Model.route) = !Runtime.current_route <> Some route
+
 (* get-page-route-info resolves name/uuid/lookup-ref -> summary *)
-let load_page_ref ref_v ~missing =
+let load_page_ref for_route ref_v ~missing =
   Runtime.invoke2 "thread-api/get-page-route-info"
     (Wire.String (repo ())) ref_v
   |> Js.Promise.then_ (fun info ->
@@ -113,11 +119,13 @@ let load_page_ref ref_v ~missing =
          | Some p ->
              fetch_blocks p
              |> Js.Promise.then_ (fun p' ->
-                    Runtime.send (Action.Page_loaded p');
-                    fetch_refs p';
+                    if not (stale for_route) then (
+                      Runtime.send (Action.Page_loaded p');
+                      fetch_refs p');
                     Js.Promise.resolve ())
          | None ->
-             Runtime.send (Action.Navigate_to (Model.Not_found missing));
+             if not (stale for_route) then
+               Runtime.send (Action.Navigate_to (Model.Not_found missing));
              Js.Promise.resolve ())
 
 (* Home: default-home config page when set & resolvable, else today's
@@ -134,15 +142,22 @@ let rec load_home () =
          in
          match page_name with
          | Some name ->
-             Runtime.invoke2 "thread-api/page-exists?"
+             Runtime.invoke2 "thread-api/get-page-route-info"
                (Wire.String repo) (Wire.String name)
-             |> Js.Promise.then_ (function
-                    | Wire.Bool true ->
+             |> Js.Promise.then_ (fun info ->
+                    match Decode.page_of_summary info, stale Model.Home with
+                    | Some p, false ->
                         Runtime.send (Action.Navigate_to (Model.Page name));
-                        load_page_ref (Wire.String name) ~missing:name
-                    | _ ->
+                        fetch_blocks p
+                        |> Js.Promise.then_ (fun p' ->
+                               if not (stale (Model.Page name)) then (
+                                 Runtime.send (Action.Page_loaded p');
+                                 fetch_refs p');
+                               Js.Promise.resolve ())
+                    | None, false ->
                         Runtime.send (Action.Navigate_to Model.Journals);
-                        load_journals ())
+                        load_journals ()
+                    | _ -> Js.Promise.resolve ())
          | None -> load_today_journal repo)
 
 and load_today_journal repo =
@@ -154,7 +169,8 @@ and load_today_journal repo =
          | Some p ->
              fetch_blocks p
              |> Js.Promise.then_ (fun p' ->
-                    Runtime.send (Action.Page_loaded p');
+                    if not (stale Model.Home) then
+                      Runtime.send (Action.Page_loaded p');
                     Js.Promise.resolve ())
          | None -> Js.Promise.resolve ())
 
@@ -187,25 +203,33 @@ let load_block_zoom uuid =
                     ignore
                       (Outliner_ops.resolve_block_tags [ b ]
                        |> Js.Promise.then_ (fun bs ->
-                              Runtime.send
-                                (Action.Page_loaded
-                                   { Model.page_title = b.Model.block_title
-                                   ; page_uuid = b.block_uuid
-                                   ; page_db_id = b.block_db_id
-                                   ; page_is_tag = false
-                                   ; page_journal_day = None
-                                   ; page_blocks = bs
-                                   });
-                              (match Editor_actions.consume_pending_zoom () with
-                               | Some u when Editor_state.ready () ->
-                                   Editor_actions.enter_edit u
-                                     (String.length b.Model.block_title)
-                               | _ -> ());
-                              Js.Promise.resolve ()))
+                              if stale (Model.Block_zoom uuid) then
+                                Js.Promise.resolve ()
+                              else (
+                                Runtime.send
+                                  (Action.Page_loaded
+                                     { Model.page_title =
+                                         b.Model.block_title
+                                     ; page_uuid = b.block_uuid
+                                     ; page_db_id = b.block_db_id
+                                     ; page_is_tag = false
+                                     ; page_journal_day = None
+                                     ; page_blocks = bs
+                                     });
+                                (match Editor_actions.consume_pending_zoom ()
+                                 with
+                                 | Some u when Editor_state.ready () ->
+                                     Editor_actions.enter_edit u
+                                       (String.length b.Model.block_title)
+                                 | _ -> ());
+                                Js.Promise.resolve ())))
                 | _ ->
-                    Runtime.send
-                      (Action.Navigate_to (Model.Not_found uuid)))
-            | _ -> Runtime.send (Action.Navigate_to (Model.Not_found uuid))))
+                    if not (stale (Model.Block_zoom uuid)) then
+                      Runtime.send
+                        (Action.Navigate_to (Model.Not_found uuid)))
+            | _ ->
+                if not (stale (Model.Block_zoom uuid)) then
+                  Runtime.send (Action.Navigate_to (Model.Not_found uuid))))
 
 (* created-at range over named pages feeds the time-travel slider *)
 let load_graph () =
@@ -234,13 +258,14 @@ let load_graph () =
 let load_route (route : Model.route) =
   match route with
   | Model.Home -> ignore (load_home ())
-  | Model.Page s -> ignore (load_page_ref (page_ref s) ~missing:s)
+  | Model.Page s ->
+      ignore (load_page_ref route (page_ref s) ~missing:s)
   | Model.Block_zoom uuid -> ignore (load_block_zoom uuid)
   | Model.Journals ->
       Runtime.reload_current_view := load_journals;
       ignore (load_journals ())
   | Model.Library ->
-      ignore (load_page_ref (Wire.String "Library") ~missing:"Library")
+      ignore (load_page_ref route (Wire.String "Library") ~missing:"Library")
   | Model.Graph -> ignore (load_graph ())
   | Model.All_pages | Model.All_graphs | Model.Not_found _ -> ()
 
