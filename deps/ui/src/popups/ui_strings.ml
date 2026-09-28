@@ -141,6 +141,12 @@ let t (key : string) : string =
   | "color/blue" -> "Blue"
   | "color/purple" -> "Purple"
   | "color/gray" -> "Gray"
+  | "view/linked-references" -> "Linked references"
+  | "view/unlinked-references" -> "Unlinked references"
+  | "view/add-new-view" -> "Add new view"
+  | "reference/page-filter" -> "Page filter"
+  | "page/open-properties" -> "Open properties"
+  | "page/hide-properties" -> "Hide properties"
   | _ -> key
 
 (* "{1}" / "{2}" placeholder substitution *)
