@@ -8,6 +8,7 @@ type route =
   | Library
   | All_pages
   | All_graphs
+  | Import
   | Settings
   | Not_found of string
 

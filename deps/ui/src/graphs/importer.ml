@@ -114,12 +114,35 @@ let on_change id () =
       | files -> run_files id files)
   | None -> ()
 
-let file_input ~id ~label ~accept ?(extra_attrs = []) () =
+(* svg/logo 28 — three hard-coded ellipses from components/svg.cljs *)
+let logo_svg () =
+  let ellipse transform rx ry =
+    dom ~tag:"ellipse"
+      ~attrs:
+        [ ("transform", transform); ("rx", rx); ("ry", ry) ]
+      []
+  in
+  dom ~tag:"svg"
+    ~attrs:
+      [ ("fill", "currentColor"); ("viewBox", "0 0 21 21")
+      ; ("height", "28"); ("width", "28") ]
+    [ ellipse "matrix(0.987073 0.160274 -0.239143 0.970984 11.7346 2.59206)"
+        "3.29236" "2.04373"
+    ; ellipse "matrix(-0.495846 0.868411 -0.825718 -0.564084 3.97209 5.54515)"
+        "2.95326" "3.37606"
+    ; ellipse "matrix(0.987073 0.160274 -0.239143 0.970984 13.0843 14.72)"
+        "7.78547" "6.13006"
+    ]
+
+let file_input ~id ~label ~desc ~accept ?(extra_attrs = []) () =
   dom ~key:id ~tag:"label"
     ~style_class:"action-input flex items-center mx-2 my-2"
-    [ dom ~key:(id ^ "-t")
+    [ dom ~key:(id ^ "-ic") ~style_class:"as-flex-center"
+        [ dom ~key:(id ^ "-ico") ~tag:"i" [ logo_svg () ] ]
+    ; dom ~key:(id ^ "-t")
         ~style_class:"flex flex-col"
-        [ dom ~key:(id ^ "-s") ~tag:"strong" ~text:label [] ]
+        [ dom ~key:(id ^ "-s") ~tag:"strong" ~text:label []
+        ; dom ~key:(id ^ "-d") ~tag:"small" ~text:desc [] ]
     ; dom ~key:(id ^ "-i") ~tag:"input"
         ~style_class:"absolute hidden"
         ~attrs:
@@ -130,20 +153,43 @@ let file_input ~id ~label ~accept ?(extra_attrs = []) () =
         []
     ]
 
-let body (_ms : Model.t Signal.signal) : t =
-  dom ~key:"import" ~style_class:"importer flex flex-col gap-4"
-    [ dom ~key:"imp-h" ~tag:"h1" ~style_class:"title" ~text:T.import_title
-        []
-    ; file_input ~id:"import-db-edn" ~label:T.import_db_edn_title
-        ~accept:".edn" ()
-    ; file_input ~id:"import-sqlite-db" ~label:T.import_sqlite_title
-        ~accept:".sqlite" ()
-    ; file_input ~id:"import-sqlite-zip" ~label:T.import_sqlite_zip_title
-        ~accept:".zip" ()
-    ; file_input ~id:"import-file-graph" ~label:T.import_file_graph_title
-        ~accept:".edn,.json,.md,.org,.png,.jpg,.jpeg,.zip"
-        ~extra_attrs:[ ("webkitdirectory", "true") ]
-        ()
-    ; file_input ~id:"import-debug-transit"
-        ~label:T.import_debug_transit_title ~accept:".transit,.json" ()
+(* cljs imports.cljs importer — sqlite / zip / file-graph / transit / edn *)
+let items () =
+  [ file_input ~id:"import-sqlite-db" ~label:T.import_sqlite_title
+      ~desc:T.import_sqlite_desc ~accept:".sqlite,.sqlite3,.db" ()
+  ; file_input ~id:"import-sqlite-zip" ~label:T.import_sqlite_zip_title
+      ~desc:T.import_sqlite_zip_desc ~accept:".zip" ()
+  ; file_input ~id:"import-file-graph" ~label:T.import_file_graph_title
+      ~desc:T.import_file_graph_desc
+      ~accept:".edn,.json,.md,.org,.png,.jpg,.jpeg,.zip"
+      ~extra_attrs:[ ("webkitdirectory", "true") ]
+      ()
+  ; file_input ~id:"import-debug-transit"
+      ~label:T.import_debug_transit_title ~desc:T.import_debug_transit_desc
+      ~accept:".transit,.json" ()
+  ; file_input ~id:"import-db-edn" ~label:T.import_db_edn_title
+      ~desc:T.import_db_edn_desc ~accept:".edn" ()
+  ]
+
+let article () =
+  dom ~key:"import" ~tag:"article"
+    ~style_class:"flex flex-col items-center importer py-16 px-8"
+    [ dom ~key:"imp-c" ~style_class:"c text-center"
+        [ dom ~key:"imp-h" ~tag:"h1" ~text:T.import_title []
+        ; dom ~key:"imp-d" ~tag:"h2" ~text:T.import_desc [] ]
+    ; dom ~key:"imp-l" ~style_class:"d md:flex flex-col" (items ()) ]
+
+(* route view — cljs setups/setups-container :importer wraps the article in
+   .cp__onboarding-setups > .inner-card with a title/subtitle header *)
+let view () : t =
+  dom ~key:"importer" ~style_class:"cp__onboarding-setups flex flex-1"
+    [ dom ~key:"imp-card"
+        ~style_class:"inner-card flex flex-col items-center"
+        [ dom ~key:"imp-th" ~tag:"h1" ~style_class:"text-xl"
+            [ dom ~key:"imp-ts" ~tag:"span"
+                ~text:T.import_existing_notes [] ]
+        ; dom ~key:"imp-td" ~tag:"h2" ~text:T.import_later []
+        ; article () ]
     ]
+
+let body (_ms : Model.t Signal.signal) : t = article ()

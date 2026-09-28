@@ -39,12 +39,14 @@ let parse_hash () : Model.route =
           | "all-journals" -> Model.Journals
           | "all-pages" -> Model.All_pages
           | "graphs" -> Model.All_graphs
+          | "import" -> Model.Import
           | _ -> Model.Not_found p)
       | None -> (
           match p with
           | "all-journals" -> Model.Journals
           | "all-pages" -> Model.All_pages
           | "graphs" -> Model.All_graphs
+          | "import" -> Model.Import
           | "settings" -> Model.Settings
           | "page" | "block" -> Model.Not_found p
           | _ -> Model.Not_found p))
@@ -373,7 +375,8 @@ let load_route (route : Model.route) =
       ignore (load_journals ())
   | Model.Library ->
       ignore (load_page_ref route (Wire.String "Library"))
-  | Model.All_pages | Model.All_graphs | Model.Not_found _ -> ()
+  | Model.All_pages | Model.All_graphs | Model.Import | Model.Not_found _ ->
+      ()
   | Model.Settings -> ()
 
 let resolve () =

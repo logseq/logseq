@@ -132,7 +132,7 @@ let global_items () =
         Sidebar_state.open_dialog "export-graph")
   ; icon_item "import" Strings.import_ "file-upload" (fun () ->
         close ();
-        Sidebar_state.open_dialog "import")
+        Platform.set_location_hash "#/import")
   ; icon_item "login" Strings.login "user" (fun () ->
         close ();
         Sidebar_state.open_dialog "login")
