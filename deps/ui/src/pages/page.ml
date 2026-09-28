@@ -363,11 +363,14 @@ let unlinked_references_view (m : Model.t) : t =
 
 (* --- route views -------------------------------------------------- *)
 
-let journal_item (m : Model.t) (p : Model.page) : t =
+let journal_item ?(last = false) (m : Model.t) (p : Model.page) : t =
   let key = Option.value p.page_uuid ~default:p.page_title in
   (* cljs journal-item > page-inner: .cp__page-inner-wrap.is-journals
-     containing the same editable db-page-title row as a page *)
-  dom ~key:("ji-" ^ key) ~style_class:"journal-item content relative"
+     containing the same editable db-page-title row as a page; the last
+     item drops its separator border via .journal-last-item *)
+  dom ~key:("ji-" ^ key)
+    ~style_class:
+      ("journal-item content relative" ^ if last then " journal-last-item" else "")
     [ dom ~key:("jiw-" ^ key)
         ~style_class:"flex-1 page relative cp__page-inner-wrap is-journals"
         [ dom ~key:("jip-" ^ key)
@@ -393,7 +396,10 @@ let journals_view (m : Model.t) (js : Model.page list) : t =
                ~key_of:(fun (p : Model.page) ->
                  Option.value p.page_uuid ~default:p.page_title)
                ~render:(journal_item m) items ]
-         else List.map (journal_item m) js)
+         else
+           List.mapi
+             (fun i p -> journal_item ~last:(i = List.length js - 1) m p)
+             js)
 
 let not_found_view name : t =
   dom ~key:"not-found" ~style_class:"page"
@@ -413,7 +419,7 @@ let library_add_pages_button : t =
   dom ~key:"lib-add" ~style_class:"ls-add-pages px-1 mt-4"
     [ dom ~key:"lib-add-btn" ~tag:"button"
         ~style_class:
-          "ui__button button inline-flex items-center text-muted-foreground hover:text-foreground"
+          "ui__button button inline-flex items-center h-8 px-3 py-1 gap-1            text-sm rounded-md bg-secondary/70 text-secondary-foreground            text-muted-foreground hover:bg-secondary/100 hover:text-foreground"
         ~events:"click"
         ~on_dom_event:(fun name _ ->
           if name = "click" then Runtime.send Action.Toggle_search)

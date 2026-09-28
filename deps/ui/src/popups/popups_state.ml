@@ -156,6 +156,20 @@ let group_items grp entries =
     entries
 ;;
 
+(* cljs editor.cljs filter-commands: "Clear heading" only appears when the
+   block already is a markdown heading *)
+let slash_block_has_heading () : bool =
+  match Editor_state.editing () with
+  | None -> false
+  | Some (e : Editor_state.editing) -> (
+      let t = e.buffer in
+      let n = String.length t in
+      n >= 2 && t.[0] = '#'
+      &&
+      let rec hashes i = if i < n && t.[i] = '#' then hashes (i + 1) else i in
+      let i = hashes 0 in
+      i <= 6 && i < n && (t.[i] = ' ' || t.[i] = '\t'))
+
 let slash_items () : ac_item list =
   List.concat
     [ group_items "editor.slash/group-basic"
@@ -171,10 +185,12 @@ let slash_items () : ac_item list =
     ; (let g = Some (U.t "editor.slash/group-heading") in
        [ mk_item ~key:"editor.slash/normal-text"
            ~label:(U.t "editor.slash/normal-text") ~icon:"text" ?group:g
-           (Editor_cmd "heading-normal")
-       ; mk_item ~key:"editor.slash/clear-heading"
-           ~label:(U.t "editor.slash/clear-heading") ~icon:"heading-off"
-           ?group:g (Editor_cmd "heading-clear") ]
+           (Editor_cmd "heading-normal") ]
+       @ (if slash_block_has_heading () then
+            [ mk_item ~key:"editor.slash/clear-heading"
+                ~label:(U.t "editor.slash/clear-heading") ~icon:"heading-off"
+                ?group:g (Editor_cmd "heading-clear") ]
+          else [])
        @ List.init 6 (fun i ->
            let l = string_of_int (i + 1) in
            mk_item ~key:("heading-" ^ l)
@@ -278,6 +294,44 @@ let filter_slash q items =
   |> with_headers false
 ;;
 
+(* cljs editor.cljs page-search: an empty [[ query lists the i18n nlp
+   date pages (calendar icon); choosing one emits [[<journal title>]]
+   parsed from the english name *)
+let nlp_date_of (en : string) : Js.Date.t =
+  let now = Dates.date_now () in
+  let add n = Js.Date.fromFloat (Js.Date.getTime now +. n *. 86400000.) in
+  let shift_month n =
+    let c = Js.Date.fromFloat (Js.Date.getTime now) in
+    ignore (Js.Date.setMonth c ~month:(Js.Date.getMonth c +. n));
+    c
+  in
+  let shift_year n =
+    let c = Js.Date.fromFloat (Js.Date.getTime now) in
+    ignore (Js.Date.setFullYear c ~year:(Js.Date.getFullYear c +. n));
+    c
+  in
+  match en with
+  | "Today" -> now
+  | "Tomorrow" -> add 1.
+  | "Yesterday" -> add (-1.)
+  | "Next week" -> add 7.
+  | "This week" -> now
+  | "Last week" -> add (-7.)
+  | "Next month" -> shift_month 1.
+  | "This month" -> now
+  | "Last month" -> shift_month (-1.)
+  | "Next year" -> shift_year 1.
+  | _ -> now
+
+let nlp_en_names =
+  [ "Today"; "Tomorrow"; "Yesterday"; "Next week"; "This week"
+  ; "Last week"; "Next month"; "This month"; "Last month"; "Next year" ]
+
+let nlp_i18n_key en =
+  "date.nlp/"
+  ^ String.concat "-"
+      (List.map String.lowercase_ascii (String.split_on_char ' ' en))
+
 let page_items_for t kind q =
   let act_of ~created title =
     match kind with
@@ -299,6 +353,21 @@ let page_items_for t kind q =
              (List.filter
                 (fun (ti, _) -> contains_ci ti q)
                 !(t.tag_titles)))
+    | Page_ref | Embed_ref ->
+        if q = "" then
+          List.map
+            (fun en ->
+              let jt = Dates.journal_title_of (nlp_date_of en) in
+              mk_item ~key:("nlp:" ^ en)
+                ~label:(U.t (nlp_i18n_key en)) ~icon:"calendar"
+                (match kind with
+                 | Embed_ref -> Embed jt
+                 | _ -> Emit ("[[" ^ jt ^ "]]")))
+            nlp_en_names
+        else
+          take 20
+            (List.map wrap
+               (List.filter (fun ti -> contains_ci ti q) !(t.titles)))
     | _ ->
         take 20
           (List.map wrap
@@ -503,6 +572,21 @@ let open_ac t kind editor =
     ; tpos = Dom_ext.selection_start editor - tlen
     ; tlen; items = []; chosen = 0; editor }
   in
+  (* cljs autopair: typing [[ inputs ]] immediately with the caret kept
+     inside the brackets; insert_text consumes the ghost pair on choice *)
+  (match kind with
+   | Page_ref ->
+       let v = Dom_ext.value editor in
+       let n = S.length v in
+       let pos = ac.tpos + tlen in
+       if not (pos + 1 < n && S.sub v pos 2 = "]]") then (
+         let v' = S.sub v 0 pos ^ "]]" ^ S.sub v pos (n - pos) in
+         Dom_ext.set_value editor v';
+         (match Editor_state.editing_uuid () with
+          | Some uuid -> Editor_actions.sync_buffer uuid v'
+          | None -> ());
+         Dom_ext.set_selection_range editor pos pos)
+   | _ -> ());
   (match kind with
    | Page_ref | Embed_ref -> load_titles t
    | Tag_search -> load_tag_titles t editor
@@ -572,6 +656,13 @@ let insert_text (ac : ac) text =
   let n = S.length v in
   let tpos = max 0 (min ac.tpos n) in
   let pos = max tpos (min (Dom_ext.selection_start el) n) in
+  (* consume the autopaired ]] sitting right after the caret *)
+  let pos =
+    if (ac.kind = Page_ref || ac.kind = Embed_ref)
+       && pos + 1 < n && S.sub v pos 2 = "]]"
+    then pos + 2
+    else pos
+  in
   let v' = S.sub v 0 tpos ^ text ^ S.sub v pos (n - pos) in
   Dom_ext.set_value el v';
   (match Editor_state.editing_uuid () with
@@ -621,6 +712,12 @@ let erase_trigger_text (ac : ac) =
   let n = S.length v in
   let tpos = max 0 (min ac.tpos n) in
   let pos = max tpos (min (Dom_ext.selection_start el) n) in
+  let pos =
+    if (ac.kind = Page_ref || ac.kind = Embed_ref)
+       && pos + 1 < n && S.sub v pos 2 = "]]"
+    then pos + 2
+    else pos
+  in
   let v' = S.sub v 0 tpos ^ S.sub v pos (n - pos) in
   Dom_ext.set_value el v';
   (match Editor_state.editing_uuid () with

@@ -277,7 +277,7 @@ let rec collect_tag_ids acc (b : Model.block) =
   List.fold_left collect_tag_ids (List.rev_append b.Model.block_tag_ids acc)
     b.block_children
 
-let tag_titles repo ids : (int * string * string) list Js.Promise.t =
+let tag_titles repo ids : (int * string * string * string) list Js.Promise.t =
   Runtime.invoke2 "thread-api/get-blocks" (Wire.String repo)
     (Wire.Array
        (List.map
@@ -308,7 +308,9 @@ let tag_titles repo ids : (int * string * string) list Js.Promise.t =
                       ( id, t
                       , (match Wire.get blk "db/ident" with
                          | Some (Wire.Keyword s) | Some (Wire.String s) -> s
-                         | _ -> "") )
+                         | _ -> "")
+                      , Option.value (Wire.map_get_uuid blk "block/uuid")
+                          ~default:"" )
                 | _ -> None)
               (Sdk_util.wire_elems w)))
 
@@ -330,7 +332,14 @@ let resolve_block_tags (blocks : Model.block list) : Model.block list Js.Promise
                        List.filter_map
                          (fun i ->
                            List.find_map
-                             (fun (i', t, _) -> if i' = i then Some t else None)
+                             (fun (i', t, _, _) -> if i' = i then Some t else None)
+                             titles)
+                         b.block_tag_ids
+                   ; block_tag_uuids =
+                       List.filter_map
+                         (fun i ->
+                           List.find_map
+                             (fun (i', _, _, u) -> if i' = i then Some u else None)
                              titles)
                          b.block_tag_ids
                    ; block_children = List.map fill b.block_children
@@ -368,7 +377,7 @@ let resolve_page_tags repo (page : Model.page) : Model.page Js.Promise.t =
                       { page with
                         Model.page_tags =
                           List.filter_map
-                            (fun (i, t, ident) ->
+                            (fun (i, t, ident, _) ->
                               if List.mem i ids
                                  && ident <> "logseq.class/Page"
                               then Some t

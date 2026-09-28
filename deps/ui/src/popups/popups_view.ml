@@ -390,6 +390,10 @@ let handle_contextmenu st (ev : Dom_ext.event) =
           | Some id ->
               Dom_ext.prevent_default ev;
               Dom_ext.stop_propagation ev;
+              (* cljs block-content contextmenu selects the block it
+                 opened on, unless it is already in a multi-selection *)
+              if not (Editor_state.is_selected id) then
+                Editor_actions.select_single id;
               S.open_cm st ~x:(Dom_ext.client_x ev)
                 ~y:(Dom_ext.client_y ev) ~block_id:id
                 ~multi:(List.length (Platform.selected_block_uuids ()) >= 2)

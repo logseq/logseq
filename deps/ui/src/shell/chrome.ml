@@ -57,12 +57,13 @@ let left_menu_button =
     ~icon:"menu-2" ~title:"Toggle left sidebar"
     ~on_click:(fun _ -> Runtime.send Action.Toggle_left_sidebar)
 
-(* cljs header.cljs: home button shows when route != home *)
+(* cljs header.cljs: home button shows when route != :home — the
+   all-journals list route still shows it *)
 let home_button (ms : Model.t Signal.signal) =
   dyn ~equal:(fun a b -> a = b)
     (fun (m : Model.t) ->
       match m.route with
-      | Model.Journals | Model.Home -> Logseq_dom.dom ~key:"home-off" []
+      | Model.Home -> Logseq_dom.dom ~key:"home-off" []
       | _ ->
           icon_btn ~key:"home-btn" ~id:"" ~cls:"" ~icon:"home" ~title:"Home"
             ~on_click:(fun _ ->
@@ -87,23 +88,14 @@ let header (ms : Model.t Signal.signal) =
         [ Logseq_dom.dom ~key:"head-crumb" ~style_class:"flex flex-1" []
         ; Logseq_dom.dom ~key:"head-acts" ~style_class:"flex items-center"
             [ home_button ms
-            ; (* cljs header.cljs hook-ui-items :toolbar →
-                 .toolbar-plugins-manager trigger (plugins dialog) *)
+            ; (* cljs header.cljs hook-ui-items :toolbar renders
+                 .ui-items-container always; the plugins-manager trigger
+                 only appears once a plugin is actually installed *)
               Logseq_dom.dom ~key:"ui-items"
                 ~style_class:"ui-items-container"
                 ~attrs:[ ("data-type", "toolbar") ]
                 [ Logseq_dom.dom ~key:"ui-items-wrap" ~style_class:"list-wrap"
-                    [ Logseq_dom.dom ~key:"pm"
-                        ~style_class:"toolbar-plugins-manager flex items-center"
-                        [ Logseq_dom.dom ~key:"pm-trigger" ~tag:"a"
-                            ~style_class:
-                              "flex relative toolbar-plugins-manager-trigger"
-                            ~events:"click"
-                            ~on_dom_event:(fun name _ ->
-                              if name = "click" then
-                                Sidebar_state.open_dialog "plugins")
-                            [ Logseq_dom.dom ~key:"pm-i" ~tag:"i"
-                                ~style_class:"ti ti-puzzle" [] ] ] ] ]
+                    [] ]
             ; dots_button; right_toggle_button ]
         ]
     ]
@@ -159,6 +151,13 @@ let main_content (ms : Model.t Signal.signal) =
           "scrollbar-spacing w-full flex justify-center flex-row outline-none relative"
         [ Logseq_dom.dom ~key:"main-inner"
             ~style_class:"cp__sidebar-main-content"
+            ~attrs_signal_v:
+              (Logseq_dom.attrs_signal ms (fun (m : Model.t) ->
+                   (* cljs container.cljs: data-is-full-width on all-pages/
+                      all-files/my-publishing routes lets the table span *)
+                   match m.route with
+                   | Model.All_pages -> [ ("data-is-full-width", "true") ]
+                   | _ -> []))
             [ dyn
                 ~equal:(fun (a : Model.t) (b : Model.t) ->
                   a.phase = b.phase
