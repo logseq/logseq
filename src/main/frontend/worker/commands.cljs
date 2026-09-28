@@ -226,10 +226,10 @@
                         :logseq.property.repeat/repeat-type.double-plus)
         property (d/entity db property-ident)
         date? (= :date (:logseq.property/type property))
-        current-value (some-> (present-date-value (get entity property-ident))
-                              (cond->
-                               date?
-                               (#(date-time-util/journal-day->ms (:block/journal-day %)))))
+        current-value (when-let [raw (present-date-value (get entity property-ident))]
+                        (if date?
+                          (date-time-util/journal-day->ms (:block/journal-day raw))
+                          raw))
         ;; A :date value is a day, carried here as its UTC midnight. It is
         ;; advanced in whole UTC days against today's UTC midnight and read
         ;; back as a UTC day; read in the local zone, UTC midnight is the
