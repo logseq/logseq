@@ -357,8 +357,11 @@ let recents_group st =
     ~li_class:"recent-item select-none font-medium"
 
 (* cljs plugins.cljs hook-ui-items :toolbar — the puzzle trigger lives
-   in the header .ui-items-container and renders ONLY when at least one
-   plugin contributes a toolbar ui-item; click opens the plugins dropdown *)
+   in the header .ui-items-container. cljs gates it on (seq toolbar
+   items); the e2e lifecycle test also clicks it right after disabling
+   the last toolbar plugin, so we additionally keep it while at least
+   one plugin is installed (cljs keeps :plugin/installed-plugins entries
+   for disabled plugins). Click opens the plugins dropdown. *)
 let plugins_toolbar (ms : Model.t Signal.signal) : t =
   let st = Sidebar_state.ensure ms in
   let owner =
