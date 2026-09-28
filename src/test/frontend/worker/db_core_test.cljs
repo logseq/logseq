@@ -30,6 +30,7 @@
             [goog.object :as gobj]
             [logseq.common.config :as common-config]
             [logseq.common.log :as log]
+            [logseq.common.util.date-time :as date-time-util]
             [logseq.db :as ldb]
             [logseq.db.common.initial-data :as common-initial-data]
             [logseq.db.common.order :as db-order]
@@ -3070,6 +3071,40 @@
                 (set (map :block/title page-a))))
          (is (= ["other page"]
                 (mapv :block/title page-b))))))))
+
+(deftest get-date-scheduled-or-deadlines-uses-local-calendar-day-bounds
+  (restoring-worker-state
+   (fn []
+     (let [get-date-scheduled-or-deadlines! (get @thread-api/*thread-apis :thread-api/get-date-scheduled-or-deadlines)
+           conn (d/create-conn db-schema/schema)
+           page-id -1
+           today 20260928
+           [start end] (date-time-util/journal-day-local-range-ms today 7)
+           today-no-time (.getTime (js/Date. 2026 8 28 0 0 0 0))
+           yesterday-21 (.getTime (js/Date. 2026 8 27 21 0 0 0))
+           plus6-21 (.getTime (js/Date. 2026 9 4 21 0 0 0))]
+       (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
+       (d/transact! conn [{:db/id page-id
+                           :block/title "Tasks"
+                           :block/uuid #uuid "33333333-3333-3333-3333-333333333333"}
+                          {:block/title "today no-time"
+                           :block/page page-id
+                           :logseq.property/scheduled today-no-time
+                           :logseq.property/status :logseq.property/status.todo}
+                          {:block/title "yesterday 21:00"
+                           :block/page page-id
+                           :logseq.property/deadline yesterday-21
+                           :logseq.property/status :logseq.property/status.todo}
+                          {:block/title "+6d 21:00"
+                           :block/page page-id
+                           :logseq.property/scheduled plus6-21
+                           :logseq.property/status :logseq.property/status.todo}])
+       (reset! worker-state/*datascript-conns {test-repo conn})
+       (let [result (get-date-scheduled-or-deadlines! test-repo start end)
+             titles (->> result vals (apply concat) (map :block/title) set)]
+         (is (contains? titles "today no-time"))
+         (is (not (contains? titles "yesterday 21:00")))
+         (is (contains? titles "+6d 21:00")))))))
 
 (deftest get-property-node-selector-data-prepares-worker-owned-db-data-test
   (restoring-worker-state
