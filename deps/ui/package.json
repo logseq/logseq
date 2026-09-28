@@ -3,6 +3,7 @@
   "private": true,
   "description": "Logseq web UI (LUI/OCaml via Melange).",
   "dependencies": {
+    "@tanstack/virtual-core": "3.17.11",
     "comlink": "^4.4.2"
   },
   "devDependencies": {

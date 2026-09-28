@@ -49,6 +49,7 @@ let parse_hash () : Model.route =
           | "all-pages" -> Model.All_pages
           | "all-graphs" -> Model.All_graphs
           | "graph" -> Model.Graph
+          | "settings" -> Model.Settings
           | "page" | "block" -> Model.Not_found p
           | _ -> Model.Not_found p))
 
@@ -99,6 +100,8 @@ let fetch_unlinked (p : Model.page) =
                      (Action.Unlinked_loaded (Decode.blocks_of_wire w)))))
   | None -> ()
 
+let fetch_unlinked_refs = Outliner_ops.fetch_unlinked_refs
+
 let load_journals () =
   Runtime.invoke2 "thread-api/get-latest-journals" (Wire.String (repo ()))
     (Wire.Int 40)
@@ -147,11 +150,17 @@ let load_page_ref ref_v ~missing =
          | Some p ->
              fetch_blocks p
              |> Js.Promise.then_ (fun p' ->
-                    if gen = !Runtime.load_gen && route_still_target missing then begin
-                      Runtime.send (Action.Page_loaded p');
-                      fetch_refs p'
-                    end;
-                    Js.Promise.resolve ())
+                    Outliner_ops.resolve_page_tags (repo ()) p'
+                    |> Js.Promise.then_ (fun p'' ->
+                           if
+                             gen = !Runtime.load_gen
+                             && route_still_target missing
+                           then begin
+                             Runtime.send (Action.Page_loaded p'');
+                             fetch_refs p'';
+                             fetch_unlinked_refs p''
+                           end;
+                           Js.Promise.resolve ()))
          | None ->
              if route_still_target missing then
                Runtime.send (Action.Navigate_to (Model.Not_found missing));
@@ -262,6 +271,7 @@ let load_block_zoom uuid =
                                             ; page_is_property = false
                                             ; page_icon = None
                                             ; page_journal_day = None
+                                            ; page_tags = b.Model.block_tags
                                             ; page_blocks = bs
                                             ; page_parents
                                             });
@@ -273,6 +283,7 @@ let load_block_zoom uuid =
                                             (String.length b.Model.block_title)
                                       | _ -> ());
                                      Js.Promise.resolve ())))
+
                 | _ ->
                     Runtime.send
                       (Action.Navigate_to (Model.Not_found uuid)))
@@ -314,6 +325,7 @@ let load_route (route : Model.route) =
       ignore (load_page_ref (Wire.String "Library") ~missing:"Library")
   | Model.Graph -> ignore (load_graph ())
   | Model.All_pages | Model.All_graphs | Model.Not_found _ -> ()
+  | Model.Settings -> ()
 
 let resolve () =
   let route = parse_hash () in
@@ -328,6 +340,9 @@ let resolve () =
          (cljs exits editing on navigation) *)
       Editor_actions.exit_edit ~select:false;
       Runtime.send (Action.Navigate_to route);
+      (* cljs settings-effect cleanup: data-settings-tab only while the
+         settings route/dialog is active *)
+      if route <> Model.Settings then Settings_state.deactivate ();
       load_route route;
       Runtime.flush ()
 

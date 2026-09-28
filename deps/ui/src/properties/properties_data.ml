@@ -195,33 +195,6 @@ let display_props ?(page_title = false) ?(tag_dialog = false)
         ]
     ]
 
-(* :thread-api/get-blocks [{id, opts:{render-data?}}] — returns the
-   block wire map carrying :block.temp/positioned-properties,
-   :block.temp/display-properties and :block.temp/reactions plus the
-   block's own property attrs. *)
-let block_render_data block_uuid =
-  invoke "get-blocks"
-    [ repo ()
-    ; W.Array
-        [ W.Map
-            [ (W.String "id", W.String block_uuid)
-            ; ( W.String "opts"
-              , W.Map [ (W.Keyword "render-data?", W.Bool true) ] ) ]
-        ] ]
-  |> Js.Promise.then_ (fun w ->
-         Js.Promise.resolve
-           (match elems w with
-            | [ pair ] -> (
-                match getf pair "block" with
-                | Some res -> res
-                | None -> (
-                    match elems pair with
-                    | [ _; res ] -> res
-                    | _ -> pair))
-            | _ -> W.Nil))
-  |> Js.Promise.then_ (fun w ->
-         Js.Promise.resolve w)
-
 (* positioned-rows block_wire position — synthesize display rows
    {property-id, property, value} for the idents the worker grouped
    under POSITION (its render_property_position gating already applied).
@@ -324,6 +297,29 @@ let entity ref_wire = invoke "entity" [ repo (); ref_wire ]
 let entity_by_uuid uuid = entity (uuid_ref uuid)
 
 let entity_by_title title = invoke "get-case-page" [ repo (); W.String title ]
+
+(* get-blocks {:render-data? true} -> block wire carrying
+   block.temp/positioned-properties *)
+let block_render_data uuid =
+  invoke "get-blocks"
+    [ repo ()
+    ; W.Array
+        [ W.Map
+            [ (W.String "id", W.Uuid uuid)
+            ; ( W.String "opts"
+              , W.Map [ (W.Keyword "render-data?", W.Bool true) ] )
+            ]
+        ]
+    ]
+  |> Js.Promise.then_ (fun w ->
+         Js.Promise.resolve
+           (match elems w with
+            | [ pair ] -> (
+                match getf pair "block" with
+                | Some res -> res
+                | None -> (
+                    match elems pair with [ _; res ] -> res | _ -> W.Nil))
+            | _ -> W.Nil))
 
 (* ---------- ops ---------- *)
 

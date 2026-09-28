@@ -103,6 +103,7 @@ let page_icon_picker (page : Model.page) (anchor : string) =
 
 let title_editor (page : Model.page) : t =
   let commit value =
+    let value = String.trim value in
     (match page.page_uuid with
      | Some u -> ignore (Page_ops.rename u value)
      | None -> ());
@@ -178,18 +179,35 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
         ]
     | _ -> []
   in
+  let tag_els =
+    match page.Model.page_tags with
+    | [] -> []
+    | tags ->
+        [ dom ~key:"pt-tags" ~style_class:"block-tags gap-1"
+            (List.mapi
+               (fun i tag ->
+                 dom ~key:("pt-tag-" ^ string_of_int i)
+                   ~style_class:"block-tag"
+                   [ dom ~key:("pt-ta-" ^ string_of_int i) ~tag:"a"
+                       ~style_class:"tag" ~text:tag []
+                   ])
+               tags)
+        ]
+  in
   let body =
-    if m.editing_title then [ title_editor page ]
-    else
-      (* cljs wraps the title in block-container -> .ls-block *)
-      [ box ~key:"pt-inner" ~style_class:"w-full relative"
-          [ dom ~key:"pt-block" ~style_class:"ls-block"
-              [ dom ~key:"pt-title" ~style_class:"block-title-wrap"
-                  ~attrs:[ ("id", "page-title-text") ]
-                  ~text:page.page_title []
-              ]
-          ]
-      ]
+    (* cljs wraps the title in block-container -> .ls-block; tags render
+       while editing too (sibling of the content wrapper) *)
+    [ box ~key:"pt-inner" ~style_class:"w-full relative"
+        [ dom ~key:"pt-block" ~style_class:"ls-block"
+            ((if m.editing_title then [ title_editor page ]
+              else
+                [ dom ~key:"pt-title" ~style_class:"block-title-wrap"
+                    ~attrs:[ ("id", "page-title-text") ]
+                    ~text:page.page_title []
+                ])
+            @ tag_els)
+        ]
+    ]
   in
   (* e2e selects [data-testid='page title'] -> mapped to #page-title *)
   dom ~key:"page-title" ~id:"page-title"
@@ -212,20 +230,40 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
                 || target = "page-title-text")
           then (
             Runtime.send Action.Title_edit_start;
-            Runtime.flush ())
+            Runtime.flush ();
+            (* autofocus doesn't re-fire on remount — focus explicitly so
+               Enter/Escape reach the textarea *)
+            match Dom_ext.doc_query_selector ".ls-page-title textarea" with
+            | Some el ->
+                Dom_ext.focus el;
+                let n = String.length (Dom_ext.value el) in
+                Dom_ext.set_selection_range el n n
+            | None -> ())
       | _ -> open_menu name payload)
     (icon @ body @ actions)
 
-let blocks_inner ?puuid (blocks : Model.block list) : t =
+let blocks_inner ?puuid ?(virtualize = false) (blocks : Model.block list)
+    : t =
   let inner_attrs =
     match puuid with
     | Some u -> [ ("data-pu", u) ]
     | None -> []
   in
+  let items = Array.of_list blocks in
+  let body =
+    if Virt_list.enabled ~virtualize (Array.length items) then
+      (* cljs parity: .blocks-list-wrap carries data-virtuoso-scroller;
+         rows are .ls-virt-row[data-index] > .ls-block *)
+      [ dom ~key:"blw-virt" ~style_class:"blocks-list-wrap"
+          ~attrs:[ ("data-level", "0"); ("data-virtuoso-scroller", "true") ]
+          [ Virt_list.list ~key_of:Tree.block_key
+              ~estimate_size:(fun _ -> 32.) ~render:Tree.block_row items ]
+      ]
+    else List.map Tree.block_row blocks
+  in
   dom ~key:"page-blocks" ~style_class:"ls-page-blocks"
     [ dom ~key:"page-blocks-inner" ~style_class:"page-blocks-inner relative"
-        ~attrs:inner_attrs
-        (List.map Tree.block_row blocks)
+        ~attrs:inner_attrs body
     ]
 
 (* --- references --------------------------------------------------- *)
@@ -234,11 +272,12 @@ let blocks_inner ?puuid (blocks : Model.block list) : t =
    linked-refs (.references) and unlinked-refs bodies *)
 let ref_item (b : Model.block) : t =
   dom ~style_class:"references-item"
-    [ (if b.Model.block_page_name = "" then box []
-       else
-         dom ~tag:"a" ~style_class:"references-item-page"
-           ~attrs:[ ("data-ref", b.Model.block_page_name) ]
-           ~text:b.Model.block_page_name [])
+    [ (match b.Model.block_page_name with
+       | None -> box []
+       | Some name ->
+           dom ~tag:"a" ~style_class:"references-item-page"
+             ~attrs:[ ("data-ref", name) ]
+             ~text:name [])
     ; Tree.block_row b
     ]
 
@@ -272,26 +311,60 @@ let unlinked_search_input () : t =
         []
     ]
 
+let contains_ci ~needle hay =
+  let n = String.lowercase_ascii needle in
+  let h = String.lowercase_ascii hay in
+  let nl = String.length n and hl = String.length h in
+  let rec go i =
+    i + nl <= hl && (String.sub h i nl = n || go (i + 1))
+  in
+  nl > 0 && go 0
+
+let unlinked_row (b : Model.block) : t =
+  let key =
+    match b.block_uuid, b.block_db_id with
+    | Some u, _ -> u
+    | None, Some id -> "id-" ^ string_of_int id
+    | None, None -> b.block_title
+  in
+  dom ~key:("ur-" ^ key) ~style_class:"unlinked-row"
+    [ (match b.block_page_name with
+       | Some name ->
+           dom ~key:("urp-" ^ key) ~tag:"a"
+             ~style_class:"unlinked-page-name"
+             ~attrs:[ ("href", "#/page/" ^ name) ]
+             ~text:name []
+       | None -> box ~key:("urp-" ^ key) [])
+    ; Tree.block_row b
+    ]
+
 let unlinked_references_view (m : Model.t) : t =
-  (* collapsed by default; the caret (.ls-foldable-title-control, like
-     cljs ui/foldable) toggles ls-foldable-content.is-collapsed *)
+  match m.unlinked_refs with
+  | [] -> box ~key:"urefs-empty" []
+  | refs ->
+  let rows =
+    let q = String.trim m.unlinked_query in
+    let filtered =
+      if q = "" then refs
+      else
+        List.filter
+          (fun (b : Model.block) ->
+            contains_ci ~needle:q b.block_title
+            ||
+            (match b.block_page_name with
+             | Some p -> contains_ci ~needle:q p
+             | None -> false))
+          refs
+    in
+    List.map unlinked_row filtered
+  in
   let body =
-    dom ~key:"urefs-content"
-      ~style_class:
-        ("ls-foldable-content"
-         ^ if m.unlinked_open then "" else " is-collapsed")
-      [ dom ~key:"urefs-inner" ~style_class:"ls-foldable-content-inner"
-          [ dom ~key:"urefs-body" ~style_class:"ls-view-body"
-              (let q = Sdk_util.str_lower m.Model.unlinked_query in
-               List.map ref_item
-                 (List.filter
-                    (fun (b : Model.block) ->
-                      q = ""
-                      || Sdk_util.find_from
-                           (Sdk_util.str_lower b.block_title) 0 q
-                         >= 0)
-                    m.Model.unlinked_blocks)) ]
-      ]
+    dom ~key:"urefs-content" ~style_class:"ls-foldable-content"
+      ~attrs:
+        [ ( "aria-hidden"
+          , if m.unlinked_open then "false" else "true" )
+        ]
+      [ dom ~key:"urefs-body" ~style_class:"ls-view-body" rows ]
   in
   dom ~key:"urefs" ~style_class:"unlinked-references mt-6"
     [ dom ~key:"urefs-fold"
@@ -340,10 +413,19 @@ let journal_item (p : Model.page) : t =
     ]
 
 let journals_view (js : Model.page list) : t =
+  let items = Array.of_list js in
   dom ~key:"journals" ~id:"journals" ~style_class:"cp__journals"
     (match js with
      | [] -> [ dom ~key:"jp" ~style_class:"journal-item-placeholder" [] ]
-     | _ -> List.map journal_item js)
+     | _ ->
+         if Virt_list.force_virtualized () then
+           [ Virt_list.list
+               ~list_attrs:[ ("data-virtuoso-scroller", "true") ]
+               ~estimate_size:(fun _ -> 640.)
+               ~key_of:(fun (p : Model.page) ->
+                 Option.value p.page_uuid ~default:p.page_title)
+               ~render:journal_item items ]
+         else List.map journal_item js)
 
 let library_view (m : Model.t) (page : Model.page) : t =
   (* child pages render title rows only, no block bodies *)
@@ -386,7 +468,8 @@ let page_view (m : Model.t) (page : Model.page) : t =
            | Model.Block_zoom _ -> zoom_breadcrumbs page
            | _ -> breadcrumbs page.page_title)
         ; page_title_el m page
-        ; blocks_inner ?puuid:page.page_uuid page.page_blocks
+        ; blocks_inner ?puuid:page.page_uuid ~virtualize:true
+            page.page_blocks
         ; references_view m.page_refs
         ; unlinked_references_view m
         ]
@@ -410,6 +493,7 @@ let page_view_of_model (m : Model.t) : t =
   | Model.Ready, Model.Graph -> Graph_view.view m
   | Model.Ready, (Model.All_graphs | Model.All_pages) ->
       box ~key:"graphs-view" [] (* graphs area renders via its own view *)
+  | Model.Ready, Model.Settings -> Settings_page.view m
   | Model.Ready, _ -> (
       match m.route_page with
       | Some page -> page_view m page

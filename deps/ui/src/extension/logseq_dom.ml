@@ -25,7 +25,7 @@ let tags =
   ; "strong"; "em"; "code"; "pre"; "label"; "form"; "select"; "option"
   ; "video"; "audio"; "iframe"; "small"; "kbd"; "table"; "thead"; "tbody"
   ; "tr"; "td"; "th"; "br"; "hr"; "canvas"; "svg"; "path"; "article"
-  ; "aside"; "footer"; "details"; "summary"; "u"; "mark"; "b"; "i"
+  ; "aside"; "footer"; "details"; "summary"; "u"; "mark"; "b"; "i"; "sup"
   ; "em-emoji" ]
 
 let identifier tag = "logseq-" ^ tag

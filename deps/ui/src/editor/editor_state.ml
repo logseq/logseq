@@ -30,7 +30,7 @@ let st : t Signal.state option ref = ref None
 let pending_focus : (string * int) option ref = ref None
 
 (* structured block clipboard (titles + hierarchy), set by copy/cut *)
-let clipboard : string list ref = ref []
+let clipboard : Model.block list ref = ref []
 
 (* state transforms deferred until the first block_row mounts the state —
    an empty page mounts no rows, so click-to-add on .block-add-button must
@@ -73,17 +73,23 @@ let set f =
 (* updates with no visual dependency — folded into the next flush *)
 let set_silent f = Signal.update (state ()) f
 
-let editing () = (value ()).editing
+(* reads fall back to `initial` before the first editor mounts — e.g. on
+   an empty page only the title editor exists, but renderers still query
+   selection/editing state *)
+let read () =
+  match !st with Some s -> Signal.get_state s | None -> initial
+
+let editing () = (read ()).editing
 
 let editing_uuid () =
   match editing () with Some e -> Some e.uuid | None -> None
 
 let is_editing uuid = editing_uuid () = Some uuid
-let selected () = (value ()).selected
+let selected () = (read ()).selected
 let is_selected uuid = String_set.mem uuid (selected ())
-let collapsed () = (value ()).collapsed
+let collapsed () = (read ()).collapsed
 let is_collapsed uuid = String_set.mem uuid (collapsed ())
-let anchor () = (value ()).anchor
+let anchor () = (read ()).anchor
 let selection_active () = not (String_set.is_empty (selected ()))
 
 (* -- model helpers over !Runtime.current_page -- *)

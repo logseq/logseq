@@ -237,16 +237,56 @@ let render_panel ctx ~owner_is_tag ~owner_title ~page_area ~show_hidden
         Properties_dialog.open_for_block ctx.block_uuid);
     el_append_child panel wrap)
 
-let render_area ?(left_host = None) ctx ~owner_is_tag ~owner_title
-    ~page_area area_el =
+(* block.temp/positioned-properties on the get-blocks wire:
+   {position -> [display-property-map]} — cljs reads the same key in
+   block-positioned-properties. Values come from the block's own attrs. *)
+let positioned_rows block_w position =
+  match W.get block_w "block.temp/positioned-properties" with
+  | Some m -> (
+      match W.get m position with
+      | Some props ->
+          List.filter_map
+            (fun p ->
+              match D.getk p "db/ident" with
+              | Some ident when ident <> "logseq.property/icon" ->
+                  Some
+                    (W.Map
+                       [ (W.Keyword "property-id", W.Keyword ident)
+                       ; (W.Keyword "property", p)
+                       ; ( W.Keyword "value"
+                         , Option.value ~default:W.Nil
+                             (W.get block_w ident) )
+                       ])
+              | _ -> None)
+            (D.elems props)
+      | None -> [])
+  | None -> []
+
+let render_area ?(left_host = None) (ctx : V.ctx) ~owner_is_tag
+    ~owner_title ~page_area area_el =
   el_clear area_el;
   let panel = mk ~cls:"properties-panel" "div" in
   el_append_child area_el panel;
-  D.display_props ~page_title:page_area ~tag_dialog:false
-    ~show_hidden:!S.show_hidden (D.uuid_ref ctx.block_uuid)
-  |> Js.Promise.then_ (fun wire ->
+  let display =
+    D.display_props ~page_title:page_area ~tag_dialog:false
+      ~show_hidden:!S.show_hidden (D.uuid_ref ctx.block_uuid)
+  in
+  let block_w =
+    match left_host with
+    | Some _ -> D.block_render_data ctx.block_uuid
+    | None -> Js.Promise.resolve W.Nil
+  in
+  Js.Promise.all2 (display, block_w)
+  |> Js.Promise.then_ (fun (wire, block_w) ->
          let rows, hidden = D.split_display wire in
-         let left_rows, below_rows, panel_rows = partition_rows rows in
+         let left_rows, below_rows, panel_rows =
+           match left_host with
+           | Some _ ->
+               ( positioned_rows block_w "block-left"
+               , positioned_rows block_w "block-below"
+               , rows )
+           | None -> partition_rows rows
+         in
          (match left_host with
           | Some host ->
               render_left ctx ~owner_is_tag ~owner_title host left_rows
