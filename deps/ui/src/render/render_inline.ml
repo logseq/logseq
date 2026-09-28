@@ -45,6 +45,44 @@ let page_ref ?(tag = false) ?label name =
       ~attrs:[ ("data-ref", String.trim name) ]
       [ bracket "[["; link; bracket "]]" ]
 
+(* [[uuid]] / #[[uuid]] — titles are stored in id-ref form (block_parse);
+   resolve the entity title lazily and render the same DOM as page_ref:
+   span.page-reference[data-ref=<raw uuid>] > brackets + preview-ref-link +
+   a.page-ref[data-ref=<resolved name>][data-uuid=<uuid>] *)
+let page_ref_uuid ?(tag = false) uuid : t =
+ fun context parent ->
+  let st = Signal.state context.Lui_ui.ui_scheduler "" in
+  Render_state.with_repo (fun repo ->
+      Runtime.invoke3 "thread-api/pull" (Wire.String repo)
+        (Wire.String "[:block/title]")
+        (Wire.Array [ Wire.Keyword "block/uuid"; Wire.Uuid uuid ])
+      |> Js.Promise.then_ (fun w ->
+             (match Wire.map_get_string w "block/title" with
+              | Some t when String.trim t <> "" -> Runtime.signal_set st t
+              | _ -> ());
+             Js.Promise.resolve ())
+      |> ignore);
+  let link =
+    D.el ~tag:"a"
+      ~style_class:(if tag then "relative tag" else "relative page-ref")
+      ~attrs:
+        [ ("tabindex", "0"); ("draggable", "true"); ("data-uuid", uuid) ]
+      ~attrs_signal_v:
+        (Logseq_dom.attrs_signal (Signal.value st) (fun n ->
+             [ ("data-ref", String.lowercase_ascii n) ]))
+      [ D.el ~tag:"span"
+          ~text_signal:
+            (D.text_of_class_signal (Signal.value st) (fun n ->
+                 if tag then "#" ^ n else n))
+          [] ]
+  in
+  (if tag then preview_link link
+   else
+     D.el ~tag:"span" ~style_class:"page-reference"
+       ~attrs:[ ("data-ref", uuid) ]
+       [ bracket "[["; preview_link link; bracket "]]" ])
+    context parent
+
 (* ((uuid)) -> resolved block title via thread-api/pull *)
 let block_ref_anchor uuid : t =
  fun context parent ->
@@ -277,7 +315,11 @@ and try_bracket s i =
   if starts_at s i "[[" then
     match find_sub s (i + 2) "]]" with
     | j when j > i + 2 ->
-        Some (page_ref (String.sub s (i + 2) (j - i - 2)), j + 2 - i)
+        let inner = String.sub s (i + 2) (j - i - 2) in
+        let el =
+          if uuid_shaped inner then page_ref_uuid inner else page_ref inner
+        in
+        Some (el, j + 2 - i)
     | _ -> None
   else
     match find_sub s (i + 1) "](" with
@@ -295,7 +337,12 @@ and try_hash s i =
   if starts_at s i "#[[" then
     match find_sub s (i + 3) "]]" with
     | j when j > i + 3 ->
-        Some (page_ref ~tag:true (String.sub s (i + 3) (j - i - 3)), j + 2 - i)
+        let inner = String.sub s (i + 3) (j - i - 3) in
+        let el =
+          if uuid_shaped inner then page_ref_uuid ~tag:true inner
+          else page_ref ~tag:true inner
+        in
+        Some (el, j + 2 - i)
     | _ -> None
   else
     let n = String.length s in

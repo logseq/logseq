@@ -39,12 +39,13 @@ let parse_hash () : Model.route =
           | "journals" -> Model.Journals
           | "library" -> Model.Library
           | "all-pages" -> Model.All_pages
+          | "all-journals" -> Model.Journals
           | "all-graphs" -> Model.All_graphs
           | "graph" -> Model.Graph
           | _ -> Model.Not_found p)
       | None -> (
           match p with
-          | "journals" -> Model.Journals
+          | "journals" | "all-journals" -> Model.Journals
           | "library" -> Model.Library
           | "all-pages" -> Model.All_pages
           | "all-graphs" -> Model.All_graphs

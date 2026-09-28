@@ -297,23 +297,25 @@ let unlinked_references_view (m : Model.t) : t =
 
 (* --- route views -------------------------------------------------- *)
 
-let journal_item (p : Model.page) : t =
+let journal_item (m : Model.t) (p : Model.page) : t =
   let key = Option.value p.page_uuid ~default:p.page_title in
-  dom ~key:("ji-" ^ key) ~style_class:"journal-item"
-    [ dom ~key:("jiw-" ^ key) ~style_class:"cp__page-inner-wrap"
-        [ dom ~key:("jit-" ^ key) ~style_class:"ls-page-title title"
-            [ dom ~key:("jitt-" ^ key) ~tag:"a"
-                ~style_class:"block-title-wrap"
-                ~attrs:[ ("href", "#/page/" ^ key) ]
-                ~text:p.page_title []
+  (* cljs journal-item > page-inner: .cp__page-inner-wrap.is-journals
+     containing the same editable db-page-title row as a page *)
+  dom ~key:("ji-" ^ key) ~style_class:"journal-item content relative"
+    [ dom ~key:("jiw-" ^ key)
+        ~style_class:"flex-1 page relative cp__page-inner-wrap is-journals"
+        [ dom ~key:("jip-" ^ key)
+            ~style_class:"relative grid gap-4 sm:gap-8 page-inner mb-16"
+            [ dom ~key:("jit-" ^ key) ~style_class:"flex flex-row space-between"
+                [ page_title_el m p ]
+            ; blocks_inner ?puuid:p.page_uuid p.page_blocks
             ]
-        ; blocks_inner ?puuid:p.page_uuid p.page_blocks
         ]
     ]
 
-let journals_view (js : Model.page list) : t =
+let journals_view (m : Model.t) (js : Model.page list) : t =
   let items = Array.of_list js in
-  dom ~key:"journals" ~id:"journals" ~style_class:"cp__journals"
+  dom ~key:"journals" ~id:"journals" ~style_class:"cp__journals h-full"
     (match js with
      | [] -> [ dom ~key:"jp" ~style_class:"journal-item-placeholder" [] ]
      | _ ->
@@ -323,8 +325,8 @@ let journals_view (js : Model.page list) : t =
                ~estimate_size:(fun _ -> 640.)
                ~key_of:(fun (p : Model.page) ->
                  Option.value p.page_uuid ~default:p.page_title)
-               ~render:journal_item items ]
-         else List.map journal_item js)
+               ~render:(journal_item m) items ]
+         else List.map (journal_item m) js)
 
 let not_found_view name : t =
   dom ~key:"not-found" ~style_class:"page"
@@ -405,7 +407,7 @@ let library_view (m : Model.t) (page : Model.page) : t =
 
 let page_view_of_model (m : Model.t) : t =
   match m.phase, m.route with
-  | Model.Ready, Model.Journals -> journals_view m.journals
+  | Model.Ready, Model.Journals -> journals_view m m.journals
   | Model.Ready, Model.Library -> (
       match m.route_page with
       | Some p -> library_view m p

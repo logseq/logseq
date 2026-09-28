@@ -33,7 +33,10 @@ let block_map ?title ?(page = false) uuid =
   Wire.Map
     ([ str "block/uuid" (Wire.Uuid uuid) ]
     @ (match title with
-      | Some t -> [ str "block/title" (Wire.String t) ]
+      | Some t ->
+          List.map
+            (fun (k, v) -> (Wire.String k, v))
+            (Block_parse.title_fields t)
       | None -> [])
     @
     if page then
@@ -58,7 +61,16 @@ let op_opts name = Wire.Map [ kw "outliner-op" (Wire.Keyword name) ]
 
 (* cljs save-block-aux! trims the value before persisting *)
 let save_block uuid title =
-  op "save-block" [ block_map ~title:(String.trim title) uuid; Wire.Map [] ]
+  (* cljs save-block-aux! runs wrap-parse-block: title -> parsed
+     refs/tags + id-ref rewrite *)
+  op "save-block"
+    [ Wire.Map
+        (str "block/uuid" (Wire.Uuid uuid)
+         :: List.map
+              (fun (k, v) -> (Wire.String k, v))
+              (Block_parse.title_fields (String.trim title)))
+    ; Wire.Map []
+    ]
 
 let insert_blocks blocks target_uuid ~sibling =
   op "insert-blocks"
@@ -91,9 +103,11 @@ let paste_block_maps (trees : Model.block list) =
         in
         let m =
           Wire.Map
-            ([ str "block/uuid" (Wire.Uuid u)
-             ; str "block/title" (Wire.String (String.trim b.Model.block_title))
-             ; str "block/level" (Wire.Int level) ]
+            (str "block/uuid" (Wire.Uuid u)
+             :: List.map
+                  (fun (k, v) -> (Wire.String k, v))
+                  (Block_parse.title_fields (String.trim b.Model.block_title))
+            @ [ str "block/level" (Wire.Int level) ]
             @ parent_kv)
         in
         let acc = m :: acc in
@@ -422,6 +436,73 @@ let apply_and_refresh ?opts ops =
   apply ?opts ops
   |> Js.Promise.then_ (fun () -> refresh_page ())
 
+(* [[uuid]] / #[[uuid]] -> [[title]] / #title — the cljs
+   id-ref->title-ref pass the edit buffer gets when a block opens.
+   Resolves each uuid via thread-api/pull; unresolvable uuids stay
+   verbatim. *)
+let title_for_edit (title : string) : string Js.Promise.t =
+  let n = String.length title in
+  (* collect (start, end_excl, has_hash, uuid) tokens *)
+  let toks = ref [] in
+  let rec scan i =
+    if i + 3 >= n then ()
+    else if
+      title.[i] = '[' && title.[i + 1] = '['
+      && i + 40 <= n
+      && Block_parse.uuid_shaped (String.sub title (i + 2) 36)
+      && title.[i + 38] = ']' && title.[i + 39] = ']'
+    then begin
+      let has_hash = i > 0 && title.[i - 1] = '#' in
+      toks := (i, i + 40, has_hash, String.sub title (i + 2) 36) :: !toks;
+      scan (i + 40)
+    end
+    else scan (i + 1)
+  in
+  scan 0;
+  let toks = List.rev !toks in
+  match toks with
+  | [] -> Js.Promise.resolve title
+  | _ -> (
+      match !Runtime.current_repo with
+      | None -> Js.Promise.resolve title
+      | Some repo ->
+          let uuids = List.map (fun (_, _, _, u) -> u) toks in
+          Js.Promise.all
+            (Array.of_list
+               (List.map
+                  (fun u ->
+                 Runtime.invoke3 "thread-api/pull" (Wire.String repo)
+                   (Wire.String "[:block/title]")
+                   (Wire.Array [ Wire.Keyword "block/uuid"; Wire.Uuid u ])
+                 |> Js.Promise.then_ (fun w ->
+                        Js.Promise.resolve
+                          (match Wire.map_get_string w "block/title" with
+                           | Some t when String.trim t <> "" -> Some t
+                           | _ -> None)))
+                  uuids))
+          |> Js.Promise.then_ (fun names ->
+                 let tbl = Hashtbl.create 8 in
+                 List.iter2
+                   (fun u n ->
+                     match n with Some t -> Hashtbl.replace tbl u t | None -> ())
+                   uuids
+                   (Array.to_list names);
+                 let b = Buffer.create n in
+                 let cursor = ref 0 in
+                 List.iter
+                   (fun (i, e, has_hash, u) ->
+                     match Hashtbl.find_opt tbl u with
+                     | None -> ()
+                     | Some t ->
+                         Buffer.add_substring b title !cursor
+                           ((if has_hash then i - 1 else i) - !cursor);
+                         Buffer.add_string b
+                           (if has_hash then "#" ^ t else "[[" ^ t ^ "]]");
+                         cursor := e)
+                   toks;
+                 Buffer.add_substring b title !cursor (n - !cursor);
+                 Js.Promise.resolve (Buffer.contents b)))
+
 (* undo/redo writes datoms straight into the db — resync the open
    editor's buffer so a stale textarea does not mask the restored title *)
 let resync_open_editor () =
@@ -431,16 +512,23 @@ let resync_open_editor () =
       match S.find e.uuid with
       | Some b ->
           let title = String.trim b.Model.block_title in
-          if e.S.buffer <> title then begin
-            S.set_silent (fun st ->
-                match st.S.editing with
-                | Some e' when e'.uuid = e.uuid ->
-                    { st with S.editing = Some { e' with S.buffer = title } }
-                | _ -> st);
-            match Editor_dom.textarea_of e.uuid with
-            | Some el -> Editor_dom.el_set_value el title
-            | None -> ()
-          end
+          ignore
+            (title_for_edit title
+             |> Js.Promise.then_ (fun title ->
+                    if e.S.buffer <> title then begin
+                      S.set_silent (fun st ->
+                          match st.S.editing with
+                          | Some e' when e'.uuid = e.uuid ->
+                              { st with
+                                S.editing =
+                                  Some { e' with S.buffer = title }
+                              }
+                          | _ -> st);
+                      match Editor_dom.textarea_of e.uuid with
+                      | Some el -> Editor_dom.el_set_value el title
+                      | None -> ()
+                    end;
+                    Js.Promise.resolve ()))
       | None -> S.set_silent (fun st -> { st with S.editing = None }))
 
 let undo () =

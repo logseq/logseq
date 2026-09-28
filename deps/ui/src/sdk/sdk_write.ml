@@ -113,13 +113,14 @@ let ensure_property_ops props =
 
 let new_block_map content custom_uuid =
   Wire.Map
-    [ (Wire.String "block/title", Wire.String content)
-    ; ( Wire.String "block/uuid"
-      , Wire.Uuid
-          (match custom_uuid with
-           | Some u -> u
-           | None -> Platform.random_uuid ()))
-    ]
+    (( Wire.String "block/uuid"
+     , Wire.Uuid
+         (match custom_uuid with
+          | Some u -> u
+          | None -> Platform.random_uuid ()))
+    :: List.map
+         (fun (k, v) -> (Wire.String k, v))
+         (Block_parse.title_fields content))
 
 let insert_block a b c _d =
   match arg_string a, arg_string b with
@@ -223,9 +224,11 @@ let rec flatten_batch level parent_uuid acc (w : Wire.t) =
       in
       let flat =
         Wire.Map
-          ([ (Wire.String "block/title", Wire.String content)
-           ; (Wire.String "block/uuid", Wire.Uuid uuid)
-           ; (Wire.String "block/level", Wire.Int level) ]
+          ((Wire.String "block/uuid", Wire.Uuid uuid)
+           :: List.map
+                (fun (k, v) -> (Wire.String k, v))
+                (Block_parse.title_fields content)
+          @ [ (Wire.String "block/level", Wire.Int level) ]
           @ parent_kv)
       in
       let acc = (uuid, flat, props) :: acc in
@@ -346,9 +349,10 @@ let update_block a b _c _d =
              | Some uuid ->
                  apply_op "save-block"
                    [ Wire.Map
-                       [ (Wire.String "block/uuid", Wire.Uuid uuid)
-                       ; (Wire.String "block/title", Wire.String content)
-                       ]
+                       ((Wire.String "block/uuid", Wire.Uuid uuid)
+                        :: List.map
+                             (fun (k, v) -> (Wire.String k, v))
+                             (Block_parse.title_fields content))
                    ; Wire.Map []
                    ]
                  |> Js.Promise.then_ (fun _ -> resolved_nil))

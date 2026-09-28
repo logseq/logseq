@@ -112,7 +112,6 @@ let ac_inner (st : S.t) : t =
   in
   Logseq_dom.dom ~key:"ac-inner" ~id:"ui__ac-inner"
     ~style_class:"hide-scrollbar"
-    ~attrs:[ ("style", "max-height: 290px") ]
     [ keyed ~source:items_sig ~key:(fun (it : S.ac_item) -> it.S.ai_key)
         ~cmp:Stdlib.compare
         ~mount:(fun item_sig ->
