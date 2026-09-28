@@ -276,3 +276,38 @@ sorting, view tabs, selection bar, export EDN) and the query surface of
   `.editor-wrapper textarea` timeout). Views behaviors were verified via
   Playwright probes driving `LogseqDbWorker.invoke` directly (see
   worker-call contract in e2e-contract.md §7).
+
+## tag-basic-test (page-title tagging)
+
+- **Editor_state reads throw when unmounted**: `Editor_state.editing_uuid ()`
+  etc. raised `Failure "editor state not mounted"` on pages with no block
+  editor (empty page, title-only editing). Popups calling these accessors on
+  `#`-tag commit died synchronously. Fix: `read ()` falls back to `initial`.
+  This is a recurring hazard — any read of editor state must not assume a
+  mounted block editor. *LUI-level candidate*: keep the state signal always
+  mounted instead of per-block mount.
+- **`block/tags` wire shape**: `get-case-page` returns it as a `Set` of plain
+  `Int` entity ids — not `{:db/id}` lookup-ref stubs like `entity_map_wire`
+  emits elsewhere. `db/ident` decodes as `Wire.Keyword`, not `Wire.String`.
+  Decoders must accept both or we silently drop data (chip never rendered).
+- **Built-in Page tag must be filtered**: every page carries
+  `logseq.class/Page` in `block/tags`; cljs never renders it as a chip.
+- **`save-block` rejects page entities**: title edits must use
+  `set-block-property`/`rename-page` paths only.
+- **`ls:editor-insert` has no handler for the title textarea**: `emit`
+  dispatched the event but only block editors listen — the `" #tag"` token
+  stayed in the buffer and the following commit renamed the page to
+  `title #tag` (worker validation rejected it). Fix: when `ac.editor` is
+  inside `.ls-page-title`, `emit` splices the value directly. Suggestion:
+  generalize editor targets behind a shared `editor-surface` contract so
+  emit/insert works for any textarea, not only `edit-block-*`.
+- **Commit must trim**: emit leaves the leading space (`"ttd5 "`); cljs trims
+  before rename. An untrimmed title reaches worker `save-block` on the page
+  entity and corrupts the lookup (page became unresolvable).
+- **Stale-node dispatch crash**: a capture-phase handler that re-renders can
+  unmount the event target before its own bubbling listener runs; LUI
+  `dispatch` raised `unknown extension node`. Fixed in LUI
+  (`devin/web-stale-node-ops`): events on unmounted nodes are ignored.
+- **Remounted textarea loses focus**: `autofocus` doesn't re-fire reliably on
+  remount; the title editor now focuses explicitly after `Title_edit_start`
+  and places the caret at the end.

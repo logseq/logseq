@@ -80,6 +80,7 @@ let page_of_summary (w : Wire.t) : Model.page option =
             (match Wire.map_get_int w "journal-day" with
              | Some d -> Some d
              | None -> Wire.map_get_int w "block/journal-day")
+        ; page_tags = []
         ; page_blocks = []
         }
   | _ -> None

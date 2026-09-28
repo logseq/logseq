@@ -304,7 +304,7 @@ let toolbar_row st =
           if name = "click" then Sidebar_state.open_dialog "plugins")
         [ icon "apps" ]
     ; dom ~key:"dots-btn" ~tag:"button"
-        ~style_class:"button toolbar-dots-btn"
+        ~style_class:"button sidebar-dots-btn"
         ~attrs:[ ("title", t "More") ]
         ~events:"click"
         ~on_dom_event:(fun name _ ->

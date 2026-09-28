@@ -54,6 +54,7 @@ let open_menu name payload =
 
 let title_editor (page : Model.page) : t =
   let commit value =
+    let value = String.trim value in
     (match page.page_uuid with
      | Some u -> ignore (Page_ops.rename u value)
      | None -> ());
@@ -91,18 +92,35 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
       ]
     else []
   in
+  let tag_els =
+    match page.Model.page_tags with
+    | [] -> []
+    | tags ->
+        [ dom ~key:"pt-tags" ~style_class:"block-tags gap-1"
+            (List.mapi
+               (fun i tag ->
+                 dom ~key:("pt-tag-" ^ string_of_int i)
+                   ~style_class:"block-tag"
+                   [ dom ~key:("pt-ta-" ^ string_of_int i) ~tag:"a"
+                       ~style_class:"tag" ~text:tag []
+                   ])
+               tags)
+        ]
+  in
   let body =
-    if m.editing_title then [ title_editor page ]
-    else
-      (* cljs wraps the title in block-container -> .ls-block *)
-      [ box ~key:"pt-inner" ~style_class:"w-full relative"
-          [ dom ~key:"pt-block" ~style_class:"ls-block"
-              [ dom ~key:"pt-title" ~style_class:"block-title-wrap"
-                  ~attrs:[ ("id", "page-title-text") ]
-                  ~text:page.page_title []
-              ]
-          ]
-      ]
+    (* cljs wraps the title in block-container -> .ls-block; tags render
+       while editing too (sibling of the content wrapper) *)
+    [ box ~key:"pt-inner" ~style_class:"w-full relative"
+        [ dom ~key:"pt-block" ~style_class:"ls-block"
+            ((if m.editing_title then [ title_editor page ]
+              else
+                [ dom ~key:"pt-title" ~style_class:"block-title-wrap"
+                    ~attrs:[ ("id", "page-title-text") ]
+                    ~text:page.page_title []
+                ])
+            @ tag_els)
+        ]
+    ]
   in
   (* e2e selects [data-testid='page title'] -> mapped to #page-title *)
   dom ~key:"page-title" ~id:"page-title"
@@ -114,7 +132,15 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
       | "click" ->
           if page.page_uuid <> None then (
             Runtime.send Action.Title_edit_start;
-            Runtime.flush ())
+            Runtime.flush ();
+            (* autofocus doesn't re-fire on remount — focus explicitly so
+               Enter/Escape reach the textarea *)
+            match Dom_ext.doc_query_selector ".ls-page-title textarea" with
+            | Some el ->
+                Dom_ext.focus el;
+                let n = String.length (Dom_ext.value el) in
+                Dom_ext.set_selection_range el n n
+            | None -> ())
       | _ -> open_menu name payload)
     (icon @ body)
 
@@ -164,7 +190,12 @@ let unlinked_references_view (m : Model.t) : t =
         [ ( "aria-hidden"
           , if m.unlinked_open then "false" else "true" )
         ]
-      [ dom ~key:"urefs-body" ~style_class:"ls-view-body" [] ]
+      (match m.unlinked_refs with
+       | [] -> []
+       | refs ->
+           [ dom ~key:"urefs-body" ~style_class:"ls-view-body"
+               (List.map Tree.block_row refs)
+           ])
   in
   dom ~key:"urefs" ~style_class:"unlinked-references mt-6"
     [ dom ~key:"urefs-fold" ~style_class:"ls-foldable-title-control"
