@@ -412,17 +412,17 @@ let pv_open st (wrap : Dom_ext.element) =
       let r = Dom_ext.bounding_rect wrap in
       let x = Dom_ext.rect_left r and y = Dom_ext.rect_bottom r +. 8.0 in
       ignore
-        (S.fetch_preview_blocks (Router.repo ()) name
-         |> Js.Promise.then_ (fun blocks ->
+        (S.fetch_preview (Router.repo ()) name
+         |> Js.Promise.then_ (fun (title, blocks) ->
                 (match !pv_pending with
                  | Some el when el == wrap ->
-                     (* two signal sets: close -> set forces the if_
-                        branch to remount so a different page's preview
-                        replaces the old one *)
-                     S.close_pv st;
                      S.set_pv st
                        (Some
-                          { S.pv_x = x; S.pv_y = y; S.pv_blocks = blocks })
+                          { S.pv_x = x
+                          ; S.pv_y = y
+                          ; S.pv_title = title
+                          ; S.pv_blocks = blocks
+                          })
                  | _ -> ());
                 Js.Promise.resolve ()))
 
@@ -451,21 +451,18 @@ let pv_track st el =
                 (Dom_ext.set_timeout_id (fun () -> S.close_pv st) 400)
         | _ -> ())
 
-let pv_popover (st : S.t) : t =
-  Logseq_dom.dom ~key:"pv-pop" ~style_class:"ls-preview-popup"
-    ~attrs_signal_v:
-      (Signal.map
-         (fun (v : S.view) ->
-           match v.S.pv with
-           | Some p ->
-               attrs_v
-                 [ ( "style"
-                   , Printf.sprintf
-                       "position: fixed; left: %.0fpx; top: %.0fpx; \
-                        z-index: 999"
-                       p.S.pv_x p.S.pv_y ) ]
-           | None -> attrs_v [])
-         st.S.vs.Signal.state_signal)
+let pv_popover (p : S.pv) : t =
+  (* cljs popup-show! content = PopoverContent card classes +
+     ls-preview-popup (page.css: pl-6, .tippy-wrapper paddings) *)
+  Logseq_dom.dom ~key:"pv-pop"
+    ~style_class:
+      "ui__popover-content z-50 rounded-md border bg-popover \
+       text-popover-foreground shadow-md outline-none ls-preview-popup"
+    ~attrs:
+      [ ( "style"
+        , Printf.sprintf
+            "position: fixed; left: %.0fpx; top: %.0fpx; z-index: 999"
+            p.S.pv_x p.S.pv_y ) ]
     [ Logseq_dom.dom ~key:"pvw" ~style_class:"tippy-wrapper as-page"
         ~attrs:
           [ ("tabindex", "-1")
@@ -474,20 +471,33 @@ let pv_popover (st : S.t) : t =
                padding-bottom: 64px" )
           ]
         [ Logseq_dom.dom ~key:"pvp" ~style_class:"page"
-            [ Logseq_dom.dom ~key:"pvb" ~style_class:"ls-page-blocks"
+            [ Logseq_dom.dom ~key:"pvt"
+                ~style_class:
+                  "ls-page-title flex flex-1 w-full content items-start \
+                   title"
+                ~attrs:[ ("data-testid", "page title") ]
+                [ Logseq_dom.dom ~key:"pvtw" ~style_class:"block-title-wrap"
+                    ~text:p.S.pv_title [] ]
+            ; Logseq_dom.dom ~key:"pvb" ~style_class:"ls-page-blocks"
                 [ Logseq_dom.dom ~key:"pvbi"
                     ~style_class:"page-blocks-inner relative"
-                    (match (S.get st).S.pv with
-                     | Some p ->
-                         List.map
-                           (Tree.block_row ~scope:"preview"
-                              ~editable:false)
-                           p.S.pv_blocks
-                     | None -> [])
+                    (List.map
+                       (Tree.block_row ~scope:"preview" ~editable:false)
+                       p.S.pv_blocks)
                 ]
             ]
         ]
     ]
+
+let pv_dyn (st : S.t) : t =
+  dyn
+    ~equal:(fun a b -> a == b)
+    (fun pv ->
+      match pv with
+      | None -> box ~key:"pv-empty" []
+      | Some p -> pv_popover p)
+    (Signal.map (fun (v : S.view) -> v.S.pv)
+       st.S.vs.Signal.state_signal)
 
 let handle_input st (ev : Dom_ext.event) =
   match Dom_ext.target ev with
@@ -615,14 +625,10 @@ let render (_ms : Model.t Signal.signal) : t =
     Signal.map (fun (v : S.view) -> v.S.cm <> None)
       st.S.vs.Signal.state_signal
   in
-  let pv_open_sig =
-    Signal.map (fun (v : S.view) -> v.S.pv <> None)
-      st.S.vs.Signal.state_signal
-  in
   let body =
     box ~key:"popups_view"
       [ if_ ~test:ac_open (ac_popover st)
       ; if_ ~test:cm_open (cm_popover st)
-      ; if_ ~test:pv_open_sig (pv_popover st) ]
+      ; pv_dyn st ]
   in
   body context parent
