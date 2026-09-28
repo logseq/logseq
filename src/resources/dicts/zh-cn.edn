@@ -1155,6 +1155,7 @@
  :page.convert/cant-be-block "页“{1}”无法转换为块。"
  :page.convert/cant-be-block-has-children "页“{1}”无法转换为块，因为它具有子页。"
  :page.convert/cant-be-block-move-first "页面“{1}”无法转换为块，请先将其移动到其他页面。"
+ :page.convert/page-to-property-namespaced "命名空间页面不能作为属性"
  :page.convert/page-to-tag-action "将“{1}”转换为标签"
  :page.convert/page-to-tag-built-in "内置页面不能用作标签"
  :page.convert/page-to-tag-duplicate "标签“{1}”已存在。"

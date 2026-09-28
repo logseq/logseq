@@ -1155,6 +1155,7 @@
  :page.convert/cant-be-block "Page \"{1}\" cannot be converted to a block."
  :page.convert/cant-be-block-has-children "Page \"{1}\" cannot be converted to a block because it has page children."
  :page.convert/cant-be-block-move-first "Page \"{1}\" cannot be converted to a block, please move it to another page first."
+ :page.convert/page-to-property-namespaced "Namespaced pages can't be properties"
  :page.convert/page-to-tag-action "Convert \"{1}\" to tag"
  :page.convert/page-to-tag-built-in "Built-in pages can't be used as tags"
  :page.convert/page-to-tag-duplicate "A tag with the name \"{1}\" already exists."
