@@ -106,6 +106,53 @@
       (and (map? value)
            (= (:db/ident value) :logseq.property/empty-placeholder))))
 
+(defn- property-value-collection?
+  "Entity maps are colls, so cardinality-many checks must exclude them."
+  [value]
+  (or (set? value)
+      (and (sequential? value)
+           (not (string? value)))))
+
+(defn- property-value-empty-for-render?
+  [value]
+  (or (nil? value)
+      (empty-placeholder-value? value)
+      (and (property-value-collection? value)
+           (or (empty? value)
+               (every? empty-placeholder-value? value)))))
+
+(defn- property-value-blocks
+  "Blocks that can be mounted in the property value editor.
+
+  After Backspace on an empty many-valued url/default slot the row can still
+  contain empty-placeholder, nil, or a snapshot without :block/uuid.
+  blocks-container throws Invalid block row for those (db-test#1340)."
+  [value-block]
+  (let [items (cond
+                (property-value-collection? value-block)
+                value-block
+
+                (or (map? value-block) (uuid? value-block))
+                [value-block]
+
+                :else
+                [])]
+    (vec
+     (keep (fn [item]
+             (cond
+               (empty-placeholder-value? item)
+               nil
+
+               (uuid? item)
+               item
+
+               (and (map? item) (uuid? (:block/uuid item)))
+               item
+
+               :else
+               nil))
+           items))))
+
 (defn- unset-default-value?
   "Show the Set default value trigger only when no value entity exists.
 
@@ -1687,9 +1734,17 @@
         multiple-values? (db-property/many? property)
         block-container (state/get-component :block/container)
         blocks-container (state/get-component :block/blocks-container)
-        value-block (if (and (coll? value-block) (every? entity-map? value-block))
-                      (set (remove #(= (:db/ident %) :logseq.property/empty-placeholder) value-block))
-                      value-block)
+        value-blocks (property-value-blocks value-block)
+        value-block (cond
+                      (empty? value-blocks)
+                      nil
+
+                      (or multiple-values?
+                          (property-value-collection? value-block))
+                      (set value-blocks)
+
+                      :else
+                      (first value-blocks))
         default-value (:logseq.property/default-value property)
         default-value? (and
                         (:db/id default-value)
@@ -1730,7 +1785,11 @@
          {:tabIndex 0
           :class (if (:table-view? opts) "cursor-pointer" "cursor-text")
           :style {:min-height 20 :margin-left 3}
-          :on-click #(<create-new-block! block property "")}
+          :on-click #(<create-new-block! block property "")
+          :on-key-down (fn [e]
+                         (when (contains? #{"Backspace" "Delete"} (util/ekey e))
+                           (util/stop e)
+                           (delete-block-property! block property opts)))}
          (when (:class-schema? opts)
            (t :property/add-description))]))))
 
@@ -1905,8 +1964,9 @@
            [:<> (page-cp opts value)]))
 
        (contains? #{:node :class :property :page :asset} type)
-       (when-let [reference (state/get-component :block/reference)]
-         (when value (reference {:table-view? table-view?} (:block/uuid value))))
+       (when-let [block-uuid (and value (:block/uuid value))]
+         (when-let [reference (state/get-component :block/reference)]
+           (reference {:table-view? table-view?} block-uuid)))
 
        (and (map? value) (some? (db-property/property-value-content value)))
        (let [content (str (db-property/property-value-content value))]
@@ -2633,9 +2693,16 @@
 (hsx/defc multiple-values
   [block property opts]
   (let [value (get block (:db/ident property))
-           value' (if (coll? value) value
-                      (when (some? value) #{value}))]
-       (multiple-values-inner block property value' opts)))
+        value' (cond
+                 (property-value-collection? value)
+                 value
+
+                 (some? value)
+                 #{value}
+
+                 :else
+                 nil)]
+    (multiple-values-inner block property value' opts)))
 
 (defn- resolved-property-value-for-render
   [block property multiple-values?]
@@ -2644,7 +2711,7 @@
         block-loaded? (some? (:block/uuid block))]
     (or
      (cond
-       (and multiple-values? (or (set? v) (coll? v) (nil? v)))
+       (and multiple-values? (or (property-value-collection? v) (nil? v)))
        v
        multiple-values?
        #{v}
@@ -2698,7 +2765,7 @@
                                     (:db/id block)
                                     (:db/ident property)))}
                       (t :ui/fix))]
-        (let [empty-value? (when (coll? v) (= :logseq.property/empty-placeholder (:db/ident (first v))))
+        (let [empty-value? (property-value-empty-for-render? v)
               closed-values? (seq (:property/closed-values property))
               value-cp [:div.property-value-inner
                         {:data-type type
