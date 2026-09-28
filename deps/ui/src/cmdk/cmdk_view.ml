@@ -472,7 +472,8 @@ let handle_keydown st (ev : Dom_ext.event) =
     | Some "Enter" ->
         Dom_ext.prevent_default ev;
         Dom_ext.stop_propagation ev;
-        S.run_highlighted st
+        if Dom_ext.shift_key ev then S.run_highlighted_sidebar st
+        else S.run_highlighted st
     | Some "k" when Dom_ext.meta_key ev || Dom_ext.ctrl_key ev ->
         Dom_ext.prevent_default ev;
         S.close st
@@ -484,6 +485,12 @@ let handle_keydown st (ev : Dom_ext.event) =
            && not (Dom_ext.shift_key ev || Dom_ext.alt_key ev) ->
         Dom_ext.prevent_default ev;
         S.open_palette st
+    | Some "m"
+      when (Dom_ext.meta_key ev || Dom_ext.ctrl_key ev)
+           && Dom_ext.shift_key ev ->
+        (* cljs mod+shift+m -> editor/move-blocks -> cmdk move mode *)
+        Dom_ext.prevent_default ev;
+        S.open_palette ~move:true st
     | _ -> ()
 
 let handle_click st (ev : Dom_ext.event) =

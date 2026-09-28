@@ -13,9 +13,14 @@ let rename uuid new_title =
     |> Js.Promise.then_ (fun _ -> Js.Promise.resolve (reload ()))
 
 let delete uuid =
+  (* bounce to Home after deleting, but only when the route still
+     points where it did at click time — a navigation that already
+     happened (e.g. to Recycle) must not be stomped *)
+  let from = Platform.location_hash () in
   Sdk_util.apply_op "delete-page" [ Wire.Uuid uuid; Wire.Map [] ]
   |> Js.Promise.then_ (fun _ ->
-         Platform.set_location_hash (Runtime.nav_hash "/");
+         if Platform.location_hash () = from then
+           Platform.set_location_hash (Runtime.nav_hash "/");
          Js.Promise.resolve ())
 
 let convert_to_tag db_id =

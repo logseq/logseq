@@ -130,7 +130,8 @@ let content_el uuid (b : Model.block) : t =
     [ dom ~key:("bci-" ^ uuid)
         ~style_class:"block-content-inner flex flex-row justify-between"
         [ dom ~key:("bh-" ^ uuid) ~style_class:"block-head-wrap"
-            (Render.title ?heading:b.block_heading b.block_title)
+                (Render.title ?heading:b.block_heading
+                   (S.title_for uuid b.block_title))
         ]
     ]
 
@@ -280,3 +281,55 @@ and children_el uuid scope (b : Model.block) : t =
        ; dom ~key:("clist-" ^ uuid) ~style_class:"block-children w-full"
            (List.map (block_row ~scope) (S.children_of b))
        ])
+
+(* Read-only row for linked-reference lists: same shell as row_el but the
+   content never swaps to editor_el — a block shown in .references can
+   simultaneously be under edit in its own page, and a second
+   #edit-block-<uuid> textarea breaks locators. *)
+and block_row_static (b : Model.block) : t =
+  let uuid = Option.value b.block_uuid ~default:"" in
+  let key = block_key b in
+  let embed = b.block_link <> None in
+  let has_children = b.block_children <> [] in
+  let blank = String.trim b.block_title = "" in
+  dom ~key:("ls-" ^ key)
+    ~style_class_signal:(row_class_sig uuid blank embed)
+    ~attrs_signal_v:(row_attrs_sig uuid b)
+    [ dom ~key:("main-" ^ key)
+        ~style_class:"block-main-container flex flex-row gap-1"
+        [ control_wrap uuid b
+        ; dom ~key:("col-" ^ key) ~style_class:"flex flex-col w-full"
+            [ dom ~key:("bmc-" ^ key)
+                ~style_class:"block-main-content flex flex-row gap-2"
+                [ dom ~key:("cew-" ^ key)
+                    ~style_class:"block-content-or-editor-wrap flex flex-1"
+                    [ dom ~key:("cei-" ^ key)
+                        ~style_class:"block-content-or-editor-inner"
+                        [ dom ~key:("row-" ^ key)
+                            ~style_class:
+                              "block-row flex flex-1 flex-row gap-1 \
+                               items-center"
+                            [ dom ~key:("cw-" ^ key)
+                                ~style_class:
+                                  "block-content-wrapper flex flex-1 w-full"
+                                [ content_el uuid b ]
+                            ; tags_el uuid b
+                            ]
+                        ]
+                    ]
+                ]
+            ]
+        ]
+    ; (if has_children then children_static_el uuid b
+       else box ~key:("nc-" ^ key) [])
+    ]
+
+and children_static_el uuid (b : Model.block) : t =
+  dom ~key:("children-" ^ uuid)
+    ~style_class:"block-children-container flex"
+    [ dom ~key:("border-" ^ uuid)
+        ~style_class:"block-children-left-border"
+        ~attrs:[ ("blockid", uuid) ] []
+    ; dom ~key:("clist-" ^ uuid) ~style_class:"block-children w-full"
+        (List.map block_row_static b.block_children)
+    ]

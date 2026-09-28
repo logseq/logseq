@@ -2,11 +2,85 @@
 
 open Sdk_util
 
+(* cljs result->js beans datascript entities, materializing ref attributes
+   as nested entity objects; worker wire values keep them as db/id refs, so
+   expand the known ref attrs one level via pull *)
+let ref_attrs =
+  [ "block/alias"; "block/tags"; "block/parent"; "block/page"
+  ; "block/refs"; "block/link"; "block/path-refs"; "block/namespace"
+  ; "block/closed-value-property"; "logseq.property.class/extends" ]
+
+let ref_ids_of w =
+  let ids_of x = match x with Wire.Int id -> Some id | _ -> None in
+  match w with
+  | Wire.Int id -> [ id ]
+  | Wire.Set xs | Wire.List xs | Wire.Array xs ->
+      List.filter_map ids_of xs
+  | _ -> []
+
+let pull_entity id =
+  Runtime.invoke3 "thread-api/pull" (Wire.String (repo ()))
+    (Wire.String "[*]") (Wire.Int id)
+
+let expand_refs (w : Wire.t) : Wire.t Js.Promise.t =
+  match w with
+  | Wire.Map kvs ->
+      let ids =
+        List.concat_map
+          (fun (k, v) ->
+            match k with
+            | Wire.Keyword key when List.mem key ref_attrs -> ref_ids_of v
+            | _ -> [])
+          kvs
+        |> List.sort_uniq compare
+      in
+      if ids = [] then Js.Promise.resolve w
+      else
+        Js.Promise.all
+          (Array.of_list
+             (List.map
+                (fun id ->
+                  pull_entity id
+                  |> Js.Promise.then_ (fun e ->
+                         Js.Promise.resolve (id, e)))
+                ids))
+        |> Js.Promise.then_ (fun pairs ->
+               let tbl = Hashtbl.create 7 in
+               Array.iter (fun (id, e) -> Hashtbl.replace tbl id e) pairs;
+               let expand = function
+                 | Wire.Int id ->
+                     Option.value (Hashtbl.find_opt tbl id)
+                       ~default:(Wire.Int id)
+                 | Wire.Set xs | Wire.List xs | Wire.Array xs ->
+                     Wire.Array
+                       (List.map
+                          (fun x ->
+                            match x with
+                            | Wire.Int id ->
+                                Option.value (Hashtbl.find_opt tbl id)
+                                  ~default:x
+                            | _ -> x)
+                          xs)
+                 | other -> other
+               in
+               Js.Promise.resolve
+                 (Wire.Map
+                    (List.map
+                       (fun ((k, v) as kv) ->
+                          match k with
+                          | Wire.Keyword key when List.mem key ref_attrs ->
+                              (k, expand v)
+                          | _ -> kv)
+                       kvs)))
+  | _ -> Js.Promise.resolve w
+
 let get_block a _b _c _d =
   match arg_string a with
   | None -> resolved_nil
   | Some id ->
-      get_entity id |> Js.Promise.then_ (fun w -> resolved_wire w)
+      get_entity id
+      |> Js.Promise.then_ expand_refs
+      |> Js.Promise.then_ (fun w -> resolved_wire w)
 
 let get_page = get_block
 

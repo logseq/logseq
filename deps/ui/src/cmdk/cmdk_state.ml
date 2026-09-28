@@ -433,13 +433,13 @@ let on_input st q =
 
 (* -- open/close ------------------------------------------------------ *)
 
-let open_palette st =
+let open_palette ?(move = false) st =
   st.gen := !(st.gen) + 1;
   set_in st (fun v ->
-      { v with open_ = true; input = ""; move_mode = false; mouse = false
-      ; filter = None });
+          { v with open_ = true; input = ""; move_mode = move; mouse = false
+          ; filter = None });
   (* prime synchronously so commands show before the search lands *)
-  apply_results st "" false [] [] 0;
+  apply_results st "" move [] [] 0;
   refresh st;
   (match !(Runtime.current_repo) with
    | Some repo -> load_recents st repo
@@ -576,9 +576,37 @@ let validate_graph repo =
             Platform.console_error ("validate-db failed", e);
             Js.Promise.resolve ()))
 
+(* "Move blocks to" trigger: move the selection (or the editing block)
+   to the bottom of the chosen page — cljs editor/move-blocks trigger *)
+let run_move st target =
+  let uuids =
+    if Editor_state.ready () then
+      match
+        Editor_state.String_set.elements (Editor_state.selected ())
+      with
+      | [] -> Option.to_list (Editor_state.editing_uuid ())
+      | sel -> sel
+    else []
+  in
+  close st;
+  if uuids <> [] then (
+    Editor_actions.clear_selection ();
+    (* committing the dirty editing buffer must run before the move —
+       move-blocks carries no titles, and apply would cancel the
+       debounced save and lose it *)
+    if Editor_state.ready () && Editor_state.editing () <> None then
+      Editor_actions.exit_edit ~select:false;
+    ignore
+      (Outliner_ops.apply_and_refresh
+         [ Outliner_ops.move_blocks_bottom uuids target ]))
+
 let run_item st it =
   let repo = !(Runtime.current_repo) in
-  (match it.act with
+  let v = get st in
+  (match v.move_mode, it.act with
+   | true, (Open_page target | Open_block target) -> run_move st target
+   | _ -> (
+   match it.act with
    | Create_page title ->
        close st;
        create_page title
@@ -641,11 +669,24 @@ let run_item st it =
             Option.iter validate_graph repo
         | Cmd_rtc_start | Cmd_rtc_stop ->
             (* RTC lifecycle lives outside this area; no-op per spec *)
-            ()))
+            ())))
 
 let run_highlighted st =
   let v = get st in
   match item_at v v.hl with Some it -> run_item st it | None -> ()
+
+(* shift+enter opens the highlighted page/block in the right sidebar
+   (cljs cmdk on-shift-enter -> ui/open-in-right-sidebar) *)
+let run_highlighted_sidebar st =
+  let v = get st in
+  match item_at v v.hl with
+  | Some it -> (
+      match it.act, !Sidebar_state.st_ref with
+      | (Open_page uuid | Open_block uuid), Some sst ->
+          close st;
+          Sidebar_state.open_uuid sst uuid
+      | _ -> run_item st it)
+  | None -> ()
 
 (* group of the currently highlighted item (for mod+down expand) *)
 let hl_group st =

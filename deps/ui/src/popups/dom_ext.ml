@@ -41,6 +41,9 @@ external prevent_default : event -> unit = "preventDefault" [@@mel.send]
 external stop_propagation : event -> unit = "stopPropagation"
   [@@mel.send]
 
+external stop_immediate_propagation : event -> unit
+  = "stopImmediatePropagation" [@@mel.send]
+
 (* -- element access -- *)
 
 external matches : element -> string -> bool = "matches" [@@mel.send]

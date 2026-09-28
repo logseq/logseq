@@ -35,24 +35,59 @@ let page_items (p : Model.page) =
             Runtime.flush ()
         | None -> ())
   in
+  let fav =
+    match !Sidebar_state.st_ref with
+    | Some st ->
+        let label =
+          if Signal.get_state st.Sidebar_state.favorited then
+            Strings.unfavorite_page
+          else Strings.add_to_favorites
+        in
+        [ item "fav" label (fun () ->
+              Runtime.send (Action.Page_menu_set None);
+              Sidebar_state.toggle_favorite st) ]
+    | None -> []
+  in
   match p.page_is_tag, p.page_db_id with
   | false, Some id ->
-      [ del
-      ; item "cvt" Strings.convert_to_tag (fun () ->
-            Runtime.send (Action.Page_menu_set None);
-            ignore (Page_ops.convert_to_tag id))
-      ]
-  | true, Some id ->
-      [ del
-      ; item "cvt2p" Strings.convert_tag_to_page (fun () ->
-            Runtime.send
-              (Action.Confirm_set
-                 (Some (Model.Confirm_convert_tag_to_page id)));
-            Runtime.flush ())
-      ]
-  | _ -> [ del ]
+          fav
+          @ [ del
+            ; item "cvt" Strings.convert_to_tag (fun () ->
+                  Runtime.send (Action.Page_menu_set None);
+                  ignore (Page_ops.convert_to_tag id))
+            ]
+      | true, Some id ->
+          fav
+          @ [ del
+            ; item "cvt2p" Strings.convert_tag_to_page (fun () ->
+                  Runtime.send
+                    (Action.Confirm_set
+                       (Some (Model.Confirm_convert_tag_to_page id)));
+                  Runtime.flush ())
+            ]
+      | _ -> fav @ [ del ]
 
-let view (x, y) (p : Model.page) =
+(* app-wide entries mirror the cljs header dots menu
+   (components/header.cljs toolbar-dots-menu): dialogs dispatch
+   ls:open-dialog, Recycle navigates to its page. *)
+let global_items () =
+  let close () = Runtime.send (Action.Page_menu_set None) in
+  let dlg key label name =
+    item key label (fun () ->
+        close ();
+        Sidebar_state.open_dialog name)
+  in
+  [ dlg "settings" Strings.settings "settings"
+  ; dlg "plugins" Strings.plugins "plugins"
+  ; item "recycle" Strings.recycle (fun () ->
+        close ();
+        Platform.set_location_hash "#/page/Recycle")
+  ; dlg "export" Strings.export_graph "export-graph"
+  ; dlg "import" Strings.import_ "import"
+  ; dlg "login" Strings.login "login"
+  ]
+
+let view (x, y) (p : Model.page option) =
   dom ~key:"page-menu" ~tag:"div"
     ~style_class:
       "ui__dropdown-menu-content z-50 min-w-[8rem] rounded-md border \
@@ -61,7 +96,9 @@ let view (x, y) (p : Model.page) =
       [ ( "style"
         , Printf.sprintf "position:fixed;left:%.0fpx;top:%.0fpx" x y )
       ]
-    (page_items p)
+    (match p with
+     | Some p -> page_items p @ global_items ()
+     | None -> global_items ())
 
 let btn key label cls act =
   dom ~key ~tag:"button" ~style_class:cls ~text:label ~events:"click"
@@ -137,9 +174,9 @@ let confirm_view (c : Model.confirm) =
 
 (* stop overlay clicks from leaking to the dialog handler *)
 let dialog_view (m : Model.t) =
-  match m.page_menu, m.route_page with
-  | Some pos, Some p -> view pos p
-  | _ -> (
+  match m.page_menu with
+  | Some pos -> view pos m.route_page
+  | None -> (
       match m.confirm with
       | Some c -> confirm_view c
       | None -> dom ~key:"menu-none" [])

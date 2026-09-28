@@ -144,6 +144,15 @@ let move_blocks uuids target_uuid ~sibling =
     ; Wire.Map [ kw "sibling?" (Wire.Bool sibling) ]
     ]
 
+(* cljs :bottom? — append as last children of target *)
+let move_blocks_bottom uuids target_uuid =
+  op "move-blocks"
+    [ uuids_list uuids
+    ; Wire.Uuid target_uuid
+    ; Wire.Map
+        [ kw "sibling?" (Wire.Bool false); kw "bottom?" (Wire.Bool true) ]
+    ]
+
 (* move to the top of target's children — cljs :top? *)
 let move_blocks_top uuids target_uuid =
   op "move-blocks"
@@ -453,6 +462,10 @@ let refresh_page () : unit Js.Promise.t =
                                 Js.Promise.resolve page
                             | _ -> resolve_page_tags repo page)
                            |> Js.Promise.then_ (fun page ->
+                                  (* the worker's tree is authoritative
+                                     again — drop committed-buffer title
+                                     overrides *)
+                                  S.clear_overrides ();
                                   (* the user may have navigated while the
                                      refetch was in-flight — never
                                      overwrite the new route's page *)

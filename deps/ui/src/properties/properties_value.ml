@@ -337,6 +337,37 @@ let choice_visible choice tag_ids exclusions =
   in
   scoped_ok && not excluded
 
+(* node-type value pickers: initial items come from
+   get-property-node-selector-data, filtering re-queries the worker via
+   search-blocks (cljs property-value-select-node). on_pick gets the
+   chosen entity's db/id. *)
+let node_items_source ~block ~prop ~on_pick =
+  let to_item v =
+    match D.entity_id_of v with
+    | Some id ->
+        Some (Properties_select.item (D.ref_title v) (fun () -> on_pick id))
+    | None -> None
+  in
+  let items_of w = List.filter_map to_item (D.elems w) in
+  let initial =
+    (match D.entity_id_of prop with
+     | Some property_id ->
+         D.node_selector_data ~property_id ~block
+         |> Js.Promise.then_ (fun w ->
+                Js.Promise.resolve
+                  (match D.getf w "initial-choices" with
+                   | Some v -> items_of v
+                   | None -> []))
+     | None -> Js.Promise.resolve [])
+  in
+  let on_search q =
+    if String.trim q = "" then initial
+    else
+      D.search_blocks q
+      |> Js.Promise.then_ (fun w -> Js.Promise.resolve (items_of w))
+  in
+  (initial, on_search)
+
 let open_select_popup _row items ~placeholder anchor
     ~(on_new : (string -> unit) option) =
   let sel, input =
@@ -344,8 +375,28 @@ let open_select_popup _row items ~placeholder anchor
       ~on_escape:(fun () -> S.pop_overlay ())
       items
   in
-  ignore (Properties_popup.open_anchored anchor sel);
+  let wrap = mk ~cls:"property-select" "div" in
+  el_append_child wrap sel;
+  ignore (Properties_popup.open_anchored anchor wrap);
   el_focus input
+
+let open_node_select_popup ~placeholder anchor ~block ~prop ~on_pick
+    ~on_new =
+  let initial, on_search = node_items_source ~block ~prop ~on_pick in
+  initial
+  |> Js.Promise.then_ (fun items ->
+         let sel, input =
+           Properties_select.create ~placeholder ~new_option:on_new
+             ~on_search:(Some on_search)
+             ~on_escape:(fun () -> S.pop_overlay ())
+             items
+         in
+         let wrap = mk ~cls:"property-select" "div" in
+         el_append_child wrap sel;
+         ignore (Properties_popup.open_anchored anchor wrap);
+         el_focus input;
+         Js.Promise.resolve ())
+  |> ignore
 
 let new_choice ctx row text =
   let ident = D.row_ident row |> Option.value ~default:"" in
@@ -409,31 +460,22 @@ let node_cell ctx row =
       ignore (child_text "span" "block-title-wrap" (D.ref_title r) cell))
     (D.value_elems value);
   let rec open_values () =
-    D.property_values
-      ~property_ident:(D.row_ident row |> Option.value ~default:"")
-      ~block:(D.uuid_ref ctx.block_uuid)
-    |> Js.Promise.then_ (fun w ->
-           let items =
-             List.filter_map
-               (fun v ->
-                 match D.entity_id_of v with
-                 | Some id ->
-                     Some
-                       (Properties_select.item (D.ref_title v) (fun () ->
-                            let ident =
-                              D.row_ident row |> Option.value ~default:""
-                            in
-                            set_scalar ctx ~ident ~value:(W.Int id);
-                            S.pop_overlay ()))
-                 | None -> None)
-               (D.elems w)
-           in
-           open_select_popup row items
-             ~placeholder:
-               (I18n.t1 "property/set-placeholder" (D.row_title row))
-             ~on_new:(Some (new_node ctx row)) cell;
-           Js.Promise.resolve ())
-    |> ignore
+    let ident = D.row_ident row |> Option.value ~default:"" in
+    open_node_select_popup
+      ~placeholder:(I18n.t1 "property/set-placeholder" (D.row_title row))
+      cell ~block:(D.uuid_ref ctx.block_uuid) ~prop:(D.row_prop row)
+      ~on_pick:(fun id ->
+        let existing =
+          List.filter_map D.entity_id_of (D.value_elems value)
+        in
+        if List.mem id existing then (
+          D.delete_property_value ~block_uuid:ctx.block_uuid ~ident
+            ~value:(W.Int id)
+          |> ignore;
+          S.refresh_all ())
+        else set_scalar ctx ~ident ~value:(W.Int id);
+        S.pop_overlay ())
+      ~on_new:(Some (new_node ctx row))
   and new_node ctx row text =
     D.create_page text
     |> Js.Promise.then_ (fun res ->
@@ -485,7 +527,8 @@ let render ctx row =
         | "checkbox" -> checkbox_cell ctx row
         | "number" -> number_cell ctx row
         | "date" | "datetime" -> date_cell ctx row
-        | "node" | "asset" -> node_cell ctx row
+        | "node" | "asset" | "page" | "class" | "property" ->
+            node_cell ctx row
         | _ ->
             if D.value_empty_p value then (
               let empty =
