@@ -28,8 +28,13 @@ let row_base_class =
 
 (* -- item row -------------------------------------------------------- *)
 
-(* wrapper attrs: only data-item-index; row attrs: data-cmdk-item etc. *)
-let wrapper_attrs it = [ ("data-item-index", string_of_int it.S.idx) ]
+(* wrapper attrs: data-item-index for highlight; data-item-key gives a
+   stable identity — idx is -1 on the optimistically-inserted create row
+   until renumbering lands, so click dispatch resolves by key *)
+let wrapper_attrs it =
+  [ ("data-item-index", string_of_int it.S.idx)
+  ; ("data-item-key", it.S.ikey)
+  ]
 
 let row_class _it v =
   row_base_class ^ if v.S.mouse then " cursor-pointer" else ""
@@ -514,15 +519,16 @@ let handle_click st (ev : Dom_ext.event) =
                  (not (List.mem S.G_commands v.S.expanded))
            | _ -> ())
        | None ->
-           match Dom_ext.closest el ".cp__cmdk [data-item-index]" with
+           match Dom_ext.closest el ".cp__cmdk [data-item-key]" with
            | Some wrap -> (
-               match
-                 Option.bind
-                   (Dom_ext.get_attribute wrap "data-item-index")
-                   int_of_string_opt
-               with
-               | Some idx ->
-                   (match S.item_at (S.get st) idx with
+               match Dom_ext.get_attribute wrap "data-item-key" with
+               | Some key ->
+                   let v = S.get st in
+                   (match
+                      List.find_opt
+                        (fun (it : S.item) -> it.S.ikey = key)
+                        (Array.to_list (S.flat_items v))
+                    with
                     | Some it -> S.run_item st it
                     | None -> ())
                | None -> ())

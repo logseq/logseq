@@ -18,6 +18,16 @@ let uuid_of_prefixed prefix id =
 let caret_span el =
   (D.el_selection_start el, D.el_selection_end el)
 
+(* while #ui__ac (autocomplete popup) is in the DOM the popup's own
+   document keydown handler owns these keys — the editor listener runs
+   first (it installs at module init), so without this guard Enter would
+   split the block AND pick the popup item *)
+let ac_popup_open () = D.get_element_by_id "ui__ac" <> None
+
+let ac_owned_key = function
+  | "Enter" | "Tab" | "Escape" | "ArrowUp" | "ArrowDown" -> true
+  | _ -> false
+
 (* -- editor-mode keys -- *)
 
 let on_editor_arrows ev uuid el =
@@ -62,6 +72,7 @@ let on_editor_key ev uuid el =
   let key = D.ev_key ev in
   let shift = D.ev_shift ev in
   if D.ev_composing ev then ()
+  else if ac_popup_open () && ac_owned_key key then ()
   else
     match key with
     | "Enter" when not shift ->
@@ -245,7 +256,17 @@ let on_click ev =
                     | Some el -> (
                         match D.el_get_attr el "blockid" with
                         | Some u ->
-                            A.enter_edit u
+                            (* scope by container: the same block can render
+                               in main and the right sidebar; only the tree
+                               where the click landed mounts the editor *)
+                            let scope =
+                              match
+                                D.closest_sel ".cp__right-sidebar" target
+                              with
+                              | Some _ -> "sidebar"
+                              | None -> "main"
+                            in
+                            A.enter_edit ~scope u
                               (String.length (A.model_title u))
                         | None -> ())
                     | None -> ()))))
@@ -298,7 +319,14 @@ let on_mousedown ev =
     match D.closest_sel ".editor-wrapper" (D.ev_target ev) with
     | Some _ -> ()
     | None -> (
-        match D.closest_sel ".cp__overlays" (D.ev_target ev) with
+        (* .cp__overlays hosts the cmdk/autocomplete/context-menu popups;
+           .ui__popover-content/.ls-context-menu-content cover anchored
+           property popups mounted outside the overlays container *)
+        match
+          D.closest_sel
+            ".cp__overlays, .ui__popover-content, .ls-context-menu-content"
+            (D.ev_target ev)
+        with
         | Some _ -> ()
         | None -> A.schedule_blur_commit ())
 

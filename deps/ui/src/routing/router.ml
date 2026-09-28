@@ -69,10 +69,22 @@ let fetch_blocks (p : Model.page) =
   Runtime.invoke3 "thread-api/get-page-blocks-tree"
     (Wire.String (repo ())) (ref_of_page p) Wire.Nil
   |> Js.Promise.then_ (fun blocks_w ->
-         let blocks =
-           Decode.view_blocks ~library:p.Model.page_is_library
-             (Decode.blocks_of_wire blocks_w)
-         in
+         (* fill :block/link rows' embed children so page embeds render
+            the linked page's blocks *)
+         let collapsed = ref Editor_state.String_set.empty in
+         collapsed :=
+           Outliner_ops.collect_collapsed !collapsed blocks_w;
+         Outliner_ops.fill_embed_children (repo ())
+           (Outliner_ops.ancestors_of p) collapsed
+           (Decode.blocks_of_wire blocks_w)
+         |> Js.Promise.then_ (fun blocks ->
+                Outliner_ops.set_collapsed !collapsed;
+                let blocks =
+                  Decode.view_blocks ~library:p.Model.page_is_library
+                    blocks
+                in
+                Outliner_ops.resolve_block_tags blocks))
+  |> Js.Promise.then_ (fun blocks ->
          Js.Promise.resolve { p with Model.page_blocks = blocks })
 
 let fetch_refs (p : Model.page) =
@@ -189,30 +201,45 @@ let load_block_zoom uuid =
                       | _ -> Wire.Nil)
                 in
                 match blk with
-                | Wire.Map _ ->
+                | Wire.Map _ -> (
                     let b = Decode.block_of_wire blk in
                     (* cljs block-route-root renders the zoomed block itself
                        as the root row (children nested under it) *)
+                    let ancestors =
+                      match b.Model.block_db_id with
+                      | Some id -> [ id ]
+                      | None -> []
+                    in
+                    let collapsed = ref Editor_state.String_set.empty in
                     ignore
-                      (Outliner_ops.resolve_block_tags [ b ]
+                      (Outliner_ops.fill_embed_children (repo ()) ancestors
+                         collapsed [ b ]
                        |> Js.Promise.then_ (fun bs ->
-                              Runtime.send
-                                (Action.Page_loaded
-                                   { Model.page_title = b.Model.block_title
-                                   ; page_uuid = b.block_uuid
-                                   ; page_db_id = b.block_db_id
-                                   ; page_is_tag = false
-                                   ; page_journal_day = None
-                                   ; page_is_library = false
-                                   ; page_tags = b.Model.block_tags
-                                   ; page_blocks = bs
-                                   });
-                              (match Editor_actions.consume_pending_zoom () with
-                               | Some u when Editor_state.ready () ->
-                                   Editor_actions.enter_edit u
-                                     (String.length b.Model.block_title)
-                               | _ -> ());
-                              Js.Promise.resolve ()))
+                              Outliner_ops.resolve_block_tags bs
+                              |> Js.Promise.then_ (fun bs ->
+                                     Outliner_ops.set_collapsed !collapsed;
+                                     Runtime.send
+                                       (Action.Page_loaded
+                                          { Model.page_title =
+                                              b.Model.block_title
+                                          ; page_uuid = b.block_uuid
+                                          ; page_db_id = b.block_db_id
+                                          ; page_is_tag = false
+                                          ; page_journal_day = None
+                                          ; page_is_library = false
+                                          ; page_tags = b.Model.block_tags
+                                          ; page_blocks = bs
+                                          });
+                                     (match
+                                        Editor_actions.consume_pending_zoom
+                                          ()
+                                      with
+                                      | Some u when Editor_state.ready () ->
+                                          Editor_actions.enter_edit u
+                                            (String.length
+                                               b.Model.block_title)
+                                      | _ -> ());
+                                     Js.Promise.resolve ()))))
                 | _ ->
                     Runtime.send
                       (Action.Navigate_to (Model.Not_found uuid)))

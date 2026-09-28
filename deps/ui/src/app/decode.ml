@@ -17,6 +17,12 @@ let rec block_of_wire (w : Wire.t) : Model.block =
         List.map block_of_wire xs
     | _ -> []
   in
+  (* a pulled [:block/link ...] ref arrives as a {:db/id n} stub *)
+  let link =
+    match Wire.get w "block/link" with
+    | Some l -> Wire.map_get_int l "db/id"
+    | None -> None
+  in
   let tag_ids =
     match Wire.get w "block/tags" with
     | Some (Wire.List xs) | Some (Wire.Array xs) | Some (Wire.Set xs) ->
@@ -30,6 +36,8 @@ let rec block_of_wire (w : Wire.t) : Model.block =
   ; block_tag_ids = tag_ids
   ; block_tags = []
   ; block_children = children
+  ; block_link = link
+  ; block_embed_children = []
   ; block_page_name = Wire.map_get_string w "block/page-name"
   ; block_is_page =
       Option.is_some (Wire.map_get_string w "block/name")

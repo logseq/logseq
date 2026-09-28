@@ -193,13 +193,40 @@ let blocks_inner ?puuid ?(virtualize = false) (blocks : Model.block list)
 
 (* --- references --------------------------------------------------- *)
 
+(* cljs components/block.cljs grouped-blocks-container: refs render
+   grouped under their source page (references-blocks-item > page-cp),
+   so the referencing page's name must appear inside .references *)
+let refs_grouped (refs : Model.block list) : (string * Model.block list) list =
+  let insert groups (b : Model.block) =
+    let name = Option.value b.block_page_name ~default:"" in
+    match List.find_opt (fun (n, _) -> n = name) groups with
+    | Some _ ->
+        List.map
+          (fun (n, bs) -> if n = name then (n, bs @ [ b ]) else (n, bs))
+          groups
+    | None -> groups @ [ (name, [ b ]) ]
+  in
+  List.fold_left insert [] refs
+
+let ref_group (name, blocks) : t =
+  dom ~key:("rg-" ^ name) ~style_class:"my-2 references-blocks-item"
+    [ dom ~key:("rgp-" ^ name) ~style_class:"with-foldable-page"
+        [ dom ~key:("rgl-" ^ name) ~tag:"a" ~style_class:"page-ref"
+            ~attrs:[ ("href", "#/page/" ^ name) ] ~text:name [] ]
+    ; dom ~key:("rgb-" ^ name) ~style_class:"blocks-container"
+        (List.map Tree.block_row blocks)
+    ]
+
 let references_view (refs : Model.block list) : t =
   match refs with
   | [] -> box ~key:"refs-empty" []
   | _ ->
       dom ~key:"refs" ~style_class:"references references-wrap"
         [ dom ~key:"refs-body" ~style_class:"ls-view-body"
-            (List.map Tree.block_row refs)
+            [ dom ~key:"refs-groups"
+                ~style_class:"flex flex-col references-blocks-wrap"
+                (List.map ref_group (refs_grouped refs))
+            ]
         ]
 
 let unlinked_search_input () : t =
