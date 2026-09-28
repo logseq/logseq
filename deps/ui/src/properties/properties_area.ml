@@ -240,24 +240,6 @@ let render_area ?(left_host = None) (ctx : V.ctx) ~owner_is_tag ~owner_title
   D.display_props ~page_title:page_area ~tag_dialog:false
     ~show_hidden:!S.show_hidden (D.uuid_ref ctx.block_uuid)
   |> Js.Promise.then_ (fun wire ->
-         (match W.get wire "positioned-properties" with
-          | Some w ->
-              let dump =
-                String.concat ";"
-                  (List.map
-                     (fun (k, v) ->
-                       let ks =
-                         match W.as_keyword k with
-                         | Some s -> s
-                         | None -> "?"
-                       in
-                       ks ^ "="
-                       ^ String.concat ","
-                           (List.filter_map D.row_ident (D.elems v)))
-                     (match w with W.Map kvs -> kvs | _ -> []))
-              in
-              Platform.console_log ("DBG pos", ctx.block_uuid, dump)
-          | None -> Platform.console_log ("DBG pos", "absent"));
          let rows, hidden, positioned = D.split_display wire in
          (* positioned rows come from block.temp/positioned-properties —
             never part of full/hidden; icon renders on the block itself
@@ -282,27 +264,13 @@ let render_area ?(left_host = None) (ctx : V.ctx) ~owner_is_tag ~owner_title
          (match el_parent area_el with
           | Some parent ->
               remove_all parent ":scope > .positioned-properties.block-below";
-              if below_rows <> [] then begin
-                Platform.console_log
-                  ("DBG pills-insert", List.length below_rows);
+              if below_rows <> [] then
                 insert_pills_before ctx ~owner_is_tag ~owner_title area_el
-                  below_rows;
-                Platform.console_log
-                  ("DBG pills-done",
-                    (match el_parent area_el with
-                     | Some p ->
-                         (match
-                            el_query p
-                              ".positioned-properties.block-below"
-                          with
-                          | Some _ -> "present"
-                          | None -> "GONE")
-                     | None -> "no-parent"))
-              end
-          | None -> Platform.console_log ("DBG pills", "no-parent"));
+                  below_rows
+          | None -> ());
          Js.Promise.resolve ())
   |> Js.Promise.catch (fun e ->
-         Platform.console_log ("DBG pills-err", e);
+         Platform.console_error ("properties render failed", e);
          Js.Promise.resolve ())
   |> ignore
 

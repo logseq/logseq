@@ -150,7 +150,12 @@ let load_view_data inst =
           inst.V.loading <- false;
           render inst
       | Some v ->
-          let d = Wr.decode_view_data v in
+          let d =
+            try Wr.decode_view_data v
+            with e ->
+              Platform.console_error ("view-data decode failed", e);
+              Wr.VEmpty
+          in
           inst.V.data <- d;
           (match d with
            | Wr.VFlat { qprops; _ } -> inst.V.query_idents <- qprops
@@ -331,11 +336,17 @@ let install_ops () =
 
 (* ---------- mount ---------- *)
 
+(* one inst per {{query}} block: the block row is rebuilt on every save, so
+   a new .custom-query-results shell re-attaches the existing inst instead
+   of leaving a stale duplicate mounted *)
+let query_insts : (string, V.inst) Hashtbl.t = Hashtbl.create 8
+
 let mount ~kind ~owner ~container : V.inst =
   let feature = feature_of_kind kind in
   let inst = V.make ~kind ~feature ~owner ~container in
   (match kind with
-   | V.KQuery _ ->
+   | V.KQuery { block_uuid } ->
+       Hashtbl.replace query_insts block_uuid inst;
        inst.V.is_advanced <-
          (let t = String.trim inst.V.qsrc in
           String.length t > 0 && t.[0] = '{');
@@ -345,5 +356,24 @@ let mount ~kind ~owner ~container : V.inst =
    | _ ->
        load_views inst ~on_done:(fun () -> ensure_default_view inst));
   inst
+
+(* mount a query-result view for `block_uuid`: reuse the existing inst when
+   the shell was rebuilt, re-pointing it at the new inner container *)
+let mount_query ~block_uuid ~container : V.inst =
+  match Hashtbl.find_opt query_insts block_uuid with
+  | Some inst ->
+      inst.V.container <- container;
+      refresh inst;
+      inst
+  | None ->
+      mount ~kind:(V.KQuery { block_uuid }) ~owner:(W.Uuid block_uuid)
+        ~container
+
+(* re-run every mounted query view — called on the worker's
+   "sync-db-changes" broadcast so result membership updates live *)
+let refresh_query_insts () =
+  Hashtbl.iter
+    (fun _ inst -> if D.el_is_connected inst.V.container then refresh inst)
+    query_insts
 
 let () = install_ops ()

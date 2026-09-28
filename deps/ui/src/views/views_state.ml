@@ -34,7 +34,7 @@ type inst =
   ; kind : inst_kind
   ; feature : feature
   ; owner : W.t (* [:views] resource owner lookup *)
-  ; container : Views_dom.el (* .ls-view-body mount point *)
+  ; mutable container : Views_dom.el (* .ls-view-body mount point *)
   ; mutable view_uuid : string (* selected view entity uuid *)
   ; mutable views : Views_wire.view_ent list
   ; mutable view_ent : Views_wire.view_ent option

@@ -91,6 +91,8 @@ type t =
   { vs : view Signal.state
   ; gen : int ref (* stale-response guard *)
   ; titles : string list ref
+  ; class_titles : string list ref (* # ac lists classes only (cljs
+                                       get-matched-classes) *)
   ; templates : (string * string) list ref (* (uuid, title) *)
   }
 
@@ -98,6 +100,7 @@ let make scheduler : t =
   { vs = Signal.state scheduler { ac = None; cm = None }
   ; gen = ref 0
   ; titles = ref []
+  ; class_titles = ref []
   ; templates = ref []
   }
 
@@ -306,10 +309,13 @@ let page_items_for t kind q =
     | _ ->
         mk_item ~key:("page:" ^ title) ~label:title (Emit ("[[" ^ title ^ "]]", 0))
   in
-  let matched =
-    take 20 (List.map wrap (List.filter (fun ti -> fuzzy_score ti q <> None) !(t.titles)))
+  let pool =
+    match kind with Tag_search -> !(t.class_titles) | _ -> !(t.titles)
   in
-  let exact = List.exists (fun ti -> S.equal ti q) !(t.titles) in
+  let matched =
+    take 20 (List.map wrap (List.filter (fun ti -> fuzzy_score ti q <> None) pool))
+  in
+  let exact = List.exists (fun ti -> S.equal ti q) pool in
   let items =
     if q <> "" && not exact then
       let label =
@@ -423,6 +429,31 @@ let load_titles t =
             Js.Promise.resolve ()))
 ;;
 
+(* cljs get-matched-classes — # autocomplete lists classes only, never
+   plain pages or properties *)
+let load_classes t =
+  ignore
+    (Runtime.invoke2 "thread-api/get-all-classes"
+       (Wire.String (repo ()))
+       (Wire.Map
+          [ (Wire.kw "except-root-class?", Wire.Bool true)
+          ; (Wire.kw "except-private-tags?", Wire.Bool false)
+          ; (Wire.kw "except-extends-hidden-tags?", Wire.Bool false) ])
+     |> Js.Promise.then_ (fun w ->
+            t.class_titles :=
+              List.filter_map
+                (fun row -> Wire.map_get_string row "block/title")
+                (Sdk_util.wire_elems w);
+            (match (get t).ac with
+             | Some ({ kind = Tag_search; _ } as ac) ->
+                 set_ac t (Some (refresh_items t ac))
+             | _ -> ());
+            Js.Promise.resolve ())
+     |> Js.Promise.catch (fun e ->
+            Platform.console_error ("popups classes failed", e);
+            Js.Promise.resolve ()))
+;;
+
 (* template-search: blocks tagged logseq.class/Template (cljs
    search/template-search = get-tag-objects + fuzzy) *)
 let load_templates t =
@@ -435,18 +466,15 @@ let load_templates t =
                [?b :block/uuid ?u] [?b :block/title ?ti]]"
           ])
      |> Js.Promise.then_ (fun w ->
-            let rows =
-              match w with
-              | Wire.Array xs | Wire.List xs -> xs
-              | _ -> []
-            in
+            let rows = Sdk_util.wire_elems w in
             t.templates :=
               List.filter_map
                 (fun row ->
                   match Sdk_util.wire_elems row with
                   | [ u; ti ] -> (
-                      match (Wire.as_string u, Wire.as_string ti) with
-                      | Some u, Some ti -> Some (u, ti)
+                      match (u, Wire.as_string ti) with
+                      | Wire.Uuid u, Some ti -> Some (u, ti)
+                      | Wire.String u, Some ti -> Some (u, ti)
                       | _ -> None)
                   | _ -> None)
                 rows;
@@ -472,7 +500,8 @@ let open_ac t kind editor =
     ; items = []; chosen = 0; editor }
   in
   (match kind with
-   | Page_ref | Tag_search -> load_titles t
+   | Page_ref -> load_titles t
+   | Tag_search -> load_classes t
    | Template_search -> load_templates t
    | Block_ref -> ()
    | Slash -> ());
@@ -504,20 +533,63 @@ let on_editor_input t el ev =
         || S.sub v ac.tpos ac.tlen <> trigger_text_of_kind ac.kind
       in
       if pos < ac.tpos + ac.tlen then close_ac t
-      else if trig_missing then (
-        if Dom_ext.input_type ev = "insertReplacementText" then
-          (* a programmatic whole-buffer fill (e2e `fill`) wiped the
-             trigger text — re-anchor the ac at 0 so the buffer up to the
-             caret becomes the query *)
-          ac_update t { ac with tpos = 0; tlen = 0; rpos = 0 }
-            (S.sub v 0 pos)
-        else close_ac t)
       else
-        let qend = pos - ac.tpos - ac.tlen in
-        if qend > S.length v then close_ac t
+        (* cljs handle-last-input runs the /, [[, (( and # openers
+           regardless of an open popup, so a trigger char typed while an
+           ac is open replaces it (e.g. / inside a #tag query starts the
+           slash menu); # followed by another # clears instead *)
+        let c =
+          if pos >= 1 && pos <= S.length v then Some (S.get v (pos - 1))
+          else None
+        in
+        let two ch = pos >= 2 && S.get v (pos - 2) = ch in
+        let bounded =
+          pos < 2 || (let p = S.get v (pos - 2) in p = ' ' || p = '\n')
+        in
+        let switched =
+          match c with
+          | Some '/' when bounded ->
+              close_ac t;
+              open_ac t Slash el;
+              true
+          | Some '[' when two '[' ->
+              close_ac t;
+              open_ac t Page_ref el;
+              true
+          | Some '(' when two '(' ->
+              close_ac t;
+              open_ac t Block_ref el;
+              true
+          | Some '#' when bounded || two '#' ->
+              if bounded && not (two '#') then open_ac t Tag_search el
+              else close_ac t;
+              true
+          | _ -> false
+        in
+        if switched then ()
+        else if trig_missing then
+          (* cljs ac state isn't tied to the trigger still being in the
+             buffer: a whole-buffer replacement (e2e `fill`, inputType
+             insertText/insertReplacementText) wipes the trigger but the
+             popup stays open with the buffer as its query. Only a real
+             keystroke that removed the trigger (delete inputTypes)
+             closes it. *)
+          let it = Dom_ext.input_type ev in
+          if S.length it >= 6 && S.sub it 0 6 = "delete" then close_ac t
+          else
+            ac_update t { ac with tpos = 0; tlen = 0; rpos = 0 }
+              (S.sub v 0 pos)
         else
-          let q = S.sub v (ac.tpos + ac.tlen) qend in
-          if query_closed ac q then close_ac t else ac_update t ac q
+          let qend = pos - ac.tpos - ac.tlen in
+          if qend > S.length v then close_ac t
+          else
+            let q = S.sub v (ac.tpos + ac.tlen) qend in
+            (* "# " clears hashtag search (a space right after the
+               trigger), and "#+" is an org directive, not a tag *)
+            if query_closed ac q
+               || (ac.kind = Tag_search && (q = " " || q = "+"))
+            then close_ac t
+            else ac_update t ac q
   | None ->
       let v = Dom_ext.value el in
       if pos < 1 || pos > S.length v then ()
@@ -615,16 +687,18 @@ let apply_tag t ac ~create title =
   | None -> ()
   | Some buuid ->
       let repo_v = repo () in
-      let save_and_tag dbid =
-        (* emit already stripped "#q" from the buffer; persist the new
-           buffer and the tag in one batch *)
-        let v = Dom_ext.value ac.editor in
-        ignore
-          (Outliner_ops.apply_and_refresh
-             [ Outliner_ops.save_block buuid v
-             ; Outliner_ops.set_block_property buuid "block/tags"
-                 (Wire.Int dbid)
-             ])
+      (* cljs set-block-property! tags with the class entity's db/id *)
+      let save_and_tag w =
+        match Wire.map_get_int w "db/id" with
+        | Some dbid ->
+            let v = Dom_ext.value ac.editor in
+            ignore
+              (Outliner_ops.apply_and_refresh
+                 [ Outliner_ops.save_block buuid v
+                 ; Outliner_ops.set_block_property buuid "block/tags"
+                     (Wire.Int dbid)
+                 ])
+        | None -> ()
       in
       let create_and_tag () =
         emit ac "" 0;
@@ -637,11 +711,7 @@ let apply_tag t ac ~create title =
            |> Js.Promise.then_ (fun _ ->
                   Runtime.invoke2 "thread-api/get-case-page"
                     (Wire.String repo_v) (Wire.String title))
-           |> Js.Promise.then_ (fun e ->
-                  (match Wire.map_get_int e "db/id" with
-                   | Some dbid -> save_and_tag dbid
-                   | None -> ());
-                  Js.Promise.resolve ()))
+           |> Js.Promise.then_ (fun e -> save_and_tag e; Js.Promise.resolve ()))
       in
       if create then create_and_tag ()
       else
@@ -654,15 +724,16 @@ let apply_tag t ac ~create title =
                      | Some _ -> (
                          emit ac "" 0;
                          close_ac t;
-                         match Wire.map_get_int w "db/id" with
-                         | Some dbid -> save_and_tag dbid
-                         | None -> ())
+                         save_and_tag w)
                      | None -> (
                          match w with
                          | Wire.Map _ ->
                              emit ac ("#" ^ title) 0;
                              close_ac t
-                         | _ -> create_and_tag ()))))
+                         | _ -> create_and_tag ())))
+           |> Js.Promise.catch (fun e ->
+                  Platform.console_error ("tag apply failed", e);
+                  Js.Promise.resolve ()))
 
 let apply_template t ac uuid =
   match Editor_state.editing_uuid () with

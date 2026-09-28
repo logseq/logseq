@@ -207,3 +207,48 @@ sorting, view tabs, selection bar, export EDN) and the query surface of
   `.editor-wrapper textarea` timeout). Views behaviors were verified via
   Playwright probes driving `LogseqDbWorker.invoke` directly (see
   worker-call contract in e2e-contract.md §7).
+
+## Commands
+
+Contracts discovered while making `logseq.e2e.commands-basic-test` green
+(slash autocomplete, tags, templates, clozes, list commands).
+
+- **ac popup is not tied to its trigger text** (cljs handle-last-input).
+  A whole-buffer replacement (Playwright `fill`, inputType
+  `insertText`/`insertReplacementText`) can wipe the `/`, `[[`, `((`, `#`
+  trigger while the popup stays open — the whole buffer becomes the query.
+  Only a `delete*` inputType that removes the trigger closes it.
+  `on_editor_input` re-anchors `tpos/tlen/rpos` to 0 in that case.
+- **`#` autocomplete lists classes only** (cljs `get-matched-classes`,
+  `thread-api/get-all-classes` with `except-root-class?`), never page
+  titles — otherwise properties like `logseq.property/template-applied-to`
+  (title "Apply template to tags") match `:has-text("Template")` clicks and
+  `set-block-property block/tags` on a non-class built-in raises
+  `Outliner_validate.Notification`.
+- **Tag application value** is the class entity's `db/id` sent as a bare
+  int to `set-block-property` (cljs `(:db/id tag-entity)`); a `db/ident`
+  keyword also works via `convert_ref_property_value`, but `db/id` is the
+  cljs-exact path.
+- **`thread-api/q` relation results decode as `Wire.Set`**, not
+  `Wire.Array`/`Wire.List` — always go through `Sdk_util.wire_elems`.
+- **`?u` uuid bindings decode as `Wire.Uuid`**, not `Wire.String` —
+  `Wire.as_uuid` accepts both; `Wire.as_string` silently drops them
+  (this made the `/template` list empty).
+- **Template search** = blocks tagged `logseq.class/Template`
+  (`[:find ?u ?ti :where [?b :block/tags ?t] [?t :db/ident
+  :logseq.class/Template] ...]`); apply via `apply-template` op with
+  `replace-empty-target? true`.
+- **Interactive inline elements must be in the click guard**: clicks on
+  `.cloze`/`.cloze-revealed` (cljs `non-link-target?`) must NOT call
+  `enter_edit` — the capture-phase document `on_click` swaps the block to
+  a textarea before the element's own click listener can emit its
+  dom-event, so the toggle is lost.
+- **`number children` reads children fresh from the worker**
+  (`thread-api/get-block-immediate-children`), not `Model.block_children`
+  — the model tree lags a just-applied `k/tab` indent and intermittently
+  returns `[]`, silently no-oping the command.
+- **Worker-side validation raises are unrecoverable page-side**: a
+  synchronous `Outliner_validate.Notification` inside `invoke_raw`
+  escapes Comlink as `MelangeError` with only the constructor name — the
+  human message is lost. Log context (op names, ids) before the call when
+  diagnosing.

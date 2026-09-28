@@ -42,25 +42,106 @@ let markdown_heading_level s =
 let strip_markdown_heading s lvl =
   String.trim (String.sub (String.trim s) lvl (String.length (String.trim s) - lvl))
 
-(* cljs save-block-aux! trims the value before persisting *)
-let save_block uuid title =
+let is_uuid_text s =
+  let n = String.length s in
+  n = 36 && s.[8] = '-' && s.[13] = '-' && s.[18] = '-' && s.[23] = '-'
+  && (let hex i =
+        let c = s.[i] in
+        (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')
+        || (c >= 'A' && c <= 'F')
+      in
+      let rec all i =
+        i >= n || (i = 8 || i = 13 || i = 18 || i = 23 || hex i)
+                   && all (i + 1)
+      in
+      all 0)
+
+(* cljs wrap-parse-block (subset): [[name]] and [[uuid]] in a title are
+   persisted as :block/refs entries, and [[name]] is rewritten to
+   [[uuid]] in block/title. The worker's resolve-page-refs looks up or
+   creates the page and the pipeline rebuilds :block/refs from the
+   [[uuid]] patterns. #[[...]] stays literal (tag conversion is a
+   separate cljs path). Returns (title', refs wire values). *)
+let extract_title_refs title =
+  let n = String.length title in
+  let buf = Buffer.create n in
+  let refs = ref [] in
+  let memo : (string, string) Hashtbl.t = Hashtbl.create 4 in
+  let uuid_of_name name =
+    let key = String.lowercase_ascii name in
+    match Hashtbl.find_opt memo key with
+    | Some u -> u
+    | None ->
+        let u = Platform.random_uuid () in
+        Hashtbl.add memo key u; u
+  in
+  let emit_ref inner u =
+    refs :=
+      (if is_uuid_text inner then
+         Wire.Array [ Wire.Keyword "block/uuid"; Wire.Uuid u ]
+       else
+         Wire.Map
+           [ str "block/uuid" (Wire.Uuid u)
+           ; str "block/title" (Wire.String inner)
+           ; str "block/name" (Wire.String (String.lowercase_ascii inner))
+           ; str "block/type" (Wire.String "page") ])
+      :: !refs
+  in
+  let rec scan i =
+    if i < n then begin
+      if i + 1 < n && title.[i] = '[' && title.[i + 1] = '['
+         && (i = 0 || title.[i - 1] <> '#')
+      then begin
+        match
+          try Some (String.index_from title (i + 2) ']')
+          with Not_found -> None
+        with
+        | Some k when k + 1 < n && title.[k + 1] = ']' && k > i + 2 ->
+            let inner = String.sub title (i + 2) (k - i - 2) in
+            let u = if is_uuid_text inner then inner else uuid_of_name inner in
+            Buffer.add_string buf "[["; Buffer.add_string buf u;
+            Buffer.add_string buf "]]";
+            emit_ref inner u;
+            scan (k + 2)
+        | _ -> Buffer.add_char buf title.[i]; scan (i + 1)
+      end else begin
+        Buffer.add_char buf title.[i]; scan (i + 1)
+      end
+    end
+  in
+  scan 0;
+  (Buffer.contents buf, List.rev !refs)
+
+(* The block map sent in a save-block op — shared by editor saves and
+   sdk updateBlock. *)
+let saved_block_map uuid title =
   let dt =
     match S.find uuid with
     | Some b -> b.Model.block_display_type
     | None -> None
   in
+  let refs_pairs title =
+    match dt with
+    | Some _ -> [ str "block/title" (Wire.String title) ]
+    | None ->
+        let title', refs = extract_title_refs title in
+        [ str "block/title" (Wire.String title')
+        ; str "block/refs" (Wire.List refs) ]
+  in
   match markdown_heading_level title with
   | Some lvl when dt <> Some "code" && dt <> Some "math" ->
-      op "save-block"
-        [ Wire.Map
-            [ str "block/uuid" (Wire.Uuid uuid)
-            ; str "block/title"
-                (Wire.String (strip_markdown_heading title lvl))
-            ; str "logseq.property/heading" (Wire.Int lvl) ]
-        ; Wire.Map [] ]
+      Wire.Map
+        ([ str "block/uuid" (Wire.Uuid uuid) ]
+        @ refs_pairs (strip_markdown_heading title lvl)
+        @ [ str "logseq.property/heading" (Wire.Int lvl) ])
   | _ ->
-      op "save-block"
-        [ block_map ~title:(String.trim title) uuid; Wire.Map [] ]
+      Wire.Map
+        ([ str "block/uuid" (Wire.Uuid uuid) ]
+        @ refs_pairs (String.trim title))
+
+(* cljs save-block-aux! trims the value before persisting *)
+let save_block uuid title =
+  op "save-block" [ saved_block_map uuid title; Wire.Map [] ]
 
 let insert_blocks blocks target_uuid ~sibling =
   op "insert-blocks"
@@ -335,7 +416,19 @@ let apply ?(opts = Wire.Map []) ops : unit Js.Promise.t =
         (Wire.Array ops) opts
       |> Js.Promise.then_ (fun _ -> Js.Promise.resolve ())
       |> Js.Promise.catch (fun e ->
-             Platform.console_error ("apply-outliner-ops failed", e);
+             Platform.console_error
+               ( "apply-outliner-ops failed"
+               , String.concat ","
+                   (List.map
+                      (fun o ->
+                        match o with
+                        | Wire.Array (Wire.Array (Wire.Keyword name :: _) :: _)
+                        | Wire.List (Wire.Array (Wire.Keyword name :: _) :: _)
+                        | Wire.Array (Wire.Keyword name :: _) ->
+                            name
+                        | _ -> "?")
+                      ops)
+               , e );
              Js.Promise.resolve ())
 
 let schedule_save uuid title =

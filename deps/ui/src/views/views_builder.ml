@@ -30,6 +30,9 @@ let is_op s = List.mem s operators
 
 let rec to_dsl = function
   | CText s -> "\"" ^ s ^ "\""
+  | CItem ("page-ref", [ a ]) ->
+      (* cljs ->dsl* collapses [:page-ref v] to the bare [[v]] form *)
+      a.a_dsl
   | CItem (f, args) ->
       let arg_str = List.map (fun a -> a.a_dsl) args |> String.concat " " in
       if args = [] then "(" ^ f ^ ")"
@@ -539,8 +542,10 @@ and add_filter_btn inst ~tree ~loc ~refresh ~with_label : D.el =
       ~attrs:[ ("type", "button") ]
       ~children:[ D.icon "plus" ] ()
   in
+  (* cljs add-filter: bare text child of the button (not wrapped in a
+     span) so the button is the smallest element holding the text *)
   if with_label then
-    D.el_append_child b (D.h ~tag:"span" ~text:I.filter ());
+    D.el_insert_adjacent_text b "beforeend" I.filter;
   D.el_add_listener b "mousedown" (fun ev -> Editor_dom.stop_propagation ev);
   D.el_add_listener b "click" (fun _ ->
       picker inst ~tree ~loc ~anchor:b ~refresh);
