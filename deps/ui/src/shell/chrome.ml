@@ -147,16 +147,40 @@ let main_content (ms : Model.t Signal.signal) =
     ; Logseq_dom.dom ~key:"main-content" ~id:"main-content-container"
         ~style_class:
           "scrollbar-spacing w-full flex justify-center flex-row outline-none relative"
+        ~attrs_signal_v:
+          (Logseq_dom.attrs_signal ms (fun (m : Model.t) ->
+               match m.route with
+               | Model.Graph -> [ ("data-is-margin-less-pages", "true") ]
+               | _ -> [ ("data-is-margin-less-pages", "false") ]))
         [ Logseq_dom.dom ~key:"main-inner"
             ~style_class:"cp__sidebar-main-content"
             ~attrs_signal_v:
               (Logseq_dom.attrs_signal ms (fun (m : Model.t) ->
-                   (* cljs container.cljs: data-is-full-width on all-pages/
-                      all-files/my-publishing routes lets the table span *)
+                   (* cljs container.cljs: data-is-full-width on margin-less +
+                      all-pages/all-files/my-publishing routes *)
+                   let marginless =
+                     match m.route with
+                     | Model.Graph ->
+                         [ ("data-is-margin-less-pages", "true")
+                         ; ("data-is-full-width", "true") ]
+                     | _ -> [ ("data-is-margin-less-pages", "false") ]
+                   in
                    match m.route with
-                   | Model.All_pages -> [ ("data-is-full-width", "true") ]
-                   | _ -> []))
-            [ dyn
+                   | Model.All_pages ->
+                       ("data-is-full-width", "true") :: marginless
+                   | _ -> marginless))
+            [ Logseq_dom.dom ~key:"content-wrap"
+                ~attrs_signal_v:
+                  (Logseq_dom.attrs_signal ms (fun (m : Model.t) ->
+                       (* cljs container.cljs: div.mx-auto.pb-24 around
+                          main-content; margin-less routes keep an empty
+                          class + 0 margin *)
+                       match m.route with
+                       | Model.Graph -> [ ("style", "margin-bottom: 0") ]
+                       | _ ->
+                           [ ("class", "mx-auto pb-24")
+                           ; ("style", "margin-bottom: 120px") ]))
+                [ dyn
                 ~equal:(fun (a : Model.t) (b : Model.t) ->
                   a.phase = b.phase
                   && a.route = b.route
@@ -173,6 +197,7 @@ let main_content (ms : Model.t Signal.signal) =
                   && a.gv = b.gv)
                 (fun m -> Page.page_view_of_model m)
                 ms ]
+            ]
         ]
     ]
 

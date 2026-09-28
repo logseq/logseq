@@ -551,17 +551,28 @@ let library_add_pages_button : t =
             ~text:(Ui_strings.t "library/add-existing-pages") [] ]
     ]
 
+(* cljs page-inner: data-page-tags="[\"a\", \"b\"]" on the wrap *)
+let page_wrap_attrs (page : Model.page) : (string * string) list =
+  match page.page_tags with
+  | [] -> []
+  | tags ->
+      [ ( "data-page-tags"
+        , "[" ^ String.concat ", " (List.map (fun t -> "\"" ^ t ^ "\"") tags)
+          ^ "]" ) ]
+
 let page_view (m : Model.t) (page : Model.page) : t =
   let cls =
     "flex-1 page relative cp__page-inner-wrap"
     ^ (if page.page_journal_day <> None then " is-journals" else "")
     ^ (if is_today_page m page then " is-today-page" else "")
+    ^ (if page.page_is_tag then " is-node-page" else "")
   in
   dom ~key:"page" ~style_class:cls
+      ~attrs:(page_wrap_attrs page)
     [ dom ~key:"page-inner"
         ~style_class:"relative grid gap-4 sm:gap-8 page-inner mb-16"
-        [ breadcrumbs page.page_title
-        ; page_title_el m page
+        [ dom ~key:"page-title-row" ~style_class:"flex flex-row space-between"
+            [ page_title_el m page ]
         ; (if page.page_is_library then library_add_pages_button
            else dom ~key:"lib-add-off" [])
         ; blocks_inner ?puuid:page.page_uuid ~virtualize:true
@@ -586,12 +597,14 @@ let library_view (m : Model.t) (page : Model.page) : t =
   let cls =
     "flex-1 page relative cp__page-inner-wrap"
     ^ (if is_today_page m page then " is-today-page" else "")
+    ^ (if page.page_is_tag then " is-node-page" else "")
   in
   dom ~key:"page" ~style_class:cls
+      ~attrs:(page_wrap_attrs page)
     [ dom ~key:"page-inner"
         ~style_class:"relative grid gap-4 sm:gap-8 page-inner mb-16"
-        [ breadcrumbs page.page_title
-        ; page_title_el m page
+        [ dom ~key:"page-title-row" ~style_class:"flex flex-row space-between"
+            [ page_title_el m page ]
         ; library_add_pages_button
         ; blocks_inner ?puuid:page.page_uuid ~virtualize:true
             page.page_blocks
