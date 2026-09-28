@@ -149,6 +149,15 @@ let desktop_os () =
   in
   contains 0 "mac" || contains 0 "win"
 
+(* cljs util/mac? — goog.userAgent MAC *)
+let is_mac () =
+  let p = String.lowercase_ascii (navigator_platform navigator_) in
+  let n = String.length p in
+  let rec go i =
+    i + 3 <= n && (String.sub p i 3 = "mac" || go (i + 1))
+  in
+  go 0
+
 external json_parse : string -> Js.Json.t = "parse" [@@mel.scope "JSON"]
 external json_prop : Js.Json.t -> string -> Js.Json.t = "" [@@mel.get_index]
 
