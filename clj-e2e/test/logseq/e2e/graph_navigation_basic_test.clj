@@ -191,52 +191,6 @@
         (util/refresh-until-graph-loaded)
         (assert/assert-is-visible "#search-button")))))
 
-(deftest graph-view-mode-settings-test
-  (testing "Graph view modes and settings rebuild the canvas"
-    (doseq [title ["graph view alpha" "graph view beta" "graph view gamma"]]
-      (page/new-page title)
-      (b/new-block "[[graph view alpha]]")
-      (util/set-tag title)
-      (util/exit-edit))
-    (util/search-and-click "Go to graph view")
-    (assert/assert-is-visible "#global-graph.graph-root")
-    (assert/assert-is-visible
-     "[role='application'][aria-label='Graph canvas']")
-    (w/click ".graph-settings-toggle")
-    (w/click (loc/filter ".graph-mode-tab" :has-text "Tags"))
-    (assert/assert-is-visible
-     (loc/filter ".graph-mode-tab[aria-selected='true']" :has-text "Tags"))
-    (w/click (loc/filter ".graph-mode-tab" :has-text "All pages"))
-    (assert/assert-is-visible
-     (loc/filter ".graph-mode-tab[aria-selected='true']" :has-text "All pages"))
-    (w/refresh)
-    (assert/assert-is-visible "#global-graph.graph-root")
-    (assert/assert-is-visible
-     "[role='application'][aria-label='Graph canvas']")
-    (assert/assert-is-hidden ".graph-error")
-    (page/goto-page "graph view beta")
-    (assert/assert-graph-loaded?)))
-
-(deftest graph-time-travel-playback-test
-  (testing "time travel limits nodes and returning to Now restores the complete graph"
-    (page/new-page "time travel old")
-    (util/wait-timeout 20)
-    (page/new-page "time travel new")
-    (util/search-and-click "Go to graph view")
-    (w/click "button[title*='Time'], button:has-text('Time travel')")
-    (let [slider (w/-query "input[type='range']")]
-      (assert/assert-is-visible slider)
-      (let [full-count (util/count-elements ".graph-node, [data-node-id]")]
-        (w/click slider)
-        (k/press "Home")
-        (is (<= (util/count-elements ".graph-node, [data-node-id]")
-                full-count))
-        (w/click ".graph-time-travel-reset[title='Now']")
-        (assert/assert-is-visible
-         (loc/filter ".graph-time-travel-label" :has-text "Now"))
-        (is (= full-count
-               (util/count-elements ".graph-node, [data-node-id]")))))))
-
 (deftest restoring-graph-gates-and-recovers-interaction-test
   (testing "reload/restoring never accepts half-mounted edits and restores all controls"
     (b/new-block "restore interaction target")

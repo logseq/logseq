@@ -51,7 +51,6 @@ let menu_item st label on_click =
 let nav_labels =
   [ ("flashcards", "Flashcards")
   ; ("all-pages", "All pages")
-  ; ("graph-view", "Graph view")
   ; ("tag/tasks", "Tasks")
   ; ("tag/assets", "Assets")
   ]
@@ -243,11 +242,6 @@ let nav_items ~active_route (checked, tag_titles) =
             (nav_route ~class_:"all-pages-nav"
                ~active:(active_route = Model.All_pages) ~title:(t "Pages")
                ~icon_name:"files" "#/all-pages")
-      | "graph-view" ->
-          Some
-            (nav_route ~class_:"graph-view-nav"
-               ~active:(active_route = Model.Graph) ~title:(t "Graph view")
-               ~icon_name:"hierarchy" ~shortcut:"g g" "#/graph")
       | "tag/tasks" -> tag_nav ~active_route "tasks" "Tasks" tag_titles
       | "tag/assets" -> tag_nav ~active_route "assets" "Assets" tag_titles
       | _ -> None)

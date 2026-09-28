@@ -41,7 +41,6 @@ let t (key : string) : string =
   | "command.go/journals" -> "Go to journals"
   | "command.go/all-graphs" -> "Go to all graphs"
   | "command.go/all-pages" -> "Go to all pages"
-  | "command.go/graph-view" -> "Go to graph view"
   | "command.graph/db-add" -> "Add a DB graph"
   | "command.editor/move-blocks" -> "Move blocks to"
   | "command.editor/add-reaction" -> "Add reaction"

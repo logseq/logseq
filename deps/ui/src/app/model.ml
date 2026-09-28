@@ -8,7 +8,6 @@ type route =
   | Library
   | All_pages
   | All_graphs
-  | Graph
   | Settings
   | Not_found of string
 
@@ -92,28 +91,6 @@ type toast =
   ; toast_kind : string (* "success" | "error" | "warning" | ... *)
   }
 
-(* global graph view (#/graph) — toolbar/panel state; the canvas
-   itself is DOM-less (cljs renders via pixi) *)
-type graph_view =
-  { gv_settings_open : bool
-  ; gv_mode : string (* "tags-and-objects" | "all-pages" *)
-  ; gv_tt_open : bool
-  ; gv_tt_value : float option (* offset ms from gv_min; None = at now *)
-  ; gv_min : float (* earliest block/created-at *)
-  ; gv_max : float
-  ; gv_loaded : bool
-  }
-
-let graph_view_initial =
-  { gv_settings_open = false
-  ; gv_mode = "tags-and-objects"
-  ; gv_tt_open = false
-  ; gv_tt_value = None
-  ; gv_min = 0.
-  ; gv_max = 0.
-  ; gv_loaded = false
-  }
-
 type t =
   { phase : phase
   ; repo : string option
@@ -137,7 +114,6 @@ type t =
   ; unlinked_query : string
   ; help_open : bool
   ; unlinked_blocks : block list
-  ; gv : graph_view
   }
 
 let initial =
@@ -166,7 +142,6 @@ let initial =
   ; unlinked_query = ""
   ; help_open = false
   ; unlinked_blocks = []
-  ; gv = graph_view_initial
   }
 
 (* optimistic reorder for move-up/down: only handles the common case of a

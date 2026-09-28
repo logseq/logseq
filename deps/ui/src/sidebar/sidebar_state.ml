@@ -21,7 +21,7 @@
    dictionaries once a shared i18n module lands. *)
 let t (s : string) = s
 
-let default_navs = [ "flashcards"; "all-pages"; "graph-view" ]
+let default_navs = [ "flashcards"; "all-pages" ]
 
 (* A rendered right-sidebar entry. kind maps to .item-type-<kind>. *)
 type item =
@@ -484,10 +484,6 @@ let open_sticky_item st kind =
     match kind with
     | "contents" when not (has_item st "contents") ->
         add_promise st (contents_item repo)
-    | "page-graph" when not (has_item st "page-graph") ->
-        (match static_item "page-graph" "page-graph" "Page graph" with
-         | Some it -> push_item st it
-         | None -> ())
     | "help" when not (has_item st "help") ->
         (match static_item "help" "help" "Help" with
          | Some it -> push_item st it
