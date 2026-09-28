@@ -125,7 +125,8 @@ let ac_popover (st : S.t) : t =
                        "position: fixed; left: %.0fpx; top: %.0fpx; z-index: 999"
                        a.S.x a.S.y )
                  ; ("data-side", "bottom")
-                 ; ("data-editor-popup-ref", "true") ]
+                 ; ( "data-editor-popup-ref"
+                   , S.popup_ref_of_kind a.S.kind ) ]
            | None -> attrs_v [])
          st.S.vs.Signal.state_signal)
     [ Logseq_dom.dom ~key:"ac" ~id:"ui__ac"

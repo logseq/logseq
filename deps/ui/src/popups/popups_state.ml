@@ -99,6 +99,13 @@ let ac_class_of_kind = function
 let trigger_len_of_kind = function
   | Slash | Tag_search -> 1
   | Page_ref | Block_ref -> 2
+
+(* cljs data-editor-popup-ref values drive popup sizing in editor.css *)
+let popup_ref_of_kind = function
+  | Slash -> "commands"
+  | Page_ref -> "page-search"
+  | Block_ref -> "block-search"
+  | Tag_search -> "page-search-hashtag"
 ;;
 
 (* ---- slash command table ---- *)

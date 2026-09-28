@@ -62,6 +62,7 @@ type view =
   ; hl : int (* flat index of the highlighted item, -1 = none *)
   ; mouse : bool
   ; filter : group_id option
+  ; recents : item list
   }
 
 type t =
@@ -71,7 +72,8 @@ type t =
 
 let initial_view =
   { open_ = false; input = ""; move_mode = false; groups = []
-  ; expanded = []; hl = -1; mouse = false; filter = None }
+  ; expanded = []; hl = -1; mouse = false; filter = None
+  ; recents = [] }
 
 let make scheduler : t =
   { vs = Signal.state scheduler initial_view; gen = ref 0 }
@@ -289,6 +291,26 @@ let group_order v q rows total =
     ; gitems = filter_items; gtotal = List.length filter_items
     ; glimit = 99; gexpanded = false }
   in
+  let recents_g () =
+    let q' = String.lowercase_ascii (String.trim q) in
+    let items =
+      if q' = "" then v.recents
+      else
+        List.filter
+          (fun (it : item) ->
+            let l = String.lowercase_ascii it.ititle in
+            let rec find i =
+              i + String.length q' <= String.length l
+              && (String.sub l i (String.length q') = q' || find (i + 1))
+            in
+            find 0)
+          v.recents
+    in
+    { gid = G_recently_updated
+    ; gtitle = Ui_strings.t "cmdk.groups/recently-updated"
+    ; gitems = items; gtotal = List.length items
+    ; glimit = 5; gexpanded = List.mem G_recently_updated v.expanded }
+  in
   let starts_slash =
     String.length q > 0 && String.get q 0 = '/'
   in
@@ -311,7 +333,7 @@ let group_order v q rows total =
         Option.to_list (create_g ()) @ [ nodes_g (); filters_g () ]
       else
         Option.to_list (create_g ())
-        @ [ nodes_g (); commands_g (); filters_g () ]
+        @ [ nodes_g (); recents_g (); commands_g (); filters_g () ]
 
 let apply_results st q move_mode expanded rows total =
   ignore move_mode;
@@ -370,6 +392,40 @@ let upsert_create v =
       :: others
   }
 
+(* cljs load-results :initial — recently-updated pages from storage ids *)
+let recents_item_of_wire w =
+  match Decode.page_of_summary w with
+  | Some p -> (
+      match p.Model.page_uuid with
+      | Some uuid ->
+          Some
+            { ikey = "recent-" ^ uuid; idx = -1; gid = G_recently_updated
+            ; ititle = p.page_title; info = None; header = None
+            ; iicon = "file"; act = Open_page uuid }
+      | None -> None)
+  | None -> None
+
+let load_recents st repo =
+  let ids =
+    Wire.List
+      (List.map
+         (fun i -> Wire.Int i)
+         (Sidebar_state.recent_ids_of_storage repo))
+  in
+  ignore
+    (Runtime.invoke2 "thread-api/get-recent-pages" (Wire.String repo) ids
+     |> Js.Promise.then_ (fun w ->
+            let items =
+              match w with
+              | Wire.Array xs | Wire.List xs ->
+                  List.filter_map recents_item_of_wire xs
+              | _ -> []
+            in
+            set_in st (fun v -> { v with recents = items });
+            refresh st;
+            Js.Promise.resolve ())
+     |> Js.Promise.catch (fun _ -> Js.Promise.resolve ()))
+
 let on_input st q =
   set_in st (fun v -> upsert_create { v with input = q });
   let gen = (incr st.gen; !(st.gen)) in
@@ -385,12 +441,16 @@ let open_palette st =
   (* prime synchronously so commands show before the search lands *)
   apply_results st "" false [] [] 0;
   refresh st;
-  Dom_ext.set_timeout
-    (fun () ->
-      match Dom_ext.doc_query_selector ".cp__cmdk-search-input" with
-      | Some el -> Dom_ext.focus el
-      | None -> ())
-    0
+  (match !(Runtime.current_repo) with
+   | Some repo -> load_recents st repo
+   | None -> ());
+  let rec focus_input tries =
+    match Dom_ext.doc_query_selector ".cp__cmdk-search-input" with
+    | Some el -> Dom_ext.focus el
+    | None ->
+        if tries > 0 then Dom_ext.set_timeout (fun () -> focus_input (tries - 1)) 20
+  in
+  Dom_ext.set_timeout (fun () -> focus_input 20) 0
 
 let close st = set_in st (fun v -> { v with open_ = false })
 
@@ -408,7 +468,7 @@ let clear_or_close st =
      | None -> ());
     refresh st;
     true)
-  else false
+  else (close st; true)
 
 (* -- highlight ------------------------------------------------------- *)
 

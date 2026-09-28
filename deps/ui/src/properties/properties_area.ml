@@ -416,7 +416,12 @@ let mount_page_area page_inner =
           | None -> ()
           | Some uuid ->
               let actions = title_actions p in
-              el_insert_adjacent title_el "afterend" actions;
+              (* cljs: actions sit inside .block-content-wrapper, opacity-0
+                 until hover; keep them there, not as a sibling of the title *)
+              (match el_query page_inner ".ls-page-title .block-content-wrapper"
+               with
+               | Some cw -> el_insert_adjacent cw "afterbegin" actions
+               | None -> el_insert_adjacent title_el "afterend" actions);
               let area =
                 mk "div"
                   ~cls:"ls-properties-area ls-page-properties"
