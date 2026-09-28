@@ -66,7 +66,8 @@ let count_refs (w : Wire.t) (k : string) : int =
       List.length xs
   | _ -> 0
 
-let rec block_of_wire ?(order_index = 1) (w : Wire.t) : Model.block =
+let rec block_of_wire ?(order_index = 1) ?(parent_query_id = None)
+    (w : Wire.t) : Model.block =
   let uuid = Wire.map_get_uuid w "block/uuid" in
   let db_id = Wire.map_get_int w "db/id" in
   let title =
@@ -78,6 +79,16 @@ let rec block_of_wire ?(order_index = 1) (w : Wire.t) : Model.block =
     Option.value (Wire.map_get_int w "block/level") ~default:1
   in
   let order_list = order_list_type_of_wire w in
+  (* the pull's forward ref is a {:db/id} stub — a child is this block's
+     query value block when its db/id matches *)
+  let query_ref_id =
+    match Wire.get w "logseq.property/query" with
+    | Some q -> (
+        match q with
+        | Wire.Tagged (_, inner) -> Wire.map_get_int inner "db/id"
+        | _ -> Wire.map_get_int q "db/id")
+    | None -> None
+  in
   let children =
     (* cljs :block/children accessor (entity-plus) excludes
        property-created and closed-value children *)
@@ -87,7 +98,8 @@ let rec block_of_wire ?(order_index = 1) (w : Wire.t) : Model.block =
     in
     match Wire.get w "block/children" with
     | Some (Wire.List xs) | Some (Wire.Array xs) ->
-        assign_order_indices [] (List.filter renderable xs)
+        assign_order_indices ~parent_query_id:query_ref_id []
+          (List.filter renderable xs)
     | _ -> []
   in
   (* a pulled [:block/link ...] ref arrives as a {:db/id n} stub *)
@@ -175,11 +187,15 @@ let rec block_of_wire ?(order_index = 1) (w : Wire.t) : Model.block =
       (match Wire.get w "logseq.property.asset/align" with
        | Some (Wire.Keyword s) | Some (Wire.String s) -> Some s
        | _ -> None)
+  ; block_is_query =
+      (match parent_query_id, db_id with
+       | Some p, Some id -> p = id
+       | _ -> false)
   }
 
 (* number = 1 + the run of consecutive same-type ordered-list siblings
    immediately to the left (plain_value.ml order_list_index) *)
-and assign_order_indices acc ws =
+and assign_order_indices ?(parent_query_id = None) acc ws =
   match ws with
   | [] -> List.rev acc
   | w :: rest ->
@@ -193,7 +209,9 @@ and assign_order_indices acc ws =
             | _ -> 1)
         | [] -> 1
       in
-      assign_order_indices (block_of_wire ~order_index w :: acc) rest
+      assign_order_indices ~parent_query_id
+        (block_of_wire ~order_index ~parent_query_id w :: acc)
+        rest
 
 let blocks_of_wire (w : Wire.t) : Model.block list =
   match w with
@@ -385,3 +403,26 @@ let toast_of_wire (w : Wire.t) : Model.toast option =
             }
       | None -> None)
   | _ -> None
+
+(* rtc-sync-state broadcast (deps/db-worker sync_presence.ml rtc_state_payload):
+   rtc-state {ws-state} / rtc-lock / tx counters / pending op counts *)
+let rtc_of_wire (w : Wire.t) : Model.rtc =
+  let ws_state =
+    match Wire.get w "rtc-state" with
+    | Some m -> (
+        match Wire.get m "ws-state" with
+        | Some (Wire.Keyword s) | Some (Wire.String s) -> s
+        | _ -> "")
+    | _ -> ""
+  in
+  let int k = Option.value (Wire.map_get_int w k) ~default:0 in
+  { Model.rtc_lock =
+      Option.value (Option.bind (Wire.get w "rtc-lock") Wire.as_bool)
+        ~default:false
+  ; rtc_ws_state = ws_state
+  ; rtc_local_tx = Wire.map_get_int w "local-tx"
+  ; rtc_remote_tx = Wire.map_get_int w "remote-tx"
+  ; rtc_pending_local = int "unpushed-block-update-count"
+  ; rtc_pending_asset = int "pending-asset-ops-count"
+  ; rtc_pending_server = int "pending-server-ops-count"
+  }

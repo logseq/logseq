@@ -140,9 +140,11 @@ let content_el uuid (b : Model.block) : t =
     [ dom ~key:("bci-" ^ uuid)
         ~style_class:"block-content-inner flex flex-row justify-between"
         [ dom ~key:("bh-" ^ uuid) ~style_class:"block-head-wrap"
-            (Render.title_block ~self:uuid
-               ~resolved:(S.title_for uuid b.block_title)
-               b)
+            (if b.Model.block_is_query then [ Query_builder.block_el uuid b ]
+             else
+               Render.title_block ~self:uuid
+                 ~resolved:(S.title_for uuid b.block_title)
+                 b)
         ]
     ]
 

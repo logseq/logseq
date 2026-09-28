@@ -70,12 +70,16 @@ let write_prop_value d prop w =
 let close () = S.pop_overlay ()
 
 (* after "Text"/"URL" is chosen the cljs flow creates the empty value
-   block and lands the caret in it *)
+   block and lands the caret in it — refresh as soon as the write lands
+   so the pending editor mounts before the user's next click *)
 let add_empty_text_block d prop =
   let ident = ident_of prop in
   V.set_pending_edit ~block_uuid:d.target.uuid ~ident;
   D.create_property_text_block ~block_uuid:d.target.uuid ~ident
     ~title:"" ~new_block_id:(Platform.random_uuid ()) ()
+  |> Js.Promise.then_ (fun _ ->
+         S.refresh_now ();
+         Js.Promise.resolve ())
   |> ignore;
   S.refresh_all ()
 

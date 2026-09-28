@@ -75,6 +75,15 @@ let take_nav_mark () =
    latest-initiated load always wins *)
 let load_gen : int ref = ref 0
 
+(* set by graphs_ops (avoids a Worker_events -> Graphs_ops -> Boot
+   module cycle): remote-graph-gone broadcast refreshes the remote
+   list and the all-graphs view *)
+let remote_graph_gone : (unit -> unit) ref = ref (fun () -> ())
+
+(* set by graphs_ops (same cycle-avoidance): worker add-repo broadcast
+   appends a downloaded graph to the local list *)
+let add_repo : (string -> unit) ref = ref (fun _ -> ())
+
 let track action =
   match action with
   | Action.Boot_graph_ready repo ->

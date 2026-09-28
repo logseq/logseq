@@ -36,10 +36,12 @@ let short_name repo =
 let already_exists name =
   List.mem (Graph.full_graph_name name) !repos
 
-(* remote graphs known to the sync server: (name-without-prefix, uuid) *)
-let remote_graphs : (string * string) list ref = ref []
+(* remote graphs known to the sync server:
+   (name-without-prefix, uuid, e2ee?) *)
+let remote_graphs : (string * string * bool) list ref = ref []
 
 let list_remote_graphs () =
+  Rtc_ops.sync_app_state !Runtime.current_repo;
   Runtime.invoke "thread-api/db-sync-list-remote-graphs" []
   |> Js.Promise.then_ (fun w ->
          let entries =
@@ -54,9 +56,19 @@ let list_remote_graphs () =
                  ( Wire.map_get_string g "graph-name"
                  , Wire.map_get_string g "graph-id" )
                with
-               | Some name, Some id -> Some (name, id)
+               | Some name, Some id ->
+                   let e2ee =
+                     match Wire.get g "graph-e2ee?" with
+                     | Some (Wire.Bool b) -> b
+                     | _ -> false
+                   in
+                   Some (name, id, e2ee)
                | _ -> None)
              entries;
+         Js.Promise.resolve !remote_graphs)
+  |> Js.Promise.catch (fun e ->
+         (* logged out / offline: keep the previous list *)
+         Platform.console_error ("list-remote-graphs failed", e);
          Js.Promise.resolve !remote_graphs)
 
 (* removable? = not (demo && it's the only graph) *)
@@ -72,6 +84,16 @@ let meta_last_seen = Graphs_meta.last_seen
 (* graphs_view registers a rerender callback here (avoids a module cycle) *)
 let on_repos_changed : (unit -> unit) ref = ref (fun () -> ())
 
+(* remote-graph-gone broadcast hookup (same cycle-avoidance trick) *)
+let () =
+  Runtime.remote_graph_gone :=
+    (fun () ->
+      ignore
+        (list_remote_graphs ()
+         |> Js.Promise.then_ (fun _ ->
+                !on_repos_changed ();
+                Js.Promise.resolve ())))
+
 let refresh () =
   Graph.list_graphs ()
   |> Js.Promise.then_ (fun rs ->
@@ -81,30 +103,69 @@ let refresh () =
          !on_repos_changed ();
          Js.Promise.resolve rs)
 
+(* cljs state/add-repo! — the worker broadcasts add-repo when a remote
+   graph download finishes; the local list must include it without
+   waiting for a full list-db refresh *)
+let add_repo repo =
+  if not (List.mem repo !repos) then begin
+    repos := !repos @ [ repo ];
+    !on_repos_changed ()
+  end
+
+let () = Runtime.add_repo := add_repo
+
 (* -- switch / navigate -- *)
 
+(* Generation counter on navigation requests: two navigations can be
+   in flight at once (e.g. delete-redirect racing a remote-graph
+   download), and the earlier one's continuation must not win just
+   because it resolved later. Only the newest request applies. *)
+let nav_req = ref 0
+
 let navigate_journal repo =
+  incr nav_req;
+  let seq = !nav_req in
   Graphs_meta.touch repo;
   Graph.open_graph repo
   |> Js.Promise.then_ (fun _ -> Boot.ensure_today_journal repo)
   |> Js.Promise.then_ (fun () ->
-         Runtime.send (Action.Boot_graph_ready repo);
-         Runtime.current_repo := Some repo;
-         Graph.build_search_index repo;
-         Platform.set_location_hash (Runtime.nav_hash "#/");
-         Router.resolve ();
+         if !nav_req = seq then begin
+           Worker_events.reset_rtc ();
+           Runtime.send (Action.Boot_graph_ready repo);
+           Runtime.current_repo := Some repo;
+           Graph.build_search_index repo;
+           Platform.set_location_hash (Runtime.nav_hash "#/");
+           Router.resolve ()
+         end;
          Js.Promise.resolve ())
 
 (* -- create -- *)
 
+(* cljs <rtc-create-graph-and-start-sync!: create-remote-graph ->
+   <get-remote-graphs -> <rtc-start! (which pushes sync-app-state +
+   db-sync config) *)
 let create_remote name e2ee =
-  Graph.create_graph name
+  Graph.create_graph ~remote:true name
   |> Js.Promise.then_ (fun r ->
+         Rtc_ops.sync_app_state (Some r);
+         Rtc_ops.set_sync_config ();
          Runtime.invoke3 "thread-api/db-sync-create-remote-graph"
            (Wire.String r) (Wire.Bool e2ee) (Wire.Bool true)
+         |> Js.Promise.then_ (fun _ -> list_remote_graphs ())
          |> Js.Promise.then_ (fun _ ->
-                Runtime.invoke1 "thread-api/db-sync-start" (Wire.String r)
-                |> Js.Promise.then_ (fun _ -> Js.Promise.resolve r)))
+                Rtc_ops.start r;
+                Js.Promise.resolve r))
+
+(* cljs :rtc/download-remote-graph -> <rtc-download-graph! ->
+   <get-remote-graphs -> :graph/switch -> <rtc-start! *)
+let download_remote ~name ~uuid ~e2ee =
+  let repo = Graph.full_graph_name name in
+  Rtc_ops.download repo uuid e2ee
+  |> Js.Promise.then_ (fun _ -> list_remote_graphs ())
+  |> Js.Promise.then_ (fun _ -> navigate_journal repo)
+  |> Js.Promise.then_ (fun () ->
+         Rtc_ops.start repo;
+         Js.Promise.resolve ())
 
 let remember_open repo =
   Graphs_meta.touch repo;
@@ -131,32 +192,51 @@ let delete_remote_http uuid =
       |> Js.Promise.catch (fun _ -> Js.Promise.resolve ())
 
 let delete_graph repo ~remote =
+  let drop_from_repos () =
+    Graphs_meta.drop repo;
+    repos := List.filter (fun r -> r <> repo) !repos;
+    Runtime.send (Action.Repos_loaded !repos);
+    !on_repos_changed ()
+  in
   let finish () =
+    (* drop the repo from the local list before the worker round-trip:
+       the graphs view can re-render the remote row while the unlink is
+       in flight, and its click handler decides local-vs-remote from
+       `repos`. cljs removes via state/delete-repo! right after the
+       delete-graph! invoke resolves; removing on entry keeps the remote
+       row non-local for the whole window *)
+    drop_from_repos ();
     Runtime.invoke1 "thread-api/unsafe-unlink-db" (Wire.String repo)
-    |> Js.Promise.then_ (fun _ ->
-           Graphs_meta.drop repo;
-           refresh ())
-    |> Js.Promise.then_ (fun remaining ->
-           match !Runtime.current_repo = Some repo, remaining with
-           | true, next :: _ ->
-               Toast.success (T.removed_redirecting repo next);
-               navigate_journal next
-           | true, [] ->
-               Toast.success (T.removed repo);
-               Runtime.current_repo := None;
-               Router.resolve ();
-               Js.Promise.resolve ()
-           | false, _ ->
-               Toast.success (T.removed repo);
-               Js.Promise.resolve ())
+    |> Js.Promise.then_ (fun _w -> Js.Promise.resolve true)
+    |> Js.Promise.catch (fun e ->
+           Platform.console_error ("unlink-db failed " ^ repo, e);
+           repos := repo :: !repos;
+           Runtime.send (Action.Repos_loaded !repos);
+           !on_repos_changed ();
+           Js.Promise.resolve false)
+    |> Js.Promise.then_ (fun ok ->
+           if not ok then Js.Promise.resolve ()
+           else
+             match !Runtime.current_repo = Some repo, !repos with
+             | true, next :: _ ->
+                 Toast.success (T.removed_redirecting repo next);
+                 navigate_journal next
+             | true, [] ->
+                 Toast.success (T.removed repo);
+                 Runtime.current_repo := None;
+                 Router.resolve ();
+                 Js.Promise.resolve ()
+             | false, _ ->
+                 Toast.success (T.removed repo);
+                 Js.Promise.resolve ())
   in
   if remote then
     match
       List.find_opt
-        (fun (n, _) -> n = short_name repo)
+        (fun (n, _, _) -> n = short_name repo)
         !remote_graphs
     with
-    | Some (_, uuid) ->
+    | Some (_, uuid, _) ->
         delete_remote_http uuid
         |> Js.Promise.then_ (fun () -> finish ())
     | None -> finish ()

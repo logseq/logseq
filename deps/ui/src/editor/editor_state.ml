@@ -31,6 +31,9 @@ let initial =
   ; expanded = String_set.empty
   }
 
+let scope_of (st : t) =
+  match st.editing with Some e -> e.scope | None -> "main"
+
 let st : t Signal.state option ref = ref None
 
 (* focus request consumed after the next DOM flush — ops remount the page

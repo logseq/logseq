@@ -14,6 +14,7 @@ open Lui_elements
 module D = Logseq_dom
 
 let dom = D.dom
+let dyn = D.dyn
 let t = Sidebar_state.t
 
 let icon name = Icons.icon ~size:16. name

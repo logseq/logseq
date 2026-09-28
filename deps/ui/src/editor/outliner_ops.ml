@@ -125,14 +125,15 @@ let save_block uuid title =
      refs/tags + id-ref rewrite *)
   op "save-block" [ saved_block_map uuid title; Wire.Map [] ]
 
-let insert_blocks ?(replace_empty_target = false) blocks target_uuid
-    ~sibling =
+let insert_blocks ?(bottom = false) ?(replace_empty_target = false)
+    blocks target_uuid ~sibling =
   op "insert-blocks"
     [ Wire.List blocks
     ; Wire.Uuid target_uuid
     ; Wire.Map
         ([ kw "sibling?" (Wire.Bool sibling)
          ; kw "keep-uuid?" (Wire.Bool true)
+         ; kw "bottom?" (Wire.Bool bottom)
          ; kw "outliner-op" (Wire.Keyword "insert-blocks")
          ]
         @ if replace_empty_target then
@@ -542,8 +543,18 @@ let fetch_unlinked_refs (p : Model.page) =
                      (Action.Unlinked_loaded (Decode.blocks_of_wire w)))))
   | _ -> ()
 
+(* Refresh calls pile up during rapid editing (each op's
+   apply_and_refresh plus remote sync-db-changes). Every refresh that
+   lands runs a full reconcile, and a reparented row is dropped+recreated
+   — the e2e bounding-xy on the editor textarea races exactly that node
+   replacement. A stale refresh carries strictly older data than the
+   in-flight one, so only the newest applies. *)
+let refresh_gen = ref 0
+
 let refresh_page () : unit Js.Promise.t =
   let route_at_start = !Runtime.current_route in
+  incr refresh_gen;
+  let gen = !refresh_gen in
   match (!Runtime.current_repo, !Runtime.current_page) with
   | Some repo, Some page -> (
       incr Runtime.load_gen;
@@ -565,40 +576,49 @@ let refresh_page () : unit Js.Promise.t =
       in
       blocks_p
       |> Js.Promise.then_ (fun blocks_w ->
-             let collapsed = ref S.String_set.empty in
-             collapsed := collect_collapsed !collapsed blocks_w;
-             fill_embed_children repo (ancestors_of page) collapsed
-               (Decode.blocks_of_wire blocks_w)
-             |> Js.Promise.then_ (fun blocks ->
-                    let blocks =
-                      Decode.view_blocks ~library:page.Model.page_is_library
-                        blocks
-                    in
-                    Js.Promise.resolve blocks)
-             |> Js.Promise.then_ (fun blocks ->
-                    set_collapsed !collapsed;
-                    resolve_block_tags blocks
-                    |> Js.Promise.then_ (fun blocks ->
-                           let page =
-                             { page with Model.page_blocks = blocks }
-                           in
-                           (match !Runtime.current_route with
-                            | Some (Model.Block_zoom _) ->
-                                Js.Promise.resolve page
-                            | _ -> resolve_page_tags repo page)
-                           |> Js.Promise.then_ (fun page ->
-                                  (* the worker's tree is authoritative
-                                     again — drop committed-buffer title
-                                     overrides *)
-                                  S.clear_overrides ();
-                                  (* the user may have navigated while the
-                                     refetch was in-flight — never
-                                     overwrite the new route's page *)
-                                  if !Runtime.current_route = route_at_start
-                                  then
-                                    Runtime.send
-                                      (Action.Page_loaded page);
-                                  Js.Promise.resolve ())))))
+             (* a newer refresh superseded this fetch — a stale apply
+                would tear the open editor (recreated textarea reads) *)
+             if !refresh_gen <> gen then Js.Promise.resolve ()
+             else
+               let collapsed = ref S.String_set.empty in
+               collapsed := collect_collapsed !collapsed blocks_w;
+               fill_embed_children repo (ancestors_of page) collapsed
+                 (Decode.blocks_of_wire blocks_w)
+               |> Js.Promise.then_ (fun blocks ->
+                      let blocks =
+                        Decode.view_blocks
+                          ~library:page.Model.page_is_library blocks
+                      in
+                      Js.Promise.resolve blocks)
+               |> Js.Promise.then_ (fun blocks ->
+                      set_collapsed !collapsed;
+                      resolve_block_tags blocks
+                      |> Js.Promise.then_ (fun blocks ->
+                             let page =
+                               { page with Model.page_blocks = blocks }
+                             in
+                             (match !Runtime.current_route with
+                              | Some (Model.Block_zoom _) ->
+                                  Js.Promise.resolve page
+                              | _ -> resolve_page_tags repo page)
+                             |> Js.Promise.then_ (fun page ->
+                                    (* the worker's tree is authoritative
+                                       again — drop committed-buffer title
+                                       overrides *)
+                                    S.clear_overrides ();
+                                    (* the user may have navigated while
+                                       the refetch was in-flight — never
+                                       overwrite the new route's page *)
+                                    if
+                                      !Runtime.current_route
+                                      = route_at_start
+                                    then
+                                      Runtime.send
+                                        (Action.Page_loaded page);
+                                    Js.Promise.resolve ()))))
+      |> Js.Promise.catch (fun e ->
+             Platform.console_error ("refresh_page failed", e);
+             Js.Promise.resolve ()))
   | Some _, None ->
       (* journals / other non-page views reload through the router hook *)
       !Runtime.reload_current_view ()
@@ -701,6 +721,41 @@ let apply_parsed ?opts ~rest pairs =
 let apply_parsed_and_refresh ?opts ~rest pairs =
   apply_parsed ?opts ~rest pairs
   |> Js.Promise.then_ (fun () -> refresh_page ())
+(* same ops as [apply] but the promise carries the worker response
+   — callers that act on inserted uuids need {:blocks [...]} (cljs
+   insert-blocks! result) *)
+let rec apply_result ?(opts = Wire.Map []) ops : Wire.t option Js.Promise.t
+    =
+  match !pending_save with
+  | Some (uuid, title) ->
+      pending_save := None;
+      apply [ save_block uuid title ]
+      |> Js.Promise.then_ (fun () -> apply_result ~opts ops)
+  | None -> (
+      Editor_dom.clear_timeout !save_timer;
+      match !Runtime.current_repo with
+      | None -> Js.Promise.resolve None
+      | Some repo ->
+          Runtime.invoke3 "thread-api/apply-outliner-ops" (Wire.String repo)
+            (Wire.Array ops) opts
+          |> Js.Promise.then_ (fun r -> Js.Promise.resolve (Some r))
+          |> Js.Promise.catch (fun e ->
+                 Platform.console_error ("apply-outliner-ops failed", e);
+                 Js.Promise.resolve None))
+
+(* cljs insert-blocks! result {:blocks [...inserted maps]} — last block's
+   real uuid (keep-uuid? regenerates on collision, so callers cannot
+   reuse the ids they sent) *)
+let last_inserted_uuid (resp : Wire.t option) : string option =
+  match Option.bind resp (fun r -> Wire.map_get r "result") with
+  | Some r -> (
+      match Wire.map_get r "blocks" with
+      | Some (Wire.Array bs) | Some (Wire.List bs) -> (
+          match List.rev bs with
+          | last :: _ -> Wire.map_get_uuid last "block/uuid"
+          | [] -> None)
+      | _ -> None)
+  | None -> None
 
 let schedule_save uuid title =
   cancel_pending_save ();
@@ -779,6 +834,12 @@ let title_for_edit (title : string) : string Js.Promise.t =
                    toks;
                  Buffer.add_substring b title !cursor (n - !cursor);
                  Js.Promise.resolve (Buffer.contents b)))
+
+let apply_and_refresh_result ?opts ops =
+  apply_result ?opts ops
+  |> Js.Promise.then_ (fun r ->
+         refresh_page ()
+         |> Js.Promise.then_ (fun () -> Js.Promise.resolve r))
 
 (* undo/redo writes datoms straight into the db — resync the open
    editor's buffer so a stale textarea does not mask the restored title *)
