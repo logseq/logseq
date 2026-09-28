@@ -111,6 +111,19 @@ let item_title (it : Sidebar_state.item) =
         [ dom ~tag:"span"
             ~style_class:"overflow-hidden text-ellipsis"
             ~text:it.title [] ]
+  | [], "contents" ->
+      (* cljs: (icon "list-details") + "Contents" *)
+      dom ~key:"pt-contents" ~style_class:"flex items-center"
+        [ dom ~tag:"i" ~style_class:"ti ti-list-details text-md mr-2" []
+        ; dom ~tag:"span" ~text:it.title [] ]
+  | [], "page-graph" ->
+      dom ~key:"pt-pg" ~style_class:"flex items-center"
+        [ dom ~tag:"i" ~style_class:"ti ti-hierarchy text-md mr-2" []
+        ; dom ~tag:"span" ~text:it.title [] ]
+  | [], "help" ->
+      dom ~key:"pt-help" ~style_class:"flex items-center"
+        [ dom ~tag:"i" ~style_class:"ti ti-help text-md mr-2" []
+        ; dom ~tag:"span" ~text:it.title [] ]
   | [], _ -> dom ~key:"pt-plain" ~style_class:"flex items-center" ~text:it.title []
   | crumbs, _ -> breadcrumb crumbs
 
