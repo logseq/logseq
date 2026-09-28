@@ -2864,7 +2864,9 @@
           (is (every? #(<= (:tx %) (:max-tx @reopened)) (d/datoms @reopened :eavt))
               "the next tx id the reopened graph hands out is on no datom yet")
           (is (= "edited" (:block/title (d/entity @reopened (:db/id parent)))))
-          (with-datascript-conns reopened client-ops-conn
+          ;; the reopened graph is marked synced already; a second mark would
+          ;; be a transaction past the covered one
+          (with-local-graph-conns reopened client-ops-conn
             (fn []
               (client-op/update-local-checksum test-repo "stale" max-tx)
               (db-sync/reconcile-local-checksum! test-repo reopened)
@@ -2887,7 +2889,7 @@
 (deftest local-graph-edit-writes-no-checksum-test
   (testing "an edit on a graph that does not sync stores no checksum"
     (let [{:keys [conn client-ops-conn parent]} (setup-parent-child)]
-      (with-datascript-conns conn client-ops-conn
+      (with-local-graph-conns conn client-ops-conn
         (fn []
           (db-listener/listen-db-changes! test-repo conn :handler-keys [:checksum-test])
           (is (= 0 (count-checksum-writes
@@ -2914,7 +2916,7 @@
     (let [{:keys [conn client-ops-conn parent]} (setup-parent-child)
           recomputes (atom 0)
           recompute-checksum sync-checksum/recompute-checksum]
-      (with-datascript-conns conn client-ops-conn
+      (with-local-graph-conns conn client-ops-conn
         (fn []
           ;; stored by an app version that kept the checksum on every graph
           (client-op/update-local-checksum test-repo (recompute-checksum @conn) (:max-tx @conn))
@@ -2937,7 +2939,7 @@
       ;; The E2EE flag is already set, so the transaction below does not flip
       ;; it; a flip recomputes the checksum on its own (update-checksum).
       (d/transact! conn [(ldb/kv :logseq.kv/graph-rtc-e2ee? false)])
-      (with-datascript-conns conn client-ops-conn
+      (with-local-graph-conns conn client-ops-conn
         (fn []
           ;; stored by an app version that kept the checksum on every graph,
           ;; then edits that did not update it
