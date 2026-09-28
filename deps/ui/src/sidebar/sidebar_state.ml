@@ -32,6 +32,7 @@ type item =
   ; icon : (string * string) option
   ; breadcrumb : string list
   ; blocks : Model.block list
+  ; linked_refs : Model.block list
   ; page_ref : string option
   }
 
@@ -270,6 +271,7 @@ let item_of_page (p : Model.page) =
   ; icon = p.Model.page_icon
   ; breadcrumb = []
   ; blocks = p.Model.page_blocks
+  ; linked_refs = p.Model.page_linked_refs
   ; page_ref =
       Some
         (match p.Model.page_title with
@@ -289,7 +291,13 @@ let page_item_of_ref repo (target : string) : item option Js.Promise.t =
          | Some p ->
              fetch_blocks p
              |> Js.Promise.then_ (fun p' ->
-                    Js.Promise.resolve (Some (item_of_page p'))))
+                    Router.fetch_refs_blocks p'
+                    |> Js.Promise.then_ (fun refs ->
+                           Js.Promise.resolve
+                             (Some
+                                (item_of_page
+                                   { p' with
+                                     Model.page_linked_refs = refs })))))
 
 (* pull of the entity; a "page" is tagged logseq.class/* — blocks have a
    :block/page ref back to their page. *)
@@ -363,6 +371,7 @@ let block_item_of_uuid repo uuid : item option Js.Promise.t =
                              ; icon = None
                              ; breadcrumb = crumbs
                              ; blocks = [ b ]
+                             ; linked_refs = []
                              ; page_ref = List.nth_opt crumbs 0
                              }))
              | _ -> Js.Promise.resolve None)
@@ -390,6 +399,7 @@ let contents_item _repo : item option Js.Promise.t =
            ; title = t "Contents"
            ; breadcrumb = []
            ; blocks = p.Model.page_blocks
+           ; linked_refs = []
            ; page_ref = Some p.Model.page_title
            ; icon = None
            })
@@ -404,6 +414,7 @@ let static_item key kind title =
     ; icon = None
     ; breadcrumb = []
     ; blocks = []
+    ; linked_refs = []
     ; page_ref = None
     }
 
