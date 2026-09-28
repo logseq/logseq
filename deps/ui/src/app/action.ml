@@ -4,6 +4,7 @@ type t =
   | Boot_graph_ready of string
   | Repos_loaded of string list
   | Page_loaded of Model.page
+  | Page_load_failed (* page/block lookup resolved to nothing *)
   | Journals_loaded of Model.page list
   | Refs_loaded of Model.block list
   | Unlinked_loaded of Model.block list

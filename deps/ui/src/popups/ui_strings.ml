@@ -167,6 +167,7 @@ let t (key : string) : string =
   | "reference/page-filter" -> "Page filter"
   | "page/open-properties" -> "Open properties"
   | "page/hide-properties" -> "Hide properties"
+  | "page/not-found" -> "Page not found"
   | "page/not-found-title" -> "Page Not Found"
   | "page/not-found-desc" -> "Oops! The page you're looking for doesn't exist."
   | "page/go-back-home" -> "Go back home"
