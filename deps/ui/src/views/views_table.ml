@@ -506,10 +506,9 @@ let header_cell inst ~refresh (c : V.column) : D.el =
             ~cls:"h-8 w-6 flex items-center justify-center"
             ~attrs:[ ("for", "header-index"); ("title", I.row_number) ]
             ~text:"#" ())
-   | _ ->
-       D.el_append_child cell
-         (D.h ~tag:"span" ~cls:"truncate" ~text:c.V.c_name ());
-       (match c.V.c_prop with
+   | _ -> (
+       D.el_append_child cell (header_button inst ~refresh c);
+       match c.V.c_prop with
         | Some p ->
             (* cljs header-cp: property columns open the property
                configure dropdown (.ls-property-dropdown) *)
@@ -529,7 +528,7 @@ let header_cell inst ~refresh (c : V.column) : D.el =
                   (W.Map
                      [ (W.Keyword "property", p)
                      ; (W.Keyword "property-id", W.Keyword c.V.c_id) ]))
-        | None -> D.el_append_child cell (header_button inst ~refresh c)));
+        | None -> ()));
   cell
 
 (* ---------- action bar ---------- *)
