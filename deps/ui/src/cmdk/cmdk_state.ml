@@ -738,8 +738,9 @@ let run_item st it =
         | Cmd_search -> () (* keep palette open on the input *)
         | Cmd_journals ->
             close st;
-            (* cljs route-handler/go-to-journals! -> :home/:all-journals *)
-            Platform.set_location_hash (Runtime.nav_hash "#/journals")
+            (* cljs route-handler/go-to-journals! -> :home (no custom
+               home page) / :all-journals (custom home configured) *)
+            Platform.set_location_hash (Runtime.nav_hash "#/")
         | Cmd_all_graphs ->
             close st;
             Runtime.send (Action.Navigate_to Model.All_graphs);
