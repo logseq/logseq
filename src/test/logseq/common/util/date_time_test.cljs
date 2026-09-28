@@ -47,8 +47,8 @@
         utc (date-time-util/journal-day->ms day)
         offset-min (.getTimezoneOffset (js/Date. 2026 8 28))]
     (is (= js-local local))
-    (is (= (* offset-min 60 1000) (- utc local))
-        "local midnight is UTC midnight shifted by the local offset on that day")
+    (is (= (* offset-min 60 1000) (- local utc))
+        "local midnight is UTC midnight plus Date.getTimezoneOffset (minutes west of UTC)")
     (is (= day (date-time-util/ms->journal-day local)))
     (is (nil? (date-time-util/journal-day->local-ms nil)))))
 
