@@ -56,6 +56,7 @@ let update (model : t) (action : Action.t) : t =
       ; unlinked_query = ""
       }
   | Unlinked_set_query q -> { model with unlinked_query = q }
+  | Help_toggle -> { model with help_open = not model.help_open }
   | Graph_toggle_settings ->
       let gv = model.gv in
       { model with gv = { gv with gv_settings_open = not gv.gv_settings_open } }
