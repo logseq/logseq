@@ -20,14 +20,10 @@ let icon name = Icons.icon ~size:16. name
 
 (* ---------- popup menu helpers ---------- *)
 
-let backdrop st =
-  dom ~key:"menu-backdrop"
-    ~attrs:[ ("style", "position:fixed;inset:0;z-index:998") ]
-    ~events:"click"
-    ~on_dom_event:(fun name _ ->
-      if name = "click" then Sidebar_state.close_menu st)
-    []
-
+(* Menus dismiss via the document-level outside-click + Escape handlers in
+   Sidebar_state — no fullscreen backdrop element (an invisible inset:0
+   overlay would intercept every pointer hit beneath it, matching the cljs
+   dropdown which has none). *)
 let menu_box ~style children =
   dom ~key:"menu-box" ~tag:"div"
     ~style_class:"ui__dropdown-menu-content ui__dropdown-menu"
@@ -75,8 +71,7 @@ let nav_edit_menu st checked =
           ~text:label [] ]
   in
   dom ~key:"nav-edit-menu"
-    [ backdrop st
-    ; menu_box ~style:"position:fixed;top:96px;left:16px;z-index:999;min-width:180px"
+    [ menu_box ~style:"position:fixed;top:96px;left:16px;z-index:999;min-width:180px"
         (List.map mk nav_labels)
     ]
 
@@ -120,8 +115,7 @@ let plugins_menu st =
       ]
   in
   dom ~key:"plugins-menu"
-    [ backdrop st
-    ; dom ~key:"menu-box" ~tag:"div"
+    [ dom ~key:"menu-box" ~tag:"div"
         ~style_class:
           "ui__dropdown-menu-content ui__dropdown-menu \
            toolbar-plugins-manager-content"
@@ -372,8 +366,11 @@ let plugins_toolbar (ms : Model.t Signal.signal) : t =
   in
   dyn ~equal:Stdlib.( = )
     (fun _dirty ->
-      match Plugin_host.toolbar_items () with
-      | [] -> dom ~key:"pm-none" []
+      match
+        ( Plugin_host.toolbar_items () <> []
+        , Plugin_host.has_installed_plugins () )
+      with
+      | false, false -> dom ~key:"pm-none" []
       | _ ->
           dom ~key:"pm" ~tag:"div"
             ~style_class:"toolbar-plugins-manager flex items-center"
