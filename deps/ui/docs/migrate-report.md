@@ -471,6 +471,37 @@ Contracts discovered while making `logseq.e2e.commands-basic-test` green
   moves to the block-below pill). Rendering it for any block with hidden
   rows adds a second `.property-k` ("Show hidden properties") and breaks
   `get-text ".property-k"` single-match assertions.
+- **The popup key router must be consulted before the normal dispatch**:
+  `Editor_commands.popup_key`/`click_guard` were defined but never wired
+  — `on_keydown` must check `popup_key` first (arrows move the calendar,
+  Enter commits, Escape restores caret at `p.from`, other keys swallowed)
+  or the date picker ignores Escape and teardown clicks leak into the
+  picker. `click_guard` runs at the top of `on_mousedown`'s
+  `.editor-wrapper` None branch: inside the popup suppress, outside
+  close it — before the blur-commit chain.
+- **The forbidden-edit guard is the full cljs selector list**
+  (`target-forbidden-edit?`, block.cljs): capture-phase clicks matching
+  `.forbid-edit`/`.bullet`/`.logbook`/`.markdown-table`/A|BUTTON|TIME|
+  AUDIO|VIDEO|INPUT|TEXTAREA|DETAILS|SUMMARY|SUP.fn|`.image-resize`/
+  `closest a`/`.cloze`/`.cloze-revealed`/`.query-table` must not call
+  `enter_edit` — the element's own handler owns the click and the
+  unmount-on-edit would beat it.
+- **The code/calc editing surface needs the same listener wiring as the
+  textarea**: `pre.CodeMirror-line[data-code-uuid]` lives outside
+  `.editor-wrapper`, so `on_input` must route its `input` events to
+  `code_pre_input` (sync buffer + schedule_save + re-render
+  `.extensions__code-calc-results` per line) and `on_keydown`'s
+  non-textarea fallthrough to `code_pre_key` (Escape exits,
+  Shift+Enter inserts a sibling). Without it `w/fill "*:focus"` never
+  reaches the buffer and no calc output renders.
+- **`expand_property_refs` must actually be in the served worker
+  bundle**: `get-page-blocks-tree` expands `{db/id}` stubs under
+  `logseq.property/*` keys into `ref_value_summary` maps (title/ident) —
+  a stale `static/js/db-worker.js` ships the raw stub and
+  `prop_label`-style decoders see `{db/id}` with no `block/title`, so
+  `order-list-type` silently decodes to nothing. db-worker has its own
+  build: `cd deps/db-worker && dune build js_api && vite build --mode
+  browser`.
 
 ## tag-basic-test (page-title tagging)
 

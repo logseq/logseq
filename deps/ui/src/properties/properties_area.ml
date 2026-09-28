@@ -259,8 +259,20 @@ let new_property_btn (ctx : V.ctx) ~for_class ~owner_title =
       else Properties_dialog.open_for_block ctx.block_uuid);
   wrap
 
+(* cljs show-hidden-properties-toggle-button?: the toggle row only
+   renders when the owning surface is the current route page or the
+   zoom root block — hidden props on ordinary blocks stay unreachable *)
+let can_toggle_hidden (ctx : V.ctx) ~below_rows =
+  match !Runtime.current_route with
+  | Some (Model.Block_zoom u) ->
+      u = ctx.block_uuid && below_rows = []
+  | _ -> (
+      match !Runtime.current_page with
+      | Some (p : Model.page) -> p.page_uuid = Some ctx.block_uuid
+      | None -> false)
+
 let render_panel ctx ~owner_is_tag ~owner_title ~page_area ~show_hidden
-    panel rows hidden_rows =
+    ~can_toggle panel rows hidden_rows =
   List.iter
     (fun r -> el_append_child panel (row_el ctx ~owner_is_tag ~owner_title r))
     rows;
@@ -272,7 +284,8 @@ let render_panel ctx ~owner_is_tag ~owner_title ~page_area ~show_hidden
         (fun r ->
           el_append_child panel (row_el ctx ~owner_is_tag ~owner_title r))
         hidden_rows;
-    if hidden_rows <> [] then el_append_child panel (toggle_row ())
+    if can_toggle && hidden_rows <> [] then
+      el_append_child panel (toggle_row ())
   end;
   ignore page_area
 
@@ -348,7 +361,9 @@ let render_area ?(left_host = None) ~host (ctx : V.ctx) ~owner_is_tag
              | None -> left_rows @ panel_rows
            in
            render_panel ctx ~owner_is_tag ~owner_title ~page_area
-             ~show_hidden:!S.show_hidden panel panel_rows hidden;
+             ~show_hidden:!S.show_hidden
+             ~can_toggle:(can_toggle_hidden ctx ~below_rows:[])
+             panel panel_rows hidden;
            (* pills render next to the area inside the indent container *)
            remove_all host ":scope > .positioned-properties.block-below";
            if below_rows <> [] then
@@ -395,7 +410,9 @@ let render_block_area ~ind ~left_host ctx ~owner_is_tag ~owner_title area_el =
                       left_rows
                 | None -> ());
                render_panel ctx ~owner_is_tag ~owner_title ~page_area:false
-                 ~show_hidden:!S.show_hidden panel rows hidden;
+                 ~show_hidden:!S.show_hidden
+                 ~can_toggle:(can_toggle_hidden ctx ~below_rows)
+                 panel rows hidden;
                remove_all ind ":scope > .positioned-properties.block-below";
                if below_rows <> [] then
                  render_pills ctx ~owner_is_tag ~owner_title ind below_rows);
@@ -604,7 +621,9 @@ let rec render_page_area ctx (p : Model.page) ~attach_area ~attach_bidi
            el_append_child area panel;
            render_panel ctx ~owner_is_tag:false
              ~owner_title:p.Model.page_title ~page_area:true
-             ~show_hidden:!S.show_hidden panel panel_rows hidden;
+             ~show_hidden:!S.show_hidden
+             ~can_toggle:(can_toggle_hidden ctx ~below_rows:[])
+             panel panel_rows hidden;
            el_append_child area
              (new_property_btn ctx ~for_class:false
                 ~owner_title:p.Model.page_title));
