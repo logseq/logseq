@@ -777,6 +777,19 @@ let run_highlighted_sidebar st =
       | _ -> run_item st it)
   | None -> ()
 
+(* cmd+c / "Copy ref" hint copies [[uuid]] of the highlighted node and
+   closes the dialog (cljs copy-block-ref -> ->page-ref) *)
+let copy_highlighted_ref st =
+  let v = get st in
+  match item_at v v.hl with
+  | Some it -> (
+      match it.act with
+      | Open_page uuid | Open_block uuid ->
+          Platform.clipboard_write_text ("[[" ^ uuid ^ "]]");
+          close st
+      | _ -> ())
+  | None -> ()
+
 (* group of the currently highlighted item (for mod+down expand) *)
 let hl_group st =
   let v = get st in

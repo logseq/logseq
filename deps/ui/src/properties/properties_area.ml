@@ -762,6 +762,188 @@ let mount_page_area page_inner =
            | None -> el_insert_adjacent title_el "afterend" actions);
           mount_page_props page_inner p uuid)
 
+(* ---------- right-sidebar page properties ---------- *)
+
+(* cljs page.cljs sidebar-page-properties expands db-properties-cp
+   (sidebar-properties? => show-properties? and, for classes,
+   show-class-properties-area?) inside .ls-sidebar-page-properties.
+   Unlike the main-page surface, tag/class pages DO mount the area here;
+   a non-class page with no rows renders only the "Add property" button
+   (no .ls-properties-area). *)
+
+(* cljs class-properties-key: the built-in
+   logseq.property.class/properties key — letter-p icon + "Tag
+   Properties" *)
+let class_properties_key () =
+  let key = mk ~cls:"property-key text-sm" "div" in
+  let inner = mk ~cls:"property-key-inner jtrigger-view" "div" in
+  let icon = mk ~cls:"property-icon" "div" in
+  let btn = mk "button" ~cls:"flex items-center property-m" in
+  let s = mk ~cls:"ui__icon ti ls-icon-letter-p opacity-50" "span" in
+  el_append_child s (mk ~cls:"ti ti-letter-p" "i");
+  el_append_child btn s;
+  el_append_child icon btn;
+  el_append_child inner icon;
+  let a =
+    mk "a" ~cls:"property-k flex select-none jtrigger w-full"
+      ~attrs:[ ("tabindex", "0") ]
+  in
+  el_set_text a (I18n.t "property.built-in/class-properties");
+  el_append_child inner a;
+  el_append_child key inner;
+  key
+
+(* class-schema rows: get-class-properties returns property entities;
+   properties-section renders each as a row whose value is the schema
+   config (nil here — same shape positioned_rows synthesizes) *)
+let class_schema_row prop =
+  match W.map_get_string prop "db/ident" with
+  | Some ident ->
+      Some
+        (W.Map
+           [ (W.Keyword "property-id", W.Keyword ident)
+           ; (W.Keyword "property", prop)
+           ; (W.Keyword "value", W.Nil) ])
+  | None -> None
+
+let render_class_section (ctx : V.ctx) ~owner_title host =
+  (* .flex.flex-col.gap-1.mt-2 > [header; .gap-1.flex.flex-col > rows +
+     .ml-5 > new-property] *)
+  let section = mk ~cls:"flex flex-col gap-1 mt-2" "div" in
+  let head = mk ~attrs:[ ("style", "font-size: 15px") ] "div" in
+  el_append_child head (class_properties_key ());
+  ignore (child_text "div" "text-muted-foreground ml-5"
+            (I18n.t "class/tag-properties-desc") head);
+  el_append_child section head;
+  let col = mk ~cls:"gap-1 flex flex-col" "div" in
+  el_append_child section col;
+  el_append_child host section;
+  D.class_properties (D.uuid_ref ctx.block_uuid)
+  |> Js.Promise.then_ (fun w ->
+         let props = W.args_list w in
+         List.iter
+           (fun p ->
+             match class_schema_row p with
+             | Some row ->
+                 el_append_child col
+                   (row_el ctx ~owner_is_tag:true ~owner_title row)
+             | None -> ())
+           props;
+         let add_wrap = mk ~cls:"ml-5" "div" in
+         el_append_child add_wrap
+           (new_property_btn ctx ~for_class:true ~owner_title);
+         el_append_child col add_wrap;
+         Js.Promise.resolve ())
+  |> ignore
+
+(* host is the emitted .ls-properties-area.ls-page-properties div;
+   mounts once per element via the data-props-mounted marker *)
+let mount_sidebar_area (area : el) =
+  match el_get_attr area "data-sb-uuid" with
+  | None | Some "" -> ()
+  | Some uuid ->
+      if el_get_attr area "data-sb-mounted" = Some "1" then ()
+      else (
+        el_set_attr area "data-sb-mounted" "1";
+        let db_id =
+          match el_get_attr area "data-sb-db-id" with
+          | Some "" | None -> None
+          | Some s -> ( try Some (int_of_string s) with _ -> None )
+        in
+        let title =
+          Option.value ~default:"" (el_get_attr area "data-sb-title")
+        in
+        let is_tag = el_get_attr area "data-sb-tag" = Some "1" in
+        let host =
+          match el_parent area with
+          | Some h -> h
+          | None -> area
+        in
+        let bidi = mk ~cls:"w-full ls-bidirectional-properties mt-8" "div" in
+        let rec ctx : V.ctx =
+          { block_uuid = uuid
+          ; block_id = db_id
+          ; refresh
+          ; is_page = true
+          ; class_schema = false
+          }
+        and refresh () = render ()
+        and render () =
+          D.display_props ~page_title:false ~tag_dialog:false ~sidebar:true
+            ~show_hidden:!S.show_hidden (D.uuid_ref uuid)
+          |> Js.Promise.then_ (fun wire ->
+                 let rows, hidden = D.split_display wire in
+                 let rows = List.filter is_panel_row rows in
+                 let _l, _b, panel_rows = partition_rows rows in
+                 el_clear area;
+                 let before_hr el =
+                   match el_query host "hr" with
+                   | Some hr -> el_insert_adjacent hr "beforebegin" el
+                   | None -> el_insert_adjacent host "beforeend" el
+                 in
+                 if (not is_tag) && panel_rows = [] && hidden = [] then (
+                   (* cljs: (and empty-full empty-hidden (not class?)) →
+                      just [new-property], no .ls-properties-area *)
+                   el_remove area;
+                   if el_query host ".ls-new-property" = None then
+                     before_hr
+                       (new_property_btn ctx ~for_class:false
+                          ~owner_title:title))
+                 else (
+                   if not (el_is_connected area) then begin
+                     match el_query host ".ls-new-property" with
+                     | Some btn -> el_insert_adjacent btn "afterend" area
+                     | None -> before_hr area
+                   end;
+                   let panel = mk ~cls:"properties-panel" "div" in
+                   el_append_child area panel;
+                   render_panel ctx ~owner_is_tag:is_tag
+                     ~owner_title:title ~page_area:true
+                     ~show_hidden:!S.show_hidden panel panel_rows hidden;
+                   if is_tag then
+                     render_class_section ctx ~owner_title:title area
+                   else
+                     el_append_child area
+                       (new_property_btn ctx ~for_class:false
+                          ~owner_title:title));
+                 (* bidirectional area renders for page targets too *)
+                 (match db_id with
+                  | Some id ->
+                      D.bidirectional id
+                      |> Js.Promise.then_ (fun w ->
+                             let groups =
+                               match w with
+                               | W.List xs | W.Array xs -> xs
+                               | _ -> []
+                             in
+                             if groups = [] then begin
+                               if el_is_connected bidi then el_remove bidi
+                             end else (
+                               if not (el_is_connected bidi) then
+                                 el_insert_adjacent area "afterend" bidi;
+                               el_clear bidi;
+                               render_bidi_groups bidi w);
+                             Js.Promise.resolve ())
+                      |> ignore
+                  | None -> ());
+                 Js.Promise.resolve ())
+          |> ignore
+        in
+        refresh ();
+        S.register_area area (fun () ->
+            if el_is_connected area || el_is_connected host then render ()
+            else S.unregister_area area))
+
+let ensure_sidebar_areas () =
+  let els =
+    query_selector_all ".ls-sidebar-page-properties [data-sb-uuid]"
+  in
+  for i = 0 to node_list_length els - 1 do
+    match node_list_item els i with
+    | Some el -> mount_sidebar_area el
+    | None -> ()
+  done
+
 (* ---------- observer entry ---------- *)
 
 let ensure_all () =
@@ -770,6 +952,7 @@ let ensure_all () =
   (match doc_query ".page-inner" with
    | Some inner -> mount_page_area inner
    | None -> ());
+  ensure_sidebar_areas ();
   (* block-level *)
   let blocks = query_selector_all ".ls-block" in
   for i = 0 to node_list_length blocks - 1 do

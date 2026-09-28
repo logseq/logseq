@@ -34,6 +34,8 @@ type item =
   ; blocks : Model.block list
   ; linked_refs : Model.block list
   ; page_ref : string option
+  ; page : Model.page option (* source page for page/contents items *)
+  ; props_collapsed : bool (* cljs: collapsed? = (not (entity/class? page)) *)
   }
 
 type t =
@@ -273,6 +275,8 @@ let item_of_page (p : Model.page) =
   ; breadcrumb = []
   ; blocks = p.Model.page_blocks
   ; linked_refs = p.Model.page_linked_refs
+  ; page = Some p
+  ; props_collapsed = not p.Model.page_is_tag
   ; page_ref =
       Some
         (match p.Model.page_title with
@@ -373,6 +377,8 @@ let block_item_of_uuid repo uuid : item option Js.Promise.t =
                              ; breadcrumb = crumbs
                              ; blocks = [ b ]
                              ; linked_refs = []
+                             ; page = None
+                             ; props_collapsed = true
                              ; page_ref = List.nth_opt crumbs 0
                              }))
              | _ -> Js.Promise.resolve None)
@@ -400,6 +406,8 @@ let static_item key kind title =
     ; breadcrumb = []
     ; blocks = []
     ; linked_refs = []
+    ; page = None
+    ; props_collapsed = true
     ; page_ref = None
     }
 
@@ -414,6 +422,14 @@ let push_item st it =
 let remove_item st key =
   Runtime.signal_set st.items
     (List.filter (fun (i : item) -> i.key <> key)
+       (Signal.get_state st.items))
+
+let toggle_props st key =
+  Runtime.signal_set st.items
+    (List.map
+       (fun (i : item) ->
+         if i.key = key then { i with props_collapsed = not i.props_collapsed }
+         else i)
        (Signal.get_state st.items))
 
 let add_promise st p =

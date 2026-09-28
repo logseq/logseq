@@ -325,12 +325,14 @@ let shortcut_el keys =
     ~attrs:[ ("aria-hidden", "true"); ("style", "white-space: nowrap") ]
     (interleave kids)
 
-let hint_button label keys =
+let hint_button ~on_click label keys =
   Logseq_dom.dom ~key:("hb-" ^ label) ~tag:"button"
     ~style_class:
       "hint-button [&>span:first-child]:hover:opacity-100 opacity-40 \
        hover:opacity-80 inline-flex items-center gap-1"
     ~attrs:[ ("data-hint", label) ]
+    ~events:"click"
+    ~on_dom_event:(fun n _ -> if n = "click" then on_click ())
     [ Logseq_dom.dom ~key:"t" ~tag:"span" ~style_class:"opacity-60"
         ~text:label []
     ; shortcut_el keys ]
@@ -369,28 +371,37 @@ let hint_action_of (it : S.item) =
   | S.Open_page _ -> (`open_, true)
   | S.Open_block _ -> (`open_, true)
 
-let action_hints v =
+(* cljs hints: each button's on-click runs handle-action on the
+   highlighted item *)
+let action_hints st v =
   match S.item_at v v.S.hl with
   | None -> box ~key:"no-actions" []
   | Some it ->
       let btns =
         match hint_action_of it with
         | `open_, has_block ->
-            [ hint_button (Ui_strings.t "cmdk.action/open") [ "return" ]
+            [ hint_button ~on_click:(fun () -> S.run_highlighted st)
+                (Ui_strings.t "cmdk.action/open") [ "return" ]
             ; hint_button
+                ~on_click:(fun () -> S.run_highlighted_sidebar st)
                 (Ui_strings.t "cmdk.action/open-in-sidebar")
                 [ "shift"; "return" ]
             ]
             @ (if has_block then
-                 [ hint_button (Ui_strings.t "cmdk.action/copy-ref")
+                 [ hint_button
+                     ~on_click:(fun () -> S.copy_highlighted_ref st)
+                     (Ui_strings.t "cmdk.action/copy-ref")
                      [ "cmd"; "c" ] ]
                else [])
         | `create, _ ->
-            [ hint_button (Ui_strings.t "cmdk.action/create") [ "return" ] ]
+            [ hint_button ~on_click:(fun () -> S.run_highlighted st)
+                (Ui_strings.t "cmdk.action/create") [ "return" ] ]
         | `filter, _ ->
-            [ hint_button (Ui_strings.t "cmdk.action/filter") [ "return" ] ]
+            [ hint_button ~on_click:(fun () -> S.run_highlighted st)
+                (Ui_strings.t "cmdk.action/filter") [ "return" ] ]
         | `trigger, _ ->
-            [ hint_button (Ui_strings.t "cmdk.action/trigger") [ "return" ] ]
+            [ hint_button ~on_click:(fun () -> S.run_highlighted st)
+                (Ui_strings.t "cmdk.action/trigger") [ "return" ] ]
       in
       Logseq_dom.dom ~key:"actions"
         ~style_class:"gap-2 hidden md:flex"
@@ -416,7 +427,8 @@ let hints st : t =
         ]
     ; dyn
         ~equal:(fun (a : int * int) b -> a = b)
-        (fun (hl, _kind) -> action_hints { (S.get st) with S.hl = hl })
+        (fun (hl, _kind) ->
+          action_hints st { (S.get st) with S.hl = hl })
         (Signal.map
            (fun (v : S.view) ->
              let kind =
