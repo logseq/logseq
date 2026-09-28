@@ -195,21 +195,32 @@ let stable_built_in_sync_repair_item order (m : Block_map.t) : Block_map.t =
         (Block_map.put m "block/created-at" (Datascript.Int64 0L))
         "block/updated-at" (Datascript.Int64 0L)
     in
-    (match Block_map.attr_value m "db/ident" with
-     | Some (Datascript.Keyword ident)
-       when not (List.mem ident built_in_sync_repair_unordered_classes) ->
-         (match order with
-          | Some o -> Block_map.put m "block/order" (Datascript.String o)
-          | None -> m)
-     | _ -> m)
+    let unordered =
+      match Block_map.attr_value m "db/ident" with
+      | Some (Datascript.Keyword ident) ->
+          List.mem ident built_in_sync_repair_unordered_classes
+      | _ -> false
+    in
+    if unordered then m
+    else
+      match order with
+      | Some o -> Block_map.put m "block/order" (Datascript.String o)
+      | None -> m
   else m
 
 (* cljs db-core/built-in-sync-repair-tx-data *)
 let built_in_sync_repair_tx_data () : Wire.t list =
   let new_properties =
-    Builtin_data.built_in_properties
-    |> List.filter (fun (b : Builtin_data.builtin_property) ->
-           List.mem b.Builtin_data.ident built_in_sync_repair_properties)
+    (* cljs selects the property entries by the repair idents' order — a
+       cljs select-keys map iterates in keys order, so the tx must emit
+       repeat-type before comments/blocks even though the property table
+       declares them in the opposite order. *)
+    built_in_sync_repair_properties
+    |> List.map (fun ident ->
+           List.find
+             (fun (b : Builtin_data.builtin_property) ->
+                b.Builtin_data.ident = ident)
+             Builtin_data.built_in_properties)
     |> Sqlite_create_graph.build_properties
     |> List.map Sqlite_create_graph.mark_block_as_built_in
   in
