@@ -120,6 +120,7 @@ let main_content (ms : Model.t Signal.signal) =
                   && a.route_page = b.route_page
                   && a.journals = b.journals
                   && a.page_refs = b.page_refs
+                  && a.unlinked_refs = b.unlinked_refs
                   && a.editing_title = b.editing_title
                   && a.page_menu = b.page_menu
                   && a.confirm = b.confirm
