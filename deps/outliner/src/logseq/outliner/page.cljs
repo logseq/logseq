@@ -34,7 +34,8 @@
         id-ref->page #(db-content/content-id-ref->page % [page-entity])]
     (->> refs
          (keep (fn [ref]
-                 (when-let [raw-title (:block/raw-title ref)]
+                 (when-let [raw-title (or (:block/raw-title ref)
+                                          (:block/title ref))]
                    (let [content' (id-ref->page raw-title)]
                      (when (not= raw-title content')
                        {:ref-id (:db/id ref)

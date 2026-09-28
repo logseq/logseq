@@ -33,7 +33,8 @@
      (fn [ref]
        (let [id (:db/id ref)
              replaced-title (when-not (contains? retract-ids id)
-                              (when-let [raw-title (:block/raw-title ref)]
+                              (when-let [raw-title (or (:block/raw-title ref)
+                                                       (:block/title ref))]
                                 (reduce
                                  (fn [raw-title block]
                                    (replace-ref-with-deleted-block-title block raw-title))
