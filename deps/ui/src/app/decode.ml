@@ -33,6 +33,16 @@ let rec block_of_wire (w : Wire.t) : Model.block =
   ; block_page_name = Wire.map_get_string w "block/page-name"
   ; block_is_page =
       Option.is_some (Wire.map_get_string w "block/name")
+  ; block_heading =
+      (* cljs block-heading-level: :block/heading-level first, else the
+         logseq.property/heading value (int 1-6, or true = level+1) *)
+      (match Wire.map_get_int w "block/heading-level" with
+       | Some n -> Some n
+       | None -> (
+           match Wire.get w "logseq.property/heading" with
+           | Some (Wire.Int n) when n >= 1 && n <= 6 -> Some n
+           | Some (Wire.Bool true) -> Some (min (level + 1) 6)
+           | _ -> None))
   ; block_default_collapsed = false
   }
 

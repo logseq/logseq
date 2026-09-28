@@ -53,7 +53,10 @@ type ac =
   }
 
 type cm_item =
-  | Ci_item of string
+  (* label, optional (binding, display caps) shortcut, command id —
+     mirrors ui/dropdown-shortcut output; the id is what
+     ls:editor-command carries *)
+  | Ci_item of string * (string * string list) option * string
   | Ci_sub of string
   | Ci_sep
   | Ci_colors
@@ -76,12 +79,14 @@ type t =
   { vs : view Signal.state
   ; gen : int ref (* stale-response guard *)
   ; titles : string list ref
+  ; tag_titles : string list ref (* class/tag entities for the # popup *)
   }
 
 let make scheduler : t =
   { vs = Signal.state scheduler { ac = None; cm = None }
   ; gen = ref 0
   ; titles = ref []
+  ; tag_titles = ref []
   }
 
 let get t = Signal.get t.vs.Signal.state_signal
@@ -144,33 +149,42 @@ let slash_items () : ac_item list =
         ; "editor.slash/image-link", "photoLink", Emit "![]()"
         ; "editor.slash/underline", "underline", Emit "<ins></ins>"
         ; "editor.slash/code-block", "code", Emit "```\n\n```"
-        ; "class.built-in/quote-block", "quote", Editor_cmd "Quote"
+        ; "class.built-in/quote-block", "quote", Editor_cmd "quote"
         ; "editor.slash/math-block", "math", Emit "$$\n\n$$" ]
-    ; group_items "editor.slash/group-heading"
-        ([ "editor.slash/normal-text", "text", Editor_cmd "Normal text"
-         ; "editor.slash/clear-heading", "heading-off", Editor_cmd "Clear heading" ]
-        @ List.init 6 (fun i ->
-            let l = string_of_int (i + 1) in
-            ( "h-" ^ l
-            , "h-" ^ l
-            , Editor_cmd (U.tf "editor/heading" [ l ]) )))
+    ; (let g = Some (U.t "editor.slash/group-heading") in
+       [ mk_item ~key:"editor.slash/normal-text"
+           ~label:(U.t "editor.slash/normal-text") ~icon:"text" ?group:g
+           (Editor_cmd "heading-normal")
+       ; mk_item ~key:"editor.slash/clear-heading"
+           ~label:(U.t "editor.slash/clear-heading") ~icon:"heading-off"
+           ?group:g (Editor_cmd "heading-clear") ]
+       @ List.init 6 (fun i ->
+           let l = string_of_int (i + 1) in
+           mk_item ~key:("heading-" ^ l)
+             ~label:(U.tf "editor/heading" [ l ]) ~icon:("h-" ^ l)
+             ?group:g (Editor_cmd ("heading-" ^ l))))
     ; group_items "editor.slash/group-task-status"
-        [ "property.status/backlog", "backlog", Editor_cmd "Backlog"
-        ; "property.status/todo", "todo", Editor_cmd "Todo"
-        ; "property.status/doing", "inProgress50", Editor_cmd "Doing"
-        ; "property.status/in-review", "inReview", Editor_cmd "In Review"
-        ; "property.status/done", "done", Editor_cmd "Done"
-        ; "property.status/canceled", "cancelled", Editor_cmd "Canceled" ]
+        [ "property.status/backlog", "backlog", Editor_cmd "status-backlog"
+        ; "property.status/todo", "todo", Editor_cmd "status-todo"
+        ; "property.status/doing", "inProgress50", Editor_cmd "status-doing"
+        ; "property.status/in-review", "inReview", Editor_cmd "status-in-review"
+        ; "property.status/done", "done", Editor_cmd "status-done"
+        ; "property.status/canceled", "cancelled", Editor_cmd "status-canceled" ]
     ; group_items "editor.slash/group-task-date"
-        [ "property.built-in/deadline", "calendar-stats", Editor_cmd "Deadline"
-        ; "property.built-in/scheduled", "calendar-month", Editor_cmd "Scheduled" ]
-    ; group_items "editor.slash/group-priority"
-        ([ "editor.slash/no-priority", "priorityLvlNone", Editor_cmd "No priority" ]
-        @ List.map
+        [ "property.built-in/deadline", "calendar-stats", Editor_cmd "deadline"
+        ; "property.built-in/scheduled", "calendar-month", Editor_cmd "scheduled" ]
+    ; (let g = Some (U.t "editor.slash/group-priority") in
+       mk_item ~key:"editor.slash/no-priority"
+         ~label:(U.t "editor.slash/no-priority") ~icon:"priorityLvlNone"
+         ?group:g (Editor_cmd "priority-none")
+       :: List.map
             (fun lvl ->
-              ( "p-" ^ lvl
-              , "priorityLvl" ^ String.capitalize_ascii lvl
-              , Editor_cmd (U.tf "editor.slash/priority-label" [ U.t ("property.priority/" ^ lvl) ]) ))
+              mk_item ~key:("priority-" ^ lvl)
+                ~label:
+                  (U.tf "editor.slash/priority-label"
+                     [ U.t ("property.priority/" ^ lvl) ])
+                ~icon:("priorityLvl" ^ String.capitalize_ascii lvl)
+                ?group:g (Editor_cmd ("priority-" ^ lvl)))
             [ "low"; "medium"; "high"; "urgent" ])
     ; group_items "editor.slash/group-time-and-date"
         [ "date.nlp/tomorrow", "tomorrow", Emit (journal_offset 1)
@@ -254,10 +268,15 @@ let page_items_for t kind q =
     | _ ->
         mk_item ~key:("page:" ^ title) ~label:title (Emit ("[[" ^ title ^ "]]"))
   in
-  let matched =
-    take 20 (List.map wrap (List.filter (fun ti -> contains_ci ti q) !(t.titles)))
+  let pool =
+    match kind with
+    | Tag_search -> !(t.tag_titles)
+    | _ -> !(t.titles)
   in
-  let exact = List.exists (fun ti -> S.equal ti q) !(t.titles) in
+  let matched =
+    take 20 (List.map wrap (List.filter (fun ti -> contains_ci ti q) pool))
+  in
+  let exact = List.exists (fun ti -> S.equal ti q) pool in
   let items =
     if q <> "" && not exact then
       let label =
@@ -347,12 +366,87 @@ let load_titles t =
                   | _ -> Cmdk_state.str_field row "block/title")
                 rows;
             (match (get t).ac with
-             | Some ({ kind = Page_ref | Tag_search; _ } as ac) ->
+             | Some ({ kind = Page_ref; _ } as ac) ->
                  set_ac t (Some (refresh_items t ac))
              | _ -> ());
             Js.Promise.resolve ())
      |> Js.Promise.catch (fun e ->
             Platform.console_error ("popups titles failed", e);
+            Js.Promise.resolve ()))
+;;
+
+(* cljs get-matched-classes: all classes except the root tag (plus the
+   Page class when editing a non-page block), alias titles included.
+   Entity maps carry block/title and block/alias rows. *)
+let class_titles_of rows =
+  List.concat_map
+    (fun row ->
+      let title = Cmdk_state.str_field row "block/title" in
+      let aliases =
+        match Wire.get row "block/alias" with
+        | Some (Wire.Array xs) | Some (Wire.List xs) ->
+            List.filter_map
+              (fun a -> Cmdk_state.str_field a "block/title")
+              xs
+        | _ -> []
+      in
+      Option.to_list title @ aliases)
+    rows
+
+let load_tag_titles t _editor =
+  let editing_block =
+    match Editor_state.editing_uuid () with
+    | Some _ -> true
+    | None -> false
+  in
+  let wopts extra =
+    Wire.Map
+      (List.map
+         (fun (k, v) -> (Wire.kw k, v))
+         ([ ("except-root-class?", Wire.Bool true) ]
+          @ extra))
+  in
+  ignore
+    (Runtime.invoke2 "thread-api/get-all-classes"
+       (Wire.String (repo ()))
+       (wopts [ ("except-private-tags?", Wire.Bool true) ])
+     |> Js.Promise.then_ (fun w ->
+            let rows =
+              match w with
+              | Wire.Array xs | Wire.List xs -> xs
+              | _ -> []
+            in
+            t.tag_titles := class_titles_of rows;
+            if editing_block then
+              Runtime.invoke2 "thread-api/get-all-classes"
+                (Wire.String (repo ()))
+                (wopts [ ("except-private-tags?", Wire.Bool false) ])
+              |> Js.Promise.then_ (fun w2 ->
+                     let rows2 =
+                       match w2 with
+                       | Wire.Array xs | Wire.List xs -> xs
+                       | _ -> []
+                     in
+                     let page_class =
+                       List.filter
+                         (fun r ->
+                           Cmdk_state.str_field r "db/ident"
+                           = Some "logseq.class/Page")
+                         rows2
+                     in
+                     t.tag_titles :=
+                       !(t.tag_titles)
+                       @ class_titles_of page_class;
+                     Js.Promise.resolve ())
+            else Js.Promise.resolve ())
+     |> Js.Promise.then_ (fun () ->
+            (match (get t).ac with
+             | Some ({ kind = Tag_search; _ } as ac) ->
+                 set_ac t (Some (refresh_items t ac))
+             | _ -> ());
+            Js.Promise.resolve ())
+     |> Js.Promise.catch (fun e ->
+            Platform.console_error ("popups classes failed", e);
             Js.Promise.resolve ()))
 ;;
 
@@ -367,7 +461,8 @@ let open_ac t kind editor =
     ; tlen; items = []; chosen = 0; editor }
   in
   (match kind with
-   | Page_ref | Tag_search -> load_titles t
+   | Page_ref -> load_titles t
+   | Tag_search -> load_tag_titles t editor
    | Block_ref -> ()
    | Slash -> ());
   set_cm t None;
@@ -622,23 +717,25 @@ let ac_mousemove t el =
 
 let colors = [ "yellow"; "red"; "pink"; "green"; "blue"; "purple"; "gray" ]
 
-(* mirrors content.cljs block-context-menu-content *)
+(* mirrors content.cljs block-context-menu-content. Shortcut caps match
+   shortcut utils decorate-binding/print-shortcut-key output on macOS *)
 let block_entries () =
   [ Ci_colors; Ci_headings; Ci_sep
-  ; Ci_item (U.t "sidebar.right/open")
-  ; Ci_item (U.t "block.comments/add-comment")
+  ; Ci_item (U.t "sidebar.right/open", Some ("shift+click", [ "\u{21e7}"; "Click" ]), "open-in-sidebar")
+  ; Ci_item (U.t "block.comments/add-comment", None, "add-comment")
   ; Ci_sub (U.t "command.editor/add-reaction")
   ; Ci_sub (U.t "context-menu/set-icon")
   ; Ci_sep
-  ; Ci_item (U.t "block/copy-ref")
-  ; Ci_item (U.t "export/copy-or-export-as")
-  ; Ci_item (U.t "editor/cut")
-  ; Ci_item (U.t "editor/delete-selection")
+  ; Ci_item (U.t "block/copy-ref", None, "copy-ref")
+  ; Ci_item (U.t "export/copy-or-export-as", None, "copy-export-as")
+  ; Ci_item (U.t "editor/cut", Some ("meta+x", [ "\u{2318}"; "X" ]), "cut")
+  ; Ci_item (U.t "editor/delete-selection", Some ("delete", [ "Delete" ]), "delete")
   ; Ci_sep
-  ; Ci_item (U.t "context-menu/toggle-number-list")
+  ; Ci_item (U.t "context-menu/make-a-flashcard", None, "make-flashcard")
+  ; Ci_item (U.t "context-menu/toggle-number-list", None, "toggle-numbered-list")
   ; Ci_sep
-  ; Ci_item (U.t "editor/expand-block-children")
-  ; Ci_item (U.t "editor/collapse-block-children")
+  ; Ci_item (U.t "editor/expand-block-children", Some ("meta+down", [ "\u{2318}"; "\u{2193}" ]), "expand-children")
+  ; Ci_item (U.t "editor/collapse-block-children", Some ("meta+up", [ "\u{2318}"; "\u{2191}" ]), "collapse-children")
   ]
 ;;
 
@@ -647,17 +744,17 @@ let multi_entries () =
   [ Ci_colors; Ci_headings
   ; Ci_sub (U.t "context-menu/set-icon")
   ; Ci_sep
-  ; Ci_item (U.t "editor/cut")
-  ; Ci_item (U.t "editor/delete-selection")
-  ; Ci_item (U.t "ui/copy")
-  ; Ci_item (U.t "export/copy-or-export-as")
-  ; Ci_item (U.t "block/copy-ref")
+  ; Ci_item (U.t "editor/cut", Some ("meta+x", [ "\u{2318}"; "X" ]), "cut")
+  ; Ci_item (U.t "editor/delete-selection", Some ("delete", [ "Delete" ]), "delete")
+  ; Ci_item (U.t "ui/copy", Some ("meta+c", [ "\u{2318}"; "C" ]), "copy")
+  ; Ci_item (U.t "export/copy-or-export-as", None, "copy-export-as")
+  ; Ci_item (U.t "block/copy-ref", None, "copy-ref")
   ; Ci_sep
-  ; Ci_item (U.t "context-menu/toggle-number-list")
-  ; Ci_item (U.t "editor/cycle-todo")
+  ; Ci_item (U.t "context-menu/toggle-number-list", None, "toggle-numbered-list")
+  ; Ci_item (U.t "editor/cycle-todo", None, "cycle-todo")
   ; Ci_sep
-  ; Ci_item (U.t "editor/expand-block-children")
-  ; Ci_item (U.t "editor/collapse-block-children")
+  ; Ci_item (U.t "editor/expand-block-children", Some ("meta+down", [ "\u{2318}"; "\u{2193}" ]), "expand-children")
+  ; Ci_item (U.t "editor/collapse-block-children", Some ("meta+up", [ "\u{2318}"; "\u{2191}" ]), "collapse-children")
   ]
 ;;
 
@@ -678,7 +775,7 @@ let run_cm_item t label =
 let run_cm_color t color =
   match (get t).cm with
   | Some cm ->
-      emit_cmd "Set block color"
+      emit_cmd "set-color"
         [ "block", Js.Json.string cm.block_id
         ; "value", Js.Json.string color ];
       close_cm t
@@ -688,7 +785,7 @@ let run_cm_color t color =
 let run_cm_heading t h =
   match (get t).cm with
   | Some cm ->
-      emit_cmd "Set heading"
+      emit_cmd "set-heading"
         [ "block", Js.Json.string cm.block_id
         ; "value", Js.Json.string h ];
       close_cm t
