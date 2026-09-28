@@ -39,7 +39,8 @@ let page_summary db (page : entity) : Wire.t =
      @ field "block/title" (Ldb.value page "block/title")
      @ field "block/raw-title" (Ldb.raw_title db page)
      @ field "block/name" (Ldb.value page "block/name")
-     @ field "block/journal-day" (Ldb.value page "block/journal-day"))
+     @ field "block/journal-day" (Ldb.value page "block/journal-day")
+     @ field "icon" (Ldb.value page "logseq.property/icon"))
 
 (* :thread-api/get-journal-page-by-day [repo journal-day] *)
 let get_journal_page_by_day args =

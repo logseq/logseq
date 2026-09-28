@@ -63,7 +63,8 @@ let breadcrumbs title : t list =
       in
       [ dom ~key:"bc" ~style_class:"breadcrumb" (crumbs [] "" parts) ]
 
-(* click position payload -> Page_menu_set *)
+(* click position payload -> Page_menu_set (context menu = page items
+   only, so with_app_items = false) *)
 let open_menu name payload =
   if name = "contextmenu" then
     Option.iter
@@ -72,7 +73,8 @@ let open_menu name payload =
           (Action.Page_menu_set
              (Some
                 ( Platform.payload_num p "clientX"
-                , Platform.payload_num p "clientY" )));
+                , Platform.payload_num p "clientY"
+                , false )));
         Runtime.flush ())
       payload
 
@@ -92,12 +94,15 @@ let set_page_icon (page : Model.page) (c : Icon_picker.choice) =
                   [ Wire.Keyword "type", Wire.Keyword "emoji"
                   ; Wire.Keyword "id", Wire.String id ]
               ]
-        | Icon_picker.Tabler id ->
+        | Icon_picker.Tabler (id, color) ->
             Outliner_ops.op "set-block-property"
               [ Wire.Uuid u; Wire.Keyword "logseq.property/icon"
               ; Wire.Map
-                  [ Wire.Keyword "type", Wire.Keyword "tabler-icon"
-                  ; Wire.Keyword "id", Wire.String id ]
+                  ([ Wire.Keyword "type", Wire.Keyword "tabler-icon"
+                   ; Wire.Keyword "id", Wire.String id ]
+                  @ (match color with
+                     | Some c -> [ Wire.Keyword "color", Wire.String c ]
+                     | None -> []))
               ]
       in
       ignore

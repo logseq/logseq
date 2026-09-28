@@ -133,7 +133,7 @@ let global_items () =
 
 external inner_width : float = "innerWidth" [@@mel.scope "window"]
 
-let view (x, y) (p : Model.page option) =
+let view (x, y, with_app_items) (p : Model.page option) =
   let x = Float.min x (inner_width -. 250.) in
   dom ~key:"page-menu" ~tag:"div"
     ~style_class:
@@ -143,11 +143,13 @@ let view (x, y) (p : Model.page option) =
       [ ( "style"
         , Printf.sprintf "position:fixed;left:%.0fpx;top:%.0fpx" x y )
       ]
-    (* cljs keeps the page context menu and the toolbar dots menu
-       separate — right-click on a page shows only page items *)
-    (match p with
-     | Some p -> page_items p
-     | None -> global_items ())
+    (* cljs header.cljs toolbar-dots-menu = page items + hr + app
+       items; a page right-click shows page items only *)
+    (match p, with_app_items with
+     | Some p, true ->
+         page_items p @ [ separator "pg-app" ] @ global_items ()
+     | Some p, false -> page_items p
+     | None, _ -> global_items ())
 
 let btn key label cls act =
   dom ~key ~tag:"button" ~style_class:cls ~text:label ~events:"click"
@@ -228,7 +230,7 @@ let confirm_view (c : Model.confirm) =
 (* stop overlay clicks from leaking to the dialog handler *)
 let dialog_view (m : Model.t) =
   match m.page_menu with
-  | Some pos -> view pos m.route_page
+  | Some (x, y, with_app) -> view (x, y, with_app) m.route_page
   | None -> (
       match m.confirm with
       | Some c -> confirm_view c
