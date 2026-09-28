@@ -414,7 +414,7 @@ let block_item_of_row i w =
   in
   mk_item ~key:it.Cmdk_state.ikey ~label:it.Cmdk_state.ititle
     ?info:it.Cmdk_state.header
-    (Emit ("((" ^ uuid ^ "))"))
+    (Emit ("[[" ^ uuid ^ "]]"))
 ;;
 
 let run_block_search t ac =
