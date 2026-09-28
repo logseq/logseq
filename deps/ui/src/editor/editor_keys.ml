@@ -95,6 +95,15 @@ let on_editor_key ev uuid el =
           D.prevent_default ev;
           A.merge_next uuid)
     | "ArrowUp" | "ArrowDown" -> on_editor_arrows ev uuid el
+    | "]" | ")" -> (
+        (* cljs autopair overtype: a closing char that already sits under
+           the caret (autopaired ghost) skips it instead of inserting *)
+        let v = D.el_value el in
+        let s = D.el_selection_start el in
+        let c = if key = "]" then ']' else ')' in
+        if s < String.length v && String.get v s = c then (
+          D.prevent_default ev;
+          D.el_set_selection_range el (s + 1) (s + 1)))
     | "z" when mods ev ->
         D.prevent_default ev;
         if shift then A.redo () else A.undo ()
