@@ -63,18 +63,53 @@ let uuids_list uuids = Wire.List (List.map (fun u -> Wire.Uuid u) uuids)
    single-op batches get it auto-derived from the op name) *)
 let op_opts name = Wire.Map [ kw "outliner-op" (Wire.Keyword name) ]
 
+(* cljs wrap-parse-block: a leading "#"+ whitespace normalizes into
+   logseq.property/heading and is stripped from block/title (skipped for
+   code/math display types) *)
+let markdown_heading_level s =
+  let t = String.trim s in
+  let n = String.length t in
+  let rec hashes i = if i < n && t.[i] = '#' then hashes (i + 1) else i in
+  let i = hashes 0 in
+  if i >= 1 && i <= 6 && i < n
+     && (t.[i] = ' ' || t.[i] = '\t' || t.[i] = '\n')
+  then Some i
+  else None
+
+let strip_markdown_heading s lvl =
+  String.trim (String.sub (String.trim s) lvl (String.length (String.trim s) - lvl))
+
+(* The block map sent in a save-block op — shared by editor saves and
+   sdk updateBlock. *)
+let saved_block_map uuid title =
+  let dt =
+    match S.find uuid with
+    | Some b -> b.Model.block_display_type
+    | None -> None
+  in
+  let fields t =
+    match dt with
+    | Some _ -> [ str "block/title" (Wire.String t) ]
+    | None ->
+        List.map
+          (fun (k, v) -> (Wire.String k, v))
+          (Block_parse.title_fields t)
+  in
+  match markdown_heading_level title with
+  | Some lvl when dt <> Some "code" && dt <> Some "math" ->
+      Wire.Map
+        ([ str "block/uuid" (Wire.Uuid uuid) ]
+        @ fields (strip_markdown_heading title lvl)
+        @ [ str "logseq.property/heading" (Wire.Int lvl) ])
+  | _ ->
+      Wire.Map
+        ([ str "block/uuid" (Wire.Uuid uuid) ] @ fields (String.trim title))
+
 (* cljs save-block-aux! trims the value before persisting *)
 let save_block uuid title =
   (* cljs save-block-aux! runs wrap-parse-block: title -> parsed
      refs/tags + id-ref rewrite *)
-  op "save-block"
-    [ Wire.Map
-        (str "block/uuid" (Wire.Uuid uuid)
-         :: List.map
-              (fun (k, v) -> (Wire.String k, v))
-              (Block_parse.title_fields (String.trim title)))
-    ; Wire.Map []
-    ]
+  op "save-block" [ saved_block_map uuid title; Wire.Map [] ]
 
 let insert_blocks ?(replace_empty_target = false) blocks target_uuid
     ~sibling =
@@ -202,6 +237,28 @@ let create_class title =
 let set_block_property uuid prop v =
   op "set-block-property" [ Wire.Uuid uuid; Wire.Keyword prop; v ]
 
+(* cljs batch-set-property! — {:entity-id? true} means v is already a
+   resolved db/id and skips ref-value conversion *)
+let batch_set_property uuids prop v ~entity_id =
+  op "batch-set-property"
+    [ uuids_list uuids
+    ; Wire.Keyword prop
+    ; v
+    ; Wire.Map [ kw "entity-id?" (Wire.Bool entity_id) ]
+    ]
+
+let remove_block_property uuid prop =
+  op "remove-block-property" [ Wire.Uuid uuid; Wire.Keyword prop ]
+
+(* cljs insert-template! passes replace-empty-target? so a blank target
+   block is reused instead of left empty *)
+let apply_template template_uuid target_uuid =
+  op "apply-template"
+    [ Wire.Uuid template_uuid
+    ; Wire.Uuid target_uuid
+    ; Wire.Map [ kw "replace-empty-target?" (Wire.Bool true) ]
+    ]
+
 (* mirror :block/collapsed? from the raw wire into editor state — the
    decoded Model.block drops it *)
 let rec collect_collapsed set (w : Wire.t) =
@@ -284,6 +341,19 @@ let rec collect_tag_ids acc (b : Model.block) =
   List.fold_left collect_tag_ids (List.rev_append b.Model.block_tag_ids acc)
     b.block_children
 
+(* cljs block.cljs also hides a tag on a node when its entity carries
+   :logseq.property.class/hide-from-node (Quote-block, Code-block,
+   Math-block, ...). The worker's own hidden? flag is the primary signal —
+   the property is the fallback. *)
+let tag_hidden blk =
+  Option.bind (Wire.get blk "block/hidden?") Wire.as_bool = Some true
+  || Option.bind (Wire.get blk "hidden?") Wire.as_bool = Some true
+  ||
+  match Wire.get blk "logseq.property.class/hide-from-node" with
+  | Some (Wire.Bool hidden) -> hidden
+  | _ -> false
+
+(* (db-id, (title, ident, hidden, uuid)) per tag entity *)
 let tag_titles repo ids : (int * (string * string * bool * string)) list Js.Promise.t =
   Runtime.invoke2 "thread-api/get-blocks" (Wire.String repo)
     (Wire.Array
@@ -291,8 +361,14 @@ let tag_titles repo ids : (int * (string * string * bool * string)) list Js.Prom
           (fun i ->
             Wire.Map
               [ (Wire.String "id", Wire.Int i)
-              ; (Wire.String "opts", Wire.Map [])
-              ])
+              ; ( Wire.String "opts"
+                , Wire.Map
+                    [ ( Wire.String "properties"
+                      , Wire.Array
+                          [ Wire.Keyword "db/ident"
+                          ; Wire.Keyword
+                              "logseq.property.class/hide-from-node" ])
+                    ]) ])
           ids))
   |> Js.Promise.then_ (fun w ->
          Js.Promise.resolve
@@ -318,12 +394,7 @@ let tag_titles repo ids : (int * (string * string * bool * string)) list Js.Prom
                            | Some (Wire.Keyword s) | Some (Wire.String s) ->
                                s
                            | _ -> "")
-                        , (Option.bind
-                            (Wire.get blk "block/hidden?") Wire.as_bool
-                            = Some true
-                          || Option.bind
-                               (Wire.get blk "hidden?") Wire.as_bool
-                               = Some true)
+                        , tag_hidden blk
                         , Option.value (Wire.map_get_uuid blk "block/uuid")
                             ~default:"" ) )
                 | _ -> None)
@@ -547,23 +618,51 @@ let rec apply ?(opts = Wire.Map []) ops : unit Js.Promise.t =
             (Wire.Array ops) opts
           |> Js.Promise.then_ (fun _ -> Js.Promise.resolve ())
           |> Js.Promise.catch (fun e ->
-                 Platform.console_error ("apply-outliner-ops failed", e);
+                 Platform.console_error
+                   ( "apply-outliner-ops failed"
+                   , String.concat ","
+                       (List.map
+                          (fun o ->
+                            match o with
+                            | Wire.Array
+                                (Wire.Array (Wire.Keyword name :: _) :: _)
+                            | Wire.List
+                                (Wire.Array (Wire.Keyword name :: _) :: _)
+                            | Wire.Array (Wire.Keyword name :: _) -> name
+                            | _ -> "?")
+                          ops)
+                   , e );
                  Js.Promise.resolve ()))
 
 let apply_and_refresh ?opts ops =
   apply ?opts ops
   |> Js.Promise.then_ (fun () -> refresh_page ())
 
-(* cljs wrap-parse-block on save: [[page]]/#tag references resolve into
-   block/refs + block/tags and the stored title is rewritten to
+(* cljs wrap-parse-block on save: markdown headings normalize into
+   logseq.property/heading, and [[page]]/#tag references resolve into
+   block/refs + block/tags with the stored title rewritten to
    [[uuid]] id-ref form — async since Title_refs resolves entities *)
 let block_map_parsed uuid title =
-  Title_refs.parse (String.trim title)
+  let dt =
+    match S.find uuid with
+    | Some b -> b.Model.block_display_type
+    | None -> None
+  in
+  let title, heading =
+    match markdown_heading_level title with
+    | Some lvl when dt <> Some "code" && dt <> Some "math" ->
+        (strip_markdown_heading title lvl, Some lvl)
+    | _ -> (String.trim title, None)
+  in
+  Title_refs.parse title
   |> Js.Promise.then_ (fun p ->
          Js.Promise.resolve
            (Wire.Map
               ([ str "block/uuid" (Wire.Uuid uuid)
                ; str "block/title" (Wire.String p.Title_refs.title) ]
+              @ (match heading with
+                 | Some lvl -> [ str "logseq.property/heading" (Wire.Int lvl) ]
+                 | None -> [])
               @ Title_refs.kvs_of_parsed p)))
 
 let save_block_parsed uuid title =

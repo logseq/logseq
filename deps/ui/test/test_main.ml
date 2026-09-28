@@ -47,6 +47,10 @@ let block ?(children = []) uuid title : Model.block =
   ; block_asset_height = None
   ; block_asset_resize = None
   ; block_asset_align = None
+  ; block_display_type = None
+  ; block_order_list = None
+  ; block_order_index = None
+  ; block_code_lang = None
   }
 
 let page blocks : Model.page =

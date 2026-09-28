@@ -86,9 +86,18 @@ let row_hidden row =
 let row_hide_empty row =
   getb (row_prop row) "logseq.property/hide-empty-value"
 
+(* ui-position is a ref attr: the display map carries a ref summary with
+   db/ident (e.g. :logseq.property.ui-position/block-left) *)
 let row_position row =
-  getk (row_prop row) "logseq.property/ui-position"
-  |> Option.value ~default:"logseq.property.ui-position/properties"
+  match getf (row_prop row) "logseq.property/ui-position" with
+  | Some w -> (
+      match untag w with
+      | W.Map _ as m ->
+          Option.value (getk m "db/ident")
+            ~default:"logseq.property.ui-position/properties"
+      | W.Keyword s | W.String s -> s
+      | _ -> "logseq.property.ui-position/properties")
+  | None -> "logseq.property.ui-position/properties"
 
 (* cljs resolved-property-value-for-render: when the block has no own
    value, the property's :logseq.property/default-value renders instead *)
@@ -230,7 +239,6 @@ let positioned_rows block_wire position =
       | None -> [])
   | None -> []
 
-(* returns (rows, hidden-rows, description, class-properties-prop) *)
 let split_display wire =
   let rows =
     match W.get wire "full-properties" with

@@ -79,6 +79,11 @@ let collapsed_sig (b : Model.block) =
 (* cljs block-control-icon-size: heading chrome sizes differ, collapsed
    bullets shrink *)
 let control_wrap uuid (b : Model.block) : t =
+  let order_list = b.Model.block_order_list = Some "number" in
+  let bullet_cls =
+    "bullet-container cursor-pointer"
+    ^ if order_list then " as-order-list typed-list" else ""
+  in
   let heading_attrs =
     ( "data-has-children"
     , string_of_bool (b.block_children <> []) )
@@ -111,10 +116,14 @@ let control_wrap uuid (b : Model.block) : t =
             ~attrs:[ ("blockid", uuid); ("draggable", "true") ]
             ~style_class_signal:
               (Logseq_dom.class_signal (collapsed_sig b) (fun c ->
-                   "bullet-container cursor-pointer"
-                   ^ if c then " bullet-closed" else ""))
+                   bullet_cls ^ if c then " bullet-closed" else ""))
             [ dom ~key:("b-" ^ uuid) ~tag:"span" ~style_class:"bullet"
-                ~attrs:[ ("blockid", uuid) ] []
+                ~attrs:[ ("blockid", uuid) ]
+                (match b.Model.block_order_index with
+                 | Some idx when order_list ->
+                     [ dom ~key:("ol-" ^ uuid) ~tag:"label"
+                         ~text:(string_of_int idx ^ ".") [] ]
+                 | _ -> [])
             ]
         ]
     ]
@@ -131,10 +140,9 @@ let content_el uuid (b : Model.block) : t =
     [ dom ~key:("bci-" ^ uuid)
         ~style_class:"block-content-inner flex flex-row justify-between"
         [ dom ~key:("bh-" ^ uuid) ~style_class:"block-head-wrap"
-            (Render.title ?heading:b.block_heading
-               ~is_query:(List.mem "logseq.class/Query" b.Model.block_tag_idents)
-               ~self:uuid
-               (S.title_for uuid b.block_title))
+            (Render.title_block ~self:uuid
+               ~resolved:(S.title_for uuid b.block_title)
+               b)
         ]
     ]
 
@@ -174,6 +182,31 @@ let editor_el uuid scope : t =
     ; Asset_dom.upload_input ("up-" ^ uuid)
     ]
 
+(* code/calc blocks edit through a contenteditable pre.CodeMirror-line —
+   no textarea (cljs parity: CodeMirror owns the surface) *)
+let code_editor_el uuid (b : Model.block) : t =
+  let buffer =
+    match S.editing () with
+    | Some e when e.uuid = uuid -> e.buffer
+    | _ -> ""
+  in
+  let lang = Option.value b.Model.block_code_lang ~default:"" in
+  dom ~key:("ew-" ^ uuid) ~style_class:"extensions__code w-full"
+    ~id:("editor-edit-block-" ^ uuid)
+    [ dom ~key:("cm-" ^ uuid) ~style_class:"CodeMirror"
+        ~attrs:[ ("data-lang", lang) ]
+        [ dom ~key:("cp-" ^ uuid) ~tag:"pre"
+            ~style_class:"CodeMirror-line"
+            ~attrs:
+              [ ("contenteditable", "true")
+              ; ("spellcheck", "false")
+              ; ("data-code-uuid", uuid) ]
+            ~text:buffer []
+        ]
+    ; dom ~key:("cr-" ^ uuid) ~style_class:"extensions__code-calc-results"
+        []
+    ]
+
 let content_or_editor ~editable uuid scope (b : Model.block) : t =
   (* cljs unmounts .block-content while editing and removes the editor
      entirely in normal mode — .block-title-wrap must be absent for the
@@ -189,7 +222,10 @@ let content_or_editor ~editable uuid scope (b : Model.block) : t =
               [ Asset_dom.block_view uuid b; editor_el uuid scope ]
           else Asset_dom.block_view uuid b
       | None ->
-          if editing && editable then editor_el uuid scope
+          if editing && editable then
+            match b.Model.block_display_type with
+            | Some "code" -> code_editor_el uuid b
+            | _ -> editor_el uuid scope
           else content_el uuid b)
     (Signal.map
        (fun (st : S.t) ->
@@ -287,6 +323,10 @@ and row_el ~editable scope (b : Model.block) : t =
                 ~style_class:"block-main-content flex flex-row gap-2"
                 [ dom ~key:("cew-" ^ key)
                     ~style_class:"block-content-or-editor-wrap flex flex-1"
+                    ~attrs:
+                      (match b.Model.block_display_type with
+                       | Some dt -> [ ("data-node-type", dt) ]
+                       | None -> [])
                     [ dom ~key:("cei-" ^ key)
                         ~style_class:"block-content-or-editor-inner"
                         [ dom ~key:("row-" ^ key)

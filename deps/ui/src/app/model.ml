@@ -19,6 +19,10 @@ type block =
   ; block_level : int
   ; block_tag_ids : int list (* block/tags ref ids from the pull *)
   ; block_tags : string list (* resolved tag titles, for .block-tags *)
+  ; block_display_type : string option (* logseq.property.node/display-type *)
+  ; block_order_list : string option (* logseq.property/order-list-type *)
+  ; block_order_index : int option (* 1-based position among list siblings *)
+  ; block_code_lang : string option (* logseq.property.code/lang *)
   ; block_tag_uuids : string list (* aligned with block_tags *)
   ; block_tag_idents : string list (* resolved tag idents, same filtering *)
   ; block_page_name : string option (* containing page, for ref rows *)

@@ -58,23 +58,6 @@ let on_keydown ev =
           S.refresh_all ())
     | _ -> ()
 
-(* ---------- ls:editor-command channel ---------- *)
-
-(* "/" commands dispatch ls:editor-command {command} (popups_state
-   emit_cmd); cljs routes them through commands.cljs handle-step. Only
-   "Add property" is ported — it opens the property picker dialog on the
-   current editing/selected/page target like :editor/new-property. *)
-let on_editor_command ev =
-  match
-    Option.bind
-      (Option.join
-         (Option.map (fun d -> Js.Dict.get d "command")
-            (Option.bind (ev_detail ev) Js.Json.decodeObject)))
-      Js.Json.decodeString
-  with
-  | Some "Add property" -> Dialog.open_for_current ()
-  | _ -> ()
-
 (* ---------- install ---------- *)
 
 let installed = ref false
@@ -87,8 +70,7 @@ let install () =
     Area.ensure_all ();
     let obs = new_observer (fun () -> Area.ensure_all ()) in
     observe obs document_element (observe_opts ~childList:true ~subtree:true);
-    document_add_listener "keydown" on_keydown true;
-    document_add_listener "ls:editor-command" on_editor_command true)
+    document_add_listener "keydown" on_keydown true)
 
 (* Module init runs at bundle load (every module in the lib is linked
    into js_app). The observer then keeps the mounts alive across page

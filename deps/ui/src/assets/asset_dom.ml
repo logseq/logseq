@@ -610,7 +610,7 @@ let install () =
           match
             Option.bind (Js.Dict.get d "command") Js.Json.decodeString
           with
-          | Some "Upload an asset" -> (
+          | Some "upload" -> (
               match B.qs "#upload-file" with
               | Some el -> B.click el
               | None -> ())
