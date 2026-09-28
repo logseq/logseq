@@ -47,17 +47,25 @@
                           graph-handler/settle-metadata-to-local!
                           (fn [metadata]
                             (swap! calls conj [:metadata (keys metadata)])
+                            (p/resolved nil))
+                          graph-handler/remember-current-graph-id-in-tab!
+                          (fn []
+                            (swap! calls conj [:remember-tab])
                             (p/resolved nil))]
             (p/let [created (repo-handler/new-db! "  created  " {})
                     _ (do
                         (is (= "logseq_db_created" created))
                         (is (some #(= [:restore "logseq_db_created" {:file-graph-import? nil}] %) @calls))
+                        (is (some #{[:remember-tab]} @calls)
+                            "Creating a graph must remember it as this tab's graph for reload")
                         (is (some #{[:redirect-home]} @calls))
                         (is (some #{[:rerender]} @calls))
                         (reset! calls []))
                     imported (#'repo-handler/create-db "logseq_db_imported" {:file-graph-import? true})]
               (is (= "logseq_db_imported" imported))
               (is (some #(= [:restore "logseq_db_imported" {:file-graph-import? true}] %) @calls))
+              (is (some #{[:remember-tab]} @calls)
+                  "Imported graphs must also replace tab memory used on reload")
               (is (not-any? #{[:redirect-home] [:rerender]} @calls)
                   "File-graph import must keep the Importing UI instead of leaving for home.")))
           (p/catch

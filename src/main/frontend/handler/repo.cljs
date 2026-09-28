@@ -165,6 +165,7 @@
                                 file-graph-import? (assoc :import-type :file-graph)))
            _ (state/add-repo! {:url full-graph-name :root (config/get-local-dir full-graph-name)})
            _ (restore-and-setup-repo! full-graph-name {:file-graph-import? file-graph-import?})
+           _ (graph-handler/remember-current-graph-id-in-tab!)
            _ (when-not file-graph-import? (route-handler/redirect-to-home!))
            _ (repo-config-handler/set-repo-config-state! full-graph-name config/config-default-content)
           ;; TODO: handle global graph

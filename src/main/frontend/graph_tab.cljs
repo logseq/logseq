@@ -36,9 +36,13 @@
        :graph-id graph-id})))
 
 (defn set-tab-graph!
+  "Remember this tab's graph. A blank repo or graph-id removes that key so a
+  newly opened graph cannot keep a previous graph's identity."
   [repo graph-id]
   (when-let [storage (session-storage)]
-    (when-not (string/blank? repo)
+    (if (string/blank? repo)
+      (.removeItem storage repo-key)
       (.setItem storage repo-key repo))
-    (when-not (string/blank? graph-id)
+    (if (string/blank? graph-id)
+      (.removeItem storage graph-id-key)
       (.setItem storage graph-id-key graph-id))))

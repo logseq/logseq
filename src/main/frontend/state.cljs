@@ -902,8 +902,15 @@ should be done through this fn in order to get global config and config defaults
   [repo]
   (set-state! :git/current-repo repo)
   (if repo
-    (storage/set :git/current-repo repo)
-    (storage/remove :git/current-repo))
+    (do
+      (storage/set :git/current-repo repo)
+      (let [{tab-repo :repo tab-graph-id :graph-id} (graph-tab/get-tab-graph)]
+        ;; Keep graph-id only when this tab is already on the same repo.
+        ;; Otherwise a stale id from the previous graph would win on reload.
+        (graph-tab/set-tab-graph! repo (when (= repo tab-repo) tab-graph-id))))
+    (do
+      (storage/remove :git/current-repo)
+      (graph-tab/set-tab-graph! nil nil)))
   (ipc/ipc "setCurrentGraph" repo))
 
 (defn set-preferred-language!

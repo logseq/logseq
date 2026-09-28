@@ -1,6 +1,7 @@
 (ns frontend.handler.graph-test
   (:require [cljs.test :refer [async deftest is testing]]
             [frontend.common.idb :as idb]
+            [frontend.graph-tab :as graph-tab]
             [frontend.handler.graph]
             [frontend.state :as state]
             [frontend.util.url :as url-util]
@@ -153,6 +154,42 @@
                         {:repo "logseq_db_tab"
                          :graph-id "tab-uuid"}
                         "logseq_db_current"))))))
+
+(deftest set-current-repo-updates-tab-repo-so-reload-opens-it-test
+  (let [previous-repo (state/get-current-repo)
+        tab (atom {:repo "logseq_db_graph_a"
+                   :graph-id "graph-a-uuid"})
+        resolve-f (some-> (resolve 'frontend.handler.graph/resolve-startup-repo) deref)]
+    (try
+      (with-redefs [graph-tab/get-tab-graph (fn [] @tab)
+                    graph-tab/set-tab-graph! (fn [repo graph-id]
+                                              (reset! tab {:repo repo
+                                                           :graph-id graph-id}))]
+        (testing "reopening the same graph keeps its tab graph-id"
+          (state/set-current-repo! "logseq_db_graph_a")
+          (is (= {:repo "logseq_db_graph_a"
+                  :graph-id "graph-a-uuid"}
+                 @tab)))
+
+        (testing "creating or opening another graph replaces tab memory used on reload"
+          (state/set-current-repo! "logseq_db_graph_b")
+          (is (= {:repo "logseq_db_graph_b"
+                  :graph-id nil}
+                 @tab)
+              "Stale graph-id from the previous graph must not survive the switch")
+          (is (= "logseq_db_graph_b"
+                 (resolve-f []
+                            [{:url "logseq_db_graph_a"}
+                             {:url "logseq_db_graph_b"}]
+                            {}
+                            @tab
+                            "logseq_db_graph_a"))))
+
+        (testing "clearing the current repo clears tab memory"
+          (state/set-current-repo! nil)
+          (is (= {:repo nil :graph-id nil} @tab))))
+      (finally
+        (state/set-state! :git/current-repo previous-repo)))))
 
 (deftest resolve-startup-repo-uses-tab-graph-id-before-global-current-test
   (let [resolve-f (some-> (resolve 'frontend.handler.graph/resolve-startup-repo) deref)]
