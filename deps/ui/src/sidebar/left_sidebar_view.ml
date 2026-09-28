@@ -131,61 +131,72 @@ let menu_host st =
 
 (* ---------- navigations ---------- *)
 
-let nav_link ~key ~class_ ~title ~icon_name ~on_click =
-  dom ~key ~style_class:class_
+(* cljs sidebar-item: wrapper div gets the nav class (+ `active`), the
+   inner `a.item` also gets `active` when the route matches *)
+let nav_link ~key ~class_ ~active ~title ~icon_name ~on_click =
+  let act = if active then " active" else "" in
+  dom ~key ~style_class:(class_ ^ act)
     [ dom ~tag:"a"
-        ~style_class:"item group flex items-center text-sm rounded-md font-medium"
+        ~style_class:
+          ("item group flex items-center text-sm rounded-md font-medium" ^ act)
         ~events:"click" ~on_dom_event:on_click
         [ icon icon_name
         ; dom ~tag:"span" ~style_class:"flex-1" ~text:title [] ]
     ]
 
-let nav_route ~class_ ~title ~icon_name hash =
-  nav_link ~key:("nl-" ^ class_) ~class_ ~title ~icon_name
+let nav_route ~class_ ~active ~title ~icon_name hash =
+  nav_link ~key:("nl-" ^ class_) ~class_ ~active ~title ~icon_name
     ~on_click:(fun name _ ->
       if name = "click" then (
         Platform.set_location_hash hash;
         Platform.dispatch "ls:navigate" Js.Json.null))
 
-let tag_nav class_ label titles =
+let tag_nav ~active_route class_ label titles =
   match List.assoc_opt class_ titles with
   | Some title ->
       Some
         (nav_link ~key:("tag-" ^ class_) ~class_:("tag-view-nav " ^ class_)
+           ~active:(active_route = Model.Page title)
            ~title:(t label) ~icon_name:"hash"
            ~on_click:(fun name _ ->
              if name = "click" then Sidebar_state.navigate_to_page title))
   | None -> None
 
-let nav_items (checked, tag_titles) =
+(* active nav per route — cljs sidebar-navigations-loaded *)
+let nav_items ~active_route (checked, tag_titles) =
   List.filter_map
     (fun nav ->
       match nav with
       | "flashcards" ->
           Some
             (nav_link ~key:"nl-flashcards" ~class_:"flashcards-nav"
-               ~title:(t "Flashcards") ~icon_name:"cards"
+               ~active:false ~title:(t "Flashcards") ~icon_name:"cards"
                ~on_click:(fun name _ ->
                  if name = "click" then Sidebar_state.open_dialog "cards"))
       | "all-pages" ->
           Some
-            (nav_route ~class_:"all-pages-nav" ~title:(t "Pages")
+            (nav_route ~class_:"all-pages-nav"
+               ~active:(active_route = Model.All_pages) ~title:(t "Pages")
                ~icon_name:"files" "#/all-pages")
       | "graph-view" ->
           Some
-            (nav_route ~class_:"graph-view-nav" ~title:(t "Graph view")
+            (nav_route ~class_:"graph-view-nav"
+               ~active:(active_route = Model.Graph) ~title:(t "Graph view")
                ~icon_name:"hierarchy" "#/graph")
-      | "tag/tasks" -> tag_nav "tasks" "Tasks" tag_titles
-      | "tag/assets" -> tag_nav "assets" "Assets" tag_titles
+      | "tag/tasks" -> tag_nav ~active_route "tasks" "Tasks" tag_titles
+      | "tag/assets" -> tag_nav ~active_route "assets" "Assets" tag_titles
       | _ -> None)
     checked
 
-let nav_group st =
+let nav_group ms st =
   let navs_sig =
     Signal.map2
-      (fun a b -> (a, b))
-      (Signal.value st.Sidebar_state.nav_checked)
-      (Signal.value st.nav_tag_titles)
+      (fun route rest -> (route, rest))
+      (Signal.map (fun (m : Model.t) -> m.Model.route) ms)
+      (Signal.map2
+         (fun a b -> (a, b))
+         (Signal.value st.Sidebar_state.nav_checked)
+         (Signal.value st.nav_tag_titles))
   in
   dom ~key:"nav-group"
     ~style_class:"sidebar-content-group navigations is-expand has-children"
@@ -206,15 +217,15 @@ let nav_group st =
                       if name = "click" then Sidebar_state.open_nav_menu st)
                     [ icon "filter-edit" ] ] ]
         ; dom ~key:"nav-bd" ~style_class:"bd"
-            [ dom ~key:"navs"
-                ~style_class:"sidebar-navigations flex flex-col mt-1"
-                (nav_route ~class_:"journals-nav" ~title:(t "Journals")
-                   ~icon_name:"calendar" "#/"
-                :: [ dyn ~equal:(fun a b -> a = b)
-                       (fun pair ->
-                         dom ~key:"nav-dyn" ~style_class:"contents"
-                           (nav_items pair))
-                       navs_sig ])
+            [ dyn ~equal:(fun a b -> a = b)
+                (fun (route, (checked, tag_titles)) ->
+                  dom ~key:"navs"
+                    ~style_class:"sidebar-navigations flex flex-col mt-1"
+                    (nav_route ~class_:"journals-nav"
+                       ~active:(route = Model.Journals || route = Model.Home)
+                       ~title:(t "Journals") ~icon_name:"calendar" "#/"
+                    :: nav_items ~active_route:route (checked, tag_titles)))
+                navs_sig
             ]
         ]
     ]
@@ -291,26 +302,8 @@ let recents_group st =
     ~items_sig:(Signal.value st.Sidebar_state.recents)
     ~li_class:"recent-item select-none font-medium"
 
-(* ---------- plugins / dots toolbar ---------- *)
-
-let toolbar_row st =
-  dom ~key:"sb-toolbar"
-    ~style_class:"toolbar-plugins-manager flex items-center gap-1 px-2"
-    [ dom ~key:"pm-trigger" ~tag:"a"
-        ~style_class:"flex relative toolbar-plugins-manager-trigger"
-        ~attrs:[ ("title", t "Plugins") ]
-        ~events:"click"
-        ~on_dom_event:(fun name _ ->
-          if name = "click" then Sidebar_state.open_dialog "plugins")
-        [ icon "apps" ]
-    ; dom ~key:"dots-btn" ~tag:"button"
-        ~style_class:"button sidebar-dots-btn"
-        ~attrs:[ ("title", t "More") ]
-        ~events:"click"
-        ~on_dom_event:(fun name _ ->
-          if name = "click" then Sidebar_state.open_dots_menu st)
-        [ icon "dots" ]
-    ]
+(* plugins toolbar lives in the header (cljs hook-ui-items :toolbar) —
+   see chrome.ml *)
 
 (* ---------- root ---------- *)
 (* chrome.ml owns the #left-sidebar.cp__sidebar-left-layout shell +
@@ -346,13 +339,13 @@ let graphs_selector (ms : Model.t Signal.signal) : t =
 let header (ms : Model.t Signal.signal) : t =
   let st = Sidebar_state.ensure ms in
   dom ~key:"ls-header" ~style_class:"flex flex-col"
-    [ graphs_selector ms; nav_group st ]
+    [ graphs_selector ms; nav_group ms st ]
 
 let contents (ms : Model.t Signal.signal) : t =
   let st = Sidebar_state.ensure ms in
   dom ~key:"ls-contents" ~style_class:"sidebar-contents-container"
     [ dom ~key:"ls-left" ~style_class:"cp__sidebar-left"
-        [ favorites_group st; recents_group st; toolbar_row st ] ]
+        [ favorites_group st; recents_group st ] ]
 
 let menus (ms : Model.t Signal.signal) : t =
   let st = Sidebar_state.ensure ms in
