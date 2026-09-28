@@ -1,9 +1,12 @@
 (ns logseq.outliner.validate-test
   (:require [cljs.test :refer [are deftest is testing]]
             [datascript.core :as d]
+            [logseq.db :as ldb]
             [logseq.db.common.entity-plus :as entity-plus]
             [logseq.db.frontend.entity-util :as entity-util]
             [logseq.db.test.helper :as db-test]
+            [logseq.outliner.core :as outliner-core]
+            [logseq.outliner.page :as outliner-page]
             [logseq.outliner.validate :as outliner-validate]))
 
 (deftest validate-block-title-unique-for-properties
@@ -39,7 +42,7 @@
           @conn
           "Class1"
           (d/entity @conn :user.class/Class2)))
-        "Disallow duplicate class names, regardless of extends")
+        "Disallow duplicate top-level class names; built-in extends are not a namespace parent")
     (is (thrown-with-msg?
          js/Error
          #"Duplicate class"
@@ -210,6 +213,95 @@
           "FOO"
           (db-test/find-page-by-title @conn "Bar")))
         "Disallow rename when any candidate collides, even if an exempt candidate is checked first")))
+
+(deftest validate-block-title-unique-for-top-level-and-namespaced-pages
+  (testing "Rename there and back is allowed when a namespaced page shares the title"
+    (let [conn (db-test/create-conn)
+          [_ baz-uuid] (outliner-page/create! conn "Baz" {})
+          _ (outliner-page/create! conn "Foo/Baz" {:split-namespace? true})
+          baz (d/entity @conn [:block/uuid baz-uuid])
+          foo-baz (->> (d/q '[:find [?e ...] :where [?e :block/title "Baz"]] @conn)
+                       (map #(d/entity @conn %))
+                       (remove #(= baz-uuid (:block/uuid %)))
+                       first)]
+      (is (some? foo-baz))
+      (is (nil? (:block/parent baz))
+          "Standalone Baz has no parent")
+      (is (some? (:block/parent foo-baz))
+          "Foo/Baz is nested")
+      (is (nil? (outliner-validate/validate-unique-by-name-and-tags @conn "Qux" baz)))
+      (outliner-core/save-block! conn {:block/uuid baz-uuid :block/title "Qux"})
+      (is (nil? (outliner-validate/validate-unique-by-name-and-tags
+                 @conn "Baz" (d/entity @conn [:block/uuid baz-uuid])))
+          "Restoring top-level Baz must not collide with Foo/Baz")
+      (outliner-core/save-block! conn {:block/uuid baz-uuid :block/title "Baz"})
+      (is (= "Baz" (:block/title (d/entity @conn [:block/uuid baz-uuid]))))
+      (is (= 2 (count (d/q '[:find [?e ...] :where [?e :block/title "Baz"]] @conn))))))
+
+  (testing "Renaming a Library namespace root to a top-level title is refused"
+    (let [conn (db-test/create-conn)
+          [_ baz-uuid] (outliner-page/create! conn "Baz" {})
+          _ (outliner-page/create! conn "Foo/Bar" {:split-namespace? true})
+          foo (ldb/get-page @conn "Foo")
+          library (ldb/get-library-page @conn)]
+      (is (= (:db/id library) (:db/id (:block/parent foo)))
+          "Namespace root Foo lives under Library")
+      (is (thrown-with-msg?
+           js/Error
+           #"Duplicate page"
+           (outliner-validate/validate-unique-by-name-and-tags @conn "Baz" foo))
+          "Foo cannot take the top-level Baz title")
+      (is (thrown-with-msg?
+           js/Error
+           #"Duplicate page"
+           (outliner-core/save-block! conn {:block/uuid (:block/uuid foo) :block/title "Baz"})))
+      (is (= "Foo" (:block/title (d/entity @conn (:db/id foo)))))
+      (is (= 1 (count (filter ldb/internal-page?
+                              (map #(d/entity @conn %)
+                                   (d/q '[:find [?e ...] :where [?e :block/title "Baz"]] @conn)))))
+          "Still exactly one live page titled Baz"))))
+
+(deftest validate-block-title-unique-for-namespaced-tags
+  (testing "Rename there and back is allowed when a namespaced tag shares the title"
+    (let [conn (db-test/create-conn)
+          [_ foo-uuid] (outliner-page/create! conn "Foo" {:class? true})
+          _ (outliner-page/create! conn "Bar/Foo" {:class? true :split-namespace? true})
+          foo (d/entity @conn [:block/uuid foo-uuid])]
+      (is (ldb/class? foo))
+      (outliner-core/save-block! conn {:block/uuid foo-uuid :block/title "Qux"})
+      (is (nil? (outliner-validate/validate-unique-by-name-and-tags
+                 @conn "Foo" (d/entity @conn [:block/uuid foo-uuid])))
+          "Restoring top-level #Foo must not collide with #Bar/Foo")
+      (outliner-core/save-block! conn {:block/uuid foo-uuid :block/title "Foo"})
+      (is (= "Foo" (:block/title (d/entity @conn [:block/uuid foo-uuid]))))
+      (is (= 2 (count (filter ldb/class?
+                              (map #(d/entity @conn %)
+                                   (d/q '[:find [?e ...] :where [?e :block/title "Foo"]] @conn))))))))
+
+  (testing "Renaming a top-level tag to another top-level tag title is refused"
+    (let [conn (db-test/create-conn)
+          [_ _foo-uuid] (outliner-page/create! conn "Foo" {:class? true})
+          [_ bar-uuid] (outliner-page/create! conn "Bar" {:class? true})]
+      (is (thrown-with-msg?
+           js/Error
+           #"Duplicate class"
+           (outliner-validate/validate-unique-by-name-and-tags
+            @conn "Foo" (d/entity @conn [:block/uuid bar-uuid]))))
+      (is (thrown-with-msg?
+           js/Error
+           #"Duplicate class"
+           (outliner-core/save-block! conn {:block/uuid bar-uuid :block/title "Foo"})))
+      (is (= "Bar" (:block/title (d/entity @conn [:block/uuid bar-uuid]))))))
+
+  (testing "Namespaced tags under the same parent cannot share a title"
+    (let [conn (db-test/create-conn)
+          _ (outliner-page/create! conn "Bar/Baz" {:class? true :split-namespace? true})
+          [_ qux-uuid] (outliner-page/create! conn "Bar/Qux" {:class? true :split-namespace? true})]
+      (is (thrown-with-msg?
+           js/Error
+           #"Duplicate class"
+           (outliner-validate/validate-unique-by-name-and-tags
+            @conn "Baz" (d/entity @conn [:block/uuid qux-uuid])))))))
 
 (deftest validate-extends-property
   (let [conn (db-test/create-conn-with-blocks
