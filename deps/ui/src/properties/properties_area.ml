@@ -211,31 +211,79 @@ let render_left (ctx : V.ctx) ~owner_is_tag ~owner_title host rows =
   ignore owner_is_tag;
   ignore owner_title
 
-let render_panel ctx ~owner_is_tag ~owner_title ~page_area ~show_hidden
+let new_property_btn (ctx : V.ctx) ~for_class ~owner_title =
+  let wrap = mk ~cls:"ls-new-property" "div" in
+  let btn =
+    mk "button" ~cls:"jtrigger flex items-center gap-1"
+      ~attrs:[ ("aria-label", I18n.t "property/add-new") ]
+  in
+  (* shui ui/icon markup: span.ui__icon.ti.ls-icon-plus > i.ti.ti-plus *)
+  let plus = mk ~cls:"ui__icon ti ls-icon-plus" "span" in
+  let i = mk ~cls:"ti ti-plus" "i" in
+  el_append_child plus i;
+  el_append_child btn plus;
+  ignore
+    (child_text "span" "" (I18n.t "property/add-new") btn);
+  el_append_child wrap btn;
+  on_click btn (fun _ ->
+      if for_class then
+        Properties_dialog.open_dialog
+          { Properties_dialog.uuid = ctx.block_uuid
+          ; db_id = ctx.block_id
+          ; is_tag = true
+          ; title = owner_title }
+      else Properties_dialog.open_for_block ctx.block_uuid);
+  wrap
+
+let render_panel ctx ~owner_is_tag ~owner_title ~show_hidden
     panel rows hidden_rows =
   List.iter
     (fun r -> el_append_child panel (row_el ctx ~owner_is_tag ~owner_title r))
     rows;
-  if show_hidden && hidden_rows <> [] then
+  (* cljs: hidden properties (and their toggle) are skipped for class
+     pages — the class section hosts them instead *)
+  if not owner_is_tag then begin
+    if show_hidden && hidden_rows <> [] then
+      List.iter
+        (fun r ->
+          el_append_child panel (row_el ctx ~owner_is_tag ~owner_title r))
+        hidden_rows;
+    if hidden_rows <> [] then el_append_child panel (toggle_row ())
+  end
+
+(* cljs properties-area class section: .flex.flex-col.gap-1.mt-2 with the
+   class-properties key, the "Tag properties are inherited" description
+   and the add-property button under .ml-5 *)
+let class_section ctx ~owner_is_tag ~owner_title ~show_hidden hidden_rows =
+  let section = mk ~cls:"flex flex-col gap-1 mt-2" "div" in
+  let head = mk ~attrs:[ ("style", "font-size:15px") ] "div" in
+  el_append_child head (mk ~cls:"property-key text-sm" "div");
+  ignore
+    (child_text "div" "text-muted-foreground ml-5"
+       (I18n.t "class/tag-properties-desc") head);
+  el_append_child section head;
+  let body = mk ~cls:"gap-1 flex flex-col" "div" in
+  if show_hidden then
     List.iter
       (fun r ->
-        el_append_child panel (row_el ctx ~owner_is_tag ~owner_title r))
+        el_append_child body (row_el ctx ~owner_is_tag ~owner_title r))
       hidden_rows;
-  if hidden_rows <> [] then el_append_child panel (toggle_row ());
-  if page_area then (
-    let wrap = mk ~cls:"ls-new-property" "div" in
-    let btn =
-      mk "button" ~cls:"jtrigger flex items-center gap-1"
-        ~attrs:[ ("aria-label", I18n.t "property/add-new") ]
-    in
-    let plus = mk ~cls:"ls-icon-plus" "span" in
-    el_append_child btn plus;
-    ignore
-      (child_text "span" "" (I18n.t "property/add-new") btn);
-    el_append_child wrap btn;
-    on_click btn (fun _ ->
-        Properties_dialog.open_for_block ctx.block_uuid);
-    el_append_child panel wrap)
+  let add = mk ~cls:"ml-5" "div" in
+  el_append_child add
+    (new_property_btn ctx ~for_class:true ~owner_title);
+  el_append_child body add;
+  el_append_child section body;
+  section
+
+(* cljs properties' drops icon/query/class-properties from the visible
+   panel rows *)
+let non_panel_idents =
+  [ "logseq.property/icon"; "logseq.property/query"
+  ; "logseq.property.class/properties" ]
+
+let is_panel_row r =
+  not
+    (List.mem (Option.value ~default:"" (D.row_ident r)) non_panel_idents)
 
 (* block.temp/positioned-properties on the get-blocks wire:
    {position -> [display-property-map]} — cljs reads the same key in
@@ -279,6 +327,7 @@ let render_area ?(left_host = None) (ctx : V.ctx) ~owner_is_tag
   Js.Promise.all2 (display, block_w)
   |> Js.Promise.then_ (fun (wire, block_w) ->
          let rows, hidden = D.split_display wire in
+         let rows = List.filter is_panel_row rows in
          let left_rows, below_rows, panel_rows =
            match left_host with
            | Some _ ->
@@ -296,8 +345,17 @@ let render_area ?(left_host = None) (ctx : V.ctx) ~owner_is_tag
            | Some _ -> panel_rows
            | None -> left_rows @ panel_rows
          in
-         render_panel ctx ~owner_is_tag ~owner_title ~page_area
+         render_panel ctx ~owner_is_tag ~owner_title
            ~show_hidden:!S.show_hidden panel panel_rows hidden;
+         (* cljs: new-property is a direct child of .ls-properties-area
+            for non-class page areas; class pages get the class section *)
+         if page_area && owner_is_tag then
+           el_append_child area_el
+             (class_section ctx ~owner_is_tag ~owner_title
+                ~show_hidden:!S.show_hidden hidden)
+         else if page_area then
+           el_append_child area_el
+             (new_property_btn ctx ~for_class:false ~owner_title);
          (* pills render next to the area inside the indent container *)
          (match el_parent area_el with
           | Some parent ->
@@ -377,73 +435,129 @@ let mount_block_area block_el uuid =
 
 (* ---------- page mount ---------- *)
 
-let fill_bidirectional wrap (p : Model.page) =
+let fill_bidirectional wrap groups =
   el_clear wrap;
-  (match p.Model.page_db_id with
-   | Some id ->
-       D.bidirectional id
-       |> Js.Promise.then_ (fun w ->
-                  List.iter
-                    (fun group ->
-                      let g = mk ~cls:"ls-bidirectional-group" "div" in
-                      let title =
-                        D.gets group "title" |> Option.value ~default:""
-                      in
-                      let key_wrap = mk ~cls:"property-key-panel" "div" in
-                      let key =
-                        mk "a"
-                          ~cls:"property-k flex select-none jtrigger w-full"
-                          ~attrs:[ ("tabindex", "0") ]
-                      in
-                      el_set_text key title;
-                      el_append_child key_wrap key;
-                      el_append_child g key_wrap;
-                      let vc =
-                        mk ~cls:"ls-block property-value-container" "div"
-                      in
-                      let pv = mk ~cls:"property-value" "div" in
-                      (match D.getf group "entities" with
-                       | Some ents ->
-                           List.iter
-                             (fun e ->
-                               ignore
-                                 (child_text "span" "block-title-wrap"
-                                    (D.ref_title e) pv))
-                             (D.elems ents)
-                       | None -> ());
-                      el_append_child vc pv;
-                      el_append_child g vc;
-                      el_append_child wrap g)
-                    (D.elems w);
-              Js.Promise.resolve ())
-       |> ignore
-   | None -> ())
+  List.iter
+    (fun group ->
+      let g = mk ~cls:"ls-bidirectional-group" "div" in
+      let title =
+        D.gets group "title" |> Option.value ~default:""
+      in
+      let key_wrap = mk ~cls:"property-key-panel" "div" in
+      let key =
+        mk "a"
+          ~cls:"property-k flex select-none jtrigger w-full"
+          ~attrs:[ ("tabindex", "0") ]
+      in
+      el_set_text key title;
+      el_append_child key_wrap key;
+      el_append_child g key_wrap;
+      let vc =
+        mk ~cls:"ls-block property-value-container" "div"
+      in
+      let pv = mk ~cls:"property-value" "div" in
+      (match D.getf group "entities" with
+       | Some ents ->
+           List.iter
+             (fun e ->
+               ignore
+                 (child_text "span" "block-title-wrap"
+                    (D.ref_title e) pv))
+             (D.elems ents)
+       | None -> ());
+      el_append_child vc pv;
+      el_append_child g vc;
+      el_append_child wrap g)
+    groups
 
-(* title action buttons: "Set property" / "Add tag property" /
-   "Configure" (property page) *)
-let title_actions (p : Model.page) =
+(* cljs bidirectional-properties-area renders the wrap only when the
+   groups resource is non-empty; it lives in .page-inner right after the
+   title's .flex.flex-row.space-between row *)
+let refresh_bidirectional page_inner (p : Model.page) =
+  match p.Model.page_db_id, el_query page_inner ".flex.flex-row.space-between"
+  with
+  | Some id, Some row_el ->
+      ignore
+        (D.bidirectional id
+         |> Js.Promise.then_ (fun w ->
+                let groups = D.elems w in
+                (match el_query page_inner ".ls-bidirectional-properties" with
+                 | Some wrap ->
+                     if groups = [] then el_remove wrap
+                     else fill_bidirectional wrap groups
+                 | None ->
+                     if groups <> [] then begin
+                       let wrap =
+                         mk ~cls:"w-full ls-bidirectional-properties mt-8"
+                           "div"
+                       in
+                       el_insert_adjacent row_el "afterend" wrap;
+                       fill_bidirectional wrap groups
+                     end);
+                Js.Promise.resolve ()))
+  | _ -> ()
+
+(* title action buttons — cljs db-page-title-actions: ghost sm buttons
+   inside .ls-page-title-actions > .flex.flex-row.items-center.gap-2 *)
+let ghost_sm_cls =
+  "ui__button inline-flex cursor-pointer items-center justify-center \
+   whitespace-nowrap rounded-md text-sm gap-1 font-medium \
+   ring-offset-background transition-colors focus-visible:outline-none \
+   focus-visible:ring-2 focus-visible:ring-ring \
+   focus-visible:ring-offset-2 disabled:pointer-events-none \
+   disabled:opacity-50 select-none hover:bg-secondary/70 \
+   hover:text-secondary-foreground active:opacity-80 as-ghost h-7 \
+   rounded px-3 py-1 px-2 py-0 h-6 text-xs text-muted-foreground"
+
+let title_actions (p : Model.page) ~has_icon =
   let actions = mk ~cls:"ls-page-title-actions" "div" in
   let row = mk ~cls:"flex flex-row items-center gap-2" "div" in
   let uuid = Option.value ~default:"" p.Model.page_uuid in
-  if p.Model.page_is_tag then (
-    let btn = mk "button" ~cls:"ui__button" in
-    el_set_text btn (I18n.t "class/add-property");
+  if not has_icon then begin
+    let btn = mk "button" ~cls:ghost_sm_cls in
+    el_set_text btn (I18n.t "command.editor/add-property-icon");
     el_append_child row btn;
-    on_click btn (fun _ ->
+    on_click btn (fun _ -> Properties_dialog.open_for_block uuid)
+  end;
+  let btn = mk "button" ~cls:ghost_sm_cls in
+  el_set_text btn
+    (I18n.t
+       (if p.Model.page_is_tag then "class/add-property"
+        else "property/set-property"));
+  el_append_child row btn;
+  on_click btn (fun _ ->
+      if p.Model.page_is_tag then
         Properties_dialog.open_dialog
           { Properties_dialog.uuid
           ; db_id = p.Model.page_db_id
           ; is_tag = true
-          ; title = p.Model.page_title
-          }))
-  else (
-    let btn = mk "button" ~cls:"ui__button" in
-    el_set_text btn (I18n.t "property/set-property");
-    el_append_child row btn;
-    on_click btn (fun _ ->
-        Properties_dialog.open_for_block uuid));
+          ; title = p.Model.page_title }
+      else Properties_dialog.open_for_block uuid);
   el_append_child actions row;
   actions
+
+(* cljs: the actions are the first child of .block-content-wrapper inside
+   the page-title block; "Add icon" shows when :logseq.property/icon is
+   unset on the page entity *)
+let insert_title_actions title_el (p : Model.page) =
+  match el_query title_el ".block-content-wrapper" with
+  | None -> ()
+  | Some wrapper -> (
+      match el_query title_el ".ls-page-title-actions" with
+      | Some _ -> ()
+      | None ->
+          ignore
+            (D.entity_by_uuid
+               (Option.value ~default:"" p.Model.page_uuid)
+             |> Js.Promise.then_ (fun ent ->
+                    let has_icon =
+                      match W.get ent "logseq.property/icon" with
+                      | Some W.Nil | None -> false
+                      | Some _ -> true
+                    in
+                    el_insert_adjacent wrapper "afterbegin"
+                      (title_actions p ~has_icon);
+                    Js.Promise.resolve ())))
 
 let mount_page_area page_inner =
   (* only once per page-inner instance *)
@@ -454,35 +568,37 @@ let mount_page_area page_inner =
       | Some p, Some title_el -> (
           match p.Model.page_uuid with
           | None -> ()
-          | Some uuid ->
-              let actions = title_actions p in
-              el_insert_adjacent title_el "afterend" actions;
-              let area =
-                mk "div"
-                  ~cls:"ls-properties-area ls-page-properties"
-                  ~attrs:[ ("id", uuid); ("tabindex", "0") ]
-              in
-              el_insert_adjacent actions "afterend" area;
-              let bidi =
-                mk ~cls:"w-full ls-bidirectional-properties mt-8" "div"
-              in
-              el_insert_adjacent area "afterend" bidi;
-              let rec ctx : V.ctx =
-                { block_uuid = uuid
-                ; block_id = p.Model.page_db_id
-                ; refresh
-                ; is_page = true
-                ; class_schema = false
-                }
-              and refresh () =
-                render_area ctx ~owner_is_tag:p.Model.page_is_tag
-                  ~owner_title:p.Model.page_title ~page_area:true area;
-                fill_bidirectional bidi p
-              in
-              refresh ();
-              S.register_area area (fun () ->
-                  if el_is_connected area then refresh ()
-                  else S.unregister_area area))
+          | Some uuid -> (
+              insert_title_actions title_el p;
+              (* cljs db-properties-cp: a plain div holding
+                 .ls-properties-area is appended to the title's .ls-block *)
+              match el_query title_el ".ls-block" with
+              | None -> ()
+              | Some block_el ->
+                  let holder = mk "div" in
+                  let area =
+                    mk "div"
+                      ~cls:"ls-properties-area ls-page-properties"
+                      ~attrs:[ ("id", uuid); ("tabindex", "0") ]
+                  in
+                  el_append_child holder area;
+                  el_append_child block_el holder;
+                  let rec ctx : V.ctx =
+                    { block_uuid = uuid
+                    ; block_id = p.Model.page_db_id
+                    ; refresh
+                    ; is_page = true
+                    ; class_schema = false
+                    }
+                  and refresh () =
+                    render_area ctx ~owner_is_tag:p.Model.page_is_tag
+                      ~owner_title:p.Model.page_title ~page_area:true area;
+                    refresh_bidirectional page_inner p
+                  in
+                  refresh ();
+                  S.register_area area (fun () ->
+                      if el_is_connected area then refresh ()
+                      else S.unregister_area area)))
       | _ -> ())
 
 (* ---------- observer entry ---------- *)

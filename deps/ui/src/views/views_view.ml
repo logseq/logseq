@@ -39,13 +39,17 @@ let rec render inst =
   | _ ->
       D.clear inst.V.container;
       let refresh = (V.ops ()).V.o_refresh in
-      D.el_append_child inst.V.container
-        (Views_head.render_head inst ~refresh);
-      (match Views_head.filters_row inst ~refresh with
-       | Some r -> D.el_append_child inst.V.container r
-       | None -> ());
-      D.el_append_child inst.V.container
-        (Views_table.render_body inst ~refresh)
+      (* cljs views.cljs view: .flex.flex-col.gap-2.grid with filters-row
+         as first child of .ls-view-body *)
+      let grid = D.h ~cls:"flex flex-col gap-2 grid" () in
+      D.el_append_child grid (Views_head.render_head inst ~refresh);
+      let body =
+        Views_table.render_body inst ~refresh
+          ~filters:(Views_head.filters_row inst ~refresh)
+          ()
+      in
+      D.el_append_child grid body;
+      D.el_append_child inst.V.container grid
 
 and render_query inst =
   D.clear inst.V.container;
@@ -87,7 +91,7 @@ and render_query inst =
     (match Views_head.filters_row inst ~refresh with
      | Some r -> D.el_append_child inner r
      | None -> ());
-    D.el_append_child inner (Views_table.render_body inst ~refresh);
+    D.el_append_child inner (Views_table.render_body inst ~refresh ());
     D.el_append_child inst.V.container inner
   end
   else if inst.V.loading then
@@ -222,11 +226,27 @@ let owner_uuid inst f =
         [ Db.res key ])
   | _ -> ()
 
+(* cljs create-view! parents view blocks under the shared $$$views page
+   (common-config/views-page-name) and skips the insert when that page
+   cannot be resolved *)
+let views_page_uuid f =
+  let key = Db.key_page_identity "$$$views" in
+  Db.snapshots
+    ~f:(fun snap ->
+      match Wr.snapshot_slot_value snap key with
+      | Some (W.Uuid u) -> f (Some u)
+      | _ -> f None)
+    [ Db.res key ]
+
 let create_view ~title ~uuid inst ~after =
   owner_uuid inst (fun ouuid ->
-      Db.insert_view_block ~title ~uuid ~page_uuid:ouuid ~owner_uuid:ouuid
-        ~feature_type:inst.V.feature ~after:(fun () ->
-          load_views inst ~on_done:(fun () -> after ())) ())
+      views_page_uuid (function
+        | Some vpuuid ->
+            Db.insert_view_block ~title ~uuid ~page_uuid:vpuuid
+              ~owner_uuid:ouuid ~feature_type:inst.V.feature
+              ~after:(fun () ->
+                load_views inst ~on_done:(fun () -> after ())) ()
+        | None -> ()))
 
 (* auto-create the default "All" view (cljs create-view! auto-triggered?) *)
 let ensure_default_view inst =
@@ -237,15 +257,18 @@ let ensure_default_view inst =
           let uuid =
             Db.gen_view_uuid ~owner:ouuid ~feature_type:inst.V.feature
           in
-          Db.insert_view_block ~title:I.all ~uuid ~page_uuid:ouuid
-            ~owner_uuid:ouuid ~feature_type:inst.V.feature
-            ~after:(fun () ->
-              load_views inst ~on_done:(fun () ->
-                  match inst.V.views with
-                  | v :: _ -> select_view inst v
-                  | [] ->
-                      inst.V.view_uuid <- uuid;
-                      refresh inst)) ())
+          views_page_uuid (function
+            | Some vpuuid ->
+                Db.insert_view_block ~title:I.all ~uuid ~page_uuid:vpuuid
+                  ~owner_uuid:ouuid ~feature_type:inst.V.feature
+                  ~after:(fun () ->
+                    load_views inst ~on_done:(fun () ->
+                        match inst.V.views with
+                        | v :: _ -> select_view inst v
+                        | [] ->
+                            inst.V.view_uuid <- uuid;
+                            refresh inst)) ()
+            | None -> ()))
 
 (* ---------- actions ---------- *)
 
