@@ -24,11 +24,10 @@ let skip_to_main =
 let icon_btn ~key ~id ~cls ~icon ~title ~on_click =
   Logseq_dom.dom ~key ~tag:"button" ~id
     ~style_class:("button cp__header-btn " ^ cls)
-    ~attrs:[ ("title", title) ]
+    ~attrs:[ ("title", title); ("data-button", "icon") ]
     ~events:"click"
     ~on_dom_event:(fun name payload -> if name = "click" then on_click payload)
-    [ Logseq_dom.dom ~key:(key ^ "-i") ~tag:"i"
-        ~style_class:("ti ti-" ^ icon) [] ]
+    [ Icons.icon ~size:20. ~cls:"" icon ]
 
 let search_button =
   icon_btn ~key:"search-btn" ~id:"search-button" ~cls:"" ~icon:"search"
@@ -50,7 +49,7 @@ let dots_button =
           | None -> (0., 0.)
         in
         Runtime.send (Action.Page_menu_set (Some (x, y)))))
-    [ Logseq_dom.dom ~key:"dots-i" ~tag:"i" ~style_class:"ti ti-dots" [] ]
+    [ Icons.icon ~size:20. ~cls:"" "dots" ]
 
 let left_menu_button =
   icon_btn ~key:"left-menu-btn" ~id:"left-menu" ~cls:"cp__header-left-menu"

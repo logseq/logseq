@@ -501,9 +501,14 @@ and fill_bidirectional_page (p : Model.page) ~attach_bidi bidi =
       |> ignore
 
 let mount_page_area page_inner =
-  (* only once per page-inner instance *)
+  (* cljs db-page-title: title actions hide while the page title itself is
+     being edited (page-title-actions-cp only when edit-block ≠ page) *)
+  let editing_title =
+    el_query page_inner ".ls-page-title .editor-wrapper" <> None
+  in
   match el_query page_inner ".ls-page-title-actions" with
-  | Some _ -> ()
+  | Some actions ->
+      set_style actions (if editing_title then "display: none" else "")
   | None -> (
       match !Runtime.current_page, el_query page_inner ".ls-page-title" with
       | Some p, Some title_el -> (
