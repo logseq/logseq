@@ -777,21 +777,38 @@ let gallery_card_el ~title : D.el = D.h ~cls:"ls-card-item" ~text:title ()
 
 (* ---------- foldable groups ---------- *)
 
-let foldable inst ~refresh ~key ~title_text ~(body : unit -> D.el) : D.el =
-  let collapsed = V.Sset.mem key inst.V.collapsed_groups in
+(* cljs svg/caret-right inside .rotating-arrow *)
+let caret_arrow ~collapsed : D.el =
   let arrow =
     D.h ~tag:"span"
-      ~cls:(if collapsed then "control-show cursor-pointer" else "control-hide")
-      ~children:
-        [ D.h ~tag:"i"
-            ~cls:("ti ti-chevron-" ^ if collapsed then "right" else "down")
-            () ]
+      ~cls:("rotating-arrow" ^ if collapsed then " collapsed" else " not-collapsed")
       ()
+  in
+  D.el_inner_html_set arrow
+    "<svg class=\"h-4 w-4\" aria-hidden=\"true\" version=\"1.1\" \
+     viewBox=\"0 0 192 512\" fill=\"currentColor\" \
+     display=\"inline-block\" style=\"margin-left: \
+     2px\"><path d=\"M0 384.662V127.338c0-17.818 21.543-26.741 \
+     34.142-14.142l128.662 128.662c7.81 7.81 7.81 20.474 0 \
+     28.284L34.142 398.804C21.543 411.404 0 402.48 0 384.662z\" \
+     fill-rule=\"evenodd\"/></svg>";
+  arrow
+
+(* cljs ui/foldable: .flex.flex-col > (.ls-foldable-title.content +
+   .ls-foldable-content > .ls-foldable-content-inner). The caret toggles
+   control-show only while the title is hovered (or while collapsed). *)
+let foldable inst ~refresh ~key ~title_el ~(body : unit -> D.el) : D.el =
+  let collapsed = V.Sset.mem key inst.V.collapsed_groups in
+  let ctrl_wrap =
+    D.h ~tag:"span"
+      ~cls:(if collapsed then "control-show cursor-pointer" else "control-hide")
+      ~children:[ caret_arrow ~collapsed ] ()
   in
   let ctrl =
     D.h ~tag:"a"
       ~cls:"ls-foldable-title-control block-control opacity-50 hover:opacity-100"
-      ~attrs:[ ("style", "width:14px;height:16px") ] ~children:[ arrow ] ()
+      ~attrs:[ ("style", "width:14px;height:16px") ]
+      ~children:[ ctrl_wrap ] ()
   in
   D.el_add_listener ctrl "pointerdown" (fun ev ->
       Editor_dom.stop_propagation ev;
@@ -800,15 +817,27 @@ let foldable inst ~refresh ~key ~title_text ~(body : unit -> D.el) : D.el =
       else
         inst.V.collapsed_groups <- V.Sset.add key inst.V.collapsed_groups;
       refresh inst);
-  let header =
-    D.h ~cls:"flex flex-row items-center ls-foldable-header gap-1"
-      ~children:[ ctrl; D.h ~text:title_text () ]
+  let fold_title =
+    D.h ~cls:"flex-1 flex-row foldable-title"
+      ~children:
+        [ D.h ~cls:"flex flex-row items-center ls-foldable-header gap-1"
+            ~children:[ ctrl; title_el ] () ]
       ()
   in
-  let title_el =
-    D.h ~cls:"ls-foldable-title content"
-      ~children:[ D.h ~cls:"flex-1 flex-row foldable-title" ~children:[ header ] () ]
-      ()
+  D.el_add_listener fold_title "mouseover" (fun _ ->
+      if not collapsed then begin
+        D.el_class_remove ctrl_wrap "control-hide";
+        D.el_class_add ctrl_wrap "control-show";
+        D.el_class_add ctrl_wrap "cursor-pointer"
+      end);
+  D.el_add_listener fold_title "mouseout" (fun _ ->
+      if not collapsed then begin
+        D.el_class_remove ctrl_wrap "control-show";
+        D.el_class_remove ctrl_wrap "cursor-pointer";
+        D.el_class_add ctrl_wrap "control-hide"
+      end);
+  let title =
+    D.h ~cls:"ls-foldable-title content" ~children:[ fold_title ] ()
   in
   let content =
     D.h
@@ -817,7 +846,7 @@ let foldable inst ~refresh ~key ~title_text ~(body : unit -> D.el) : D.el =
       ~children:[ D.h ~cls:"ls-foldable-content-inner" ~children:[ body () ] () ]
       ()
   in
-  D.h ~cls:"flex flex-col" ~children:[ title_el; content ] ()
+  D.h ~cls:"flex flex-col" ~children:[ title; content ] ()
 
 let group_title inst gv =
   match gv with
@@ -839,7 +868,7 @@ let render_list inst ~refresh body =
         (fun i g ->
           D.el_append_child body
             (foldable inst ~refresh ~key:("g" ^ string_of_int i)
-               ~title_text:(group_title inst g.Wr.gv)
+               ~title_el:(D.h ~text:(group_title inst g.Wr.gv) ())
                ~body:(fun () ->
                  let w = D.h () in
                  List.iter
@@ -854,7 +883,7 @@ let render_list inst ~refresh body =
         (fun i g ->
           D.el_append_child body
             (foldable inst ~refresh ~key:("g" ^ string_of_int i)
-               ~title_text:(group_title inst g.Wr.glv)
+               ~title_el:(D.h ~text:(group_title inst g.Wr.glv) ())
                ~body:(fun () ->
                  let w = D.h () in
                  List.iteri
@@ -862,7 +891,7 @@ let render_list inst ~refresh body =
                      D.el_append_child w
                        (foldable inst ~refresh
                           ~key:("g" ^ string_of_int i ^ "-" ^ string_of_int j)
-                          ~title_text:(row_title inst buuid)
+                          ~title_el:(D.h ~text:(row_title inst buuid) ())
                           ~body:(fun () ->
                             let w2 = D.h () in
                             List.iter
@@ -897,7 +926,7 @@ let render_table inst ~refresh body =
         (fun i g ->
           D.el_append_child body
             (foldable inst ~refresh ~key:("g" ^ string_of_int i)
-               ~title_text:(group_title inst g.Wr.gv)
+               ~title_el:(D.h ~text:(group_title inst g.Wr.gv) ())
                ~body:(grouped_table inst ~refresh ~rows:g.Wr.grows)))
         gs
   | Wr.VGroupedList gs ->
@@ -905,7 +934,7 @@ let render_table inst ~refresh body =
         (fun i g ->
           D.el_append_child body
             (foldable inst ~refresh ~key:("g" ^ string_of_int i)
-               ~title_text:(group_title inst g.Wr.glv)
+               ~title_el:(D.h ~text:(group_title inst g.Wr.glv) ())
                ~body:(fun () ->
                  let w = D.h () in
                  List.iteri
@@ -913,7 +942,7 @@ let render_table inst ~refresh body =
                      D.el_append_child w
                        (foldable inst ~refresh
                           ~key:("g" ^ string_of_int i ^ "-" ^ string_of_int j)
-                          ~title_text:(row_title inst buuid)
+                          ~title_el:(D.h ~text:(row_title inst buuid) ())
                           ~body:(grouped_table inst ~refresh ~rows)))
                    g.Wr.glparts;
                  w)))

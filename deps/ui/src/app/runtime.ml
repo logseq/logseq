@@ -17,6 +17,17 @@ let current_journals : Model.page list ref = ref []
 let reload_current_view : (unit -> unit Js.Promise.t) ref =
   ref (fun () -> Js.Promise.resolve ())
 
+(* mutation paths outside the editor (sdk bridge) refresh the current
+   view through this hook — Outliner_ops sets it to refresh_page (avoids
+   an editor->sdk dependency cycle) *)
+let refresh_after_ops : (unit -> unit Js.Promise.t) ref =
+  ref (fun () -> Js.Promise.resolve ())
+
+(* mounted property areas live outside the model — Properties_state sets
+   this so sdk mutations can rebuild them without the 150ms debounce *)
+let refresh_property_areas : (unit -> unit Js.Promise.t) ref =
+  ref (fun () -> Js.Promise.resolve ())
+
 (* the open graph's worker uuid — carried as ?graph-id=<uuid> inside the
    location hash (e.g. "#/page/u?graph-id=u") like cljs
    current-graph-query-params, so deep links and reloads resolve a repo *)
