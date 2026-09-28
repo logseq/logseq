@@ -748,14 +748,32 @@ let mount_page_area page_inner =
         | None -> ())
     | _ -> ()
   in
+  (* the mounted element survives reloads (dyn reconcile preserves it),
+     so key it on the page identity + class flag that selects its buttons —
+     otherwise "Add tag property" stays after tag→page conversion and vice
+     versa. Rebuild only on a key change so an open icon-picker anchor
+     isn't detached. *)
+  let actions_key (p : Model.page) =
+    String.concat "|"
+      [ Option.value ~default:"" p.Model.page_uuid
+      ; string_of_bool p.Model.page_is_tag ]
+  in
   match el_query page_inner ".ls-page-title-actions" with
   | Some actions ->
       set_style actions (if editing_title then "display: none" else "");
       with_page (fun p uuid ~title_el:_ ->
+          if el_get_attr actions "data-actions-key" <> Some (actions_key p)
+          then (
+            let fresh = title_actions p in
+            el_set_attr fresh "data-actions-key" (actions_key p);
+            set_style fresh (if editing_title then "display: none" else "");
+            el_insert_adjacent actions "beforebegin" fresh;
+            el_remove actions);
           mount_page_props page_inner p uuid)
   | None ->
       with_page (fun p uuid ~title_el ->
           let actions = title_actions p in
+          el_set_attr actions "data-actions-key" (actions_key p);
           (* cljs: actions sit inside .block-content-wrapper, opacity-0
              until hover; keep them there, not as a sibling of the title *)
           (match el_query page_inner ".ls-page-title .block-content-wrapper"
