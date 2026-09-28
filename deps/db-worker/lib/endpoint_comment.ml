@@ -52,7 +52,8 @@ let block_ref_entity db (v : value) : entity option =
   match v with
   | Uuid u -> entity db (Lookup_ref ("block/uuid", Uuid u))
   | String s when Ldb.is_uuid_string s ->
-      entity db (Lookup_ref ("block/uuid", Uuid s))
+      entity db
+        (Lookup_ref ("block/uuid", Uuid (Datascript.Util.uuid_canonicalize s)))
   | Int64 id -> entity db (Entity_id (Datascript.Util.int64_to_int_exn "entity id" id))
   (* cljs :else (d/entity db block-ref): numeric eids arrive as Int64
      above; lookup-refs, idents and {:db/id} maps resolve through entity

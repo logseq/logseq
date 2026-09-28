@@ -1818,7 +1818,11 @@ let resolve_temp_id (db : db) (datom_v : Wire.t) : Wire.t =
   let replace v =
     match v with
     | Wire.String s when Sync_state.uuid_string s -> (
-        match Datascript.entity db (Lookup_ref ("block/uuid", Uuid s)) with
+        match
+          Datascript.entity db
+            (Lookup_ref
+               ("block/uuid", Uuid (Datascript.Util.uuid_canonicalize s)))
+        with
         | Some e -> Wire.Int e.id
         | None -> v)
     | _ -> v
