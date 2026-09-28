@@ -78,9 +78,16 @@ type cm =
   ; entries : cm_item list
   }
 
+type pv =
+  { pv_x : float
+  ; pv_y : float
+  ; pv_blocks : Model.block list
+  }
+
 type view =
   { ac : ac option
   ; cm : cm option
+  ; pv : pv option
   }
 
 type t =
@@ -98,7 +105,7 @@ let active : t option ref = ref None
 
 let make scheduler : t =
   let t =
-    { vs = Signal.state scheduler { ac = None; cm = None }
+    { vs = Signal.state scheduler { ac = None; cm = None; pv = None }
   ; gen = ref 0
   ; titles = ref []
   ; tag_titles = ref []
@@ -116,8 +123,20 @@ let ac_open () =
 let set t v = Runtime.signal_set t.vs v
 let set_ac t ac = set t { (get t) with ac }
 let set_cm t cm = set t { (get t) with cm }
+let set_pv t pv = set t { (get t) with pv }
 let close_ac t = set_ac t None
 let close_cm t = set_cm t None
+let close_pv t = set_pv t None
+
+(* blocks of the page a .preview-ref-link points at — same bare
+   uuid/name ref as sidebar_state.fetch_blocks *)
+let fetch_preview_blocks repo name : Model.block list Js.Promise.t =
+  Runtime.invoke3 "thread-api/get-page-blocks-tree" (Wire.String repo)
+    (if Sdk_util.is_uuid_string name then Wire.Uuid name
+     else Wire.String name)
+    Wire.Nil
+  |> Js.Promise.then_ (fun w ->
+         Js.Promise.resolve (Decode.blocks_of_wire w))
 
 let ac_class_of_kind = function
   | Slash -> "cp__commands-slash"
