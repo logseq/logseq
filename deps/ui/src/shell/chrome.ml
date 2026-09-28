@@ -56,19 +56,12 @@ let left_menu_button =
     ~icon:"menu-2" ~title:"Toggle left sidebar"
     ~on_click:(fun _ -> Runtime.send Action.Toggle_left_sidebar)
 
-(* cljs header.cljs: home button shows when route != :home — the
-   all-journals list route still shows it *)
-let home_button (ms : Model.t Signal.signal) =
-  dyn ~equal:(fun a b -> a = b)
-    (fun (m : Model.t) ->
-      match m.route with
-      | Model.Home -> Logseq_dom.dom ~key:"home-off" []
-      | _ ->
-          icon_btn ~key:"home-btn" ~id:"" ~cls:"" ~icon:"home" ~title:"Home"
-            ~on_click:(fun _ ->
-              Platform.set_location_hash "#/";
-              Platform.dispatch "ls:navigate" Js.Json.null))
-    ms
+(* cljs header.cljs home-button: always rendered *)
+let home_button =
+  icon_btn ~key:"home-btn" ~id:"" ~cls:"" ~icon:"home" ~title:"Home"
+    ~on_click:(fun _ ->
+      Platform.set_location_hash "#/";
+      Platform.dispatch "ls:navigate" Js.Json.null)
 
 (* cljs open-right-sidebar! seeds a "contents" item when the sidebar
    is empty (state/sidebar-add-content-when-open!) *)
@@ -90,7 +83,7 @@ let header (ms : Model.t Signal.signal) =
           "r flex drag-region justify-between items-center gap-2 overflow-x-hidden w-full"
         [ Logseq_dom.dom ~key:"head-crumb" ~style_class:"flex flex-1" []
         ; Logseq_dom.dom ~key:"head-acts" ~style_class:"flex items-center"
-            [ home_button ms
+            [ home_button
             ; (* cljs header.cljs hook-ui-items :toolbar renders
                  .ui-items-container always; the plugins-manager trigger
                  only appears once a plugin is actually installed *)

@@ -117,7 +117,11 @@ let item_title (it : Sidebar_state.item) =
                     []
                 ]
             ]
-        | None -> []
+        | None ->
+            (* cljs icon/get-node-icon: plain pages default to "file" *)
+            [ dom ~key:"pt-ti"
+                ~style_class:"icon-cp-container flex items-center"
+                [ Icons.icon ~size:16. "file" ] ]
       in
       dom ~key:"pt" ~style_class:"flex items-center page-title gap-1"
         (icon_els

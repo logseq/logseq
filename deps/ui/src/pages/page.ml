@@ -16,21 +16,30 @@ let dom = Logseq_dom.dom
 
 (* block zoom: .breadcrumb lists ancestor block titles (root first),
    each linking to its own zoom route — cljs breadcrumb parity *)
-let zoom_breadcrumbs (page : Model.page) : t =
-  dom ~key:"bc" ~style_class:"breadcrumb"
-    (List.map
-       (fun (p : Model.block) ->
-         dom ~tag:"a" ~style_class:"breadcrumb-item"
-           ~attrs:
-             [ ( "href"
-               , "#/block/" ^ Option.value p.block_uuid ~default:"" ) ]
-           ~text:p.block_title [])
-       page.page_parents)
+let zoom_breadcrumbs (page : Model.page) : t list =
+  (* cljs page-inner omits the breadcrumb node entirely when there's
+     nothing to show — an empty placeholder div would still consume a
+     grid gap slot *)
+  match page.page_parents with
+  | [] -> []
+  | parents ->
+      [ dom ~key:"bc" ~style_class:"breadcrumb"
+          (List.map
+             (fun (p : Model.block) ->
+               dom ~tag:"a" ~style_class:"breadcrumb-item"
+                 ~attrs:
+                   [ ( "href"
+                     , "#/block/" ^ Option.value p.block_uuid ~default:"" )
+                   ]
+                   ~text:p.block_title [])
+             parents)
+      ]
 
-let breadcrumbs title : t =
-  (* namespaced pages "a/b/c" -> breadcrumb trail *)
+let breadcrumbs title : t list =
+  (* namespaced pages "a/b/c" -> breadcrumb trail; non-namespaced
+     titles render no breadcrumb node at all *)
   match String.split_on_char '/' title with
-  | [] | [ _ ] -> box ~key:"bc-none" []
+  | [] | [ _ ] -> []
   | parts ->
       let rec crumbs acc prefix = function
         | [] -> List.rev acc
@@ -50,7 +59,7 @@ let breadcrumbs title : t =
             let sep = dom ~key:("bcsep-" ^ here) ~text:" / " [] in
             crumbs (sep :: item :: acc) here rest
       in
-      dom ~key:"bc" ~style_class:"breadcrumb" (crumbs [] "" parts)
+      [ dom ~key:"bc" ~style_class:"breadcrumb" (crumbs [] "" parts) ]
 
 (* click position payload -> Page_menu_set *)
 let open_menu name payload =
@@ -872,16 +881,17 @@ let page_view (m : Model.t) (page : Model.page) : t =
       ~attrs:(page_wrap_attrs page)
     [ dom ~key:"page-inner"
         ~style_class:"relative grid gap-4 sm:gap-8 page-inner mb-16"
-        [ (match m.route with
-           | Model.Block_zoom _ -> zoom_breadcrumbs page
-           | _ -> breadcrumbs page.page_title)
-        ; dom ~key:"page-title-row" ~style_class:"flex flex-row space-between"
-            [ page_title_el m page ]
-        ; (if page.page_is_library then library_add_pages_button
-           else dom ~key:"lib-add-off" [])
-        ; blocks_inner ?puuid:page.page_uuid ~virtualize:true
-            page.page_blocks
-        ]
+        ((match m.route with
+          | Model.Block_zoom _ -> zoom_breadcrumbs page
+          | _ -> breadcrumbs page.page_title)
+        @ [ dom ~key:"page-title-row"
+              ~style_class:"flex flex-row space-between"
+              [ page_title_el m page ] ]
+        @ (if page.page_is_library then [ library_add_pages_button ]
+           else [])
+        @ [ blocks_inner ?puuid:page.page_uuid ~virtualize:true
+              page.page_blocks
+          ])
     ; dom ~key:"refs-wrap" ~style_class:"flex flex-col gap-8 ml-1"
         [ dom ~key:"lrefs" ~style_class:"fade-in delay"
             [ references_view m.page_refs ]
