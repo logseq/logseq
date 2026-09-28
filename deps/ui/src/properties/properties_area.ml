@@ -378,6 +378,9 @@ let render_area ?(left_host = None) ~host (ctx : V.ctx) ~owner_is_tag
            if below_rows <> [] then
              render_pills ctx ~owner_is_tag ~owner_title host below_rows);
          Js.Promise.resolve ())
+  |> Js.Promise.catch (fun e ->
+         Platform.console_error ("properties render failed", e);
+         Js.Promise.resolve ())
   |> ignore
 
 (* block area: one get-blocks render-data call supplies the positioned

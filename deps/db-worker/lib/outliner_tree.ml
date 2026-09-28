@@ -99,6 +99,77 @@ let vec_tree_data ~(include_root : bool) ?(keep_block_tx_id = false)
     | None -> []
   else children
 
+let starts_with prefix s =
+  let n = String.length prefix in
+  String.length s >= n && String.sub s 0 n = prefix
+
+(* pull [*] encodes ref values as bare {:db/id} stubs, while the cljs UI
+   reads them live via pu/lookup on the entity. Expand stubs under
+   property attrs into ref_value_summary maps so the wire carries the
+   value's title/ident/icon — what the UI actually renders. *)
+let is_property_key (k : Wire.t) : bool =
+  match k with
+  | Wire.Keyword s ->
+      starts_with "logseq.property/" s || starts_with "user.property/" s
+  | _ -> false
+
+let db_id_stub (v : Wire.t) : entity_id option =
+  match v with
+  | Wire.Map [ (Wire.Keyword "db/id", Wire.Int id) ] -> Some id
+  | _ -> None
+
+let rec expand_property_refs (db : db) (w : Wire.t) : Wire.t =
+  match w with
+  | Wire.Map pairs ->
+      Wire.Map
+        (List.map
+           (fun (k, v) ->
+             match db_id_stub v with
+             | Some id when is_property_key k ->
+                 (k, Plain_value.ref_value_summary db id)
+             | _ -> (k, expand_property_refs db v))
+           pairs)
+  | Wire.Array xs -> Wire.Array (List.map (expand_property_refs db) xs)
+  | Wire.List xs -> Wire.List (List.map (expand_property_refs db) xs)
+  | Wire.Set xs -> Wire.Set (List.map (expand_property_refs db) xs)
+  | _ -> w
+
+(* cljs update-block-content: stored titles keep [[uuid]] id-refs and
+   the UI resolves them through :block/refs when rendering — converted
+   here so the wire carries the title the UI displays. *)
+let wire_display_titles (db : db) (ws : Wire.t list) : Wire.t list =
+  let convert (id : entity_id) (title : string) =
+    if not (Regexp.test Db_content.id_ref_re title) then title
+    else
+      match Ldb.ent_of_id db id with
+      | None -> title
+      | Some e ->
+          Db_content.id_ref_to_title_ref title
+            (Ldb.ref_ents e "block/refs")
+  in
+  let rec go (w : Wire.t) : Wire.t =
+    match w with
+    | Wire.Map pairs ->
+        let id =
+          match List.assoc_opt (Wire.Keyword "db/id") pairs with
+          | Some (Wire.Int i) -> Some i
+          | _ -> None
+        in
+        Wire.Map
+          (List.map
+             (fun (k, v) ->
+               match k, v, id with
+               | Wire.Keyword "block/title", Wire.String t, Some id ->
+                   (k, Wire.String (convert id t))
+               | _ -> (k, go v))
+             pairs)
+    | Wire.List xs -> Wire.List (List.map go xs)
+    | Wire.Array xs -> Wire.Array (List.map go xs)
+    | Wire.Set xs -> Wire.Set (List.map go xs)
+    | _ -> w
+  in
+  List.map go ws
+
 (* otree/blocks->vec-tree for the page-root call shape used by
    :thread-api/get-page-blocks-tree — the cljs impl routes through
    get-root-and-page which, for a numeric page eid, yields
@@ -107,3 +178,5 @@ let vec_tree_data ~(include_root : bool) ?(keep_block_tx_id = false)
 let page_blocks_vec_tree (db : db) (blocks : pulled_entity list)
     (page_id : entity_id) : Wire.t list =
   vec_tree_data ~include_root:false ~db ~root:None ~root_id:page_id blocks
+  |> wire_display_titles db
+  |> List.map (expand_property_refs db)

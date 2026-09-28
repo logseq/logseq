@@ -139,4 +139,5 @@ let is_editable_target target =
   | Some el ->
       el_tag el = "TEXTAREA" || el_tag el = "INPUT"
       || el_tag el = "SELECT"
+      || el_closest el "[contenteditable='true']" <> None
   | None -> false

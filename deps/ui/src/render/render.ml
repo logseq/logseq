@@ -111,13 +111,29 @@ let src_block s =
    the query source lives on the hidden logseq.property/query value
    block and the queries area fills in real results later. *)
 let code_block lang code =
+  let trimmed = String.trim code in
   D.el ~tag:"div" ~style_class:"extensions__code"
     [ D.el ~tag:"div" ~style_class:"CodeMirror"
         ~attrs:[ ("data-lang", lang) ]
-        [ D.el ~tag:"pre" ~style_class:"CodeMirror-line"
-            ~text:(String.trim code) []
+        [ (if trimmed = "" then
+             (* empty line needs a br to have a box (CodeMirror renders
+                one inside an empty CodeMirror-line) *)
+             D.el ~tag:"pre" ~style_class:"CodeMirror-line"
+               [ D.el ~tag:"br" [] ]
+           else
+             D.el ~tag:"pre" ~style_class:"CodeMirror-line"
+               ~text:trimmed [])
         ]
     ]
+
+(* {{query ...}} whole-title -> the query shell:
+   .custom-query-results + .ls-query-setting shell; the queries area
+   fills in real results later. *)
+let is_whole_query s =
+  let t = String.trim s in
+  String.length t > 8
+  && String.sub t 0 8 = "{{query "
+  && String.sub t (String.length t - 2) 2 = "}}"
 
 let query_shell =
   D.el ~tag:"div" ~style_class:"custom-query-results"
@@ -128,50 +144,91 @@ let query_shell =
     ]
 
 (* content for a (possibly quoted) body — headings nest inside quote *)
-let content ?(self = "") s =
-  match heading_level s with
-  | Some (lvl, rest) ->
+let content ?(heading : int option) ?(self = "") s =
+  match heading with
+  | Some lvl when lvl >= 1 && lvl <= 6 ->
       wrap ~tag:("h" ^ string_of_int lvl)
-        ~cls:"block-title-wrap as-heading" ~self rest
-  | None ->
-      (* empty title: a <br> gives the inline wrap a line box, so
-         .block-content keeps its clickable area (cljs does the same via
-         the mldoc linebreak node it emits for empty content) *)
-      if s = "" then
-        D.el ~key:"btw-empty" ~tag:"span" ~style_class:"block-title-wrap"
-          [ D.el ~key:"btw-br" ~tag:"br" [] ]
-      else wrap ~self s
+        ~cls:"block-title-wrap as-heading" ~self s
+  | _ -> (
+      match heading_level s with
+      | Some (lvl, rest) ->
+          wrap ~tag:("h" ^ string_of_int lvl)
+            ~cls:"block-title-wrap as-heading" ~self rest
+      | None ->
+          (* empty title: a <br> gives the inline wrap a line box, so
+             .block-content keeps its clickable area (cljs does the same
+             via the mldoc linebreak node it emits for empty content) *)
+          if s = "" then
+            D.el ~key:"btw-empty" ~tag:"span" ~style_class:"block-title-wrap"
+              [ D.el ~key:"btw-br" ~tag:"br" [] ]
+          else wrap ~self s)
+
+(* @@html:<fragment> whole-title — parsed into real elements so the e2e
+   can address the emitted markup (#embed-test). *)
+let html_body s =
+  let t = String.trim s in
+  if starts_ci t "@@html:" then
+    Some (String.trim (String.sub t 7 (String.length t - 7)))
+  else None
+
+(* calc result lines for display-type=code + code/lang=calc *)
+let calc_results_el code =
+  match Render_calc.results code with
+  | [] -> None
+  | lines ->
+      Some
+        (D.el ~tag:"div" ~style_class:"extensions__code-calc-results"
+           (List.map
+              (fun line ->
+                D.el ~tag:"div"
+                  ~style_class:"extensions__code-calc-output-line"
+                  ~text:line [])
+              lines))
 
 (* self: uuid of the block whose title this is — seeds the ref chain
    (cljs :ref-set) that suppresses self/cycle references. is_query:
    query blocks render the .custom-query-results shell instead of
    inline content (cljs query view). *)
-let title ?heading ?(is_query = false) ?(self = "") (s : string) : t list =
-  match quote_body s with
-  | Some body ->
-      [ D.el ~key:"rc-quote" ~tag:"div"
-          ~attrs:[ ("data-node-type", "quote") ]
-          [ content ~self body ] ]
+let title ?heading ?(is_query = false) ?(self = "")
+    (s : string) : t list =
+  match html_body s with
+  | Some frag -> Render_html.els_of_string frag
   | None -> (
-      match src_block s with
-      | Some (lang, code) -> [ code_block lang code ]
+      match quote_body s with
+      | Some body ->
+          [ D.el ~key:"rc-quote" ~tag:"div"
+              ~attrs:[ ("data-node-type", "quote") ]
+              [ content ?heading ~self body ] ]
       | None -> (
-          if is_query then [ wrap ""; query_shell ]
-          else (
-              match ordered_prefix s with
-              | Some (num, rest) ->
-                  [ D.el ~key:"rc-typed-list" ~tag:"span"
-                      ~style_class:"typed-list"
-                      [ D.el ~tag:"label" ~text:num [] ]
-                  ; content ~self rest ]
-              | None -> (
-                  (* cljs text-block-title: a resolved property heading
-                     renders the wrap as h<lvl>.block-title-wrap.as-heading *)
-                  match heading with
-                  | Some lvl -> (
-                      match heading_level s with
-                      | Some _ -> [ content ~self s ]
-                      | None ->
-                          [ wrap ~tag:("h" ^ string_of_int lvl)
-                              ~cls:"block-title-wrap as-heading" ~self s ])
-                  | None -> [ content ~self s ]))))
+          match src_block s with
+          | Some (lang, code) -> [ code_block lang code ]
+          | None -> (
+              if is_whole_query s || is_query then [ wrap ""; query_shell ]
+              else
+                match ordered_prefix s with
+                | Some (num, rest) ->
+                    [ D.el ~key:"rc-typed-list" ~tag:"span"
+                        ~style_class:"typed-list"
+                        [ D.el ~tag:"label" ~text:num [] ]
+                    ; content ?heading ~self rest ]
+                | None -> [ content ?heading ~self s ])))
+
+(* display-type/heading aware variant — the block model carries
+   logseq.property.node/display-type + logseq.property/heading.
+   ~resolved: the caller's ref-resolved title (uuid refs rendered to page
+   titles); code/math surfaces keep the raw block_title. *)
+let title_block ?(self = "") ?resolved (b : Model.block) : t list =
+  let s = b.Model.block_title in
+  let heading = b.Model.block_heading in
+  match b.Model.block_display_type with
+  | Some "code" ->
+      let lang = Option.value b.Model.block_code_lang ~default:"" in
+      code_block lang s
+      :: (match calc_results_el s with Some el -> [ el ] | None -> [])
+  | Some "math" ->
+      [ D.el ~tag:"div" ~style_class:"math-block"
+          [ Render_inline.katex_el s ] ]
+  | _ ->
+      title ?heading
+        ~is_query:(List.mem "logseq.class/Query" b.Model.block_tag_idents)
+        ~self (Option.value resolved ~default:s)

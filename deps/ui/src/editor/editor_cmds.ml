@@ -200,12 +200,3 @@ let run ~command ~block ~value =
           Platform.console_error ("editor command not implemented", command)
       | _ -> Platform.console_error ("unknown editor command", command))
 ;;
-
-let install () =
-  Platform.on_document_event "ls:editor-command" (fun ev ->
-      match detail_str "command" ev with
-      | None -> ()
-      | Some command ->
-          run ~command ~block:(detail_str "block" ev)
-            ~value:(detail_str "value" ev))
-;;

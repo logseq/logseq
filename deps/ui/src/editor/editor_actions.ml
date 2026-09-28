@@ -45,12 +45,25 @@ let rec apply_focus () =
           let len = String.length (D.el_value el) in
           let c = max 0 (min caret len) in
           D.el_set_selection_range el c c
-      | None ->
-          incr focus_attempts;
-          if !focus_attempts < 50 then D.set_timeout apply_focus 40
-          else (
-            S.pending_focus := None;
-            focus_attempts := 0))
+      | None -> (
+          (* code/calc blocks edit through pre.CodeMirror-line — no
+             textarea exists on that surface *)
+          match D.get_element_by_id ("editor-edit-block-" ^ uuid) with
+          | Some wrap -> (
+              match D.el_query wrap "pre.CodeMirror-line" with
+              | Some pre ->
+                  S.pending_focus := None;
+                  focus_attempts := 0;
+                  D.el_focus pre
+              | None -> retry_focus ())       
+          | None -> retry_focus ()))
+
+and retry_focus () =
+  incr focus_attempts;
+  if !focus_attempts < 50 then D.set_timeout apply_focus 40
+  else (
+    S.pending_focus := None;
+    focus_attempts := 0)
 
 let request_focus uuid caret =
   S.pending_focus := Some (uuid, caret);
@@ -174,13 +187,20 @@ let schedule_blur_commit () =
 
 (* ---- structure ops ---- *)
 
+(* Enter on an empty ordered-list block just removes its list marker
+   (cljs remove-block-own-order-list-type!); the block keeps editing *)
+let drop_own_order_list uuid buf parent_ordered =
+  String.trim buf = "" && not parent_ordered
+  && (match S.find uuid with
+      | Some b -> b.Model.block_order_list <> None
+      | None -> false)
+
 (* cljs insert-as-sibling?: every insert on the Library page lands as a
    sibling *page* — library children are always page-typed *)
 let library_context () =
   match !Runtime.current_page with
   | Some p -> p.Model.page_is_library
   | None -> false
-
 let split_at_cursor uuid =
   match (S.editing (), S.find uuid) with
   | Some e, Some b when e.uuid = uuid ->
@@ -189,34 +209,63 @@ let split_at_cursor uuid =
         | Some el -> (D.el_value el, D.el_selection_start el)
         | None -> (e.buffer, String.length e.buffer)
       in
-      let pos = max 0 (min pos (String.length buf)) in
-      let before = String.sub buf 0 pos in
-      let after = String.sub buf pos (String.length buf - pos) in
+      let parent_ordered =
+        match S.find_parent uuid with
+        | Some (Some p, _) -> p.Model.block_order_list <> None
+        | _ -> false
+      in
+      if drop_own_order_list uuid buf parent_ordered then (
+        ignore
+          (Ops.apply_and_refresh
+             [ Ops.remove_block_property uuid
+                 "logseq.property/order-list-type" ]);
+        request_focus uuid 0)
+      else
+        let pos = max 0 (min pos (String.length buf)) in
+        let before = String.sub buf 0 pos in
+        let after = String.sub buf pos (String.length buf - pos) in
+        let new_uuid = Platform.random_uuid () in
+        let sibling = S.is_collapsed uuid || b.Model.block_children = [] in
+        let p =
+          Js.Promise.all
+            [| Ops.block_map_parsed uuid before
+             ; Ops.block_map_parsed new_uuid after |]
+          |> Js.Promise.then_ (fun a ->
+                 Ops.apply_and_refresh ~opts:(Ops.op_opts "insert-blocks")
+                   [ Ops.op "save-block" [ a.(0); Wire.Map [] ]
+                   ; Ops.insert_blocks [ a.(1) ] uuid ~sibling ])
+        in
+        S.set_silent (fun st ->
+            { st with
+              S.editing =
+                Some { uuid = new_uuid; buffer = after; scope = e.scope } });
+        with_focus_after new_uuid 0 p
+  | _ -> ()
+
+(* shift+Enter on a code surface (or any non-splitting editor) appends a
+   fresh sibling after the block — cljs insert-new-block! *)
+let insert_sibling_after uuid =
+  match (S.editing (), S.find uuid) with
+  | Some e, Some b when e.uuid = uuid ->
+      let buf = live_buffer uuid in
       let new_uuid = Platform.random_uuid () in
       let library = library_context () in
       let sibling =
         library || S.is_collapsed uuid || b.Model.block_children = []
       in
       let p =
-        Js.Promise.all
-          [| Ops.block_map_parsed uuid before
-           ; Ops.block_map_parsed new_uuid after |]
-        |> Js.Promise.then_ (fun a ->
-               let ins =
-                 match a.(1) with
-                 | Wire.Map kvs when library ->
-                     Wire.Map
-                       ((Wire.String "block/page", Wire.Bool true) :: kvs)
-                 | m -> m
-               in
+        Ops.block_map_parsed uuid buf
+        |> Js.Promise.then_ (fun m ->
                Ops.apply_and_refresh ~opts:(Ops.op_opts "insert-blocks")
-                 [ Ops.op "save-block" [ a.(0); Wire.Map [] ]
-                 ; Ops.insert_blocks [ ins ] uuid ~sibling ])
+                 [ Ops.op "save-block" [ m; Wire.Map [] ]
+                 ; Ops.insert_blocks
+                     [ Ops.block_map ~title:"" ~page:library new_uuid ]
+                     uuid ~sibling ])
       in
       S.set_silent (fun st ->
           { st with
             S.editing =
-              Some { uuid = new_uuid; buffer = after; scope = e.scope }
+              Some { uuid = new_uuid; buffer = ""; scope = e.scope }
           });
       with_focus_after new_uuid 0 p
   | _ -> ()

@@ -81,6 +81,7 @@ let make scheduler : t =
   { vs = Signal.state scheduler initial_view; gen = ref 0 }
 
 let get st = Signal.get st.vs.state_signal
+
 let set st v = Runtime.signal_set st.vs v
 let set_in st f = set st (f (get st))
 

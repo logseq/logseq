@@ -279,7 +279,7 @@ and render_node_tags d body prop =
 and value_items d prop wire_values =
   let ty = type_of prop in
   let closed =
-    match D.getf prop "logseq.property/closed-values" with
+    match D.getf prop "property/closed-values" with
     | Some w -> D.elems w
     | None -> []
   in
