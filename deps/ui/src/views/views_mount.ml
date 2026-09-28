@@ -49,10 +49,41 @@ let ensure_all_pages () =
       | Some el -> D.el_remove el
       | None -> ())
 
+(* right-sidebar items render their own .page-inner (data-sb-inner);
+   their objects view mounts into the emitted .ml-1 host off
+   data-sb-views-owner / data-sb-kind instead of the route page *)
+let ensure_sidebar_object_view inner =
+  match Ed.el_query inner ".ml-1[data-sb-views-owner]" with
+  | None -> ()
+  | Some container -> (
+      match mounted_id container with
+      | Some _ -> ()
+      | None -> (
+          match
+            ( Ed.el_get_attr container "data-sb-views-owner"
+            , Ed.el_get_attr container "data-sb-kind" )
+          with
+          | Some uuid, Some "tag" ->
+              let inst =
+                Views_view.mount ~kind:(V.KTagPage uuid)
+                  ~owner:(W.Uuid uuid) ~container
+              in
+              mark container inst
+          | Some uuid, _ ->
+              let inst =
+                Views_view.mount ~kind:(V.KPropertyPage uuid)
+                  ~owner:(W.Uuid uuid) ~container
+              in
+              mark container inst
+          | _ -> ()))
+
 (* tag/class and property pages get an objects view above the block
    list (class-objects / property-objects) *)
 let rec ensure_object_view () =
   Ed.for_each_selector ".page-inner" (fun inner ->
+      match Ed.el_get_attr inner "data-sb-inner" with
+      | Some _ -> ensure_sidebar_object_view inner
+      | None -> (
       let kind =
         match !Runtime.current_page with
         | Some p when p.Model.page_is_tag ->
@@ -80,6 +111,7 @@ let rec ensure_object_view () =
                 ensure_object_view_container inner uuid kind
               end
           | None -> ensure_object_view_container inner uuid kind))
+      )
 
 and ensure_object_view_container inner uuid kind =
   (* cljs page.cljs: tag/property objects live inside

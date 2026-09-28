@@ -104,6 +104,11 @@ let breadcrumb crumbs =
 let item_title (it : Sidebar_state.item) =
   match it.breadcrumb, it.kind with
   | [], "page" ->
+      let is_class =
+        match it.Sidebar_state.page with
+        | Some p -> p.Model.page_is_tag || p.Model.page_is_property
+        | None -> false
+      in
       let icon_els =
         match it.icon with
         | Some ("emoji", eid) ->
@@ -115,10 +120,15 @@ let item_title (it : Sidebar_state.item) =
                 ]
             ]
         | None ->
-            (* cljs icon/get-node-icon: plain pages default to "file" *)
+            (* cljs icon/get-node-icon: class pages default to "hash",
+               plain pages to "file"; both inside .icon-cp-container *)
             [ dom ~key:"pt-ti"
-                ~style_class:"icon-cp-container flex items-center"
-                [ Icons.icon ~size:16. "file" ] ]
+                ~style_class:"text-md icon-cp-container flex items-center"
+                ~attrs:[ "style", "color: inherit" ]
+                [ if is_class then Icons.icon ~size:14. ~cls:"text-md" "hash"
+                  else Icons.icon ~size:16. "file"
+                ]
+            ]
       in
       dom ~key:"pt" ~style_class:"flex items-center page-title gap-1"
         (icon_els
@@ -153,7 +163,9 @@ let item_header st idx (it : Sidebar_state.item) =
           ]
         [ dom ~key:("arrow-" ^ it.key) ~tag:"span"
             ~style_class:"opacity-50 hover:opacity-100 flex items-center pr-1"
-            [ Icons.icon "chevron-down" ]
+            (* cljs: .rotating-arrow.not-collapsed > FA caret-right *)
+            [ dom ~tag:"span" ~style_class:"rotating-arrow not-collapsed"
+                [ Page.rotating_arrow ("arw-" ^ it.key) ] ]
         ; dom ~key:("ht-" ^ it.key)
             ~style_class:
               "ml-1 font-medium text-sm overflow-hidden whitespace-nowrap"
@@ -176,27 +188,127 @@ let item_header st idx (it : Sidebar_state.item) =
             [ Icons.icon "x" ] ]
     ]
 
-(* cljs sidebar-page-properties: ghost button "Open properties" over the
-   (collapsed) properties list — rendered for page-backed sidebar items *)
-let sidebar_props_row (it : Sidebar_state.item) =
-  if it.kind = "contents" || it.kind = "page" then
-    dom ~key:("props-" ^ it.key) ~style_class:"-mb-8"
-      [ dom ~style_class:"ls-sidebar-page-properties flex flex-col gap-2 mt-2"
-          [ dom
-              [ dom ~tag:"button"
+(* cljs sidebar-page-properties: ghost toggle + db-properties-cp +
+   hr.my-4. collapsed? = (not class?) — class pages start expanded. The
+   area itself is mounted imperatively by
+   Properties_area.mount_sidebar_area off the data-sb-* host. *)
+let sidebar_props_row st (it : Sidebar_state.item) =
+  let empty = dom ~key:("props-none-" ^ it.key) [] in
+  match it.Sidebar_state.kind with
+  | "contents" | "page" -> (
+      match it.Sidebar_state.page with
+      | None -> empty
+      | Some p ->
+          let collapsed = it.Sidebar_state.props_collapsed in
+          let uuid = Option.value p.Model.page_uuid ~default:"" in
+          let body =
+            if collapsed then []
+            else
+              [ dom ~key:("parea-" ^ it.key)
                   ~style_class:
-                    "ui__button inline-flex items-center px-1 \
-                     text-muted-foreground h-7 text-sm"
-                  ~events:"click" ~on_dom_event:(fun _ _ -> ())
-                  [ dom ~tag:"span" ~style_class:"text-xs"
-                      ~text:(t "Open properties") [] ]
+                    "ls-page-properties ls-properties-area"
+                  ~attrs:
+                    [ ("id", "sbprops-" ^ uuid)
+                    ; ("tabindex", "0")
+                    ; ("data-sb-uuid", uuid)
+                    ; ( "data-sb-db-id"
+                      , match p.Model.page_db_id with
+                        | Some i -> string_of_int i
+                        | None -> "" )
+                    ; ("data-sb-title", p.Model.page_title)
+                    ; ( "data-sb-tag"
+                      , if p.Model.page_is_tag then "1" else "0" )
+                    ]
+                  []
+              ; dom ~key:("phr-" ^ it.key) ~tag:"hr"
+                  ~style_class:"my-4" []
               ]
-          ]
-      ]
-  else dom ~key:("props-none-" ^ it.key) []
+          in
+          dom ~key:("props-" ^ it.key) ~style_class:"-mb-8"
+            [ dom
+                ~style_class:
+                  "ls-sidebar-page-properties flex flex-col gap-2 mt-2"
+                (dom
+                   [ dom ~tag:"button"
+                       ~style_class:
+                         "ui__button inline-flex items-center px-1 \
+                          text-muted-foreground h-7 text-sm"
+                       ~events:"click"
+                       ~on_dom_event:(fun name _ ->
+                         if name = "click" then
+                           Sidebar_state.toggle_props st it.key)
+                       [ dom ~tag:"span" ~style_class:"text-xs"
+                           ~text:
+                             (t
+                                (if collapsed then "Open properties"
+                                 else "Hide properties"))
+                           [] ]
+                   ]
+                 :: body)
+            ])
+  | _ -> empty
 
-let item_body idx (it : Sidebar_state.item) =
+(* cljs page-inner (show-tabs?): class/property pages render
+   .page-tabs > .w-full > tabpanel > .ml-1 hosting the objects view.
+   Views_mount.ensure_object_view mounts it off data-sb-views-*. *)
+let object_tabs_host (it : Sidebar_state.item) =
+  match it.Sidebar_state.page with
+  | Some p
+    when p.Model.page_is_tag || p.Model.page_is_property -> (
+      match p.Model.page_uuid with
+      | None -> dom ~key:("tabs-none-" ^ it.key) []
+      | Some uuid ->
+          let kind =
+            if p.Model.page_is_tag then "tag" else "property"
+          in
+          dom ~key:("tabs-" ^ it.key) ~style_class:"page-tabs"
+            ~attrs:[ ("data-views-owner", uuid); ("data-sb-kind", kind) ]
+            [ dom ~style_class:"w-full"
+                ~attrs:
+                  [ ("data-orientation", "horizontal")
+                  ; ("data-activation-direction", "none") ]
+                [ dom
+                    ~style_class:
+                      "ui__tabs-content mt-2 ring-offset-background \
+                       focus-visible:outline-none \
+                       focus-visible:ring-2 focus-visible:ring-ring \
+                       focus-visible:ring-offset-2"
+                    ~attrs:
+                      [ ("data-orientation", "horizontal")
+                      ; ("role", "tabpanel"); ("tabindex", "0")
+                      ; ("data-index", "0") ]
+                    [ dom ~key:("tabs-c-" ^ it.key) ~style_class:"ml-1"
+                        ~attrs:
+                          [ ("data-sb-views-owner", uuid)
+                          ; ("data-sb-kind", kind) ]
+                        [] ]
+                ]
+            ])
+  | _ -> dom ~key:("tabs-none-" ^ it.key) []
+
+let item_body st idx (it : Sidebar_state.item) =
   let n = string_of_int idx in
+  let is_node, wrap_attrs, margin_left =
+    match it.Sidebar_state.page with
+    | Some p ->
+        ( p.Model.page_is_tag || p.Model.page_is_property
+        , (match p.Model.page_tags with
+           | [] -> []
+           | tags ->
+               (* cljs data-page-tags: JSON array of tag titles *)
+               [ ( "data-page-tags"
+                 , "["
+                   ^ String.concat ","
+                       (List.map
+                          (fun t -> "\"" ^ String.escaped t ^ "\"")
+                          tags)
+                   ^ "]" )
+               ])
+        , "margin-left: -20px;" )
+    | None -> (false, [], "")
+  in
+  (* cljs right_sidebar page items render the full page-inner body:
+     .cp__page-inner-wrap > .page-inner > (props + tabs + blocks + refs) *)
   dom ~key:("body-" ^ it.key)
     ~attrs:
       [ ("role", "region")
@@ -204,18 +316,33 @@ let item_body idx (it : Sidebar_state.item) =
       ; ("aria-labelledby", "sidebar-panel-header-" ^ n)
       ]
     ~style_class:"sidebar-panel-content px-2 initial"
-    [ dom ~key:("page-" ^ it.key) ~style_class:"page"
-        ([ sidebar_props_row it
-         ; dom ~key:("pbi-" ^ it.key) ~style_class:"ls-page-blocks"
-             [ dom ~key:("pbin-" ^ it.key)
-                 ~style_class:"page-blocks-inner relative"
-                 (List.map (Tree.block_row ~scope:"sidebar") it.blocks)
+    [ dom ~key:("wrap-" ^ it.key)
+        ~style_class:
+          ("flex-1 page relative cp__page-inner-wrap"
+          ^ if is_node then " is-node-page" else "")
+        ~attrs:wrap_attrs
+        [ dom ~key:("inner-" ^ it.key)
+            ~style_class:"relative grid gap-4 sm:gap-8 page-inner mb-16"
+            ~attrs:[ "data-sb-inner", it.key ]
+            ([ sidebar_props_row st it
+             ; object_tabs_host it
+             ; dom ~key:("pbi-" ^ it.key)
+                 ~style_class:"ls-page-blocks"
+                 ~attrs:
+                   (if margin_left = "" then []
+                    else [ "style", margin_left ])
+                 [ dom ~key:("pbin-" ^ it.key)
+                     ~style_class:"page-blocks-inner relative"
+                     (List.map
+                        (Tree.block_row ~scope:"sidebar")
+                        it.blocks)
+                 ]
              ]
-         ]
-         (* cljs sidebar page items render the same page-cp body,
-            including the linked-references section *)
-         @ (if it.kind = "page" then [ Page.references_view it.linked_refs ]
-            else []))
+            (* linked references sit inside .page-inner in cljs *)
+            @ (if it.kind = "page" then
+                 [ Page.references_view it.linked_refs ]
+               else []))
+        ]
     ]
 
 let sidebar_item st idx (it : Sidebar_state.item) =
@@ -226,7 +353,7 @@ let sidebar_item st idx (it : Sidebar_state.item) =
     [ dom ~key:("wrap-" ^ it.key)
         ~style_class:"flex flex-col w-full relative"
         [ item_header st idx it
-        ; item_body idx it
+        ; item_body st idx it
         ; item_menu_host st it ]
     ]
 

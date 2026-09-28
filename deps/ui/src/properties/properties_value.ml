@@ -536,17 +536,42 @@ let closed_value_cell ctx row anchor =
 
 let node_cell ctx row =
   let value = D.row_value row in
+  (* cljs: .property-value-inner[data-type] > .multi-values.jtrigger >
+     .select-item.cursor-pointer > a.page-ref.relative[data-uuid][data-ref]
+     — refs render as clickable links, not bare text *)
+  let wrap =
+    mk ~cls:"w-full property-value-inner"
+      ~attrs:[ ("data-type", D.row_type row) ]
+      "div"
+  in
   let cell =
     mk
       ~cls:
-        ("jtrigger flex flex-1"
+        ("flex flex-1 min-w-0 flex-row items-center gap-1 flex-wrap \
+          jtrigger"
         ^ if D.row_many row then " multi-values" else "")
       "div"
   in
   el_set_attr cell "tabindex" "0";
   List.iter
     (fun r ->
-      ignore (child_text "span" "block-title-wrap" (D.ref_title r) cell))
+      let item = mk ~cls:"select-item cursor-pointer" "div" in
+      let t = D.ref_title r in
+      let a =
+        mk "a" ~cls:"page-ref relative"
+          ~attrs:
+            (("data-ref", String.lowercase_ascii t)
+            :: ("draggable", "true") :: ("tabindex", "0")
+            :: (match D.ref_uuid r with
+                | Some u -> [ ("data-uuid", u) ]
+                | None -> []))
+      in
+      (* the ref is a real link — don't let the cell's click open the
+         value editor *)
+      el_listen a "click" (fun ev -> stop_propagation ev) true;
+      ignore (child_text "span" "" t a);
+      el_append_child item a;
+      el_append_child cell item)
     (D.value_elems value);
   let rec open_values () =
     let ident = D.row_ident row |> Option.value ~default:"" in
@@ -586,7 +611,8 @@ let node_cell ctx row =
           open_values ()
       | _ -> ())
     true;
-  cell
+  el_append_child wrap cell;
+  wrap
 
 (* ---------- dispatch ---------- *)
 

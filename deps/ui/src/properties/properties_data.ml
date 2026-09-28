@@ -182,23 +182,24 @@ let invoke name args =
   Runtime.invoke ("thread-api/" ^ name) args
 
 (* opts map for get-display-properties. *)
-let display_opts ~page_title ~tag_dialog =
+let display_opts ~page_title ~tag_dialog ~sidebar =
   W.Map
     [ (W.Keyword "gallery-view?", W.Bool false)
     ; (W.Keyword "page-title?", W.Bool page_title)
-    ; (W.Keyword "sidebar-properties?", W.Bool false)
+    ; (W.Keyword "sidebar-properties?", W.Bool sidebar)
     ; (W.Keyword "tag-dialog?", W.Bool tag_dialog)
     ; (W.Keyword "publishing?", W.Bool false)
     ; (W.Keyword "state-hide-empty-properties?", W.Bool false)
     ]
 
 let display_props ?(page_title = false) ?(tag_dialog = false)
-    ~show_hidden block_ref =
+    ?(sidebar = false) ~show_hidden block_ref =
   invoke "get-display-properties"
     [ repo ()
     ; W.Map
         [ (W.Keyword "block", block_ref)
-        ; (W.Keyword "opts", display_opts ~page_title ~tag_dialog)
+        ; ( W.Keyword "opts"
+          , display_opts ~page_title ~tag_dialog ~sidebar )
         ; ( W.Keyword "show-empty-and-hidden-properties?"
           , W.Bool show_hidden )
         ]

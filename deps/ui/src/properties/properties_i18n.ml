@@ -8,6 +8,7 @@ let t key =
   match key with
   | "property/add-new" -> "Add property"
   | "class/add-property" -> "Add tag property"
+  | "property.built-in/class-properties" -> "Tag Properties"
   | "class/tag-properties-desc" ->
       "Tag properties are inherited by all nodes using the tag. For \
        example, each #Task node inherits 'Status' and 'Priority'."
