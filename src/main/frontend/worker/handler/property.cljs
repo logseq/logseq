@@ -379,6 +379,12 @@
   (when-let [conn (worker-state/get-datascript-conn repo)]
     (get-all-properties @conn opts)))
 
+(def-thread-api :thread-api/get-user-properties-by-name
+  [repo property-name]
+  (when-let [conn (worker-state/get-datascript-conn repo)]
+    (mapv entity-util/entity->map
+          (ldb/get-user-properties-by-name @conn property-name))))
+
 (def-thread-api :thread-api/validate-property-value
   [repo {:keys [property value]}]
   (when-let [conn (worker-state/get-datascript-conn repo)]

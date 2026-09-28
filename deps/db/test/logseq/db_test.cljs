@@ -153,6 +153,23 @@
            (ldb/page-exists? @conn "movie" #{:logseq.class/Property}))
         "Class pages correctly not found for given class")))
 
+(deftest get-user-property-by-name
+  (let [conn (db-test/create-conn-with-blocks
+              {:classes {:Foo {}}
+               :properties {:Foo {:logseq.property/type :default}}
+               :pages-and-blocks [{:page {:block/title "Bar"}}]})]
+    (is (= :user.property/Foo
+           (:db/ident (ldb/get-user-property-by-name @conn "foo")))
+        "Finds the user property by lc name when a tag is older")
+    (is (= "Foo"
+           (:block/title (ldb/get-user-property-by-name @conn "Foo")))
+        "Exact title still resolves to the user property")
+    (is (nil? (ldb/get-user-property-by-name @conn "Bar"))
+        "A page with the same lc name is not treated as a property")
+    (is (= [:user.property/Foo]
+           (mapv :db/ident (ldb/get-user-properties-by-name @conn "foo")))
+        "A same-named tag is not returned as a property"))))
+
 (deftest test-transact-with-multiple-tx-datoms
   (testing "last write wins with same tx"
     (let [conn (d/create-conn)]

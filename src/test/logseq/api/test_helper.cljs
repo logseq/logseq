@@ -265,6 +265,11 @@
     :thread-api/get-all-properties
     (mapv #(entity->api-map db %) (ldb/get-all-properties db))
 
+    :thread-api/get-user-properties-by-name
+    (let [[_repo property-name] args]
+      (mapv #(entity->api-map db %)
+            (ldb/get-user-properties-by-name db property-name)))
+
     :thread-api/get-class-objects
     (let [[_repo class-id] args]
       (mapv #(entity->api-map db %) (db-class/get-class-objects db class-id)))

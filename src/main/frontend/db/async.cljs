@@ -107,6 +107,10 @@
   [graph name]
   (<invoke-db-worker :thread-api/get-tags-by-name graph name))
 
+(defn <get-user-properties-by-name
+  [graph property-name]
+  (<invoke-db-worker :thread-api/get-user-properties-by-name graph property-name))
+
 (defn <resolve-query-inputs
   [graph inputs opts]
   (<invoke-db-worker :thread-api/resolve-query-inputs graph inputs opts))
