@@ -35,7 +35,9 @@ The next occurrence starts at *original + one interval* and keeps
 advancing in whole intervals until the result is strictly in the
 future. Because the arithmetic is in UTC and advances by whole weeks
 (or months, or years), weekly recurrences naturally land on the same
-day-of-week as the original.
+day-of-week as the original. Monthly and yearly recurrences keep the
+original day-of-month when the destination month has that many days
+(January 31 skipped to July lands on July 31, not July 30).
 
 **Best for:** calendar-anchored recurrences where completion is a side
 event and the anchor matters — "every Monday standup," "monthly review

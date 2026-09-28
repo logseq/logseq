@@ -293,8 +293,36 @@
     (let [now (t/date-time 2026 3 30)
           scheduled (t/date-time 2026 1 31)]
       (with-redefs [t/now (fn [] now)]
-        (is (t/after? (tc/from-long (get-next-time scheduled month-unit 1 double-plus))
-                      now))))))
+        (is (= (tc/to-long (t/date-time 2026 3 31))
+               (get-next-time scheduled month-unit 1 double-plus)))))))
+
+(deftest double-plus-month-end-keeps-original-day-test
+  (testing "`++` monthly from the 31st stays on the 31st after skipping shorter months"
+    (let [now (t/date-time 2026 7 1 9 1)
+          scheduled (t/date-time 2026 1 31)]
+      (with-redefs [t/now (fn [] now)]
+        (is (= (tc/to-long (t/date-time 2026 7 31))
+               (get-next-time scheduled month-unit 1 double-plus))
+            "Jan 31 checked on Jul 1 must land on Jul 31, not Jul 30"))))
+  (testing "`++` monthly timed date from Oct 31 keeps 09:30 on Mar 31 after a leap February"
+    (let [now (t/date-time 2028 3 1)
+          scheduled (t/date-time 2026 10 31 9 30)]
+      (with-redefs [t/now (fn [] now)]
+        (is (= (tc/to-long (t/date-time 2028 3 31 9 30))
+               (get-next-time scheduled month-unit 1 double-plus))
+            "Oct 31 09:30 checked on Mar 1 2028 must land on Mar 31 09:30, not Mar 29"))))
+  (testing "`++` monthly from the 31st uses the last day of a shorter month"
+    (let [now (t/date-time 2026 2 1)
+          scheduled (t/date-time 2026 1 31)]
+      (with-redefs [t/now (fn [] now)]
+        (is (= (tc/to-long (t/date-time 2026 2 28))
+               (get-next-time scheduled month-unit 1 double-plus))))))
+  (testing "`++` yearly from Feb 29 re-anchors to Feb 29 in the next leap year"
+    (let [now (t/date-time 2027 3 1)
+          scheduled (t/date-time 2024 2 29)]
+      (with-redefs [t/now (fn [] now)]
+        (is (= (tc/to-long (t/date-time 2028 2 29))
+               (get-next-time scheduled year-unit 1 double-plus)))))))
 
 (deftest double-plus-far-overdue-minute-is-bounded-test
   (testing "`++` does not advance far-overdue minute repeats one interval at a time"
@@ -315,6 +343,35 @@
       (when-not (instance? js/Error result)
         (is (= 1 (/ (- (tc/to-long result) (tc/to-long now)) (* 1000 60)))))
       (is (< @unit-calls 20)))))
+
+(deftest repeated-deadline-month-end-skip-test
+  (testing "monthly ++ deadline from Jan 31 lands on Jul 31 when checked on Jul 1"
+    (let [now (t/date-time 2026 7 1 9 1)
+          deadline (tc/to-long (t/date-time 2026 1 31))
+          expected-next-deadline (tc/to-long (t/date-time 2026 7 31))
+          conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks
+                 [{:page {:block/title "Month-end sandbox"}
+                   :blocks [{:block/title "Month-end recurring item"
+                             :build/properties
+                             {:logseq.property.repeat/repeated? true
+                              :logseq.property.repeat/recur-frequency 1
+                              :logseq.property.repeat/recur-unit :logseq.property.repeat/recur-unit.month
+                              :logseq.property/deadline deadline
+                              :logseq.property/status :logseq.property/status.todo}}]}]})
+          block (db-test/find-block-by-content @conn "Month-end recurring item")
+          _ (d/transact! conn [[:db/add (:db/id block)
+                                :logseq.property.repeat/repeat-type
+                                :logseq.property.repeat/repeat-type.double-plus]])
+          report (d/transact! conn [[:db/add (:db/id block)
+                                     :logseq.property/status
+                                     :logseq.property/status.done]])]
+      (with-redefs [t/now (fn [] now)]
+        (let [commands-tx (doall (commands/run-commands report))]
+          (is (= expected-next-deadline
+                 (tx-add-value commands-tx (:db/id block) :logseq.property/deadline)))
+          (is (= :logseq.property/status.todo
+                 (tx-add-value commands-tx (:db/id block) :logseq.property/status))))))))
 
 (deftest repeated-task-with-deadline-and-missing-temporal-property-test
   (testing "falls back to the existing deadline instead of missing scheduled"

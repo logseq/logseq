@@ -117,3 +117,26 @@
            t/to-default-time-zone
            (tf/unparse yyyyMMdd-formatter)
            parse-long))
+
+(defn with-day-of-month
+  "Return `datetime` with its day-of-month set to `day`, or to the last day
+  of that month when `day` is larger than the month's length. Time-of-day is
+  preserved."
+  [datetime day]
+  (let [target (min day (t/number-of-days-in-the-month datetime))
+        delta (- target (t/day datetime))]
+    (cond-> datetime
+      (not (zero? delta))
+      (t/plus (t/days delta)))))
+
+(defn plus-preserving-month-day
+  "Add `period` to `datetime`. After a month or year addition, restore
+  `anchor-day` when the destination month is long enough. Intermediate
+  shorter months therefore do not permanently clamp the day: Jan 31 + 6
+  months is Jul 31, not Jul 30."
+  [datetime period anchor-day]
+  (let [result (t/plus datetime period)]
+    (if (or (some-> (:months period) pos?)
+            (some-> (:years period) pos?))
+      (with-day-of-month result anchor-day)
+      result)))

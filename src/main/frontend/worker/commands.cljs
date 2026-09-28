@@ -122,20 +122,26 @@
 (defn- advance-until-future
   "`++` semantics: advance from scheduled in frequency*unit steps until strictly
   after now. cljs-time arithmetic is UTC, so adding whole weeks preserves
-  day-of-week by construction — no fix-up needed."
+  day-of-week by construction. Month and year steps keep the original
+  day-of-month when the destination month is long enough — `t/plus` would
+  otherwise clamp through a shorter month (Jan 31 + 5 months → Jun 30) and
+  then step to the wrong day (Jul 30 instead of Jul 31)."
   [now datetime recur-unit period-f frequency]
-  (let [periods (max 1
+  (let [anchor-day (t/day datetime)
+        plus-step (fn [dt period]
+                    (date-time-util/plus-preserving-month-day dt period anchor-day))
+        periods (max 1
                      (if (t/after? datetime now)
                        1
                        (period-f (t/interval datetime now))))
         delta (->> (Math/ceil (/ periods frequency))
                    (* frequency)
                    recur-unit)
-        result (t/plus datetime delta)]
+        result (plus-step datetime delta)]
     (loop [candidate result]
       (if (t/after? candidate now)
         candidate
-        (recur (t/plus candidate (recur-unit frequency)))))))
+        (recur (plus-step candidate (recur-unit frequency)))))))
 
 (defn- repeat-next-timestamp
   "Dispatch on repeat-type db-ident to compute the next occurrence. Mirrors the
