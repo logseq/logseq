@@ -25,7 +25,12 @@ let apply_storage_env () =
     | None -> "light"
   in
   Platform.document_set_data "theme" theme;
-  Platform.document_set_data "color" "logseq"
+  let color =
+    match Platform.local_storage_get "ui/radix-color" with
+    | Some v -> unquote v
+    | None -> "logseq"
+  in
+  Platform.document_set_data "color" color
 
 (* pick the graph to open: first existing repo, else create Demo. *)
 let pick_graph repos =
