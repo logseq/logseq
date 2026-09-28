@@ -8,6 +8,7 @@ let t key =
   match key with
   | "property/add-new" -> "Add property"
   | "class/add-property" -> "Add tag property"
+  | "command.editor/add-property-icon" -> "Add icon"
   | "property/set-property" -> "Set property"
   | "property/add-or-change" -> "Add or change property"
   | "property/select-property-placeholder" -> "Select a property"

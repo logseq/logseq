@@ -30,7 +30,11 @@ let update (model : t) (action : Action.t) : t =
   | Dismiss_all ->
       { model with page_menu = None; confirm = None }
   | Toggle_left_sidebar ->
-      { model with left_sidebar_open = not model.left_sidebar_open }
+      (* cljs set-left-sidebar-open! persists to storage *)
+      let open_ = not model.left_sidebar_open in
+      Platform.local_storage_set "ls-left-sidebar-open?"
+        (if open_ then "true" else "false");
+      { model with left_sidebar_open = open_ }
   | Toggle_right_sidebar ->
       { model with right_sidebar_open = not model.right_sidebar_open }
   | Toast_push t ->
