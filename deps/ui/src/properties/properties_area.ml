@@ -705,10 +705,22 @@ let mount_page_area page_inner =
     el_query page_inner ".ls-page-title .editor-wrapper" <> None
   in
   let with_page f =
-    match
-      ( !Runtime.current_page
-      , el_query page_inner ".ls-page-title" )
-    with
+    (* journals view mounts one .page-inner per journal — current_page is
+       unset there, so resolve the page from the title's block uuid *)
+    let page =
+      match !Runtime.current_page with
+      | Some p -> Some p
+      | None -> (
+          match el_query page_inner ".ls-page-title [blockid]" with
+          | Some title_block -> (
+              let bid = el_get_attr title_block "blockid" in
+              List.find_opt
+                (fun (j : Model.page) -> j.Model.page_uuid = bid)
+                !Runtime.current_journals
+            )
+          | None -> None)
+    in
+    match page, el_query page_inner ".ls-page-title" with
     | Some p, Some title_el -> (
         match p.Model.page_uuid with
         | Some uuid -> f p uuid ~title_el
