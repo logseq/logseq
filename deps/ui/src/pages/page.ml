@@ -285,22 +285,6 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
             ]
         ]
   in
-  let actions =
-    match page.page_icon, page.page_is_tag, page.page_uuid with
-    | None, false, Some _ ->
-        [ dom ~key:"pt-actions" ~style_class:"ls-page-title-actions"
-            [ dom ~key:"pt-add-icon" ~tag:"button"
-                ~style_class:"ui__button"
-                ~attrs:[ "id", "add-page-icon-btn"; "type", "button" ]
-                ~text:(Ui_strings.t "command.editor/add-property-icon")
-                ~events:"click"
-                ~on_dom_event:(fun _ _ ->
-                  page_icon_picker page "#add-page-icon-btn")
-                []
-            ]
-        ]
-    | _ -> []
-  in
   let body =
     (* cljs db-page-title: the page title is a full block row —
        .ls-block > .is-page-title-row > bullet control + nested
@@ -411,7 +395,7 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
                 Dom_ext.set_selection_range el n n
             | None -> ())
       | _ -> open_menu name payload)
-    (icon @ body @ actions)
+    (icon @ body)
 
 let blocks_inner ?puuid ?(virtualize = false) (blocks : Model.block list)
     : t =
