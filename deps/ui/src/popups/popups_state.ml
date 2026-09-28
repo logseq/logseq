@@ -283,7 +283,7 @@ let contains_ci hay needle =
   let n = S.lowercase_ascii needle and h = S.lowercase_ascii hay in
   let nl = S.length n and hl = S.length h in
   let rec go i = i + nl <= hl && (S.sub h i nl = n || go (i + 1)) in
-  nl > 0 && go 0
+  nl = 0 || go 0
 ;;
 
 let rec take n xs =
@@ -319,12 +319,20 @@ let editing_has_heading () =
 ;;
 
 let filter_slash q items =
-  let fs = List.filter (fun it -> contains_ci it.ai_label q) items in
-  (* cljs only renders group headers when `filtered?` is false — i.e. when
-     the filtered command list equals *initial-commands*. filter-commands
-     always rebuilds the list, so headers effectively never show *)
+  (* cljs filter-commands fuzzy-matches on the label — "h1" hits
+     "Heading 1" — then hides the group banners while filtered *)
+  let fs =
+    List.filter_map
+      (fun it ->
+        Option.map (fun s -> (s, it)) (fuzzy_score it.ai_label q))
+      items
+  in
+  let fs =
+    List.map snd
+      (List.sort (fun (a, _) (b, _) -> Int.compare a b) fs)
+  in
   (match fs with [] -> [ slash_fallback ] | _ -> fs)
-  |> with_headers false
+  |> with_headers (q = "")
 ;;
 
 (* cljs editor.cljs page-search: an empty [[ query lists the i18n nlp
@@ -1070,8 +1078,10 @@ let run_query t ac ~advanced =
 let apply_item t ac it =
   match it.ai_act with
   | Switch kind ->
-      erase_trigger_text ac;      (match kind with
+      erase_trigger_text ac;
+      (match kind with
        | Page_ref | Page_embed | Tag_search | Embed_ref -> load_titles t
+       | Template_search -> load_templates t
        | _ -> ());
       set_ac t
         (Some

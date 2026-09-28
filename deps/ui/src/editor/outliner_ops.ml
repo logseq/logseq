@@ -105,6 +105,20 @@ let saved_block_map uuid title =
       Wire.Map
         ([ str "block/uuid" (Wire.Uuid uuid) ] @ fields (String.trim title))
 
+(* the block/title form saved_block_map persists — commit-title overrides
+   paint this so the post-edit DOM already shows the normalized text
+   (markdown heading stripped) instead of the raw buffer *)
+let normalized_title uuid title =
+  let dt =
+    match S.find uuid with
+    | Some b -> b.Model.block_display_type
+    | None -> None
+  in
+  match markdown_heading_level title with
+  | Some lvl when dt <> Some "code" && dt <> Some "math" ->
+      strip_markdown_heading title lvl
+  | _ -> String.trim title
+
 (* cljs save-block-aux! trims the value before persisting *)
 let save_block uuid title =
   (* cljs save-block-aux! runs wrap-parse-block: title -> parsed
