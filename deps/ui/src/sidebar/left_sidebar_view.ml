@@ -34,6 +34,18 @@ let menu_box ~style children =
     ~attrs:[ ("role", "menu"); ("style", style) ]
     children
 
+(* [role='menuitem'] > div text — contract uses `div:text('<label>')` *)
+let menu_item st label on_click =
+  dom ~key:("mi-" ^ label) ~tag:"div"
+    ~attrs:[ ("role", "menuitem") ]
+    ~style_class:"ui__dropdown-menu-item"
+    ~events:"click"
+    ~on_dom_event:(fun name _ ->
+      if name = "click" then (
+        Sidebar_state.close_menu st;
+        on_click ()))
+    [ dom ~tag:"div" ~text:label [] ]
+
 (* ---------- nav edit (checkbox) menu ---------- *)
 
 let nav_labels =
@@ -69,6 +81,100 @@ let nav_edit_menu st checked =
         (List.map mk nav_labels)
     ]
 
+(* ---------- dots (page) menu ---------- *)
+
+let dots_menu st favorited =
+  let page_items =
+    match !Runtime.current_page with
+    | Some _ ->
+        [ menu_item st
+            (if favorited then t "Unfavorite page" else t "Add to Favorites")
+            (fun () -> Sidebar_state.toggle_favorite st)
+        ; menu_item st (t "Delete page")
+            (fun () -> Sidebar_state.open_dialog "delete-page")
+        ]
+    | None -> []
+  in
+  dom ~key:"dots-menu"
+    [ backdrop st
+    ; menu_box
+        ~style:"position:fixed;top:96px;right:16px;z-index:999;min-width:200px"
+        (page_items
+         @ [ menu_item st (t "Settings")
+               (fun () -> Sidebar_state.open_dialog "settings")
+           ; menu_item st (t "Export graph")
+               (fun () -> Sidebar_state.open_dialog "export-graph")
+           ; menu_item st (t "Import")
+               (fun () -> Sidebar_state.open_dialog "import")
+           ; menu_item st (t "Login")
+               (fun () -> Sidebar_state.open_dialog "login")
+           ])
+    ]
+
+(* ---------- plugins dropdown (toolbar-plugins-manager) ---------- *)
+
+let plugins_menu st =
+  let owner =
+    st.Sidebar_state.open_menu.Signal.state_signal.Signal.owner
+  in
+  let extra_item key label icn f =
+    dom ~key:("pm-x-" ^ key) ~style_class:"ui__dropdown-menu-item extra-item"
+      ~events:"click"
+      ~on_dom_event:(fun n _ ->
+        if n = "click" then (
+          Sidebar_state.close_menu st;
+          f ()))
+      [ dom ~tag:"span" ~style_class:"flex items-center gap-1"
+          [ icon icn; dom ~tag:"div" ~text:label [] ] ]
+  in
+  let pinned = Plugin_host.pinned () in
+  let item_row (it : Plugin_host.ui_item) =
+    let key = Plugin_host.jstr it.it_opts "key" in
+    let pkey = it.it_pid ^ ":" ^ key in
+    dom ~key:("pm-i-" ^ pkey) ~style_class:"ui__dropdown-menu-item"
+      ~events:"click"
+      ~on_dom_event:(fun n _ ->
+        if n = "click" then Plugin_host.toggle_pinned pkey)
+      [ dom ~style_class:"flex items-center item-wrap"
+          [ dom ~key:("slot-" ^ pkey) ~id:(Plugin_host.slot_id it)
+              ~style_class:"pl-injected-ui-item-toolbar"
+              ~attrs:[ ("title", key) ] []
+          ; dom ~key:("lbl-" ^ pkey) ~tag:"span"
+              ~attrs:[ ("style", "padding-left:2px") ]
+              ~text:key []
+          ; dom ~key:("pin-" ^ pkey) ~tag:"span"
+              ~style_class:
+                ("pin flex items-center opacity-60"
+                 ^ if List.mem pkey pinned then " pinned" else "")
+              [ icon (if List.mem pkey pinned then "pinned" else "pin") ]
+          ]
+      ]
+  in
+  dom ~key:"plugins-menu"
+    [ backdrop st
+    ; dom ~key:"menu-box" ~tag:"div"
+        ~style_class:
+          "ui__dropdown-menu-content ui__dropdown-menu \
+           toolbar-plugins-manager-content"
+        ~attrs:
+          [ ("role", "menu")
+          ; ( "style"
+            , "position:fixed;top:96px;left:16px;z-index:999;min-width:200px" )
+          ]
+        (dyn ~equal:Stdlib.( = )
+           (fun _dirty ->
+             dom ~key:"pm-body" ~tag:"div"
+               (List.map item_row (Plugin_host.toolbar_items ())))
+           (Plugin_host.dirty_value owner)
+        :: [ extra_item "plugins" (t "Plugins") "apps"
+               (fun () -> Dialogs_state.open_ "plugins")
+           ; extra_item "themes" (t "Themes") "palette"
+               (fun () -> Dialogs_state.open_ "plugins")
+           ; extra_item "settings" (t "Settings") "adjustments"
+               (fun () -> Sidebar_state.open_dialog "settings")
+           ])
+    ]
+
 let menu_host st =
   let menu_sig =
     Signal.map2
@@ -83,6 +189,8 @@ let menu_host st =
     (fun (menu, checked, _favorited) ->
       match menu with
       | "nav-edit" -> nav_edit_menu st checked
+      | "dots" -> dots_menu st _favorited
+      | "plugins" -> plugins_menu st
       | _ -> dom ~key:"menu-closed" [])
     menu_sig
 
@@ -259,8 +367,28 @@ let recents_group st =
     ~items_sig:(Signal.value st.Sidebar_state.recents)
     ~li_class:"recent-item select-none font-medium"
 
-(* plugins toolbar lives in the header (cljs hook-ui-items :toolbar) —
-   see chrome.ml *)
+(* ---------- plugins / dots toolbar ---------- *)
+
+let toolbar_row st =
+  dom ~key:"sb-toolbar"
+    ~style_class:"toolbar-plugins-manager flex items-center gap-1 px-2"
+    [ dom ~key:"pm-trigger" ~tag:"a"
+        ~style_class:"flex relative toolbar-plugins-manager-trigger"
+        ~attrs:[ ("title", t "Plugins") ]
+        ~events:"click"
+        ~on_dom_event:(fun name _ ->
+          if name = "click" then (
+            Runtime.signal_set st.Sidebar_state.open_menu "plugins";
+            Plugin_host.inject_toolbar_ui ()))
+        [ icon "apps" ]
+    ; dom ~key:"dots-btn" ~tag:"button"
+        ~style_class:"button sidebar-dots-btn"
+        ~attrs:[ ("title", t "More") ]
+        ~events:"click"
+        ~on_dom_event:(fun name _ ->
+          if name = "click" then Sidebar_state.open_dots_menu st)
+        [ icon "dots" ]
+    ]
 
 (* ---------- root ---------- *)
 (* chrome.ml owns the #left-sidebar.cp__sidebar-left-layout shell +
@@ -302,7 +430,7 @@ let contents (ms : Model.t Signal.signal) : t =
   let st = Sidebar_state.ensure ms in
   dom ~key:"ls-contents" ~style_class:"sidebar-contents-container"
     [ dom ~key:"ls-left" ~style_class:"cp__sidebar-left"
-        [ favorites_group st; recents_group st ] ]
+        [ favorites_group st; recents_group st; toolbar_row st ] ]
 
 let menus (ms : Model.t Signal.signal) : t =
   let st = Sidebar_state.ensure ms in
