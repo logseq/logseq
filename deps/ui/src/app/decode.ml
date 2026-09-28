@@ -110,9 +110,15 @@ let page_of_summary (w : Wire.t) : Model.page option =
              | Some d -> Some d
              | None -> Wire.map_get_int w "block/journal-day")
         ; page_is_library =
-            (* cljs entity-util/library? = built-in? && title = "Library" *)
-            (match Wire.get w "built-in?" with
-             | Some (Wire.Bool true) -> title = "Library"
+            (* cljs entity-util/library? = :logseq.property/built-in?
+               && title = "Library". get-case-page exposes the raw attr
+               key; get-page-route-info returns the computed "built-in?". *)
+            (match
+               ( Wire.get w "logseq.property/built-in?"
+               , Wire.get w "built-in?" )
+             with
+             | Some (Wire.Bool true), _ | _, Some (Wire.Bool true) ->
+                 title = "Library"
              | _ -> false)
         ; page_tags = []
         ; page_blocks = []

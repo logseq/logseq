@@ -379,7 +379,6 @@ let query_closed ac q =
 (* after an `input` event in a .editor-wrapper textarea *)
 let on_editor_input t el =
   let pos = Dom_ext.selection_start el in
-  Platform.console_log (Printf.sprintf "DBG on_input pos=%d v='%s'" pos (Dom_ext.value el));
   match (get t).ac with
   | Some ac ->
       if pos < ac.tpos + ac.tlen then close_ac t
