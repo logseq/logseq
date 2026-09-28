@@ -767,7 +767,6 @@ let page_view (m : Model.t) (page : Model.page) : t =
         ; dom ~key:"urefs" ~style_class:"fade-in delay"
             [ unlinked_references_view m ]
         ]
-    ; Page_menu.dialog_view m
     ]
 
 let empty_state () : t =
@@ -802,7 +801,6 @@ let library_view (m : Model.t) (page : Model.page) : t =
         ; dom ~key:"urefs" ~style_class:"fade-in delay"
             [ unlinked_references_view m ]
         ]
-    ; Page_menu.dialog_view m
     ]
 
 let page_view_of_model (m : Model.t) : t =

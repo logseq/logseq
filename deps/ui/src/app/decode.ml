@@ -142,6 +142,16 @@ let is_tag_page (w : Wire.t) : bool =
             xs
       | _ -> false)
 
+(* entity internal-page? = :block/tags contains the given class ident
+   (route-info maps carry "tags" [{ident}] stubs) *)
+let has_ident_page (w : Wire.t) (ident : string) : bool =
+  match Wire.get w "tags" with
+  | Some (Wire.Array xs) | Some (Wire.List xs) ->
+      List.exists
+        (fun t -> Wire.map_get_string t "ident" = Some ident)
+        xs
+  | _ -> false
+
 (* accepts entity maps (block/title) and get-page-route-info maps
    (page-title/page-uuid/page-id) *)
 let page_of_summary (w : Wire.t) : Model.page option =
@@ -183,6 +193,14 @@ let page_of_summary (w : Wire.t) : Model.page option =
              with
              | Some (Wire.Bool true), _ | _, Some (Wire.Bool true) ->
                  title = "Library"
+             | _ -> false)
+        ; page_internal = has_ident_page w "logseq.class/Page"
+        ; page_built_in =
+            (match
+               ( Wire.get w "logseq.property/built-in?"
+               , Wire.get w "built-in?" )
+             with
+             | Some (Wire.Bool true), _ | _, Some (Wire.Bool true) -> true
              | _ -> false)
         ; page_tags = []
         ; page_blocks = []

@@ -216,6 +216,12 @@ let overlays (ms : Model.t Signal.signal) =
     ; Dialogs_view.render ms
     ; Cards_view.render ms
     ; Toasts_view.render ms
+    ; dyn
+        ~equal:(fun (a : Model.t) (b : Model.t) ->
+          a.page_menu = b.page_menu && a.confirm = b.confirm
+          && a.route_page = b.route_page)
+        (fun m -> Page_menu.dialog_view m)
+        ms
     ]
 
 (* cljs container.cljs help-button: fixed bottom-right "?" — click toggles

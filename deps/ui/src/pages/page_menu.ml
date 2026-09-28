@@ -72,25 +72,30 @@ let page_items (p : Model.page) =
         Runtime.send (Action.Page_menu_set None);
         Sidebar_state.open_dialog "export")
   in
-  let own =
-    match p.page_is_tag, p.page_db_id with
-    | false, Some id ->
-        [ del; export_page; publish_page
-        ; item "cvt" Strings.convert_to_tag (fun () ->
-              Runtime.send (Action.Page_menu_set None);
-              ignore (Page_ops.convert_to_tag id))
-        ]
-    | true, Some id ->
-        [ del; export_page; publish_page
-        ; item "cvt2p" Strings.convert_tag_to_page (fun () ->
-              Runtime.send
-                (Action.Confirm_set
-                   (Some (Model.Confirm_convert_tag_to_page id)));
-              Runtime.flush ())
-        ]
-    | _ -> [ del; export_page; publish_page ]
+  (* cljs page_menu.cljs: convert-to-tag only for internal pages that are
+     not built-in; convert-tag-to-page for non-built-in classes *)
+  let convert =
+    match p.page_is_tag, p.page_internal, p.page_built_in with
+    | _, _, true -> []
+    | true, _, _ -> (
+        match p.page_db_id with
+        | Some id ->
+            [ item "cvt2p" Strings.convert_tag_to_page (fun () ->
+                  Runtime.send
+                    (Action.Confirm_set
+                       (Some (Model.Confirm_convert_tag_to_page id)));
+                  Runtime.flush ()) ]
+        | None -> [])
+    | false, true, _ -> (
+        match p.page_db_id with
+        | Some id ->
+            [ item "cvt" Strings.convert_to_tag (fun () ->
+                  Runtime.send (Action.Page_menu_set None);
+                  ignore (Page_ops.convert_to_tag id)) ]
+        | None -> [])
+    | false, false, _ -> []
   in
-  fav @ own
+  fav @ [ del; export_page; publish_page ] @ convert
 
 (* app-wide entries mirror the cljs header dots menu
    (components/header.cljs toolbar-dots-menu): dialogs dispatch

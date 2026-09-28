@@ -48,6 +48,11 @@ type page =
   ; page_is_tag : bool
   ; page_journal_day : int option
   ; page_is_library : bool
+  ; (* entity predicates used by menu/convert actions:
+       internal-page? = tagged with :logseq.class/Page;
+       built-in? = :logseq.property/built-in? *)
+    page_internal : bool
+  ; page_built_in : bool
   ; page_tags : string list
   ; page_blocks : block list
   ; page_linked_refs : block list (* linked references, for journal items *)
