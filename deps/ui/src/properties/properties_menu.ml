@@ -524,14 +524,17 @@ let menu_body m =
        (I18n.t "property/delete-from-node") (fun () -> delete_property m));
   body
 
-(* Open the dropdown anchored to a clicked element (property-k). *)
+(* Open the dropdown anchored to a clicked element (property-k).
+   `trailing` items append after the config menuitems — cljs puts the
+   table header's sort/pin more-options there. *)
 let open_menu ~anchor ~owner_uuid ~owner_id ~owner_is_tag ~owner_title
-    ~refresh row =
+    ~refresh ?(trailing = []) row =
   let m =
     { owner_uuid; owner_id; owner_is_tag; owner_title; refresh; row
     ; content = None
     }
   in
   let body = menu_body m in
+  List.iter (el_append_child body) trailing;
   ignore
     (Properties_popup.open_anchored ~cls:menu_root_class anchor body)
