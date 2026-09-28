@@ -83,6 +83,8 @@ let fetch_refs (p : Model.page) =
                      (Action.Refs_loaded (Decode.blocks_of_wire w)))))
   | None -> ()
 
+let fetch_unlinked_refs = Outliner_ops.fetch_unlinked_refs
+
 let load_journals () =
   Runtime.invoke2 "thread-api/get-latest-journals" (Wire.String (repo ()))
     (Wire.Int 40)
@@ -117,6 +119,7 @@ let load_page_ref ref_v ~missing =
                     |> Js.Promise.then_ (fun p'' ->
                            Runtime.send (Action.Page_loaded p'');
                            fetch_refs p'';
+                           fetch_unlinked_refs p'';
                            Js.Promise.resolve ()))
          | None ->
              Runtime.send (Action.Navigate_to (Model.Not_found missing));

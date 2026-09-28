@@ -30,6 +30,7 @@ let rec block_of_wire (w : Wire.t) : Model.block =
   ; block_tag_ids = tag_ids
   ; block_tags = []
   ; block_children = children
+  ; block_page_name = Wire.map_get_string w "block/page-name"
   }
 
 let blocks_of_wire (w : Wire.t) : Model.block list =
