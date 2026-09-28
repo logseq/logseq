@@ -182,7 +182,7 @@ let on_normal_key ev =
   | _ -> ()
 
 let on_keydown ev =
-  if S.ready () then
+  if S.ready () && not (Editor_commands.popup_key ev) then
     let target = D.ev_target ev in
     match
       (S.editing_uuid (), D.closest_sel ".editor-wrapper" target)
@@ -205,8 +205,12 @@ let on_keydown ev =
           | _ -> false
         in
         if stale_block_editor then on_normal_key ev
-        else if D.is_editable_target target then ()
-        else on_normal_key ev
+        else (
+          match D.closest_sel "pre[data-code-uuid]" target with
+          | Some el -> Editor_commands.code_pre_key el ev
+          | None ->
+              if D.is_editable_target target then ()
+              else on_normal_key ev)
 
 (* -- input: keep the editing buffer in sync (silently) -- *)
 
@@ -228,7 +232,12 @@ let on_input ev =
             D.el_set_text_content el v;
             Outliner_ops.schedule_save uuid v
         | None -> ())
-    | None -> ()
+    | None -> (
+        (* the code/calc editing surface is a contenteditable pre, not a
+           textarea — same buffer-sync duty plus live calc results *)
+        match D.closest_sel "pre[data-code-uuid]" (D.ev_target ev) with
+        | Some el -> Editor_commands.code_pre_input el
+        | None -> ())
 
 (* -- clipboard events -- *)
 
@@ -253,7 +262,28 @@ let on_copy ev =
 let on_cut ev =
   if S.ready () && S.editing () = None then A.cut_selection ev
 
-(* -- clicks -- *)
+(* cljs target-forbidden-edit? (block.cljs): capture-phase clicks on these
+   surfaces never enter block edit — the element's own handler owns them
+   (.cloze toggles reveal, a navigates, details/summary expands, etc.) *)
+let forbidden_edit_target (target : D.el option) : bool =
+  match target with
+  | None -> false
+  | Some el ->
+      let tag = D.el_tag el in
+      D.el_matches el ".forbid-edit"
+      || D.el_matches el ".bullet"
+      || D.el_matches el ".logbook"
+      || D.el_matches el ".markdown-table"
+      || tag = "A" || tag = "BUTTON"
+      || tag = "TIME" || tag = "AUDIO" || tag = "VIDEO"
+      || tag = "INPUT" || tag = "TEXTAREA"
+      || tag = "DETAILS" || tag = "SUMMARY"
+      || (tag = "SUP" && D.el_matches el ".fn")
+      || D.el_matches el ".image-resize"
+      || D.closest_sel "a" target <> None
+      || D.closest_sel ".cloze" target <> None
+      || D.closest_sel ".cloze-revealed" target <> None
+      || D.closest_sel ".query-table" target <> None
 
 let on_click ev =
   let target = D.ev_target ev in
@@ -302,6 +332,8 @@ let on_click ev =
                                    Title_edit; the page uuid is not an
                                    editable block *)
                                 ()
+                            | Some _
+                              when forbidden_edit_target target -> ()
                             | Some el -> (
                                 match D.el_get_attr el "blockid" with
                                 | Some u ->
@@ -389,17 +421,22 @@ let on_mousedown ev =
     match D.closest_sel ".editor-wrapper" (D.ev_target ev) with
     | Some _ -> ()
     | None -> (
-            (* .cp__overlays hosts the cmdk/autocomplete/context-menu popups;
-               .ui__popover-content/.ls-context-menu-content cover anchored
-               property popups and cmdk/dialog portals mount outside the
-               overlays container under body *)
-            match
-              D.closest_sel
-                ".cp__overlays, .cp__cmdk__modal, .ui__popover-content, .ls-context-menu-content"
-                (D.ev_target ev)
-            with
-        | Some _ -> ()
-        | None -> A.schedule_blur_commit ())
+            (* an open #date-time-picker/.ls-editor-link-form keeps editing
+               while its controls are clicked; a mousedown outside closes
+               it, then the normal blur-commit runs *)
+            if Editor_commands.click_guard (D.ev_target ev) then ()
+            else
+              (* .cp__overlays hosts the cmdk/autocomplete/context-menu popups;
+                 .ui__popover-content/.ls-context-menu-content cover anchored
+                 property popups and cmdk/dialog portals mount outside the
+                 overlays container under body *)
+              match
+                D.closest_sel
+                  ".cp__overlays, .cp__cmdk__modal, .ui__popover-content, .ls-context-menu-content"
+                  (D.ev_target ev)
+              with
+              | Some _ -> ()
+              | None -> A.schedule_blur_commit ())
 
 (* -- drag & drop (cljs components/block.cljs on-drag-start/
    block-drag-over/block-drop) -- *)
