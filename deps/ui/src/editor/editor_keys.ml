@@ -192,6 +192,7 @@ let on_keydown ev =
           match target with
           | Some el when D.el_tag el = "TEXTAREA" ->
               Option.is_some (D.closest_sel ".ls-block" target)
+              && D.closest_sel ".ls-page-title" target = None
           | _ -> false
         in
         if stale_block_editor then on_normal_key ev
@@ -203,6 +204,11 @@ let on_keydown ev =
 let on_input ev =
   if S.ready () then
     match D.closest_sel ".editor-wrapper textarea" (D.ev_target ev) with
+    | Some _
+      when D.closest_sel ".ls-page-title" (D.ev_target ev) <> None ->
+        (* the page-title textarea is not a block editor — its own dom-event
+           keydown/blur handlers commit the rename *)
+        ()
     | Some el -> (
         match uuid_of_prefixed "edit-block-" (D.el_id el) with
         | Some uuid ->
@@ -274,6 +280,13 @@ let on_click ev =
                             ()
                         | None -> (
                             match D.closest_sel ".block-content" target with
+                            | Some _
+                              when D.closest_sel ".ls-page-title" target
+                                   <> None ->
+                                (* the page title's own click handler starts
+                                   Title_edit; the page uuid is not an
+                                   editable block *)
+                                ()
                             | Some el -> (
                                 match D.el_get_attr el "blockid" with
                                 | Some u ->

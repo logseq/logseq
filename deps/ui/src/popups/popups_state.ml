@@ -619,8 +619,26 @@ let query_closed ac q =
   | Slash | Tag_search | Embed_ref -> S.contains q '\n'
 ;;
 
+(* cljs autopair overtype: typing a closing char that already sits under
+   the caret (the ghost pair we inserted) skips over it instead of
+   inserting a duplicate *)
+let overtype_skip el =
+  let pos = Dom_ext.selection_start el in
+  let v = Dom_ext.value el in
+  if
+    pos >= 1 && pos < S.length v
+    && Dom_ext.selection_end el = pos
+    && S.get v pos = S.get v (pos - 1)
+    && (S.get v pos = ']' || S.get v pos = ')')
+  then (
+    Dom_ext.set_value el
+      (S.sub v 0 (pos - 1) ^ S.sub v pos (S.length v - pos));
+    Dom_ext.set_selection_range el pos pos)
+;;
+
 (* after an `input` event in a .editor-wrapper textarea *)
 let on_editor_input t el =
+  overtype_skip el;
   let pos = Dom_ext.selection_start el in
   match (get t).ac with
   | Some ac ->

@@ -64,6 +64,8 @@ external tag_name : element -> string = "tagName" [@@mel.get]
 external value : element -> string = "value" [@@mel.get]
 external set_value : element -> string -> unit = "value" [@@mel.set]
 external selection_start : element -> int = "selectionStart" [@@mel.get]
+
+external selection_end : element -> int = "selectionEnd" [@@mel.get]
 external set_text_content : element -> string -> unit = "textContent"
   [@@mel.set]
 external set_selection_range : element -> int -> int -> unit
