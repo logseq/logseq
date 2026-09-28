@@ -346,3 +346,40 @@ sorting, view tabs, selection bar, export EDN) and the query surface of
   `slash-menu-filter-scroll-and-cleanup-test` sees
   `a.menu-link.chosen` count=2. The properties popover should be removed
   or folded into the main autocomplete.
+
+## Block/page references (e2e: `reference_basic_test`)
+
+- **Copy inside an editing block is a block-ref copy**: cljs
+  `shortcut-copy` (handler/editor.cljs) on a collapsed caret writes
+  `[[<block-uuid>]]` to the clipboard (`copy-current-block-ref` →
+  `ref/->page-ref`); only a non-collapsed selection is a native text
+  copy. The OCaml `on_copy` handled only selection-mode copy, so
+  editing-mode mod+c silently wrote nothing. Fixed in
+  `editor_keys.ml`: collapsed selection in an editing block does
+  `clipboardData.setData("text/plain", "[[" ^ uuid ^ "]]")` +
+  preventDefault; paste then falls through `paste_into_editor` to a
+  native textarea insert (internal `S.clipboard` stays empty).
+- **`[[x]]`/`((uuid))` render `[[`/`]]` bracket spans**: cljs
+  `page-reference` always emits `span.page-reference[data-ref]` +
+  `span.text-gray-500.bracket` "[" "]"" around `a.page-ref`; `((uuid))`
+  routes through the same component. The OCaml renderer emitted only
+  bare `a.page-ref`/`a.tag`, so `:text('b1[[b2]]')` never matched.
+  `#tag` is different: cljs routes it through `page-cp` with
+  `:tag? true` — `a.tag` with `#name`, no `.page-reference` wrapper,
+  no brackets.
+- **Uuid refs resolve the target's title and re-parse it**: cljs
+  `page-inner` calls `block-title` on the resolved block, so
+  `[[uuid]]` renders the block's full markup recursively. A uuid that
+  resolves to a *page* entity renders plain title text instead. The
+  OCaml `resolved_ref` pulls `[:block/title :block/name]` in one
+  `thread-api/pull` (`block/name` present = page → plain text;
+  absent = block → `parse` recursion). Non-uuid `[[name]]` still
+  renders the raw name — cljs resolves it to the unique title.
+- **`:ref-set` suppression is required to terminate cycles**: cljs
+  seeds the ref-set with the enclosing block's uuid on the first ref
+  and conjs `{enclosing-uuid, ref-target}` per nesting level; a ref
+  whose target is in the set renders nothing (not even the wrapper).
+  Mirrored via `~refs`/`~self` params on `Render_inline.parse` +
+  `Render.title` (block uuid passed from `content_el`): without it,
+  `b1[[u3]]` → `u3` title → `[[u2]]` → `u2` title → `[[u1]]` looped
+  forever (each level a new thread-api pull + dyn mount).

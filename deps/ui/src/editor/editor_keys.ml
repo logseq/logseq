@@ -196,7 +196,19 @@ let on_paste ev =
   if S.ready () then A.paste_blocks ev
 
 let on_copy ev =
-  if S.ready () && S.editing () = None then A.copy_selection ev
+  if S.ready () then
+    match S.editing () with
+    | Some e -> (
+        (* cljs copy-current-block-ref: a collapsed selection inside an
+           editing block copies [[uuid]]; a non-collapsed selection falls
+           through to the native text copy *)
+        match (D.textarea_of e.uuid, D.ev_clipboard ev) with
+        | Some el, Some clip ->
+            if D.el_selection_start el = D.el_selection_end el then (
+              D.clipboard_set_text clip "text/plain" ("[[" ^ e.uuid ^ "]]");
+              D.prevent_default ev)
+        | _ -> ())
+    | None -> A.copy_selection ev
 
 let on_cut ev =
   if S.ready () && S.editing () = None then A.cut_selection ev
