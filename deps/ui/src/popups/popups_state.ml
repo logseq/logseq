@@ -16,19 +16,14 @@ module S = String
 module U = Ui_strings
 
 type ac_kind =
-  | Slash
-  | Page_ref
-  | Block_ref
-  | Tag_search
-  | Template_search
-
+    Slash | Page_ref | Page_embed | Block_ref | Tag_search
+  | Template_search | Embed_ref
 type item_action =
   | Emit of string * int (* ls:editor-insert {text, back} *)
-  | Switch of ac_kind (* reopen as another autocomplete, keeping text *)
-  | Emit_switch of string * int * ac_kind * bool
-  (* emit text first (cljs [:editor/input x {:backward-pos}] then reopen
-     the popup as `kind`; embed = page picks wrap in {{embed [[..]]}} *)
+  | Emit_exit of string (* ls:editor-insert {text, exit} — cljs clear-edit! *)
+  | Switch of ac_kind (* reopen as another autocomplete *)
   | Editor_cmd of string (* ls:editor-command {command, from, to} *)
+  | Embed of string (* page title — insert a :block/link embed *)
   | Tag_apply of string (* existing entity — cljs tag-on-chosen-handler *)
   | Tag_create of string (* "New tag" row — always creates a class *)
   | Template_apply of string (* template block uuid — apply-template op *)
@@ -38,6 +33,7 @@ type item_action =
 type ac_item =
   { ai_key : string
   ; ai_label : string
+  ; ai_icon : string option (* tabler/tabler-ext icon name *)
   ; ai_group : string option
   ; ai_info : string option
   ; ai_idx : int
@@ -45,8 +41,8 @@ type ac_item =
   ; ai_act : item_action
   }
 
-let mk_item ~key ~label ?group ?info act =
-  { ai_key = key; ai_label = label; ai_group = group
+let mk_item ~key ~label ?icon ?group ?info act =
+  { ai_key = key; ai_label = label; ai_icon = icon; ai_group = group
   ; ai_info = info; ai_idx = -1; ai_hdr = None; ai_act = act }
 
 let empty_key = "__ac_empty__"
@@ -59,17 +55,16 @@ type ac =
   ; query : string
   ; tpos : int (* query-trigger offset (the "/" "[[" "((" "#" start) *)
   ; tlen : int
-  ; rpos : int (* replace-start offset — differs from tpos after a
-                  prefill emit ("{{embed [[ ]]}}"): emitted text covers
-                  [rpos, caret+closer) *)
-  ; embed : bool
   ; items : ac_item list
   ; chosen : int
   ; editor : Dom_ext.element
   }
 
 type cm_item =
-  | Ci_item of string
+  (* label, optional (binding, display caps) shortcut, command id —
+     mirrors ui/dropdown-shortcut output; the id is what
+     ls:editor-command carries *)
+  | Ci_item of string * (string * string list) option * string
   | Ci_sub of string
   | Ci_sep
   | Ci_colors
@@ -92,20 +87,32 @@ type t =
   { vs : view Signal.state
   ; gen : int ref (* stale-response guard *)
   ; titles : string list ref
-  ; class_titles : string list ref (* # ac lists classes only (cljs
-                                       get-matched-classes) *)
-  ; templates : (string * string) list ref (* (uuid, title) *)
-  }
+  ; tag_titles : (string * string option) list ref
+    (* class/tag entities for the # popup: (title, tabler icon) *)
+  ; templates : (string * string) list ref (* (uuid, title) *)  }
+
+(* the live popups layer — exactly one exists per app; lets editor key
+   handling yield to an open autocomplete (cljs: the commands popup consumes
+   arrows/enter/tab/escape before the editor sees them) *)
+let active : t option ref = ref None
 
 let make scheduler : t =
-  { vs = Signal.state scheduler { ac = None; cm = None }
+  let t =
+    { vs = Signal.state scheduler { ac = None; cm = None }
   ; gen = ref 0
   ; titles = ref []
-  ; class_titles = ref []
-  ; templates = ref []
-  }
+    ; tag_titles = ref []
+    ; templates = ref []  }
+  in
+  active := Some t;
+  t
 
 let get t = Signal.get t.vs.Signal.state_signal
+let ac_open () =
+  match !active with
+  | Some t -> (get t).ac <> None
+  | None -> false
+
 let set t v = Runtime.signal_set t.vs v
 let set_ac t ac = set t { (get t) with ac }
 let set_cm t cm = set t { (get t) with cm }
@@ -114,17 +121,27 @@ let close_cm t = set_cm t None
 
 let ac_class_of_kind = function
   | Slash -> "cp__commands-slash"
-  | Page_ref | Tag_search | Template_search -> "black"
+  | Page_ref | Page_embed | Tag_search | Template_search | Embed_ref
+      -> "black"
   | Block_ref -> "ac-block-search"
 ;;
 
 let trigger_len_of_kind = function
   | Slash | Tag_search | Template_search -> 1
-  | Page_ref | Block_ref -> 2
+  | Page_ref | Page_embed | Block_ref -> 2
+  | Embed_ref -> 0 (* only reachable via Switch — no typed trigger *)
+
+(* cljs data-editor-popup-ref values drive popup sizing in editor.css *)
+let popup_ref_of_kind = function
+  | Slash -> "commands"
+  | Page_ref | Page_embed | Embed_ref | Template_search -> "page-search"
+  | Block_ref -> "block-search"
+  | Tag_search -> "page-search-hashtag"
 ;;
 
 let trigger_text_of_kind = function
-  | Page_ref -> "[["
+  | Page_ref | Page_embed -> "[["
+  | Embed_ref -> ""
   | Block_ref -> "(("
   | Tag_search -> "#"
   | Slash | Template_search -> "/"
@@ -158,16 +175,6 @@ let fuzzy_score hay needle =
          | None -> None)
 ;;
 
-let fuzzy_filter items q =
-  let scored =
-    List.filter_map
-      (fun it -> Option.map (fun s -> (s, it)) (fuzzy_score it.ai_label q))
-      items
-  in
-  List.map snd
-    (List.stable_sort (fun (a, _) (b, _) -> compare (a : int) b) scored)
-;;
-
 (* ---- slash command table ---- *)
 
 let journal_offset days =
@@ -183,78 +190,86 @@ let current_time () =
     (int_of_float (Js.Date.getMinutes d))
 ;;
 
+(* (i18n key, icon, action) — icon names mirror commands.cljs :icon/*
+   values verbatim (custom-pack names like pageRef stay camelCase) *)
 let group_items grp entries =
   let g = Some (U.t grp) in
-  List.map (fun (key, act) -> mk_item ~key ~label:(U.t key) ?group:g act) entries
+  List.map
+    (fun (key, icon, act) ->
+      mk_item ~key ~label:(U.t key) ~icon ?group:g act)
+    entries
 ;;
 
 let cmd label = Editor_cmd label
 
 (* has_heading gates "Clear heading" (cljs filter-commands drops it when
    the edited block has no heading prop, leaving "No matched commands") *)
-let slash_items ~has_heading : ac_item list =
-  List.concat
+let slash_items ~has_heading : ac_item list =  List.concat
     [ group_items "editor.slash/group-basic"
-        [ ( "editor.slash/node-reference"
-          , Emit_switch ("[[ ]]", 2, Page_ref, false) )
-        ; ( "editor.slash/node-embed"
-          , Emit_switch ("{{embed [[ ]]}}", 4, Page_ref, true) ) ]
+        [ "editor.slash/node-reference", "pageRef", Switch Page_ref
+        ; "editor.slash/node-embed", "blockEmbed", Switch Embed_ref ]
     ; group_items "editor.slash/group-format"
-        [ "ui/link", cmd "link"
-        ; "editor.slash/image-link", cmd "image-link"
-        ; "editor.slash/underline", Emit ("<ins></ins>", 6)
-        ; "editor.slash/code-block", cmd "code-block"
-        ; "class.built-in/quote-block", cmd "quote"
-        ; "editor.slash/math-block", cmd "math-block" ]
-    ; group_items "editor.slash/group-heading"
-        ([ "editor.slash/normal-text", cmd "normal-text" ]
-        @ (if has_heading then [ "editor.slash/clear-heading", cmd "clear-heading" ]
-           else [])
-        @ List.init 6 (fun i ->
-            ( U.tf "editor.slash/heading-label" [ string_of_int (i + 1) ]
-            , cmd ("heading:" ^ string_of_int (i + 1)) )))
-    ; group_items "editor.slash/group-task-status"
-        [ "property.status/backlog", cmd "status:Backlog"
-        ; "property.status/todo", cmd "status:Todo"
-        ; "property.status/doing", cmd "status:Doing"
-        ; "property.status/in-review", cmd "status:In Review"
-        ; "property.status/done", cmd "status:Done"
-        ; "property.status/canceled", cmd "status:Canceled" ]
-    ; group_items "editor.slash/group-task-date"
-        [ "property.built-in/deadline", cmd "deadline"
-        ; "property.built-in/scheduled", cmd "scheduled" ]
-    ; group_items "editor.slash/group-priority"
-        ([ "editor.slash/no-priority", cmd "priority:" ]
-        @ List.map
-            (fun lvl ->
-              ( U.tf "editor.slash/priority-label"
-                  [ U.t ("property.priority/" ^ lvl) ]
-              , cmd ("priority:" ^ U.t ("property.priority/" ^ lvl)) ))
-            [ "low"; "medium"; "high"; "urgent" ])
+        [ "ui/link", "link", cmd "link"
+        ; "editor.slash/image-link", "photoLink", cmd "image-link"
+        ; "editor.slash/underline", "underline", Emit ("<ins></ins>", 6)
+        ; "editor.slash/code-block", "code", cmd "code-block"
+        ; "class.built-in/quote-block", "quote", cmd "quote"
+        ; "editor.slash/math-block", "math", cmd "math-block" ]
+    ; (let g = Some (U.t "editor.slash/group-heading") in
+       [ mk_item ~key:"editor.slash/normal-text"
+           ~label:(U.t "editor.slash/normal-text") ~icon:"text" ?group:g
+           (cmd "normal-text") ]
+       @ (if has_heading then
+            [ mk_item ~key:"editor.slash/clear-heading"
+                ~label:(U.t "editor.slash/clear-heading") ~icon:"heading-off"
+                ?group:g (cmd "clear-heading") ]
+          else [])
+       @ List.init 6 (fun i ->
+           let l = string_of_int (i + 1) in
+           mk_item ~key:("heading-" ^ l)
+             ~label:(U.tf "editor/heading" [ l ]) ~icon:("h-" ^ l)
+             ?group:g (cmd ("heading:" ^ l))))    ; group_items "editor.slash/group-task-status"
+        [ "property.status/backlog", "backlog", cmd "status:Backlog"
+        ; "property.status/todo", "todo", cmd "status:Todo"
+        ; "property.status/doing", "inProgress50", cmd "status:Doing"
+        ; "property.status/in-review", "inReview", cmd "status:In Review"
+        ; "property.status/done", "done", cmd "status:Done"
+        ; "property.status/canceled", "cancelled", cmd "status:Canceled" ]    ; group_items "editor.slash/group-task-date"
+        [ "property.built-in/deadline", "calendar-stats", cmd "deadline"
+        ; "property.built-in/scheduled", "calendar-month", cmd "scheduled" ]
+    ; (let g = Some (U.t "editor.slash/group-priority") in
+       mk_item ~key:"editor.slash/no-priority"
+         ~label:(U.t "editor.slash/no-priority") ~icon:"priorityLvlNone"
+         ?group:g (cmd "priority:")
+       :: List.map            (fun lvl ->
+              mk_item ~key:("priority-" ^ lvl)
+                ~label:
+                  (U.tf "editor.slash/priority-label"
+                     [ U.t ("property.priority/" ^ lvl) ])
+                ~icon:("priorityLvl" ^ String.capitalize_ascii lvl)
+                ?group:g (cmd ("priority:" ^ lvl)))            [ "low"; "medium"; "high"; "urgent" ])
     ; group_items "editor.slash/group-time-and-date"
-        [ "date.nlp/tomorrow", Emit (journal_offset 1, 0)
-        ; "date.nlp/yesterday", Emit (journal_offset (-1), 0)
-        ; "date.nlp/today", Emit ("[[" ^ Dates.today () ^ "]]", 0)
-        ; "editor.slash/current-time", Emit (current_time (), 0)
-        ; "editor.slash/date-picker", cmd "date-picker" ]
-    ; group_items "editor.slash/group-list-type"
-        [ "editor.slash/number-list", cmd "number-list"
-        ; "editor.slash/number-children", cmd "number-children" ]
-    ; group_items "editor.slash/group-advanced"
-        [ "block.comments/add-comment", cmd "add-comment"
-        ; "property.built-in/query", Run_query false
-        ; "editor.slash/advanced-query", Run_query true
-        ; "editor.slash/query-function", Emit ("{{function }}", 2)
-        ; "editor.slash/calculator", cmd "calculator"
-        ; "editor.slash/upload-asset", cmd "upload"
-        ; "class.built-in/template", Emit_switch ("/", 0, Template_search, false)
-        ; "editor.slash/cloze", Emit ("{{cloze }}", 2)
-        ; "editor.slash/embed-html", Emit ("@@html: @@", 2)
-        ; "editor.slash/embed-video-url", Emit ("{{video }}", 2)
-        ; "editor.slash/embed-youtube-timestamp", cmd "youtube-timestamp"
-        ; "editor.slash/embed-twitter-tweet", Emit ("{{tweet }}", 2)
-        ; "command.editor/add-property", cmd "add-property" ]
-    ]
+        [ "date.nlp/tomorrow", "tomorrow", Emit (journal_offset 1, 0)
+        ; "date.nlp/yesterday", "yesterday", Emit (journal_offset (-1), 0)
+        ; "date.nlp/today", "calendar", Emit ("[[" ^ Dates.today () ^ "]]", 0)
+        ; "editor.slash/current-time", "clock", Emit (current_time (), 0)
+        ; "editor.slash/date-picker", "calendar-dots", cmd "date-picker" ]    ; group_items "editor.slash/group-list-type"
+        [ "editor.slash/number-list", "numberedParents", cmd "number-list"
+        ; "editor.slash/number-children", "numberedChildren", cmd "number-children" ]    ; group_items "editor.slash/group-advanced"
+        [ "block.comments/add-comment", "messageCircle", cmd "add-comment"
+        ; "property.built-in/query", "query", Run_query false
+        ; "editor.slash/advanced-query", "query", Run_query true
+        ; "editor.slash/query-function", "queryCode", Emit ("{{function }}", 2)
+        ; "editor.slash/calculator", "calculator", cmd "calculator"
+        ; "editor.slash/upload-asset", "upload", cmd "upload"
+        ; "class.built-in/template", "template", Switch Template_search
+        ; "editor.slash/cloze", "braces", Emit ("{{cloze }}", 2)
+        ; "editor.slash/embed-html", "htmlEmbed", Emit ("@@html: @@", 2)
+        ; "editor.slash/embed-video-url", "videoEmbed", Emit ("{{video }}", 2)
+        ; "editor.slash/embed-youtube-timestamp", "videoEmbed"
+          , cmd "youtube-timestamp"
+        ; "editor.slash/embed-twitter-tweet", "xEmbed", Emit ("{{tweet }}", 2)
+        ; "command.editor/add-property", "cube-plus", cmd "add-property" ]    ]
 ;;
 
 (* cljs editor.cljs keeps a fallback item for slash — literal there too *)
@@ -263,6 +278,13 @@ let slash_fallback =
 ;;
 
 (* ---- filtering ---- *)
+
+let contains_ci hay needle =
+  let n = S.lowercase_ascii needle and h = S.lowercase_ascii hay in
+  let nl = S.length n and hl = S.length h in
+  let rec go i = i + nl <= hl && (S.sub h i nl = n || go (i + 1)) in
+  nl > 0 && go 0
+;;
 
 let rec take n xs =
   if n <= 0 then [] else match xs with [] -> [] | x :: tl -> x :: take (n - 1) tl
@@ -297,27 +319,101 @@ let editing_has_heading () =
 ;;
 
 let filter_slash q items =
-  let fs = fuzzy_filter items q in
+  let fs = List.filter (fun it -> contains_ci it.ai_label q) items in
+  (* cljs only renders group headers when `filtered?` is false — i.e. when
+     the filtered command list equals *initial-commands*. filter-commands
+     always rebuilds the list, so headers effectively never show *)
   (match fs with [] -> [ slash_fallback ] | _ -> fs)
-  |> with_headers (q = "")
+  |> with_headers false
 ;;
 
-let page_items_for t kind q =
-  let q = S.trim q in
-  let wrap title =
-    match kind with
-    | Tag_search -> mk_item ~key:("page:" ^ title) ~label:title (Tag_apply title)
-    | _ ->
-        mk_item ~key:("page:" ^ title) ~label:title (Emit ("[[" ^ title ^ "]]", 0))
+(* cljs editor.cljs page-search: an empty [[ query lists the i18n nlp
+   date pages (calendar icon); choosing one emits [[<journal title>]]
+   parsed from the english name *)
+let nlp_date_of (en : string) : Js.Date.t =
+  let now = Dates.date_now () in
+  let add n = Js.Date.fromFloat (Js.Date.getTime now +. n *. 86400000.) in
+  let shift_month n =
+    let c = Js.Date.fromFloat (Js.Date.getTime now) in
+    ignore (Js.Date.setMonth c ~month:(Js.Date.getMonth c +. n));
+    c
   in
-  let pool =
-    match kind with Tag_search -> !(t.class_titles) | _ -> !(t.titles)
+  let shift_year n =
+    let c = Js.Date.fromFloat (Js.Date.getTime now) in
+    ignore (Js.Date.setFullYear c ~year:(Js.Date.getFullYear c +. n));
+    c
+  in
+  match en with
+  | "Today" -> now
+  | "Tomorrow" -> add 1.
+  | "Yesterday" -> add (-1.)
+  | "Next week" -> add 7.
+  | "This week" -> now
+  | "Last week" -> add (-7.)
+  | "Next month" -> shift_month 1.
+  | "This month" -> now
+  | "Last month" -> shift_month (-1.)
+  | "Next year" -> shift_year 1.
+  | _ -> now
+
+let nlp_en_names =
+  [ "Today"; "Tomorrow"; "Yesterday"; "Next week"; "This week"
+  ; "Last week"; "Next month"; "This month"; "Last month"; "Next year" ]
+
+let nlp_i18n_key en =
+  "date.nlp/"
+  ^ String.concat "-"
+      (List.map String.lowercase_ascii (String.split_on_char ' ' en))
+
+let page_items_for t kind q =
+  let act_of ~created title =
+    match kind with
+    | Tag_search -> if created then Tag_create title else Tag_apply title
+    | Embed_ref -> Embed title
+    | Page_embed -> Emit ("{{embed [[" ^ title ^ "]]}}", 0)
+    | _ -> Emit ("[[" ^ title ^ "]]", 0)
+  in
+  let wrap title =
+    mk_item ~key:("page:" ^ title) ~label:title (act_of ~created:false title)
+  in
+  let wrap_tag (title, icon) =
+    mk_item ~key:("page:" ^ title) ~label:title ?icon (Tag_apply title)
   in
   let matched =
-    take 20 (List.map wrap (List.filter (fun ti -> fuzzy_score ti q <> None) pool))
+    match kind with
+    | Tag_search ->
+        (* cljs get-matched-classes → fuzzy-search (limit 20) *)
+        Fuzzy.fuzzy_search ~extract:fst ~limit:20 !(t.tag_titles) q
+        |> List.map wrap_tag
+    | Page_ref | Page_embed | Embed_ref ->
+        if q = "" then
+          List.map
+            (fun en ->
+              let jt = Dates.journal_title_of (nlp_date_of en) in
+              mk_item ~key:("nlp:" ^ en)
+                ~label:(U.t (nlp_i18n_key en)) ~icon:"calendar"
+                (match kind with
+                 | Embed_ref -> Embed jt
+                 | Page_embed -> Emit ("{{embed [[" ^ jt ^ "]]}}", 0)
+                 | _ -> Emit ("[[" ^ jt ^ "]]", 0)))
+            nlp_en_names
+        else
+          Fuzzy.fuzzy_search ~extract:(fun ti -> ti) ~limit:50 !(t.titles) q
+          |> List.map wrap
+    | _ ->
+        take 20
+          (List.map wrap
+             (List.filter (fun ti -> contains_ci ti q) !(t.titles)))
   in
-  let exact = List.exists (fun ti -> S.equal ti q) pool in
-  let items =
+  let exact =
+    match kind with
+    | Tag_search ->
+        List.exists (fun (ti, _) -> S.equal ti q) !(t.tag_titles)
+    | _ -> List.exists (fun ti -> S.equal ti q) !(t.titles)
+  in
+  (* cljs matched-pages-with-new-page: the "New tag/page" row goes after a
+     leading starts-with match, else first *)
+  let with_new xs =
     if q <> "" && not exact then
       let label =
         (match kind with
@@ -325,17 +421,22 @@ let page_items_for t kind q =
          | _ -> U.t "editor/new-page")
         ^ " " ^ q
       in
-      let act =
-        match kind with
-        | Tag_search -> Tag_create q
-        | _ -> Emit ("[[" ^ q ^ "]]", 0)
-      in
-      mk_item ~key:("new:" ^ q) ~label act :: matched
-    else matched
+      mk_item ~key:("new:" ^ q) ~label (act_of ~created:true q) :: xs
+    else xs
+  in
+  let items =
+    match matched with
+    | first :: rest
+      when S.length first.ai_label >= S.length q
+           && S.equal
+                (S.lowercase_ascii
+                   (S.sub first.ai_label 0 (S.length q)))
+                (S.lowercase_ascii q) ->
+        first :: with_new rest
+    | _ -> with_new matched
   in
   renumber items
 ;;
-
 let template_items_for t q =
   let q = S.trim q in
   renumber
@@ -356,8 +457,13 @@ let repo () = Option.value !(Runtime.current_repo) ~default:""
 
 let refresh_items t ac =
   match ac.kind with
-  | Slash -> { ac with items = filter_slash ac.query (slash_items ~has_heading:(editing_has_heading ())) }
-  | Page_ref | Tag_search -> { ac with items = page_items_for t ac.kind ac.query }
+  | Slash ->
+      { ac with
+        items =
+          filter_slash ac.query
+            (slash_items ~has_heading:(editing_has_heading ())) }
+  | Page_ref | Page_embed | Tag_search | Embed_ref ->
+      { ac with items = page_items_for t ac.kind ac.query }
   | Template_search -> { ac with items = template_items_for t ac.query }
   | Block_ref -> ac (* filled asynchronously by run_block_search *)
 ;;
@@ -371,8 +477,7 @@ let block_item_of_row i w =
   in
   mk_item ~key:it.Cmdk_state.ikey ~label:it.Cmdk_state.ititle
     ?info:it.Cmdk_state.header
-    (Emit ("((" ^ uuid ^ "))", 0))
-;;
+    (Emit ("[[" ^ uuid ^ "]]", 0));;
 
 let run_block_search t ac =
   incr t.gen;
@@ -421,7 +526,7 @@ let load_titles t =
                   | _ -> Cmdk_state.str_field row "block/title")
                 rows;
             (match (get t).ac with
-             | Some ({ kind = Page_ref | Tag_search; _ } as ac) ->
+             | Some ({ kind = Page_ref | Page_embed | Tag_search | Embed_ref; _ } as ac) ->
                  set_ac t (Some (refresh_items t ac))
              | _ -> ());
             Js.Promise.resolve ())
@@ -430,29 +535,92 @@ let load_titles t =
             Js.Promise.resolve ()))
 ;;
 
-(* cljs get-matched-classes — # autocomplete lists classes only, never
-   plain pages or properties *)
-let load_classes t =
+(* cljs get-matched-classes: all classes except the root tag (plus the
+   Page class when editing a non-page block), alias titles included.
+   Entity maps carry block/title and block/alias rows. *)
+let class_titles_of rows =
+  (* cljs icon-component/get-node-icon: logseq.property/icon of the class,
+     shape {:type :tabler-icon :id <name>} *)
+  let icon_of row =
+    match Wire.get row "logseq.property/icon" with
+    | Some m -> (
+        match Wire.get m "id" with
+        | Some (Wire.String id) -> Some id
+        | _ -> None)
+    | None -> None
+  in
+  List.concat_map
+    (fun row ->
+      let title = Cmdk_state.str_field row "block/title" in
+      let icon = icon_of row in
+      let aliases =
+        match Wire.get row "block/alias" with
+        | Some (Wire.Array xs) | Some (Wire.List xs) ->
+            List.filter_map
+              (fun a -> Cmdk_state.str_field a "block/title")
+              xs
+        | _ -> []
+      in
+      (match title with
+       | Some t -> [ (t, icon) ]
+       | None -> [])
+      @ List.map (fun a -> (a, None)) aliases)
+    rows
+
+let load_tag_titles t _editor =
+  let editing_block =
+    match Editor_state.editing_uuid () with
+    | Some _ -> true
+    | None -> false
+  in
+  let wopts extra =
+    Wire.Map
+      (List.map
+         (fun (k, v) -> (Wire.kw k, v))
+         ([ ("except-root-class?", Wire.Bool true) ]
+          @ extra))
+  in
   ignore
     (Runtime.invoke2 "thread-api/get-all-classes"
        (Wire.String (repo ()))
-       (Wire.Map
-          [ (Wire.kw "except-root-class?", Wire.Bool true)
-          ; (Wire.kw "except-private-tags?", Wire.Bool false)
-          ; (Wire.kw "except-extends-hidden-tags?", Wire.Bool false) ])
+       (wopts [ ("except-private-tags?", Wire.Bool true) ])
      |> Js.Promise.then_ (fun w ->
-            t.class_titles :=
-              List.filter_map
-                (fun row -> Wire.map_get_string row "block/title")
-                (Sdk_util.wire_elems w);
+            let rows =
+              match w with
+              | Wire.Array xs | Wire.List xs -> xs
+              | _ -> []
+            in
+            t.tag_titles := class_titles_of rows;
+            if editing_block then
+              Runtime.invoke2 "thread-api/get-all-classes"
+                (Wire.String (repo ()))
+                (wopts [ ("except-private-tags?", Wire.Bool false) ])
+              |> Js.Promise.then_ (fun w2 ->
+                     let rows2 =
+                       match w2 with
+                       | Wire.Array xs | Wire.List xs -> xs
+                       | _ -> []
+                     in
+                     let page_class =
+                       List.filter
+                         (fun r ->
+                           Cmdk_state.str_field r "db/ident"
+                           = Some "logseq.class/Page")
+                         rows2
+                     in
+                     t.tag_titles :=
+                       !(t.tag_titles)
+                       @ class_titles_of page_class;
+                     Js.Promise.resolve ())
+            else Js.Promise.resolve ())
+     |> Js.Promise.then_ (fun () ->
             (match (get t).ac with
              | Some ({ kind = Tag_search; _ } as ac) ->
                  set_ac t (Some (refresh_items t ac))
              | _ -> ());
             Js.Promise.resolve ())
      |> Js.Promise.catch (fun e ->
-            Platform.console_error ("popups classes failed", e);
-            Js.Promise.resolve ()))
+            Platform.console_error ("popups classes failed", e);            Js.Promise.resolve ()))
 ;;
 
 (* template-search: blocks tagged logseq.class/Template (cljs
@@ -483,9 +651,6 @@ let load_templates t =
              | Some ({ kind = Template_search; _ } as ac) ->
                  set_ac t (Some (refresh_items t ac))
              | _ -> ());
-            Js.Promise.resolve ())
-     |> Js.Promise.catch (fun e ->
-            Platform.console_error ("popups templates failed", e);
             Js.Promise.resolve ()))
 ;;
 
@@ -497,14 +662,28 @@ let open_ac t kind editor =
   let tpos = Dom_ext.selection_start editor - tlen in
   let ac =
     { kind; x; y; query = ""
-    ; tpos; tlen; rpos = tpos; embed = false
+    ; tpos; tlen
     ; items = []; chosen = 0; editor }
   in
+  (* cljs autopair: typing [[ inputs ]] immediately with the caret kept
+     inside the brackets; insert_text consumes the ghost pair on choice *)
   (match kind with
-   | Page_ref -> load_titles t
-   | Tag_search -> load_classes t
-   | Template_search -> load_templates t
-   | Block_ref -> ()
+   | Page_ref ->
+       let v = Dom_ext.value editor in
+       let n = S.length v in
+       let pos = ac.tpos + tlen in
+       if not (pos + 1 < n && S.sub v pos 2 = "]]") then (
+         let v' = S.sub v 0 pos ^ "]]" ^ S.sub v pos (n - pos) in
+         Dom_ext.set_value editor v';
+         (match Editor_state.editing_uuid () with
+          | Some uuid -> Editor_actions.sync_buffer uuid v'
+          | None -> ());
+         Dom_ext.set_selection_range editor pos pos)
+   | _ -> ());
+  (match kind with
+   | Page_ref | Page_embed | Embed_ref -> load_titles t
+   | Tag_search -> load_tag_titles t editor
+   | Template_search -> load_templates t   | Block_ref -> ()
    | Slash -> ());
   set_cm t None;
   set_ac t (Some (refresh_items t ac))
@@ -518,15 +697,30 @@ let ac_update t ac q =
 
 let query_closed ac q =
   match ac.kind with
-  | Page_ref -> S.contains q ']'
+  | Page_ref | Page_embed -> S.contains q ']'
   | Block_ref -> S.contains q ')'
-  | Slash | Tag_search | Template_search -> S.contains q '\n'
+  | Slash | Tag_search | Template_search | Embed_ref -> S.contains q '\n'
 ;;
+
+(* cljs autopair overtype: typing a closing char that already sits under
+   the caret (the ghost pair we inserted) skips over it instead of
+   inserting a duplicate *)
+let overtype_skip el =
+  let pos = Dom_ext.selection_start el in
+  let v = Dom_ext.value el in
+  if
+    pos >= 1 && pos < S.length v
+    && Dom_ext.selection_end el = pos
+    && S.get v pos = S.get v (pos - 1)
+    && (S.get v pos = ']' || S.get v pos = ')')
+  then (
+    Dom_ext.set_value el
+      (S.sub v 0 (pos - 1) ^ S.sub v pos (S.length v - pos));
+    Dom_ext.set_selection_range el pos pos);;
 
 (* after an `input` event in a .editor-wrapper textarea *)
 let on_editor_input t el ev =
-  let pos = Dom_ext.selection_start el in
-  Platform.console_log (Printf.sprintf "DBG on_input pos=%d v='%s'" pos (Dom_ext.value el));
+  overtype_skip el;  let pos = Dom_ext.selection_start el in
   match (get t).ac with
   | Some ac ->
       let v = Dom_ext.value el in
@@ -579,7 +773,7 @@ let on_editor_input t el ev =
           let it = Dom_ext.input_type ev in
           if S.length it >= 6 && S.sub it 0 6 = "delete" then close_ac t
           else
-            ac_update t { ac with tpos = 0; tlen = 0; rpos = 0 }
+            ac_update t { ac with tpos = 0; tlen = 0 }
               (S.sub v 0 pos)
         else
           let qend = pos - ac.tpos - ac.tlen in
@@ -599,9 +793,11 @@ let on_editor_input t el ev =
         let c = S.get v (pos - 1) in
         let two = pos >= 2 && S.get v (pos - 1) = S.get v (pos - 2) in
         let bounded =
-          pos < 2 || (let p = S.get v (pos - 2) in p = ' ' || p = '\n')
+          pos < 2
+          || (let p = S.get v (pos - 2) in p = ' ' || p = '\n')
+          || (pos >= 3 && S.get v (pos - 2) = ']' && S.get v (pos - 3) = ']')
         in
-        if c = '/' then open_ac t Slash el
+        if c = '/' && bounded then open_ac t Slash el
         else if c = '[' && two then open_ac t Page_ref el
         else if c = '(' && two then open_ac t Block_ref el
         else if c = '#' && bounded then open_ac t Tag_search el
@@ -616,26 +812,39 @@ let detail_obj pairs =
   Js.Json.object_ o
 ;;
 
-(* cljs page-ref on-chosen consumes the trailing "]]" left by the
-   "[[ ]]" prefill (and "]]}}" for node embeds) so the emitted
-   [[title]] doesn't leave a dangling closer *)
-let closer_len ac v pos =
+(* replace [tpos, caret) with text and sync the editing buffer —
+   equivalent to cljs's ls:editor-insert handler *)
+let insert_text (ac : ac) text back =
+  let el = ac.editor in
+  let v = Dom_ext.value el in
   let n = S.length v in
-  if ac.embed && pos + 4 <= n && S.sub v pos 4 = "]]}}" then 4
-  else if pos + 2 <= n && S.sub v pos 2 = "]]" then 2
-  else if pos + 2 <= n && S.sub v pos 2 = "))" then 2
-  else 0
-;;
+  let tpos = max 0 (min ac.tpos n) in
+  let pos = max tpos (min (Dom_ext.selection_start el) n) in
+  (* consume the autopaired ]] sitting right after the caret *)
+  let pos =
+    if (ac.kind = Page_ref || ac.kind = Embed_ref)
+       && pos + 1 < n && S.sub v pos 2 = "]]"
+    then pos + 2
+    else pos
+  in
+  let v' = S.sub v 0 tpos ^ text ^ S.sub v pos (n - pos) in
+  Dom_ext.set_value el v';
+  (match Editor_state.editing_uuid () with
+   | Some uuid -> Editor_actions.sync_buffer uuid v'
+   | None -> ());
+  let caret = tpos + S.length text - back in
+  Dom_ext.set_selection_range el caret caret;
+  Dom_ext.focus el
 
-let emit_range editor from to_ text back =
+let emit ?(exit = false) editor tpos text =
   match Dom_ext.closest editor ".ls-page-title" with
   | Some _ ->
       (* the page-title editor isn't a block editor — splice the buffer
          directly instead of dispatching ls:editor-insert *)
       let v = Dom_ext.value editor in
       let n = String.length v in
-      let f = Int.max 0 (Int.min from n) in
-      let t_ = Int.max f (Int.min to_ n) in
+      let f = Int.max 0 (Int.min tpos n) in
+      let t_ = Int.max f (Int.min (Dom_ext.selection_start editor) n) in
       let nv = String.sub v 0 f ^ text ^ String.sub v t_ (n - t_) in
       let caret = f + String.length text in
       Dom_ext.set_value editor nv;
@@ -646,55 +855,48 @@ let emit_range editor from to_ text back =
       Dom_ext.dispatch_custom "ls:editor-insert"
         (detail_obj
            [ "text", Js.Json.string text
-           ; "from", Js.Json.number (float_of_int from)
-           ; "to", Js.Json.number (float_of_int to_)
-           ; "back", Js.Json.number (float_of_int back) ]);
+           ; "from", Js.Json.number (float_of_int tpos)
+           ; "to", Js.Json.number (float_of_int (Dom_ext.selection_start editor))
+           ; "exit", Js.Json.boolean exit ]);
       (* cljs refocuses the editor input after a chosen item *)
       Dom_ext.focus editor
 ;;
 
-let emit ac text back =
-  let pos = Dom_ext.selection_start ac.editor in
-  let v = Dom_ext.value ac.editor in
-  emit_range ac.editor ac.rpos (pos + closer_len ac v pos) text back
-;;
-
-let emit_cmd ac command extra =
+let emit_cmd ?pos command extra =
   Dom_ext.dispatch_custom "ls:editor-command"
     (detail_obj
-       ([ "command", Js.Json.string command
-        ; "from", Js.Json.number (float_of_int ac.rpos)
-        ; "to", Js.Json.number (float_of_int (Dom_ext.selection_start ac.editor)) ]
+       (("command", Js.Json.string command)
+        :: (match pos with
+            | Some p ->
+                [ "from", Js.Json.number (float_of_int p)
+                ; "to", Js.Json.number (float_of_int p) ]
+            | None -> [])
         @ extra))
 ;;
 
-let sub_index s pat =
-  let n = S.length pat and m = S.length s in
-  let rec go i =
-    if i + n > m then -1 else if S.sub s i n = pat then i else go (i + 1)
+(* erase the typed trigger range [tpos, caret) from the editor and hand
+   focus back to the textarea — a clicked menu-link steals focus to its
+   anchor, and Switch keeps no literal text (cljs [:editor/input ""]) *)
+let erase_trigger_text (ac : ac) =
+  let el = ac.editor in
+  let v = Dom_ext.value el in
+  let n = S.length v in
+  let tpos = max 0 (min ac.tpos n) in
+  let pos = max tpos (min (Dom_ext.selection_start el) n) in
+  let pos =
+    if (ac.kind = Page_ref || ac.kind = Embed_ref)
+       && pos + 1 < n && S.sub v pos 2 = "]]"
+    then pos + 2
+    else pos
   in
-  go 0
+  let v' = S.sub v 0 tpos ^ S.sub v pos (n - pos) in
+  Dom_ext.set_value el v';
+  (match Editor_state.editing_uuid () with
+   | Some uuid -> Editor_actions.sync_buffer uuid v'
+   | None -> ());
+  Dom_ext.set_selection_range el tpos tpos;
+  Dom_ext.focus el
 ;;
-
-(* re-derive the popup anchor after the prefill emit rewrote the buffer:
-   tpos sits on the trigger inside the emitted text ("[[" for "[[ ]]" and
-   "{{embed [[ ]]}}"), rpos on the emitted text's start *)
-let switched_ac ac text kind embed =
-  let tlen = trigger_len_of_kind kind in
-  let trig =
-    match kind with
-    | Page_ref -> "[["
-    | Block_ref -> "(("
-    | Tag_search -> "#"
-    | Slash | Template_search -> "/"
-  in
-  let tpos =
-    match sub_index text trig with i when i >= 0 -> ac.rpos + i | _ -> ac.rpos
-  in
-  { ac with kind; query = ""; items = []; chosen = 0; embed
-  ; tpos; tlen
-  ; rpos = (if embed then ac.rpos else tpos) }
-
 (* cljs tag-on-chosen-handler: strip the "#query" fragment, then either
    keep "#title" inline (existing page) or attach the tag as a class via
    block/tags (existing class or a new "New tag" class). The "New tag"
@@ -717,27 +919,22 @@ let apply_tag t ac ~create title =
   | None -> ()
   | Some buuid ->
       let repo_v = repo () in
-      (* cljs set-block-property! tags with the class entity's db/id. emit
-         already stripped "#q" from the buffer; persist the new buffer and
-         the tag in one batch. For the page-title editor the stripped title
-         is committed by the title's own rename path — save-block rejects
-         page entities, so only the tag is sent. *)
-      let save_and_tag w =
-        match Wire.map_get_int w "db/id" with
-        | Some dbid ->
-            let rest =
-              [ Outliner_ops.set_block_property buuid "block/tags"
-                  (Wire.Int dbid) ]
-            in
-            ignore
-              (if title_edit then Outliner_ops.apply_and_refresh rest
-               else
-                 Outliner_ops.apply_parsed_and_refresh ~rest
-                   [ (buuid, Dom_ext.value ac.editor) ])
-        | None -> ()
+      let save_and_tag dbid =
+        (* emit already stripped "#q" from the buffer; persist the new
+           buffer and the tag in one batch. For the page-title editor the
+           stripped title is committed by the title's own rename path —
+           save-block rejects page entities, so only the tag is sent. *)
+        let rest =
+          [ Outliner_ops.set_block_property buuid "block/tags" (Wire.Int dbid) ]
+        in
+        ignore
+          (if title_edit then Outliner_ops.apply_and_refresh rest
+           else
+             Outliner_ops.apply_parsed_and_refresh ~rest
+               [ (buuid, Dom_ext.value ac.editor) ])
       in
       let create_and_tag () =
-        emit ac "" 0;
+        emit ac.editor ac.tpos "";
         close_ac t;
         ignore
           (Runtime.invoke3 "thread-api/apply-outliner-ops"
@@ -747,7 +944,11 @@ let apply_tag t ac ~create title =
            |> Js.Promise.then_ (fun _ ->
                   Runtime.invoke2 "thread-api/get-case-page"
                     (Wire.String repo_v) (Wire.String title))
-           |> Js.Promise.then_ (fun e -> save_and_tag e; Js.Promise.resolve ()))
+           |> Js.Promise.then_ (fun e ->
+                  (match Wire.map_get_int e "db/id" with
+                   | Some dbid -> save_and_tag dbid
+                   | None -> ());
+                  Js.Promise.resolve ()))
       in
       if create then create_and_tag ()
       else
@@ -755,21 +956,32 @@ let apply_tag t ac ~create title =
           (Runtime.invoke2 "thread-api/get-case-page" (Wire.String repo_v)
              (Wire.String title)
            |> Js.Promise.then_ (fun w ->
-                  Js.Promise.resolve
-                    (match Wire.get w "db/ident" with
-                     | Some _ -> (
-                         emit ac "" 0;
-                         close_ac t;
-                         save_and_tag w)
-                     | None -> (
-                         match w with
-                         | Wire.Map _ ->
-                             emit ac ("#" ^ title) 0;
-                             close_ac t
-                         | _ -> create_and_tag ())))
-           |> Js.Promise.catch (fun e ->
-                  Platform.console_error ("tag apply failed", e);
-                  Js.Promise.resolve ()))
+                  match w with
+                  | Wire.Map _ -> (
+                      match Wire.map_get_int w "db/id" with
+                      | None -> Js.Promise.resolve ()
+                      | Some dbid ->
+                          (match Wire.get w "db/ident" with
+                           | Some _ ->
+                               emit ac.editor ac.tpos "";
+                               close_ac t;
+                               save_and_tag dbid;
+                               Js.Promise.resolve ()
+                           | None ->
+                               (* cljs tag-on-chosen-handler: a plain page
+                                  chosen in the hashtag search is converted
+                                  to a class, then attached via block/tags *)
+                               emit ac.editor ac.tpos "";
+                               close_ac t;
+                               Runtime.invoke2
+                                 "thread-api/convert-page-to-tag"
+                                 (Wire.String repo_v) (Wire.Int dbid)
+                               |> Js.Promise.then_ (fun _ ->
+                                      save_and_tag dbid;
+                                      Js.Promise.resolve ())))
+                  | _ ->
+                      create_and_tag ();
+                      Js.Promise.resolve ()))
 
 let apply_template t ac uuid =
   match Editor_state.editing_uuid () with
@@ -782,7 +994,6 @@ let apply_template t ac uuid =
            ~opts:(Outliner_ops.op_opts "apply-template")
            [ Outliner_ops.save_block buuid buf
            ; Outliner_ops.apply_template uuid buuid ])
-
 (* cljs run-query-command! / advanced-query-steps: save the current
    block, tag it logseq.class/Query, create the hidden
    logseq.property/query value block and copy the current title into it
@@ -793,7 +1004,7 @@ let run_query t ac ~advanced =
   match Editor_state.editing_uuid () with
   | None -> ()
   | Some buuid ->
-      emit ac "" 0;
+      emit ac.editor ac.tpos "";
       close_ac t;
       let title = Dom_ext.value ac.editor in
       Editor_actions.exit_edit ~select:false;
@@ -859,24 +1070,24 @@ let run_query t ac ~advanced =
 let apply_item t ac it =
   match it.ai_act with
   | Switch kind ->
-      (match kind with
-       | Page_ref | Tag_search -> load_titles t
+      erase_trigger_text ac;      (match kind with
+       | Page_ref | Page_embed | Tag_search | Embed_ref -> load_titles t
        | _ -> ());
       set_ac t
         (Some
            (refresh_items t
-              { ac with kind; query = ""; items = []; chosen = 0 }))
-  | Emit_switch (text, back, kind, embed) ->
-      emit ac text back;
-      let ac' = switched_ac ac text kind embed in
-      (match kind with
-       | Page_ref | Tag_search -> load_titles t
-       | Template_search -> load_templates t
-       | _ -> ());
-      set_ac t (Some (refresh_items t ac'))
-  | Emit (text, back) -> emit ac text back; close_ac t
-  | Editor_cmd c -> emit_cmd ac c []; close_ac t
-  | Run_query advanced -> run_query t ac ~advanced
+              { ac with kind; query = ""; tlen = 0; items = []; chosen = 0 }))
+  | Embed title ->
+      erase_trigger_text ac;
+      close_ac t;
+      Editor_embed.insert title
+  | Emit (text, back) -> insert_text ac text back; close_ac t
+  | Emit_exit text -> emit ~exit:true ac.editor ac.tpos text; close_ac t
+  | Editor_cmd c ->
+      (* cljs strips the "/cmd" trigger text like an Emit "" insert *)
+      emit ac.editor ac.tpos "";
+      emit_cmd ~pos:ac.tpos c [];
+      close_ac t  | Run_query advanced -> run_query t ac ~advanced
   | Tag_apply title -> apply_tag t ac ~create:false title
   | Tag_create title -> apply_tag t ac ~create:true title
   | Template_apply uuid -> apply_template t ac uuid
@@ -951,23 +1162,25 @@ let ac_mousemove t el =
 
 let colors = [ "yellow"; "red"; "pink"; "green"; "blue"; "purple"; "gray" ]
 
-(* mirrors content.cljs block-context-menu-content *)
+(* mirrors content.cljs block-context-menu-content. Shortcut caps match
+   shortcut utils decorate-binding/print-shortcut-key output on macOS *)
 let block_entries () =
   [ Ci_colors; Ci_headings; Ci_sep
-  ; Ci_item (U.t "sidebar.right/open")
-  ; Ci_item (U.t "block.comments/add-comment")
+  ; Ci_item (U.t "sidebar.right/open", Some ("shift+click", [ "\u{21e7}"; "Click" ]), "open-in-sidebar")
+  ; Ci_item (U.t "block.comments/add-comment", None, "add-comment")
   ; Ci_sub (U.t "command.editor/add-reaction")
   ; Ci_sub (U.t "context-menu/set-icon")
   ; Ci_sep
-  ; Ci_item (U.t "block/copy-ref")
-  ; Ci_item (U.t "export/copy-or-export-as")
-  ; Ci_item (U.t "editor/cut")
-  ; Ci_item (U.t "editor/delete-selection")
+  ; Ci_item (U.t "block/copy-ref", None, "copy-ref")
+  ; Ci_item (U.t "export/copy-or-export-as", None, "copy-export-as")
+  ; Ci_item (U.t "editor/cut", Some ("meta+x", [ "\u{2318}"; "X" ]), "cut")
+  ; Ci_item (U.t "editor/delete-selection", Some ("delete", [ "Delete" ]), "delete")
   ; Ci_sep
-  ; Ci_item (U.t "context-menu/toggle-number-list")
+  ; Ci_item (U.t "context-menu/make-a-flashcard", None, "make-flashcard")
+  ; Ci_item (U.t "context-menu/toggle-number-list", None, "toggle-numbered-list")
   ; Ci_sep
-  ; Ci_item (U.t "editor/expand-block-children")
-  ; Ci_item (U.t "editor/collapse-block-children")
+  ; Ci_item (U.t "editor/expand-block-children", Some ("meta+down", [ "\u{2318}"; "\u{2193}" ]), "expand-children")
+  ; Ci_item (U.t "editor/collapse-block-children", Some ("meta+up", [ "\u{2318}"; "\u{2191}" ]), "collapse-children")
   ]
 ;;
 
@@ -976,16 +1189,16 @@ let multi_entries () =
   [ Ci_colors; Ci_headings
   ; Ci_sub (U.t "context-menu/set-icon")
   ; Ci_sep
-  ; Ci_item (U.t "editor/cut")
-  ; Ci_item (U.t "editor/delete-selection")
-  ; Ci_item (U.t "ui/copy")
-  ; Ci_item (U.t "block/copy-ref")
+  ; Ci_item (U.t "editor/cut", Some ("meta+x", [ "\u{2318}"; "X" ]), "cut")
+  ; Ci_item (U.t "editor/delete-selection", Some ("delete", [ "Delete" ]), "delete")
+  ; Ci_item (U.t "ui/copy", Some ("meta+c", [ "\u{2318}"; "C" ]), "copy")
+  ; Ci_item (U.t "export/copy-or-export-as", None, "copy-export-as")
+  ; Ci_item (U.t "block/copy-ref", None, "copy-ref")  ; Ci_sep
+  ; Ci_item (U.t "context-menu/toggle-number-list", None, "toggle-numbered-list")
+  ; Ci_item (U.t "editor/cycle-todo", None, "cycle-todo")
   ; Ci_sep
-  ; Ci_item (U.t "context-menu/toggle-number-list")
-  ; Ci_item (U.t "editor/cycle-todo")
-  ; Ci_sep
-  ; Ci_item (U.t "editor/expand-block-children")
-  ; Ci_item (U.t "editor/collapse-block-children")
+  ; Ci_item (U.t "editor/expand-block-children", Some ("meta+down", [ "\u{2318}"; "\u{2193}" ]), "expand-children")
+  ; Ci_item (U.t "editor/collapse-block-children", Some ("meta+up", [ "\u{2318}"; "\u{2191}" ]), "collapse-children")
   ]
 ;;
 
@@ -995,17 +1208,10 @@ let open_cm t ~x ~y ~block_id ~multi =
   set_cm t (Some { cx = x; cy = y; block_id; multi; entries })
 ;;
 
-(* context-menu commands carry no slash range — the consumer keys off
-   the "block" detail instead *)
-let emit_cm_cmd command extra =
-  Dom_ext.dispatch_custom "ls:editor-command"
-    (detail_obj (("command", Js.Json.string command) :: extra))
-;;
-
 let run_cm_item t label =
   match (get t).cm with
   | Some cm ->
-      emit_cm_cmd label [ "block", Js.Json.string cm.block_id ];
+      emit_cmd label [ "block", Js.Json.string cm.block_id ];
       close_cm t
   | None -> ()
 ;;
@@ -1013,8 +1219,7 @@ let run_cm_item t label =
 let run_cm_color t color =
   match (get t).cm with
   | Some cm ->
-      emit_cm_cmd "Set block color"
-        [ "block", Js.Json.string cm.block_id
+      emit_cmd "set-color"        [ "block", Js.Json.string cm.block_id
         ; "value", Js.Json.string color ];
       close_cm t
   | None -> ()
@@ -1023,8 +1228,7 @@ let run_cm_color t color =
 let run_cm_heading t h =
   match (get t).cm with
   | Some cm ->
-      emit_cm_cmd "Set heading"
-        [ "block", Js.Json.string cm.block_id
+      emit_cmd "set-heading"        [ "block", Js.Json.string cm.block_id
         ; "value", Js.Json.string h ];
       close_cm t
   | None -> ()

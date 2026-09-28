@@ -39,6 +39,9 @@ external set_value : W.Element.t -> string -> unit = "value" [@@mel.set]
 
 external get_value : W.Element.t -> string = "value" [@@mel.get]
 
+external create_element_ns : string -> string -> W.Element.t
+  = "createElementNS" [@@mel.scope "document"]
+
 external add_listener :
   W.Element.t -> string -> (Js.Json.t -> unit) -> unit = "addEventListener"
   [@@mel.send]
@@ -89,6 +92,18 @@ let is_input_tag el =
   match String.lowercase_ascii (W.Element.tagName el) with
   | "input" | "textarea" | "select" -> true
   | _ -> false
+
+(* SVGElement.className is a read-only SVGAnimatedString — must go through
+   setAttribute *)
+let is_svg_tag el =
+  match String.lowercase_ascii (W.Element.tagName el) with
+  | "svg" | "path" | "circle" | "rect" | "line" | "polyline" | "polygon"
+  | "g" | "defs" | "use" | "ellipse" | "tspan" -> true
+  | _ -> false
+
+let set_class el s =
+  if is_svg_tag el then W.Element.setAttribute "class" s el
+  else W.Element.setClassName el s
 
 (* -- attrs prop -- *)
 
@@ -222,7 +237,7 @@ let set_property el prop value =
         if W.Element.tagName el = "TEXTAREA" then
           W.Element.setTextContent el s)
       else set_text el s
-  | "style-class", StringValue s -> W.Element.setClassName el s
+  | "style-class", StringValue s -> set_class el s
   | "accessibility-identifier", StringValue s ->
       W.Element.setAttribute "id" s el
   | _ -> ()
@@ -232,9 +247,12 @@ let remove_property el prop =
   | "attrs" -> apply_attrs el "{}"
   | "events" -> apply_events el ""
   | "text" ->
-      if is_input_tag el then set_value el ""
+      if is_input_tag el then begin
+        set_value el "";
+        W.Element.setTextContent el ""
+      end
       else clear_text el
-  | "style-class" -> W.Element.setClassName el ""
+  | "style-class" -> set_class el ""
   | "accessibility-identifier" -> W.Element.removeAttribute "id" el
   | _ -> ()
 
@@ -243,10 +261,20 @@ let cleanup el =
   Hashtbl.iter (fun name f -> remove_listener el name f) tbl;
   Hashtbl.reset tbl
 
+(* createElement alone yields HTMLUnknownElement for svg children — the
+   SVG namespace list mirrors the tags registered for icon rendering *)
+let svg_tags =
+  [ "svg"; "path"; "circle"; "rect"; "line"; "polyline"; "polygon"; "g"
+  ; "defs"; "use"; "ellipse"; "tspan" ]
+
 let adapter_of_tag tag : web_extension_adapter =
   { web_extension_create =
       (fun _node document emit ->
-        let el = W.Document.createElement tag document in
+        let el =
+          if List.mem tag svg_tags then
+            create_element_ns "http://www.w3.org/2000/svg" tag
+          else W.Document.createElement tag document
+        in
         emit_set el emit;
         el)
   ; web_extension_set_property = set_property

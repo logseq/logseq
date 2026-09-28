@@ -54,16 +54,43 @@ let column_of_property (p : W.t) : V.column option =
           })
   | None -> None
 
-let builtin_column id name ty ?(disable_hide = false) () : V.column =
+let builtin_column id name ty ?(disable_hide = false) ?(many = false) ()
+    : V.column =
   { V.c_id = id; c_name = name; c_type = ty; c_prop = None
-  ; c_disable_hide = disable_hide; c_many = false }
+  ; c_disable_hide = disable_hide; c_many = many }
 
 let select_column : V.column =
   builtin_column "select" I.select_col "default" ~disable_hide:true ()
 
-let id_column : V.column = builtin_column "id" "#" "default" ()
+(* cljs views.cljs keeps the :id column in `columns` but unconditionally
+   hides it in `visible-columns` (assoc :id false) — never added here *)
 
 let title_column : V.column = builtin_column "block/title" I.name_ "node" ()
+
+(* all_pages.cljs uses (t :page/name) — "Page name" — for its title column *)
+let page_title_column : V.column =
+  builtin_column "block/title" I.page_name "node" ()
+
+let tags_column : V.column =
+  builtin_column "block/tags" I.filter_tags "node" ~many:true ()
+
+(* cljs get-column-size defaults *)
+let column_size (c : V.column) =
+  match c.V.c_id with
+  | "id" -> 48
+  | "select" -> 32
+  | "logseq.property/query" -> 400
+  | "block/title" | "block/name" -> 360
+  | "block/created-at" | "block/updated-at" -> 160
+  | _ -> 180
+
+let size_style c =
+  let w = string_of_int (column_size c) in
+  "width:" ^ w ^ "px;min-width:" ^ w ^ "px"
+
+let inner_cls ?(select = false) () =
+  "flex align-middle w-full overflow-x-clip items-center"
+  ^ if select then " px-0" else " border-r px-2"
 
 let created_column : V.column =
   builtin_column "block/created-at" I.created_at "datetime" ()
@@ -98,7 +125,10 @@ let column_of_ident (inst : V.inst) (ident : string) : V.column option =
   | "block/format" | "block/properties" | "block/properties-order"
   | "block/properties-text-values" | "block/pre-block?" | "block/order"
   | "block/collapsed?" | "block/created-at" | "block/updated-at" -> None
-  | "block/tags" -> Some (builtin_column "block/tags" I.filter_tags "node" ())
+  | "block/tags" ->
+      Some
+        { (builtin_column "block/tags" I.filter_tags "node" ()) with
+          V.c_many = true }
   | "block/page" -> Some page_column
   | "block/journal-day" ->
       Some (builtin_column ident (titleize_ident ident) "datetime" ())
@@ -115,16 +145,19 @@ let build_columns (inst : V.inst) (properties : W.t list) : V.column list =
   let props = List.filter_map column_of_property properties in
   let with_tags =
     if List.exists (fun c -> c.V.c_id = "block/tags") props then props
-    else props @ [ builtin_column "block/tags" I.filter_tags "node" () ]
+    else
+      props
+      @ [ { (builtin_column "block/tags" I.filter_tags "node" ()) with
+            V.c_many = true } ]
   in
   match inst.V.kind with
   | V.KAllPages ->
-      [ select_column; title_column; refs_count_column; created_column
-      ; updated_column ]
-  | V.KTagPage _ ->
+      [ select_column; page_title_column; refs_count_column; tags_column
+      ; created_column; updated_column ]
+  | V.KTagPage _ | V.KPropertyPage _ ->
       (* cljs objects.cljs: Asset-class tag pages get a "File" column
          before the logseq property columns *)
-      [ select_column; id_column; title_column ]
+      [ select_column; title_column ]
       @ (if inst.V.asset_class
          then [ builtin_column "file" "File" "default" ~disable_hide:true () ]
          else [])
@@ -140,7 +173,7 @@ let build_columns (inst : V.inst) (properties : W.t list) : V.column list =
         if inst.V.is_advanced then []
         else [ created_column; updated_column ]
       in
-      [ select_column; id_column; title_column ] @ qcols @ tail
+      [ select_column; title_column ] @ qcols @ tail
       @ (if inst.V.is_advanced
          then
            (if List.mem "block/created-at" inst.V.query_idents
@@ -152,7 +185,8 @@ let build_columns (inst : V.inst) (properties : W.t list) : V.column list =
 let visible_columns inst =
   let cols =
     List.filter
-      (fun c -> not (V.Sset.mem c.V.c_id inst.V.hidden))
+      (fun c ->
+        c.V.c_id <> "id" && not (V.Sset.mem c.V.c_id inst.V.hidden))
       inst.V.columns
   in
   match inst.V.ordered with
@@ -174,15 +208,18 @@ external date_of_ms : float -> Js.Json.t = "Date" [@@mel.new]
 external date_year : Js.Json.t -> int = "getFullYear" [@@mel.send]
 external date_month : Js.Json.t -> int = "getMonth" [@@mel.send]
 external date_day : Js.Json.t -> int = "getDate" [@@mel.send]
+external date_hours : Js.Json.t -> int = "getHours" [@@mel.send]
+external date_minutes : Js.Json.t -> int = "getMinutes" [@@mel.send]
 
-let month_names =
-  [| "Jan"; "Feb"; "Mar"; "Apr"; "May"; "Jun"; "Jul"; "Aug"; "Sep"; "Oct"
-   ; "Nov"; "Dec" |]
+let pad2 n =
+  if n < 10 then "0" ^ string_of_int n else string_of_int n
 
+(* cljs date/int->local-time-2 → "yyyy-MM-dd HH:mm" local *)
 let fmt_date ms =
   let d = date_of_ms ms in
-  Printf.sprintf "%s %d, %d" month_names.(date_month d) (date_day d)
-    (date_year d)
+  Printf.sprintf "%04d-%s-%s %s:%s" (date_year d)
+    (pad2 (date_month d + 1))
+    (pad2 (date_day d)) (pad2 (date_hours d)) (pad2 (date_minutes d))
 
 let fmt_cell_value (c : V.column) v =
   match v with
@@ -210,30 +247,35 @@ let cell_value blk (c : V.column) : W.t =
 
 (* ---------- cells ---------- *)
 
+(* cljs row-checkbox: label.jtrigger > shui checkbox; opacity flips on
+   hover of the label *)
 let select_cell inst ~refresh ~row_uuid ~blk : D.el =
-  let inner =
-    D.h ~cls:"flex align-middle w-full items-center px-0" ()
-  in
+  let inner = D.h ~cls:(inner_cls ~select:true ()) () in
   let dbid =
     match W.map_get_int blk "db/id" with
     | Some n -> string_of_int n
     | None -> row_uuid
   in
+  let checked () = V.Sset.mem row_uuid inst.V.selected in
+  let cb_cls show =
+    "jtrigger flex transition-opacity "
+    ^ if show || checked () then "opacity-100" else "opacity-0"
+  in
   let cb =
-    D.h ~tag:"input"
-      ~cls:
-        ("jtrigger flex transition-opacity "
-         ^ if V.Sset.mem row_uuid inst.V.selected then "opacity-100"
-           else "opacity-0")
+    D.h ~tag:"input" ~cls:(cb_cls false)
       ~attrs:[ ("type", "checkbox"); ("id", dbid ^ "-checkbox") ] ()
   in
-  D.el_set_checked cb (V.Sset.mem row_uuid inst.V.selected);
+  D.el_set_checked cb (checked ());
   let label =
     D.h ~tag:"label"
       ~cls:"jtrigger h-8 w-8 flex items-center justify-center cursor-pointer"
       ~attrs:[ ("for", dbid ^ "-checkbox"); ("data-table-row-select", "") ]
       ~children:[ cb ] ()
   in
+  D.el_add_listener label "mouseover" (fun _ ->
+      Editor_dom.el_set_class cb (cb_cls true));
+  D.el_add_listener label "mouseout" (fun _ ->
+      Editor_dom.el_set_class cb (cb_cls false));
   (* native label[for] dispatches the click on the input *)
   D.el_add_listener cb "click" (fun ev ->
       Editor_dom.stop_propagation ev;
@@ -245,15 +287,26 @@ let select_cell inst ~refresh ~row_uuid ~blk : D.el =
   inner
 
 let title_cell inst ~row_uuid ~blk (c : V.column) : D.el =
-  let inner =
-    D.h ~cls:"flex align-middle w-full overflow-x-clip items-center border-r px-2" ()
-  in
+  let inner = D.h ~cls:(inner_cls ()) () in
   let title = Wr.prop_text (cell_value blk c) in
   (match inst.V.kind, W.get blk "block/name" with
    | V.KAllPages, Some (W.String name) ->
+       (* cljs page-title-cell: div.flex.h-full.min-w-0.items-center >
+          a.page-ref.truncate; href prefers block/uuid *)
+       let page_name =
+         if row_uuid <> "" then row_uuid
+         else if name <> "" then name
+         else title
+       in
        D.el_append_child inner
-         (D.h ~tag:"a" ~cls:"page-ref truncate"
-            ~attrs:[ ("href", "#/page/" ^ name) ] ~text:title ())
+         (D.h ~cls:"flex h-full min-w-0 items-center"
+            ~children:
+              [ D.h ~tag:"a" ~cls:"page-ref truncate"
+                  ~attrs:
+                    [ ("href", "#/page/" ^ page_name); ("title", title) ]
+                  ~text:title ()
+              ]
+            ())
    | _ ->
        let div =
          D.h ~cls:
@@ -270,24 +323,63 @@ let title_cell inst ~row_uuid ~blk (c : V.column) : D.el =
   inner
 
 let prop_cell ~blk (c : V.column) : D.el =
-  let inner =
-    D.h ~cls:"flex align-middle w-full overflow-x-clip items-center border-r px-2" ()
-  in
+  let inner = D.h ~cls:(inner_cls ()) () in
   (match cell_value blk c with
    | W.Map _ as v when Wr.ref_uuid v <> None ->
        let t = Option.value (Wr.ref_title v) ~default:"" in
+       let href = Option.value (Wr.ref_uuid v) ~default:t in
        D.el_append_child inner
-         (D.h ~tag:"a" ~cls:"page-ref" ~attrs:[ ("href", "#/page/" ^ t) ]
+         (D.h ~tag:"a" ~cls:"page-ref" ~attrs:[ ("href", "#/page/" ^ href) ]
             ~text:t ())
    | W.Array xs when c.V.c_many ->
-       List.iter
-         (fun x ->
+       (* cljs block-title over a node-many property: div.flex.flex-row
+          with "," separators between page-ref links; the implicit Page
+          class is hidden (cljs renders nothing for it in the cell) *)
+       let box = D.h ~cls:"flex flex-row" () in
+       let items =
+         List.filter
+           (fun x ->
+             Wr.prop_text x <> ""
+             && (c.V.c_id <> "block/tags"
+                 || Wr.ident_of_value x <> Some "logseq.class/Page"))
+           xs
+       in
+       List.iteri
+         (fun i x ->
            let t = Wr.prop_text x in
-           if t <> "" then
-             D.el_append_child inner
-               (D.h ~tag:"a" ~cls:"page-ref mr-1"
-                  ~attrs:[ ("href", "#/page/" ^ t) ] ~text:t ()))
-         xs
+           if c.V.c_id = "block/tags" then begin
+             (* cljs select-item -> page-cp {:tag?} ->
+                a.relative.tag[data-ref][data-uuid][draggable] > span *)
+             let attrs =
+               ("data-ref", String.lowercase_ascii t)
+               :: (match Wr.ref_uuid x with
+                   | Some u -> [ ("data-uuid", u) ]
+                   | None -> [])
+               @ [ ("draggable", "true"); ("tabindex", "0") ]
+             in
+             D.el_append_child box
+               (D.h ~cls:"select-item cursor-pointer"
+                  ~children:
+                    [ D.h ~tag:"a" ~cls:"relative tag" ~attrs
+                        ~children:
+                          [ D.h ~tag:"span" ~text:("#" ^ t) () ]
+                        () ]
+                  ())
+           end
+           else begin
+             if i > 0 then
+               D.el_append_child box (D.h ~cls:"mr-1" ~text:"," ());
+             let href = Option.value (Wr.ref_uuid x) ~default:t in
+             D.el_append_child box
+               (D.h
+                  ~children:
+                    [ D.h ~tag:"a" ~cls:"page-ref"
+                        ~attrs:[ ("href", "#/page/" ^ href) ] ~text:t ()
+                    ]
+                  ())
+           end)
+         items;
+       D.el_append_child inner box
    | W.Bool b when c.V.c_type = "checkbox" ->
        let cb = D.h ~tag:"input" ~attrs:[ ("type", "checkbox") ] () in
        D.el_set_checked cb b;
@@ -298,14 +390,32 @@ let prop_cell ~blk (c : V.column) : D.el =
          (D.h ~tag:"span" ~cls:"truncate" ~text:(fmt_cell_value c v) ()));
   inner
 
+(* shui table-cell-container: title attr = plain cell value (none for
+   select/id) *)
+let cell_title blk (c : V.column) =
+  match c.V.c_id with
+  | "select" | "id" -> None
+  | _ -> (
+      match fmt_cell_value c (cell_value blk c) with
+      | "" -> None
+      | t -> Some t)
+
+
 let cell_el inst ~refresh ~row_uuid ~blk ~idx (c : V.column) : D.el =
-  let cell = D.h ~cls:"ls-table-cell flex relative h-full" () in
+  let title_attr =
+    match cell_title blk c with Some t -> [ ("title", t) ] | None -> []
+  in
+  let cell =
+    D.h ~cls:"ls-table-cell flex relative h-full"
+      ~attrs:
+        ([ ("style", size_style c); ("tabindex", "0") ] @ title_attr)
+      ()
+  in
+
   (match c.V.c_id with
    | "select" -> D.el_append_child cell (select_cell inst ~refresh ~row_uuid ~blk)
    | "id" ->
-       let inner =
-         D.h ~cls:"flex align-middle w-full items-center border-r px-2" ()
-       in
+       let inner = D.h ~cls:(inner_cls ()) () in
        D.el_append_child inner
          (D.h ~tag:"label" ~cls:"flex items-center" ~text:(string_of_int idx)
             ());
@@ -331,56 +441,126 @@ let sortable c =
     (List.mem c.V.c_id
        [ "select"; "id"; "block/page"; "block.temp/refs-count" ])
 
+(* cljs header-checkbox: opacity-100 while hovered or any selection *)
+let header_select_cell inst ~refresh cell =
+  let checked () = not (V.Sset.is_empty inst.V.selected) in
+  let cb_cls show =
+    "flex transition-opacity "
+    ^ if show || checked () then "opacity-100" else "opacity-0"
+  in
+  let cb =
+    D.h ~tag:"input" ~cls:(cb_cls false)
+      ~attrs:
+        [ ("type", "checkbox"); ("id", "header-checkbox")
+        ; ("aria-label", I.select_all) ]
+      ()
+  in
+  let label =
+    D.h ~tag:"label"
+      ~cls:"h-8 w-8 flex items-center justify-center cursor-pointer"
+      ~attrs:[ ("for", "header-checkbox") ] ~children:[ cb ] ()
+  in
+  D.el_add_listener label "mouseover" (fun _ ->
+      Editor_dom.el_set_class cb (cb_cls true));
+  D.el_add_listener label "mouseout" (fun _ ->
+      Editor_dom.el_set_class cb (cb_cls false));
+  D.el_add_listener cb "click" (fun ev ->
+      Editor_dom.stop_propagation ev;
+      inst.V.selected <-
+        (if D.el_checked cb then
+           List.fold_left
+             (fun s u -> V.Sset.add u s)
+             inst.V.selected (all_row_uuids inst)
+         else V.Sset.empty);
+      refresh inst);
+  D.el_append_child cell label
+
+(* cljs header-cp: text-variant button holding the title span and a sort
+   arrow for the active sort column *)
+let header_button inst ~refresh (c : V.column) : D.el =
+  let sort =
+    List.find_opt (fun s -> s.V.s_id = c.V.c_id) inst.V.sorting
+  in
+  let arrow =
+    match sort with
+    | Some s -> Some (D.icon (if s.V.s_asc then "arrow-up" else "arrow-down"))
+    | None -> None
+  in
+  let children =
+    D.h ~tag:"span" ~cls:"max-w-full overflow-hidden text-ellipsis"
+      ~attrs:[ ("title", c.V.c_name) ] ~text:c.V.c_name ()
+    :: (match arrow with Some a -> [ a ] | None -> [])
+  in
+  let btn =
+    D.h ~tag:"button"
+      ~cls:
+        (D.button_cls ~variant:"text"
+           ~cls:"h-8 !pl-2 !px-2 !py-0 hover:text-foreground w-full \
+                 justify-start"
+           ())
+      ~children ()
+  in
+  if sortable c then
+    D.el_add_listener btn "click" (fun _ ->
+        P.show_menu ~anchor:btn
+          [ P.MItem
+              ( I.sort_ascending
+              , fun () ->
+                  inst.V.sorting <- [ { V.s_id = c.V.c_id; s_asc = true } ];
+                  V.persist_sorting inst;
+                  refresh inst )
+          ; P.MItem
+              ( I.sort_descending
+              , fun () ->
+                  inst.V.sorting <-
+                    [ { V.s_id = c.V.c_id; s_asc = false } ];
+                  V.persist_sorting inst;
+                  refresh inst )
+          ]
+        |> ignore);
+  btn
+
 let header_cell inst ~refresh (c : V.column) : D.el =
   let cell =
-    D.h ~cls:"ls-table-header-cell"
-      ~attrs:[ ("style", "width:auto;min-width:60px") ] ()
+    D.h
+      ~cls:
+        ("ls-table-header-cell"
+         ^ if c.V.c_id = "select" then " !border-0" else "")
+      ~attrs:[ ("style", size_style c) ] ()
+
   in
   (match c.V.c_id with
-   | "select" ->
-       Editor_dom.el_set_class cell "ls-table-header-cell !border-0";
-       let cb =
-         D.h ~tag:"input"
-           ~attrs:[ ("type", "checkbox"); ("id", "header-checkbox") ] ()
-       in
-       let label =
-         D.h ~tag:"label"
-           ~cls:"jtrigger h-8 w-8 flex items-center justify-center cursor-pointer"
-           ~attrs:[ ("for", "header-checkbox") ] ~children:[ cb ] ()
-       in
-       D.el_add_listener cb "click" (fun ev ->
-           Editor_dom.stop_propagation ev;
-           inst.V.selected <-
-             (if D.el_checked cb then
-                List.fold_left
-                  (fun s u -> V.Sset.add u s)
-                  inst.V.selected (all_row_uuids inst)
-              else V.Sset.empty);
-           refresh inst);
-       D.el_append_child cell label
+   | "select" -> header_select_cell inst ~refresh cell
    | "id" ->
        D.el_append_child cell
-         (D.h ~tag:"label" ~cls:"flex items-center justify-center" ~text:"#" ())
+         (D.h ~tag:"label"
+            ~cls:"h-8 w-6 flex items-center justify-center"
+            ~attrs:[ ("for", "header-index"); ("title", I.row_number) ]
+            ~text:"#" ())
    | _ ->
        D.el_append_child cell
          (D.h ~tag:"span" ~cls:"truncate" ~text:c.V.c_name ());
-       if sortable c then
-         D.el_add_listener cell "click" (fun _ ->
-             P.show_menu ~anchor:cell
-               [ P.MItem
-                   ( I.sort_ascending
-                   , fun () ->
-                       inst.V.sorting <- [ { V.s_id = c.V.c_id; s_asc = true } ];
-                       V.persist_sorting inst;
-                       refresh inst )
-               ; P.MItem
-                   ( I.sort_descending
-                   , fun () ->
-                       inst.V.sorting <-
-                         [ { V.s_id = c.V.c_id; s_asc = false } ];
-                       V.persist_sorting inst;
-                       refresh inst )
-               ]));
+       (match c.V.c_prop with
+        | Some p ->
+            (* cljs header-cp: property columns open the property
+               configure dropdown (.ls-property-dropdown) *)
+            D.el_add_listener cell "click" (fun _ ->
+                let owner_uuid =
+                  match inst.V.kind with
+                  | V.KTagPage u | V.KPropertyPage u -> u
+                  | _ -> ""
+                in
+                Properties_menu.open_menu ~anchor:cell ~owner_uuid
+                  ~owner_id:(Properties_data.entity_id_of p)
+                  ~owner_is_tag:(match inst.V.kind with
+                    | V.KTagPage _ -> true
+                    | _ -> false)
+                  ~owner_title:c.V.c_name
+                  ~refresh:(fun () -> refresh inst)
+                  (W.Map
+                     [ (W.Keyword "property", p)
+                     ; (W.Keyword "property-id", W.Keyword c.V.c_id) ]))
+        | None -> D.el_append_child cell (header_button inst ~refresh c)));
   cell
 
 (* ---------- action bar ---------- *)
@@ -466,13 +646,18 @@ let row_el inst ~refresh ~idx ~row_uuid (cols : V.column list) : D.el =
     | Some b -> b
     | None -> W.Map []
   in
+  let data_id =
+    match W.map_get_int blk "db/id" with
+    | Some n -> string_of_int n
+    | None -> row_uuid
+  in
   let row =
     D.h ~cls:
       "ls-table-row ls-block flex flex-row items-center border-b \
        transition-colors hover:bg-muted/50 \
        data-[state=selected]:bg-muted bg-gray-01 items-stretch"
       ~attrs:
-        [ ("data-id", row_uuid); ("blockid", row_uuid); ("tabIndex", "0") ]
+        [ ("data-id", data_id); ("blockid", row_uuid); ("tabIndex", "0") ]
       ()
   in
   let wrap = D.h ~cls:"flex flex-row" () in
@@ -483,9 +668,17 @@ let row_el inst ~refresh ~idx ~row_uuid (cols : V.column list) : D.el =
   D.el_append_child row wrap;
   row
 
+(* cljs: shui/table > .ls-table-rows.content.overflow-x-auto
+   .force-visible-scrollbar > .relative > [header; body rows] *)
 let table_el inst ~refresh : D.el =
   let tbl = D.h ~cls:"ls-table w-full caption-bottom text-sm table-fixed" () in
   let cols = visible_columns inst in
+  let scroller =
+    D.h ~cls:"ls-table-rows content overflow-x-auto force-visible-scrollbar"
+      ()
+  in
+  let rel = D.h ~cls:"relative" () in
+
   let header =
     D.h ~cls:"ls-table-header border-y transition-colors bg-gray-01"
       ~attrs:[ ("style", "z-index:9") ] ()
@@ -498,20 +691,43 @@ let table_el inst ~refresh : D.el =
   (match action_bar inst ~refresh with
    | Some bar -> D.el_append_child header bar
    | None -> ());
-  D.el_append_child tbl header;
-  let rows_el = D.h ~cls:"ls-table-rows" () in
+  D.el_append_child rel header;
   List.iteri
     (fun i u ->
-      D.el_append_child rows_el
+      D.el_append_child rel
         (row_el inst ~refresh ~idx:(i + 1) ~row_uuid:u cols))
     (all_row_uuids inst);
-  D.el_append_child tbl rows_el;
+  (* cljs add-new-row footer when data-fns has add-new-object! *)
+  (match inst.V.kind with
+   | V.KTagPage _ | V.KAllPages | V.KPropertyPage _ ->
+       let footer = D.h ~cls:"ls-table-footer fade-in faster" () in
+       let row =
+         D.h
+           ~cls:
+             "py-1 px-2 cursor-pointer flex flex-row items-center gap-1 \
+              text-muted-foreground hover:text-foreground w-full text-sm \
+              border-b"
+           ~children:[ D.icon "plus"; D.h ~text:I.new_ () ]
+           ()
+       in
+       D.el_add_listener row "click" (fun _ ->
+           (V.ops ()).V.o_add_object inst);
+       D.el_append_child footer row;
+       D.el_append_child rel footer
+   | V.KQuery _ -> ());
+  D.el_append_child scroller rel;
+  D.el_append_child tbl scroller;
+
   tbl
 
 (* grouped rows render without the header (group table per cljs) *)
 let grouped_table inst ~refresh ~rows () =
   let tbl = D.h ~cls:"ls-table w-full caption-bottom text-sm table-fixed" () in
-  let rows_el = D.h ~cls:"ls-table-rows" () in
+  let rows_el =
+    D.h
+      ~cls:"ls-table-rows content overflow-x-auto force-visible-scrollbar"
+      ()
+  in
   List.iteri
     (fun i u ->
       D.el_append_child rows_el
@@ -693,8 +909,11 @@ let render_table inst ~refresh body =
         gs
   | _ -> D.el_append_child body (table_el inst ~refresh)
 
-let render_body inst ~refresh : D.el =
-  let body = D.h ~cls:"ls-view-body" () in
+let render_body inst ~refresh ?(filters = None) () : D.el =
+  let body = D.h ~cls:"ls-view-body flex flex-col gap-2 grid mt-1" () in
+  (match filters with
+   | Some f -> D.el_append_child body f
+   | None -> ());
   (if inst.V.loading then
      D.el_append_child body
        (D.h ~cls:"p-2 text-sm opacity-50" ~text:I.loading ())

@@ -17,7 +17,7 @@ let overlay_cls =
 let content_cls =
   "ui__dialog-content fixed left-[50%] top-[50%] z-50 grid w-full \
    max-w-2xl lg:max-w-3xl gap-4 border sm:rounded-lg bg-background p-6 \
-   shadow-lg"
+   shadow-lg ui__dialog-zoom-in"
 
 let btn_style =
   "inline-flex items-center justify-center rounded-md text-sm \
@@ -68,10 +68,8 @@ let label_of = function
   | "settings" -> Some "app-settings"
   | "plugins" -> Some "plugins-dashboard"
   | _ -> None
-
 let dialog_view name (ms : Model.t Signal.signal) : t =
-  let is_settings = name = "settings" in
-  dom ~key:("dlg-ov-" ^ name) ~style_class:overlay_cls ~events:"click"
+  let is_settings = name = "settings" in  dom ~key:("dlg-ov-" ^ name) ~style_class:overlay_cls ~events:"click"
     ~attrs:(if is_settings then [ ("data-align", "top") ] else [])
     ~on_dom_event:(fun n p ->
       if n = "click" && is_overlay_click p then Dialogs_state.close_top ())
@@ -86,8 +84,7 @@ let dialog_view name (ms : Model.t Signal.signal) : t =
           ([ ("data-state", "open")
            ; ( "style"
              , if is_settings then
-                 "transform: translateX(-50%); width: min(1024px, \
-                  calc(100vw - 2rem)); max-width: calc(100vw - 2rem)"
+                 "transform: translateX(-50%); width: min(1024px,                   calc(100vw - 2rem)); max-width: calc(100vw - 2rem)"
                else "transform: translate(-50%, -50%)" )
            ]
           @

@@ -99,6 +99,39 @@ let row_position row =
       | _ -> "logseq.property.ui-position/properties")
   | None -> "logseq.property.ui-position/properties"
 
+(* cljs resolved-property-value-for-render: when the block has no own
+   value, the property's :logseq.property/default-value renders instead *)
+let row_effective_value row =
+  let v = row_value row in
+  let empty =
+    match v with
+    | W.Nil -> true
+    | W.Set [] | W.Array [] | W.List [] -> true
+    | _ -> false
+  in
+  if empty then
+    match getf (row_prop row) "logseq.property/default-value" with
+    | Some d -> d
+    | None -> v
+  else v
+
+(* like row_effective_value but returns a row with the value substituted,
+   so all cell renderers see the default *)
+let row_with_effective_value row =
+  match row with
+  | W.Map kvs ->
+      let eff = row_effective_value row in
+      if eff = row_value row then row
+      else
+        W.Map
+          (List.map
+             (fun (k, v) ->
+               match k with
+               | W.Keyword "value" | W.String "value" -> (k, eff)
+               | _ -> (k, v))
+             kvs)
+  | _ -> row
+
 (* A display row's value for ref types is a ref_value_summary map or a
    set of them; plain types come through as scalars. *)
 let value_is_ref = function W.Map _ | W.Set _ | W.Array _ | W.List _ -> true | _ -> false
@@ -171,9 +204,41 @@ let display_props ?(page_title = false) ?(tag_dialog = false)
         ]
     ]
 
-(* returns (rows, hidden-rows, positioned-by-position) — the worker emits
-   positioned-properties as {block-left|block-right|block-below: rows}
-   (cljs block.temp/positioned-properties) *)
+(* positioned-rows block_wire position — synthesize display rows
+   {property-id, property, value} for the idents the worker grouped
+   under POSITION (its render_property_position gating already applied).
+   Values come straight off the block's own attrs. *)
+let positioned_rows block_wire position =
+  match getf block_wire "block.temp/positioned-properties" with
+  | Some positioned -> (
+      match getf positioned position with
+      | Some props_w ->
+          List.filter_map
+            (fun prop ->
+              match getk prop "db/ident" with
+              | Some ident ->
+                  let value =
+                    match getf block_wire ident with
+                    | Some (W.Map _ as m) -> (
+                        (* scalar property values live in a value
+                           entity: {db/id, block/uuid,
+                           logseq.property/value} *)
+                        match getf m "logseq.property/value" with
+                        | Some v -> v
+                        | None -> m)
+                    | Some v -> v
+                    | None -> W.Nil
+                  in
+                  Some
+                    (W.Map
+                       [ (W.String "property-id", W.Keyword ident)
+                       ; (W.String "property", prop)
+                       ; (W.String "value", value) ])
+              | None -> None)
+            (elems props_w)
+      | None -> [])
+  | None -> []
+
 let split_display wire =
   let rows =
     match W.get wire "full-properties" with
@@ -185,13 +250,7 @@ let split_display wire =
     | Some w -> elems w
     | None -> []
   in
-  let positioned position =
-    match W.get wire "positioned-properties" with
-    | Some p -> (
-        match W.get p position with Some w -> elems w | None -> [])
-    | None -> []
-  in
-  (rows, hidden, positioned)
+  (rows, hidden)
 
 let bidirectional target_id =
   invoke "get-bidirectional-properties"
@@ -210,6 +269,30 @@ let property_values ~property_ident ~block =
 
 let closed_values property_ref =
   invoke "get-property-closed-values" [ repo (); property_ref ]
+
+(* cljs db-async/<get-property-node-selector-data {property block} *)
+let node_selector_data ~property_id ~block =
+  invoke "get-property-node-selector-data"
+    [ repo ()
+    ; W.Map
+        [ (W.Keyword "property", W.Int property_id)
+        ; (W.Keyword "block", block)
+        ]
+    ]
+
+(* cljs search/block-search — returns a bare array of result maps
+   ({db/id, block/uuid, block/title, page?, ...}) *)
+let search_blocks q =
+  invoke "search-blocks"
+    [ repo ()
+    ; W.String q
+    ; W.Map
+        [ (W.Keyword "limit", W.Int 20)
+        ; (W.Keyword "search-limit", W.Int 100)
+        ; (W.Keyword "enable-snippet?", W.Bool false)
+        ; (W.Keyword "built-in?", W.Bool false)
+        ]
+    ]
 
 let all_properties block =
   invoke "get-all-properties"

@@ -16,6 +16,9 @@ type t =
   { open_ : bool Signal.state
   ; decks : deck list Signal.state
   ; sel : int Signal.state (* -1 = All cards *)
+  ; (* cljs *phase: :init | :show-cloze | :show-answer — the test flow only
+       exercises init -> show-answer *)
+    revealed : bool Signal.state
   ; opts_open : bool Signal.state
   ; cards : string list Signal.state (* block titles *)
   ; pos : int Signal.state
@@ -176,6 +179,7 @@ let load_cards st repo =
 let open_modal st =
   Runtime.signal_set st.open_ true;
   Runtime.signal_set st.sel (-1);
+  Runtime.signal_set st.revealed false;
   Runtime.signal_set st.opts_open false;
   Runtime.signal_set st.phase "init";
   let r = repo () in
@@ -185,6 +189,14 @@ let open_modal st =
     load_cards st r)
 
 let close st = Runtime.signal_set st.open_ false
+
+let reveal st = Runtime.signal_set st.revealed true
+
+(* rating advances to the next card; cljs also persists the fsrs state —
+   the OCaml worker has no rate endpoint yet, so only the index moves *)
+let rate st =
+  Runtime.signal_set st.pos (Signal.get_state st.pos + 1);
+  Runtime.signal_set st.revealed false
 let toggle_opts st =
   Runtime.signal_set st.opts_open (not (Signal.get_state st.opts_open))
 
@@ -262,6 +274,7 @@ let init (ms : Model.t Signal.signal) : t =
         { open_ = Signal.state owner false
         ; decks = Signal.state owner []
         ; sel = Signal.state owner (-1)
+        ; revealed = Signal.state owner false
         ; opts_open = Signal.state owner false
         ; cards = Signal.state owner []
         ; pos = Signal.state owner 0

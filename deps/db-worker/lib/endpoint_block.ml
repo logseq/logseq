@@ -130,19 +130,9 @@ let block_positioned_properties_map db (block : entity) : Wire.t =
        (Render_snapshot.block_positioned_property_idents_by_position db
           block.id))
 
-let reaction_selector =
-  "[:db/id :block/uuid :logseq.property.reaction/emoji-id \
-   {:logseq.property/created-by-ref [:db/id :block/uuid :block/title]}]"
-
+(* single impl lives in outliner_tree (shared with the page-tree pull) *)
 let block_reactions db (block_id : entity_id) : Wire.t =
-  Wire.Array
-    (List.of_seq
-       (datoms db Avet ~a:"logseq.property.reaction/target"
-          ~v:(Ref block_id) ())
-    |> List.map (fun (d : datom) ->
-           match pull_string db reaction_selector (Entity_id d.e) with
-           | Some p -> Ds_wire.transit_of_pulled p
-           | None -> Wire.Nil))
+  Outliner_tree.block_reactions db block_id
 
 let empty_render_display_properties =
   Wire.Map

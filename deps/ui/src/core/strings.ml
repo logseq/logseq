@@ -12,11 +12,6 @@ let confirm = "Confirm"
 let cancel = "Cancel"
 
 (* app menu *)
-let settings = "Settings"
-let export_graph = "Export graph"
-let import = "Import"
-let login = "Login"
-
 (* assets — en.edn :asset/* *)
 let asset_align = "Align"
 let asset_align_left = "Align left"
@@ -35,6 +30,28 @@ let loading = "Loading..."
 let go_to_journals = "Go to journals"
 let unlinked_references = "Unlinked References"
 let filter_placeholder = "Type to search"
+
+(* header dots menu *)
+let add_to_favorites = "Add to Favorites"
+let unfavorite_page = "Unfavorite page"
+let settings = "Settings"
+let plugins = "Plugins"
+let recycle = "Recycle"
+let export_graph = "Export graph"
+let export_page = "Export page"
+let publish_page = "Publish page"
+let appearance = "Appearance"
+let help_handbook = "Handbook"
+let help_shortcuts = "Keyboard shortcuts"
+let help_docs = "Documentation"
+let help_bug = "Bug report"
+let help_feature = "Feature request"
+let help_feedback = "Submit feedback"
+let help_discord = "Ask the community"
+let help_forum = "Support forum"
+let help_release_notes = "Release notes"
+let import_ = "Import"
+let login = "Login"
 
 (* graph view *)
 let graph_settings = "Graph settings"

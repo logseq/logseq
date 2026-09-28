@@ -96,6 +96,26 @@ let query_param name =
   | "" -> None
   | search -> search_params_get (new_url_search_params search) name
 
+(* query param inside the location hash: "#/page/x?graph-id=u" *)
+let hash_query_param name =
+  match location_hash () with
+  | "" -> None
+  | h -> (
+      match String.index_opt h '?' with
+      | Some i ->
+          search_params_get
+            (new_url_search_params
+               (String.sub h (i + 1) (String.length h - i - 1)))
+            name
+      | None -> None)
+
+(* rewrite the hash in place (no history entry, no hashchange) *)
+external replace_state :
+  Js.Json.t -> string -> string -> unit = "replaceState"
+  [@@mel.scope "history"]
+
+let replace_url_fragment hash = replace_state Js.Json.null "" hash
+
 let on_hash_change f =
   add_event_listener "hashchange" (fun _ -> f ())
 
@@ -108,6 +128,14 @@ let on_document_event name f = add_document_listener name f
 
 external decode_uri : string -> string = "decodeURIComponent"
 
+external js_escape : string -> string = "escape"
+
+(* OCaml source literals hold UTF-8 bytes; Melange hands them to JS as a
+   byte-string so non-ASCII renders mojibake. Percent-encode each byte then
+   UTF-8 decode to obtain the real JS string. Only safe for literals — worker
+   (transit-decoded) strings are already proper JS strings and would throw. *)
+let utf8 s = decode_uri (js_escape s)
+
 external json_parse : string -> Js.Json.t = "parse" [@@mel.scope "JSON"]
 external json_prop : Js.Json.t -> string -> Js.Json.t = "" [@@mel.get_index]
 
@@ -116,6 +144,11 @@ let payload_str json key =
   match Js.Json.decodeString (json_prop (json_parse json) key) with
   | Some s -> s
   | None -> ""
+
+let payload_bool json key =
+  match Js.Json.decodeBoolean (json_prop (json_parse json) key) with
+  | Some b -> b
+  | None -> false
 
 let payload_num json key =
   match Js.Json.decodeNumber (json_prop (json_parse json) key) with

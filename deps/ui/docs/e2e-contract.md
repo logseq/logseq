@@ -225,7 +225,7 @@ Graph view: `#global-graph.graph-root`, `[role='application'][aria-label='Graph 
 - `journals-consecutive-input-test` — consecutive journal typing.
 - `worker-missing-read-is-recoverable-test` — worker read recovery.
 - `enter-splits-block-at-cursor-test` — mid-text Enter.
-- `node-reference-autocomplete-test` — `((`/`[[` node refs.
+- `node-reference-autocomplete-test` — `[[` node refs (`((` is deprecated).
 - `quick-add-moves-all-blocks-to-today-test` — quick-add dialog.
 - `external-property-update-preserves-edit-buffer-test` — external update vs edit buffer.
 - `operation-completion-restores-mounted-focus-test` — focus restore after ops.
@@ -268,7 +268,7 @@ Graph view: `#global-graph.graph-root`, `[role='application'][aria-label='Graph 
 - `command-trigger-test` — `/` command trigger.
 - `slash-command-arrow-scroll-test` — slash menu arrow scroll.
 - `page-reference-test` — `[[page]]`.
-- `block-reference-test` — `((block))`.
+- `block-reference-test` — `[[uuid]]` block ref.
 - `link-test` — markdown link.
 - `link-image-test` — image link.
 - `underline-test` — underline markup.

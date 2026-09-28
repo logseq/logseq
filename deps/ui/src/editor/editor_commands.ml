@@ -575,32 +575,7 @@ let run_editor_cmd uuid command from to_ =
             (W.Keyword "logseq.property/empty-placeholder")
         else
           set_closed_prop ~caret uuid "logseq.property/priority" s)
-      else ()
-
-(* context-menu commands target a block by uuid — no slash range, no
-   editing state required *)
-let run_block_cmd uuid command value =
-  let ops =
-    match (command, value) with
-    | "Set block color", Some v ->
-        [ (if v = ""
-           then
-             Ops.remove_block_property uuid
-               "logseq.property/background-color"
-           else
-             Ops.set_block_property uuid
-               "logseq.property/background-color" (W.String v)) ]
-    | "Set heading", Some v -> (
-        match int_of_string_opt v with
-        | Some n when n >= 1 && n <= 6 ->
-            [ Ops.set_block_property uuid "logseq.property/heading"
-                (W.Int n) ]
-        | _ -> [ Ops.remove_block_property uuid "logseq.property/heading" ])
-    | _ -> []
-  in
-  match ops with
-  | [] -> ()
-  | _ -> ignore (Ops.apply_and_refresh ops)
+      else Editor_cmds.run ~command ~block:None ~value:None
 
 let on_command ev =
   if S.ready () then
@@ -608,11 +583,15 @@ let on_command ev =
     | None -> ()
     | Some command -> (
         match detail_str ev "block" with
-        | Some block_id ->
-            run_block_cmd block_id command (detail_str ev "value")
+        | Some _ ->
+            (* context-menu commands target a block by uuid — Editor_cmds
+               owns them *)
+            Editor_cmds.run ~command ~block:(detail_str ev "block")
+              ~value:(detail_str ev "value")
         | None -> (
             match S.editing () with
-            | None -> ()
+            | None -> Editor_cmds.run ~command ~block:None
+                        ~value:(detail_str ev "value")
             | Some e ->
                 let from =
                   Option.value (detail_int ev "from") ~default:0

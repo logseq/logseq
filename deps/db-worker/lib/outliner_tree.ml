@@ -22,12 +22,29 @@ let drop_key (k : string) (pairs : (Wire.t * Wire.t) list) =
 
 let assoc_wire k v pairs = (kw k, v) :: pairs
 
+(* block.temp/reactions — raw reaction entity maps, same shape the
+   get-blocks render-data path emits (cljs components/query pull it via
+   subscription; the page tree pull [*] does not cover reverse refs) *)
+let reaction_selector =
+  "[:db/id :block/uuid :logseq.property.reaction/emoji-id \
+   {:logseq.property/created-by-ref [:db/id :block/uuid :block/title]}]"
+
+let block_reactions db (block_id : entity_id) : Wire.t =
+  Wire.Array
+    (List.of_seq
+       (datoms db Avet ~a:"logseq.property.reaction/target"
+          ~v:(Ref block_id) ())
+    |> List.map (fun (d : datom) ->
+           match pull_string db reaction_selector (Entity_id d.e) with
+           | Some p -> Ds_wire.transit_of_pulled p
+           | None -> Wire.Nil))
+
 (* otree/blocks->vec-tree-data — recursive :block/children assembly on
    pulled maps; emits transit-ready wire maps. cljs opt
    :keep-block-tx-id? keeps :block/tx-id on each emitted map
    (default drops it). *)
 let vec_tree_data ~(include_root : bool) ?(keep_block_tx_id = false)
-    ~(root : pulled_entity option) ~(root_id : entity_id)
+    ~(db : db) ~(root : pulled_entity option) ~(root_id : entity_id)
     (blocks : pulled_entity list) : Wire.t list =
   let drop_tx_id pairs =
     if keep_block_tx_id then pairs else drop_key "block/tx-id" pairs
@@ -62,6 +79,8 @@ let vec_tree_data ~(include_root : bool) ?(keep_block_tx_id = false)
       (pairs
        |> assoc_wire "block/level" (Wire.Int level)
        |> assoc_wire "block/children" (Wire.List children)
+       |> assoc_wire "block.temp/reactions"
+            (block_reactions db m.pulled_id)
        |> assoc_wire "block/parent"
             (Wire.Map [ (kw "db/id", Wire.Int parent) ]))
   and children_of (parent : entity_id) (level : int) : Wire.t list =
@@ -158,6 +177,6 @@ let wire_display_titles (db : db) (ws : Wire.t list) : Wire.t list =
    page. *)
 let page_blocks_vec_tree (db : db) (blocks : pulled_entity list)
     (page_id : entity_id) : Wire.t list =
-  vec_tree_data ~include_root:false ~root:None ~root_id:page_id blocks
+  vec_tree_data ~include_root:false ~db ~root:None ~root_id:page_id blocks
   |> wire_display_titles db
   |> List.map (expand_property_refs db)

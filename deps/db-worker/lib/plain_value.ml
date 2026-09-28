@@ -39,6 +39,11 @@ let ref_value_summary db (eid : entity_id) : Wire.t =
       in
       let m = [ field "db/id" (Wire.Int e.id) ] in
       let m =
+        match Ldb.ident_of e with
+        | Some i -> field "db/ident" (kw i) :: m
+        | None -> m
+      in
+      let m =
         match tag_idents with
         | [] -> m
         | ts -> field "block/tags" (Wire.Array ts) :: m

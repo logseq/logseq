@@ -17,9 +17,45 @@ let current_journals : Model.page list ref = ref []
 let reload_current_view : (unit -> unit Js.Promise.t) ref =
   ref (fun () -> Js.Promise.resolve ())
 
+(* the open graph's worker uuid — carried as ?graph-id=<uuid> inside the
+   location hash (e.g. "#/page/u?graph-id=u") like cljs
+   current-graph-query-params, so deep links and reloads resolve a repo *)
+let current_graph_uuid : string option ref = ref None
+
+(* set by graphs_ops (avoids a boot/graphs_ops module cycle); invoked on
+   Boot_graph_ready to fetch and remember the graph's uuid *)
+let on_graph_opened : (string -> unit) ref = ref (fun _ -> ())
+
+(* append ?graph-id=<uuid> to an in-app hash route when the uuid is known *)
+let nav_hash route =
+  match !current_graph_uuid with
+  | Some u when u <> "" -> route ^ "?graph-id=" ^ u
+  | _ -> route
+
+(* add the missing graph-id to the current hash without firing hashchange *)
+let sync_hash_graph_id () =
+  match !current_graph_uuid with
+  | Some u when u <> "" -> (
+      match Platform.location_hash () with
+      | "" | "#" -> ()
+      | h ->
+          if String.index_opt h '?' = None then
+            Platform.replace_url_fragment (h ^ "?graph-id=" ^ u))
+  | _ -> ()
+
+(* generation counter for async page loads — several Page_loaded
+   producers (route loads, refresh_page, block zoom) can be in flight at
+   once and their fetches can resolve out of order; bump on initiation
+   and only commit when the captured generation is still current, so the
+   latest-initiated load always wins *)
+let load_gen : int ref = ref 0
+
 let track action =
   match action with
-  | Action.Boot_graph_ready repo -> current_repo := Some repo
+  | Action.Boot_graph_ready repo ->
+      current_repo := Some repo;
+      current_graph_uuid := None;
+      !on_graph_opened repo
   | Action.Page_loaded page -> current_page := Some page
   | Action.Journals_loaded js -> current_journals := js
   | Action.Navigate_to r ->

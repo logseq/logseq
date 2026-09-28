@@ -45,6 +45,9 @@ external prevent_default : event -> unit = "preventDefault" [@@mel.send]
 external stop_propagation : event -> unit = "stopPropagation"
   [@@mel.send]
 
+external stop_immediate_propagation : event -> unit
+  = "stopImmediatePropagation" [@@mel.send]
+
 (* -- element access -- *)
 
 external matches : element -> string -> bool = "matches" [@@mel.send]
@@ -65,11 +68,69 @@ external tag_name : element -> string = "tagName" [@@mel.get]
 external value : element -> string = "value" [@@mel.get]
 external set_value : element -> string -> unit = "value" [@@mel.set]
 external selection_start : element -> int = "selectionStart" [@@mel.get]
+
+external selection_end : element -> int = "selectionEnd" [@@mel.get]
 external set_text_content : element -> string -> unit = "textContent"
   [@@mel.set]
 external set_selection_range : element -> int -> int -> unit
   = "setSelectionRange" [@@mel.send]
 external focus : element -> unit = "focus" [@@mel.send]
+
+(* mock-text mirror (cljs util/cursor.cljs) — a hidden .mock-text inside
+   .editor-inner holds one span per grapheme; caret pos is read from the
+   span at the grapheme index *)
+external create_element : string -> element = "createElement"
+  [@@mel.scope "document"]
+external append_child : element -> element -> unit = "appendChild"
+  [@@mel.send]
+external set_id : element -> string -> unit = "id" [@@mel.set]
+external offset_left : element -> float = "offsetLeft" [@@mel.get]
+external children_col : element -> Js.Json.t = "children" [@@mel.get]
+external col_item : Js.Json.t -> int -> element option = "item"
+  [@@mel.send] [@@mel.return nullable]
+external set_mock_value : element -> string -> unit = "__mockValue" [@@mel.set]
+external get_mock_value : element -> string option = "__mockValue"
+  [@@mel.get] [@@mel.return nullable]
+external parse_float : string -> float = "parseFloat" [@@mel.scope "window"]
+external intl_obj : Js.Json.t = "Intl"
+
+type segmenter
+external make_segmenter : string -> Js.Json.t -> segmenter = "Segmenter"
+  [@@mel.scope "Intl"] [@@mel.new]
+external seg_iter : segmenter -> string -> Js.Json.t = "segment" [@@mel.send]
+external array_from : Js.Json.t -> Js.Json.t array = "from"
+  [@@mel.scope "Array"]
+external seg_text : Js.Json.t -> string = "segment" [@@mel.get]
+
+let segmenter : segmenter option =
+  match Js.Json.decodeObject intl_obj with
+  | Some d -> (
+      match Js.Dict.get d "Segmenter" with
+      | Some _ ->
+          let o = Js.Dict.empty () in
+          Js.Dict.set o "granularity" (Js.Json.string "grapheme");
+          (try Some (make_segmenter "und" (Js.Json.object_ o))
+           with _ -> None)
+      | None -> None)
+  | None -> None
+;;
+
+(* cljs util/split-grapheme-clusters *)
+let split_graphemes s : string array =
+  match segmenter with
+  | Some seg ->
+      let it = seg_iter seg s in
+      Array.map seg_text (array_from it)
+  | None -> Array.init (String.length s) (fun i -> String.make 1 s.[i])
+;;
+
+(* count grapheme clusters in s[..from-index) — cljs get-graphemes-pos *)
+let graphemes_pos s from_index =
+  if from_index <= 0 then 0
+  else
+    Array.length (split_graphemes (String.sub s 0 from_index))
+;;
+
 external bounding_rect : element -> rect = "getBoundingClientRect" [@@mel.send]
 external rect_left : rect -> float = "left" [@@mel.get]
 external rect_top : rect -> float = "top" [@@mel.get]
@@ -143,31 +204,50 @@ let scroll_row_into_view ~scroller ~row =
   else if r_top < s_top +. pad then
     set_scroll_top scroller (st -. (s_top +. pad -. r_top))
 
-(* text position of caret -> line index for popup placement *)
-let caret_line_index el =
-  if not (is_text_input el) then 0
-  else
-    let v = value el in
-    let pos = selection_start el in
-    let n = ref 0 in
-    for i = 0 to Int.min pos (String.length v) - 1 do
-      if String.get v i = '\n' then incr n
-    done;
-    !n
+(* the .mock-text mirror sibling of `input` inside .editor-inner *)
+let mock_text_el input =
+  match closest input ".editor-inner" with
+  | Some inner -> query_selector inner ".mock-text"
+  | None -> None
+;;
 
-(* caret-relative popup position below the current line *)
+(* cljs cursor.cljs build-mock-text!: one span per grapheme ("\n" -> "0"
+   + <br>), ids mock-text_<i>, rebuilt only when the value changed *)
+let build_mock_text input el =
+  let v = value input ^ "0" in
+  let cached = Option.value (get_mock_value el) ~default:"" in
+  if cached <> v then (
+    set_text_content el "";
+    Array.iteri
+      (fun i g ->
+        let s = create_element "span" in
+        set_id s ("mock-text_" ^ string_of_int i);
+        if g = "\n" then (
+          set_text_content s "0";
+          append_child s (create_element "br"))
+        else set_text_content s g;
+        append_child el s)
+      (split_graphemes v);
+    set_mock_value el v)
+;;
+
+(* cljs cursor.cljs get-caret-pos -> editor.cljs popup pos:
+   left = mirror-span offsetLeft + input.left - 20
+   top  = mirror-span offsetTop  + input.top  + (lineHeight - 4 | 20) *)
 let caret_popup_pos el =
   let r = bounding_rect el in
   let lh =
-    match Float.of_string_opt (style_line_height (computed_style el)) with
-    | Some f -> f
-    | None -> 20.0
+    let f = parse_float (style_line_height (computed_style el)) in
+    if Float.is_nan f then 20.0 else f -. 4.0
   in
-  let line = float_of_int (caret_line_index el) in
-  (rect_left r, rect_top r +. (line +. 1.0) *. lh)
-
-external make_error : unit -> event = "Error" [@@mel.new]
-
-external error_stack : event -> string = "stack" [@@mel.get]
-
-let debug_stack () = error_stack (make_error ())
+  let l, t =
+    match mock_text_el el with
+    | Some m ->
+        build_mock_text el m;
+        let gpos = graphemes_pos (value el) (selection_start el) in
+        (match col_item (children_col m) gpos with
+         | Some s -> (offset_left s, offset_top s)
+         | None -> (0., 0.))
+    | None -> (0., 0.)
+  in
+  (l +. rect_left r -. 20., t +. rect_top r +. lh)
