@@ -181,6 +181,16 @@ let gen_uuid (kind : string) (seed : string) : string =
   | "view-block-uuid" -> gen_block_uuid "00000006" (hash_string seed)
   | _ -> invalid_arg ("unknown gen-uuid kind " ^ kind)
 
+(* cljs dispatches (hash v) on the seed's type, so a keyword seed must
+   hash via hash_keyword (e.g. :builtin-block-uuid called with
+   :logseq.property/empty-placeholder in cljs create-graph). *)
+let gen_uuid_keyword (kind : string) (seed : string) : string =
+  match kind with
+  | "migrate-new-block-uuid" -> gen_block_uuid "00000003" (hash_keyword seed)
+  | "builtin-block-uuid" -> gen_block_uuid "00000004" (hash_keyword seed)
+  | "view-block-uuid" -> gen_block_uuid "00000006" (hash_keyword seed)
+  | _ -> invalid_arg ("unknown gen-uuid kind " ^ kind)
+
 (* ldb/new-block-id / common-uuid/gen-uuid () — datascript squuid. *)
 let new_block_id () : string =
   match Datascript.squuid () with

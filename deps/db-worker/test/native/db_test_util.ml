@@ -962,7 +962,7 @@ let initial_data_edn =
      :logseq.property/hide? true :logseq.property/public? false
      }
     {:db/ident :logseq.property/empty-placeholder
-     :block/uuid #uuid \"00000004-1267-0549-0045-000000000000\"}
+     :block/uuid #uuid \"00000004-1595-0218-3700-000000000000\"}
     {:db/ident :logseq.class/Tag
      :block/uuid #uuid \"00000003-0000-4000-8000-000000000201\"
      :block/name \"tag\" :block/title \"Tag\"
@@ -1081,23 +1081,23 @@ let initial_data_edn =
     ;; cljs build-new-page + mark-block-as-built-in for
     ;; built-in-pages-names (Library, Quick add, Contents); Quick add is
     ;; also :logseq.property/hide? true in cljs.
-    {:block/uuid #uuid \"00000004-1031-2047-0034-000000000000\"
+    {:block/uuid #uuid \"00000004-1294-7765-6000-000000000000\"
      :block/name \"library\" :block/title \"Library\"
      :block/tags #{:logseq.class/Page}
      :block/created-at 0 :block/updated-at 0
      :logseq.property/built-in? true}
-    {:block/uuid #uuid \"00000004-2007-8570-0009-000000000000\"
+    {:block/uuid #uuid \"00000004-7336-8251-3000-000000000000\"
      :block/name \"quick add\" :block/title \"Quick add\"
      :block/tags #{:logseq.class/Page}
      :block/created-at 0 :block/updated-at 0
      :logseq.property/hide? true :logseq.property/built-in? true}
-    {:block/uuid #uuid \"00000004-1871-9210-0097-000000000000\"
+    {:block/uuid #uuid \"00000004-1690-2597-3200-000000000000\"
      :block/name \"contents\" :block/title \"Contents\"
      :block/tags #{:logseq.class/Page}
      :block/created-at 0 :block/updated-at 0
      :logseq.property/built-in? true}
     ;; cljs build-recycle-page — the built-in Recycle page every graph gets.
-    {:block/uuid #uuid \"00000004-1514-5003-0003-000000000000\"
+    {:block/uuid #uuid \"00000004-7238-1304-3000-000000000000\"
      :block/name \"recycle\" :block/title \"Recycle\"
      :block/tags [:logseq.class/Page]
      :block/created-at 0 :block/updated-at 0
@@ -1105,16 +1105,16 @@ let initial_data_edn =
     ;; cljs build-db-initial-data initial files
     ;; (build-initial-files, config-content empty) — needed by
     ;; delete-blocks-rejects-built-in-entities.
-    {:block/uuid #uuid \"00000004-1675-4395-0028-000000000000\"
+    {:block/uuid #uuid \"00000004-3919-3813-3000-000000000000\"
      :file/path \"logseq/config.edn\" :file/content \"\"
      :file/created-at #inst \"2020-01-01T00:00:00.000Z\" :file/last-modified-at #inst \"2020-01-01T00:00:00.000Z\"}
-    {:block/uuid #uuid \"00000004-1345-1192-0017-000000000000\"
+    {:block/uuid #uuid \"00000004-1713-4660-3800-000000000000\"
      :file/path \"logseq/custom.css\" :file/content \"\"
      :file/created-at #inst \"2020-01-01T00:00:00.000Z\" :file/last-modified-at #inst \"2020-01-01T00:00:00.000Z\"}
-    {:block/uuid #uuid \"00000004-1360-2645-0098-000000000000\"
+    {:block/uuid #uuid \"00000004-1335-6485-2300-000000000000\"
      :file/path \"logseq/custom.js\" :file/content \"\"
      :file/created-at #inst \"2020-01-01T00:00:00.000Z\" :file/last-modified-at #inst \"2020-01-01T00:00:00.000Z\"}
-    {:block/uuid #uuid \"00000004-1904-0402-0048-000000000000\"
+    {:block/uuid #uuid \"00000004-4049-4381-0000-000000000000\"
      :file/path \"logseq/publish.css\" :file/content \"\"
      :file/created-at #inst \"2020-01-01T00:00:00.000Z\" :file/last-modified-at #inst \"2020-01-01T00:00:00.000Z\"}
     {:db/ident :block/parent
@@ -1249,7 +1249,7 @@ let initial_data_edn =
 :db/cardinality :db.cardinality/one
      :logseq.property/public? false
      }
-    {:block/uuid #uuid \"00000004-4879-1153-0006-000000000000\"
+    {:block/uuid #uuid \"00000004-2116-2824-5200-000000000000\"
      :file/path \"logseq/publish.js\" :file/content \"\"
      :file/created-at #inst \"2020-01-01T00:00:00.000Z\" :file/last-modified-at #inst \"2020-01-01T00:00:00.000Z\"}]"
 
@@ -2776,7 +2776,7 @@ let initial_data_ops : tx_op list =
             [ "db/ident",
               One_value (Keyword "logseq.property/empty-placeholder")
             ; "block/uuid",
-              One_value (Uuid "00000004-1267-0549-0045-000000000000")
+              One_value (Uuid "00000004-1595-0218-3700-000000000000")
             ]
         }
     ; (* cljs build-initial-files — file entities are part of
