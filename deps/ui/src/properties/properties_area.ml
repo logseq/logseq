@@ -865,7 +865,7 @@ let mount_sidebar_area (area : el) =
         let rec ctx : V.ctx =
           { block_uuid = uuid
           ; block_id = db_id
-          ; refresh
+          ; refresh = (fun () -> ignore (refresh ()))
           ; is_page = true
           ; class_schema = false
           }
@@ -876,7 +876,7 @@ let mount_sidebar_area (area : el) =
           |> Js.Promise.then_ (fun wire ->
                  let rows, hidden = D.split_display wire in
                  let rows = List.filter is_panel_row rows in
-                 let _l, _b, panel_rows = partition_rows rows in
+                 let _l, below_rows, panel_rows = partition_rows rows in
                  el_clear area;
                  let before_hr el =
                    match el_query host "hr" with
@@ -901,7 +901,9 @@ let mount_sidebar_area (area : el) =
                    el_append_child area panel;
                    render_panel ctx ~owner_is_tag:is_tag
                      ~owner_title:title ~page_area:true
-                     ~show_hidden:!S.show_hidden panel panel_rows hidden;
+                     ~show_hidden:!S.show_hidden
+                     ~can_toggle:(can_toggle_hidden ctx ~below_rows)
+                     panel panel_rows hidden;
                    if is_tag then
                      render_class_section ctx ~owner_title:title area
                    else
@@ -929,12 +931,13 @@ let mount_sidebar_area (area : el) =
                       |> ignore
                   | None -> ());
                  Js.Promise.resolve ())
-          |> ignore
         in
-        refresh ();
+        ignore (refresh ());
         S.register_area area (fun () ->
             if el_is_connected area || el_is_connected host then render ()
-            else S.unregister_area area))
+            else (
+              S.unregister_area area;
+              Js.Promise.resolve ())))
 
 let ensure_sidebar_areas () =
   let els =
