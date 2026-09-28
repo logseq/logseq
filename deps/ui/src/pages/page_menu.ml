@@ -122,7 +122,15 @@ let global_items () =
         Sidebar_state.open_dialog "plugins")
   ; icon_item "appearance" Strings.appearance "color-swatch" (fun () ->
         close ();
-        Sidebar_state.open_dialog "settings")
+        (* cljs :ui/toggle-appearance anchors the appearance popup to the
+           dots trigger, same as the menu itself *)
+        match Dom_ext.doc_query_selector ".toolbar-dots-btn" with
+        | Some el ->
+            let r = Dom_ext.bounding_rect el in
+            Runtime.send
+              (Action.Appearance_set
+                 (Some (Dom_ext.rect_right r, Dom_ext.rect_bottom r +. 4.)))
+        | None -> ())
   ; icon_item "recycle" Strings.recycle "trash" (fun () ->
         close ();
         Runtime.mark_nav ();

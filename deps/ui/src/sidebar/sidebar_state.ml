@@ -631,7 +631,9 @@ let on_doc_keydown st ev =
       match jstring k with
       | Some "Escape" ->
           if Signal.get_state st.open_menu <> "" then
-            Runtime.signal_set st.open_menu ""
+            Runtime.signal_set st.open_menu "";
+          if (!model_ref).Model.appearance <> None then
+            Runtime.send (Action.Appearance_set None)
       | _ -> ())
   | None -> ()
 
