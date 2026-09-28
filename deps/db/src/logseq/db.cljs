@@ -609,21 +609,23 @@
   A page, tag and property may share a name, and the same title may exist in
   different namespaces. Create must only reuse a top-level page of the
   requested type."
-  [page {:keys [class? journal?]}]
-  (boolean
-   (and page
-        (cond
-          class?
-          (and (entity-util/class? page)
-               (not (namespaced-class-child? page)))
+  [page opts]
+  (let [create-class? (:class? opts)
+        create-journal? (:journal? opts)]
+    (boolean
+     (and page
+          (cond
+            create-class?
+            (and (entity-util/class? page)
+                 (not (namespaced-class-child? page)))
 
-          journal?
-          (entity-util/journal? page)
+            create-journal?
+            (entity-util/journal? page)
 
-          :else
-          (and (or (entity-util/internal-page? page)
-                   (entity-util/journal? page))
-               (not (namespaced-page-child? page)))))))
+            :else
+            (and (or (entity-util/internal-page? page)
+                     (entity-util/journal? page))
+                 (not (namespaced-page-child? page))))))))
 
 (defn find-matching-create-page
   "Existing page that create may reuse for `title` and `types`, or nil."

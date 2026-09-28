@@ -368,11 +368,12 @@
 
 (deftest create-page-beside-existing-property-with-same-name
   (let [conn (db-test/create-conn-with-blocks
-              {:properties {:foo {:logseq.property/type :default}}})
-        property (db-test/find-page-by-title @conn "foo")
-        [_ page-uuid] (outliner-page/create! conn "foo" {})]
+              {:properties {:user.property/coexist {:logseq.property/type :default}}})
+        property (d/entity @conn :user.property/coexist)
+        [_ page-uuid] (outliner-page/create! conn (:block/title property) {})]
+    (is (ldb/property? property))
     (is (not= (:block/uuid property) page-uuid))
-    (is (ldb/property? (d/entity @conn (:db/id property))))
+    (is (ldb/property? (d/entity @conn :user.property/coexist)))
     (is (ldb/internal-page? (d/entity @conn [:block/uuid page-uuid])))))
 
 (deftest create-tag-after-namespaced-tag-is-order-independent
@@ -395,7 +396,7 @@
       (is (not= nested-uuid top-uuid))
       (is (contains? (set (map :block/title (:logseq.property.class/extends nested))) "Foo"))
       (is (not (contains? (set (map :block/title (:logseq.property.class/extends top))) "Foo")))
-      (is (= 2 (count (d/q '[:find [?e ...] :where [?e :block/title "Baz"]] @conn))))))
+      (is (= 2 (count (d/q '[:find [?e ...] :where [?e :block/title "Baz"]] @conn)))))))
 
 (deftest create-slash-formatted-journal-does-not-create-namespace-pages
   (let [conn (db-test/create-conn)
