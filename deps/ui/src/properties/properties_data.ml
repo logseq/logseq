@@ -230,6 +230,29 @@ let entity_by_uuid uuid = entity (uuid_ref uuid)
 
 let entity_by_title title = invoke "get-case-page" [ repo (); W.String title ]
 
+(* get-blocks {:render-data? true} -> block wire carrying
+   block.temp/positioned-properties *)
+let block_render_data uuid =
+  invoke "get-blocks"
+    [ repo ()
+    ; W.Array
+        [ W.Map
+            [ (W.String "id", W.Uuid uuid)
+            ; ( W.String "opts"
+              , W.Map [ (W.Keyword "render-data?", W.Bool true) ] )
+            ]
+        ]
+    ]
+  |> Js.Promise.then_ (fun w ->
+         Js.Promise.resolve
+           (match elems w with
+            | [ pair ] -> (
+                match getf pair "block" with
+                | Some res -> res
+                | None -> (
+                    match elems pair with [ _; res ] -> res | _ -> W.Nil))
+            | _ -> W.Nil))
+
 (* ---------- ops ---------- *)
 
 let apply = Sdk_util.apply_op

@@ -77,7 +77,15 @@ let view (x, y) (p : Model.page) =
       [ ( "style"
         , Printf.sprintf "position:fixed;left:%.0fpx;top:%.0fpx" x y )
       ]
-    (page_items p)
+    (page_items p
+     @ [ item "plugins" "Plugins" (fun () ->
+             Runtime.send (Action.Page_menu_set None);
+             if Dialogs_state.ready () then Dialogs_state.open_ "plugins"
+             else
+               Platform.dispatch "ls:open-dialog"
+                 (Sdk_convert.json_obj
+                    (Js.Dict.fromList [ ("name", Js.Json.string "plugins") ])))
+       ])
 
 let btn key label cls act =
   dom ~key ~tag:"button" ~style_class:cls ~text:label ~events:"click"
