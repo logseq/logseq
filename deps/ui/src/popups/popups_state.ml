@@ -60,15 +60,23 @@ type ac =
   ; editor : Dom_ext.element
   }
 
+type cm_picker = Picker_emoji | Picker_icon
+
 type cm_item =
   (* label, optional (binding, display caps) shortcut, command id —
      mirrors ui/dropdown-shortcut output; the id is what
      ls:editor-command carries *)
   | Ci_item of string * (string * string list) option * string
-  | Ci_sub of string
+  | Ci_sub of string * cm_sub
   | Ci_sep
   | Ci_colors
   | Ci_headings
+
+and cm_sub =
+  (* Sub_menu renders a dropdown-menu-sub-content of items; Sub_picker
+     opens the icon/emoji picker anchored to the trigger *)
+  | Sub_menu of cm_item list
+  | Sub_picker of cm_picker
 
 type cm =
   { cx : float
@@ -76,6 +84,8 @@ type cm =
   ; block_id : string
   ; multi : bool
   ; entries : cm_item list
+  ; sub_open : int (* index into entries, -1 = none *)
+  ; sub_xy : float * float
   }
 
 type pv =
@@ -1209,8 +1219,8 @@ let block_entries () =
   [ Ci_colors; Ci_headings; Ci_sep
   ; Ci_item (U.t "sidebar.right/open", Some ("shift+click", [ "\u{21e7}"; "Click" ]), "open-in-sidebar")
   ; Ci_item (U.t "block.comments/add-comment", None, "add-comment")
-  ; Ci_sub (U.t "command.editor/add-reaction")
-  ; Ci_sub (U.t "context-menu/set-icon")
+  ; Ci_sub (U.t "command.editor/add-reaction", Sub_picker Picker_emoji)
+  ; Ci_sub (U.t "context-menu/set-icon", Sub_picker Picker_icon)
   ; Ci_sep
   ; Ci_item (U.t "block/copy-ref", None, "copy-ref")
   ; Ci_item (U.t "export/copy-or-export-as", None, "copy-export-as")
@@ -1228,25 +1238,75 @@ let block_entries () =
 (* mirrors content.cljs custom-context-menu-content (multi-select) *)
 let multi_entries () =
   [ Ci_colors; Ci_headings
-  ; Ci_sub (U.t "context-menu/set-icon")
+  ; Ci_sub (U.t "context-menu/set-icon", Sub_picker Picker_icon)
   ; Ci_sep
   ; Ci_item (U.t "editor/cut", Some ("meta+x", [ "\u{2318}"; "X" ]), "cut")
   ; Ci_item (U.t "editor/delete-selection", Some ("delete", [ "Delete" ]), "delete")
   ; Ci_item (U.t "ui/copy", Some ("meta+c", [ "\u{2318}"; "C" ]), "copy")
   ; Ci_item (U.t "export/copy-or-export-as", None, "copy-export-as")
   ; Ci_item (U.t "block/copy-ref", None, "copy-ref")  ; Ci_sep
+  ; Ci_item (U.t "context-menu/make-a-flashcard", None, "make-flashcard")
+  ; Ci_item (U.t "block.comments/add-comment", None, "add-comment")
   ; Ci_item (U.t "context-menu/toggle-number-list", None, "toggle-numbered-list")
-  ; Ci_item (U.t "editor/cycle-todo", None, "cycle-todo")
+  ; Ci_item (U.t "editor/cycle-todo", Some ("meta+enter", [ "\u{2318}"; "\u{21b5}" ]), "cycle-todo")
   ; Ci_sep
   ; Ci_item (U.t "editor/expand-block-children", Some ("meta+down", [ "\u{2318}"; "\u{2193}" ]), "expand-children")
   ; Ci_item (U.t "editor/collapse-block-children", Some ("meta+up", [ "\u{2318}"; "\u{2191}" ]), "collapse-children")
   ]
 ;;
 
+(* cljs state/developer-mode? — storage holds raw "true" (ours) or a
+   JSON-quoted "\"true\"" (cljs storage) *)
+let dev_mode () =
+  match Platform.local_storage_get "developer-mode" with
+  | Some "true" | Some "\"true\"" -> true
+  | _ -> false
+
+(* cljs adds a Developer tools submenu to the block context menu in
+   developer-mode (content.cljs block-context-menu-content) *)
+let dev_entries () =
+  if dev_mode () then
+    [ Ci_sep
+    ; Ci_sub
+        ( U.t "context-menu/developer-tools"
+        , Sub_menu
+            [ Ci_item ("(Dev) Show block data", None, "dev/show-block-data")
+            ; Ci_item ("(Dev) Show block AST", None, "dev/show-block-ast") ] )
+    ]
+  else []
+
 let open_cm t ~x ~y ~block_id ~multi =
-  let entries = if multi then multi_entries () else block_entries () in
+  let entries =
+    (if multi then multi_entries () else block_entries ()) @ dev_entries ()
+  in
   close_ac t;
-  set_cm t (Some { cx = x; cy = y; block_id; multi; entries })
+  set_cm t
+    (Some
+       { cx = x; cy = y; block_id; multi; entries; sub_open = -1
+       ; sub_xy = (0., 0.) })
+;;
+
+let open_cm_sub t ~index ~x ~y =
+  match (get t).cm with
+  | Some cm when cm.sub_open <> index ->
+      set_cm t (Some { cm with sub_open = index; sub_xy = (x, y) })
+  | _ -> ()
+;;
+
+let close_cm_sub t =
+  match (get t).cm with
+  | Some cm when cm.sub_open <> -1 ->
+      set_cm t (Some { cm with sub_open = -1 })
+  | _ -> ()
+;;
+
+let cm_sub_at t index =
+  match (get t).cm with
+  | Some cm -> (
+      match List.nth_opt cm.entries index with
+      | Some (Ci_sub (_, sub)) -> Some sub
+      | _ -> None)
+  | None -> None
 ;;
 
 let run_cm_item t label =

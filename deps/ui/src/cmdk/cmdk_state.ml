@@ -738,6 +738,10 @@ let goto_page repo uuid =
                     (* invalidate in-flight route loads so their late
                        Page_loaded cannot clobber this fresh page *)
                     Router.bump_load_gen ();
+                    (* mark BEFORE the sends: Page_loaded dispatches
+                       on_sync synchronously, which takes the nav mark
+                       to push recents *)
+                    Runtime.mark_nav ();
                     Runtime.send (Action.Navigate_to (Model.Page uuid));
                     Runtime.send (Action.Page_loaded page);
                     Router.fetch_refs page;

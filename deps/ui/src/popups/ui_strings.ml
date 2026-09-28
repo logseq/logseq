@@ -53,6 +53,7 @@ let t (key : string) : string =
   | "context-menu/make-a-flashcard" -> "Make a Flashcard"
   | "context-menu/toggle-number-list" -> "Toggle number list"
   | "context-menu/set-icon" -> "Set icon"
+  | "context-menu/developer-tools" -> "Developer tools"
   | "editor/expand-block-children" -> "Expand all"
   | "editor/collapse-block-children" -> "Collapse all"
   | "editor/auto-heading" -> "Auto heading"
