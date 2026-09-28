@@ -69,7 +69,11 @@ let fetch_blocks (p : Model.page) =
     (Wire.String (repo ())) (ref_of_page p) Wire.Nil
   |> Js.Promise.then_ (fun blocks_w ->
          Js.Promise.resolve
-           { p with Model.page_blocks = Decode.blocks_of_wire blocks_w })
+           { p with
+             Model.page_blocks =
+               Decode.view_blocks ~library:p.page_is_library
+                 (Decode.blocks_of_wire blocks_w)
+           })
 
 let fetch_refs (p : Model.page) =
   match p.Model.page_db_id with
@@ -199,6 +203,7 @@ let load_block_zoom uuid =
                                    ; page_db_id = b.block_db_id
                                    ; page_is_tag = false
                                    ; page_journal_day = None
+                                   ; page_is_library = false
                                    ; page_tags = b.Model.block_tags
                                    ; page_blocks = bs
                                    });

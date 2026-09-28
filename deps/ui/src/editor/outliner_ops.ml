@@ -8,12 +8,42 @@ module S = Editor_state
 let kw k v = (Wire.Keyword k, v)
 let str k v = (Wire.String k, v)
 
-let block_map ?title uuid =
+(* cljs page-name-sanity-lc, cheap half: boundary slashes off + lowercase.
+   The worker recomputes the full sanity on save (outliner_core page_
+   branch), so this only needs to be close enough to key the insert. *)
+let page_name_sanity_lc (s : string) : string =
+  let s = String.trim s in
+  let n = String.length s in
+  let i = ref 0 in
+  while !i < n && String.unsafe_get s !i = '/' do
+    incr i
+  done;
+  let j = ref (n - 1) in
+  while !j >= !i && String.unsafe_get s !j = '/' do
+    decr j
+  done;
+  (if !j >= !i then String.sub s !i (!j - !i + 1) else "")
+  |> String.lowercase_ascii
+
+(* ~page:true page-ifies the new block (cljs outliner-insert-block!
+   library branch): tags #{logseq.class/Page} + block/name; the worker's
+   insert tx then dissocs block/page so the block lives only under
+   block/parent. *)
+let block_map ?title ?(page = false) uuid =
   Wire.Map
     ([ str "block/uuid" (Wire.Uuid uuid) ]
     @ (match title with
       | Some t -> [ str "block/title" (Wire.String t) ]
-      | None -> []))
+      | None -> [])
+    @
+    if page then
+      [ ( Wire.String "block/tags"
+        , Wire.Set [ Wire.Keyword "logseq.class/Page" ] )
+      ; ( Wire.String "block/name"
+        , Wire.String (page_name_sanity_lc (Option.value title ~default:""))
+        )
+      ]
+    else [])
 
 (* op entries are [:name [args]] — the args live in a nested seq; the
    worker's op_of_entry only accepts that shape (outliner_op.ml) *)
@@ -328,7 +358,10 @@ let refresh_page () : unit Js.Promise.t =
       blocks_p
       |> Js.Promise.then_ (fun blocks_w ->
              set_collapsed (collect_collapsed S.String_set.empty blocks_w);
-             let blocks = Decode.blocks_of_wire blocks_w in
+             let blocks =
+               Decode.view_blocks ~library:page.Model.page_is_library
+                 (Decode.blocks_of_wire blocks_w)
+             in
              resolve_block_tags blocks
              |> Js.Promise.then_ (fun blocks ->
                     let page = { page with Model.page_blocks = blocks } in

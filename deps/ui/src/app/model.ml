@@ -20,6 +20,11 @@ type block =
   ; block_tags : string list (* resolved tag titles, for .block-tags *)
   ; block_children : block list
   ; block_page_name : string option (* containing page, for ref rows *)
+  ; block_is_page : bool
+    (* page-typed outline child (carries block/name; cljs entity/page?) *)
+  ; block_default_collapsed : bool
+    (* page children render collapsed outside the Library page
+       (cljs block-default-collapsed?) — set per containing page view *)
   }
 
 type page =
@@ -28,6 +33,7 @@ type page =
   ; page_db_id : int option
   ; page_is_tag : bool
   ; page_journal_day : int option
+  ; page_is_library : bool
   ; page_tags : string list
   ; page_blocks : block list
   }
