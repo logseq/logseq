@@ -81,6 +81,7 @@ type cm =
 type pv =
   { pv_x : float
   ; pv_y : float
+  ; pv_title : string
   ; pv_blocks : Model.block list
   }
 
@@ -128,15 +129,26 @@ let close_ac t = set_ac t None
 let close_cm t = set_cm t None
 let close_pv t = set_pv t None
 
-(* blocks of the page a .preview-ref-link points at — same bare
+(* title + blocks of the page a .preview-ref-link points at — same bare
    uuid/name ref as sidebar_state.fetch_blocks *)
-let fetch_preview_blocks repo name : Model.block list Js.Promise.t =
-  Runtime.invoke3 "thread-api/get-page-blocks-tree" (Wire.String repo)
-    (if Sdk_util.is_uuid_string name then Wire.Uuid name
-     else Wire.String name)
-    Wire.Nil
-  |> Js.Promise.then_ (fun w ->
-         Js.Promise.resolve (Decode.blocks_of_wire w))
+let page_ref_of_name name =
+  if Sdk_util.is_uuid_string name then Wire.Uuid name
+  else Wire.String name
+
+let fetch_preview repo name : (string * Model.block list) Js.Promise.t =
+  Runtime.invoke2 "thread-api/get-page-route-info" (Wire.String repo)
+    (page_ref_of_name name)
+  |> Js.Promise.then_ (fun info ->
+         let title =
+           match Decode.page_of_summary info with
+           | Some p -> p.Model.page_title
+           | None -> name
+         in
+         Runtime.invoke3 "thread-api/get-page-blocks-tree"
+           (Wire.String repo) (page_ref_of_name name) Wire.Nil
+         |> Js.Promise.then_ (fun w ->
+                Js.Promise.resolve
+                  (title, Decode.blocks_of_wire w)))
 
 let ac_class_of_kind = function
   | Slash -> "cp__commands-slash"
