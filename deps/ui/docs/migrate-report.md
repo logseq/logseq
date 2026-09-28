@@ -215,6 +215,33 @@ that the e2e contract doesn't spell out directly. Newest area last.
   closes the dialog. `Object.fromEntries` needs an OCaml
   `(string * Js.Json.t) array` via `%identity`, never a list (lists are not
   JS-iterable → "object is not iterable").
+- **Settings page/dialog**: `#/settings` (`Model.Settings` in `router.ml`)
+  and the header-dots `settings` dialog share `settings_page.inner ~modal`
+  (`#settings.cp__settings-main > .cp__settings-inner > aside + article`).
+  cljs `settings-effect` mirrors `body[data-settings-tab]` while a settings
+  panel is mounted — `Settings_state.activate/deactivate` runs on inner
+  mount, on route change away, and from `Dialogs_state.set` when the
+  `settings` name leaves the dialog stack.
+- **Dialog label attr**: `.ui__dialog-content` gets `label` from
+  `dialogs_view.label_of` (settings→`app-settings`, plugins→
+  `plugins-dashboard`); `app-settings` is what gives the modal its
+  `w-auto md:max-w-5xl overflow-hidden` sizing in shui.css.
+- **Settings rows**: `(i)` hint icons are sequential children of the
+  `<label>` (`span.flex.px-2 > svg.info` + `data-base-ui-tooltip-trigger`),
+  not siblings of the switch — `toggle_row`'s `~label_extra`. `svg.info`
+  is cljs `svg/info` flattened (no `<g>` wrapper).
+- **Shortcut `<kbd>` labels**: cljs `print-shortcut-key` semantics in
+  `settings_page.print_key` (letters uppercased; mod/cmd→⌘; shift→⇧;
+  alt/opt→⌥; return→⎵; delete→⌫…). `kbd_seq` keys kbd children by index
+  — repeated letters (`t t`) otherwise trip `invalid_arg "duplicate
+  reload key among siblings"`.
+- **`style_class_signal` overwrites the whole `class` attribute** — the
+  base `style_class` is not merged; signals must emit the full class
+  string (`"settings-menu-item[ active]"`).
+- **Boot storage env** (`boot.ml apply_storage_env`): `preferred-language`,
+  `system-theme?` (→ `prefers-color-scheme` else stored `theme`),
+  `radix-color` (strip leading `:` → `data-color`), `editor-font`
+  (EDN → `data-font`/`data-font-global`), `wide-mode` → `ls-wide-mode`.
 
 ---
 

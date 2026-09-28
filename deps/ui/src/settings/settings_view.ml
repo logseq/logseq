@@ -1,7 +1,7 @@
-(* Settings dialog body: theme mode picker (.cp__theme-modes-options)
-   and language select (.ui__select-trigger with the .ui__select-icon
-   svg chevron). Mirrors components/settings.cljs theme-modes-row +
-   language-row and state/use-theme-mode!. *)
+(* Settings theme/language helpers shared by the settings page, dialog and
+   boot. Mirrors components/settings.cljs theme-modes-row + language-row,
+   state/use-theme-mode! and theme.cljs DOM effects.
+   Storage keys use cljs storage.cljs `(name key)` semantics. *)
 
 open Lui_elements
 
@@ -29,30 +29,46 @@ let quoted v = "\"" ^ v ^ "\""
 
 let current_mode () =
   let system =
-    match Platform.local_storage_get "ui/system-theme?" with
+    match Platform.local_storage_get "system-theme?" with
     | Some v -> unquote v = "true"
     | None -> false
   in
   if system then "system"
   else
-    match Platform.local_storage_get "ui/theme" with
+    match Platform.local_storage_get "theme" with
     | Some v -> (
         match unquote v with "dark" -> "dark" | _ -> "light")
     | None -> "light"
+
+(* theme.cljs container effect: dataset.theme + .dark class on
+   documentElement, dark-theme vs white-theme light-theme on body *)
+let apply_theme_dom effective =
+  Platform.document_set_data "theme" effective;
+  if effective = "dark" then (
+    Platform.root_add_class "dark";
+    Platform.body_add_class "dark-theme";
+    Platform.body_rm_class "light-theme";
+    Platform.body_rm_class "white-theme")
+  else (
+    Platform.root_rm_class "dark";
+    Platform.body_rm_class "dark-theme";
+    Platform.body_add_class "white-theme";
+    Platform.body_add_class "light-theme")
 
 (* state/use-theme-mode!: set dataset.theme + storage; system follows
    prefers-color-scheme *)
 let use_mode mode =
   let effective =
     if mode = "system" then (
-      Platform.local_storage_set "ui/system-theme?" "true";
+      Platform.local_storage_set "system-theme?" "true";
       if Browser_ui.prefers_dark () then "dark" else "light")
     else (
-      Platform.local_storage_set "ui/system-theme?" "false";
+      Platform.local_storage_set "system-theme?" "false";
       mode)
   in
-  Platform.document_set_data "theme" effective;
-  Platform.local_storage_set "ui/theme" (quoted mode)
+  (* cljs stores the *effective* mode in :ui/theme even under system *)
+  apply_theme_dom effective;
+  Platform.local_storage_set "theme" (quoted effective)
 
 let current_lang () =
   match Platform.local_storage_get "preferred-language" with
@@ -63,6 +79,11 @@ let set_language code =
   Platform.local_storage_set "preferred-language" (quoted code);
   Platform.document_set_lang code
 
+let lang_label_for code =
+  match List.find_opt (fun (k, _) -> k = code) languages with
+  | Some (_, l) -> l
+  | None -> code
+
 let lang_dropdown_on : Webapi.Dom.Element.t option ref = ref None
 
 let close_lang_dropdown () =
@@ -72,7 +93,7 @@ let close_lang_dropdown () =
       lang_dropdown_on := None
   | None -> ()
 
-let open_lang_dropdown anchor trigger_text on_pick =
+let open_text_dropdown anchor options on_pick =
   close_lang_dropdown ();
   let menu = Browser_ui.create "div" in
   Browser_ui.set_class menu
@@ -83,23 +104,28 @@ let open_lang_dropdown anchor trigger_text on_pick =
     (Printf.sprintf "position:fixed;left:%.0fpx;top:%.0fpx;z-index:99999"
        (Browser_ui.rect_left r) (Browser_ui.rect_bottom r));
   List.iter
-    (fun (code, label) ->
+    (fun opt ->
       let it = Browser_ui.create "div" in
       Browser_ui.set_class it
         "ui__select-item relative flex w-full cursor-pointer \
          select-none items-center rounded-sm py-1.5 pl-8 pr-2 text-sm";
-      Browser_ui.set_text it label;
+      Browser_ui.set_text it opt;
       Browser_ui.add_listener it "click" (fun _ ->
-          set_language code;
-          on_pick label;
+          on_pick opt;
           close_lang_dropdown ());
       Browser_ui.append menu it)
-    languages;
+    options;
   (match Browser_ui.qs "body" with
    | Some b -> Browser_ui.append b menu
    | None -> ());
-  lang_dropdown_on := Some menu;
-  ignore trigger_text
+  lang_dropdown_on := Some menu
+
+let open_lang_dropdown anchor on_pick =
+  open_text_dropdown anchor (List.map snd languages) (fun label ->
+      (match List.find_opt (fun (_, l) -> l = label) languages with
+       | Some (code, _) -> set_language code
+       | None -> ());
+      on_pick label)
 
 let theme_item ~st mode label =
   dom ~key:("tm-" ^ mode) ~tag:"li"
@@ -118,15 +144,55 @@ let theme_item ~st mode label =
     ; dom ~key:("tms-" ^ mode) ~tag:"strong" ~text:label []
     ]
 
+(* ul.cp__theme-modes-options — needs a signal state holding the active mode *)
+let theme_modes_ul ~st =
+  dom ~key:"tm" ~tag:"ul" ~style_class:"cp__theme-modes-options"
+    [ theme_item ~st "light" T.theme_light
+    ; theme_item ~st "dark" T.theme_dark
+    ; theme_item ~st "system" T.theme_system
+    ]
+
+(* shui select trigger + chevron; opening the language popover like cljs *)
+let lang_trigger ~key ~h_cls ~st ~anchor_sel =
+  dom ~key ~tag:"button"
+    ~style_class:
+      ("ui__select-trigger flex " ^ h_cls
+     ^ " items-center justify-between rounded-md border border-input \
+        bg-background px-3 py-2 text-sm")
+    ~attrs:[ ("type", "button") ]
+    ~events:"click"
+    ~on_dom_event:(fun n _ ->
+      if n = "click" then
+        match Browser_ui.qs anchor_sel with
+        | Some el ->
+            open_lang_dropdown el (fun l ->
+                Signal.set st l;
+                Runtime.flush ())
+        | None -> ())
+    [ dom ~key:(key ^ "v") ~tag:"span"
+        ~text_signal:
+          (Signal.map (fun l -> Lui_protocol.StringValue l) (Signal.value st))
+        []
+    ; dom ~key:(key ^ "i") ~tag:"span"
+        ~style_class:"ui__select-icon shrink-0 text-muted-foreground"
+        [ dom ~key:(key ^ "svg") ~tag:"svg" ~style_class:"h-4 w-4"
+            ~attrs:
+              [ ("viewBox", "0 0 24 24"); ("fill", "none")
+              ; ("stroke", "currentColor"); ("stroke-width", "2")
+              ]
+            [ dom ~key:(key ^ "p") ~tag:"path"
+                ~attrs:[ ("d", "m6 9 6 6 6-6") ] []
+            ]
+        ]
+    ]
+
+(* legacy simple body — kept for non-page callers; the settings dialog now
+   renders the full settings panel via Settings_page.modal_body *)
 let body (_ms : Model.t Signal.signal) : t =
  fun ctx parent ->
   let mode = Signal.state ctx.ui_scheduler (current_mode ()) in
   let lang_label =
-    Signal.state ctx.ui_scheduler
-      (let c = current_lang () in
-       match List.find_opt (fun (k, _) -> k = c) languages with
-       | Some (_, l) -> l
-       | None -> c)
+    Signal.state ctx.ui_scheduler (lang_label_for (current_lang ()))
   in
   let node =
     dom ~key:"settings" ~style_class:"cp__settings flex flex-col gap-4"
@@ -136,53 +202,12 @@ let body (_ms : Model.t Signal.signal) : t =
              tracking-tight" ~text:T.settings_title []
       ; dom ~key:"st-theme" ~style_class:"flex flex-col gap-2"
           [ dom ~key:"st-tl" ~tag:"strong" ~text:T.theme_label []
-          ; dom ~key:"st-tm" ~tag:"ul"
-              ~style_class:"cp__theme-modes-options"
-              [ theme_item ~st:mode "light" T.theme_light
-              ; theme_item ~st:mode "dark" T.theme_dark
-              ; theme_item ~st:mode "system" T.theme_system
-              ]
+          ; theme_modes_ul ~st:mode
           ]
       ; dom ~key:"st-lang" ~style_class:"flex flex-col gap-2"
           [ dom ~key:"st-ll" ~tag:"strong" ~text:T.language_label []
-          ; dom ~key:"st-ls" ~tag:"button"
-              ~style_class:
-                "ui__select-trigger flex h-10 w-64 items-center \
-                 justify-between rounded-md border border-input \
-                 bg-background px-3 py-2 text-sm"
-              ~attrs:[ ("type", "button") ]
-              ~events:"click"
-              ~on_dom_event:(fun n _ ->
-                if n = "click" then
-                  match Browser_ui.qs ".ui__select-trigger" with
-                  | Some el ->
-                      open_lang_dropdown el
-                        (Signal.get_state lang_label)
-                        (fun l ->
-                          Signal.set lang_label l;
-                          Runtime.flush ())
-                  | None -> ())
-              [ dom ~key:"lsv" ~tag:"span"
-                  ~text_signal:
-                    (Signal.map
-                       (fun l -> Lui_protocol.StringValue l)
-                       (Signal.value lang_label))
-                  []
-              ; dom ~key:"lsi" ~tag:"span"
-                  ~style_class:
-                    "ui__select-icon shrink-0 text-muted-foreground"
-                  [ dom ~key:"lsvg" ~tag:"svg"
-                      ~style_class:"h-4 w-4"
-                      ~attrs:
-                        [ ("viewBox", "0 0 24 24"); ("fill", "none")
-                        ; ("stroke", "currentColor")
-                        ; ("stroke-width", "2")
-                        ]
-                      [ dom ~key:"lsp" ~tag:"path"
-                          ~attrs:[ ("d", "m6 9 6 6 6-6") ] []
-                      ]
-                  ]
-              ]
+          ; lang_trigger ~key:"st-ls" ~h_cls:"h-10 w-64" ~st:lang_label
+              ~anchor_sel:".ui__select-trigger"
           ]
       ]
   in

@@ -32,7 +32,11 @@ external local_storage_get : string -> string option = "getItem"
 external local_storage_set : string -> string -> unit = "setItem"
   [@@mel.scope "localStorage"]
 
+external local_storage_remove : string -> unit = "removeItem"
+  [@@mel.scope "localStorage"]
+
 external document_element : Js.Json.t = "document.documentElement"
+external document_body : Js.Json.t = "document.body"
 
 external set_lang : Js.Json.t -> string -> unit = "lang" [@@mel.set]
 
@@ -45,6 +49,24 @@ external dataset_set :
 
 let document_set_data name value =
   dataset_set (dataset_of document_element) name value
+
+let body_set_data name value =
+  dataset_set (dataset_of document_body) name value
+
+let body_rm_data : string -> unit =
+  [%mel.raw "function (k) { delete document.body.dataset[k] }"]
+
+let root_add_class : string -> unit =
+  [%mel.raw "function (c) { document.documentElement.classList.add(c) }"]
+
+let root_rm_class : string -> unit =
+  [%mel.raw "function (c) { document.documentElement.classList.remove(c) }"]
+
+let body_add_class : string -> unit =
+  [%mel.raw "function (c) { document.body.classList.add(c) }"]
+
+let body_rm_class : string -> unit =
+  [%mel.raw "function (c) { document.body.classList.remove(c) }"]
 
 external console_log : 'a -> unit = "log" [@@mel.scope "console"]
 external console_error : 'a -> unit = "error" [@@mel.scope "console"]
