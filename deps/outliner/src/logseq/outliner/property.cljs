@@ -948,10 +948,13 @@
         (outliner-validate/validate-page-title-characters k-name {:node {:db/ident db-ident'}})
         (outliner-validate/validate-property-title k-name {:node {:db/ident db-ident'}})
         (let [db-id (:db/id properties)
+              page (when (integer? db-id)
+                     (d/entity db db-id))
+              _ (outliner-validate/validate-page-to-property-conversion page)
               opts' (cond-> {:title k-name
                              :properties properties}
                       (integer? db-id)
-                      (assoc :block-uuid (:block/uuid (d/entity db db-id))))
+                      (assoc :block-uuid (:block/uuid page)))
               tx-data (concat
                        [(sqlite-util/build-new-property db-ident' schema opts')]
                        ;; Convert page to property
