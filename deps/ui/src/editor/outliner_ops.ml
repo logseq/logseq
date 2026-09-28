@@ -410,6 +410,7 @@ let fetch_unlinked_refs (p : Model.page) =
   | _ -> ()
 
 let refresh_page () : unit Js.Promise.t =
+  let route_at_start = !Runtime.current_route in
   match (!Runtime.current_repo, !Runtime.current_page) with
   | Some repo, Some page -> (
       fetch_unlinked_refs page;
@@ -452,7 +453,13 @@ let refresh_page () : unit Js.Promise.t =
                                 Js.Promise.resolve page
                             | _ -> resolve_page_tags repo page)
                            |> Js.Promise.then_ (fun page ->
-                                  Runtime.send (Action.Page_loaded page);
+                                  (* the user may have navigated while the
+                                     refetch was in-flight — never
+                                     overwrite the new route's page *)
+                                  if !Runtime.current_route = route_at_start
+                                  then
+                                    Runtime.send
+                                      (Action.Page_loaded page);
                                   Js.Promise.resolve ())))))
   | Some _, None ->
       (* journals / other non-page views reload through the router hook *)

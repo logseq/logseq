@@ -220,7 +220,7 @@ let navigate_to_page target =
     if Sdk_util.is_uuid_string target then target
     else encode_uri_component target
   in
-  Platform.set_location_hash ("#/page/" ^ target);
+  Platform.set_location_hash (Runtime.nav_hash ("#/page/" ^ target));
   Platform.dispatch "ls:navigate" Js.Json.null
 
 (* Ref value for get-page-route-info / get-page-blocks-tree: a bare uuid
@@ -242,8 +242,10 @@ let fetch_blocks (p : Model.page) =
         | None -> p.Model.page_title))
     Wire.Nil
   |> Js.Promise.then_ (fun blocks_w ->
-         Js.Promise.resolve
-           { p with Model.page_blocks = Decode.blocks_of_wire blocks_w })
+         Outliner_ops.resolve_block_tags (Decode.blocks_of_wire blocks_w)
+         |> Js.Promise.then_ (fun blocks ->
+                Js.Promise.resolve
+                  { p with Model.page_blocks = blocks }))
 
 let open_dialog name =
   let o = Js.Dict.empty () in

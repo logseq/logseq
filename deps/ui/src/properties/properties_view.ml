@@ -12,12 +12,11 @@
      mount, same pattern as blocks/add_button.ml);
    - document keydown handling: Escape pops overlays, mod+p /
      Ctrl+Alt+P and `;;` open the .ls-property-dialog, `p` then `a`
-     toggles hidden properties.
-   `/` and `#` popovers inside block editors are owned by
-   popups/popups_state.ml (the cljs-faithful autocomplete). *)
+     toggles hidden properties. `/` and `#` popovers inside block
+     editors are owned by popups/popups_state.ml (the cljs-faithful
+     autocomplete). *)
 
 open Editor_dom
-module D = Properties_data
 module S = Properties_state
 module Area = Properties_area
 module Dialog = Properties_dialog

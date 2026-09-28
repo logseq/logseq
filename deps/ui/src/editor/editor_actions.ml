@@ -842,7 +842,7 @@ let pending_zoom : string option ref = ref None
 
 let zoom_to uuid =
   pending_zoom := Some uuid;
-  Platform.set_location_hash ("#/block/" ^ uuid)
+  Platform.set_location_hash (Runtime.nav_hash ("#/block/" ^ uuid))
 
 let consume_pending_zoom () =
   let z = !pending_zoom in

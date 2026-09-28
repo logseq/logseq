@@ -514,7 +514,7 @@ let menu_body m =
   el_append_child body
     (menuitem (I18n.t "property/go-to-this-property") (fun () ->
          (match prop_uuid m with
-          | Some u -> Platform.set_location_hash ("#/page/" ^ u)
+          | Some u -> Platform.set_location_hash (Runtime.nav_hash ("#/page/" ^ u))
           | None -> ());
          S.close_overlays ()));
   el_append_child body
