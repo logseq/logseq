@@ -24,6 +24,19 @@ let item key label on_click =
       if name = "click" then on_click ())
     [ dom ~key:(key ^ "-l") ~text:label [] ]
 
+(* global items appended to every page menu (cljs header.cljs dots
+   menu): Settings / Export graph / Import / Login *)
+let global_items () =
+  let dialog_item key label dialog =
+    item key label (fun () ->
+        Runtime.send (Action.Page_menu_set None);
+        Sidebar_state.open_dialog dialog)
+  in
+  [ dialog_item "settings" Strings.settings "settings"
+  ; dialog_item "export" Strings.export_graph "export-graph"
+  ; dialog_item "import" Strings.import "import"
+  ; dialog_item "login" Strings.login "login" ]
+
 (* items for the current route page; convert only for non-tag pages.
    Recycle navigates to the builtin "Recycle" page by name — cljs
    header.cljs shows it whenever the page identity resolves. *)
@@ -43,34 +56,25 @@ let page_items (p : Model.page) =
         Runtime.flush ();
         Platform.set_location_hash "#/page/Recycle")
   in
-  (* cljs header.cljs dots menu also carries Import -> #/import; our
-     importer renders as a dialog body (.importer) *)
-  let import_ =
-    item "import" Strings.import_title (fun () ->
-        Runtime.send (Action.Page_menu_set None);
-        Runtime.flush ();
-        Dialogs_state.open_ "import")
+  let own =
+    match p.page_is_tag, p.page_db_id with
+    | false, Some id ->
+        [ del
+        ; item "cvt" Strings.convert_to_tag (fun () ->
+              Runtime.send (Action.Page_menu_set None);
+              ignore (Page_ops.convert_to_tag id))
+        ]
+    | true, Some id ->
+        [ del
+        ; item "cvt2p" Strings.convert_tag_to_page (fun () ->
+              Runtime.send
+                (Action.Confirm_set
+                   (Some (Model.Confirm_convert_tag_to_page id)));
+              Runtime.flush ())
+        ]
+    | _ -> [ del ]
   in
-  match p.page_is_tag, p.page_db_id with
-  | false, Some id ->
-      [ del
-      ; item "cvt" Strings.convert_to_tag (fun () ->
-            Runtime.send (Action.Page_menu_set None);
-            ignore (Page_ops.convert_to_tag id))
-      ; recycle
-      ; import_
-      ]
-  | true, Some id ->
-      [ del
-      ; item "cvt2p" Strings.convert_tag_to_page (fun () ->
-            Runtime.send
-              (Action.Confirm_set
-                 (Some (Model.Confirm_convert_tag_to_page id)));
-            Runtime.flush ())
-      ; recycle
-      ; import_
-      ]
-  | _ -> [ del; recycle; import_ ]
+  own @ (recycle :: global_items ())
 
 let view (x, y) (p : Model.page) =
   dom ~key:"page-menu" ~tag:"div"
@@ -81,7 +85,15 @@ let view (x, y) (p : Model.page) =
       [ ( "style"
         , Printf.sprintf "position:fixed;left:%.0fpx;top:%.0fpx" x y )
       ]
-    (page_items p)
+    (page_items p
+     @ [ item "plugins" "Plugins" (fun () ->
+             Runtime.send (Action.Page_menu_set None);
+             if Dialogs_state.ready () then Dialogs_state.open_ "plugins"
+             else
+               Platform.dispatch "ls:open-dialog"
+                 (Sdk_convert.json_obj
+                    (Js.Dict.fromList [ ("name", Js.Json.string "plugins") ])))
+       ])
 
 let btn key label cls act =
   dom ~key ~tag:"button" ~style_class:cls ~text:label ~events:"click"
@@ -100,6 +112,10 @@ let confirm_view (c : Model.confirm) =
         ( Strings.convert_tag_to_page
         , Strings.convert_tag_to_page_desc
         , fun () -> ignore (Page_ops.convert_tag_to_page id) )
+    | Model.Confirm_delete_asset u ->
+        ( Strings.asset_confirm_delete
+        , ""
+        , fun () -> Asset_dom.delete_asset u )
   in
   let close () =
     Runtime.send (Action.Confirm_set None);

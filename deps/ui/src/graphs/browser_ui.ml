@@ -20,6 +20,12 @@ external set_attr : E.t -> string -> string -> unit = "setAttribute"
 external set_text : E.t -> string -> unit = "textContent" [@@mel.set]
 external set_class : E.t -> string -> unit = "className" [@@mel.set]
 
+let add_class : E.t -> string -> unit =
+  [%mel.raw "function (e, c) { e.classList.add(c) }"]
+
+let rm_class : E.t -> string -> unit =
+  [%mel.raw "function (e, c) { e.classList.remove(c) }"]
+
 external add_listener : E.t -> string -> (Js.Json.t -> unit) -> unit =
   "addEventListener" [@@mel.send]
 
