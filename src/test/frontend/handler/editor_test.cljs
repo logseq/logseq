@@ -1,5 +1,6 @@
 (ns frontend.handler.editor-test
-  (:require [clojure.test :refer [async deftest is testing use-fixtures]]
+  (:require [clojure.string :as string]
+            [clojure.test :refer [async deftest is testing use-fixtures]]
             [datascript.core :as d]
             [dommy.core :as dom]
             [frontend.commands :as commands]
@@ -1281,6 +1282,47 @@
       "Pending tag search should not show a create-new result before existing classes load.")
   (is (seq (#'editor-component/matched-pages-with-new-page [] true "Missing tag" nil))
       "Resolved empty tag search can still offer a create-new result."))
+
+(deftest page-search-offers-new-page-beside-nested-or-other-kind
+  (let [offers-create? (fn [pages q]
+                         (some (fn [item]
+                                 (and (nil? (:db/id item))
+                                      (string? (:block/title item))
+                                      (string/includes? (:block/title item) q)))
+                               pages))]
+    (is (offers-create? (#'editor-component/matched-pages-with-new-page
+                         [] false "Bar"
+                         {:block/title "Bar"
+                          :block/tags [{:db/ident :logseq.class/Page}]
+                          :block/parent {:block/title "Foo"}})
+                        "Bar")
+        "Nested Foo/Bar still offers New page Bar")
+    (is (offers-create? (#'editor-component/matched-pages-with-new-page
+                         [] false "foo"
+                         {:block/title "Foo"
+                          :block/tags [{:db/ident :logseq.class/Tag}]})
+                        "foo")
+        "An existing tag does not hide New page")
+    (is (offers-create? (#'editor-component/matched-pages-with-new-page
+                         [] false "foo"
+                         {:block/title "foo"
+                          :block/tags [{:db/ident :logseq.class/Property}]})
+                        "foo")
+        "An existing property does not hide New page")
+    (is (not (offers-create? (#'editor-component/matched-pages-with-new-page
+                              [] false "Bar"
+                              {:block/title "Bar"
+                               :block/tags [{:db/ident :logseq.class/Page}]})
+                             "Bar"))
+        "A top-level page does not offer New page")
+    (is (offers-create? (#'editor-component/matched-pages-with-new-page
+                         [] true "Baz"
+                         {:block/title "Baz"
+                          :block/tags [{:db/ident :logseq.class/Tag}]
+                          :logseq.property.class/extends [{:block/title "Foo"
+                                                           :db/ident :user.class/Foo}]})
+                        "Baz")
+        "A namespaced tag still offers New tag")))
 
 (defn- default-keyup-result
   [{:keys [value cursor-pos key code action is-processed?]

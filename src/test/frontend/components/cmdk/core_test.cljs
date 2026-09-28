@@ -222,3 +222,43 @@
            (fn [error]
              (is false (str error))))
           (p/finally done)))))
+
+(deftest create-target-exists-ignores-nested-and-other-kinds
+  (is (false? (cmdk/create-target-exists?
+               "Bar"
+               [{:page? true
+                 :block.temp/original-title "Bar"
+                 :block/tags [{:db/ident :logseq.class/Page}]
+                 :block/parent {:block/title "Foo"}}]))
+      "Nested Foo/Bar does not hide Create page Bar")
+  (is (false? (cmdk/create-target-exists?
+               "foo"
+               [{:page? true
+                 :block.temp/original-title "Foo"
+                 :block/tags [{:db/ident :logseq.class/Tag}]}]))
+      "A tag does not hide Create page")
+  (is (false? (cmdk/create-target-exists?
+               "foo"
+               [{:page? true
+                 :block.temp/original-title "foo"
+                 :block/tags [{:db/ident :logseq.class/Property}]}]))
+      "A property does not hide Create page")
+  (is (true? (cmdk/create-target-exists?
+              "Bar"
+              [{:page? true
+                :block.temp/original-title "Bar"
+                :block/tags [{:db/ident :logseq.class/Page}]}]))
+      "A top-level page hides Create page")
+  (is (false? (cmdk/create-target-exists?
+               "#Baz"
+               [{:page? true
+                 :block.temp/original-title "Baz"
+                 :block/tags [{:db/ident :logseq.class/Tag}]
+                 :block.temp/namespace-child? true}]))
+      "A namespaced tag does not hide Create tag")
+  (is (true? (cmdk/create-target-exists?
+              "#Foo"
+              [{:page? true
+                :block.temp/original-title "Foo"
+                :block/tags [{:db/ident :logseq.class/Tag}]}]))
+      "A top-level tag hides Create tag"))
