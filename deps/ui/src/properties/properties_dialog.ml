@@ -165,8 +165,9 @@ and render_type_select d body name =
   let items =
     List.map
       (fun ty -> type_item d name ty)
+      (* cljs db-property-type/user-built-in-property-types order *)
       [ "default"; "number"; "date"; "datetime"; "checkbox"; "url"
-      ; "node" ]
+      ; "node"; "asset" ]
   in
   let sel, _input =
     Sel.create

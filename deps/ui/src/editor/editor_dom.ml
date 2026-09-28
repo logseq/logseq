@@ -11,6 +11,10 @@ type clipboard_data
 type mutation_observer
 type observe_opts
 
+(* identity conversion for code paths that hold elements as Js.Json.t
+   (Dom_ext.element) — same runtime value, different abstract view *)
+external el_of_json : Js.Json.t -> el = "%identity"
+
 external document_add_listener :
   string -> (ev -> unit) -> bool -> unit = "addEventListener"
   [@@mel.scope "document"]

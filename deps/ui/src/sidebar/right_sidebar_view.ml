@@ -56,21 +56,62 @@ let menu_item st label on_click =
         on_click ()))
     [ dom ~tag:"div" ~text:label [] ]
 
+(* cljs right_sidebar.cljs actions-menu-content: Close / [multi] Close
+   others / [multi] Close all / sep / Collapse / [multi] Collapse others /
+   [multi] Collapse all / sep / Expand / [multi] Expand all /
+   [page] sep + Open as page *)
 let item_menu st (it : Sidebar_state.item) =
+  let multi =
+    List.length (Signal.get_state st.Sidebar_state.items) > 1
+  in
+  let collapsed = it.Sidebar_state.collapsed in
+  (* cljs page? = type :page|:contents — block items have a page_ref
+     (breadcrumb parent) but are still :block *)
+  let page_ =
+    it.Sidebar_state.kind = "page" || it.Sidebar_state.kind = "contents"
+  in
+  let sep key = dom ~key ~tag:"hr" ~style_class:"menu-separator" [] in
   dom ~key:("imenu-" ^ it.key) ~tag:"div"
     ~attrs:
       [ ("role", "menu")
       ; ( "style"
-        , "position:fixed;top:96px;right:16px;z-index:1501;min-width:160px"
-        ) ]
+        , Printf.sprintf
+            "position:fixed;left:%.0fpx;top:%.0fpx;z-index:1501;min-width:160px"
+            (fst !Sidebar_state.im_xy) (snd !Sidebar_state.im_xy) ) ]
     ~style_class:"ui__dropdown-menu-content ui__dropdown-menu"
     (menu_item st (t "Close")
        (fun () -> Sidebar_state.remove_item st it.key)
-     :: (match it.Sidebar_state.page_ref with
-         | Some _ ->
-             [ menu_item st (t "Open as page")
-                 (fun () -> Sidebar_state.open_as_page st it) ]
-         | None -> []))
+     :: (if multi then
+           [ menu_item st (t "Close others")
+               (fun () -> Sidebar_state.remove_rest st it.key)
+           ; menu_item st (t "Close all")
+               (fun () -> Sidebar_state.clear_items st) ]
+         else [])
+     @ (if multi && not collapsed then [ sep "s1" ] else [])
+     @ (if not collapsed then
+          [ menu_item st (t "Collapse")
+              (fun () -> Sidebar_state.set_collapsed st it.key true) ]
+        else [])
+     @ (if multi then
+          [ menu_item st (t "Collapse others")
+              (fun () -> Sidebar_state.collapse_others st it.key true)
+          ; menu_item st (t "Collapse all")
+              (fun () -> Sidebar_state.collapse_all st true) ]
+        else [])
+     @ (if multi && collapsed then [ sep "s2" ] else [])
+     @ (if collapsed then
+          [ menu_item st (t "Expand")
+              (fun () -> Sidebar_state.set_collapsed st it.key false) ]
+        else [])
+     @ (if multi then
+          [ menu_item st (t "Expand all")
+              (fun () -> Sidebar_state.collapse_all st false) ]
+        else [])
+     @ (if page_ then
+          [ sep "s3"
+          ; menu_item st (t "Open as page")
+              (fun () -> Sidebar_state.open_as_page st it) ]
+        else []))
 
 let item_menu_host st (it : Sidebar_state.item) =
   dyn ~equal:(fun a b -> a = b)
@@ -150,21 +191,39 @@ let item_title (it : Sidebar_state.item) =
 
 let item_header st idx (it : Sidebar_state.item) =
   let n = string_of_int idx in
+  let collapsed = it.Sidebar_state.collapsed in
   dom ~key:("hd-" ^ it.key)
     ~style_class:
-      "flex flex-row justify-between sidebar-item-header color-level rounded-t-md"
+      ("flex flex-row justify-between sidebar-item-header color-level \
+        rounded-t-md"
+       ^ if collapsed then " rounded-b-md" else "")
     ~attrs:[ ("draggable", "true") ]
+    ~events:"pointerup"
+    ~on_dom_event:(fun name payload ->
+      (* cljs on-pointer-up: middle click removes the sidebar item *)
+      if
+        name = "pointerup"
+        && (match payload with
+            | Some pl -> Platform.payload_num pl "which" = 2.
+            | None -> false)
+      then Sidebar_state.remove_item st it.key)
     [ dom ~key:("hdr-" ^ it.key) ~tag:"button"
         ~style_class:"flex flex-row px-2 items-center w-full overflow-hidden"
         ~attrs:
-          [ ("aria-expanded", "true")
+          [ ("aria-expanded", string_of_bool (not collapsed))
           ; ("id", "sidebar-panel-header-" ^ n)
           ; ("aria-controls", "sidebar-panel-content-" ^ n)
           ]
+        ~events:"click"
+        ~on_dom_event:(fun name _ ->
+          if name = "click" then Sidebar_state.toggle_collapsed st it.key)
         [ dom ~key:("arrow-" ^ it.key) ~tag:"span"
             ~style_class:"opacity-50 hover:opacity-100 flex items-center pr-1"
-            (* cljs: .rotating-arrow.not-collapsed > FA caret-right *)
-            [ dom ~tag:"span" ~style_class:"rotating-arrow not-collapsed"
+            (* cljs: .rotating-arrow.(not-)collapsed > FA caret-right *)
+            [ dom ~tag:"span"
+                ~style_class:
+                  (if collapsed then "rotating-arrow collapsed"
+                   else "rotating-arrow not-collapsed")
                 [ Page.rotating_arrow ("arw-" ^ it.key) ] ]
         ; dom ~key:("ht-" ^ it.key)
             ~style_class:
@@ -176,8 +235,17 @@ let item_header st idx (it : Sidebar_state.item) =
             ~style_class:"px-2 py-2 h-8 w-8 text-muted-foreground"
             ~attrs:[ ("data-testid", "sidebar-item-more") ]
             ~events:"click"
-            ~on_dom_event:(fun name _ ->
-              if name = "click" then Sidebar_state.open_item_menu st it.key)
+            ~on_dom_event:(fun name payload ->
+              if name = "click" then
+                Sidebar_state.open_item_menu st it.key
+                  ~x:
+                    (match payload with
+                     | Some pl -> Platform.payload_num pl "clientX"
+                     | None -> 0.)
+                  ~y:
+                    (match payload with
+                     | Some pl -> Platform.payload_num pl "clientY"
+                     | None -> 0.))
             [ Icons.icon "dots" ]
         ; dom ~key:("close-" ^ it.key) ~tag:"button"
             ~style_class:"px-2 py-2 h-8 w-8 text-muted-foreground"
@@ -315,7 +383,13 @@ let item_body st idx (it : Sidebar_state.item) =
       ; ("id", "sidebar-panel-content-" ^ n)
       ; ("aria-labelledby", "sidebar-panel-header-" ^ n)
       ]
-    ~style_class:"sidebar-panel-content px-2 initial"
+    ~style_class:
+      ("sidebar-panel-content"
+       ^ (if it.Sidebar_state.collapsed then " hidden" else " initial")
+       ^
+       match it.Sidebar_state.kind with
+       | "search" | "shortcut-settings" -> ""
+       | _ -> " px-2")
     [ dom ~key:("wrap-" ^ it.key)
         ~style_class:
           ("flex-1 page relative cp__page-inner-wrap"
@@ -349,7 +423,9 @@ let sidebar_item st idx (it : Sidebar_state.item) =
   dom ~key:("item-" ^ it.key)
     ~style_class:
       ("flex sidebar-item content color-level rounded-md shadow-lg item-type-"
-       ^ it.kind)
+       ^ it.kind
+       ^ if it.Sidebar_state.collapsed then " collapsed" else "")
+    ~attrs:[ ("data-item-key", it.Sidebar_state.key) ]
     [ dom ~key:("wrap-" ^ it.key)
         ~style_class:"flex flex-col w-full relative"
         [ item_header st idx it
