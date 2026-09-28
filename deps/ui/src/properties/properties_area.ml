@@ -418,7 +418,6 @@ let render_block_area ~ind ~left_host ctx ~owner_is_tag ~owner_title area_el =
                  render_pills ctx ~owner_is_tag ~owner_title ind below_rows);
              Js.Promise.resolve ()
          | _ -> Js.Promise.resolve ())
-  |> ignore
 
 (* ---------- block mounts ---------- *)
 
@@ -475,7 +474,7 @@ let mount_block_area block_el uuid =
               let rec ctx : V.ctx =
                 { block_uuid = uuid
                 ; block_id = None
-                ; refresh
+                ; refresh = (fun () -> ignore (refresh ()))
                 ; is_page = false
                 ; class_schema = false
                 }
@@ -483,7 +482,7 @@ let mount_block_area block_el uuid =
                 render_block_area ~ind ~left_host ctx ~owner_is_tag:false
                   ~owner_title:"" area
               in
-              refresh ();
+              ignore (refresh ());
               (* register the always-connected indent, not area: the
                  area element stays detached when the block has no
                  visible rows, and live_areas prunes detached containers,
@@ -491,7 +490,9 @@ let mount_block_area block_el uuid =
                  property tx lands *)
               S.register_area ind (fun () ->
                   if el_is_connected ind then refresh ()
-                  else S.unregister_area ind)))
+                  else (
+                    S.unregister_area ind;
+                    Js.Promise.resolve ()))))
 
 (* ---------- page mount ---------- *)
 
@@ -629,7 +630,6 @@ let rec render_page_area ctx (p : Model.page) ~attach_area ~attach_bidi
                 ~owner_title:p.Model.page_title));
          fill_bidirectional_page p ~attach_bidi bidi;
          Js.Promise.resolve ())
-  |> ignore
 
 and fill_bidirectional_page (p : Model.page) ~attach_bidi bidi =
   match p.Model.page_db_id with
@@ -703,7 +703,7 @@ let mount_page_props page_inner (p : Model.page) uuid =
     let rec ctx : V.ctx =
       { block_uuid = uuid
       ; block_id = p.Model.page_db_id
-      ; refresh
+      ; refresh = (fun () -> ignore (refresh ()))
       ; is_page = true
       ; class_schema = false
       }
@@ -711,11 +711,13 @@ let mount_page_props page_inner (p : Model.page) uuid =
       render_page_area ctx p ~attach_area ~attach_bidi ~detach
         area bidi
     in
-    refresh ();
+    ignore (refresh ());
     S.unregister_area page_inner;
     S.register_area page_inner (fun () ->
         if el_is_connected page_inner then refresh ()
-        else S.unregister_area page_inner))
+        else (
+          S.unregister_area page_inner;
+          Js.Promise.resolve ())))
 
 let mount_page_area page_inner =
   (* cljs db-page-title: title actions hide while the page title itself is

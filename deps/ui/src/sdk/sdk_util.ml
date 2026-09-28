@@ -404,10 +404,18 @@ let apply_ops ops opts =
            (Wire.Array ops)
            opts
          |> Js.Promise.then_ (fun w ->
-                Js.Promise.resolve
-                  (match Wire.get w "result" with
-                   | Some r -> r
-                   | None -> Wire.Nil)))
+                let result =
+                  match Wire.get w "result" with
+                  | Some r -> r
+                  | None -> Wire.Nil
+                in
+                (* the sync-db-changes broadcast refresh is debounced;
+                   refresh before resolving so callers observe applied
+                   state (matches cljs' reactive frontend db) *)
+                !Runtime.refresh_property_areas ()
+                |> Js.Promise.then_ (fun () ->
+                       !Runtime.refresh_after_ops ())
+                |> Js.Promise.then_ (fun () -> Js.Promise.resolve result)))
 
 let apply_op op args =
   apply_ops [ Wire.Array [ Wire.Keyword op; Wire.Array args ] ]
@@ -452,7 +460,13 @@ let get_entity id_or_name =
                           get_by_id
                             (Wire.Keyword (trim_leading id_or_name))
                       | _ -> Js.Promise.resolve w2)
-           | _ -> Js.Promise.resolve w)
+           | _ -> (
+               (* get-case-page emits entity_map_wire (bare ref ids, no
+                  synthesized block/properties); re-resolve through
+                  get-blocks for the expanded entity shape *)
+               match Wire.map_get_uuid w "block/uuid" with
+               | Some u -> get_by_id (Wire.Uuid u)
+               | None -> Js.Promise.resolve w))
 
 (* api args can be uuid strings, page names, db ids (numbers) or
    lookup maps like {id: n} / {uuid: "..."} — normalize to wire eid *)
