@@ -513,27 +513,13 @@ let toast msg cls =
   Js.Dict.set d "cls" (Js.Json.string cls);
   Dom_ext.dispatch_custom "ls:toast" (Js.Json.object_ d)
 
-let load_page repo ref_v =
-  Runtime.invoke3 "thread-api/get-page-blocks-tree" (Wire.String repo)
-    ref_v Wire.Nil
-  |> Js.Promise.then_ (fun blocks_w ->
-         Js.Promise.resolve (Decode.blocks_of_wire blocks_w))
-
-let goto_page repo uuid =
-  Runtime.invoke2 "thread-api/get-case-page" (Wire.String repo)
-    (Wire.String uuid)
-  |> Js.Promise.then_ (fun page_w ->
-         match Decode.page_of_summary page_w with
-         | None -> Js.Promise.resolve ()
-         | Some page ->
-             load_page repo
-               (Wire.Array [ Wire.Keyword "block/uuid"; Wire.Uuid uuid ])
-             |> Js.Promise.then_ (fun blocks ->
-                    let page = { page with Model.page_blocks = blocks } in
-                    Runtime.send (Action.Navigate_to (Model.Page uuid));
-                    Runtime.send (Action.Page_loaded page);
-                    Platform.set_location_hash ("#/page/" ^ uuid);
-                    Js.Promise.resolve ()))
+let goto_page _repo uuid =
+  let h = "#/page/" ^ uuid in
+  (* hashchange loads the page when the hash differs; when it does not,
+     and to have the returned promise settle after Page_loaded, load
+     through the canonical route path either way *)
+  Platform.set_location_hash h;
+  Router.load_page_ref (Wire.Uuid uuid) ~missing:uuid
 
 let goto_today_journal repo =
   let day = Dates.today_journal_day () in

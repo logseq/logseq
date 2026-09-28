@@ -387,19 +387,26 @@ let cancel_pending_save () =
   Editor_dom.clear_timeout !save_timer;
   pending_save := None
 
-let apply ?(opts = Wire.Map []) ops : unit Js.Promise.t =
-  (* any structural op already carries the correct titles — a queued
-     keystroke save firing afterwards would clobber them *)
-  cancel_pending_save ();
-  match !Runtime.current_repo with
-  | None -> Js.Promise.resolve ()
-  | Some repo ->
-      Runtime.invoke3 "thread-api/apply-outliner-ops" (Wire.String repo)
-        (Wire.Array ops) opts
-      |> Js.Promise.then_ (fun _ -> Js.Promise.resolve ())
-      |> Js.Promise.catch (fun e ->
-             Platform.console_error ("apply-outliner-ops failed", e);
-             Js.Promise.resolve ())
+let rec apply ?(opts = Wire.Map []) ops : unit Js.Promise.t =
+  (* cljs saves the editing buffer on keydown before structure ops —
+     flush the queued keystroke save instead of dropping it, so ops like
+     indent/move don't lose text typed within the debounce window *)
+  match !pending_save with
+  | Some (uuid, title) ->
+      pending_save := None;
+      apply [ save_block uuid title ]
+      |> Js.Promise.then_ (fun () -> apply ~opts ops)
+  | None -> (
+      Editor_dom.clear_timeout !save_timer;
+      match !Runtime.current_repo with
+      | None -> Js.Promise.resolve ()
+      | Some repo ->
+          Runtime.invoke3 "thread-api/apply-outliner-ops" (Wire.String repo)
+            (Wire.Array ops) opts
+          |> Js.Promise.then_ (fun _ -> Js.Promise.resolve ())
+          |> Js.Promise.catch (fun e ->
+                 Platform.console_error ("apply-outliner-ops failed", e);
+                 Js.Promise.resolve ()))
 
 let schedule_save uuid title =
   cancel_pending_save ();
