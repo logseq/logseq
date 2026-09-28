@@ -16,6 +16,12 @@ docker run -d --rm -p 127.0.0.1:3001:80 ghcr.io/logseq/logseq-webapp:latest
 
 Open the browser and go to <http://localhost:3001>.
 
+## Easypanel
+
+[Easypanel](https://easypanel.io) is a self-hosted Docker deployment platform, and it maintains a one-click deployment template for the Logseq web app, which also handles HTTPS for you (required by the File System Access API):
+
+[![Deploy on Easypanel](https://easypanel.io/img/deploy-on-easypanel-40.svg)](https://easypanel.io/templates/logseq)
+
 ## Remote(non-local) access
 
 Here we use the [mkcert](https://github.com/FiloSottile/mkcert) to generate locally-trusted development certificates. For other purposes, you should apply a certificate from a trusted CA.
