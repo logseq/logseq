@@ -250,14 +250,24 @@ let on_click ev =
                     | Some u -> A.zoom_to u
                     | None -> ())
                 | None -> (
-                    match D.closest_sel ".block-content" target with
-                    | Some el -> (
-                        match D.el_get_attr el "blockid" with
-                        | Some u ->
-                            A.enter_edit u
-                              (String.length (A.model_title u))
-                        | None -> ())
-                    | None -> ()))))
+                    match
+                      D.closest_sel
+                        "button, a, input, audio, video, details, summary, \
+                         sup.fn, [contenteditable=true], .cloze, \
+                         .cloze-revealed, .query-table, .image-resize, \
+                         .custom-query-results, .cp__query-builder"
+                        target
+                    with
+                    | Some _ -> ()
+                    | None -> (
+                        match D.closest_sel ".block-content" target with
+                        | Some el -> (
+                            match D.el_get_attr el "blockid" with
+                            | Some u ->
+                                A.enter_edit u
+                                  (String.length (A.model_title u))
+                            | None -> ())
+                        | None -> ())))))
 
 (* -- ls:editor-insert channel (autocomplete pick: replace the typed
    trigger range with the chosen text) -- *)

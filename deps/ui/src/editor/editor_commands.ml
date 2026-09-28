@@ -433,12 +433,9 @@ let set_props ~caret uuid ident v =
    by db-property/closed-value-content (block/title else
    logseq.property/value), then batch-set-property {:entity-id? true} *)
 let set_closed_prop ~caret uuid ident title =
-  Platform.console_log ("DBG closed-prop start", ident, title);
   ignore
     (Properties_data.closed_values (W.Keyword ident)
      |> Js.Promise.then_ (fun w ->
-            Platform.console_log
-              ("DBG closed-prop wire", Js.Json.stringifyAny w);
             let rows =
               match w with
               | W.Array xs | W.List xs | W.Set xs -> xs
@@ -458,7 +455,6 @@ let set_closed_prop ~caret uuid ident title =
                   | _ -> None)
                 rows
             in
-            Platform.console_log ("DBG closed-prop id", id);
             (match id with
              | Some id ->
                  prop_batch ~caret uuid
@@ -469,7 +465,7 @@ let set_closed_prop ~caret uuid ident title =
                    ("no closed value for", title));
             Js.Promise.resolve ())
      |> Js.Promise.catch (fun e ->
-            Platform.console_error ("DBG closed-prop failed", e);
+            Platform.console_error ("closed-prop failed", e);
             Js.Promise.resolve ()))
 
 (* toggle this block's own logseq.property/order-list-type *)
@@ -486,32 +482,39 @@ let toggle_own_list uuid caret =
               (W.String "number")) ]
 
 (* cljs toggle-blocks-as-own-order-list!: any child ordered -> remove all,
-   else set all children *)
+   else set all children. Children are read fresh from the worker — the
+   model tree can lag a just-applied indent. *)
 let toggle_children_list uuid caret =
-  match S.find uuid with
-  | Some b -> (
-      let kids = b.Model.block_children in
-      let has_ordered =
-        List.exists (fun c -> c.Model.block_order_list <> None) kids
-      in
-      match
-        List.filter_map
-          (fun c ->
-            Option.map
-              (fun u ->
-                if has_ordered
-                then
-                  Ops.remove_block_property u
-                    "logseq.property/order-list-type"
-                else
-                  Ops.set_block_property u
-                    "logseq.property/order-list-type" (W.String "number"))
-              c.Model.block_uuid)
-          kids
-      with
-      | [] -> ()
-      | ops -> prop_batch ~caret uuid ops)
+  match !Runtime.current_repo with
   | None -> ()
+  | Some repo ->
+      ignore
+        (Sdk_write.children_of repo uuid
+         |> Js.Promise.then_ (fun kids ->
+                let ordered u =
+                  match W.get u "logseq.property/order-list-type" with
+                  | Some (W.Nil | W.Bool false) | None -> false
+                  | Some _ -> true
+                in
+                let has_ordered = List.exists ordered kids in
+                let ops =
+                  List.filter_map
+                    (fun k ->
+                      Option.map
+                        (fun u ->
+                          if has_ordered
+                          then
+                            Ops.remove_block_property u
+                              "logseq.property/order-list-type"
+                          else
+                            Ops.set_block_property u
+                              "logseq.property/order-list-type"
+                              (W.String "number"))
+                        (W.map_get_uuid k "block/uuid"))
+                    kids
+                in
+                if ops <> [] then prop_batch ~caret uuid ops;
+                Js.Promise.resolve ()))
 
 let run_editor_cmd uuid command from to_ =
   let caret = clear_range uuid from to_ in

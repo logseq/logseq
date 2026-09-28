@@ -22,6 +22,9 @@ external el_text_content : el -> string = "textContent" [@@mel.get]
 external el_set_text_content : el -> string -> unit = "textContent"
   [@@mel.set]
 
+external el_insert_adjacent_text : el -> string -> string -> unit =
+  "insertAdjacentText" [@@mel.send]
+
 external el_click : el -> unit = "click" [@@mel.send]
 
 external el_blur : el -> unit = "blur" [@@mel.send]

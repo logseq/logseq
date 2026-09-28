@@ -345,10 +345,7 @@ let update_block a b _c _d =
              | None -> resolved_nil
              | Some uuid ->
                  apply_op "save-block"
-                   [ Wire.Map
-                       [ (Wire.String "block/uuid", Wire.Uuid uuid)
-                       ; (Wire.String "block/title", Wire.String content)
-                       ]
+                   [ Outliner_ops.saved_block_map uuid content
                    ; Wire.Map []
                    ]
                  |> Js.Promise.then_ (fun _ -> resolved_nil))

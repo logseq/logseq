@@ -69,18 +69,7 @@ let make scheduler : t =
 
 let get st = Signal.get st.vs.state_signal
 
-let set st v =
-  let cur = get st in
-  if cur.open_ <> v.open_ then
-    Platform.console_log
-      ("DBG open_ " ^ string_of_bool cur.open_ ^ "->" ^ string_of_bool v.open_);
-  Platform.console_log
-    ("DBG set input=" ^ v.input ^ " groups="
-     ^ String.concat ","
-         (List.map
-            (fun g -> g.gtitle ^ "/" ^ string_of_int (List.length g.gitems))
-            v.groups));
-  Runtime.signal_set st.vs v
+let set st v = Runtime.signal_set st.vs v
 let set_in st f = set st (f (get st))
 
 let flat_items (v : view) : item array =
@@ -305,7 +294,6 @@ let upsert_create v =
   }
 
 let on_input st q =
-  Platform.console_log ("DBG on_input " ^ q);
   set_in st (fun v -> upsert_create { v with input = q });
   let gen = (incr st.gen; !(st.gen)) in
   Dom_ext.set_timeout (fun () -> if gen = !(st.gen) then refresh st) 100
@@ -461,7 +449,6 @@ let validate_graph repo =
 
 let run_item st it =
   let repo = !(Runtime.current_repo) in
-  Platform.console_log ("DBG run_item " ^ it.ititle);
   (match it.act with
    | Create_page title ->
        close st;
