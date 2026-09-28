@@ -2,7 +2,7 @@
   "name": "logseq-cli",
   "private": true,
   "scripts": {
-    "bundle": "opam exec -- dune build @bundle",
+    "bundle": "node ../scripts/write-cli-git-revision.mjs && opam exec -- dune build @bundle",
     "test": "opam exec -- dune runtest"
   },
   "devDependencies": {
