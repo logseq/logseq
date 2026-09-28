@@ -304,16 +304,20 @@ let filter_popup inst ~refresh anchor =
            List.find_opt (fun c -> c.V.c_id = it.P.si_value) inst.V.columns
          with
          | Some c ->
+             (* cljs: value-phase select whenever the column resolves a
+                property (built-ins like block/title included) or its type
+                is not :string; only unresolved :string columns go
+                straight to a text-contains filter *)
              (if
-                c.V.c_type = "default" || c.V.c_type = "string"
-                || c.V.c_id = "block/title" || c.V.c_id = "block/tags"
-              then
+                c.V.c_prop <> None || c.V.c_many
+                || c.V.c_type <> "string"
+              then filter_value_phase inst ~refresh ~anchor c
+              else
                 set_filters inst ~refresh
                   (inst.V.filters
                    @ [ { V.c_prop = c.V.c_id; c_op = "text-contains"
                        ; c_val = None } ])
-                  inst.V.filters_or
-              else filter_value_phase inst ~refresh ~anchor c)
+                  inst.V.filters_or)
          | None -> ())
        ())
 
@@ -407,14 +411,15 @@ let groupable_columns inst =
 let rec more_actions inst ~refresh : D.el =
   let btn = ghost_btn "dots" in
   D.el_add_listener btn "click" (fun _ ->
+      let gcs = groupable_columns inst in
       let subs =
         List.concat
           [ (if inst.V.display_type = "table" then
                [ P.MSub (I.columns_visibility, column_visibility_items inst ~refresh) ]
              else [])
-          ; (match groupable_columns inst with
+          ; (match gcs with
              | [] -> []
-             | gcs ->
+             | _ ->
                  [ P.MSub
                      ( I.group_by
                      , List.map
@@ -428,7 +433,9 @@ let rec more_actions inst ~refresh : D.el =
                                  V.persist_group_by inst;
                                  refresh inst ))
                          gcs ) ])
-          ; (if inst.V.group_by = Some "block/page" then
+          ; (* cljs group-by-page?: sort-groups shows whenever block/page is
+               a groupable column, regardless of the current group-by *)
+            (if List.exists (fun c -> c.V.c_id = "block/page") gcs then
                [ P.MSub
                    ( I.sort_groups_by
                    , [ mk_group_sort inst ~refresh "block/journal-day"

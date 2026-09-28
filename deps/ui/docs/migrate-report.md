@@ -741,8 +741,6 @@ switch, but is NOT committed to `logseq/lui` — the opam pin tracks
 `#main`, so any fresh `install-opam-deps.sh` run silently reverts it.
 Needs an upstream PR.
 
-||||||| dd51ac8b86
-
 ## Plugins (e2e: `plugins_basic_test`, `plugins_marketplace_test`)
 
 - **SDK bridge**: `src/sdk/` installs `window.logseq.api` (flat snake_case
@@ -1042,3 +1040,19 @@ search may lag).
 - **`#/graphs` row menu divergence** — our local-graph row menu keeps a
   "Delete remote graph" item so e2e can reach remote-delete when logged
   in; cljs only shows it on remote rows.
+
+## Cmdk (e2e: `cmdk_scroll_basic_test`)
+
+- **The `:recently-updated-pages` group is filtered by
+  `search/fuzzy-search`**, not substring (`core.cljs` `load-results
+  :recently-updated-pages` → `search/fuzzy-search recent-pages q
+  {:extract-fn :block/title}`). Fuzzy = subsequence match over
+  `clean-str` (lowercase, `[ \/_\]\(\)\[]+` stripped). A substring
+  filter drops recents as soon as the query is not a contiguous match
+  (e.g. typing one extra char), shrinking the visible result set —
+  `cmdk-keeps-results-visible-while-searching` counts on them staying.
+- **cljs `:nodes` results come from `search-blocks`** (worker FTS), so
+  keystrokes do not clear the rendered list: results are only replaced
+  when the async search resolves. The OCaml port already keeps
+  `v.groups` while `refresh` is in flight — the stale-input check in
+  `apply_results` (`v.input <> q`) must stay.
