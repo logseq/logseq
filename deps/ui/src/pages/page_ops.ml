@@ -22,3 +22,8 @@ let convert_to_tag db_id =
   Runtime.invoke2 "thread-api/convert-page-to-tag"
     (Wire.String (repo ())) (Wire.Int db_id)
   |> Js.Promise.then_ (fun _ -> Js.Promise.resolve (reload ()))
+
+let convert_tag_to_page db_id =
+  Runtime.invoke2 "thread-api/convert-tag-to-page"
+    (Wire.String (repo ())) (Wire.Int db_id)
+  |> Js.Promise.then_ (fun _ -> Js.Promise.resolve (reload ()))

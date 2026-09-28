@@ -137,10 +137,20 @@ let build_columns inst =
   in
   match inst.V.kind with
   | V.KTagPage owner_uuid ->
-      (* thread-api entity refs take lookup-refs, not bare uuids *)
-      Db.get_class_properties
-        (W.List [ W.Keyword "block/uuid"; W.Uuid owner_uuid ])
-        apply
+      (* cljs objects.cljs build-class-object-columns: the Asset class
+         gets an extra "File" column — detect it by the class ident *)
+      Db.get_blocks [ owner_uuid ] (fun ents ->
+          inst.V.asset_class <-
+            (match ents with
+             | [ e ] ->
+                 W.as_keyword
+                   (Option.value (W.get e "db/ident") ~default:W.Nil)
+                 = Some "logseq.class/Asset"
+             | _ -> false);
+          (* thread-api entity refs take lookup-refs, not bare uuids *)
+          Db.get_class_properties
+            (W.List [ W.Keyword "block/uuid"; W.Uuid owner_uuid ])
+            apply)
   | V.KPropertyPage owner_uuid ->
       (* cljs build-property-object-columns: the property itself is the
          only property column *)

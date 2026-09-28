@@ -67,6 +67,97 @@ current) plus `exit_edit` at navigation entry points — the e2e
 A hashchange to the already-current route re-triggered the whole load path
 (stale commits + flicker); cljs only acts on real route transitions.
 
+### Undo restores the DB but the open editor keeps a stale buffer
+Worker `apply_history_action` replays inverse outliner ops correctly; the
+bug was UI-side: after undo restored a title, the still-mounted textarea
+kept showing the pre-undo `buffer`, and `visible-outline-content-tree`
+prefers `editor.value`. `resync_open_editor` after undo/redo re-reads the
+block from the model and rewrites the textarea when they diverge.
+**LUI lesson**: controlled-input state that can diverge from source of
+truth (DB) needs an explicit resync hook on every external-mutation path —
+undo/redo, RTC apply, sync events.
+
+### Structured clipboard: copy must keep only topmost selected roots
+`select-blocks` selects every visible row including children that are
+already inside a selected parent. If the clipboard keeps all selected
+uuids, `paste_block_maps` expands each parent AND emits the children again
+as separate roots — the worker receives duplicate maps for the same uuid
+(one bare, one with a `block/parent` lookup-ref) and the flat writes win,
+flattening the pasted tree (cut-and-paste e2e). Fix: filter the clipboard
+to uuids with no selected ancestor (`has_selected_ancestor` walks
+`find_parent`).
+**cljs semantics**: copying a parent implicitly includes its subtree; the
+clipboard payload is *trees*, not rows.
+
+### Replace-empty paste swaps the entity under the live editor
+`insert-blocks` with `replace-empty-target?` reuses the target's db/id,
+uuid and order — the editing block's entity is rewritten in place. The
+worker tx was correct from the start (`DBG-POST` showed `title=b1` on the
+target uuid); the visible `""` was the still-open textarea buffer. Same
+class of bug as undo-resync: `resync_open_editor` now also runs after a
+replace-empty paste.
+
+### Worker-side debugging workflow that worked
+`eprintf` in `deps/db-worker/lib` reaches the page console (captured by
+the e2e `console-logs-*.txt` dump — note the dump is **newest-first**,
+`conj` onto a list). Add prints around `insert_blocks` input/output,
+rebuild `dune build js_api` + `vite build --mode browser`, run the single
+e2e namespace, then strip. No cljs needed.
+
+### mousedown commit → synchronous re-render steals the click target
+Committing the edit on `mousedown` re-renders the DOM between `mousedown`
+and `mouseup`; the browser then retargets `click` to a common ancestor
+(`.page-blocks-inner`), so the block's click handler never fires and the
+clicked block never enters edit. Fix: defer the blur commit one tick
+(`schedule_blur_commit`), cancelled by `enter_edit`.
+**General rule**: pointerdown handlers must not synchronously mutate DOM
+that the same gesture's click depends on — defer or dispatch on the
+stable ancestor.
+
+### Pending focus must retry until mount, not poll twice
+`apply_focus` polled at 0ms/120ms after an apply+refresh; a slower refresh
+(more blocks, cold wasm paths) lost the focus entirely, leaving
+`pending_focus` set but dead. Bounded retry-until-mounted (40ms × 50)
+fixes Enter→Tab flows on collapsed blocks.
+
+### Collapsed-state override is per-view, not per-DB
+cljs `expand-collapsed-indent-target!` expands the indent target in the DB
+*and* clears the local `:ui/collapsed-blocks` override — porting only the
+DB part left the freshly-indented child invisible on journals.
+
+### Menu links must not steal editor focus
+`a.menu-link` items with `tabindex=0` accept focus on click; cljs keeps
+editor focus. preventDefault on mousedown inside `.ui__popover-content` /
+`.ls-context-menu-content` preserves it (click still fires).
+
+### Undo recording needs `outliner-op` on multi-op batches
+Worker `gen_undo_ops` auto-derives `outliner-op` only for single-op
+batches; multi-op batches (e.g. split = `save-block` + `insert-blocks`,
+merges = `move`+`delete`+`save`) MUST pass it via opts or the tx is
+invisible to undo.
+
+### Asset upload must commit the pending edit before inserting
+cljs `db-based-save-assets!` calls `save-block-aux!` on the edit block
+first (`has-unsaved-edit?`): the file is written to
+`assets/<block-uuid>.<ext>` and rendering resolves that path from the
+*final* block uuid. The worker only honors `replace-empty-target?` when
+the stored target title is still blank — so an uncommitted edit ("image
+uploads" typed but still only in the buffer) silently remaps the idx-0
+block's uuid onto the target's, leaving the pfs file named after the
+stale random bid and `img.src` blank. Port sends `save-block` + the
+`insert-blocks` op in one `apply-and-refresh` batch. (cljs also has a
+`new-asset-block` uuid-reuse path keyed on `empty-target?`, which now
+rarely triggers since the saved title is non-blank.)
+`crypto.subtle.digest` via Melange: `[@@mel.scope ("crypto","subtle")]
+[@@mel.send]` compiles to `"SHA-256".crypto.subtle.digest(...)` — scope
+binds to the receiver (first arg). Get `crypto.subtle` as a value with
+`[@@mel.scope "crypto"]`, then call `digest` as a `send` on it.
+LUI mounts `on_dom_event`-created elements after the mount fn returns —
+`qs`/`querySelector` from an async continuation (pfs read, onload) can
+still see a detached node; use a bounded `setTimeout` retry like the
+focus fix above.
+
+
 ## Worker protocol edge cases
 
 - `apply-outliner-ops` op entries require nested `Array` args
@@ -166,7 +257,33 @@ that the e2e contract doesn't spell out directly. Newest area last.
   closes the dialog. `Object.fromEntries` needs an OCaml
   `(string * Js.Json.t) array` via `%identity`, never a list (lists are not
   JS-iterable → "object is not iterable").
-||||||| a024dc1c3f
+- **Settings page/dialog**: `#/settings` (`Model.Settings` in `router.ml`)
+  and the header-dots `settings` dialog share `settings_page.inner ~modal`
+  (`#settings.cp__settings-main > .cp__settings-inner > aside + article`).
+  cljs `settings-effect` mirrors `body[data-settings-tab]` while a settings
+  panel is mounted — `Settings_state.activate/deactivate` runs on inner
+  mount, on route change away, and from `Dialogs_state.set` when the
+  `settings` name leaves the dialog stack.
+- **Dialog label attr**: `.ui__dialog-content` gets `label` from
+  `dialogs_view.label_of` (settings→`app-settings`, plugins→
+  `plugins-dashboard`); `app-settings` is what gives the modal its
+  `w-auto md:max-w-5xl overflow-hidden` sizing in shui.css.
+- **Settings rows**: `(i)` hint icons are sequential children of the
+  `<label>` (`span.flex.px-2 > svg.info` + `data-base-ui-tooltip-trigger`),
+  not siblings of the switch — `toggle_row`'s `~label_extra`. `svg.info`
+  is cljs `svg/info` flattened (no `<g>` wrapper).
+- **Shortcut `<kbd>` labels**: cljs `print-shortcut-key` semantics in
+  `settings_page.print_key` (letters uppercased; mod/cmd→⌘; shift→⇧;
+  alt/opt→⌥; return→⎵; delete→⌫…). `kbd_seq` keys kbd children by index
+  — repeated letters (`t t`) otherwise trip `invalid_arg "duplicate
+  reload key among siblings"`.
+- **`style_class_signal` overwrites the whole `class` attribute** — the
+  base `style_class` is not merged; signals must emit the full class
+  string (`"settings-menu-item[ active]"`).
+- **Boot storage env** (`boot.ml apply_storage_env`): `preferred-language`,
+  `system-theme?` (→ `prefers-color-scheme` else stored `theme`),
+  `radix-color` (strip leading `:` → `data-color`), `editor-font`
+  (EDN → `data-font`/`data-font-global`), `wide-mode` → `ls-wide-mode`.
 
 ---
 
@@ -248,3 +365,157 @@ sorting, view tabs, selection bar, export EDN) and the query surface of
   `.editor-wrapper textarea` timeout). Views behaviors were verified via
   Playwright probes driving `LogseqDbWorker.invoke` directly (see
   worker-call contract in e2e-contract.md §7).
+
+## tag-basic-test (page-title tagging)
+
+- **Editor_state reads throw when unmounted**: `Editor_state.editing_uuid ()`
+  etc. raised `Failure "editor state not mounted"` on pages with no block
+  editor (empty page, title-only editing). Popups calling these accessors on
+  `#`-tag commit died synchronously. Fix: `read ()` falls back to `initial`.
+  This is a recurring hazard — any read of editor state must not assume a
+  mounted block editor. *LUI-level candidate*: keep the state signal always
+  mounted instead of per-block mount.
+- **`block/tags` wire shape**: `get-case-page` returns it as a `Set` of plain
+  `Int` entity ids — not `{:db/id}` lookup-ref stubs like `entity_map_wire`
+  emits elsewhere. `db/ident` decodes as `Wire.Keyword`, not `Wire.String`.
+  Decoders must accept both or we silently drop data (chip never rendered).
+- **Built-in Page tag must be filtered**: every page carries
+  `logseq.class/Page` in `block/tags`; cljs never renders it as a chip.
+- **`save-block` rejects page entities**: title edits must use
+  `set-block-property`/`rename-page` paths only.
+- **`ls:editor-insert` has no handler for the title textarea**: `emit`
+  dispatched the event but only block editors listen — the `" #tag"` token
+  stayed in the buffer and the following commit renamed the page to
+  `title #tag` (worker validation rejected it). Fix: when `ac.editor` is
+  inside `.ls-page-title`, `emit` splices the value directly. Suggestion:
+  generalize editor targets behind a shared `editor-surface` contract so
+  emit/insert works for any textarea, not only `edit-block-*`.
+- **Commit must trim**: emit leaves the leading space (`"ttd5 "`); cljs trims
+  before rename. An untrimmed title reaches worker `save-block` on the page
+  entity and corrupts the lookup (page became unresolvable).
+- **Stale-node dispatch crash**: a capture-phase handler that re-renders can
+  unmount the event target before its own bubbling listener runs; LUI
+  `dispatch` raised `unknown extension node`. Fixed in LUI
+  (`devin/web-stale-node-ops`): events on unmounted nodes are ignored.
+- **Remounted textarea loses focus**: `autofocus` doesn't re-fire reliably on
+  remount; the title editor now focuses explicitly after `Title_edit_start`
+  and places the caret at the end.
+
+## Multi-tabs / cross-tab sync (e2e: `multi_tabs_basic_test`)
+
+- **Worker side is healthy**: `logseq.api.append_block_in_page` propagates to
+  other tabs via navigator.locks master election + BroadcastChannel
+  (`deps/db-worker/lib/shared_service.ml`); UI receives `"sync-db-changes"`
+  and `Router.reload ()` re-fetches blocks.
+- **Crash 1 — `NotFoundError: removeChild`**: a single batch emitted
+  `SetExtensionProp(span.block-title-wrap, "text", ...)` BEFORE
+  `RemoveChild(span, br)`; `dom_adapter.ml` `set_property "text"` maps to
+  `setTextContent`, which detaches ALL DOM children, so the later
+  `removeChild` threw, the batch aborted, and the generation desync
+  ("expected patch generation N, received M") killed every subsequent
+  render on all tabs. This is an upstream emit-order issue (prop sets
+  applied before child ops on the same node). Workaround committed in
+  `src/render/render.ml`: `.block-title-wrap` gets reload keys `btw-t`
+  (plain `~text`) vs `btw-c` (children, incl. the empty-title `<br>`), so
+  a text↔children transition forces a remount instead of a prop+remove
+  mix on one node. If upstream reorders emits (children before prop
+  writes), the keys can be dropped.
+- **Crash 2 — `store batch: cannot drop a node with children`**: surfaced
+  on cmdk "Add a DB graph" → dialog open. Cause was the retained-store
+  `insert_at` bug already listed above (fixed upstream in
+  logseq/lui#65): every non-append `insert_child` duplicated the child id
+  in `retained_children`, so `drop_node` still saw leftovers after all
+  `RemoveChild` ops. **Environment gotcha**: `lui` in the `5.5.0` opam
+  switch is `dune install`ed from `~/repos/lui`, NOT the git pin — after
+  upstream merges you must `cd ~/repos/lui && dune build -p lui && dune install lui`
+  then rebuild `deps/ui`, or you debug already-fixed code.
+- **Open**: `src/properties/properties_view.ml` installs a capture-phase
+  `input` listener that opens a second `.ui__popover-content` on `/`/`#`
+  in any `edit-block-*` textarea, alongside the real `popups_state`
+  slash menu (which already lists "Add property"). Two popovers →
+  `slash-menu-filter-scroll-and-cleanup-test` sees
+  `a.menu-link.chosen` count=2. The properties popover should be removed
+  or folded into the main autocomplete.
+
+## Plugins (e2e: `plugins_basic_test`, `plugins_marketplace_test`)
+
+- **SDK bridge**: `src/sdk/` installs `window.logseq.api` (flat snake_case
+  method table) + `sdk.ui`; `sdk/plugin_host.ml` wires `LSPluginCore`
+  events (`registered`/`unregistered`/`disabled`, `lsp-updates`), persists
+  installed web plugins under `LSPUserDotRoot/installed-plugins-for-web`
+  localStorage keys, and injects toolbar UI via `pluginHelpers.setupInjectedUI`
+  into `pl-injected-ui-item-*` slots in the left-sidebar plugins menu
+  (`.toolbar-plugins-manager-trigger` dropdown).
+- **`datascript_query` camelCase**: cljs calls
+  `normalize-keyword-for-json result false` — camel-case? is nil, so keys
+  keep hyphens (`journal-day`, `original-name`). `json_of_wire ~camel:false`
+  added for this; every other api result stays camelized. Inputs are
+  resolved through worker `thread-api/resolve-query-inputs` (binds
+  `:current-page`/`:today`-style inputs) before `thread-api/q`, matching
+  cljs `db-async/<resolve-query-inputs` + `<q`.
+- **`datascript_query` input args**: `logseq.DB.datascriptQuery` also emits
+  `logseq.api.datascript_query`; `q` (`thread-api/query-dsl-query` with
+  `:current-page-title`/`:today-day` opts) is registered too.
+- **`wire_of_json` must guard `undefined`**: plugins pass `undefined`/null
+  args (e.g. `pushState('page', {name: page?.uuid})` when uuid is absent);
+  `Js.Json.classify` lets `undefined` fall into the `JSONObject` branch →
+  `Js.Dict.keys` crashes the whole exec call and silently aborts the
+  plugin's promise chain. Guard on `Js.typeof j = "undefined"` first.
+- **Missing api methods throw, not resolve**: `LSPluginCore` rejects
+  `logseq.<fn>` calls for unregistered method names ("Not existed method
+  #<name>"), which aborts the plugin's `.then` chain (hideMainUI inside
+  `_onDaySelect` killed `pushState` before it ran). Any method a plugin
+  may call needs at least a `nil_fn` stub — added `show/hide/toggle_main_ui`,
+  `set_main_ui_inline_style`, `set_main_ui_attrs`.
+- **`get_user_configs.preferredDateFormat`**: cljs returns
+  `state/get-date-formatter` (config `:journal/page-title-format`,
+  default `"MMM do, yyyy"`); plugins format journal titles with it via
+  dayjs. A wrong default (`yyyy-MM-dd`) makes created journal pages miss
+  `journal-day`. `get_user_configs` now reads `logseq/config.edn` through
+  `Sdk_config.read_config` with that fallback.
+- **`sup` tag**: `installed_card` uses `[:sup]` (cljs plugins.cljs L388);
+  every `Logseq_dom.dom ~tag:` must be whitelisted in
+  `logseq_dom.ml`'s `tags` list or `create_extension_node` raises
+  `Invalid_argument` and unmounts the whole dialog subtree.
+- **`a.btn.disabled` e2e pitfall**: app CSS gives
+  `.cp__plugins-item-card>.r .ctl a.btn.disabled` `pointer-events:none`;
+  the e2e `has-text('Install')` selector also matches "Installed", so
+  `click-install-button` hit-tests a dead anchor forever. The installed
+  anchor carries inline `pointer-events:auto` (handler no-ops when
+  installed) — a deliberate deviation from cljs CSS.
+- **`create_tag` `tagProperties`**: cljs creates the class then
+  `set-block-property! :logseq.property.class/properties` with db/ids;
+  `set-block-property`'s first arg spec is `SBlockId` → `Wire.Uuid` only
+  (`Wire.Int` raises `Invalid_outliner_op`). OCaml create_tag upserts
+  missing property entities then links them by uuid.
+- **`get_block_property` enum reads**: `logseq.property/type` arrives as
+  `Wire.Keyword "json"` — `Wire.map_get_string` misses keywords; match
+  `(Wire.Keyword _ | Wire.String _)`.
+
+## cljs ↔ OCaml 行为对照表 (interaction semantics map)
+
+| 交互 / 隐式契约 | cljs 语义来源 | LUI/OCaml 实现位置 |
+|---|---|---|
+| Enter 分裂块 / Shift+Enter 换行 | frontend.handler.editor/keydown | `src/editor/editor_keys.ml` `on_editor_key` → `editor_actions.split_at_cursor` |
+| Tab / Shift+Tab 缩进 | editor handler indent-outdent | `editor_keys.ml` Tab → `editor_actions.indent_or_outdent` → `outliner_ops.indent_outdent` |
+| Shift+Arrow 在编辑边界跨到块选择 | cljs keydown 边界判断 | `editor_keys.ml` `on_editor_arrows`（caret 在首/末行时退出编辑进入选择态）|
+| Meta/Alt+Shift+Arrow 移动块 | shortcuts move-up/down | `editor_keys.ml` `on_normal_key` → `editor_actions.move_blocks_up_down` + `Model.move_selected_top_blocks` 乐观重排 |
+| textarea 文本同步 | React 同时维护 value+textContent | `extension/dom_adapter.ml`（input 事件同步 textContent；text prop 跳过冗余 .value 写入）；上游 `lui_web_props.set_text_control_value` 已同步（lui PR #68） |
+| 页面标题编辑（点击→textarea→Enter 提交）| page.cljs title editor | `src/pages/page.ml` `title_editor`/`commit`（`String.trim` 后 `Page_ops.rename`）|
+| 标题上打 tag（# → popup）| editor tag popup | `src/popups/popups_state.ml` `emit`/`apply_tag` — `.ls-page-title` 内直接 splice value/textContent（`ls:editor-insert` 不覆盖标题 textarea）|
+| slash/`#` 命令弹窗 | editor autocomplete | `src/cmdk/` + `popups_state.ml`（`/`,`#`,`[[`,`((`,`:` 触发，`.ui__popover-content`，`a.menu-link.chosen`）|
+| cmdk (Meta+K) | ui.search | `src/cmdk/cmdk_state.ml`/`cmdk_view.ml`（`.cp__cmdk-search-input` + testid 结果行）|
+| Undo/Redo（图级作用域）| outliner history per repo | `editor_actions.undo/redo` → worker `apply_history_action`；`resync_open_editor` 回写打开的 buffer |
+| 左/右 sidebar | frontend.components.right-sidebar / left | `src/sidebar/`（`#left-sidebar` 单实例、right sidebar panels）|
+| 页面 tags (`.block-tags`) | :block/tags refs 解析 | `outliner_ops.resolve_page_tags`（接受 `Wire.Set` of `Int`/`Int64`，过滤 `logseq.class/Page` 内建类）；`router.load_page_ref` 与 `refresh` 都会调用 |
+| 块/页面 embed（`{{embed}}`、Node embed）| components.block embed | `src/render/render.ml` 嵌入渲染 + reload key `btw-t`/`btw-c` 区分 text/children 两种形态 |
+| 虚拟列表 | cljs Virtuoso | `@tanstack/virtual-core` 绑定 `src/virt/virt_list.ml` + `virtualizer.ml`，page block list 已接入 |
+| worker 协议 | Comlink + transit | `src/core/comlink.ml` + `src/core/wire.ml`（transit map/array/keyword/int64 解码）+ `app/decode.ml` |
+| 弹层 (popover/modal/toast) | shui base-ui | LUI schema 组件 + `src/popups/`；document `ls:open-dialog` CustomEvent 跨模块派发 |
+| 键盘修饰键顺序 | cljs match 顺序 | 教训：`on_normal_key`/`on_editor_key` 中 modifier 组合必须先匹配最具体的 |
+
+## 已提交到 lui 的通用化下沉
+
+- `lui_web_dom_ext`（lui PR #68）：通用 `lui-dom-<tag>` 扩展族（attrs/events/text + dom-event payload 含 selectionStart/End/Direction），textarea textContent 同步。
+- stale-node 容错（lui PR #67）：unmounted 节点上的事件/属性写入不再崩溃或卡住批次。
+- dropdown dismiss / modal hit-testing / retained-store 顺序（lui PR #65）。

@@ -37,9 +37,15 @@ let rec block_of_wire (w : Wire.t) : Model.block =
     Option.value (Wire.map_get_int w "block/level") ~default:1
   in
   let children =
+    (* cljs :block/children accessor (entity-plus) excludes
+       property-created and closed-value children *)
+    let renderable c =
+      Wire.get c "logseq.property/created-from-property" = None
+      && Wire.get c "block/closed-value-property" = None
+    in
     match Wire.get w "block/children" with
     | Some (Wire.List xs) | Some (Wire.Array xs) ->
-        List.map block_of_wire xs
+        List.map block_of_wire (List.filter renderable xs)
     | _ -> []
   in
   let tag_ids =
@@ -47,6 +53,23 @@ let rec block_of_wire (w : Wire.t) : Model.block =
     | Some (Wire.List xs) | Some (Wire.Array xs) | Some (Wire.Set xs) ->
         List.filter_map (fun t -> Wire.map_get_int t "db/id") xs
     | _ -> []
+  in
+  let num_prop k =
+    match Wire.get w k with
+    | Some (Wire.Int n) -> Some n
+    | Some (Wire.Int64 n) -> Some (Int64.to_int n)
+    | Some (Wire.Float f) -> Some (int_of_float f)
+    | _ -> None
+  in
+  let resize_w =
+    match Wire.get w "logseq.property.asset/resize-metadata" with
+    | Some m -> (
+        match Wire.get m "width" with
+        | Some (Wire.Int n) -> Some n
+        | Some (Wire.Int64 n) -> Some (Int64.to_int n)
+        | Some (Wire.Float f) -> Some (int_of_float f)
+        | _ -> None)
+    | _ -> None
   in
   { block_uuid = uuid
   ; block_db_id = db_id
@@ -59,9 +82,18 @@ let rec block_of_wire (w : Wire.t) : Model.block =
   ; block_is_comments_area = false
   ; block_is_comment = false
   ; block_comment_targets = count_refs w "logseq.property.comments/blocks"
-  ; block_page_name =
-      Option.value (Wire.map_get_string w "block/page-name") ~default:""
   ; block_children = children
+  ; block_page_name = Wire.map_get_string w "block/page-name"
+  ; block_asset_type = Wire.map_get_string w "logseq.property.asset/type"
+  ; block_asset_url =
+      Wire.map_get_string w "logseq.property.asset/external-url"
+  ; block_asset_width = num_prop "logseq.property.asset/width"
+  ; block_asset_height = num_prop "logseq.property.asset/height"
+  ; block_asset_resize = resize_w
+  ; block_asset_align =
+      (match Wire.get w "logseq.property.asset/align" with
+       | Some (Wire.Keyword s) | Some (Wire.String s) -> Some s
+       | _ -> None)
   }
 
 let blocks_of_wire (w : Wire.t) : Model.block list =
@@ -145,6 +177,7 @@ let page_of_summary (w : Wire.t) : Model.page option =
             (match Wire.map_get_int w "journal-day" with
              | Some d -> Some d
              | None -> Wire.map_get_int w "block/journal-day")
+        ; page_tags = []
         ; page_blocks = []
         ; page_parents = []
         }

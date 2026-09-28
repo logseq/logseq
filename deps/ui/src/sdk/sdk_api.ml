@@ -43,7 +43,10 @@ let api_methods : (string * api_fn) list =
   ; "get_current_graph", (fun a b c d -> Sdk_ui.get_current_graph a b c d)
   ; "get_current_graph_configs", (fun a b c d -> Sdk_ui.get_current_graph_configs a b c d)
   ; "set_current_graph_configs", (fun a b c d -> Sdk_ui.set_current_graph_configs a b c d)
+  ; "datascript_query", (fun a b c d -> Sdk_read.datascript_query a b c d)
+  ; "q", (fun a b c d -> Sdk_read.dsl_query a b c d)
   ]
+  @ Plugin_host.api_methods
 
 let sdk_ui_methods : (string * api_fn) list =
   [ "show_msg", (fun a b c d -> Sdk_ui.show_msg a b c d)
@@ -61,4 +64,5 @@ let install () =
   let sdk : Js.Json.t Js.Dict.t = Js.Dict.empty () in
   Js.Dict.set sdk "ui" (dict_of sdk_ui_methods);
   Js.Dict.set logseq "sdk" (Sdk_convert.json_obj sdk);
-  Worker_client.set_global "logseq" (Sdk_convert.json_obj logseq)
+  Worker_client.set_global "logseq" (Sdk_convert.json_obj logseq);
+  Plugin_host.setup ()

@@ -111,6 +111,70 @@ let dots_menu st favorited =
            ])
     ]
 
+(* ---------- plugins dropdown (toolbar-plugins-manager) ---------- *)
+
+let plugins_menu st =
+  let owner =
+    st.Sidebar_state.open_menu.Signal.state_signal.Signal.owner
+  in
+  let extra_item key label icn f =
+    dom ~key:("pm-x-" ^ key) ~style_class:"ui__dropdown-menu-item extra-item"
+      ~events:"click"
+      ~on_dom_event:(fun n _ ->
+        if n = "click" then (
+          Sidebar_state.close_menu st;
+          f ()))
+      [ dom ~tag:"span" ~style_class:"flex items-center gap-1"
+          [ icon icn; dom ~tag:"div" ~text:label [] ] ]
+  in
+  let pinned = Plugin_host.pinned () in
+  let item_row (it : Plugin_host.ui_item) =
+    let key = Plugin_host.jstr it.it_opts "key" in
+    let pkey = it.it_pid ^ ":" ^ key in
+    dom ~key:("pm-i-" ^ pkey) ~style_class:"ui__dropdown-menu-item"
+      ~events:"click"
+      ~on_dom_event:(fun n _ ->
+        if n = "click" then Plugin_host.toggle_pinned pkey)
+      [ dom ~style_class:"flex items-center item-wrap"
+          [ dom ~key:("slot-" ^ pkey) ~id:(Plugin_host.slot_id it)
+              ~style_class:"pl-injected-ui-item-toolbar"
+              ~attrs:[ ("title", key) ] []
+          ; dom ~key:("lbl-" ^ pkey) ~tag:"span"
+              ~attrs:[ ("style", "padding-left:2px") ]
+              ~text:key []
+          ; dom ~key:("pin-" ^ pkey) ~tag:"span"
+              ~style_class:
+                ("pin flex items-center opacity-60"
+                 ^ if List.mem pkey pinned then " pinned" else "")
+              [ icon (if List.mem pkey pinned then "pinned" else "pin") ]
+          ]
+      ]
+  in
+  dom ~key:"plugins-menu"
+    [ backdrop st
+    ; dom ~key:"menu-box" ~tag:"div"
+        ~style_class:
+          "ui__dropdown-menu-content ui__dropdown-menu \
+           toolbar-plugins-manager-content"
+        ~attrs:
+          [ ("role", "menu")
+          ; ( "style"
+            , "position:fixed;top:96px;left:16px;z-index:999;min-width:200px" )
+          ]
+        (dyn ~equal:Stdlib.( = )
+           (fun _dirty ->
+             dom ~key:"pm-body" ~tag:"div"
+               (List.map item_row (Plugin_host.toolbar_items ())))
+           (Plugin_host.dirty_value owner)
+        :: [ extra_item "plugins" (t "Plugins") "apps"
+               (fun () -> Dialogs_state.open_ "plugins")
+           ; extra_item "themes" (t "Themes") "palette"
+               (fun () -> Dialogs_state.open_ "plugins")
+           ; extra_item "settings" (t "Settings") "adjustments"
+               (fun () -> Sidebar_state.open_dialog "settings")
+           ])
+    ]
+
 let menu_host st =
   let menu_sig =
     Signal.map2
@@ -126,6 +190,7 @@ let menu_host st =
       match menu with
       | "nav-edit" -> nav_edit_menu st checked
       | "dots" -> dots_menu st favorited
+      | "plugins" -> plugins_menu st
       | _ -> dom ~key:"menu-closed" [])
     menu_sig
 
@@ -301,10 +366,12 @@ let toolbar_row st =
         ~attrs:[ ("title", t "Plugins") ]
         ~events:"click"
         ~on_dom_event:(fun name _ ->
-          if name = "click" then Sidebar_state.open_dialog "plugins")
+          if name = "click" then (
+            Runtime.signal_set st.Sidebar_state.open_menu "plugins";
+            Plugin_host.inject_toolbar_ui ()))
         [ icon "apps" ]
     ; dom ~key:"dots-btn" ~tag:"button"
-        ~style_class:"button toolbar-dots-btn"
+        ~style_class:"button sidebar-dots-btn"
         ~attrs:[ ("title", t "More") ]
         ~events:"click"
         ~on_dom_event:(fun name _ ->
@@ -313,31 +380,20 @@ let toolbar_row st =
     ]
 
 (* ---------- root ---------- *)
+(* chrome.ml owns the #left-sidebar.cp__sidebar-left-layout shell +
+   shade-mask + resizer; these pieces fill its .wrap skeleton *)
 
-let render (ms : Model.t Signal.signal) : t =
+let header (ms : Model.t Signal.signal) : t =
   let st = Sidebar_state.ensure ms in
-  dom ~key:"left-sidebar"
-    ~style_class_signal:
-      (D.class_signal ms (fun (m : Model.t) ->
-           if m.left_sidebar_open then "is-open" else "is-closing"))
-    [ dom ~key:"ls-inner"
-        ~style_class:
-          "left-sidebar-inner as-container flex-1 flex flex-col min-h-0"
-        [ dom ~key:"ls-wrap" ~style_class:"wrap"
-            [ dom ~key:"ls-header" ~style_class:"sidebar-header-container"
-                [ nav_group st ]
-            ; dom ~key:"ls-contents"
-                ~style_class:"sidebar-contents-container"
-                [ favorites_group st
-                ; recents_group st
-                ; toolbar_row st ]
-            ]
-        ]
-    ; menu_host st
-    ; dom ~key:"ls-mask" ~tag:"span" ~style_class:"shade-mask"
-        ~events:"click"
-        ~on_dom_event:(fun name _ ->
-          if name = "click" then
-            Runtime.send Action.Toggle_left_sidebar)
-        []
-    ]
+  nav_group st
+
+let contents (ms : Model.t Signal.signal) : t =
+  let st = Sidebar_state.ensure ms in
+  dom ~key:"ls-contents" ~style_class:"sidebar-contents-container"
+    [ dom ~key:"ls-left" ~style_class:"cp__sidebar-left"
+        [ favorites_group st; recents_group st; toolbar_row st ] ]
+
+let menus (ms : Model.t Signal.signal) : t =
+  let st = Sidebar_state.ensure ms in
+  menu_host st
+
