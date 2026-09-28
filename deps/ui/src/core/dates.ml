@@ -42,3 +42,7 @@ let short_date_of_ts ts =
   let day = int_of_float (Js.Date.getDate d) in
   let year = int_of_float (Js.Date.getFullYear d) in
   Printf.sprintf "%s %d, %d" month day year
+
+(* d + delta days *)
+let add_days (d : Js.Date.t) delta =
+  Js.Date.fromFloat (Js.Date.getTime d +. float_of_int delta *. 86400000.)
