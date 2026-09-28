@@ -197,10 +197,21 @@ let contains_sub hay needle =
   go 0
 
 let tags_el uuid (b : Model.block) : t =
+  let pairs =
+    try List.combine b.block_tags b.block_tag_uuids
+    with Invalid_argument _ -> List.map (fun t -> (t, "")) b.block_tags
+  in
   let visible =
-    List.filter
-      (fun tag -> not (contains_sub b.block_title ("#" ^ tag)))
-      b.block_tags
+    List.filter_map
+      (fun (tag, tuuid) ->
+        (* cljs inline-tag? drops tags that already appear inline in the
+           raw title, as "#name" or "#[[uuid]]" *)
+        let inline =
+          contains_sub b.block_title ("#" ^ tag)
+          || (tuuid <> "" && contains_sub b.block_title tuuid)
+        in
+        if inline then None else Some tag)
+      pairs
   in
   match visible with
   | [] -> box ~key:("tags-" ^ uuid) []

@@ -18,6 +18,7 @@ type block =
   ; block_level : int
   ; block_tag_ids : int list (* block/tags ref ids from the pull *)
   ; block_tags : string list (* resolved tag titles, for .block-tags *)
+  ; block_tag_uuids : string list (* aligned with block_tags *)
   ; block_page_name : string option (* source page, for ref views *)
   ; block_children : block list
   ; (* db id of a :block/link target — the block renders the linked
