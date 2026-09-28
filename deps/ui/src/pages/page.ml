@@ -350,11 +350,17 @@ let ui_btn =
    disabled:pointer-events-none disabled:opacity-50 select-none \
    hover:bg-secondary/70 hover:text-secondary-foreground active:opacity-80"
 
-let fold_arrow key : t =
+let fold_arrow ?on_click key : t =
+  let events, handler =
+    match on_click with
+    | Some f -> ("click", Some (fun name _ -> if name = "click" then f ()))
+    | None -> ("", None)
+  in
   dom ~key ~tag:"a"
     ~style_class:
       "ls-foldable-title-control block-control opacity-50 hover:opacity-100"
     ~attrs:[ ("style", "width: 14px; height: 16px;") ]
+    ~events ?on_dom_event:handler
     [ dom ~key:"ch" ~tag:"span" ~style_class:"control-hide"
         [ dom ~key:"ra" ~tag:"span" ~style_class:"rotating-arrow not-collapsed"
             [ rotating_arrow (key ^ "-svg") ]
@@ -441,12 +447,12 @@ let refs_view_head key title count : t =
     ]
 
 (* cljs ls-foldable-title wrapping a view-head or a group page-ref *)
-let foldable_title key inner : t =
+let foldable_title ?on_click key inner : t =
   dom ~key:(key ^ "-ft") ~style_class:"ls-foldable-title content"
     [ dom ~key:"ftr" ~style_class:"flex-1 flex-row foldable-title"
         [ dom ~key:"fth"
             ~style_class:"flex flex-row items-center ls-foldable-header gap-1"
-            [ fold_arrow (key ^ "-fa"); inner ]
+            [ fold_arrow ?on_click (key ^ "-fa"); inner ]
         ]
     ]
 
@@ -605,56 +611,57 @@ let unlinked_row (b : Model.block) : t =
     ; Tree.block_row b
     ]
 
+(* cljs reference/unlinked-references — same views/view chrome as linked
+   refs; our search input + fold toggle ride on the same handlers *)
 let unlinked_references_view (m : Model.t) : t =
   match m.unlinked_refs with
   | [] -> box ~key:"urefs-empty" []
   | refs ->
-  let rows =
+  let filtered =
     let q = String.trim m.unlinked_query in
-    let filtered =
-      if q = "" then refs
-      else
-        List.filter
-          (fun (b : Model.block) ->
-            contains_ci ~needle:q b.block_title
-            ||
-            (match b.block_page_name with
-             | Some p -> contains_ci ~needle:q p
-             | None -> false))
-          refs
-    in
-    List.map unlinked_row filtered
+    if q = "" then refs
+    else
+      List.filter
+        (fun (b : Model.block) ->
+          contains_ci ~needle:q b.block_title
+          ||
+          (match b.block_page_name with
+           | Some p -> contains_ci ~needle:q p
+           | None -> false))
+        refs
   in
-  let body =
-    dom ~key:"urefs-content" ~style_class:"ls-foldable-content"
-      ~attrs:
-        [ ( "aria-hidden"
-          , if m.unlinked_open then "false" else "true" )
+  dom ~key:"urefs" ~style_class:"unlinked-references"
+    [ dom ~key:"uv1" ~style_class:"flex flex-col gap-2"
+        [ dom ~key:"uv2" ~style_class:"flex flex-col gap-2 grid"
+            [ dom ~key:"uv3" ~style_class:"flex flex-col"
+                [ foldable_title "urefs-t"
+                    ~on_click:(fun () ->
+                      Runtime.send Action.Unlinked_toggle_open;
+                      Runtime.flush ())
+                    (refs_view_head "urefs"
+                       (Ui_strings.t "view/unlinked-references")
+                       (List.length refs))
+                ; dom ~key:"urefs-content" ~style_class:"ls-foldable-content"
+                    ~attrs:
+                      [ ( "aria-hidden"
+                        , if m.unlinked_open then "false" else "true" ) ]
+                    [ dom ~key:"ufci" ~style_class:"ls-foldable-content-inner"
+                        [ (if m.unlinked_search then unlinked_search_input ()
+                          else box ~key:"urefs-sb" [])
+                        ; dom ~key:"urefs-body"
+                            ~style_class:"ls-view-body flex flex-col gap-2 \
+                                          grid mt-1"
+                            [ dom ~key:"uvl"
+                                ~style_class:"flex flex-col border-t pt-2 \
+                                              gap-2"
+                                [ ref_groups_virt "uvg"
+                                    (refs_grouped filtered) ]
+                            ]
+                        ]
+                    ]
+                ]
+            ]
         ]
-      [ dom ~key:"urefs-body" ~style_class:"ls-view-body" rows ]
-  in
-  dom ~key:"urefs" ~style_class:"unlinked-references mt-6"
-    [ dom ~key:"urefs-fold" ~style_class:"ls-foldable-title-control"
-        [ dom ~key:"urefs-t" ~style_class:"foldable-title"
-            ~text:Strings.unlinked_references
-            ~events:"click"
-            ~on_dom_event:(fun name _ ->
-              if name = "click" then (
-                Runtime.send Action.Unlinked_toggle_open;
-                Runtime.flush ()))
-            []
-        ; dom ~key:"urefs-search" ~tag:"button"
-            ~style_class:"view-action-search"
-            ~events:"click"
-            ~on_dom_event:(fun name _ ->
-              if name = "click" then (
-                Runtime.send Action.Unlinked_toggle_search;
-                Runtime.flush ()))
-            [ dom ~key:"urefs-icon" ~tag:"i"
-                ~style_class:"ls-icon-search ti ti-search" [] ]
-        ]
-    ; if m.unlinked_search then unlinked_search_input () else box ~key:"urefs-sb" []
-    ; body
     ]
 
 (* --- route views -------------------------------------------------- *)
