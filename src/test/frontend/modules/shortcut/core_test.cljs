@@ -157,6 +157,10 @@
   (testing "toggle contents shortcut is configured with alt+shift+c"
     (is (= ["alt+shift+c"] (dh/shortcut-binding :ui/toggle-contents))))
   (testing "toggle contents stays active while editing, like open-today-page"
+    (is (contains? (get @shortcut-config/*config :shortcut.handler/global-prevent-default)
+                   :ui/toggle-contents))
+    (is (not (contains? (get @shortcut-config/*config :shortcut.handler/global-non-editing-only)
+                        :ui/toggle-contents)))
     (is (= :shortcut.handler/global-prevent-default
            (dh/get-group :ui/toggle-contents)))
     (is (= :shortcut.handler/global-prevent-default
