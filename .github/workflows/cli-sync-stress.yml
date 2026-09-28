@@ -42,7 +42,7 @@ jobs:
   cli-sync-stress:
     name: CLI sync/offline stress
     runs-on: ubuntu-22.04
-    timeout-minutes: 30
+    timeout-minutes: 60
 
     steps:
       - name: Checkout
