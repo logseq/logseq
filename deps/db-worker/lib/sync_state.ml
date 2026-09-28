@@ -160,9 +160,12 @@ let client_ops_conn repo : Sqlite.db =
       if not (Sqlite.pooled_runtime ()) then
         ignore (File_sys.mkdir_p (Filename.dirname path));
       let db = Sqlite.open_db_pool ~name:(Graph_dir.pool_name repo) ~path in
-      (* cljs enable-sqlite-wal-mode! runs on every db get-dbs opens *)
+      (* cljs enable-sqlite-wal-mode! runs on every db get-dbs opens;
+         synchronous=NORMAL skips per-commit fsyncs — WAL checkpoints
+         still fsync, matching cljs sql.js's in-memory durability. *)
       Sqlite.exec db ~sql:"pragma locking_mode=exclusive" ~bind:[||];
       Sqlite.exec db ~sql:"pragma journal_mode=WAL" ~bind:[||];
+      Sqlite.exec db ~sql:"pragma synchronous=NORMAL" ~bind:[||];
       Hashtbl.replace client_ops_conns repo db;
       db
 

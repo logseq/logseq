@@ -84,6 +84,7 @@ let open_search_db repo : Sqlite.db =
      access unless locking_mode=exclusive is set first. *)
   Sqlite.exec db ~sql:"pragma locking_mode=exclusive" ~bind:[||];
   Sqlite.exec db ~sql:"pragma journal_mode=WAL" ~bind:[||];
+  Sqlite.exec db ~sql:"pragma synchronous=NORMAL" ~bind:[||];
   Search_index.create_tables_and_triggers db;
   db
 
@@ -756,9 +757,12 @@ let invalidate_search_db args : Wire.t E.t =
    for tx-meta :from-disk? and the importer flags. *)
 
 let search_listener repo (r : tx_report) : unit =
-  (* cljs wraps the whole handler in p/do! — async so it does not block the
-     commit's broadcast to the main thread. *)
+  (* cljs wraps the whole handler in p/do! — the index update is deferred
+     so it does not block the commit's broadcast to the main thread.
+     Db_worker_effect.async runs its thunk eagerly, so the body is moved
+     behind a zero-delay sleep to keep the sync work off the commit path. *)
   Db_worker_effect.async (fun () ->
+      Db_worker_effect.bind (Db_worker_effect.sleep 0.) (fun () ->
       try
         let meta k =
           match List.assoc_opt k r.tx_meta with
@@ -796,7 +800,7 @@ let search_listener repo (r : tx_report) : unit =
       with e ->
         Worker_log.error "search/search-listener-failed"
           [ ("repo", repo); ("error", Printexc.to_string e) ];
-        Db_worker_effect.pure ())
+        Db_worker_effect.pure ()))
 
 (* ---- init wiring ---- *)
 
