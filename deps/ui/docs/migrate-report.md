@@ -447,6 +447,30 @@ Contracts discovered while making `logseq.e2e.commands-basic-test` green
   non-consecutive input silently (`get_non_consecutive_blocks` → `None`),
   and uuid sort order is random relative to document order — selections
   must go through `selected_uuids` (flat-visible order).
+- **`Switch` re-opens bypass `open_ac`'s kind loaders**: `apply_item`'s
+  `Switch kind` arm must run the same loader `open_ac` does for that
+  kind — `Template_search` fell into the `_ -> ()` branch so
+  `t.templates` stayed `[]` and the template picker rendered only its
+  empty placeholder.
+- **Commit-title overrides must paint the normalized title**
+  (`Ops.normalized_title`): the raw buffer carries `# ` prefixes and the
+  trailing space `input-command` types, and the override's `S.set`
+  repaint lands before any worker `Page_loaded` — so `.block-content`
+  shows `# title ` until the refetch clears it, breaking exact-text
+  block jumps.
+- **Every `Page_loaded` producer must `clear_overrides`**: worker
+  `sync-db-changes` reloads flow through `Router.reload` →
+  `load_page_ref`/`load_home`/`load_block_zoom`, which never cleared —
+  overrides set on exit stayed painted forever. The clear lives at each
+  `send (Action.Page_loaded _)` site in router.ml (and refresh_page).
+- **Closed-value resolution is case-insensitive**: `/low` style command
+  ids pass lowercase names; compare `closed-value-content`
+  lowercased (`priority:low` → "Low") or the property is never set.
+- **Hidden-properties toggle is root-block/page only** (cljs
+  `properties-area` gate): `current-route-page? || root-block?` (or it
+  moves to the block-below pill). Rendering it for any block with hidden
+  rows adds a second `.property-k` ("Show hidden properties") and breaks
+  `get-text ".property-k"` single-match assertions.
 
 ## tag-basic-test (page-title tagging)
 
