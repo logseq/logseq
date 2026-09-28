@@ -222,7 +222,9 @@ let render_panel ctx ~owner_is_tag ~owner_title ~page_area ~show_hidden
         el_append_child panel (row_el ctx ~owner_is_tag ~owner_title r))
       hidden_rows;
   if hidden_rows <> [] then el_append_child panel (toggle_row ());
-  if page_area then (
+  (* cljs: new-property button only renders on sidebar/tag-dialog surfaces
+     (show-properties?) — never on the main page title surface *)
+  if page_area && ctx.class_schema then (
     let wrap = mk ~cls:"ls-new-property" "div" in
     let btn =
       mk "button" ~cls:"jtrigger flex items-center gap-1"
@@ -337,77 +339,120 @@ let mount_block_area block_el uuid =
 
 (* ---------- page mount ---------- *)
 
-let fill_bidirectional wrap (p : Model.page) =
-  el_clear wrap;
-  (match p.Model.page_db_id with
-   | Some id ->
-       D.bidirectional id
-       |> Js.Promise.then_ (fun w ->
-                  List.iter
-                    (fun group ->
-                      let g = mk ~cls:"ls-bidirectional-group" "div" in
-                      let title =
-                        D.gets group "title" |> Option.value ~default:""
-                      in
-                      let key_wrap = mk ~cls:"property-key-panel" "div" in
-                      let key =
-                        mk "a"
-                          ~cls:"property-k flex select-none jtrigger w-full"
-                          ~attrs:[ ("tabindex", "0") ]
-                      in
-                      el_set_text key title;
-                      el_append_child key_wrap key;
-                      el_append_child g key_wrap;
-                      let vc =
-                        mk ~cls:"ls-block property-value-container" "div"
-                      in
-                      let pv = mk ~cls:"property-value" "div" in
-                      (match D.getf group "entities" with
-                       | Some ents ->
-                           List.iter
-                             (fun e ->
-                               ignore
-                                 (child_text "span" "block-title-wrap"
-                                    (D.ref_title e) pv))
-                             (D.elems ents)
-                       | None -> ());
-                      el_append_child vc pv;
-                      el_append_child g vc;
-                      el_append_child wrap g)
-                    (D.elems w);
-              Js.Promise.resolve ())
-       |> ignore
-   | None -> ())
+let render_bidi_groups wrap w =
+  List.iter
+    (fun group ->
+      let g = mk ~cls:"ls-bidirectional-group" "div" in
+      let title = D.gets group "title" |> Option.value ~default:"" in
+      let key_wrap = mk ~cls:"property-key-panel" "div" in
+      let key =
+        mk "a" ~cls:"property-k flex select-none jtrigger w-full"
+          ~attrs:[ ("tabindex", "0") ]
+      in
+      el_set_text key title;
+      el_append_child key_wrap key;
+      el_append_child g key_wrap;
+      let vc = mk ~cls:"ls-block property-value-container" "div" in
+      let pv = mk ~cls:"property-value" "div" in
+      (match D.getf group "entities" with
+       | Some ents ->
+           List.iter
+             (fun e ->
+               ignore
+                 (child_text "span" "block-title-wrap" (D.ref_title e) pv))
+             (D.elems ents)
+       | None -> ());
+      el_append_child vc pv;
+      el_append_child g vc;
+      el_append_child wrap g)
+    (D.elems w)
 
-(* title action buttons: "Set property" / "Add tag property" /
-   "Configure" (property page) *)
+(* shui button ghost sm — cljs components.cljs with-button-classes *)
+let ghost_btn_cls =
+  "ui__button inline-flex cursor-pointer items-center justify-center \
+   whitespace-nowrap rounded-md text-sm gap-1 font-medium \
+   ring-offset-background transition-colors focus-visible:outline-none \
+   focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 \
+   disabled:pointer-events-none disabled:opacity-50 select-none \
+   hover:bg-secondary/70 hover:text-secondary-foreground \
+   active:opacity-80 as-ghost h-7 rounded px-3 py-1 \
+   px-2 py-0 h-6 text-xs text-muted-foreground"
+
+(* title action buttons — cljs db-page-title-actions: "Add icon" (when no
+   icon prop) + "Set property"/"Add tag property"/"Configure" *)
 let title_actions (p : Model.page) =
   let actions = mk ~cls:"ls-page-title-actions" "div" in
   let row = mk ~cls:"flex flex-row items-center gap-2" "div" in
   let uuid = Option.value ~default:"" p.Model.page_uuid in
-  if p.Model.page_is_tag then (
-    let btn = mk "button" ~cls:"ui__button" in
-    el_set_text btn (I18n.t "class/add-property");
+  let add_btn label on =
+    let btn = mk "button" ~cls:ghost_btn_cls in
+    el_set_text btn label;
     el_append_child row btn;
-    on_click btn (fun _ ->
+    on_click btn on
+  in
+  add_btn (I18n.t "command.editor/add-property-icon") (fun _ ->
+      Properties_dialog.open_for_block uuid);
+  if p.Model.page_is_tag then
+    add_btn (I18n.t "class/add-property") (fun _ ->
         Properties_dialog.open_dialog
           { Properties_dialog.uuid
           ; db_id = p.Model.page_db_id
           ; is_tag = true
           ; title = p.Model.page_title
-          }))
-  else (
-    let btn = mk "button" ~cls:"ui__button" in
-    el_set_text btn (I18n.t "property/set-property");
-    el_append_child row btn;
-    on_click btn (fun _ ->
-        Properties_dialog.open_for_block uuid));
+          })
+  else
+    add_btn (I18n.t "property/set-property") (fun _ ->
+        Properties_dialog.open_for_block uuid);
   el_append_child actions row;
   actions
 
+(* Page surface: attach .ls-properties-area only when there are rows to
+   show (cljs show-properties-area?); attach .ls-bidirectional-properties
+   only when bidirectional groups exist. *)
+let rec render_page_area ctx (p : Model.page) ~attach_area ~attach_bidi
+    ~detach area bidi =
+  D.display_props ~page_title:true ~tag_dialog:false
+    ~show_hidden:!S.show_hidden (D.uuid_ref ctx.block_uuid)
+  |> Js.Promise.then_ (fun wire ->
+         let rows, hidden = D.split_display wire in
+         let _left, _below, panel_rows = partition_rows rows in
+         if panel_rows = [] && hidden = [] && not p.Model.page_is_tag then
+           detach ()
+         else (
+           attach_area ();
+           el_clear area;
+           let panel = mk ~cls:"properties-panel" "div" in
+           el_append_child area panel;
+           render_panel ctx ~owner_is_tag:p.Model.page_is_tag
+             ~owner_title:p.Model.page_title ~page_area:true
+             ~show_hidden:!S.show_hidden panel panel_rows hidden);
+         fill_bidirectional_page p ~attach_bidi bidi;
+         Js.Promise.resolve ())
+  |> ignore
+
+and fill_bidirectional_page (p : Model.page) ~attach_bidi bidi =
+  match p.Model.page_db_id with
+  | None -> ()
+  | Some id ->
+      D.bidirectional id
+      |> Js.Promise.then_ (fun w ->
+             let groups =
+               match w with
+               | W.List xs | W.Array xs -> xs
+               | _ -> []
+             in
+             if groups = [] then begin
+               if el_is_connected bidi then el_remove bidi
+             end else (
+               attach_bidi ();
+               el_clear bidi;
+               render_bidi_groups bidi w);
+             Js.Promise.resolve ())
+      |> ignore
+
 let mount_page_area page_inner =
   (* only once per page-inner instance *)
-  match el_query page_inner ".ls-properties-area.ls-page-properties" with
+  match el_query page_inner ".ls-page-title-actions" with
   | Some _ -> ()
   | None -> (
       match !Runtime.current_page, el_query page_inner ".ls-page-title" with
@@ -422,16 +467,32 @@ let mount_page_area page_inner =
                with
                | Some cw -> el_insert_adjacent cw "afterbegin" actions
                | None -> el_insert_adjacent title_el "afterend" actions);
+              (* cljs properties-area renders .ls-properties-area only when
+                 there is something to show (show-properties-area?) and the
+                 .ls-new-property button only on sidebar/tag-dialog surfaces —
+                 the main page surface shows neither when empty. area/bidi are
+                 attached lazily once data proves non-empty. *)
               let area =
                 mk "div"
                   ~cls:"ls-properties-area ls-page-properties"
                   ~attrs:[ ("id", uuid); ("tabindex", "0") ]
               in
-              el_insert_adjacent actions "afterend" area;
               let bidi =
                 mk ~cls:"w-full ls-bidirectional-properties mt-8" "div"
               in
-              el_insert_adjacent area "afterend" bidi;
+              let attach_area () =
+                if not (el_is_connected area) then
+                  el_insert_adjacent actions "afterend" area
+              in
+              let attach_bidi () =
+                if not (el_is_connected bidi) then (
+                  attach_area ();
+                  el_insert_adjacent area "afterend" bidi)
+              in
+              let detach () =
+                if el_is_connected bidi then el_remove bidi;
+                if el_is_connected area then el_remove area
+              in
               let rec ctx : V.ctx =
                 { block_uuid = uuid
                 ; block_id = p.Model.page_db_id
@@ -440,14 +501,13 @@ let mount_page_area page_inner =
                 ; class_schema = false
                 }
               and refresh () =
-                render_area ctx ~owner_is_tag:p.Model.page_is_tag
-                  ~owner_title:p.Model.page_title ~page_area:true area;
-                fill_bidirectional bidi p
+                render_page_area ctx p ~attach_area ~attach_bidi ~detach
+                  area bidi
               in
               refresh ();
-              S.register_area area (fun () ->
-                  if el_is_connected area then refresh ()
-                  else S.unregister_area area))
+              S.register_area actions (fun () ->
+                  if el_is_connected actions then refresh ()
+                  else S.unregister_area actions))
       | _ -> ())
 
 (* ---------- observer entry ---------- *)

@@ -110,7 +110,11 @@ let initial =
   ; unlinked_refs = []
   ; repos = []
   ; theme_dark = false
-  ; left_sidebar_open = true
+  ; left_sidebar_open =
+      (* cljs: (boolean (storage/get :ls-left-sidebar-open?)) — nil -> false *)
+      (match Platform.local_storage_get "ls-left-sidebar-open?" with
+       | Some "true" -> true
+       | _ -> false)
   ; right_sidebar_open = false
   ; editing_title = false
   ; page_menu = None
