@@ -2578,7 +2578,8 @@ let test_checksum_diagnostics () =
       ignore
         (Sync_client_op.update_local_checksum repo "local-checksum-1"
            (Datascript.db conn).max_tx);
-      Hashtbl.replace Sync_state.latest_remote_checksums repo "remote-checksum-1";
+      Hashtbl.replace Sync_apply.repo_latest_remote_checksum repo
+        "remote-checksum-1";
       let local, remote = Endpoint_validate.checksum_diagnostics repo in
       check "checksum local" (local = Wire.String "local-checksum-1");
       check "checksum remote" (remote = Wire.String "remote-checksum-1"))
@@ -2593,7 +2594,7 @@ let test_checksum_diagnostics_missing_remote () =
       ignore
         (Sync_client_op.update_local_checksum repo "local-checksum-123"
            (Datascript.db conn).max_tx);
-      Hashtbl.remove Sync_state.latest_remote_checksums repo;
+      Hashtbl.remove Sync_apply.repo_latest_remote_checksum repo;
       let local, remote = Endpoint_validate.checksum_diagnostics repo in
       check "checksum local present"
         (local = Wire.String "local-checksum-123");
@@ -2605,7 +2606,7 @@ let test_checksum_diagnostics_empty () =
   with_client_ops repo (fun () ->
       let conn = create_conn () in
       Worker_state.set_datascript_conn repo conn;
-      Hashtbl.remove Sync_state.latest_remote_checksums repo;
+      Hashtbl.remove Sync_apply.repo_latest_remote_checksum repo;
       let local, remote = Endpoint_validate.checksum_diagnostics repo in
       check "checksum empty local" (local = Wire.Nil);
       check "checksum empty remote" (remote = Wire.Nil))
@@ -3124,6 +3125,17 @@ let test_date_ms_transit_decodes_to_instant () =
   check "a real ~t still decodes to Instant"
     (Ds_wire.value_of_transit (Wire.Date_ms ms) = Instant ms)
 
+(* cljs ~u decode canonicalizes via transit-js UUIDfromString; a raw
+   uuid string like a JWT sub must materialize to the same canonical
+   form a kvs leaf holds, or lookups miss after leaf materialization *)
+let test_uuid_value_of_transit_canonicalizes () =
+  check "raw sub decodes to the canonical uuid transit-js produces"
+    (Ds_wire.value_of_transit (Wire.Uuid "cli-sync-stress-user")
+     = Uuid "0c00000c-000e-0000-0000-000000000000");
+  check "canonical uuids are unchanged"
+    (Ds_wire.value_of_transit (Wire.Uuid "3b8e1234-5678-4a9b-8c1d-2e3f4a5b6c7d")
+     = Uuid "3b8e1234-5678-4a9b-8c1d-2e3f4a5b6c7d")
+
 (* worker-db-fix/heal-instant-values — cljs writes inst values only on
    file/created-at|last-modified-at; a ~m anywhere else is a corrupt
    epoch-ms number and gets rewritten numeric on open *)
@@ -3440,6 +3452,8 @@ let cases =
       test_epoch_ms_value_of_transit_stays_numeric
   ; Alcotest.test_case "date-ms-transit-decodes-to-instant-test" `Quick
       test_date_ms_transit_decodes_to_instant
+  ; Alcotest.test_case "uuid-value-of-transit-canonicalizes-test" `Quick
+      test_uuid_value_of_transit_canonicalizes
   ; Alcotest.test_case "heal-instant-values-test" `Quick
       test_heal_instant_values
   ; Alcotest.test_case

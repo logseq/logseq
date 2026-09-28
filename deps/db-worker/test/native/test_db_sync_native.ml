@@ -138,7 +138,6 @@ let preserve_state (f : unit -> 'a) : 'a =
   let remote_ck_prev = Hashtbl.copy Sync_apply.repo_latest_remote_checksum in
   let stopped_prev = Hashtbl.copy Sync_apply.repo_upload_stopped in
   let large_up_prev = Hashtbl.copy Sync_apply.repo_large_upload_progress in
-  let ck_prev = Hashtbl.copy Sync_state.latest_remote_checksums in
   let prep_prev = !(Sync_apply.prepare_upload_tx_entries_fn) in
   let flush_prev = !(Sync_apply.flush_pending_fn) in
   let client_prev = !(Sync_state.db_sync_client) in
@@ -223,9 +222,6 @@ let preserve_state (f : unit -> 'a) : 'a =
       Hashtbl.iter
         (Hashtbl.replace Sync_apply.repo_large_upload_progress)
         large_up_prev;
-      Hashtbl.reset Sync_state.latest_remote_checksums;
-      Hashtbl.iter
-        (Hashtbl.replace Sync_state.latest_remote_checksums) ck_prev;
       Sync_state.db_sync_client := client_prev;
       Sync_state.dev_or_test := dev_or_test_prev;
       Sync_apply.prepare_upload_tx_entries_fn := prep_prev;
