@@ -553,11 +553,45 @@ let title_actions (p : Model.page) =
     el_append_child row btn;
     on_click btn on
   in
+  (* cljs page.cljs db-page-title-actions: "Add icon" opens the icon
+     picker directly, writing logseq.property/icon *)
   add_btn (I18n.t "command.editor/add-property-icon") (fun _ ->
-      Properties_dialog.open_for_block uuid);
+      Icon_picker.open_picker ~anchor:row
+        ~del:(p.Model.page_icon <> None)
+        ~on_chosen:(fun c ->
+          let op =
+            match c with
+            | Icon_picker.Remove ->
+                Outliner_ops.op "remove-block-property"
+                  [ Wire.Uuid uuid
+                  ; Wire.Keyword "logseq.property/icon" ]
+            | Icon_picker.Emoji id ->
+                Outliner_ops.op "set-block-property"
+                  [ Wire.Uuid uuid
+                  ; Wire.Keyword "logseq.property/icon"
+                  ; Wire.Map
+                      [ Wire.Keyword "type", Wire.Keyword "emoji"
+                      ; Wire.Keyword "id", Wire.String id ] ]
+            | Icon_picker.Tabler (id, color) ->
+                Outliner_ops.op "set-block-property"
+                  [ Wire.Uuid uuid
+                  ; Wire.Keyword "logseq.property/icon"
+                  ; Wire.Map
+                      ([ Wire.Keyword "type", Wire.Keyword "tabler-icon"
+                       ; Wire.Keyword "id", Wire.String id ]
+                      @ (match color with
+                         | Some c -> [ Wire.Keyword "color", Wire.String c ]
+                         | None -> [])) ]
+          in
+          let p =
+            Outliner_ops.apply [ op ]
+            |> Js.Promise.then_ (fun _ -> !Runtime.reload_current_view ())
+          in
+          ignore p));
   if p.Model.page_is_tag then
     add_btn (I18n.t "class/add-property") (fun _ ->
-        Properties_dialog.open_dialog
+        let l, _t, _r, b, _w = el_rect row in
+        Properties_dialog.open_dialog ~anchor:(l, b +. 4.)
           { Properties_dialog.uuid
           ; db_id = p.Model.page_db_id
           ; is_tag = true
@@ -565,7 +599,7 @@ let title_actions (p : Model.page) =
           })
   else
     add_btn (I18n.t "property/set-property") (fun _ ->
-        Properties_dialog.open_for_block uuid);
+        Properties_dialog.open_for_block_at row uuid);
   el_append_child actions row;
   actions
 
