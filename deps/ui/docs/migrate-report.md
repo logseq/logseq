@@ -816,3 +816,52 @@ search may lag).
   `Render.title` (block uuid passed from `content_el`): without it,
   `b1[[u3]]` → `u3` title → `[[u2]]` → `u2` title → `[[u1]]` looped
   forever (each level a new thread-api pull + dyn mount).
+
+## Page title actions + properties-area mount (e2e: `block_property_basic_test`)
+
+- **`.ls-page-title-actions` is LUI-rendered, not view-injected**: cljs
+  `db-page-title-actions` is part of the page-title component — "Add
+  icon" (only while the page has no icon) + "Set property" (pages) /
+  "Add tag property" (tag pages). `mount_page_area` used to treat an
+  existing `.ls-page-title-actions` as "already mounted" and skip, so
+  once LUI rendered the Add-icon button the properties area +
+  `.ls-bidirectional-properties` never mounted on plain pages.
+  `page_title_el` now renders the full action set and
+  `mount_page_area` mounts idempotently: marker on `.page-inner`
+  (`data-props-mounted=<uuid>`), refresh registered on `.page-inner`
+  (survives actions-node replacement by LUI re-renders), stale
+  area/bidi removed on remount.
+- **Detached area elements must not be the refresh registration
+  container**: `mount_block_area` previously registered the
+  `.ls-properties-area` element itself with `S.register_area`, but the
+  element stays detached while a block has no visible rows and
+  `live_areas` prunes detached containers — a property tx landing
+  later found no registration, so pills never re-rendered. The
+  always-connected `.ls-block-content-indent` is the registration
+  container now.
+- **Page icon replaces the bullet**: cljs renders `.ls-page-icon`
+  inside `.block-control-wrap.is-with-icon.bullet-hidden`; as an outer
+  sibling the `a.block-control` bullet kept intercepting pointer
+  events.
+- **One `.ls-foldable-title-control` per foldable section**: cljs puts
+  the fold arrow only on the outer section header; per-group ref
+  titles are plain headers. `foldable_title` takes
+  `~control:false` for `ref_group`.
+- **Select item text needs the leaf span**: `properties_select`
+  `item_el` built `span.font-normal` carrying the item title but never
+  appended it to `span.flex-1` — every select row rendered empty, so
+  `getByText "New option:"` found nothing.
+- **One `ls:editor-command` listener per command**: both
+  `editor_keys` and `properties_view` listened for "Add property" and
+  each opened the dialog — two `.cp__select-input` mounts broke
+  `input[placeholder]` strict mode. `properties_view`'s
+  `open_for_current` (editing block > selected > page) is the single
+  path now.
+- **`createJournalPage` resolves the worker-assigned uuid**: journals
+  get a day-derived `00000001-YYYYMMDD-…` uuid from `create-page`, so
+  `create_page_with_flags` must `get_entity` the *returned* uuid, not
+  the caller's random one.
+- **View-head action buttons need click wiring**: the unlinked-refs
+  search toggle (`button:has(.ls-icon-search)` →
+  `Unlinked_toggle_search`) rendered `.view-action-search` but the
+  button dispatched nothing.
