@@ -259,30 +259,6 @@ let new_property_btn (ctx : V.ctx) ~for_class ~owner_title =
       else Properties_dialog.open_for_block ctx.block_uuid);
   wrap
 
-(* cljs properties-area class section: .flex.flex-col.gap-1.mt-2 with the
-   class-properties key, the "Tag properties are inherited" description,
-   hidden rows and the add-property button under .ml-5 *)
-let class_section ctx ~owner_is_tag ~owner_title ~show_hidden hidden_rows =
-  let section = mk ~cls:"flex flex-col gap-1 mt-2" "div" in
-  let head = mk ~attrs:[ ("style", "font-size:15px") ] "div" in
-  el_append_child head (mk ~cls:"property-key text-sm" "div");
-  ignore
-    (child_text "div" "text-muted-foreground ml-5"
-       (I18n.t "class/tag-properties-desc") head);
-  el_append_child section head;
-  let body = mk ~cls:"gap-1 flex flex-col" "div" in
-  if show_hidden then
-    List.iter
-      (fun r ->
-        el_append_child body (row_el ctx ~owner_is_tag ~owner_title r))
-      hidden_rows;
-  let add = mk ~cls:"ml-5" "div" in
-  el_append_child add
-    (new_property_btn ctx ~for_class:true ~owner_title);
-  el_append_child body add;
-  el_append_child section body;
-  section
-
 let render_panel ctx ~owner_is_tag ~owner_title ~page_area ~show_hidden
     panel rows hidden_rows =
   List.iter
@@ -614,27 +590,24 @@ let rec render_page_area ctx (p : Model.page) ~attach_area ~attach_bidi
          let rows, hidden = D.split_display wire in
          let rows = List.filter is_panel_row rows in
          let _left, _below, panel_rows = partition_rows rows in
-         if panel_rows = [] && hidden = [] && not p.Model.page_is_tag then
+         (* cljs: on a class/tag page the title block is collapsed, so
+            db-properties-cp never mounts — no .ls-properties-area at
+            all; the class section only lives in the tag dialog *)
+         if p.Model.page_is_tag then
+           detach ()
+         else if panel_rows = [] && hidden = [] then
            detach ()
          else (
            attach_area ();
            el_clear area;
            let panel = mk ~cls:"properties-panel" "div" in
            el_append_child area panel;
-           render_panel ctx ~owner_is_tag:p.Model.page_is_tag
+           render_panel ctx ~owner_is_tag:false
              ~owner_title:p.Model.page_title ~page_area:true
              ~show_hidden:!S.show_hidden panel panel_rows hidden;
-           (* cljs properties-area: class pages get the class section;
-              other page-title surfaces get .ls-new-property *)
-           if p.Model.page_is_tag then
-             el_append_child area
-               (class_section ctx ~owner_is_tag:true
-                  ~owner_title:p.Model.page_title
-                  ~show_hidden:!S.show_hidden hidden)
-           else
-             el_append_child area
-               (new_property_btn ctx ~for_class:false
-                  ~owner_title:p.Model.page_title));
+           el_append_child area
+             (new_property_btn ctx ~for_class:false
+                ~owner_title:p.Model.page_title));
          fill_bidirectional_page p ~attach_bidi bidi;
          Js.Promise.resolve ())
   |> ignore
