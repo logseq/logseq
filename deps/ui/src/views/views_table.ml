@@ -319,10 +319,16 @@ let prop_cell ~blk (c : V.column) : D.el =
             ~text:t ())
    | W.Array xs when c.V.c_many ->
        (* cljs block-title over a node-many property: div.flex.flex-row
-          with "," separators between page-ref links *)
+          with "," separators between page-ref links; the implicit Page
+          class is hidden (cljs renders nothing for it in the cell) *)
        let box = D.h ~cls:"flex flex-row" () in
        let items =
-         List.filter (fun x -> Wr.prop_text x <> "") xs
+         List.filter
+           (fun x ->
+             Wr.prop_text x <> ""
+             && (c.V.c_id <> "block/tags"
+                 || Wr.ident_of_value x <> Some "logseq.class/Page"))
+           xs
        in
        List.iteri
          (fun i x ->
@@ -330,11 +336,12 @@ let prop_cell ~blk (c : V.column) : D.el =
            if i > 0 then
              D.el_append_child box (D.h ~cls:"mr-1" ~text:"," ());
            let href = Option.value (Wr.ref_uuid x) ~default:t in
+           let label = if c.V.c_id = "block/tags" then "#" ^ t else t in
            D.el_append_child box
              (D.h
                 ~children:
                   [ D.h ~tag:"a" ~cls:"page-ref"
-                      ~attrs:[ ("href", "#/page/" ^ href) ] ~text:t ()
+                      ~attrs:[ ("href", "#/page/" ^ href) ] ~text:label ()
                   ]
                 ()))
          items;
