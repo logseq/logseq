@@ -169,8 +169,10 @@ let entity_checksum_tuples db eid e2ee : Tuple_set.t =
            Tuple_set.empty
   | None -> Tuple_set.empty
 
+(* cljs (str v): keywords keep the leading colon, symbols do not. *)
 let value_str = function
-  | String s | Keyword s | Symbol s | Uuid s -> Some s
+  | String s | Symbol s | Uuid s -> Some s
+  | Keyword s -> Some (":" ^ s)
   | Int64 n -> Some (Int64.to_string n)
   | Float f -> Some (Common_util.js_string_of_float f)
   | Bool b -> Some (string_of_bool b)
@@ -181,7 +183,8 @@ let tuple_digest (entity_uuid, attr, value) =
   (fnv_offset, djb_offset)
   |> fun s -> digest_string s entity_uuid
   |> fun s -> hash_code s field_separator
-  |> fun s -> digest_string s attr
+  (* cljs (str attr) on a keyword yields ":ns/name" *)
+  |> fun s -> digest_string s (":" ^ attr)
   |> fun s -> hash_code s field_separator
   |> fun s -> digest_string s (Option.value (value_str value) ~default:"")
 

@@ -13182,6 +13182,29 @@ let test_template_text_property_uploads_after_rebase_and_undo_redo () =
          [ false; true ])
     [ false; true ]
 
+(* cljs checksum.cljs tuple-digest digests (str attr) — keywords keep the
+   leading colon — and (some-> value str) — keyword values too. Golden
+   digests computed with a JS port of cljs digest-string/hash-code over the
+   colonized strings, so a format regression (dropping the colon) is caught
+   against a cljs-oracle value. *)
+let test_tuple_digest_matches_cljs_str_format () =
+  let digest = Db_sync_checksum.tuple_digest in
+  let checksum_of = Db_sync_checksum.checksum_of_state in
+  let u = "0180a55d-0000-7000-0000-000000000001" in
+  Alcotest.(check string)
+    "keyword attr keeps colon" "47f129bf0075bf01"
+    (checksum_of (digest (u, "block/title", String "hello")));
+  Alcotest.(check string)
+    "uuid value" "3960442260e738d6"
+    (checksum_of (digest (u, "block/uuid", Uuid u)));
+  Alcotest.(check string)
+    "int64 value" "b53b165c08b2a7e2"
+    (checksum_of
+       (digest (u, "logseq.property/created-at", Int64 1234L)));
+  Alcotest.(check string)
+    "keyword value keeps colon" "8abd67ddbbf807ef"
+    (checksum_of (digest (u, "block/tags", Keyword "logseq.class/Page")))
+
 let () =
   Alcotest.run "db-sync-native"
     [ ( "db-sync"
@@ -13243,6 +13266,8 @@ let () =
         ; Alcotest.test_case
             "sync-counts-counts-only-true-pending-local-ops"
             `Quick test_sync_counts_counts_only_true_pending_local_ops
+        ; Alcotest.test_case "tuple-digest-matches-cljs-str-format" `Quick
+            test_tuple_digest_matches_cljs_str_format
         ; Alcotest.test_case "sync-counts-reports-stored-local-checksum"
             `Quick test_sync_counts_reports_stored_local_checksum
         ; Alcotest.test_case "pull-ok-with-older-remote-tx-is-ignored"
