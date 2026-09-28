@@ -10,6 +10,8 @@
 
 open Lui_elements
 
+module S = Editor_state
+
 let dom = Logseq_dom.dom
 
 (* --- shared pieces ------------------------------------------------ *)
@@ -264,35 +266,36 @@ let title_content (page : Model.page) : t =
     ]
 
 let page_title_el (m : Model.t) (page : Model.page) : t =
-  let icon_btn_id = "page-icon-btn" in
-  let icon_children =
+  (* cljs page-icon: custom :logseq.property/icon -> first tag icon ->
+     class "hash" -> property "letter-p"; rendered as the icon-picker
+     button inside .block-main-content *)
+  let icon_el =
     match page.page_icon, page.page_is_tag with
     | Some ("emoji", eid), _ ->
-        [ dom ~key:"pt-e" ~tag:"em-emoji" ~attrs:[ "id", eid ] [] ]
-    | Some (_, iid), _ ->
-        [ dom ~key:"pt-ti" ~style_class:("ui__icon ti ls-icon-" ^ iid)
-            [ dom ~key:"pt-tii" ~tag:"i" ~style_class:("ti ti-" ^ iid) []
-            ]
-        ]
-    | None, true -> [ dom ~key:"pt-ic" ~tag:"i" ~style_class:"ti ti-hash" [] ]
-    | None, false -> []
+        Some (dom ~key:"pt-e" ~tag:"em-emoji" ~attrs:[ "id", eid ] [])
+    | Some (_, iid), _ -> Some (Icons.icon ~size:38. iid)
+    | None, true -> Some (Icons.icon ~size:38. "hash")
+    | None, false -> None
   in
   let uuid = Option.value page.page_uuid ~default:"" in
-  let icon =
-    match icon_children with
-    | [] -> []
-    | _ ->
-        [ dom ~key:"pt-icon" ~style_class:"ls-page-icon flex self-start"
-            [ dom ~key:"pt-icbtn" ~tag:"button"
-                ~attrs:
-                  [ "id", icon_btn_id; "type", "button"
-                  ; "title", Ui_strings.t "icon/tab-emojis" ]
-                ~events:"click"
-                ~on_dom_event:(fun _ _ ->
-                  page_icon_picker page ("#" ^ icon_btn_id))
-                icon_children
-            ]
-        ]
+  (* cljs db-page-title: tag/class pages render collapsed by default; the
+     fold state lives in the same collapsed/expanded sets as blocks *)
+  let title_collapsed =
+    (not (S.is_expanded uuid)) && (S.is_collapsed uuid || page.page_is_tag)
+  in
+  let toggle_title_collapse () =
+    if S.ready () then
+      S.set (fun (st : S.t) ->
+          if title_collapsed then
+            { st with
+              S.collapsed = S.String_set.remove uuid st.S.collapsed
+            ; S.expanded = S.String_set.add uuid st.S.expanded
+            }
+          else
+            { st with
+              S.collapsed = S.String_set.add uuid st.S.collapsed
+            ; S.expanded = S.String_set.remove uuid st.S.expanded
+            })
   in
   let body =
     (* cljs db-page-title: the page title is a full block row —
@@ -306,37 +309,121 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
             ~attrs:
               [ ("blockid", uuid); ("containerid", uuid)
               ; ("data-block-title", page.page_title)
-              ; ("haschild", "false"); ("data-comment-item", "false")
+              ; ("haschild", "false")
+              ; ("data-comment-item", "false")
               ; ("data-comments-area", "false"); ("level", "0")
               ; ("data-collapsed", "false")
-              ; ("data-db-collapsable", "false")
+              ; ("data-db-collapsable", if page.page_is_tag then "true" else "false")
               ; ("data-block-format", "markdown") ]
             [ dom ~key:"pt-row"
                 ~style_class:
                   "block-main-container flex flex-row gap-1 is-page-title-row"
-                ~attrs:[ ("style", "margin-left: -30px") ]
+                ~attrs:
+                  [ ( "style"
+                    , "margin-left: "
+                      ^ if icon_el = None then "-30px" else "-36px" )
+                  ]
                 [ dom ~key:"pt-ctrl"
                     ~style_class:
-                      "is-with-icon bullet-hidden block-control-wrap flex \
-                       flex-row items-center h-6"
+                      ("is-with-icon"
+                      ^ (if title_collapsed then " bullet-closed" else "")
+                      ^ " bullet-hidden block-control-wrap flex flex-row \
+                         items-center h-6")
                     ~attrs:[ ("data-has-children", "false") ]
-                    [ dom ~key:"pt-ca" ~tag:"a"
-                        ~style_class:"block-control"
-                        ~id:("control-" ^ uuid)
-                        [ dom ~key:"pt-cs" ~tag:"span"
+                    ~events:"mouseover mouseout"
+                    ~on_dom_event:(fun name _ ->
+                      (* cljs *control-show? atom: caret appears only while
+                         hovering, and only for collapsable titles *)
+                      if page.page_is_tag then
+                        match
+                          Browser_ui.qs "#page-title .block-control > span"
+                        with
+                        | Some el ->
+                            if name = "mouseover" then (
+                              Browser_ui.rm_class el "control-hide";
+                              Browser_ui.add_class el "control-show";
+                              Browser_ui.add_class el "cursor-pointer")
+                            else (
+                              Browser_ui.add_class el "control-hide";
+                              Browser_ui.rm_class el "control-show";
+                              Browser_ui.rm_class el "cursor-pointer")
+                        | None -> ())
+                    ([ (let cs =
+                          dom ~key:"pt-cs" ~tag:"span"
                             ~style_class:"control-hide"
                             [ dom ~key:"pt-ra" ~tag:"span"
-                                ~style_class:"rotating-arrow not-collapsed"
+                                ~style_class:
+                                  ("rotating-arrow"
+                                  ^ if title_collapsed then " collapsed"
+                                    else " not-collapsed")
                                 [ rotating_arrow "pt-arw" ]
                             ]
-                        ]
-                    ]
+                        in
+                        if page.page_is_tag then
+                          dom ~key:"pt-ca" ~tag:"a"
+                            ~style_class:"block-control"
+                            ~id:("control-" ^ uuid) ~events:"click"
+                            ~on_dom_event:(fun name _ ->
+                              if name = "click" then toggle_title_collapse ())
+                            [ cs ]
+                        else
+                          dom ~key:"pt-ca" ~tag:"a"
+                            ~style_class:"block-control"
+                            ~id:("control-" ^ uuid) [ cs ])
+                     ]
+                    )
                 ; dom ~key:"pt-col1" ~style_class:"flex flex-col w-full"
                     [ dom ~key:"pt-col2" ~style_class:"flex flex-col w-full"
                         [ dom ~key:"pt-bmc"
                             ~style_class:
                               "block-main-content flex flex-row gap-2"
-                            [ dom ~key:"pt-col3"
+                            ((match icon_el with
+                              | None -> []
+                              | Some ic ->
+                                  [ dom ~key:"pt-icon"
+                                      ~style_class:"ls-page-icon flex self-start"
+                                      [ dom ~key:"pt-icbtn" ~tag:"button"
+                                          ~attrs:
+                                            [ ("type", "button")
+                                            ; ( "title"
+                                              , Ui_strings.t "icon/tab-emojis"
+                                              )
+                                            ]
+                                          ~style_class:
+                                            "ui__button inline-flex \
+                                             cursor-pointer items-center \
+                                             justify-center whitespace-nowrap \
+                                             rounded-md text-sm gap-1 \
+                                             font-medium ring-offset-background \
+                                             transition-colors \
+                                             focus-visible:outline-none \
+                                             focus-visible:ring-2 \
+                                             focus-visible:ring-ring \
+                                             focus-visible:ring-offset-2 \
+                                             disabled:pointer-events-none \
+                                             disabled:opacity-50 select-none \
+                                             hover:bg-secondary/70 \
+                                             hover:text-secondary-foreground \
+                                             active:opacity-80 as-ghost h-7 \
+                                             rounded py-1 px-1 leading-none \
+                                             text-muted-foreground \
+                                             hover:text-foreground"
+                                          ~events:"click"
+                                          ~on_dom_event:(fun name _ ->
+                                            if name = "click" then
+                                              page_icon_picker page
+                                                "#page-title .ls-page-icon")
+                                          [ dom ~key:"pt-cw" ~tag:"span"
+                                              ~style_class:
+                                                "inline-flex items-center \
+                                                 ls-icon-color-wrap"
+                                              ~attrs:
+                                                [ ("style", "color: inherit") ]
+                                              [ ic ]
+                                          ]
+                                      ]
+                                  ])
+                            @ [ dom ~key:"pt-col3"
                                 ~style_class:"flex flex-col w-full"
                                 [ dom ~key:"pt-wrap"
                                     ~style_class:
@@ -366,11 +453,12 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
                                     ]
                                 ]
                             ]
-                        ]
+                        )
                     ]
                 ]
             ]
         ]
+      ]
     ]
   in
   (* e2e selects [data-testid='page title'] -> mapped to #page-title *)
@@ -404,7 +492,7 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
                 Dom_ext.set_selection_range el n n
             | None -> ())
       | _ -> open_menu name payload)
-    (icon @ body)
+    body
 
 let blocks_inner ?puuid ?(virtualize = false) (blocks : Model.block list)
     : t =

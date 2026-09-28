@@ -542,6 +542,15 @@ let get_page_route_info args =
                     ; ( kw "private-built-in?",
                         Wire.Bool
                           (Ldb.built_in page && Ldb.private_built_in_page page) )
+                    ; (* objects.cljs: class-objects shows "new object" unless
+                         the class ident is private (Asset exempt) *)
+                      ( kw "add-object?",
+                        Wire.Bool
+                          (match Ldb.ident_of page with
+                           | Some "logseq.class/Asset" -> true
+                           | Some ident ->
+                               not (List.mem ident Db_class.private_tags)
+                           | None -> false) )
                     ; ( kw "journal-day",
                         Ds_wire.transit_of_value
                           (Option.value

@@ -61,6 +61,9 @@ type page =
        built-in? = :logseq.property/built-in? *)
     page_internal : bool
   ; page_built_in : bool
+  ; (* objects.cljs: class-objects "new object" unless the class ident is
+       private (worker-computed "add-object?") *)
+    page_add_object : bool
   ; page_tags : string list
   ; page_blocks : block list
   ; page_linked_refs : block list (* linked references, for journal items *)

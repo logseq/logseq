@@ -269,6 +269,10 @@ let page_of_summary (w : Wire.t) : Model.page option =
              with
              | Some (Wire.Bool true), _ | _, Some (Wire.Bool true) -> true
              | _ -> false)
+        ; page_add_object =
+            (match Wire.get w "add-object?" with
+             | Some (Wire.Bool b) -> b
+             | _ -> false)
         ; page_tags = []
         ; page_blocks = []
         ; page_linked_refs = []

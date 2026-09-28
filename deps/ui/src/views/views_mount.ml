@@ -63,7 +63,7 @@ let rec ensure_object_view () =
       in
       match kind with
       | None -> (
-          match Ed.el_query inner ".ls-views-wrap" with
+          match Ed.el_query inner ".page-tabs" with
           | Some el -> D.el_remove el
           | None -> ())
       | Some kind -> (
@@ -72,7 +72,7 @@ let rec ensure_object_view () =
             | V.KTagPage u | V.KPropertyPage u -> u
             | _ -> ""
           in
-          match Ed.el_query inner ".ls-views-wrap" with
+          match Ed.el_query inner ".page-tabs" with
           | Some el ->
               (* remount when the page changed underneath *)
               if Ed.el_get_attr el "data-views-owner" <> Some uuid then begin
@@ -82,13 +82,31 @@ let rec ensure_object_view () =
           | None -> ensure_object_view_container inner uuid kind))
 
 and ensure_object_view_container inner uuid kind =
-  (* cljs objects.cljs class-objects: [:div.ml-1 [view]] *)
-  let container = D.h ~cls:"ls-views-wrap ml-1 w-full" () in
-  D.el_set_attr container "data-views-owner" uuid;
+  (* cljs page.cljs: tag/property objects live inside
+     .page-tabs > .w-full > .ui__tabs-content > .ml-1 (objects.cljs) *)
+  let container = D.h ~cls:"ml-1" () in
+  let tabpanel =
+    D.h
+      ~cls:"ui__tabs-content mt-2 ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+      ~attrs:
+        [ ("data-orientation", "horizontal"); ("role", "tabpanel")
+        ; ("tabindex", "0"); ("data-index", "0") ]
+      ~children:[ container ] ()
+  in
+  let tabs =
+    D.h ~cls:"w-full"
+      ~attrs:
+        [ ("data-orientation", "horizontal")
+        ; ("data-activation-direction", "none") ]
+      ~children:[ tabpanel ] ()
+  in
+  let wrapper =
+    D.h ~cls:"page-tabs"
+      ~attrs:[ ("data-views-owner", uuid) ] ~children:[ tabs ] ()
+  in
   (* .page-blocks-inner is nested inside .ls-page-blocks, a direct child of
      .page-inner — insertBefore requires a direct-child reference node *)
-  D.el_insert_before inner container
-    (Ed.el_query inner ".ls-page-blocks");
+  D.el_insert_before inner wrapper (Ed.el_query inner ".ls-page-blocks");
   let inst =
     Views_view.mount ~kind ~owner:(W.Uuid uuid) ~container
   in
