@@ -75,7 +75,8 @@ let ac_item_el (st : S.t) (item_sig : S.ac_item Signal.signal) : t =
 let ac_empty_placeholder (v : S.view) : t =
   let text =
     match v.S.ac with
-    | Some { kind = S.Page_ref; _ } -> U.t "editor/search-for-node"
+    | Some { kind = S.Page_ref | S.Page_embed; _ } ->
+        U.t "editor/search-for-node"
     | Some { kind = S.Tag_search; _ } -> U.t "editor/search-for-tag"
     | _ -> U.t "editor/block-search"
   in

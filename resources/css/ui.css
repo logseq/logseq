@@ -112,6 +112,7 @@
 }
 
 .ui__toaster-viewport .ui__toast {
+  pointer-events: auto;
   --gap: 0.75rem;
   --peek: 0.75rem;
   --scale: calc(1 - (var(--toast-index) * 0.1));

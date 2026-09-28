@@ -118,8 +118,15 @@ let set_collapsed set =
   else S.defer_init apply
 
 (* block/tags arrives as {:db/id} stubs — cljs resolves tag entities live
-   off datascript; we batch-resolve titles via get-blocks and rewrite the
-   model before rendering. *)
+   off datascript; we batch-resolve title/ident/hidden via get-blocks and
+   rewrite the model before rendering. Internal classes (Page, Property,
+   …) and hidden tags never render as .block-tag chips, matching
+   db-class/internal-tags + block.cljs tags-cp. *)
+let internal_tag_ident (ident : string) : bool =
+  List.mem ident
+    [ "logseq.class/Page"; "logseq.class/Property"; "logseq.class/Tag";
+      "logseq.class/Root"; "logseq.class/Asset" ]
+
 let rec collect_tag_ids acc (b : Model.block) =
   List.fold_left collect_tag_ids (List.rev_append b.Model.block_tag_ids acc)
     b.block_children
@@ -144,7 +151,8 @@ let resolve_block_tags (blocks : Model.block list) : Model.block list Js.Promise
                       ])
                   ids))
           |> Js.Promise.then_ (fun w ->
-                 let titles =
+                 (* id -> (title, ident, hidden) *)
+                 let tags =
                    List.filter_map
                      (fun pair ->
                        let blk =
@@ -155,20 +163,50 @@ let resolve_block_tags (blocks : Model.block list) : Model.block list Js.Promise
                              | [ _; b ] -> b
                              | _ -> Wire.Nil)
                        in
-                       match
-                         ( Wire.map_get_int blk "db/id"
-                         , Wire.map_get_string blk "block/title" )
-                       with
-                       | Some id, Some t -> Some (id, t)
-                       | _ -> None)
+                       match Wire.map_get_int blk "db/id" with
+                       | Some id ->
+                           Some
+                             ( id,
+                               ( Option.value
+                                   (Wire.map_get_string blk "block/title")
+                                   ~default:"",
+                                 (match Wire.get blk "db/ident" with
+                                  | Some (Wire.String s)
+                                  | Some (Wire.Keyword s) -> s
+                                  | _ -> ""),
+                                 Option.bind
+                                   (Wire.get blk "block/hidden?")
+                                   Wire.as_bool
+                                   = Some true
+                                 || Option.bind
+                                      (Wire.get blk "hidden?")
+                                      Wire.as_bool
+                                      = Some true ) )
+                       | None -> None)
                      (Sdk_util.wire_elems w)
                  in
                  let rec fill (b : Model.block) =
+                   let resolved =
+                     List.filter_map
+                       (fun i -> List.assoc_opt i tags)
+                       b.Model.block_tag_ids
+                   in
+                   let idents = List.map (fun (_, i, _) -> i) resolved in
+                   let visible =
+                     List.filter
+                       (fun (_, ident, hidden) ->
+                         not hidden && not (internal_tag_ident ident))
+                       resolved
+                   in
                    { b with
                      Model.block_tags =
-                       List.filter_map
-                         (fun i -> List.assoc_opt i titles)
-                         b.block_tag_ids
+                       List.map (fun (t, _, _) -> t) visible
+                   ; block_tag_idents =
+                       List.map (fun (_, i, _) -> i) visible
+                   ; block_is_comments_area =
+                       List.mem "logseq.class/Comments" idents
+                   ; block_is_comment =
+                       List.mem "logseq.class/Comment" idents
                    ; block_children = List.map fill b.block_children
                    }
                  in
@@ -205,6 +243,8 @@ let fetch_zoom_blocks repo uuid : Wire.t Js.Promise.t =
 let refresh_page () : unit Js.Promise.t =
   match (!Runtime.current_repo, !Runtime.current_page) with
   | Some repo, Some page -> (
+      incr Runtime.load_gen;
+      let gen = !Runtime.load_gen in
       let blocks_p =
         match !Runtime.current_route, page.Model.page_uuid with
         | Some (Model.Block_zoom _), Some u -> fetch_zoom_blocks repo u
@@ -226,9 +266,21 @@ let refresh_page () : unit Js.Promise.t =
              let blocks = Decode.blocks_of_wire blocks_w in
              resolve_block_tags blocks
              |> Js.Promise.then_ (fun blocks ->
-                    Runtime.send
-                      (Action.Page_loaded
-                         { page with Model.page_blocks = blocks });
+                    (* the fetch can resolve after navigation — only
+                       commit when this page is still the current one *)
+                    let still_current =
+                      gen = !Runtime.load_gen
+                      &&
+                      match (!Runtime.current_page, page.Model.page_uuid) with
+                      | Some cur, Some u -> cur.Model.page_uuid = Some u
+                      | Some cur, None ->
+                          cur.Model.page_title = page.Model.page_title
+                      | _ -> false
+                    in
+                    if still_current then
+                      Runtime.send
+                        (Action.Page_loaded
+                           { page with Model.page_blocks = blocks });
                     Js.Promise.resolve ())))
   | Some _, None ->
       (* journals / other non-page views reload through the router hook *)
@@ -251,9 +303,8 @@ let apply ?(opts = Wire.Map []) ops : unit Js.Promise.t =
   cancel_pending_save ();
   match !Runtime.current_repo with
   | None -> Js.Promise.resolve ()
-  | Some repo ->
-      Runtime.invoke3 "thread-api/apply-outliner-ops" (Wire.String repo)
-        (Wire.Array ops) opts
+  | Some _ ->
+      Sdk_util.apply_ops ops opts
       |> Js.Promise.then_ (fun _ -> Js.Promise.resolve ())
       |> Js.Promise.catch (fun e ->
              Platform.console_error ("apply-outliner-ops failed", e);

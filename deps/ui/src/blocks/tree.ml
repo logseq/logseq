@@ -72,6 +72,7 @@ let control_wrap uuid : t =
             []
         ]
     ; dom ~key:("blw-" ^ uuid) ~tag:"a" ~style_class:"bullet-link-wrap"
+        ~attrs:[ ("href", "#/block/" ^ uuid) ]
         [ dom ~key:("dotw-" ^ uuid) ~tag:"span"
             ~id:("dot-" ^ uuid)
             ~attrs:[ ("blockid", uuid); ("draggable", "true") ]
@@ -118,10 +119,10 @@ let editor_el uuid : t =
         ]
     ]
 
-let content_or_editor uuid (b : Model.block) : t =
+let content_or_editor ~editable uuid (b : Model.block) : t =
   dyn ~equal:(fun a b -> a = b)
     (fun editing ->
-      if editing then editor_el uuid else content_el uuid b)
+      if editing && editable then editor_el uuid else content_el uuid b)
     (Signal.map
        (fun (st : S.t) ->
          match st.editing with
@@ -169,13 +170,15 @@ let () =
   Editor_keys.install_once ();
   Add_button.install ()
 
-let rec block_row (b : Model.block) : t =
+let rec block_row ?(editable = true) (b : Model.block) : t =
  fun ctx parent ->
   S.ensure ctx;
-  (row_el b) ctx parent
+  (row_el ~editable b) ctx parent
 
-and row_el (b : Model.block) : t =
+and row_el ~editable (b : Model.block) : t =
   let uuid = Option.value b.block_uuid ~default:"" in
+  if b.Model.block_is_comments_area then Comments_view.area_el b
+  else
   let key = block_key b in
   let has_children = b.block_children <> [] in
   let blank = String.trim b.block_title = "" in
@@ -199,18 +202,21 @@ and row_el (b : Model.block) : t =
                             [ dom ~key:("cw-" ^ key)
                                 ~style_class:
                                   "block-content-wrapper flex flex-1 w-full"
-                                [ content_or_editor uuid b ]
+                                [ content_or_editor ~editable uuid b ]
                             ; tags_el uuid b
                             ]
+                        ; Comments_view.reactions_el uuid
+                            b.Model.block_reactions
                         ]
                     ]
                 ]
             ]
         ]
-    ; (if has_children then children_el uuid b else box ~key:("nc-" ^ key) [])
+    ; (if has_children then children_el ~editable uuid b
+       else box ~key:("nc-" ^ key) [])
     ]
 
-and children_el uuid (b : Model.block) : t =
+and children_el ~editable uuid (b : Model.block) : t =
   if_
     ~test:(Signal.map (fun c -> not c) (collapsed_sig uuid))
     (dom ~key:("children-" ^ uuid)
@@ -219,5 +225,61 @@ and children_el uuid (b : Model.block) : t =
            ~style_class:"block-children-left-border"
            ~attrs:[ ("blockid", uuid) ] []
        ; dom ~key:("clist-" ^ uuid) ~style_class:"block-children w-full"
-           (List.map block_row b.block_children)
+           (List.map (block_row ~editable) b.block_children)
        ])
+
+(* -- {{embed [[page]]}}: live page block tree inside .embed-block --
+
+   render_inline cannot import this module (tree -> render), so the embed
+   view registers itself into Render_state and render_inline calls the
+   hook. Each mounted embed refetches on "sync-db-changes" so edits show up
+   without remounting (cljs embeds are datascript subscriptions). *)
+
+let embed_refreshes : (int, unit -> unit) Hashtbl.t = Hashtbl.create 8
+let embed_refresh_seq = ref 0
+let embed_chained = ref false
+
+let chain_embed_worker () =
+  match !embed_chained, !Runtime.worker with
+  | true, _ | _, None -> ()
+  | false, Some w ->
+      embed_chained := true;
+      let prev = w.Worker_client.on_message in
+      w.Worker_client.on_message <-
+        (fun kind payload ->
+          prev kind payload;
+          if kind = "sync-db-changes" then
+            Hashtbl.iter (fun _ f -> f ()) embed_refreshes)
+
+let fetch_embed_blocks name st =
+  Render_state.with_repo (fun repo ->
+      ignore
+        (Runtime.invoke3 "thread-api/get-page-blocks-tree"
+           (Wire.String repo) (Wire.String name) Wire.Nil
+         |> Js.Promise.then_ (fun w ->
+                Outliner_ops.resolve_block_tags (Decode.blocks_of_wire w)
+                |> Js.Promise.then_ (fun blocks ->
+                       Signal.set st blocks;
+                       Js.Promise.resolve ()))))
+
+let page_embed (name : string) : t =
+ fun ctx parent ->
+  chain_embed_worker ();
+  let st =
+    Signal.state ctx.Lui_ui.ui_scheduler ([] : Model.block list)
+  in
+  let id = !embed_refresh_seq in
+  embed_refresh_seq := id + 1;
+  let load () = fetch_embed_blocks name st in
+  load ();
+  Hashtbl.replace embed_refreshes id load;
+  (dyn ~equal:(=)
+     (fun blocks ->
+       (* embed copies render read-only — the same uuid can exist in the
+          sidebar/main tree, and only that instance should own the textarea *)
+       dom ~key:"embed-page" ~tag:"div" ~style_class:"embed-page"
+         (List.map (block_row ~editable:false) blocks))
+     (Signal.value st))
+    ctx parent
+
+let () = Render_state.page_embed := page_embed

@@ -545,6 +545,11 @@ let get_page_route_info args =
                           (Option.value
                              (Ldb.value page "block/journal-day")
                              ~default:Nil) )
+                    ; ( kw "icon",
+                        Ds_wire.transit_of_value
+                          (Option.value
+                             (Ldb.value page "logseq.property/icon")
+                             ~default:Nil) )
                     ]
                   in
                   let base =
@@ -629,6 +634,23 @@ let get_block_refs args =
          | None -> Wire.nil))
 
 let () = Dispatcher.register "thread-api/get-block-refs" get_block_refs
+
+(* :thread-api/get-unlinked-references — [:db/id? eid] → plain block maps
+   of unlinked mentions (title contains page title, not in :block/refs) *)
+let get_unlinked_references args =
+  with_conn args (fun db ->
+      let eid = Option.bind (arg args 1) Wire.as_int in
+      Db_worker_effect.pure
+        (match eid with
+         | Some eid ->
+             Wire.List
+               (List.map (plain_map_wire db)
+                  (Db_view.get_unlinked_references db eid))
+         | None -> Wire.nil))
+
+let () =
+  Dispatcher.register "thread-api/get-unlinked-references"
+    get_unlinked_references
 
 module IntSet = Set.Make (Int)
 

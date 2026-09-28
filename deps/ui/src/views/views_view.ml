@@ -15,6 +15,7 @@ module Db = Views_db
 let feature_of_kind = function
   | V.KAllPages -> "all-pages"
   | V.KTagPage _ -> "class-objects"
+  | V.KPropertyPage _ -> "property-objects"
   | V.KQuery _ -> "query-result"
 
 let row_uuids_of (d : Wr.view_data) : string list =
@@ -136,7 +137,18 @@ let build_columns inst =
   in
   match inst.V.kind with
   | V.KTagPage owner_uuid ->
-      Db.get_class_properties (W.Uuid owner_uuid) apply
+      (* thread-api entity refs take lookup-refs, not bare uuids *)
+      Db.get_class_properties
+        (W.List [ W.Keyword "block/uuid"; W.Uuid owner_uuid ])
+        apply
+  | V.KPropertyPage owner_uuid ->
+      (* cljs build-property-object-columns: the property itself is the
+         only property column *)
+      Db.get_all_properties (fun props ->
+          apply
+            (List.filter
+               (fun p -> W.map_get_uuid p "block/uuid" = Some owner_uuid)
+               props))
   | _ -> apply []
 
 let load_view_data inst =

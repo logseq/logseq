@@ -471,7 +471,6 @@ html.is-mobile .ls-block-content-indent {
   background: var(--ls-primary-background-color);
   box-shadow: 0 2px 8px rgb(0 0 0 / 12%);
   opacity: 0;
-  pointer-events: none;
   transition: opacity 0.12s ease;
 }
 

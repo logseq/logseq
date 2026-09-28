@@ -27,6 +27,7 @@ type item =
   ; kind : string
   ; uuid : string option
   ; title : string
+  ; icon : (string * string) option
   ; breadcrumb : string list
   ; blocks : Model.block list
   ; page_ref : string option
@@ -242,8 +243,9 @@ let fetch_blocks (p : Model.page) =
         | None -> p.Model.page_title))
     Wire.Nil
   |> Js.Promise.then_ (fun blocks_w ->
-         Js.Promise.resolve
-           { p with Model.page_blocks = Decode.blocks_of_wire blocks_w })
+         Outliner_ops.resolve_block_tags (Decode.blocks_of_wire blocks_w)
+         |> Js.Promise.then_ (fun blocks ->
+                Js.Promise.resolve { p with Model.page_blocks = blocks }))
 
 let open_dialog name =
   let o = Js.Dict.empty () in
@@ -261,6 +263,7 @@ let item_of_page (p : Model.page) =
   ; kind = "page"
   ; uuid = p.Model.page_uuid
   ; title = p.Model.page_title
+  ; icon = p.Model.page_icon
   ; breadcrumb = []
   ; blocks = p.Model.page_blocks
   ; page_ref =
@@ -353,6 +356,7 @@ let block_item_of_uuid repo uuid : item option Js.Promise.t =
                              ; kind = "block"
                              ; uuid = Some uuid
                              ; title = b.Model.block_title
+                             ; icon = None
                              ; breadcrumb = crumbs
                              ; blocks = [ b ]
                              ; page_ref = List.nth_opt crumbs 0
@@ -374,6 +378,7 @@ let contents_item repo : item option Js.Promise.t =
                          ; kind = "contents"
                          ; uuid = p'.Model.page_uuid
                          ; title = t "Contents"
+                         ; icon = p'.Model.page_icon
                          ; breadcrumb = []
                          ; blocks = p'.Model.page_blocks
                          ; page_ref = Some "Contents"
@@ -385,6 +390,7 @@ let contents_item repo : item option Js.Promise.t =
                   ; kind = "contents"
                   ; uuid = None
                   ; title = t "Contents"
+                  ; icon = None
                   ; breadcrumb = []
                   ; blocks = []
                   ; page_ref = Some "Contents"
@@ -396,6 +402,7 @@ let static_item key kind title =
     ; kind
     ; uuid = None
     ; title = t title
+    ; icon = None
     ; breadcrumb = []
     ; blocks = []
     ; page_ref = None
@@ -632,6 +639,12 @@ let init (ms : Model.t Signal.signal) : t =
         }
       in
       st_ref := Some st;
+      (* sidebar item blocks are editable: expose them to Editor_state.find
+         so click-to-edit works on .cp__right-sidebar block rows *)
+      Editor_state.add_block_source (fun uuid ->
+          List.find_map
+            (fun (it : item) -> Editor_state.find_in it.blocks uuid)
+            (Signal.get_state st.items));
       ignore (Signal.subscribe ~emit_initial:false ms (on_model st));
       Platform.on_document_event "ls:open-right-sidebar" (fun ev ->
           match detail_string "uuid" ev with

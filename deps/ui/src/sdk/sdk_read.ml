@@ -124,6 +124,22 @@ let get_block_property a b _c _d =
                | _ -> None
              in
              (match v with
+              | Some (Wire.Map kvs) ->
+                  (* cljs get_block_property: a map value gains
+                     :block/value (serialized as "value") and :db/ident *)
+                  let value =
+                    match
+                      ( Wire.get (Wire.Map kvs) "logseq.property/value"
+                      , Wire.get (Wire.Map kvs) "block/title" )
+                    with
+                    | Some v, _ | _, Some v -> v
+                    | _ -> Wire.Nil
+                  in
+                  resolved_wire
+                    (Wire.Map
+                       ((Wire.String "value", value)
+                        :: (Wire.String "ident", Wire.String ident)
+                        :: kvs))
               | Some v -> resolved_wire v
               | None -> resolved_nil))
   | _ -> resolved_nil

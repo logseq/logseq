@@ -316,7 +316,7 @@ let toolbar_row st =
 
 let render (ms : Model.t Signal.signal) : t =
   let st = Sidebar_state.ensure ms in
-  dom ~key:"left-sidebar" ~id:"left-sidebar"
+  dom ~key:"left-sidebar"
     ~style_class_signal:
       (D.class_signal ms (fun (m : Model.t) ->
            if m.left_sidebar_open then "is-open" else "is-closing"))
