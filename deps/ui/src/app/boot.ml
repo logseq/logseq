@@ -113,7 +113,9 @@ let run () =
          pick_graph repos)
   |> Js.Promise.then_ (fun repo ->
          Graph.open_graph repo
-         |> Js.Promise.then_ (fun _ -> Js.Promise.resolve repo))
+         |> Js.Promise.then_ (fun _ ->
+                Graphs_meta.touch repo;
+                Js.Promise.resolve repo))
   |> Js.Promise.then_ (fun repo ->
          ensure_today_journal repo
          |> Js.Promise.then_ (fun () -> Js.Promise.resolve repo))
