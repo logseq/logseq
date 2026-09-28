@@ -346,6 +346,10 @@ let create_or_open_db args =
                  Sqlite.exec db ~sql:"pragma locking_mode=exclusive" ~bind:[||];
                  Sqlite.exec db ~sql:"pragma journal_mode=WAL" ~bind:[||];
                  Sqlite.exec db ~sql:"pragma wal_autocheckpoint=0" ~bind:[||];
+                 (* synchronous=NORMAL: WAL checkpoints still fsync, but
+                    per-commit fsyncs are skipped — matches the cljs
+                    sql.js in-memory durability envelope. *)
+                 Sqlite.exec db ~sql:"pragma synchronous=NORMAL" ~bind:[||];
                  Worker_state.set_sqlite_conn repo db;
                  (db, true)
            in
