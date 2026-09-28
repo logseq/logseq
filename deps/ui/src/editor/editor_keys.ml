@@ -62,6 +62,12 @@ let on_editor_key ev uuid el =
   let key = D.ev_key ev in
   let shift = D.ev_shift ev in
   if D.ev_composing ev then ()
+  else if
+    Popups_state.ac_open ()
+    && List.mem key [ "Escape"; "ArrowUp"; "ArrowDown"; "Enter"; "Tab" ]
+  then
+    () (* the open autocomplete consumes these keys (its own document
+          keydown listener handles them before editing is affected) *)
   else
     match key with
     | "Enter" when not shift ->
@@ -96,6 +102,9 @@ let on_editor_key ev uuid el =
     | "i" when mods ev ->
         D.prevent_default ev;
         A.wrap_selection uuid "*"
+    | "h" when mods ev && shift ->
+        D.prevent_default ev;
+        A.wrap_selection uuid "=="
     | "e" when D.ev_meta ev -> A.quick_add ()
     | "." when mods ev && shift ->
         D.prevent_default ev;
@@ -230,14 +239,20 @@ let on_click ev =
                     | Some u -> A.zoom_to u
                     | None -> ())
                 | None -> (
-                    match D.closest_sel ".block-content" target with
-                    | Some el -> (
-                        match D.el_get_attr el "blockid" with
-                        | Some u ->
-                            A.enter_edit u
-                              (String.length (A.model_title u))
-                        | None -> ())
-                    | None -> ()))))
+                    match D.closest_sel "a.page-ref" target with
+                    | Some _ ->
+                        (* page-ref navigation happens in the document-level
+                           listener; the editor only has to not enter edit *)
+                        ()
+                    | None -> (
+                        match D.closest_sel ".block-content" target with
+                        | Some el -> (
+                            match D.el_get_attr el "blockid" with
+                            | Some u ->
+                                A.enter_edit u
+                                  (String.length (A.model_title u))
+                            | None -> ())
+                        | None -> ())))))
 
 (* -- ls:editor-insert channel (autocomplete pick: replace the typed
    trigger range with the chosen text) -- *)
@@ -287,7 +302,8 @@ let on_mousedown ev =
     match D.closest_sel ".editor-wrapper" (D.ev_target ev) with
     | Some _ -> ()
     | None -> (
-        match D.closest_sel ".cp__overlays" (D.ev_target ev) with
+        (* cmdk/dialog portals mount outside .cp__overlays under body *)
+        match D.closest_sel ".cp__overlays, .cp__cmdk__modal" (D.ev_target ev) with
         | Some _ -> ()
         | None -> A.schedule_blur_commit ())
 

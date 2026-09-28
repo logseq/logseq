@@ -13,6 +13,16 @@ let go_to_journals = "Go to journals"
 let unlinked_references = "Unlinked References"
 let filter_placeholder = "Type to search"
 
+(* header dots menu *)
+let add_to_favorites = "Add to Favorites"
+let unfavorite_page = "Unfavorite page"
+let settings = "Settings"
+let plugins = "Plugins"
+let recycle = "Recycle"
+let export_graph = "Export graph"
+let import_ = "Import"
+let login = "Login"
+
 (* graph view *)
 let graph_settings = "Graph settings"
 let graph_settings_saved_per_graph = "Saved per graph"

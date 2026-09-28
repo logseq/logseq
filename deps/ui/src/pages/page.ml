@@ -112,7 +112,18 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
     ~on_dom_event:(fun name payload ->
       match name with
       | "click" ->
-          if page.page_uuid <> None then (
+          (* shift+click opens the page in the right sidebar (handled by
+             the document-level listener); starting title edit would
+             replace the clicked node mid-dispatch *)
+          let shift =
+            match payload with
+            | Some p ->
+                Js.Json.decodeBoolean
+                  (Platform.json_prop (Platform.json_parse p) "shiftKey")
+                = Some true
+            | None -> false
+          in
+          if page.page_uuid <> None && not shift then (
             Runtime.send Action.Title_edit_start;
             Runtime.flush ())
       | _ -> open_menu name payload)
@@ -132,13 +143,42 @@ let blocks_inner ?puuid (blocks : Model.block list) : t =
 
 (* --- references --------------------------------------------------- *)
 
+(* cljs views/view {:add-page-column? true} — each ref row carries the
+   source page name. *)
+let references_row (b : Model.block) : t =
+  match b.Model.block_page_name with
+  | Some pname ->
+      dom
+        ~key:("ref-row-" ^ Option.value b.block_uuid ~default:"")
+        ~style_class:"references-item"
+        [ dom ~key:"pn" ~tag:"a" ~style_class:"page-ref"
+            ~attrs:[ ("data-ref", pname) ] ~text:pname []
+        ; Tree.block_row_static b
+        ]
+  | None -> Tree.block_row_static b
+
 let references_view (refs : Model.block list) : t =
   match refs with
   | [] -> box ~key:"refs-empty" []
   | _ ->
       dom ~key:"refs" ~style_class:"references references-wrap"
         [ dom ~key:"refs-body" ~style_class:"ls-view-body"
-            (List.map Tree.block_row refs)
+            (List.map references_row refs)
+        ]
+
+(* journal linked refs render inside a foldable content wrapper, like
+   cljs views/view {:foldable-options ...} — journals default expanded. *)
+let journal_references_view (p : Model.page) : t =
+  let key = Option.value p.Model.page_uuid ~default:p.Model.page_title in
+  match p.Model.page_linked_refs with
+  | [] -> box ~key:("jrefs-empty-" ^ key) []
+  | refs ->
+      dom ~key:("jrefs-" ^ key) ~style_class:"references references-wrap"
+        [ dom ~key:"jrfc" ~style_class:"ls-foldable-content"
+            ~attrs:[ ("aria-hidden", "false") ]
+            [ dom ~key:"jrb" ~style_class:"ls-view-body"
+                (List.map references_row refs)
+            ]
         ]
 
 let unlinked_search_input () : t =
@@ -203,6 +243,7 @@ let journal_item (p : Model.page) : t =
                 ~text:p.page_title []
             ]
         ; blocks_inner ?puuid:p.page_uuid p.page_blocks
+        ; journal_references_view p
         ]
     ]
 

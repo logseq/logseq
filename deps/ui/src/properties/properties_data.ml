@@ -194,6 +194,30 @@ let property_values ~property_ident ~block =
 let closed_values property_ref =
   invoke "get-property-closed-values" [ repo (); property_ref ]
 
+(* cljs db-async/<get-property-node-selector-data {property block} *)
+let node_selector_data ~property_id ~block =
+  invoke "get-property-node-selector-data"
+    [ repo ()
+    ; W.Map
+        [ (W.Keyword "property", W.Int property_id)
+        ; (W.Keyword "block", block)
+        ]
+    ]
+
+(* cljs search/block-search — returns a bare array of result maps
+   ({db/id, block/uuid, block/title, page?, ...}) *)
+let search_blocks q =
+  invoke "search-blocks"
+    [ repo ()
+    ; W.String q
+    ; W.Map
+        [ (W.Keyword "limit", W.Int 20)
+        ; (W.Keyword "search-limit", W.Int 100)
+        ; (W.Keyword "enable-snippet?", W.Bool false)
+        ; (W.Keyword "built-in?", W.Bool false)
+        ]
+    ]
+
 let all_properties block =
   invoke "get-all-properties"
     [ repo ()

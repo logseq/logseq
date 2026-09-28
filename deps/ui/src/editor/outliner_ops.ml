@@ -51,6 +51,15 @@ let move_blocks uuids target_uuid ~sibling =
     ; Wire.Map [ kw "sibling?" (Wire.Bool sibling) ]
     ]
 
+(* cljs :bottom? — append as last children of target *)
+let move_blocks_bottom uuids target_uuid =
+  op "move-blocks"
+    [ uuids_list uuids
+    ; Wire.Uuid target_uuid
+    ; Wire.Map
+        [ kw "sibling?" (Wire.Bool false); kw "bottom?" (Wire.Bool true) ]
+    ]
+
 (* move to the top of target's children — cljs :top? *)
 let move_blocks_top uuids target_uuid =
   op "move-blocks"
@@ -226,6 +235,9 @@ let refresh_page () : unit Js.Promise.t =
              let blocks = Decode.blocks_of_wire blocks_w in
              resolve_block_tags blocks
              |> Js.Promise.then_ (fun blocks ->
+                    (* the worker's tree is authoritative again — drop
+                       committed-buffer title overrides *)
+                    S.clear_overrides ();
                     Runtime.send
                       (Action.Page_loaded
                          { page with Model.page_blocks = blocks });

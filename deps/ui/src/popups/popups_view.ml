@@ -280,7 +280,9 @@ let handle_input st (ev : Dom_ext.event) =
 let handle_keydown st (ev : Dom_ext.event) =
   if S.ac_keydown st ev then (
     Dom_ext.prevent_default ev;
-    Dom_ext.stop_propagation ev)
+    (* stopImmediate: same-target listeners registered later (the editor's
+       own keydown) must not also react to the key the popup consumed *)
+    Dom_ext.stop_immediate_propagation ev)
   else
     match Dom_ext.key_ ev with
     | Some "Escape" when (S.get st).S.cm <> None -> S.close_cm st
