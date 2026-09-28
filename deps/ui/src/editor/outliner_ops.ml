@@ -829,3 +829,7 @@ let redo () =
              resync_open_editor ();
              Js.Promise.resolve ())
   | None -> Js.Promise.resolve ()
+
+(* sdk bridge (and other non-editor mutation paths) refresh the view
+   through this Runtime hook *)
+let () = Runtime.refresh_after_ops := (fun () -> refresh_page ())
