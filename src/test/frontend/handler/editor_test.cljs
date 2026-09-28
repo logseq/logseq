@@ -2593,12 +2593,17 @@
           "Comment editor collapse shortcut should not collapse synthetic draft blocks"))))
 
 (deftest toggle-collapse-does-not-throw-on-property-value-row-only-selection
-  (let [empty-row (mock-ls-block {:class-name "ls-block property-value-container"})]
+  (let [empty-row (mock-ls-block {:class-name "ls-block property-value-container"})
+        threw (atom nil)]
     (with-redefs [util/stop (constantly nil)
                   state/editing? (constantly false)
                   state/selection? (constantly true)
                   editor/get-selected-blocks (constantly [empty-row])]
-      (is (nil? (editor/toggle-collapse! nil))
+      (try
+        (editor/toggle-collapse! nil)
+        (catch :default e
+          (reset! threw e)))
+      (is (nil? @threw)
           "A property-value row with no blockid must be skipped, not passed to uuid"))))
 
 (deftest toggle-collapse-skips-property-value-rows-without-blockid
