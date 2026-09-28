@@ -62,13 +62,19 @@ let with_focus_after uuid caret p =
            D.set_timeout apply_focus 0;
            Js.Promise.resolve ()))
 
+(* persisted/worker truth; display_title layers committed-but-unrefreshed
+   buffers on top so exit-edit paints the saved text on the first frame *)
 let model_title uuid =
   match S.find uuid with Some b -> b.Model.block_title | None -> ""
 
-let save_if_dirty uuid =
-  let buf = live_buffer uuid in
-  if buf <> model_title uuid then
-    ignore (Ops.apply_and_refresh [ Ops.save_block uuid buf ])
+let display_title uuid = S.title_for uuid (model_title uuid)
+
+let commit uuid buf =
+  if buf <> display_title uuid then (
+    S.override_title uuid buf;
+    ignore (Ops.apply_and_refresh [ Ops.save_block uuid buf ]))
+
+let save_if_dirty uuid = commit uuid (live_buffer uuid)
 
 (* deferred blur: committing synchronously on mousedown re-renders the
    tree between mousedown and mouseup, so the browser retargets the click
@@ -87,26 +93,25 @@ let enter_edit uuid caret =
   | Some e when e.uuid <> uuid -> save_if_dirty e.uuid
   | _ -> ());
   match S.find uuid with
-  | Some b ->
+  | Some _b ->
       S.set (fun st ->
           { st with
             S.editing =
-              Some { uuid; buffer = String.trim b.Model.block_title }
+              Some { uuid; buffer = String.trim (display_title uuid) }
           ; selected = S.String_set.empty
           ; anchor = None
           });
       request_focus uuid caret
   | None -> ()
 
-let commit_buf uuid buf =
-  if buf <> model_title uuid then
-    ignore (Ops.apply_and_refresh [ Ops.save_block uuid buf ])
-
 let exit_edit ~select =
   match S.editing () with
   | None -> ()
   | Some e ->
       let buf = live_buffer e.uuid in
+      (* set the override before the state change so the post-edit render
+         already paints the committed text *)
+      if buf <> model_title e.uuid then S.override_title e.uuid buf;
       S.set (fun st ->
           { st with
             S.editing = None
@@ -114,7 +119,7 @@ let exit_edit ~select =
               (if select then S.String_set.singleton e.uuid else st.selected)
           ; anchor = (if select then Some e.uuid else st.anchor)
           });
-      commit_buf e.uuid buf
+      commit e.uuid buf
 
 (* click outside the editor commits without selecting *)
 let blur_commit () =
@@ -122,8 +127,21 @@ let blur_commit () =
   | None -> ()
   | Some e ->
       let buf = live_buffer e.uuid in
+      if buf <> model_title e.uuid then S.override_title e.uuid buf;
       S.set (fun st -> { st with S.editing = None });
-      commit_buf e.uuid buf
+      commit e.uuid buf
+
+(* route change: persist the live buffer without refreshing — the
+   navigation itself reloads whatever route is current *)
+let flush_edit () =
+  if S.ready () then
+    match S.editing () with
+    | None -> ()
+  | Some e ->
+      let buf = live_buffer e.uuid in
+      S.set (fun st -> { st with S.editing = None });
+      if buf <> model_title e.uuid then
+        ignore (Ops.apply [ Ops.save_block e.uuid buf ])
 
 let schedule_blur_commit () =
   match S.editing () with
@@ -633,6 +651,7 @@ let wrap_selection uuid marker =
         ^ String.sub v e (n - e)
       in
       D.el_set_value el nv;
+      D.el_set_text_content el nv;
       D.el_set_selection_range el (s + String.length marker)
         (e + String.length marker);
       sync_buffer uuid nv

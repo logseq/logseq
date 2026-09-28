@@ -109,6 +109,18 @@ let rec find_in blocks uuid =
 
 let find uuid = find_in (page_blocks ()) uuid
 
+(* committed edit buffers, applied to rendered titles immediately — the
+   page model only catches up once the worker transact+refresh lands, and
+   a stale paint between the two shows a blank/reverted title *)
+let display_overrides : (string, string) Hashtbl.t = Hashtbl.create 8
+
+let override_title uuid title = Hashtbl.replace display_overrides uuid title
+
+let title_for uuid fallback =
+  Option.value (Hashtbl.find_opt display_overrides uuid) ~default:fallback
+
+let clear_overrides () = Hashtbl.reset display_overrides
+
 (* returns (parent, index) of uuid among its siblings *)
 let rec find_parent_in blocks uuid =
   match blocks with

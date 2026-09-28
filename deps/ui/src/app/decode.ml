@@ -29,6 +29,13 @@ let rec block_of_wire (w : Wire.t) : Model.block =
   ; block_level = level
   ; block_tag_ids = tag_ids
   ; block_tags = []
+  ; block_page_name =
+      (match Wire.get w "block/page" with
+       | Some (Wire.Map _ as p) -> (
+           match Wire.map_get_string p "block/title" with
+           | Some t -> Some t
+           | None -> Wire.map_get_string w "block/page-name")
+       | _ -> Wire.map_get_string w "block/page-name")
   ; block_children = children
   }
 
@@ -81,6 +88,7 @@ let page_of_summary (w : Wire.t) : Model.page option =
              | Some d -> Some d
              | None -> Wire.map_get_int w "block/journal-day")
         ; page_blocks = []
+        ; page_linked_refs = []
         }
   | _ -> None
 

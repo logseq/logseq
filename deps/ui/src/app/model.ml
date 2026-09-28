@@ -18,6 +18,7 @@ type block =
   ; block_level : int
   ; block_tag_ids : int list (* block/tags ref ids from the pull *)
   ; block_tags : string list (* resolved tag titles, for .block-tags *)
+  ; block_page_name : string option (* source page, for ref views *)
   ; block_children : block list
   }
 
@@ -28,6 +29,7 @@ type page =
   ; page_is_tag : bool
   ; page_journal_day : int option
   ; page_blocks : block list
+  ; page_linked_refs : block list (* linked references, for journal items *)
   }
 
 type phase =
