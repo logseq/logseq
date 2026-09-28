@@ -166,7 +166,7 @@ let nav_items (checked, tag_titles) =
             (nav_link ~key:"nl-flashcards" ~class_:"flashcards-nav"
                ~title:(t "Flashcards") ~icon_name:"cards"
                ~on_click:(fun name _ ->
-                 if name = "click" then Sidebar_state.open_dialog "cards"))
+                 if name = "click" then Sidebar_state.open_cards ()))
       | "all-pages" ->
           Some
             (nav_route ~class_:"all-pages-nav" ~title:(t "All pages")

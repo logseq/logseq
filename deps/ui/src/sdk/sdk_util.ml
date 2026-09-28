@@ -135,3 +135,25 @@ let get_entity id_or_name =
 let get_entity_ident ident = get_by_id (Wire.Keyword ident)
 
 let block_uuid_of (w : Wire.t) = Wire.map_get_uuid w "block/uuid"
+
+(* api block args arrive as uuid strings or entity objects {uuid}/{id}/
+   {block/uuid} — cljs sdk-utils normalizes all of them *)
+let entity_of_arg j =
+  match arg_wire j with
+  | Wire.Map _ as m -> (
+      match Wire.map_get_uuid m "uuid" with
+      | Some u -> get_by_id (Wire.String u)
+      | None -> (
+          match Wire.map_get_uuid m "block/uuid" with
+          | Some u -> get_by_id (Wire.String u)
+          | None -> (
+              match Wire.get m "id" with
+              | Some (Wire.Int _ as id) -> get_by_id id
+              | Some (Wire.Keyword _ as id) -> get_by_id id
+              | Some (Wire.String s) -> get_entity s
+              | Some (Wire.Uuid u) -> get_by_id (Wire.String u)
+              | _ -> resolved Wire.Nil)))
+  | Wire.String s -> get_entity s
+  | Wire.Uuid u -> get_by_id (Wire.String u)
+  | Wire.Int _ | Wire.Keyword _ as id -> get_by_id id
+  | _ -> resolved Wire.Nil
