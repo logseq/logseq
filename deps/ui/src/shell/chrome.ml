@@ -309,9 +309,15 @@ let help_menu_popup : t =
         ]
     ; Logseq_dom.dom ~key:"hm-ft"
         ~style_class:"ft pl-11 pb-3 flex flex-col gap-1"
-        [ Logseq_dom.dom ~key:"hm-ver" ~tag:"span"
-            ~style_class:"opacity text-xs opacity-30" ~text:"Logseq " []
-        ]
+        ([ Logseq_dom.dom ~key:"hm-ver" ~tag:"span"
+             ~style_class:"opacity text-xs opacity-30"
+             ~text:(Printf.sprintf "Logseq %s" Version.app) [] ]
+        @ (match Version.revision () with
+           | "" -> []
+           | rev ->
+               [ Logseq_dom.dom ~key:"hm-rev" ~tag:"span"
+                   ~style_class:"opacity text-xs opacity-30"
+                   ~text:(Printf.sprintf "Revision: %s" rev) [] ]))
     ]
 
 let help_area (ms : Model.t Signal.signal) : t =
