@@ -172,7 +172,12 @@ focus fix above.
   multi-scalar forms return rows. Nested vector queries need the nested
   `Array` wrapping.
 
-## LUI runtime issues found and fixed (already merged upstream)
+## LUI runtime issues found and fixed (upstream; see branch notes)
+
+(The same-batch create+drop / dead-event fixes live on
+`devin/lui-removechild-guard` in logseq/lui — **not yet merged to main**;
+the opam pin tracks `#main`, so pin `lui` to that branch locally until it
+lands. Earlier items in this list are on main.)
 
 - Retained-store `insert_at` duplicated elements on non-end insertion,
   producing stale node ids (crash on Toast page nav).
@@ -471,6 +476,55 @@ Contracts discovered while making `logseq.e2e.commands-basic-test` green
   moves to the block-below pill). Rendering it for any block with hidden
   rows adds a second `.property-k` ("Show hidden properties") and breaks
   `get-text ".property-k"` single-match assertions.
+
+### cmdk palette (cljs `frontend.components.cmdk.core` parity)
+
+- **Commands group = `global-shortcut-commands`**: every shortcut.handler
+  command in groups editor-global + global-prevent-default +
+  global-non-editing-only (~83 web-active ids in `commands_data.ml`),
+  each row renders its keycap binding on the right (mac shows ⌘/⌥/⇧/⌃
+  glyphs via `Platform.is_mac`, non-mac shows Ctrl/Alt/Shift/Delete words).
+- **Fuzzy filter** = cljs `fuzzy-search-multi` semantics
+  (`Fuzzy.fuzzy_search_multi`): max score over several extract fields,
+  score > 0, stable sort desc, group limit nodes=10 / others=5; query
+  "Seed" still returns ~15 commands.
+- **Group header** shows `<title> <total-count>` plus `Show more ⌘↓` /
+  `Show less ⌘↑` when `gitems > limit`; `mod+down/up` expands/collapses
+  per group (state lives on the view record, not the DOM).
+- **Filters group** prepends "Search only current page" (file icon,
+  `G_current_page` scope) only when a current page exists; **Nodes rows
+  matching the current page get a "Current Page" badge**; **Files group
+  lists `logseq/config.edn`** as a static entry.
+- **Query highlight**: titles render `<mark>`-wrapped match segments
+  (`highlight_el`); indices must index the SAME bytes `String.sub`
+  slices — normalize with `String.lowercase_ascii text`, not a
+  normalizer that re-encodes, or non-ASCII queries shift every segment
+  bound and crash inside the dyn render.
+- **Hint bar** at the bottom = cljs tips row ("Tip: Press ⌘⏎ to open
+  search in the sidebar" etc.).
+- **Escape semantics** (cljs `clear_or_close`): first Escape clears a
+  non-empty input/filter, second Escape closes — a bare Escape does NOT
+  close while input is non-empty.
+- **Same-batch create+drop = live crash without lui fix**: any view
+  change that mounts a subtree and drops it again inside one signal
+  stabilize (two publishes in one flush — e.g. keyed re-orders + row
+  remounts from rapid input) emits `create-*` + `drop-node` for the same
+  node id; the web backend commits the store batch before DOM replay,
+  so `dom_node` then throws `invalid_arg "unknown DOM node"` and the
+  failed batch wedges `runtime_generation` (every later flush fails
+  `expected patch generation`). Fixed LUI-side by
+  `devin/lui-removechild-guard` (commit `317b801`: `enqueue_drop`
+  cancels same-batch create+drop op groups, `dispatch` absorbs events
+  on dead nodes) — **the opam pin tracks `#main`, so that branch must
+  merge to logseq/lui main for fresh sessions/snapshots to keep the
+  fix**; locally repin with
+  `opam pin lui git+https://github.com/logseq/lui.git#devin/lui-removechild-guard`.
+- **Rows must not subscribe the whole view signal**: keyed rows read
+  per-item fields that `Cmdk_state.decorate` bakes at publish
+  (`ihl`/`imouse`/`iq`/`gfilter_active`), and the inner `keyed` uses
+  `item_dom_key` (content-versioned key) so any render-visible change
+  does a clean remove+insert instead of publishing into a row that the
+  same flush may tear down.
 
 ## tag-basic-test (page-title tagging)
 
