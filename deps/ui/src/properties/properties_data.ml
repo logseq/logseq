@@ -472,12 +472,12 @@ let set_choice_scope ~choice_id ~class_id ~add =
         ]
     ]
 
-let reorder_display_property ~block ~active_ident ~over_ident ~direction
+let reorder_display_property ~block_id ~active_ident ~over_ident ~direction
     ~property_idents =
   invoke "reorder-display-property"
     [ repo ()
     ; W.Map
-        [ (W.Keyword "block-id", W.Uuid block)
+        [ (W.Keyword "block-id", W.Int block_id)
         ; (W.Keyword "active-ident", W.Keyword active_ident)
         ; (W.Keyword "over-ident", W.Keyword over_ident)
         ; (W.Keyword "direction", W.String direction)

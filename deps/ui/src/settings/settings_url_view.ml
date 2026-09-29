@@ -50,7 +50,7 @@ let push_sync_config () =
     | Some u -> (url_to_ws u, strip_trailing_slashes u)
     | None -> (default_sync_ws, default_sync_http)
   in
-  Runtime.invoke2 "thread-api/set-db-sync-config" (Wire.String "")
+  Runtime.invoke1 "thread-api/set-db-sync-config"
     (Wire.Map
        [ (Wire.kw "enabled?", Wire.Bool true)
        ; (Wire.kw "ws-url", Wire.String ws)
