@@ -102,6 +102,13 @@ let connect ~url ~on_event =
       resolved := true;
       Db_worker_effect.reject resolver (Failure msg))
   in
+  let close_sent = ref false in
+  let emit_close code =
+    if not !close_sent then begin
+      close_sent := true;
+      on_event (Close (code, ""))
+    end
+  in
   let run () =
     try
       Eio_posix.run (fun env ->
@@ -162,7 +169,7 @@ let connect ~url ~on_event =
             ; eof =
                 (fun ?error:_ () ->
                    finish ws;
-                   on_event (Close (1000, "")))
+                   emit_close 1000)
             }
           in
           let conn =
@@ -179,12 +186,19 @@ let connect ~url ~on_event =
           (* conn ended: unblock the command fiber and release fds *)
           finish ws;
           flow.close ();
-          (try Unix.close pipe_r with _ -> ())))
+          (try Unix.close pipe_r with _ -> ());
+          (* Any teardown after the handshake must surface a Close:
+             callers reconnect on it, and an abrupt drop emits no Close
+             frame from the wire. *)
+          if !resolved then emit_close 1006))
     with
     | exn ->
         finish ws;
         (try Unix.close pipe_r with _ -> ());
-        if !resolved then on_event (Error (Printexc.to_string exn)) else (
+        if !resolved then begin
+          on_event (Error (Printexc.to_string exn));
+          emit_close 1006
+        end else (
           resolved := true;
           Db_worker_effect.reject resolver exn)
   in

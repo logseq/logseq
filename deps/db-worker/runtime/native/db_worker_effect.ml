@@ -6,17 +6,24 @@ type 'a state =
 type 'a t =
   { mutable state : 'a state
   ; mutable callbacks : ('a state -> unit) Rrbvec.t
+  ; mutex : Mutex.t
   }
 
 type 'a resolver = 'a t
 
-let pure value = { state = Resolved value; callbacks = Rrbvec.empty }
-let error exn = { state = Rejected exn; callbacks = Rrbvec.empty }
+(* Connection threads resolve tasks while worker threads attach
+   continuations — state transitions and callback attachment must
+   serialize on the task's mutex or a wakeup racing an on_state can
+   strand a callback that is never invoked. *)
+let make state = { state; callbacks = Rrbvec.empty; mutex = Mutex.create () }
+
+let pure value = make (Resolved value)
+let error exn = make (Rejected exn)
 
 let is_pending task = match task.state with Pending -> true | _ -> false
 
 let wait () =
-  let task = { state = Pending; callbacks = Rrbvec.empty } in
+  let task = make Pending in
   (task, task)
 
 (* JS .then isolates each listener: a raising callback must not drop
@@ -29,20 +36,33 @@ let run_callback callback state =
       [ ("error", Printexc.to_string exn) ]
 
 let notify task state =
-  if is_pending task then begin
-    task.state <- state;
-    let callbacks = Rrbvec.rev task.callbacks in
-    task.callbacks <- Rrbvec.empty;
-    Rrbvec.iter (fun callback -> run_callback callback state) callbacks
-  end
+  Mutex.lock task.mutex;
+  let callbacks =
+    match task.state with
+    | Pending ->
+        task.state <- state;
+        let cbs = Rrbvec.rev task.callbacks in
+        task.callbacks <- Rrbvec.empty;
+        cbs
+    | _ -> Rrbvec.empty
+  in
+  Mutex.unlock task.mutex;
+  Rrbvec.iter (fun callback -> run_callback callback state) callbacks
 
 let wakeup resolver value = notify resolver (Resolved value)
 let reject resolver exn = notify resolver (Rejected exn)
 
 let on_state task callback =
-  match task.state with
-  | Pending -> task.callbacks <- Rrbvec.push_front task.callbacks callback
-  | state -> run_callback callback state
+  Mutex.lock task.mutex;
+  let run_now =
+    match task.state with
+    | Pending ->
+        task.callbacks <- Rrbvec.push_front task.callbacks callback;
+        false
+    | _ -> true
+  in
+  Mutex.unlock task.mutex;
+  if run_now then run_callback callback task.state
 
 let bind task f =
   let result, resolver = wait () in
