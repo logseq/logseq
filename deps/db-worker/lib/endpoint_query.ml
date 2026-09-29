@@ -631,3 +631,40 @@ let query_custom args =
            execute_custom_query (Datascript.db conn) query_m ctx)
 
 let () = Dispatcher.register "thread-api/query-custom" query_custom
+
+(* frontend.extensions.sci/eval-string — evaluates user EDN source through
+   Edn_eval. 'block binds the src block's entity when a uuid arg is given
+   (cljs {:bindings {'block block}}). Errors swallow to nil like cljs
+   sci/eval-string's try/catch. *)
+let eval_string args =
+  let repo = require_repo args in
+  let code = match arg args 1 with Some (Wire.String s) -> s | _ -> "" in
+  let block_uuid =
+    match arg args 2 with Some (Wire.String s) -> s | _ -> ""
+  in
+  match Worker_state.datascript_conn repo with
+  | None -> fail "Missing eval database" [ (kw "repo", Wire.String repo) ]
+  | Some conn ->
+      let db = Datascript.db conn in
+      let bindings =
+        match block_uuid with
+        | "" -> []
+        | u -> (
+            match entity db (Lookup_ref ("block/uuid", Uuid u)) with
+            | Some e -> [ ("block", Edn_eval.Ent e.id) ]
+            | None -> [])
+      in
+      let entity_attr eid attr =
+        match Ldb.ent_of_id db eid with
+        | Some e -> (match Ldb.value e attr with Some v -> v | None -> Nil)
+        | None -> Nil
+      in
+      let r =
+        try Edn_eval.wire_of_rt (Edn_eval.eval_code ~entity_attr ~bindings code)
+        with
+        | Edn_eval.Eval_error _ | Edn_eval.Throw_value _ -> Wire.Nil
+        | _ -> Wire.Nil
+      in
+      Db_worker_effect.pure r
+
+let () = Dispatcher.register "thread-api/eval-string" eval_string
