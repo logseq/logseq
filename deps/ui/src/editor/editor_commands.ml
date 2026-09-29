@@ -502,12 +502,12 @@ let cycle_todo uuid =
               ])
          |> Js.Promise.then_ (fun w ->
                 let blk =
-                  match Sdk_util.wire_elems w with
+                  match Wire.elems w with
                   | [ pair ] -> (
                       match W.get pair "block" with
                       | Some b -> b
                       | None -> (
-                          match Sdk_util.wire_elems pair with
+                          match Wire.elems pair with
                           | [ _; b ] -> b
                           | _ -> W.Nil))
                   | _ -> W.Nil
@@ -520,7 +520,7 @@ let cycle_todo uuid =
                 Properties_data.closed_values
                   (W.Keyword "logseq.property/status")
                 |> Js.Promise.then_ (fun rows_w ->
-                       let rows = Properties_data.elems rows_w in
+                       let rows = Wire.elems rows_w in
                        let ident_of id =
                          List.find_map
                            (fun e ->

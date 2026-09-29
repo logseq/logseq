@@ -6,7 +6,6 @@
 
 open Editor_dom
 open Properties_dom
-module I18n = Properties_i18n
 module D = Properties_data
 module S = Properties_state
 module W = Wire
@@ -22,15 +21,11 @@ type menu_ctx =
   ; mutable content : Editor_dom.el option (* current dropdown body *)
   }
 
-let item_class =
-  "ui__dropdown-menu-item relative flex cursor-pointer select-none \
-   items-center rounded-sm px-2 py-1.5 text-sm outline-none"
-
 let menuitem ?(cls = "") ?icon label act =
   let el =
     mk "div"
-      ~cls:(item_class ^ " " ^ cls)
-      ~attrs:[ ("role", "menuitem"); ("tabindex", "-1") ]
+      ~cls:(Menu_item.base_cls ^ " " ^ cls)
+      ~attrs:Menu_item.item_attrs
   in
   (match icon with
    | Some name ->
@@ -238,7 +233,7 @@ let choice_settings m choice =
   let cid = D.entity_id_of choice in
   let scoped_ids =
     match D.getf choice "logseq.property/choice-classes" with
-    | Some w -> List.filter_map D.entity_id_of (D.elems w)
+    | Some w -> List.filter_map D.entity_id_of (W.elems w)
     | None -> []
   in
   let owner_scoped =
@@ -372,7 +367,7 @@ let choices_pane m =
            (* must overflow-scroll: e2e asserts scrollHeight > clientHeight *)
            set_style ul "max-height:240px;overflow-y:auto";
            List.iter (fun c -> el_append_child ul (choice_li m c build))
-             (D.elems w);
+             (W.elems w);
            el_append_child pane ul;
            el_append_child pane
              (menuitem (I18n.t "property/add-choice") (fun () ->
@@ -417,8 +412,7 @@ let default_value_pane m =
         in
         let ta = mk "textarea" in
         let mt = mk ~cls:"mock-text" "div" in
-        el_set_attr mt "style"
-          "width:100%;height:100%;position:absolute;visibility:hidden;top:0;left:0";
+        el_set_attr mt "style" Ui_parts.mock_text_style;
         el_append_child inner ta;
         el_append_child inner mt;
         el_append_child wrap inner;

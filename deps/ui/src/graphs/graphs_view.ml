@@ -4,7 +4,7 @@
    components/repo.cljs repos-inner: div#graphs > h1 "All graphs" +
    "Create a new graph" button + local rows + remote section. *)
 
-module T = Graphs_text
+module T = I18n
 module B = Browser_ui
 
 let short_name repo =
@@ -51,10 +51,7 @@ let close_dropdown () =
 let menu_item ~cls label ~disabled on_click =
   let b = B.create "div" in
   B.set_attr b "role" "menuitem";
-  B.set_class b
-    ("ui__dropdown-menu-item relative flex select-none items-center \
-      rounded-sm px-2 py-1.5 text-sm outline-none cursor-pointer "
-    ^ cls);
+  B.set_class b (Menu_item.graphs_cls ^ cls);
   B.set_text b label;
   if disabled then (
     B.set_attr b "data-disabled" "";

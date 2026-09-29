@@ -4,7 +4,7 @@
 
 open Lui_elements
 module D = Render_dom
-module U = Ui_strings
+module U = I18n
 
 let starts_at s i pat =
   let n = String.length pat in
@@ -24,14 +24,6 @@ let bracket s =
 let preview_link inner =
   D.el ~tag:"span" [ D.el ~tag:"span" ~style_class:"preview-ref-link" [ inner ] ]
 
-let is_uuid_like s =
-  String.length s = 36
-  && s.[8] = '-' && s.[13] = '-' && s.[18] = '-' && s.[23] = '-'
-  && String.for_all
-       (fun c ->
-         (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')
-         || (c >= 'A' && c <= 'F') || c = '-')
-       s
 
 (* ---------- emitters ---------- *)
 
@@ -302,7 +294,7 @@ and try_bracket ~refs ~self s i =
    title (cljs page-reference/page-reference-content). *)
 and page_ref ?(tag = false) ~refs ~self name =
   let name = String.trim name in
-  if is_uuid_like name then
+  if Wire.is_uuid_string name then
     if List.mem name refs then D.el ~tag:"span" []
     else if tag then resolved_tag_ref ~refs ~self name
     else
@@ -433,7 +425,7 @@ and try_hash ~refs ~self s i =
     | j when j > i + 3 ->
         let inner = String.sub s (i + 3) (j - i - 3) in
         Some
-          ( (if Sdk_util.is_uuid_string inner then resolved_tag_ref ~refs ~self inner
+          ( (if Wire.is_uuid_string inner then resolved_tag_ref ~refs ~self inner
              else page_ref ~tag:true ~refs ~self inner)
           , j + 2 - i )
     | _ -> None

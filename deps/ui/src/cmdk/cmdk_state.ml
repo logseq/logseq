@@ -209,7 +209,7 @@ let command_table () : Commands_data.cmd list =
   |> List.rev
 
 let cmd_label (c : Commands_data.cmd) =
-  if c.i18n then Ui_strings.t c.label else c.label
+  if c.i18n then I18n.t c.label else c.label
 
 let command_item (c : Commands_data.cmd) : item =
   { ikey = "cmd-" ^ c.id; idx = -1; gid = G_commands
@@ -245,14 +245,14 @@ let create_items q =
     if String.trim tag = "" then []
     else
       [ { ikey = "create-" ^ q; idx = -1; gid = G_create
-        ; ititle = Ui_strings.t "cmdk.create/tag"
-        ; info = Some (Ui_strings.tf "cmdk.info/create-tag" [ tag ])
+        ; ititle = I18n.t "cmdk.create/tag"
+        ; info = Some (I18n.tf "cmdk.info/create-tag" [ tag ])
         ; header = None; iicon = "new-page"; isc = ""; ibadge = No_badge
         ; act = Create_tag tag; ihl = false; imouse = false; iq = "" } ]
   else
     [ { ikey = "create-" ^ q; idx = -1; gid = G_create
-      ; ititle = Ui_strings.t "cmdk.create/page"
-      ; info = Some (Ui_strings.tf "cmdk.info/create-page" [ q ])
+      ; ititle = I18n.t "cmdk.create/page"
+      ; info = Some (I18n.tf "cmdk.info/create-page" [ q ])
       ; header = None; iicon = "new-page"; isc = ""; ibadge = No_badge
       ; act = Create_page q; ihl = false; imouse = false; iq = "" } ]
 
@@ -269,20 +269,20 @@ let current_page_uuid () =
 let filter_items () : item list =
   let row gid label icon =
     { ikey = "filter-" ^ label; idx = -1; gid = G_filters
-    ; ititle = label; info = Some (Ui_strings.t "cmdk.filter/add")
+    ; ititle = label; info = Some (I18n.t "cmdk.filter/add")
     ; header = None; iicon = icon; isc = ""; ibadge = No_badge
     ; act = Set_filter gid; ihl = false; imouse = false; iq = "" }
   in
   (match current_page_uuid () with
    | Some _ ->
-       [ row G_current_page (Ui_strings.t "cmdk.filter/current-page")
+       [ row G_current_page (I18n.t "cmdk.filter/current-page")
            "file" ]
    | None -> [])
-  @ [ row G_nodes (Ui_strings.t "cmdk.filter/nodes") "point-filled"
-    ; row G_codes (Ui_strings.t "cmdk.filter/codes") "code"
-    ; row G_commands (Ui_strings.t "cmdk.filter/commands") "command"
-    ; row G_files (Ui_strings.t "cmdk.filter/files") "file"
-    ; row G_themes (Ui_strings.t "cmdk.filter/themes") "palette" ]
+  @ [ row G_nodes (I18n.t "cmdk.filter/nodes") "point-filled"
+    ; row G_codes (I18n.t "cmdk.filter/codes") "code"
+    ; row G_commands (I18n.t "cmdk.filter/commands") "command"
+    ; row G_files (I18n.t "cmdk.filter/files") "file"
+    ; row G_themes (I18n.t "cmdk.filter/themes") "palette" ]
 
 (* cljs search/file-search on a db graph — the only :file/path entity is
    logseq/config.edn; fuzzy-match like cljs (clean-str + limit 99) *)
@@ -431,12 +431,12 @@ let group_order v q rows total =
     if node_exists q rows then None
     else
       Some
-        { gid = G_create; gtitle = Ui_strings.t "cmdk.groups/create"
+        { gid = G_create; gtitle = I18n.t "cmdk.groups/create"
         ; gitems = create_items q; gtotal = 1; glimit = 1
         ; gexpanded = false; gfilter_active = false }
   in
   let nodes_g () =
-    { gid = G_nodes; gtitle = Ui_strings.t "cmdk.groups/nodes"
+    { gid = G_nodes; gtitle = I18n.t "cmdk.groups/nodes"
     ; gitems = rows; gtotal = max total (List.length rows)
     ; glimit = nodes_limit v.move_mode v.expanded
     ; gexpanded = List.mem G_nodes v.expanded; gfilter_active = false }
@@ -452,7 +452,7 @@ let group_order v q rows total =
         rows
     in
     { gid = G_current_page
-    ; gtitle = Ui_strings.t "cmdk.groups/current-page"
+    ; gtitle = I18n.t "cmdk.groups/current-page"
     ; gitems = items; gtotal = max total (List.length items)
     ; glimit = current_page_limit v.expanded
     ; gexpanded = List.mem G_current_page v.expanded
@@ -460,27 +460,27 @@ let group_order v q rows total =
   in
   let commands_g () =
     let items = commands_items q in
-    { gid = G_commands; gtitle = Ui_strings.t "cmdk.groups/commands"
+    { gid = G_commands; gtitle = I18n.t "cmdk.groups/commands"
     ; gitems = items; gtotal = List.length items
     ; glimit = 5; gexpanded = List.mem G_commands v.expanded
     ; gfilter_active = false }
   in
   let files_g () =
     let items = file_items q in
-    { gid = G_files; gtitle = Ui_strings.t "cmdk.groups/files"
+    { gid = G_files; gtitle = I18n.t "cmdk.groups/files"
     ; gitems = items; gtotal = List.length items
     ; glimit = 5; gexpanded = List.mem G_files v.expanded
     ; gfilter_active = false }
   in
   let filters_g () =
     let items = filter_items () in
-    { gid = G_filters; gtitle = Ui_strings.t "cmdk.groups/filters"
+    { gid = G_filters; gtitle = I18n.t "cmdk.groups/filters"
     ; gitems = items; gtotal = List.length items
     ; glimit = 99; gexpanded = false; gfilter_active = false }
   in
   let recents_g () =
     { gid = G_recently_updated
-    ; gtitle = Ui_strings.t "cmdk.groups/recently-updated"
+    ; gtitle = I18n.t "cmdk.groups/recently-updated"
     ; gitems =
         (if String.trim q = "" then v.recents
          else

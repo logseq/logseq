@@ -73,13 +73,10 @@ type inst =
 
 let next_id = ref 0
 
-let instances : (int, inst) Hashtbl.t = Hashtbl.create 8
-
 let make ~kind ~feature ~owner ~container : inst =
   incr next_id;
-  let inst =
-    { id = !next_id
-    ; kind
+  { id = !next_id
+  ; kind
     ; feature
     ; owner
     ; container
@@ -116,11 +113,6 @@ let make ~kind ~feature ~owner ~container : inst =
     ; ref_titles = Hashtbl.create 8
     ; asset_class = false
     }
-  in
-  Hashtbl.replace instances inst.id inst;
-  inst
-
-let drop inst = Hashtbl.remove instances inst.id
 
 (* -- wire encode/decode of persisted table state -- *)
 
@@ -166,7 +158,7 @@ let filters_of_wire w : filter_clause list * bool =
                            | [] -> None)
                       }
                 | _ -> None)
-              (Views_wire.seq_items fs)
+              (W.elems fs)
           , or_ )
       | None -> ([], or_))
   | _ -> ([], false)
@@ -260,7 +252,7 @@ let apply_view_entity inst (v : Views_wire.view_ent) =
   inst.group_desc <- v.vgroup_desc
 
 let display_title (v : Views_wire.view_ent) =
-  if String.trim v.vtitle = "" then Views_i18n.new_view else v.vtitle
+  if String.trim v.vtitle = "" then I18n.new_view else v.vtitle
 
 (* persisted write helpers *)
 let persist_sorting inst =

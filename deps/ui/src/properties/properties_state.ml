@@ -28,24 +28,15 @@ let install_outside_close =
   fun () ->
     if not !installed then (
       installed := true;
-      Editor_dom.document_add_listener "mousedown" (fun ev ->
-          match Editor_dom.ev_target ev with
-          | None -> ()
-          | Some target -> (
-              match
-                List.find_index
-                  (fun o -> Editor_dom.el_contains o.el target)
-                  !overlays
-              with
-              | None ->
-                  List.iter (fun o -> el_remove o.el) !overlays;
-                  overlays := []
-              | Some i ->
-                  List.iteri
-                    (fun n o -> if n < i then el_remove o.el)
-                    !overlays;
-                  overlays := List.filteri (fun n _ -> n >= i) !overlays))
-          true)
+      Overlay.on_document_press "mousedown"
+        ~els:(fun () -> List.map (fun o -> o.el) !overlays)
+        ~on_hit:(function
+          | None ->
+              List.iter (fun o -> el_remove o.el) !overlays;
+              overlays := []
+          | Some i ->
+              List.iteri (fun n o -> if n < i then el_remove o.el) !overlays;
+              overlays := List.filteri (fun n _ -> n >= i) !overlays))
 
 let push_overlay el ~on_escape =
   install_outside_close ();
@@ -156,25 +147,14 @@ let refresh_now () =
 
 (* ---------- sync-db-changes hook ---------- *)
 
-(* boot.ml assigns worker.on_message = Worker_events.dispatch (which
-   already triggers Router.reload for model-backed content). Property
-   areas hold worker data outside the model, so we chain a listener
-   AFTER the worker exists: keep the original handler, then refresh
-   areas on every "sync-db-changes" broadcast. *)
+(* Property areas hold worker data outside the model, so they refresh on
+   every "sync-db-changes" broadcast via the shared subscription list. *)
 let chained = ref false
 
 let chain_worker () =
-  match !chained, !Runtime.worker with
-  | true, _ | _, None -> ()
-  | false, Some w ->
-      chained := true;
-      let prev = w.Worker_client.on_message in
-      w.Worker_client.on_message <-
-        (fun kind payload ->
-          (try prev kind payload
-           with err ->
-             Platform.console_error
-               ("worker broadcast handler failed", err));
-          if kind = "sync-db-changes" then refresh_all ())
+  if not !chained then begin
+    chained := true;
+    Runtime.on_sync refresh_all
+  end
 
 

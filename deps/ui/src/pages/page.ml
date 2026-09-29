@@ -130,9 +130,8 @@ let title_editor (page : Model.page) : t =
      .editor-wrapper > .editor-inner.block-editor > textarea +
      mock-text mirror (popup caret positioning) *)
   let uuid = Option.value page.page_uuid ~default:"" in
-  dom ~key:"pt-edit" ~style_class:"editor-wrapper flex flex-1 w-full"
-    ~id:("editor-edit-block-" ^ uuid)
-    [ dom ~key:"pt-ei" ~style_class:"editor-inner flex flex-1 block-editor"
+  Ui_parts.editor_wrapper ~key:"pt-edit" ~id:("editor-edit-block-" ^ uuid)
+    [ Ui_parts.editor_inner ~key:"pt-ei"
         [ dom ~key:"pt-ta" ~tag:"textarea"
             ~id:("edit-block-" ^ uuid)
             ~attrs:[ ("autofocus", "true") ]
@@ -152,34 +151,11 @@ let title_editor (page : Model.page) : t =
               | _ -> ())
           | _ -> ())
         []
-        ; (* cljs mock-textarea: hidden caret mirror for popup placement *)
-          dom ~key:"pt-mt" ~style_class:"mock-text"
-            ~attrs:
-              [ ( "style"
-                , "width:100%;height:100%;position:absolute;visibility:hidden;top:0;left:0" )
-              ]
-            []
+        ; Ui_parts.mock_text ~key:"pt-mt"
         ]
     ; Asset_dom.upload_input ("pt-up-" ^ uuid)
     ]
 
-(* cljs arrow svg inside .control-hide/.rotating-arrow *)
-let rotating_arrow key : t =
-  dom ~key ~tag:"svg"
-    ~style_class:"h-4 w-4"
-    ~attrs:
-      [ ("aria-hidden", "true"); ("version", "1.1")
-      ; ("viewBox", "0 0 192 512"); ("fill", "currentColor")
-      ; ("display", "inline-block"); ("style", "margin-left: 2px") ]
-    [ dom ~key:"p" ~tag:"path"
-        ~attrs:
-          [ ( "d"
-            , "M0 384.662V127.338c0-17.818 21.543-26.741 \
-               34.142-14.142l128.662 128.662c7.81 7.81 7.81 20.474 0 \
-               28.284L34.142 398.804C21.543 411.404 0 402.48 0 384.662z" )
-          ; ("fill-rule", "evenodd") ]
-        []
-    ]
 
 (* cljs title-tag chip: .block-tag > .flex.items-center > a.hash-symbol +
    a.tag[draggable][data-ref] > span. The .ls-block-right/.hover wrappers
@@ -371,7 +347,7 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
                                   ("rotating-arrow"
                                   ^ if title_collapsed then " collapsed"
                                     else " not-collapsed")
-                                [ rotating_arrow "pt-arw" ]
+                                [ Ui_parts.rotating_arrow "pt-arw" ]
                             ]
                         in
                         if page.page_is_tag then
@@ -599,7 +575,7 @@ let fold_arrow ?on_click key : t =
     ~events ?on_dom_event:handler
     [ dom ~key:"ch" ~tag:"span" ~style_class:"control-hide"
         [ dom ~key:"ra" ~tag:"span" ~style_class:"rotating-arrow not-collapsed"
-            [ rotating_arrow (key ^ "-svg") ]
+            [ Ui_parts.rotating_arrow (key ^ "-svg") ]
         ]
     ]
 
@@ -640,7 +616,7 @@ let refs_view_head key ?on_search title count : t =
             ; dom ~key:"vh-add" ~tag:"button"
                 ~attrs:
                   [ ("type", "button"); ("tabindex", "0")
-                  ; ("title", Ui_strings.t "view/add-new-view") ]
+                  ; ("title", I18n.t "view/add-new-view") ]
                 ~style_class:
                   (ui_btn ^ " as-text h-7 rounded py-1 !px-1 -ml-1 \
                    text-muted-foreground hover:text-foreground \
@@ -652,7 +628,7 @@ let refs_view_head key ?on_search title count : t =
         ~style_class:
           "opacity-0 view-actions flex items-center gap-1 \
            transition-opacity ease-in duration-300"
-        [ view_ghost_btn "vh-fc" ~title:(Ui_strings.t "reference/page-filter")
+        [ view_ghost_btn "vh-fc" ~title:(I18n.t "reference/page-filter")
             "filter-cog" 18.
         ; view_ghost_btn "vh-srt" "arrows-up-down" 18.
         ; view_ghost_btn "vh-flt" "filter" 18.
@@ -811,7 +787,7 @@ let references_view (refs : Model.block list) : t =
                 [ dom ~key:"rv3" ~style_class:"flex flex-col"
                     [ foldable_title "refs-t"
                         (refs_view_head "refs"
-                           (Ui_strings.t "view/linked-references")
+                           (I18n.t "view/linked-references")
                            (List.length refs))
                     ; foldable_content "refs-c"
                         (dom ~key:"rvb"
@@ -846,7 +822,7 @@ let journal_references_view (p : Model.page) : t =
 let unlinked_search_input () : t =
   dom ~key:"urefs-search-box" ~style_class:"view-action-search"
     [ dom ~key:"urefs-input" ~tag:"input"
-        ~attrs:[ ("placeholder", Strings.filter_placeholder) ]
+        ~attrs:[ ("placeholder", I18n.filter_placeholder) ]
         ~events:"input"
         ~on_dom_event:(fun name payload ->
           if name = "input" then (
@@ -858,15 +834,6 @@ let unlinked_search_input () : t =
             Runtime.flush ()))
         []
     ]
-
-let contains_ci ~needle hay =
-  let n = String.lowercase_ascii needle in
-  let h = String.lowercase_ascii hay in
-  let nl = String.length n and hl = String.length h in
-  let rec go i =
-    i + nl <= hl && (String.sub h i nl = n || go (i + 1))
-  in
-  nl > 0 && go 0
 
 let unlinked_row (b : Model.block) : t =
   let key =
@@ -898,10 +865,10 @@ let unlinked_references_view (m : Model.t) : t =
     else
       List.filter
         (fun (b : Model.block) ->
-          contains_ci ~needle:q b.block_title
+          I18n.contains_ci b.block_title q
           ||
           (match b.block_page_name with
-           | Some p -> contains_ci ~needle:q p
+           | Some p -> I18n.contains_ci p q
            | None -> false))
         refs
   in
@@ -918,7 +885,7 @@ let unlinked_references_view (m : Model.t) : t =
                        ~on_search:(fun () ->
                          Runtime.send Action.Unlinked_toggle_search;
                          Runtime.flush ())
-                       (Ui_strings.t "view/unlinked-references")
+                       (I18n.t "view/unlinked-references")
                        (List.length refs))
                 ; dom ~key:"urefs-content" ~style_class:"ls-foldable-content"
                     ~attrs:
@@ -1037,7 +1004,7 @@ let journals_view (m : Model.t) (js : Model.page list) : t =
 let not_found_view name : t =
   dom ~key:"not-found" ~style_class:"page"
     [ box ~key:"nf-inner" ~style_class:"flex flex-col items-center"
-        [ text ~key:"nf-t" ~value:(Strings.page_not_found ^ name)
+        [ text ~key:"nf-t" ~value:(I18n.page_not_found ^ name)
             ~style_class:"" []
         ]
     ]
@@ -1053,7 +1020,7 @@ let library_add_pages_button : t =
           if name = "click" then Runtime.send Action.Toggle_search)
         [ dom ~key:"lib-add-i" ~tag:"i" ~style_class:"ti ti-plus" []
         ; dom ~key:"lib-add-t" ~tag:"span"
-            ~text:(Ui_strings.t "library/add-existing-pages") [] ]
+            ~text:(I18n.t "library/add-existing-pages") [] ]
     ]
 
 let page_view (m : Model.t) (page : Model.page) : t =
@@ -1100,7 +1067,7 @@ let page_view (m : Model.t) (page : Model.page) : t =
 let empty_state () : t =
   box ~key:"empty" ~style_class:"page"
     [ box ~key:"empty-inner" ~style_class:"flex flex-col items-center"
-        [ text ~key:"empty-t" ~value:Strings.loading ~style_class:"" [] ]
+        [ text ~key:"empty-t" ~value:I18n.loading ~style_class:"" [] ]
     ]
 
 (* Library renders the ordinary page chrome plus the add-pages button; its
@@ -1156,7 +1123,7 @@ let page_view_of_model (m : Model.t) : t =
           (* cljs page-aux: missing page/block renders inline
              (t :page/not-found) inside the content wrap *)
           dom ~key:"pg-missing" ~style_class:"opacity-75"
-            [ text ~key:"pgm-t" ~value:(Ui_strings.t "page/not-found")
+            [ text ~key:"pgm-t" ~value:(I18n.t "page/not-found")
                 ~style_class:"" [] ]
       | None, false -> empty_state ())
   | _ -> empty_state ()

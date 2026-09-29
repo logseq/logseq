@@ -295,7 +295,7 @@ let insert_block a b c _d =
             match Wire.get opts "properties" with
             | Some p -> (
                 match Wire.get p "id" with
-                | Some (Wire.String u) when is_uuid_string u -> Some u
+                | Some (Wire.String u) when Wire.is_uuid_string u -> Some u
                 | _ -> None)
             | None -> None)
       in
@@ -499,14 +499,8 @@ let insert_batch_block a b c _d =
                         |> Js.Promise.then_ (fun w ->
                                let blocks =
                                  List.filter_map
-                                   (fun pair ->
-                                     match Wire.get pair "block" with
-                                     | Some b -> Some b
-                                     | None -> (
-                                         match wire_elems pair with
-                                         | [ _; b ] -> Some b
-                                         | _ -> None))
-                                   (wire_elems w)
+                                   Wire.block_of_pair
+                                   (Wire.elems w)
                                in
                                resolved
                                  (Sdk_convert.json_arr
@@ -551,7 +545,7 @@ let append_block_in_page a b c _d =
          (* cljs append-block-in-page creates a missing named page first *)
          get_entity target_id
          |> Js.Promise.then_ (fun e ->
-                match e, is_uuid_string target_id, target_id with
+                match e, Wire.is_uuid_string target_id, target_id with
                 | Wire.Nil, false, name when name <> "" ->
                     apply_op "create-page"
                       [ Wire.String name; Wire.Map [] ]
@@ -629,7 +623,7 @@ let create_page_with_flags name journal class_ uuid custom_uuid props schema =
   apply_op "create-page" [ Wire.String name; Wire.Map opts ]
   |> Js.Promise.then_ (fun r ->
          Js.Promise.resolve
-           (match wire_elems r with
+           (match Wire.elems r with
             | [ _; Wire.Uuid u ] -> u
             | [ _; Wire.String u ] -> u
             | _ -> uuid))

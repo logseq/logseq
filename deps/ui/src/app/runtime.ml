@@ -9,6 +9,8 @@ let app_flush : (unit -> unit) ref = ref (fun () -> ())
 let current_repo : string option ref = ref None
 let current_page : Model.page option ref = ref None
 let current_route : Model.route option ref = ref None
+
+let repo () = Option.value !current_repo ~default:""
 (* journals view renders several pages at once — editor actions like
    append/find need access to every journal item's blocks *)
 let current_journals : Model.page list ref = ref []
@@ -27,6 +29,21 @@ let refresh_after_ops : (unit -> unit Js.Promise.t) ref =
    this so sdk mutations can rebuild them without the 150ms debounce *)
 let refresh_property_areas : (unit -> unit Js.Promise.t) ref =
   ref (fun () -> Js.Promise.resolve ())
+
+(* "sync-db-changes" subscribers — one ordered list (drained by
+   Worker_events.dispatch) instead of each area monkey-patching
+   Worker_client.on_message. A failing handler is logged and the rest
+   still run. *)
+let sync_subs : (unit -> unit) list ref = ref []
+
+let on_sync f = sync_subs := !sync_subs @ [ f ]
+
+let run_sync_subs () =
+  List.iter
+    (fun f ->
+      try f ()
+      with e -> Platform.console_error ("sync-db-changes handler failed", e))
+    !sync_subs
 
 (* the open graph's worker uuid — carried as ?graph-id=<uuid> inside the
    location hash (e.g. "#/page/u?graph-id=u") like cljs

@@ -4,7 +4,9 @@
 
    - "notification"    -> toast push (see Decode.toast_of_wire)
    - "sync-db-changes" -> reload current route's data (keeps route_page
-     until the fresh one lands — no blank flicker)
+     until the fresh one lands — no blank flicker), then run the
+     Runtime.on_sync subscribers (areas holding worker data outside the
+     model)
    - anything else     -> Worker_event action for future consumers *)
 
 (* "rtc-sync-state" floods during sync bursts (presence updates, pending-tx
@@ -43,7 +45,8 @@ let dispatch kind payload =
       | None -> ())
   | "sync-db-changes" ->
       schedule_reload ();
-      Views_mount.refresh_query_insts ()
+      Views_mount.refresh_query_insts ();
+      Runtime.run_sync_subs ()
   | "rtc-sync-state" -> (
       let rtc = Decode.rtc_of_wire payload in
       match !last_rtc with

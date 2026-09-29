@@ -5,7 +5,7 @@
 open Lui_elements
 
 let dom = Logseq_dom.dom
-module T = Graphs_text
+module T = I18n
 module B = Browser_ui
 
 let repo () =
@@ -126,7 +126,7 @@ let body (_ms : Model.t Signal.signal) : t =
             export_binary
         ; link ~key:"ex-zip" T.export_sqlite_zip T.export_zip_desc
             export_zip
-        ; link ~key:"ex-edn" T.export_edn T.export_edn_desc export_edn
+        ; link ~key:"ex-edn" T.export_edn_file T.export_edn_desc export_edn
         ; link ~key:"ex-md" T.export_markdown "" export_markdown
         ; link ~key:"ex-tr" T.export_debug_transit
             T.export_debug_transit_desc export_transit

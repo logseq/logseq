@@ -258,33 +258,6 @@ let neighbor_of uuid dir =
 let prev_visible uuid = neighbor_of uuid `Prev
 let next_visible uuid = neighbor_of uuid `Next
 
-(* optimistic title write: a commit updates the model so the row re-renders
-   immediately instead of waiting for the worker refresh round-trip *)
-let rec map_block_title uuid title blocks =
-  List.map
-    (fun (b : Model.block) ->
-      { b with
-        Model.block_title =
-          (if b.Model.block_uuid = Some uuid then title
-           else b.Model.block_title)
-      ; block_children = map_block_title uuid title b.Model.block_children
-      ; block_embed_children =
-          map_block_title uuid title b.Model.block_embed_children
-      })
-    blocks
-
-let update_block_title uuid title =
-  match !Runtime.current_page with
-  | None -> ()
-  | Some p ->
-      Runtime.current_page :=
-        Some
-          { p with
-            Model.page_blocks =
-              map_block_title uuid title p.Model.page_blocks
-          };
-      set (fun st -> st)
-
 let prev_sibling uuid =
   match find_parent uuid with
   | Some (parent_opt, idx) when idx > 0 ->

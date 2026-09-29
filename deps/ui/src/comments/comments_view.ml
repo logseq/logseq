@@ -19,7 +19,7 @@
 open Lui_elements
 module D = struct include Editor_dom include Properties_dom end
 module E = Editor_dom
-module I = Ui_strings
+module I = I18n
 module Ops = Outliner_ops
 
 let dom = Logseq_dom.dom
