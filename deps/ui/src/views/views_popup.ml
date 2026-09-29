@@ -15,12 +15,6 @@ external document_body : D.el = "document.body"
    mousedown or Escape *)
 let open_popups : D.el list ref = ref []
 
-let in_open_popups (t : D.el option) =
-  match t with
-  | None -> false
-  | Some t ->
-      List.exists (fun p -> p == t || D.el_contains p t) !open_popups
-
 let close_top () =
   match !open_popups with
   | [] -> ()
@@ -32,13 +26,6 @@ let close_all () =
   List.iter D.el_remove !open_popups;
   open_popups := []
 
-let on_doc_mousedown ev =
-  match Editor_dom.ev_target ev with
-  | None -> ()
-  | Some t ->
-      if !open_popups <> [] && not (in_open_popups (Some t)) then
-        close_all ()
-
 let on_doc_keydown ev =
   if Editor_dom.ev_key ev = "Escape" && !open_popups <> [] then begin
     Editor_dom.stop_propagation ev;
@@ -47,7 +34,11 @@ let on_doc_keydown ev =
   end
 
 let install_listeners () =
-  Editor_dom.document_add_listener "pointerdown" on_doc_mousedown true;
+  Overlay.on_document_press "pointerdown"
+    ~els:(fun () -> !open_popups)
+    ~on_hit:(function
+      | None -> close_all ()
+      | Some _ -> ());
   Editor_dom.document_add_listener "keydown" on_doc_keydown true
 
 let push_popup el = open_popups := el :: !open_popups
