@@ -5,6 +5,7 @@
             [clojure.string :as string]
             [datascript.core :as d]
             [logseq.common.date :as common-date]
+            [logseq.common.util :as common-util]
             [logseq.common.util.namespace :as ns-util]
             [logseq.db :as ldb]
             [logseq.db.frontend.class :as db-class]
@@ -46,84 +47,104 @@
                                       :i18n-key :page.validation/name-blank
                                       :type :warning}})))))
 
-(defn- find-other-ids-with-title-and-tags
-  "Query that finds other ids given the id to ignore, title to look up and tags to consider"
+(defn- case-sensitive-title?
+  "Properties and tags keep exact-title uniqueness. Ordinary pages match create
+   via :block/name (page-name-sanity-lc)."
   [entity]
-  (cond
-    (ldb/property? entity)
-    ;; Property names are unique in that they can
-    ;; have the same names as built-in property names
-    '[:find [?b ...]
-      :in $ ?eid ?title [?tag-id ...]
-      :where
-      [?b :block/title ?title]
-      [?b :block/tags ?tag-id]
-      [(missing? $ ?b :logseq.property/built-in?)]
-      [(not= ?b ?eid)]]
-    (:block/parent entity)
-    '[:find [?b ...]
-      :in $ ?eid ?title [?tag-id ...]
-      :where
-      [?b :block/title ?title]
-      [?b :block/tags ?tag-id]
-      [(not= ?b ?eid)]
-      ;; same parent
-      [?b :block/parent ?bp]
-      [?eid :block/parent ?ep]
-      [(= ?bp ?ep)]]
-    :else
-    '[:find [?b ...]
-      :in $ ?eid ?title [?tag-id ...]
-      :where
-      [?b :block/title ?title]
-      [?b :block/tags ?tag-id]
-      [(not= ?b ?eid)]]))
+  (or (ldb/property? entity) (ldb/class? entity)))
+
+(defn- find-other-ids-with-title-and-tags
+  "Query that finds other ids given the id to ignore, title or lc name to look up, and tags to consider.
+   Properties and tags match by exact :block/title; ordinary pages match by :block/name
+   (page-name-sanity-lc, same as page creation). Entities with a parent are scoped to
+   that parent; top-level pages only match other top-level pages."
+  [entity]
+  (let [case-sensitive? (case-sensitive-title? entity)]
+    (vec
+     (concat
+      '[:find [?b ...]
+        :in $ ?eid ?title [?tag-id ...]
+        :where]
+      [(vector '?b (if case-sensitive? :block/title :block/name) '?title)
+       '[?b :block/tags ?tag-id]
+       '[(not= ?b ?eid)]]
+      (cond
+        (ldb/property? entity)
+        ;; Property names are unique in that they can
+        ;; have the same names as built-in property names
+        '[[(missing? $ ?b :logseq.property/built-in?)]]
+        (:block/parent entity)
+        ;; same parent
+        '[[?b :block/parent ?bp]
+          [?eid :block/parent ?ep]
+          [(= ?bp ?ep)]]
+        (not case-sensitive?)
+        '[[(missing? $ ?b :block/parent)]])))))
+
+(defn- throw-duplicate
+  [title payload]
+  (throw (ex-info title {:type :notification :payload payload})))
+
+(defn- colliding-tag-ids
+  "Shared tag idents of the first colliding entity. An entity is exempt when it
+   shares the name under different tags e.g. Apple #Company and Apple #Fruit."
+  [db entity lookup tags]
+  (let [this-tags (set (map :db/ident tags))]
+    (some (fn [another-id]
+            (let [another-tags (set (map :db/ident (:block/tags (d/entity db another-id))))
+                  common-tags (set/intersection this-tags another-tags)]
+              (when-not (and (= common-tags #{:logseq.class/Page})
+                             (> (count this-tags) 1)
+                             (> (count another-tags) 1))
+                common-tags)))
+          (d/q (find-other-ids-with-title-and-tags entity)
+               db
+               (:db/id entity)
+               lookup
+               (map :db/id tags)))))
 
 (defn- validate-unique-for-page
   [db new-title {:block/keys [tags] :as entity}]
   (when (seq tags)
-    (when-let [another-id (first
-                           (d/q (find-other-ids-with-title-and-tags entity)
-                                db
-                                (:db/id entity)
-                                new-title
-                                (map :db/id tags)))]
-      (let [another (d/entity db another-id)
-            this-tags (set (map :db/ident tags))
-            another-tags (set (map :db/ident (:block/tags another)))
-            common-tag-ids (set/intersection this-tags another-tags)]
-        (when-not (and (= common-tag-ids #{:logseq.class/Page})
-                       (> (count this-tags) 1)
-                       (> (count another-tags) 1))
-          (cond
-            (ldb/property? entity)
-            (throw (ex-info "Duplicate property"
-                            {:type :notification
-                             :payload {:message (str "Another property named " (pr-str new-title) " already exists.")
-                                       :i18n-key :property.validation/duplicate
-                                       :i18n-args [new-title]
-                                       :type :warning}}))
-            (ldb/class? entity)
-            (throw (ex-info "Duplicate class"
-                            {:type :notification
-                             :payload {:message (str "Another tag named " (pr-str new-title) " already exists.")
-                                       :i18n-key :class.validation/duplicate
-                                       :i18n-args [new-title]
-                                       :type :warning}}))
-            :else
-            (throw (ex-info "Duplicate page"
-                            {:type :notification
-                             :payload {:message (str "Another page named " (pr-str new-title) " already exists for tags: "
-                                                     (string/join ", "
-                                                                  (map (fn [id] (str "#" (:block/title (d/entity db id)))) common-tag-ids)))
-                                       :i18n-key :page.validation/duplicate
-                                       :i18n-args [new-title
-                                                   (string/join ", "
-                                                                (map (fn [id] (str "#" (:block/title (d/entity db id)))) common-tag-ids))]
-                                       :type :warning}}))))))))
+    (let [lookup (if (case-sensitive-title? entity)
+                   new-title
+                   (common-util/page-name-sanity-lc new-title))
+          common-tag-ids (colliding-tag-ids db entity lookup tags)]
+      (when common-tag-ids
+        (cond
+          (ldb/property? entity)
+          (throw-duplicate "Duplicate property"
+                           {:message (str "Another property named " (pr-str new-title) " already exists.")
+                            :i18n-key :property.validation/duplicate
+                            :i18n-args [new-title]
+                            :type :warning})
+
+          (ldb/class? entity)
+          (throw-duplicate "Duplicate class"
+                           {:message (str "Another tag named " (pr-str new-title) " already exists.")
+                            :i18n-key :class.validation/duplicate
+                            :i18n-args [new-title]
+                            :type :warning})
+
+          (= common-tag-ids #{:logseq.class/Page})
+          (throw-duplicate "Duplicate page"
+                           {:message (str "Another page named " (pr-str new-title) " already exists.")
+                            :i18n-key :page.validation/duplicate-name
+                            :i18n-args [new-title]
+                            :type :warning})
+
+          :else
+          (let [common-tags-str (string/join ", " (map (fn [id] (str "#" (:block/title (d/entity db id))))
+                                                       common-tag-ids))]
+            (throw-duplicate "Duplicate page"
+                             {:message (str "Another page named " (pr-str new-title) " already exists for tags: " common-tags-str)
+                              :i18n-key :page.validation/duplicate
+                              :i18n-args [new-title common-tags-str]
+                              :type :warning})))))))
 
 (defn ^:api validate-unique-by-name-and-tags
   "Validates uniqueness of nodes for the following cases:
+   - Ordinary page names are unique by :block/name (case-insensitive) for the same parent or among top-level pages
    - Page names are unique for a tag e.g. their can be Apple #Company and Apple #Fruit
    - Property names are unique with user properties being allowed to have the same name as built-in ones
    - Class names are unique regardless of their extends or if they're built-in"
@@ -362,6 +383,19 @@
   (disallow-tagging-a-built-in-entity db block-eids {:delete? true})
   (disallow-node-cant-tag-with-private-tags db block-eids v {:delete? true})
   (disallow-removing-page-tag db block-eids v))
+
+(defn validate-page-to-property-conversion
+  "Namespaced pages (pages with a parent, including Library-parented
+   namespace roots) cannot become properties. Retracting #Page would
+   otherwise be treated as page->block and drop :block/name."
+  [page]
+  (when (and (entity-util/internal-page? page)
+             (:block/parent page))
+    (throw (ex-info "Namespaced pages can't be properties"
+                    {:type :notification
+                     :payload {:message "Namespaced pages can't be properties"
+                               :i18n-key :page.convert/page-to-property-namespaced
+                               :type :error}}))))
 
 (defn disallow-editing-private-built-in-nodes
   "Disallow editing private :built-in nodes. This explicit validation is needed for contexts

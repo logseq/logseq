@@ -5,12 +5,16 @@
             [cljs.test :refer [async deftest is]]
             [clojure.string :as string]
             [frontend.components.property :as property-component]
+            [frontend.context.i18n :refer [t]]
             [frontend.components.property.config :as property-config]
             [frontend.components.property.default-value :as property-default-value]
             [frontend.components.property.value :as property-value]
             [frontend.db.async :as db-async]
             [frontend.db.hooks :as db-hooks]
+            [frontend.handler.db-based.property :as db-property-handler]
+            [frontend.handler.notification :as notification]
             [frontend.handler.property :as property-handler]
+            [frontend.state :as state]
             [goog.object :as gobj]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]))
@@ -48,6 +52,7 @@
 
 (deftest display-property-resource-value-is-authoritative-test
   (let [value-uuid (random-uuid)
+        missing-uuid (random-uuid)
         value-entity {:block/uuid value-uuid :block/title "canonical"}
         restore #'property-component/restore-resource-entity-values]
     (is (= "new" (restore "new" {}))
@@ -56,7 +61,11 @@
         "Entity UUIDs resolve from canonical block snapshots.")
     (is (= [value-entity]
            (restore [value-uuid] {value-uuid value-entity}))
-        "Entity collections retain their resource-owned shape.")))
+        "Entity collections retain their resource-owned shape.")
+    (is (= #{value-entity}
+           (restore #{value-uuid missing-uuid} {value-uuid value-entity
+                                                missing-uuid nil}))
+        "A retracted many-value UUID must not restore as nil for blocks-container.")))
 
 (deftest property-configuration-subscribes-to-current-property-data-test
   (let [property-uuid (random-uuid)
@@ -201,6 +210,97 @@
              "line with the other properties (db-test#1239)."))
     (is (string/includes? rule ":not(.block-control)")
         "The same rule must exclude the block control anchor for the same reason")))
+
+(deftest add-property-from-dropdown-converts-plain-page-test
+  (async done
+         (let [page {:db/id 41
+                     :block/title "PlainPage"
+                     :block/tags [{:db/ident :logseq.class/Page}]}
+               created {:db/id 99
+                        :db/ident :user.property/PlainPage
+                        :block/title "PlainPage"
+                        :block/tags [{:db/ident :logseq.class/Property}]}
+               calls (atom [])]
+           (-> (p/with-redefs [state/get-current-repo (constantly "test")
+                               db-async/<get-block
+                               (fn [_repo id _opts]
+                                 (p/resolved (if (= 99 id) created page)))
+                               db-property-handler/upsert-property!
+                               (fn [property-id schema opts]
+                                 (swap! calls conj [:upsert property-id schema opts])
+                                 (p/resolved created))]
+                 (#'property-component/<add-property-from-dropdown
+                  {:block/uuid (random-uuid)}
+                  "PlainPage"
+                  {:logseq.property/type :default}
+                  {}))
+               (p/then (fn [result]
+                         (is (= created result))
+                         (is (= [[:upsert nil
+                                  {:logseq.property/type :default}
+                                  {:property-name "PlainPage"
+                                   :properties {:db/id 41}}]]
+                                @calls))))
+               (p/catch (fn [error]
+                          (is false (str error))))
+               (p/finally done)))))
+
+(deftest add-property-from-dropdown-refuses-namespaced-page-test
+  (async done
+         (let [page {:db/id 42
+                     :block/title "Bar"
+                     :block/parent {:db/id 7}
+                     :block/tags [{:db/ident :logseq.class/Page}]}
+               calls (atom [])]
+           (-> (p/with-redefs [state/get-current-repo (constantly "test")
+                               db-async/<get-block (fn [& _] (p/resolved page))
+                               notification/show!
+                               (fn [& args]
+                                 (swap! calls conj (into [:notification] args)))
+                               db-property-handler/upsert-property!
+                               (fn [& _]
+                                 (throw (js/Error. "namespaced page must not be written")))]
+                 (#'property-component/<add-property-from-dropdown
+                  {:block/uuid (random-uuid)}
+                  "Bar"
+                  {:logseq.property/type :default}
+                  {}))
+               (p/then (fn [_]
+                         (is false "namespaced convert should reject before write")))
+               (p/catch (fn [error]
+                          (is (= :namespaced-page error))
+                          (is (= [[:notification (t :page.convert/page-to-property-namespaced) :error false]]
+                                 @calls))))
+               (p/finally done)))))
+
+(deftest property-input-on-chosen-refuses-namespaced-page-before-type-picker-test
+  (let [page {:db/id 42
+              :block/title "Bar"
+              :block/parent {:db/id 7}
+              :block/tags [{:db/ident :logseq.class/Page}]}
+        *property (atom nil)
+        *property-key (atom nil)
+        *show-new-property-config? (atom false)
+        calls (atom [])
+        on-chosen (#'property-component/property-input-on-chosen
+                   {:block/uuid (random-uuid)}
+                   *property *property-key
+                   *show-new-property-config? {})]
+    (with-redefs [notification/show!
+                  (fn [& args]
+                    (swap! calls conj (into [:notification] args)))
+                  shui/popup-hide!
+                  (fn []
+                    (swap! calls conj [:popup-hide]))]
+      (on-chosen {:value (:block/uuid page)
+                  :label "Bar"
+                  :convert-page-to-property? true
+                  :property page})
+      (is (= [[:notification (t :page.convert/page-to-property-namespaced) :error false]
+              [:popup-hide]]
+             @calls))
+      (is (nil? @*property))
+      (is (false? @*show-new-property-config?)))))
 
 (deftest page-title-property-surface-hides-outliner-add-property-test
   (is (true? (#'property-component/page-title-property-surface? {:page-title? true}))

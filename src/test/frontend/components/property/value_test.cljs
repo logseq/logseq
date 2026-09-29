@@ -2,6 +2,7 @@
   (:require ["react" :as react]
             ["react-dom/server" :as react-dom-server]
             [cljs.test :refer [async deftest is]]
+            [clojure.string :as string]
             [datascript.core :as d]
             [frontend.components.property.value :as property-value]
             [frontend.db.async :as db-async]
@@ -112,6 +113,126 @@
   (is (false? (#'property-value/empty-placeholder-value?
                {:db/id 10
                 :db/ident :logseq.property/priority.low}))))
+
+(deftest property-value-collection-excludes-entity-maps-test
+  (is (true? (#'property-value/property-value-collection? #{{:db/id 1}})))
+  (is (true? (#'property-value/property-value-collection? [{:db/id 1}])))
+  (is (false? (#'property-value/property-value-collection?
+               {:db/id 9
+                :db/ident :logseq.property/empty-placeholder}))
+      "A single entity map is not a many-valued collection.")
+  (is (false? (#'property-value/property-value-collection? "https://example.com"))))
+
+(deftest property-value-empty-for-render-test
+  (is (true? (#'property-value/property-value-empty-for-render? nil)))
+  (is (true? (#'property-value/property-value-empty-for-render?
+              :logseq.property/empty-placeholder)))
+  (is (true? (#'property-value/property-value-empty-for-render?
+              {:db/id 9
+               :db/ident :logseq.property/empty-placeholder})))
+  (is (true? (#'property-value/property-value-empty-for-render?
+              #{{:db/ident :logseq.property/empty-placeholder}})))
+  (is (false? (#'property-value/property-value-empty-for-render?
+               {:db/id 10
+                :block/uuid (random-uuid)
+                :block/title "https://logseq.com"}))))
+
+(deftest property-value-blocks-skips-empty-and-nil-blockid-rows-test
+  (let [value-uuid (random-uuid)
+        value-block {:db/id 11
+                     :block/uuid value-uuid
+                     :block/title "https://logseq.com"}]
+    (is (= []
+           (#'property-value/property-value-blocks nil)))
+    (is (= []
+           (#'property-value/property-value-blocks
+            :logseq.property/empty-placeholder)))
+    (is (= []
+           (#'property-value/property-value-blocks
+            {:db/id 9
+             :db/ident :logseq.property/empty-placeholder}))
+        "A cardinality-many empty-placeholder entity must not become a nested ls-block.")
+    (is (= []
+           (#'property-value/property-value-blocks
+            #{nil
+              {:db/id 9
+               :db/ident :logseq.property/empty-placeholder}
+              {:db/id 12}}))
+        "Backspace can leave nil or uuid-less snapshots in the many-valued set.")
+    (is (= [value-block]
+           (#'property-value/property-value-blocks
+            #{value-block
+              nil
+              {:db/ident :logseq.property/empty-placeholder}})))
+    (is (= [value-uuid]
+           (#'property-value/property-value-blocks #{value-uuid}))
+        "Unresolved UUIDs stay mountable; blocks-container accepts raw UUIDs.")))
+
+(deftest resolved-many-value-does-not-treat-entity-map-as-collection-test
+  (let [property {:db/ident :user.property/websites
+                  :logseq.property/type :url
+                  :db/cardinality :db.cardinality/many}
+        placeholder {:db/id 9
+                     :db/ident :logseq.property/empty-placeholder
+                     :block/uuid (random-uuid)}
+        block {:db/id 1
+               :block/uuid #uuid "11111111-1111-1111-1111-111111111111"
+               :user.property/websites placeholder}]
+    (is (= #{placeholder}
+           (#'property-value/resolved-property-value-for-render block property true))
+        "A leftover empty-placeholder entity on a many property must stay wrapped as a set.")))
+
+(deftest empty-multi-value-url-slot-renders-without-invalid-block-row-test
+  (let [property {:db/ident :user.property/websites
+                  :logseq.property/type :url
+                  :db/cardinality :db.cardinality/many}
+        block {:db/id 1
+               :block/uuid #uuid "11111111-1111-1111-1111-111111111111"}
+        invalid-row {:db/id 12}
+        blocks-container-calls (atom [])]
+    (with-redefs [state/use-container-id (constantly 1)
+                  state/get-component (fn [k]
+                                        (when (= k :block/blocks-container)
+                                          (fn [_config blocks]
+                                            (swap! blocks-container-calls conj blocks)
+                                            (throw (ex-info "Invalid block row" {:block (first blocks)})))))]
+      (let [html (render-static
+                  (property-value/property-normal-block-value
+                   block
+                   property
+                   #{nil
+                     {:db/ident :logseq.property/empty-placeholder}
+                     invalid-row}
+                   {}))]
+        (is (empty? @blocks-container-calls)
+            "Empty many-valued leftovers must not reach blocks-container.")
+        (is (string/includes? html "ls-empty-text-property")
+            "Backspace leftovers render as the empty slot, not catch-error.")))))
+
+(deftest filled-multi-value-url-slot-still-mounts-blocks-test
+  (let [value-uuid (random-uuid)
+        value-block {:db/id 11
+                     :block/uuid value-uuid
+                     :block/title "https://logseq.com"}
+        property {:db/ident :user.property/websites
+                  :logseq.property/type :url
+                  :db/cardinality :db.cardinality/many}
+        block {:db/id 1
+               :block/uuid #uuid "11111111-1111-1111-1111-111111111111"}
+        blocks-container-calls (atom [])]
+    (with-redefs [state/use-container-id (constantly 1)
+                  state/get-component (fn [k]
+                                        (when (= k :block/blocks-container)
+                                          (fn [_config blocks]
+                                            (swap! blocks-container-calls conj blocks)
+                                            [:div.mounted-value (str (count blocks))])))]
+      (let [html (render-static
+                  (property-value/property-normal-block-value
+                   block property #{value-block} {}))]
+        (is (= [value-uuid]
+               (mapv :block/uuid (first @blocks-container-calls)))
+            "Filled many-valued url blocks still mount in blocks-container.")
+        (is (string/includes? html "mounted-value"))))))
 
 (deftest canonical-property-without-closed-values-still-selects-priority-test
   (let [property {:db/ident :logseq.property/priority

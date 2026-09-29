@@ -31,6 +31,13 @@
             [promesa.core :as p]
             [io.factorhouse.hsx.core :as hsx]))
 
+(defn- namespaced-page-for-property-convert?
+  "Same parent check as convert-page-to-tag!: namespace children and
+   Library-parented namespace roots cannot become properties."
+  [page]
+  (and (entity/internal-page? page)
+       (:block/parent page)))
+
 (defn- <add-property-from-dropdown
   "Adds an existing or new property from dropdown. Used from a block or page context."
   [entity id-or-name* schema {:keys [class-schema? block-uuid]}]
@@ -42,23 +49,31 @@
           property? (entity/property? property)
           property-title (or (:block/title property) id-or-name)]
     ;; existing property selected or entered
-    (if property?
+    (cond
+      property?
       (do
         (when (and (not (ldb/public-built-in-property? property))
                    (ldb/built-in? property))
           (notification/show! (t :property/private-built-in-not-usable) :error))
         property)
-      ;; new property entered or converting page to property
-      (if (db-property/valid-property-name? property-title)
-        (p/let [opts (cond-> {:property-name property-title}
-                       (and (not property?) (entity/internal-page? property))
-                       (assoc :properties {:db/id (:db/id property)}))
-                result (db-property-handler/upsert-property! nil schema opts)
-                property (db-async/<get-block repo (:db/id result) {:children? false})
-                _ (when add-class-property?
-                    (pv/<add-property! entity (:db/ident property) "" {:class-schema? class-schema? :exit-edit? false}))]
-          property)
-        (notification/show! (t :property.validation/invalid-name) :error)))))
+
+      (namespaced-page-for-property-convert? property)
+      (do
+        (notification/show! (t :page.convert/page-to-property-namespaced) :error false)
+        (p/rejected :namespaced-page))
+
+      (db-property/valid-property-name? property-title)
+      (p/let [opts (cond-> {:property-name property-title}
+                     (entity/internal-page? property)
+                     (assoc :properties {:db/id (:db/id property)}))
+              result (db-property-handler/upsert-property! nil schema opts)
+              property (db-async/<get-block repo (:db/id result) {:children? false})
+              _ (when add-class-property?
+                  (pv/<add-property! entity (:db/ident property) "" {:class-schema? class-schema? :exit-edit? false}))]
+        property)
+
+      :else
+      (notification/show! (t :property.validation/invalid-name) :error))))
 
 (defn- enable-block-properties-renderers?
   [{:keys [sidebar? sidebar-properties?]} class?]
@@ -264,19 +279,24 @@
   [block *property *property-key *show-new-property-config? {:keys [class-schema? remove-property? view-parent]}]
   (fn [{:keys [value label convert-page-to-property?]
         selected-property :property}]
-    (p/let [property selected-property
-            _ (reset! *property-key (if property
-                                      (if convert-page-to-property? (:block/title property) label)
-                                      value))
-            batch? (pv/batch-operation?)]
-      (if (and property remove-property?)
-        (let [block-ids (map :block/uuid (pv/get-operating-blocks block))]
-          (property-handler/batch-remove-block-property!
-           block-ids
-           (:db/ident property)
-           {:preserve-task-tag? (= :logseq.class/Task (:db/ident view-parent))})
-          (shui/popup-hide!))
-        (do
+    (if (and convert-page-to-property?
+             (namespaced-page-for-property-convert? selected-property))
+      (do
+        (notification/show! (t :page.convert/page-to-property-namespaced) :error false)
+        (shui/popup-hide!))
+      (p/let [property selected-property
+              _ (reset! *property-key (if property
+                                        (if convert-page-to-property? (:block/title property) label)
+                                        value))
+              batch? (pv/batch-operation?)]
+        (if (and property remove-property?)
+          (let [block-ids (map :block/uuid (pv/get-operating-blocks block))]
+            (property-handler/batch-remove-block-property!
+             block-ids
+             (:db/ident property)
+             {:preserve-task-tag? (= :logseq.class/Task (:db/ident view-parent))})
+            (shui/popup-hide!))
+          (do
           (when (and *show-new-property-config? (not (entity/property? property)))
             (reset! *show-new-property-config? true))
           (reset! *property property)
@@ -309,7 +329,7 @@
 
                   (or (not= :default type)
                       (and (= :default type) (seq (:property/closed-values property))))
-                  (reset! *show-new-property-config? false))))))))))
+                  (reset! *show-new-property-config? false)))))))))))
 
 (defn- property-description-title
   [property]
@@ -631,11 +651,23 @@
   [value entities]
   (letfn [(restore [item]
             (cond
-              (uuid? item) (get entities item item)
-              (set? item) (into #{} (map restore) item)
-              (vector? item) (mapv restore item)
-              (sequential? item) (map restore item)
-              :else item))]
+              (uuid? item)
+              (let [entity (get entities item ::missing)]
+                (if (= entity ::missing)
+                  item
+                  entity))
+
+              (set? item)
+              (into #{} (keep restore) item)
+
+              (vector? item)
+              (into [] (keep restore) item)
+
+              (sequential? item)
+              (keep restore item)
+
+              :else
+              item))]
     (restore value)))
 
 (defn- restore-closed-values

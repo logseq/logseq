@@ -5,6 +5,7 @@
             [logseq.db.frontend.property :as db-property]
             [logseq.db.test.helper :as db-test]
             [logseq.outliner.core :as outliner-core]
+            [logseq.outliner.page :as outliner-page]
             [logseq.outliner.property :as outliner-property]))
 
 (deftest upsert-property!
@@ -59,6 +60,51 @@
     (let [conn (db-test/create-conn-with-blocks {:properties {:empty-prop {:logseq.property/type :default}}})]
       (outliner-property/upsert-property! conn :user.property/empty-prop {:logseq.property/type :number} {})
       (is (= :number (:logseq.property/type (d/entity @conn :user.property/empty-prop)))))))
+
+(deftest upsert-property-converts-plain-page
+  (let [conn (db-test/create-conn)
+        [_ page-uuid] (outliner-page/create! conn "PlainPage" {})
+        page (d/entity @conn [:block/uuid page-uuid])
+        property (outliner-property/upsert-property!
+                  conn nil {:logseq.property/type :default}
+                  {:property-name "PlainPage"
+                   :properties {:db/id (:db/id page)}})
+        converted (d/entity @conn (:db/id page))]
+    (is (ldb/property? property))
+    (is (= (:db/id page) (:db/id converted)))
+    (is (ldb/property? converted))
+    (is (not (ldb/internal-page? converted)))))
+
+(deftest upsert-property-refuses-namespaced-page
+  (let [conn (db-test/create-conn)
+        [_ bar-uuid] (outliner-page/create! conn "Foo/Bar" {:split-namespace? true})
+        bar (d/entity @conn [:block/uuid bar-uuid])
+        foo (ldb/get-page @conn "foo")
+        convert-error (fn [page property-name]
+                        (try
+                          (outliner-property/upsert-property!
+                           conn nil {:logseq.property/type :default}
+                           {:property-name property-name
+                            :properties {:db/id (:db/id page)}})
+                          nil
+                          (catch :default e e)))]
+    (testing "Namespace child"
+      (let [err (convert-error bar "Bar")
+            bar' (d/entity @conn (:db/id bar))]
+        (is (= :notification (:type (ex-data err))))
+        (is (= :page.convert/page-to-property-namespaced
+               (get-in (ex-data err) [:payload :i18n-key])))
+        (is (ldb/internal-page? bar'))
+        (is (not (ldb/property? bar')))))
+
+    (testing "Namespace root"
+      (let [err (convert-error foo "Foo")
+            foo' (d/entity @conn (:db/id foo))]
+        (is (= :notification (:type (ex-data err))))
+        (is (= :page.convert/page-to-property-namespaced
+               (get-in (ex-data err) [:payload :i18n-key])))
+        (is (ldb/internal-page? foo'))
+        (is (not (ldb/property? foo')))))))
 
 (deftest convert-property-input-string
   (testing "Convert property input string according to its schema type"
