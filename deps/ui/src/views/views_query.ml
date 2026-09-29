@@ -224,14 +224,33 @@ let refresh_block inst f =
    .ls-query-setting toggles a .CodeMirror > pre.CodeMirror-line[contenteditable]
    inside the shell; Esc commits the raw source to the value block title. *)
 
+(* persist the raw source on the hidden value block — never on the
+   tagged parent. The first refresh_block may still be in flight when
+   the user commits, so the uuid is resolved through the parent's
+   logseq.property/query ref on demand instead of guessed. *)
+let save_src inst src =
+  match inst.V.kind with
+  | V.KQuery { block_uuid } ->
+      if inst.V.query_block_uuid <> "" then
+        Db.save_block_title inst.V.query_block_uuid src (fun () -> ())
+      else
+        Db.get_blocks [ block_uuid ] ~metadata:true ~children:true
+          ~include_property_block:true
+          (fun ents ->
+            match ents with
+            | b :: _ -> (
+                match query_value_block b with
+                | Some vb -> (
+                    match W.map_get_uuid vb "block/uuid" with
+                    | Some u ->
+                        inst.V.query_block_uuid <- u;
+                        Db.save_block_title u src (fun () -> ())
+                    | None -> ())
+                | None -> ())
+            | [] -> ())
+  | _ -> ()
+
 let open_editor inst (shell : D.el) =
-  let buuid =
-    if inst.V.query_block_uuid <> "" then inst.V.query_block_uuid
-    else
-      match inst.V.kind with
-      | V.KQuery { block_uuid } -> block_uuid
-      | _ -> ""
-  in
   let cur =
     match parse_src inst.V.qsrc with
     | QDsl s -> s
@@ -260,8 +279,7 @@ let open_editor inst (shell : D.el) =
   D.el_add_listener line "input" (fun _ ->
       let src = D.el_text_content line |> String.trim in
       (V.ops ()).V.o_refresh_src inst src;
-      autosave (fun () ->
-          Db.save_block_title buuid src (fun () -> ())));
+      autosave (fun () -> save_src inst src));
   D.el_add_listener line "keydown" (fun ev ->
       match Editor_dom.ev_key ev with
       | "Escape" ->
@@ -272,7 +290,7 @@ let open_editor inst (shell : D.el) =
              on input — only re-run it if the text changed since, and
              always persist the final source. *)
           if src <> inst.V.qsrc then (V.ops ()).V.o_refresh_src inst src;
-          Db.save_block_title buuid src (fun () -> ())
+          save_src inst src
       | "Enter" ->
           (* single-line editor contract *)
           Editor_dom.prevent_default ev
