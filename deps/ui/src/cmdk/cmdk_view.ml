@@ -752,7 +752,7 @@ let tip_el (filtered, tip) =
 
 let hint_action_of (it : S.item) =
   match it.S.act with
-  | S.Create_page _ -> (`create, false)
+  | S.Create_page _ | S.Create_tag _ -> (`create, false)
   | S.Set_filter _ -> (`filter, false)
   | S.Run _ -> (`trigger, false)
   | S.Open_page _ -> (`open_, true)

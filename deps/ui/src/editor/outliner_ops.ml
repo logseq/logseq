@@ -780,7 +780,18 @@ let schedule_save uuid title =
     Editor_dom.set_timeout_id
       (fun () ->
         pending_save := None;
-        ignore (apply_parsed ~rest:[] [ (uuid, title) ]))
+        ignore
+          (apply_parsed ~rest:[] [ (uuid, title) ]
+          |> Js.Promise.then_ (fun _ ->
+                 (* committed — advance base so the undo resync gate sees
+                    the buffer as clean and can restore reverted titles *)
+                 S.set_silent (fun st ->
+                     match st.S.editing with
+                     | Some e when e.S.uuid = uuid && e.S.buffer = title ->
+                         { st with
+                           S.editing = Some { e with S.base = title } }
+                     | _ -> st);
+                 Js.Promise.resolve ())))
       400
 
 

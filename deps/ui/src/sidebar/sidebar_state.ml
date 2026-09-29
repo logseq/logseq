@@ -242,7 +242,15 @@ let refresh_favorited repo st =
 
 external encode_uri_component : string -> string = "encodeURIComponent"
 
-let navigate_to_page target =
+(* Ref value for get-page-route-info / get-page-blocks-tree: a bare uuid
+   or page-name string. The [:block/uuid u] lookup-ref ARRAY that
+   Router.page_ref builds decodes to a Vector that the endpoints'
+   Ldb.get_page does not match (returns nil) — TODO(shared): fix
+   Router.page_ref / Ldb.get_page so #/page/<uuid> hash routes work. *)
+let route_ref s =
+  if Sdk_util.is_uuid_string s then Wire.Uuid s else Wire.String s
+
+let push_page_route target =
   let target =
     if Sdk_util.is_uuid_string target then target
     else encode_uri_component target
@@ -251,13 +259,36 @@ let navigate_to_page target =
   Platform.set_location_hash (Runtime.nav_hash ("#/page/" ^ target));
   Platform.dispatch "ls:navigate" Js.Json.null
 
-(* Ref value for get-page-route-info / get-page-blocks-tree: a bare uuid
-   or page-name string. The [:block/uuid u] lookup-ref ARRAY that
-   Router.page_ref builds decodes to a Vector that the endpoints'
-   Ldb.get_page does not match (returns nil) — TODO(shared): fix
-   Router.page_ref / Ldb.get_page so #/page/<uuid> hash routes work. *)
-let route_ref s =
-  if Sdk_util.is_uuid_string s then Wire.Uuid s else Wire.String s
+(* cljs redirect-to-page!: route-info first — hidden and
+   private-built-in pages warn instead of navigating, and alias pages
+   redirect to their source page *)
+let navigate_to_page target =
+  let go () = push_page_route target in
+  ignore
+    (Runtime.invoke2 "thread-api/get-page-route-info"
+       (Wire.String (Router.repo ())) (route_ref target)
+     |> Js.Promise.then_ (fun info ->
+            let flag k =
+              Option.value
+                (Option.bind (Wire.get info k) Wire.as_bool)
+                ~default:false
+            in
+            let blocked =
+              (* cljs exempts the Recycle page *)
+              Wire.map_get_string info "block/title" <> Some "Recycle"
+              && ((flag "hidden?" && not (flag "property?"))
+                  || (flag "built-in?" && flag "private-built-in?"))
+            in
+            if blocked then Toast.warning Strings.cannot_go_to_internal_page
+            else
+              (match Wire.map_get_uuid info "alias-source-uuid" with
+               | Some src -> push_page_route src
+               | None -> go ());
+            Js.Promise.resolve ())
+     |> Js.Promise.catch (fun _ ->
+            (* cljs treats a nil route-info as navigable *)
+            go ();
+            Js.Promise.resolve ()))
 
 (* Router.fetch_blocks goes through the broken lookup-ref; keep a local
    copy that passes a bare uuid/name until the shared fix lands. *)

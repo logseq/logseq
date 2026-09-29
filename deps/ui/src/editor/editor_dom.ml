@@ -103,6 +103,13 @@ external el_insert_before : el -> el -> el -> unit = "insertBefore"
   [@@mel.send]
 external el_set_class : el -> string -> unit = "className" [@@mel.set]
 external el_focus : el -> unit = "focus" [@@mel.send]
+external el_scroll_into_view : el -> unit = "scrollIntoView" [@@mel.send]
+
+let el_class_add : el -> string -> unit =
+  [%mel.raw "function (e, c) { e.classList.add(c) }"]
+
+let el_class_remove : el -> string -> unit =
+  [%mel.raw "function (e, c) { e.classList.remove(c) }"]
 
 (* textarea *)
 external el_value : el -> string = "value" [@@mel.get]

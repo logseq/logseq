@@ -21,6 +21,7 @@ type badge_kind =
 
 type action =
   | Create_page of string
+  | Create_tag of string
   | Open_page of string (* block/uuid *)
   | Open_block of string (* block/uuid -> resolve owning page *)
   | Open_file of string (* file/path, e.g. logseq/config.edn *)
@@ -247,7 +248,7 @@ let create_items q =
         ; ititle = Ui_strings.t "cmdk.create/tag"
         ; info = Some (Ui_strings.tf "cmdk.info/create-tag" [ tag ])
         ; header = None; iicon = "new-page"; isc = ""; ibadge = No_badge
-        ; act = Create_page tag; ihl = false; imouse = false; iq = "" } ]
+        ; act = Create_tag tag; ihl = false; imouse = false; iq = "" } ]
   else
     [ { ikey = "create-" ^ q; idx = -1; gid = G_create
       ; ititle = Ui_strings.t "cmdk.create/page"
@@ -753,7 +754,15 @@ let goto_today_journal repo =
                  Js.Promise.resolve ()
              | None -> Js.Promise.resolve ()))
 
-let create_page title =
+(* worker create-page/create-class ops return the new entity's uuid as
+   [:op-name uuid] *)
+let created_uuid w =
+  match Wire.get w "result" with
+  | Some (Wire.Array [ _; Wire.Uuid u ]) -> Some u
+  | Some (Wire.List [ _; Wire.Uuid u ]) -> Some u
+  | _ -> None
+
+let apply_create op label on_ok =
   match !(Runtime.current_repo) with
   | None -> ()
   | Some repo ->
@@ -763,30 +772,35 @@ let create_page title =
       Editor_actions.exit_edit ~select:false;
       ignore
         (Runtime.invoke3 "thread-api/apply-outliner-ops" (Wire.String repo)
-           (Wire.Array
-              [ Wire.Array
-                  [ Wire.Keyword "create-page"
-                  ; Wire.Array
-                      [ Wire.String title; Wire.Map [] ] ] ])
-           (Wire.Map [])
+           (Wire.Array [ op ]) (Wire.Map [])
          |> Js.Promise.then_ (fun w ->
-                let uuid =
-                  match Wire.get w "result" with
-                  | Some (Wire.Array [ _; Wire.Uuid u ]) -> u
-                  | Some (Wire.List [ _; Wire.Uuid u ]) -> u
-                  | _ -> ""
-                in
-                (* a fresh page has no blocks; append_block inserts the
-                   first block and enters edit mode on it — wait for the
-                   navigation's Page_loaded so it lands on the new page *)
-                Runtime.on_page_loaded uuid (fun () ->
-                    Editor_actions.append_block ());
-                goto_page repo uuid;
+                (match created_uuid w with Some uuid -> on_ok repo uuid
+                 | None -> ());
                 Js.Promise.resolve ())
          |> Js.Promise.catch (fun e ->
-                Platform.console_error
-                  ("cmdk create-page failed", Platform.error_inner e);
+                Platform.console_error (label, Platform.error_inner e);
                 Js.Promise.resolve ()))
+
+let create_page title =
+  apply_create
+    (Outliner_ops.create_page title)
+    "cmdk create-page failed"
+    (fun repo uuid ->
+      (* a fresh page has no blocks; append_block inserts the first
+         block and enters edit mode on it — wait for the navigation's
+         Page_loaded so it lands on the new page *)
+      Runtime.on_page_loaded uuid (fun () ->
+          Editor_actions.append_block ());
+      goto_page repo uuid)
+
+(* cljs cmdk "#tag" create: <create-class! without redirect, then the
+   tag dialog opens — there is no tag dialog surface, so navigate to
+   the new class page instead *)
+let create_tag title =
+  apply_create
+    (Outliner_ops.create_class title)
+    "cmdk create-tag failed"
+    (fun repo uuid -> goto_page repo uuid)
 
 let validate_graph repo =
   ignore
@@ -920,6 +934,9 @@ let editor_action cid : (unit -> unit) option =
   | "editor/collapse-block-children" ->
       Some (first_target (fun u -> Editor_actions.set_collapsed u true))
   | "editor/toggle-open-blocks" -> Some (fun () -> Editor_actions.toggle_open_blocks ())
+  | "editor/cycle-todo" ->
+      Some
+        (fun () -> List.iter Editor_commands.cycle_todo (target_uuids ()))
   | "editor/undo" -> Some (fun () -> Editor_actions.undo ())
   | "editor/redo" -> Some (fun () -> Editor_actions.redo ())
   | "editor/quick-add" -> Some (fun () -> Editor_actions.quick_add ())
@@ -977,6 +994,9 @@ let rec run_item st it =
    | Create_page title ->
        close st;
        create_page title
+   | Create_tag title ->
+       close st;
+       create_tag title
    | Open_page uuid ->
        close st;
        Option.iter (fun repo -> goto_page repo uuid) repo
