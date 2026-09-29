@@ -39,6 +39,7 @@ type dlg =
   ; mutable phase : phase
   ; mutable body : Editor_dom.el option
   ; mutable pending_type : string option
+  ; mutable select_overlay : Editor_dom.el option
   }
 
 (* ---------- helpers ---------- *)
@@ -68,6 +69,13 @@ let write_prop_value d prop w =
 (* close this dialog (top overlay) *)
 let close () = S.pop_overlay ()
 
+(* close the dialog plus any select dropdown it opened above itself *)
+let close_dlg d =
+  (match d.select_overlay with
+   | Some el -> S.remove_overlay_el el; d.select_overlay <- None
+   | None -> ());
+  S.pop_overlay ()
+
 (* after "Text"/"URL" is chosen the cljs flow creates the empty value
    block and lands the caret in it — refresh as soon as the write lands
    so the pending editor mounts before the user's next click; entering
@@ -91,10 +99,10 @@ let rec property_chosen d prop =
       (D.class_add_property ~class_uuid:d.target.uuid
          ~ident:(ident_of prop));
     S.refresh_all ();
-    close ())
+    close_dlg d)
   else if is_checkbox prop then (
     write_prop_value d prop (Some (W.Bool false));
-    close ())
+    close_dlg d)
   else (
     d.phase <- Value_edit prop;
     render d)
@@ -105,6 +113,11 @@ and render (d : dlg) =
   match d.body with
   | None -> ()
   | Some body -> (
+      (* a select dropdown portaled above the dialog is torn down with
+         the phase that opened it *)
+      (match d.select_overlay with
+       | Some el -> S.remove_overlay_el el; d.select_overlay <- None
+       | None -> ());
       el_clear body;
       match d.phase with
       | Prop_select -> render_prop_select d body
@@ -151,36 +164,125 @@ and render_prop_select d body =
          Js.Promise.resolve ())
   |> ignore
 
-and type_item d name ty =
-  Sel.item (I18n.t ("property/type-" ^ ty)) (fun () ->
-      on_type_chosen d name ty)
+and select_trigger_cls =
+  "ui__select-trigger flex w-full items-center justify-between \
+   rounded-md border border-input bg-background text-sm \
+   ring-offset-background placeholder:text-muted-foreground \
+   focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 \
+   disabled:cursor-not-allowed disabled:opacity-50 [&>span]:line-clamp-1 \
+   !px-2 !py-0 !h-8"
+
+and select_content_cls =
+  "ui__select-content relative z-[99999] min-w-[8rem] overflow-hidden \
+   rounded-md border bg-popover text-popover-foreground shadow-md \
+   animate-in fade-in-0 zoom-in-95 \
+   data-[side=bottom]:slide-in-from-top-2 \
+   data-[side=left]:slide-in-from-right-2 \
+   data-[side=right]:slide-in-from-left-2 \
+   data-[side=top]:slide-in-from-bottom-2"
+
+(* portaled type dropdown under the trigger (cljs shui select-content *
+   auto-opens via :default-open in the new-property flow) *)
+and open_type_menu d name trigger =
+  let l, _t, _r, b, _w = el_rect trigger in
+  let content =
+    mk ~cls:select_content_cls "div"
+      ~attrs:
+        [ ("role", "presentation"); ("tabindex", "-1"); ("data-open", "")
+        ; ("data-side", "none"); ("data-align", "center")
+        ; ("data-state", "open")
+        ; ( "style"
+          , Printf.sprintf
+              "position:fixed;left:%.0fpx;top:%.0fpx;z-index:99999;\
+               overflow:hidden auto" l (b +. 4.) ) ]
+  in
+  let listbox =
+    mk ~cls:"p-1" "div"
+      ~attrs:
+        [ ("role", "listbox")
+        ; ( "style"
+          , "position:relative;max-height:100%;overflow:hidden auto;\
+             flex:1 1 auto;min-height:0" ) ]
+  in
+  let group = mk "div" ~attrs:[ ("role", "group") ] in
+  el_append_child listbox group;
+  el_append_child content listbox;
+  List.iteri
+    (fun i ty ->
+      let opt =
+        mk
+          ~cls:
+            "ui__select-item flex w-full cursor-default select-none \
+             items-center gap-2 rounded-sm px-2 py-1.5 text-sm \
+             outline-none data-[highlighted]:bg-muted \
+             data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
+          "div"
+          ~attrs:
+            [ ("role", "option"); ("aria-selected", "false")
+            ; ("tabindex", if i = 0 then "0" else "-1") ]
+      in
+      if i = 0 then el_set_attr opt "data-highlighted" "";
+      el_append_child opt
+        (mk ~cls:"flex h-4 w-4 shrink-0 items-center justify-center" "span");
+      let lbl = mk "div" in
+      ignore (child_text "span" "" (I18n.t ("property/type-" ^ ty)) lbl);
+      el_append_child opt lbl;
+      el_append_child group opt;
+      on_click opt (fun _ -> on_type_chosen d name ty))
+    (* cljs db-property-type/user-built-in-property-types order *)
+    [ "default"; "number"; "date"; "datetime"; "checkbox"; "url"; "node"
+    ; "asset" ];
+  d.select_overlay <- Some content;
+  S.push_overlay content ~on_escape:(fun () -> d.select_overlay <- None)
 
 and render_type_select d body name =
+  (* cljs DOM contract (property.cljs property-type-select):
+     .ls-property-add > .property-key > bullet + name, then
+     .flex.flex-row > .flex.items-center > button.ui__select-trigger *)
   let wrap =
-    mk ~cls:"ls-property-add flex flex-row items-center gap-1" "div"
+    mk ~cls:"ls-property-add gap-1 flex flex-1 flex-row items-center" "div"
   in
-  let key = mk ~cls:"property-key flex flex-row items-center" "div" in
-  el_set_text key name;
+  let key =
+    mk ~cls:"flex flex-row items-center property-key gap-1" "div"
+  in
+  let bullet = mk ~cls:"bullet-container" "span" in
+  el_append_child bullet (mk ~cls:"bullet" "span");
+  el_append_child key bullet;
+  let label = mk "div" in
+  el_set_text label name;
+  el_append_child key label;
   el_append_child wrap key;
-  (* cljs renders the select-trigger's placeholder value as visible text;
-     e2e asserts get-by-text "Select a property type" *)
-  ignore
-    (child_text "span" "text-sm text-muted-foreground select-placeholder"
-       (I18n.t "property/select-type-placeholder") wrap);
+  let row = mk ~cls:"flex flex-row" "div" in
+  let cell = mk ~cls:"flex items-center" "div" in
+  el_append_child row cell;
+  el_append_child wrap row;
   el_append_child body wrap;
-  let items =
-    List.map
-      (fun ty -> type_item d name ty)
-      (* cljs db-property-type/user-built-in-property-types order *)
-      [ "default"; "number"; "date"; "datetime"; "checkbox"; "url"
-      ; "node"; "asset" ]
+  let trigger =
+    mk ~cls:select_trigger_cls "button"
+      ~attrs:
+        [ ("type", "button"); ("tabindex", "0"); ("role", "combobox")
+        ; ("aria-expanded", "true"); ("aria-haspopup", "listbox")
+        ; ("data-popup-open", ""); ("data-pressed", "")
+        ; ("data-placeholder", ""); ("data-popup-side", "bottom") ]
   in
-  let sel, _input =
-    Sel.create
-      ~placeholder:(I18n.t "property/select-type-placeholder")
-      ~on_escape:close items
+  let ph =
+    child_text "span" "" (I18n.t "property/select-type-placeholder")
+      trigger
   in
-  el_append_child wrap sel
+  el_set_attr ph "data-placeholder" "";
+  let icon =
+    mk ~cls:"ui__select-icon shrink-0 text-muted-foreground" "span"
+      ~attrs:[ ("data-popup-open", ""); ("aria-hidden", "true") ]
+  in
+  (match tabler_svg_el ~size:24. "chevron-down" with
+   | Some svg ->
+       el_set_attr svg "class"
+         "tabler-icon tabler-icon-chevron-down h-4 w-4";
+       el_append_child icon svg
+   | None -> ());
+  el_append_child trigger icon;
+  el_append_child cell trigger;
+  open_type_menu d name trigger
 
 and valid_property_name s =
   not (String.length s > 0
@@ -218,15 +320,15 @@ and on_type_chosen d name ty =
                        (D.class_add_property ~class_uuid:d.target.uuid
                           ~ident));
                 S.refresh_all ();
-                close ())
+                close_dlg d)
               else (
                 match ty with
                 | "checkbox" ->
                     write_prop_value d prop (Some (W.Bool false));
-                    close ()
+                    close_dlg d
                 | "default" | "url" ->
                     add_empty_text_block d prop;
-                    close ()
+                    close_dlg d
                 | "node" ->
                     d.phase <- Node_tags prop;
                     render d
@@ -298,7 +400,7 @@ and value_items d prop wire_values =
             Some
               (Sel.item (D.ref_title c) (fun () ->
                    write_prop_value d prop (Some (W.Int id));
-                   close ()))
+                   close_dlg d))
         | None -> None)
       closed
   else
@@ -312,7 +414,7 @@ and value_items d prop wire_values =
                 Some
                   (Sel.item (D.ref_title v) (fun () ->
                        write_prop_value d prop (Some (W.Int id));
-                       close ()))
+                       close_dlg d))
             | None -> None)
           wire_values
 
@@ -349,7 +451,7 @@ and render_value_edit d body prop =
               }
             in
             V.commit_date_input ctx (ident_of prop) ~is_datetime:(ty = "datetime") input;
-            close ()
+            close_dlg d
         | "Escape" -> prevent_default ev; stop_propagation ev; close ()
         | _ -> ())
       true)
@@ -361,7 +463,7 @@ and render_value_edit d body prop =
           V.node_items_source ~block:(D.uuid_ref d.target.uuid) ~prop
             ~on_pick:(fun id ->
               write_prop_value d prop (Some (W.Int id));
-              close ())
+              close_dlg d)
         in
         (initial, Some on_search))
       else
@@ -380,7 +482,7 @@ and render_value_edit d body prop =
                    match Float.of_string_opt (String.trim text) with
                    | Some n ->
                        write_prop_value d prop (Some (W.Float n));
-                       close ()
+                       close_dlg d
                    | None -> ())
              else if ty = "node" then
                Some
@@ -391,7 +493,7 @@ and render_value_edit d body prop =
                            | Some id ->
                                write_prop_value d prop (Some (W.Int id))
                            | None -> ());
-                          close ();
+                          close_dlg d;
                           Js.Promise.resolve ())
                    |> ignore)
              else
@@ -403,7 +505,7 @@ and render_value_edit d body prop =
                      ~new_block_id:(Platform.random_uuid ()) ()
                    |> ignore;
                    S.refresh_all ();
-                   close ())
+                   close_dlg d)
            in
            let sel, input =
              Sel.create ~placeholder ~new_option:on_new ~on_escape:close
@@ -419,16 +521,24 @@ and render_value_edit d body prop =
 (* cljs pops the input under the invoking control (popup-show! on the
    click target); callers without an anchor get the centered fallback *)
 let open_dialog ?anchor target =
-  let d = { target; phase = Prop_select; body = None; pending_type = None } in
+  let d =
+    { target; phase = Prop_select; body = None; pending_type = None
+    ; select_overlay = None
+    }
+  in
+  (* cljs popup body styles: base-ui sets font metrics and the page
+     title size var on the popover content *)
+  let body_style =
+    "font-size:1rem;line-height:1.5;--ls-page-title-size:1rem"
+  in
   let style =
     match anchor with
     | Some (x, y) ->
-        Printf.sprintf
-          "position:fixed;left:%.0fpx;top:%.0fpx;z-index:9999;min-width:320px"
-          x y
+        Printf.sprintf "position:fixed;left:%.0fpx;top:%.0fpx;z-index:9999;%s"
+          x y body_style
     | None ->
         "position:fixed;left:50%;top:30%;transform:translateX(-50%);\
-         z-index:9999;min-width:320px"
+         z-index:9999;" ^ body_style
   in
   (* cljs popup chrome: ui__popover-content card > .ls-property-dialog *)
   let root =
@@ -443,7 +553,10 @@ let open_dialog ?anchor target =
          data-[side=top]:slide-in-from-bottom-2 \
          focus:outline-none focus-visible:outline-none z-50"
       "div"
-      ~attrs:[ ("role", "dialog"); ("style", style) ]
+      ~attrs:
+        [ ("role", "dialog"); ("style", style); ("data-open", "")
+        ; ("data-side", "bottom"); ("data-align", "start")
+        ; ("data-base-ui-focusable", "") ]
   in
   let dlg = mk ~cls:"ls-property-dialog" "div" in
   el_append_child root dlg;
@@ -483,8 +596,27 @@ let current_target () : target option =
                   }
           | None -> None))
 
-(* open the dialog for a specific block uuid (slash command path) *)
+(* open the dialog for a specific block uuid (slash command path). cljs
+   anchors the popover on the editing textarea (#edit-block-<uuid>)
+   with align:start — bottom-left corner, 4px left *)
 let open_for_block ?anchor uuid =
+  let anchor =
+    match anchor with
+    | Some _ -> anchor
+    | None -> (
+        match get_element_by_id ("edit-block-" ^ uuid) with
+        | Some ta ->
+            let l, _t, _r, b, _w = el_rect ta in
+            Some (l -. 4., b)
+        | None -> (
+            (* no live editor: cljs anchors on the block element itself
+               (selection path) — bottom-left of .ls-block *)
+            match get_element_by_id ("ls-block-" ^ uuid) with
+            | Some blk ->
+                let l, _t, _r, b, _w = el_rect blk in
+                Some (l, b)
+            | None -> None))
+  in
   open_dialog ?anchor { uuid; db_id = None; is_tag = false; title = "" }
 
 (* open anchored under a DOM element (its bottom-left corner) *)
