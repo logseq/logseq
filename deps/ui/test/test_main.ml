@@ -66,6 +66,7 @@ let page blocks : Model.page =
   ; page_built_in = false
   ; page_add_object = false
   ; page_tags = []
+  ; page_tag_idents = []
   ; page_blocks = blocks
   ; page_linked_refs = []
   ; page_parents = []
@@ -662,11 +663,11 @@ let test_title_refs () =
     (Title_refs.replace_all "aaa" ~pat:"aa" ~rep:"Y");
   let resolved =
     [ { Title_refs.name = "X"; uuid = "u1"; is_tag = false
-      ; fresh = true }
+      ; fresh = true; entity = Wire.Nil }
     ; { Title_refs.name = "y"; uuid = "u2"; is_tag = true
-      ; fresh = true }
+      ; fresh = true; entity = Wire.Nil }
     ; { Title_refs.name = "foobar"; uuid = "u3"; is_tag = true
-      ; fresh = true } ]
+      ; fresh = true; entity = Wire.Nil } ]
   in
   eqs "rewrite page + bare tag" "a [[u1]] #[[u2]]"
     (Title_refs.rewrite_title "a [[X]] #y" resolved);
@@ -678,7 +679,7 @@ let test_title_refs () =
   check "tag_name_at no boundary"
     (Title_refs.tag_name_at "#yz!" 1
        [ { Title_refs.name = "y"; uuid = "u"; is_tag = true
-         ; fresh = true } ]
+         ; fresh = true; entity = Wire.Nil } ]
      = None)
 
 let test_title_refs2 () =

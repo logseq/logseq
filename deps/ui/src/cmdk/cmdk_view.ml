@@ -993,7 +993,5 @@ let render (_ms : Model.t Signal.signal) : t =
   let open_sig =
     Signal.map (fun (v : S.view) -> v.S.open_) st.S.vs.Signal.state_signal
   in
-  let body =
-    box ~key:"cmdk_view" [ if_ ~test:open_sig (modal_shell st) ]
-  in
+  let body = if_ ~test:open_sig (modal_shell st) in
   body context parent

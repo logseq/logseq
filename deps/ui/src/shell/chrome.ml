@@ -21,25 +21,37 @@ let dyn = Logseq_dom.dyn
 
 let skip_to_main =
   Logseq_dom.dom ~key:"skip" ~tag:"button" ~id:"skip-to-main"
-    ~style_class:"sr-only" ~text:"Skip to main content" []
+    ~text:"Skip to main content" []
 
-let icon_btn ~key ~id ~cls ~icon ~title ~on_click =
+(* cljs shui/button :ghost :size :sm — tooltip-wrapped buttons carry no
+   title attr; extra classes sort alphabetically into the class list *)
+let ghost_btn_cls ?(mid = "") ?(tail = "") () =
+  "active:opacity-80 as-ghost box-content " ^ mid
+  ^ "cursor-pointer disabled:opacity-50 disabled:pointer-events-none \
+     focus-visible:outline-none focus-visible:ring-2 \
+     focus-visible:ring-offset-2 focus-visible:ring-ring font-medium gap-1 \
+     h-6 hover:bg-secondary/70 hover:text-secondary-foreground inline-flex \
+     items-center justify-center overflow-hidden p-1 ring-offset-background \
+     rounded-md select-none text-sm " ^ tail
+  ^ "transition-colors ui__button w-6 whitespace-nowrap"
+
+let icon_btn ~key ~id ~cls ~icon ~on_click =
   Logseq_dom.dom ~key ~tag:"button" ~id
-    ~style_class:("button cp__header-btn " ^ cls)
-    ~attrs:[ ("title", title); ("data-button", "icon") ]
+    ~style_class:cls
+    ~attrs:[ ("type", "button") ]
     ~events:"click"
     ~on_dom_event:(fun name payload -> if name = "click" then on_click payload)
     [ Icons.icon ~size:20. ~cls:"" icon ]
 
 let search_button =
-  icon_btn ~key:"search-btn" ~id:"search-button" ~cls:"" ~icon:"search"
-
-    ~title:"Search"
+  icon_btn ~key:"search-btn" ~id:"search-button" ~cls:(ghost_btn_cls ())
+    ~icon:"search"
     ~on_click:(fun _ -> Runtime.send Action.Toggle_search)
 
 let dots_button =
   Logseq_dom.dom ~key:"dots-btn" ~tag:"button"
-    ~style_class:"button cp__header-btn toolbar-dots-btn"
+    ~style_class:(ghost_btn_cls ~tail:"toolbar-dots-btn " ())
+    ~attrs:[ ("type", "button") ]
     ~events:"click"
     ~on_dom_event:(fun name _ ->
       (* cljs anchors the dropdown to the trigger's right edge, not
@@ -107,8 +119,9 @@ let rtc_indicator (ms : Model.t Signal.signal) : t =
     (Signal.map (fun (m : Model.t) -> m.rtc) ms)
 
 let left_menu_button =
-  icon_btn ~key:"left-menu-btn" ~id:"left-menu" ~cls:"cp__header-left-menu"
-    ~icon:"menu-2" ~title:"Toggle left sidebar"
+  icon_btn ~key:"left-menu-btn" ~id:"left-menu"
+    ~cls:(ghost_btn_cls ~mid:"cp__header-left-menu " ())
+    ~icon:"menu-2"
     ~on_click:(fun _ -> Runtime.send Action.Toggle_left_sidebar)
 
 (* cljs header.cljs: home button hidden on the :home route and on a
@@ -118,10 +131,10 @@ let home_button ms =
     ~equal:(fun (a : Model.t) (b : Model.t) -> a.route = b.route)
     (fun (m : Model.t) ->
       match m.route with
-      | Model.Home -> Logseq_dom.dom ~key:"home-none" []
+      | Model.Home -> Logseq_dom.nothing
       | _ ->
-          icon_btn ~key:"home-btn" ~id:"" ~cls:"" ~icon:"home"
-            ~title:"Home" ~on_click:(fun _ ->
+          icon_btn ~key:"home-btn" ~id:"" ~cls:(ghost_btn_cls ())
+            ~icon:"home" ~on_click:(fun _ ->
               Platform.set_location_hash "#/";
               Platform.dispatch "ls:navigate" Js.Json.null))
     ms
@@ -129,15 +142,16 @@ let home_button ms =
 (* cljs open-right-sidebar! seeds a "contents" item when the sidebar
    is empty (state/sidebar-add-content-when-open!) *)
 let right_toggle_button ms =
-  icon_btn ~key:"rs-toggle" ~id:"" ~cls:"toggle-right-sidebar"
-    ~icon:"layout-sidebar-right" ~title:"Toggle right sidebar"
+  icon_btn ~key:"rs-toggle" ~id:""
+    ~cls:(ghost_btn_cls ~tail:"toggle-right-sidebar " ())
+    ~icon:"layout-sidebar-right"
     ~on_click:(fun _ ->
       Runtime.send Action.Toggle_right_sidebar;
       Sidebar_state.ensure_contents (Sidebar_state.ensure ms))
 
 let header (ms : Model.t Signal.signal) =
-  Logseq_dom.dom ~key:"head" ~tag:"header" ~id:"head"
-    ~style_class:"cp__header"
+  Logseq_dom.dom ~key:"head" ~tag:"div" ~id:"head"
+    ~style_class:"cp__header drag-region"
     [ Logseq_dom.dom ~key:"head-inner"
         ~style_class:"l flex items-center drag-region"
         [ left_menu_button; search_button ]
@@ -149,24 +163,21 @@ let header (ms : Model.t Signal.signal) =
             [ rtc_indicator ms
             ; home_button ms
             ; (* cljs header.cljs hook-ui-items :toolbar renders
-                 .ui-items-container always; the plugins-manager trigger
-                 only appears once a plugin is actually installed *)
-              Logseq_dom.dom ~key:"ui-items"
-                ~style_class:"ui-items-container"
-                ~attrs:[ ("data-type", "toolbar") ]
-                [ Logseq_dom.dom ~key:"ui-items-wrap" ~style_class:"list-wrap"
-                    [ Left_sidebar_view.plugins_toolbar ms ] ]
+                 .ui-items-container only when a plugin actually
+                 contributes a toolbar item *)
+              Left_sidebar_view.plugins_toolbar ms
             ; dots_button; right_toggle_button ms ]
         ]
     ]
 
-(* right sidebar — hidden until toggled; e2e checks .cp__right-sidebar *)
+(* cljs right_sidebar.cljs: #right-sidebar.cp__right-sidebar.h-screen
+   carries .open/.closed; only renders contents while open *)
 let right_sidebar (ms : Model.t Signal.signal) =
   Logseq_dom.dom ~key:"right-sidebar" ~id:"right-sidebar"
     ~style_class_signal:
       (Logseq_dom.class_signal ms (fun (m : Model.t) ->
-           "cp__right-sidebar"
-           ^ if m.right_sidebar_open then " open" else ""))
+           "cp__right-sidebar h-screen "
+           ^ if m.right_sidebar_open then "open" else "closed"))
     [ Right_sidebar_view.render ms ]
 
 (* left_sidebar.cljs:570 — div#left-sidebar.cp__sidebar-left-layout
@@ -226,12 +237,16 @@ let main_content (ms : Model.t Signal.signal) =
                    | _ -> marginless))
             [ Logseq_dom.dom ~key:"content-wrap"
                 ~attrs_signal_v:
-                  (Logseq_dom.attrs_signal ms (fun (_ : Model.t) ->
+                  (Logseq_dom.attrs_signal ms (fun (m : Model.t) ->
                        (* cljs container.cljs: div.mx-auto.pb-24 around
-                          main-content; margin-less routes keep an empty
-                          class + 0 margin *)
-                       [ ("class", "mx-auto pb-24")
-                       ; ("style", "margin-bottom: 120px") ]))
+                          main-content; home/margin-less routes keep an
+                          empty class + 0 margin *)
+                       match m.route with
+                       | Model.Journals | Model.Home ->
+                           [ ("style", "margin-bottom: 0") ]
+                       | _ ->
+                           [ ("class", "mx-auto pb-24")
+                           ; ("style", "margin-bottom: 120px") ]))
                 [ dyn
                 ~equal:(fun (a : Model.t) (b : Model.t) ->
                   a.phase = b.phase
@@ -255,10 +270,10 @@ let main_content (ms : Model.t Signal.signal) =
     ]
 
 (* Overlay layer — cmdk palette, popups (autocomplete/slash/context
-   menus), dialogs and toasts mount here (single shared container;
-   e2e selects by class so the wrapper is transparent). *)
+   menus), dialogs and toasts mount here. cljs's installers emit no
+   wrapper element, so these mount directly under #app-container. *)
 let overlays (ms : Model.t Signal.signal) =
-  Logseq_dom.dom ~key:"overlays" ~style_class:"cp__overlays"
+  Logseq_dom.fragment
     [ Cmdk_view.render ms
     ; Popups_view.render ms
     ; Left_sidebar_view.menus ms
@@ -281,6 +296,20 @@ let overlays (ms : Model.t Signal.signal) =
         ms
     ]
 
+(* cljs container.cljs emits hidden <a> anchors used by export flows *)
+let export_anchors : t =
+  Logseq_dom.fragment
+    (List.map
+       (fun id ->
+         Logseq_dom.dom ~key:("a-" ^ id) ~tag:"a" ~id
+           ~style_class:"hidden" [])
+       [ "download"; "download-as-edn-v2"; "download-as-json-v2"
+       ; "download-as-transit-debug"; "download-as-sqlite-db"
+       ; "download-as-db-edn"; "download-as-roam-json"
+       ; "download-as-html"; "download-as-zip"; "export-as-markdown"
+       ; "export-as-opml"
+       ; "convert-markdown-to-unordered-list-or-heading" ])
+
 (* cljs container.cljs help-button: fixed bottom-right "?" — click toggles
    the help menu popup; popup itself not ported yet *)
 (* cljs container.cljs help-button: inline tabler help-small svg *)
@@ -295,10 +324,9 @@ let help_svg : t =
       ; ("xmlns", "http://www.w3.org/2000/svg")
       ; ("stroke-linecap", "round")
       ; ("stroke-width", "2")
-      ; ("class", "icon icon-tabler icon-tabler-help-small")
       ; ("height", "24")
       ]
-    ~style_class:"scale-125"
+    ~style_class:"icon icon-tabler icon-tabler-help-small scale-125"
     [ Logseq_dom.dom ~key:"hsv-p0" ~tag:"path"
         ~attrs:[ ("stroke", "none"); ("d", "M0 0h24v24H0z"); ("fill", "none") ]
         []
@@ -371,7 +399,7 @@ let help_menu_popup : t =
     ]
 
 let help_area (ms : Model.t Signal.signal) : t =
-  Logseq_dom.dom ~key:"help-area"
+  Logseq_dom.fragment
     [ Logseq_dom.dom ~key:"help" ~style_class:"cp__sidebar-help-btn"
         [ Logseq_dom.dom ~key:"help-inner" ~style_class:"inner"
             ~events:"click"
@@ -383,7 +411,7 @@ let help_area (ms : Model.t Signal.signal) : t =
         ~equal:(fun (a : Model.t) (b : Model.t) -> a.help_open = b.help_open)
         (fun (m : Model.t) ->
           if m.help_open then help_menu_popup
-          else Logseq_dom.dom ~key:"hm-none" [])
+          else Logseq_dom.nothing)
         ms
     ]
 
@@ -424,18 +452,24 @@ let shell (ms : Model.t Signal.signal) : t =
   Logseq_dom.dom ~key:"wrapper" ~tag:"main" ~id:"app-container-wrapper"
     ~style_class_signal:
       (Logseq_dom.class_signal ms (fun (m : Model.t) ->
-           "theme-container-inner"
+           "theme-container-inner ls-hl-colored"
            ^ if m.left_sidebar_open then " ls-left-sidebar-open" else ""
            ^ if m.right_sidebar_open then " ls-right-sidebar-open" else ""))
     [ skip_to_main
     ; Logseq_dom.dom ~key:"app" ~id:"app-container"
-        ~style_class:"cp__sidebar-main-layout"
         [ Logseq_dom.dom ~key:"left-container" ~id:"left-container"
+            ~style_class_signal:
+              (Logseq_dom.class_signal ms (fun (m : Model.t) ->
+                   if m.left_sidebar_open then "overflow-hidden"
+                   else "w-full"))
             [ header ms; main_content ms ]
         ; right_sidebar ms
-        ; overlays ms
-        ; help_area ms
-        ; dyn
+        ; Logseq_dom.dom ~key:"asc" ~id:"app-single-container" []
+        ]
+    ; overlays ms
+    ; export_anchors
+    ; help_area ms
+    ; dyn
             ~equal:(fun (a : Model.t) (b : Model.t) ->
               match a.route, b.route with
               | Model.Not_found _, Model.Not_found _ -> true
@@ -444,7 +478,6 @@ let shell (ms : Model.t Signal.signal) : t =
             (fun (m : Model.t) ->
               match m.route with
               | Model.Not_found _ -> not_found_page
-              | _ -> Logseq_dom.dom ~key:"nf-none" ~style_class:"contents" [])
+              | _ -> Logseq_dom.nothing)
             ms
-        ]
     ]

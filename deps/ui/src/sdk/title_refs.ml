@@ -101,6 +101,22 @@ let user_class_ident name =
 let uuid_lookup u =
   Wire.Array [ Wire.Keyword "block/uuid"; Wire.Uuid u ]
 
+(* cljs use-cached-refs swaps a parsed ref for the cached entity's
+   ref-summary map ({:db/id :block/uuid :block/title :block/name
+   :db/ident :block/tags}). A bare [:block/uuid u] carries no
+   block/name, so remove-orphaned-page-refs cannot keep the still
+   referenced page alive — it gets retracted mid-tx and the lookup
+   then throws "Nothing found for entity id". *)
+let existing_ref_map w =
+  let keep =
+    [ "db/id"; "block/uuid"; "block/title"; "block/name"; "db/ident"
+    ; "block/tags" ]
+  in
+  Wire.Map
+    (List.filter_map
+       (fun k -> Option.map (fun v -> (Wire.String k, v)) (Wire.get w k))
+       keep)
+
 let new_page_map name uuid =
   Wire.Map
     [ (Wire.String "block/name", Wire.String (lc name))
@@ -128,7 +144,9 @@ let new_tag_map name uuid =
     ; (Wire.String "block/updated-at", Wire.Float now)
     ]
 
-type resolved = { name : string; uuid : string; is_tag : bool; fresh : bool }
+type resolved =
+  { name : string; uuid : string; is_tag : bool; fresh : bool
+  ; entity : Wire.t }
 
 let resolve_names names tags =
   names
@@ -139,10 +157,11 @@ let resolve_names names tags =
                   (match Wire.map_get_uuid w "block/uuid" with
                    | Some u ->
                        { name; uuid = u; is_tag = List.mem name tags
-                       ; fresh = false }
+                       ; fresh = false; entity = w }
                    | None ->
                        { name; uuid = Platform.random_uuid ()
-                       ; is_tag = List.mem name tags; fresh = true })))
+                       ; is_tag = List.mem name tags; fresh = true
+                       ; entity = Wire.Nil })))
   |> Array.of_list |> Js.Promise.all
   |> Js.Promise.then_ (fun a -> Js.Promise.resolve (Array.to_list a))
 
@@ -219,7 +238,7 @@ let parse title =
            if r.fresh then
              if r.is_tag then new_tag_map r.name r.uuid
              else new_page_map r.name r.uuid
-           else uuid_lookup r.uuid
+           else existing_ref_map r.entity
          in
          let tag_of r =
            if r.fresh then new_tag_map r.name r.uuid else uuid_lookup r.uuid

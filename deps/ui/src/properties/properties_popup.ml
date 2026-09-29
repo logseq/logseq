@@ -33,7 +33,8 @@ let open_at ?(cls = "") ~x ~y content =
   let root =
     mk "div" ~cls
       ~attrs:
-        [ ( "style"
+        [ ("role", "dialog")
+        ; ( "style"
           , Printf.sprintf "position:fixed;left:%dpx;top:%dpx;z-index:9999"
               (int_of_float x) (int_of_float y) )
         ]

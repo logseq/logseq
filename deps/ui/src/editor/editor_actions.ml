@@ -112,6 +112,9 @@ let clear_pending_blur () = pending_blur_uuid := None
 
 let enter_edit ?(scope = "main") uuid caret =
   clear_pending_blur ();
+  (* single editing surface (cljs): a block editor opening commits any
+     open property-value editor first *)
+  !(S.close_property_editor) ();
   (match S.editing () with
   | Some e when e.uuid <> uuid -> save_if_dirty e.uuid
   | _ -> ());
@@ -173,6 +176,10 @@ let flush_edit () =
       S.set (fun st -> { st with S.editing = None });
       if buf <> model_title e.uuid then
         ignore (Ops.apply [ Ops.save_block e.uuid buf ])
+
+(* property value cells open their own inline editor — entering one
+   exits block editing just like a click into another block *)
+let () = S.close_block_editor := blur_commit
 
 let schedule_blur_commit () =
   match S.editing () with

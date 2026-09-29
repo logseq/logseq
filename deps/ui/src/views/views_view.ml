@@ -49,8 +49,17 @@ let rec render inst =
           ~filters:(Views_head.filters_row inst ~refresh)
           ()
       in
-      D.el_append_child grid body;
-      D.el_append_child inst.V.container grid
+      D.el_append_child grid
+        (Views_table.foldable inst ~refresh ~key:"view"
+           ~title_el:(Views_head.render_head inst ~refresh)
+           ~body:(fun () -> body));
+      (* cljs: view container > div > .flex.flex-col.gap-2 > .flex.flex-col
+         .gap-2.grid > foldable *)
+      D.el_append_child inst.V.container
+        (D.h
+           ~children:
+             [ D.h ~cls:"flex flex-col gap-2" ~children:[ grid ] () ]
+           ())
 
 and render_query inst =
   D.clear inst.V.container;
