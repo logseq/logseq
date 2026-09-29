@@ -556,8 +556,17 @@ let refresh st =
   incr st.gen;
   let gen = !(st.gen) in
   (* commands/filters are local — apply them synchronously so a hanging
-     worker query (e.g. repo mid-transition) can't leave stale groups *)
-  apply_results st v.input v.move_mode v.expanded [] 0;
+     worker query (e.g. repo mid-transition) can't leave stale groups.
+     Keep the previous node rows while the worker resolves: cljs
+     load-results :nodes sets :status :loading without clearing items —
+     keystrokes must never empty the visible result list *)
+  let carry_nodes =
+    List.concat_map
+      (fun (g : group) -> if g.gid = G_nodes then g.gitems else [])
+      v.groups
+  in
+  apply_results st v.input v.move_mode v.expanded carry_nodes
+    (List.length carry_nodes);
   match !(Runtime.current_repo) with
   | None -> ()
   | Some repo ->
