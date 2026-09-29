@@ -40,6 +40,13 @@ let pending_focus : (string * int) option ref = ref None
 (* structured block clipboard (titles + hierarchy), set by copy/cut *)
 let clipboard : Model.block list ref = ref []
 
+(* cljs has a single editing block: entering block edit dismisses any
+   inline secondary editor (e.g. a property value cell) and vice versa.
+   editor_actions binds [close_block_editor] to blur_commit;
+   properties_value binds [close_property_editor] to its commit thunk. *)
+let close_block_editor : (unit -> unit) ref = ref (fun () -> ())
+let close_property_editor : (unit -> unit) ref = ref (fun () -> ())
+
 (* state transforms deferred until the first block_row mounts the state —
    an empty page mounts no rows, so click-to-add on .block-add-button must
    queue its edit-mode entry here. They fold into [initial] before the
