@@ -868,7 +868,7 @@ let handle_click st (ev : Dom_ext.event) =
   match Dom_ext.target ev with
   | None -> ()
   | Some el ->
-      if not (in_popups el) then (S.close_ac st; S.close_cm st)
+      if not (in_popups el) then (S.close_ac st; S.close_cm st; S.close_pv st)
       else (
         Dom_ext.prevent_default ev;
         if Dom_ext.closest el "[data-cm-color]" <> None then
@@ -915,7 +915,11 @@ let install_listeners st =
   Dom_ext.add_document_listener "contextmenu" (handle_contextmenu st) true;
   Dom_ext.add_document_listener "click" (handle_click st) true;
   Dom_ext.add_document_listener "mousedown" (handle_mousedown st) true;
-  Dom_ext.add_document_listener "mousemove" (handle_mousemove st) false
+  Dom_ext.add_document_listener "mousemove" (handle_mousemove st) false;
+  (* the preview survives its trigger element (popup lives in the overlay
+     layer); navigation must drop it like cljs' tippy instance dying with
+     the reference node *)
+  Platform.on_hash_change (fun () -> S.close_pv st)
 ;;
 
 let render (_ms : Model.t Signal.signal) : t =

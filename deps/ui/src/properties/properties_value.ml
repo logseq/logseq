@@ -833,9 +833,26 @@ let extends_cell ctx row =
   let ident = D.row_ident row |> Option.value ~default:"" in
   let cell = mk ~cls:"jtrigger flex flex-1 multi-values" "div" in
   el_set_attr cell "tabindex" "0";
+  (* cljs property-block-value -> page-cp: page entities render as
+     a.relative.tag / a.relative.page-ref, not .block-title-wrap *)
   List.iter
     (fun r ->
-      ignore (child_text "span" "block-title-wrap" (D.ref_title r) cell))
+      let class_p = D.ref_is_class r in
+      let a =
+        mk "a"
+          ~cls:("relative " ^ if class_p then "tag" else "page-ref")
+          ~attrs:
+            [ ("tabindex", "0")
+            ; ("data-ref", String.lowercase_ascii (D.ref_title r))
+            ; ("data-uuid", Option.value ~default:"" (D.ref_uuid r))
+            ; ("draggable", "true")
+            ]
+      in
+      ignore
+        (child_text "span" ""
+           ((if class_p then "#" else "") ^ D.ref_title r)
+           a);
+      el_append_child cell a)
     (D.value_elems value);
   on_click cell (fun _ -> open_extends_menu ctx ~ident row cell);
   cell

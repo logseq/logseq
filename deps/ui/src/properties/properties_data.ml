@@ -150,6 +150,19 @@ let ref_title w =
 let ref_uuid w = entity_uuid_of w
 let ref_dbid w = entity_id_of w
 
+(* cljs entity/class?: entity tagged with :logseq.class/Tag *)
+let ref_is_class w =
+  let w = untag w in
+  match getf w "block/tags" with
+  | Some tags ->
+      List.exists
+        (fun t ->
+          match gets t "db/ident" with
+          | Some "logseq.class/Tag" -> true
+          | _ -> false)
+        (elems tags)
+  | None -> false
+
 let value_elems w =
   match w with
   | W.Set l | W.List l | W.Array l -> l
