@@ -310,7 +310,10 @@ let base_edit_form ~title_v ~desc_v on_save =
   el_append_child form input;
   el_append_child form desc;
   el_append_child form save_btn;
-  on_click save_btn (fun _ -> on_save (el_value input) (el_value desc));
+  on_click save_btn (fun _ ->
+      on_save (el_value input) (el_value desc);
+      (* the form is always the top overlay — saving closes it *)
+      S.pop_overlay ());
   (form, input)
 
 let choice_li m choice rebuild =
@@ -329,9 +332,11 @@ let choice_li m choice rebuild =
         base_edit_form ~title_v:title ~desc_v:"" (fun v _d ->
             ignore
               (D.upsert_closed_value ~ident:(prop_ident m)
-                 ?choice_id:(D.entity_uuid_of choice) ~value:v ());
-            rebuild ();
-            S.refresh_all ())
+                 ?choice_id:(D.entity_uuid_of choice) ~value:v ()
+               |> Js.Promise.then_ (fun _ ->
+                      rebuild ();
+                      S.refresh_all ();
+                      Js.Promise.resolve ())))
       in
       ignore
         (Properties_popup.open_anchored ~cls:"ui__popover-content" li

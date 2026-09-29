@@ -23,6 +23,7 @@ type item =
   ; it_tip : string (* ident / sublabel, rendered as title attr *)
   ; it_icon : string (* tabler icon before the title, "" = none *)
   ; it_new : bool (* renders via the "New option:" affordance *)
+  ; it_strong : bool (* title leaf is <strong> (cljs property select) *)
   ; on_choose : unit -> unit
   }
 
@@ -40,9 +41,9 @@ type select_config =
   ; mutable results_inner : Editor_dom.el option
   }
 
-let item ?(tip = "") ?(icon = "") title on_choose =
+let item ?(tip = "") ?(icon = "") ?(strong = false) title on_choose =
   { it_title = title; it_tip = tip; it_icon = icon; it_new = false
-  ; on_choose
+  ; it_strong = strong; on_choose
   }
 
 let matches needle item =
@@ -76,6 +77,7 @@ let visible_items cfg =
           ; it_tip = ""
           ; it_icon = ""
           ; it_new = true
+          ; it_strong = false
           ; on_choose = (fun () -> on_new (String.trim cfg.filter))
           }
         ]
@@ -115,7 +117,9 @@ let item_el idx cfg it =
   in
   (* e2e targets `span` + exact text; a leaf span keeps the deepest
      getByText match a span *)
-  let strong = mk ~cls:"font-normal" "span" in
+  let strong =
+    mk ~cls:"font-normal" (if it.it_strong then "strong" else "span")
+  in
   el_set_text strong
     (if it.it_new then I18n.t "select/new-option" ^ " " ^ it.it_title
      else it.it_title);
