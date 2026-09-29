@@ -15,6 +15,7 @@
   "scripts": {
     "build": "dune build js_app && vite build",
     "build:production": "dune build js_app && vite build --mode production",
-    "gen:icon-data": "node scripts/gen-icon-data.mjs"
+    "gen:icon-data": "node scripts/gen-icon-data.mjs",
+    "gen:emoji-data": "node scripts/gen-emoji-data.mjs"
   }
 }

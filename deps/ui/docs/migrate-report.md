@@ -1640,9 +1640,10 @@ Sizes:
 
 | build | main.js bytes | gzip |
 |---|---:|---:|
-| dev | 3,686,203 | 691,344 |
-| production | 2,438,496 | 554,822 |
+| dev | 3,171,646 | 605,427 |
+| production | 2,010,056 | 471,768 |
 | `js/icon-data.js` (both modes) | 1,778,026 | 331,469 |
+| `js/emoji-data.js` (both modes) | 432,757 | 83,099 |
 
 (Baseline before this branch: dev 8,546,822 / gzip 1,204,745, prod
 4,974,916 / gzip 988,477 — the icon split is responsible for most of
@@ -1696,11 +1697,17 @@ app code. If `__tablerChildren` is absent (e.g. test environments)
 `tabler_children` returns `[]` and icons degrade to font glyphs, same
 as an unknown icon name before.
 
+The `@emoji-mart/data` native set followed the same pattern as
+`icon-data.js`: `scripts/gen-emoji-data.mjs` emits
+`resources/js/emoji-data.js` (`globalThis.__emojiData`) and
+`emoji_mart.ml` reads the four dataset keys off `window` (fail-fast if
+the script is absent). That removed another ~430KB of real data from
+main.js.
+
 Remaining bundle weight is `icon_picker_names.js` (~244KB),
-`camlinternalFormat` (~215KB, the Printf/sprintf runtime),
-`@emoji-mart/data` (~410KB) plus melange runtime and npm deps
-(transit-js, dnd-kit, lui); the build is intentionally a single IIFE
-(`codeSplitting:false`).
+`camlinternalFormat` (~215KB, the Printf/sprintf runtime) plus
+melange runtime and npm deps (transit-js, dnd-kit, lui); the build is
+intentionally a single IIFE (`codeSplitting:false`).
 
 Verified: `bb test -n logseq.e2e.tag-basic-test -p 3007` (3 tests) and
 `bb test -n logseq.e2e.commands-basic-test -p 3007` (31 tests / 204
