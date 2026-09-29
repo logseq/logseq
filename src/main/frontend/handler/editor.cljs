@@ -1762,12 +1762,6 @@
   (some-> js/document.activeElement
           (.closest ".ui__dropdown-menu-content, .ui__dropdown-menu-sub-content, .ui__context-menu-content, .ui__context-menu-sub-content")))
 
-(defn in-shui-popup?
-  []
-  (or (focus-in-shui-popup?)
-      (.querySelector js/document.body
-                      ".ui__dropdown-menu-content, .ui__popover-content, .ui__context-menu-content")))
-
 (defn get-current-input-char
   [input]
   (when-let [pos (cursor/pos input)]
@@ -3512,7 +3506,7 @@
     (state/pub-event! [:editor/hide-action-bar])
     (when (and (not (auto-complete?))
                (or (in-page-preview?)
-                   (not (in-shui-popup?)))
+                   (not (focus-in-shui-popup?)))
                (not (state/get-timestamp-block)))
       (util/stop e)
       (cond
