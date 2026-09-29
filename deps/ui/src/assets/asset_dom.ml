@@ -541,7 +541,7 @@ let measure_on_load uuid (b : Model.block) =
 
 let asset_img uuid (b : Model.block) file : t =
   let src =
-    match Hashtbl.find_opt A.url_cache file with
+    match Hashtbl.find_opt A.url_cache (A.cache_key (repo ()) file) with
     | Some u -> u
     | None -> ""
   in
@@ -651,7 +651,7 @@ let file_cell (w : W.t) : D.el =
   in
   let file = uuid ^ "." ^ ext in
   let img = D.h ~tag:"img" ~attrs:[ ("title", file) ] () in
-  (match Hashtbl.find_opt A.url_cache file with
+  (match Hashtbl.find_opt A.url_cache (A.cache_key (repo ()) file) with
    | Some url -> D.el_set_attr img "src" url
    | None ->
        ignore
