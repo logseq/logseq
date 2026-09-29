@@ -12,7 +12,6 @@
 
 open Editor_dom
 open Properties_dom
-module I18n = Properties_i18n
 module D = Properties_data
 module S = Properties_state
 module V = Properties_value
@@ -307,7 +306,7 @@ let positioned_rows block_w position =
                              (W.get block_w ident) )
                        ])
               | _ -> None)
-            (D.elems props)
+            (W.elems props)
       | None -> [])
   | None -> []
 
@@ -516,12 +515,12 @@ let render_bidi_groups wrap w =
              (fun e ->
                ignore
                  (child_text "span" "block-title-wrap" (D.ref_title e) pv))
-             (D.elems ents)
+             (W.elems ents)
        | None -> ());
       el_append_child vc pv;
       el_append_child g vc;
       el_append_child wrap g)
-    (D.elems w)
+    (W.elems w)
 
 (* shui button ghost sm — cljs components.cljs with-button-classes *)
 let ghost_btn_cls =
@@ -649,7 +648,7 @@ let render_class_section (ctx : V.ctx) ~owner_title host =
   el_append_child host section;
   D.class_properties (D.uuid_ref ctx.block_uuid)
   |> Js.Promise.then_ (fun w ->
-         let props = D.elems w in
+         let props = W.elems w in
          List.iter
            (fun p ->
              match class_schema_row p with

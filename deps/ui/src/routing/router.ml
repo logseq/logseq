@@ -54,7 +54,7 @@ let parse_hash () : Model.route =
   in
   parse_path p
 
-let repo () = Option.value !Runtime.current_repo ~default:""
+let repo = Runtime.repo
 
 (* cljs set-route-match!: the hash can carry query params —
    ?anchor=ls-block-<uuid> on block-ref/backlink navigation *)
@@ -83,7 +83,7 @@ let rec poll_anchor anchor n =
         let tail =
           String.sub anchor (String.length anchor - 36) 36
         in
-        if Sdk_util.is_uuid_string tail then
+        if Wire.is_uuid_string tail then
           Editor_actions.select_single tail
         else (
           Editor_dom.el_class_add el "block-highlight";
@@ -102,36 +102,9 @@ let jump_to_anchor anchor =
   Editor_dom.clear_timeout !anchor_timer;
   poll_anchor anchor 0
 
-(* ref wire for get-page-blocks-tree / get-page-route-info:
-   Uuid for uuid strings, String for page names *)
-let page_ref s =
-  if Sdk_util.is_uuid_string s then Wire.Uuid s else Wire.String s
-
-let ref_of_page (p : Model.page) =
-  match p.Model.page_uuid, p.Model.page_title with
-  | Some u, _ -> page_ref u
-  | None, t -> page_ref t
-
 let fetch_blocks (p : Model.page) =
-  Runtime.invoke3 "thread-api/get-page-blocks-tree"
-    (Wire.String (repo ())) (ref_of_page p) Wire.Nil
-  |> Js.Promise.then_ (fun blocks_w ->
-             (* fill :block/link rows' embed children so page embeds render
-                the linked page's blocks *)
-             let collapsed = ref Editor_state.String_set.empty in
-             collapsed :=
-               Outliner_ops.collect_collapsed !collapsed blocks_w;
-             Outliner_ops.fill_embed_children (repo ())
-               (Outliner_ops.ancestors_of p) collapsed
-               (Decode.blocks_of_wire blocks_w)
-             |> Js.Promise.then_ (fun blocks ->
-                    Outliner_ops.set_collapsed !collapsed;
-                    let blocks =
-                      Decode.view_blocks ~library:p.Model.page_is_library
-                        blocks
-                    in
-                    Outliner_ops.resolve_block_tags blocks))
-      |> Js.Promise.then_ (fun blocks ->
+  Outliner_ops.fetch_page_blocks (repo ()) p
+  |> Js.Promise.then_ (fun blocks ->
              (* cljs page-membership :class: children tagged with the class
                 itself are excluded from the block tree — they render in
                 the class-objects table instead *)
@@ -145,7 +118,6 @@ let fetch_blocks (p : Model.page) =
                | _ -> blocks
              in
              Js.Promise.resolve { p with Model.page_blocks = blocks })
-
 let fetch_refs_blocks (p : Model.page) : Model.block list Js.Promise.t =
   match p.Model.page_db_id with
   | Some id ->
@@ -231,14 +203,6 @@ let load_journals () =
               Runtime.send Action.Page_load_failed
           | _ -> ());
          Js.Promise.resolve ())
-
-(* a fetch started for route R can resolve after navigation moved on —
-   sending its Page_loaded would clobber the current page with stale data *)
-let route_still_target missing =
-  match !Runtime.current_route with
-  | Some (Model.Page s) -> s = missing
-  | Some Model.Library -> missing = "Library"
-  | _ -> false
 
 (* fetches for the same route can resolve out of order — only the
    latest-initiated load may commit, otherwise an older response lands
@@ -370,18 +334,10 @@ let load_block_zoom uuid =
        ])
   |> Js.Promise.then_ (fun w ->
          Js.Promise.resolve
-           (match Sdk_util.wire_elems w with
+           (match Wire.elems w with
             | [ pair ] -> (
-                let blk =
-                  match Wire.get pair "block" with
-                  | Some b -> b
-                  | None -> (
-                      match Sdk_util.wire_elems pair with
-                      | [ _; b ] -> b
-                      | _ -> Wire.Nil)
-                in
-                match blk with
-                | Wire.Map _ -> (
+                match Wire.block_of_pair pair with
+                | Some (Wire.Map _ as blk) -> (
                     let b = Decode.block_of_wire blk in
                     (* cljs block-route-root renders the zoomed block itself
                        as the root row (children nested under it) *)
@@ -398,7 +354,7 @@ let load_block_zoom uuid =
                             [ Wire.Keyword "block/uuid"; Wire.Uuid uuid ])
                        |> Js.Promise.then_ (fun parents_w ->
                               let page_parents =
-                                Sdk_util.wire_elems parents_w
+                                Wire.elems parents_w
                                 |> List.filter_map (fun w ->
                                        match w with
                                        | Wire.Map _ ->
@@ -477,7 +433,7 @@ let load_route (route : Model.route) =
        Runtime.reload_current_view := load_journals
    | Model.Page s ->
        Runtime.reload_current_view :=
-         (fun () -> load_page_ref route (page_ref s))
+         (fun () -> load_page_ref route (Wire.page_ref s))
    | Model.Block_zoom uuid ->
        Runtime.reload_current_view := (fun () -> load_block_zoom uuid)
    | Model.Library ->
@@ -489,7 +445,7 @@ let load_route (route : Model.route) =
   match route with
   | Model.Home -> ignore (load_home ())
   | Model.Page s ->
-      ignore (load_page_ref route (page_ref s))
+      ignore (load_page_ref route (Wire.page_ref s))
   | Model.Block_zoom uuid -> ignore (load_block_zoom uuid)
   | Model.Journals -> ignore (load_journals ())
   | Model.Library ->

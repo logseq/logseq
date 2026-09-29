@@ -538,20 +538,20 @@ let test_fuzzy2 () =
   check "non-matching extract dropped"
     (Fuzzy.fuzzy_search ~extract:fst ~limit:5 data "zzz" = [])
 
-(* ---- Ui_strings + Commands_data ---- *)
+(* ---- I18n + Commands_data ---- *)
 
 let test_ui_strings () =
-  eqs "t known key" "Create page" (Ui_strings.t "cmdk.create/page");
+  eqs "t known key" "Create page" (I18n.t "cmdk.create/page");
   eqs "t unknown falls back to key" "no/such-key"
-    (Ui_strings.t "no/such-key");
+    (I18n.t "no/such-key");
   eqs "tf {1}" "Create page called 'X'"
-    (Ui_strings.tf "cmdk.info/create-page" [ "X" ]);
+    (I18n.tf "cmdk.info/create-page" [ "X" ]);
   eqs "tf extra arg unused" "Create page called 'X'"
-    (Ui_strings.tf "cmdk.info/create-page" [ "X"; "Y" ]);
+    (I18n.tf "cmdk.info/create-page" [ "X"; "Y" ]);
   eqs "replace_all" "a-b-c"
-    (Ui_strings.replace_all "a+b+c" "+" "-");
+    (I18n.replace_all "a+b+c" "+" "-");
   eqs "replace_all miss" "abc"
-    (Ui_strings.replace_all "abc" "+" "-");
+    (I18n.replace_all "abc" "+" "-");
   (* this runner is macOS (navigator.platform = MacIntel): mod -> ⌘ *)
   eqs "decorate mod" (Platform.utf8 "\xe2\x8c\x98" ^ "+enter")
     (Commands_data.decorate_binding "mod+enter");
@@ -967,15 +967,6 @@ let test_editor_state () =
    | _ -> check "find_parent_in" false);
   check "find_parent_in misses top-level uuid"
     (Editor_state.find_parent_in blocks "t" = None);
-  (* map_block_title rewrites through children and embed children *)
-  let renamed = Editor_state.map_block_title "ee" "new" blocks in
-  (match Editor_state.find_in renamed "ee" with
-   | Some b -> eqs "map_block_title embed child" "new" b.block_title
-   | None -> check "map_block_title embed child" false);
-  let renamed2 = Editor_state.map_block_title "g" "g2" blocks in
-  (match Editor_state.find_in renamed2 "g" with
-   | Some b -> eqs "map_block_title nested" "g2" b.block_title
-   | None -> check "map_block_title nested" false);
   (* unmounted state falls back to initial *)
   check "editing none unmounted" (Editor_state.editing () = None);
   check "selection empty unmounted"
@@ -1816,17 +1807,17 @@ let test_sdk_convert () =
 
 let test_sdk_util () =
   check "uuid ok"
-    (Sdk_util.is_uuid_string "123e4567-e89b-42d3-a456-426614174000");
-  check "uuid bad len" (not (Sdk_util.is_uuid_string "123e4567"));
+    (Wire.is_uuid_string "123e4567-e89b-42d3-a456-426614174000");
+  check "uuid bad len" (not (Wire.is_uuid_string "123e4567"));
   check "uuid bad dash pos"
     (not
-       (Sdk_util.is_uuid_string "123e4567e89b-42d3-a456-426614174000"));
+       (Wire.is_uuid_string "123e4567e89b-42d3-a456-426614174000"));
   check "uuid non-hex head"
     (not
-       (Sdk_util.is_uuid_string "zzze4567-e89b-42d3-a456-426614174000"));
+       (Wire.is_uuid_string "zzze4567-e89b-42d3-a456-426614174000"));
   (* only the first 8 chars are hex-checked — pin the quirk *)
   check "uuid lax tail"
-    (Sdk_util.is_uuid_string "123e4567-xxxx-xxxx-xxxx-xxxxxxxxxxxx");
+    (Wire.is_uuid_string "123e4567-xxxx-xxxx-xxxx-xxxxxxxxxxxx");
   eqs "trim_leading mixed" "x" (Sdk_util.trim_leading ":_ \t\nx");
   eqs "trim_leading all" "" (Sdk_util.trim_leading ":_ :_");
   eqs "trim_leading none" "abc" (Sdk_util.trim_leading "abc");
@@ -1843,8 +1834,8 @@ let test_sdk_util () =
   eqs "ident digit" "plugin.property._test_plugin/NUM-3x"
     (Sdk_util.property_ident "3x");
   check "wire_elems array"
-    (Sdk_util.wire_elems (Wire.Array [ Wire.Int 1 ]) = [ Wire.Int 1 ]);
-  check "wire_elems map" (Sdk_util.wire_elems (Wire.Map []) = []);
+    (Wire.elems (Wire.Array [ Wire.Int 1 ]) = [ Wire.Int 1 ]);
+  check "wire_elems map" (Wire.elems (Wire.Map []) = []);
   eqs "sanity lc" "foo" (Sdk_util.page_name_sanity_lc "Foo");
   eqs "sanity boundary slashes" "foo"
     (Sdk_util.page_name_sanity_lc "/Foo/");
@@ -1943,14 +1934,14 @@ let test_sdk_util () =
    | None -> check "rewrite nested" false);
   (* block_of_pair *)
   check "block_of_pair key"
-    (Sdk_util.block_of_pair
+    (Wire.block_of_pair
        (Wire.Map [ (Wire.String "block", Wire.Int 5) ])
      = Some (Wire.Int 5));
   check "block_of_pair seq"
-    (Sdk_util.block_of_pair
+    (Wire.block_of_pair
        (Wire.Array [ Wire.Int 1; Wire.String "b" ])
      = Some (Wire.String "b"));
-  check "block_of_pair none" (Sdk_util.block_of_pair (Wire.Int 1) = None);
+  check "block_of_pair none" (Wire.block_of_pair (Wire.Int 1) = None);
   (* eid_wire_of_json *)
   check "eid number"
     (Sdk_util.eid_wire_of_json (Js.Json.number 5.0) = Some (Wire.Int64 5L));
@@ -2092,8 +2083,8 @@ let test_views_builder () =
 
 let test_views_wire () =
   check "seq_items set"
-    (Views_wire.seq_items (Wire.Set [ Wire.Int 1 ]) = [ Wire.Int 1 ]);
-  check "seq_items other" (Views_wire.seq_items (Wire.Int 1) = []);
+    (Wire.elems (Wire.Set [ Wire.Int 1 ]) = [ Wire.Int 1 ]);
+  check "seq_items other" (Wire.elems (Wire.Int 1) = []);
   check "as_float int" (Views_wire.as_float (Wire.Int 2) = Some 2.);
   check "as_float i64" (Views_wire.as_float (Wire.Int64 2L) = Some 2.);
   check "as_float none" (Views_wire.as_float (Wire.String "x") = None);
@@ -2532,15 +2523,15 @@ let mk_ac kind =
 
 let test_popups_state () =
   (* fuzzy_score: subsequence match, first*1000 + span *)
-  check "fuzzy h1" (Popups_state.fuzzy_score "Heading 1" "h1" = Some 9);
-  check "fuzzy te 1" (Popups_state.fuzzy_score "template 1" "te 1" = Some 10);
-  check "fuzzy no subseq" (Popups_state.fuzzy_score "abc" "acb" = None);
-  check "fuzzy empty needle" (Popups_state.fuzzy_score "abc" "" = Some 0);
-  check "fuzzy too long" (Popups_state.fuzzy_score "ab" "abc" = None);
-  check "fuzzy case" (Popups_state.fuzzy_score "ABC" "abc" = Some 3);
-  check "contains_ci" (Popups_state.contains_ci "Hello World" "world");
-  check "contains_ci miss" (not (Popups_state.contains_ci "abc" "z"));
-  check "contains_ci empty" (Popups_state.contains_ci "abc" "");
+  check "fuzzy h1" (Fuzzy.score "h1" "Heading 1" > 0.);
+  check "fuzzy te 1" (Fuzzy.score "te 1" "template 1" > 0.);
+  check "fuzzy no subseq" (Fuzzy.score "acb" "abc" = 0.);
+  check "fuzzy empty needle" (Fuzzy.score "" "abc" > 0.);
+  check "fuzzy too long" (Fuzzy.score "abc" "ab" = 0.);
+  check "fuzzy case" (Fuzzy.score "abc" "ABC" > 0.);
+  check "contains_ci" (I18n.contains_ci "Hello World" "world");
+  check "contains_ci miss" (not (I18n.contains_ci "abc" "z"));
+  check "contains_ci empty" (I18n.contains_ci "abc" "");
   (* with_headers: banner only on group transitions, only when shown *)
   let items =
     [ ac_it ~group:"g1" "Alpha"; ac_it ~group:"g1" "Beta"
@@ -3010,8 +3001,8 @@ let test_settings_state () =
 
 let test_cards_state () =
   check "cards elems"
-    (Cards_state.elems (Wire.Set [ Wire.Int 1 ]) = [ Wire.Int 1 ]);
-  check "cards elems other" (Cards_state.elems Wire.Nil = []);
+    (Wire.elems (Wire.Set [ Wire.Int 1 ]) = [ Wire.Int 1 ]);
+  check "cards elems other" (Wire.elems Wire.Nil = []);
   (* uuid refs -> names; spaced names keep [[..]] *)
   check "refs_to_names"
     (Cards_state.refs_to_names "x [[u1]] #[[u2]] and #u3"

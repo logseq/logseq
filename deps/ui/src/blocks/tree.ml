@@ -76,23 +76,6 @@ let collapsed_sig (b : Model.block) =
 
 (* -- control wrap: collapse arrow + bullet -- *)
 
-(* cljs arrow svg inside .control-hide > .rotating-arrow *)
-let rotating_arrow key : t =
-  dom ~key ~tag:"svg"
-    ~style_class:"h-4 w-4"
-    ~attrs:
-      [ ("aria-hidden", "true"); ("version", "1.1")
-      ; ("viewBox", "0 0 192 512"); ("fill", "currentColor")
-      ; ("display", "inline-block"); ("style", "margin-left: 2px") ]
-    [ dom ~key:"p" ~tag:"path"
-        ~attrs:
-          [ ( "d"
-            , "M0 384.662V127.338c0-17.818 21.543-26.741 \
-               34.142-14.142l128.662 128.662c7.81 7.81 7.81 20.474 0 \
-               28.284L34.142 398.804C21.543 411.404 0 402.48 0 384.662z" )
-          ; ("fill-rule", "evenodd") ]
-        []
-    ]
 
 (* cljs ldb/private-tags: built-in classes hidden/locked for direct use;
    internal idents are already filtered out upstream *)
@@ -139,7 +122,7 @@ let control_wrap uuid (b : Model.block) : t =
                      (fun c ->
                        "rotating-arrow"
                        ^ if c then " collapsed" else " not-collapsed"))
-                [ rotating_arrow ("arw-" ^ uuid) ]
+                [ Ui_parts.rotating_arrow ("arw-" ^ uuid) ]
             ]
         ]
     ; dom ~key:("blw-" ^ uuid) ~tag:"a" ~style_class:"bullet-link-wrap"
@@ -204,10 +187,9 @@ let editor_el uuid scope : t =
            | _ -> Lui_protocol.StringValue "")
          (S.signal ()))
   in
-    (dom ~key:("ew-" ^ uuid) ~style_class:"editor-wrapper flex flex-1 w-full"
+    (Ui_parts.editor_wrapper ~key:("ew-" ^ uuid)
     ~id:("editor-edit-block-" ^ uuid)
-    [ dom ~key:("ei-" ^ uuid)
-        ~style_class:"editor-inner flex flex-1 block-editor"
+    [ Ui_parts.editor_inner ~key:("ei-" ^ uuid)
         [ dom ~key:("ta-" ^ uuid) ~tag:"textarea"
             ~id:("edit-block-" ^ uuid)
             ~style_class:"normal-block uniline-block"
@@ -218,13 +200,7 @@ let editor_el uuid scope : t =
                 ("autofocus", "")
               ]
             ~text:buffer ~text_signal:buffer_sig []
-        ; (* cljs mock-textarea: hidden caret mirror for popup placement *)
-          dom ~key:("mt-" ^ uuid) ~style_class:"mock-text"
-            ~attrs:
-              [ ( "style"
-                , "width:100%;height:100%;position:absolute;visibility:hidden;top:0;left:0" )
-              ]
-            []
+        ; Ui_parts.mock_text ~key:("mt-" ^ uuid)
         ]
     ; Asset_dom.upload_input ("up-" ^ uuid)
     ])
@@ -297,13 +273,6 @@ let content_or_editor ~editable uuid scope (b : Model.block) : t =
    still appear inline in the title ("#tag") are skipped — they render in
    the title itself. -- *)
 
-let contains_sub hay needle =
-  let n = String.length hay and m = String.length needle in
-  let rec go i =
-    i + m <= n && (String.sub hay i m = needle || go (i + 1))
-  in
-  go 0
-
 let tags_el uuid (b : Model.block) : t =
   let triples =
     try List.combine b.block_tags
@@ -317,8 +286,8 @@ let tags_el uuid (b : Model.block) : t =
         (* cljs inline-tag? drops tags that already appear inline in the
            raw title, as "#name" or "#[[uuid]]" *)
         let inline =
-          contains_sub b.block_title ("#" ^ tag)
-          || (tuuid <> "" && contains_sub b.block_title tuuid)
+          I18n.contains b.block_title ("#" ^ tag)
+          || (tuuid <> "" && I18n.contains b.block_title tuuid)
         in
         if inline then None else Some (tag, ident))
       triples
@@ -527,19 +496,16 @@ let embed_refresh_seq = ref 0
 let embed_chained = ref false
 
 let chain_embed_worker () =
-  match !embed_chained, !Runtime.worker with
-  | true, _ | _, None -> ()
-  | false, Some w ->
-      embed_chained := true;
-      let prev = w.Worker_client.on_message in
-      w.Worker_client.on_message <-
-        (fun kind payload ->
-          (try prev kind payload
-           with err ->
-             Platform.console_error
-               ("worker broadcast handler failed", err));
-          if kind = "sync-db-changes" then
-            Hashtbl.iter (fun _ f -> f ()) embed_refreshes)
+  if not !embed_chained then begin
+    embed_chained := true;
+    Runtime.on_sync (fun () ->
+        Hashtbl.iter
+          (fun _ f ->
+            try f ()
+            with e ->
+              Platform.console_error ("embed refresh failed", e))
+          embed_refreshes)
+  end
 
 let fetch_embed_blocks name st =
   Render_state.with_repo (fun repo ->

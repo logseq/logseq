@@ -11,7 +11,7 @@
 
 module D = Properties_dom
 module S = Properties_state
-module I18n = Properties_i18n
+module I18n = I18n
 module W = Wire
 
 let dom = Logseq_dom.dom

@@ -17,7 +17,6 @@
 
 open Editor_dom
 open Properties_dom
-module I18n = Properties_i18n
 module D = Properties_data
 module S = Properties_state
 module W = Wire
@@ -422,7 +421,7 @@ let block_tag_ids ctx f =
   |> Js.Promise.then_ (fun w ->
          let tags =
            match D.getf w "block/tags" with
-           | Some xs -> List.filter_map D.entity_id_of (D.elems xs)
+           | Some xs -> List.filter_map D.entity_id_of (W.elems xs)
            | None -> []
          in
          f tags |> Js.Promise.resolve)
@@ -441,7 +440,7 @@ let gather_exclusions tag_ids f =
                (match D.getf (D.untag ent) "logseq.property/choice-exclusions" with
                 | Some xs ->
                     acc :=
-                      !acc @ List.filter_map D.entity_id_of (D.elems xs)
+                      !acc @ List.filter_map D.entity_id_of (W.elems xs)
                 | None -> ());
                go rest;
                Js.Promise.resolve ())
@@ -455,7 +454,7 @@ let choice_visible choice tag_ids exclusions =
   let cid = D.entity_id_of choice in
   let scoped =
     match D.getf choice "logseq.property/choice-classes" with
-    | Some w -> List.filter_map D.entity_id_of (D.elems w)
+    | Some w -> List.filter_map D.entity_id_of (W.elems w)
     | None -> []
   in
   let scoped_ok =
@@ -477,7 +476,7 @@ let node_items_source ~block ~prop ~on_pick =
         Some (Properties_select.item (D.ref_title v) (fun () -> on_pick id))
     | None -> None
   in
-  let items_of w = List.filter_map to_item (D.elems w) in
+  let items_of w = List.filter_map to_item (W.elems w) in
   let initial =
     (match D.entity_id_of prop with
      | Some property_id ->
@@ -752,7 +751,7 @@ let open_extends_menu ctx ~ident row anchor =
                in
                let ids_of m id =
                  match D.int_map_get m id with
-                 | Some w -> List.filter_map D.entity_id_of (D.elems w)
+                 | Some w -> List.filter_map D.entity_id_of (W.elems w)
                  | None -> []
                in
                let children =
@@ -763,7 +762,7 @@ let open_extends_menu ctx ~ident row anchor =
                  | Some id, Some m -> (
                      match D.int_map_get m id with
                      | Some w ->
-                         List.filter_map (fun v -> W.as_int v) (D.elems w)
+                         List.filter_map (fun v -> W.as_int v) (W.elems w)
                      | None -> [])
                  | _ -> []
                and grandparents =
@@ -778,7 +777,7 @@ let open_extends_menu ctx ~ident row anchor =
                in
                let options =
                  (match D.getf data "extends-class-options" with
-                  | Some w -> D.elems w
+                  | Some w -> W.elems w
                   | None -> [])
                  |> List.filter (fun o ->
                         match D.entity_id_of o with

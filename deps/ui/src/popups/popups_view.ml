@@ -10,7 +10,7 @@
 open Lui_elements
 
 module S = Popups_state
-module U = Ui_strings
+module U = I18n
 
 let sv s = Lui_protocol.StringValue s
 
@@ -49,18 +49,6 @@ let mark_el ~key s =
 
 let text_span ~key s = Logseq_dom.dom ~key ~tag:"span" ~text:s [];;
 
-let index_ci hay needle =
-  let n = String.length needle and h = String.length hay in
-  let needle' = String.lowercase_ascii needle in
-  let rec go i =
-    if n = 0 || i + n > h then None
-    else if String.lowercase_ascii (String.sub hay i n) = needle' then
-      Some i
-    else go (i + 1)
-  in
-  go 0
-;;
-
 (* cljs hiccup renders plain strings as bare DOM text nodes; LUI mounts
    only elements, so a <raw-text> placeholder marks the exact position
    and the MutationObserver in Editor_dom swaps it for a text node *)
@@ -81,7 +69,7 @@ let highlight_el ~key ~query label : t =
       match words with
       | [] -> List.rev (text_span ~key:("r" ^ string_of_int i) rest :: acc)
       | w :: ws -> (
-          match index_ci rest w with
+          match I18n.index_ci rest w with
           | Some j ->
               let hit_len = String.length w in
               let rest' =
@@ -98,7 +86,7 @@ let highlight_el ~key ~query label : t =
     in
     Logseq_dom.dom ~key ~tag:"span" ~style_class:"m-0" (loop 0 words label []))
   else
-    match index_ci label query with
+    match I18n.index_ci label query with
     | Some i ->
         let before = String.sub label 0 i in
         let hit = String.sub label i (String.length query) in
@@ -580,20 +568,11 @@ let cm_shortcut_el (binding, caps) : t =
     ]
 ;;
 
-let cm_item_cls =
-  "ui__dropdown-menu-item relative flex cursor-pointer select-none \
-   items-center rounded-sm px-2 py-1.5 text-sm outline-none \
-   data-[disabled]:opacity-50 data-[disabled]:pointer-events-none \
-   data-[highlighted]:bg-muted"
-;;
-
 let cm_item_el (entry_sig : S.cm_item Signal.signal) : t =
   (* cm entries are static for the menu's lifetime, so sampling once is
      stable and the keyed mount can return the item node directly *)
   match Signal.sample entry_sig with
-  | S.Ci_sep ->
-      Logseq_dom.dom ~key:"sep" ~attrs:[ ("role", "separator") ]
-        ~style_class:"ui__dropdown-menu-separator -mx-1 my-1 h-px bg-muted" []
+  | S.Ci_sep -> Menu_item.separator ~key:"sep"
   | S.Ci_colors -> cm_color_row ()
   | S.Ci_headings -> cm_heading_row ()
   | S.Ci_sub label ->
@@ -609,14 +588,16 @@ let cm_item_el (entry_sig : S.cm_item Signal.signal) : t =
         ~text:label
         [ Icons.raw ~cls:"ml-auto h-4 w-4" "chevron-right" ]
   | S.Ci_item (label, scut, cmd) ->
-      Logseq_dom.dom ~key:"item" ~style_class:cm_item_cls
+      Menu_item.text_el ~cls:Menu_item.cm_cls ~key:"item"
         ~attrs:
           [ ("role", "menuitem"); ("data-cm-item", cmd)
           ; ("style", "cursor: pointer") ]
-        ~text:label
-        (match scut with
-         | Some s -> [ cm_shortcut_el s ]
-         | None -> [])
+        ~label
+        ~children:
+          (match scut with
+           | Some s -> [ cm_shortcut_el s ]
+           | None -> [])
+        ()
 ;;
 
 let cm_popover (st : S.t) : t =

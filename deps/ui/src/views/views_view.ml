@@ -6,7 +6,7 @@ module D = Views_dom
 module V = Views_state
 module Wr = Views_wire
 module W = Wire
-module I = Views_i18n
+module I = I18n
 module P = Views_popup
 module A = Action
 module M = Model
@@ -105,7 +105,7 @@ and render_query inst =
   end
   else if inst.V.loading then
     D.el_append_child inst.V.container
-      (D.h ~cls:"p-2 text-sm opacity-50" ~text:I.loading ())
+      (D.h ~cls:"p-2 text-sm opacity-50" ~text:I.loading_ ())
   else
     D.el_append_child inst.V.container
       (D.h ~cls:"text-sm mt-2 opacity-90" ~text:I.no_matched_result ())
@@ -450,7 +450,6 @@ let refresh_query_insts () =
       match Hashtbl.find_opt query_insts uuid with
       | Some inst ->
           Views_builder.drop_tree inst;
-          V.drop inst;
           Hashtbl.remove query_insts uuid
       | None -> ())
     !dead

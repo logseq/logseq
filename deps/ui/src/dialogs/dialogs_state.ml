@@ -54,15 +54,9 @@ let signal () = (state ()).Signal.state_signal
    "confirm" — cmdk and other hosts stamp their own id here. *)
 let layer_order : string list ref = ref []
 
-let touch id = layer_order := List.filter (( <> ) id) !layer_order @ [ id ]
-let release id = layer_order := List.filter (( <> ) id) !layer_order
-
-let z_index id =
-  let rec go i = function
-    | [] -> 0
-    | x :: rest -> if x = id then i else go (i + 1) rest
-  in
-  50 + go 0 !layer_order
+let touch id = Overlay.touch layer_order id
+let release id = Overlay.release layer_order id
+let z_index id = Overlay.z_index ~base:50 layer_order id
 
 (* drop layer ids whose layer is gone — runs inside every set so any
    removal path (close_top/close_named/close_all) stays in sync *)

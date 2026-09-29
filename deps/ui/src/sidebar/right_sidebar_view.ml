@@ -47,15 +47,14 @@ let topbar st =
 (* ---------- item menus ---------- *)
 
 let menu_item st label on_click =
-  dom ~key:("mi-" ^ label) ~tag:"div"
+  Menu_item.el ~key:("mi-" ^ label)
+    ~cls:"ui__dropdown-menu-item"
     ~attrs:[ ("role", "menuitem") ]
-    ~style_class:"ui__dropdown-menu-item"
-    ~events:"click"
-    ~on_dom_event:(fun name _ ->
-      if name = "click" then (
-        Sidebar_state.close_menu st;
-        on_click ()))
-    [ dom ~tag:"div" ~text:label [] ]
+    ~label
+    ~on_click:(fun () ->
+      Sidebar_state.close_menu st;
+      on_click ())
+    ()
 
 let item_menu st (it : Sidebar_state.item) =
   dom ~key:("imenu-" ^ it.key) ~tag:"div"
@@ -166,7 +165,7 @@ let item_header st idx (it : Sidebar_state.item) =
             ~style_class:"opacity-50 hover:opacity-100 flex items-center pr-1"
             (* cljs: .rotating-arrow.not-collapsed > FA caret-right *)
             [ dom ~tag:"span" ~style_class:"rotating-arrow not-collapsed"
-                [ Page.rotating_arrow ("arw-" ^ it.key) ] ]
+                [ Ui_parts.rotating_arrow ("arw-" ^ it.key) ] ]
         ; dom ~key:("ht-" ^ it.key)
             ~style_class:
               "ml-1 font-medium text-sm overflow-hidden whitespace-nowrap"

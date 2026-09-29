@@ -8,7 +8,7 @@ module D = Views_dom
 module V = Views_state
 module W = Wire
 module Wr = Views_wire
-module I = Views_i18n
+module I = I18n
 module Db = Views_db
 module M = Model
 
@@ -99,8 +99,8 @@ let decode_result inst (v : W.t) =
       inst.V.query_error <- None;
       let items =
         match W.get v "rows" with
-        | Some w -> Wr.seq_items w
-        | None -> Wr.seq_items v
+        | Some w -> W.elems w
+        | None -> W.elems v
       in
       let uuids = List.filter_map W.as_uuid items in
       if items <> [] && List.length uuids = List.length items then (

@@ -94,8 +94,8 @@ let view (r : Dialogs_state.ui_request) : t =
   let submit_now () = submit r two warn in
   let title, extra =
     if two
-    then (Graphs_text.e2ee_set_password_title, " encryption-password")
-    else (Graphs_text.e2ee_enter_password_title, "")
+    then (I18n.e2ee_set_password_title, " encryption-password")
+    else (I18n.e2ee_enter_password_title, "")
   in
   dom ~key:"e2ee-ov"
     ~style_class:
@@ -110,19 +110,19 @@ let view (r : Dialogs_state.ui_request) : t =
         [ dom ~key:"t" ~style_class:"text-2xl font-medium" ~text:title []
         ; dom ~key:"f" ~style_class:"flex flex-col gap-4"
             ( [ pw_input ~key:"p1"
-                  ~placeholder:Graphs_text.e2ee_password_ph
+                  ~placeholder:I18n.e2ee_password_ph
                   ~on_enter:submit_now ]
             @ ( if two
                 then
                   [ pw_input ~key:"p2"
-                      ~placeholder:Graphs_text.e2ee_password_again_ph
+                      ~placeholder:I18n.e2ee_password_again_ph
                       ~on_enter:submit_now
                   ; dyn ~equal:( = ) (fun w ->
                         if w
                         then
                           dom ~key:"mm"
                             ~style_class:"text-warning text-sm"
-                            ~text:Graphs_text.e2ee_password_not_matched
+                            ~text:I18n.e2ee_password_not_matched
                             []
                         else box ~key:"mm-ok" [])
                       warn.Signal.state_signal
@@ -134,7 +134,7 @@ let view (r : Dialogs_state.ui_request) : t =
                      rounded-md text-sm font-medium px-4 py-2 \
                      bg-primary text-primary-foreground"
                   ~attrs:[ ("type", "button") ]
-                  ~text:Graphs_text.submit ~events:"click"
+                  ~text:I18n.submit ~events:"click"
                   ~on_dom_event:(fun n _ ->
                     if n = "click" then submit_now ())
                   []
