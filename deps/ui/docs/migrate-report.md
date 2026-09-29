@@ -1227,6 +1227,74 @@ search may lag).
   `v.groups` while `refresh` is in flight — the stale-input check in
   `apply_results` (`v.input <> q`) must stay.
 
+## Block drag-and-drop (dnd-kit)
+
+- **Block move runs on `@dnd-kit/dom`** (`DragDropManager` +
+  `PointerSensor`), not native HTML5 drag events. `deps/ui/src/dnd/`
+  holds the Melange externals (`dnd_kit.ml`) and the block-move wiring
+  (`block_dnd.ml`); `editor_keys.install_once` keeps only the file-drop
+  listeners natively.
+- **`draggable="true"` is NOT harmless under PointerSensor**: while a
+  pointerdown is active the sensor binds a document capture-phase
+  `dragstart` listener that calls `handleCancel` when the target is a
+  native draggable (otherwise `preventDefault`) — i.e. a browser HTML5
+  drag started on a bullet aborts the dnd-kit activation mid-flight.
+  `editor_keys` registers a capture-phase `dragstart` listener at
+  install time — earlier than any sensor binding, so it runs first —
+  that `preventDefault`s + `stopImmediatePropagation`s native drags
+  started from a `.bullet-container`: the browser never begins an HTML5
+  drag and the sensor's listener never sees the event.
+- **Activation is `Distance(4)` with `preventActivation: false`**: the
+  default `preventActivation` refuses drags whose pointerdown lands
+  inside an interactive element (`a.bullet-link-wrap` wraps the bullet),
+  and a bare `undefined` constraint would activate on pointerdown.
+- **Collision = per-block droppables ranked by nesting depth**:
+  `defaultCollisionDetection` (pointer intersection) picks the
+  highest `collisionPriority` droppable, so `block_dnd` sets
+  `collisionPriority` to the block's `.ls-block` ancestor count —
+  innermost block wins, which reproduces `closest('.ls-block')` from
+  the native `dragover` handler.
+- **Registration is MutationObserver-driven**: draggables
+  (`.bullet-container[blockid]`) and droppables (`.ls-block[blockid]`)
+  are discovered on every DOM mutation; disconnected elements are
+  destroyed + swept each batch. `dragstart`/`dragmove`/`dragover`/
+  `dragend` monitor events carry `operation.source/target`; `dragover`
+  fires only when the collision target changes (use `dragmove` for
+  pointer coordinates — `nativeEvent.pageX`/`clientY`).
+- **The `drop_target` "no-target keeps last" quirk is preserved**: the
+  native `dragover` handler did `| None -> ()` when no `.ls-block`
+  matched, so the previous valid target persisted while hovering
+  invalid areas; `block_dnd` reproduces that.
+- **File drop stays native**: dnd-kit has no file-drop concept; the
+  document `dragover`/`drop` listeners now only act when
+  `dataTransfer.files` is non-empty and call `Asset_dom.upload_files`
+  — same handler as before, split from block-drag. Synthetic e2e
+  `DragEvent`s take this path unchanged.
+- **Tag/ref anchors (`views_table.ml`, `page.ml`) keep
+  `draggable="true"` but were NOT routed through the manager**: their
+  payload is `dataTransfer` `text/plain` data consumed by
+  `on_editor_drop` (property rows), not the block-move path, and dnd-kit
+  sensors don't produce a native `dataTransfer` payload a `drop`
+  listener could read. Routing them through the manager would need a
+  separate drop-target path; out of scope for the block-move migration.
+- **Journal views have no `Runtime.current_page`**: since the journals
+  scaffolding sweep, journal routes populate `current_journals`
+  (`get-latest-journals`, newest-first) and leave `current_page`
+  `None`. Anything that resolves "the current page" must fall back to
+  `current_journals`: `drop_dragged_block` `"top"` finds the journal
+  page containing the target block, and `upload_files` treats the head
+  of `current_journals` as today's journal — both were silent no-ops
+  before that fallback was added.
+- **Verified locally** (Playwright, same steps as
+  `outliner_basic_test.drag-block!`): `top` (first block + near-top ≤16px),
+  `nested` (x-offset > 50), `sibling` all reorder via
+  `A.drop_dragged_block`; file drop creates `.asset-container img`.
+  The clj-e2e suite itself is blocked upstream of this change: page
+  creation through search throws `Invalid_argument` in
+  `apply_pending_batch` (`close_ac` → `set_ac`) on the base build too —
+  preexisting LUI bug, so `new-logseq-page`'s `wait-editor-visible`
+  times out before any drag test runs.
+
 ## Toolchain / test-suite state
 
 - **`bb dev:lint-and-test` baseline** — clj-kondo lint is clean on the
