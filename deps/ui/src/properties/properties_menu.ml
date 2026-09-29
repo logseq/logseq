@@ -483,7 +483,7 @@ let menu_body ~with_title ~more_options m =
   m.content <- Some body;
   (if with_title then begin
      let h3 = mk ~cls:"font-medium px-2 py-1" "h3" in
-     el_set_text h3 (I18n.t "property/configure-title");
+     el_set_text h3 (I18n.t "ui/configure");
      el_append_child body h3
    end);
   List.iter (el_append_child body) more_options;

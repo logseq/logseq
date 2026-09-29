@@ -26,14 +26,14 @@ let operators = [ "and"; "or"; "not" ]
 (* cljs filter-label — en.edn keys *)
 let filter_label = function
   | "tags" -> I18n.t "property.built-in/tags"
-  | "page reference" -> "Page reference"
-  | "property" -> "Property"
-  | "task" -> "Task"
+  | "page reference" -> I18n.t "query.builder/filter-page-reference-label"
+  | "property" -> I18n.t "class.built-in/property"
+  | "task" -> I18n.t "class.built-in/task"
   | "priority" -> I18n.t "property.built-in/priority"
-  | "page" -> "Page"
-  | "full text search" -> "Full text search"
-  | "between" -> "between"
-  | "sample" -> "Sample"
+  | "page" -> I18n.t "query.builder/filter-page-label"
+  | "full text search" -> I18n.t "query.builder/filter-full-text-search-label"
+  | "between" -> I18n.t "view.filter/operator-between"
+  | "sample" -> I18n.t "query.builder/filter-sample-label"
   | other -> other
 
 (* save the dsl title on the query value block (cljs add-watch :updated

@@ -554,7 +554,7 @@ and macro_el ~refs:_refs ~self:_self body =
         [ D.el ~tag:"button"
             ~style_class:
               "ls-query-setting ls-small-icon text-muted-foreground ml-2 w-6 h-6"
-            ~attrs:[ ("type", "button"); ("title", "Set query") ]
+            ~attrs:[ ("type", "button"); ("title", U.t "block/set-query") ]
             []
         ]
   | "embed" ->

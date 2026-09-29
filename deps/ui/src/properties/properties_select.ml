@@ -145,7 +145,7 @@ let item_el idx cfg it =
     mk ~cls:"font-normal" (if it.it_strong then "strong" else "span")
   in
   el_set_text strong
-    (if it.it_new then I18n.t "select/new-option" ^ " " ^ it.it_title
+    (if it.it_new then I18n.t1 "select/new-option-label" it.it_title
      else it.it_title);
   (* cljs property select renders a leading type icon (letter-t /
      puzzle) inside .pt-1 as a ui/icon svg *)
