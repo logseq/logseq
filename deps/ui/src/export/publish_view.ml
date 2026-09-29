@@ -188,7 +188,7 @@ let submit ctx =
          |> Js.Promise.then_ (fun payload ->
                 match payload with
                 | W.Nil ->
-                    Toast.error "Couldn't find the page to publish";
+                    Toast.error (I18n.t "publish/page-not-found-error");
                     Js.Promise.resolve ()
                 | _ ->
                     let page_uuid =
@@ -217,7 +217,7 @@ let submit ctx =
            Dialogs_state.close_top ();
            Js.Promise.resolve ())
     |> Js.Promise.catch (fun _ ->
-           Toast.error "Publish failed. Please try again.";
+           Toast.error (I18n.t "publish/publish-error");
            Signal.update st (fun s -> { s with publishing = false });
            Runtime.flush ();
            Dialogs_state.close_top ();
@@ -234,7 +234,7 @@ let ghost_btn () =
     ~attrs:[ ("type", "button") ] ~events:"click"
     ~on_dom_event:(fun n _ ->
       if n = "click" then Dialogs_state.close_top ())
-    ~text:"Cancel" []
+    ~text:(I18n.t "ui/cancel") []
 
 let toggle_pw ctx =
   let st_sig = Signal.value (st ctx) in
@@ -243,7 +243,7 @@ let toggle_pw ctx =
         ~attrs_signal_v:
           (Logseq_dom.attrs_signal st_sig (fun (s : pst) ->
                [ ("type", if s.visible then "text" else "password")
-               ; ("placeholder", "Optional password") ]))
+               ; ("placeholder", I18n.t "publish/password-optional-placeholder") ]))
         ~events:"input"
         ~on_dom_event:(fun n payload ->
           if n = "input" then
@@ -299,11 +299,9 @@ let body (_ms : Model.t Signal.signal) : t =
       ~events:"submit"
       ~on_dom_event:(fun n _ -> if n = "submit" then submit ctx)
       [ dom ~key:"pub-t" ~style_class:"text-lg font-medium"
-          ~text:"Publish page" []
+          ~text:(I18n.t "publish/dialog-title") []
       ; dom ~key:"pub-d" ~style_class:"text-sm opacity-70"
-          ~text:
-            "Optionally protect this page with a password. Leave empty \
-             for public access." []
+          ~text:(I18n.t "publish/dialog-desc") []
       ; toggle_pw ctx
       ; dom ~key:"pub-btns" ~style_class:"flex justify-end gap-2"
           [ ghost_btn ()

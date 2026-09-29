@@ -104,7 +104,10 @@ let indent_select ctx =
   select_el ctx ~key:"export-indent"
     ~cls:"block my-2 text-lg rounded border py-0 px-1" ~show:in_text
     ~value:(fun st -> st.S.indent_style)
-    ~options:[ ("dashes", "dashes"); ("spaces", "spaces"); ("no-indent", "no-indent") ]
+    ~options:
+      [ ("dashes", I18n.t "export/indent-style-dashes")
+      ; ("spaces", I18n.t "export/indent-style-spaces")
+      ; ("no-indent", I18n.t "export/indent-style-none") ]
     ~on_change:(fun v ->
       let st = S.st ctx in
       P.opt_change st (fun s -> { s with indent_style = v }))
@@ -115,7 +118,7 @@ let level_select ctx =
     ~value:(fun st ->
       match st.S.level_lte with None -> "all" | Some n -> string_of_int n)
     ~options:
-      (("all", "all")
+      (("all", I18n.t "export/level-all")
       :: List.init 9 (fun i ->
              (string_of_int (i + 1), string_of_int (i + 1))))
     ~on_change:(fun v ->
@@ -161,14 +164,16 @@ let copy_save_row ctx =
         ~text_signal:
           (Signal.map
              (fun (st : S.t) ->
-               sv (if st.copied then "Copied to clipboard!" else "Copy to clipboard"))
+               sv
+                 (if st.copied then I18n.t "export/copied-to-clipboard"
+                  else I18n.t "ui/copy-to-clipboard"))
              (Signal.value (S.st ctx)))
         []
     ; dom ~key:"export-save" ~tag:"button" ~style_class:btn_cls
         ~attrs:[ ("type", "button") ] ~events:"click"
         ~on_dom_event:(fun n _ ->
           if n = "click" then P.save_to_file (S.st ctx))
-        ~text:"Save to file" [] ])
+        ~text:(I18n.t "export/save-to-file") [] ])
 
 let options_rows ctx =
   let st_sig = Signal.value (S.st ctx) in
@@ -178,24 +183,24 @@ let options_rows ctx =
             ~attrs_signal_v:
               (Logseq_dom.attrs_signal st_sig (fun (st : S.t) ->
                    [ ("style", "visibility: " ^ vis (in_text st)) ]))
-            ~text:"Indentation style:" []
+            ~text:(I18n.t "export/indent-style-label") []
         ; indent_select ctx ]
     ; dom ~key:"row-rm" ~style_class:"flex items-center"
         [ checkbox ctx ~key:"cb-page-ref" ~cls:"mr-2" ~show:in_structured
             ~on:(fun st -> removal st "page-ref")
             ~on_toggle:(fun () -> toggle_removal ctx "page-ref")
         ; opt_label ctx ~key:"lb-page-ref" ~show:in_structured
-            ~text:"[[text]] -> text"
+            ~text:(I18n.t "export/page-ref-text")
         ; checkbox ctx ~key:"cb-emphasis" ~cls:"mr-2 ml-4" ~show:in_structured
             ~on:(fun st -> removal st "emphasis")
             ~on_toggle:(fun () -> toggle_removal ctx "emphasis")
         ; opt_label ctx ~key:"lb-emphasis" ~show:in_structured
-            ~text:"remove emphasis"
+            ~text:(I18n.t "export/remove-emphasis")
         ; checkbox ctx ~key:"cb-tag" ~cls:"mr-2 ml-4" ~show:in_structured
             ~on:(fun st -> removal st "tag")
             ~on_toggle:(fun () -> toggle_removal ctx "tag")
         ; opt_label ctx ~key:"lb-tag" ~show:in_structured
-            ~text:"remove #tags" ]
+            ~text:(I18n.t "export/remove-tags") ]
     ; dom ~key:"row-nl" ~style_class:"flex items-center"
         [ checkbox ctx ~key:"cb-newline" ~cls:"mr-2" ~show:in_text
             ~on:(fun st -> st.S.newline_after_block)
@@ -203,12 +208,12 @@ let options_rows ctx =
               P.opt_change (S.st ctx) (fun s ->
                   { s with newline_after_block = not s.newline_after_block }))
         ; opt_label ctx ~key:"lb-newline" ~show:in_text
-            ~text:"newline after block"
+            ~text:(I18n.t "export/newline-after-block")
         ; checkbox ctx ~key:"cb-property" ~cls:"mr-2 ml-4" ~show:in_text
             ~on:(fun st -> removal st "property")
             ~on_toggle:(fun () -> toggle_removal ctx "property")
         ; opt_label ctx ~key:"lb-property" ~show:in_text
-            ~text:"remove properties" ]
+            ~text:(I18n.t "export/remove-properties") ]
     ; dom ~key:"row-open" ~style_class:"flex items-center"
         [ checkbox ctx ~key:"cb-open" ~cls:"mr-2" ~show:in_structured
             ~on:(fun st -> st.S.open_blocks_only)
@@ -216,13 +221,13 @@ let options_rows ctx =
               P.opt_change (S.st ctx) (fun s ->
                   { s with open_blocks_only = not s.open_blocks_only }))
         ; opt_label ctx ~key:"lb-open" ~show:in_structured
-            ~text:"open blocks only (skip collapsed children)" ]
+            ~text:(I18n.t "export/open-blocks-only") ]
     ; dom ~key:"row-level" ~style_class:"flex items-center"
         [ dom ~key:"level-l" ~tag:"label" ~style_class:"mr-2"
             ~attrs_signal_v:
               (Logseq_dom.attrs_signal st_sig (fun (st : S.t) ->
                    [ ("style", "visibility: " ^ vis (in_structured st)) ]))
-            ~text:"level <=" []
+            ~text:(I18n.t "export/level-lte") []
         ; level_select ctx ] ]
 
 (* cljs PNG preview: loading spinner until the blob lands, then
@@ -270,7 +275,7 @@ let body (_ms : Model.t Signal.signal) : t =
     dom ~key:"export-page" ~style_class:"export resize -m-5"
       [ dom ~key:"export-inner" ~style_class:"p-6"
           [ dom ~key:"export-tabs" ~style_class:"flex pb-3"
-              [ fmt_btn ctx "ft-text" "Text" S.Text "mr-4 w-20"
+              [ fmt_btn ctx "ft-text" (I18n.t "export/format-text") S.Text "mr-4 w-20"
               ; fmt_btn ctx "ft-opml" "OPML" S.Opml "mr-4 w-20"
               ; fmt_btn ctx "ft-html" "HTML" S.Html "mr-4 w-20"
               ; fmt_btn ctx "ft-png" "PNG" S.Png "mr-4 w-20"

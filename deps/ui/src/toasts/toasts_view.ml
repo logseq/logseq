@@ -43,7 +43,7 @@ let toast_item (t : Model.toast) (idx : int) : t =
                    ~style_class:(toast_icon_class kind) []
                ; dom ~key:"ti-close" ~tag:"button"
                    ~style_class:"ui__toast-close"
-                   ~attrs:[ ("aria-label", "Close") ]
+                   ~attrs:[ ("aria-label", I18n.t "ui/close") ]
                    ~events:"click"
                    ~on_dom_event:(fun name _ ->
                      if name = "click" then Toast.dismiss t.toast_id)
