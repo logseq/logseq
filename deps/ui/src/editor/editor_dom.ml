@@ -139,6 +139,13 @@ external set_timeout_id : (unit -> unit) -> int -> int = "setTimeout"
 
 external clear_timeout : int -> unit = "clearTimeout"
 
+(* debounce: returns a function; each call resets the timer *)
+let debounce ms =
+  let id = ref (-1) in
+  fun f ->
+    if !id >= 0 then clear_timeout !id;
+    id := set_timeout_id f ms
+
 external new_observer : (unit -> unit) -> mutation_observer
   = "MutationObserver" [@@mel.new]
 
@@ -171,12 +178,88 @@ let for_each_selector sel f =
     match node_list_item nl i with Some el -> f el | None -> ()
   done
 
+external el_query_all : el -> string -> node_list = "querySelectorAll"
+  [@@mel.send]
+
+external node_type : el -> int = "nodeType" [@@mel.get]
+
+(* elements matching [sel] touched by the mutation roots: each root's
+   closest ancestor-or-self match plus its matching descendants. Roots
+   are the mutation records' addedNodes — a subtree inserted under an
+   already-mounted shell is covered by the ancestor direction. *)
+let for_each_touched roots sel f =
+  let seen : el list ref = ref [] in
+  let emit el =
+    if not (List.exists (fun e -> e == el) !seen) then begin
+      seen := el :: !seen;
+      f el
+    end
+  in
+  List.iter
+    (fun root ->
+      (match el_closest root sel with Some el -> emit el | None -> ());
+      let nl = el_query_all root sel in
+      for i = 0 to node_list_length nl - 1 do
+        match node_list_item nl i with Some el -> emit el | None -> ()
+      done)
+    roots
+
+(* shared document observer: feature installers register one scan each;
+   mutation batches coalesce into a single debounced pass that hands each
+   scan the added element roots so scans scope their selector work to the
+   changed subtrees instead of re-scanning the whole document *)
+type doc_scan =
+  { ds_run_if : mutation_record array -> bool
+  ; ds_scan : el list -> unit }
+
+let doc_scans : doc_scan list ref = ref []
+let doc_scan_timer = ref (-1)
+let doc_pending_recs : mutation_record list ref = ref []
+
+let doc_flush () =
+  doc_scan_timer := -1;
+  let recs = Array.of_list (List.rev !doc_pending_recs) in
+  doc_pending_recs := [];
+  let roots =
+    Array.fold_left
+      (fun acc r ->
+        let nl = rec_added r in
+        let rec collect i acc =
+          if i >= node_list_length nl then acc
+          else
+            collect (i + 1)
+              (match node_list_item nl i with
+               | Some el when node_type el = 1 -> el :: acc
+               | _ -> acc)
+        in
+        collect 0 acc)
+      [] recs
+  in
+  List.iter
+    (fun ds -> if ds.ds_run_if recs then ds.ds_scan roots)
+    !doc_scans
+
+let doc_observer_installed = ref false
+
+let register_doc_scan ?(run_if = fun _ -> true) scan =
+  doc_scans := !doc_scans @ [ { ds_run_if = run_if; ds_scan = scan } ];
+  scan [ document_element ];
+  if not !doc_observer_installed then (
+    doc_observer_installed := true;
+    let obs =
+      new_observer_records (fun recs ->
+          doc_pending_recs := Array.to_list recs @ !doc_pending_recs;
+          if !doc_scan_timer < 0 then
+            doc_scan_timer := set_timeout_id doc_flush 60)
+    in
+    observe obs document_element (observe_opts ~childList:true ~subtree:true))
+
 (* <raw-text> placeholders carry the intended text in data-raw-text and
    are swapped for real text nodes once they enter the DOM — extension
    create() can only return Elements, so this observer performs the
    swap the adapter cannot. *)
-let replace_all_raw_text () =
-  for_each_selector "raw-text" (fun el ->
+let replace_all_raw_text roots =
+  for_each_touched roots "raw-text" (fun el ->
       match el_get_attr el "data-raw-text" with
       | Some s -> el_replace_with el (create_text_node s)
       | None -> el_replace_with el (create_text_node ""))
@@ -185,8 +268,8 @@ let replace_all_raw_text () =
    at create time; cljs emits no such ids, so strip them for DOM parity.
    Ids with a suffix (menu popups, accordion triggers/panels) keep the
    "lui-node-N-*" form and are left alone since LUI core references them. *)
-let strip_lui_node_ids () =
-  for_each_selector "[id^='lui-node-']" (fun el ->
+let strip_lui_node_ids roots =
+  for_each_touched roots "[id^='lui-node-']" (fun el ->
       match el_get_attr el "id" with
       | Some id ->
           let n = String.length id in
@@ -196,18 +279,16 @@ let strip_lui_node_ids () =
           if n > 9 && digits 9 then el_remove_attr el "id"
       | None -> ())
 
-let dom_fixups () =
-  replace_all_raw_text ();
-  strip_lui_node_ids ()
+let dom_fixups roots =
+  replace_all_raw_text roots;
+  strip_lui_node_ids roots
 
 let raw_text_observer_installed = ref false
 
 let ensure_raw_text_observer () =
   if not !raw_text_observer_installed then (
     raw_text_observer_installed := true;
-    let obs = new_observer dom_fixups in
-    observe obs document_element (observe_opts ~childList:true ~subtree:true);
-    dom_fixups ())
+    register_doc_scan dom_fixups)
 
 let closest_sel sel target =
   match target with

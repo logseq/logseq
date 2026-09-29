@@ -249,20 +249,18 @@ let main_content (ms : Model.t Signal.signal) =
                            ; ("style", "margin-bottom: 120px") ]))
                 [ dyn
                 ~equal:(fun (a : Model.t) (b : Model.t) ->
+                  (* block-bearing fields compare by revision — a
+                     structural [=] walks both trees on every publish *)
                   a.phase = b.phase
                   && a.route = b.route
-                  && a.route_page = b.route_page
+                  && a.data_gen = b.data_gen
                   && a.page_missing = b.page_missing
-                  && a.journals = b.journals
-                  && a.page_refs = b.page_refs
-                  && a.unlinked_refs = b.unlinked_refs
                   && a.editing_title = b.editing_title
                   && a.page_menu = b.page_menu
                   && a.confirm = b.confirm
                   && a.unlinked_open = b.unlinked_open
                   && a.unlinked_search = b.unlinked_search
-                  && a.unlinked_query = b.unlinked_query
-                  && a.unlinked_blocks = b.unlinked_blocks)
+                  && a.unlinked_query = b.unlinked_query)
                 (fun m -> Page.page_view_of_model m)
                 ms ]
             ]
@@ -286,7 +284,7 @@ let overlays (ms : Model.t Signal.signal) =
     ; dyn
         ~equal:(fun (a : Model.t) (b : Model.t) ->
           a.page_menu = b.page_menu && a.confirm = b.confirm
-          && a.route_page = b.route_page)
+          && a.data_gen = b.data_gen)
         (fun m -> Page_menu.dialog_view m)
         ms
     ; dyn

@@ -995,15 +995,9 @@ let mount_sidebar_area (area : el) =
               S.unregister_area area;
               Js.Promise.resolve ())))
 
-let ensure_sidebar_areas () =
-  let els =
-    query_selector_all ".ls-sidebar-page-properties [data-sb-uuid]"
-  in
-  for i = 0 to node_list_length els - 1 do
-    match node_list_item els i with
-    | Some el -> mount_sidebar_area el
-    | None -> ()
-  done
+let ensure_sidebar_areas roots =
+  for_each_touched roots ".ls-sidebar-page-properties [data-sb-uuid]"
+    mount_sidebar_area
 
 (* A remove-block-property op commits in the worker before the debounced
    sync-db-changes refresh (~80ms) reaches the DOM, so an sdk caller
@@ -1036,25 +1030,19 @@ let drop_row ~owner_uuid ~title =
 
 (* ---------- observer entry ---------- *)
 
-let ensure_all () =
+(* scoped to the shared document observer's added roots *)
+let ensure_all roots =
   S.chain_worker ();
   (* page-level *)
-  (match doc_query ".page-inner" with
-   | Some inner -> mount_page_area inner
-   | None -> ());
-  ensure_sidebar_areas ();
+  for_each_touched roots ".page-inner" mount_page_area;
+  ensure_sidebar_areas roots;
   (* block-level *)
-  let blocks = query_selector_all ".ls-block" in
-  for i = 0 to node_list_length blocks - 1 do
-    match node_list_item blocks i with
-    | Some el ->
-        if
-          not
-            (el_matches el ".block-add-button"
-             || el_closest el ".ls-page-title" <> None)
-        then (
-          match block_uuid_of_ls_block el with
-          | Some uuid -> mount_block_area el uuid
-          | None -> ())
-    | None -> ()
-  done
+  for_each_touched roots ".ls-block" (fun el ->
+      if
+        not
+          (el_matches el ".block-add-button"
+           || el_closest el ".ls-page-title" <> None)
+      then (
+        match block_uuid_of_ls_block el with
+        | Some uuid -> mount_block_area el uuid
+        | None -> ()))

@@ -542,16 +542,24 @@ let blocks_inner ?puuid ?(virtualize = false) ?(container = true)
    grouped under their source page (references-blocks-item > page-cp),
    so the referencing page's name must appear inside .references *)
 let refs_grouped (refs : Model.block list) : (string * Model.block list) list =
-  let insert groups (b : Model.block) =
-    let name = Option.value b.block_page_name ~default:"" in
-    match List.find_opt (fun (n, _) -> n = name) groups with
-    | Some _ ->
-        List.map
-          (fun (n, bs) -> if n = name then (n, bs @ [ b ]) else (n, bs))
-          groups
-    | None -> groups @ [ (name, [ b ]) ]
-  in
-  List.fold_left insert [] refs
+  (* linear grouping: Hashtbl keyed by source page name, order of first
+     appearance preserved; a per-ref List.find_opt + append rebuild is
+     O(refs x groups) on ref-heavy pages *)
+  let tbl : (string, Model.block list ref) Hashtbl.t = Hashtbl.create 16 in
+  let order = ref [] in
+  List.iter
+    (fun (b : Model.block) ->
+      let name = Option.value b.block_page_name ~default:"" in
+      match Hashtbl.find_opt tbl name with
+      | Some bs -> bs := b :: !bs
+      | None ->
+          Hashtbl.replace tbl name (ref [ b ]);
+          order := name :: !order)
+    refs;
+  List.rev_map
+    (fun name ->
+      (name, List.rev !(Hashtbl.find tbl name)))
+    (List.rev !order)
 
 (* cljs ui__button base classes (shui/button) *)
 let ui_btn =
@@ -682,12 +690,13 @@ let foldable_content key inner : t =
     ~attrs:[ ("aria-hidden", "false") ]
     [ dom ~key:"fci" ~style_class:"ls-foldable-content-inner" [ inner ] ]
 
-(* one linked-ref group: source page-ref foldable title + its blocks *)
-let ref_group idx (name, blocks) : t =
+(* one linked-ref group: source page-ref foldable title + its blocks.
+   The static layout keeps the virtuoso index attrs; virtualized rows get
+   data-index from the .ls-virt-row wrapper instead (a second data-index
+   inside would double-measure) *)
+let ref_group ?(extra_attrs = []) (name, blocks) : t =
   let key = "rg-" ^ name in
-  dom ~key ~attrs:[ ("data-index", string_of_int idx)
-                  ; ("data-item-index", string_of_int idx)
-                  ; ("style", "overflow-anchor: none;") ]
+  dom ~key ~attrs:extra_attrs
     [ dom ~key:"gi" ~style_class:"flex flex-col"
         [ foldable_title (key ^ "-t")
             (dom ~key:"grp" ~style_class:""
@@ -722,22 +731,39 @@ let ref_group idx (name, blocks) : t =
     ]
 
 let ref_groups_virt key (groups : (string * Model.block list) list) : t =
-  (* cljs mounts a Virtuoso scroller; we keep its DOM scaffolding but lay
-     groups out statically (absolute positioning would collapse without a
-     measured scroller height) *)
-  dom ~key ~style_class:"group-list-view"
-    ~attrs:[ ("data-virtuoso-scroller", "true")
-           ; ("style", "position: relative;") ]
-    [ dom ~key:"vp" ~attrs:[ ("data-viewport-type", "window") ]
-        [ dom ~key:"il"
-            ~attrs:
-              [ ("data-testid", "virtuoso-item-list")
-              ; ( "style"
-                , "box-sizing: border-box; margin-top: 0px; \
-                   padding-bottom: 0px; padding-top: 0px;" ) ]
-            (List.mapi ref_group groups)
-        ]
-    ]
+  let items = Array.of_list groups in
+  (* virtualize at group granularity — a tag page can carry hundreds of
+     source-page groups; group rows measure dynamically like journals *)
+  if Virt_list.enabled ~virtualize:true (Array.length items) then
+    dom ~key ~style_class:"group-list-view"
+      ~attrs:[ ("data-virtuoso-scroller", "true")
+             ; ("style", "position: relative;") ]
+      [ Virt_list.list
+          ~list_attrs:[ ("data-viewport-type", "window") ]
+          ~key_of:(fun (name, _) -> name)
+          ~estimate_size:(fun _ -> 120.) ~render:ref_group items ]
+  else
+    dom ~key ~style_class:"group-list-view"
+      ~attrs:[ ("data-virtuoso-scroller", "true")
+             ; ("style", "position: relative;") ]
+      [ dom ~key:"vp" ~attrs:[ ("data-viewport-type", "window") ]
+          [ dom ~key:"il"
+              ~attrs:
+                [ ("data-testid", "virtuoso-item-list")
+                ; ( "style"
+                  , "box-sizing: border-box; margin-top: 0px; \
+                     padding-bottom: 0px; padding-top: 0px;" ) ]
+              (List.mapi
+                 (fun i g ->
+                   ref_group
+                     ~extra_attrs:
+                       [ ("data-index", string_of_int i)
+                       ; ("data-item-index", string_of_int i)
+                       ; ("style", "overflow-anchor: none;") ]
+                     g)
+                 groups)
+          ]
+      ]
 
 (* cljs views/view {:add-page-column? true} — each ref row carries the
    source page name. *)
@@ -771,7 +797,7 @@ let ref_item (b : Model.block) : t =
 let fetch_unlinked (m : Model.t) =
   match m.route_page with
   | Some p ->
-      Router.fetch_unlinked
+      Outliner_ops.fetch_unlinked_refs
         ~stale:(fun () -> !Runtime.current_route <> Some m.route)
         p
   | None -> ()
@@ -981,7 +1007,11 @@ let journals_view (m : Model.t) (js : Model.page list) : t =
          [ dom ~key:"jp"
              ~style_class:"journal-item-placeholder animate-pulse p-6" [] ]
      | _ ->
-         if Virt_list.force_virtualized () then
+         (* cljs mounts the Virtuoso scroller unconditionally; only
+            rtc-test mode (without the flag) falls back to eager rows *)
+         if Virt_list.enabled_min ~virtualize:true ~min:1
+              (Array.length items)
+         then
            [ dom ~key:"js"
                [ dom ~key:"jvp"
                    [ Virt_list.list
