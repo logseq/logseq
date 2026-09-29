@@ -334,10 +334,32 @@ let order_list_shifted_eids (r : tx_report) : entity_id list =
     List.exists (String.equal a) membership_affecting_attrs
     || String.equal a "logseq.property/order-list-type"
   in
+  (* an order-list-type ref value's label feeds the effective type: a
+     title/name change on it flips its referrers' type, so they are
+     treated as touched (and as type-changed for descendants) *)
+  let referrers =
+    r.tx_data
+    |> List.filter_map (fun (d : datom) ->
+           if d.a = "block/title" || d.a = "block/name" then Some d.e
+           else None)
+    |> List.sort_uniq compare
+    |> List.concat_map (fun eid ->
+           List.concat_map
+             (fun db ->
+                match entity db (Entity_id eid) with
+                | Some e ->
+                    List.map
+                      (fun (c : entity) -> c.id)
+                      (Ldb.ref_ents e "logseq.property/_order-list-type")
+                | None -> [])
+             [ r.db_before; r.db_after ])
+    |> List.sort_uniq compare
+  in
   let touched =
     r.tx_data
     |> List.filter_map (fun (d : datom) ->
            if relevant d.a then Some d.e else None)
+    |> List.append referrers
     |> List.sort_uniq compare
   in
   if touched = [] then []
@@ -409,12 +431,13 @@ let order_list_shifted_eids (r : tx_report) : entity_id list =
            (fun pid -> diff (markers 0 eid pid) (markers 1 eid pid))
            pids;
          if
-           List.exists
-             (fun (d : datom) ->
-                d.e = eid
-                && (d.a = "logseq.property/order-list-type"
-                   || d.a = "block/parent"))
-             r.tx_data
+           List.mem eid referrers
+           || List.exists
+                (fun (d : datom) ->
+                   d.e = eid
+                   && (d.a = "logseq.property/order-list-type"
+                      || d.a = "block/parent"))
+                r.tx_data
          then mark_descendants eid)
       touched;
     Hashtbl.fold (fun eid () acc -> eid :: acc) shifted []
