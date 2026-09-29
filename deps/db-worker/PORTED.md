@@ -29,6 +29,12 @@ dependency cone, master SHAs):
     8edb86a2fa  fix(db-sync): heal stale local checksum on graph open via covered commit (#13415)
     8e11118390  fix: show property title instead of db-ident in query builder (#13420)
     b7558934aa  fix: isolate query render errors so editing /query with incomplete syntax doesn't crash (#13419)
+    3fdabc0810  fix: show selected values in node property pickers (#13521)
+    fdfd7758a3  fix: keep '++' repeat anchored to original date across month-end clamp
+    82e2717796  fix: refuse renaming a page to a case variant of another page
+    74b61250e3  fix: keep recycle parent until both sides restore
+    829fb85cca  fix: use local days for scheduled and deadline range
+    53db271a4b  fix: refuse converting namespaced pages to properties
 
 When diffs against the baseline reference these, the OCaml side already
 carries them (canonicalize-insert-ops, Library move restriction,

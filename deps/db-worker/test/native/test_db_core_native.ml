@@ -1972,6 +1972,67 @@ let test_get_date_scheduled_or_deadlines () =
        | _ -> Alcotest.fail "date-scheduled group missing")
   | _ -> Alcotest.fail "date-scheduled: expected grouped map"
 
+(* (deftest get-date-scheduled-or-deadlines-uses-local-calendar-day-bounds ...) *)
+let test_get_date_scheduled_or_deadlines_uses_local_calendar_day_bounds () =
+  let conn = create_conn () in
+  ignore
+    (transact_maps conn
+       [ [ "db/ident", Kw "logseq.property/status.todo" ]
+       ; [ "db/ident", Kw "logseq.property/status.doing" ]
+       ; [ "db/ident", Kw "logseq.property/status.done" ]
+       ; [ "block/title", Str "Tasks"
+         ; "block/uuid", Uuid "33333333-3333-3333-3333-333333333333" ] ]);
+  let today = 20260928 in
+  let start_time, end_time =
+    Option.get (Date_time_util.journal_day_local_range_ms today 7)
+  in
+  let hour_ms h = Int64.mul (Int64.of_int h) 3_600_000L in
+  let today_no_time = Date_time_util.journal_day_to_local_ms 20260928 in
+  let yesterday_21 =
+    Int64.add (Date_time_util.journal_day_to_local_ms 20260927)
+      (hour_ms 21)
+  in
+  let plus6_21 =
+    Int64.add (Date_time_util.journal_day_to_local_ms 20261004)
+      (hour_ms 21)
+  in
+  ignore
+    (transact_maps conn
+       [ [ "block/title", Str "today no-time"
+         ; "block/page", Vec [ Kw "block/uuid"; Uuid "33333333-3333-3333-3333-333333333333" ]
+         ; "logseq.property/scheduled", Inst today_no_time
+         ; "logseq.property/status", Kw "logseq.property/status.todo" ]
+       ; [ "block/title", Str "yesterday 21:00"
+         ; "block/page", Vec [ Kw "block/uuid"; Uuid "33333333-3333-3333-3333-333333333333" ]
+         ; "logseq.property/deadline", Inst yesterday_21
+         ; "logseq.property/status", Kw "logseq.property/status.todo" ]
+       ; [ "block/title", Str "+6d 21:00"
+         ; "block/page", Vec [ Kw "block/uuid"; Uuid "33333333-3333-3333-3333-333333333333" ]
+         ; "logseq.property/scheduled", Inst plus6_21
+         ; "logseq.property/status", Kw "logseq.property/status.todo" ] ]);
+  register_conn conn;
+  let result =
+    api "get-date-scheduled-or-deadlines"
+      [ Wire.String test_repo; Wire.Int64 start_time; Wire.Int64 end_time ]
+  in
+  (match result with
+   | Wire.Map groups ->
+       let titles =
+         List.concat_map
+           (fun (_, blocks) ->
+              List.filter_map (fun w -> wire_str "block/title" w)
+                (wire_array_items blocks))
+           groups
+         |> sort_uniq
+       in
+       check "date-scheduled local bounds includes today no-time"
+         (List.mem "today no-time" titles);
+       check "date-scheduled local bounds excludes yesterday 21:00"
+         (not (List.mem "yesterday 21:00" titles));
+       check "date-scheduled local bounds includes +6d 21:00"
+         (List.mem "+6d 21:00" titles)
+   | _ -> Alcotest.fail "date-scheduled local bounds: expected grouped map")
+
 (* ---------- view-filter / convert / validate ---------- *)
 
 (* (deftest get-view-filter-data-resolves-filter-options-test ...) *)
@@ -3338,6 +3399,8 @@ let cases =
       test_transact_failed_logs_tx_count_not_tx_data
   ; Alcotest.test_case "get-date-scheduled-or-deadlines-filters-sorts-and-groups-worker-results" `Quick
       test_get_date_scheduled_or_deadlines
+  ; Alcotest.test_case "get-date-scheduled-or-deadlines-uses-local-calendar-day-bounds" `Quick
+      test_get_date_scheduled_or_deadlines_uses_local_calendar_day_bounds
   ; Alcotest.test_case "get-view-filter-data-resolves-filter-options-test" `Quick
       test_get_view_filter_data
   ; Alcotest.test_case "convert-tag-to-page-test" `Quick test_convert_tag_to_page
