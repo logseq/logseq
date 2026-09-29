@@ -331,7 +331,8 @@ let split_at_cursor uuid =
         let new_uuid = Platform.random_uuid () in
         let library = library_context () in
         let sibling =
-          library || S.is_collapsed uuid || b.Model.block_children = []
+          library || S.is_collapsed_in ~scope:e.S.scope uuid
+          || b.Model.block_children = []
         in
         let p =
           Js.Promise.all
