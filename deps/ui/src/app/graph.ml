@@ -11,6 +11,12 @@ let default_config = "{:feature/enable-git-auto-commit? false}"
 let init_worker () =
   Runtime.invoke1 "thread-api/init" (Wire.Array [])
   |> Js.Promise.then_ (fun _ ->
+         (* cljs events.cljs :graph/sync-context — :dev? flips the
+            worker's OUTLINER-PERF-LOGGING mirror used by e2e *)
+         Runtime.invoke1 "thread-api/set-context"
+           (Wire.Map
+              [ (Wire.kw "dev?", Wire.Bool Platform.dev_build) ]))
+  |> Js.Promise.then_ (fun _ ->
          (* single-arg map like cljs state/set-db-sync-config *)
          Runtime.invoke1 "thread-api/set-db-sync-config"
            (Rtc_ops.db_sync_config ()))
