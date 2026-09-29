@@ -2067,3 +2067,235 @@ wiring disproportionate to the feature. Left unported deliberately.
 - Documented gaps (cljs features not ported): link-over-selection and
   `html-link-format!`, `(())` block-ref paste, file/image paste,
   `web application/logseq` system-clipboard blocks, `revert-cut-txs`.
+
+
+## Bundle / production build (devin/lui-prodbuild)
+
+`deps/ui/vite.config.mjs` now has two build modes (vite 8 defaults
+`env.mode` to `"production"` for every `vite build`, so the flag is
+detected on `process.argv`, not `ConfigEnv.mode`):
+
+- `vite build` (`npm run build`): dev bundle — `minify:false`, inline
+  sourcemap, `logseq_dev=true` (cljs `config/dev?` equivalent).
+- `vite build --mode production` (`npm run build:production`):
+  minified (built-in oxc minifier — no new dep), `sourcemap:"hidden"`
+  (emits `main.js.map` without a `sourceMappingURL` comment — cljs
+  release emitted the map and the deploy pipeline stripped it before
+  shipping), `logseq_dev=false`.
+
+Sizes:
+
+| build | main.js bytes | gzip |
+|---|---:|---:|
+| dev | 3,113,199 | 599,115 |
+| production | 1,977,328 | 467,023 |
+| `js/icon-data.js` (both modes) | 1,778,026 | 331,469 |
+| `js/emoji-data.js` (both modes) | 432,757 | 83,099 |
+
+(Baseline before this branch: dev 8,546,822 / gzip 1,204,745, prod
+4,974,916 / gzip 988,477 — the icon split is responsible for most of
+the delta; minification and tree-shaking account for the rest.)
+
+vs cljs release (`clojure -M:cljs release app`, master): `main.js`
+16,113,696 / gzip 4,008,217 with tabler icon data inlined, plus lazy
+`code-editor.js` 1,012,649 / gzip 316,163. The LUI prod surface
+(main.js + icon-data.js + emoji-data.js) is 4,188,111 / gzip 881,591
+total — ~4.6x smaller gzipped; main.js alone is ~8.6x smaller
+(467,023 vs 4,008,217). Note the cljs bundle carries the complete
+legacy frontend; the LUI rewrite does not yet implement the full
+feature set.
+
+### ESM emit → tree-shaking works
+
+`js_app/dune` emitted `(module_systems commonjs)`, which rolldown can
+only shake coarsely. Switching to `(module_systems esm)` lets it drop
+dead modules and unused exports — 186 emitted modules fell out of the
+bundle entirely (182 unused `melange-webapi`/lui/dep bindings plus 4
+of our own emitted-but-unreachable modules). No `[%mel.raw]` `require`
+/`module.exports` interop exists in `src/`, so the switch was clean.
+`test/dune` keeps `commonjs` — the node test harness `require()`s its
+emitted modules directly. OCaml-side dead code is otherwise invisible
+to warning 32: without `.mli` files every structure binding is
+exported, so nothing can ever be flagged unused.
+
+### Data tables → embedded JSON
+
+`keymap_data.ml`, `icon_picker_names.ml` and `commands_data.ml` were
+re-encoded from OCaml list/record literals to a single embedded JSON
+string each, decoded once at module init (same wire shape decoded into
+the same public types — call sites unchanged). The emitted JS dropped
+~630KB (445→19KB, 318→244KB, 138→8KB), but most of the old emit was
+melange pretty-printing whitespace the minifier already removed: prod
+main.js gained only ~14KB, while the unminified dev bundle dropped
+~290KB. Kept because JSON.parse at init is also cheaper than building
+~6.4k cons cells. Lesson vs the icon split: icon data was real
+megabytes; small tables gain little once minified.
+
+### Icon data split (`resources/js/icon-data.js`)
+
+`icon_tabler_data.ml` used to embed all 6,146 tabler icons as a giant
+`match` returning OCaml list literals — 6.8MB of emitted JS, >50% of
+the production bundle. cljs carried the same icon set more compactly:
+`@tabler/icons-react` factories ≈1.78MB minified / 333KB gzip
+(`resources/mobile/js/tabler-icons-react.min.js`).
+
+Now `deps/ui/scripts/gen-icon-data.mjs` (`npm run gen:icon-data`,
+reads `node_modules/@tabler/icons/tabler-nodes-{outline,filled}.json`)
+emits `resources/js/icon-data.js` — `globalThis.__tablerChildren` in
+the same `[[tag, {attr: v}]]` shape. `resources/index.html` loads it
+as a `<script defer>` before `main.js`, and `Icon_tabler_data` is a
+thin binding that decodes entries to the same
+`(tag * (string * string) list) list` the renderers already consumed —
+call sites (`icons.ml`, `editor_dom.ml`) are unchanged. Benefits:
+`main.js` drops ~2.2MB, the icon table parses as a plain JS object
+literal (no cons-cell construction), and it caches independently of
+app code. If `__tablerChildren` is absent (e.g. test environments)
+`tabler_children` returns `[]` and icons degrade to font glyphs, same
+as an unknown icon name before.
+
+The `@emoji-mart/data` native set followed the same pattern as
+`icon-data.js`: `scripts/gen-emoji-data.mjs` emits
+`resources/js/emoji-data.js` (`globalThis.__emojiData`) and
+`emoji_mart.ml` reads the four dataset keys off `window` (fail-fast if
+the script is absent). That removed another ~430KB of real data from
+main.js.
+
+### Printf → mini interpreter (`src/core/sprintf.ml`)
+
+`camlinternalFormat.js` (~215KB emitted) is the stdlib printf/format
+interpreter pulled in by `melange/printf.js`; dep modules (lui,
+melange-edn, melange-transit) and stdlib `printexc.js` all import it,
+so it could not be shaken. `src/core/sprintf.ml` is a ~300-line port
+of `make_printf`'s format-GADT walk covering the directives used here
+(%s %S %c %C %d %i %u %x %X %o %b %f %e %g %F %Ld %% plus literal and
+argument padding/precision; semantics byte-verified against Stdlib
+Printf across the codebase's format strings). `vite.config.mjs`
+aliases every `printf.js` specifier to `shims/printf.js`, a re-export
+of the emitted `src/core/sprintf.js`, so all callers — ours, stdlib
+printexc, and deps — use the mini interpreter and camlinternalFormat
+drops out entirely. Exotic directives (%%_ignored, %a/%t/%r/%{ %%(
+scanf sets) raise `Invalid_argument` at the first sprintf call.
+
+Remaining bundle weight is `icon_picker_names.js` (~244KB) plus
+melange runtime and npm deps (transit-js, dnd-kit, lui); the build is
+intentionally a single IIFE (`codeSplitting:false`).
+
+Verified: `bb test -n logseq.e2e.tag-basic-test -p 3007` (3 tests) and
+`bb test -n logseq.e2e.commands-basic-test -p 3007` (31 tests / 204
+assertions) both pass against the minified bundle + external icon
+data.
+
+
+## Code-block editor (branch `devin/lui-codemirror`)
+
+Real CodeMirror 5 replaces the fake `pre.CodeMirror-line` path for
+code-fence blocks (`display-type=code`, or ` ```lang ` fences in
+`src_block`). Pure OCaml FFI — no hand-written JS.
+
+### FFI shape (deps/ui/src/editor/code_mirror.ml)
+
+- `external cm : cm_module = "codemirror" [@@mel.module]` binds
+  `require("codemirror")` — the CJS `module.exports = CodeMirror`
+  object itself. A bare `= ""` external is *wrong here*: melange
+  infers the val name and emits `require("codemirror").cm`
+  (undefined). Same fix applied to all addon/mode imports:
+  `= "path" [@@mel.module]` (module-object binding, harmless to
+  reference, and it avoids the ppx `fragile` alert entirely — no
+  `[@@@alert]` needed).
+- Side-effect imports: closebrackets, matchbrackets, show-hint,
+  active-line, `mode/meta`, and all 121 vendored modes
+  (`codemirror/mode/*/*`). Sanitized OCaml names
+  (`asn.1`→`asn_1`, `haskell-literate`→`haskell_literate`, …). The
+  `_imports` list keeps references so bundlers don't drop the
+  requires; the values are module objects, not members.
+
+### Mount lifecycle
+
+- `Editor_dom.register_doc_scan ~sync:true` scans
+  `.code-editor textarea` on every added DOM root and at startup
+  (`scan [document_element]`). `~sync` runs in the observer microtask
+  so the editor exists before paint and before `set_timeout 0`
+  focus attempts (`apply_focus`/`retry_focus` cover stragglers).
+- **The scan must skip textareas already inside `.CodeMirror`** —
+  CM's own hidden input textarea also matches `.code-editor
+  textarea`, and mounting on it nests a second `.CodeMirror`
+  recursively until the renderer OOM-crashes. Guard:
+  `D.el_closest el ".CodeMirror" = None`.
+- `bound` = nextElementSibling has `.CodeMirror`; `instances` map
+  pruned when a wrapper disconnects (`prune`).
+- CM mounts in **display and edit mode alike** (cljs renders CM as
+  the code surface always). `tree.ml content_or_editor` therefore
+  keeps `content_wrapper` for `display_type=code` even while editing
+  — the dyn never swaps the subtree, so the mounted CM survives
+  edit-state flips.
+
+### Options / DOM parity (cljs extensions/code.cljs render!)
+
+theme `lsradix light|dark` (html.dark → dark), autoCloseBrackets,
+lineNumbers, matchBrackets for lisp-like (scheme|lisp|clojure|edn),
+styleActiveLine, tabIndex −1, extraKeys Esc + Shift-Enter,
+`viewportMargin Infinity` for calc. Mode via `findModeByName →
+findModeByExtension → .mime → raw lang`; lang normalized
+`edn|clj|cljc|cljs|clojurescript → clojure` (cljs src-cp).
+
+### Events
+
+- `change` → `sync_buffer` (silent, keeps `editing.buffer` + textarea
+  textContent) + `Ops.schedule_save` (400 ms debounce →
+  `apply_parsed` → worker tx) + `update_calc`.
+- `blur` → `blur_commit` when this uuid is the editing block.
+- `focus` → `enter_edit` whenever the focused CM is not the current
+  edit block — including when nothing was editing (cljs
+  edit-block! parity). The click-placed caret survives because
+  `focus_block` short-circuits when `hasFocus()`.
+- Wrapper `keydown`: Cmd/Ctrl+[ ] swallowed (history nav), arrows at
+  document start/end move to the neighbor block
+  (`A.arrow_nav`). Wrapper `pointerdown`: stopPropagation + clear the
+  block-range selection. `editor_keys` document-capture pointerdown
+  additionally skips `.ui-fenced-code-editor` targets (CM's
+  stopPropagation can't reach capture listeners).
+- `Esc`: commits via `A.exit_edit ~select:true`. **Divergence**: cljs
+  drops into a raw-textarea mode on Esc before the second Esc fully
+  exits; we exit in one step (simpler, matches `exit-edit` helper).
+- `Shift-Enter`: `insert_sibling_after`.
+- `update_calc` clears `.extensions__code-calc` and re-appends
+  `.extensions__code-calc-output-line` rows from
+  `Render_calc.results`. For that to exist on a *fresh* calc block,
+  render.ml now emits the `.extensions__code-calc.pr-2` container
+  for `lang=calc` even when empty (cljs always mounts it).
+
+### State coupling (no module cycle)
+
+`Editor_state` exposes `code_buffer_of` / `code_focus` refs that
+`Code_mirror.install` wires: `live_buffer` consults the CM doc before
+the textarea fallback; `apply_focus` tries `code_focus` (has_focus →
+keep caret, else `cm.focus()` + `setCursor`) before the textarea
+match and runs `run_pending_focus_actions` on success. `sync_titles`
+(≈ cljs `sync-editor-code!`) is subscribed to `S.signal ()` *lazily*
+from the scan — `S.state` throws `failwith "editor state not
+mounted"` until the first block row mounts the state, and an eager
+subscribe in `install` crashed boot ("Failure(editor state not
+mounted)").
+
+### Actions bar
+
+`.code-block-actions` = `.select-language` button (label =
+lower-cased lang or `editor/code-language-placeholder` + chevron) +
+copy button (`navigator.clipboard.writeText` → "Copied!" toast, via
+`let*` promise bind). The picker renders `.ls-code-lang-picker`
+menu rows under `.cp__overlays` at the button's fixed rect; a
+document mousedown outside `.ls-code-lang-picker,
+.code-block-actions` closes it. Picking a mode calls
+`setOption("mode", …)` + `set_block_property
+logseq.property.code/lang`. `window.CodeMirror` is exported for
+extensions/dev helpers.
+
+### Verification
+
+- `virtualized-late-editor-and-code-editor-test` 4/4,
+  `commands-basic-test/code-block-test` 2/2,
+  `commands-basic-test/calculator-test` 3/3 — all green on port 3013.
+- Manual probe: `/code` → `.CodeMirror` (cm-s-lsradix cm-s-light)
+  mounts, click on `pre.CodeMirror-line` focuses the hidden textarea,
+  `fill "*:focus"` writes the doc, Esc exits, `.extensions__code`
+  shows the code, block content persists across reload.

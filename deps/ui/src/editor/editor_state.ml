@@ -253,6 +253,13 @@ let title_for uuid fallback =
 
 let clear_overrides () = Hashtbl.reset display_overrides
 
+(* CodeMirror buffer/focus providers for code-fence blocks, wired by
+   Code_mirror.install — refs so Editor_actions needs no CM module dep *)
+let code_buffer_of : (string -> string option) ref = ref (fun _ -> None)
+
+let code_focus : (caret:int -> string -> bool) ref =
+  ref (fun ~caret:_ _ -> false)
+
 (* returns (parent, index) of uuid among its siblings *)
 let rec find_parent_in blocks uuid =
   match blocks with
