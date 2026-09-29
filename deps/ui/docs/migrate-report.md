@@ -1524,6 +1524,18 @@ the correctness batch; each fixes the findings of its own report:
    .block-control-wrap, .bullet-container, .ls-properties-area,
    .ls-page-title-actions, .lsp-hook-ui-slot")`) and both title-edit
   handlers require `not interactive`.
+- **Unlinked section gates on an exists check, not loaded refs**
+  (`outliner_ops.ml`, `model.ml`, `page.ml`): cljs renders
+  `.unlinked-references` whenever the `:block-unlinked-ref-exists`
+  resource is true — independent of fold state, since opening is what
+  triggers the refs fetch. Our section gated on `unlinked_refs`
+  non-empty while the fetch was gated on `unlinked_open`, deadlocking
+  the collapsed header out of the DOM
+  (`unlinked-reference-filter-and-breadcrumb` e2e). New
+  `fetch_unlinked_exists` hits `get-render-snapshots` with the
+  `block-unlinked-ref-exists` key on page load/refresh into a new
+  `Model.unlinked_exists` field; `fetch_unlinked_refs` stays gated on
+  `unlinked_open` (it scans every block/title datom).
 - **Property-area refresh preserves nodes** (`properties_area.ml`):
   `render_page_area` builds the candidate DOM detached and swaps children
   only when `innerHTML` differs (`replace_if_changed`) — clearing and
