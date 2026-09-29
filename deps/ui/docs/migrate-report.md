@@ -1621,3 +1621,35 @@ list. `Cmdk_state.refresh ?clear` therefore skips the synchronous
 `apply_results` entirely on the debounced input path (`~clear:false`),
 leaving prior groups rendered until the async response replaces them;
 every other caller uses the default `~clear:true`.
+
+## Ac popup edge cases (parity: `devin/lui-parity2`)
+
+- **`menu-link` class order is dynamic-first**: cljs builds the class
+  list with `(when chosen? "chosen")` first, so a chosen row is
+  `"chosen flex justify-between menu-link"` and a non-chosen row keeps
+  the leading join space (`" flex justify-between menu-link"`).
+- **Keep-visible scrolling** (`handler/ui.cljs`
+  `auto-complete-keep-visible-scroll-top`): arrow-key navigation
+  scrolls `#ui__ac-inner` only enough to reveal the row (no padding);
+  on a group-start row the `.ui__ac-group-name` heading above it counts
+  toward the row's top.
+- **Popup collision flip** (base-ui `avoidCollisions`): an ac popup
+  mounts below the caret; when its rendered height exceeds the space
+  below and more room exists above, it flips to `data-side="top"`,
+  anchored so its bottom edge sits just above the caret. To measure
+  the real rendered height the `--available-height` clamp (propagated
+  to `#ui__ac-inner`'s own `max-height`) is lifted briefly; the
+  list's own CSS cap still applies (`min(avail-60, 460px)` flipped for
+  commands, `min(avail-20, 480px)` below / for search popups).
+  `caret_popup_pos` therefore also returns the caret line top as the
+  flip anchor.
+- **Context-menu icon/emoji picker is a `Properties_state` overlay**:
+  `Icon_picker.open_picker_with_opts` pushes a body-level overlay on
+  the `overlays` stack (not a `.ui__dropdown-menu-sub-content`); the
+  returned root el is tracked in `cm_picker_el` and removed via
+  `Properties_state.remove_overlay_el` on every close path
+  (hover-away, Escape, outside click, submenu switch).
+- **Hover highlight mirrors base-ui `data-highlighted`**: moving over
+  a `[role=menuitem]` inside `.ls-context-menu-content` /
+  `.ui__dropdown-menu-sub-content` sets `data-highlighted` (→
+  `bg-muted`), cleared on the previously hovered row.
