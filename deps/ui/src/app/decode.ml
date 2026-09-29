@@ -413,6 +413,7 @@ let toast_of_wire (w : Wire.t) : Model.toast option =
             { Model.toast_id = 0
             ; toast_text = text
             ; toast_kind = Option.value (text_of ty) ~default:"info"
+            ; toast_key = None
             }
       | None -> None)
   | _ -> None

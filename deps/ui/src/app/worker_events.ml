@@ -107,10 +107,33 @@ let init () =
             | None -> "info")
         | None -> "info"
       in
+      let key =
+        match Js.Json.decodeObject d with
+        | Some o -> (
+            match Js.Dict.get o "key" with
+            | Some v -> Js.Json.decodeString v
+            | None -> None)
+        | None -> None
+      in
       Runtime.send
         (Action.Toast_push
-           { Model.toast_id = 0; toast_text = text; toast_kind = kind });
+           { Model.toast_id = 0
+           ; toast_text = text
+           ; toast_kind = kind
+           ; toast_key = key
+           });
       Runtime.flush ());
-  Platform.on_document_event "ls:toast-close" (fun _ ->
-      Runtime.send Action.Toasts_clear;
-      Runtime.flush ())
+  Platform.on_document_event "ls:toast-close" (fun ev ->
+      (* sdk close_msg targets one notification by its show_msg key;
+         a missing key clears nothing — Toasts_clear stays internal *)
+      match Js.Json.decodeObject (detail_json ev) with
+      | Some o -> (
+          match Js.Dict.get o "key" with
+          | Some v -> (
+              match Js.Json.decodeString v with
+              | Some key ->
+                  Runtime.send (Action.Toast_dismiss_key key);
+                  Runtime.flush ()
+              | None -> ())
+          | None -> ())
+      | None -> ())

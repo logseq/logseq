@@ -260,8 +260,12 @@ let () =
     ignore
       (Runtime.invoke1 "thread-api/get-graph-uuid" (Wire.String repo)
        |> Js.Promise.then_ (fun w ->
+              (* cljs graph_tab/set-tab-graph! — sessionStorage keys so a
+                 reload reopens this tab's graph *)
+              Platform.session_storage_set "ls-tab-repo" repo;
               (match Wire.as_uuid w with
                | Some uuid ->
+                   Platform.session_storage_set "ls-tab-graph-id" uuid;
                    Runtime.current_graph_uuid := Some uuid;
                    Graphs_meta.remember_uuid repo uuid;
                    Runtime.sync_hash_graph_id ()

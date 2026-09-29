@@ -794,7 +794,10 @@ let ref_item (b : Model.block) : t =
 
 let fetch_unlinked (m : Model.t) =
   match m.route_page with
-  | Some p -> Router.fetch_unlinked p
+  | Some p ->
+      Router.fetch_unlinked
+        ~stale:(fun () -> !Runtime.current_route <> Some m.route)
+        p
   | None -> ()
 
 let references_view (refs : Model.block list) : t =

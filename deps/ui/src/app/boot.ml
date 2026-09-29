@@ -71,17 +71,27 @@ let apply_storage_env () =
     | Some el -> Browser_ui.add_class el "ls-wide-mode"
     | None -> ()
 
-(* pick the graph to open: the repo a deep link's ?graph-id= resolves to
-   (via the uuid persisted in ls-graphs-metadata), else the first existing
-   repo, else create Demo. *)
+(* pick the graph to open (cljs graph/resolve-startup-repo): the repo a
+   deep link's ?graph-id= resolves to (via ls-graphs-metadata), else the
+   repo this tab last had open (sessionStorage ls-tab-repo /
+   ls-tab-graph-id), else the first existing repo, else create Demo. *)
 let pick_graph repos =
-  let resolved =
+  let url_target =
     match Platform.hash_query_param "graph-id" with
     | Some gid -> Graphs_meta.repo_of_uuid gid
     | None -> None
   in
-  match resolved with
-  | Some repo when List.mem repo repos -> Js.Promise.resolve repo
+  let tab_target =
+    match Platform.session_storage_get "ls-tab-repo" with
+    | Some repo when repo <> "" && List.mem repo repos -> Some repo
+    | _ -> (
+        match Platform.session_storage_get "ls-tab-graph-id" with
+        | Some gid when gid <> "" -> Graphs_meta.repo_of_uuid gid
+        | _ -> None)
+  in
+  match url_target, tab_target with
+  | Some repo, _ when List.mem repo repos -> Js.Promise.resolve repo
+  | _, Some repo when List.mem repo repos -> Js.Promise.resolve repo
   | _ -> (
       match repos with
       | first :: _ -> Js.Promise.resolve first

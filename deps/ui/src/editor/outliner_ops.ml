@@ -538,8 +538,9 @@ let fetch_zoom_blocks repo uuid : Wire.t Js.Promise.t =
          | _ -> Js.Promise.resolve (Wire.List []))
 
 (* refetch unlinked refs for the current page — a block-title edit can
-   create or remove a text mention *)
-let fetch_unlinked_refs (p : Model.page) =
+   create or remove a text mention; the send is guarded so an in-flight
+   fetch can't overwrite a page the user navigated to *)
+let fetch_unlinked_refs ~stale:(is_stale : unit -> bool) (p : Model.page) =
   match !Runtime.current_repo, p.Model.page_db_id with
   | Some repo, Some id ->
       ignore
@@ -547,8 +548,9 @@ let fetch_unlinked_refs (p : Model.page) =
            (Wire.Int id)
          |> Js.Promise.then_ (fun w ->
                 Js.Promise.resolve
-                  (Runtime.send
-                     (Action.Unlinked_loaded (Decode.blocks_of_wire w)))))
+                  (if not (is_stale ()) then
+                     Runtime.send
+                       (Action.Unlinked_loaded (Decode.blocks_of_wire w)))))
   | _ -> ()
 
 (* Refresh calls pile up during rapid editing (each op's
@@ -566,7 +568,9 @@ let refresh_page () : unit Js.Promise.t =
   match (!Runtime.current_repo, !Runtime.current_page) with
   | Some repo, Some page -> (
       incr Runtime.load_gen;
-      fetch_unlinked_refs page;
+      fetch_unlinked_refs
+        ~stale:(fun () -> !Runtime.current_route <> route_at_start)
+        page;
       let blocks_p =
         match !Runtime.current_route, page.Model.page_uuid with
         | Some (Model.Block_zoom _), Some u -> fetch_zoom_blocks repo u

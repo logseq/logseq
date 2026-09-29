@@ -106,6 +106,7 @@ type toast =
   { toast_id : int
   ; toast_text : string
   ; toast_kind : string (* "success" | "error" | "warning" | ... *)
+  ; toast_key : string option (* sdk show_msg key — close_msg targets it *)
   }
 
 type t =

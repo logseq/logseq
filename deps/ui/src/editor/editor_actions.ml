@@ -627,21 +627,26 @@ let delete_selection () =
        | Some pu -> (
            match S.find pu with
            | Some b ->
-               S.set_silent (fun st ->
-                   { st with
-                     S.editing =
-                       Some
-                         { uuid = pu
-                         ; buffer = String.trim b.Model.block_title
-                         ; scope = "main"
-                         ; base = String.trim b.Model.block_title
-                         }
-                   ; selected = S.String_set.empty
-                   ; anchor = None
-                   });
-               with_focus_after pu
-                 (String.length b.Model.block_title)
-                 (Ops.apply_and_refresh [ Ops.delete_blocks uuids ])
+               (* stored titles are id-ref form — go through the same
+                  title_for_edit rewrite as enter_edit *)
+               ignore
+                 (Ops.title_for_edit (String.trim b.Model.block_title)
+                  |> Js.Promise.then_ (fun buffer ->
+                         S.set_silent (fun st ->
+                             { st with
+                               S.editing =
+                                 Some
+                                   { uuid = pu; buffer; scope = "main"
+                                   ; base = buffer
+                                   }
+                             ; selected = S.String_set.empty
+                             ; anchor = None
+                             });
+                         with_focus_after pu
+                           (String.length buffer)
+                           (Ops.apply_and_refresh
+                              [ Ops.delete_blocks uuids ]);
+                         Js.Promise.resolve ()))
            | None ->
                ignore (Ops.apply_and_refresh [ Ops.delete_blocks uuids ]))
        | None ->
@@ -854,7 +859,7 @@ let paste_blocks ev =
 let toggle_collapse uuid =
   match S.find uuid with
   | Some b when S.children_of b <> [] ->
-      if b.Model.block_default_collapsed && not (S.is_collapsed uuid) then
+      if b.Model.block_default_collapsed && not (S.is_expanded uuid) then
         (* view-default collapse (page child on a non-Library page): a
            click expands it locally without persisting — cljs
            temp-collapsed? takes precedence over the default *)

@@ -50,6 +50,18 @@ let local_storage_set k v =
 let local_storage_remove k =
   match local_storage_obj with Some s -> ls_remove_item s k | None -> ()
 
+(* sessionStorage — cljs graph_tab.cljs persists the per-tab graph so a
+   reload restores it; absent outside the browser *)
+external session_storage_obj : Js.Json.t option = "sessionStorage"
+
+let session_storage_get k =
+  match session_storage_obj with
+  | Some s -> ls_get_item s k
+  | None -> None
+
+let session_storage_set k v =
+  match session_storage_obj with Some s -> ls_set_item s k v | None -> ()
+
 external document_element : Js.Json.t = "document.documentElement"
 external document_body : Js.Json.t = "document.body"
 
