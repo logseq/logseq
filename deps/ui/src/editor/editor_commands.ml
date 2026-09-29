@@ -403,44 +403,7 @@ let click_guard target =
       | Some _ -> true
       | None -> close_popup p; false)
 
-(* ---------- code-pre (contenteditable CodeMirror surface) ---------- *)
 
-let update_calc_results el =
-  match D.closest_sel ".extensions__code" (Some el) with
-  | Some wrap -> (
-      match D.el_query wrap ".extensions__code-calc-results" with
-      | Some res ->
-          V.clear res;
-          List.iter
-            (fun line ->
-              D.el_append_child res
-                (V.h ~cls:"extensions__code-calc-output-line" ~text:line
-                   ()))
-            (Render_calc.results (V.el_text_content el))
-      | None -> ())
-  | None -> ()
-
-let code_pre_input el =
-  match D.el_get_attr el "data-code-uuid" with
-  | Some uuid ->
-      let v = V.el_text_content el in
-      A.sync_buffer uuid v;
-      Ops.schedule_save uuid v;
-      update_calc_results el
-  | None -> ()
-
-let code_pre_key el ev =
-  match D.el_get_attr el "data-code-uuid" with
-  | None -> ()
-  | Some uuid -> (
-      match D.ev_key ev with
-      | "Escape" ->
-          D.prevent_default ev;
-          A.exit_edit ~select:true
-      | "Enter" when D.ev_shift ev ->
-          D.prevent_default ev;
-          A.insert_sibling_after uuid
-      | _ -> ())
 
 (* ---------- command dispatch ---------- *)
 
@@ -713,5 +676,6 @@ let installed = ref false
 let install () =
   if not !installed then begin
     installed := true;
-    D.document_add_listener "ls:editor-command" on_command true
+    D.document_add_listener "ls:editor-command" on_command true;
+    Code_mirror.install ()
   end

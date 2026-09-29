@@ -110,22 +110,100 @@ let src_block s =
    render the outer .custom-query-results + .ls-query-setting shell;
    the query source lives on the hidden logseq.property/query value
    block and the queries area fills in real results later. *)
-let code_block ?(extra = []) lang code =
-  let trimmed = String.trim code in
-  D.el ~tag:"div" ~style_class:"extensions__code"
-    ([ D.el ~tag:"div" ~style_class:"CodeMirror"
-         ~attrs:[ ("data-lang", lang) ]
-         [ (if trimmed = "" then
-              (* empty line needs a br to have a box (CodeMirror renders
-                 one inside an empty CodeMirror-line) *)
-              D.el ~tag:"pre" ~style_class:"CodeMirror-line"
-                [ D.el ~tag:"br" [] ]
-            else
-              D.el ~tag:"pre" ~style_class:"CodeMirror-line"
-                ~text:trimmed [])
-         ]
-     ]
-    @ extra)
+(* calc result lines for display-type=code + code/lang=calc — cljs
+   extensions/calc.cljc results (.extensions__code-calc > per-line
+   .extensions__code-calc-output-line), mounted inside .code-editor *)
+let calc_results_el code =
+  match Render_calc.results code with
+  | [] -> None
+  | lines ->
+      Some
+        (D.el ~tag:"div" ~style_class:"extensions__code-calc pr-2"
+           (List.map
+              (fun line ->
+                D.el ~tag:"div"
+                  ~style_class:"extensions__code-calc-output-line"
+                  ~text:line [])
+              lines))
+
+(* cljs components/block.cljs src-cp actions bar — .code-block-actions
+   with a language picker button + copy button. Handlers live in
+   Code_mirror (open_lang_picker/copy_button). *)
+let code_block_actions ~self lang =
+  D.el ~key:"cba" ~tag:"div" ~style_class:"code-block-actions"
+    [ D.el ~key:"sl" ~tag:"button"
+        ~style_class:"select-language"
+        ~attrs:[ ("type", "button"); ("blockid", self) ]
+        ~events:"click"
+        ~on_dom_event:(fun name _ ->
+          if name = "click" then Code_mirror.open_lang_picker self)
+        [ D.el ~key:"t" ~tag:"span"
+            ~text:
+              (if lang <> "" then lang
+               else I18n.t "editor/code-language-placeholder")
+            []
+        ; Icons.icon ~size:14. "chevron-down"
+        ]
+    ; D.el ~key:"cp" ~tag:"button"
+        ~attrs:[ ("type", "button") ]
+        ~events:"click"
+        ~on_dom_event:(fun name _ ->
+          if name = "click" then Code_mirror.copy_button self)
+        [ Icons.icon ~size:14. "copy"
+        ; D.el ~key:"l" ~tag:"span" ~text:(I18n.t "ui/copy") []
+        ]
+    ]
+
+(* cljs src-cp + extensions/code.cljs editor DOM:
+   .ui-fenced-code-editor > .ls-code-editor-wrap > (.code-block-actions +
+   .extensions__code > .extensions__code-lang? + .code-editor > textarea
+   + calc-results?). Code_mirror mounts the real CodeMirror on the
+   textarea via the document mutation scan (vendored codemirror@5) —
+   DOM structure matches cljs so both display and edit look identical.
+   ~extra appends inside .extensions__code (the src-eval .results div). *)
+let code_block ?(self = "") ?(extra = []) lang code =
+  let lang =
+    (* cljs src-cp aliases the fence's stored lang to clojure *)
+    match lang with
+    | "edn" | "clj" | "cljc" | "cljs" | "clojurescript" -> "clojure"
+    | l -> l
+  in
+  let calc = lang = "calc" in
+  D.el ~key:("fcb-" ^ self) ~tag:"div"
+    ~style_class:"ui-fenced-code-editor flex w-full"
+    [ D.el ~key:"wrap" ~tag:"div" ~style_class:"ls-code-editor-wrap"
+        [ code_block_actions ~self lang
+        ; D.el ~key:"ec" ~tag:"div"
+            ~style_class:"extensions__code flex flex-1"
+            ~attrs:(if calc then [ ("data-lang", "calc") ] else [])
+            ([ (if lang <> "" && not calc then
+                 D.el ~key:"lang" ~tag:"div"
+                   ~style_class:"extensions__code-lang"
+                   ~text:(String.lowercase_ascii lang) []
+               else Logseq_dom.fragment [])
+             ; D.el ~key:"ce" ~tag:"div"
+                 ~style_class:"code-editor flex flex-1 flex-row w-full"
+                 [ D.el ~key:"ta" ~tag:"textarea"
+                     ~id:("edit-block-" ^ self)
+                     ~attrs:
+                       (if lang <> "" then [ ("data-lang", lang) ]
+                        else [])
+                     ~text:code []
+                 ; (if not calc then Logseq_dom.fragment []
+                    else
+                      match calc_results_el code with
+                      | Some el -> el
+                      | None ->
+                          (* cljs mounts .extensions__code-calc for calc
+                             blocks even when empty —
+                             Code_mirror.update_calc fills it on change *)
+                          D.el ~key:"calc" ~tag:"div"
+                            ~style_class:"extensions__code-calc pr-2" [])
+                 ]
+             ]
+            @ extra)
+        ]
+    ]
 
 let has_sub hay needle =
   let n = String.length hay and m = String.length needle in
@@ -225,20 +303,6 @@ let html_body s =
     Some (String.trim (String.sub t 7 (String.length t - 7)))
   else None
 
-(* calc result lines for display-type=code + code/lang=calc *)
-let calc_results_el code =
-  match Render_calc.results code with
-  | [] -> None
-  | lines ->
-      Some
-        (D.el ~tag:"div" ~style_class:"extensions__code-calc-results"
-           (List.map
-              (fun line ->
-                D.el ~tag:"div"
-                  ~style_class:"extensions__code-calc-output-line"
-                  ~text:line [])
-              lines))
-
 (* self: uuid of the block whose title this is — seeds the ref chain
    (cljs :ref-set) that suppresses self/cycle references. is_query:
    query blocks render the .custom-query-results shell instead of
@@ -256,7 +320,7 @@ let title ?heading ?(is_query = false) ?(self = "")
               [ content ?heading ~self body ] ]
       | None -> (
           match src_block s with
-          | Some (lang, code) -> [ code_block lang code ]
+          | Some (lang, code) -> [ code_block ~self lang code ]
           | None -> (
               if is_whole_query s || is_query then [ wrap ""; query_shell ]
               else
@@ -278,15 +342,14 @@ let title_block ?(self = "") ?resolved (b : Model.block) : t list =
   match b.Model.block_display_type with
   | Some "code" ->
       let lang = Option.value b.Model.block_code_lang ~default:"" in
-      code_block lang s
-      :: (match calc_results_el s with Some el -> [ el ] | None -> [])
+      [ code_block ~self lang s ]
   | Some "math" ->
       [ D.el ~tag:"div" ~style_class:"math-block"
           [ Render_inline.katex_el s ] ]
   | _ -> (
       match src_eval_parts s with
       | Some (lang, code) ->
-          [ code_block lang code
+          [ code_block ~self lang code
               ~extra:
                 [ src_eval_el ~code
                     ~uuid:(Option.value b.Model.block_uuid ~default:"") ] ]
