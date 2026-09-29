@@ -1640,8 +1640,8 @@ Sizes:
 
 | build | main.js bytes | gzip |
 |---|---:|---:|
-| dev | 3,171,646 | 605,427 |
-| production | 2,010,056 | 471,768 |
+| dev | 3,113,199 | 599,115 |
+| production | 1,977,328 | 467,023 |
 | `js/icon-data.js` (both modes) | 1,778,026 | 331,469 |
 | `js/emoji-data.js` (both modes) | 432,757 | 83,099 |
 
@@ -1704,8 +1704,23 @@ The `@emoji-mart/data` native set followed the same pattern as
 the script is absent). That removed another ~430KB of real data from
 main.js.
 
-Remaining bundle weight is `icon_picker_names.js` (~244KB),
-`camlinternalFormat` (~215KB, the Printf/sprintf runtime) plus
+### Printf → mini interpreter (`src/core/sprintf.ml`)
+
+`camlinternalFormat.js` (~215KB emitted) is the stdlib printf/format
+interpreter pulled in by `melange/printf.js`; dep modules (lui,
+melange-edn, melange-transit) and stdlib `printexc.js` all import it,
+so it could not be shaken. `src/core/sprintf.ml` is a ~300-line port
+of `make_printf`'s format-GADT walk covering the directives used here
+(%s %S %c %C %d %i %u %x %X %o %b %f %e %g %F %Ld %% plus literal and
+argument padding/precision; semantics byte-verified against Stdlib
+Printf across the codebase's format strings). `vite.config.mjs`
+aliases every `printf.js` specifier to `shims/printf.js`, a re-export
+of the emitted `src/core/sprintf.js`, so all callers — ours, stdlib
+printexc, and deps — use the mini interpreter and camlinternalFormat
+drops out entirely. Exotic directives (%%_ignored, %a/%t/%r/%{ %%(
+scanf sets) raise `Invalid_argument` at the first sprintf call.
+
+Remaining bundle weight is `icon_picker_names.js` (~244KB) plus
 melange runtime and npm deps (transit-js, dnd-kit, lui); the build is
 intentionally a single IIFE (`codeSplitting:false`).
 

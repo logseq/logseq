@@ -37,6 +37,18 @@ function cliMode() {
 export default defineConfig(() => {
   const production = cliMode() === "production";
   return {
+    resolve: {
+      alias: [
+        {
+          // Stdlib.Printf -> mini interpreter (shims/printf.js), so the
+          // full camlinternalFormat runtime stays out of the bundle.
+          // Matches "melange/printf.js" and relative "./printf.js"
+          // specifiers; nothing else in the tree is named printf.js.
+          find: /^(.*\/)?printf\.js$/,
+          replacement: resolve(import.meta.dirname, "shims/printf.js"),
+        },
+      ],
+    },
     define: {
       "globalThis.logseq_revision": JSON.stringify(revision),
       // cljs config/dev? = dev-release? || goog.DEBUG — true in dev
