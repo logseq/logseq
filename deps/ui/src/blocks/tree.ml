@@ -292,36 +292,47 @@ let content_or_editor ~editable uuid scope (b : Model.block) : t =
    the title itself. -- *)
 
 let tags_el uuid (b : Model.block) : t =
-  let triples =
-    try List.combine b.block_tags
-           (List.combine b.block_tag_uuids b.block_tag_idents)
+  let quads =
+    try List.map2
+          (fun (tag, (tuuid, ident)) dbid -> (tag, tuuid, ident, dbid))
+          (List.combine b.block_tags
+             (List.combine b.block_tag_uuids b.block_tag_idents))
+          b.block_tag_db_ids
     with Invalid_argument _ ->
-        List.map (fun t -> (t, ("", ""))) b.block_tags
+        List.map (fun t -> (t, "", "", 0)) b.block_tags
   in
   let visible =
     List.filter_map
-      (fun (tag, (tuuid, ident)) ->
+      (fun (tag, tuuid, ident, dbid) ->
         (* cljs inline-tag? drops tags that already appear inline in the
            raw title, as "#name" or "#[[uuid]]" *)
         let inline =
           I18n.contains b.block_title ("#" ^ tag)
           || (tuuid <> "" && I18n.contains b.block_title tuuid)
         in
-        if inline then None else Some (tag, ident))
-      triples
+        if inline then None else Some (tag, tuuid, ident, dbid))
+      quads
   in
   match visible with
   | [] -> Logseq_dom.nothing
   | tags ->
       dom ~key:("tags-" ^ uuid) ~style_class:"block-tags gap-1"
         (List.mapi
-           (fun i (tag, ident) ->
+           (fun i (tag, tuuid, ident, dbid) ->
              (* cljs block-tag: .block-tag > .flex.items-center >
                 a.hash-symbol("#") + a.tag[data-ref] *)
+             let priv = private_tag_ident ident in
              dom ~key:("tag-" ^ uuid ^ "-" ^ string_of_int i)
                ~style_class:
-                 ("block-tag"
-                 ^ if private_tag_ident ident then " private-tag" else "")
+                 ("block-tag" ^ if priv then " private-tag" else "")
+               (* cljs keeps the tag entity in the chip's click closure;
+                  the delegated context-menu handler reads it off data
+                  attrs instead *)
+               ~attrs:
+                 [ ("data-tag-uuid", tuuid)
+                 ; ("data-tag-id", string_of_int dbid)
+                 ; ("data-tag-title", tag)
+                 ; ("data-tag-priv", if priv then "true" else "false") ]
                [ dom ~key:("tc-" ^ uuid ^ "-" ^ string_of_int i)
                    ~style_class:"flex items-center"
                    [ dom ~key:("th-" ^ uuid ^ "-" ^ string_of_int i) ~tag:"a"

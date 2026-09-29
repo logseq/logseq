@@ -25,6 +25,7 @@ type block =
   ; block_code_lang : string option (* logseq.property.code/lang *)
   ; block_tag_uuids : string list (* aligned with block_tags *)
   ; block_tag_idents : string list (* resolved tag idents, same filtering *)
+  ; block_tag_db_ids : int list (* aligned with block_tags — chip ctx menu *)
   ; block_page_name : string option (* containing page, for ref rows *)
   ; block_reactions : (string * int) list (* emoji-id, count *)
   ; block_is_comments_area : bool
@@ -76,6 +77,8 @@ type page =
     page_add_object : bool
   ; page_tags : string list
   ; page_tag_idents : string list (* aligned with page_tags *)
+  ; page_tag_uuids : string list (* aligned — chip ctx menu *)
+  ; page_tag_db_ids : int list (* aligned with page_tags *)
   ; page_blocks : block list
   ; page_linked_refs : block list (* linked references, for journal items *)
   ; page_parents : block list (* block-zoom breadcrumb chain, root first *)

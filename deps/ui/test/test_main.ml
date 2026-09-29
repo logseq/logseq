@@ -294,10 +294,11 @@ let test_update_popups () =
     (m5.page_menu = Some (3., 4., false) && m5.appearance = None);
   let m6 =
     Update.update m5
-      (Action.Confirm_set (Some (Model.Confirm_delete_page "u")))
+      (Action.Confirm_set
+         (Some (Model.Confirm_delete_page ("u", "T", false))))
   in
   check "confirm clears both popups"
-    (m6.confirm = Some (Model.Confirm_delete_page "u")
+    (m6.confirm = Some (Model.Confirm_delete_page ("u", "T", false))
     && m6.page_menu = None && m6.appearance = None);
   let m7 = Update.update m6 Action.Dismiss_all in
   check "dismiss_all clears confirm too" (m7.confirm = None)
@@ -2994,7 +2995,7 @@ let test_update3 () =
   (* Navigate_to resets confirm alongside other page-local state *)
   let dirty =
     { Model.initial with
-      Model.confirm = Some (Model.Confirm_delete_page "u") }
+      Model.confirm = Some (Model.Confirm_delete_page ("u", "T", false)) }
   in
   check "navigate clears confirm"
     ((Update.update dirty (Action.Navigate_to Model.All_pages))

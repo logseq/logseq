@@ -913,6 +913,37 @@ let handle_contextmenu st (ev : Dom_ext.event) =
   match Dom_ext.target ev with
   | None -> ()
   | Some el -> (
+      match Dom_ext.closest el ".block-tag[data-tag-uuid]" with
+      | Some chip -> (
+          (* cljs block-tag popup: its own menu, not the block/page menu *)
+          match
+            ( Dom_ext.get_attribute chip "data-tag-uuid"
+            , Option.bind
+                (Dom_ext.get_attribute chip "data-tag-id")
+                int_of_string_opt
+            , Dom_ext.get_attribute chip "data-tag-priv"
+            , Dom_ext.closest el
+                ".bullet-container[blockid], .ls-block[blockid]" )
+          with
+          | Some tuuid, Some tid, priv, Some blk
+            when tuuid <> "" -> (
+              match Dom_ext.get_attribute blk "blockid" with
+              | Some bid ->
+                  Dom_ext.prevent_default ev;
+                  Dom_ext.stop_propagation ev;
+                  close_cm_picker ();
+                  let title =
+                    match Dom_ext.get_attribute chip "data-tag-title" with
+                    | Some r -> r
+                    | None -> tuuid
+                  in
+                  S.open_cm_tag st ~x:(Dom_ext.client_x ev)
+                    ~y:(Dom_ext.client_y ev) ~block_id:bid
+                    ~tag_uuid:tuuid ~tag_id:tid ~tag_title:title
+                    ~priv:(priv = Some "true")
+              | None -> ())
+          | _ -> ())
+      | None ->
       if Dom_ext.closest el ".ls-page-title" <> None then ()
       else
       match

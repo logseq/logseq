@@ -117,11 +117,14 @@ and cm_sub =
 type cm =
   { cx : float
   ; cy : float
-  ; block_id : string
+  ; block_id : string (* owner block/page entity of the menu target *)
   ; multi : bool
   ; entries : cm_item list
   ; sub_open : int (* index into entries, -1 = none *)
   ; sub_xy : float * float
+  ; tag : (string * int * bool) option
+    (* Some (uuid, db/id, private?) => block-tag chip menu, not the
+       block context menu *)
   }
 
 type pv =
@@ -1368,7 +1371,32 @@ let open_cm t ~x ~y ~block_id ~multi =
   set_cm t
     (Some
        { cx = x; cy = y; block_id; multi; entries; sub_open = -1
-       ; sub_xy = (0., 0.) })
+       ; sub_xy = (0., 0.); tag = None })
+;;
+
+(* cljs block-tag popup (block.cljs): Go to #tag (mod+click) / Open in
+   sidebar (shift+click) / Remove tag — the last hidden for private
+   class idents *)
+let tag_entries ~title ~priv =
+  [ Ci_item
+      ( "Go to #" ^ title
+      , Some ("mod+click", [ "\u{2318}"; "Click" ])
+      , "go-to-tag" )
+  ; Ci_item
+      ( U.t "sidebar.right/open"
+      , Some ("shift+click", [ "\u{21e7}"; "Click" ])
+      , "open-tag-sidebar" ) ]
+  @ if priv then []
+    else [ Ci_item (U.t "block/remove-tag", None, "remove-tag") ]
+
+let open_cm_tag t ~x ~y ~block_id ~tag_uuid ~tag_id ~tag_title ~priv =
+  close_ac t;
+  set_cm t
+    (Some
+       { cx = x; cy = y; block_id; multi = false
+       ; entries = tag_entries ~title:tag_title ~priv
+       ; sub_open = -1; sub_xy = (0., 0.)
+       ; tag = Some (tag_uuid, tag_id, priv) })
 ;;
 
 let open_cm_sub t ~index ~x ~y =
@@ -1397,7 +1425,26 @@ let cm_sub_at t index =
 let run_cm_item t label =
   match (get t).cm with
   | Some cm ->
-      emit_cmd label [ "block", Js.Json.string cm.block_id ];
+      (match cm.tag with
+       | Some (tuuid, tid, _) -> (
+           match label with
+           | "go-to-tag" ->
+               Platform.set_location_hash
+                 (Runtime.nav_hash ("#/page/" ^ tuuid))
+           | "open-tag-sidebar" ->
+               Platform.dispatch "ls:open-right-sidebar"
+                 (Js.Json.object_
+                    (Js.Dict.fromList
+                       [ ("uuid", Js.Json.string tuuid) ]))
+           | "remove-tag" ->
+               ignore
+                 (Outliner_ops.apply_and_refresh
+                    [ Outliner_ops.op "delete-property-value"
+                        [ Wire.Uuid cm.block_id
+                        ; Wire.Keyword "block/tags"
+                        ; Wire.Int tid ] ])
+           | _ -> ())
+       | None -> emit_cmd label [ "block", Js.Json.string cm.block_id ]);
       close_cm t
   | None -> ()
 ;;
