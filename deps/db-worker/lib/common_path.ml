@@ -119,6 +119,32 @@ let preserve_file_url_win_drive (scheme : string) (encoded_path : string) : stri
       encoded_path
   else encoded_path
 
+(* js/URL .pathname output is percent-encoded per the WHATWG path
+   percent-encode set: C0 controls, space, the reserved bytes
+   double-quote hash lt gt question backquote lbrace rbrace, DEL, and
+   every non-ASCII byte (UTF-8). '%' itself stays raw — js/URL preserves
+   even invalid escapes. *)
+let url_path_encode (s : string) : string =
+  let needs_encode c =
+    let b = Char.code c in
+    b <= 0x20 || b >= 0x7f
+    ||
+    match c with
+    | '"' | '#' | '<' | '>' | '?' | '`' | '{' | '}' -> true
+    | _ -> false
+  in
+  if not (String.exists needs_encode s) then s
+  else begin
+    let buf = Buffer.create (String.length s) in
+    String.iter
+      (fun c ->
+        if needs_encode c then
+          Buffer.add_string buf (Printf.sprintf "%%%02X" (Char.code c))
+        else Buffer.add_char buf c)
+      s;
+    Buffer.contents buf
+  end
+
 (* minimal js/URL for scheme://host/path forms *)
 type url_parts = { protocol : string; host : string; pathname : string }
 
@@ -175,6 +201,7 @@ let url_parse (s : string) : url_parts option =
       in
       (* js/URL normalizes empty path to "/" *)
       let pathname = if pathname = "" then "/" else pathname in
+      let pathname = url_path_encode pathname in
       (* js/URL lowercases the host *)
       Some { protocol = scheme; host = String.lowercase_ascii host; pathname }
 
