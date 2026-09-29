@@ -12,6 +12,7 @@ type confirm =
 
 type prompt =
   { title : string
+  ; desc : string (* optional subtitle (cljs pdf-password-input) *)
   ; on_submit : string -> unit (* handler closes via close_prompt *)
   }
 
@@ -152,8 +153,8 @@ let confirm () =
       c.on_confirm ()
   | None -> ()
 
-let prompt ~title ~on_submit () =
-  set (fun d -> { d with prompt = Some { title; on_submit } });
+let prompt ~title ?(desc = "") ~on_submit () =
+  set (fun d -> { d with prompt = Some { title; desc; on_submit } });
   touch "prompt"
 
 let submit_prompt v =

@@ -1,0 +1,743 @@
+(* pdf highlights overlay — cljs pdf-highlights +
+   pdf-highlight-area-selection + pdf-highlights-ctx-menu +
+   *-region. Imperative: layers live inside each page's textLayer div,
+   the ctx menu renders into .pp-holder. *)
+
+module D = Dom_ext
+module B = Browser_ui
+module U = Pdf_utils
+module S = Pdf_state
+module A = Pdf_assets
+
+let ( let* ) = U.( let* )
+
+type ctx =
+  { mk_hl : unit -> Model.hl option (* cljs highlight may be a thunk *)
+  ; sel : Js.Json.t option (* live Selection object *)
+  ; point : float * float (* clientX/Y *)
+  ; reset_fn : (unit -> unit) option
+  }
+
+type t =
+  { viewer : S.viewer
+  ; el : D.element (* .extensions__pdf-viewer (viewer.container) *)
+  ; holder : D.element (* .pp-holder *)
+  ; mutable ctx : ctx option
+  ; mutable ctx_el : D.element option
+  ; mutable ctx_doc_click : (D.event -> unit) option
+  ; (* area selection state (cljs pdf-highlight-area-selection refs) *)
+    mutable a_start_el : D.element option
+  ; mutable a_page_el : D.element option
+  ; mutable a_page_rect : D.rect option
+  ; mutable a_cnt_rect : D.rect option
+  ; mutable a_start_xy : (float * float) option
+  ; mutable a_start : (float * float) option
+  ; mutable a_end : (float * float) option
+  ; a_sel_el : D.element (* .extensions__pdf-area-selection *)
+  ; mutable a_shadow : D.element option
+  ; mutable a_listening : bool
+  ; mutable win_resize : (D.event -> unit) option
+  }
+
+let cur : t option ref = ref None
+
+let cnt_el t = U.container_el t.viewer
+
+let colors = [ "yellow"; "red"; "green"; "blue"; "purple" ]
+
+let menu_li cls action text =
+  let li = U.create_el "li" in
+  U.set_class li cls;
+  U.set_attr li "data-action" action;
+  U.set_text li text;
+  li
+
+external dt_set_data : D.event -> string -> string -> unit = "setData"
+  [@@mel.send] [@@mel.scope "dataTransfer"]
+
+let rec clear_ctx_menu (t : t) =
+  let reset =
+    match t.ctx with
+    | Some c -> c.reset_fn
+    | None -> None
+  in
+  t.ctx <- None;
+  (match t.ctx_el with
+   | Some e -> U.remove_el e
+   | None -> ());
+  t.ctx_el <- None;
+  (match t.ctx_doc_click with
+   | Some f ->
+       U.off_document "click" f false;
+       t.ctx_doc_click <- None
+   | None -> ());
+  match reset with
+  | Some f -> f ()
+  | None -> ()
+
+(* cljs pdf-highlights-ctx-menu — ul.extensions__pdf-hls-ctx-menu *)
+and render_ctx_menu (t : t) (c : ctx) : unit =
+  clear_ctx_menu t;
+  t.ctx <- Some c;
+  let hl_opt = c.mk_hl () in
+  let is_new =
+    match hl_opt with
+    | Some hl -> hl.hl_id = None
+    | None -> false
+  in
+  let area =
+    match hl_opt with
+    | Some hl -> hl.hl_image <> None
+    | None -> false
+  in
+  if !S.highlight_mode && is_new then
+    (* cljs new-&-highlight-mode: wait for the selection to clear, then
+       apply the last color *)
+    ignore
+      (B.set_timeout
+         (fun () -> action_fn t c ~action:!S.last_color ~clear:true)
+         300)
+  else (
+    let show =
+      match c.sel with
+      | None -> true
+      | Some _ -> S.auto_open_ctx () || U.active_keystroke () = Some "Alt"
+    in
+    let cnt = cnt_el t in
+    let x, y = c.point in
+    let ul = U.create_el "ul" in
+    U.set_class ul "extensions__pdf-hls-ctx-menu";
+    U.style_set ul "top"
+      (Printf.sprintf "%gpx" (y +. D.scroll_top cnt));
+    U.style_set ul "left"
+      (Printf.sprintf "%gpx" (x +. U.scroll_left cnt));
+    U.style_set ul "visibility" (if show then "visible" else "hidden");
+    let li_colors = U.create_el "li" in
+    U.set_class li_colors "item-colors";
+    List.iter
+      (fun cl ->
+        let a = U.create_el "a" in
+        U.set_attr a "data-color" cl;
+        U.set_attr a "data-action" cl;
+        U.set_text a cl;
+        U.append_el li_colors a)
+      colors;
+    U.append_el ul li_colors;
+    if not is_new then
+      U.append_el ul (menu_li "item" "ref" (I18n.t "pdf/copy-ref"));
+    if not area then
+      U.append_el ul (menu_li "item" "copy" (I18n.t "pdf/copy-text"));
+    if not is_new then (
+      U.append_el ul (menu_li "item" "link" (I18n.t "pdf/linked-ref"));
+      U.append_el ul (menu_li "item" "del" (I18n.t "ui/delete")));
+    U.on ul "click" (fun e ->
+        D.stop_propagation e;
+        match D.target e with
+        | Some target -> (
+            match D.get_attribute target "data-action" with
+            | Some action -> action_fn t c ~action ~clear:true
+            | None -> ())
+        | None -> ());
+    U.append_el t.holder ul;
+    t.ctx_el <- Some ul;
+    (* cljs util/calc-delta-rect-offset — clamp inside the scroller *)
+    (match D.closest ul ".extensions__pdf-viewer" with
+     | Some scroller ->
+         let dx, dy =
+           U.calc_delta_rect_offset (D.bounding_rect ul) scroller
+         in
+         if dx <> 0. || dy <> 0. then
+           U.style_set ul "transform"
+             (Printf.sprintf "translate3d(%gpx,%gpx,0)" dx dy)
+     | None -> ());
+    (* cljs: a document click clears the menu (deferred so the click
+       that opened it doesn't immediately close it) *)
+    let doc_click _ = clear_ctx_menu t in
+    t.ctx_doc_click <- Some doc_click;
+    ignore
+      (B.set_timeout
+         (fun () -> D.add_document_listener "click" doc_click false)
+         0))
+
+(* cljs action-fn! *)
+and action_fn (t : t) (c : ctx) ~(action : string) ~(clear : bool) :
+    unit =
+  (match c.mk_hl () with
+   | None -> ()
+   | Some hl -> (
+       match action with
+       | "ref" -> A.copy_hl_ref hl
+       | "copy" ->
+           let text =
+             if hl.hl_text <> "" then hl.hl_text
+             else
+               match c.sel with
+               | Some s ->
+                   U.fix_selection_text_breakline (U.sel_to_string s)
+               | None -> hl.hl_text
+           in
+           Platform.copy_to_clipboard text;
+           U.clear_all_selection ()
+       | "link" -> ignore (A.goto_block_ref hl)
+       | "del" -> (
+           del_hl t hl;
+           match hl.hl_id with
+           | Some _ -> A.del_ref_block hl
+           | None -> ())
+       | color when List.mem color colors -> (
+           match hl.hl_id with
+           | None ->
+               let hl =
+                 { hl with
+                   hl_id = Some (U.gen_uuid ())
+                 ; hl_color = Some color }
+               in
+               add_hl t hl;
+               U.clear_all_selection ();
+               A.copy_hl_ref hl
+           | Some _ -> upd_hl t { hl with hl_color = Some color });
+           S.last_color := color
+       | _ -> ()));
+  if clear then
+    ignore (B.set_timeout (fun () -> clear_ctx_menu t) 68)
+
+(* cljs add-hl! — conj + area highlights persist the cropped png *)
+and add_hl (t : t) (hl : Model.hl) : unit =
+  S.hls := hl :: !S.hls;
+  rerender_hl t hl;
+  match hl.hl_image with
+  | Some _ -> (
+      match U.scaled_to_vw_pos t.viewer hl with
+      | Some vw -> (
+          ignore
+            ((let* dbid =
+                A.persist_hl_area_image ~viewer:t.viewer ~new_hl:hl
+                  ~region:vw.hl_bounding
+              in
+              (match dbid with
+               | Some id ->
+                   let hl' = { hl with hl_image = Some id } in
+                   S.hls :=
+                     List.map
+                       (fun (h : Model.hl) ->
+                         if h.hl_id = hl'.hl_id then hl' else h)
+                       !S.hls;
+                   ignore (A.update_hl_block hl')
+               | None -> ());
+              Js.Promise.resolve ())
+             |> Js.Promise.catch (fun e ->
+                    Platform.console_error ("pdf hl persist failed", e);
+                    Js.Promise.resolve ())))
+      | None -> ())
+  | None -> ()
+
+(* cljs upd-hl! *)
+and upd_hl (t : t) (hl : Model.hl) : unit =
+  S.hls :=
+    List.map (fun (h : Model.hl) -> if h.hl_id = hl.hl_id then hl else h)
+      !S.hls;
+  rerender_hl t hl;
+  ignore (A.update_hl_block hl)
+
+(* cljs del-hl! *)
+and del_hl (t : t) (hl : Model.hl) : unit =
+  S.hls :=
+    List.filter
+      (fun (h : Model.hl) -> h.hl_id <> hl.hl_id)
+      !S.hls;
+  rerender_hl t hl
+
+(* re-render the page layer containing hl *)
+and rerender_hl (t : t) (hl : Model.hl) : unit =
+  match U.resolve_hls_layer t.viewer hl.hl_page with
+  | Some layer -> render_region_container t layer hl.hl_page
+  | None -> ()
+
+(* cljs pdf-highlights-region-container — one .hls-region-container per
+   page layer *)
+and render_region_container (t : t) (layer : D.element) (page : int) :
+    unit =
+  let box =
+    match U.qs_in layer ".hls-region-container" with
+    | Some b -> b
+    | None ->
+        let b = U.create_el "div" in
+        U.set_class b "hls-region-container";
+        U.append_el layer b;
+        b
+  in
+  U.inner_html_set box "";
+  List.iter
+    (fun (hl : Model.hl) ->
+      if hl.hl_page = page then
+        match U.scaled_to_vw_pos t.viewer hl with
+        | Some vw -> (
+            match hl.hl_image with
+            | Some _ -> render_area_region t box vw hl
+            | None -> render_text_region t box vw hl)
+        | None -> ())
+    !S.hls
+
+(* cljs pdf-highlights-text-region *)
+and render_text_region (t : t) (box : D.element) (vw : Model.hl)
+    (hl : Model.hl) : unit =
+  let region = U.create_el "div" in
+  U.set_class region "extensions__pdf-hls-text-region";
+  (match hl.hl_id with
+   | Some id -> U.set_attr region "id" ("hl_" ^ id)
+   | None -> ());
+  let open_ctx e =
+    D.prevent_default e;
+    render_ctx_menu t
+      { mk_hl = (fun () -> Some hl)
+      ; sel = None
+      ; point = D.client_x e, D.client_y e
+      ; reset_fn = None }
+  in
+  U.on region "click" open_ctx;
+  U.on region "contextmenu" open_ctx;
+  List.iter
+    (fun (r : Model.hl_rect) ->
+      let it = U.create_el "div" in
+      U.set_class it "hls-text-region-item";
+      U.style_set it "left" (Printf.sprintf "%gpx" r.hl_x1);
+      U.style_set it "top" (Printf.sprintf "%gpx" r.hl_y1);
+      U.style_set it "width" (Printf.sprintf "%gpx" r.hl_w);
+      U.style_set it "height" (Printf.sprintf "%gpx" r.hl_h);
+      U.set_attr it "draggable" "true";
+      (match hl.hl_color with
+       | Some cl -> U.set_attr it "data-color" cl
+       | None -> ());
+      U.on it "dragstart" (fun e ->
+          match hl.hl_id with
+          | Some id -> (
+              dt_set_data e "text/plain" ("[[" ^ id ^ "]]");
+              match !S.current with
+              | Some a -> ignore (A.ensure_ref_block a hl)
+              | None -> ())
+          | None -> ());
+      U.append_el region it)
+    vw.hl_rects;
+  U.append_el box region
+
+(* cljs pdf-highlight-area-region — style = vw bounding rect;
+   interact.js resizable; drag-end persists the crop + updates the hl *)
+and render_area_region (t : t) (_box : D.element) (vw : Model.hl)
+    (hl : Model.hl) : unit =
+  let b = vw.hl_bounding in
+  let region = U.create_el "div" in
+  U.set_class region "extensions__pdf-hls-area-region";
+  (match hl.hl_id with
+   | Some id -> U.set_attr region "id" ("hl_" ^ id)
+   | None -> ());
+  U.style_set region "left" (Printf.sprintf "%gpx" b.hl_x1);
+  U.style_set region "top" (Printf.sprintf "%gpx" b.hl_y1);
+  U.style_set region "width" (Printf.sprintf "%gpx" b.hl_w);
+  U.style_set region "height" (Printf.sprintf "%gpx" b.hl_h);
+  (match hl.hl_color with
+   | Some cl -> U.set_attr region "data-color" cl
+   | None -> ());
+  U.set_attr region "draggable" "true";
+  let dirty = ref false in
+  let open_ctx e =
+    D.prevent_default e;
+    if not !dirty then
+      render_ctx_menu t
+        { mk_hl = (fun () -> Some hl)
+        ; sel = None
+        ; point = D.client_x e, D.client_y e
+        ; reset_fn = None }
+  in
+  U.on region "click" open_ctx;
+  U.on region "contextmenu" open_ctx;
+  U.on region "dragstart" (fun e ->
+      match hl.hl_id with
+      | Some id -> dt_set_data e "text/plain" ("[[" ^ id ^ "]]")
+      | None -> ());
+  let on_move (_t : D.element) (_w : float) (_h : float) (_ax : float)
+      (_ay : float) : unit =
+    ()
+  in
+  let on_end () =
+    let dx = Option.value (U.float_attr region "data-x") ~default:0. in
+    let dy = Option.value (U.float_attr region "data-y") ~default:0. in
+    let r = D.bounding_rect region in
+    let to_vw =
+      { Model.hl_x1 = b.hl_x1 +. dx
+      ; hl_y1 = b.hl_y1 +. dy
+      ; hl_x2 = b.hl_x1 +. dx +. D.rect_width r
+      ; hl_y2 = b.hl_y1 +. dy +. D.rect_height r
+      ; hl_w = D.rect_width r
+      ; hl_h = D.rect_height r }
+    in
+    (match
+       U.vw_to_scaled t.viewer ~page:hl.hl_page ~bounding:to_vw
+         ~rects:[]
+     with
+     | Some (bounding, rects) ->
+         let hl' =
+           { hl with
+             hl_bounding = bounding
+           ; hl_rects = rects
+           ; hl_image = Some (Int64.of_float (Js.Date.now ())) }
+         in
+         ignore
+           (let* dbid =
+              A.persist_hl_area_image ~viewer:t.viewer ~new_hl:hl'
+                ~region:to_vw
+            in
+            ignore
+              (B.set_timeout
+                 (fun () ->
+                   U.style_set region "transform" "translate(0, 0)";
+                   U.rm_attr region "data-x";
+                   U.rm_attr region "data-y";
+                   upd_hl t
+                     (match dbid with
+                      | Some id -> { hl' with hl_image = Some id }
+                      | None -> hl'))
+                 200);
+            Js.Promise.resolve ())
+     | None -> ());
+    ignore (B.set_timeout (fun () -> dirty := false) 50)
+  in
+  match
+    U.interact_resizable ~el:region ~on_start:(fun () -> dirty := true)
+      ~on_move ~on_end
+  with
+  | Some it -> S.hls_interactables := it :: !S.hls_interactables
+  | None -> ()
+
+(* public: render the hls layer for a page once its text layer is up
+   (cljs render-hls effect on textlayerrendered) *)
+let render_page ~(viewer : S.viewer) ~(page : int) : unit =
+  match !cur with
+  | Some t -> (
+      match U.resolve_hls_layer viewer page with
+      | Some layer -> render_region_container t layer page
+      | None -> ())
+  | None -> ()
+
+(* ---------- selection -> ctx menu (cljs fn-selection chain)
+   ---------- *)
+
+let show_ctx_sel (t : t) (range : Js.Json.t) (sel : Js.Json.t)
+    (point : float * float) : unit =
+  let mk_hl () =
+    match U.get_page_from_range range with
+    | Some (page, page_el) -> (
+        match U.get_range_rects range page_el with
+        | [] -> None
+        | rects -> (
+            match U.get_bounding_rect rects with
+            | Some bounding -> (
+                match
+                  U.vw_to_scaled t.viewer ~page ~bounding ~rects
+                with
+                | Some (bounding, rects) ->
+                    Some
+                      { Model.hl_id = None
+                      ; hl_page = page
+                      ; hl_bounding = bounding
+                      ; hl_rects = rects
+                      ; hl_text =
+                          U.fix_selection_text_breakline
+                            (U.sel_to_string sel)
+                      ; hl_image = None
+                      ; hl_color = None }
+                | None -> None)
+            | None -> None))
+    | None -> None
+  in
+  render_ctx_menu t
+    { mk_hl; sel = Some sel; point; reset_fn = None }
+
+let sel_ok (t : t) (e : D.event) : unit =
+  let sel = U.get_selection () in
+  if U.sel_is_collapsed sel then ()
+  else
+    let range = U.sel_range_at sel 0 in
+    match U.range_common_ancestor range with
+    | Some anc when U.el_contains t.el anc ->
+        (* cljs defers the ctx-menu open by a tick *)
+        ignore
+          (B.set_timeout
+             (fun () ->
+               show_ctx_sel t range sel (D.client_x e, D.client_y e))
+             0)
+    | _ -> ()
+
+(* ---------- area selection (cljs pdf-highlight-area-selection)
+   ---------- *)
+
+let el_in_page target = D.closest target ".page"
+
+let area_should_start (_t : t) (e : D.event) : bool =
+  match D.target e with
+  | Some target ->
+      not
+        (U.el_class_contains target "extensions__pdf-hls-area-region")
+      && el_in_page target <> None
+      && (D.meta_key e || D.shift_key e || !S.area_mode)
+  | None -> false
+
+(* cljs calc-coords! — clamp pageX/Y into the page rect, then offset
+   by the container scroll *)
+let calc_coords (t : t) (page_x : float) (page_y : float) :
+    float * float =
+  let cnt = cnt_el t in
+  (match t.a_cnt_rect with
+   | Some _ -> ()
+   | None -> t.a_cnt_rect <- Some (D.bounding_rect cnt));
+  let x', y' =
+    match t.a_page_rect, t.a_start_xy with
+    | Some pr, Some (sx, sy) ->
+        ( (if sx > page_x then Float.max page_x (D.rect_left pr)
+           else Float.min page_x (D.rect_right pr))
+        , if sy > page_y then Float.max page_y (D.rect_top pr)
+          else Float.min page_y (D.rect_bottom pr) )
+    | _ -> page_x, page_y
+  in
+  (x' +. U.scroll_left cnt, y' +. D.scroll_top cnt)
+
+(* cljs disable-text-selection! — toggles on viewer.viewer (.pdfViewer) *)
+let disable_text_selection (t : t) (on_ : bool) : unit =
+  U.el_class_toggle (U.viewer_el t.viewer) "disabled-text-selection" on_
+
+let draw_shadow (t : t) : unit =
+  match t.a_start, t.a_end with
+  | Some (sx, sy), Some (ex, ey) ->
+      let r =
+        U.vw_rect
+          ~left:(Float.min sx ex)
+          ~top:(Float.min sy ey)
+          ~width:(Float.abs (ex -. sx))
+          ~height:(Float.abs (ey -. sy))
+      in
+      let sh =
+        match t.a_shadow with
+        | Some s -> s
+        | None ->
+            let s = U.create_el "div" in
+            U.set_class s "shadow-rect";
+            U.append_el t.a_sel_el s;
+            t.a_shadow <- Some s;
+            s
+      in
+      U.style_set sh "left" (Printf.sprintf "%gpx" r.hl_x1);
+      U.style_set sh "top" (Printf.sprintf "%gpx" r.hl_y1);
+      U.style_set sh "width" (Printf.sprintf "%gpx" r.hl_w);
+      U.style_set sh "height" (Printf.sprintf "%gpx" r.hl_h)
+  | _ -> ()
+
+let area_move (e : D.event) : unit =
+  match !cur with
+  | Some t -> (
+      match t.a_start_xy with
+      | Some _ ->
+          t.a_end <-
+            Some (calc_coords t (U.event_page_x e) (U.event_page_y e));
+          draw_shadow t
+      | None -> ())
+  | None -> ()
+
+let area_reset (t : t) : unit =
+  t.a_start_el <- None;
+  t.a_page_el <- None;
+  t.a_page_rect <- None;
+  t.a_cnt_rect <- None;
+  t.a_start_xy <- None;
+  t.a_start <- None;
+  t.a_end <- None;
+  (match t.a_shadow with
+   | Some s ->
+       U.remove_el s;
+       t.a_shadow <- None
+   | None -> ());
+  if t.a_listening then (
+    U.off_document "mousemove" area_move false;
+    t.a_listening <- false)
+
+let area_end (e : D.event) : unit =
+  match !cur with
+  | Some t -> (
+      match t.a_start_el, t.a_start with
+      | Some start_el, Some start ->
+          let end_ =
+            calc_coords t (U.event_page_x e) (U.event_page_y e)
+          in
+          let w = Float.abs (fst end_ -. fst start) in
+          let h = Float.abs (snd end_ -. snd start) in
+          if w > 10. && h > 10. then
+            match el_in_page start_el with
+            | Some page_el -> (
+                match U.dataset_page_number page_el with
+                | Some pn -> (
+                    match int_of_string_opt pn with
+                    | Some page ->
+                        let rect =
+                          U.vw_rect
+                            ~left:(Float.min (fst start) (fst end_))
+                            ~top:(Float.min (snd start) (snd end_))
+                            ~width:w ~height:h
+                        in
+                        let page_pos =
+                          { rect with
+                            hl_y1 = rect.hl_y1 -. U.offset_top page_el
+                          ; hl_x1 =
+                              rect.hl_x1 -. U.offset_left page_el }
+                        in
+                        (match
+                           U.vw_to_scaled t.viewer ~page
+                             ~bounding:page_pos ~rects:[]
+                         with
+                         | Some (bounding, rects) ->
+                             let hl =
+                               { Model.hl_id = None
+                               ; hl_page = page
+                               ; hl_bounding = bounding
+                               ; hl_rects = rects
+                               ; hl_text = ""
+                               ; hl_image =
+                                   Some
+                                     (Int64.of_float (Js.Date.now ()))
+                               ; hl_color = None }
+                             in
+                             render_ctx_menu t
+                               { mk_hl = (fun () -> Some hl)
+                               ; sel = None
+                               ; point =
+                                   D.client_x e, D.client_y e
+                               ; reset_fn =
+                                   Some (fun () -> area_reset t) }
+                         | None -> ());
+                        S.area_mode := false
+                    | None -> ())
+                | None -> ())
+            | None -> ()
+          else area_reset t;
+          disable_text_selection t false
+      | _ -> ());
+      area_reset t
+  | None -> ()
+
+(* cljs install: listeners on the viewer element (selection tracking +
+   wheel zoom) + container (area selection) + window resize *)
+let install ~(viewer : S.viewer) ~(el : D.element)
+    ~(holder : D.element) : unit =
+  let a_sel_el = U.create_el "div" in
+  U.set_class a_sel_el "extensions__pdf-area-selection";
+  let hls_cnt = U.create_el "div" in
+  U.set_class hls_cnt "extensions__pdf-highlights-cnt";
+  U.append_el hls_cnt a_sel_el;
+  U.append_el el hls_cnt;
+  let t =
+    { viewer
+    ; el
+    ; holder
+    ; ctx = None
+    ; ctx_el = None
+    ; ctx_doc_click = None
+    ; a_start_el = None
+    ; a_page_el = None
+    ; a_page_rect = None
+    ; a_cnt_rect = None
+    ; a_start_xy = None
+    ; a_start = None
+    ; a_end = None
+    ; a_sel_el
+    ; a_shadow = None
+    ; a_listening = false
+    ; win_resize = None }
+  in
+  cur := Some t;
+  (* cljs fn-selection: mousedown arms a dirty tracker; the one-shot
+     document mouseup turns a dirty selection into sel-state *)
+  U.on el "mousedown" (fun _ ->
+      let dirty = ref false in
+      let fn_dirty _ = dirty := true in
+      D.add_document_listener "selectionchange" fn_dirty false;
+      U.on_once D.document_el "mouseup" (fun e ->
+          if !dirty then sel_ok t e;
+          U.off_document "selectionchange" fn_dirty false));
+  (* cljs fn-wheel: ctrl/meta wheel zooms around the cursor *)
+  U.on el "wheel" (fun e ->
+      if D.ctrl_key e || D.meta_key e then (
+        let cnt = cnt_el t in
+        let rect = D.bounding_rect cnt in
+        let mx = D.client_x e -. D.rect_left rect in
+        let my = D.client_y e -. D.rect_top rect in
+        let xr = (U.scroll_left cnt +. mx) /. U.scroll_width cnt in
+        let yr = (D.scroll_top cnt +. my) /. U.scroll_height cnt in
+        let cur_scale = U.current_scale viewer in
+        let s =
+          if U.event_delta_y e < 0. then cur_scale *. 1.05
+          else cur_scale /. 1.05
+        in
+        D.prevent_default e;
+        U.bus_dispatch (U.event_bus viewer) "scaleChanging"
+          (B.json_props
+             [ "source", Js.Json.string "wheel"
+             ; "scale", Js.Json.number s ]);
+        U.request_animation_frame (fun () ->
+            U.set_scroll_left cnt (U.scroll_width cnt *. xr -. mx);
+            D.set_scroll_top cnt (U.scroll_height cnt *. yr -. my))));
+  (* cljs fn-resize: window resize re-adjusts the viewer *)
+  let on_resize _ = U.adjust_viewer_size viewer in
+  t.win_resize <- Some on_resize;
+  U.win_on "resize" on_resize;
+  (* cljs pdf-page-finder: :restore-last-page restores the saved page *)
+  U.bus_on (U.event_bus viewer) "restore-last-page" (fun ev ->
+      let page =
+        match U.json_f ev "detail" with
+        | Some p -> Some (int_of_float p)
+        | None -> (
+            match Js.Json.decodeString ev with
+            | Some s -> int_of_string_opt s
+            | None -> (
+                match Js.Json.decodeNumber ev with
+                | Some n -> Some (int_of_float n)
+                | None -> None))
+      in
+      match page with
+      | Some p -> U.set_current_page viewer p
+      | None -> ());
+  (* area selection: mousedown on the container starts it *)
+  U.on (cnt_el t) "mousedown" (fun e ->
+      if area_should_start t e then (
+        match D.target e with
+        | Some target -> (
+            match el_in_page target with
+            | Some page_el ->
+                let x = U.event_page_x e and y = U.event_page_y e in
+                t.a_start_el <- Some target;
+                t.a_start_xy <- Some (x, y);
+                t.a_page_el <- Some page_el;
+                t.a_page_rect <- Some (D.bounding_rect page_el);
+                t.a_start <- Some (calc_coords t x y);
+                disable_text_selection t true;
+                if not t.a_listening then (
+                  D.add_document_listener "mousemove" area_move false;
+                  t.a_listening <- true)
+            | None -> ())
+        | None -> ())
+      else (
+        area_reset t;
+        disable_text_selection t false));
+  U.on (cnt_el t) "mouseup" area_end
+
+(* teardown — drop listeners that live outside the removed container *)
+let uninstall () : unit =
+  (match !cur with
+   | Some t ->
+       (match t.ctx_doc_click with
+        | Some f -> U.off_document "click" f false
+        | None -> ());
+       if t.a_listening then
+         U.off_document "mousemove" area_move false;
+       (match t.win_resize with
+        | Some f -> U.win_off "resize" f
+        | None -> ());
+       cur := None
+   | None -> ());
+  S.hls := []
