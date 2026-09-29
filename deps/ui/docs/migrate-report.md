@@ -937,6 +937,7 @@ Needs an upstream PR.
 - stale-node 容错（lui PR #67）：unmounted 节点上的事件/属性写入不再崩溃或卡住批次。
 - same-batch create+drop 容错（lui PR #75）：keyed remount 在同一 flush 内 create→insert→drop 的节点，DOM apply 按 batch 末状态找不到 platform_node 导致整个 flush abort（e2e 里表现为 Meta+k 打不开 cmdk——`resync_open_editor` 在同一 flush 重建并卸载了 editor 子树）。DOM apply 现在跳过 current∪previous 两边都解析不到的节点。
 - dropdown dismiss / modal hit-testing / retained-store 顺序（lui PR #65）。
+- DOM 插入索引按实际挂载父节点计数（lui PR #76）：`visible_child_index` 原先按节点类型估算（只跳过 ContextMenu/DropdownMenu/Toast/modal/tooltip），portal 子节点、从未挂载的 dyn/`nothing` 段和同 batch create+drop 的节点仍计入索引，任何 overlay 挂载（页面菜单、toast、对话框）都会抛 `DOM child index is out of bounds` 并 abort 整个 flush（view-basic/tag-basic 曾因此回归）。现在改为 `platform_node.parentElement = container` 实测计数，原来的 kind 启发式 `child_hidden_in_parent` 被这条规则完全覆盖并删除。
 
 
 ## Graph navigation
