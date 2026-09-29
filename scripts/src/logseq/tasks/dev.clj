@@ -1,5 +1,5 @@
 (ns logseq.tasks.dev
-  "Tasks for general development. For desktop or mobile development see their
+  "Tasks for general development. For desktop development see its
   namespaces"
   (:refer-clojure :exclude [test])
   (:require [babashka.cli :as cli]

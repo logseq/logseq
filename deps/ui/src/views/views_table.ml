@@ -1021,7 +1021,7 @@ let grouped_table inst ~refresh ~rows () =
 (* ---------- list + gallery ---------- *)
 
 let list_row_el ~row_uuid ~title : D.el =
-  D.h ~cls:"ls-block swipe-item"
+  D.h ~cls:"ls-block"
     ~attrs:[ ("blockid", row_uuid); ("id", "ls-block-" ^ row_uuid) ]
     ~children:
       [ D.h ~cls:"block-main-container flex flex-row gap-1"
