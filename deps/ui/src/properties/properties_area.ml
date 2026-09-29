@@ -663,7 +663,23 @@ let render_class_section (ctx : V.ctx) ~owner_title host =
            (new_property_btn ctx ~for_class:true ~owner_title);
          el_append_child col add_wrap;
          Js.Promise.resolve ())
-  |> ignore
+
+(* a clear+rebuild detaches every node it replaces; a click that
+   resolved .property-k just before the swap lands on whatever sits at
+   its old coordinates now (cljs/React reconciliation preserves nodes
+   on unrelated txs). Render into a detached candidate and swap only
+   when the markup actually changed. *)
+let rec move_children src dst =
+  match el_first_child src with
+  | Some c ->
+      el_append_child dst c;
+      move_children src dst
+  | None -> ()
+
+let replace_if_changed host cand =
+  if el_inner_html cand <> el_inner_html host then (
+    el_clear host;
+    move_children cand host)
 
 (* Page surface: attach .ls-properties-area only when there are rows to
    show (cljs show-properties-area?); attach .ls-bidirectional-properties
@@ -686,9 +702,9 @@ let rec render_page_area ctx (p : Model.page) ~attach_area ~attach_bidi
            detach ()
          else (
            attach_area ();
-           el_clear area;
+           let cand = mk "div" in
            let panel = mk ~cls:"properties-panel" "div" in
-           el_append_child area panel;
+           el_append_child cand panel;
            render_panel ctx ~owner_is_tag:p.Model.page_is_tag
              ~owner_title:p.Model.page_title ~page_area:true
              ~show_hidden:!S.show_hidden
@@ -696,13 +712,18 @@ let rec render_page_area ctx (p : Model.page) ~attach_area ~attach_bidi
              panel panel_rows hidden;
            (* cljs renders new-property at page level only for non-class
               pages — the class section hosts its own *)
-           if p.Model.page_is_tag then
-             render_class_section ctx ~owner_title:p.Model.page_title
-               area
-           else
-             el_append_child area
-               (new_property_btn ctx ~for_class:false
-                  ~owner_title:p.Model.page_title));
+           (if p.Model.page_is_tag then
+              render_class_section ctx ~owner_title:p.Model.page_title
+                cand
+            else (
+              el_append_child cand
+                (new_property_btn ctx ~for_class:false
+                   ~owner_title:p.Model.page_title);
+              Js.Promise.resolve ()))
+           |> Js.Promise.then_ (fun () ->
+                  replace_if_changed area cand;
+                  Js.Promise.resolve ())
+           |> ignore);
          fill_bidirectional_page p ~attach_bidi bidi;
          Js.Promise.resolve ())
 
@@ -962,7 +983,9 @@ let mount_sidebar_area (area : el) =
                      ~can_toggle:(can_toggle_hidden ctx ~below_rows)
                      panel panel_rows hidden;
                    if is_tag then
-                     render_class_section ctx ~owner_title:title area
+                     ignore
+                       (render_class_section ctx ~owner_title:title
+                          area)
                    else
                      el_append_child area
                        (new_property_btn ctx ~for_class:false
