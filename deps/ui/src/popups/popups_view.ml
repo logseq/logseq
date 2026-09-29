@@ -10,7 +10,7 @@
 open Lui_elements
 
 module S = Popups_state
-module U = Ui_strings
+module U = I18n
 
 let sv s = Lui_protocol.StringValue s
 
@@ -69,7 +69,7 @@ let highlight_el ~key ~query label : t =
       match words with
       | [] -> List.rev (text_span ~key:("r" ^ string_of_int i) rest :: acc)
       | w :: ws -> (
-          match Strings.index_ci rest w with
+          match I18n.index_ci rest w with
           | Some j ->
               let hit_len = String.length w in
               let rest' =
@@ -86,7 +86,7 @@ let highlight_el ~key ~query label : t =
     in
     Logseq_dom.dom ~key ~tag:"span" ~style_class:"m-0" (loop 0 words label []))
   else
-    match Strings.index_ci label query with
+    match I18n.index_ci label query with
     | Some i ->
         let before = String.sub label 0 i in
         let hit = String.sub label i (String.length query) in

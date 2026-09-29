@@ -176,7 +176,7 @@ let asset_of_file ~idx ~edit_uuid ~empty_target f =
                   find_by_checksum checksum (function
                     | Some (uuid, t) ->
                         Toast.warning
-                          (Strings.asset_already_exists t uuid);
+                          (I18n.asset_already_exists t uuid);
                         Js.Promise.resolve None
                     | None ->
                         let block_id =
@@ -388,23 +388,23 @@ let set_align uuid a =
 let menu_items uuid (b : Model.block) : Views_popup.menu_item list =
   let align_v = b.Model.block_asset_align in
   [ Views_popup.MSub
-      ( Strings.asset_align
+      ( I18n.asset_align
       , [ Views_popup.MCheck
-            ( Strings.asset_align_left
+            ( I18n.asset_align_left
             , align_v = None || align_v = Some "left"
             , fun _ -> set_align uuid "left" )
         ; Views_popup.MCheck
-            ( Strings.asset_align_center
+            ( I18n.asset_align_center
             , align_v = Some "center"
             , fun _ -> set_align uuid "center" )
         ; Views_popup.MCheck
-            ( Strings.asset_align_right
+            ( I18n.asset_align_right
             , align_v = Some "right"
             , fun _ -> set_align uuid "right" )
         ] )
   ; Views_popup.MSep
   ; Views_popup.MItem
-      ( Strings.asset_delete
+      ( I18n.asset_delete
       , fun () ->
           Runtime.send
             (Action.Confirm_set

@@ -5,7 +5,7 @@
    and .ui__dialog-content confirm dialogs. *)
 
 module D = Views_dom
-module I = Views_i18n
+module I = I18n
 
 external document_body : D.el = "document.body"
 

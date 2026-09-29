@@ -6,7 +6,6 @@
 
 open Editor_dom
 open Properties_dom
-module I18n = Properties_i18n
 module D = Properties_data
 module S = Properties_state
 module W = Wire
@@ -400,8 +399,7 @@ let default_value_pane m =
         in
         let ta = mk "textarea" in
         let mt = mk ~cls:"mock-text" "div" in
-        el_set_attr mt "style"
-          "width:100%;height:100%;position:absolute;visibility:hidden;top:0;left:0";
+        el_set_attr mt "style" Ui_parts.mock_text_style;
         el_append_child inner ta;
         el_append_child inner mt;
         el_append_child wrap inner;

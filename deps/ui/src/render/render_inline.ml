@@ -4,7 +4,7 @@
 
 open Lui_elements
 module D = Render_dom
-module U = Ui_strings
+module U = I18n
 
 let starts_at s i pat =
   let n = String.length pat in

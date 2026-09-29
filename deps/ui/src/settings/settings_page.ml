@@ -6,7 +6,7 @@
 open Lui_elements
 
 let dom = Logseq_dom.dom
-module T = Graphs_text
+module T = I18n
 module S = Settings_state
 module V = Settings_view
 

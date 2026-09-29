@@ -311,27 +311,27 @@ let help_menu_popup : t =
   in
   Logseq_dom.dom ~key:"help-menu" ~style_class:"cp__sidebar-help-menu-popup"
     [ Logseq_dom.dom ~key:"hm-wrap" ~style_class:"list-wrap"
-        [ help_item "hm-handbook" (Strings.help_handbook) "book-2" close
-        ; help_item "hm-shortcuts" (Strings.help_shortcuts) "command" close
-        ; help_item "hm-docs" (Strings.help_docs) "help" (fun () ->
+        [ help_item "hm-handbook" (I18n.help_handbook) "book-2" close
+        ; help_item "hm-shortcuts" (I18n.help_shortcuts) "command" close
+        ; help_item "hm-docs" (I18n.help_docs) "help" (fun () ->
             open_url "https://docs.logseq.com/"; close ())
         ; Logseq_dom.dom ~key:"hm-hr1" ~tag:"hr" ~style_class:"!my-2" []
-        ; help_item "hm-bug" (Strings.help_bug) "bug" close
-        ; help_item "hm-feature" (Strings.help_feature) "git-pull-request"
+        ; help_item "hm-bug" (I18n.help_bug) "bug" close
+        ; help_item "hm-feature" (I18n.help_feature) "git-pull-request"
             (fun () ->
               open_url
                 "https://discuss.logseq.com/c/feedback/feature-requests/";
               close ())
-        ; help_item "hm-feedback" (Strings.help_feedback) "messages"
+        ; help_item "hm-feedback" (I18n.help_feedback) "messages"
             (fun () ->
               open_url "https://discuss.logseq.com/c/feedback/13"; close ())
         ; Logseq_dom.dom ~key:"hm-hr2" ~tag:"hr" ~style_class:"!my-2" []
-        ; help_item "hm-discord" (Strings.help_discord) "brand-discord"
+        ; help_item "hm-discord" (I18n.help_discord) "brand-discord"
             (fun () -> open_url "https://discord.com/invite/KpN4eHY"; close ())
-        ; help_item "hm-forum" (Strings.help_forum) "message" (fun () ->
+        ; help_item "hm-forum" (I18n.help_forum) "message" (fun () ->
             open_url "https://discuss.logseq.com/"; close ())
         ; Logseq_dom.dom ~key:"hm-hr3" ~tag:"hr" ~style_class:"!my-2" []
-        ; help_item "hm-notes" (Strings.help_release_notes) "asterisk"
+        ; help_item "hm-notes" (I18n.help_release_notes) "asterisk"
             (fun () ->
               open_url "https://docs.logseq.com/#/page/changelog"; close ())
         ]
@@ -380,10 +380,10 @@ let not_found_page : t =
         ~style_class:"text-6xl font-bold text-gray-12 mb-4" ~text:"404" []
     ; Logseq_dom.dom ~key:"nf-h2" ~tag:"h2"
         ~style_class:"text-2xl font-semibold text-gray-10 mb-6"
-        ~text:(Ui_strings.t "page/not-found-title") []
+        ~text:(I18n.t "page/not-found-title") []
     ; Logseq_dom.dom ~key:"nf-p" ~tag:"p"
         ~style_class:"text-gray-500 mb-8"
-        ~text:(Ui_strings.t "page/not-found-desc") []
+        ~text:(I18n.t "page/not-found-desc") []
     ; Logseq_dom.dom ~key:"nf-btn" ~tag:"button"
         ~style_class:
           "ui__button inline-flex cursor-pointer items-center justify-center whitespace-nowrap rounded-md text-sm gap-1 font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 select-none border bg-background hover:bg-accent hover:text-accent-foreground active:opacity-80 as-outline h-10 px-4 py-2"
@@ -394,7 +394,7 @@ let not_found_page : t =
             ~style_class:"ls-icon-home  ui__icon ti"
             [ Icons.icon ~size:18. ~cls:"" "home" ]
         ; Logseq_dom.dom ~key:"nf-txt" ~tag:"span"
-            ~text:(Ui_strings.t "page/go-back-home") []
+            ~text:(I18n.t "page/go-back-home") []
         ]
     ]
 

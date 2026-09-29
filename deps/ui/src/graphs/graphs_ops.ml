@@ -2,7 +2,7 @@
    delete, and ls-graphs-metadata bookkeeping. Mirrors
    components/repo.cljs repos-cp + repo/remove-repo!. *)
 
-module T = Graphs_text
+module T = I18n
 
 (* last known repo list (logseq_db_* names) for the all-graphs view +
    name-conflict checks *)

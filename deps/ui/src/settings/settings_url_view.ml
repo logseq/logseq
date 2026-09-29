@@ -6,7 +6,7 @@
 open Lui_elements
 
 let dom = Logseq_dom.dom
-module T = Graphs_text
+module T = I18n
 
 let default_sync_http = "https://api.logseq.io"
 let default_sync_ws = "wss://api.logseq.io/sync/%s"

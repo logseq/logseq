@@ -171,9 +171,9 @@ let confirm_view (c : Dialogs_state.confirm) =
             ~style_class:
               "ui__alert-dialog-footer flex flex-col-reverse \
                sm:flex-row sm:justify-end sm:space-x-2"
-            [ btn "cfrm-cancel" Graphs_text.cancel "border"
+            [ btn "cfrm-cancel" I18n.cancel "border"
                 Dialogs_state.close_confirm
-            ; btn "cfrm-ok" Graphs_text.confirm
+            ; btn "cfrm-ok" I18n.confirm
                 "bg-primary text-primary-foreground"
                 Dialogs_state.confirm
             ]
@@ -218,7 +218,7 @@ let prompt_view (p : Dialogs_state.prompt) =
                   ; ("autofocus", "true") ]
                 ~events:"keydown"
                 ~on_dom_event:input_events []
-            ; btn "prmt-ok" Graphs_text.submit "" (fun () -> submit ())
+            ; btn "prmt-ok" I18n.submit "" (fun () -> submit ())
             ]
         ; close_btn
         ]

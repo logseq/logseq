@@ -7,7 +7,7 @@
 open Lui_elements
 
 let dom = Logseq_dom.dom
-module T = Graphs_text
+module T = I18n
 
 let checkbox_cls checked =
   "ui__checkbox peer h-4 w-4 shrink-0 cursor-pointer rounded-sm border \

@@ -13,7 +13,7 @@
    The editor area wires the listeners; see e2e-contract.md. *)
 
 module S = String
-module U = Ui_strings
+module U = I18n
 
 type ac_kind =
     Slash | Page_ref | Page_embed | Block_ref | Tag_search
@@ -477,7 +477,7 @@ let page_items_for t kind q =
     | _ ->
         take 20
           (List.map wrap
-             (List.filter (fun ti -> Strings.contains_ci ti q) !(t.titles)))
+             (List.filter (fun ti -> I18n.contains_ci ti q) !(t.titles)))
   in
   let exact =
     match kind with
