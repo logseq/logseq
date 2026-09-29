@@ -204,6 +204,39 @@ let switch_btn ~checked ~on_click =
         []
     ]
 
+let menu_li key label act =
+  dom ~tag:"li" ~key ~text:label ~events:"click"
+    ~on_dom_event:(fun n _ -> if n = "click" then act ())
+    []
+
+(* cljs card-ctls-of-installed .updates-actions — btn shows "Update
+   new-version" when a check recorded one, else "Check update"; click
+   runs check-or-update-marketplace-plugin! (only-check when nothing
+   pending) *)
+let updates_btn ~pid ~plj ~web_pkg =
+  let repo =
+    let r = Plugin_host.jstr web_pkg "repo" in
+    if r <> "" then r else Plugin_host.jstr plj "repo"
+  in
+  match Plugin_host.update_version pid with
+  | Some v ->
+      dom ~key:"upd" ~style_class:"updates-actions"
+        [ dom ~tag:"a" ~style_class:"btn" ~events:"click"
+            ~on_dom_event:(fun n _ ->
+              if n = "click" then
+                Plugin_host.check_or_update pid repo false)
+            [ dom ~tag:"span"
+                ~text:(t "plugin/update" ^ " \240\159\145\137 " ^ v) [] ]
+        ]
+  | None ->
+      dom ~key:"upd" ~style_class:"updates-actions"
+        [ dom ~tag:"a" ~style_class:"btn" ~events:"click"
+            ~on_dom_event:(fun n _ ->
+              if n = "click" then
+                Plugin_host.check_or_update pid repo true)
+            ~text:(t "plugin/check-update") []
+        ]
+
 let installed_card (pl : Js.Json.t) =
   let open Plugin_host in
   let plj = meth pl "toJSON" [| Js.Json.boolean false |] in
@@ -243,11 +276,31 @@ let installed_card (pl : Js.Json.t) =
                 [ dom ~key:"de" ~style_class:"de"
                     [ dom ~tag:"strong" [ icon "settings" ]
                     ; dom ~tag:"ul" ~style_class:"menu-list"
-                        [ dom ~tag:"li" ~text:(t "plugin/open-settings") [] ]
+                        [ menu_li "open-settings"
+                            (t "plugin/open-settings") (fun () ->
+                              open_settings_pid := Some pid;
+                              Dialogs_state.open_ "plugin-settings")
+                        (* web has no plugin-logs view or report modal
+                           (cljs open-plugin-logs!/open-report-modal!) —
+                           li kept for menu parity *)
+                        ; dom ~tag:"li"
+                            ~text:(t "plugin/open-logs") []
+                        ; dom ~tag:"li"
+                            ~text:(t "plugin/report-security") []
+                        ; menu_li "uninstall" (t "plugin/uninstall")
+                            (fun () ->
+                              Dialogs_state.ask
+                                ~title:
+                                  (I18n.tf "plugin/delete-alert" [ name ])
+                                ~desc:""
+                                ~on_confirm:(fun () ->
+                                  unregister_plugin pid)
+                                ())
+                        ]
                     ]
                 ]
             ; dom ~key:"ctl-r" ~style_class:"r flex items-center"
-                [ dom ~key:"upd" ~style_class:"updates-actions" []
+                [ updates_btn ~pid ~plj ~web_pkg
                 ; switch_btn ~checked:(not disabled) ~on_click:(fun () ->
                       set_plugin_disabled pid (not disabled))
                 ]
@@ -395,5 +448,325 @@ let body (_ms : Model.t Signal.signal) : t =
       (Signal.map2 pair
          (Signal.value tab)
          (Plugin_host.dirty_value owner))
+  in
+  node ctx parent
+
+(* ---------- plugin settings view ----------
+   cljs plugins.cljs :plugins-settings + plugins_settings.cljs
+   settings-container: .cp__plugins-settings.cp__settings-main >
+   .cp__settings-inner.no-aside (nav? is always false on web) > article >
+   .panel-wrap[data-id] > h2 "ID: pid" + .cp__plugins-settings-inner with
+   desc-item.as-{input,toggle,enum,object,heading,button} schema rows or
+   the code-mode editor. *)
+
+let jstr_ = Plugin_host.jstr_
+
+let json_pretty : Js.Json.t -> string =
+  [%mel.raw "function (j) { return JSON.stringify(j, null, 2); }"]
+
+let set_json_exn s =
+  try Some (Js.Json.parseExn s) with _ -> None
+
+let desc_h2 key title =
+  dom ~tag:"h2" ~key:("h-" ^ key)
+    [ dom ~tag:"code" ~key:"k" ~text:key []
+    ; icon "caret-right"
+    ; dom ~tag:"strong" ~key:"t" ~text:title []
+    ]
+
+(* cljs html-content — sanitized markdown rendered raw (DOMPurify) *)
+let html_desc key desc =
+  if desc = "" then []
+  else
+    [ dom ~key:("hd-" ^ key)
+        ~style_class:"html-content pl-1 flex-1 text-sm"
+        ~html:(Markdown.markdown_to_html desc) [] ]
+
+let set_v pid key v =
+  Plugin_host.plugin_set_setting pid key v;
+  Plugin_host.bump ()
+
+let json_text_of j =
+  match Js.Json.decodeString j with
+  | Some s -> s
+  | None -> Js.Json.stringify j
+
+let item_input pid key s cur =
+  let title = Plugin_host.jstr s "title" in
+  let desc = Plugin_host.jstr s "description" in
+  let input_as =
+    let a = Plugin_host.jstr s "inputAs" in
+    String.lowercase_ascii
+      (if a = "" then Plugin_host.jstr s "type" else a)
+  in
+  let input_as = if input_as = "string" then "text" else input_as in
+  let v =
+    match Js.Json.decodeString cur with
+    | Some s -> s
+    | None -> (
+        match Js.Json.decodeNumber cur with
+        | Some n -> Printf.sprintf "%g" n
+        | None -> "")
+  in
+  let on_change p =
+    let raw = Platform.payload_str (Option.value p ~default:"{}") "value" in
+    set_v pid key
+      (if input_as = "number" then
+         match float_of_string_opt raw with
+         | Some n -> Js.Json.number n
+         | None -> jstr_ raw
+       else jstr_ raw)
+  in
+  dom ~key:("i-" ^ key) ~style_class:"desc-item as-input"
+    ~attrs:[ ("data-key", key) ]
+    [ desc_h2 key title
+    ; dom ~key:"fc" ~tag:"label" ~style_class:"form-control"
+        ( html_desc key desc
+        @ [ (if input_as = "textarea" then
+               dom ~key:"in" ~tag:"textarea"
+                 ~attrs:[ ("type", input_as); ("value", v) ]
+                 ~events:"change"
+                 ~on_dom_event:(fun n p ->
+                   if n = "change" then on_change p)
+                 []
+             else
+               dom ~key:"in" ~tag:"input"
+                 ~style_class:
+                   (if input_as = "color" || input_as = "range" then ""
+                    else "form-input")
+                 ~attrs:[ ("type", input_as); ("value", v) ]
+                 ~events:"change"
+                 ~on_dom_event:(fun n p ->
+                   if n = "change" then on_change p)
+                 []) ]
+        )
+    ]
+
+let item_toggle pid key s cur =
+  let title = Plugin_host.jstr s "title" in
+  let desc = Plugin_host.jstr s "description" in
+  let checked =
+    match Js.Json.decodeBoolean cur with
+    | Some b -> b
+    | None -> Plugin_host.jbool s "default"
+  in
+  dom ~key:("t-" ^ key) ~style_class:"desc-item as-toggle"
+    ~attrs:[ ("data-key", key) ]
+    [ desc_h2 key title
+    ; dom ~key:"fc" ~tag:"label" ~style_class:"form-control"
+        ( [ dom ~key:"cb" ~tag:"input"
+              ~attrs:
+                ([ ("type", "checkbox") ]
+                @ if checked then [ ("checked", "checked") ] else [])
+              ~events:"change"
+              ~on_dom_event:(fun n p ->
+                if n = "change" then
+                  set_v pid key
+                    (Js.Json.boolean
+                       (Platform.payload_bool
+                          (Option.value p ~default:"{}") "checked")))
+              [] ]
+        @ html_desc key desc )
+    ]
+
+let item_enum pid key s cur' =
+  let title = Plugin_host.jstr s "title" in
+  let desc = Plugin_host.jstr s "description" in
+  let choices =
+    match Js.Json.decodeArray (Plugin_host.getf s "enumChoices") with
+    | Some xs ->
+        Array.to_list xs
+        |> List.filter_map Js.Json.decodeString
+    | None -> []
+  in
+  let cur = json_text_of cur' in
+  let picker = Plugin_host.jstr s "enumPicker" in
+  dom ~key:("e-" ^ key) ~style_class:"desc-item as-enum"
+    ~attrs:[ ("data-key", key) ]
+    [ desc_h2 key title
+    ; dom ~key:"fc" ~style_class:"form-control"
+        [ dom ~key:"w"
+            ~tag:(if picker = "radio" || picker = "checkbox" then "div"
+                  else "label")
+            ~style_class:"wrap"
+            ( html_desc key desc
+            @ [ dom ~key:"s" ~tag:"select" ~text:cur
+                  ~attrs:[ ("data-key", key) ]
+                  ~events:"change"
+                  ~on_dom_event:(fun n p ->
+                    if n = "change" then
+                      set_v pid key
+                        (jstr_
+                           (Platform.payload_str
+                              (Option.value p ~default:"{}") "value")))
+                  (List.map
+                     (fun c ->
+                       dom ~key:c ~tag:"option"
+                         ~attrs:
+                           ([ ("value", c) ]
+                           @ if c = cur then [ ("selected", "selected") ]
+                             else [])
+                         ~text:c [])
+                     choices) ]
+            )
+        ]
+    ]
+
+let item_object key s =
+  dom ~key:("o-" ^ key) ~style_class:"desc-item as-object"
+    ~attrs:[ ("data-key", key) ]
+    [ desc_h2 key (Plugin_host.jstr s "title")
+    ; dom ~key:"fc" ~style_class:"form-control"
+        (html_desc key (Plugin_host.jstr s "description"))
+    ]
+
+let item_button pid key s =
+  let action = Plugin_host.jstr s "buttonAction" in
+  dom ~key:("b-" ^ key) ~style_class:"desc-item as-button"
+    ~attrs:[ ("data-key", key) ]
+    [ desc_h2 key (Plugin_host.jstr s "title")
+    ; dom ~key:"fc" ~style_class:"form-control"
+        ( html_desc key (Plugin_host.jstr s "description")
+        @ [ dom ~key:"btn" ~tag:"button"
+              ~style_class:"ui__button is-small"
+              ~attrs:[ ("type", "button") ]
+              ~text:(Plugin_host.jstr s "buttonText")
+              ~events:"click"
+              ~on_dom_event:(fun n _ ->
+                if n = "click" then
+                  Plugin_host.call_button_action pid action key)
+              [] ]
+        )
+    ]
+
+(* code mode: cljs lazy-editor renders CodeMirror — a plain textarea
+   plus reset/save keeps the same settings round-trip on web *)
+let code_mode_wrap pid code_mode =
+  let content = json_pretty (Plugin_host.plugin_settings_json pid) in
+  dom ~key:"cmw" ~style_class:"code-mode-wrap pl-3 pr-1 py-1 mb-8 -ml-1"
+    [ dom ~key:"ta" ~tag:"textarea"
+        ~style_class:"form-input font-mono"
+        ~attrs:[ ("rows", "12"); ("data-lang", "json") ]
+        ~text:content []
+    ; dom ~key:"btns" ~style_class:"flex justify-end pt-2 gap-2"
+        [ dom ~key:"reset" ~tag:"button"
+            ~style_class:"ui__button is-small variant-ghost"
+            ~attrs:[ ("type", "button") ] ~text:(t "ui/reset")
+            ~events:"click"
+            ~on_dom_event:(fun n _ ->
+              if n = "click" then Plugin_host.bump ())
+            []
+        ; dom ~key:"save" ~tag:"button"
+            ~style_class:"ui__button is-small"
+            ~attrs:[ ("type", "button") ] ~text:(t "ui/save")
+            ~events:"click"
+            ~on_dom_event:(fun n _ ->
+              if n = "click" then (
+                match
+                  Dom_ext.doc_query_selector
+                    ".cp__plugins-settings-inner .code-mode-wrap textarea"
+                with
+                | Some el -> (
+                    match set_json_exn (Dom_ext.value el) with
+                    | Some j ->
+                        Plugin_host.replace_plugin_settings pid j;
+                        Runtime.signal_set code_mode false
+                    | None ->
+                        Platform.dispatch "ls:toast"
+                          (Plugin_host.jobj
+                             [ ("msg", jstr_ "Invalid JSON")
+                             ; ("cls", jstr_ "error")
+                             ]))
+                | None -> ()))
+            []
+        ]
+    ]
+
+(* cljs settings-container: rows dispatch on :type; unknown ->
+   :plugin/setting-not-handled *)
+let settings_item pid s =
+  let key = Plugin_host.jstr s "key" in
+  let ty = Plugin_host.jstr s "type" in
+  let settings = Plugin_host.plugin_settings_json pid in
+  let v = Plugin_host.getf settings key in
+  let val_or_default =
+    match Js.Json.classify v with
+    | Js.Json.JSONNull -> Plugin_host.getf s "default"
+    | _ -> v
+  in
+  match ty with
+  | "string" | "number" -> item_input pid key s val_or_default
+  | "boolean" -> item_toggle pid key s val_or_default
+  | "enum" -> item_enum pid key s val_or_default
+  | "object" -> item_object key s
+  | "heading" ->
+      dom ~key:("h-" ^ key) ~style_class:"heading-item"
+        ~attrs:[ ("data-key", key) ]
+        [ dom ~tag:"h2" ~key:"t" ~text:(Plugin_host.jstr s "title") [] ]
+  | "button" -> item_button pid key s
+  | _ ->
+      dom ~key:("nh-" ^ key) ~tag:"p" ~style_class:"text-red-500"
+        ~text:(I18n.tf "plugin/setting-not-handled" [ key ]) []
+
+let settings_body (_ms : Model.t Signal.signal) : t =
+ fun ctx parent ->
+  let owner = ctx.ui_scheduler in
+  let code_mode = Signal.state owner false in
+  ignore (Plugin_host.dirty_signal owner);
+  let pair a b = (a, b) in
+  let node =
+    dyn ~equal:Stdlib.( = )
+      (fun (_d, code) ->
+        match !(Plugin_host.open_settings_pid) with
+        | None -> dom ~key:"ps-empty" []
+        | Some pid ->
+            let schema = Plugin_host.plugin_settings_schema pid in
+            let body =
+              if schema = [] then
+                [ dom ~tag:"h2" ~key:"none"
+                    ~style_class:"font-bold text-lg py-4 warning"
+                    ~text:(t "plugin/no-settings-schema") [] ]
+              else
+                [ dom ~tag:"h2" ~key:"id"
+                    ~style_class:"text-xl px-2 pt-1 opacity-90"
+                    ~text:("ID: " ^ pid) []
+                ; dom ~key:"in"
+                    ~style_class:"cp__plugins-settings-inner"
+                    ~attrs:
+                      [ ("data-mode", if code then "code" else "") ]
+                    ( dom ~key:"ef" ~tag:"span"
+                        ~style_class:"edit-file"
+                        [ dom ~tag:"a"
+                            ~style_class:"text-sm hover:underline"
+                            ~events:"click"
+                            ~on_dom_event:(fun n _ ->
+                              if n = "click" then
+                                Runtime.signal_set code_mode (not code))
+                            ~text:
+                              (if code then
+                                 t "plugin.settings/exit-code-mode"
+                               else t "plugin.settings/edit-settings-json")
+                            [] ]
+                    ::
+                    if code then
+                      [ code_mode_wrap pid code_mode ]
+                    else
+                      List.map (settings_item pid) schema )
+                ]
+            in
+            dom ~key:"ps"
+              ~style_class:"cp__plugins-settings cp__settings-main"
+              [ dom ~key:"si"
+                  ~style_class:"cp__settings-inner no-aside"
+                  [ dom ~tag:"article" ~key:"art"
+                      [ dom ~key:"pw" ~style_class:"panel-wrap"
+                          ~attrs:[ ("data-id", pid) ]
+                          body
+                      ]
+                  ]
+              ])
+      (Signal.map2 pair
+         (Plugin_host.dirty_value owner)
+         (Signal.value code_mode))
   in
   node ctx parent

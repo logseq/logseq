@@ -45,6 +45,9 @@ let dispatch kind payload =
       | None -> ())
   | "sync-db-changes" ->
       Render_inline.invalidate_pull_caches ();
+      (* cljs pipeline.cljs publish-plugin-hook! — fire plugin db
+         hooks for the tx report before the UI reloads *)
+      Plugin_host.fire_db_hooks payload;
       schedule_reload ();
       Views_mount.refresh_query_insts ();
       Runtime.run_sync_subs ()

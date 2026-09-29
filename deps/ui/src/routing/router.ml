@@ -475,6 +475,8 @@ let resolve () =
       (* cljs unmounts its modal stack on route change *)
       if Dialogs_state.ready () then Dialogs_state.close_all ();
       Runtime.send (Action.Navigate_to route);
+      (* cljs events.cljs router/route-changed → plugin route hook *)
+      Plugin_host.fire_route_changed route;
       (* cljs settings-effect cleanup: data-settings-tab only while the
          settings route/dialog is active *)
       if route <> Model.Settings then Settings_state.deactivate ();

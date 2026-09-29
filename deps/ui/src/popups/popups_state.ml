@@ -28,6 +28,7 @@ type item_action =
   | Tag_create of string (* "New tag" row — always creates a class *)
   | Template_apply of string (* template block uuid — apply-template op *)
   | Run_query of bool (* cljs editor/run-query-command; arg = advanced? *)
+  | Plugin_slash of string * string (* plugin pid + trigger tag *)
   | Noop (* "No matched commands" row — applies to nothing *)
 
 (* cljs commands-map item doc: title attr text, label echo, formatted
@@ -360,7 +361,20 @@ let slash_items ~has_heading : ac_item list =  List.concat
           , Emit ("{{tweet }}", 2)
         ; "command.editor/add-property", "cube-plus", Desc_none
           , cmd "add-property"
-        ; "editor.slash/cloze", "brackets-contain", Desc_none, Emit ("{{cloze }}", 2) ]    ]
+        ; "editor.slash/cloze", "brackets-contain", Desc_none, Emit ("{{cloze }}", 2) ]
+    ; (match Plugin_host.slash_cmd_tags () with
+       | [] -> []
+       | xs ->
+           (* cljs get-plugins-slash-commands — one "PLUGINS" group,
+              puzzle icon *)
+           let g = Some (U.t "editor.slash/group-plugins") in
+           List.map
+             (fun (pid, tag) ->
+               mk_item ~key:("plugin." ^ pid ^ "/" ^ tag) ~label:tag
+                 ~icon:"puzzle" ?group:g ~desc:Desc_none
+                 (Plugin_slash (pid, tag)))
+             xs)
+    ]
 ;;
 
 (* cljs editor.cljs keeps a fallback item for slash *)
@@ -1323,7 +1337,16 @@ let apply_item t ac it =
       (* cljs strips the "/cmd" trigger text like an Emit "" insert *)
       emit ac.editor ac.tpos "";
       emit_cmd ~pos:ac.tpos c [];
-      close_ac t  | Run_query advanced -> run_query t ac ~advanced
+      close_ac t  | Plugin_slash (pid, tag) ->
+      (* cljs handle-steps — strip the "/tag" trigger like an Emit ""
+         insert, then run each step (editor/input inserts text;
+         editor/hook fires the plugin's event) *)
+      emit ac.editor ac.tpos "";
+      close_ac t;
+      Plugin_host.exec_slash_command
+        ~insert:(fun text -> insert_text ac text 0)
+        pid tag
+  | Run_query advanced -> run_query t ac ~advanced
 
   | Tag_apply title -> apply_tag t ac ~create:false title
   | Tag_create title -> apply_tag t ac ~create:true title

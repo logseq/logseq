@@ -2218,3 +2218,142 @@ extensions/dev helpers.
   mounts, click on `pre.CodeMirror-line` focuses the hidden textarea,
   `fill "*:focus"` writes the doc, Esc exits, `.extensions__code`
   shows the code, block content persists across reload.
+
+## Plugins runtime (branch `devin/lui-plugins-runtime`)
+
+cljs surface: `src/main/frontend/plugins*` (~3.9k lines) drives the
+vendored `resources/js/lsplugin.core.js` (LSPluginCore). The core owns
+the sandboxed iframe loader, `provider:ui` / `provider:theme` /
+`settings:schema` / `settings:update` handlers, injected-UI helpers, and
+the `api:call` proxy that resolves `window.logseq.api[method]` /
+`window.logseq.sdk.<tag>`. None of that needed re-implementation — the
+port fills the host-side gaps the cljs layer supplied: listeners,
+registries, file/storage shims, hook firing, and the settings view.
+
+### `LSPluginCore.hostMounted()`
+
+Plugins' `ready`/provideUI handshake waits on `_hostMountedActor`; cljs
+calls it after page mount. `Plugin_host.setup` (invoked from
+`Sdk_api.install` after `Lui_app.mount`) now ends with
+`LSPluginCore.hostMounted()`.
+
+### Core listeners (`core_listeners`)
+
+`registered`/`reloaded` track the instance; `unregistered` +
+`beforereload` + `disabled` now run `clear_plugin_resources`
+(hooks/simple-commands/slash/global-keybindings/ui-items/themes,
+mirroring cljs `clear-commands!` + `unregister-plugin-themes`);
+`unlink-plugin` drops storage like before. New listeners:
+`themes-changed` (flatten `pid -> themes[]` into `installed_themes`
+with `:pid` injected — cljs `mapcat assoc :pid`), `theme-selected`
+(mode → `data-theme` + `ui/theme`/`ui/custom-theme` localStorage, then
+`hookApp("theme-changed")`), `settings-changed` (bump only — the core's
+settings EE already persisted via `save_plugin_user_settings`), `error`
+(`IllegalPluginPackageError` → `ls:toast` with
+`plugin.package-config/parse-error`). `reset-custom-theme` is not wired
+(no custom-theme UI exists to trigger it).
+
+### Hook registry + firing
+
+`install_plugin_hook`/`uninstall_plugin_hook` record `hook -> {pid}`.
+`should_exec_plugin_hook` returns a **raw boolean**, not a Promise —
+`invokeHostExportedApi` returns call results synchronously and a Promise
+is always truthy; the `%identity` `as_promise` cast keeps the api-fn
+shape while the core's `_hook` compat path reads the bool.
+
+`LSPluginCore._hook` dispatches `hookApp`/`hookEditor`/`hookDb` via
+`%mel.raw` shims (no handwritten JS files). `hook_db` fires on the
+worker `sync-db-changes` broadcast (`worker_events.ml`) with cljs
+payload `{blocks, deletedBlockUuids, txData, txMeta}` plus per-block
+`block:<uuid>` for installed block hooks, gated on the same
+`<= 1000` blocks. `hook_app "route-changed"` fires from `Router.resolve`
+on every committed navigation with `{template, path, parameters}` —
+`parameters` is `{}` (cljs only fills it for a couple of named routes;
+nothing plugin-visible depends on it on web).
+
+### Command registries
+
+`register_plugin_simple_command` stores `{cmd, event, palette}` keyed by
+normalized key (`':' -> '-'`, leading digit -> `_N`). Palette-registered
+commands flow into `Cmdk_state.command_table` as `plugin.<pid>/<key>`
+`Commands_data.cmd` entries; `run_command` short-circuits on the
+`plugin.` prefix and calls `exec_palette_command` (→ `hookEditor` with
+cmd + `{pid, args?, uuid, format}` from `Editor_state.editing_uuid`).
+
+`register_plugin_slash_command` stores `(pid, tag) -> steps`. The "/"
+menu appends a `PLUGINS` group (`editor.slash/group-plugins`, puzzle
+icon) built from `Plugin_host.slash_cmd_tags`; choosing one strips the
+trigger text then runs steps — `editor/input` inserts via the same
+buffer splice as `Emit`, `editor/hook` fires `hookEditor(event,
+payload+{uuid,format})` (cljs `handle-steps`).
+
+`register_global_keybinding_cmd` is recorded (so
+`clear_plugin_resources` can drop it) but no host keybinding dispatcher
+exists on web — the cljs dispatch lives in shortcut handlers not yet
+ported.
+
+`invoke_external_plugin_cmd`: `models` → `caller.callUserModelAsync`,
+`commands` → `exec_simple_command` with args (cljs
+`call-plugin-user-model!`/`call-plugin-user-command!`).
+`__install_plugin` requires `{repo, id}` and delegates to
+`install_marketplace` (cljs delegates to
+`install-marketplace-plugin!`).
+
+### File/storage api (localStorage, not idb/filesystem)
+
+cljs stores plugin files under `LSPUserDotRoot/` in idb; on web there is
+no filesystem, so each file is a localStorage entry keyed
+`LSPUserDotRoot/<sub>/<file>`. `dotdir_norm` normalizes `sub/file` and
+rejects `..` escapes (cljs `"<action> file denied"`). Implementations:
+`write/read/unlink/list/exist_dotdir_file`, `write_user_tmp_file`
+(`tmp/`), `read/write/unlink/exist/clear/list_plugin_storage_file`
+(`storages/<basename pid>/`). `read_plugin_storage_file` rejects with
+"file not existed" like cljs. `list_dotdir_files` enumerates
+`localStorage` keys via `length`/`key(i)` externals.
+
+Electron-only surfaces stay nil/false stubs: `load_plugin_readme`,
+`load_plugin_config`, `save_plugin_package_json`,
+`register/unregister_search_service(s)`, `install/update_plugin_themes`
+(the core handles theme install internally; cljs's host fns were
+electron file ops), `validate_external_plugins` (false — no external
+plugin list on web), `write_assetsdir_file`, main-ui
+`show/hide/toggle/set_inline_style/set_attrs` (plugins own no main UI
+surface yet).
+
+### Install / update lifecycle
+
+`on_lsp_update` now handles all three cljs shapes: `onlyCheck`
+completed → `updates[pid] = latest-version` (drives the "Update 👉 v"
+button); completed for an installed pid → `pl.reload()` + refresh saved
+manifest `version`/`webPkg`; completed for a new pid →
+`LSPluginCore.register`. `check_or_update id repo only_check` fetches
+the r2 entry and re-emits `lsp-updates` like cljs
+`check-or-update-marketplace-plugin!`. Card `.updates-actions` renders
+`.btn` (Update 👉 `<ver>` | Check update). `unregister_plugin` =
+`LSPluginCore.unregister` (cljs `unregister-plugin`); uninstall runs
+through `Dialogs_state.ask` with `plugin/delete-alert`.
+
+### Settings surface
+
+New `plugin-settings` dialog (`dialogs_state.known` + `body_of`). Card
+menu "Open settings" sets `open_settings_pid` and opens it; the body
+mirrors cljs `.cp__plugins-settings.cp__settings-main >
+.cp__settings-inner.no-aside > article > .panel-wrap[data-id]` (web
+always has `nav? = false`). Rows render `desc-item.as-{input,toggle,
+enum,object,button}` + `heading-item` + `p.text-red-500` not-handled,
+descriptions via `Markdown.markdown_to_html` (marked + DOMPurify,
+sanitize options identical to cljs `security/sanitize-html`) into a new
+`"html"` extension property on the DOM adapter. Writes go through
+`pl.settings.set(k,v)` — the core's settings EE persists via
+`save_plugin_user_settings` and emits `settings-changed` (bump
+re-renders). Inputs commit on `change` (not per-keystroke like cljs's
+debounced `defaultValue` — avoids clobbering the buffer mid-edit).
+Code mode is a plain `<textarea>` + Reset/Save (no CodeMirror
+lazy-editor); Save parses and assigns `pl.settings.settings` like cljs.
+
+### Inert-by-design
+
+Menu keeps `View logs` / `Report plugin` `<li>`s for DOM parity but they
+are un-wired (no plugin-logs view or report modal exists on web yet).
+`plugins.edn`, fs ops, ipc, unpacked-plugin reload, assetsdir writes are
+Electron-only and out of scope.
