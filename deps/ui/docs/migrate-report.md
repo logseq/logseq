@@ -998,6 +998,48 @@ search may lag).
   `Unlinked_toggle_search`) rendered `.view-action-search` but the
   button dispatched nothing.
 
+## Property value editing (e2e: `property_basic_test`, `block_property_basic_test`)
+
+- **`replaceChildren` fires `blur` on a focused child before
+  `isConnected` flips**: when a refresh re-renders the properties area
+  (`render_block_area` → `area_el.replaceChildren`), a focused value
+  textarea gets a synchronous `blur` while it still reports connected.
+  A `blur → commit` handler that runs inline therefore nukes the edit
+  session on every routine refresh — the editor closed the instant a
+  commit tx round-tripped. `edit_text_cell` defers the commit one tick
+  (`set_timeout` + `el_is_connected` re-check): a detached editor is
+  skipped, a real user blur still commits. Any future blur-driven
+  commit near a `replaceChildren`/innerHTML refresh needs the same
+  deferral.
+- **Clicks on editing-cell chrome must not blur the textarea**: the
+  `.property-pair > .ls-block` row container is clickable, and a
+  mousedown on the editing cell's padding lands on the `.jtrigger`
+  chrome (tabindex=-1) — focus moves off the textarea, blur-commits,
+  and `*:focus` then resolves to the div (playwright `fill` times
+  out). The editing cell eats `mousedown` on non-editable targets via
+  `preventDefault` so focus stays in the textarea.
+- **Every editable property cell goes through `edit_text_cell`, not an
+  ad-hoc input**: `number_cell` used to mount its own
+  `<input type=number>` outside `active_editor` tracking, so a
+  commit-triggered pill-strip rebuild destroyed the focused input
+  mid-`press-seq`. Now number/date-adjacent text edits share the
+  single editing surface (`active_editor` keyed
+  `(block_uuid, ident)`), which is also what lets a refresh re-mount
+  the editor instead of losing it (`has_active_edit` /
+  `take_pending_edit` in `render`).
+- **Property textareas are not `stale_block_editor`s**:
+  `editor_keys.on_keydown` routed a TEXTAREA inside `.ls-block` to
+  `on_normal_key` (meta+a → outliner `select_all`), which stole
+  `ControlOrMeta+a` inside property value editors. The guard now
+  excludes targets inside `.property-value-container`.
+- **Dialogs are a singleton**: `properties_dialog.open_dialog` runs
+  `S.close_overlays ()` before pushing its overlay — a second "Add
+  property" while one is open must not stack.
+- **Overlay outside-close mirrors shui**: a document-level
+  `mousedown` (capture) drops every overlay stacked above the
+  innermost overlay containing the target (all when outside any);
+  installed lazily on first `push_overlay`.
+
 ## Explicitly not ported (product decisions)
 
 - **Graph view canvas** — the pixi.js page/local graph renderer is
