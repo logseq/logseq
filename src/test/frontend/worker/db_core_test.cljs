@@ -3298,6 +3298,7 @@
        (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
        (d/transact! conn [{:db/id first-block-tempid
                            :block/title "Object"
+                           :block/name "object"
                            :block/uuid first-block-id
                            :block/tags :logseq.class/Page}
                           {:db/id second-block-tempid
