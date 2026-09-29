@@ -1373,16 +1373,34 @@ let apply_chosen t =
   | None -> ()
 ;;
 
+(* cljs closes the mention/search popup on keyup once the caret is no
+   longer wrapped by its trigger pair (close-autocomplete-if-outside).
+   Our editor `]`/`)` autopair-overtype preventDefaults the keystroke and
+   skips the caret past the ghost bracket, so no input event reaches
+   on_editor_input — check the same close condition on leftover keys:
+   caret moved before the trigger, or the buffer shows a completed
+   closer in the query. *)
+let ac_position_closed ac =
+  let pos = Dom_ext.selection_start ac.editor in
+  let v = Dom_ext.value ac.editor in
+  let qend = pos - ac.tpos - ac.tlen in
+  qend < 0 || qend > S.length v
+  || query_closed ac (S.sub v (ac.tpos + ac.tlen) qend)
+;;
+
 (* true if the keydown was consumed by the open popup *)
 let ac_keydown t ev =
-  if (get t).ac = None then false
-  else
-    match Dom_ext.key_ ev with
-    | Some "ArrowDown" -> move_chosen t 1; true
-    | Some "ArrowUp" -> move_chosen t (-1); true
-    | Some ("Enter" | "Tab") -> apply_chosen t; true
-    | Some "Escape" -> close_ac t; true
-    | _ -> false
+  match (get t).ac with
+  | None -> false
+  | Some ac -> (
+      match Dom_ext.key_ ev with
+      | Some "ArrowDown" -> move_chosen t 1; true
+      | Some "ArrowUp" -> move_chosen t (-1); true
+      | Some ("Enter" | "Tab") -> apply_chosen t; true
+      | Some "Escape" -> close_ac t; true
+      | _ ->
+          if ac_position_closed ac then close_ac t;
+          false)
 ;;
 
 let ac_mousemove t el =
