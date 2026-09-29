@@ -30,6 +30,21 @@ let refresh_after_ops : (unit -> unit Js.Promise.t) ref =
 let refresh_property_areas : (unit -> unit Js.Promise.t) ref =
   ref (fun () -> Js.Promise.resolve ())
 
+(* "sync-db-changes" subscribers — one ordered list (drained by
+   Worker_events.dispatch) instead of each area monkey-patching
+   Worker_client.on_message. A failing handler is logged and the rest
+   still run. *)
+let sync_subs : (unit -> unit) list ref = ref []
+
+let on_sync f = sync_subs := !sync_subs @ [ f ]
+
+let run_sync_subs () =
+  List.iter
+    (fun f ->
+      try f ()
+      with e -> Platform.console_error ("sync-db-changes handler failed", e))
+    !sync_subs
+
 (* the open graph's worker uuid — carried as ?graph-id=<uuid> inside the
    location hash (e.g. "#/page/u?graph-id=u") like cljs
    current-graph-query-params, so deep links and reloads resolve a repo *)

@@ -4,7 +4,9 @@
 
    - "notification"    -> toast push (see Decode.toast_of_wire)
    - "sync-db-changes" -> reload current route's data (keeps route_page
-     until the fresh one lands — no blank flicker)
+     until the fresh one lands — no blank flicker), then run the
+     Runtime.on_sync subscribers (areas holding worker data outside the
+     model)
    - anything else     -> Worker_event action for future consumers *)
 
 let dispatch kind payload =
@@ -17,7 +19,8 @@ let dispatch kind payload =
       | None -> ())
   | "sync-db-changes" ->
       Router.reload ();
-      Views_mount.refresh_query_insts ()
+      Views_mount.refresh_query_insts ();
+      Runtime.run_sync_subs ()
   | _ -> Runtime.send (Action.Worker_event (kind, payload))
 
 (* sdk show_msg/close_msg dispatch `ls:toast`/`ls:toast-close`

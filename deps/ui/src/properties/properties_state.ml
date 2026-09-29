@@ -140,23 +140,15 @@ let () = Runtime.refresh_property_areas := refresh_all_now
 
 (* ---------- sync-db-changes hook ---------- *)
 
-(* boot.ml assigns worker.on_message = Worker_events.dispatch (which
-   already triggers Router.reload for model-backed content). Property
-   areas hold worker data outside the model, so we chain a listener
-   AFTER the worker exists: keep the original handler, then refresh
-   areas on every "sync-db-changes" broadcast. *)
+(* Property areas hold worker data outside the model, so they refresh on
+   every "sync-db-changes" broadcast via the shared subscription list. *)
 let chained = ref false
 
 let chain_worker () =
-  match !chained, !Runtime.worker with
-  | true, _ | _, None -> ()
-  | false, Some w ->
-      chained := true;
-      let prev = w.Worker_client.on_message in
-      w.Worker_client.on_message <-
-        (fun kind payload ->
-          (try prev kind payload with _ -> ());
-          if kind = "sync-db-changes" then refresh_all ())
+  if not !chained then begin
+    chained := true;
+    Runtime.on_sync refresh_all
+  end
 
 (* ---------- pending-async guards ---------- *)
 

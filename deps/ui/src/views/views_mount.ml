@@ -180,21 +180,15 @@ let refresh_query_insts () =
 
 (* ---------- observer ---------- *)
 
-(* chain onto worker.on_message once the worker exists: query views hold
-   worker data outside the model, so refresh them on every
-   "sync-db-changes" broadcast (same pattern as properties_state) *)
+(* query views hold worker data outside the model, so they refresh on
+   every "sync-db-changes" broadcast via the shared subscription list *)
 let worker_chained = ref false
 
 let chain_worker () =
-  match !worker_chained, !Runtime.worker with
-  | true, _ | _, None -> ()
-  | false, Some w ->
-      worker_chained := true;
-      let prev = w.Worker_client.on_message in
-      w.Worker_client.on_message <-
-        (fun kind payload ->
-          (try prev kind payload with _ -> ());
-          if kind = "sync-db-changes" then Views_view.refresh_query_insts ())
+  if not !worker_chained then begin
+    worker_chained := true;
+    Runtime.on_sync (fun () -> Views_view.refresh_query_insts ())
+  end
 
 let scan () =
   chain_worker ();
