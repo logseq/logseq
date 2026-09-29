@@ -1640,13 +1640,26 @@ Sizes:
 
 | build | main.js bytes | gzip |
 |---|---:|---:|
-| dev | 5,030,558 | 829,429 |
-| production | 2,739,516 | 645,142 |
+| dev | 3,976,891 | 703,625 |
+| production | 2,452,989 | 555,165 |
 | `js/icon-data.js` (both modes) | 1,778,026 | 331,469 |
 
 (Baseline before this branch: dev 8,546,822 / gzip 1,204,745, prod
 4,974,916 / gzip 988,477 — the icon split is responsible for most of
-the delta; minification accounts for the rest.)
+the delta; minification and tree-shaking account for the rest.)
+
+### ESM emit → tree-shaking works
+
+`js_app/dune` emitted `(module_systems commonjs)`, which rolldown can
+only shake coarsely. Switching to `(module_systems esm)` lets it drop
+dead modules and unused exports — 186 emitted modules fell out of the
+bundle entirely (182 unused `melange-webapi`/lui/dep bindings plus 4
+of our own emitted-but-unreachable modules). No `[%mel.raw]` `require`
+/`module.exports` interop exists in `src/`, so the switch was clean.
+`test/dune` keeps `commonjs` — the node test harness `require()`s its
+emitted modules directly. OCaml-side dead code is otherwise invisible
+to warning 32: without `.mli` files every structure binding is
+exported, so nothing can ever be flagged unused.
 
 ### Icon data split (`resources/js/icon-data.js`)
 
@@ -1673,8 +1686,7 @@ as an unknown icon name before.
 Remaining bundle weight is `keymap_data.js` (~445KB source),
 `@emoji-mart/data` (~410KB), `icon_picker_names.js` (~318KB) — all
 candidates for the same treatment — plus melange runtime and npm deps
-(transit-js, dnd-kit, lui); Melange emits CommonJS so tree-shaking
-yields little, and the build is intentionally a single IIFE
+(transit-js, dnd-kit, lui); the build is intentionally a single IIFE
 (`codeSplitting:false`).
 
 Verified: `bb test -n logseq.e2e.tag-basic-test -p 3007` (3 tests) and
