@@ -162,10 +162,45 @@ let cards_body st =
           (Signal.value st.Cards_state.pos))
        (Signal.value st.Cards_state.phase))
 
+(* overlay-click dismissal matches dialogs_view: the payload carries the
+   click target's class list *)
+let is_overlay_click payload =
+  Option.fold ~none:false
+    ~some:(fun p ->
+      let tc = Platform.payload_str p "targetClass" in
+      let needle = "ui__dialog-overlay" in
+      let ln = String.length needle and lt = String.length tc in
+      let rec go i =
+        i + ln <= lt && (String.sub tc i ln = needle || go (i + 1))
+      in
+      go 0)
+    payload
+
+(* cljs :modal/show-cards -> shui/dialog-open! {:id :srs :label
+   :flashcards__cp} — the deck lives inside the standard dialog chrome
+   (.ui__dialog-overlay > .ui__dialog-content) so it stacks above the
+   page instead of rendering inline *)
 let modal st =
-  dom ~key:"cards-modal" ~id:"cards-modal"
-    ~style_class:"flex flex-col gap-8 flex-1 min-h-0"
-    [ selector_row st; cards_body st ]
+  dom ~key:"cards-ov"
+    ~style_class:
+      "ui__dialog-overlay fixed inset-0 z-50 bg-background/90 flex \
+       justify-center items-center"
+    ~events:"click"
+    ~on_dom_event:(fun n p ->
+      if n = "click" && is_overlay_click p then Cards_state.close st)
+    [ dom ~key:"cards-ct"
+        ~style_class:
+          "ui__dialog-content fixed left-[50%] top-[50%] z-50 grid \
+           w-full max-w-2xl lg:max-w-3xl gap-4 border sm:rounded-lg \
+           bg-background p-6 shadow-lg ui__dialog-zoom-in"
+        ~attrs:
+          [ ("data-state", "open"); ("role", "dialog")
+          ; ("label", "flashcards__cp")
+          ; ("style", "transform: translate(-50%, -50%)") ]
+        [ dom ~key:"cards-modal" ~id:"cards-modal"
+            ~style_class:"flex flex-col gap-8 flex-1 min-h-0"
+            [ selector_row st; cards_body st ] ]
+    ]
 
 let render (ms : Model.t Signal.signal) : t =
   let st = Cards_state.init ms in
