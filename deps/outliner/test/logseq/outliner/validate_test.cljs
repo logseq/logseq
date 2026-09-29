@@ -197,6 +197,20 @@
           (db-test/find-page-by-title @conn "Banana")))
         "Allow a case variant of the same name for a different tag")))
 
+(deftest validate-block-title-unique-checks-all-candidates
+  (let [conn (db-test/create-conn-with-blocks
+              [{:page {:block/title "Foo" :build/tags [:Company]}}
+               {:page {:block/title "foo" :build/tags [:Fruit]}}
+               {:page {:block/title "Bar" :build/tags [:Fruit]}}])]
+    (is (thrown-with-msg?
+         js/Error
+         #"Duplicate page"
+         (outliner-validate/validate-unique-by-name-and-tags
+          @conn
+          "FOO"
+          (db-test/find-page-by-title @conn "Bar")))
+        "Disallow rename when any candidate collides, even if an exempt candidate is checked first")))
+
 (deftest validate-extends-property
   (let [conn (db-test/create-conn-with-blocks
               {:properties {:prop1 {:logseq.property/type :default}}
