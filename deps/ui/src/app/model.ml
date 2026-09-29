@@ -127,6 +127,8 @@ type t =
   ; journals : page list
   ; page_refs : block list
   ; unlinked_refs : block list
+  ; unlinked_exists : bool (* cljs :block-unlinked-ref-exists — gates
+                              whether the collapsed section renders at all *)
   ; repos : string list
   ; theme_dark : bool
   ; left_sidebar_open : bool
@@ -159,6 +161,7 @@ let initial =
   ; journals = []
   ; page_refs = []
   ; unlinked_refs = []
+  ; unlinked_exists = false
   ; repos = []
   ; theme_dark = false
   ; left_sidebar_open =

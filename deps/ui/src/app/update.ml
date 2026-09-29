@@ -46,6 +46,13 @@ let update (model : t) (action : Action.t) : t =
           (if refs = model.unlinked_refs then model.data_gen
            else model.data_gen + 1)
       }
+  | Unlinked_exists b ->
+      { model with
+        unlinked_exists = b
+      ; data_gen =
+          (if b = model.unlinked_exists then model.data_gen
+           else model.data_gen + 1)
+      }
   | Navigate_to route ->
       { model with
         route
@@ -53,6 +60,7 @@ let update (model : t) (action : Action.t) : t =
       ; page_missing = false
       ; page_refs = []
       ; unlinked_refs = []
+      ; unlinked_exists = false
       ; editing_title = false
       ; page_menu = None
       ; appearance = None
