@@ -149,7 +149,7 @@ let query_shell =
     [ D.el ~tag:"button"
         ~style_class:
           "ls-query-setting ls-small-icon text-muted-foreground ml-2 w-6 h-6"
-        ~attrs:[ ("type", "button"); ("title", "Set query") ] []
+        ~attrs:[ ("type", "button"); ("title", I18n.t "block/set-query") ] []
     ]
 
 let heading_tag lvl = "h" ^ string_of_int (max 1 (min lvl 6))

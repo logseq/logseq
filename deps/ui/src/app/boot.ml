@@ -116,7 +116,7 @@ let run () =
   Pdf.install ();
   let w = Worker_client.create () in
   Worker_client.notify_worker_failure :=
-    (fun () -> Toast.error "Database worker crashed — reload the app.");
+    (fun () -> Toast.error (I18n.t "storage/db-worker-crashed-error"));
   w.on_message <- Worker_events.dispatch;
   Worker_events.init ();
   Runtime.worker := Some w;
@@ -144,5 +144,5 @@ let run () =
          Js.Promise.resolve ())
   |> Js.Promise.catch (fun err ->
          Platform.console_error ("boot failed", err);
-         Toast.error "Failed to load the graph — check the console for details.";
+         Toast.error (I18n.t "graph/load-error");
          Js.Promise.resolve ())

@@ -296,7 +296,7 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
        .block-content-wrapper(.ls-page-title-actions + content|editor) +
        .ls-block-right(.block-tags). Tags render while editing too. *)
     [ dom ~key:"pt-inner" ~style_class:"w-full relative"
-        [ dom ~key:"pt-block" ~style_class:"ls-block swipe-item"
+        [ dom ~key:"pt-block" ~style_class:"ls-block"
             ~id:("ls-block-" ^ uuid)
             ~attrs:
               [ ("blockid", uuid); ("containerid", uuid)
