@@ -171,18 +171,33 @@ let then_keep p k =
          Js.Promise.resolve ())
        p)
 
+(* loads race with writes (push_recent/set-page-favorite) and with each
+   other via the sync-db-changes broadcast; a stale RPC resolving last would
+   clobber fresher state, so only the latest issued load may apply *)
+let favorites_gen = ref 0
+
 let load_favorites repo st =
+  incr favorites_gen;
+  let gen = !favorites_gen in
   then_keep
     (Runtime.invoke1 "thread-api/get-favorite-pages" (Wire.String repo))
-    (fun w -> Runtime.signal_set st.favorites (pages_of_wire w))
+    (fun w ->
+      if gen = !favorites_gen then
+        Runtime.signal_set st.favorites (pages_of_wire w))
+
+let recents_gen = ref 0
 
 let load_recents repo st =
+  incr recents_gen;
+  let gen = !recents_gen in
   let ids =
     Wire.List (List.map (fun i -> Wire.Int i) (recent_ids_of_storage repo))
   in
   then_keep
     (Runtime.invoke2 "thread-api/get-recent-pages" (Wire.String repo) ids)
-    (fun w -> Runtime.signal_set st.recents (pages_of_wire w))
+    (fun w ->
+      if gen = !recents_gen then
+        Runtime.signal_set st.recents (pages_of_wire w))
 
 let load_nav_tag_titles repo st =
   let pull_cls cls =
@@ -554,13 +569,20 @@ let toggle_favorite st =
   | Some p, Some repo -> (
       match p.Model.page_uuid with
       | Some u ->
-          let fav = Signal.get_state st.favorited in
+          (* the cached favorited signal can still hold the previous page's
+             flag right after navigation; ask the worker for this page's
+             state instead of toggling from stale UI state *)
           then_keep
-            (Runtime.invoke3 "thread-api/set-page-favorite"
-               (Wire.String repo) (Wire.Uuid u) (Wire.Bool (not fav)))
-            (fun _ ->
-              load_favorites repo st;
-              refresh_favorited repo st)
+            (Runtime.invoke2 "thread-api/favorited-page?"
+               (Wire.String repo) (Wire.Uuid u))
+            (fun w ->
+              let fav = Wire.as_bool w = Some true in
+              then_keep
+                (Runtime.invoke3 "thread-api/set-page-favorite"
+                   (Wire.String repo) (Wire.Uuid u) (Wire.Bool (not fav)))
+                (fun _ ->
+                  load_favorites repo st;
+                  refresh_favorited repo st))
       | None -> ())
   | _ -> ()
 

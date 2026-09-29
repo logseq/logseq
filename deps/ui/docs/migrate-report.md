@@ -204,7 +204,24 @@ no local repin is needed. Earlier items in this list are on main.)
   attached at that point in the op stream, can take the write.
 - DOM `removeChild`/`MoveChild` ops now detach nodes from their actual
   DOM parent instead of assuming the recorded parent (stale tree state
-  after navigation raced removals).
+  after navigation raced removals). Host apps may also swap tracked
+  elements outside op dispatch entirely: `editor_dom.ml` replaces
+  `<raw-text>` placeholders with real text nodes via a MutationObserver
+  (`dom_fixups`), leaving the retained store pointing at detached
+  elements — `detach_dom_child` therefore no-ops when the DOM reports
+  a different `parentNode` (lui `5a00864`).
+- **`lui_runtime.flush` claims `pending_ops` + `runtime_generation`
+  before `apply_pending_batch`** (lui `1d58d13`). If apply re-enters
+  flush (a dom-event handler sending actions mid-batch), the nested
+  call used to replay the same ops or drop the generation bump; the
+  claim-first ordering makes re-entry a no-op.
+- **`apply_dom_batch` wraps every JS exception as `Invalid_argument`**
+  ("dom batch: <exn>") so it joins the `apply_pending_batch` catch
+  (lui `5a00864`). Raw JS errors (e.g. `NotFoundError` from
+  `removeChild`) used to escape past it: the store had committed while
+  `runtime_generation` stayed behind, and every subsequent batch threw
+  `expected patch generation N+1, received N` — the same wedge as the
+  generation-desync above, via a different door.
 
 ## Open / intermittent issues
 
@@ -1132,6 +1149,16 @@ search may lag).
 
 ## Editor (e2e: `editor_basic_test`)
 
+- **Shift+click on the page title opens the page in the right sidebar
+  and must NOT enter title edit.** Two click paths reach
+  `Title_edit_start`: the `title_content` `.block-content` handler and
+  the `.ls-page-title` wrapper handler in `page_title_el` (which fires
+  for any descendant click whose target has no `id` — `targetId`
+  serializes to `""`, so `target = ""` matches `.block-title-wrap`
+  too). Both must guard on `payload_bool "shiftKey"`; the wrapper
+  handler lacked the check, so shift+click swapped the title into the
+  editor mid-dispatch — Playwright's real click then saw its target
+  element detached before `Sidebar_state.on_doc_click` ran.
 - **`#/` (Home) is the journals stream, not today's page.** cljs
   `route.cljs:go-to-journals!` routes to `:home` (or `:all-journals`
   only when a custom home page is set), and `:home` renders the full
@@ -1240,6 +1267,82 @@ search may lag).
   group also matches (e.g. a just-visited page "Library"), producing
   two `[data-testid="<title>"]` spans and a playwright strict-mode
   violation.
+- **Every store schedules a debounced `wal_checkpoint(TRUNCATE)`**
+  (cljs `db-core.cljs` `schedule-wal-checkpoint!`, 2000ms idle, keyed
+  by repo). The OPFS pool runs `journal_mode=WAL` +
+  `wal_autocheckpoint=0` + `locking_mode=exclusive`, so without the
+  idle checkpoint `db.sqlite-wal` grows unboundedly — under sustained
+  commit bursts (the e2e suite seeds ~30 journals) it exceeds the
+  access-handle write cap and `sah.write()` returns
+  `FILE_ERROR_NO_SPACE` (-8), surfacing as a permanent SQLITE_IOERR on
+  every subsequent commit. Ported to
+  `db-worker/lib/graph_store.ml:schedule_wal_checkpoint` via
+  `Timers.set_timeout`, fired after each `store`'s transaction.
+- **Lazy-state readers must `S.ensure` before `S.signal`/`S.state`.**
+  `block_row_static` (linked-reference rows) called `S.signal()` without
+  `ensure`; on a journals refresh the first mounted row is a ref row, so
+  `state ()` hit `failwith "editor state not mounted"` mid-mount. Worse,
+  the throw happens inside a `Runtime.flush` effect: the failing effect
+  stays queued and *every subsequent flush dies on the same exception* —
+  the MutationObserver driven publish never fires again and the page
+  freezes with boot complete. Any `S.*` read inside a component body
+  needs `ensure` first (or a not-mounted fallback).
+- **LUI `InsertChild` cannot use a bare DOM index.** In one batch a
+  child may be created then dropped later, or a lower-indexed insert may
+  land after a higher-indexed one — `insertBefore` with the stored index
+  then throws `IndexSizeError`, and because the batch is mid-apply the
+  store and DOM diverge permanently (cmdk reopened empty, suite died at
+  the next test). `lui_web_apply.insert_child_anchored` anchors on the
+  next retained sibling whose DOM element is already seated in the
+  target container, falling back to append (lui
+  `devin/remove-child-order`).
+- **`<raw-text>` placeholders need a live-node backlink.**
+  `Editor_dom.replace_all_raw_text` swaps `<raw-text
+  data-raw-text="s">` for a real text node via `replaceWith`; after the
+  swap the LUI node's element is DETACHED — later `data-raw-text` attr
+  writes land on a dead element (dynamic `D.txt` inside `dyn` never
+  updates, e.g. `[[uuid]]` `a.page-ref` inner span stayed empty after
+  `thread-api/pull` resolved) and `DropNode` removes nothing. The
+  placeholder now keeps `__lsTextNode` pointing at the live node
+  (reused on re-insert); `dom_adapter.apply_attrs` forwards
+  `data-raw-text` writes to `textNode.data` and adapter `cleanup`
+  removes the live node.
+- **Sidebar `dyn ~equal` must compare contents, not shape.**
+  `left_sidebar_view` favorites/recents used
+  `~equal:(fun a b -> (a = []) = (b = []))` — once the list was
+  non-empty every later load compared equal and the sidebar froze on
+  the first render (stale favorites across the whole suite). Compare
+  `List.map (fun p -> (p.page_uuid, p.page_title))`. Same class of bug:
+  both loads also need a generation counter (`favorites_gen`/
+  `recents_gen`) — a load started on page A can resolve after
+  navigation and clobber page B's list.
+- **`toggle_favorite` reads the worker, not the cached signal.** The
+  `favorited` signal still holds the previous page's flag right after
+  navigation; toggling from it can write the inverted value. Query
+  `thread-api/favorited-page?` at toggle time, then
+  `set-page-favorite`.
+- **pending-focus window: shift+arrows must be queued, not
+  swallowed.** `on_pending_focus_key`'s fallthrough only
+  `preventDefault`ed, so `Shift+ArrowUp` arriving while the editing
+  textarea was mid-remount never entered block selection — the
+  following Tab hit `indent_or_outdent`'s `[editing-uuid]` fallback,
+  which is a no-op on a first child (multi-select indent did nothing
+  and the undo history desynced). Shift+ArrowUp/Down now queue
+  `shift_arrow_select`: replayed after focus lands it runs
+  `exit_edit ~select:true` when still editing, `extend_selection`
+  otherwise.
+- **`#` tag menu suppresses "New tag" on any exact-title match.**
+  cljs hides the create row when the text matches an existing page OR
+  class (private classes included); `Tag_search` now checks an
+  `except-private-tags=false` `get-all-classes` list
+  (`tag_exact_titles`) — otherwise `#Journal`-style inputs offered a
+  create row the worker then rejects.
+- **One `#today-queries` render site.** `page.ml` rendered the
+  today-queries block twice (duplicate ids, strict-mode violations);
+  keep the journals-view instance only.
+- **Page-title focus targets `.ls-page-title`.**
+  `editor_actions.focus_page_title` must select the title textarea via
+  `D.query_selector ".ls-page-title"` (added to `editor_dom`).
 
 ## Toolchain / test-suite state
 
@@ -1262,7 +1365,6 @@ search may lag).
   (Melange→node). `Platform.local_storage_*` resolves the storage
   object via `globalThis` and no-ops when absent, because
   `Model.initial` touches storage at module init under node.
-||||||| parent of be25c4ee95 (fix(ui): parity sweep — journals scaffolding, route-conditional content-wrap, ref-summary maps in block/refs, icon picker set)
 
 ## Parity sweep fixes
 

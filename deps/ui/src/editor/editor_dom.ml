@@ -21,6 +21,9 @@ external get_element_by_id : string -> el option = "getElementById"
 external query_selector_all : string -> node_list = "querySelectorAll"
   [@@mel.scope "document"]
 
+external query_selector : string -> el option = "querySelector"
+  [@@mel.scope "document"] [@@mel.return nullable]
+
 external active_element : el option = "document.activeElement"
   [@@mel.return nullable]
 
@@ -153,15 +156,34 @@ let for_each_selector sel f =
     match node_list_item nl i with Some el -> f el | None -> ()
   done
 
+external el_raw_text_node : el -> el Js.Undefined.t = "__lsTextNode"
+  [@@mel.get]
+
+external el_set_raw_text_node : el -> el -> unit = "__lsTextNode"
+  [@@mel.set]
+
+external node_set_data : el -> string -> unit = "data" [@@mel.set]
+
 (* <raw-text> placeholders carry the intended text in data-raw-text and
    are swapped for real text nodes once they enter the DOM — extension
    create() can only return Elements, so this observer performs the
-   swap the adapter cannot. *)
+   swap the adapter cannot.  The swapped node is kept on the placeholder
+   as __lsTextNode so later property writes/removals on the (detached)
+   placeholder can still reach the live text node, and a re-inserted
+   placeholder reuses it so the text moves with the node. *)
 let replace_all_raw_text () =
   for_each_selector "raw-text" (fun el ->
-      match el_get_attr el "data-raw-text" with
-      | Some s -> el_replace_with el (create_text_node s)
-      | None -> el_replace_with el (create_text_node ""))
+      let s =
+        Option.value (el_get_attr el "data-raw-text") ~default:""
+      in
+      let tn =
+        match Js.Undefined.toOption (el_raw_text_node el) with
+        | Some n -> n
+        | None -> create_text_node s
+      in
+      node_set_data tn s;
+      el_replace_with el tn;
+      el_set_raw_text_node el tn)
 
 (* LUI core stamps id="lui-node-<n>" on every registered/extension node
    at create time; cljs emits no such ids, so strip them for DOM parity.

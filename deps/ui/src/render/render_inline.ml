@@ -346,7 +346,8 @@ and resolved_ref ~refs ~self uuid : t =
                     | None -> false
                   in
                   Runtime.signal_set st (t, is_page)
-              | _ -> Runtime.signal_set st (uuid, true));
+              | _ ->
+                  Runtime.signal_set st (uuid, true));
              Js.Promise.resolve ())
       |> ignore);
   let child_refs =

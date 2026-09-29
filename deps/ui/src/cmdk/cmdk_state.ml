@@ -639,7 +639,9 @@ let open_palette ?(move = false) st =
   st.gen := !(st.gen) + 1;
   set_in st (fun v ->
           { v with open_ = true; input = ""; move_mode = move; mouse = false
-          ; filter = None
+          (* cljs move-selected-blocks opens via go-to-search! :nodes, which
+             pins the nodes filter — keeps recents/filters out of the list *)
+          ; filter = (if move then Some G_nodes else None)
           ; tip = (if js_random () < 0.5 then 0 else 1) });
   (* prime synchronously so commands show before the search lands *)
   apply_results st "" move [] [] 0;
@@ -663,7 +665,10 @@ let clear_filter st =
 
 let clear_or_close st =
   let v = get st in
-  if v.filter <> None then (clear_filter st; true)
+  (* cljs esc: move mode never clears its pinned nodes filter — blank input
+     closes the dialog, non-blank just clears the text *)
+  if v.move_mode && v.input = "" then (close st; true)
+  else if v.filter <> None && not v.move_mode then (clear_filter st; true)
   else if v.input <> "" then (
     set_in st (fun v -> { v with input = "" });
     (match Dom_ext.doc_query_selector ".cp__cmdk-search-input" with

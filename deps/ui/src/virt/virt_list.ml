@@ -217,11 +217,21 @@ let list ?(scroll_parent_id = "main-content-container") ?(overscan = 1)
       [ if row.v_index < Array.length data then render data.(row.v_index)
         else box ~key:("vrx-" ^ row.v_key) [] ]
   in
-  set_timeout
-    (fun () ->
+  (* LUI applies the enclosing dom tree asynchronously — the list element
+     may not exist yet at +0ms; retry briefly, then fail loudly rather
+     than leaving the list permanently empty *)
+  let rec try_attach attempt =
+    if get_by_id list_id <> None && get_by_id scroll_parent_id <> None then
       attach ctx st margin list_id scroll_parent_id data key_of overscan
-        estimate_size)
-    0;
+        estimate_size
+    else if attempt < 100 then
+      set_timeout (fun () -> try_attach (attempt + 1)) 50
+    else
+      Platform.console_log
+        ("virt-list attach failed: missing "
+        ^ (if get_by_id list_id = None then list_id else scroll_parent_id))
+  in
+  set_timeout (fun () -> try_attach 0) 0;
   D.dom ~key:("vl-" ^ list_id) ~id:list_id ~style_class:list_class
     ~attrs:list_attrs
     [ D.dom ~key:("vs-" ^ list_id) ~style_class:"ls-virt-spacer"

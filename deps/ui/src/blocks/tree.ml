@@ -515,7 +515,12 @@ and children_el ~editable ~library uuid scope (b : Model.block) : t =
    simultaneously be under edit in its own page, and a second
    #edit-block-<uuid> textarea breaks locators. *)
 and block_row_static ?(library = false) (b : Model.block) : t =
-  let uuid = Option.value b.block_uuid ~default:"" in
+ fun ctx parent ->
+  (* references rows can be the first block render on a page (journals
+     refresh mounts ref rows before any editable row) — the state must
+     exist before the per-row signals below *)
+  S.ensure ctx;
+  (let uuid = Option.value b.block_uuid ~default:"" in
   let key = block_key b in
   let embed = b.block_link <> None in
   let has_children = b.block_children <> [] in
@@ -566,7 +571,8 @@ and block_row_static ?(library = false) (b : Model.block) : t =
         ~style_class:"ls-block-content-indent" []
     ; (if has_children then children_static_el ~library uuid b
        else Logseq_dom.nothing)
-    ]
+    ])
+  ctx parent
 
 and children_static_el ~library uuid (b : Model.block) : t =
   dom ~key:("children-" ^ uuid)
