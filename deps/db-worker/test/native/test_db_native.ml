@@ -2607,7 +2607,13 @@ let test_validate_block_title_unique_for_tags () =
     "Another tag named"
     (fun () ->
        Outliner_validate.validate_unique_by_name_and_tags db (Some "Card")
-         (ent_ident db "user.class/Class1") None)
+         (ent_ident db "user.class/Class1") None);
+  check "validate unique: class may use a case variant of another class name"
+    (try
+       Outliner_validate.validate_unique_by_name_and_tags db (Some "class1")
+         (ent_ident db "user.class/Class2") None;
+       true
+     with _ -> false)
 
 (* (deftest validate-block-title-unique-for-pages ...) *)
 let test_validate_block_title_unique_for_pages () =
@@ -2619,6 +2625,9 @@ let test_validate_block_title_unique_for_pages () =
             Db_test_util.blocks = [] };
           { Db_test_util.page =
               Db_test_util.{ default_page with pg_title = Some "another page" };
+            Db_test_util.blocks = [] };
+          { Db_test_util.page =
+              Db_test_util.{ default_page with pg_title = Some "Foo" };
             Db_test_util.blocks = [] };
           { Db_test_util.page =
               Db_test_util.{ default_page with pg_title = Some "Apple";
@@ -2656,7 +2665,55 @@ let test_validate_block_title_unique_for_pages () =
        Outliner_validate.validate_unique_by_name_and_tags db (Some "Apple")
          (Db_test_util.find_page_by_title db "Fruit") None;
        true
+     with _ -> false);
+  throws_with "validate unique: rename to case variant of top-level page"
+    "Another page named \"foo\" already exists."
+    (fun () ->
+       Outliner_validate.validate_unique_by_name_and_tags db (Some "foo")
+         (Db_test_util.find_page_by_title db "another page") None);
+  check "validate unique: rename to own title's case variant allowed"
+    (try
+       Outliner_validate.validate_unique_by_name_and_tags db (Some "PAGE1")
+         (Db_test_util.find_page_by_title db "page1") None;
+       true
+     with _ -> false);
+  throws_with "validate unique: rename to case variant with same tag"
+    "Another page named"
+    (fun () ->
+       Outliner_validate.validate_unique_by_name_and_tags db (Some "apple")
+         (Db_test_util.find_page_by_title db "Another Company") None);
+  check "validate unique: case variant allowed for different tag"
+    (try
+       Outliner_validate.validate_unique_by_name_and_tags db (Some "apple")
+         (Db_test_util.find_page_by_title db "Banana") None;
+       true
      with _ -> false)
+
+(* (deftest validate-block-title-unique-checks-all-candidates ...) *)
+let test_validate_block_title_unique_checks_all_candidates () =
+  let conn =
+    Db_test_util.create_conn_with_blocks
+      ~pages_and_blocks:
+        [ { Db_test_util.page =
+              Db_test_util.{ default_page with pg_title = Some "Foo";
+                             pg_tags = [ "Company" ] };
+            Db_test_util.blocks = [] };
+          { Db_test_util.page =
+              Db_test_util.{ default_page with pg_title = Some "foo";
+                             pg_tags = [ "Fruit" ] };
+            Db_test_util.blocks = [] };
+          { Db_test_util.page =
+              Db_test_util.{ default_page with pg_title = Some "Bar";
+                             pg_tags = [ "Fruit" ] };
+            Db_test_util.blocks = [] } ]
+      ()
+  in
+  let db = db_of conn in
+  throws_with "validate unique: any colliding candidate rejects the rename"
+    "Another page named"
+    (fun () ->
+       Outliner_validate.validate_unique_by_name_and_tags db (Some "FOO")
+         (Db_test_util.find_page_by_title db "Bar") None)
 
 (* (deftest validate-block-title-unique-for-namespaced-pages ...)
    :build-existing-tx? is a fixture flag; same shape via explicit
@@ -2696,6 +2753,17 @@ let test_validate_block_title_unique_for_namespaced_pages () =
                                  Db_test_util.Vec
                                    [ Db_test_util.Kw "block/uuid";
                                      Db_test_util.Uuid "3aa1e950-5a9b-4efc-81d4-b6d89a504591" ] ] };
+            Db_test_util.blocks = [] };
+          { Db_test_util.page =
+              Db_test_util.{ default_page with pg_title = Some "other";
+                             pg_extra =
+                               [ "block/parent",
+                                 Db_test_util.Vec
+                                   [ Db_test_util.Kw "block/uuid";
+                                     Db_test_util.Uuid "d246c71a-3e71-42f0-928f-afe607ee5ce0" ] ] };
+            Db_test_util.blocks = [] };
+          { Db_test_util.page =
+              Db_test_util.{ default_page with pg_title = Some "Foo" };
             Db_test_util.blocks = [] } ]
       ()
   in
@@ -2709,6 +2777,29 @@ let test_validate_block_title_unique_for_namespaced_pages () =
     (try
        Outliner_validate.validate_unique_by_name_and_tags db (Some "n4")
          (Db_test_util.find_page_by_title db "n3") None;
+       true
+     with _ -> false);
+  throws_with "validate unique: rename ns child to sibling's case variant"
+    "Another page named"
+    (fun () ->
+       Outliner_validate.validate_unique_by_name_and_tags db (Some "N2")
+         (Db_test_util.find_page_by_title db "n3") None);
+  check "validate unique: ns child may share name with other-parent page"
+    (try
+       Outliner_validate.validate_unique_by_name_and_tags db (Some "Other")
+         (Db_test_util.find_page_by_title db "n3") None;
+       true
+     with _ -> false);
+  check "validate unique: ns child may share name with top-level page"
+    (try
+       Outliner_validate.validate_unique_by_name_and_tags db (Some "foo")
+         (Db_test_util.find_page_by_title db "n3") None;
+       true
+     with _ -> false);
+  check "validate unique: top-level page may share name with ns page"
+    (try
+       Outliner_validate.validate_unique_by_name_and_tags db (Some "N2")
+         (Db_test_util.find_page_by_title db "Foo") None;
        true
      with _ -> false)
 
@@ -3283,6 +3374,7 @@ let endpoint_cases : unit Alcotest.test_case list =
     Alcotest.test_case "validate-block-title-unique-for-properties" `Quick test_validate_block_title_unique_for_properties;
     Alcotest.test_case "validate-block-title-unique-for-tags" `Quick test_validate_block_title_unique_for_tags;
     Alcotest.test_case "validate-block-title-unique-for-pages" `Quick test_validate_block_title_unique_for_pages;
+    Alcotest.test_case "validate-block-title-unique-checks-all-candidates" `Quick test_validate_block_title_unique_checks_all_candidates;
     Alcotest.test_case "validate-block-title-unique-for-namespaced-pages" `Quick test_validate_block_title_unique_for_namespaced_pages;
     Alcotest.test_case "validate-extends-property" `Quick test_validate_extends_property;
     Alcotest.test_case "validate-tags-property" `Quick test_validate_tags_property;

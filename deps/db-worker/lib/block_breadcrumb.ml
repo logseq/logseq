@@ -158,13 +158,49 @@ let property_or_asset_extras db collected : (attr * value) list =
        | None -> [])
     ]
 
-let compute_shallow_ref_identity db (ref_id : entity_id option) : (attr * value) list =
+(* node-value-target-id — a :node property value can be stored as a
+   hidden property value block whose :block/title is the uuid of the node
+   it targets. Such a value block only stands in for its target when read
+   through the property it was created for — anywhere else (e.g. an
+   explicit block reference) it is itself. Value blocks of other
+   property types carry their own content (a :default value could itself
+   be a uuid string), so they are never resolved. *)
+let node_value_target_id db (ref_id : entity_id) collected
+    (attr : attr option) : entity_id option =
+  match attr with
+  | None -> None
+  | Some attr -> (
+      match collected_scalar collected "logseq.property/created-from-property" with
+      | Some v -> (
+          match resolve_ref_id_of_value db v with
+          | Some pid -> (
+              match Ldb.ent_of_id db pid with
+              | Some property
+                when Ldb.value property "logseq.property/type"
+                     = Some (Keyword "node")
+                     && Ldb.ident_of property = Some attr -> (
+                  match collected_scalar collected "block/title" with
+                  | Some (String title) when Ldb.is_uuid_string title -> (
+                      match entity db (Lookup_ref ("block/uuid", Uuid title)) with
+                      | Some target when target.id <> ref_id -> Some target.id
+                      | _ -> None)
+                  | _ -> None)
+              | _ -> None)
+          | None -> None)
+      | None -> None)
+
+let rec compute_shallow_ref_identity db (ref_id : entity_id option)
+    (attr : attr option) : (attr * value) list =
   let ref_id =
     match ref_id with
     | Some id -> id
     | None -> fail "Missing canonical block reference" "{:ref-id nil}"
   in
   let collected = scan_ref_attrs db ref_id in
+  (match node_value_target_id db ref_id collected attr with
+   | Some target_id ->
+       compute_shallow_ref_identity db (Some target_id) None
+   | None ->
   let ref_uuid = collected_scalar collected "block/uuid" in
   let ref_ident = collected_scalar collected "db/ident" in
   let ref_title =
@@ -205,25 +241,34 @@ let compute_shallow_ref_identity db (ref_id : entity_id option) : (attr * value)
   List.fold_left
     (fun acc (a, v) -> (a, v) :: List.remove_assoc a acc)
     base
-    (if page_ref_identity collected then [] else property_or_asset_extras db collected)
+    (if page_ref_identity collected then [] else property_or_asset_extras db collected))
 
 (* cljs *ref-identity-cache* — bound per batch; one per breadcrumb
    call here (still dedupes refs shared across ancestors/refs). *)
-type cache = (entity_id, (attr * value) list) Hashtbl.t
 
-let shallow_ref_identity ?cache db (r : Ev.node) : (attr * value) list =
+(* cljs cache-key [ref-id attr] — the same value block resolves
+   differently per owning property *)
+type cache = (entity_id * attr option, (attr * value) list) Hashtbl.t
+
+let shallow_ref_identity ?cache ?attr db (r : Ev.node)
+    : (attr * value) list =
   let ref_id = resolve_ref_id db r in
+  let key =
+    match ref_id with
+    | Some id -> Some (id, attr)
+    | None -> None
+  in
   let hit =
-    match cache, ref_id with
-    | Some c, Some id -> Hashtbl.find_opt c id
+    match cache, key with
+    | Some c, Some k -> Hashtbl.find_opt c k
     | _ -> None
   in
   match hit with
   | Some h -> h
   | None ->
-      let identity = compute_shallow_ref_identity db ref_id in
-      (match cache, ref_id with
-       | Some c, Some id -> Hashtbl.replace c id identity
+      let identity = compute_shallow_ref_identity db ref_id attr in
+      (match cache, key with
+       | Some c, Some k -> Hashtbl.replace c k identity
        | _ -> ());
       identity
 

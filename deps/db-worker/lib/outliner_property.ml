@@ -2024,15 +2024,18 @@ let upsert_property conn (property_id : string option) (schema : Wire.t)
         | Some (Wire.Int id) -> Some id
         | _ -> None
       in
-      let block_uuid =
+      let page =
         match db_id with
-        | Some id ->
-            (match Ldb.ent_of_id db id with
-             | Some e ->
-                 (match Ldb.value e "block/uuid" with
-                  | Some (Uuid u) -> Some u
-                  | _ -> None)
-             | None -> None)
+        | Some id -> Ldb.ent_of_id db id
+        | None -> None
+      in
+      Outliner_validate.validate_page_to_property_conversion page;
+      let block_uuid =
+        match page with
+        | Some e ->
+            (match Ldb.value e "block/uuid" with
+             | Some (Uuid u) -> Some u
+             | _ -> None)
         | None -> None
       in
       let new_property =
@@ -2057,6 +2060,45 @@ let upsert_property conn (property_id : string option) (schema : Wire.t)
       (match entity (Datascript.db conn) (Ident db_ident') with
        | Some e -> e
        | None -> failwith "upsert-property failed to create entity")
+
+(* node-value-target-id — resolves a :node property value to the id of
+   the node it targets. Such values can be hidden property value blocks
+   whose :block/title is the target's uuid. Only resolves value blocks
+   created by property-ident itself — a value block created for another
+   property carries its own content even when stored under this
+   property. *)
+let node_value_target_id db (v : value) (property_ident : attr)
+    : entity_id option =
+  let ent =
+    match v with
+    | Ref id -> Ldb.ent_of_id db id
+    | Int64 i -> (
+        match Datascript.Util.int64_to_int i with
+        | Some id -> Ldb.ent_of_id db id
+        | None -> None)
+    | _ -> None
+  in
+  match ent with
+  | Some e -> (
+      let matches =
+        match Ldb.ref_ent e "logseq.property/created-from-property" with
+        | Some p -> Ldb.ident_of p = Some property_ident
+        | None -> false
+      in
+      match matches, Ldb.string_value e "block/title" with
+      | true, Some title when Ldb.is_uuid_string title -> (
+          match entity db (Lookup_ref ("block/uuid", Uuid title)) with
+          | Some target -> Some target.id
+          | None -> Some e.id)
+      | _ -> Some e.id)
+  | None -> None
+
+(* cljs (if (de/entity? v) (:db/id v) v) — ref values carry the target
+   eid; scalars carry themselves *)
+let match_value_of (v : value) : value =
+  match v with
+  | Ref id -> Int64 (Int64.of_int id)
+  | _ -> v
 
 (* batch-delete-property-value! *)
 let batch_delete_property_value conn (block_eids : Wire.t list)
@@ -2106,30 +2148,48 @@ let batch_delete_property_value conn (block_eids : Wire.t list)
                  [ ("outliner-op", Keyword "save-block") ]
                |> ignore
              end else
+               let node_type =
+                 Ldb.value property "logseq.property/type"
+                 = Some (Keyword "node")
+               in
                List.iter
                  (fun e ->
                     match entity_of_eid db e with
                     | Some block ->
                         let current_val = Ldb.values block property_id in
-                        let fv = List.nth_opt current_val 0 in
-                        if
-                          List.length current_val = 1
-                          &&
-                          (match fv, property_value with
-                           | Some (Ref id), Wire.Int vid -> id = vid
-                           | Some rv, _ ->
-                               rv = Ds_wire.value_of_transit property_value
-                           | _ -> false)
-                        then
-                          remove_block_property conn (Wire.Int block.id)
-                            property_id
-                        else
-                          Db_transact.transact conn
-                            [ Wire.Array
-                                [ kw "db/retract"; Wire.Int block.id
-                                ; kw property_id; property_value ] ]
-                            [ ("outliner-op", Keyword "save-block") ]
-                          |> ignore
+                        (* cljs match-id — the first value equal to
+                           property-value, or (for :node properties) whose
+                           hidden value block resolves to it *)
+                        let matched =
+                          List.find_opt
+                            (fun v ->
+                               let v_id = match_value_of v in
+                               Ds_wire.value_of_transit property_value
+                               = v_id
+                               || (node_type
+                                   &&
+                                   (match property_value,
+                                          node_value_target_id db v
+                                            property_id
+                                    with
+                                    | Wire.Int vid, Some tid -> vid = tid
+                                    | _ -> false)))
+                            current_val
+                        in
+                        (match matched with
+                         | Some _ when List.length current_val = 1 ->
+                             remove_block_property conn (Wire.Int block.id)
+                               property_id
+                         | Some v ->
+                             Db_transact.transact conn
+                               [ Wire.Array
+                                   [ kw "db/retract"; Wire.Int block.id
+                                   ; kw property_id
+                                   ; Ds_wire.transit_of_value
+                                       (match_value_of v) ] ]
+                               [ ("outliner-op", Keyword "save-block") ]
+                             |> ignore
+                         | None -> ())
                     | None -> ())
                  block_eids
            end
