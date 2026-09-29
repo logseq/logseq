@@ -1175,11 +1175,40 @@ let render_list inst ~refresh body =
   | _ -> mount_list_rows inst body (all_row_uuids inst)
 
 let render_gallery inst body =
+  let uuids = all_row_uuids inst in
   let wrap = D.h ~cls:"flex flex-row flex-wrap gap-2 p-2" () in
-  List.iter
-    (fun u ->
-      D.el_append_child wrap (gallery_card_el ~title:(row_title inst u)))
-    (all_row_uuids inst);
+  (if Virt_list.enabled ~virtualize:true (List.length uuids) then
+     (* virtualize as card strips — chunk by wrap width so each virtual
+        row approximates one flex-wrap row of ~220px cards *)
+     let cols =
+       let w = D.el_client_width inst.V.container in
+       if w <= 0. then 4
+       else max 1 (int_of_float (Float.floor ((w -. 16.) /. 228.)))
+     in
+     let arr = Array.of_list uuids in
+     let n = Array.length arr in
+     let strips =
+       Array.init ((n + cols - 1) / cols) (fun s ->
+           let lo = s * cols in
+           Array.sub arr lo (min cols (n - lo)))
+     in
+     D.el_append_child wrap
+       (Views_virt.rows ~estimate_size:(fun _ -> 328.)
+          ~key_of:(fun strip -> strip.(0))
+          ~render_el:(fun _ strip ->
+              let w = D.h ~cls:"flex flex-row flex-wrap gap-2" () in
+              Array.iter
+                (fun u ->
+                  D.el_append_child w
+                    (gallery_card_el ~title:(row_title inst u)))
+                strip;
+              w)
+          strips)
+   else
+     List.iter
+       (fun u ->
+         D.el_append_child wrap (gallery_card_el ~title:(row_title inst u)))
+       uuids);
   D.el_append_child body wrap
 
 let render_table inst ~refresh body =
