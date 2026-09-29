@@ -243,8 +243,7 @@ let delete_graph repo ~remote =
         |> Js.Promise.then_ (fun remote_ok ->
              if remote_ok then finish ()
              else (
-               Toast.error
-                 "Couldn't reach the server — remote graph not deleted.";
+               Toast.error (I18n.t "graph/delete-remote-server-error");
                Js.Promise.resolve ()))
     | None -> finish ()
   else finish ()
