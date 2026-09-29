@@ -70,9 +70,11 @@ let write_prop_value d prop w =
 let close () = S.pop_overlay ()
 
 (* after "Text"/"URL" is chosen the cljs flow creates the empty value
-   block and lands the caret in it *)
+   block and lands the caret in it — entering that editor exits the
+   outliner edit (single editing surface) *)
 let add_empty_text_block d prop =
   let ident = ident_of prop in
+  !(Editor_state.close_block_editor) ();
   V.set_pending_edit ~block_uuid:d.target.uuid ~ident;
   D.create_property_text_block ~block_uuid:d.target.uuid ~ident
     ~title:"" ~new_block_id:(Platform.random_uuid ()) ()
@@ -125,7 +127,8 @@ and render_prop_select d body =
                | "" -> None
                | t ->
                    Some
-                     (Sel.item ~tip:(ident_of p) ~icon:"letter-t" t
+                     (Sel.item ~tip:(ident_of p) ~icon:"letter-t"
+                        ~strong:true t
                         (fun () -> property_chosen d p)))
              props
          in
@@ -437,6 +440,9 @@ let open_dialog ?anchor target =
   in
   el_append_child root inner;
   d.body <- Some inner;
+  (* cljs mounts the property dialog as the single active modal — a
+     second open replaces any popups left over from the previous flow *)
+  S.close_overlays ();
   S.push_overlay root ~on_escape:(fun () -> ());
   render d
 
