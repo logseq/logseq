@@ -131,6 +131,10 @@ let set_worker_fs worker =
   install "pfs";
   install "workerThread"
 
+(* wired by the app layer at boot — this module can't reach Toast
+   without a cycle through Runtime *)
+let notify_worker_failure = ref (fun () -> ())
+
 let create () =
   let worker =
     Comlink.new_worker
@@ -147,8 +151,10 @@ let create () =
   Comlink.set_onmessage worker (fun event -> onmessage t event);
   Comlink.set_onerror worker (fun err ->
       Platform.console_error ("db-worker error", err);
+      !notify_worker_failure ();
       !kill (Failure "db-worker crashed"));
   Comlink.set_onmessageerror worker (fun err ->
-      Platform.console_error ("db-worker messageerror", err));
+      Platform.console_error ("db-worker messageerror", err);
+      !notify_worker_failure ());
   install_remote_invoke worker;
   t
