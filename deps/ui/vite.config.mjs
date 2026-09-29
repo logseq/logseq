@@ -25,6 +25,9 @@ export default defineConfig({
     // cljs goog.DEBUG equivalent — the only bundle we ship is the
     // dev/debug build; a release pipeline would flip this.
     logseq_dev: "true",
+    // @tanstack/virtual-core's esm build reads process.env.NODE_ENV;
+    // browsers have no process, so substitute a literal.
+    "process.env.NODE_ENV": '"production"',
   },
   build: {
     lib: {

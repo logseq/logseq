@@ -163,11 +163,19 @@ let ensure_query_shells roots =
               | _ ->
                   let inner = D.h ~cls:"views-query-inner" () in
                   D.el_append_child shell inner;
-                  let inst =
-                    Views_view.mount_query ~block_uuid:buuid ~container:inner
-                  in
-                  mark shell inst;
-                  Views_query.wire_settings_button inst shell)))
+                  (try
+                     let inst =
+                       Views_view.mount_query ~block_uuid:buuid ~container:inner
+                     in
+                     mark shell inst;
+                     Views_query.wire_settings_button inst shell;
+                     (* a page remount rebuilt the shell — restore the raw
+                        source editor if it was open before the rebuild *)
+                     if inst.V.query_editor_open then
+                       Views_query.open_editor inst shell
+                   with e ->
+                     Platform.console_error
+                       ("mount_query exn: " ^ Printexc.to_string e)))))
 
 (* worker tx broadcast (sync-db-changes) invalidates view resources —
    refresh every still-connected inst so rows/columns stay live (cljs
@@ -182,8 +190,15 @@ let refresh_query_insts () =
       let dead = ref [] in
       Hashtbl.iter
         (fun id (inst : V.inst) ->
-          if D.el_is_connected inst.V.container then Views_view.refresh inst
-          else dead := id :: !dead)
+          if not (D.el_is_connected inst.V.container) then dead := id :: !dead
+          else
+            match inst.V.kind with
+            | V.KQuery _ ->
+                (* query insts are refreshed through
+                   Views_view.refresh_query_insts — running them again here
+                   would refetch twice per broadcast *)
+                ()
+            | _ -> Views_view.refresh inst)
         insts;
       (* a detached container never comes back — the observer mounts a
          fresh inst when the route re-renders — so drop the bookkeeping
