@@ -167,6 +167,11 @@ let title_cell uuid (b : Model.block) : t =
             ; ("title", U.t "editor/click-to-edit")
             ; ("data-area-uuid", uuid)
             ]
+          ~events:"click"
+          ~on_dom_event:(fun _ _ ->
+            (* cljs edit-comments-area-title! → edit-block! on the area
+               block; the standard editor machinery renders the textarea *)
+            Editor_actions.enter_edit uuid 0)
           ~text:(S.title_for uuid b.Model.block_title)
           [])
     (editing_sig uuid)

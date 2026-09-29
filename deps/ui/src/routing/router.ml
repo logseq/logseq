@@ -142,15 +142,19 @@ let fetch_unlinked (p : Model.page) =
 let fetch_unlinked_refs = Outliner_ops.fetch_unlinked_refs
 
 let load_journals () =
+  Platform.console_log "[dbg] route:load-journals-start";
   Runtime.invoke2 "thread-api/get-latest-journals" (Wire.String (repo ()))
     (Wire.Int 40)
   |> Js.Promise.then_ (fun w ->
+         Platform.console_log "[dbg] route:journals-rpc-done";
          let pages =
            match w with
            | Wire.Array xs | Wire.List xs ->
                List.filter_map Decode.page_of_summary xs
            | _ -> []
          in
+         Platform.console_log
+           ("[dbg] route:journals-pages n=" ^ string_of_int (List.length pages));
          let rec collect acc = function
            | [] -> Js.Promise.resolve (List.rev acc)
            | p :: rest ->
@@ -164,11 +168,18 @@ let load_journals () =
          in
          collect [] pages
          |> Js.Promise.then_ (fun js ->
+                Platform.console_log "[dbg] route:journals-collected";
                 Js.Promise.resolve
                   (match !Runtime.current_route with
                    | Some (Model.Journals | Model.Home) ->
+                       Platform.console_log "[dbg] route:journals-send";
                        Runtime.send (Action.Journals_loaded js)
-                   | _ -> ())))
+                   | _ ->
+                       Platform.console_log
+                         ("[dbg] route:journals-dropped "
+                          ^ (match !Runtime.current_route with
+                             | None -> "none"
+                             | Some _ -> "other")))))
 
 (* a fetch started for route R can resolve after navigation moved on —
    sending its Page_loaded would clobber the current page with stale data *)
@@ -253,7 +264,15 @@ let rec load_home () =
                         Runtime.send (Action.Navigate_to Model.Journals);
                         load_journals ()
                     | _ -> Js.Promise.resolve ())
-         | None -> load_today_journal repo)
+         | None ->
+             (* cljs :home is the journals stream — the latest journals
+                load alongside today's page so the #journals list fills *)
+             Runtime.reload_current_view :=
+               (fun () ->
+                 ignore (load_journals ());
+                 load_today_journal repo);
+             ignore (load_journals ());
+             load_today_journal repo)
 
 and load_today_journal repo =
   let day = Dates.today_journal_day () in

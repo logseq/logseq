@@ -107,21 +107,27 @@ let run () =
   Worker_events.init ();
   Runtime.worker := Some w;
   Graph.init_worker ()
-  |> Js.Promise.then_ (fun () -> Graph.list_graphs ())
+  |> Js.Promise.then_ (fun () ->
+         Platform.console_log "[dbg] boot:worker-init-done";
+         Graph.list_graphs ())
   |> Js.Promise.then_ (fun repos ->
+         Platform.console_log "[dbg] boot:repos-listed";
          Runtime.send (Action.Repos_loaded repos);
          pick_graph repos)
   |> Js.Promise.then_ (fun repo ->
+         Platform.console_log "[dbg] boot:graph-picked";
          Graph.open_graph repo
          |> Js.Promise.then_ (fun _ ->
                 Graphs_meta.touch repo;
                 Js.Promise.resolve repo))
   |> Js.Promise.then_ (fun repo ->
+         Platform.console_log "[dbg] boot:graph-opened";
          ensure_today_journal repo
          |> Js.Promise.then_ (fun () ->
             Graph.build_search_index repo;
             Js.Promise.resolve repo))
   |> Js.Promise.then_ (fun repo ->
+         Platform.console_log "[dbg] boot:ready";
          Runtime.send (Action.Boot_graph_ready repo);
          Graph.build_search_index repo;
          (* initial route resolution (deep link or home) *)

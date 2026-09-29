@@ -310,13 +310,9 @@ and resolved_ref ~refs ~self uuid : t =
     self :: (match refs with [] -> [] | _ -> uuid :: refs)
   in
   D.el ~tag:"a" ~style_class:"relative page-ref"
-    ~attrs:[ ("data-uuid", uuid); ("tabindex", "0"); ("draggable", "true") ]
-    ~attrs_signal_v:
-      (D.text_of_class_signal
-         (Signal.map fst (Signal.value st))
-         (fun n ->
-           Logseq_dom.attrs_json
-             [ ("data-ref", String.lowercase_ascii n) ]))
+    ~attrs:
+      [ ("data-uuid", uuid); ("data-ref", uuid); ("tabindex", "0")
+      ; ("draggable", "true") ]
     [ dyn
         ~equal:(fun (a : string * bool) b -> a = b)
         (fun (title, is_page) ->
@@ -341,11 +337,8 @@ and resolved_tag_ref ~refs ~self uuid : t =
              Js.Promise.resolve ())
       |> ignore);
   D.el ~tag:"a" ~style_class:"relative tag"
-    ~attrs:[ ("data-uuid", uuid); ("tabindex", "0") ]
-    ~attrs_signal_v:
-      (D.text_of_class_signal (Signal.value st) (fun n ->
-           Logseq_dom.attrs_json
-             [ ("data-ref", String.lowercase_ascii n) ]))
+    ~attrs:
+      [ ("data-uuid", uuid); ("data-ref", uuid); ("tabindex", "0") ]
     ~text_signal:(D.text_of_class_signal (Signal.value st) (fun n -> "#" ^ n))
     [] context parent
 

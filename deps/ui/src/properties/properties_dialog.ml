@@ -199,7 +199,8 @@ and render_prop_select d body =
                | "" -> None
                | t ->
                    Some
-                     (Sel.item ~tip:(ident_of p) ~icon:"letter-t" t
+                     (Sel.item ~tip:(ident_of p) ~icon:"letter-t"
+                        ~strong:true t
                         (fun () -> property_chosen d p)))
              props
          in

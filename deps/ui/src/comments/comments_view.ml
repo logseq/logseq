@@ -233,13 +233,28 @@ let add_box st (area_uuid : string) : t =
 
 let header st (area_uuid : string) (count : int) (targets : int) : t =
   dom ~key:("ch-" ^ area_uuid) ~style_class:"ls-comments-header"
-    ( [ dom ~key:("cl-" ^ area_uuid) ~tag:"button"
-          ~style_class:"ls-comments-label"
-          ~attrs:
-            [ ("title", I.t "editor/click-to-edit")
-            ; ("aria-label", I.t "editor/click-to-edit")
-            ; ("type", "button") ]
-          ~text:(I.t "block.comments/label") []
+    ( [ dyn
+          ~equal:(fun a b -> a = b)
+          (fun editing ->
+            (* cljs comments-area-title-view: the label swaps for the
+               standard block editor while the area title is edited *)
+            if editing then
+              dom ~key:("cte-" ^ area_uuid)
+                ~style_class:"ls-comments-title-editor"
+                [ Comments.title_editor_el area_uuid ]
+            else
+              dom ~key:("cl-" ^ area_uuid) ~tag:"button"
+                ~style_class:"ls-comments-label"
+                ~attrs:
+                  [ ("title", I.t "editor/click-to-edit")
+                  ; ("aria-label", I.t "editor/click-to-edit")
+                  ; ("type", "button") ]
+                ~events:"click"
+                ~on_dom_event:(fun _ _ ->
+                  (* cljs edit-comments-area-title! → edit-block! *)
+                  Editor_actions.enter_edit area_uuid 0)
+                ~text:(I.t "block.comments/label") [])
+          (Comments.editing_sig area_uuid)
       ; dom ~key:("cc-" ^ area_uuid) ~tag:"span"
           ~style_class:"ls-comments-count"
           ~text:(string_of_int count) []

@@ -29,9 +29,6 @@ external entry_get : Js.Json.t -> string -> Js.Json.t = "" [@@mel.get_index]
 
 external entry_bool : Js.Json.t -> string -> bool = "" [@@mel.get_index]
 
-external query_in : Js.Json.t -> string -> Js.Json.t Js.Nullable.t
-  = "querySelector" [@@mel.send]
-
 let enabled () =
   match Platform.query_param "virtualized" with
   | Some "true" -> true
@@ -45,12 +42,7 @@ let set_visibility entry =
   Platform.set_prop (Platform.json_prop target "style") "visibility"
     (Js.Json.string visibility)
 
-(* a [data-index] row wrapping a page block has the .ls-block as direct
-   child; journal rows nest their blocks under .journal-item *)
-let block_uuid_of_row row =
-  match Js.Nullable.toOption (query_in row ":scope > .ls-block") with
-  | Some el -> Platform.get_attribute el "blockid"
-  | None -> None
+
 
 let io = ref None
 
@@ -60,22 +52,20 @@ let observer () =
   | None ->
       let o =
         new_io
-          (fun entries ->
-            Array.iter set_visibility entries;
-            if Block_selection.is_down () then
-              Array.iter
-                (fun entry ->
-                  if entry_bool entry "isIntersecting" then
-                    match block_uuid_of_row (entry_get entry "target") with
-                    | Some uuid -> Block_selection.extend_to uuid
-                    | None -> ())
-                entries)
+          (fun entries -> Array.iter set_visibility entries)
           (* cljs virtuoso mounts rows up to 254px beyond the viewport
              (increase-viewport-by / overscan 254) *)
           (io_opts ~rootMargin:"254px")
       in
       io := Some o;
       o
+
+(* virt_list's onChange calls this with the rendered window's edge row in
+   the scroll direction — cljs virtuoso items-rendered boundary. Unlike a
+   per-entry intersection walk it can't regress the range when a stale
+   row fires its observer late *)
+let extend_drag uuid =
+  if Block_selection.is_down () then Block_selection.extend_to uuid
 
 (* observe every [data-index] row under a [data-virtuoso-scroller] once;
    rows LUI rebuilds lose the marker and get re-observed *)
@@ -90,4 +80,4 @@ let sync () =
             set_attr row "data-vs" "1";
             io_observe o row)
       (Platform.query_selector_all
-         "[data-virtuoso-scroller] > [data-index]")
+         "[data-virtuoso-scroller] [data-index]")

@@ -751,8 +751,10 @@ let load_tag_titles t _editor =
                      let page_class =
                        List.filter
                          (fun r ->
-                           Cmdk_state.str_field r "db/ident"
-                           = Some "logseq.class/Page")
+                           (* entity_map_wire emits db/ident as a keyword
+                              value, not a string *)
+                           Wire.get r "db/ident"
+                           = Some (Wire.Keyword "logseq.class/Page"))
                          rows2
                      in
                      t.tag_titles :=
@@ -941,15 +943,36 @@ let on_editor_input t el ev =
       else
         let c = S.get v (pos - 1) in
         let two = pos >= 2 && S.get v (pos - 1) = S.get v (pos - 2) in
-        let bounded =
-          pos < 2
-          || (let p = S.get v (pos - 2) in p = ' ' || p = '\n')
-          || (pos >= 3 && S.get v (pos - 2) = ']' && S.get v (pos - 3) = ']')
+        (* cljs opens "/" / "#" menus when any line already starts with the
+           trigger, or when the char starts a new word (preceded by space or
+           tab); "#" also opens right after "]]" *)
+        let line_starts_with ch =
+          (S.length v > 0 && S.get v 0 = ch)
+          ||
+            let rec scan i =
+              if i + 1 >= S.length v then false
+              else if S.get v i = '\n' && S.get v (i + 1) = ch then true
+              else scan (i + 1)
+            in
+            scan 0
         in
-        if c = '/' && bounded then open_ac t Slash el
+        let word_before =
+          pos >= 2
+          &&
+            let p = S.get v (pos - 2) in
+            p = ' ' || p = '\t'
+        in
+        let ref_before =
+          pos >= 3 && S.get v (pos - 2) = ']' && S.get v (pos - 3) = ']'
+        in
+        if c = '/' && (line_starts_with '/' || word_before) then
+          open_ac t Slash el
         else if c = '[' && two then open_ac t Page_ref el
         else if c = '(' && two then open_ac t Block_ref el
-        else if c = '#' && bounded then open_ac t Tag_search el
+        else if
+          c = '#' && (line_starts_with '#' || word_before || ref_before)
+          && not (pos < S.length v && S.get v pos = '+')
+        then open_ac t Tag_search el
         else ()
 ;;
 

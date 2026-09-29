@@ -326,6 +326,7 @@ let create_or_open_db args =
            Db_worker_effect.bind
              (Sqlite.prepare_pool ~name:(Graph_dir.pool_name repo))
              (fun () ->
+           Worker_log.info "lifecycle/pool-prepared" [ "repo", repo ];
            let ensure_dir =
              if Sqlite.pooled_runtime () then Db_worker_effect.pure ()
              else File_sys.mkdir_p (db_dir repo)
@@ -347,6 +348,7 @@ let create_or_open_db args =
                  Sqlite.exec db ~sql:"pragma journal_mode=WAL" ~bind:[||];
                  Sqlite.exec db ~sql:"pragma wal_autocheckpoint=0" ~bind:[||];
                  Worker_state.set_sqlite_conn repo db;
+                 Worker_log.info "lifecycle/db-opened" [ "repo", repo ];
                  (db, true)
            in
            (* cljs get-dbs opens the client-ops sqlite beside the graph
