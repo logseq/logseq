@@ -99,33 +99,51 @@ let connect ~url ~on_event =
     }
   in
   let resolved = ref false in
+  let close_sent = ref false in
+  let setup_failure = ref None in
+  (* Signal for the deadline watchdog: resolved once the handshake
+     completes or the connection is torn down, so the timer fiber exits
+     instead of pinning the eio switch (and its thread) for 30s. *)
+  let setup_done = ref (fun () -> ()) in
+  let mark_setup_done () =
+    !setup_done ();
+    setup_done := (fun () -> ())
+  in
   let fail msg =
     ws.state <- 3;
+    mark_setup_done ();
     if !resolved
     then on_event (Error msg)
     else (
       resolved := true;
       Db_worker_effect.reject resolver (Failure msg))
   in
-  let close_sent = ref false in
   let emit_close code =
+    mark_setup_done ();
     if not !close_sent then begin
       close_sent := true;
       on_event (Close (code, ""))
     end
   in
-  let setup_failure = ref None in
   let run () =
     try
       Eio_posix.run (fun env ->
         Eio.Switch.run (fun sw ->
           let clock = Eio.Stdenv.clock env in
+          let setup_done_p, setup_done_u = Eio.Promise.create () in
+          setup_done := (fun () -> Eio.Promise.resolve setup_done_u ());
           Eio.Fiber.fork ~sw (fun () ->
-            Eio.Time.sleep clock connect_timeout_s;
-            if not !resolved then begin
-              setup_failure := Some "websocket: connect timed out";
-              Eio.Switch.fail sw (Failure "websocket: connect timed out")
-            end);
+            match
+              Eio.Fiber.first
+                (fun () -> Eio.Time.sleep clock connect_timeout_s; `Timeout)
+                (fun () -> Eio.Promise.await setup_done_p; `Done)
+            with
+            | `Done -> ()
+            | `Timeout ->
+                if not !resolved then begin
+                  setup_failure := Some "websocket: connect timed out";
+                  Eio.Switch.fail sw (Failure "websocket: connect timed out")
+                end);
           let host, target, flow = Net_eio.connect_flow ~env ~sw url in
           Lazy.force Net_eio.rng_init;
           let nonce = Mirage_crypto_rng.generate 16 in
@@ -149,6 +167,7 @@ let connect ~url ~on_event =
             ws.state <- 1;
             resolved := true;
             Db_worker_effect.wakeup resolver ws;
+            mark_setup_done ();
             on_event Open;
             let flush_msg () =
               let s = Buffer.contents frag in
