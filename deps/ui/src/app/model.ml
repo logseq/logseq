@@ -52,6 +52,9 @@ type block =
   ; block_is_query : bool
     (* db/id == parent's logseq.property/query ref — renders the query
        builder instead of plain content (cljs query-block? branch) *)
+  ; block_db_collapsable : bool
+    (* cljs db-collapsable?: entity carries property keys other than
+       internal created-* ones (logseq.property/query etc.) *)
   }
 
 type page =

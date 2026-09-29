@@ -49,6 +49,7 @@ let block ?(children = []) uuid title : Model.block =
   ; block_order_list = None
   ; block_order_index = None
   ; block_code_lang = None
+  ; block_db_collapsable = false
   }
 
 let page blocks : Model.page =
