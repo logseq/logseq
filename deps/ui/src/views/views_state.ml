@@ -330,6 +330,7 @@ let persist_group_sort_by_ident inst ident f =
    this record) *)
 type ops =
   { o_refresh : inst -> unit
+  ; o_refresh_src : inst -> string -> unit
   ; o_create_view : inst -> unit
   ; o_rename : inst -> Views_wire.view_ent -> unit
   ; o_export : inst -> unit

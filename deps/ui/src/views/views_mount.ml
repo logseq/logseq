@@ -144,6 +144,21 @@ and ensure_object_view_container inner uuid kind =
   in
   mark container inst
 
+(* mount a query-result view for `block_uuid` inside `shell` and mark the
+   shell — returns the inst on success *)
+let mount_query_shell ~block_uuid shell =
+  let inner = D.h ~cls:"views-query-inner" () in
+  D.el_append_child shell inner;
+  try
+    let inst =
+      Views_view.mount_query ~block_uuid ~container:inner
+    in
+    mark shell inst;
+    Some inst
+  with e ->
+    Platform.console_error ("mount_query exn: " ^ Printexc.to_string e);
+    None
+
 (* logseq.class/Query blocks render a .custom-query-results shell; mount
    a query-result view inside it *)
 let ensure_query_shells roots =
@@ -159,23 +174,24 @@ let ensure_query_shells roots =
               match
                 (mounted_id shell, Ed.el_query shell ".views-query-inner")
               with
-              | Some _, Some _ -> ()
-              | _ ->
-                  let inner = D.h ~cls:"views-query-inner" () in
-                  D.el_append_child shell inner;
-                  (try
-                     let inst =
-                       Views_view.mount_query ~block_uuid:buuid ~container:inner
-                     in
-                     mark shell inst;
-                     Views_query.wire_settings_button inst shell;
-                     (* a page remount rebuilt the shell — restore the raw
-                        source editor if it was open before the rebuild *)
-                     if inst.V.query_editor_open then
-                       Views_query.open_editor inst shell
-                   with e ->
-                     Platform.console_error
-                       ("mount_query exn: " ^ Printexc.to_string e)))))
+              | Some id, Some _ -> (
+                  (* DOM patching can rebuild the shell's children while
+                     keeping the marker — restore the source editor when
+                     the inst says it was open *)
+                  match Hashtbl.find_opt insts id with
+                  | Some inst
+                    when inst.V.query_editor_open
+                         && Ed.el_query shell ".CodeMirror" = None ->
+                      Views_query.open_editor inst shell
+                  | _ -> ())
+              | _ -> (
+                  match mount_query_shell ~block_uuid:buuid shell with
+                  | Some inst ->
+                      (* a page remount rebuilt the shell — restore the raw
+                         source editor if it was open before the rebuild *)
+                      if inst.V.query_editor_open then
+                        Views_query.open_editor inst shell
+                  | None -> ()))))
 
 (* worker tx broadcast (sync-db-changes) invalidates view resources —
    refresh every still-connected inst so rows/columns stay live (cljs
@@ -232,8 +248,40 @@ let scan roots =
 
 let installed = ref false
 
+(* delegated click handler for every `.ls-query-setting` button —
+   per-shell wiring raced with clicks arriving before the mutation scan
+   ran, so the inst is resolved at click time instead *)
+let on_document_click (ev : Ed.ev) =
+  match Ed.ev_target ev with
+  | None -> ()
+  | Some target -> (
+      match Ed.el_closest target ".ls-query-setting" with
+      | None -> ()
+      | Some btn -> (
+          Ed.stop_propagation ev;
+          match Ed.el_closest btn ".custom-query-results" with
+          | None -> ()
+          | Some shell -> (
+              let inst =
+                match mounted_id shell with
+                | Some id -> Hashtbl.find_opt insts id
+                | None -> (
+                    (* click beat the mutation scan — mount now *)
+                    match Ed.el_closest shell ".ls-block" with
+                    | Some block_el -> (
+                        match Ed.el_get_attr block_el "blockid" with
+                        | Some buuid ->
+                            mount_query_shell ~block_uuid:buuid shell
+                        | None -> None)
+                    | None -> None)
+              in
+              match inst with
+              | Some inst -> Views_query.toggle_source_editor inst shell
+              | None -> ())))
+
 let install () =
   if not !installed then begin
     installed := true;
+    Ed.document_add_listener "click" on_document_click false;
     Ed.register_doc_scan scan
   end
