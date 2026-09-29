@@ -62,21 +62,94 @@ let page_link ~(tag : bool) ?label ?uuid_sig name =
                else Logseq_dom.attrs_json (("data-uuid", u) :: base)))
         [ D.el ~tag:"span" [ D.txt text ] ]
 
+(* ---- pull memoization ----
+   Every [[name]]/uuid anchor used to fire its own thread-api/pull per
+   mount. Memoize name->uuid and uuid->(title, is-page) per repo; the
+   worker's sync-db-changes broadcast drops the caches
+   (worker_events.invalidate_pull_caches). Misses are not cached — a
+   just-created entity resolves on the next broadcast+remount. *)
+
+type pull_cache =
+  { c_name_uuid : (string, string) Hashtbl.t
+  ; c_uuid_meta : (string, string * bool) Hashtbl.t (* title, is-page *)
+  }
+
+let pull_caches : (string, pull_cache) Hashtbl.t = Hashtbl.create 4
+
+let repo_cache repo =
+  match Hashtbl.find_opt pull_caches repo with
+  | Some c -> c
+  | None ->
+      let c =
+        { c_name_uuid = Hashtbl.create 256
+        ; c_uuid_meta = Hashtbl.create 256
+        }
+      in
+      Hashtbl.replace pull_caches repo c;
+      c
+
+let invalidate_pull_caches () = Hashtbl.reset pull_caches
+
+(* resolved-meta signal behind [c_uuid_meta]: initialized synchronously
+   on a cache hit (plain set — the mount's own flush publishes it), the
+   pull fills + publishes on a miss *)
+let uuid_meta_state context uuid ~fallback ?(miss = None) () =
+  let st = Signal.state context.Lui_ui.ui_scheduler fallback in
+  let sync = ref true in
+  Render_state.with_repo (fun repo ->
+      let cache = repo_cache repo in
+      match Hashtbl.find_opt cache.c_uuid_meta uuid with
+      | Some meta ->
+          if !sync then Signal.set st meta
+          else Runtime.signal_set st meta
+      | None ->
+          Runtime.invoke3 "thread-api/pull" (Wire.String repo)
+            (Wire.String "[:block/title :block/name]")
+            (Wire.Array [ Wire.Keyword "block/uuid"; Wire.Uuid uuid ])
+          |> Js.Promise.then_ (fun w ->
+                 (match Wire.map_get_string w "block/title" with
+                  | Some t when String.trim t <> "" ->
+                      let is_page =
+                        match Wire.map_get_string w "block/name" with
+                        | Some n -> String.trim n <> ""
+                        | None -> false
+                      in
+                      let meta = (t, is_page) in
+                      Hashtbl.replace cache.c_uuid_meta uuid meta;
+                      Runtime.signal_set st meta
+                  | _ -> (
+                      match miss with
+                      | Some m -> Runtime.signal_set st m
+                      | None -> ()));
+                 Js.Promise.resolve ())
+          |> ignore);
+  sync := false;
+  st
+
 (* name-based ref -> resolved entity uuid via thread-api/pull (empty string
    until the pull returns; cljs resolves through a react subscription) *)
 let name_uuid_state context name =
   let st = Signal.state context.Lui_ui.ui_scheduler "" in
+  let sync = ref true in
   Render_state.with_repo (fun repo ->
-      Runtime.invoke3 "thread-api/pull" (Wire.String repo)
-        (Wire.String "[:block/uuid]")
-        (Wire.Array
-           [ Wire.Keyword "block/name"; Wire.String (String.lowercase_ascii name) ])
-      |> Js.Promise.then_ (fun w ->
-             (match Wire.map_get_uuid w "block/uuid" with
-              | Some u -> Runtime.signal_set st u
-              | None -> ());
-             Js.Promise.resolve ())
-      |> ignore);
+      let cache = repo_cache repo in
+      let key = String.lowercase_ascii name in
+      match Hashtbl.find_opt cache.c_name_uuid key with
+      | Some u ->
+          if !sync then Signal.set st u else Runtime.signal_set st u
+      | None ->
+          Runtime.invoke3 "thread-api/pull" (Wire.String repo)
+            (Wire.String "[:block/uuid]")
+            (Wire.Array [ Wire.Keyword "block/name"; Wire.String key ])
+          |> Js.Promise.then_ (fun w ->
+                 (match Wire.map_get_uuid w "block/uuid" with
+                  | Some u ->
+                      Hashtbl.replace cache.c_name_uuid key u;
+                      Runtime.signal_set st u
+                  | None -> ());
+                 Js.Promise.resolve ())
+          |> ignore);
+  sync := false;
   st
 
 let external_link href label_els =
@@ -88,20 +161,11 @@ let external_link href label_els =
    pull returns *)
 let block_ref_anchor uuid : t =
  fun context parent ->
-  let st = Signal.state context.Lui_ui.ui_scheduler uuid in
-  Render_state.with_repo (fun repo ->
-      Runtime.invoke3 "thread-api/pull" (Wire.String repo)
-        (Wire.String "[:block/title]")
-        (Wire.Array [ Wire.Keyword "block/uuid"; Wire.Uuid uuid ])
-      |> Js.Promise.then_ (fun w ->
-             (match Wire.map_get_string w "block/title" with
-              | Some t when String.trim t <> "" -> Runtime.signal_set st t
-              | _ -> ());
-             Js.Promise.resolve ())
-      |> ignore);
+  let st = uuid_meta_state context uuid ~fallback:(uuid, false) () in
+  let title_sig = Signal.map fst (Signal.value st) in
   D.el ~tag:"a" ~style_class:"relative page-ref"
     ~attrs:[ ("data-ref", uuid); ("tabindex", "0") ]
-    ~text_signal:(D.text_of_class_signal (Signal.value st) Fun.id)
+    ~text_signal:(D.text_of_class_signal title_sig Fun.id)
     [] context parent
 
 let block_ref uuid =
@@ -332,23 +396,10 @@ and page_ref ?(tag = false) ~refs ~self name =
    block titles are re-parsed with the ref chain extended *)
 and resolved_ref ~refs ~self uuid : t =
  fun context parent ->
-  let st = Signal.state context.Lui_ui.ui_scheduler ("", true) in
-  Render_state.with_repo (fun repo ->
-      Runtime.invoke3 "thread-api/pull" (Wire.String repo)
-        (Wire.String "[:block/title :block/name]")
-        (Wire.Array [ Wire.Keyword "block/uuid"; Wire.Uuid uuid ])
-      |> Js.Promise.then_ (fun w ->
-             (match Wire.map_get_string w "block/title" with
-              | Some t when String.trim t <> "" ->
-                  let is_page =
-                    match Wire.map_get_string w "block/name" with
-                    | Some n -> String.trim n <> ""
-                    | None -> false
-                  in
-                  Runtime.signal_set st (t, is_page)
-              | _ -> Runtime.signal_set st (uuid, true));
-             Js.Promise.resolve ())
-      |> ignore);
+  let st =
+    uuid_meta_state context uuid ~fallback:("", true)
+      ~miss:(Some (uuid, true)) ()
+  in
   let child_refs =
     self :: (match refs with [] -> [] | _ -> uuid :: refs)
   in
@@ -373,26 +424,17 @@ and resolved_ref ~refs ~self uuid : t =
 and resolved_tag_ref ~refs ~self uuid : t =
  fun context parent ->
   ignore (refs, self);
-  let st = Signal.state context.Lui_ui.ui_scheduler uuid in
-  Render_state.with_repo (fun repo ->
-      Runtime.invoke3 "thread-api/pull" (Wire.String repo)
-        (Wire.String "[:block/title]")
-        (Wire.Array [ Wire.Keyword "block/uuid"; Wire.Uuid uuid ])
-      |> Js.Promise.then_ (fun w ->
-             (match Wire.map_get_string w "block/title" with
-              | Some t when String.trim t <> "" -> Runtime.signal_set st t
-              | _ -> ());
-             Js.Promise.resolve ())
-      |> ignore);
+  let st = uuid_meta_state context uuid ~fallback:(uuid, false) () in
+  let title_sig = Signal.map fst (Signal.value st) in
   D.el ~tag:"a" ~style_class:"relative tag"
     ~attrs:[ ("data-uuid", uuid); ("tabindex", "0") ]
     ~attrs_signal_v:
-      (D.text_of_class_signal (Signal.value st) (fun n ->
+      (D.text_of_class_signal title_sig (fun n ->
            Logseq_dom.attrs_json
              [ ("data-uuid", uuid); ("tabindex", "0")
              ; ("data-ref", String.lowercase_ascii n) ]))
     [ D.el ~tag:"span"
-        ~text_signal:(D.text_of_class_signal (Signal.value st) (fun n -> "#" ^ n))
+        ~text_signal:(D.text_of_class_signal title_sig (fun n -> "#" ^ n))
         [] ]
     context parent
 

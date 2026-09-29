@@ -42,6 +42,7 @@ let dispatch kind payload =
           Runtime.flush ()
       | None -> ())
   | "sync-db-changes" ->
+      Render_inline.invalidate_pull_caches ();
       schedule_reload ();
       Views_mount.refresh_query_insts ()
   | "rtc-sync-state" -> (
