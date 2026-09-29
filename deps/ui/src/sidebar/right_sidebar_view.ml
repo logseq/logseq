@@ -36,10 +36,10 @@ let topbar st =
       "cp__right-sidebar-topbar flex flex-row justify-between items-center"
     [ dom ~key:"rs-settings"
         ~style_class:"cp__right-sidebar-settings hide-scrollbar gap-1"
-        [ topbar_btn "contents" (t "Contents") (fun n _ ->
+        [ topbar_btn "contents" (t "page/contents") (fun n _ ->
               if n = "click" then
                 Sidebar_state.open_sticky_item st "contents")
-        ; topbar_btn "help" (t "Help") (fun n _ ->
+        ; topbar_btn "help" (t "nav/help") (fun n _ ->
               if n = "click" then Sidebar_state.open_sticky_item st "help")
         ]
     ]
@@ -79,37 +79,37 @@ let item_menu st (it : Sidebar_state.item) =
             "position:fixed;left:%.0fpx;top:%.0fpx;z-index:1501;min-width:160px"
             (fst !Sidebar_state.im_xy) (snd !Sidebar_state.im_xy) ) ]
     ~style_class:"ui__dropdown-menu-content ui__dropdown-menu"
-    (menu_item st (t "Close")
+    (menu_item st (t "ui/close")
        (fun () -> Sidebar_state.remove_item st it.key)
      :: (if multi then
-           [ menu_item st (t "Close others")
+           [ menu_item st (t "sidebar.right/close-others")
                (fun () -> Sidebar_state.remove_rest st it.key)
-           ; menu_item st (t "Close all")
+           ; menu_item st (t "sidebar.right/close-all")
                (fun () -> Sidebar_state.clear_items st) ]
          else [])
      @ (if multi && not collapsed then [ sep "s1" ] else [])
      @ (if not collapsed then
-          [ menu_item st (t "Collapse")
+          [ menu_item st (t "sidebar.right/collapse")
               (fun () -> Sidebar_state.set_collapsed st it.key true) ]
         else [])
      @ (if multi then
-          [ menu_item st (t "Collapse others")
+          [ menu_item st (t "sidebar.right/collapse-others")
               (fun () -> Sidebar_state.collapse_others st it.key true)
-          ; menu_item st (t "Collapse all")
+          ; menu_item st (t "sidebar.right/collapse-all")
               (fun () -> Sidebar_state.collapse_all st true) ]
         else [])
      @ (if multi && collapsed then [ sep "s2" ] else [])
      @ (if collapsed then
-          [ menu_item st (t "Expand")
+          [ menu_item st (t "sidebar.right/expand")
               (fun () -> Sidebar_state.set_collapsed st it.key false) ]
         else [])
      @ (if multi then
-          [ menu_item st (t "Expand all")
+          [ menu_item st (t "sidebar.right/expand-all")
               (fun () -> Sidebar_state.collapse_all st false) ]
         else [])
      @ (if page_ then
           [ sep "s3"
-          ; menu_item st (t "Open as page")
+          ; menu_item st (t "sidebar.right/open-as-page")
               (fun () -> Sidebar_state.open_as_page st it) ]
         else []))
 
@@ -249,7 +249,7 @@ let item_header st idx (it : Sidebar_state.item) =
             [ Icons.icon "dots" ]
         ; dom ~key:("close-" ^ it.key) ~tag:"button"
             ~style_class:"px-2 py-2 h-8 w-8 text-muted-foreground"
-            ~attrs:[ ("title", t "Close") ]
+            ~attrs:[ ("title", t "ui/close") ]
             ~events:"click"
             ~on_dom_event:(fun name _ ->
               if name = "click" then Sidebar_state.remove_item st it.key)
@@ -308,8 +308,8 @@ let sidebar_props_row st (it : Sidebar_state.item) =
                        [ dom ~tag:"span" ~style_class:"text-xs"
                            ~text:
                              (t
-                                (if collapsed then "Open properties"
-                                 else "Hide properties"))
+                                (if collapsed then "page/open-properties"
+                                 else "page/hide-properties"))
                            [] ]
                    ]
                  :: body)
@@ -462,7 +462,7 @@ let render (ms : Model.t Signal.signal) : t =
           ; ("tabindex", "0")
           ; ("aria-valuemax", "70")
           ; ("aria-orientation", "vertical")
-          ; ("aria-label", "Right sidebar resize handler")
+          ; ("aria-label", t "sidebar.right/resize-handle")
           ; ("aria-valuemin", "10")
           ; ("aria-valuenow", "50")
           ]

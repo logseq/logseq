@@ -35,7 +35,7 @@ let block_key (b : Model.block) =
 
 let row_class_sig uuid blank embed (b : Model.block) =
   Logseq_dom.class_signal (S.signal ()) (fun (st : S.t) ->
-      "ls-block swipe-item"
+      "ls-block"
       ^ (if S.String_set.mem uuid st.selected then " selected" else "")
       ^ (if embed then " embed-block" else "")
       ^ (if Comments.is_comments_area b then " is-comments-area"

@@ -464,11 +464,27 @@ let sample_picker inst ~tree ~loc ~anchor ~refresh =
          commit inst ~tree ~refresh ())
        ())
 
+(* cljs filter-label — en.edn keys *)
+let item_label = function
+  | "tags" -> I.t "property.built-in/tags"
+  | "page reference" -> I.t "query.builder/filter-page-reference-label"
+  | "property" -> I.t "class.built-in/property"
+  | "task" -> I.t "class.built-in/task"
+  | "priority" -> I.t "property.built-in/priority"
+  | "page" -> I.t "query.builder/filter-page-label"
+  | "full text search" -> I.t "query.builder/filter-full-text-search-label"
+  | "between" -> I.t "view.filter/operator-between"
+  | "sample" -> I.t "query.builder/filter-sample-label"
+  | "and" -> I.t "query.builder/operator-and-label"
+  | "or" -> I.t "view.filter/or"
+  | "not" -> I.t "query.builder/operator-not-label"
+  | other -> other
+
 (* first-level picker: filter names + operators *)
 let picker inst ~tree ~loc ~anchor ~refresh =
   let items =
     List.map
-      (fun f -> { P.si_label = f; si_value = f; si_extra = None })
+      (fun f -> { P.si_label = item_label f; si_value = f; si_extra = None })
       (filters @ operators)
   in
   ignore

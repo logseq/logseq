@@ -170,7 +170,7 @@ let asset_of_file ~idx ~edit_uuid ~empty_target f =
   let title = title_of_name name ext in
   let size = file_size f in
   if ext = "" then (
-    Toast.error ("File doesn't have a valid ext. " ^ name);
+    Toast.error (I18n.tf "asset/invalid-ext-error" [ name ]);
     Js.Promise.resolve None)
   else
     B.file_buffer f

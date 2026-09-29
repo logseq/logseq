@@ -59,10 +59,10 @@ let menu_item st label on_click =
 (* ---------- nav edit (checkbox) menu ---------- *)
 
 let nav_labels =
-  [ ("flashcards", "Flashcards")
-  ; ("all-pages", "All pages")
-  ; ("tag/tasks", "Tasks")
-  ; ("tag/assets", "Assets")
+  [ ("flashcards", "nav/flashcards")
+  ; ("all-pages", "sidebar.left/nav-all-pages")
+  ; ("tag/tasks", "nav/tasks")
+  ; ("tag/assets", "nav/assets")
   ]
 
 let nav_edit_menu st checked =
@@ -82,7 +82,7 @@ let nav_edit_menu st checked =
                  [ ("role", "menuitemcheckbox")
                  ; ("aria-checked", string_of_bool (List.mem nav cur))
                  ]))
-          ~text:label [] ]
+          ~text:(t label) [] ]
   in
   dom ~key:"nav-edit-menu"
     [ menu_box ~style:"position:fixed;top:96px;left:16px;z-index:999;min-width:180px"
@@ -143,11 +143,11 @@ let plugins_menu st =
              dom ~key:"pm-body" ~tag:"div"
                (List.map item_row (Plugin_host.toolbar_items ())))
            (Plugin_host.dirty_value owner)
-        :: [ extra_item "plugins" (t "Plugins") "apps"
+        :: [ extra_item "plugins" (t "nav/plugins") "apps"
                (fun () -> Dialogs_state.open_ "plugins")
-           ; extra_item "themes" (t "Themes") "palette"
+           ; extra_item "themes" (t "nav/themes") "palette"
                (fun () -> Dialogs_state.open_ "plugins")
-           ; extra_item "settings" (t "Settings") "adjustments"
+           ; extra_item "settings" (t "nav/settings") "adjustments"
                (fun () -> Sidebar_state.open_dialog "settings")
            ])
     ]
@@ -181,11 +181,11 @@ let lp_menu st =
       let items =
         (if recent then []
          else
-           [ item (t "Unfavorite") "star-off" [ "⌘"; "⇧"; "F" ]
+           [ item (t "sidebar.left/unfavorite") "star-off" [ "⌘"; "⇧"; "F" ]
                (fun () ->
                  if Wire.is_uuid_string target then
                    Sidebar_state.unfavorite st target) ])
-        @ [ item (t "Open in sidebar") "layout-sidebar-right"
+        @ [ item (t "sidebar.right/open") "layout-sidebar-right"
               [ "⇧"; "Click" ]
               (fun () -> Sidebar_state.open_ref st target) ]
       in
@@ -292,7 +292,7 @@ let nav_items ~active_route (checked, tag_titles) =
       | "flashcards" ->
           Some
             (nav_link ~key:"nl-flashcards" ~class_:"flashcards-nav"
-               ~active:false ~title:(t "Flashcards") ~icon_name:"cards"
+               ~active:false ~title:(t "nav/flashcards") ~icon_name:"cards"
                ~shortcut:"g f"
                ~on_click:(fun name _ ->
                  if name = "click" then Sidebar_state.open_cards ())
@@ -300,15 +300,15 @@ let nav_items ~active_route (checked, tag_titles) =
       | "all-pages" ->
           Some
             (nav_route ~class_:"all-pages-nav"
-               ~active:(active_route = Model.All_pages) ~title:(t "Pages")
+               ~active:(active_route = Model.All_pages) ~title:(t "nav.all-pages/label")
                ~icon_name:"files" "#/all-pages")
       | "graph-view" ->
           Some
             (nav_route ~class_:"graph-view-nav" ~active:false
-               ~title:(t "Graph view") ~icon_name:"hierarchy"
+               ~title:(t "nav/graph-view") ~icon_name:"hierarchy"
                ~shortcut:"g g" "#/graph")
-      | "tag/tasks" -> tag_nav ~active_route "tasks" "Tasks" tag_titles
-      | "tag/assets" -> tag_nav ~active_route "assets" "Assets" tag_titles
+      | "tag/tasks" -> tag_nav ~active_route "tasks" "nav/tasks" tag_titles
+      | "tag/assets" -> tag_nav ~active_route "assets" "nav/assets" tag_titles
       | _ -> None)
     checked
 
@@ -330,7 +330,7 @@ let nav_group ms st =
             [ dom ~key:"nav-name" ~tag:"span" ~style_class:"a"
                 [ dom ~tag:"a" ~style_class:"wrap-th"
                     [ dom ~tag:"strong" ~style_class:"flex-1"
-                        ~text:(t "Navigations") [] ] ]
+                        ~text:(t "sidebar.left/navigations") [] ] ]
             ; dom ~key:"nav-more" ~tag:"span" ~style_class:"b"
                 [ dom ~tag:"a"
                     ~style_class:
@@ -348,7 +348,7 @@ let nav_group ms st =
                        carries no href *)
                     ((nav_link ~key:"nl-journals" ~class_:"journals-nav"
                        ~active:(route = Model.Journals || route = Model.Home)
-                       ~title:(t "Journals") ~icon_name:"calendar"
+                       ~title:(t "nav/journals") ~icon_name:"calendar"
                        ~shortcut:"g j"
                        ~on_click:(fun name _ ->
                          if name = "click" then (
@@ -481,14 +481,14 @@ let content_group st ~key ~class_ ~label ~items_sig ~li_class ~ul_class
     ]
 
 let favorites_group st =
-  content_group st ~key:"fav" ~class_:"favorites" ~label:(t "Favorites")
+  content_group st ~key:"fav" ~class_:"favorites" ~label:(t "sidebar.left/favorites")
     ~items_sig:(Signal.value st.Sidebar_state.favorites)
     ~ul_class:"favorites text-sm" ~always_bd:false
     ~li_class:"favorite-item font-medium" ~recent:false
 
 let recents_group st =
   content_group st ~key:"recent" ~class_:"recent"
-    ~label:(t "Recent")
+    ~label:(t "sidebar.left/recent-pages")
     ~items_sig:(Signal.value st.Sidebar_state.recents)
     ~ul_class:"text-sm" ~always_bd:true
     ~li_class:"recent-item select-none font-medium" ~recent:true
@@ -525,7 +525,7 @@ let plugins_toolbar (ms : Model.t Signal.signal) : t =
                         Plugin_host.inject_toolbar_ui ()))
                     [ dom ~key:"pm-trigger" ~tag:"a"
                         ~style_class:"flex relative toolbar-plugins-manager-trigger"
-                        ~attrs:[ ("title", t "Plugins") ]
+                        ~attrs:[ ("title", t "nav/plugins") ]
                         [ icon "puzzle" ] ] ] ])
     (Plugin_host.dirty_value owner)
 
@@ -544,7 +544,7 @@ let graphs_selector (ms : Model.t Signal.signal) : t =
                && String.sub r 0 10 = "logseq_db_"
             then String.sub r 10 (String.length r - 10)
             else r
-        | None -> "Select a Graph"
+        | None -> t "graph.switch/select-prompt"
       in
       dom ~key:"gsel" ~style_class:"sidebar-graphs"
         [ dom ~key:"gsel-box"
