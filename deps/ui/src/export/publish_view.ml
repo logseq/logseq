@@ -307,7 +307,10 @@ let body (_ms : Model.t Signal.signal) : t =
       ; toggle_pw ctx
       ; dom ~key:"pub-btns" ~style_class:"flex justify-end gap-2"
           [ ghost_btn ()
-          ; dom ~key:"pub-submit" ~tag:"button" ~style_class:btn_base
+          ; dom ~key:"pub-submit" ~tag:"button"
+              ~style_class:
+                (btn_base
+               ^ " bg-primary text-primary-foreground hover:bg-primary/90")
               ~attrs_signal_v:
                 (Logseq_dom.attrs_signal
                    (Signal.value st)

@@ -27,8 +27,19 @@ let page_items (p : Model.page) =
       [ item "del" I18n.delete_page (fun () ->
             match p.page_uuid with
             | Some u ->
+                (* cljs: permanent wording for class/property entities
+                   and today's journal *)
+                let permanent =
+                  p.page_is_tag || p.page_is_property
+                  || (match p.page_journal_day with
+                      | Some d -> d = Dates.today_journal_day ()
+                      | None -> false)
+                in
                 Runtime.send
-                  (Action.Confirm_set (Some (Model.Confirm_delete_page u)));
+                  (Action.Confirm_set
+                     (Some
+                        (Model.Confirm_delete_page
+                           (u, p.page_title, permanent))));
                 Runtime.flush ()
             | None -> ()) ]
   in
@@ -168,19 +179,26 @@ let btn key label cls act =
 
 (* div[role='alertdialog'] — Confirm / Cancel *)
 let confirm_view (c : Model.confirm) =
-  let title, desc, act =
+  let icon_opt, title, desc, desc_cls, act =
     match c with
-    | Model.Confirm_delete_page u ->
-        ( I18n.delete_page_title
-        , I18n.delete_page_desc
+    | Model.Confirm_delete_page (u, page_title, permanent) ->
+        ( Some (Icons.icon ~size:20. "alert-triangle")
+        , (if permanent then I18n.delete_page_permanent_desc
+           else I18n.delete_page_desc)
+        , "- " ^ page_title
+        , "ui__alert-dialog-description text-sm opacity-60"
         , fun () -> ignore (Page_ops.delete u) )
     | Model.Confirm_convert_tag_to_page id ->
-        ( I18n.convert_tag_to_page
+        ( None
+        , I18n.convert_tag_to_page
         , I18n.convert_tag_to_page_desc
+        , "ui__alert-dialog-description text-sm text-muted-foreground"
         , fun () -> ignore (Page_ops.convert_tag_to_page id) )
     | Model.Confirm_delete_asset u ->
-        ( I18n.asset_confirm_delete
+        ( None
+        , I18n.asset_confirm_delete
         , ""
+        , "ui__alert-dialog-description text-sm text-muted-foreground"
         , fun () -> Asset_dom.delete_asset u )
   in
   let close () =
@@ -215,11 +233,16 @@ let confirm_view (c : Model.confirm) =
            border bg-background p-6 shadow-lg sm:rounded-lg"
         [ dom ~key:"adlg-t" ~tag:"h2"
             ~style_class:"ui__alert-dialog-title text-lg font-semibold"
-            ~text:title []
+            [ (match icon_opt with
+               | Some i ->
+                   (* cljs dialog-confirm title: flex gap-2 items-center
+                      > span.relative icon + text *)
+                   dom ~key:"adlg-tw" ~style_class:"flex gap-2 items-center"
+                     [ dom ~key:"adlg-ic" ~style_class:"relative" [ i ]
+                     ; dom ~key:"adlg-tx" ~text:title [] ]
+               | None -> dom ~key:"adlg-tx" ~text:title []) ]
         ; dom ~key:"adlg-d" ~tag:"div"
-            ~style_class:
-              "ui__alert-dialog-description text-sm \
-               text-muted-foreground" ~text:desc []
+            ~style_class:desc_cls ~text:desc []
         ; dom ~key:"adlg-f" ~tag:"div"
             ~style_class:
               "ui__alert-dialog-footer flex flex-col-reverse \
