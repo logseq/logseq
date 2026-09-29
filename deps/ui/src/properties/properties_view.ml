@@ -1,8 +1,6 @@
 (* Public entry points for the properties UI.
 
-   `install ()` must be called once during app startup —
-   TODO(app/js_app): add `Properties_view.install ();` to the boot path
-   (js_app/main.ml or wherever app modules are wired). Melange
+   `install ()` must be called once during app startup. Melange
    dead-codes unreferenced modules, so without that single call nothing
    in this directory is bundled into main.js. It sets up:
 
