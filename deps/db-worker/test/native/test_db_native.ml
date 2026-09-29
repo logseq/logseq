@@ -186,6 +186,91 @@ let test_ordinary_sibling_ignores_stale_order_datoms () =
      | Some e -> e.id = c1.id
      | None -> false)
 
+(* order-list-index propagation: emitted markers per sibling list and the
+   shifted-eid diff that augments delta.blocks. Root children cover
+   untyped/letter/number runs, an equal-order pair and a typed nested
+   parent; e30/e31 exercise the descendant representation flip. *)
+let create_order_list_delta_conn () =
+  let datom = Datascript.datom in
+  let uuid n = Uuid (Printf.sprintf "00000000-0000-4000-8000-%012d" n) in
+  let lt = "logseq.property/order-list-type" in
+  let child e parent order t uuid_n =
+    [ datom ~e ~a:"block/parent" ~v:(Ref parent) ();
+      datom ~e ~a:"block/order" ~v:(String order) ();
+      datom ~e ~a:"block/uuid" ~v:(uuid uuid_n) () ]
+    @
+    match t with
+    | Some ty -> [ datom ~e ~a:lt ~v:(String ty) () ]
+    | None -> []
+  in
+  Datascript.conn_from_datoms ~schema:(Db_test_util.schema ())
+    ([ datom ~e:1 ~a:"block/title" ~v:(String "page") ();
+       datom ~e:1 ~a:"block/uuid" ~v:(uuid 1) () ]
+     @ child 10 1 "a1" (Some "number") 10
+     @ child 11 1 "a2" (Some "number") 11
+     @ child 16 1 "a2" (Some "number") 16
+     @ child 12 1 "a3" (Some "number") 12
+     @ child 13 1 "a4" (Some "number") 13
+     @ child 14 1 "a5" None 14
+     @ child 15 1 "a6" (Some "letter") 15
+     @ child 20 1 "a7" (Some "number") 20
+     @ child 21 20 "a0" (Some "number") 21
+     @ child 22 20 "a1" None 22
+     @ child 23 20 "a2" (Some "number") 23
+     @ child 30 1 "a8" (Some "number") 30
+     @ child 31 30 "a0" (Some "number") 31
+     @ child 32 1 "a9" (Some "number") 32)
+
+(* sibling_index_markers must agree with the per-child
+   order_list_index/emitted value on every child *)
+let test_order_list_index_markers_match_per_child () =
+  let db = db_of (create_order_list_delta_conn ()) in
+  let check_list name parent =
+    let children = Ldb.get_children parent in
+    let markers = Render_delta.sibling_index_markers children in
+    List.iter
+      (fun (c : entity) ->
+         let expected = Render_delta.index_marker_of c in
+         check (name ^ " e" ^ string_of_int c.id)
+           (Hashtbl.find markers c.id = expected))
+      children
+  in
+  check_list "markers root" (Option.get (block_by_title db "page"));
+  check_list "markers nested" (Option.get (Ldb.ent_of_id db 20))
+
+(* a same-parent reorder shifts the emitted index of siblings whose own
+   datoms did not change *)
+let test_order_list_shifted_uuids_reports_displaced_sibling () =
+  let conn = create_order_list_delta_conn () in
+  let r =
+    Datascript.transact_conn conn
+      [ Datascript.Retract (Entity_id 12, "block/order", Some (String "a3"));
+        Datascript.Add (Entity_id 12, "block/order", String "az") ]
+  in
+  let shifted = Render_delta.order_list_shifted_uuids r in
+  check "shifted includes displaced D"
+    (List.mem "00000000-0000-4000-8000-000000000013" shifted);
+  check "shifted includes moved C"
+    (List.mem "00000000-0000-4000-8000-000000000012" shifted);
+  check "shifted excludes unchanged A"
+    (not (List.mem "00000000-0000-4000-8000-000000000010" shifted));
+  check "shifted excludes unchanged B"
+    (not (List.mem "00000000-0000-4000-8000-000000000011" shifted))
+
+(* reparenting a typed block flips the representation of its typed
+   descendants (ancestor count mod 3) — they are shifted even though
+   their own datoms did not change *)
+let test_order_list_shifted_uuids_covers_descendants () =
+  let conn = create_order_list_delta_conn () in
+  let r =
+    Datascript.transact_conn conn
+      [ Datascript.Retract (Entity_id 30, "block/parent", Some (Ref 1));
+        Datascript.Add (Entity_id 30, "block/parent", Ref 32) ]
+  in
+  let shifted = Render_delta.order_list_shifted_uuids r in
+  check "shifted includes descendant Y"
+    (List.mem "00000000-0000-4000-8000-000000000031" shifted)
+
 (* (deftest page-exists ...)
    cljs page-exists? returns a seq of page eids (e.g. ["foo" page]);
    Ldb.page_exists returns bool — boolean equivalents asserted. *)
@@ -3216,6 +3301,9 @@ let db_test_cases : unit Alcotest.test_case list =
     Alcotest.test_case "ordinary-sibling-skips-created-from-property-children" `Quick test_ordinary_sibling_skips_created_from_property_children;
     Alcotest.test_case "ordinary-sibling-skips-closed-value-property-children" `Quick test_ordinary_sibling_skips_closed_value_property_children;
     Alcotest.test_case "ordinary-sibling-ignores-stale-order-datoms" `Quick test_ordinary_sibling_ignores_stale_order_datoms;
+    Alcotest.test_case "order-list-index-markers-match-per-child" `Quick test_order_list_index_markers_match_per_child;
+    Alcotest.test_case "order-list-shifted-uuids-reports-displaced-sibling" `Quick test_order_list_shifted_uuids_reports_displaced_sibling;
+    Alcotest.test_case "order-list-shifted-uuids-covers-descendants" `Quick test_order_list_shifted_uuids_covers_descendants;
     Alcotest.test_case "page-exists" `Quick test_page_exists;
     Alcotest.test_case "test-transact-with-multiple-tx-datoms" `Quick test_transact_with_multiple_tx_datoms;
     Alcotest.test_case "get-bidirectional-properties" `Quick
