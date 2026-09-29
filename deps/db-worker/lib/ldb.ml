@@ -345,18 +345,22 @@ let block_children_or_property_children (block : entity) (parent : entity) : ent
    cljs folds over every (:block/parent parent) datom with three index
    lookups per child (order + two exclusion checks) — O(siblings) seeks.
    The :block/order avet index already stores the same ordering, so scan
-   it from the block's own order toward the requested direction and take
-   the first owner whose :block/parent is the same parent and that is not
-   excluded: the answer is identical to the cljs fold (closest eligible
-   order; same-order ties pick the smallest e, matching the fold's
-   first-seen in e-ascending iteration) but costs only the order gap
-   between siblings, typically ~1-3 candidate lookups.
+   it from the block's own order toward the requested direction.
 
-   Eligibility uses the child's effective :block/order (the entity read,
-   first eavt datom — same value the cljs fold sees), not the scanned
-   index datom: raw-datom replay can leave a second :block/order datom on
-   an entity (e.g. a batch-remove marker string), and that stale index
-   position must not make the entity a candidate. *)
+   Candidacy at an index position requires the scanned datom's value to
+   equal the entity's effective :block/order (the entity read, first eavt
+   datom — same value the cljs fold sees). Raw-datom replay can leave a
+   second :block/order datom on an entity; such a stale position is
+   dishonest — it is skipped, and the entity is yielded again at its
+   honest position (the live datom is itself an index entry, so it is
+   always seen there when in range). Every entity has at most one honest
+   position and it equals its live order, so scanning positions in order:
+   the first position with an honest eligible candidate is the argmax
+   over live orders on the requested side — identical to the cljs fold —
+   while costing only the order gap between siblings plus any stale
+   datoms in between, typically ~1-3 candidate lookups. Same-order ties
+   pick the smallest e, matching the fold's first-seen in e-ascending
+   iteration. *)
 let ordinary_sibling (block : entity) (dir : [ `Left | `Right ]) : entity option =
   let db = block.db in
   match ref_ids block "block/parent", value block "block/order" with
@@ -388,9 +392,12 @@ let ordinary_sibling (block : entity) (dir : [ `Left | `Right ]) : entity option
          | `Left -> rseek_datoms db Avet ~a:"block/order" ~v:(String block_order) ()
          | `Right -> seek_datoms db Avet ~a:"block/order" ~v:(String block_order) ())
         |> Seq.filter_map (fun (d : datom) ->
-            match live_order d.e with
-            | Some o
-              when eligible o && same_parent d.e && not (excluded d.e) ->
+            match d.v, live_order d.e with
+            | String stored, Some o
+              when String.equal o stored
+                   && eligible o
+                   && same_parent d.e
+                   && not (excluded d.e) ->
                 Some (d.e, o)
             | _ -> None)
       in
