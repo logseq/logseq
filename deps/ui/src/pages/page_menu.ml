@@ -5,31 +5,15 @@
 
 let dom = Logseq_dom.dom
 
-let item_class =
-  "ui__dropdown-menu-item relative flex cursor-pointer select-none \
-   items-center rounded-sm px-2 py-1.5 text-sm outline-none"
-
-let item key label on_click =
-  dom ~key ~style_class:item_class
-    ~attrs:[ ("role", "menuitem"); ("tabindex", "-1") ]
-    ~events:"click"
-    ~on_dom_event:(fun name _ ->
-      if name = "click" then on_click ())
-    [ dom ~key:(key ^ "-l") ~text:label [] ]
+let item key label on_click = Menu_item.el ~key ~label ~on_click ()
 
 (* cljs dropdown-menu-item renders its :icon before the title *)
 let icon_item key label icon_name on_click =
-  dom ~key ~style_class:item_class
-    ~attrs:[ ("role", "menuitem"); ("tabindex", "-1") ]
-    ~events:"click"
-    ~on_dom_event:(fun name _ ->
-      if name = "click" then on_click ())
-    [ Icons.icon ~size:15. ~cls:"mr-2" icon_name
-    ; dom ~key:(key ^ "-l") ~text:label [] ]
+  Menu_item.el ~key ~label
+    ~before:[ Icons.icon ~size:15. ~cls:"mr-2" icon_name ]
+    ~on_click ()
 
-let separator key =
-  dom ~key ~attrs:[ ("role", "separator") ]
-    ~style_class:"ui__dropdown-menu-separator -mx-1 my-1 h-px bg-muted" []
+let separator key = Menu_item.separator ~key
 
 (* items for the current route page; convert only for non-tag pages.
    Recycle navigates to the builtin "Recycle" page by name — cljs

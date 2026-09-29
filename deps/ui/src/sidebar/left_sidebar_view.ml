@@ -32,15 +32,14 @@ let menu_box ~style children =
 
 (* [role='menuitem'] > div text — contract uses `div:text('<label>')` *)
 let menu_item st label on_click =
-  dom ~key:("mi-" ^ label) ~tag:"div"
+  Menu_item.el ~key:("mi-" ^ label)
+    ~cls:"ui__dropdown-menu-item"
     ~attrs:[ ("role", "menuitem") ]
-    ~style_class:"ui__dropdown-menu-item"
-    ~events:"click"
-    ~on_dom_event:(fun name _ ->
-      if name = "click" then (
-        Sidebar_state.close_menu st;
-        on_click ()))
-    [ dom ~tag:"div" ~text:label [] ]
+    ~label
+    ~on_click:(fun () ->
+      Sidebar_state.close_menu st;
+      on_click ())
+    ()
 
 (* ---------- nav edit (checkbox) menu ---------- *)
 

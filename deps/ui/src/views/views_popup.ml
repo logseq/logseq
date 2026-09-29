@@ -90,11 +90,7 @@ type menu_item =
   | MCustom of D.el
   | MSep
 
-let item_cls base =
-  base
-  ^ " relative flex cursor-pointer select-none items-center rounded-sm \
-     px-2 py-1.5 text-sm outline-none data-[highlighted]:bg-muted \
-     data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
+let item_cls = Menu_item.views_item_cls
 
 let focus_item (items : D.el array) idx =
   if idx >= 0 && idx < Array.length items then begin
