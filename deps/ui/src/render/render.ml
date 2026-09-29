@@ -110,21 +110,72 @@ let src_block s =
    render the outer .custom-query-results + .ls-query-setting shell;
    the query source lives on the hidden logseq.property/query value
    block and the queries area fills in real results later. *)
-let code_block lang code =
+let code_block ?(extra = []) lang code =
   let trimmed = String.trim code in
   D.el ~tag:"div" ~style_class:"extensions__code"
-    [ D.el ~tag:"div" ~style_class:"CodeMirror"
-        ~attrs:[ ("data-lang", lang) ]
-        [ (if trimmed = "" then
-             (* empty line needs a br to have a box (CodeMirror renders
-                one inside an empty CodeMirror-line) *)
-             D.el ~tag:"pre" ~style_class:"CodeMirror-line"
-               [ D.el ~tag:"br" [] ]
-           else
-             D.el ~tag:"pre" ~style_class:"CodeMirror-line"
-               ~text:trimmed [])
-        ]
-    ]
+    ([ D.el ~tag:"div" ~style_class:"CodeMirror"
+         ~attrs:[ ("data-lang", lang) ]
+         [ (if trimmed = "" then
+              (* empty line needs a br to have a box (CodeMirror renders
+                 one inside an empty CodeMirror-line) *)
+              D.el ~tag:"pre" ~style_class:"CodeMirror-line"
+                [ D.el ~tag:"br" [] ]
+            else
+              D.el ~tag:"pre" ~style_class:"CodeMirror-line"
+                ~text:trimmed [])
+         ]
+     ]
+    @ extra)
+
+let has_sub hay needle =
+  let n = String.length hay and m = String.length needle in
+  let rec go i =
+    i + m <= n && (String.sub hay i m = needle || go (i + 1))
+  in
+  go 0
+
+(* "#+BEGIN_SRC clojure :results" — cljs src-cp evals the body through
+   sci/eval-string ('block bound) only for clojure language + :results
+   option. Options only survive on raw #+BEGIN_SRC titles (saved
+   display-type=code blocks drop the fence header). *)
+let src_eval_parts s =
+  match src_block s with
+  | Some (hdr, code) -> (
+      match String.index_opt hdr ' ' with
+      | None -> None
+      | Some i ->
+          let lang = String.sub hdr 0 i in
+          let opts = String.sub hdr (i + 1) (String.length hdr - i - 1) in
+          if String.lowercase_ascii lang = "clojure"
+             && has_sub opts ":results"
+          then Some (lang, code)
+          else None)
+  | None -> None
+
+(* async eval-string -> div > code "Results" + .results.mt-1 > pre.code;
+   stays empty until the worker answers (cljs mounts the shell and fills
+   the value when sci resolves) *)
+let src_eval_el ~(code : string) ~(uuid : string) : t =
+ fun context parent ->
+  let st = Signal.state context.Lui_ui.ui_scheduler "" in
+  Render_state.with_repo (fun repo ->
+      Runtime.invoke3 "thread-api/eval-string" (Wire.String repo)
+        (Wire.String code) (Wire.String uuid)
+      |> Js.Promise.then_ (fun w ->
+             (match w with
+              | Wire.String s -> Runtime.signal_set st s
+              | Wire.Nil -> ()
+              | w -> Runtime.signal_set st (Edn.to_string w));
+             Js.Promise.resolve ())
+      |> ignore);
+  Logseq_dom.dyn ~equal:(fun a b -> (a : string) = b)
+    (fun s ->
+      D.el ~tag:"div"
+        [ D.el ~tag:"code" ~text:(I18n.t "view/results") []
+        ; D.el ~tag:"div" ~style_class:"results mt-1"
+            [ D.el ~tag:"pre" ~style_class:"code" ~text:s [] ] ])
+    (Signal.value st)
+    context parent
 
 (* {{query ...}} whole-title -> the query shell:
    .custom-query-results + .ls-query-setting shell; the queries area
@@ -232,8 +283,15 @@ let title_block ?(self = "") ?resolved (b : Model.block) : t list =
   | Some "math" ->
       [ D.el ~tag:"div" ~style_class:"math-block"
           [ Render_inline.katex_el s ] ]
-  | _ ->
-      title ?heading
-        ~is_query:(List.mem "logseq.class/Query" b.Model.block_tag_idents)
-        ~self (Option.value resolved ~default:s)
+  | _ -> (
+      match src_eval_parts s with
+      | Some (lang, code) ->
+          [ code_block lang code
+              ~extra:
+                [ src_eval_el ~code
+                    ~uuid:(Option.value b.Model.block_uuid ~default:"") ] ]
+      | None ->
+          title ?heading
+            ~is_query:(List.mem "logseq.class/Query" b.Model.block_tag_idents)
+            ~self (Option.value resolved ~default:s))
 
