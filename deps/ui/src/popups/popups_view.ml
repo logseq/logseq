@@ -168,7 +168,9 @@ let ac_node_label_el (v : S.view) (it : S.ac_item) : t =
           [ Logseq_dom.dom ~key:"bc"
               ~style_class:"text-xs opacity-70 mb-1"
               ~attrs:[ ("style", "margin-left: 3px") ]
-              ~text:bc [] ]
+              [ Logseq_dom.dom ~key:"b"
+                  ~style_class:"breadcrumb block-parents breadcrumb--search-result"
+                  ~text:bc [] ] ]
       | None -> [])
     @ [ Logseq_dom.dom ~key:"row"
           ~style_class:"flex flex-row items-start"

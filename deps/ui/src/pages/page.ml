@@ -499,8 +499,13 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
             | Some p -> Platform.payload_str p "targetId"
             | None -> ""
           in
+          let shift =
+            match payload with
+            | Some p -> Platform.payload_bool p "shiftKey"
+            | None -> false
+          in
           if
-            page.page_uuid <> None
+            page.page_uuid <> None && not shift
             && (target = "" || target = "page-title"
                 || target = "page-title-text")
           then (
@@ -1083,12 +1088,7 @@ let page_view (m : Model.t) (page : Model.page) : t =
                  | _ -> "main")
               page.page_blocks
           ]
-        @ (* cljs today-queries: today's journal shows the repo's
-             [:default-queries :journals] custom queries; the section
-             shell renders (query execution is not ported yet) *)
-          (if is_today_page m page
-           then [ dom ~key:"tq" ~attrs:[ ("id", "today-queries") ] [] ]
-           else []))
+    )
     ; dom ~key:"refs-wrap" ~style_class:"flex flex-col gap-8 ml-1"
         (* cljs page-inner: #today-queries div first on today's journal,
            then linked and unlinked refs .fade-in.delay sections *)

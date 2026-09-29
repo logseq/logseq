@@ -152,7 +152,6 @@ let on_become_master (repo : string) (start_opts : Wire.t) : unit E.t =
     ; "import-type", edn_of_opt (Wire.get "import-type" start_opts) ];
   E.catch
     (E.bind (Sqlite.init ()) (fun () ->
-         Worker_log.info "db-worker/master-sqlite-init-done" [ "repo", repo ];
          match Wire.get "import-type" start_opts with
          | Some w when w <> Wire.Nil -> E.pure ()
          | _ ->
@@ -160,7 +159,6 @@ let on_become_master (repo : string) (start_opts : Wire.t) : unit E.t =
                (Endpoint_lifecycle.create_or_open_db
                   [ Wire.String repo; start_opts ])
                (fun _ ->
-                  Worker_log.info "db-worker/master-db-opened" [ "repo", repo ];
                   (* cljs asserts the datascript conn opened *)
                   assert (Worker_state.datascript_conn repo <> None);
                   E.pure ())))

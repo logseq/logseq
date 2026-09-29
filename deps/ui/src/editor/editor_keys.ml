@@ -220,9 +220,6 @@ let is_other_block_editor uuid target =
    pending buffer at the pending caret and replay structural ops once
    focus lands *)
 let on_pending_focus_key ev e caret =
-  Platform.console_log
-    (Printf.sprintf "[dbg] pending-key key=%s uuid=%s caret=%d"
-       (D.ev_key ev) e.S.uuid caret);
   let buf = e.S.buffer in
   let len = String.length buf in
   let queue f =
@@ -273,6 +270,9 @@ let on_pending_focus_key ev e caret =
   | "Escape" ->
       D.prevent_default ev;
       A.exit_edit ~select:true
+  | ("ArrowUp" | "ArrowDown") as key when D.ev_shift ev ->
+      D.prevent_default ev;
+      queue (fun () -> A.shift_arrow_select (key = "ArrowUp"))
   | key
     when String.length key = 1
          && (not (D.ev_composing ev))
@@ -283,19 +283,6 @@ let on_pending_focus_key ev e caret =
 
 let on_keydown ev =
   if S.ready () then begin
-    (match (S.editing (), !S.pending_focus) with
-     | Some e, pend ->
-         Platform.console_log
-           (Printf.sprintf "[dbg] kd key=%s tgt=%s edit=%s pend=%s"
-              (D.ev_key ev)
-              (match D.ev_target ev with
-               | Some el -> D.el_tag el ^ "#" ^ D.el_id el
-               | None -> "none")
-              e.S.uuid
-              (match pend with
-               | Some (u, c) -> Printf.sprintf "Some(%s,%d)" u c
-               | None -> "None"))
-     | _ -> ());
     if Editor_commands.popup_key ev then ()
     else
       let target = D.ev_target ev in
@@ -321,12 +308,6 @@ let on_keydown ev =
                 | Some el -> D.el_selection_start el
                 | None -> String.length e.S.buffer
               in
-              Platform.console_log
-                (Printf.sprintf "[dbg] rearm uuid=%s caret=%d tgt=%s"
-                   e.S.uuid caret
-                   (match target with
-                    | Some el -> D.el_tag el ^ "#" ^ D.el_id el
-                    | None -> "none"));
               S.pending_focus := Some (e.S.uuid, caret);
               D.set_timeout A.apply_focus 0;
               on_pending_focus_key ev e caret

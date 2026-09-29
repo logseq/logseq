@@ -142,19 +142,15 @@ let fetch_unlinked (p : Model.page) =
 let fetch_unlinked_refs = Outliner_ops.fetch_unlinked_refs
 
 let load_journals () =
-  Platform.console_log "[dbg] route:load-journals-start";
   Runtime.invoke2 "thread-api/get-latest-journals" (Wire.String (repo ()))
     (Wire.Int 40)
   |> Js.Promise.then_ (fun w ->
-         Platform.console_log "[dbg] route:journals-rpc-done";
          let pages =
            match w with
            | Wire.Array xs | Wire.List xs ->
                List.filter_map Decode.page_of_summary xs
            | _ -> []
          in
-         Platform.console_log
-           ("[dbg] route:journals-pages n=" ^ string_of_int (List.length pages));
          let rec collect acc = function
            | [] -> Js.Promise.resolve (List.rev acc)
            | p :: rest ->
@@ -168,18 +164,14 @@ let load_journals () =
          in
          collect [] pages
          |> Js.Promise.then_ (fun js ->
-                Platform.console_log "[dbg] route:journals-collected";
-                Js.Promise.resolve
-                  (match !Runtime.current_route with
-                   | Some (Model.Journals | Model.Home) ->
-                       Platform.console_log "[dbg] route:journals-send";
-                       Runtime.send (Action.Journals_loaded js)
-                   | _ ->
-                       Platform.console_log
-                         ("[dbg] route:journals-dropped "
-                          ^ (match !Runtime.current_route with
-                             | None -> "none"
-                             | Some _ -> "other")))))
+                match !Runtime.current_route with
+                | Some (Model.Journals | Model.Home) ->
+                    Js.Promise.resolve
+                      (Runtime.send (Action.Journals_loaded js))
+                | _ -> Js.Promise.resolve ()))
+  |> Js.Promise.catch (fun err ->
+         Platform.console_error ("route:load-journals-failed", err);
+         Js.Promise.resolve ())
 
 (* a fetch started for route R can resolve after navigation moved on —
    sending its Page_loaded would clobber the current page with stale data *)

@@ -130,6 +130,10 @@ type t =
   ; titles : string list ref
   ; tag_titles : (string * string option) list ref
     (* class/tag entities for the # popup: (title, tabler icon) *)
+  ; tag_exact_titles : string list ref
+    (* every class + alias title — feeds only the exact-match check that
+       suppresses the "New tag" row (cljs page-exists?/class-alias?); the
+       candidate list stays private-tag-filtered *)
   ; templates : (string * string) list ref (* (uuid, title) *)  }
 
 (* the live popups layer — exactly one exists per app; lets editor key
@@ -143,6 +147,7 @@ let make scheduler : t =
   ; gen = ref 0
   ; titles = ref []
     ; tag_titles = ref []
+    ; tag_exact_titles = ref []
     ; templates = ref []  }
   in
   active := Some t;
@@ -537,7 +542,10 @@ let page_items_for t kind q =
   let exact =
     match kind with
     | Tag_search ->
-        List.exists (fun (ti, _) -> S.equal ti q) !(t.tag_titles)
+        (* cljs search-pages db-tag?: the "New tag" row is suppressed when
+           the query exactly names an existing class (internal ones like
+           Page count) or a class alias *)
+        List.exists (fun ti -> S.equal ti q) !(t.tag_exact_titles)
     | _ -> List.exists (fun ti -> S.equal ti q) !(t.titles)
   in
   (* cljs matched-pages-with-new-page: the "New tag/page" row goes after a
@@ -612,10 +620,13 @@ let page_item_of_row i w =
   let act =
     if is_page then Emit ("[[" ^ title ^ "]]", 0) else Emit ("[[" ^ uuid ^ "]]", 0)
   in
+  (* cljs node-render: node icon + title, block rows carry a .breadcrumb
+     row with the parent page path *)
   mk_item
     ~key:("node-" ^ uuid ^ "-" ^ string_of_int i)
-    ~label:title
-    ?info:(if is_page then None else Cmdk_state.breadcrumb_of w)
+    ~label:title ~node:true
+    ~node_icon:((if is_page then "file" else "point-filled"), true)
+    ?breadcrumb:(if is_page then None else Cmdk_state.breadcrumb_of w)
     act
 ;;
 
@@ -823,30 +834,34 @@ let load_tag_titles t _editor =
               | _ -> []
             in
             t.tag_titles := class_titles_of rows;
-            if editing_block then
-              Runtime.invoke2 "thread-api/get-all-classes"
-                (Wire.String (repo ()))
-                (wopts [ ("except-private-tags?", Wire.Bool false) ])
-              |> Js.Promise.then_ (fun w2 ->
-                     let rows2 =
-                       match w2 with
-                       | Wire.Array xs | Wire.List xs -> xs
-                       | _ -> []
-                     in
-                     let page_class =
-                       List.filter
-                         (fun r ->
-                           (* entity_map_wire emits db/ident as a keyword
-                              value, not a string *)
-                           Wire.get r "db/ident"
-                           = Some (Wire.Keyword "logseq.class/Page"))
-                         rows2
-                     in
-                     t.tag_titles :=
-                       !(t.tag_titles)
-                       @ class_titles_of page_class;
-                     Js.Promise.resolve ())
-            else Js.Promise.resolve ())
+            (* the full class list (private tags included) feeds only
+               tag_exact_titles; Page is conjoined to the candidates just
+               when editing a non-page block *)
+            Runtime.invoke2 "thread-api/get-all-classes"
+              (Wire.String (repo ()))
+              (wopts [ ("except-private-tags?", Wire.Bool false) ])
+            |> Js.Promise.then_ (fun w2 ->
+                   let rows2 =
+                     match w2 with
+                     | Wire.Array xs | Wire.List xs -> xs
+                     | _ -> []
+                   in
+                   t.tag_exact_titles :=
+                     List.map fst (class_titles_of rows2);
+                   (if editing_block then
+                      let page_class =
+                        List.filter
+                          (fun r ->
+                            (* entity_map_wire emits db/ident as a keyword
+                               value, not a string *)
+                            Wire.get r "db/ident"
+                            = Some (Wire.Keyword "logseq.class/Page"))
+                          rows2
+                      in
+                      t.tag_titles :=
+                        !(t.tag_titles)
+                        @ class_titles_of page_class);
+                   Js.Promise.resolve ()))
      |> Js.Promise.then_ (fun () ->
             (match (get t).ac with
              | Some ({ kind = Tag_search; _ } as ac) ->

@@ -350,7 +350,13 @@ let content_group st ~key ~class_ ~label ~items_sig ~li_class ~ul_class
             ; dom ~key:(key ^ "-b") ~tag:"span" ~style_class:"b"
                 [ Icons.icon ~cls:"more" ~size:15. "chevron-right" ] ]
         ; dyn
-            ~equal:(fun a b -> (a = []) = (b = []))
+            ~equal:(fun a b ->
+              List.map
+                (fun (p : Model.page) -> (p.page_uuid, p.page_title))
+                a
+              = List.map
+                  (fun (p : Model.page) -> (p.page_uuid, p.page_title))
+                  b)
             (fun ps ->
               if ps = [] && not always_bd then Logseq_dom.nothing
               else

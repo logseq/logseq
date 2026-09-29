@@ -38,19 +38,12 @@ let focus_attempts = ref 0
 let run_pending_focus_actions () =
   let fs = List.rev !S.pending_focus_actions in
   S.pending_focus_actions := [];
-  if fs <> [] then
-    Platform.console_log
-      (Printf.sprintf "[dbg] run-pending n=%d" (List.length fs));
   List.iter (fun f -> f ()) fs
 
 let rec apply_focus () =
   match !S.pending_focus with
   | None -> S.pending_focus_actions := []
   | Some (uuid, caret) -> (
-      Platform.console_log
-        (Printf.sprintf "[dbg] apply-focus probe uuid=%s caret=%d found=%b"
-           uuid caret
-           (Option.is_some (D.textarea_of uuid)));
       match D.textarea_of uuid with
       | Some el -> (
           D.autosize_textarea el;
@@ -61,19 +54,13 @@ let rec apply_focus () =
              editor gets it *)
           match D.active_element with
           | Some ae when ae == el ->
-              Platform.console_log
-                (Printf.sprintf "[dbg] pending-land uuid=%s caret=%d"
-                   uuid caret);
               S.pending_focus := None;
               focus_attempts := 0;
               let len = String.length (D.el_value el) in
               let c = max 0 (min caret len) in
               D.el_set_selection_range el c c;
               run_pending_focus_actions ()
-          | _ ->
-              Platform.console_log
-                (Printf.sprintf "[dbg] pending-nofocus uuid=%s" uuid);
-              retry_focus ())
+          | _ -> retry_focus ())
       | None -> (
           (* code/calc blocks edit through pre.CodeMirror-line — no
              textarea exists on that surface *)
@@ -84,9 +71,6 @@ let rec apply_focus () =
                   D.el_focus pre;
                   match D.active_element with
                   | Some ae when ae == pre ->
-                      Platform.console_log
-                        (Printf.sprintf "[dbg] pending-land uuid=%s caret=%d"
-                           uuid caret);
                       S.pending_focus := None;
                       focus_attempts := 0;
                       run_pending_focus_actions ()
@@ -114,8 +98,6 @@ let with_focus_after uuid caret p =
   S.pending_focus := Some (uuid, caret);
   S.pending_focus_actions := [];
   focus_attempts := 0;
-  Platform.console_log
-    (Printf.sprintf "[dbg] pending-set uuid=%s caret=%d" uuid caret);
   ignore
     (p
     |> Js.Promise.then_ (fun () ->
@@ -625,6 +607,13 @@ let clear_selection () =
   S.set (fun st ->
       { st with S.selected = S.String_set.empty; anchor = None })
 
+(* shift+arrow arriving during the pending-focus window replays here once
+   focus lands: exit edit into selection, then extend one visible step *)
+let shift_arrow_select up =
+  match S.editing () with
+  | Some _ -> exit_edit ~select:true
+  | None -> extend_selection up
+
 (* move selection up/down one block (single-block arrow nav in normal
    mode, plain move for shift-extend callers) *)
 let move_selection_focus up =
@@ -1069,13 +1058,12 @@ let wrap_selection uuid marker =
 (* ArrowUp past the first block lands in the page title — cljs
    move-cross-boundary-up-down treats .ls-page-title as a block *)
 let focus_page_title () =
-  match D.get_element_by_id "page-title" with
+  match D.query_selector ".ls-page-title" with
   | None -> ()
   | Some _ -> (
       Runtime.send Action.Title_edit_start;
       Runtime.flush ();
-      let nl = D.query_selector_all "#page-title textarea" in
-      match D.node_list_item nl 0 with
+      match D.query_selector ".ls-page-title textarea" with
       | Some ta ->
           D.el_focus ta;
           let len = String.length (D.el_value ta) in

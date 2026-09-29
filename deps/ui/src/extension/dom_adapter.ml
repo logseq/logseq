@@ -109,7 +109,21 @@ let set_class el s =
 
 let json_string v = Option.value (Js.Json.decodeString v) ~default:""
 
+external raw_text_node_get : W.Element.t -> W.Node.t Js.Undefined.t
+  = "__lsTextNode" [@@mel.get]
+
+external node_remove : W.Node.t -> unit = "remove" [@@mel.send]
+
 let apply_attrs el json =
+  (* a <raw-text> placeholder swapped for a real text node is detached —
+     forward data-raw-text writes to the live node instead of the element *)
+  match Js.Undefined.toOption (raw_text_node_get el) with
+  | Some tn -> (
+      let obj = parse_json json in
+      match Js.Undefined.toOption (json_get obj "data-raw-text") with
+      | Some v -> set_node_data tn (json_string v)
+      | None -> set_node_data tn "")
+  | None ->
   let prev =
     managed_get el
     |> Js.Undefined.toOption
@@ -257,6 +271,11 @@ let remove_property el prop =
   | _ -> ()
 
 let cleanup el =
+  (* a swapped <raw-text> placeholder is detached; DropNode must remove the
+     live text node it stands for *)
+  (match Js.Undefined.toOption (raw_text_node_get el) with
+   | Some tn -> node_remove tn
+   | None -> ());
   let tbl = handlers_of el in
   Hashtbl.iter (fun name f -> remove_listener el name f) tbl;
   Hashtbl.reset tbl
