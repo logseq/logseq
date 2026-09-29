@@ -10,7 +10,7 @@
 open Lui_elements
 
 let dom = Logseq_dom.dom
-let t s = s
+let t = I18n.t
 
 let icon name = Icons.icon name
 
@@ -34,7 +34,7 @@ let search_input ~key st =
     ; dom ~key:(key ^ "-in") ~tag:"input"
         ~style_class:"form-input is-small"
         ~attrs:
-          [ ("placeholder", t "Search plugins")
+          [ ("placeholder", t "plugin/search-plugin")
           ; ("type", "text")
           ; ("autocomplete", "off")
           ]
@@ -64,8 +64,8 @@ let category_tabs ~key ~nums cat cat_st =
   let (np, nt) = nums in
   dom ~key:(key ^ "-cats")
     ~style_class:"secondary-tabs categories flex"
-    [ btn "plugins" (t "Plugins") "puzzle" np
-    ; btn "themes" (t "Themes") "palette" nt
+    [ btn "plugins" (t "nav/plugins") "puzzle" np
+    ; btn "themes" (t "nav/themes") "palette" nt
     ]
 
 external open_url_ : string -> unit = "open" [@@mel.scope "window"]
@@ -93,7 +93,7 @@ let control_tabs ~key ~search_st ~cat ~cat_st ~nums =
               [ ("href", "https://github.com/logseq/marketplace")
               ; ("target", "_blank")
               ]
-            ~text:(Platform.utf8 (t "✨ Write and submit new plugin")) []
+            ~text:(Platform.utf8 (t "plugin/contribute")) []
         ]
     ]
 
@@ -104,7 +104,7 @@ let empty_item =
         "flex items-center justify-center py-28 flex-col gap-2 opacity-30"
       [ Icons.icon ~size:40. "list-search"
       ; dom ~tag:"span" ~style_class:"text-sm"
-          ~text:(t "Nothing Found.") []
+          ~text:(t "plugin/empty") []
       ]
 
 let list_wrap ~key children =
@@ -163,7 +163,7 @@ let market_card pkg =
                     ~on_dom_event:(fun n _ ->
                       if n = "click" && not installed_ then
                         install_marketplace pkg)
-                    ~text:(if installed_ then t "Installed" else t "Install")
+                    ~text:(if installed_ then t "plugin/installed" else t "plugin/install")
                     []
                 ]
             ]
@@ -243,7 +243,7 @@ let installed_card (pl : Js.Json.t) =
                 [ dom ~key:"de" ~style_class:"de"
                     [ dom ~tag:"strong" [ icon "settings" ]
                     ; dom ~tag:"ul" ~style_class:"menu-list"
-                        [ dom ~tag:"li" ~text:(t "Open settings") [] ]
+                        [ dom ~tag:"li" ~text:(t "plugin/open-settings") [] ]
                     ]
                 ]
             ; dom ~key:"ctl-r" ~style_class:"r flex items-center"
@@ -358,14 +358,14 @@ let body (_ms : Model.t Signal.signal) : t =
         dom ~key:"plugins-page"
           ~style_class:"cp__plugins-page web-platform"
           ~attrs:[ ("tabindex", "-1") ]
-          [ dom ~key:"pl-h" ~tag:"h1" ~text:(t "Plugins") []
+          [ dom ~key:"pl-h" ~tag:"h1" ~text:(t "nav/plugins") []
           ; dom ~key:"pl-tabs"
               ~style_class:"tabs flex items-center justify-center"
               [ dom ~key:"pl-tabs-in"
                   ~style_class:"tabs-inner flex items-center"
-                  [ tab_btn "installed" "Installed" "cube"
+                  [ tab_btn "installed" "plugin/installed" "cube"
                       (tab_now = "installed")
-                  ; tab_btn "marketplace" "Marketplace" "apps"
+                  ; tab_btn "marketplace" "plugin/marketplace" "apps"
                       (tab_now = "marketplace")
                   ]
               ]
