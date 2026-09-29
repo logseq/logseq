@@ -159,7 +159,9 @@ let build_columns (inst : V.inst) (properties : W.t list) : V.column list =
          before the logseq property columns *)
       [ select_column; title_column ]
       @ (if inst.V.asset_class
-         then [ builtin_column "file" "File" "default" ~disable_hide:true () ]
+         then
+           [ builtin_column "file" (I18n.t "file/label") "default"
+               ~disable_hide:true () ]
          else [])
       @ with_tags
       @ [ created_column; updated_column; page_column ]

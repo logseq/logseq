@@ -140,7 +140,7 @@ let query_shell =
     [ D.el ~tag:"button"
         ~style_class:
           "ls-query-setting ls-small-icon text-muted-foreground ml-2 w-6 h-6"
-        ~attrs:[ ("type", "button"); ("title", "Set query") ] []
+        ~attrs:[ ("type", "button"); ("title", I18n.t "block/set-query") ] []
     ]
 
 (* content for a (possibly quoted) body — headings nest inside quote *)

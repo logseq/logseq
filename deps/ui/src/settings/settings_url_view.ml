@@ -144,7 +144,7 @@ let sync_body =
         (push_sync_config ()
          |> Js.Promise.then_ (fun _ -> Js.Promise.resolve ())
          |> Js.Promise.catch (fun _ ->
-                Toast.error "Failed to update worker";
+                Toast.error (I18n.t "settings/update-worker-error");
                 Js.Promise.resolve ())))
 
 let publish_body =

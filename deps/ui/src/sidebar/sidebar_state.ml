@@ -16,9 +16,7 @@
    - refresh: subscribes to the "sync-db-changes" broadcast via
      Runtime.on_sync and re-fetches sidebar data + the current route. *)
 
-(* i18n placeholder: keep the t() call shape so keys can be wired to real
-   dictionaries once a shared i18n module lands. *)
-let t (s : string) = s
+let t = I18n.t
 
 let default_navs = [ "flashcards"; "all-pages"; "graph-view" ]
 
@@ -582,7 +580,7 @@ let open_sticky_item st kind =
     | "contents" when not (has_item st "contents") ->
         add_promise st (contents_item repo)
     | "help" when not (has_item st "help") ->
-        (match static_item "help" "help" "Help" with
+        (match static_item "help" "help" (t "nav/help") with
          | Some it -> push_item st it
          | None -> ())
     | _ -> ()
