@@ -21,7 +21,7 @@ let dyn = Logseq_dom.dyn
 
 let skip_to_main =
   Logseq_dom.dom ~key:"skip" ~tag:"button" ~id:"skip-to-main"
-    ~text:"Skip to main content" []
+    ~text:(I18n.t "nav/skip-to-main-content") []
 
 (* cljs shui/button :ghost :size :sm — tooltip-wrapped buttons carry no
    title attr; extra classes sort alphabetically into the class list *)
@@ -414,7 +414,7 @@ let help_menu_popup : t =
            | rev ->
                [ Logseq_dom.dom ~key:"hm-rev" ~tag:"span"
                    ~style_class:"opacity text-xs opacity-30"
-                   ~text:(Printf.sprintf "Revision: %s" rev) [] ]))
+                   ~text:(I18n.tf "help/revision" [ rev ]) [] ]))
     ]
 
 let help_area (ms : Model.t Signal.signal) : t =

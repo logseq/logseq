@@ -18,7 +18,7 @@ let catch_write (p : unit Js.Promise.t) =
   Js.Promise.catch
     (fun e ->
       Platform.console_error ("views write failed", e);
-      Toast.error "Failed to save changes";
+      Toast.error (I18n.t "ui/save-changes-error");
       Js.Promise.resolve ())
     p
 
