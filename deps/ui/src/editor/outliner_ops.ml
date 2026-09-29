@@ -899,6 +899,10 @@ let undo () =
       Runtime.invoke1 "thread-api/undo-redo-undo" (Wire.String repo)
       |> Js.Promise.then_ (fun _ -> refresh_page ())
       |> Js.Promise.then_ (fun () -> resync_open_editor ())
+      |> Js.Promise.catch (fun e ->
+             Platform.console_error ("undo failed", e);
+             Toast.error "Undo failed";
+             Js.Promise.resolve ())
   | None -> Js.Promise.resolve ()
 
 let redo () =
@@ -908,6 +912,10 @@ let redo () =
       Runtime.invoke1 "thread-api/undo-redo-redo" (Wire.String repo)
       |> Js.Promise.then_ (fun _ -> refresh_page ())
       |> Js.Promise.then_ (fun () -> resync_open_editor ())
+      |> Js.Promise.catch (fun e ->
+             Platform.console_error ("redo failed", e);
+             Toast.error "Redo failed";
+             Js.Promise.resolve ())
   | None -> Js.Promise.resolve ()
 
 (* sdk bridge (and other non-editor mutation paths) refresh the view
