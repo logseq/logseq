@@ -138,25 +138,28 @@
 
 (defn- node-value-target-id
   "A :node property value can be stored as a hidden property value block whose
-  :block/title is the uuid of the node it targets. Returns the target's id for
-  such value blocks, nil otherwise. Value blocks of other property types carry
-  their own content (a :default value could itself be a uuid string), so they
-  are never resolved."
-  [db ref-id collected]
+  :block/title is the uuid of the node it targets. Such a value block only
+  stands in for its target when read through the property it was created for —
+  anywhere else (e.g. an explicit block reference) it is itself. Value blocks
+  of other property types carry their own content (a :default value could
+  itself be a uuid string), so they are never resolved."
+  [db ref-id collected attr]
   (when-let [property-id (:logseq.property/created-from-property collected)]
-    (when (= :node (:logseq.property/type (d/entity db property-id)))
-      (when-let [target-uuid (some-> (:block/title collected) parse-uuid)]
-        (let [target-id (resolve-ref-id db target-uuid)]
-          (when (not= target-id ref-id)
-            target-id))))))
+    (let [property (d/entity db property-id)]
+      (when (and (= :node (:logseq.property/type property))
+                 (= attr (:db/ident property)))
+        (when-let [target-uuid (some-> (:block/title collected) parse-uuid)]
+          (let [target-id (resolve-ref-id db target-uuid)]
+            (when (not= target-id ref-id)
+              target-id)))))))
 
 (defn- compute-shallow-ref-identity
-  [db ref-id]
+  [db ref-id attr]
   (when-not ref-id
     (fail! "Missing canonical block reference" {:ref-id ref-id}))
   (let [collected (scan-ref-attrs db ref-id)]
-    (if-let [target-id (node-value-target-id db ref-id collected)]
-      (compute-shallow-ref-identity db target-id)
+    (if-let [target-id (node-value-target-id db ref-id collected attr)]
+      (compute-shallow-ref-identity db target-id nil)
       (let [ref-uuid (:block/uuid collected)
             ref-ident (:db/ident collected)
             ref-title (when (string? (:block/title collected))
@@ -182,15 +185,18 @@
           (merge (property-or-asset-extras db collected)))))))
 
 (defn shallow-ref-identity
-  [db ref-or-id]
-  (let [ref-id (resolve-ref-id db ref-or-id)
-        cache *ref-identity-cache*]
-    (if-let [hit (and cache (get @cache ref-id))]
-      hit
-      (let [identity (compute-shallow-ref-identity db ref-id)]
-        (when cache
-          (vswap! cache assoc ref-id identity))
-        identity))))
+  ([db ref-or-id]
+   (shallow-ref-identity db ref-or-id nil))
+  ([db ref-or-id attr]
+   (let [ref-id (resolve-ref-id db ref-or-id)
+         cache *ref-identity-cache*
+         cache-key [ref-id attr]]
+     (if-let [hit (and cache (get @cache cache-key))]
+       hit
+       (let [identity (compute-shallow-ref-identity db ref-id attr)]
+         (when cache
+           (vswap! cache assoc cache-key identity))
+         identity)))))
 
 (defn- breadcrumb-entity
   [db entity]

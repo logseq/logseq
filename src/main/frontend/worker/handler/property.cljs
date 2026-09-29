@@ -97,7 +97,7 @@
              ;; Resolve hidden property value blocks to their target node so
              ;; choice ids match the ids selected block snapshots resolve to
              eid (if (and node-type? original-id)
-                   (worker-plain/node-property-target-id db original-id)
+                   (worker-plain/node-property-target-id db original-id (:db/ident property))
                    original-id)]
        (if-let [entity (some->> eid
                                 (d/entity db))]

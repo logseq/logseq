@@ -65,10 +65,13 @@
 (defn node-property-target-id
   "Resolves a :node property value to the id of the node it targets. :node
    values are often stored as hidden property value blocks whose :block/title
-   is the target's uuid; direct node refs resolve to themselves."
-  [db value-id]
+   is the target's uuid; direct node refs resolve to themselves. A value block
+   only stands in for its target through the property that created it, so
+   property-ident must match the value block's creator."
+  [db value-id property-ident]
   (let [property-value (d/entity db value-id)]
-    (if (:logseq.property/created-from-property property-value)
+    (if (= property-ident
+           (:db/ident (:logseq.property/created-from-property property-value)))
       (let [title (:block/title property-value)]
         (if-let [target-uuid (some-> title parse-uuid)]
           (let [target (d/entity db [:block/uuid target-uuid])]
@@ -82,7 +85,7 @@
   (if (ref-attr? db attr)
     (let [property (d/entity db attr)
           ref-id (if (= :node (:logseq.property/type property))
-                   (node-property-target-id db value)
+                   (node-property-target-id db value attr)
                    value)]
       (ref-value->summary db ref-id))
     value))
