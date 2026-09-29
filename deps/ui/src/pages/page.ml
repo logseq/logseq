@@ -66,7 +66,18 @@ let breadcrumbs title : t list =
 (* click position payload -> Page_menu_set (context menu = page items
    only, so with_app_items = false) *)
 let open_menu name payload =
-  if name = "contextmenu" then
+  (* title-tag chips get their own context menu (.block-tag, cljs
+     block-tag popup) — only the bare title opens the page menu *)
+  let on_tag_chip =
+    Option.fold ~none:false
+      ~some:(fun p ->
+        (* chip anchors/children count interactive; the bare .block-tag
+           container only shows up via targetClass *)
+        Platform.payload_bool p "interactive"
+        || I18n.contains (Platform.payload_str p "targetClass") "block-tag")
+      payload
+  in
+  if name = "contextmenu" && not on_tag_chip then
     Option.iter
       (fun p ->
         Runtime.send
@@ -179,11 +190,26 @@ let title_tag_chips (page : Model.page) : t list =
                          | Some s -> s
                          | None -> ""
                        in
+                       let priv = Tree.private_tag_ident ident in
                        dom ~key:("pt-tag-" ^ string_of_int i)
                          ~style_class:
                            ("block-tag"
-                           ^ if Tree.private_tag_ident ident then " private-tag"
-                             else "")
+                           ^ if priv then " private-tag" else "")
+                         ~attrs:
+                           [ ( "data-tag-uuid"
+                             , Option.value
+                                 (List.nth_opt
+                                    page.Model.page_tag_uuids i)
+                                 ~default:"" )
+                           ; ( "data-tag-id"
+                             , Option.value
+                                 (Option.map string_of_int
+                                    (List.nth_opt
+                                       page.Model.page_tag_db_ids i))
+                                 ~default:"0" )
+                           ; ("data-tag-title", tag)
+                           ; ( "data-tag-priv"
+                             , if priv then "true" else "false" ) ]
                          [ dom ~key:("pti-" ^ string_of_int i)
                              ~style_class:"flex items-center"
                              [ dom ~key:("ph-" ^ string_of_int i) ~tag:"a"

@@ -1668,3 +1668,26 @@ every other caller uses the default `~clear:true`.
   (`bg-primary text-primary-foreground hover:bg-primary/90`) —
   e.g. the publish-page submit. `btn_base` alone renders ghost-like;
   append the primary classes for a default-variant button.
+
+## Tag chips & node-value "New option" (parity: `devin/lui-parity2`)
+
+- **`.block-tag` chips carry `data-tag-uuid` / `data-tag-id` /
+  `data-tag-title` / `data-tag-priv`** so the document contextmenu
+  handler can open the cljs tag menu (`Go to #<title>` `⌘ Click`,
+  `Open in sidebar` `⇧ Click`, `Remove tag` — the last hidden for
+  private/built-in tags). The `data-ref` attr stays lowercase; the
+  menu label needs original case, hence `data-tag-title`.
+  `Remove tag` uses `delete-property-value` on `block/tags`, which
+  validates + retracts by `Wire.Int` db/id — uuid args fail, so
+  `resolve_block_tags`/`resolve_page_tags` must ship aligned
+  uuid+dbid per visible tag. `tags_wire` only carries
+  `{ident,title}`; decode-only chips (e.g. refs listing) fall back
+  to `""`/`0` and the menu simply doesn't open.
+- **create-page op returns `[title, uuid]`** — never `db/id`. Any
+  "New option" write must resolve the uuid back to a db/id
+  (`get-case-page` by uuid) before `set-block-property`; a bare
+  `geti res "db/id"` silently no-ops.
+- **`block/tags` schema type is `class`, not `node`**: cljs
+  `<create-page-if-not-exists!` creates a *class* for `block/tags`
+  (and `class`-type properties generally create classes). Writing a
+  plain page as a tag value fails validation ("should be a Class").

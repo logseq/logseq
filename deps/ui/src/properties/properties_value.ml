@@ -772,16 +772,30 @@ let node_cell ctx row =
         S.pop_overlay ())
       ~on_new:(Some (new_node ctx row))
   and new_node ctx row text =
-    D.create_page text
-    |> Js.Promise.then_ (fun res ->
-           (match D.geti res "db/id" with
-            | Some id ->
-                let ident = D.row_ident row |> Option.value ~default:"" in
-                set_scalar ctx ~ident ~value:(W.Int id)
-            | None -> ());
-           S.pop_overlay ();
-           Js.Promise.resolve ())
-    |> ignore
+    let ( let* ) p f = Js.Promise.then_ f p in
+    ignore
+      (let* res =
+         (* cljs <create-page-if-not-exists!: class-type and block/tags
+            values are classes *)
+         if D.row_type row = "class" || D.row_ident row = Some "block/tags"
+         then D.create_class text
+         else D.create_page text
+       in
+       let* () =
+         match D.create_result_uuid res with
+         | Some uuid -> (
+             let* id = D.db_id_of_uuid uuid in
+             match id with
+             | Some id ->
+                 let ident =
+                   D.row_ident row |> Option.value ~default:"" in
+                 set_scalar ctx ~ident ~value:(W.Int id);
+                 Js.Promise.resolve ()
+             | None -> Js.Promise.resolve ())
+         | None -> Js.Promise.resolve ()
+       in
+       S.pop_overlay ();
+       Js.Promise.resolve ())
   in
   on_click cell (fun _ -> open_values ());
   el_listen cell "keydown"

@@ -171,6 +171,8 @@ let rec block_of_wire ?(order_index = 1) ?(parent_query_id = None)
       (match order_list with Some _ -> Some order_index | None -> None)
   ; block_code_lang = prop_label w "logseq.property.code/lang"
   ; block_tag_uuids = []
+  ; block_tag_idents = []
+  ; block_tag_db_ids = []
   ; block_page_name =
       (match Wire.get w "block/page" with
        | Some (Wire.Map _ as p) -> (
@@ -178,7 +180,6 @@ let rec block_of_wire ?(order_index = 1) ?(parent_query_id = None)
            | Some t -> Some t
            | None -> Wire.map_get_string w "block/page-name")
        | _ -> Wire.map_get_string w "block/page-name")
-  ; block_tag_idents = []
   ; block_reactions = reactions_of_wire w
   ; block_is_comments_area = false
   ; block_is_comment = false
@@ -412,6 +413,8 @@ let page_of_summary (w : Wire.t) : Model.page option =
              | _ -> false)
         ; page_tags = page_tag_titles w
         ; page_tag_idents = page_tag_idents w
+        ; page_tag_uuids = []
+        ; page_tag_db_ids = []
         ; page_blocks = []
         ; page_linked_refs = []
         ; page_parents = []

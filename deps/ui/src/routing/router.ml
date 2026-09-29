@@ -373,6 +373,10 @@ let load_block_zoom uuid =
                                             ; page_tags = b.Model.block_tags
                                             ; page_tag_idents =
                                                 b.Model.block_tag_idents
+                                            ; page_tag_uuids =
+                                                b.Model.block_tag_uuids
+                                            ; page_tag_db_ids =
+                                                b.Model.block_tag_db_ids
                                             ; page_blocks = bs
                                             ; page_linked_refs = []
                                             ; page_parents

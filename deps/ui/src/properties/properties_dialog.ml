@@ -484,18 +484,31 @@ and render_value_edit d body prop =
                        write_prop_value d prop (Some (W.Float n));
                        close_dlg d
                    | None -> ())
-             else if ty = "node" then
+             else if ty = "node" || ty = "class" then
                Some
                  (fun text ->
-                   D.create_page text
-                   |> Js.Promise.then_ (fun res ->
-                          (match D.geti res "db/id" with
-                           | Some id ->
-                               write_prop_value d prop (Some (W.Int id))
-                           | None -> ());
-                          close_dlg d;
-                          Js.Promise.resolve ())
-                   |> ignore)
+                   let ( let* ) p f = Js.Promise.then_ f p in
+                   ignore
+                     (let* res =
+                        (* cljs <create-page-if-not-exists!: class-type
+                           and block/tags values are classes *)
+                        if ty = "class" || ident_of prop = "block/tags"
+                        then D.create_class text
+                        else D.create_page text
+                      in
+                      let* () =
+                        match D.create_result_uuid res with
+                        | Some uuid -> (
+                            let* id = D.db_id_of_uuid uuid in
+                            match id with
+                            | Some id ->
+                                write_prop_value d prop (Some (W.Int id));
+                                Js.Promise.resolve ()
+                            | None -> Js.Promise.resolve ())
+                        | None -> Js.Promise.resolve ()
+                      in
+                      close_dlg d;
+                      Js.Promise.resolve ()))
              else
                Some
                  (fun text ->

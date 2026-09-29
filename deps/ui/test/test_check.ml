@@ -28,6 +28,7 @@ let block ?(children = []) uuid title : Model.block =
   ; block_tags = []
   ; block_tag_uuids = []
   ; block_tag_idents = []
+  ; block_tag_db_ids = []
   ; block_children = children
   ; block_page_name = None
   ; block_reactions = []
@@ -67,6 +68,8 @@ let page blocks : Model.page =
   ; page_add_object = false
   ; page_tags = []
   ; page_tag_idents = []
+  ; page_tag_uuids = []
+  ; page_tag_db_ids = []
   ; page_blocks = blocks
   ; page_linked_refs = []
   ; page_parents = []
