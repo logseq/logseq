@@ -107,6 +107,11 @@ let after_page_load : (string * (unit -> unit)) option ref = ref None
 
 let on_page_loaded uuid f = after_page_load := Some (uuid, f)
 
+(* mirrors Model.unlinked_open so fetch paths outside the model (router,
+   outliner refresh) can gate the full-title unlinked scan on the
+   section being open *)
+let unlinked_open = ref true
+
 let track action =
   match action with
   | Action.Boot_graph_ready repo ->
@@ -127,11 +132,13 @@ let track action =
       current_page := None;
       current_journals := [];
       current_route := Some r;
+      unlinked_open := false;
       (* in-graph routes always carry ?graph-id — navigation call sites
          write raw hashes, so re-append it here after the hash settles *)
       (match r with
        | Model.All_graphs | Model.Import | Model.Not_found _ -> ()
        | _ -> sync_hash_graph_id ())
+  | Action.Unlinked_toggle_open -> unlinked_open := not !unlinked_open
   | _ -> ()
 
 let flush () = !app_flush ()

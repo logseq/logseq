@@ -12,12 +12,21 @@ let update (model : t) (action : Action.t) : t =
       { model with phase = Ready; repo = Some repo; rtc = None }
   | Repos_loaded repos -> { model with repos }
   | Page_loaded page ->
-      { model with route_page = Some page; page_missing = false }
+      { model with
+        route_page = Some page
+      ; page_missing = false
+      ; data_gen = model.data_gen + 1
+      }
   | Page_load_failed ->
-      { model with route_page = None; page_missing = true }
-  | Journals_loaded js -> { model with journals = js }
-  | Refs_loaded refs -> { model with page_refs = refs }
-  | Unlinked_loaded refs -> { model with unlinked_refs = refs }
+      { model with
+        route_page = None
+      ; page_missing = true
+      ; data_gen = model.data_gen + 1
+      }
+  | Journals_loaded js -> { model with journals = js; data_gen = model.data_gen + 1 }
+  | Refs_loaded refs -> { model with page_refs = refs; data_gen = model.data_gen + 1 }
+  | Unlinked_loaded refs ->
+      { model with unlinked_refs = refs; data_gen = model.data_gen + 1 }
   | Navigate_to route ->
       { model with
         route
@@ -33,6 +42,7 @@ let update (model : t) (action : Action.t) : t =
       ; unlinked_search = false
       ; unlinked_query = ""
       ; unlinked_blocks = []
+      ; data_gen = model.data_gen + 1
       }
   | Title_edit_start -> { model with editing_title = true }
   | Title_edit_done -> { model with editing_title = false }

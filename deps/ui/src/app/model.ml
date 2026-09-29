@@ -138,6 +138,9 @@ type t =
   ; help_open : bool
   ; unlinked_blocks : block list
   ; rtc : rtc option
+  ; data_gen : int (* bumped whenever a block/page-bearing field is
+                      reassigned — cheap revision for dyn ~equal so
+                      block trees are never structurally compared *)
   }
 
 let initial =
@@ -169,6 +172,7 @@ let initial =
   ; help_open = false
   ; unlinked_blocks = []
   ; rtc = None
+  ; data_gen = 0
   }
 
 (* optimistic indent: move the selected run under its previous sibling so

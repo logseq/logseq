@@ -945,12 +945,19 @@ let table_el inst ~refresh : D.el =
   (* cljs Virtuoso mounts the rows under [data-testid=virtuoso-item-list]
      inside two bare wrapper divs; each row sits in a bare item div *)
   let vlist = D.h ~attrs:[ ("data-testid", "virtuoso-item-list") ] () in
-  List.iteri
-    (fun i u ->
-      D.el_append_child vlist
-        (D.h ~children:[ row_el inst ~refresh ~idx:(i + 1) ~row_uuid:u cols ]
-           ()))
-    (all_row_uuids inst);
+  let uuids = Array.of_list (all_row_uuids inst) in
+  if Virt_list.enabled ~virtualize:true (Array.length uuids) then
+    D.el_append_child vlist
+      (Views_virt.rows ~key_of:Fun.id
+         ~render_el:(fun i u -> row_el inst ~refresh ~idx:(i + 1) ~row_uuid:u cols)
+         uuids)
+  else
+    Array.iteri
+      (fun i u ->
+        D.el_append_child vlist
+          (D.h ~children:[ row_el inst ~refresh ~idx:(i + 1) ~row_uuid:u cols ]
+             ()))
+      uuids;
   D.el_append_child rel
     (D.h ~children:[ D.h ~children:[ vlist ] () ] ());
   (* cljs add-new-row footer when data-fns has add-new-object!:
@@ -995,12 +1002,19 @@ let grouped_table inst ~refresh ~rows () =
       ~cls:"ls-table-rows content overflow-x-auto force-visible-scrollbar"
       ()
   in
-  List.iteri
-    (fun i u ->
-      D.el_append_child rows_el
-        (row_el inst ~refresh ~idx:(i + 1) ~row_uuid:u
-           (visible_columns inst)))
-    rows;
+  let uuids = Array.of_list rows in
+  let cols = visible_columns inst in
+  if Virt_list.enabled ~virtualize:true (Array.length uuids) then
+    D.el_append_child rows_el
+      (Views_virt.rows ~key_of:Fun.id
+         ~render_el:(fun i u -> row_el inst ~refresh ~idx:(i + 1) ~row_uuid:u cols)
+         uuids)
+  else
+    Array.iteri
+      (fun i u ->
+        D.el_append_child rows_el
+          (row_el inst ~refresh ~idx:(i + 1) ~row_uuid:u cols))
+      uuids;
   D.el_append_child tbl rows_el;
   tbl
 
@@ -1117,6 +1131,13 @@ let group_title inst gv =
 
 (* ---------- body dispatch ---------- *)
 
+let mount_list_rows inst (w : D.el) (rows : string list) =
+  let data = Array.of_list rows in
+  let render _i u = list_row_el ~row_uuid:u ~title:(row_title inst u) in
+  if Virt_list.enabled ~virtualize:true (Array.length data) then
+    D.el_append_child w (Views_virt.rows ~key_of:Fun.id ~render_el:render data)
+  else Array.iter (fun u -> D.el_append_child w (render 0 u)) data
+
 let render_list inst ~refresh body =
   match inst.V.data with
   | Wr.VGrouped gs ->
@@ -1127,11 +1148,7 @@ let render_list inst ~refresh body =
                ~title_el:(D.h ~text:(group_title inst g.Wr.gv) ())
                ~body:(fun () ->
                  let w = D.h () in
-                 List.iter
-                   (fun u ->
-                     D.el_append_child w
-                       (list_row_el ~row_uuid:u ~title:(row_title inst u)))
-                   g.Wr.grows;
+                 mount_list_rows inst w g.Wr.grows;
                  w)))
         gs
   | Wr.VGroupedList gs ->
@@ -1150,22 +1167,12 @@ let render_list inst ~refresh body =
                           ~title_el:(D.h ~text:(row_title inst buuid) ())
                           ~body:(fun () ->
                             let w2 = D.h () in
-                            List.iter
-                              (fun u ->
-                                D.el_append_child w2
-                                  (list_row_el ~row_uuid:u
-                                     ~title:(row_title inst u)))
-                              rows;
+                            mount_list_rows inst w2 rows;
                             w2)))
                    g.Wr.glparts;
                  w)))
         gs
-  | _ ->
-      List.iter
-        (fun u ->
-          D.el_append_child body
-            (list_row_el ~row_uuid:u ~title:(row_title inst u)))
-        (all_row_uuids inst)
+  | _ -> mount_list_rows inst body (all_row_uuids inst)
 
 let render_gallery inst body =
   let wrap = D.h ~cls:"flex flex-row flex-wrap gap-2 p-2" () in

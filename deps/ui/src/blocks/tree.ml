@@ -495,16 +495,21 @@ let embed_refreshes : (int, unit -> unit) Hashtbl.t = Hashtbl.create 8
 let embed_refresh_seq = ref 0
 let embed_chained = ref false
 
+(* a broadcast can arrive per applied op — coalesce embed refetches into
+   one fan-out per burst so N embeds issue N fetches, not N x ops *)
+let debounced_embed_refresh = Editor_dom.debounce 150
+
 let chain_embed_worker () =
   if not !embed_chained then begin
     embed_chained := true;
     Runtime.on_sync (fun () ->
-        Hashtbl.iter
-          (fun _ f ->
-            try f ()
-            with e ->
-              Platform.console_error ("embed refresh failed", e))
-          embed_refreshes)
+        debounced_embed_refresh (fun () ->
+            Hashtbl.iter
+              (fun _ f ->
+                try f ()
+                with e ->
+                  Platform.console_error ("embed refresh failed", e))
+              embed_refreshes))
   end
 
 let fetch_embed_blocks name st =
@@ -521,6 +526,19 @@ let fetch_embed_blocks name st =
                 Platform.console_error ("embed blocks fetch failed", e);
                 Js.Promise.resolve ())))
 
+(* cheap dyn equality for fetched trees: uuid + title covers structure
+   and content edits; a full structural compare walks every field of a
+   rebuilt-per-fetch tree on each publish *)
+let rec same_blocks a b =
+  match a, b with
+  | [], [] -> true
+  | x :: xs, y :: ys ->
+      x.Model.block_uuid = y.Model.block_uuid
+      && x.Model.block_title = y.Model.block_title
+      && same_blocks x.Model.block_children y.Model.block_children
+      && same_blocks xs ys
+  | _ -> false
+
 let page_embed (name : string) : t =
  fun ctx parent ->
   chain_embed_worker ();
@@ -535,7 +553,7 @@ let page_embed (name : string) : t =
   (* a destroyed embed must stop refetching on every tx broadcast *)
   Signal.on_dispose ctx.ui_scope (fun () ->
       Hashtbl.remove embed_refreshes id);
-  (dyn ~equal:(=)
+  (dyn ~equal:same_blocks
      (fun blocks ->
        (* embed copies render read-only — the same uuid can exist in the
           sidebar/main tree, and only that instance should own the textarea *)

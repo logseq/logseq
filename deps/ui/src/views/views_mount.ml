@@ -28,10 +28,10 @@ let mark el inst =
 (* all-pages route: page.ml renders an empty graphs-view box; append the
    .ls-all-pages container into the .mx-auto.pb-24 content wrapper, like
    cljs all_pages.cljs which renders inside the page wrapper *)
-let ensure_all_pages () =
+let ensure_all_pages roots =
   match !Runtime.current_route with
   | Some Model.All_pages ->
-      Ed.for_each_selector ".cp__sidebar-main-content > .mx-auto" (fun main ->
+      Ed.for_each_touched roots ".cp__sidebar-main-content > .mx-auto" (fun main ->
           match Ed.el_query main ".ls-all-pages" with
           | Some _ -> ()
           | None ->
@@ -79,8 +79,8 @@ let ensure_sidebar_object_view inner =
 
 (* tag/class and property pages get an objects view above the block
    list (class-objects / property-objects) *)
-let rec ensure_object_view () =
-  Ed.for_each_selector ".page-inner" (fun inner ->
+let rec ensure_object_view roots =
+  Ed.for_each_touched roots ".page-inner" (fun inner ->
       match Ed.el_get_attr inner "data-sb-inner" with
       | Some _ -> ensure_sidebar_object_view inner
       | None -> (
@@ -146,8 +146,8 @@ and ensure_object_view_container inner uuid kind =
 
 (* logseq.class/Query blocks render a .custom-query-results shell; mount
    a query-result view inside it *)
-let ensure_query_shells () =
-  Ed.for_each_selector ".custom-query-results" (fun shell ->
+let ensure_query_shells roots =
+  Ed.for_each_touched roots ".custom-query-results" (fun shell ->
       match Ed.el_closest shell ".ls-block" with
       | None -> ()
       | Some block_el -> (
@@ -172,24 +172,30 @@ let ensure_query_shells () =
 (* worker tx broadcast (sync-db-changes) invalidates view resources —
    refresh every still-connected inst so rows/columns stay live (cljs
    refetches the view-data resource on each tx) *)
+(* debounced: a sync-db-changes burst should coalesce into one view
+   refetch — the reload debounce in worker_events already collapses the
+   page side *)
+let debounced_refresh = D.debounce 150
+
 let refresh_query_insts () =
-  let dead = ref [] in
-  Hashtbl.iter
-    (fun id (inst : V.inst) ->
-      if D.el_is_connected inst.V.container then Views_view.refresh inst
-      else dead := id :: !dead)
-    insts;
-  (* a detached container never comes back — the observer mounts a
-     fresh inst when the route re-renders — so drop the bookkeeping
-     instead of leaking the inst's rows/caches *)
-  List.iter
-    (fun id ->
-      match Hashtbl.find_opt insts id with
-      | Some inst ->
-          Views_builder.drop_tree inst;
-          Hashtbl.remove insts id
-      | None -> ())
-    !dead
+  debounced_refresh (fun () ->
+      let dead = ref [] in
+      Hashtbl.iter
+        (fun id (inst : V.inst) ->
+          if D.el_is_connected inst.V.container then Views_view.refresh inst
+          else dead := id :: !dead)
+        insts;
+      (* a detached container never comes back — the observer mounts a
+         fresh inst when the route re-renders — so drop the bookkeeping
+         instead of leaking the inst's rows/caches *)
+      List.iter
+        (fun id ->
+          match Hashtbl.find_opt insts id with
+          | Some inst ->
+              Views_builder.drop_tree inst;
+              Hashtbl.remove insts id
+          | None -> ())
+        !dead)
 
 (* ---------- observer ---------- *)
 
@@ -203,19 +209,16 @@ let chain_worker () =
     Runtime.on_sync (fun () -> Views_view.refresh_query_insts ())
   end
 
-let scan () =
+let scan roots =
   chain_worker ();
-  ensure_all_pages ();
-  ensure_object_view ();
-  ensure_query_shells ()
+  ensure_all_pages roots;
+  ensure_object_view roots;
+  ensure_query_shells roots
 
 let installed = ref false
 
 let install () =
   if not !installed then begin
     installed := true;
-    let obs = Ed.new_observer scan in
-    Ed.observe obs Ed.document_element
-      (Ed.observe_opts ~childList:true ~subtree:true);
-    scan ()
+    Ed.register_doc_scan scan
   end
