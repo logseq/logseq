@@ -230,6 +230,8 @@ let load_page_ref for_route ref_v =
                              fetch_refs ~stale:is_stale p'';
                              Outliner_ops.fetch_unlinked_refs
                                ~stale:is_stale p'';
+                             Outliner_ops.fetch_unlinked_exists
+                               ~stale:is_stale p'';
                              (* zoom-out to a page parent keeps the zoomed
                                 block in edit mode (cljs pending-edit) *)
                              (match Editor_actions.consume_pending_zoom ()

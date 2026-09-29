@@ -283,8 +283,26 @@ let overlays (ms : Model.t Signal.signal) =
     ; Toasts_view.render ms
     ; dyn
         ~equal:(fun (a : Model.t) (b : Model.t) ->
+          (* the menu reads only page scalars — comparing them skips the
+             per-publish deep [=] on the whole route page record *)
           a.page_menu = b.page_menu && a.confirm = b.confirm
-          && a.data_gen = b.data_gen)
+          && a.data_gen = b.data_gen
+          && Option.map
+               (fun (p : Model.page) ->
+                 ( p.page_uuid
+                 , p.page_db_id
+                 , p.page_is_tag
+                 , p.page_internal
+                 , p.page_built_in ))
+               a.route_page
+             = Option.map
+                 (fun (p : Model.page) ->
+                   ( p.page_uuid
+                   , p.page_db_id
+                   , p.page_is_tag
+                   , p.page_internal
+                   , p.page_built_in ))
+                 b.route_page)
         (fun m -> Page_menu.dialog_view m)
         ms
     ; dyn

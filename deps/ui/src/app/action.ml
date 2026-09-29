@@ -8,6 +8,7 @@ type t =
   | Journals_loaded of Model.page list
   | Refs_loaded of Model.block list
   | Unlinked_loaded of Model.block list
+  | Unlinked_exists of bool
   | Navigate_to of Model.route
   | Worker_event of string * Wire.t
   | Refresh_page
