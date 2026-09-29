@@ -120,6 +120,9 @@ let track action =
       !on_graph_opened repo
   | Action.Page_loaded page ->
       current_page := Some page;
+      (* cljs route.cljs update-page-title!: document.title follows the
+         loaded page's title *)
+      Browser_ui.set_document_title page.Model.page_title;
       sync_hash_graph_id ();
       (match !after_page_load, page.Model.page_uuid with
        | Some (want, f), Some u when u = want ->
@@ -137,7 +140,24 @@ let track action =
          write raw hashes, so re-append it here after the hash settles *)
       (match r with
        | Model.All_graphs | Model.Import | Model.Not_found _ -> ()
-       | _ -> sync_hash_graph_id ())
+       | _ -> sync_hash_graph_id ());
+      (* cljs route.cljs static-title for non-page routes (page routes
+         get their title when Page_loaded lands) *)
+      (match r with
+       | Model.Home -> Browser_ui.set_document_title "Logseq"
+       | Model.Journals ->
+           Browser_ui.set_document_title (I18n.t "nav/all-journals")
+       | Model.All_pages ->
+           Browser_ui.set_document_title (I18n.t "nav.all-pages/title")
+       | Model.All_graphs ->
+           Browser_ui.set_document_title (I18n.t "mobile.tab/graphs")
+       | Model.Settings ->
+           Browser_ui.set_document_title (I18n.t "nav/settings")
+       | Model.Import ->
+           Browser_ui.set_document_title (I18n.t "import/title")
+       | Model.Library | Model.Not_found _ ->
+           Browser_ui.set_document_title "Logseq"
+       | Model.Page _ | Model.Block_zoom _ -> ())
   | Action.Unlinked_toggle_open -> unlinked_open := not !unlinked_open
   | _ -> ()
 
