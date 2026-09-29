@@ -124,7 +124,29 @@ let track action =
   | Action.Unlinked_toggle_open -> unlinked_open := not !unlinked_open
   | _ -> ()
 
-let flush () = !app_flush ()
+external set_timeout : (unit -> unit) -> int -> unit = "setTimeout"
+
+(* flushes must not re-enter: callbacks fired while a patch batch applies
+   (virtualizer onChange, observers, effectful mounts) enqueue ops and
+   re-request a flush — nesting would apply the same pending ops twice
+   with a stale generation, so the follow-up runs on the next tick *)
+let flushing = ref false
+let flush_deferred = ref false
+
+let rec flush () =
+  if !flushing then flush_deferred := true
+  else begin
+    flushing := true;
+    (try !app_flush ()
+     with e ->
+       flushing := false;
+       raise e);
+    flushing := false;
+    if !flush_deferred then begin
+      flush_deferred := false;
+      set_timeout flush 0
+    end
+  end
 
 let send action =
   track action;

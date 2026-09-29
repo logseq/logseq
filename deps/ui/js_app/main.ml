@@ -50,18 +50,15 @@ let main root =
     Lui_app.create_with_extensions (Lui_web.backend renderer) registry
       Model.initial Update.update View.view
   in
-  Runtime.app_send :=
-    (fun action ->
-      let changed = Lui_app.send app action in
-      ignore (Lui_app.flush app);
-      changed);
+  Runtime.app_send := (fun action -> Lui_app.send app action);
   Runtime.app_flush := (fun () -> ignore (Lui_app.flush app));
   ignore
     (Lui_web.set_event_handler renderer (fun event ->
          ignore (Lui_app.dispatch_event app event);
-         Lui_app.flush app));
+         Runtime.flush ();
+         true));
   ignore (Lui_app.start app);
-  ignore (Lui_app.flush app);
+  Runtime.flush ();
   Lui_web.mount renderer (Lui_app.root_node app) root;
   Sdk_api.install ();
   Properties_view.install ();
