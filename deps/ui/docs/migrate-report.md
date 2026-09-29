@@ -1649,6 +1649,15 @@ Sizes:
 4,974,916 / gzip 988,477 — the icon split is responsible for most of
 the delta; minification and tree-shaking account for the rest.)
 
+vs cljs release (`clojure -M:cljs release app`, master): `main.js`
+16,113,696 / gzip 4,008,217 with tabler icon data inlined, plus lazy
+`code-editor.js` 1,012,649 / gzip 316,163. The LUI prod surface
+(main.js + icon-data.js + emoji-data.js) is 4,188,111 / gzip 881,591
+total — ~4.6x smaller gzipped; main.js alone is ~8.6x smaller
+(467,023 vs 4,008,217). Note the cljs bundle carries the complete
+legacy frontend; the LUI rewrite does not yet implement the full
+feature set.
+
 ### ESM emit → tree-shaking works
 
 `js_app/dune` emitted `(module_systems commonjs)`, which rolldown can
