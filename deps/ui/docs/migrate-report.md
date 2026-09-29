@@ -425,6 +425,15 @@ Contracts discovered while making `logseq.e2e.commands-basic-test` green
   trigger while the popup stays open — the whole buffer becomes the query.
   Only a `delete*` inputType that removes the trigger closes it.
   `on_editor_input` re-anchors `tpos/tlen/rpos` to 0 in that case.
+- **ac close-on-caret-leave lives on the keyup path, not input** (cljs
+  `close-autocomplete-if-outside`/`wrapped-by?`). The `]`/`)`
+  autopair-overtype handler `preventDefault`s the keydown and skips the
+  caret over the ghost bracket, so no `input` event reaches
+  `on_editor_input` and its `query_closed` check never runs — without the
+  equivalent check in `ac_keydown` a completed `[[page]]` keeps the popup
+  open and swallows Enter. `ac_keydown` closes the ac when the caret left
+  the trigger range or the buffer already contains the closer
+  (`]]`/`))`/`/` query end).
 - **`#` autocomplete lists classes only** (cljs `get-matched-classes`,
   `thread-api/get-all-classes` with `except-root-class?`), never page
   titles — otherwise properties like `logseq.property/template-applied-to`

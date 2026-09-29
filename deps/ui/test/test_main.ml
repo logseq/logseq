@@ -2573,6 +2573,154 @@ let test_popups_state () =
   let d = Popups_state.detail_obj [ "a", Js.Json.string "v" ] in
   check "detail_obj" (json_str d "a" = Some "v")
 
+(* -- autocomplete lifecycle over a fake textarea --
+   regression coverage for the `]`/`)` autopair-overtype path that used
+   to leave the page-ref popup open: the editor preventDefaults the
+   keystroke and skips the caret over the ghost bracket, so no input
+   event reaches on_editor_input and query_closed never ran — the open
+   popup then swallowed Enter via apply_chosen and the block never
+   split *)
+let test_ac_lifecycle () =
+  Stub_dom.install ();
+  ignore (Fake_worker.install Fake_worker.never);
+  let sched = Signal.scheduler () in
+  let t = Popups_state.make sched in
+  (* Signal.set only publishes on scheduler drain — production settles
+     each frame; tests drain explicitly after mutations *)
+  let settle () = Signal.stabilize sched in
+  let ta = Stub_dom.make_element "textarea" in
+  Stub_dom.set_field ta "value" "";
+  Stub_dom.set_field ta "selectionStart" 0;
+  Stub_dom.set_field ta "selectionEnd" 0;
+  Stub_dom.set_field ta "setSelectionRange"
+    (fun a b ->
+      Stub_dom.set_field ta "selectionStart" (a : int);
+      Stub_dom.set_field ta "selectionEnd" (b : int));
+  Stub_dom.set_field ta "focus" (fun () -> ());
+  let get_v () = (Stub_dom.get_field ta "value" : string) in
+  let get_pos () = (Stub_dom.get_field ta "selectionStart" : int) in
+  let reset () =
+    Stub_dom.set_field ta "value" "";
+    Stub_dom.set_field ta "selectionStart" 0;
+    Stub_dom.set_field ta "selectionEnd" 0
+  in
+  let set_caret p =
+    Stub_dom.set_field ta "selectionStart" p;
+    Stub_dom.set_field ta "selectionEnd" p
+  in
+  let ac () = (Popups_state.get t).Popups_state.ac in
+  let ac_open () = Option.is_some (ac ()) in
+  let input_ev ?(it = "insertText") () =
+    let o = Js.Json.object_ (Js.Dict.empty ()) in
+    Stub_dom.set_field o "inputType" it;
+    o
+  in
+  let key_ev k =
+    let o = Js.Json.object_ (Js.Dict.empty ()) in
+    Stub_dom.set_field o "key" k;
+    o
+  in
+  (* a real keystroke: splice the char at the caret then fire the input
+     event, mirroring how the editor updates the textarea *)
+  let type_str s =
+    String.iter
+      (fun ch ->
+        let pos = get_pos () in
+        let v = get_v () in
+        let n = String.length v in
+        Stub_dom.set_field ta "value"
+          (String.sub v 0 pos ^ String.make 1 ch
+          ^ String.sub v pos (n - pos));
+        set_caret (pos + 1);
+        Popups_state.on_editor_input t ta (input_ev ());
+        settle ())
+      s
+  in
+  let press k =
+    let consumed = Popups_state.ac_keydown t (key_ev k) in
+    settle ();
+    consumed
+  in
+  (* the autopair-overtype path: editor preventDefaults and just moves
+     the caret past the ghost char — no input event fires *)
+  let overtype () = set_caret (get_pos () + 1) in
+
+  (* [[ opens Page_ref and autopairs ]] with the caret inside *)
+  type_str "[[";
+  check "ac opens on [[" (ac_open ());
+  check "ac is page_ref"
+    (match ac () with
+     | Some a -> a.Popups_state.kind = Popups_state.Page_ref
+     | None -> false);
+  check "autopair inserted ]]" (get_v () = "[[]]" && get_pos () = 2);
+  type_str "ab";
+  check "query text grows" (get_v () = "[[ab]]" && get_pos () = 4);
+  (match ac () with
+   | Some a -> check "query captures ab" (a.Popups_state.query = "ab")
+   | None -> check "query captures ab" false);
+  check "enter consumed while open" (press "Enter");
+
+  (* THE regression: skipping the caret over the ghost ] fires no input
+     event, so a leftover key must see the completed closer and close
+     the popup (cljs close-autocomplete-if-outside parity) *)
+  reset ();
+  type_str "[[cd";
+  check "ac open before overtype" (ac_open () && get_v () = "[[cd]]");
+  overtype ();
+  check "caret skipped ghost ]" (get_pos () = 5);
+  check "leftover key not consumed" (not (press "]"));
+  check "ac closed by completed closer" (not (ac_open ()));
+  check "enter free after close" (not (press "Enter"));
+
+  (* caret moved before the trigger also closes (ArrowLeft parity) *)
+  reset ();
+  type_str "[[";
+  check "ac reopens" (ac_open ());
+  set_caret 1;
+  check "caret before trigger closes"
+    (not (press "ArrowLeft") && not (ac_open ()));
+
+  (* (( opens Block_ref; typing ) through the input path closes it *)
+  reset ();
+  type_str "((xy";
+  check "ac is block_ref"
+    (match ac () with
+     | Some a -> a.Popups_state.kind = Popups_state.Block_ref
+     | None -> false);
+  type_str ")";
+  check "block_ref closed by )" (not (ac_open ()));
+
+  (* / opens Slash; Enter consumed, Escape closes, Enter then free *)
+  reset ();
+  type_str "/";
+  check "ac is slash"
+    (match ac () with
+     | Some a -> a.Popups_state.kind = Popups_state.Slash
+     | None -> false);
+  check "enter consumed for slash" (press "Enter");
+  check "escape closes" (press "Escape" && not (ac_open ()));
+  check "enter free after escape" (not (press "Enter"));
+
+  (* whole-buffer replacement keeps the popup (query = buffer); a
+     delete keystroke that removes the trigger closes it *)
+  reset ();
+  type_str "[[";
+  Stub_dom.set_field ta "value" "zz";
+  set_caret 2;
+  Popups_state.on_editor_input t ta (input_ev ~it:"insertReplacementText" ());
+  settle ();
+  check "replace keeps ac" (ac_open ());
+  Popups_state.on_editor_input t ta (input_ev ~it:"deleteContentBackward" ());
+  settle ();
+  check "delete closes ac" (not (ac_open ()));
+
+  (* overtype_skip consumes the duplicate closer under the caret *)
+  Stub_dom.set_field ta "value" "a]]x";
+  set_caret 2;
+  Popups_state.overtype_skip ta;
+  check "overtype_skip merges closers" (get_v () = "a]x" && get_pos () = 2);
+  Fake_worker.clear ()
+
 (* ---- editor_actions pure helpers ---- *)
 
 let test_editor_actions () =
@@ -3969,6 +4117,8 @@ let () =
   test_views_query ();
   test_views_table ();
   test_popups_state ();
+  test_ac_lifecycle ();
+  Test_lui_apply.run ();
   test_editor_actions ();
   test_update2 ();
   test_decode_rtc ();
