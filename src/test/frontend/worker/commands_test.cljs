@@ -316,6 +316,51 @@
         (is (= 1 (/ (- (tc/to-long result) (tc/to-long now)) (* 1000 60)))))
       (is (< @unit-calls 20)))))
 
+(deftest double-plus-month-end-keeps-its-day-test
+  (testing "`++` monthly repeat from a 31st lands on the next 31st, not a drifted day"
+    ;; Reproduces https://github.com/logseq/db-test/issues/1354: the bulk
+    ;; `t/plus` clamps the day (Jan 31 + 5 months = Jun 30) and stepping on
+    ;; from the clamped date drifts (Jun 30 + 1 month = Jul 30, not Jul 31).
+    (let [now (t/date-time 2026 7 1)
+          scheduled (t/date-time 2026 1 31)]
+      (with-redefs [t/now (fn [] now)]
+        (is (= (tc/to-long (t/date-time 2026 7 31))
+               (get-next-time scheduled month-unit 1 double-plus)))))
+    (let [now (t/date-time 2028 3 1)
+          scheduled (t/date-time 2026 10 31 9 30)]
+      (with-redefs [t/now (fn [] now)]
+        (is (= (tc/to-long (t/date-time 2028 3 31 9 30))
+               (get-next-time scheduled month-unit 1 double-plus)))))))
+
+(deftest repeated-task-monthly-deadline-from-31st-test
+  (testing "monthly `++` deadline set on the 31st reschedules to the 31st"
+    (let [now (t/date-time 2026 7 1 9 0)
+          deadline (tc/to-long (t/date-time 2026 1 31))
+          expected-next-deadline (tc/to-long (t/date-time 2026 7 31))
+          conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks
+                 [{:page {:block/title "Regression Sandbox"}
+                   :blocks [{:block/title "Monthly recurring item"
+                             :build/properties
+                             {:logseq.property.repeat/repeated? true
+                              :logseq.property.repeat/recur-frequency 1
+                              :logseq.property.repeat/recur-unit :logseq.property.repeat/recur-unit.month
+                              :logseq.property/deadline deadline
+                              :logseq.property/status :logseq.property/status.todo}}]}]})
+          block (db-test/find-block-by-content @conn "Monthly recurring item")
+          _ (d/transact! conn [[:db/add (:db/id block)
+                                :logseq.property.repeat/repeat-type
+                                :logseq.property.repeat/repeat-type.double-plus]])
+          report (d/transact! conn [[:db/add (:db/id block)
+                                     :logseq.property/status
+                                     :logseq.property/status.done]])]
+      (with-redefs [t/now (fn [] now)]
+        (let [commands-tx (doall (commands/run-commands report))]
+          (is (= expected-next-deadline
+                 (tx-add-value commands-tx (:db/id block) :logseq.property/deadline)))
+          (is (= :logseq.property/status.todo
+                 (tx-add-value commands-tx (:db/id block) :logseq.property/status))))))))
+
 (deftest repeated-task-with-deadline-and-missing-temporal-property-test
   (testing "falls back to the existing deadline instead of missing scheduled"
     (let [now (t/date-time 2030 1 10 8 30)
