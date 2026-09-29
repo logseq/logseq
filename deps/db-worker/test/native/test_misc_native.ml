@@ -1476,6 +1476,31 @@ let test_double_plus_far_overdue_minute_is_bounded () =
   check "far-overdue minute: result = now + 1min"
     (in_minutes ~now (utc_ms result) = 1)
 
+(* (deftest double-plus-month-end-keeps-its-day-test) *)
+let test_double_plus_month_end_keeps_its_day () =
+  (* "`++` monthly repeat from a 31st lands on the next 31st, not a
+     drifted day" — db-test#1354: the bulk t/plus clamps the day
+     (Jan 31 + 5 months = Jun 30) and stepping on from the clamped date
+     drifts (Jun 30 + 1 month = Jul 30, not Jul 31). *)
+  let now =
+    Time.civil ~year:2026 ~month:7 ~day:1 ~hour:0 ~minute:0 ~second:0
+      ~ms:0
+  in
+  let scheduled = civil_ms 2026 1 31 0 0 in
+  check "++ month-end Jan 31 -> Jul 31"
+    (opt_get_exn
+       (Commands.get_next_time ~now scheduled month_unit 1 double_plus)
+     = civil_ms 2026 7 31 0 0);
+  let now =
+    Time.civil ~year:2028 ~month:3 ~day:1 ~hour:0 ~minute:0 ~second:0
+      ~ms:0
+  in
+  let scheduled = civil_ms 2026 10 31 9 30 in
+  check "++ month-end Oct 31 9:30 -> Mar 31 9:30"
+    (opt_get_exn
+       (Commands.get_next_time ~now scheduled month_unit 1 double_plus)
+     = civil_ms 2028 3 31 9 30)
+
 (* cljs tx-add-value — find [:db/add eid attr v] in tx ops *)
 let tx_add_value (txs : tx_op list) (eid : entity_id) (a : attr)
     : value option =
@@ -1528,6 +1553,63 @@ let test_repeated_task_with_deadline_and_missing_temporal_property () =
     (tx_add_value commands_tx block.id "logseq.property/deadline"
      = Some (Int64 (Int64.of_int (Int64.to_int expected_next_deadline))));
   check "repeated-task: status reset to todo"
+    (match tx_add_value commands_tx block.id "logseq.property/status" with
+     | Some (Keyword "logseq.property/status.todo") -> true
+     | _ -> false)
+
+(* (deftest repeated-task-monthly-deadline-from-31st-test) *)
+let test_repeated_task_monthly_deadline_from_31st () =
+  (* "monthly `++` deadline set on the 31st reschedules to the 31st" *)
+  let conn = Sqlite_export.create_conn () in
+  let deadline = civil_ms 2026 1 31 0 0 in
+  let expected_next_deadline = civil_ms 2026 7 31 0 0 in
+  ignore
+    (Datascript.transact_conn_string conn
+       (Printf.sprintf
+          "[{:block/uuid #uuid \"dddd0000-0000-4000-8000-000000000011\"
+             :block/title \"Regression Sandbox\" :block/name \"regression sandbox\"}
+            {:block/uuid #uuid \"dddd0000-0000-4000-8000-000000000012\"
+             :block/title \"Monthly recurring item\"
+             :block/parent [:block/uuid #uuid \"dddd0000-0000-4000-8000-000000000011\"]
+             :block/page [:block/uuid #uuid \"dddd0000-0000-4000-8000-000000000011\"]
+             :logseq.property.repeat/repeated? true
+             :logseq.property.repeat/recur-frequency 1
+             :logseq.property.repeat/recur-unit :logseq.property.repeat/recur-unit.month
+             :logseq.property/deadline %Ld
+             :logseq.property/status :logseq.property/status.todo}]"
+          deadline));
+  let db = db_of conn in
+  let block =
+    Option.get
+      (Db_test_util.find_block_by_content db "Monthly recurring item")
+  in
+  ignore
+    (Datascript.transact_conn_string conn
+       (Printf.sprintf
+          "[[:db/add %d :logseq.property.repeat/repeat-type :logseq.property.repeat/repeat-type.double-plus]]"
+          block.id));
+  let report =
+    Datascript.transact_conn_string conn
+      (Printf.sprintf
+         "[[:db/add %d :logseq.property/status :logseq.property/status.done]]"
+         block.id)
+  in
+  let prev = !Commands.now_fn in
+  let commands_tx =
+    Fun.protect
+      ~finally:(fun () -> Commands.now_fn := prev)
+      (fun () ->
+         Commands.now_fn :=
+           (fun () ->
+              Time.epoch_ms_of_civil Time.utc
+                (Time.civil ~year:2026 ~month:7 ~day:1 ~hour:9 ~minute:0
+                   ~second:0 ~ms:0));
+         Commands.run_commands report.db_after report.tx_data)
+  in
+  check "monthly ++ from 31st: next deadline is Jul 31"
+    (tx_add_value commands_tx block.id "logseq.property/deadline"
+     = Some (Int64 (Int64.of_int (Int64.to_int expected_next_deadline))));
+  check "monthly ++ from 31st: status reset to todo"
     (match tx_add_value commands_tx block.id "logseq.property/status" with
      | Some (Keyword "logseq.property/status.todo") -> true
      | _ -> false)
@@ -1782,12 +1864,16 @@ let commands_cases : unit Alcotest.test_case list =
       test_double_plus_month_and_year
   ; Alcotest.test_case "double-plus-month-clamp-stays-future-test"
       `Quick test_double_plus_month_clamp_stays_future
+  ; Alcotest.test_case "double-plus-month-end-keeps-its-day-test" `Quick
+      test_double_plus_month_end_keeps_its_day
   ; Alcotest.test_case
       "double-plus-far-overdue-minute-is-bounded-test" `Quick
       test_double_plus_far_overdue_minute_is_bounded
   ; Alcotest.test_case
       "repeated-task-with-deadline-and-missing-temporal-property-test"
       `Quick test_repeated_task_with_deadline_and_missing_temporal_property
+  ; Alcotest.test_case "repeated-task-monthly-deadline-from-31st-test"
+      `Quick test_repeated_task_monthly_deadline_from_31st
   ; Alcotest.test_case
       "repeated-task-reschedules-numeric-scheduled-value-test" `Quick
       test_repeated_task_reschedules_numeric_scheduled_value

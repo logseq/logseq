@@ -103,6 +103,48 @@ let local_date_start_ms (d : Time.local_date) : int64 =
     (Time.epoch_ms_of_civil (Time.local_date_tz d)
        (Time.civil ~year ~month ~day ~hour:0 ~minute:0 ~second:0 ~ms:0))
 
+(* date-time-util/journal-day->local-ms — epoch ms at local midnight of
+   a yyyymmdd int; the inverse of ms->journal-day. Same body as
+   int->local-date (journal-day->local-ms is `(.getTime (int->local-date
+   day))`). *)
+let journal_day_to_local_ms (day : int) : int64 = int_to_local_ms day
+
+(* date-time-util/journal-day-plus — yyyymmdd int `n` calendar days
+   after `day`; cljs parses the UTC yyyyMMdd formatter, t/plus days, and
+   un-parses. *)
+let journal_day_plus (day : int) (n : int) : int option =
+  match Time.local_date_of_journal_day Time.utc day with
+  | None -> None
+  | Some d ->
+      let year, month, mday = Time.local_date_fields d in
+      let utc_midnight =
+        Time.epoch_ms_of_civil Time.utc
+          (Time.civil ~year ~month ~day:mday ~hour:0 ~minute:0 ~second:0
+             ~ms:0)
+      in
+      let shifted =
+        Time.epoch_ms
+          (Int64.add (Time.epoch_ms_to_int64 utc_midnight)
+             (Int64.of_int (n * 86_400_000)))
+      in
+      let year', month', day', _, _, _, _ =
+        Time.civil_fields (Time.civil_of_epoch_ms Time.utc shifted)
+      in
+      Some ((year' * 10000) + (month' * 100) + day')
+
+(* date-time-util/journal-day-local-range-ms — local-midnight ms range
+   from `day` through `day` + `future-days`, both ends inclusive.
+   Date-only Scheduled and Deadline values are stored as local midnight,
+   so this range matches the journal day in every timezone. *)
+let journal_day_local_range_ms (day : int) (future_days : int)
+    : (int64 * int64) option =
+  match journal_day_plus day future_days with
+  | Some end_day ->
+      Some
+        ( journal_day_to_local_ms day
+        , journal_day_to_local_ms end_day )
+  | None -> None
+
 (* ---------- journal title parsing ----------
 
    common-util/capitalize-all *)

@@ -403,6 +403,7 @@ let canonical_block ~(ref_cache : Block_breadcrumb.cache) (db : db)
                    | Some ref_id ->
                        let pairs =
                          Block_breadcrumb.shallow_ref_identity ~cache:ref_cache
+                           ~attr:d.a
                            db (Entity_view.of_pulled (Entity_view.pulled_stub ref_id))
                        in
                        Wire.Map
