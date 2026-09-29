@@ -49,7 +49,8 @@ let resource_query spec = res (key_query spec)
 let pull_many selector_edn ids f =
   Runtime.invoke3 "thread-api/pull-many" (W.String (repo ()))
     (W.String selector_edn)
-    (W.Array (List.map (fun u -> W.Uuid u) ids))
+    (W.Array
+       (List.map (fun u -> W.Array [ W.kw "block/uuid"; W.Uuid u ]) ids))
   |> then_ (fun w -> f (W.args_list w); Js.Promise.resolve ())
   |> catch_quiet
   |> ignore
