@@ -274,8 +274,10 @@ let navigate_to_page target =
                 ~default:false
             in
             let blocked =
-              (* cljs exempts the Recycle page *)
-              Wire.map_get_string info "block/title" <> Some "Recycle"
+              (* cljs gates this on (not config/dev?) — our bundle is
+                 the dev build — and exempts the Recycle page *)
+              (not Platform.dev_build)
+              && Wire.map_get_string info "block/title" <> Some "Recycle"
               && ((flag "hidden?" && not (flag "property?"))
                   || (flag "built-in?" && flag "private-built-in?"))
             in

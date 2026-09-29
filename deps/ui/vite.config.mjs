@@ -22,6 +22,9 @@ try {
 export default defineConfig({
   define: {
     "globalThis.logseq_revision": JSON.stringify(revision),
+    // cljs goog.DEBUG equivalent — the only bundle we ship is the
+    // dev/debug build; a release pipeline would flip this.
+    logseq_dev: "true",
   },
   build: {
     lib: {
