@@ -336,7 +336,7 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
        .block-content-wrapper(.ls-page-title-actions + content|editor) +
        .ls-block-right(.block-tags). Tags render while editing too. *)
     [ dom ~key:"pt-inner" ~style_class:"w-full relative"
-        [ dom ~key:"pt-block" ~style_class:"ls-block swipe-item"
+        [ dom ~key:"pt-block" ~style_class:"ls-block"
             ~id:("ls-block-" ^ uuid)
             ~attrs:
               [ ("blockid", uuid); ("containerid", uuid)
@@ -515,8 +515,13 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
                          Platform.payload_bool p "interactive")
             | None -> ("", false)
           in
+          let shift =
+            match payload with
+            | Some p -> Platform.payload_bool p "shiftKey"
+            | None -> false
+          in
           if
-            page.page_uuid <> None
+            page.page_uuid <> None && not shift
             && (target = "" || target = "page-title"
                 || target = "page-title-text")
             && not interactive
@@ -534,8 +539,8 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
       | _ -> open_menu name payload)
     body
 
-let blocks_inner ?puuid ?(virtualize = false) ?(container = true)
-    (blocks : Model.block list) : t =
+let blocks_inner ?puuid ?(virtualize = false) ?(library = false)
+    ?(scope = "main") ?(container = true) (blocks : Model.block list) : t =
   let inner_attrs =
     match puuid with
     | Some u -> [ ("data-pu", u) ]
@@ -554,11 +559,12 @@ let blocks_inner ?puuid ?(virtualize = false) ?(container = true)
           ~attrs:
             [ ("data-level", "0"); ("data-virtuoso-scroller", "true") ]
           [ Virt_list.list ~key_of:Tree.block_key
-              ~estimate_size:(fun _ -> 32.) ~render:Tree.block_row items ] ]
+              ~estimate_size:(fun _ -> 32.)
+              ~render:(Tree.block_row ~library ~scope) items ] ]
     else
       [ dom ~key:"blw" ~style_class:"blocks-list-wrap"
           ~attrs:[ ("data-level", "0") ]
-          (List.map Tree.block_row blocks) ]
+          (List.map (Tree.block_row ~library ~scope) blocks) ]
   in
   (* cljs page-root-virtual-list: .blocks-container.flex-1[containerid]
      wraps the .blocks-list-wrap block list; journal-page's
@@ -576,7 +582,7 @@ let blocks_inner ?puuid ?(virtualize = false) ?(container = true)
   dom ~key:"page-blocks" ~style_class:"mt-4 ls-page-blocks"
     ~attrs:[ ("style", "margin-left: -20px") ]
     [ dom ~key:"page-blocks-inner" ~style_class:"page-blocks-inner relative"
-        ~attrs:inner_attrs body
+        ~attrs:(("data-cid", scope) :: inner_attrs) body
     ]
 
 (* cljs components/block.cljs grouped-blocks-container: refs render
@@ -920,7 +926,7 @@ let unlinked_row (b : Model.block) : t =
              ~attrs:[ ("href", "#/page/" ^ name) ]
              ~text:name []
        | None -> Logseq_dom.nothing)
-    ; Tree.block_row b
+    ; Tree.block_row ~scope:"unlinked" b
     ]
 
 (* cljs reference/unlinked-references — same views/view chrome as linked
@@ -982,6 +988,7 @@ let unlinked_references_view (m : Model.t) : t =
                 ]
             ]
         ]
+
     ]
 
 (* --- route views -------------------------------------------------- *)
@@ -1122,8 +1129,14 @@ let page_view (m : Model.t) (page : Model.page) : t =
         @ (if page.page_is_library then [ library_add_pages_button ]
            else [])
         @ [ blocks_inner ?puuid:page.page_uuid ~virtualize:true
+              ~library:page.page_is_library
+              ~scope:
+                (match m.route with
+                 | Model.Block_zoom u -> "zoom-" ^ u
+                 | _ -> "main")
               page.page_blocks
-          ])
+          ]
+    )
     ; dom ~key:"refs-wrap" ~style_class:"flex flex-col gap-8 ml-1"
         (* cljs page-inner: #today-queries div first on today's journal,
            then linked and unlinked refs .fade-in.delay sections *)
@@ -1166,7 +1179,7 @@ let library_view (m : Model.t) (page : Model.page) : t =
         [ dom ~key:"page-title-row" ~style_class:"flex flex-row space-between"
             [ page_title_el m page ]
         ; library_add_pages_button
-        ; blocks_inner ?puuid:page.page_uuid ~virtualize:true
+        ; blocks_inner ?puuid:page.page_uuid ~virtualize:true ~library:true
             page.page_blocks
         ]
     ; dom ~key:"refs-wrap" ~style_class:"flex flex-col gap-8 ml-1"

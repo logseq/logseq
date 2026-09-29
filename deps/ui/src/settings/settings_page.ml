@@ -697,11 +697,38 @@ let keymap_binding ~key (b : Keymap_data.binding) =
         ]
     ]
 
+(* Category literals in keymap_data.ml map to shortcut.category/* keys *)
+let keymap_category = function
+  | "Basics" -> "shortcut.category/basics"
+  | "Navigation" -> "shortcut.category/navigating"
+  | "Block editing general" -> "shortcut.category/block-editing"
+  | "Block command editing" -> "shortcut.category/block-command-editing"
+  | "Block selection (press Esc to quit selection)" ->
+      "shortcut.category/block-selection"
+  | "Formatting" -> "shortcut.category/formatting"
+  | "Toggle" -> "shortcut.category/toggle"
+  | "Plugins" -> "shortcut.category/plugins"
+  | _ -> "shortcut.category/others"
+
+(* ":<id>#<handler>" -> the command.<id> dict key *)
+let command_key_of (title : string) : string =
+  let s =
+    if String.length title > 0 && String.get title 0 = ':' then
+      String.sub title 1 (String.length title - 1)
+    else title
+  in
+  let s =
+    match String.index_opt s '#' with
+    | Some i -> String.sub s 0 i
+    | None -> s
+  in
+  "command." ^ s
+
 let keymap_th ~key label =
   dom ~key ~tag:"li" ~style_class:"flex justify-between th"
     ~attrs:[ ("role", "button") ]
     [ dom ~key:(key ^ "s") ~tag:"strong" ~style_class:"font-semibold"
-        ~text:label []
+        ~text:(I18n.t (keymap_category label)) []
     ; dom ~key:(key ^ "i") ~tag:"i" ~style_class:"flex items-center"
         [ icon ~key:(key ^ "c") "chevron-down" ]
     ]
@@ -714,7 +741,7 @@ let keymap_row ~key (r : Keymap_data.row) =
     [ dom ~key:(key ^ "l") ~tag:"span" ~style_class:"label-wrap"
         [ dom ~key:(key ^ "lt") ~tag:"span" ~attrs:[ ("title", r.title) ]
             [ dom ~key:(key ^ "lx") ~tag:"span" ~style_class:"px-1"
-                ~text:r.label []
+                ~text:(I18n.t (command_key_of r.title)) []
             ]
         ]
     ; dom ~key:(key ^ "a") ~tag:"span" ~style_class:"action-wrap"

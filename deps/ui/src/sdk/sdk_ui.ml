@@ -119,7 +119,10 @@ let set_state_from_store a b _c _d =
   resolved_nil
 
 let get_selected_blocks _a _b _c _d =
-  let uuids = Platform.selected_block_uuids () in
+  (* cljs state/get-selection-blocks reads the selection set, not the
+     DOM — under virtualization the selected range outlives mounted
+     rows, so .ls-block.selected would only see the windowed subset *)
+  let uuids = Editor_actions.selected_uuids () in
   match uuids with
   | [] -> resolved (Sdk_convert.json_arr [||])
   | _ ->

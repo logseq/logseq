@@ -114,6 +114,39 @@ let focus_day p =
   | Some b -> V.el_focus b
   | None -> ()
 
+let close_popup ?focus_caret p =
+  V.el_remove p.root;
+  active := None;
+  match focus_caret with
+  | Some c -> (
+      match D.textarea_of p.uuid with
+      | Some el ->
+          D.el_focus el;
+          D.el_set_selection_range el c c
+      | None -> ())
+  | None -> ()
+
+(* cljs Enter handler: "date picker" closes the popup and inserts
+   [[journal]]; scheduled/deadline set the datetime property and keep
+   the calendar open (still editing) *)
+let commit_cal p =
+  let d = day_date p in
+  match p.kind with
+  | Cal_insert ->
+      let nv, caret =
+        replace_range p.uuid p.from p.from
+          ("[[" ^ Dates.journal_title_of d ^ "]]")
+      in
+      Ops.schedule_save p.uuid nv;
+      close_popup p ~focus_caret:caret
+  | Cal_prop ident ->
+      prop_batch ~caret:p.from p.uuid
+        [ Ops.set_block_property p.uuid ident
+            (W.Float (Js.Date.getTime d)) ]
+      (* popup deliberately stays open — cljs datepicker stays up for
+         scheduled/deadline so the user can keep adjusting *)
+  | Link_form _ -> ()
+
 (* one td[role=gridcell] > button; data-focused moves with arrow keys,
    data-selected/data-today pin the current date *)
 let cal_cell p d =
@@ -129,6 +162,28 @@ let cal_cell p d =
         ; ("tabindex", if focused then "0" else "-1") ]
       ~text:(string_of_int d) ()
   in
+  (* cljs nlp-calendar on-select: clicking a day commits that date *)
+  V.el_add_listener btn "click" (fun _ ->
+      p.cd <- d;
+      commit_cal p;
+      match p.kind with
+      | Cal_prop _ -> (
+          (* reflect the new selected/focused day while the popup stays
+             open *)
+          match V.el_parent btn with
+          | Some td ->
+              (match V.query_inside p.root "td[data-focused='true']" with
+               | Some old -> V.el_remove_attr old "data-focused"
+               | None -> ());
+              (match V.query_inside p.root "td[aria-selected='true']" with
+               | Some old -> V.el_remove_attr old "aria-selected"
+               | None -> ());
+              D.el_set_attr td "data-focused" "true";
+              D.el_set_attr td "data-selected" "true";
+              D.el_set_attr td "aria-selected" "true";
+              V.el_set_attr btn "tabindex" "0"
+          | None -> ())
+      | _ -> ());
   V.h ~tag:"td"
     ~attrs:
       ([ ("role", "gridcell") ]
@@ -218,39 +273,6 @@ let cal_move p delta =
     if p.cm > 12 then (p.cm <- 1; p.cy <- p.cy + 1));
   rebuild_cal p
 
-let close_popup ?focus_caret p =
-  V.el_remove p.root;
-  active := None;
-  match focus_caret with
-  | Some c -> (
-      match D.textarea_of p.uuid with
-      | Some el ->
-          D.el_focus el;
-          D.el_set_selection_range el c c
-      | None -> ())
-  | None -> ()
-
-(* cljs Enter handler: "date picker" closes the popup and inserts
-   [[journal]]; scheduled/deadline set the datetime property and keep
-   the calendar open (still editing) *)
-let commit_cal p =
-  let d = day_date p in
-  match p.kind with
-  | Cal_insert ->
-      let nv, caret =
-        replace_range p.uuid p.from p.from
-          ("[[" ^ Dates.journal_title_of d ^ "]]")
-      in
-      Ops.schedule_save p.uuid nv;
-      close_popup p ~focus_caret:caret
-  | Cal_prop ident ->
-      prop_batch ~caret:p.from p.uuid
-        [ Ops.set_block_property p.uuid ident
-            (W.Float (Js.Date.getTime d)) ]
-      (* popup deliberately stays open — cljs datepicker stays up for
-         scheduled/deadline so the user can keep adjusting *)
-  | Link_form _ -> ()
-
 let open_cal kind uuid from =
   let today = Dates.date_now () in
   let cy = int_of_float (Js.Date.getFullYear today)
@@ -297,12 +319,12 @@ let open_link_form image uuid from =
     V.h ~tag:"input" ~cls:"ls-link-url"
       ~attrs:
         [ ("type", "text")
-        ; ("placeholder", "Paste a link, input a search term") ]
+        ; ("placeholder", I18n.t "editor/link-url-placeholder") ]
       ()
   in
   let label_inp =
     V.h ~tag:"input" ~cls:"ls-link-text"
-      ~attrs:[ ("type", "text"); ("placeholder", "Label") ] ()
+      ~attrs:[ ("type", "text"); ("placeholder", I18n.t "editor/link-label-placeholder") ] ()
   in
   let root =
     V.h ~cls:"ls-editor-link-form"
@@ -381,44 +403,7 @@ let click_guard target =
       | Some _ -> true
       | None -> close_popup p; false)
 
-(* ---------- code-pre (contenteditable CodeMirror surface) ---------- *)
 
-let update_calc_results el =
-  match D.closest_sel ".extensions__code" (Some el) with
-  | Some wrap -> (
-      match D.el_query wrap ".extensions__code-calc-results" with
-      | Some res ->
-          V.clear res;
-          List.iter
-            (fun line ->
-              D.el_append_child res
-                (V.h ~cls:"extensions__code-calc-output-line" ~text:line
-                   ()))
-            (Render_calc.results (V.el_text_content el))
-      | None -> ())
-  | None -> ()
-
-let code_pre_input el =
-  match D.el_get_attr el "data-code-uuid" with
-  | Some uuid ->
-      let v = V.el_text_content el in
-      A.sync_buffer uuid v;
-      Ops.schedule_save uuid v;
-      update_calc_results el
-  | None -> ()
-
-let code_pre_key el ev =
-  match D.el_get_attr el "data-code-uuid" with
-  | None -> ()
-  | Some uuid -> (
-      match D.ev_key ev with
-      | "Escape" ->
-          D.prevent_default ev;
-          A.exit_edit ~select:true
-      | "Enter" when D.ev_shift ev ->
-          D.prevent_default ev;
-          A.insert_sibling_after uuid
-      | _ -> ())
 
 (* ---------- command dispatch ---------- *)
 
@@ -691,5 +676,6 @@ let installed = ref false
 let install () =
   if not !installed then begin
     installed := true;
-    D.document_add_listener "ls:editor-command" on_command true
+    D.document_add_listener "ls:editor-command" on_command true;
+    Code_mirror.install ()
   end

@@ -49,6 +49,37 @@ let vec_tree_data ~(include_root : bool) ?(keep_block_tx_id = false)
   let drop_tx_id pairs =
     if keep_block_tx_id then pairs else drop_key "block/tx-id" pairs
   in
+  (* the [*] pull emits :block/tags/:block/refs entries as bare {db/id}
+     stubs; the UI reads tag ident/title/icon off the entity reactively in
+     cljs, so expand each ref to the shared ref summary *)
+  let expand_tags pairs =
+    List.map
+      (fun (k, v) ->
+        match (k, v) with
+        | ( Wire.Keyword ("block/tags" | "block/refs")
+          , (Wire.Set xs | Wire.List xs | Wire.Array xs) ) ->
+            ( k
+            , Wire.List
+                (List.map
+                   (fun t ->
+                     match t with
+                     | Wire.Map _ -> (
+                         match
+                           (match t with Wire.Map ps -> ps | _ -> [])
+                           |> List.assoc_opt (kw "db/id")
+                         with
+                         | Some (Wire.Int id) ->
+                             Plain_value.ref_value_summary db id
+                         | Some (Wire.Int64 id) ->
+                             Plain_value.ref_value_summary db
+                               (Datascript.Util.int64_to_int_exn
+                                  "block/tags db/id" id)
+                         | _ -> t)
+                     | _ -> t)
+                   xs) )
+        | _ -> (k, v))
+      pairs
+  in
   let parent_children : (entity_id, pulled_entity list) Hashtbl.t =
     Hashtbl.create 64
   in
@@ -76,7 +107,7 @@ let vec_tree_data ~(include_root : bool) ?(keep_block_tx_id = false)
       | _ -> []
     in
     Wire.Map
-      (pairs
+      (pairs |> expand_tags
        |> assoc_wire "block/level" (Wire.Int level)
        |> assoc_wire "block/children" (Wire.List children)
        |> assoc_wire "block.temp/reactions"
@@ -95,7 +126,9 @@ let vec_tree_data ~(include_root : bool) ?(keep_block_tx_id = false)
           | Wire.Map pairs -> drop_tx_id pairs
           | _ -> []
         in
-        [ Wire.Map (assoc_wire "block/children" (Wire.List children) pairs) ]
+        [ Wire.Map
+            (assoc_wire "block/children" (Wire.List children)
+               (expand_tags pairs)) ]
     | None -> []
   else children
 
@@ -176,7 +209,16 @@ let wire_display_titles (db : db) (ws : Wire.t list) : Wire.t list =
    include-root? = (not page?) — false here since callers pass a
    page. *)
 let page_blocks_vec_tree (db : db) (blocks : pulled_entity list)
-    (page_id : entity_id) : Wire.t list =
-  vec_tree_data ~include_root:false ~db ~root:None ~root_id:page_id blocks
+    (page : entity) : Wire.t list =
+  (* cljs get-root-and-page: include-root? = (not page?) — a block entity
+     (e.g. #/page/<block-uuid>) renders itself as the root row while a
+     real page shows only its children *)
+  let include_root = not (Ldb.is_page page) in
+  let root =
+    if include_root then
+      List.find_opt (fun p -> p.pulled_id = page.id) blocks
+    else None
+  in
+  vec_tree_data ~include_root ~db ~root ~root_id:page.id blocks
   |> wire_display_titles db
   |> List.map (expand_property_refs db)

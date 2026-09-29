@@ -63,6 +63,11 @@ let uuids_list uuids = Wire.List (List.map (fun u -> Wire.Uuid u) uuids)
    single-op batches get it auto-derived from the op name) *)
 let op_opts name = Wire.Map [ kw "outliner-op" (Wire.Keyword name) ]
 
+(* cljs apply-outliner-ops generates a fresh :ui/perf-id per call; the
+   worker requires it before emitting the :db-worker/outliner-op-perf
+   console line that e2e counts per op *)
+let perf_id () = Wire.Uuid (Platform.random_uuid ())
+
 (* cljs wrap-parse-block: a leading "#"+ whitespace normalizes into
    logseq.property/heading and is stripped from block/title (skipped for
    code/math display types) *)
@@ -445,8 +450,11 @@ let resolve_block_tags (blocks : Model.block list) : Model.block list Js.Promise
                        List.map (fun (_, (t, _, _, _)) -> t) visible
                    ; block_tag_uuids =
                        List.map (fun (_, (_, _, _, u)) -> u) visible
-                   ; block_tag_idents =
-                       List.map (fun (_, (_, i, _, _)) -> i) visible
+                   ; (* block_tag_idents stays unfiltered: internal
+                        classes (Page, Comments, Query, …) drive the
+                        node icon and structural checks even though
+                        they never render as chips *)
+                     block_tag_idents = idents
                    ; block_tag_db_ids =
                        List.map (fun (i, _) -> i) visible
                    ; block_is_comments_area =
@@ -515,16 +523,29 @@ let fetch_zoom_blocks repo uuid : Wire.t Js.Promise.t =
        [ Wire.Map
            [ (Wire.String "id", Wire.Uuid uuid)
            ; ( Wire.String "opts"
-             , Wire.Map [ (Wire.Keyword "children?", Wire.Bool true) ] )
+             , Wire.Map
+                 [ (Wire.Keyword "children?", Wire.Bool true)
+                 ; (* a container's root always renders its children,
+                      even when collapsed in the page — fetch them *)
+                   ( Wire.Keyword "include-collapsed-children?"
+                   , Wire.Bool true )
+                 ] )
            ]
        ])
   |> Js.Promise.then_ (fun w ->
          match Wire.elems w with
          | [ pair ] -> (
-             match Wire.block_of_pair pair with
-             | Some (Wire.Map _ as blk) ->
-                 Js.Promise.resolve (Wire.List [ blk ])
-             | _ -> Js.Promise.resolve (Wire.List []))
+             let blk =
+               (* the pair's flat `children` carry the full maps; splice
+                  them into block/children before decoding *)
+               match Decode.nest_get_blocks pair with
+               | Some w -> Some w
+               | None -> Wire.block_of_pair pair
+             in
+             (match blk with
+              | Some (Wire.Map _ as blk) ->
+                  Js.Promise.resolve (Wire.List [ blk ])
+              | _ -> Js.Promise.resolve (Wire.List [])))
          | _ -> Js.Promise.resolve (Wire.List []))
 
 (* shared page-blocks pipeline: collapse-state collection → embed-children
@@ -704,6 +725,12 @@ let rec apply ?(opts = Wire.Map []) ops : unit Js.Promise.t =
       match !Runtime.current_repo with
       | None -> Js.Promise.resolve ()
       | Some repo ->
+          let opts =
+            match opts with
+            | Wire.Map kvs ->
+                Wire.Map (kvs @ [ kw "ui/perf-id" (perf_id ()) ])
+            | _ -> opts
+          in
           Runtime.invoke3 "thread-api/apply-outliner-ops" (Wire.String repo)
             (Wire.Array ops) opts
           |> Js.Promise.then_ (fun _ -> Js.Promise.resolve ())
@@ -722,12 +749,18 @@ let rec apply ?(opts = Wire.Map []) ops : unit Js.Promise.t =
                             | _ -> "?")
                           ops)
                    , e );
-                 Toast.error "Failed to save changes";
+                 Toast.error (I18n.t "ui/save-changes-error");
                  Js.Promise.resolve ()))
 
 let apply_and_refresh ?opts ops =
   apply ?opts ops
   |> Js.Promise.then_ (fun () -> refresh_page ())
+  |> Js.Promise.then_ (fun () ->
+         (* the quick-add dialog's block list lives outside
+            .page-blocks-inner; a page refresh alone won't repaint it *)
+         if Dialogs_state.ready () && Dialogs_state.is_open "quick-add" then
+           Quick_add_state.reload ();
+         Js.Promise.resolve ())
 
 (* cljs wrap-parse-block on save: markdown headings normalize into
    logseq.property/heading, and [[page]]/#tag references resolve into
@@ -813,6 +846,7 @@ let last_inserted_uuid (resp : Wire.t option) : string option =
           | [] -> None)
       | _ -> None)
   | None -> None
+
 
 let schedule_save uuid title =
   cancel_pending_save ();
@@ -909,11 +943,12 @@ let apply_and_refresh_result ?opts ops =
          refresh_page ()
          |> Js.Promise.then_ (fun () -> Js.Promise.resolve r))
 
+
 (* undo/redo writes datoms straight into the db — resync the open
    editor's buffer so a stale textarea does not mask the restored title.
    Returns the promise so callers that move editing afterwards (paste)
    sequence after the textarea write *)
-let resync_open_editor () : unit Js.Promise.t =
+let resync_open_editor ?(force = false) () : unit Js.Promise.t =
   match S.editing () with
   | None -> Js.Promise.resolve ()
   | Some e -> (
@@ -924,8 +959,11 @@ let resync_open_editor () : unit Js.Promise.t =
           |> Js.Promise.then_ (fun title ->
                  (* remote refresh must not clobber typed text: only
                     overwrite when the buffer is still the value the editor
-                    opened with and the stored title moved since *)
-                 if e.S.buffer = e.S.base && e.S.base <> title then begin
+                    opened with and the stored title moved since. undo/redo
+                    force it — the user asked for the revert even when an
+                    unsaved edit is in flight *)
+                 if (force || (e.S.buffer = e.S.base)) && e.S.buffer <> title
+                 then begin
                    S.set_silent (fun st ->
                        match st.S.editing with
                        | Some e' when e'.uuid = e.uuid ->
@@ -950,10 +988,10 @@ let undo () =
   | Some repo ->
       Runtime.invoke1 "thread-api/undo-redo-undo" (Wire.String repo)
       |> Js.Promise.then_ (fun _ -> refresh_page ())
-      |> Js.Promise.then_ (fun () -> resync_open_editor ())
+      |> Js.Promise.then_ (fun () -> resync_open_editor ~force:true ())
       |> Js.Promise.catch (fun e ->
              Platform.console_error ("undo failed", e);
-             Toast.error "Undo failed";
+             Toast.error (I18n.t "editor/undo-error");
              Js.Promise.resolve ())
   | None -> Js.Promise.resolve ()
 
@@ -963,10 +1001,10 @@ let redo () =
   | Some repo ->
       Runtime.invoke1 "thread-api/undo-redo-redo" (Wire.String repo)
       |> Js.Promise.then_ (fun _ -> refresh_page ())
-      |> Js.Promise.then_ (fun () -> resync_open_editor ())
+      |> Js.Promise.then_ (fun () -> resync_open_editor ~force:true ())
       |> Js.Promise.catch (fun e ->
              Platform.console_error ("redo failed", e);
-             Toast.error "Redo failed";
+             Toast.error (I18n.t "editor/redo-error");
              Js.Promise.resolve ())
   | None -> Js.Promise.resolve ()
 

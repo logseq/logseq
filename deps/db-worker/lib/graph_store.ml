@@ -27,6 +27,30 @@ let row_text row i =
   | Sqlite.Blob s -> Some s
   | _ -> None
 
+(* cljs db-core.cljs schedule-wal-checkpoint!: every store schedules an
+   idle wal_checkpoint(TRUNCATE) 2s out, debounced per db. The pool runs
+   journal_mode=WAL with wal_autocheckpoint=0, so without it the WAL
+   file grows on every commit until OPFS write() fails. *)
+let wal_checkpoint_idle_ms = 2000
+
+let wal_checkpoint_timers : (string, Timers.timer) Hashtbl.t =
+  Hashtbl.create 8
+
+let schedule_wal_checkpoint db =
+  let key = Sqlite.filename db in
+  (match Hashtbl.find_opt wal_checkpoint_timers key with
+   | Some t -> Timers.clear t
+   | None -> ());
+  let timer =
+    Timers.set_timeout wal_checkpoint_idle_ms (fun () ->
+        Hashtbl.remove wal_checkpoint_timers key;
+        try Sqlite.checkpoint db
+        with e ->
+          Worker_log.warn "db-worker/wal-checkpoint-failed"
+            [ "error", Printexc.to_string e; "db", key ])
+  in
+  Hashtbl.replace wal_checkpoint_timers key timer
+
 let store db addr_payloads =
   (* cljs upsert-addr-content! wraps the batch in a single sqlite
      transaction — one fsync for all rows. Multi-row inserts keep the
@@ -69,7 +93,8 @@ let store db addr_payloads =
   (match chunk_rows [] rows with
    | [] -> ()
    | chunk_list ->
-       Sqlite.transaction db (fun () -> List.iter insert_chunk chunk_list))
+       Sqlite.transaction db (fun () -> List.iter insert_chunk chunk_list));
+  schedule_wal_checkpoint db
 
 let restore db addr =
   let rows =

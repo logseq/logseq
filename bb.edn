@@ -38,13 +38,6 @@
    ;; Parallel execution - https://book.babashka.org/#parallel
    :task (run '-dev:electron-start {:parallel true})}
 
-  dev:app-watch
-  logseq.tasks.dev.mobile/app-watch
-
-  dev:mobile-https-cert
-  {:doc "Generate local HTTPS certificate for mobile Shadow CLJS development"
-   :task logseq.tasks.dev.mobile/ensure-dev-ssl-cert-task}
-
   -dev:build-publishing-frontend
   logseq.tasks.dev/build-publishing-frontend
 
@@ -115,32 +108,6 @@
 
   dev:diff-datoms
   logseq.tasks.dev/diff-datoms
-
-  dev:cap-run-ios
-  logseq.tasks.dev.mobile/cap-run-ios
-
-  -dev:ios-app
-  {:depends [dev:app-watch dev:cap-run-ios]}
-
-  dev:ios-app
-  {:doc "iOS development environment"
-   :task (run '-dev:ios-app {:parallel true})}
-
-  release:ios-app
-  logseq.tasks.dev.mobile/run-ios-release
-
-  dev:cap-run-android
-  logseq.tasks.dev.mobile/cap-run-android
-
-  -dev:android-app
-  {:depends [dev:app-watch dev:cap-run-android]}
-
-  dev:android-app
-  {:doc "Android development environment"
-   :task (run '-dev:android-app {:parallel true})}
-
-  release:android-app
-  logseq.tasks.dev.mobile/run-android-release
 
   dev:validate-local-storage
   logseq.tasks.spec/validate-local-storage

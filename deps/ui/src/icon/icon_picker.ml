@@ -175,12 +175,12 @@ let placeholder_of = function
   | Tab_icon -> I.t "icon/search-icons"
 
 let emoji_count () =
-  match Js.Json.decodeObject Emoji_mart.mart_emojis with
+  match Js.Json.decodeObject (Lazy.force Emoji_mart.mart_emojis) with
   | Some d -> Array.length (Js.Dict.keys d)
   | None -> 0
 
 let all_emojis () : (string * string) list =
-  match Js.Json.decodeObject Emoji_mart.mart_emojis with
+  match Js.Json.decodeObject (Lazy.force Emoji_mart.mart_emojis) with
   | Some d ->
       Array.to_list (Js.Dict.keys d)
       |> List.filter_map (fun id ->

@@ -249,6 +249,7 @@ let new_property_btn (ctx : V.ctx) ~for_class ~owner_title =
       if for_class then
         Properties_dialog.open_dialog
           { Properties_dialog.uuid = ctx.block_uuid
+          ; uuids = []
           ; db_id = ctx.block_id
           ; is_tag = true
           ; title = owner_title }
@@ -364,7 +365,17 @@ let render_area ?(left_host = None) ~host (ctx : V.ctx) ~owner_is_tag
            remove_all host ":scope > .positioned-properties.block-below";
            if below_rows <> [] then
              render_pills ctx ~owner_is_tag ~owner_title host below_rows);
+
          Js.Promise.resolve ())
+  |> (fun p ->
+      Js.Promise.catch
+        (fun e ->
+          (* surface fetch/decode failures instead of silently leaving
+             the panel empty *)
+          Platform.console_error
+            ("properties render_area failed", e);
+          Js.Promise.resolve ())
+        p)
   |> ignore
 
 (* block area: one get-blocks render-data call supplies the positioned
@@ -587,6 +598,7 @@ let title_actions (p : Model.page) =
         let l, _t, _r, b, _w = el_rect row in
         Properties_dialog.open_dialog ~anchor:(l, b +. 4.)
           { Properties_dialog.uuid
+          ; uuids = []
           ; db_id = p.Model.page_db_id
           ; is_tag = true
           ; title = p.Model.page_title

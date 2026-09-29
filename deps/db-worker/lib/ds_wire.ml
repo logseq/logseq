@@ -249,9 +249,17 @@ let entity_map_wire (e : entity) : Wire.t =
       | One_value v -> transit_of_value v
       | Many_values vs -> Wire.Set (List.map transit_of_value vs) )
   in
+  let ident_pair =
+    (* entity_attrs excludes the :db/ident system attr; cljs entity maps
+       still surface it, and callers branch on it (e.g. tag-on-chosen) *)
+    match Ldb.ident_of e with
+    | Some i -> [ (Wire.Keyword "db/ident", Wire.Keyword i) ]
+    | None -> []
+  in
   Wire.Map
     ((Wire.Keyword "db/id", Wire.Int e.id)
-     :: List.map pair_of (Datascript.entity_attrs e))
+     :: ident_pair
+     @ List.map pair_of (Datascript.entity_attrs e))
 
 let rec transit_of_query_result (r : query_result) : Wire.t =
   match r with

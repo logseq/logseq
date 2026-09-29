@@ -361,7 +361,7 @@ let highlight_el key query text =
 let badge_el key =
   Logseq_dom.dom ~key ~tag:"span"
     ~style_class:"cp__cmdk-current-page-badge"
-    ~text:"Current Page" []
+    ~text:(I18n.t "cmdk.group/current-page") []
 
 (* -- item row -------------------------------------------------------- *)
 
@@ -391,7 +391,7 @@ let item_header (it : S.item) q =
   | Some h ->
       Logseq_dom.dom ~key:"hdr"
         ~style_class:
-          "text-xs pl-8 font-light flex items-center gap-2 overflow-hidden min-w-0 -mt-1"
+          "breadcrumb text-xs pl-8 font-light flex items-center gap-2 overflow-hidden min-w-0 -mt-1"
         ~attrs:
           [ ("style",
              "color: var(--lx-gray-11); white-space: nowrap; text-overflow: ellipsis") ]
@@ -509,15 +509,15 @@ let gid_name = function
   | S.G_themes -> "themes"
 
 let gid_label = function
-  | S.G_nodes -> I18n.t "cmdk.groups/nodes"
-  | S.G_commands -> I18n.t "cmdk.groups/commands"
-  | S.G_filters -> I18n.t "cmdk.groups/filters"
-  | S.G_create -> I18n.t "cmdk.groups/create"
-  | S.G_current_page -> I18n.t "cmdk.groups/current-page"
-  | S.G_recently_updated -> I18n.t "cmdk.groups/recently-updated"
-  | S.G_files -> I18n.t "cmdk.groups/files"
-  | S.G_codes -> I18n.t "cmdk.groups/codes"
-  | S.G_themes -> I18n.t "cmdk.groups/themes"
+  | S.G_nodes -> I18n.t "cmdk.group/nodes"
+  | S.G_commands -> I18n.t "cmdk.group/commands"
+  | S.G_filters -> I18n.t "cmdk.group/filters"
+  | S.G_create -> I18n.t "cmdk.group/create"
+  | S.G_current_page -> I18n.t "cmdk.group/current-page"
+  | S.G_recently_updated -> I18n.t "cmdk.group/recently-updated"
+  | S.G_files -> I18n.t "cmdk.group/files"
+  | S.G_codes -> I18n.t "cmdk.group/codes"
+  | S.G_themes -> I18n.t "cmdk.group/themes"
 
 let gid_of_name = function
   | "current-page" -> Some S.G_current_page
