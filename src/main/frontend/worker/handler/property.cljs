@@ -86,14 +86,19 @@
 
 (defn- property-node-selector-values
   [db property option]
-  (mapv
-   (fn [choice]
-     (let [original-id (get-in choice [:value :db/id])
-           ;; Resolve hidden property value blocks to their target node so
-           ;; choice ids match the ids selected block snapshots resolve to
-           eid (if original-id
-                 (worker-plain/node-property-target-id db original-id)
-                 original-id)]
+  (let [values (db-view/get-property-values db (:db/ident property) option)
+        ;; Serialized property maps may omit attrs, so read the type from the
+        ;; db; only :node values stand in for another node.
+        node-type? (= :node (:logseq.property/type
+                             (d/entity db [:db/ident (:db/ident property)])))]
+    (mapv
+     (fn [choice]
+       (let [original-id (get-in choice [:value :db/id])
+             ;; Resolve hidden property value blocks to their target node so
+             ;; choice ids match the ids selected block snapshots resolve to
+             eid (if (and node-type? original-id)
+                   (worker-plain/node-property-target-id db original-id)
+                   original-id)]
        (if-let [entity (some->> eid
                                 (d/entity db))]
          (cond-> (assoc choice :value
@@ -107,7 +112,7 @@
            (not= eid original-id)
            (assoc :label (or (:block/title entity) (:label choice))))
          choice)))
-   (db-view/get-property-values db (:db/ident property) option)))
+     values)))
 
 (defn- property-node-selector-initial-choices
   [db property non-root-classes option]

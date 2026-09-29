@@ -139,13 +139,16 @@
 (defn- node-value-target-id
   "A :node property value can be stored as a hidden property value block whose
   :block/title is the uuid of the node it targets. Returns the target's id for
-  such value blocks, nil otherwise."
+  such value blocks, nil otherwise. Value blocks of other property types carry
+  their own content (a :default value could itself be a uuid string), so they
+  are never resolved."
   [db ref-id collected]
-  (when (:logseq.property/created-from-property collected)
-    (when-let [target-uuid (some-> (:block/title collected) parse-uuid)]
-      (let [target-id (resolve-ref-id db target-uuid)]
-        (when (not= target-id ref-id)
-          target-id)))))
+  (when-let [property-id (:logseq.property/created-from-property collected)]
+    (when (= :node (:logseq.property/type (d/entity db property-id)))
+      (when-let [target-uuid (some-> (:block/title collected) parse-uuid)]
+        (let [target-id (resolve-ref-id db target-uuid)]
+          (when (not= target-id ref-id)
+            target-id))))))
 
 (defn- compute-shallow-ref-identity
   [db ref-id]
