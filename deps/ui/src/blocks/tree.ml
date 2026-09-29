@@ -526,6 +526,10 @@ let embed_refreshes : (int, unit -> unit) Hashtbl.t = Hashtbl.create 8
 let embed_refresh_seq = ref 0
 let embed_chained = ref false
 
+(* a broadcast can arrive per applied op — coalesce embed refetches into
+   one fan-out per burst so N embeds issue N fetches, not N x ops *)
+let debounced_embed_refresh = Editor_dom.debounce 150
+
 let chain_embed_worker () =
   match !embed_chained, !Runtime.worker with
   | true, _ | _, None -> ()
@@ -536,7 +540,8 @@ let chain_embed_worker () =
         (fun kind payload ->
           prev kind payload;
           if kind = "sync-db-changes" then
-            Hashtbl.iter (fun _ f -> f ()) embed_refreshes)
+            debounced_embed_refresh (fun () ->
+                Hashtbl.iter (fun _ f -> f ()) embed_refreshes))
 
 let fetch_embed_blocks name st =
   Render_state.with_repo (fun repo ->
@@ -549,6 +554,19 @@ let fetch_embed_blocks name st =
                        Signal.set st blocks;
                        Js.Promise.resolve ()))))
 
+(* cheap dyn equality for fetched trees: uuid + title covers structure
+   and content edits; a full structural compare walks every field of a
+   rebuilt-per-fetch tree on each publish *)
+let rec same_blocks a b =
+  match a, b with
+  | [], [] -> true
+  | x :: xs, y :: ys ->
+      x.Model.block_uuid = y.Model.block_uuid
+      && x.Model.block_title = y.Model.block_title
+      && same_blocks x.Model.block_children y.Model.block_children
+      && same_blocks xs ys
+  | _ -> false
+
 let page_embed (name : string) : t =
  fun ctx parent ->
   chain_embed_worker ();
@@ -560,7 +578,7 @@ let page_embed (name : string) : t =
   let load () = fetch_embed_blocks name st in
   load ();
   Hashtbl.replace embed_refreshes id load;
-  (dyn ~equal:(=)
+  (dyn ~equal:same_blocks
      (fun blocks ->
        (* embed copies render read-only — the same uuid can exist in the
           sidebar/main tree, and only that instance should own the textarea *)
