@@ -81,7 +81,11 @@ let handle_escape () =
 let toast_error msg =
   Runtime.send
     (Action.Toast_push
-       { Model.toast_id = 0; toast_text = msg; toast_kind = "error" });
+       { Model.toast_id = 0
+       ; toast_text = msg
+       ; toast_kind = "error"
+       ; toast_key = None
+       });
   Runtime.flush ()
 
 (* ---------- show hidden properties toggle (`p a`) ---------- *)

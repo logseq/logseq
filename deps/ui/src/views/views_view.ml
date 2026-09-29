@@ -343,7 +343,7 @@ let export_edn inst =
        (fun () ->
          Runtime.send
            (A.Toast_push
-              { M.toast_id = 0; toast_text = I.copied_view_nodes
+              { M.toast_id = 0; toast_key = None; toast_text = I.copied_view_nodes
               ; toast_kind = "success" });
          Js.Promise.resolve ())
        (D.clipboard_write s))

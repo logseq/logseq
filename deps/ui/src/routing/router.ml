@@ -118,16 +118,19 @@ let fetch_refs_blocks (p : Model.page) : Model.block list Js.Promise.t =
              Js.Promise.resolve blocks)
   | None -> Js.Promise.resolve []
 
-let fetch_refs (p : Model.page) =
+(* refs/unlinked fetches resolve after their page load committed — guard
+   the send so a stale in-flight fetch can't overwrite the current route *)
+let fetch_refs ~stale:(is_stale : unit -> bool) (p : Model.page) =
   fetch_refs_blocks p
   |> Js.Promise.then_ (fun blocks ->
-         Js.Promise.resolve (Runtime.send (Action.Refs_loaded blocks)))
+         Js.Promise.resolve
+           (if not (is_stale ()) then
+              Runtime.send (Action.Refs_loaded blocks)))
   |> ignore
 
-(* unlinked references: blocks whose title mentions the page title
-   without a [[ref]] — the view search input filters by row title
-   substring (cljs row-matched) *)
-let fetch_unlinked (p : Model.page) =
+(* unlinked references for the page's collapsed "Unlinked references"
+   section — fetched lazily when the section opens *)
+let fetch_unlinked ~stale:(is_stale : unit -> bool) (p : Model.page) =
   match p.Model.page_db_id with
   | Some id ->
       ignore
@@ -135,11 +138,10 @@ let fetch_unlinked (p : Model.page) =
            (Wire.String (repo ())) (Wire.Int id)
          |> Js.Promise.then_ (fun w ->
                 Js.Promise.resolve
-                  (Runtime.send
-                     (Action.Unlinked_loaded (Decode.blocks_of_wire w)))))
+                  (if not (is_stale ()) then
+                     Runtime.send
+                       (Action.Unlinked_loaded (Decode.blocks_of_wire w)))))
   | None -> ()
-
-let fetch_unlinked_refs = Outliner_ops.fetch_unlinked_refs
 
 let load_journals () =
   Runtime.invoke2 "thread-api/get-latest-journals" (Wire.String (repo ()))
@@ -181,8 +183,8 @@ let route_still_target missing =
 (* fetches for the same route can resolve out of order — only the
    latest-initiated load may commit, otherwise an older response lands
    last and clobbers fresher state (e.g. page_blocks before a pending
-   insert was committed) *)
-let bump_load_gen () = incr Runtime.load_gen
+   insert was committed); callers capture !Runtime.load_gen right after
+   their own incr and compare at commit time *)
 
 (* drop a send when the route moved on while the fetch was in-flight —
    otherwise a slow stale load overwrites the page the user navigated to *)
@@ -191,6 +193,8 @@ let stale (route : Model.route) = !Runtime.current_route <> Some route
 (* get-page-route-info resolves name/uuid/lookup-ref -> summary *)
 let load_page_ref for_route ref_v =
   incr Runtime.load_gen;
+  let gen = !Runtime.load_gen in
+  let is_stale () = stale for_route || gen <> !Runtime.load_gen in
   Runtime.invoke2 "thread-api/get-page-route-info"
     (Wire.String (repo ())) ref_v
   |> Js.Promise.then_ (fun info ->
@@ -200,23 +204,24 @@ let load_page_ref for_route ref_v =
              |> Js.Promise.then_ (fun p' ->
                     Outliner_ops.resolve_page_tags (repo ()) p'
                     |> Js.Promise.then_ (fun p'' ->
-                           if not (stale for_route) then (
+                           if not (is_stale ()) then (
                              (* a fresh page snapshot is authoritative —
                                 drop pending committed-buffer title paints *)
                              Editor_state.clear_overrides ();
                              Runtime.send (Action.Page_loaded p'');
-                             fetch_refs p'';
-                             fetch_unlinked_refs p'');
+                             fetch_refs ~stale:is_stale p'';
+                             Outliner_ops.fetch_unlinked_refs
+                               ~stale:is_stale p'');
                            Js.Promise.resolve ()))
          | None ->
              (* cljs keeps the :page route and paints inline
                 (t :page/not-found); only unknown route segments get
                 the full-screen 404 *)
-             if not (stale for_route) then
+             if not (is_stale ()) then
                Runtime.send Action.Page_load_failed;
              Js.Promise.resolve ())
   |> Js.Promise.catch (fun _ ->
-         if not (stale for_route) then
+         if not (is_stale ()) then
            Runtime.send Action.Page_load_failed;
          Js.Promise.resolve ())
 
@@ -247,7 +252,10 @@ let load_home () =
                                       if not (stale (Model.Page name)) then (
                                         Editor_state.clear_overrides ();
                                         Runtime.send (Action.Page_loaded p'');
-                                        fetch_refs p'');
+                                        fetch_refs
+                                          ~stale:(fun () ->
+                                            stale (Model.Page name))
+                                          p'');
                                       Js.Promise.resolve ()))
                     | None, false ->
                         Runtime.send (Action.Navigate_to Model.Journals);

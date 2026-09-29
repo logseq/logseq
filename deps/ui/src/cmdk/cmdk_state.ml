@@ -728,35 +728,17 @@ let toast msg cls =
   Js.Dict.set d "cls" (Js.Json.string cls);
   Dom_ext.dispatch_custom "ls:toast" (Js.Json.object_ d)
 
-let load_page repo ref_v =
-  Runtime.invoke3 "thread-api/get-page-blocks-tree" (Wire.String repo)
-    ref_v Wire.Nil
-  |> Js.Promise.then_ (fun blocks_w ->
-         Js.Promise.resolve (Decode.blocks_of_wire blocks_w))
-
-let goto_page repo uuid =
+let goto_page _repo uuid =
   (* navigation intent: commit and close any in-progress edit so the old
      page stops rendering an editor during the async load gap (e2e
      waits on .editor-visible and must not see the stale one) *)
   Editor_actions.exit_edit ~select:false;
-  Runtime.invoke2 "thread-api/get-page-route-info" (Wire.String repo)
-    (Wire.String uuid)
-  |> Js.Promise.then_ (fun page_w ->
-         match Decode.page_of_summary page_w with
-         | None -> Js.Promise.resolve ()
-         | Some page ->
-             load_page repo
-               (Wire.Array [ Wire.Keyword "block/uuid"; Wire.Uuid uuid ])
-             |> Js.Promise.then_ (fun blocks ->
-                    let page = { page with Model.page_blocks = blocks } in
-                    (* invalidate in-flight route loads so their late
-                       Page_loaded cannot clobber this fresh page *)
-                    Router.bump_load_gen ();
-                    Runtime.send (Action.Navigate_to (Model.Page uuid));
-                    Runtime.send (Action.Page_loaded page);
-                    Router.fetch_refs page;
-                    Platform.set_location_hash ("#/page/" ^ uuid);
-                    Js.Promise.resolve ()))
+  Runtime.mark_nav ();
+  (* one navigation path: set the hash and let the router's hashchange
+     resolve drive Navigate_to + load (a manual prefetch here double-
+     fetched and bypassed nav_hash's ?graph-id) *)
+  Platform.set_location_hash
+    (Runtime.nav_hash ("#/page/" ^ uuid))
 let goto_today_journal repo =
   let day = Dates.today_journal_day () in
   Runtime.invoke2 "thread-api/get-journal-page-by-day" (Wire.String repo)
@@ -766,7 +748,9 @@ let goto_today_journal repo =
          | None -> Js.Promise.resolve ()
          | Some page -> (
              match page.Model.page_uuid with
-             | Some uuid -> goto_page repo uuid
+             | Some uuid ->
+                 goto_page repo uuid;
+                 Js.Promise.resolve ()
              | None -> Js.Promise.resolve ()))
 
 let create_page title =
@@ -792,12 +776,13 @@ let create_page title =
                   | Some (Wire.List [ _; Wire.Uuid u ]) -> u
                   | _ -> ""
                 in
-                goto_page repo uuid
-                |> Js.Promise.then_ (fun () ->
-                       (* a fresh page has no blocks; append_block inserts
-                          the first block and enters edit mode on it *)
-                       Editor_actions.append_block ();
-                       Js.Promise.resolve ()))
+                (* a fresh page has no blocks; append_block inserts the
+                   first block and enters edit mode on it — wait for the
+                   navigation's Page_loaded so it lands on the new page *)
+                Runtime.on_page_loaded uuid (fun () ->
+                    Editor_actions.append_block ());
+                goto_page repo uuid;
+                Js.Promise.resolve ())
          |> Js.Promise.catch (fun e ->
                 Platform.console_error
                   ("cmdk create-page failed", Platform.error_inner e);
@@ -820,9 +805,9 @@ let validate_graph repo =
 let run_move st target =
   let uuids =
     if Editor_state.ready () then
-      match
-        Editor_state.String_set.elements (Editor_state.selected ())
-      with
+      (* document order, not String_set uuid order — the worker applies
+         move-blocks in the given order *)
+      match Editor_actions.selected_uuids () with
       | [] -> Option.to_list (Editor_state.editing_uuid ())
       | sel -> sel
     else []
@@ -994,7 +979,7 @@ let rec run_item st it =
        create_page title
    | Open_page uuid ->
        close st;
-       Option.iter (fun repo -> ignore (goto_page repo uuid)) repo
+       Option.iter (fun repo -> goto_page repo uuid) repo
    | Open_block uuid ->
        close st;
        Option.iter
@@ -1005,7 +990,9 @@ let rec run_item st it =
                 (Wire.Array [ Wire.Keyword "block/uuid"; Wire.Uuid uuid ])
               |> Js.Promise.then_ (fun w ->
                      match Wire.map_get_uuid w "block/uuid" with
-                     | Some puuid -> goto_page repo puuid
+                     | Some puuid ->
+                         goto_page repo puuid;
+                         Js.Promise.resolve ()
                      | None -> Js.Promise.resolve ())))
          repo
    | Set_filter gid ->
@@ -1041,7 +1028,9 @@ and run_command st repo (cid : string) =
                   match Decode.page_of_summary w with
                   | Some p -> (
                       match p.Model.page_uuid with
-                      | Some u -> goto_page repo u
+                      | Some u ->
+                          goto_page repo u;
+                          Js.Promise.resolve ()
                       | None -> Js.Promise.resolve ())
                   | None -> Js.Promise.resolve ()))
     | None -> ()

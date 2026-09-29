@@ -30,6 +30,17 @@ let ac_owned_key = function
 
 (* -- editor-mode keys -- *)
 
+(* cljs shortcut tables key on the unshifted key plus modifier flags; DOM
+   `key` already applies Shift ("Z", ">"), so letter/symbol shortcuts must
+   be normalized back before matching *)
+let shortcut_key ev =
+  match String.lowercase_ascii (D.ev_key ev) with
+  | ">" -> "." | "<" -> "," | "?" -> "/" | ":" -> ";" | "\"" -> "'"
+  | "~" -> "`" | "{" -> "[" | "}" -> "]" | "|" -> "\\" | "_" -> "-"
+  | "+" -> "=" | "!" -> "1" | "@" -> "2" | "#" -> "3" | "$" -> "4"
+  | "%" -> "5" | "^" -> "6" | "&" -> "7" | "*" -> "8" | "(" -> "9"
+  | ")" -> "0" | k -> k
+
 let on_editor_arrows ev uuid el =
   let key = D.ev_key ev in
   let up = key = "ArrowUp" in
@@ -104,26 +115,28 @@ let on_editor_key ev uuid el =
         if s < String.length v && String.get v s = c then (
           D.prevent_default ev;
           D.el_set_selection_range el (s + 1) (s + 1)))
-    | "z" when mods ev ->
-        D.prevent_default ev;
-        if shift then A.redo () else A.undo ()
-    | "y" when mods ev ->
-        D.prevent_default ev;
-        A.redo ()
-    | "b" when mods ev ->
-        D.prevent_default ev;
-        A.wrap_selection uuid "**"
-    | "i" when mods ev ->
-        D.prevent_default ev;
-        A.wrap_selection uuid "*"
-    | "h" when mods ev && shift ->
-        D.prevent_default ev;
-        A.wrap_selection uuid "=="
-    | "e" when D.ev_meta ev -> A.quick_add ()
-    | "." when mods ev && shift ->
-        D.prevent_default ev;
-        A.zoom_to uuid
-    | _ -> ()
+    | _ -> (
+        match shortcut_key ev with
+        | "z" when mods ev ->
+            D.prevent_default ev;
+            if shift then A.redo () else A.undo ()
+        | "y" when mods ev ->
+            D.prevent_default ev;
+            A.redo ()
+        | "b" when mods ev ->
+            D.prevent_default ev;
+            A.wrap_selection uuid "**"
+        | "i" when mods ev ->
+            D.prevent_default ev;
+            A.wrap_selection uuid "*"
+        | "h" when mods ev && shift ->
+            D.prevent_default ev;
+            A.wrap_selection uuid "=="
+        | "e" when D.ev_meta ev -> A.quick_add ()
+        | "." when mods ev && shift ->
+            D.prevent_default ev;
+            A.zoom_to uuid
+        | _ -> ())
 
 (* -- normal-mode keys (block selection) -- *)
 
@@ -169,17 +182,19 @@ let on_normal_key ev =
               D.prevent_default ev;
               A.enter_edit u 0
           | _ -> ()))
-  | "a" when mods ev ->
-      D.prevent_default ev;
-      A.select_all ()
-  | "z" when mods ev ->
-      D.prevent_default ev;
-      if shift then A.redo () else A.undo ()
-  | "y" when mods ev ->
-      D.prevent_default ev;
-      A.redo ()
   | "Escape" -> A.clear_selection ()
-  | _ -> ()
+  | _ -> (
+      match shortcut_key ev with
+      | "a" when mods ev ->
+          D.prevent_default ev;
+          A.select_all ()
+      | "z" when mods ev ->
+          D.prevent_default ev;
+          if shift then A.redo () else A.undo ()
+      | "y" when mods ev ->
+          D.prevent_default ev;
+          A.redo ()
+      | _ -> ())
 
 (* while an autocomplete popup is open its own document listener
    (registered after ours) owns Enter/Tab/Escape/arrows — skip *)

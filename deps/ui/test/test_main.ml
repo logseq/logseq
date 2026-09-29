@@ -132,7 +132,7 @@ let test_update () =
    | Model.Page "foo", None -> check "navigate clears route_page" true
    | _ -> check "navigate clears route_page" false);
   (* toast ids are allocated sequentially *)
-  let toast = { Model.toast_id = 0; toast_text = "hi"; toast_kind = "success" } in
+  let toast = { Model.toast_id = 0; toast_text = "hi"; toast_kind = "success"; toast_key = None } in
   let m3 = Update.update m2 (Action.Toast_push toast) in
   let m3 = Update.update m3 (Action.Toast_push toast) in
   eqi "two toasts" 2 (List.length m3.toasts);

@@ -23,6 +23,7 @@ type t =
   | Dismiss_all (* Escape / outside click *)
   | Toast_push of Model.toast
   | Toast_dismiss of int
+  | Toast_dismiss_key of string
   | Toasts_clear
   | Unlinked_toggle_open
   | Unlinked_toggle_search

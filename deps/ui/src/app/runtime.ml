@@ -84,6 +84,12 @@ let remote_graph_gone : (unit -> unit) ref = ref (fun () -> ())
    appends a downloaded graph to the local list *)
 let add_repo : (string -> unit) ref = ref (fun _ -> ())
 
+(* one-shot (page_uuid, callback) armed before a hash navigation — runs
+   when that page's Page_loaded lands; consumed by fire or load failure *)
+let after_page_load : (string * (unit -> unit)) option ref = ref None
+
+let on_page_loaded uuid f = after_page_load := Some (uuid, f)
+
 let track action =
   match action with
   | Action.Boot_graph_ready repo ->
@@ -92,7 +98,13 @@ let track action =
       !on_graph_opened repo
   | Action.Page_loaded page ->
       current_page := Some page;
-      sync_hash_graph_id ()
+      sync_hash_graph_id ();
+      (match !after_page_load, page.Model.page_uuid with
+       | Some (want, f), Some u when u = want ->
+           after_page_load := None;
+           f ()
+       | _ -> ())
+  | Action.Page_load_failed -> after_page_load := None
   | Action.Journals_loaded js -> current_journals := js
   | Action.Navigate_to r ->
       current_page := None;

@@ -28,6 +28,7 @@ let update (model : t) (action : Action.t) : t =
       ; editing_title = false
       ; page_menu = None
       ; appearance = None
+      ; confirm = None
       ; unlinked_open = false
       ; unlinked_search = false
       ; unlinked_query = ""
@@ -59,6 +60,13 @@ let update (model : t) (action : Action.t) : t =
   | Toast_dismiss id ->
       { model with
         toasts = List.filter (fun (t : toast) -> t.toast_id <> id) model.toasts
+      }
+  | Toast_dismiss_key key ->
+      { model with
+        toasts =
+          List.filter
+            (fun (t : toast) -> t.toast_key <> Some key)
+            model.toasts
       }
   | Toasts_clear -> { model with toasts = [] }
   | Unlinked_toggle_open ->
