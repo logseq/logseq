@@ -1750,14 +1750,17 @@
   (or @*asset-uploading?
       (state/get-editor-action)))
 
-(defn in-shui-popup?
+(defn- focus-in-shui-popup?
   []
-  (or (some-> js/document.activeElement
-              (.closest ".ui__dropdown-menu-content, .ui__popover-content, .ui__context-menu-content")
-              (nil?)
-              (not))
-      (.querySelector js/document.body
-                      ".ui__dropdown-menu-content, .ui__popover-content, .ui__context-menu-content")))
+  (some-> js/document.activeElement
+          (.closest ".ui__dropdown-menu-content, .ui__popover-content, .ui__context-menu-content")))
+
+(defn- focus-in-shui-menu?
+  "True when Tab should leave a menu instead of indenting. The selection
+  action bar is a popover, so it is intentionally excluded."
+  []
+  (some-> js/document.activeElement
+          (.closest ".ui__dropdown-menu-content, .ui__dropdown-menu-sub-content, .ui__context-menu-content, .ui__context-menu-sub-content")))
 
 (defn get-current-input-char
   [input]
@@ -3032,22 +3035,23 @@
 (defn keydown-tab-handler
   [direction]
   (fn [e]
-    (cond
-      (pending-new-block?)
-      (do
-        (util/stop e)
-        (queue-pending-new-block-tab! (not= :left direction)))
+    (when-not (focus-in-shui-menu?)
+      (cond
+        (pending-new-block?)
+        (do
+          (util/stop e)
+          (queue-pending-new-block-tab! (not= :left direction)))
 
-      (state/editing?)
-      (when-not (state/get-editor-action)
-        (util/stop e)
-        (indent-outdent (not (= :left direction))))
+        (state/editing?)
+        (when-not (state/get-editor-action)
+          (util/stop e)
+          (indent-outdent (not (= :left direction))))
 
-      (state/selection?)
-      (do
-        (util/stop e)
-        (state/pub-event! [:editor/hide-action-bar])
-        (on-tab direction)))
+        (state/selection?)
+        (do
+          (util/stop e)
+          (state/pub-event! [:editor/hide-action-bar])
+          (on-tab direction))))
     nil))
 
 (defn- double-chars-typed?
@@ -3503,7 +3507,7 @@
     (state/pub-event! [:editor/hide-action-bar])
     (when (and (not (auto-complete?))
                (or (in-page-preview?)
-                   (not (in-shui-popup?)))
+                   (not (focus-in-shui-popup?)))
                (not (state/get-timestamp-block)))
       (util/stop e)
       (cond

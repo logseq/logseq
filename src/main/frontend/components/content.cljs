@@ -297,11 +297,13 @@
            (shui/dropdown-menu-item
             {:key "Copy block URL"
              :on-click (fn [_e]
-                         (let [tap-f (fn [block-id]
-                                       (url-util/get-logseq-web-block-url config/app-website
-                                                                         (graph-handler/current-graph-id)
-                                                                         block-id))]
-                           (editor-handler/copy-block-ref! block-id tap-f)))}
+                         (if-let [url (url-util/entity-url-for-copy config/app-website
+                                                                    (graph-handler/current-graph-id)
+                                                                    (state/get-current-repo)
+                                                                    (str block-id)
+                                                                    :block)]
+                           (editor-handler/copy-block-ref! block-id (fn [_] url))
+                           (notification/show! (t :block/copy-url-unavailable-warning) :warning)))}
             (t :block/copy-url)))
 
          (when (and (util/electron?) (ldb/asset? block))
