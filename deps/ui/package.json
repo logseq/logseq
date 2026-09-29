@@ -13,6 +13,8 @@
     "vite": "^8.0.10"
   },
   "scripts": {
-    "build": "dune build js_app && vite build"
+    "build": "dune build js_app && vite build",
+    "build:production": "dune build js_app && vite build --mode production",
+    "gen:icon-data": "node scripts/gen-icon-data.mjs"
   }
 }

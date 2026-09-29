@@ -1621,3 +1621,63 @@ list. `Cmdk_state.refresh ?clear` therefore skips the synchronous
 `apply_results` entirely on the debounced input path (`~clear:false`),
 leaving prior groups rendered until the async response replaces them;
 every other caller uses the default `~clear:true`.
+
+## Bundle / production build (devin/lui-prodbuild)
+
+`deps/ui/vite.config.mjs` now has two build modes (vite 8 defaults
+`env.mode` to `"production"` for every `vite build`, so the flag is
+detected on `process.argv`, not `ConfigEnv.mode`):
+
+- `vite build` (`npm run build`): dev bundle — `minify:false`, inline
+  sourcemap, `logseq_dev=true` (cljs `config/dev?` equivalent).
+- `vite build --mode production` (`npm run build:production`):
+  minified (built-in oxc minifier — no new dep), `sourcemap:"hidden"`
+  (emits `main.js.map` without a `sourceMappingURL` comment — cljs
+  release emitted the map and the deploy pipeline stripped it before
+  shipping), `logseq_dev=false`.
+
+Sizes:
+
+| build | main.js bytes | gzip |
+|---|---:|---:|
+| dev | 5,030,558 | 829,429 |
+| production | 2,739,516 | 645,142 |
+| `js/icon-data.js` (both modes) | 1,778,026 | 331,469 |
+
+(Baseline before this branch: dev 8,546,822 / gzip 1,204,745, prod
+4,974,916 / gzip 988,477 — the icon split is responsible for most of
+the delta; minification accounts for the rest.)
+
+### Icon data split (`resources/js/icon-data.js`)
+
+`icon_tabler_data.ml` used to embed all 6,146 tabler icons as a giant
+`match` returning OCaml list literals — 6.8MB of emitted JS, >50% of
+the production bundle. cljs carried the same icon set more compactly:
+`@tabler/icons-react` factories ≈1.78MB minified / 333KB gzip
+(`resources/mobile/js/tabler-icons-react.min.js`).
+
+Now `deps/ui/scripts/gen-icon-data.mjs` (`npm run gen:icon-data`,
+reads `node_modules/@tabler/icons/tabler-nodes-{outline,filled}.json`)
+emits `resources/js/icon-data.js` — `globalThis.__tablerChildren` in
+the same `[[tag, {attr: v}]]` shape. `resources/index.html` loads it
+as a `<script defer>` before `main.js`, and `Icon_tabler_data` is a
+thin binding that decodes entries to the same
+`(tag * (string * string) list) list` the renderers already consumed —
+call sites (`icons.ml`, `editor_dom.ml`) are unchanged. Benefits:
+`main.js` drops ~2.2MB, the icon table parses as a plain JS object
+literal (no cons-cell construction), and it caches independently of
+app code. If `__tablerChildren` is absent (e.g. test environments)
+`tabler_children` returns `[]` and icons degrade to font glyphs, same
+as an unknown icon name before.
+
+Remaining bundle weight is `keymap_data.js` (~445KB source),
+`@emoji-mart/data` (~410KB), `icon_picker_names.js` (~318KB) — all
+candidates for the same treatment — plus melange runtime and npm deps
+(transit-js, dnd-kit, lui); Melange emits CommonJS so tree-shaking
+yields little, and the build is intentionally a single IIFE
+(`codeSplitting:false`).
+
+Verified: `bb test -n logseq.e2e.tag-basic-test -p 3007` (3 tests) and
+`bb test -n logseq.e2e.commands-basic-test -p 3007` (31 tests / 204
+assertions) both pass against the minified bundle + external icon
+data.
