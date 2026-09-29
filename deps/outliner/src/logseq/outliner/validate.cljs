@@ -81,62 +81,66 @@
         (not case-sensitive?)
         '[[(missing? $ ?b :block/parent)]])))))
 
+(defn- throw-duplicate
+  [title payload]
+  (throw (ex-info title {:type :notification :payload payload})))
+
+(defn- colliding-tag-ids
+  "Shared tag idents of the first colliding entity. An entity is exempt when it
+   shares the name under different tags e.g. Apple #Company and Apple #Fruit."
+  [db entity lookup tags]
+  (let [this-tags (set (map :db/ident tags))]
+    (some (fn [another-id]
+            (let [another-tags (set (map :db/ident (:block/tags (d/entity db another-id))))
+                  common-tags (set/intersection this-tags another-tags)]
+              (when-not (and (= common-tags #{:logseq.class/Page})
+                             (> (count this-tags) 1)
+                             (> (count another-tags) 1))
+                common-tags)))
+          (d/q (find-other-ids-with-title-and-tags entity)
+               db
+               (:db/id entity)
+               lookup
+               (map :db/id tags)))))
+
 (defn- validate-unique-for-page
   [db new-title {:block/keys [tags] :as entity}]
   (when (seq tags)
     (let [lookup (if (case-sensitive-title? entity)
                    new-title
                    (common-util/page-name-sanity-lc new-title))
-          this-tags (set (map :db/ident tags))
-          ;; Shared tag idents of the first colliding entity. An entity is
-          ;; exempt when it shares the name under different tags e.g.
-          ;; Apple #Company and Apple #Fruit
-          common-tag-ids (some (fn [another-id]
-                                 (let [another-tags (set (map :db/ident (:block/tags (d/entity db another-id))))
-                                       common-tags (set/intersection this-tags another-tags)]
-                                   (when-not (and (= common-tags #{:logseq.class/Page})
-                                                  (> (count this-tags) 1)
-                                                  (> (count another-tags) 1))
-                                     common-tags)))
-                               (d/q (find-other-ids-with-title-and-tags entity)
-                                    db
-                                    (:db/id entity)
-                                    lookup
-                                    (map :db/id tags)))]
+          common-tag-ids (colliding-tag-ids db entity lookup tags)]
       (when common-tag-ids
-        (let [notify-duplicate (fn [title payload]
-                                 (throw (ex-info title {:type :notification
-                                                        :payload payload})))]
-          (cond
-            (ldb/property? entity)
-            (notify-duplicate "Duplicate property"
-                              {:message (str "Another property named " (pr-str new-title) " already exists.")
-                               :i18n-key :property.validation/duplicate
-                               :i18n-args [new-title]
-                               :type :warning})
+        (cond
+          (ldb/property? entity)
+          (throw-duplicate "Duplicate property"
+                           {:message (str "Another property named " (pr-str new-title) " already exists.")
+                            :i18n-key :property.validation/duplicate
+                            :i18n-args [new-title]
+                            :type :warning})
 
-            (ldb/class? entity)
-            (notify-duplicate "Duplicate class"
-                              {:message (str "Another tag named " (pr-str new-title) " already exists.")
-                               :i18n-key :class.validation/duplicate
-                               :i18n-args [new-title]
-                               :type :warning})
+          (ldb/class? entity)
+          (throw-duplicate "Duplicate class"
+                           {:message (str "Another tag named " (pr-str new-title) " already exists.")
+                            :i18n-key :class.validation/duplicate
+                            :i18n-args [new-title]
+                            :type :warning})
 
-            (= common-tag-ids #{:logseq.class/Page})
-            (notify-duplicate "Duplicate page"
-                              {:message (str "Another page named " (pr-str new-title) " already exists.")
-                               :i18n-key :page.validation/duplicate-name
-                               :i18n-args [new-title]
-                               :type :warning})
+          (= common-tag-ids #{:logseq.class/Page})
+          (throw-duplicate "Duplicate page"
+                           {:message (str "Another page named " (pr-str new-title) " already exists.")
+                            :i18n-key :page.validation/duplicate-name
+                            :i18n-args [new-title]
+                            :type :warning})
 
-            :else
-            (let [common-tags-str (string/join ", " (map (fn [id] (str "#" (:block/title (d/entity db id))))
-                                                         common-tag-ids))]
-              (notify-duplicate "Duplicate page"
-                                {:message (str "Another page named " (pr-str new-title) " already exists for tags: " common-tags-str)
-                                 :i18n-key :page.validation/duplicate
-                                 :i18n-args [new-title common-tags-str]
-                                 :type :warning}))))))))
+          :else
+          (let [common-tags-str (string/join ", " (map (fn [id] (str "#" (:block/title (d/entity db id))))
+                                                       common-tag-ids))]
+            (throw-duplicate "Duplicate page"
+                             {:message (str "Another page named " (pr-str new-title) " already exists for tags: " common-tags-str)
+                              :i18n-key :page.validation/duplicate
+                              :i18n-args [new-title common-tags-str]
+                              :type :warning})))))))
 
 (defn ^:api validate-unique-by-name-and-tags
   "Validates uniqueness of nodes for the following cases:
