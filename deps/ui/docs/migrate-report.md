@@ -1653,3 +1653,18 @@ every other caller uses the default `~clear:true`.
   a `[role=menuitem]` inside `.ls-context-menu-content` /
   `.ui__dropdown-menu-sub-content` sets `data-highlighted` (→
   `bg-muted`), cleared on the previously hovered row.
+
+## Page-menu dialogs (parity: `devin/lui-parity2`)
+
+- **`shui/dialog-confirm!` contract (delete page)**: title is a
+  `flex gap-2 items-center` row with a `span.relative` tabler
+  `alert-triangle` icon + the confirm title text; body is
+  `p.opacity-60` containing `- <page title>` (not a description
+  sentence). `Model.Confirm_delete_page` therefore carries
+  `(uuid, title, permanent?)` — `permanent` swaps the title text to
+  the `:page.delete/permanent-confirm-title` wording for class
+  entities, property entities, and today's journal.
+- **`shui/button` default variant is filled primary**
+  (`bg-primary text-primary-foreground hover:bg-primary/90`) —
+  e.g. the publish-page submit. `btn_base` alone renders ghost-like;
+  append the primary classes for a default-variant button.

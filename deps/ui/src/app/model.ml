@@ -91,7 +91,7 @@ type phase =
 
 (* modal confirm intent — carried as data so it survives the reducer *)
 type confirm =
-  | Confirm_delete_page of string (* page uuid *)
+  | Confirm_delete_page of string * string * bool (* uuid, title, permanent? *)
   | Confirm_convert_tag_to_page of int (* class db/id *)
   | Confirm_delete_asset of string (* asset block uuid *)
 
