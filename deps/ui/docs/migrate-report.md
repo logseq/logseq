@@ -1590,3 +1590,22 @@ Known leftovers:
 - **`/Add property` type picker** lists
   `user-built-in-property-types` in order: default(Text), number,
   date, datetime, checkbox, url, node, asset.
+
+## Asset store (e2e: assets_basic_test)
+
+`url_cache` is keyed `repo ^ "|" ^ name` (`A.cache_key`) — every lookup
+must go through it; a bare-file lookup silently yields "" for `src`.
+cljs `asset.cljs` `img-src` falls back to a data URL via
+`get-asset-file-object-url` when the pfs read lands after first paint;
+OCaml resolves eagerly before the view mounts (`Sync.init` /
+`sync_assets_after_boot`), so `asset-img` renders a real object URL
+immediately and needs no async repaint.
+
+## Cmdk (e2e: cmdk_scroll_basic_test) — visible-results contract
+
+cljs `load-results :nodes` keeps the previous `:items` visible while
+the worker query is in flight — keystrokes never empty the result
+list. `Cmdk_state.refresh ?clear` therefore skips the synchronous
+`apply_results` entirely on the debounced input path (`~clear:false`),
+leaving prior groups rendered until the async response replaces them;
+every other caller uses the default `~clear:true`.
