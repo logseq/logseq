@@ -19,6 +19,7 @@
      exists inside the plugin sandbox. *)
 
 open Lui_elements
+open Promise_ext
 module B = Browser_ui
 
 let dom = Logseq_dom.dom
@@ -68,13 +69,11 @@ let rec fetch_first urls : (string * string) option Js.Promise.t =
   match urls with
   | [] -> Js.Promise.resolve None
   | u :: rest ->
-      fetch_ u
-      |> Js.Promise.then_ (fun r ->
-             if resp_status r = 200 then
-               resp_text r
-               |> Js.Promise.then_ (fun s ->
-                      Js.Promise.resolve (Some (u, s)))
-             else fetch_first rest)
+      (let* r = fetch_ u in
+       if resp_status r = 200 then
+         let* s = resp_text r in
+         Js.Promise.resolve (Some (u, s))
+       else fetch_first rest)
       |> Js.Promise.catch (fun _ -> fetch_first rest)
 
 let strip_dots s =
@@ -143,19 +142,17 @@ let abs_image_links dir content =
   Buffer.contents b
 
 let readme_html url : string option Js.Promise.t =
-  fetch_first (endpoints url)
-  |> Js.Promise.then_ (function
-       | Some (readme_url, md) when String.trim md <> "" ->
-           let dir =
-             match String.rindex_opt readme_url '/' with
-             | Some i -> String.sub readme_url 0 (i + 1)
-             | None -> readme_url ^ "/"
-           in
-           Js.Promise.resolve
-             (Some
-                (Markdown.markdown_to_html
-                   (abs_image_links dir md)))
-       | _ -> Js.Promise.resolve None)
+  let* found = fetch_first (endpoints url) in
+  match found with
+  | Some (readme_url, md) when String.trim md <> "" ->
+      let dir =
+        match String.rindex_opt readme_url '/' with
+        | Some i -> String.sub readme_url 0 (i + 1)
+        | None -> readme_url ^ "/"
+      in
+      Js.Promise.resolve
+        (Some (Markdown.markdown_to_html (abs_image_links dir md)))
+  | _ -> Js.Promise.resolve None
 
 (* cljs open-readme! *)
 let open_readme (item : Js.Json.t) =
@@ -171,18 +168,18 @@ let open_readme (item : Js.Json.t) =
     Dialogs_state.open_ "plugin-readme")
   else
     ignore
-      (readme_html url
-       |> Js.Promise.then_ (function
-            | Some html ->
-                pending := Some { url; repo = ""; repository; html };
-                Dialogs_state.open_ "plugin-readme";
-                (match B.qs "#ls-plugin-readme-content" with
-                 | Some el -> B.inner_html_set el html
-                 | None -> ());
-                Js.Promise.resolve ()
-            | None ->
-                Toast.warning I18n.plugin_readme_empty;
-                Js.Promise.resolve ()))
+      (let* html = readme_html url in
+       match html with
+       | Some html ->
+           pending := Some { url; repo = ""; repository; html };
+           Dialogs_state.open_ "plugin-readme";
+           (match B.qs "#ls-plugin-readme-content" with
+            | Some el -> B.inner_html_set el html
+            | None -> ());
+           Js.Promise.resolve ()
+       | None ->
+           Toast.warning I18n.plugin_readme_empty;
+           Js.Promise.resolve ())
 
 (* cljs local-markdown-display *)
 let body (_ms : Model.t Signal.signal) : t =

@@ -4,6 +4,7 @@
    :thread-api/export-get-blocks-data and are formatted client-side in
    Export_formats (mldoc is native-only); EDN via :thread-api/export-edn. *)
 
+open Promise_ext
 module W = Wire
 module B = Browser_ui
 module S = Export_state
@@ -158,29 +159,27 @@ let export_png (st : S.t Signal.state) =
           ; "scale", Js.Json.number 1.
           ; "windowHeight", Js.Json.number (el_scroll_height container) ]
       in
-      html2canvas_ container options
-      |> Js.Promise.then_ (fun cv ->
-             canvas_to_blob cv
-               (fun blob ->
-                 match Js.Nullable.toOption blob with
-                 | Some blob ->
-                     (match (Signal.get_state st).png_url with
-                      | Some old -> Webapi.Url.revokeObjectURL old
-                      | None -> ());
-                     let url =
-                       Webapi.Url.createObjectURL (blob_as_file blob)
-                     in
-                     Signal.update st (fun s ->
-                         { s with
-                           png = Some blob; png_url = Some url });
-                     Runtime.flush ();
-                     (* cljs sets img#export-preview .src imperatively *)
-                     (match B.qs "#export-preview" with
-                      | Some img -> B.set_attr img "src" url
-                      | None -> ())
-                 | None -> ())
-               "image/png";
-             Js.Promise.resolve ())
+      (let* cv = html2canvas_ container options in
+       canvas_to_blob cv
+         (fun blob ->
+           match Js.Nullable.toOption blob with
+           | Some blob ->
+               (match (Signal.get_state st).png_url with
+                | Some old -> Webapi.Url.revokeObjectURL old
+                | None -> ());
+               let url =
+                 Webapi.Url.createObjectURL (blob_as_file blob)
+               in
+               Signal.update st (fun s ->
+                   { s with png = Some blob; png_url = Some url });
+               Runtime.flush ();
+               (* cljs sets img#export-preview .src imperatively *)
+               (match B.qs "#export-preview" with
+                | Some img -> B.set_attr img "src" url
+                | None -> ())
+           | None -> ())
+         "image/png";
+       Js.Promise.resolve ())
       |> Js.Promise.catch (fun _ -> Js.Promise.resolve ())
       |> ignore
 
