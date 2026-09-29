@@ -1184,6 +1184,7 @@
  :page.validation/alias-source-is-alias "已作为别名的页面不能拥有自己的别名。"
  :page.validation/cant-set-built-in-tags "新页面不能设置内置标签：{1}"
  :page.validation/duplicate "另一个名为“{1}”的页面已存在，其标签为：{2}。"
+ :page.validation/duplicate-name "另一个名为“{1}”的页面已存在。"
  :page.validation/name-blank "页面名称不能为空。"
  :page.validation/name-no-hash "页面名不能包含 \"#\"。"
  :page.validation/name-no-slash "页面名称不能包含 /。"

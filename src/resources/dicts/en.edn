@@ -1184,6 +1184,7 @@
  :page.validation/alias-source-is-alias "A page that is an alias of another page can't have its own aliases."
  :page.validation/cant-set-built-in-tags "New page can't set built-in tags: {1}"
  :page.validation/duplicate "Another page named \"{1}\" already exists for tags: {2}."
+ :page.validation/duplicate-name "Another page named \"{1}\" already exists."
  :page.validation/name-blank "Page name can't be blank."
  :page.validation/name-no-hash "Page name can't include \"#\"."
  :page.validation/name-no-slash "Page name can't include \"/\"."
