@@ -679,10 +679,24 @@ let drop_dragged_block src tgt move_to =
         let parent_uuid =
           match S.find_parent tgt with
           | Some (Some p, _) -> p.Model.block_uuid
-          | _ -> (
+          | Some (None, _) -> (
+              (* top-level block: the parent is the containing page —
+                 journals views keep their pages in current_journals
+                 instead of current_page *)
               match !Runtime.current_page with
               | Some page -> page.Model.page_uuid
-              | None -> None)
+              | None ->
+                  List.find_map
+                    (fun (p : Model.page) ->
+                      if
+                        List.exists
+                          (fun (b : Model.block) ->
+                            b.Model.block_uuid = Some tgt)
+                          p.Model.page_blocks
+                      then p.Model.page_uuid
+                      else None)
+                    !Runtime.current_journals)
+          | None -> None
         in
         match parent_uuid with
         | Some pu ->
