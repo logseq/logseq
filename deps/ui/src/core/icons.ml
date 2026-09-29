@@ -45,13 +45,21 @@ let pascal name =
 ;;
 
 let kebab name =
+  (* csk/->kebab-case: separators and lower->upper boundaries become '-';
+     collapsing repeats, no leading dash *)
   let b = Buffer.create (String.length name + 4) in
+  let prev_dash = ref true in
   String.iter
     (fun c ->
-      if c >= 'A' && c <= 'Z' then (
-        Buffer.add_char b '-';
-        Buffer.add_char b (Char.lowercase_ascii c))
-      else Buffer.add_char b c)
+      if c = ' ' || c = '_' || c = '-' then (
+        if not !prev_dash then Buffer.add_char b '-';
+        prev_dash := true)
+      else (
+        (if c >= 'A' && c <= 'Z' then (
+           if not !prev_dash then Buffer.add_char b '-';
+           Buffer.add_char b (Char.lowercase_ascii c))
+         else Buffer.add_char b c);
+        prev_dash := false))
     name;
   Buffer.contents b
 ;;
@@ -128,22 +136,34 @@ let ext_svg ?(size = 18.) name =
 ;;
 
 (* @tabler/icons-react svg attrs (size -> width/height) *)
-let base_svg ~size name : Lui_elements.t list =
-  match Icon_tabler_data.tabler_children name with
+let tabler_svg_attrs ~size ~filled name cls : (string * string) list =
+  let base =
+    if filled then
+      [ ("fill", "currentColor"); ("stroke", "none") ]
+    else
+      [ ("fill", "none")
+      ; ("stroke", "currentColor")
+      ; ("stroke-width", "2")
+      ; ("stroke-linecap", "round")
+      ; ("stroke-linejoin", "round") ]
+  in
+  [ ("xmlns", "http://www.w3.org/2000/svg")
+  ; ("width", Printf.sprintf "%g" size)
+  ; ("height", Printf.sprintf "%g" size)
+  ; ("viewBox", "0 0 24 24") ]
+  @ base @ [ ("class", "tabler-icon tabler-icon-" ^ name ^ cls) ]
+
+let is_filled name = String.ends_with ~suffix:"-filled" name
+
+let base_svg ~size ?(cls = "") name : Lui_elements.t list =
+  (* the tabler children data is kebab-keyed; callers pass cljs icon
+     names verbatim (camelCase or spaced), so normalize first *)
+  let n = kebab name in
+  match Icon_tabler_data.tabler_children n with
   | [] -> []
   | kids ->
       [ D.dom ~tag:"svg"
-          ~attrs:
-            [ ("xmlns", "http://www.w3.org/2000/svg")
-            ; ("width", Printf.sprintf "%g" size)
-            ; ("height", Printf.sprintf "%g" size)
-            ; ("viewBox", "0 0 24 24")
-            ; ("fill", "none")
-            ; ("stroke", "currentColor")
-            ; ("stroke-width", "2")
-            ; ("stroke-linecap", "round")
-            ; ("stroke-linejoin", "round")
-            ; ("class", "tabler-icon tabler-icon-" ^ name ^ " ") ]
+          ~attrs:(tabler_svg_attrs ~size ~filled:(is_filled n) n (" " ^ cls))
           (List.map
              (fun (tag, attrs) -> D.dom ~tag ~attrs [])
              kids) ]
@@ -161,10 +181,25 @@ let icon ?(size = 18.) ?(cls = "") name : Lui_elements.t =
           D.dom ~tag:"span" ~style_class:("ui__icon ti ls-icon-" ^ name ^ cls)
             els
       | [] ->
-          let n = kebab name in
-          let prefix = if List.mem n tie_names then "tie tie-" else "ti ti-" in
-          D.dom ~tag:"span" ~style_class:("ui__icon " ^ prefix ^ n ^ cls) [])
+          (* cljs font-icon keeps the raw name in the glyph class *)
+          let prefix =
+            if List.mem (kebab name) tie_names then "tie tie-"
+            else "ti ti-"
+          in
+          D.dom ~tag:"span" ~style_class:("ui__icon " ^ prefix ^ name ^ cls)
+            [])
 ;;
+
+(* raw icon svg without the ui__icon span wrapper — cljs renders the
+   svg directly where the call site already provides positioning (e.g.
+   submenu chevrons) *)
+let raw ?(size = 18.) ?(cls = "") name : Lui_elements.t =
+  match ext_svg ~size name with
+  | Some (el :: _) -> el
+  | Some [] | None -> (
+      match base_svg ~size ~cls name with
+      | el :: _ -> el
+      | [] -> D.dom ~tag:"i" ~style_class:("ti ti-" ^ kebab name) [])
 
 (* bare font glyph without the ui__icon wrapper (existing call sites) *)
 let font name = D.dom ~tag:"i" ~style_class:("ti ti-" ^ kebab name) []

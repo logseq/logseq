@@ -42,12 +42,14 @@ let close_btn =
   dom ~key:"dlg-close" ~tag:"button"
     ~style_class:
       "ui__dialog-close absolute right-4 top-4 rounded-sm opacity-70 \
-       transition-opacity hover:opacity-100"
-    ~attrs:[ ("aria-label", "Close"); ("type", "button") ]
+       ring-offset-background transition-opacity hover:opacity-100 \
+       focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 \
+       disabled:pointer-events-none"
+    ~attrs:[ ("type", "button") ]
     ~events:"click"
     ~on_dom_event:(fun name _ ->
       if name = "click" then Dialogs_state.close_top ())
-    [ dom ~key:"x" ~tag:"i" ~style_class:"ti ti-x h-4 w-4" [] ]
+    [ Icons.raw ~cls:"h-4 w-4" "x" ]
 
 let body_of name (ms : Model.t Signal.signal) : t =
   match name with
@@ -99,9 +101,18 @@ let dialog_view name (ms : Model.t Signal.signal) : t =
            ]
           @
           match label_of name with
-          | Some l -> [ ("label", l) ]
-          | None -> [])
-        [ body_of name ms; close_btn ]
+          | Some l -> [ ("label", l); ("role", "dialog") ]
+          | None -> [ ("role", "dialog") ])
+        (* cljs shui dialog/core: h2.ui__dialog-title (hidden when the
+           dialog has no title) then .ui__dialog-main-content > body *)
+        [ dom ~key:("dlg-t-" ^ name) ~tag:"h2"
+            ~style_class:
+              "ui__dialog-title text-lg font-semibold leading-none \
+               tracking-tight hidden"
+            []
+        ; dom ~key:("dlg-m-" ^ name) ~style_class:"ui__dialog-main-content"
+            [ body_of name ms ]
+        ; close_btn ]
     ]
 
 let btn key label extra act =
@@ -226,22 +237,20 @@ let render (ms : Model.t Signal.signal) : t =
   let prompt_sig =
     Signal.map (fun (d : Dialogs_state.t) -> d.prompt) ds
   in
-  let node =
-    box ~key:"dialogs-root"
-      [ keyed ~source:dialogs_sig ~key:(fun n -> n) ~cmp:String.compare
-          ~mount:(fun name_sig ->
-            (* name is stable per key — sample once *)
-            dialog_view (Signal.get name_sig) ms)
-      ; dyn ~equal:( == ) (fun c ->
-            match c with
-            | Some c -> confirm_view c
-            | None -> box ~key:"no-confirm" [])
-          confirm_sig
-      ; dyn ~equal:( == ) (fun p ->
-            match p with
-            | Some p -> prompt_view p
-            | None -> box ~key:"no-prompt" [])
-          prompt_sig
-      ]
-  in
-  node ctx parent
+  Logseq_dom.fragment
+    [ keyed ~source:dialogs_sig ~key:(fun n -> n) ~cmp:String.compare
+        ~mount:(fun name_sig ->
+          (* name is stable per key — sample once *)
+          dialog_view (Signal.get name_sig) ms)
+    ; dyn ~equal:( == ) (fun c ->
+          match c with
+          | Some c -> confirm_view c
+          | None -> Logseq_dom.nothing)
+        confirm_sig
+    ; dyn ~equal:( == ) (fun p ->
+          match p with
+          | Some p -> prompt_view p
+          | None -> Logseq_dom.nothing)
+        prompt_sig
+    ]
+    ctx parent

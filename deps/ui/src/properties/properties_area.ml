@@ -240,12 +240,9 @@ let new_property_btn (ctx : V.ctx) ~for_class ~owner_title =
       ~attrs:[ ("tabindex", "0")
              ; ("aria-label", I18n.t "property/add-new") ]
   in
-  (* shui ui/icon markup: span.ui__icon.ti.ls-icon-plus > i.ti.ti-plus *)
-  let plus =
-    mk ~cls:"ui__icon ti ls-icon-plus bottom-property-action-icon" "span"
-  in
-  el_append_child plus (mk ~cls:"ti ti-plus" "i");
-  el_append_child btn plus;
+  (* shui ui/icon markup: span.ui__icon.ti.ls-icon-plus > svg *)
+  el_append_child btn
+    (ui_icon_el ~cls:"bottom-property-action-icon" "plus");
   ignore
     (child_text "span" "" (I18n.t "property/add-new") btn);
   el_append_child wrap btn;
@@ -427,10 +424,12 @@ let block_uuid_of_ls_block el =
     Some (String.sub id 9 (String.length id - 9))
   else None
 
-(* the indent container hosting area + pills inside the block column *)
-let ensure_indent_for col_el uuid =
-  let sel = ".ls-block-content-indent" in
-  match el_query col_el sel with
+(* the indent container hosting area + pills: cljs emits ONE
+   .ls-block-content-indent per ls-block (sibling of block-main-container)
+   and renders db-properties-cp inside it, so reuse the tree-emitted
+   indent instead of appending a second one inside the column *)
+let ensure_indent_for block_el col_el uuid =
+  match el_query block_el ":scope > .ls-block-content-indent" with
   | Some e -> Some e
   | None ->
       let ind = mk ~cls:"ls-block-content-indent" "div" in
@@ -449,7 +448,7 @@ let mount_block_area block_el uuid =
   match col with
   | None -> ()
   | Some col -> (
-      match ensure_indent_for col uuid with
+      match ensure_indent_for block_el col uuid with
       | None -> ()
       | Some ind -> (
           match el_get_attr ind "data-props-mounted" with
@@ -532,8 +531,8 @@ let ghost_btn_cls =
    focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 \
    disabled:pointer-events-none disabled:opacity-50 select-none \
    hover:bg-secondary/70 hover:text-secondary-foreground \
-   active:opacity-80 as-ghost h-7 rounded px-3 py-1 \
-   px-2 py-0 h-6 text-xs text-muted-foreground"
+   active:opacity-80 as-ghost h-6 rounded px-2 py-0 \
+   text-xs text-muted-foreground"
 
 (* title action buttons — cljs db-page-title-actions: "Add icon" (when no
    icon prop) + "Set property"/"Add tag property"/"Configure" *)
@@ -542,7 +541,9 @@ let title_actions (p : Model.page) =
   let row = mk ~cls:"flex flex-row items-center gap-2" "div" in
   let uuid = Option.value ~default:"" p.Model.page_uuid in
   let add_btn label on =
-    let btn = mk "button" ~cls:ghost_btn_cls in
+    let btn =
+      mk "button" ~cls:ghost_btn_cls ~attrs:[ ("type", "button") ]
+    in
     el_set_text btn label;
     el_append_child row btn;
     on_click btn on
@@ -754,21 +755,38 @@ let mount_page_props page_inner (p : Model.page) uuid =
     let bidi =
       mk ~cls:"w-full ls-bidirectional-properties mt-8" "div"
     in
+    (* cljs emits the properties <div> child of .ls-block only while the
+       page title isn't collapsed — create it lazily on first attach and
+       eagerly only when the title starts expanded *)
     let holder =
-      match el_query page_inner ".ls-page-title .ls-block" with
-      | Some block_el ->
-          let h = mk "div" in
-          el_append_child block_el h;
-          h
-      | None -> mk "div"
+      let h = ref None in
+      fun () ->
+        match !h with
+        | Some el -> el
+        | None ->
+            let el =
+              match el_query page_inner ".ls-page-title .ls-block" with
+              | Some block_el ->
+                  let d = mk "div" in
+                  el_append_child block_el d;
+                  d
+              | None -> mk "div"
+            in
+            h := Some el;
+            el
     in
+    let title_collapsed =
+      (not (Editor_state.is_expanded uuid))
+      && (Editor_state.is_collapsed uuid || p.Model.page_is_tag)
+    in
+    if not title_collapsed then ignore (holder ());
     let attach_area () =
-      if not (el_is_connected area) then el_append_child holder area
+      if not (el_is_connected area) then el_append_child (holder ()) area
     in
     let attach_bidi () =
       if not (el_is_connected bidi) then (
         attach_area ();
-        el_append_child holder bidi)
+        el_append_child (holder ()) bidi)
     in
     let detach () =
       if el_is_connected bidi then el_remove bidi;

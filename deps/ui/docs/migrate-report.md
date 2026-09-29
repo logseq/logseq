@@ -1151,3 +1151,54 @@ search may lag).
   (Melange→node). `Platform.local_storage_*` resolves the storage
   object via `globalThis` and no-ops when absent, because
   `Model.initial` touches storage at module init under node.
+||||||| parent of be25c4ee95 (fix(ui): parity sweep — journals scaffolding, route-conditional content-wrap, ref-summary maps in block/refs, icon picker set)
+
+## Parity sweep fixes
+
+Visual parity sweep (LUI vs cljs at :3003) — DOM compared region-by-region
+via Playwright probes for: #Journal tag page, journal day page (linked
+references, block hover, block context menu), slash menu, #tag popup,
+[[ autocomplete, properties panel, icon picker, settings dialog,
+{{embed [[page]]}}, favorites sidebar.
+
+- **Journals page scaffolding**: `#journals` now wraps items in the cljs
+  `div > div > div[data-testid=virtuoso-item-list] > div > .journal-item`
+  chain (all-journals custom-scroll-parent layout); the route renders
+  inside a `journals-root` wrapper like cljs container.cljs's extra div.
+- **content-wrap is route-conditional**: `mx-auto pb-24` +
+  `margin-bottom: 120px` only for regular routes; journals/home routes
+  keep an empty class and `margin-bottom: 0` (cljs container.cljs:118).
+- **home button unmounts on Home route**: emits nothing (cljs
+  `when-not home?`), not an empty `.lui-box` div.
+- **`{{embed}}` macro**: renders `div.warning` with the
+  `block.macro/embed-deprecated` string, matching cljs block.cljs:1951.
+- **page-ref `data-ref` is the resolved entity uuid**: `[[name]]` and
+  `#[[name]]` anchors update `data-ref` from the resolved uuid via a
+  uuid signal (cljs page-reference behavior); `((uuid))` deprecated
+  block-ref keeps the same page-reference shell.
+- **block/refs entries for existing pages carry `block/name`**: LUI used
+  to emit bare `[:block/uuid u]` lookup-refs; cljs `use-cached-refs`
+  swaps parsed refs for the cached entity's ref-summary map
+  (`db/id`/`block/uuid`/`block/title`/`block/name`/`db/ident`/`block/tags`).
+  The worker's `remove-orphaned-page-refs` names refs via `block/name`;
+  a bare lookup made a still-referenced page look orphaned → retracted
+  mid-tx → the `[:block/uuid u]` assert then threw
+  `Invalid_argument(Nothing found for entity id ...)`, failing the whole
+  save-block tx. LUI now emits the same select-keys map.
+- **Icon picker**: full tabler set (~6203 entries) in
+  `icon_picker_names.ml`, filled variants, same grid/tab/search DOM.
+- **Slash / # / [[ popups**: group wrapper divs, item rows, status icon
+  names and label spans aligned to cljs popup structure.
+- **Settings/favorites/tag page/properties/block menus**: verified
+  identical after the above; only unfixable noise remains (below).
+
+Known unfixable / nondeterministic leftovers:
+- `Revision: dev` vs `16c4ed1a04` in the settings footer — build-time
+  revision string.
+- cljs popover/menu/input ids are per-mount random (`_r_f_`,
+  `base-ui-_r_n_`, `slot__*`, `-hidden-input` id suffixes).
+- Wall-clock timestamps, lazy-resolved ref titles, block `selected`
+  state, and typed-text leftovers in probes are interaction timing.
+- `#Journal` tag save is rejected on both sides ("Can't set tag with
+  built-in #Journal" — private built-in class), so seeded probes that
+  use it leave the same is-blank block on both.

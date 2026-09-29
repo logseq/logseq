@@ -25,95 +25,57 @@ let em_emoji_el ?(cls = "") (id : string) : E.el =
   D.mk ~cls ~attrs:[ ("id", id) ] "em-emoji"
 
 (* icon value {type,id} -> display element *)
-let icon_el ?(cls = "") (ty, id) : E.el =
+let icon_el ?(size = 18.) ?(cls = "") (ty, id) : E.el =
   match ty with
   | "emoji" -> em_emoji_el ~cls id
-  | _ ->
-      let i = D.mk ~cls:("ti ti-" ^ id) "i" in
-      let span =
-        D.mk ~cls:("ui__icon ti ls-icon-" ^ id ^ " " ^ cls) "span"
-      in
-      D.el_append_child span i;
-      span
+  | _ -> D.ui_icon_el ~size ~cls id
 
-(* ---------- tabler icon names from the icon font stylesheet ---------- *)
+(* cljs ui__button base + variant/size classes (shui/button) *)
+let btn_base =
+  "ui__button inline-flex cursor-pointer items-center justify-center \
+   whitespace-nowrap rounded-md text-sm gap-1 font-medium \
+   ring-offset-background transition-colors focus-visible:outline-none \
+   focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 \
+   disabled:pointer-events-none disabled:opacity-50 select-none"
 
-external style_sheets : Js.Json.t = "styleSheets" [@@mel.scope "document"]
+let btn_ghost_sm =
+  btn_base
+  ^ " hover:bg-secondary/70 hover:text-secondary-foreground \
+      active:opacity-80 as-ghost rounded h-7 px-3 py-1"
 
-(* StyleSheetList / CSSRuleList are array-like, not real Arrays — access
-   by length + index instead of Js.Json.decodeArray. *)
-external list_length : Js.Json.t -> int = "length" [@@mel.get]
+let btn_outline_sm =
+  btn_base
+  ^ " border bg-background hover:bg-accent hover:text-accent-foreground \
+      active:opacity-80 as-outline rounded h-7 px-3 py-1"
 
-external list_item : Js.Json.t -> int -> Js.Json.t = "" [@@mel.get_index]
+(* cljs util/classnames joins [{:active a} "tab-item"] with "," *)
+let tab_item_cls active =
+  btn_ghost_sm ^ " " ^ if active then "active,tab-item" else ",tab-item"
+
+let ui_input_cls =
+  "ui__input flex h-10 w-full rounded-md border border-input bg-background \
+   px-3 py-2 text-sm ring-offset-background file:border-0 \
+   file:bg-transparent file:text-sm file:font-medium \
+   placeholder:text-muted-foreground focus-visible:outline-none \
+   focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 \
+   disabled:cursor-not-allowed disabled:opacity-50"
 
 external el_style : E.el -> Js.Json.t = "style" [@@mel.get]
 
 external style_set : Js.Json.t -> string -> string -> unit = "setProperty"
   [@@mel.send]
 
-let name_of_selector (s : string) : string option =
-  (* ".ti-<name>::before" single-selector rules only (the browser
-     serializes :before to ::before) *)
-  let n = String.length s in
-  let pre = 4 + 8 in
-  if n > pre && String.sub s 0 4 = ".ti-"
-     && String.sub s (n - 8) 8 = "::before"
-     && not (String.contains s ',')
-  then Some (String.sub s 4 (n - pre))
-  else None
+(* ---------- tabler icon names ---------- *)
 
-let sheet_icon_names (sheet : Js.Json.t) : string list =
-  try
-    let rules = Platform.json_prop sheet "cssRules" in
-    let n = list_length rules in
-    let rec go i acc =
-      if i >= n then List.rev acc
-      else
-        go (i + 1)
-          (match
-             Js.Json.decodeString (Platform.json_prop (list_item rules i) "selectorText")
-           with
-           | Some s -> (
-               match name_of_selector s with
-               | Some x -> x :: acc
-               | None -> acc)
-           | None -> acc)
-    in
-    go 0 []
-  with _ -> [] (* cross-origin sheets throw on cssRules *)
+(* cljs get-tabler-icons enumerates @tabler/icons-react exports in order
+   and csk-prettifies them into display names ("Abacus Off"); the bundled
+   list in Icon_picker_names keeps (display, kebab) pairs in that order. *)
+let icon_items () = Array.to_list Icon_picker_names.items
 
-let cached_icon_names : string list option ref = ref None
-
-let icon_names () =
-  match !cached_icon_names with
-  | Some n -> n
-  | None ->
-      let n =
-        let sheets = style_sheets in
-        let total = list_length sheets in
-        let rec go i acc =
-          if i >= total then acc
-          else go (i + 1) (sheet_icon_names (list_item sheets i) :: acc)
-        in
-        List.concat (List.rev (go 0 []))
-      in
-      cached_icon_names := Some n;
-      n
-
-(* cljs csk display name: "a-b-2" -> "A B 2" *)
-let display_name (name : string) =
-  String.split_on_char '-' name
-  |> List.map (fun w ->
-         if w = "" then w
-         else
-           String.make 1 (Char.uppercase_ascii w.[0])
-           ^ String.sub w 1 (String.length w - 1))
-  |> String.concat " "
-
-(* cljs icon-cp strips spaces from the display name to form the id:
-   "A B 2" -> "AB2". Our ids come straight from the font so they are
-   already kebab names. *)
-let icon_id name = name
+(* cljs icon-cp strips spaces from the display name to form the id/title:
+   "A B 2" -> "AB2" *)
+let icon_id display =
+  String.concat "" (String.split_on_char ' ' display)
 
 let rec take n xs =
   match n, xs with
@@ -128,8 +90,9 @@ let contains_ci hay needle =
   nl = 0 || go 0
 
 let search_icons q =
-  icon_names ()
-  |> List.filter (fun n -> contains_ci n q || contains_ci (display_name n) q)
+  icon_items ()
+  |> List.filter (fun (display, kebab) ->
+         contains_ci display q || contains_ci kebab q)
   |> take 100
 
 (* ---------- frequently used (storage :ui/ls-icons-used) ---------- *)
@@ -200,11 +163,12 @@ type picker =
   ; mutable bd : E.el option
   ; mutable pane : E.el option
   ; mutable root : E.el option
+  ; mutable pal_wrap : E.el option
   }
 
 type item =
   | Emoji_item of string * string
-  | Tabler_item of string
+  | Tabler_item of string * string (* display name, kebab svg name *)
 
 let tab_name = function
   | Tab_all -> "all"
@@ -248,7 +212,17 @@ let choose (p : picker) (c : choice) =
          , match List.assoc_opt id (all_emojis ()) with
            | Some n -> n
            | None -> id )
-   | Tabler (id, _) -> add_used_item ("tabler-icon", id, display_name id)
+   | Tabler (id, _) ->
+       let display =
+         match
+           List.find_opt
+             (fun (d, _) -> icon_id d = id)
+             (icon_items ())
+         with
+         | Some (d, _) -> d
+         | None -> id
+       in
+       add_used_item ("tabler-icon", id, display)
    | Remove -> ());
   p.on_chosen c
 
@@ -257,21 +231,28 @@ let item_btn (p : picker) (it : item) : E.el =
   | Emoji_item (id, name) ->
       let b =
         D.mk ~cls:"text-2xl w-9 h-9 transition-opacity"
-          ~attrs:[ ("title", name); ("type", "button"); ("tabindex", "0") ]
+          ~attrs:[ ("title", name); ("tabindex", "0") ]
           "button"
       in
       D.el_append_child b (em_emoji_el id);
       D.on_click b (fun _ -> choose p (Emoji id));
       b
-  | Tabler_item name ->
+  | Tabler_item (display, kebab) ->
       let b =
         D.mk ~cls:"w-9 h-9 transition-opacity"
-          ~attrs:
-            [ ("title", icon_id name); ("type", "button"); ("tabindex", "0") ]
+          ~attrs:[ ("title", icon_id display); ("tabindex", "0") ]
           "button"
       in
-      D.el_append_child b (icon_el ("tabler-icon", name));
-      D.on_click b (fun _ -> choose p (Tabler (name, preset_color ())));
+      (* cljs ui/icon called with the display name: the ls-icon class
+         keeps the spaces verbatim, the svg uses the kebab name *)
+      let span =
+        D.mk ~cls:("ui__icon ti ls-icon-" ^ display) "span"
+      in
+      (match D.tabler_svg_el ~size:24. kebab with
+       | Some svg -> D.el_append_child span svg
+       | None -> ());
+      D.el_append_child b span;
+      D.on_click b (fun _ -> choose p (Tabler (icon_id display, preset_color ())));
       b
 
 let rec chunks n xs =
@@ -329,7 +310,14 @@ let used_section_items (p : picker) : E.el list =
   used_items ()
   |> List.map (fun (typ, id, name) ->
          if typ = "emoji" then item_btn p (Emoji_item (id, name))
-         else item_btn p (Tabler_item id))
+         else
+           match
+             List.find_opt
+               (fun (d, _) -> icon_id d = id)
+               (icon_items ())
+           with
+           | Some (d, k) -> item_btn p (Tabler_item (d, k))
+           | None -> item_btn p (Tabler_item (name, Icons.kebab name)))
 
 let render_tab (p : picker) =
   clear_pane p;
@@ -338,23 +326,27 @@ let render_tab (p : picker) =
       let wrap = D.mk ~cls:"flex flex-1 flex-col gap-1" "div" in
       (match p.tab with
        | Tab_all ->
-           D.el_set_class wrap "all-pane pb-10";
+           let inner = D.mk ~cls:"all-pane pb-10" "div" in
            let used = used_section_items p in
            (if used <> [] then
-              D.el_append_child wrap
+              D.el_append_child inner
                 (pane_section (I.t "ui/frequently-used") used));
-           D.el_append_child wrap
+           D.el_append_child inner
              (pane_section
                 (I.tf "icon/emojis-count" [ string_of_int (emoji_count ()) ])
                 (List.map (fun (id,n) -> item_btn p (Emoji_item (id,n)))
                    (take 32 (all_emojis ()))));
-           D.el_append_child wrap
+           D.el_append_child inner
              (pane_section
                 (I.tf "icon/icons-count"
-                   [ string_of_int (List.length (icon_names ())) ])
-                (List.map (fun n -> item_btn p (Tabler_item n))
-                   (take 48 (icon_names ()))))
+                   [ string_of_int (List.length (icon_items ())) ])
+                (List.map (fun (d, k) -> item_btn p (Tabler_item (d, k)))
+                   (take 48 (icon_items ()))));
+           D.el_append_child wrap inner
        | Tab_emoji ->
+           (* cljs emojis-cp renders its own flex-1 flex-col gap-1 div
+              inside the outer one *)
+           let inner = D.mk ~cls:"flex flex-1 flex-col gap-1" "div" in
            let used =
              used_items ()
              |> List.filter (fun (t, _, _) -> t = "emoji")
@@ -362,20 +354,21 @@ let render_tab (p : picker) =
                     item_btn p (Emoji_item (id, name)))
            in
            (if used <> [] then
-              D.el_append_child wrap
+              D.el_append_child inner
                 (pane_section (I.t "ui/frequently-used") used));
-           D.el_append_child wrap
+           D.el_append_child inner
              (pane_section ~virtual_list:true
                 (I.tf "icon/emojis-count" [ string_of_int (emoji_count ()) ])
                 (List.map (fun (id,n) -> item_btn p (Emoji_item (id,n)))
-                   (all_emojis ())))
+                   (all_emojis ())));
+           D.el_append_child wrap inner
        | Tab_icon ->
            D.el_append_child wrap
              (pane_section ~virtual_list:true
                 (I.tf "icon/icons-count"
-                   [ string_of_int (List.length (icon_names ())) ])
-                (List.map (fun n -> item_btn p (Tabler_item n))
-                   (icon_names ()))));
+                   [ string_of_int (List.length (icon_items ())) ])
+                (List.map (fun (d, k) -> item_btn p (Tabler_item (d, k)))
+                   (icon_items ()))));
       D.el_append_child pane wrap
   | None, _ -> ()
 
@@ -391,7 +384,7 @@ let render_search (p : picker) =
       D.el_append_child pane wrap;
       let icons =
         if p.tab = Tab_emoji then []
-        else List.map (fun n -> Tabler_item n) (search_icons p.q)
+        else List.map (fun (d, k) -> Tabler_item (d, k)) (search_icons p.q)
       in
       let fill emojis =
         if gen = p.gen then (
@@ -429,20 +422,37 @@ let set_tab (p : picker) (t : tab) =
    | None -> ());
   (match p.root with
    | Some root -> (
-       let nl = D.el_query_all root ".tab-item" in
+       (* the cljs class token is ",tab-item" / "active,tab-item" (comma
+          joined) so ".tab-item" never matches; use the substring form *)
+       let nl = D.el_query_all root "[class*='tab-item']" in
        let n = D.node_list_length nl in
        for i = 0 to n - 1 do
          match D.node_list_item nl i with
-         | Some b -> D.el_set_class b "tab-item"
+         | Some b -> D.el_set_class b (tab_item_cls false)
          | None -> ()
        done;
        match
          D.node_list_item nl
            (match t with Tab_all -> 0 | Tab_emoji -> 1 | Tab_icon -> 2)
        with
-       | Some b -> D.el_set_class b "tab-item active"
+       | Some b -> D.el_set_class b (tab_item_cls true)
        | None -> ())
    | None -> ());
+  (* cljs hides the color picker on the emoji tab *)
+  (match p.pal_wrap, p.root with
+   | Some pal_wrap, Some root -> (
+       match D.el_parent pal_wrap with
+       | Some _ -> if t = Tab_emoji then D.el_remove pal_wrap
+       | None ->
+           if t <> Tab_emoji then (
+             match D.el_query root ".ft" with
+             | Some ft -> (
+                 (* keep the cljs order: tabs, color picker, del *)
+                 match D.el_query ft "button[data-action='del']" with
+                 | Some del -> D.el_insert_before ft pal_wrap del
+                 | None -> D.el_append_child ft pal_wrap)
+             | None -> ()))
+   | _ -> ());
   (match p.input with
    | Some i -> D.el_set_attr i "placeholder" (placeholder_of t)
    | None -> ());
@@ -461,10 +471,13 @@ let presets_popover (p : picker) (anchor_btn : E.el) : E.el =
       let style, child =
         match c with
         | Some c -> ("background-color:" ^ c, None)
-        | None -> ("", Some (icon_el ("tabler-icon", "minus")))
+        | None ->
+            ("", Some (icon_el ~cls:"scale-75 opacity-70"
+                         ("tabler-icon", "minus")))
       in
       let b =
-        D.mk ~cls:"it" ~attrs:[ ("style", style); ("type", "button") ]
+        D.mk ~cls:(btn_outline_sm ^ " it")
+          ~attrs:[ ("style", style); ("type", "button") ]
           "button"
       in
       (match child with Some el -> D.el_append_child b el | None -> ());
@@ -499,13 +512,11 @@ let view (p : picker) : E.el =
     true;
   let hd = D.mk ~cls:"hd bg-popover" "div" in
   let si = D.mk ~cls:"search-input" "div" in
-  D.el_append_child si (icon_el ("tabler-icon", "search"));
+  D.el_append_child si (icon_el ~size:16. ("tabler-icon", "search"));
   let input =
-    D.mk
-      ~cls:"ui__input"
+    D.mk ~cls:ui_input_cls
       ~attrs:
-        [ ("placeholder", placeholder_of p.tab); ("type", "text")
-        ; ("auto-focus", "true") ]
+        [ ("placeholder", placeholder_of p.tab); ("auto-focus", "true") ]
       "input"
   in
   D.el_append_child si input;
@@ -514,7 +525,7 @@ let view (p : picker) : E.el =
     p.x_btn <- None;
     if p.q <> "" then (
       let x = D.mk ~cls:"x" "a" in
-      D.el_append_child x (icon_el ("tabler-icon", "x"));
+      D.el_append_child x (icon_el ~size:14. ("tabler-icon", "x"));
       D.on_click x (fun _ -> reset_q p);
       D.el_append_child si x;
       p.x_btn <- Some x)
@@ -544,8 +555,7 @@ let view (p : picker) : E.el =
   List.iter
     (fun (t, label) ->
       let b =
-        D.mk
-          ~cls:("tab-item" ^ if t = p.tab then " active" else "")
+        D.mk ~cls:(tab_item_cls (t = p.tab))
           ~attrs:[ ("type", "button") ]
           "button"
       in
@@ -555,37 +565,44 @@ let view (p : picker) : E.el =
     [ (Tab_all, I.t "icon/tab-all"); (Tab_emoji, I.t "icon/tab-emojis")
     ; (Tab_icon, I.t "icon/tab-icons") ];
   D.el_append_child ft tabs_row;
-  (* color preset button — hidden on the emoji tab like cljs *)
-  let pal =
-    D.mk ~cls:"color-picker ui__button"
-      ~attrs:[ ("type", "button"); ("title", "Color") ] "button"
+  (* cljs shui/popover-trigger renders a bare button wrapper with
+     aria-expanded around the color-picker button *)
+  let pal_wrap =
+    D.mk ~attrs:[ ("type", "button"); ("aria-expanded", "false") ] "button"
   in
-  let pal_strong = D.mk ~cls:"flex items-center gap-1" "strong" in
+  let pal =
+    D.mk ~cls:(btn_outline_sm ^ " color-picker")
+      ~attrs:[ ("type", "button") ] "button"
+  in
+  let pal_strong = D.mk "strong" in
   (match preset_color () with
    | Some c -> D.el_set_attr pal_strong "style" ("color:" ^ c)
    | None -> ());
   D.el_append_child pal_strong (icon_el ("tabler-icon", "palette"));
   D.el_append_child pal pal_strong;
+  D.el_append_child pal_wrap pal;
   let pop_ref : E.el option ref = ref None in
   D.on_click pal (fun _ ->
       match !pop_ref with
       | Some pop -> D.el_remove pop; pop_ref := None
       | None ->
-          let pop = presets_popover p pal in
+          let pop = presets_popover p pal_wrap in
           pop_ref := Some pop;
           (match D.doc_query "body" with
            | Some body -> D.el_append_child body pop
            | None -> ()));
-  D.el_append_child ft pal;
+  (match p.tab with
+   | Tab_emoji -> ()
+   | _ -> D.el_append_child ft pal_wrap);
   (if p.del then (
      let d =
-       D.mk ~cls:"ui__button"
+       D.mk ~cls:btn_outline_sm
          ~attrs:
            [ ("data-action", "del"); ("type", "button")
            ; ("title", I.t "ui/delete") ]
          "button"
      in
-     D.el_append_child d (icon_el ("tabler-icon", "trash"));
+     D.el_append_child d (icon_el ~size:17. ("tabler-icon", "trash"));
      D.on_click d (fun _ -> choose p Remove);
      D.el_append_child ft d));
   D.el_append_child root ft;
@@ -593,6 +610,7 @@ let view (p : picker) : E.el =
   p.bd <- Some bd;
   p.pane <- Some pane;
   p.root <- Some root;
+  p.pal_wrap <- Some pal_wrap;
   render_tab p;
   root
 
@@ -601,13 +619,40 @@ let open_picker ~(anchor : E.el) ~(del : bool)
   Emoji_mart.install ();
   let p =
     { del; on_chosen; q = ""; tab = Tab_all; gen = 0; input = None
-    ; x_btn = None; bd = None; pane = None; root = None }
+    ; x_btn = None; bd = None; pane = None; root = None; pal_wrap = None }
   in
   let root = view p in
+  (* cljs chrome: ui__popover-content > ls-property-dialog >
+     ls-property-input > ls-property-add > .flex-row >
+     property-value-inner > picker *)
+  let dlg = D.mk ~cls:"ls-property-dialog" "div" in
+  let lpi =
+    D.mk ~cls:"ls-property-input flex flex-1 flex-row items-center \
+               flex-wrap gap-1" "div"
+  in
+  let lpa =
+    D.mk ~cls:"ls-property-add flex flex-1 flex-row gap-1 items-center"
+      "div"
+  in
+  let row = D.mk ~cls:"flex flex-row" "div" in
+  let pvi = D.mk ~cls:"property-value-inner w-full" "div" in
+  D.el_append_child dlg lpi;
+  D.el_append_child lpi lpa;
+  D.el_append_child lpa row;
+  D.el_append_child row pvi;
+  D.el_append_child pvi root;
   ignore
     (Properties_popup.open_anchored
        ~cls:
-         "ls-icon-picker rounded-md border bg-popover           text-popover-foreground shadow-md" anchor root);
+         "ui__popover-content rounded-md border bg-popover \
+          text-popover-foreground shadow-md outline-none outline-none \
+          animate-in fade-in-0 zoom-in-95 \
+          data-[side=bottom]:slide-in-from-top-2 \
+          data-[side=left]:slide-in-from-right-2 \
+          data-[side=right]:slide-in-from-left-2 \
+          data-[side=top]:slide-in-from-bottom-2 focus:outline-none \
+          focus-visible:outline-none z-50"
+       anchor dlg);
   match p.input with
   | Some i -> D.el_focus i
   | None -> ()

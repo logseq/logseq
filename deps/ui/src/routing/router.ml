@@ -223,7 +223,7 @@ let load_page_ref for_route ref_v =
 (* Home: default-home config page when set & resolvable, else today's
    journal page (no config) or the journals list (config set but the
    page is missing). *)
-let rec load_home () =
+let load_home () =
   let repo = repo () in
   Sdk_config.read_config repo
   |> Js.Promise.then_ (fun cfg ->
@@ -253,25 +253,11 @@ let rec load_home () =
                         Runtime.send (Action.Navigate_to Model.Journals);
                         load_journals ()
                     | _ -> Js.Promise.resolve ())
-         | None -> load_today_journal repo)
-
-and load_today_journal repo =
-  let day = Dates.today_journal_day () in
-  incr Runtime.load_gen;
-  Runtime.invoke2 "thread-api/get-journal-page-by-day" (Wire.String repo)
-    (Wire.Int day)
-  |> Js.Promise.then_ (fun page_w ->
-         match Decode.page_of_summary page_w with
-         | Some p ->
-             fetch_blocks p
-             |> Js.Promise.then_ (fun p' ->
-                    Outliner_ops.resolve_page_tags repo p'
-                    |> Js.Promise.then_ (fun p'' ->
-                           if not (stale Model.Home) then (
-                             Editor_state.clear_overrides ();
-                             Runtime.send (Action.Page_loaded p''));
-                           Js.Promise.resolve ()))
-         | None -> Js.Promise.resolve ())
+         (* cljs home renders the journals list (all-journals >
+            journal-item), not today's journal as a standalone page *)
+         | None ->
+             Runtime.reload_current_view := load_journals;
+             load_journals ())
 
 let load_block_zoom uuid =
   incr Runtime.load_gen;
@@ -348,6 +334,8 @@ let load_block_zoom uuid =
                                             ; page_built_in = false
                                             ; page_add_object = false
                                             ; page_tags = b.Model.block_tags
+                                            ; page_tag_idents =
+                                                b.Model.block_tag_idents
                                             ; page_blocks = bs
                                             ; page_linked_refs = []
                                             ; page_parents
