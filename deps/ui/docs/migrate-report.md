@@ -1322,3 +1322,64 @@ Known unfixable / nondeterministic leftovers:
 - `#Journal` tag save is rejected on both sides ("Can't set tag with
   built-in #Journal" — private built-in class), so seeded probes that
   use it leave the same is-blank block on both.
+
+## Review-pass correctness batch (3e4a41f / ed58c9a)
+
+Findings from the logseq-review-workflow correctness pass, fixed on the
+main branch:
+
+- **Modifier shortcuts**: DOM `key` reports the shifted glyph
+  (`"Z"`, `">"`, `"H"`), so `Cmd+Shift+Z` redo, `Cmd+Shift+H` highlight
+  and `Cmd+Shift+.` zoom never matched. `shortcut_key` lowercases and
+  un-shifts symbols for the modifier-guarded arms only — raw keys still
+  feed the autopair/`)`/`]` overtype paths.
+- **toggle-collapse**: temp-expand now keys off `is_expanded`, so a
+  default-collapsed block the user temporarily expanded collapses back
+  instead of expanding permanently.
+- **Async staleness**: refs/unlinked/page fetch results were sent
+  unconditionally; in-flight loads could clobber a newer route.
+  `fetch_refs`/`fetch_unlinked`/`fetch_unlinked_refs` take a `~stale`
+  predicate and `load_page_ref` captures `!Runtime.load_gen` after
+  `incr` and compares at commit time.
+- **cmdk move-blocks**: selection was sent in `String_set` uuid order;
+  now `selected_uuids` (document order).
+- **Numbered-list toggle**: the `W.Map` decode arm was dead (entity
+  maps aren't fetched that way); now uses
+  `Decode.order_list_type_of_wire`.
+- **delete-selection**: entered edit mode on the previous block with
+  the raw stored title (id-ref form); now runs through
+  `Ops.title_for_edit` like `enter_edit`.
+- **cmdk page open**: bypassed `nav_hash` (dropped `?graph-id`) and
+  double-loaded (manual prefetch + hashchange reload). Now sets the
+  `nav_hash` URL and lets the router load — create-page chains its
+  `append_block` through a one-shot `Runtime.on_page_loaded` hook.
+- **SDK toasts**: `show_msg` now accepts `opts.key`/`timeout`, returns
+  the notification key, and `close_msg` dismisses only that toast
+  (`Toast_dismiss_key`) instead of clearing all.
+- **Startup repo**: `pick_graph` now follows cljs
+  `resolve-startup-repo` — url `?graph-id` → sessionStorage tab graph
+  (`ls-tab-repo`/`ls-tab-graph-id`, written on graph open) → first
+  repo → Demo.
+- **Navigate_to** clears the transient `confirm` (and already cleared
+  `page_menu`/`appearance`).
+
+## Review-fix streams (in flight)
+
+Read-only review passes flipped to fix mode on dedicated branches off
+the correctness batch; each fixes the findings of its own report:
+
+- `devin/review-fix-perf` — views eager table + refresh rebuild,
+  journals parallel fetch + unconditional virtualization, Mutation
+  Observer consolidation, root-dyn structural compare → revision
+  compare, anchor-pull cache, unlinked-refs lazy fetch, embed/minor
+  perf.
+- `devin/review-fix-sysadd` — matcher consolidation to `Fuzzy`, shared
+  menu-item builder, worker `on_message` chains → one subscription,
+  shared wire/fetch helpers, i18n consolidation, dead-code deletion,
+  shared icon/textarea builders.
+- `devin/review-fix-failure` — worker-client rejection/onerror
+  forwarding, unmounted-state command crashes, swallowed exceptions.
+- `devin/review-fix-tests` — unit-test coverage for indent/outdent,
+  sdk_convert/sdk_util, decoder/encoder pure paths.
+- `devin/review-fix-contract` — endpoint/arg/decode contract sweep.
+- `devin/review-fix-regress` — cljs parity regression hunt + fixes.
