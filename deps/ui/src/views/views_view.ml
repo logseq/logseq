@@ -435,10 +435,15 @@ let mount_query ~block_uuid ~container : V.inst =
         ~container
 
 (* re-run every mounted query view — called on the worker's
-   "sync-db-changes" broadcast so result membership updates live *)
+   "sync-db-changes" broadcast so result membership updates live;
+   debounced so a burst of tx broadcasts coalesces into one refetch *)
+let debounced_refresh_queries = D.debounce 150
+
 let refresh_query_insts () =
-  Hashtbl.iter
-    (fun _ inst -> if D.el_is_connected inst.V.container then refresh inst)
-    query_insts
+  debounced_refresh_queries (fun () ->
+      Hashtbl.iter
+        (fun _ inst ->
+          if D.el_is_connected inst.V.container then refresh inst)
+        query_insts)
 
 let () = install_ops ()
