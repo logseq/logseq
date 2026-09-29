@@ -137,4 +137,5 @@ let run () =
          Js.Promise.resolve ())
   |> Js.Promise.catch (fun err ->
          Platform.console_error ("boot failed", err);
+         Toast.error "Failed to load the graph — check the console for details.";
          Js.Promise.resolve ())

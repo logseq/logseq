@@ -13,6 +13,15 @@ let catch_quiet (p : unit Js.Promise.t) =
       Js.Promise.resolve ())
     p
 
+(* writes bypassing Outliner_ops.apply must still surface failure *)
+let catch_write (p : unit Js.Promise.t) =
+  Js.Promise.catch
+    (fun e ->
+      Platform.console_error ("views write failed", e);
+      Toast.error "Failed to save changes";
+      Js.Promise.resolve ())
+    p
+
 (* fetch several resources in one get-render-snapshots call *)
 let snapshots ?(f = fun _ -> ()) (resources : W.t list) =
   Runtime.invoke2 "thread-api/get-render-snapshots" (W.String (repo ()))
@@ -249,7 +258,7 @@ let insert_view_block ?(after = fun () -> ()) ~title ~uuid ~page_uuid
            ])
         (W.Map [])
       |> then_ (fun _ -> after (); Js.Promise.resolve ())
-      |> catch_quiet
+      |> catch_write
       |> ignore)
 
 let insert_object_block ~uuid ~page_uuid ~title ~tags ~props f =
@@ -287,7 +296,7 @@ let insert_object_block ~uuid ~page_uuid ~title ~tags ~props f =
        ])
     (W.Map [])
   |> then_ (fun w -> f w; Js.Promise.resolve ())
-  |> catch_quiet
+  |> catch_write
   |> ignore
 
 (* common-uuid/gen-uuid :view-block-uuid port — verbatim copy of

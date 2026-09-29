@@ -550,7 +550,10 @@ let fetch_unlinked_refs ~stale:(is_stale : unit -> bool) (p : Model.page) =
                 Js.Promise.resolve
                   (if not (is_stale ()) then
                      Runtime.send
-                       (Action.Unlinked_loaded (Decode.blocks_of_wire w)))))
+                       (Action.Unlinked_loaded (Decode.blocks_of_wire w))))
+         |> Js.Promise.catch (fun e ->
+                Platform.console_error ("get-unlinked-refs failed", e);
+                Js.Promise.resolve ()))
   | _ -> ()
 
 (* Refresh calls pile up during rapid editing (each op's
@@ -678,6 +681,7 @@ let rec apply ?(opts = Wire.Map []) ops : unit Js.Promise.t =
                             | _ -> "?")
                           ops)
                    , e );
+                 Toast.error "Failed to save changes";
                  Js.Promise.resolve ()))
 
 let apply_and_refresh ?opts ops =
