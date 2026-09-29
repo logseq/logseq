@@ -66,6 +66,9 @@ type inst =
   ; mutable qsrc : string (* query source text (value block title) *)
   ; mutable query_block_uuid : string
         (* logseq.property/query value block uuid — query writes target it *)
+  ; mutable query_editor_open : bool
+        (* raw-source CodeMirror visible — page remounts re-open it on the
+           fresh shell so a rebuild never silently loses the editor *)
   ; all_props : (string, W.t) Hashtbl.t (* ident -> property entity *)
   ; mutable props_loaded : bool
   ; ref_titles : (string, string) Hashtbl.t (* referenced uuid -> title *)
@@ -108,6 +111,7 @@ let make ~kind ~feature ~owner ~container : inst =
     ; query_scalar_rows = []
     ; qsrc = ""
     ; query_block_uuid = ""
+    ; query_editor_open = false
     ; all_props = Hashtbl.create 17
     ; props_loaded = false
     ; ref_titles = Hashtbl.create 8

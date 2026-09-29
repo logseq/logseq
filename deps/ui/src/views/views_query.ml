@@ -220,8 +220,6 @@ let refresh_block inst f =
    .ls-query-setting toggles a .CodeMirror > pre.CodeMirror-line[contenteditable]
    inside the shell; Esc commits the raw source to the value block title. *)
 
-let editor_open : V.inst -> bool ref = fun _ -> ref false
-
 let open_editor inst (shell : D.el) =
   let buuid =
     if inst.V.query_block_uuid <> "" then inst.V.query_block_uuid
@@ -249,6 +247,7 @@ let open_editor inst (shell : D.el) =
    | Some old -> D.el_remove old
    | None -> ());
   D.el_append_child shell cm;
+  inst.V.query_editor_open <- true;
   D.focus_end line;
   D.el_add_listener line "keydown" (fun ev ->
       match Editor_dom.ev_key ev with
@@ -256,8 +255,11 @@ let open_editor inst (shell : D.el) =
           Editor_dom.prevent_default ev;
           let src = D.el_text_content line |> String.trim in
           (* cljs keeps the editor open after Esc commits; the next tx
-             broadcast re-renders the shell anyway *)
-          Db.save_block_title buuid src (fun () -> ())
+             broadcast re-renders the shell anyway. Refresh eagerly on the
+             save ack — the debounced broadcast path is too slow for the
+             e2e immediate "Live query" check. *)
+          Db.save_block_title buuid src (fun () ->
+              (V.ops ()).V.o_refresh inst)
       | "Enter" ->
           (* single-line editor contract *)
           Editor_dom.prevent_default ev
@@ -270,5 +272,7 @@ let wire_settings_button inst (shell : D.el) =
       D.el_add_listener btn "click" (fun ev ->
           Editor_dom.stop_propagation ev;
           match D.query_inside shell ".CodeMirror" with
-          | Some cm -> D.el_remove cm
+          | Some cm ->
+              D.el_remove cm;
+              inst.V.query_editor_open <- false
           | None -> open_editor inst shell)
