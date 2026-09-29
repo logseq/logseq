@@ -14,7 +14,7 @@ let ghost_btn ?(extra = "") icon_name =
     ~cls:
       (D.button_cls ~variant:"ghost" ~size:"sm"
          ~cls:("text-muted-foreground !px-1" ^ extra) ())
-    ~children:[ D.icon icon_name ] ()
+    ~attrs:[ ("type", "button") ] ~children:[ D.icon icon_name ] ()
 
 let count_of inst =
   match inst.V.data with
@@ -51,9 +51,9 @@ let view_tab inst ~refresh (v : Wr.view_ent) : D.el =
   let is_current = v.Wr.vu = inst.V.view_uuid in
   let count = count_of inst in
   let children =
-    [ D.h ~cls:"inline-flex items-center ls-icon-color-wrap"
+    [ D.h ~tag:"span" ~cls:"inline-flex items-center ls-icon-color-wrap"
         ~children:[ D.icon (view_type_icon v) ] ()
-    ; D.h ~tag:"span" ~text:(V.display_title v) () ]
+    ; Editor_dom.create_text_node (V.display_title v) ]
     @ (if is_current && inst.V.feature <> "query-result" && count > 0
        then
          [ D.h ~tag:"span" ~cls:"text-muted-foreground text-xs"
@@ -68,7 +68,8 @@ let view_tab inst ~refresh (v : Wr.view_ent) : D.el =
              ("text-sm px-0 py-0 h-6 "
               ^ if is_current then "" else "text-muted-foreground")
            ())
-      ~attrs:[ ("data-view-tab-id", "view-tab-" ^ v.Wr.vu) ]
+      ~attrs:
+        [ ("type", "button"); ("data-view-tab-id", "view-tab-" ^ v.Wr.vu) ]
       ~children ()
   in
   D.el_add_listener b "click" (fun _ ->
@@ -110,7 +111,8 @@ let tabs_el inst ~refresh ~opacity : D.el * D.el =
                transition-opacity ease-in duration-300 "
               ^ opacity)
            ())
-      ~attrs:[ ("title", I.add_new_view) ] ~children:[ D.icon "plus" ] ()
+      ~attrs:[ ("type", "button"); ("title", I.add_new_view) ]
+      ~children:[ D.icon "plus" ] ()
   in
   D.el_add_listener add "click" (fun _ -> (V.ops ()).o_create_view inst);
   D.el_append_child wrap add;
@@ -410,6 +412,7 @@ let groupable_columns inst =
 
 let rec more_actions inst ~refresh : D.el =
   let btn = ghost_btn "dots" in
+  D.el_set_attr btn "aria-expanded" "false";
   D.el_add_listener btn "click" (fun _ ->
       let gcs = groupable_columns inst in
       let subs =
@@ -491,8 +494,19 @@ let display_type_el inst ~refresh : D.el =
     | _ -> "table"
   in
   let inner =
-    D.h ~cls:"flex items-center gap-1 cursor-pointer"
-      ~children:[ D.icon icon_name ] ()
+    D.h ~cls:"property-value-inner w-full"
+      ~children:
+        [ D.h ~cls:"cursor-pointer flex flex-1 jtrigger w-full"
+            ~attrs:[ ("id", "trigger-" ^ Platform.random_uuid ()) ]
+            ~children:
+              [ D.h ~cls:"cursor-pointer select-item"
+                  ~children:
+                    [ D.h ~tag:"span"
+                        ~cls:"inline-flex items-center ls-icon-color-wrap"
+                        ~children:[ D.icon icon_name ] () ]
+                  () ]
+            () ]
+      ()
   in
   D.el_add_listener inner "click" (fun _ ->
       let set dt =

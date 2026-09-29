@@ -202,7 +202,7 @@ let preserve_state (f : unit -> 'a) : 'a =
   Fun.protect f ~finally:(fun () ->
       (match owner_source_prev with
        | Some v -> Unix.putenv "LOGSEQ_OWNER_SOURCE" v
-       | None -> Unix.unsetenv "LOGSEQ_OWNER_SOURCE");
+       | None -> Unix.putenv "LOGSEQ_OWNER_SOURCE" "");
       Hashtbl.reset Worker_state.app_state;
       Hashtbl.iter (Hashtbl.replace Worker_state.app_state) state_prev;
       Worker_state.set_db_sync_config cfg_prev;
@@ -632,7 +632,7 @@ let large_tx_max_chunk_items = 500
 let reduce_ordered_tx_chunks (db : db) (f : Wire.t list -> unit)
     (tx_data : Wire.t list) : unit =
   let item_count = List.length tx_data in
-  let range_by_start = Sync_apply.upload_tempid_range_by_start db tx_data in
+  let range_by_start = Sync_apply.upload_group_range_by_start db tx_data in
   let rec loop idx chunk =
     if idx < item_count then begin
       let next_idx, group =
@@ -1450,6 +1450,103 @@ let test_flush_pending_splits_large_delete_upload_request () =
            (first_uploaded_tx @ second_uploaded_tx)
            tx_data);
       check "inflight [tx-id]" (!(client.inflight) = [ tx_id ]))
+
+(* cljs mentions-tempid? *)
+let mentions_tempid (tempids : string list) (item : Wire.t) : bool =
+  match item with
+  | Wire.Map _ -> (
+      match Wire.get "db/id" item with
+      | Some (Wire.String s) -> List.mem s tempids
+      | _ -> false)
+  | Wire.Array l | Wire.List l ->
+      List.exists
+        (function Wire.String s -> List.mem s tempids | _ -> false)
+        l
+  | _ -> false
+
+(* (deftest large-upload-chunks-keep-value-replacement-in-one-request-test ...)
+   The server validates each request as a whole transaction. A retract of a
+   required attribute's old value that arrives without the add of its new
+   value leaves the entity invalid, and the server rejects the request. *)
+let test_large_upload_chunks_keep_value_replacement_in_one_request () =
+  preserve_state (fun () ->
+      let conn, ops, parent, child1, _c2, _c3 = setup_parent_child () in
+      let server_conn = Datascript.conn_from_db (Datascript.db conn) in
+      let db = Datascript.db conn in
+      let page =
+        match Ldb.value parent "block/page" with
+        | Some (Ref id) -> Option.get (Ldb.ent_of_id db id)
+        | _ -> failwith "parent has no block/page"
+      in
+      let page_ref = block_uuid_lookup (entity_block_uuid page) in
+      let child_ref = block_uuid_lookup (entity_block_uuid child1) in
+      let updated_at_ms (e : entity) : int64 option =
+        match Ldb.value e "block/updated-at" with
+        | Some (Int64 n) | Some (Instant n) -> Some n
+        | _ -> None
+      in
+      let old_ms = Option.get (updated_at_ms page) in
+      let new_ms = Int64.succ old_ms in
+      (* cljs: the page's timestamp replacement straddles an unrelated datom,
+         so a 1-datom cap would put its retract and its add in different
+         requests *)
+      let tx_data =
+        [ db_retract page_ref "block/updated-at" (Wire.Int64 old_ms)
+        ; db_add child_ref "block/title" (Wire.String "child 1 renamed")
+        ; db_add page_ref "block/updated-at" (Wire.Int64 new_ms) ]
+      in
+      let tx_id = fresh_uuid () in
+      with_datascript_conns conn (Some ops) (fun () ->
+          seed_client_op_txs test_repo
+            [ seed_tx ~created_at:1 ~outliner_op:"save-block"
+                ~tx_data_v:(Wire.Array tx_data) tx_id ];
+          let prev_cap = !(Sync_apply.max_upload_request_datoms) in
+          Sync_apply.max_upload_request_datoms := 1;
+          Fun.protect
+            ~finally:(fun () ->
+              Sync_apply.max_upload_request_datoms := prev_cap)
+            (fun () ->
+              let rec loop requests =
+                let pending = Sync_apply.pending_txs test_repo () in
+                let tx_entries, _drop_ids, _drop_txs =
+                  Sync_apply.prepare_upload_tx_entries ~repo:test_repo
+                    (Some conn) pending
+                in
+                if tx_entries <> [] && requests < 10 then begin
+                  List.iter
+                    (fun entry ->
+                       try server_apply_entry server_conn entry
+                       with exn ->
+                         check
+                           (Printf.sprintf "server rejects request %d: %s"
+                              requests (Printexc.to_string exn))
+                           false)
+                    tx_entries;
+                  Sync_apply.commit_large_upload_progress test_repo
+                    tx_entries;
+                  ignore
+                    (Sync_apply.mark_pending_txs_false test_repo
+                       (List.filter_map (wire_get_str "tx-id") tx_entries));
+                  loop (requests + 1)
+                end
+                else begin
+                  check "pending empty"
+                    (Sync_apply.pending_txs test_repo () = []);
+                  let server_db = Datascript.db server_conn in
+                  let server_page =
+                    Option.get (Ldb.ent_of_id server_db page.id)
+                  in
+                  let server_child =
+                    Option.get (Ldb.ent_of_id server_db child1.id)
+                  in
+                  check "page updated-at"
+                    (updated_at_ms server_page = Some new_ms);
+                  check "child title"
+                    (Ldb.value server_child "block/title"
+                     = Some (String "child 1 renamed"))
+                end
+              in
+              loop 0)))
 
 (* (deftest flush-pending-keeps-oversized-tempid-group-in-one-request-test ...) *)
 let test_flush_pending_keeps_oversized_tempid_group_in_one_request () =
@@ -11767,6 +11864,10 @@ let test_outliner_upload_chunks_preserve_entities_and_acknowledgment () =
            let server_conn =
              Datascript.conn_from_db (Datascript.db conn)
            in
+           (* cljs new-block-uuids/new-block-tempids: the inserted blocks
+              are created under string tempids equal to their uuids, and
+              their datoms refer to one another through them *)
+           let new_block_tempids = List.init 6 (fun _ -> fresh_uuid ()) in
            with_datascript_conns conn (Some ops) (fun () ->
                ignore
                  (apply_ops conn
@@ -11776,13 +11877,15 @@ let test_outliner_upload_chunks_preserve_entities_and_acknowledgment () =
                            ; Wire.Array [ Wire.Uuid parent_uuid ] ]
                        else
                          let blocks =
-                           List.init 6 (fun i ->
-                               wire_map
-                                 [ "block/uuid", Wire.Uuid (fresh_uuid ())
-                                 ; ( "block/title"
-                                   , Wire.String
-                                       (Printf.sprintf "Chunk block %d"
-                                          i) ) ])
+                           List.mapi
+                             (fun i block_uuid ->
+                                wire_map
+                                  [ "block/uuid", Wire.Uuid block_uuid
+                                  ; ( "block/title"
+                                    , Wire.String
+                                        (Printf.sprintf "Chunk block %d"
+                                           i) ) ])
+                             new_block_tempids
                          in
                          Wire.Array
                            [ kw "insert-blocks"
@@ -11800,7 +11903,14 @@ let test_outliner_upload_chunks_preserve_entities_and_acknowledgment () =
                  (fun () ->
                     Sync_apply.max_upload_request_datoms :=
                       (if delete then 2 else 15);
-                    let rec loop requests =
+                    (* tempid_requests counts the requests that carry any
+                       datom of the inserted blocks. How many requests the
+                       whole upload takes is not asserted: the insert also
+                       replaces the page's :block/updated-at, whose datoms
+                       carry no tempid, and their position in the tx varies
+                       between runs; when they fall outside the tempid group
+                       they travel in a request of their own *)
+                    let rec loop requests tempid_requests =
                  let pending = Sync_apply.pending_txs test_repo () in
                  let tx_entries, _drops, _drop_txs =
                    Sync_apply.prepare_upload_tx_entries ~repo:test_repo
@@ -11811,7 +11921,7 @@ let test_outliner_upload_chunks_preserve_entities_and_acknowledgment () =
                      check "permanent deletion spans requests"
                        ((not delete) || requests > 1);
                      check "insert stays one atomic request"
-                       (delete || requests = 1);
+                       (delete || tempid_requests = 1);
                      check "pending empty after upload"
                        (Sync_apply.pending_txs test_repo () = []);
                      check "client/server checksums converge"
@@ -11841,10 +11951,23 @@ let test_outliner_upload_chunks_preserve_entities_and_acknowledgment () =
                           (Sync_apply.mark_pending_txs_false test_repo
                              (List.filter_map
                                 (wire_get_str "tx-id") tx_entries));
+                        let mentions =
+                          List.exists
+                            (fun entry ->
+                               match Wire.get "tx-data" entry with
+                               | Some w ->
+                                   List.exists
+                                     (mentions_tempid new_block_tempids)
+                                     (Wire.as_seq w)
+                               | None -> false)
+                            tx_entries
+                        in
                         loop (requests + 1)
+                          (if mentions then tempid_requests + 1
+                           else tempid_requests)
                       end)
                in
-               loop 0)))
+               loop 0 0)))
         [ false; true ])
 
 (* f6fc6f78ac (deftest additional-outliner-operations-upload-test) *)
@@ -13095,6 +13218,10 @@ let () =
             `Quick test_flush_pending_does_not_overgroup_existing_lookup_refs
         ; Alcotest.test_case "flush-pending-splits-large-delete-upload-request"
             `Quick test_flush_pending_splits_large_delete_upload_request
+        ; Alcotest.test_case
+            "large-upload-chunks-keep-value-replacement-in-one-request"
+            `Quick
+            test_large_upload_chunks_keep_value_replacement_in_one_request
         ; Alcotest.test_case
             "flush-pending-keeps-oversized-tempid-group-in-one-request"
             `Quick test_flush_pending_keeps_oversized_tempid_group_in_one_request

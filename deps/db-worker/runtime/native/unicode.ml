@@ -78,21 +78,24 @@ let is_js_whitespace cp =
   | 0x1680 | 0x2028 | 0x2029 | 0x202F | 0x205F | 0x3000 | 0xFEFF -> true
   | _ -> cp >= 0x2000 && cp <= 0x200A
 
+(* List.drop_while is OCaml >= 5.3; this tree still builds on 5.1 *)
+let rec drop_while_js_ws cps =
+  match cps with
+  | cp :: rest when is_js_whitespace cp -> drop_while_js_ws rest
+  | _ -> cps
+
 let trim (s : string) : string =
   match decode_utf8 s with
   | [] -> ""
   | cps ->
-      let cps = List.rev (List.drop_while is_js_whitespace
-                            (List.rev (List.drop_while is_js_whitespace cps))) in
+      let cps = List.rev (drop_while_js_ws (List.rev (drop_while_js_ws cps))) in
       encode_utf8 cps
 
 let triml (s : string) : string =
-  encode_utf8 (List.drop_while is_js_whitespace (decode_utf8 s))
+  encode_utf8 (drop_while_js_ws (decode_utf8 s))
 
 let trimr (s : string) : string =
-  encode_utf8
-    (List.rev (List.drop_while is_js_whitespace
-                 (List.rev (decode_utf8 s))))
+  encode_utf8 (List.rev (drop_while_js_ws (List.rev (decode_utf8 s))))
 
 let case_map_cp map cp =
   match map (Uchar.unsafe_of_int cp) with

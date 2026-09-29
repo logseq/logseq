@@ -23,7 +23,7 @@ type item =
   ; it_tip : string (* ident / sublabel, rendered as title attr *)
   ; it_icon : string (* tabler icon before the title, "" = none *)
   ; it_new : bool (* renders via the "New option:" affordance *)
-  ; it_strong : bool (* cljs property select labels use <strong> *)
+  ; it_strong : bool (* title leaf is <strong> (cljs property select) *)
   ; on_choose : unit -> unit
   }
 
@@ -39,10 +39,10 @@ type select_config =
         (* async item source — bypasses the static substring filter *)
   ; mutable searched : item list option
   ; mutable results_inner : Editor_dom.el option
+  ; mutable results_py : Editor_dom.el option
   }
 
-let item ?(tip = "") ?(icon = "") ?(strong = false) title on_choose
-    =
+let item ?(tip = "") ?(icon = "") ?(strong = false) title on_choose =
   { it_title = title; it_tip = tip; it_icon = icon; it_new = false
   ; it_strong = strong; on_choose
   }
@@ -128,12 +128,17 @@ let item_el idx cfg it =
       ~attrs:
         [ ("id", "ac-" ^ string_of_int idx); ("tabindex", "0") ]
   in
-  (* leaf text must live directly on the span: e2e picks items via
-     `span.and(get-by-text <title> exact)` and getByText only matches
-     the element that owns the text node *)
-  let inner =
-    mk ~cls:"flex-1 flex gap-1 items-center font-normal" "span"
-      ~attrs:[ ("title", it.it_tip) ]
+  (* cljs item DOM: a > span.flex-1 > div.flex-row.justify-between.w-full
+     > div.flex-row.gap-1 > span[title=":ident"] > icon + strong *)
+  let inner1 = mk ~cls:"flex-1" "span" in
+  let inner2 =
+    mk ~cls:("flex flex-row justify-between w-full"
+             ^ (if idx = cfg.chosen then " chosen" else "")) "div"
+  in
+  let inner3 = mk ~cls:"flex flex-row gap-1 items-center" "div" in
+  let label_span =
+    mk ~cls:"flex gap-1 items-center" "span"
+      ~attrs:(if it.it_tip = "" then [] else [ ("title", ":" ^ it.it_tip) ])
   in
   (* e2e targets `span` + exact text; a leaf span keeps the deepest
      getByText match a span *)
@@ -144,16 +149,16 @@ let item_el idx cfg it =
     (if it.it_new then I18n.t "select/new-option" ^ " " ^ it.it_title
      else it.it_title);
   (* cljs property select renders a leading type icon (letter-t /
-     puzzle) inside .pt-1 — tabler font glyph like other Editor_dom
-     icons *)
+     puzzle) inside .pt-1 as a ui/icon svg *)
   if it.it_icon <> "" then (
     let ic = mk ~cls:"pt-1" "span" in
-    let ic_span = mk ~cls:("ui__icon ti opacity-40") "span" in
-    el_append_child ic_span (mk ~cls:("ti ti-" ^ it.it_icon) "i");
-    el_append_child ic ic_span;
-    el_append_child inner ic);
-  el_append_child inner strong;
-  el_append_child a inner;
+    el_append_child ic (ui_icon_el ~cls:"opacity-40" it.it_icon);
+    el_append_child label_span ic);
+  el_append_child label_span strong;
+  el_append_child inner3 label_span;
+  el_append_child inner2 inner3;
+  el_append_child inner1 inner2;
+  el_append_child a inner1;
   el_append_child wrap a;
   on_click a (fun _ -> it.on_choose ());
   el_listen a "mousemove"
@@ -168,7 +173,11 @@ let rebuild_results cfg results_inner =
   if cfg.chosen >= List.length vis then cfg.chosen <- 0;
   List.iteri
     (fun i it -> el_append_child results_inner (item_el i cfg it))
-    vis
+    vis;
+  (* cljs adds the py-1 class only when there are results *)
+  match cfg.results_py with
+  | Some py -> el_set_class py (if vis = [] then "" else "py-1")
+  | None -> ()
 
 let pick cfg =
   let vis = visible_items cfg in
@@ -204,16 +213,18 @@ let create ~placeholder ?(new_option = None) ?(on_escape = fun () -> ())
     ; on_search
     ; searched = None
     ; results_inner = None
+    ; results_py = None
     }
   in
   let root = mk ~cls:"cp__select cp__select-main" "div" in
   let input_wrap = mk ~cls:"input-wrap" "div" in
   let input =
-    mk ~cls:"cp__select-input w-full" "input"
+    mk ~cls:"cp__select-input w-full !p-1.5" "input"
       ~attrs:[ ("placeholder", placeholder) ]
   in
   el_set_attr input "type" "text";
   el_append_child input_wrap input;
+  let py = mk ~cls:"py-1" "div" in
   let results_wrap = mk ~cls:"item-results-wrap" "div" in
   let results =
     mk ~cls:"cp__select-results" "div" ~attrs:[ ("id", "ui__ac") ]
@@ -223,8 +234,10 @@ let create ~placeholder ?(new_option = None) ?(on_escape = fun () -> ())
   in
   el_append_child results results_inner;
   el_append_child results_wrap results;
+  el_append_child py results_wrap;
   el_append_child root input_wrap;
-  el_append_child root results_wrap;
+  el_append_child root py;
+  cfg.results_py <- Some py;
   el_listen input "input"
     (fun _ ->
       cfg.filter <- el_value input;

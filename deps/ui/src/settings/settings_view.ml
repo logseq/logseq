@@ -175,7 +175,9 @@ let lang_trigger ~key ~h_cls ~st ~anchor_sel =
         disabled:cursor-not-allowed disabled:opacity-50 \
         [&>span]:line-clamp-1 "
      ^ h_cls)
-    ~attrs:[ ("type", "button"); ("role", "combobox") ]
+    ~attrs:
+      [ ("type", "button"); ("role", "combobox")
+      ; ("aria-expanded", "false") ]
     ~events:"click"
     ~on_dom_event:(fun n _ ->
       if n = "click" then
@@ -191,7 +193,8 @@ let lang_trigger ~key ~h_cls ~st ~anchor_sel =
         []
     ; dom ~key:(key ^ "i") ~tag:"span"
         ~style_class:"ui__select-icon shrink-0 text-muted-foreground"
-        [ dom ~key:(key ^ "svg") ~tag:"svg" ~style_class:"h-4 w-4"
+        [ dom ~key:(key ^ "svg") ~tag:"svg"
+            ~style_class:"h-4 w-4 tabler-icon tabler-icon-chevron-down"
             ~attrs:
               [ ("viewBox", "0 0 24 24"); ("fill", "none")
               ; ("stroke", "currentColor"); ("stroke-width", "2")

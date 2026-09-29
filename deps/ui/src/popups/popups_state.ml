@@ -30,6 +30,16 @@ type item_action =
   | Run_query of bool (* cljs editor/run-query-command; arg = advanced? *)
   | Noop (* "No matched commands" row — applies to nothing *)
 
+(* cljs commands-map item doc: title attr text, label echo, formatted
+   desc, or the vector help tooltip (Query) *)
+type ac_desc =
+  | Desc_none
+  | Desc_key of string
+  | Desc_self
+  | Desc_fmt of string
+  | Desc_custom of string
+  | Desc_help
+
 type ac_item =
   { ai_key : string
   ; ai_label : string
@@ -37,15 +47,36 @@ type ac_item =
 
   ; ai_group : string option
   ; ai_info : string option
+  ; ai_title : string option (* cljs item-render div[title] *)
+  ; ai_help : bool (* cljs item-render div.has-help > small help icon *)
+  ; ai_node : bool (* cljs node-render shape (page/tag/block search) *)
+  ; ai_node_icon : (string * bool) option
+  (* icon name for the h-5 slot; bool = wrap in .icon-cp-container *)
+  ; ai_title_icon : string option
+  (* entity icon → gap-1 wrap around the title (block-title-with-icon) *)
+  ; ai_breadcrumb : string option (* mb-1 breadcrumb row; Some "" = empty *)
   ; ai_idx : int
   ; ai_hdr : string option (* group-name banner, only on group starts *)
   ; ai_act : item_action
   }
 
-let mk_item ~key ~label ?icon ?group ?info act =
+let mk_item ~key ~label ?icon ?group ?info ?(desc = Desc_none)
+    ?(node = false) ?node_icon ?title_icon ?breadcrumb act =
+  let title, help =
+    match desc with
+    | Desc_none -> (None, false)
+    | Desc_key k -> (Some (U.t k), false)
+    | Desc_self -> (Some label, false)
+    | Desc_fmt k -> (Some (U.tf k [ label ]), false)
+    | Desc_custom t -> (Some t, false)
+    | Desc_help -> (None, true)
+  in
   { ai_key = key; ai_label = label; ai_icon = icon; ai_group = group
-
-  ; ai_info = info; ai_idx = -1; ai_hdr = None; ai_act = act }
+  ; ai_info = info; ai_title = title; ai_help = help
+  ; ai_node = node; ai_node_icon = node_icon
+  ; ai_title_icon = title_icon; ai_breadcrumb = breadcrumb
+  ; ai_idx = -1
+  ; ai_hdr = None; ai_act = act }
 
 let empty_key = "__ac_empty__"
 let empty_item = mk_item ~key:empty_key ~label:"" Noop
@@ -223,13 +254,14 @@ let current_time () =
     (int_of_float (Js.Date.getMinutes d))
 ;;
 
-(* (i18n key, icon, action) — icon names mirror commands.cljs :icon/*
-   values verbatim (custom-pack names like pageRef stay camelCase) *)
+(* (i18n key, icon, desc, action) — icon names mirror commands.cljs :icon/*
+   values verbatim (custom-pack names like pageRef stay camelCase); desc
+   mirrors each command tuple's doc slot (title attr / help tooltip) *)
 let group_items grp entries =
   let g = Some (U.t grp) in
   List.map
-    (fun (key, icon, act) ->
-      mk_item ~key ~label:(U.t key) ~icon ?group:g act)
+    (fun (key, icon, desc, act) ->
+      mk_item ~key ~label:(U.t key) ~icon ?group:g ~desc act)
     entries
 
 ;;
@@ -240,71 +272,111 @@ let cmd label = Editor_cmd label
    the edited block has no heading prop, leaving "No matched commands") *)
 let slash_items ~has_heading : ac_item list =  List.concat
     [ group_items "editor.slash/group-basic"
-        [ "editor.slash/node-reference", "pageRef", Switch Page_ref
-        ; "editor.slash/node-embed", "blockEmbed", Switch Embed_ref ]
+        [ "editor.slash/node-reference", "pageRef"
+          , Desc_key "editor.slash/node-reference-desc", Switch Page_ref
+        ; "editor.slash/node-embed", "blockEmbed"
+          , Desc_key "editor.slash/node-embed-desc", Switch Embed_ref ]
     ; group_items "editor.slash/group-format"
-        [ "ui/link", "link", cmd "link"
-        ; "editor.slash/image-link", "photoLink", cmd "image-link"
-        ; "editor.slash/underline", "underline", Emit ("<ins></ins>", 6)
-        ; "editor.slash/code-block", "code", cmd "code-block"
-        ; "class.built-in/quote-block", "quote", cmd "quote"
-        ; "editor.slash/math-block", "math", cmd "math-block" ]
+        [ "ui/link", "link", Desc_key "editor.slash/link-desc", cmd "link"
+        ; "editor.slash/image-link", "photoLink"
+          , Desc_key "editor.slash/image-link-desc", cmd "image-link"
+        ; "editor.slash/underline", "underline"
+          , Desc_key "editor.slash/underline-desc", Emit ("<ins></ins>", 6)
+        ; "editor.slash/code-block", "code"
+          , Desc_key "editor.slash/code-block-desc", cmd "code-block"
+        ; "class.built-in/quote-block", "quote"
+          , Desc_key "editor.slash/quote-desc", cmd "quote"
+        ; "editor.slash/math-block", "math"
+          , Desc_key "editor.slash/math-block-desc", cmd "math-block" ]
     ; (let g = Some (U.t "editor.slash/group-heading") in
        [ mk_item ~key:"editor.slash/normal-text"
            ~label:(U.t "editor.slash/normal-text") ~icon:"text" ?group:g
+           ~desc:(Desc_key "editor.slash/normal-text-desc")
            (cmd "normal-text") ]
        @ (if has_heading then
             [ mk_item ~key:"editor.slash/clear-heading"
                 ~label:(U.t "editor.slash/clear-heading") ~icon:"heading-off"
-                ?group:g (cmd "clear-heading") ]
+                ?group:g ~desc:(Desc_key "editor.slash/normal-text-desc")
+                (cmd "clear-heading") ]
           else [])
        @ List.init 6 (fun i ->
            let l = string_of_int (i + 1) in
            mk_item ~key:("heading-" ^ l)
-             ~label:(U.tf "editor/heading" [ l ]) ~icon:("h-" ^ l)
-             ?group:g (cmd ("heading:" ^ l))))    ; group_items "editor.slash/group-task-status"
-        [ "property.status/backlog", "backlog", cmd "status:Backlog"
-        ; "property.status/todo", "todo", cmd "status:Todo"
-        ; "property.status/doing", "inProgress50", cmd "status:Doing"
-        ; "property.status/in-review", "inReview", cmd "status:In Review"
-        ; "property.status/done", "done", cmd "status:Done"
-        ; "property.status/canceled", "cancelled", cmd "status:Canceled" ]    ; group_items "editor.slash/group-task-date"
-        [ "property.built-in/deadline", "calendar-stats", cmd "deadline"
-        ; "property.built-in/scheduled", "calendar-month", cmd "scheduled" ]
+             ~label:(U.tf "editor.slash/heading-label" [ l ])
+             ~icon:("h-" ^ l) ?group:g ~desc:Desc_self
+             (cmd ("heading:" ^ l))))    ; group_items "editor.slash/group-task-status"
+        [ "property.status/backlog", "Backlog"
+          , Desc_fmt "editor.slash/status-desc", cmd "status:Backlog"
+        ; "property.status/todo", "Todo"
+          , Desc_fmt "editor.slash/status-desc", cmd "status:Todo"
+        ; "property.status/doing", "InProgress50"
+          , Desc_fmt "editor.slash/status-desc", cmd "status:Doing"
+        ; "property.status/in-review", "In Review"
+          , Desc_fmt "editor.slash/status-desc", cmd "status:In Review"
+        ; "property.status/done", "Done"
+          , Desc_fmt "editor.slash/status-desc", cmd "status:Done"
+        ; "property.status/canceled", "Cancelled"
+          , Desc_fmt "editor.slash/status-desc", cmd "status:Canceled" ]    ; group_items "editor.slash/group-task-date"
+        [ "property.built-in/deadline", "calendar-stats"
+          , Desc_none, cmd "deadline"
+        ; "property.built-in/scheduled", "calendar-month"
+          , Desc_none, cmd "scheduled" ]
     ; (let g = Some (U.t "editor.slash/group-priority") in
        mk_item ~key:"editor.slash/no-priority"
          ~label:(U.t "editor.slash/no-priority") ~icon:"priorityLvlNone"
          ?group:g (cmd "priority:")
        :: List.map            (fun lvl ->
+              let lvl_label = U.t ("property.priority/" ^ lvl) in
               mk_item ~key:("priority-" ^ lvl)
-                ~label:
-                  (U.tf "editor.slash/priority-label"
-                     [ U.t ("property.priority/" ^ lvl) ])
+                ~label:(U.tf "editor.slash/priority-label" [ lvl_label ])
                 ~icon:("priorityLvl" ^ String.capitalize_ascii lvl)
+                ~desc:
+                  (Desc_custom (U.tf "editor.slash/priority-desc" [ lvl_label ]))
                 ?group:g (cmd ("priority:" ^ lvl)))            [ "low"; "medium"; "high"; "urgent" ])
 
     ; group_items "editor.slash/group-time-and-date"
-        [ "date.nlp/tomorrow", "tomorrow", Emit (journal_offset 1, 0)
-        ; "date.nlp/yesterday", "yesterday", Emit (journal_offset (-1), 0)
-        ; "date.nlp/today", "calendar", Emit ("[[" ^ Dates.today () ^ "]]", 0)
-        ; "editor.slash/current-time", "clock", Emit (current_time (), 0)
-        ; "editor.slash/date-picker", "calendar-dots", cmd "date-picker" ]    ; group_items "editor.slash/group-list-type"
-        [ "editor.slash/number-list", "numberedParents", cmd "number-list"
-        ; "editor.slash/number-children", "numberedChildren", cmd "number-children" ]    ; group_items "editor.slash/group-advanced"
-        [ "block.comments/add-comment", "messageCircle", cmd "add-comment"
-        ; "property.built-in/query", "query", Run_query false
-        ; "editor.slash/advanced-query", "query", Run_query true
-        ; "editor.slash/query-function", "queryCode", Emit ("{{function }}", 2)
-        ; "editor.slash/calculator", "calculator", cmd "calculator"
-        ; "editor.slash/upload-asset", "upload", cmd "upload"
-        ; "class.built-in/template", "template", Switch Template_search
-        ; "editor.slash/cloze", "braces", Emit ("{{cloze }}", 2)
-        ; "editor.slash/embed-html", "htmlEmbed", Emit ("@@html: @@", 2)
-        ; "editor.slash/embed-video-url", "videoEmbed", Emit ("{{video }}", 2)
-        ; "editor.slash/embed-youtube-timestamp", "videoEmbed"
+        [ "date.nlp/tomorrow", "tomorrow"
+          , Desc_key "editor.slash/tomorrow-desc", Emit (journal_offset 1, 0)
+        ; "date.nlp/yesterday", "yesterday"
+          , Desc_key "editor.slash/yesterday-desc"
+          , Emit (journal_offset (-1), 0)
+        ; "date.nlp/today", "calendar", Desc_key "editor.slash/today-desc"
+          , Emit ("[[" ^ Dates.today () ^ "]]", 0)
+        ; "editor.slash/current-time", "clock"
+          , Desc_key "editor.slash/current-time-desc"
+          , Emit (current_time (), 0)
+        ; "editor.slash/date-picker", "calendar-dots"
+          , Desc_key "editor.slash/date-picker-desc", cmd "date-picker" ]    ; group_items "editor.slash/group-list-type"
+        [ "editor.slash/number-list", "numberedParents"
+          , Desc_self, cmd "number-list"
+        ; "editor.slash/number-children", "numberedChildren"
+          , Desc_self, cmd "number-children" ]    ; group_items "editor.slash/group-advanced"
+        [ "block.comments/add-comment", "messageCircle"
+          , Desc_key "block.comments/add-comment-command-desc"
+          , cmd "add-comment"
+        ; "property.built-in/query", "query", Desc_help, Run_query false
+        ; "editor.slash/advanced-query", "query"
+          , Desc_key "editor.slash/advanced-query-desc", Run_query true
+        ; "editor.slash/query-function", "queryCode"
+          , Desc_key "editor.slash/query-function-desc"
+          , Emit ("{{function }}", 2)
+        ; "editor.slash/calculator", "calculator"
+          , Desc_key "editor.slash/calculator-desc", cmd "calculator"
+        ; "editor.slash/upload-asset", "upload"
+          , Desc_key "editor.slash/upload-asset-desc", cmd "upload"
+        ; "class.built-in/template", "template"
+          , Desc_key "editor.slash/template-desc", Switch Template_search
+        ; "editor.slash/embed-html", "htmlEmbed", Desc_none
+          , Emit ("@@html: @@", 2)
+        ; "editor.slash/embed-video-url", "videoEmbed", Desc_none
+          , Emit ("{{video }}", 2)
+        ; "editor.slash/embed-youtube-timestamp", "videoEmbed", Desc_none
           , cmd "youtube-timestamp"
-        ; "editor.slash/embed-twitter-tweet", "xEmbed", Emit ("{{tweet }}", 2)
-        ; "command.editor/add-property", "cube-plus", cmd "add-property" ]    ]
+        ; "editor.slash/embed-twitter-tweet", "xEmbed", Desc_none
+          , Emit ("{{tweet }}", 2)
+        ; "command.editor/add-property", "cube-plus", Desc_none
+          , cmd "add-property"
+        ; "editor.slash/cloze", "brackets-contain", Desc_none, Emit ("{{cloze }}", 2) ]    ]
 ;;
 
 (* cljs editor.cljs keeps a fallback item for slash — literal there too *)
@@ -424,10 +496,16 @@ let page_items_for t kind q =
     | _ -> Emit ("[[" ^ title ^ "]]", 0)
   in
   let wrap title =
-    mk_item ~key:("page:" ^ title) ~label:title (act_of ~created:false title)
+    (* cljs get-node-icon: plain pages get the file icon in an
+       icon-cp-container; pages have no parent → no breadcrumb row *)
+    mk_item ~key:("page:" ^ title) ~label:title ~node:true
+      ~node_icon:("file", true) (act_of ~created:false title)
   in
   let wrap_tag (title, icon) =
-    mk_item ~key:("page:" ^ title) ~label:title ?icon (Tag_apply title)
+    (* db-tag rows skip the h-5 icon slot; the entity icon wraps the
+       title instead, and tags always have a parent → breadcrumb row *)
+    mk_item ~key:("page:" ^ title) ~label:title ~node:true
+      ?title_icon:icon ~breadcrumb:"" (Tag_apply title)
   in
   let matched =
     match kind with
@@ -440,7 +518,8 @@ let page_items_for t kind q =
           List.map
             (fun en ->
               let jt = Dates.journal_title_of (nlp_date_of en) in
-              mk_item ~key:("nlp:" ^ en)
+              mk_item ~key:("nlp:" ^ en) ~node:true
+                ~node_icon:("calendar", false)
                 ~label:(U.t (nlp_i18n_key en)) ~icon:"calendar"
                 (match kind with
                  | Embed_ref -> Embed jt
@@ -471,7 +550,10 @@ let page_items_for t kind q =
          | _ -> U.t "editor/new-page")
         ^ " " ^ q
       in
-      mk_item ~key:("new:" ^ q) ~label (act_of ~created:true q) :: xs
+      (* cljs node-render: new-tag/new-page rows show a bare plus icon *)
+      mk_item ~key:("new:" ^ q) ~label ~node:true
+        ~node_icon:("plus", false) (act_of ~created:true q)
+      :: xs
     else xs
   in
   let items =
@@ -557,8 +639,11 @@ let block_item_of_row i w =
     | Some u -> u
     | None -> Option.value (Cmdk_state.str_field w "block/uuid") ~default:""
   in
-  mk_item ~key:it.Cmdk_state.ikey ~label:it.Cmdk_state.ititle
-    ?info:it.Cmdk_state.header
+  (* cljs node-render for blocks: point-filled node icon and the parent
+     path in the breadcrumb row *)
+  mk_item ~key:it.Cmdk_state.ikey ~label:it.Cmdk_state.ititle ~node:true
+    ~node_icon:("point-filled", true)
+    ~breadcrumb:(Option.value it.Cmdk_state.header ~default:"")
     (Emit ("[[" ^ uuid ^ "]]", 0));;
 
 let run_block_search t ac =

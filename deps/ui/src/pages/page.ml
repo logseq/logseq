@@ -182,38 +182,48 @@ let rotating_arrow key : t =
     ]
 
 (* cljs title-tag chip: .block-tag > .flex.items-center > a.hash-symbol +
-   a.tag[draggable][data-ref] > span *)
+   a.tag[draggable][data-ref] > span. The .ls-block-right/.hover wrappers
+   render even when the page has no tags (empty container). *)
 let title_tag_chips (page : Model.page) : t list =
-  match page.Model.page_tags with
-  | [] -> []
-  | tags ->
-      [ dom ~key:"pt-right"
-          ~style_class:
-            "ls-block-right flex flex-row items-center self-start gap-1"
-          [ dom ~key:"ptr-ghost" ~style_class:"opacity-70 hover:opacity-100"
-              []
-          ; dom ~key:"pt-tags" ~style_class:"block-tags gap-1"
-              (List.mapi
-                 (fun i tag ->
-                   dom ~key:("pt-tag-" ^ string_of_int i)
-                     ~style_class:"block-tag"
-                     [ dom ~key:("pti-" ^ string_of_int i)
-                         ~style_class:"flex items-center"
-                         [ dom ~key:("ph-" ^ string_of_int i) ~tag:"a"
-                             ~style_class:"hash-symbol select-none flex"
-                             ~text:"#" []
-                         ; dom ~key:("ptt-" ^ string_of_int i) ~tag:"a"
-                             ~style_class:"tag relative"
-                             ~attrs:
-                               [ ("tabindex", "0"); ("draggable", "true")
-                               ; ( "data-ref"
-                                 , String.lowercase_ascii tag ) ]
-                             [ dom ~key:"ts" ~tag:"span" ~text:tag [] ]
-                         ]
-                     ])
-                 tags)
-          ]
+  [ dom ~key:"pt-right"
+      ~style_class:
+        "ls-block-right flex flex-row items-center self-start gap-1"
+      [ dom ~key:"ptr-ghost" ~style_class:"opacity-70 hover:opacity-100"
+          (match page.Model.page_tags with
+           | [] -> []
+           | tags ->
+               [ dom ~key:"pt-tags" ~style_class:"block-tags gap-1"
+                   (List.mapi
+                     (fun i tag ->
+                       let ident =
+                         match List.nth_opt page.Model.page_tag_idents i with
+                         | Some s -> s
+                         | None -> ""
+                       in
+                       dom ~key:("pt-tag-" ^ string_of_int i)
+                         ~style_class:
+                           ("block-tag"
+                           ^ if Tree.private_tag_ident ident then " private-tag"
+                             else "")
+                         [ dom ~key:("pti-" ^ string_of_int i)
+                             ~style_class:"flex items-center"
+                             [ dom ~key:("ph-" ^ string_of_int i) ~tag:"a"
+                                 ~style_class:"hash-symbol select-none flex"
+                                 ~text:"#" []
+                             ; dom ~key:("ptt-" ^ string_of_int i) ~tag:"a"
+                                 ~style_class:"tag relative"
+                                 ~attrs:
+                                   [ ("tabindex", "0"); ("draggable", "true")
+                                   ; ( "data-ref"
+                                     , String.lowercase_ascii tag ) ]
+                                 [ dom ~key:"ts" ~tag:"span" ~text:tag [] ]
+                             ]
+                         ])
+                     tags)
+               ]
+           )
       ]
+  ]
 
 (* display-mode title: #block-content-<page-uuid>.block-content >
    .block-content-inner > .block-head-wrap > .w-full.inline >
@@ -308,7 +318,7 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
        flex-col wrappers > .ls-page-title-container > .block-row >
        .block-content-wrapper(.ls-page-title-actions + content|editor) +
        .ls-block-right(.block-tags). Tags render while editing too. *)
-    [ box ~key:"pt-inner" ~style_class:"w-full relative"
+    [ dom ~key:"pt-inner" ~style_class:"w-full relative"
         [ dom ~key:"pt-block" ~style_class:"ls-block swipe-item"
             ~id:("ls-block-" ^ uuid)
             ~attrs:
@@ -341,7 +351,7 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
                          hovering, and only for collapsable titles *)
                       if page.page_is_tag then
                         match
-                          Browser_ui.qs "#page-title .block-control > span"
+                          Browser_ui.qs ".ls-page-title .block-control > span"
                         with
                         | Some el ->
                             if name = "mouseover" then (
@@ -377,8 +387,8 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
                             ~id:("control-" ^ uuid) [ cs ])
                      ]
                     )
-                ; dom ~key:"pt-col1" ~style_class:"flex flex-col w-full"
-                    [ dom ~key:"pt-col2" ~style_class:"flex flex-col w-full"
+        ; dom ~key:"pt-col1" ~style_class:"flex flex-col w-full"
+            [ dom ~key:"pt-col2" ~style_class:"flex flex-col w-full"
                         [ dom ~key:"pt-bmc"
                             ~style_class:
                               "block-main-content flex flex-row gap-2"
@@ -389,11 +399,7 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
                                       ~style_class:"ls-page-icon flex self-start"
                                       [ dom ~key:"pt-icbtn" ~tag:"button"
                                           ~attrs:
-                                            [ ("type", "button")
-                                            ; ( "title"
-                                              , Ui_strings.t "icon/tab-emojis"
-                                              )
-                                            ]
+                                            [ ("type", "button") ]
                                           ~style_class:
                                             "ui__button inline-flex \
                                              cursor-pointer items-center \
@@ -417,7 +423,7 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
                                           ~on_dom_event:(fun name _ ->
                                             if name = "click" then
                                               page_icon_picker page
-                                                "#page-title .ls-page-icon")
+                                                ".ls-page-title .ls-page-icon")
                                           [ dom ~key:"pt-cw" ~tag:"span"
                                               ~style_class:
                                                 "inline-flex items-center \
@@ -464,11 +470,23 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
             ]
         ]
       ]
+    ; (* cljs plugin slot extension point after the title block *)
+      dom ~key:"pt-slot" ~style_class:"flex flex-row"
+        [ dom ~key:"pt-slot-i" ~style_class:"lsp-hook-ui-slot"
+            ~attrs:
+              [ ( "id"
+                , "slot__"
+                  ^ (match page.page_uuid with
+                     | Some u when String.length u >= 8 -> String.sub u 0 8
+                     | _ -> "lui0000") ) ]
+            []
+        ]
     ]
   in
-  (* e2e selects [data-testid='page title'] -> mapped to #page-title *)
-  dom ~key:"page-title" ~id:"page-title"
-    ~style_class:"ls-page-title flex flex-1 w-full content items-start title"
+  (* e2e selects [data-testid='page title'] — same locator as cljs *)
+  dom ~key:"page-title"
+    ~style_class:"ls-page-title flex flex-1 w-full content items-start title \
+                  title"
     ~attrs:[ ("data-testid", "page title") ]
     ~events:"click contextmenu"
     ~on_dom_event:(fun name payload ->
@@ -500,24 +518,44 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
     body
 
 let blocks_inner ?puuid ?(virtualize = false) ?(library = false)
-    ?(scope = "main") (blocks : Model.block list) : t =
+    ?(scope = "main") ?(container = true) (blocks : Model.block list) : t =
   let inner_attrs =
     match puuid with
     | Some u -> [ ("data-pu", u) ]
     | None -> []
   in
   let items = Array.of_list blocks in
-  let body =
-    if Virt_list.enabled ~virtualize (Array.length items) then
-      (* cljs parity: .blocks-list-wrap carries data-virtuoso-scroller;
-         rows are .ls-virt-row[data-index] > .ls-block *)
+  (* cljs plain-block-list: (when (seq block-uuids)
+     [:div.blocks-list-wrap ...]) — empty pages emit no wrap *)
+  let list_wrap =
+    if blocks = [] then []
+    else if Virt_list.enabled ~virtualize (Array.length items) then
+      (* cljs parity: .blocks-list-wrap carries
+         data-virtuoso-scroller; rows are .ls-virt-row[data-index] >
+         .ls-block *)
       [ dom ~key:"blw-virt" ~style_class:"blocks-list-wrap"
-          ~attrs:[ ("data-level", "0"); ("data-virtuoso-scroller", "true") ]
+          ~attrs:
+            [ ("data-level", "0"); ("data-virtuoso-scroller", "true") ]
           [ Virt_list.list ~key_of:Tree.block_key
               ~estimate_size:(fun _ -> 32.)
-              ~render:(Tree.block_row ~library ~scope) items ]
-      ]
-    else List.map (Tree.block_row ~library ~scope) blocks
+              ~render:(Tree.block_row ~library ~scope) items ] ]
+    else
+      [ dom ~key:"blw" ~style_class:"blocks-list-wrap"
+          ~attrs:[ ("data-level", "0") ]
+          (List.map (Tree.block_row ~library ~scope) blocks) ]
+  in
+  (* cljs page-root-virtual-list: .blocks-container.flex-1[containerid]
+     wraps the .blocks-list-wrap block list; journal-page's
+     plain-block-list sits directly under .page-blocks-inner *)
+  let body =
+    if not container then list_wrap
+    else
+      [ dom ~key:"blc" ~style_class:"blocks-container flex-1"
+          ~attrs:
+            (match puuid with
+             | Some u -> [ ("containerid", u) ]
+             | None -> [])
+          list_wrap ]
   in
   dom ~key:"page-blocks" ~style_class:"mt-4 ls-page-blocks"
     ~attrs:[ ("style", "margin-left: -20px") ]
@@ -595,8 +633,8 @@ let refs_view_head key ?on_search title count : t =
                   [ ("type", "button"); ("tabindex", "0")
                   ; ("data-view-tab-id", "view-tab-" ^ key) ]
                 ~style_class:(ui_btn ^ " as-text rounded text-sm px-0 py-0 h-6")
-                [ dom ~key:"vh-tt" ~tag:"span" ~text:title []
-                ; dom ~key:"vh-n" ~tag:"span"
+                ~text:title
+                [ dom ~key:"vh-n" ~tag:"span"
                     ~style_class:"text-muted-foreground text-xs"
                     ~text:(string_of_int count) []
                 ]
@@ -650,10 +688,9 @@ let refs_view_head key ?on_search title count : t =
         ]
     ]
 
-(* cljs ls-foldable-title wrapping a view-head or a group page-ref.
-   ~control:false drops the fold arrow — only the section-level title
-   carries .ls-foldable-title-control in cljs — ref-group titles are
-   plain headers. *)
+(* cljs ui/foldable-title: .ls-foldable-title > .foldable-title >
+   .ls-foldable-header > [a.ls-foldable-title-control] + header —
+   the control renders at every level (section and group titles). *)
 let foldable_title ?on_click ?(control = true) key inner : t =
   dom ~key:(key ^ "-ft") ~style_class:"ls-foldable-title content"
     [ dom ~key:"ftr" ~style_class:"flex-1 flex-row foldable-title"
@@ -677,20 +714,24 @@ let ref_group idx (name, blocks) : t =
                   ; ("data-item-index", string_of_int idx)
                   ; ("style", "overflow-anchor: none;") ]
     [ dom ~key:"gi" ~style_class:"flex flex-col"
-        [ foldable_title ~control:false (key ^ "-t")
+        [ foldable_title (key ^ "-t")
             (dom ~key:"grp" ~style_class:""
                [ dom ~key:"grl" ~tag:"a" ~style_class:"page-ref relative"
                    ~attrs:
                      [ ("tabindex", "0"); ("draggable", "true")
-                     ; ("data-ref", name); ("href", "#/page/" ^ name) ]
+                     ; ("data-ref", String.lowercase_ascii name) ]
                    [ dom ~key:"grs" ~tag:"span" ~text:name [] ]
                ])
         ; foldable_content (key ^ "-b")
+            (* cljs: .-ml-2 > div#<viewid> > div(partition) >
+               [.ml-6 breadcrumb + .content list] *)
             (dom ~key:"grm" ~style_class:"-ml-2"
-               [ dom ~key:"grb" ~style_class:"ml-6 text-sm opacity-70 \
-                              hover:opacity-100 mt-1" []
-               ; dom ~key:"grc" ~style_class:"content"
-                   (List.map
+               [ dom ~key:"grv" ~id:(Platform.random_uuid ())
+                   [ dom ~key:"grp2"
+                       [ dom ~key:"grb" ~style_class:"ml-6 text-sm \
+                          opacity-70 hover:opacity-100 mt-1" []
+                       ; dom ~key:"grc" ~style_class:"content"
+                           (List.map
                       (fun (b : Model.block) ->
                         dom
                           ~key:("grw-"
@@ -699,6 +740,8 @@ let ref_group idx (name, blocks) : t =
                           ~attrs:[ ("style", "min-height: 24px;") ]
                           [ Tree.block_row_static b ])
                       blocks)
+                       ]
+                   ]
                ])
         ]
     ]
@@ -757,7 +800,7 @@ let fetch_unlinked (m : Model.t) =
 
 let references_view (refs : Model.block list) : t =
   match refs with
-  | [] -> box ~key:"refs-empty" []
+  | [] -> Logseq_dom.nothing
   | _ ->
       let groups = refs_grouped refs in
       dom ~key:"refs" ~style_class:"references"
@@ -787,7 +830,7 @@ let references_view (refs : Model.block list) : t =
 let journal_references_view (p : Model.page) : t =
   let key = Option.value p.Model.page_uuid ~default:p.Model.page_title in
   match p.Model.page_linked_refs with
-  | [] -> box ~key:("jrefs-empty-" ^ key) []
+  | [] -> Logseq_dom.nothing
   | refs ->
       dom ~key:("jrefs-" ^ key) ~style_class:"references references-wrap"
         [ dom ~key:"jrfc" ~style_class:"ls-foldable-content"
@@ -837,7 +880,7 @@ let unlinked_row (b : Model.block) : t =
              ~style_class:"unlinked-page-name"
              ~attrs:[ ("href", "#/page/" ^ name) ]
              ~text:name []
-       | None -> box ~key:("urp-" ^ key) [])
+       | None -> Logseq_dom.nothing)
     ; Tree.block_row ~scope:"unlinked" b
     ]
 
@@ -845,7 +888,7 @@ let unlinked_row (b : Model.block) : t =
    refs; our search input + fold toggle ride on the same handlers *)
 let unlinked_references_view (m : Model.t) : t =
   match m.unlinked_refs with
-  | [] -> box ~key:"urefs-empty" []
+  | [] -> Logseq_dom.nothing
   | refs ->
   let filtered =
     let q = String.trim m.unlinked_query in
@@ -881,7 +924,7 @@ let unlinked_references_view (m : Model.t) : t =
                         , if m.unlinked_open then "false" else "true" ) ]
                     [ dom ~key:"ufci" ~style_class:"ls-foldable-content-inner"
                         [ (if m.unlinked_search then unlinked_search_input ()
-                          else box ~key:"urefs-sb" [])
+                          else Logseq_dom.nothing)
                         ; dom ~key:"urefs-body"
                             ~style_class:"ls-view-body flex flex-col gap-2 \
                                           grid mt-1"
@@ -910,6 +953,11 @@ let page_wrap_attrs (page : Model.page) : (string * string) list =
         , "[" ^ String.concat ", " (List.map (fun t -> "\"" ^ t ^ "\"") tags)
           ^ "]" ) ]
 
+let is_today_journal (page : Model.page) : bool =
+  match page.page_journal_day with
+  | Some d -> d = Dates.today_journal_day ()
+  | None -> false
+
 let is_today_page (m : Model.t) (page : Model.page) : bool =
   match page.page_journal_day with
   | Some d -> d = Dates.today_journal_day () && m.route <> Model.Home
@@ -931,32 +979,59 @@ let journal_item ?(last = false) (m : Model.t) (p : Model.page) : t =
             ~style_class:"relative grid gap-4 sm:gap-8 page-inner mb-16"
             [ dom ~key:("jit-" ^ key) ~style_class:"flex flex-row space-between"
                 [ page_title_el m p ]
-            ; blocks_inner ?puuid:p.page_uuid p.page_blocks
+            ; blocks_inner ?puuid:p.page_uuid ~container:false
+                p.page_blocks
             ]
         ; dom ~key:("jrefs-w-" ^ key) ~style_class:"flex flex-col gap-8 ml-1"
-            [ dom ~key:"jrefs-f" ~style_class:"fade-in delay"
-                [ journal_references_view p ]
-            ]
+            (* cljs journal-page: #today-queries div on the today item,
+               then one .fade-in.delay refs section (unlinked refs are
+               suppressed on the home route) *)
+            ((if is_today_journal p then
+                [ dom ~key:"tq" ~id:"today-queries" [] ]
+              else [])
+            @ [ dom ~key:"jrefs-f" ~style_class:"fade-in delay"
+                  [ journal_references_view p ]
+              ])
         ]
     ]
 
+(* cljs all-journals mounts a Virtuoso scroller with custom-scroll-parent:
+   #journals > div > div > div[data-testid=virtuoso-item-list] > div >
+   journal-item. We keep the same scaffolding. *)
+let journals_virt_item (m : Model.t) (js : Model.page list) : t list =
+  List.mapi
+    (fun i p ->
+      dom ~key:("jvi-" ^ string_of_int i)
+        [ journal_item ~last:(i = List.length js - 1) m p ])
+    js
+
 let journals_view (m : Model.t) (js : Model.page list) : t =
   let items = Array.of_list js in
-  dom ~key:"journals" ~id:"journals" ~style_class:"cp__journals h-full"
+  dom ~key:"journals" ~id:"journals" ~style_class:"h-full"
     (match js with
-     | [] -> [ dom ~key:"jp" ~style_class:"journal-item-placeholder" [] ]
+     | [] ->
+         [ dom ~key:"jp"
+             ~style_class:"journal-item-placeholder animate-pulse p-6" [] ]
      | _ ->
          if Virt_list.force_virtualized () then
-           [ Virt_list.list
-               ~list_attrs:[ ("data-virtuoso-scroller", "true") ]
-               ~estimate_size:(fun _ -> 640.)
-               ~key_of:(fun (p : Model.page) ->
-                 Option.value p.page_uuid ~default:p.page_title)
-               ~render:(journal_item m) items ]
+           [ dom ~key:"js"
+               [ dom ~key:"jvp"
+                   [ Virt_list.list
+                       ~list_attrs:[ ("data-virtuoso-scroller", "true") ]
+                       ~estimate_size:(fun _ -> 640.)
+                       ~key_of:(fun (p : Model.page) ->
+                         Option.value p.page_uuid ~default:p.page_title)
+                       ~render:(journal_item m) items ]
+               ]
+           ]
          else
-           List.mapi
-             (fun i p -> journal_item ~last:(i = List.length js - 1) m p)
-             js)
+           [ dom ~key:"js"
+               [ dom ~key:"jvp"
+                   [ dom ~key:"jil"
+                       ~attrs:[ ("data-testid", "virtuoso-item-list") ]
+                       (journals_virt_item m js) ]
+               ]
+           ])
 
 let not_found_view name : t =
   dom ~key:"not-found" ~style_class:"page"
@@ -1015,12 +1090,21 @@ let page_view (m : Model.t) (page : Model.page) : t =
            then [ dom ~key:"tq" ~attrs:[ ("id", "today-queries") ] [] ]
            else []))
     ; dom ~key:"refs-wrap" ~style_class:"flex flex-col gap-8 ml-1"
-        [ dom ~key:"lrefs" ~style_class:"fade-in delay"
-            [ references_view m.page_refs ]
-        ; dom ~key:"urefs" ~style_class:"fade-in delay"
-            [ unlinked_references_view m ]
-
-        ]
+        (* cljs page-inner: #today-queries div first on today's journal,
+           then linked and unlinked refs .fade-in.delay sections *)
+        ((if is_today_page m page then
+            [ dom ~key:"tq" ~id:"today-queries" [] ]
+          else [])
+        @ [ dom ~key:"lrefs" ~style_class:"fade-in delay"
+              [ references_view m.page_refs ]
+          ; (* cljs page.cljs when-not class-page?/property-page? — the
+               unlinked section is omitted entirely on node pages *)
+            (if page.page_is_tag || page.page_is_property
+             then Logseq_dom.nothing
+             else
+               dom ~key:"urefs" ~style_class:"fade-in delay"
+                 [ unlinked_references_view m ])
+          ])
     ]
 
 let empty_state () : t =
@@ -1053,28 +1137,19 @@ let library_view (m : Model.t) (page : Model.page) : t =
     ; dom ~key:"refs-wrap" ~style_class:"flex flex-col gap-8 ml-1"
         [ dom ~key:"lrefs" ~style_class:"fade-in delay"
             [ references_view m.page_refs ]
-        ; dom ~key:"urefs" ~style_class:"fade-in delay"
-            [ unlinked_references_view m ]
+        ; (if page.page_is_tag || page.page_is_property
+           then Logseq_dom.nothing
+           else
+             dom ~key:"urefs" ~style_class:"fade-in delay"
+               [ unlinked_references_view m ])
         ]
     ]
 
 let page_view_of_model (m : Model.t) : t =
   match m.phase, m.route with
-  | Model.Ready, Model.Journals -> journals_view m m.journals
-  | Model.Ready, Model.Home -> (
-      (* cljs :home is the journals stream (same #journals > .journal-item
-         view as :all-journals); today's single journal is only a stand-in
-         until get-latest-journals resolves *)
-      match m.journals with
-      | _ :: _ -> journals_view m m.journals
-      | [] -> (
-          match m.route_page with
-          | Some p when p.page_journal_day <> None ->
-              dom ~key:"journals" ~id:"journals"
-                ~style_class:"cp__journals h-full"
-                [ journal_item ~last:true m p ]
-          | Some p -> page_view m p
-          | None -> empty_state ()))
+  | Model.Ready, (Model.Journals | Model.Home) ->
+      (* cljs container.cljs: journals render inside a plain route-root div *)
+      dom ~key:"journals-root" [ journals_view m m.journals ]
   | Model.Ready, Model.Library -> (
       match m.route_page with
       | Some p -> library_view m p

@@ -652,6 +652,15 @@ let valid_journal_title_with_slash (title : string) : bool =
 (* date-time-util/ms->journal-day — local date as yyyymmdd int. *)
 let ms_to_journal_day (ms : int64) : int = date_to_int ms
 
+(* date-time-util/utc-ms->journal-day — ms to the :block/journal-day of its
+   UTC calendar day; the inverse of journal-day->ms, which gives UTC
+   midnight. *)
+let utc_ms_to_journal_day (ms : int64) : int =
+  let year, month, day, _, _, _, _ =
+    Time.civil_fields (Time.civil_of_epoch_ms Time.utc (Time.epoch_ms ms))
+  in
+  (year * 10000) + (month * 100) + day
+
 (* ---------- journal title formatting ---------- *)
 
 let ordinal_suffix d =

@@ -428,7 +428,7 @@ let () = Dispatcher.register "thread-api/get-recent-pages" get_recent_pages
    :block/_alias of the entity. *)
 let get_block_source args =
   with_conn args (fun db ->
-      (* cljs (d/entity @conn id) throws on unparseable refs *)
+      (* cljs (d/entity @conn id) throws on unparsable refs *)
       let r =
         Ds_wire.entity_ref_of_transit
           (Option.value (arg args 1) ~default:Wire.Nil)

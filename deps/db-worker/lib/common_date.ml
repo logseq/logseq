@@ -20,7 +20,7 @@ let normalize_date (s : string) (date_formatter : string option)
     (journal_title_formatters date_formatter)
 
 (* normalize-journal-title — capitalize then normalize-date; nil title or
-   unparseable title returns None. *)
+   unparsable title returns None. *)
 let normalize_journal_title (title : string option)
     (date_formatter : string option) : (int * int * int) option =
   match title with

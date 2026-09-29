@@ -247,6 +247,39 @@ let cell_value blk (c : V.column) : W.t =
 
 (* ---------- cells ---------- *)
 
+(* cljs shui checkbox renders a styled button[role=checkbox] with a
+   plain input[type=checkbox] sibling; the label toggles .peer styles *)
+let checkbox_cls ~jtrigger show =
+  "ui__checkbox peer h-4 w-4 shrink-0 rounded-sm border border-primary \
+   cursor-pointer flex transition-opacity focus-visible:outline-none \
+   focus-visible:ring-2 focus-visible:ring-ring \
+   focus-visible:ring-offset-2 ring-offset-background \
+   disabled:cursor-not-allowed disabled:opacity-50 \
+   data-[checked]:bg-primary data-[checked]:text-primary-foreground"
+  ^ (if jtrigger then " jtrigger" else "")
+  ^ if show then " opacity-100" else " opacity-0"
+
+let checkbox_btn ~jtrigger ~checked ~id ~aria_label ~on_toggle : D.el =
+  let btn =
+    D.h ~tag:"button" ~cls:(checkbox_cls ~jtrigger checked)
+      ~attrs:
+        [ ("type", "button"); ("role", "checkbox"); ("id", id)
+        ; ("aria-label", aria_label) ]
+      ()
+  in
+  if checked then D.el_set_attr btn "aria-checked" "true";
+  D.el_add_listener btn "click" (fun ev ->
+      Editor_dom.stop_propagation ev;
+      let on = not checked in
+      D.el_set_attr btn "aria-checked" (if on then "true" else "false");
+      if on then D.el_set_attr btn "data-checked" ""
+      else D.el_remove_attr btn "data-checked";
+      on_toggle on);
+  btn
+
+let checkbox_hidden_input () : D.el =
+  D.h ~tag:"input" ~attrs:[ ("type", "checkbox") ] ()
+
 (* cljs row-checkbox: label.jtrigger > shui checkbox; opacity flips on
    hover of the label *)
 let select_cell inst ~refresh ~row_uuid ~blk : D.el =
@@ -257,32 +290,25 @@ let select_cell inst ~refresh ~row_uuid ~blk : D.el =
     | None -> row_uuid
   in
   let checked () = V.Sset.mem row_uuid inst.V.selected in
-  let cb_cls show =
-    "jtrigger flex transition-opacity "
-    ^ if show || checked () then "opacity-100" else "opacity-0"
-  in
   let cb =
-    D.h ~tag:"input" ~cls:(cb_cls false)
-      ~attrs:[ ("type", "checkbox"); ("id", dbid ^ "-checkbox") ] ()
+    checkbox_btn ~jtrigger:true ~checked:(checked ())
+      ~id:(dbid ^ "-checkbox") ~aria_label:I.select_row
+      ~on_toggle:(fun on ->
+        inst.V.selected <-
+          (if on then V.Sset.add row_uuid inst.V.selected
+           else V.Sset.remove row_uuid inst.V.selected);
+        refresh inst)
   in
-  D.el_set_checked cb (checked ());
   let label =
     D.h ~tag:"label"
       ~cls:"jtrigger h-8 w-8 flex items-center justify-center cursor-pointer"
       ~attrs:[ ("for", dbid ^ "-checkbox"); ("data-table-row-select", "") ]
-      ~children:[ cb ] ()
+      ~children:[ cb; checkbox_hidden_input () ] ()
   in
   D.el_add_listener label "mouseover" (fun _ ->
-      Editor_dom.el_set_class cb (cb_cls true));
+      Editor_dom.el_set_class cb (checkbox_cls ~jtrigger:true true));
   D.el_add_listener label "mouseout" (fun _ ->
-      Editor_dom.el_set_class cb (cb_cls false));
-  (* native label[for] dispatches the click on the input *)
-  D.el_add_listener cb "click" (fun ev ->
-      Editor_dom.stop_propagation ev;
-      inst.V.selected <-
-        (if D.el_checked cb then V.Sset.add row_uuid inst.V.selected
-         else V.Sset.remove row_uuid inst.V.selected);
-      refresh inst);
+      Editor_dom.el_set_class cb (checkbox_cls ~jtrigger:true (checked ())));
   D.el_append_child inner label;
   inner
 
@@ -308,17 +334,53 @@ let title_cell inst ~row_uuid ~blk (c : V.column) : D.el =
               ]
             ())
    | _ ->
+       (* cljs table-block-title: flex row of text + hover "Open" ghost
+          button (.-right-1.absolute) that opens the row in the sidebar *)
+       let open_sidebar () =
+         Platform.dispatch "ls:open-right-sidebar"
+           (Js.Json.object_
+              (Js.Dict.fromList [ ("uuid", Js.Json.string row_uuid) ]))
+       in
+       let open_btn_cls =
+         D.button_cls ~variant:"ghost"
+           ~cls:
+             "!p-1 w-6 h-6 bg-gray-01 opacity-0 transition-opacity \
+              duration-100 ease-in text-muted-foreground"
+           ()
+       in
+       let open_btn =
+         D.h ~tag:"button" ~cls:open_btn_cls
+           ~attrs:[ ("type", "button"); ("title", I.open_) ]
+           ~children:[ D.icon "arrow-right" ] ()
+       in
+       D.el_add_listener open_btn "click" (fun ev ->
+           Editor_dom.stop_propagation ev;
+           open_sidebar ());
+       let sidebar_btn =
+         D.h ~tag:"button" ~cls:open_btn_cls
+           ~attrs:[ ("type", "button"); ("title", I.open_in_sidebar) ]
+           ~children:[ D.icon "layout-sidebar-right" ] ()
+       in
+       D.el_add_listener sidebar_btn "click" (fun ev ->
+           Editor_dom.stop_propagation ev;
+           open_sidebar ());
        let div =
-         D.h ~cls:
-           "table-block-title relative flex items-center w-full h-full \
-            cursor-pointer"
-           ~text:title ()
+         D.h
+           ~cls:
+             "table-block-title relative flex items-center items-center \
+              w-full h-full cursor-pointer"
+           ~children:
+             [ D.h ~cls:"flex flex-row" ~children:[ D.h ~text:title () ] ()
+             ; D.h ~cls:"-right-1 absolute"
+                 ~children:
+                   [ D.h ~cls:"flex flex-row items-center"
+                       ~children:[ open_btn; sidebar_btn ] () ]
+                 () ]
+           ()
        in
        D.el_add_listener div "click" (fun ev ->
            Editor_dom.stop_propagation ev;
-           Platform.dispatch "ls:open-right-sidebar"
-             (Js.Json.object_
-                (Js.Dict.fromList [ ("uuid", Js.Json.string row_uuid) ])));
+           open_sidebar ());
        D.el_append_child inner div);
   inner
 
@@ -332,10 +394,18 @@ let prop_cell ~blk (c : V.column) : D.el =
          (D.h ~tag:"a" ~cls:"page-ref" ~attrs:[ ("href", "#/page/" ^ href) ]
             ~text:t ())
    | W.Array xs when c.V.c_many ->
-       (* cljs block-title over a node-many property: div.flex.flex-row
-          with "," separators between page-ref links; the implicit Page
-          class is hidden (cljs renders nothing for it in the cell) *)
-       let box = D.h ~cls:"flex flex-row" () in
+       (* cljs pv: .property-value-inner > .multi-values > select-items;
+          the implicit Page class is hidden *)
+       let box =
+         D.h
+           ~cls:
+             "flex flex-1 flex-row flex-wrap gap-1 items-center jtrigger \
+              min-w-0 multi-values"
+           ()
+       in
+       let pv =
+         D.h ~cls:"property-value-inner w-full" ~children:[ box ] ()
+       in
        let items =
          List.filter
            (fun x ->
@@ -368,7 +438,7 @@ let prop_cell ~blk (c : V.column) : D.el =
            end
            else begin
              if i > 0 then
-               D.el_append_child box (D.h ~cls:"mr-1" ~text:"," ());
+               D.el_append_child box (Editor_dom.create_text_node ",");
              let href = Option.value (Wr.ref_uuid x) ~default:t in
              D.el_append_child box
                (D.h
@@ -379,7 +449,7 @@ let prop_cell ~blk (c : V.column) : D.el =
                   ())
            end)
          items;
-       D.el_append_child inner box
+       D.el_append_child inner pv
    | W.Bool b when c.V.c_type = "checkbox" ->
        let cb = D.h ~tag:"input" ~attrs:[ ("type", "checkbox") ] () in
        D.el_set_checked cb b;
@@ -387,18 +457,21 @@ let prop_cell ~blk (c : V.column) : D.el =
        D.el_append_child inner cb
    | v ->
        D.el_append_child inner
-         (D.h ~tag:"span" ~cls:"truncate" ~text:(fmt_cell_value c v) ()));
+         (Editor_dom.create_text_node (fmt_cell_value c v)));
   inner
 
-(* shui table-cell-container: title attr = plain cell value (none for
-   select/id) *)
+(* cljs title attr on cells = the string cell value only — numeric and
+   datetime cells render none *)
 let cell_title blk (c : V.column) =
   match c.V.c_id with
   | "select" | "id" -> None
   | _ -> (
-      match fmt_cell_value c (cell_value blk c) with
-      | "" -> None
-      | t -> Some t)
+      match cell_value blk c with
+      | W.Int _ | W.Int64 _ | W.Date_ms _ -> None
+      | v -> (
+          match fmt_cell_value c v with
+          | "" -> None
+          | t -> Some t))
 
 
 let cell_el inst ~refresh ~row_uuid ~blk ~idx (c : V.column) : D.el =
@@ -444,35 +517,28 @@ let sortable c =
 (* cljs header-checkbox: opacity-100 while hovered or any selection *)
 let header_select_cell inst ~refresh cell =
   let checked () = not (V.Sset.is_empty inst.V.selected) in
-  let cb_cls show =
-    "flex transition-opacity "
-    ^ if show || checked () then "opacity-100" else "opacity-0"
-  in
   let cb =
-    D.h ~tag:"input" ~cls:(cb_cls false)
-      ~attrs:
-        [ ("type", "checkbox"); ("id", "header-checkbox")
-        ; ("aria-label", I.select_all) ]
-      ()
+    checkbox_btn ~jtrigger:false ~checked:(checked ()) ~id:"header-checkbox"
+      ~aria_label:I.select_all
+      ~on_toggle:(fun on ->
+        inst.V.selected <-
+          (if on then
+             List.fold_left
+               (fun s u -> V.Sset.add u s)
+               inst.V.selected (all_row_uuids inst)
+           else V.Sset.empty);
+        refresh inst)
   in
   let label =
     D.h ~tag:"label"
       ~cls:"h-8 w-8 flex items-center justify-center cursor-pointer"
-      ~attrs:[ ("for", "header-checkbox") ] ~children:[ cb ] ()
+      ~attrs:[ ("for", "header-checkbox") ]
+      ~children:[ cb; checkbox_hidden_input () ] ()
   in
   D.el_add_listener label "mouseover" (fun _ ->
-      Editor_dom.el_set_class cb (cb_cls true));
+      Editor_dom.el_set_class cb (checkbox_cls ~jtrigger:false true));
   D.el_add_listener label "mouseout" (fun _ ->
-      Editor_dom.el_set_class cb (cb_cls false));
-  D.el_add_listener cb "click" (fun ev ->
-      Editor_dom.stop_propagation ev;
-      inst.V.selected <-
-        (if D.el_checked cb then
-           List.fold_left
-             (fun s u -> V.Sset.add u s)
-             inst.V.selected (all_row_uuids inst)
-         else V.Sset.empty);
-      refresh inst);
+      Editor_dom.el_set_class cb (checkbox_cls ~jtrigger:false (checked ())));
   D.el_append_child cell label
 
 (* cljs header-cp: text-variant button holding the title span and a sort
@@ -497,6 +563,7 @@ let header_button inst (c : V.column) : D.el =
          ~cls:"h-8 !pl-2 !px-2 !py-0 hover:text-foreground w-full \
                justify-start"
          ())
+    ~attrs:[ ("type", "button") ]
     ~children ()
 
 let set_column_sort inst ~refresh (c : V.column) asc =
@@ -651,6 +718,25 @@ let action_bar inst ~refresh : D.el option =
 
 (* ---------- table ---------- *)
 
+(* dnd-kit mounts these a11y nodes inside each DndContext *)
+let dnd_described n =
+  D.h ~attrs:[ ("id", "DndDescribedBy-" ^ n) ]
+    ~text:
+      "To pick up a draggable item, press the space bar. While dragging, \
+       use the arrow keys to move the item. Press space again to drop the \
+       item in its new position, or press escape to cancel."
+    ()
+
+let dnd_live n =
+  D.h ~attrs:[ ("id", "DndLiveRegion-" ^ n); ("role", "status") ] ()
+
+(* class-objects tables show the add-property column; matching rows get
+   a trailing empty cell *)
+let show_add_property inst =
+  match inst.V.kind with
+  | V.KTagPage _ -> !Runtime.current_page
+  | V.KPropertyPage _ | V.KAllPages | V.KQuery _ -> None
+
 let row_el inst ~refresh ~idx ~row_uuid (cols : V.column list) : D.el =
   let blk =
     match Hashtbl.find_opt inst.V.blocks row_uuid with
@@ -671,12 +757,34 @@ let row_el inst ~refresh ~idx ~row_uuid (cols : V.column list) : D.el =
         [ ("data-id", data_id); ("blockid", row_uuid); ("tabIndex", "0") ]
       ()
   in
-  let wrap = D.h ~cls:"flex flex-row" () in
+  (* cljs: sticky-columns holds the select cell, sibling .flex.flex-row
+     holds each remaining cell wrapped in .h-full *)
+  let sticky = D.h ~cls:"flex flex-row sticky-columns" () in
+  let row2 = D.h ~cls:"flex flex-row" () in
   List.iter
     (fun c ->
-      D.el_append_child wrap (cell_el inst ~refresh ~row_uuid ~blk ~idx c))
+      let cell = cell_el inst ~refresh ~row_uuid ~blk ~idx c in
+      let wrap = D.h ~cls:"h-full" ~children:[ cell ] () in
+      if c.V.c_id = "select" then D.el_append_child sticky wrap
+      else D.el_append_child row2 wrap)
     cols;
-  D.el_append_child row wrap;
+  (match show_add_property inst with
+   | Some _ ->
+       D.el_append_child row2
+         (D.h ~cls:"h-full"
+            ~children:
+              [ D.h ~cls:"ls-table-cell flex relative h-full"
+                  ~children:
+                    [ D.h
+                        ~cls:
+                          "align-middle flex items-center overflow-x-clip \
+                           w-full"
+                        () ]
+                  () ]
+            ())
+   | None -> ());
+  D.el_append_child sticky row2;
+  D.el_append_child row sticky;
   row
 
 (* cljs: shui/table > .ls-table-rows.content.overflow-x-auto
@@ -694,23 +802,92 @@ let table_el inst ~refresh : D.el =
     D.h ~cls:"ls-table-header border-y transition-colors bg-gray-01"
       ~attrs:[ ("style", "z-index:9") ] ()
   in
+  (* cljs header: .sticky-columns > [#Select > select cell, dnd a11y
+     divs, .flex.flex-row > (div[role=button] > cell)* > #add property] *)
+  let sticky = D.h ~cls:"flex flex-row sticky-columns" () in
   let header_row = D.h ~cls:"flex flex-row" () in
   List.iter
-    (fun c -> D.el_append_child header_row (header_cell inst ~refresh c))
+    (fun c ->
+      let cell = header_cell inst ~refresh c in
+      if c.V.c_id = "select" then
+        D.el_append_child sticky
+          (D.h ~attrs:[ ("id", "Select") ] ~children:[ cell ] ())
+      else (
+        D.el_append_child cell
+          (D.h ~tag:"a" ~cls:"ls-table-resize-handle" ());
+        D.el_append_child header_row
+          (D.h ~attrs:[ ("role", "button") ] ~children:[ cell ] ())))
     cols;
-  D.el_append_child header header_row;
+  D.el_append_child sticky (dnd_described "0");
+  D.el_append_child sticky (dnd_live "0");
+  (* cljs add-property-button: trailing "New property" header cell on
+     class-objects tables only (property-objects/all-pages set
+     show-add-property? false) *)
+  (match show_add_property inst with
+   | Some p -> (
+           let cell = D.h ~cls:"ls-table-header-cell !border-0" () in
+           let btn =
+             D.h ~tag:"button"
+               ~cls:
+                 (D.button_cls ~variant:"text"
+                    ~cls:"h-8 !pl-2 !px-2 !py-0 hover:text-foreground \
+                          w-full justify-start"
+                    ())
+               ~attrs:[ ("type", "button") ]
+               ~children:[ D.icon "plus" ] ()
+           in
+           D.el_append_child btn
+             (Editor_dom.create_text_node I.new_property);
+           (match p.Model.page_uuid with
+            | Some uuid ->
+                D.el_add_listener btn "click" (fun _ ->
+                    let r = D.el_rect cell in
+                    Properties_dialog.open_dialog
+                      ~anchor:(D.rect_left r, D.rect_bottom r +. 4.)
+                      { Properties_dialog.uuid
+                      ; uuids = []
+                      ; db_id = p.Model.page_db_id
+                      ; is_tag = true
+                      ; title = p.Model.page_title
+                      })
+            | None -> ());
+           D.el_append_child cell btn;
+           D.el_append_child header_row
+             (D.h ~attrs:[ ("id", "add property") ] ~children:[ cell ] ()))
+   | None -> ());
+  D.el_append_child header_row (dnd_described "1");
+  D.el_append_child header_row (dnd_live "1");
+  D.el_append_child sticky header_row;
+  D.el_append_child header sticky;
   (match action_bar inst ~refresh with
    | Some bar -> D.el_append_child header bar
    | None -> ());
   D.el_append_child rel header;
+  (* cljs Virtuoso mounts the rows under [data-testid=virtuoso-item-list]
+     inside two bare wrapper divs; each row sits in a bare item div *)
+  let vlist = D.h ~attrs:[ ("data-testid", "virtuoso-item-list") ] () in
   List.iteri
     (fun i u ->
-      D.el_append_child rel
-        (row_el inst ~refresh ~idx:(i + 1) ~row_uuid:u cols))
+      D.el_append_child vlist
+        (D.h ~children:[ row_el inst ~refresh ~idx:(i + 1) ~row_uuid:u cols ]
+           ()))
     (all_row_uuids inst);
-  (* cljs add-new-row footer when data-fns has add-new-object! *)
-  (match inst.V.kind with
-   | V.KTagPage _ | V.KAllPages | V.KPropertyPage _ ->
+  D.el_append_child rel
+    (D.h ~children:[ D.h ~children:[ vlist ] () ] ());
+  (* cljs add-new-row footer when data-fns has add-new-object!:
+     property-objects always; class-objects only for non-private
+     classes (route-info add-object?); all-pages/query never *)
+  let has_add_object =
+    match inst.V.kind with
+    | V.KPropertyPage _ -> true
+    | V.KTagPage _ -> (
+        match !Runtime.current_page with
+        | Some p -> p.Model.page_add_object
+        | None -> false)
+    | V.KAllPages | V.KQuery _ -> false
+  in
+  (match has_add_object with
+   | true ->
        let footer = D.h ~cls:"ls-table-footer fade-in faster" () in
        let row =
          D.h
@@ -725,7 +902,7 @@ let table_el inst ~refresh : D.el =
            (V.ops ()).V.o_add_object inst);
        D.el_append_child footer row;
        D.el_append_child rel footer
-   | V.KQuery _ -> ());
+   | false -> ());
   D.el_append_child scroller rel;
   D.el_append_child tbl scroller;
 
@@ -947,7 +1124,12 @@ let render_table inst ~refresh body =
                    g.Wr.glparts;
                  w)))
         gs
-  | _ -> D.el_append_child body (table_el inst ~refresh)
+  | _ ->
+      (* cljs view-table wraps the table in a random-uuid div *)
+      D.el_append_child body
+        (D.h
+           ~attrs:[ ("id", Platform.random_uuid ()) ]
+           ~children:[ table_el inst ~refresh ] ())
 
 let render_body inst ~refresh ?(filters = None) () : D.el =
   let body = D.h ~cls:"ls-view-body flex flex-col gap-2 grid mt-1" () in

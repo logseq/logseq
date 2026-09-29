@@ -444,7 +444,10 @@ let get_by_id id_wire =
    cljs resolves page args via [:block/name (page-name-sanity-lc name)] —
    get-case-page matches :block/title exactly; a miss falls back to
    get-blocks' :block/name lookup, and a qualified (ns/name) miss retries
-   as a db ident (leading ':' stripped). *)
+   as a db ident (leading ':' stripped).
+   get-case-page returns raw entity attrs (property values as bare eids,
+   no :block/properties) — a hit is re-fetched through get-blocks by uuid
+   so the wire carries the sdk entity shape. *)
 let get_entity id_or_name =
   if is_uuid_string id_or_name then get_by_id (Wire.String id_or_name)
   else

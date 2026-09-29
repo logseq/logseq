@@ -21,12 +21,15 @@ external get_element_by_id : string -> el option = "getElementById"
 external query_selector_all : string -> node_list = "querySelectorAll"
   [@@mel.scope "document"]
 
-external active_element : el option = "activeElement"
-  [@@mel.scope "document"] [@@mel.return nullable]
+external active_element : el option = "document.activeElement"
+  [@@mel.return nullable]
 
 external document_element : el = "document.documentElement"
 
 external create_element : string -> el = "createElement"
+  [@@mel.scope "document"]
+
+external create_el_ns : string -> string -> el = "createElementNS"
   [@@mel.scope "document"]
 
 external create_text_node : string -> el = "createTextNode"
@@ -96,7 +99,12 @@ external el_get_attr : el -> string -> string option = "getAttribute"
   [@@mel.send] [@@mel.return nullable]
 external el_set_attr : el -> string -> string -> unit = "setAttribute"
   [@@mel.send]
+external el_remove_attr : el -> string -> unit = "removeAttribute"
+  [@@mel.send]
 external el_append_child : el -> el -> unit = "appendChild" [@@mel.send]
+external el_contains : el -> el -> bool = "contains" [@@mel.send]
+external el_insert_before : el -> el -> el -> unit = "insertBefore"
+  [@@mel.send]
 external el_set_class : el -> string -> unit = "className" [@@mel.set]
 external el_focus : el -> unit = "focus" [@@mel.send]
 
@@ -137,11 +145,51 @@ external observe_opts :
 external observe : mutation_observer -> el -> observe_opts -> unit
   = "observe" [@@mel.send]
 
+external el_replace_with : el -> el -> unit = "replaceWith" [@@mel.send]
+
 let for_each_selector sel f =
   let nl = query_selector_all sel in
   for i = 0 to node_list_length nl - 1 do
     match node_list_item nl i with Some el -> f el | None -> ()
   done
+
+(* <raw-text> placeholders carry the intended text in data-raw-text and
+   are swapped for real text nodes once they enter the DOM — extension
+   create() can only return Elements, so this observer performs the
+   swap the adapter cannot. *)
+let replace_all_raw_text () =
+  for_each_selector "raw-text" (fun el ->
+      match el_get_attr el "data-raw-text" with
+      | Some s -> el_replace_with el (create_text_node s)
+      | None -> el_replace_with el (create_text_node ""))
+
+(* LUI core stamps id="lui-node-<n>" on every registered/extension node
+   at create time; cljs emits no such ids, so strip them for DOM parity.
+   Ids with a suffix (menu popups, accordion triggers/panels) keep the
+   "lui-node-N-*" form and are left alone since LUI core references them. *)
+let strip_lui_node_ids () =
+  for_each_selector "[id^='lui-node-']" (fun el ->
+      match el_get_attr el "id" with
+      | Some id ->
+          let n = String.length id in
+          let rec digits i =
+            i >= n || (id.[i] >= '0' && id.[i] <= '9' && digits (i + 1))
+          in
+          if n > 9 && digits 9 then el_remove_attr el "id"
+      | None -> ())
+
+let dom_fixups () =
+  replace_all_raw_text ();
+  strip_lui_node_ids ()
+
+let raw_text_observer_installed = ref false
+
+let ensure_raw_text_observer () =
+  if not !raw_text_observer_installed then (
+    raw_text_observer_installed := true;
+    let obs = new_observer dom_fixups in
+    observe obs document_element (observe_opts ~childList:true ~subtree:true);
+    dom_fixups ())
 
 let closest_sel sel target =
   match target with
@@ -157,3 +205,41 @@ let is_editable_target target =
       || el_tag el = "SELECT"
       || el_closest el "[contenteditable='true']" <> None
   | None -> false
+
+(* imperative twin of Icons.icon: span.ui__icon.ti.ls-icon-<name> holding
+   svg.tabler-icon.tabler-icon-<name> built from Icon_tabler_data; font
+   glyph only when no svg data exists *)
+let svg_ns_el tag = create_el_ns "http://www.w3.org/2000/svg" tag
+
+let tabler_svg_el ?(size = 18.) name : el option =
+  let n = Icons.kebab name in
+  match Icon_tabler_data.tabler_children n with
+  | [] -> None
+  | kids ->
+      let svg = svg_ns_el "svg" in
+      List.iter
+        (fun (k, v) -> el_set_attr svg k v)
+        (Icons.tabler_svg_attrs ~size ~filled:(Icons.is_filled n) n " ");
+      List.iter
+        (fun (tag, attrs) ->
+          let k = svg_ns_el tag in
+          List.iter (fun (a, v) -> el_set_attr k a v) attrs;
+          el_append_child svg k)
+        kids;
+      Some svg
+
+let ui_icon_el ?(size = 18.) ?(cls = "") name : el =
+  let span = create_element "span" in
+  (match tabler_svg_el ~size name with
+   | Some svg ->
+       el_set_class span
+         ("ui__icon ti ls-icon-" ^ name ^ if cls = "" then "" else " " ^ cls);
+       el_append_child span svg
+   | None ->
+       let prefix =
+         if List.mem (Icons.kebab name) Icons.tie_names then "tie tie-"
+         else "ti ti-"
+       in
+       el_set_class span
+         ("ui__icon " ^ prefix ^ name ^ if cls = "" then "" else " " ^ cls));
+  span
