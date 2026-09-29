@@ -23,9 +23,12 @@ type t =
   | Dismiss_all (* Escape / outside click *)
   | Toast_push of Model.toast
   | Toast_dismiss of int
+  | Toast_dismiss_key of string
   | Toasts_clear
   | Unlinked_toggle_open
   | Unlinked_toggle_search
   | Unlinked_set_query of string
   | Help_toggle
+  | Rtc_state of Model.rtc (* rtc-sync-state broadcast *)
+  | Rtc_state_clear (* a graph's sync is (re)starting — hide stale state *)
   | Noop

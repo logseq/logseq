@@ -449,22 +449,72 @@ let img_attrs uuid (b : Model.block) =
       base @ [ ("height", string_of_int (w * ah / aw)) ]
   | _ -> base
 
-(* runs at mount time — LUI commits the img to the DOM after this returns
-   and the async pfs-read may resolve first, so the DOM lookup retries on
-   a task tick until the element appears *)
-let set_img_src uuid file ext =
-  let rec put url tries =
-    match B.qs ("#asset-img-" ^ uuid) with
-    | Some img -> B.set_attr img "src" url
-    | None when tries > 0 ->
-        ignore
-          (Js.Global.setTimeout ~f:(fun () -> put url (tries - 1)) 0)
-    | None -> ()
-  in
+(* asset render readiness — the img only mounts once the asset file exists
+   in pfs (cljs asset-cp renders asset-link only when file-ready?). A per-uuid
+   signal flips true when the object URL resolves; remote downloads are
+   requested once per uuid and retried on asset-file-write-finish *)
+let ready_sigs
+    : (string, string * string * bool Signal.state) Hashtbl.t =
+  Hashtbl.create 17
+
+let download_requested : (string, string) Hashtbl.t = Hashtbl.create 17
+
+(* cljs maybe-request-remote-asset-download! — the worker no-ops when the
+   asset lacks remote-metadata or the file already exists *)
+let request_remote_download uuid ext =
+  let r = repo () in
+  if
+    r <> "" && ext <> "" && not (Hashtbl.mem download_requested uuid)
+  then begin
+    Hashtbl.replace download_requested uuid ext;
+    ignore
+      (Runtime.invoke2 "thread-api/db-sync-request-asset-download"
+         (W.String r) (W.String uuid)
+       |> Js.Promise.then_ (fun _ -> Js.Promise.resolve ())
+       |> Js.Promise.catch (fun _ -> Js.Promise.resolve ()))
+  end
+
+let resolve_img uuid file ext st =
   ignore
     (A.object_url ~repo:(repo ()) ~name:file ~mime:(mime_of_ext ext)
-     |> Js.Promise.then_ (fun url -> put url 40; Js.Promise.resolve ())
-     |> Js.Promise.catch (fun _ -> Js.Promise.resolve ()))
+     |> Js.Promise.then_ (fun _ ->
+            Runtime.signal_set st true;
+            Js.Promise.resolve ())
+     |> Js.Promise.catch (fun _ ->
+            request_remote_download uuid ext;
+            Js.Promise.resolve ()))
+
+let ready_for uuid ext context : bool Signal.state =
+  match Hashtbl.find_opt ready_sigs uuid with
+  | Some (_, _, st) -> st
+  | None ->
+      let st = Signal.state context.Lui_ui.ui_scheduler false in
+      Hashtbl.replace ready_sigs uuid (repo (), ext, st);
+      st
+
+(* worker wrote assets/<uuid>.<ext> to pfs after a remote download —
+   re-resolve the object URL and flip the img on *)
+let on_asset_write_finish ~repo' ~asset_id =
+  if repo' = repo () then
+    match Hashtbl.find_opt ready_sigs asset_id with
+    | Some (_, ext, st) ->
+        Hashtbl.remove download_requested asset_id;
+        resolve_img asset_id (asset_id ^ "." ^ ext) ext st
+    | None -> ()
+
+(* a download request issued before db-sync-start has a live client is a
+   silent no-op on the worker — on each rtc-sync-state broadcast re-resolve
+   every still-pending img so it asks again once the client exists *)
+let retry_pending () =
+  let r = repo () in
+  if r <> "" then
+    Hashtbl.iter
+      (fun uuid (repo', ext, st) ->
+        if repo' = r && not (Signal.get st.Signal.state_signal) then begin
+          Hashtbl.remove download_requested uuid;
+          resolve_img uuid (uuid ^ "." ^ ext) ext st
+        end)
+      ready_sigs
 
 (* record asset/width+height once the img decodes — cljs measure-image! *)
 let measure_on_load uuid (b : Model.block) =
@@ -483,40 +533,53 @@ let measure_on_load uuid (b : Model.block) =
                    (W.Int (int_of_float (nat_h img))) ])
       | _ -> ())
 
-let asset_container uuid (b : Model.block) : t =
-  let ext = Option.value b.Model.block_asset_type ~default:"" in
-  let file = uuid ^ "." ^ ext in
-  let cached_src =
+let asset_img uuid (b : Model.block) file : t =
+  let src =
     match Hashtbl.find_opt A.url_cache file with
     | Some u -> u
     | None -> ""
   in
-  dom ~key:("ac-" ^ uuid) ~style_class:"asset-container"
-    ~events:"click"
-    ~on_dom_event:(fun name payload ->
-      (* clicks on the action bar inside the container must not open the
-         lightbox — cljs stops propagation on the trigger instead *)
-      let on_img =
-        Option.fold ~none:false
-          ~some:(fun p ->
-            let s = Platform.payload_str p "targetId" in
-            String.length s >= 10 && String.sub s 0 10 = "asset-img-")
-          payload
-      in
-      if name = "click" && on_img then
-        match B.qs ("#asset-img-" ^ uuid) with
-        | Some img -> open_lightbox img
-        | None -> ())
-    [ dom ~key:("acimg-" ^ uuid) ~tag:"img"
-        ~style_class:"rounded-sm relative fade-in fade-in-faster"
-        ~attrs:
-          ( img_attrs uuid b
-          @ if cached_src = "" then [] else [ ("src", cached_src) ] )
-        ~events:"load"
-        ~on_dom_event:(fun name _ ->
-          if name = "load" then measure_on_load uuid b)
-        []
-    ; action_bar uuid b ]
+  dom ~key:("acimg-" ^ uuid) ~tag:"img"
+    ~style_class:"rounded-sm relative fade-in fade-in-faster"
+    ~attrs:
+      ( img_attrs uuid b
+      @ if src = "" then [] else [ ("src", src) ] )
+    ~events:"load"
+    ~on_dom_event:(fun name _ ->
+      if name = "load" then measure_on_load uuid b)
+    []
+
+let asset_placeholder : t =
+  dom ~key:"acph" ~style_class:"img-placeholder asset-container"
+    ~attrs:[ ("style", "width: 250px") ] []
+
+let asset_container uuid (b : Model.block) : t =
+  let ext = Option.value b.Model.block_asset_type ~default:"" in
+  let file = uuid ^ "." ^ ext in
+  fun context parent ->
+    let ready = ready_for uuid ext context in
+    (if not (Signal.get ready.Signal.state_signal) then
+       resolve_img uuid file ext ready);
+    (dom ~key:("ac-" ^ uuid) ~style_class:"asset-container"
+       ~events:"click"
+       ~on_dom_event:(fun name payload ->
+         (* clicks on the action bar inside the container must not open the
+            lightbox — cljs stops propagation on the trigger instead *)
+         let on_img =
+           Option.fold ~none:false
+             ~some:(fun p ->
+               let s = Platform.payload_str p "targetId" in
+               String.length s >= 10 && String.sub s 0 10 = "asset-img-")
+             payload
+         in
+         if name = "click" && on_img then
+           match B.qs ("#asset-img-" ^ uuid) with
+           | Some img -> open_lightbox img
+           | None -> ())
+       [ dyn ~equal:(=) (fun r -> if r then asset_img uuid b file else asset_placeholder)
+           ready.Signal.state_signal
+       ; action_bar uuid b ])
+      context parent
 
 let resize_handle uuid side : t =
   let cls =
@@ -536,8 +599,6 @@ let resize_handle uuid side : t =
 
 let image_block uuid (b : Model.block) : t =
   let align = Option.value b.Model.block_asset_align ~default:"left" in
-  let ext = Option.value b.Model.block_asset_type ~default:"" in
-  set_img_src uuid (uuid ^ "." ^ ext) ext;
   dom ~key:("ri-" ^ uuid) ~style_class:"ls-resize-inner w-full select-none"
     [ dom ~key:("rim-" ^ uuid)
         ~style_class:("ls-resize-image rounded-md align-" ^ align)

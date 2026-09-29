@@ -56,6 +56,52 @@ let parse_hash () : Model.route =
 
 let repo = Runtime.repo
 
+(* cljs set-route-match!: the hash can carry query params —
+   ?anchor=ls-block-<uuid> on block-ref/backlink navigation *)
+let route_anchor () =
+  let h = Platform.location_hash () in
+  match String.index_opt h '?' with
+  | None -> None
+  | Some i ->
+      Platform.search_params_get
+        (Platform.new_url_search_params
+           (String.sub h (i + 1) (String.length h - i - 1)))
+        "anchor"
+
+(* cljs ui-handler/highlight-element!: a "ls-block-<uuid>" anchor
+   scrolls the row into view and selects the block; other fragment ids
+   scroll and flash block-highlight for 4s. Rows inside collapsed or
+   lazily mounted subtrees appear after the route commits — poll like
+   cljs wait-for-anchor-element! *)
+let anchor_timer = ref 0
+
+let rec poll_anchor anchor n =
+  match Editor_dom.get_element_by_id anchor with
+  | Some el ->
+      Editor_dom.el_scroll_into_view el;
+      if String.length anchor > 36 then
+        let tail =
+          String.sub anchor (String.length anchor - 36) 36
+        in
+        if Wire.is_uuid_string tail then
+          Editor_actions.select_single tail
+        else (
+          Editor_dom.el_class_add el "block-highlight";
+          anchor_timer :=
+            Editor_dom.set_timeout_id
+              (fun () ->
+                Editor_dom.el_class_remove el "block-highlight")
+              4000)
+  | None ->
+      if n < 120 then
+        anchor_timer :=
+          Editor_dom.set_timeout_id (fun () -> poll_anchor anchor (n + 1))
+            50
+
+let jump_to_anchor anchor =
+  Editor_dom.clear_timeout !anchor_timer;
+  poll_anchor anchor 0
+
 let fetch_blocks (p : Model.page) =
   Outliner_ops.fetch_page_blocks (repo ()) p
   |> Js.Promise.then_ (fun blocks ->
@@ -90,16 +136,22 @@ let fetch_refs_blocks (p : Model.page) : Model.block list Js.Promise.t =
              Js.Promise.resolve blocks)
   | None -> Js.Promise.resolve []
 
-let fetch_refs (p : Model.page) =
+(* refs/unlinked fetches resolve after their page load committed — guard
+   the send so a stale in-flight fetch can't overwrite the current route *)
+let fetch_refs ~stale:(is_stale : unit -> bool) (p : Model.page) =
   fetch_refs_blocks p
   |> Js.Promise.then_ (fun blocks ->
-         Js.Promise.resolve (Runtime.send (Action.Refs_loaded blocks)))
+         Js.Promise.resolve
+           (if not (is_stale ()) then
+              Runtime.send (Action.Refs_loaded blocks)))
+  |> Js.Promise.catch (fun e ->
+         Platform.console_error ("get-block-refs failed", e);
+         Js.Promise.resolve ())
   |> ignore
 
-(* unlinked references: blocks whose title mentions the page title
-   without a [[ref]] — the view search input filters by row title
-   substring (cljs row-matched) *)
-let fetch_unlinked (p : Model.page) =
+(* unlinked references for the page's collapsed "Unlinked references"
+   section — fetched lazily when the section opens *)
+let fetch_unlinked ~stale:(is_stale : unit -> bool) (p : Model.page) =
   match p.Model.page_db_id with
   | Some id ->
       ignore
@@ -107,11 +159,14 @@ let fetch_unlinked (p : Model.page) =
            (Wire.String (repo ())) (Wire.Int id)
          |> Js.Promise.then_ (fun w ->
                 Js.Promise.resolve
-                  (Runtime.send
-                     (Action.Unlinked_loaded (Decode.blocks_of_wire w)))))
+                  (if not (is_stale ()) then
+                     Runtime.send
+                       (Action.Unlinked_loaded (Decode.blocks_of_wire w))))
+         |> Js.Promise.catch (fun e ->
+                Platform.console_error
+                  ("get-unlinked-references failed", e);
+                Js.Promise.resolve ()))
   | None -> ()
-
-let fetch_unlinked_refs = Outliner_ops.fetch_unlinked_refs
 
 let load_journals () =
   Runtime.invoke2 "thread-api/get-latest-journals" (Wire.String (repo ()))
@@ -141,12 +196,19 @@ let load_journals () =
                    | Some (Model.Journals | Model.Home) ->
                        Runtime.send (Action.Journals_loaded js)
                    | _ -> ())))
+  |> Js.Promise.catch (fun e ->
+         Platform.console_error ("load_journals failed", e);
+         (match !Runtime.current_route with
+          | Some (Model.Journals | Model.Home) ->
+              Runtime.send Action.Page_load_failed
+          | _ -> ());
+         Js.Promise.resolve ())
 
 (* fetches for the same route can resolve out of order — only the
    latest-initiated load may commit, otherwise an older response lands
    last and clobbers fresher state (e.g. page_blocks before a pending
-   insert was committed) *)
-let bump_load_gen () = incr Runtime.load_gen
+   insert was committed); callers capture !Runtime.load_gen right after
+   their own incr and compare at commit time *)
 
 (* drop a send when the route moved on while the fetch was in-flight —
    otherwise a slow stale load overwrites the page the user navigated to *)
@@ -155,32 +217,59 @@ let stale (route : Model.route) = !Runtime.current_route <> Some route
 (* get-page-route-info resolves name/uuid/lookup-ref -> summary *)
 let load_page_ref for_route ref_v =
   incr Runtime.load_gen;
+  let gen = !Runtime.load_gen in
+  let is_stale () = stale for_route || gen <> !Runtime.load_gen in
   Runtime.invoke2 "thread-api/get-page-route-info"
     (Wire.String (repo ())) ref_v
   |> Js.Promise.then_ (fun info ->
+         (* cljs redirect-to-page!: an alias page's route resolves to
+            its source page (self-alias guard: don't loop when the route
+            already targets the source uuid) *)
+         match
+           ( Wire.map_get_uuid info "alias-source-uuid"
+           , Wire.as_uuid ref_v )
+         with
+         | Some src, cur when cur <> Some src ->
+             if not (is_stale ()) then
+               Platform.set_location_hash
+                 (Runtime.nav_hash ("#/page/" ^ src));
+             Js.Promise.resolve ()
+         | _ -> (
          match Decode.page_of_summary info with
          | Some p ->
              fetch_blocks p
              |> Js.Promise.then_ (fun p' ->
                     Outliner_ops.resolve_page_tags (repo ()) p'
                     |> Js.Promise.then_ (fun p'' ->
-                           if not (stale for_route) then (
+                           if not (is_stale ()) then (
                              (* a fresh page snapshot is authoritative —
                                 drop pending committed-buffer title paints *)
                              Editor_state.clear_overrides ();
                              Runtime.send (Action.Page_loaded p'');
-                             fetch_refs p'';
-                             fetch_unlinked_refs p'');
+                             fetch_refs ~stale:is_stale p'';
+                             Outliner_ops.fetch_unlinked_refs
+                               ~stale:is_stale p'';
+                             (* zoom-out to a page parent keeps the zoomed
+                                block in edit mode (cljs pending-edit) *)
+                             (match Editor_actions.consume_pending_zoom ()
+                              with
+                              | Some u when Editor_state.ready () -> (
+                                  match Editor_state.find u with
+                                  | Some zb ->
+                                      Editor_actions.enter_edit u
+                                        (String.length zb.Model.block_title)
+                                  | None -> ())
+                              | _ -> ()));
                            Js.Promise.resolve ()))
          | None ->
              (* cljs keeps the :page route and paints inline
                 (t :page/not-found); only unknown route segments get
                 the full-screen 404 *)
-             if not (stale for_route) then
+             if not (is_stale ()) then
                Runtime.send Action.Page_load_failed;
-             Js.Promise.resolve ())
+             Js.Promise.resolve ()))
   |> Js.Promise.catch (fun _ ->
-         if not (stale for_route) then
+         if not (is_stale ()) then
            Runtime.send Action.Page_load_failed;
          Js.Promise.resolve ())
 
@@ -211,7 +300,10 @@ let load_home () =
                                       if not (stale (Model.Page name)) then (
                                         Editor_state.clear_overrides ();
                                         Runtime.send (Action.Page_loaded p'');
-                                        fetch_refs p'');
+                                        fetch_refs
+                                          ~stale:(fun () ->
+                                            stale (Model.Page name))
+                                          p'');
                                       Js.Promise.resolve ()))
                     | None, false ->
                         Runtime.send (Action.Navigate_to Model.Journals);
@@ -222,6 +314,12 @@ let load_home () =
          | None ->
              Runtime.reload_current_view := load_journals;
              load_journals ())
+  |> Js.Promise.catch (fun e ->
+         Platform.console_error ("load_home failed", e);
+         (match !Runtime.current_route with
+          | Some Model.Home -> Runtime.send Action.Page_load_failed
+          | _ -> ());
+         Js.Promise.resolve ())
 
 let load_block_zoom uuid =
   incr Runtime.load_gen;
@@ -303,28 +401,58 @@ let load_block_zoom uuid =
                                           Editor_actions.enter_edit u
                                             (String.length b.Model.block_title)
                                       | _ -> ());
-                                     Js.Promise.resolve ())))))
+                                     Js.Promise.resolve ())))
+                             |> Js.Promise.catch (fun e ->
+                                    Platform.console_error
+                                      ("load_block_zoom parents failed", e);
+                                    if
+                                      gen = !Runtime.load_gen
+                                      && !Runtime.current_route
+                                         = Some (Model.Block_zoom uuid)
+                                    then
+                                      Runtime.send Action.Page_load_failed;
+                                    Js.Promise.resolve ())))
                 | _ ->
                     if not (stale (Model.Block_zoom uuid)) then
                       Runtime.send Action.Page_load_failed)
             | _ ->
                 if not (stale (Model.Block_zoom uuid)) then
                   Runtime.send Action.Page_load_failed))
+  |> Js.Promise.catch (fun e ->
+         Platform.console_error ("load_block_zoom failed", e);
+         if not (stale (Model.Block_zoom uuid)) then
+           Runtime.send Action.Page_load_failed;
+         Js.Promise.resolve ())
 
 let load_route (route : Model.route) =
+  (* the non-page refresh hook belongs to the route that assigned it —
+     re-arm it per route so callers (page-icon writes, the refresh
+     fallback) reload *this* view instead of whatever route last set it *)
+  (match route with
+   | Model.Journals | Model.Home ->
+       Runtime.reload_current_view := load_journals
+   | Model.Page s ->
+       Runtime.reload_current_view :=
+         (fun () -> load_page_ref route (Wire.page_ref s))
+   | Model.Block_zoom uuid ->
+       Runtime.reload_current_view := (fun () -> load_block_zoom uuid)
+   | Model.Library ->
+       Runtime.reload_current_view :=
+         (fun () -> load_page_ref route (Wire.String "Library"))
+   | Model.All_pages | Model.All_graphs | Model.Import | Model.Not_found _
+   | Model.Settings ->
+       Runtime.reload_current_view := (fun () -> Js.Promise.resolve ()));
   match route with
   | Model.Home -> ignore (load_home ())
   | Model.Page s ->
       ignore (load_page_ref route (Wire.page_ref s))
   | Model.Block_zoom uuid -> ignore (load_block_zoom uuid)
-  | Model.Journals ->
-      Runtime.reload_current_view := load_journals;
-      ignore (load_journals ())
+  | Model.Journals -> ignore (load_journals ())
   | Model.Library ->
       ignore (load_page_ref route (Wire.String "Library"))
-  | Model.All_pages | Model.All_graphs | Model.Import | Model.Not_found _ ->
+  | Model.All_pages | Model.All_graphs | Model.Import | Model.Not_found _
+  | Model.Settings ->
       ()
-  | Model.Settings -> ()
 
 let resolve () =
   let route = parse_hash () in
@@ -333,7 +461,8 @@ let resolve () =
       (* our own set_location_hash (or a repeat hashchange) for the route
          already shown — Navigate_to would blank route_page/current_page
          while the same data refetches; just refresh in place *)
-      load_route route
+      load_route route;
+      Option.iter jump_to_anchor (route_anchor ())
   | _ ->
       (* commit and close any in-progress edit before the route swaps
          (cljs exits editing on navigation) *)
@@ -345,6 +474,7 @@ let resolve () =
          settings route/dialog is active *)
       if route <> Model.Settings then Settings_state.deactivate ();
       load_route route;
+      Option.iter jump_to_anchor (route_anchor ());
       Runtime.flush ()
 (* worker sync-db-changes broadcast: reload the current route's data
    without Navigate_to (keeps route_page until the fresh one lands, so

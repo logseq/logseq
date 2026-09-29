@@ -401,17 +401,19 @@ let debounce ms =
     if !id >= 0 then clear_timeout !id;
     id := set_timeout_id f ms
 
+(* mel.send on the receiver's classList: el.classList.add(c) — a bare
+   [@@mel.scope "classList"] (no send) would emit global classList.add(el,c) *)
 external el_class_add : el -> string -> unit = "add"
-  [@@mel.scope "classList"]
+  [@@mel.send] [@@mel.scope "classList"]
 
 external el_class_remove : el -> string -> unit = "remove"
-  [@@mel.scope "classList"]
+  [@@mel.send] [@@mel.scope "classList"]
 
 external el_class_toggle : el -> string -> bool -> unit = "toggle"
-  [@@mel.scope "classList"]
+  [@@mel.send] [@@mel.scope "classList"]
 
 external el_class_contains : el -> string -> bool = "contains"
-  [@@mel.scope "classList"]
+  [@@mel.send] [@@mel.scope "classList"]
 
 external el_remove_attr : el -> string -> unit = "removeAttribute" [@@mel.send]
 

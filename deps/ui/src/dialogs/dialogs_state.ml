@@ -15,13 +15,23 @@ type prompt =
   ; on_submit : string -> unit (* handler closes via close_prompt *)
   }
 
+(* db-worker/ui-request layer: the worker asks the UI for an e2ee
+   password (request-e2ee-password). ur_reject reports cancellation
+   back to the worker; the resolver lives in ui_requests.ml. *)
+type ui_request =
+  { ur_id : string
+  ; ur_reason : string
+  ; ur_reject : unit -> unit
+  }
+
 type t =
   { dialogs : string list (* bottom..top *)
   ; confirm : confirm option
   ; prompt : prompt option
+  ; ui_request : ui_request option
   }
 
-let initial = { dialogs = []; confirm = None; prompt = None }
+let initial = { dialogs = []; confirm = None; prompt = None; ui_request = None }
 
 let st : t Signal.state option ref = ref None
 
@@ -94,6 +104,10 @@ let replace_top name =
   touch name
 
 let close_top () =
+  (match value () with
+   | { prompt = None; confirm = None; ui_request = Some r; _ } ->
+       r.ur_reject ()
+   | _ -> ());
   set (fun d ->
       match d.prompt with
       | Some _ -> { d with prompt = None }
@@ -101,15 +115,29 @@ let close_top () =
           match d.confirm with
           | Some _ -> { d with confirm = None }
           | None -> (
-              match List.rev d.dialogs with
-              | _ :: r -> { d with dialogs = List.rev r }
-              | [] -> d)))
+              match d.ui_request with
+              | Some _ -> { d with ui_request = None }
+              | None -> (
+                  match List.rev d.dialogs with
+                  | _ :: r -> { d with dialogs = List.rev r }
+                  | [] -> d))))
+
+(* cljs close-e2ee-blocking-ui!: a ui-request closes every other layer
+   and sits on top until resolved/rejected *)
+let open_ui_request r =
+  set (fun _ -> { dialogs = []; confirm = None; prompt = None; ui_request = Some r })
+
+let clear_ui_request () = set (fun d -> { d with ui_request = None })
 
 let close_named name =
   set (fun d ->
       { d with dialogs = List.filter (fun n -> n <> name) d.dialogs })
 
-let close_all () = set (fun _ -> initial)
+let close_all () =
+  match (value ()).ui_request with
+  | Some r -> r.ur_reject ()
+  | None -> ();
+  set (fun _ -> initial)
 
 let ask ~title ~desc ~on_confirm () =
   set (fun d -> { d with confirm = Some { title; desc; on_confirm } });

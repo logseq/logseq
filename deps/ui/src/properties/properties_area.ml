@@ -785,7 +785,14 @@ let mount_page_props page_inner (p : Model.page) uuid =
     let attach_bidi () =
       if not (el_is_connected bidi) then (
         attach_area ();
-        el_append_child (holder ()) bidi)
+        (* cljs bidirectional-properties-area is a sibling of the title
+           row inside .page-inner, not a descendant of .ls-page-title —
+           keeping it out of the title also keeps its .block-title-wrap
+           refs out of the [data-testid='page title'] locator *)
+        match el_query page_inner ".ls-page-blocks" with
+        | Some blocks_el ->
+            el_insert_before page_inner bidi blocks_el
+        | None -> el_append_child page_inner bidi)
     in
     let detach () =
       if el_is_connected bidi then el_remove bidi;

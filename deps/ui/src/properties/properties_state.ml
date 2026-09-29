@@ -72,7 +72,11 @@ let handle_escape () =
 let toast_error msg =
   Runtime.send
     (Action.Toast_push
-       { Model.toast_id = 0; toast_text = msg; toast_kind = "error" });
+       { Model.toast_id = 0
+       ; toast_text = msg
+       ; toast_kind = "error"
+       ; toast_key = None
+       });
   Runtime.flush ()
 
 (* ---------- show hidden properties toggle (`p a`) ---------- *)
@@ -91,7 +95,6 @@ type area =
   }
 
 let areas : area list ref = ref []
-let refresh_lock = ref false
 
 let register_area container refresh =
   areas := { container; refresh } :: !areas
@@ -103,6 +106,14 @@ let live_areas () =
   areas := List.filter (fun a -> el_is_connected a.container) !areas;
   !areas
 
+(* one area's worker call failing must not starve the rest *)
+let guarded refresh =
+  Js.Promise.catch
+    (fun e ->
+      Platform.console_error ("property area refresh failed", e);
+      Js.Promise.resolve ())
+    (refresh ())
+
 (* Debounced global refresh: collapses bursts of tx broadcasts into one
    round of get-display-properties calls. *)
 let refresh_pending = ref false
@@ -113,14 +124,13 @@ let refresh_all () =
     refresh_pending := true;
     Editor_dom.set_timeout (fun () ->
         refresh_pending := false;
-        if !refresh_lock then ()
-        else List.iter (fun a -> ignore (a.refresh ())) (live_areas ()))
+        List.iter (fun a -> ignore (guarded a.refresh)) (live_areas ()))
       150)
 
 (* immediate rebuild for commit paths (sdk writes) — skips the 150ms
    debounce so callers observe applied property changes *)
 let refresh_all_now () =
-  List.map (fun a -> a.refresh ()) (live_areas ())
+  List.map (fun a -> guarded a.refresh) (live_areas ())
   |> Array.of_list
   |> Js.Promise.all
   |> Js.Promise.then_ (fun _ -> Js.Promise.resolve ())
@@ -128,6 +138,12 @@ let refresh_all_now () =
 (* sdk apply_ops awaits this before resolving — avoids a
    properties->sdk dependency cycle *)
 let () = Runtime.refresh_property_areas := refresh_all_now
+
+(* Immediate refresh for flows that must render before the next user
+   action (e.g. a pending inline editor must mount before the user can
+   click elsewhere — a late mount would open into a moved focus). *)
+let refresh_now () =
+  List.iter (fun a -> ignore (guarded a.refresh)) (live_areas ())
 
 (* ---------- sync-db-changes hook ---------- *)
 
@@ -141,14 +157,4 @@ let chain_worker () =
     Runtime.on_sync refresh_all
   end
 
-(* ---------- pending-async guards ---------- *)
 
-(* In-flight flag per async action so double-clicks don't double-write. *)
-let busy = ref false
-
-let with_busy f =
-  if !busy then ()
-  else (
-    busy := true;
-    f ();
-    Editor_dom.set_timeout (fun () -> busy := false) 300)

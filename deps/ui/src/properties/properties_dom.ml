@@ -14,6 +14,8 @@ external el_is_connected : el -> bool = "isConnected" [@@mel.get]
 external el_scroll_height : el -> int = "scrollHeight" [@@mel.get]
 external el_client_height : el -> int = "clientHeight" [@@mel.get]
 
+external el_contains : el -> el -> bool = "contains" [@@mel.send]
+
 (* Scoped queries: sel() on an element instead of document. *)
 external el_query : el -> string -> el option = "querySelector"
   [@@mel.send] [@@mel.return nullable]
@@ -50,6 +52,9 @@ external ev_client_x : ev -> float = "clientX" [@@mel.get]
 external ev_client_y : ev -> float = "clientY" [@@mel.get]
 external ev_button : ev -> int = "button" [@@mel.get]
 external ev_type : ev -> string = "type" [@@mel.get]
+
+external window_inner_width : float = "innerWidth" [@@mel.scope "window"]
+external window_inner_height : float = "innerHeight" [@@mel.scope "window"]
 
 (* Bounding rect, decoded field-by-field via Js.Json (one external, no
    extra abstract types). *)

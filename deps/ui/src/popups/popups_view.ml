@@ -385,8 +385,12 @@ let popover_style ~x ~y =
 ;;
 
 let ac_popover (st : S.t) : t =
+  (* signals are built inside the mount closure: if_ unmounts dispose any
+     derived signal bound under that scope, so an eagerly-created map would
+     throw "cannot observe a disposed signal" on the next mount *)
+ fun context parent ->
   (* cljs PopoverContent: ui__popover-content + card + transition classes *)
-  Logseq_dom.dom ~key:"ac-pop"
+  (Logseq_dom.dom ~key:"ac-pop"
     ~style_class:
       ("ui__popover-content z-50 rounded-md border bg-popover \
         text-popover-foreground shadow-md outline-none "
@@ -451,7 +455,8 @@ let ac_popover (st : S.t) : t =
                    ~text:(Platform.utf8 "\xe2\x8f\x8e") [] ] ]
            ; Logseq_dom.dom ~key:"ht" ~tag:"span"
                ~text:(U.t "editor/display-tag-inline-hint") [] ])
-    ]
+    ])
+    context parent
 ;;
 
 (* -- context menu ---------------------------------------------------- *)
@@ -596,6 +601,8 @@ let cm_item_el (entry_sig : S.cm_item Signal.signal) : t =
 ;;
 
 let cm_popover (st : S.t) : t =
+  (* see ac_popover: signals must be built per mount *)
+ fun context parent ->
   let entries_sig =
     Signal.map
       (fun (v : S.view) ->
@@ -607,7 +614,7 @@ let cm_popover (st : S.t) : t =
   (* cljs as-dropdown? context menu: dropdown-menu-content card classes
      merged with content-props class w-[280px] ls-context-menu-content *)
   (* cljs DropdownMenuContent mounts inside base-ui presentation wrappers *)
-  Logseq_dom.dom ~key:"cm-pw1" ~attrs:[ ("role", "presentation") ]
+  (Logseq_dom.dom ~key:"cm-pw1" ~attrs:[ ("role", "presentation") ]
     [ Logseq_dom.dom ~key:"cm-pw2" ~attrs:[ ("role", "presentation") ]
         [ Logseq_dom.dom ~key:"cm-ps" ~tag:"span"
             [ Logseq_dom.dom ~key:"cm"
@@ -642,7 +649,8 @@ let cm_popover (st : S.t) : t =
                 ]
             ]
         ]
-    ]
+    ])
+    context parent
 ;;
 
 (* -- delegated listeners --------------------------------------------- *)
@@ -765,14 +773,17 @@ let pv_popover (p : S.pv) : t =
     ]
 
 let pv_dyn (st : S.t) : t =
-  dyn
-    ~equal:(fun a b -> a == b)
-    (fun pv ->
-      match pv with
-      | None -> Logseq_dom.nothing
-      | Some p -> pv_popover p)
-    (Signal.map (fun (v : S.view) -> v.S.pv)
-       st.S.vs.Signal.state_signal)
+  (* see ac_popover: signals must be built per mount *)
+ fun context parent ->
+  (dyn
+     ~equal:(fun a b -> a == b)
+     (fun pv ->
+       match pv with
+       | None -> Logseq_dom.nothing
+       | Some p -> pv_popover p)
+     (Signal.map (fun (v : S.view) -> v.S.pv)
+        st.S.vs.Signal.state_signal))
+    context parent
 
 let handle_input st (ev : Dom_ext.event) =
   match Dom_ext.target ev with
@@ -838,7 +849,7 @@ let handle_click st (ev : Dom_ext.event) =
   match Dom_ext.target ev with
   | None -> ()
   | Some el ->
-      if not (in_popups el) then (S.close_ac st; S.close_cm st)
+      if not (in_popups el) then (S.close_ac st; S.close_cm st; S.close_pv st)
       else (
         Dom_ext.prevent_default ev;
         if Dom_ext.closest el "[data-cm-color]" <> None then
@@ -885,7 +896,11 @@ let install_listeners st =
   Dom_ext.add_document_listener "contextmenu" (handle_contextmenu st) true;
   Dom_ext.add_document_listener "click" (handle_click st) true;
   Dom_ext.add_document_listener "mousedown" (handle_mousedown st) true;
-  Dom_ext.add_document_listener "mousemove" (handle_mousemove st) false
+  Dom_ext.add_document_listener "mousemove" (handle_mousemove st) false;
+  (* the preview survives its trigger element (popup lives in the overlay
+     layer); navigation must drop it like cljs' tippy instance dying with
+     the reference node *)
+  Platform.on_hash_change (fun () -> S.close_pv st)
 ;;
 
 let render (_ms : Model.t Signal.signal) : t =

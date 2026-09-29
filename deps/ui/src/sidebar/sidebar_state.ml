@@ -147,11 +147,30 @@ let push_recent repo id =
   let ids =
     id :: take 14 (List.filter (fun x -> x <> id) (recent_ids_of_storage repo))
   in
+  (* merge into the stored per-graph map — rewriting the whole value
+     would drop every other repo's recents on each visit *)
+  let kvs =
+    match Platform.local_storage_get "recent-pages" with
+    | Some s -> (
+        try
+          match Edn.parse s with
+          | Wire.Map kvs ->
+              List.filter
+                (fun (k, _) ->
+                  match k with
+                  | Wire.String r | Wire.Keyword r | Wire.Symbol r ->
+                      r <> repo
+                  | _ -> true)
+                kvs
+          | _ -> []
+        with _ -> [])
+    | None -> []
+  in
   Platform.local_storage_set "recent-pages"
     (Edn.to_string
        (Wire.Map
-          [ ( Wire.String repo
-            , Wire.List (List.map (fun i -> Wire.Int i) ids) ) ]))
+          ((Wire.String repo, Wire.List (List.map (fun i -> Wire.Int i) ids))
+           :: kvs)))
 
 (* ---------- worker loaders ---------- *)
 
@@ -162,11 +181,13 @@ let pages_of_wire w =
 
 let then_keep p k =
   ignore
-    (Js.Promise.then_
-       (fun w ->
-         k w;
-         Js.Promise.resolve ())
-       p)
+    (p
+     |> Js.Promise.then_ (fun w ->
+            k w;
+            Js.Promise.resolve ())
+     |> Js.Promise.catch (fun e ->
+            Platform.console_error ("sidebar loader failed", e);
+            Js.Promise.resolve ()))
 
 let load_favorites repo st =
   then_keep
@@ -218,7 +239,13 @@ let refresh_favorited repo st =
 
 external encode_uri_component : string -> string = "encodeURIComponent"
 
-let navigate_to_page target =
+(* Wire.page_ref builds the ref for get-page-route-info /
+   get-page-blocks-tree: a bare uuid or page-name string. The
+   [:block/uuid u] lookup-ref ARRAY decodes to a Vector that the
+   endpoints' Ldb.get_page does not match (returns nil) —
+   TODO(shared): fix page refs / Ldb.get_page so #/page/<uuid> hash
+   routes work. *)
+let push_page_route target =
   let target =
     if Wire.is_uuid_string target then target
     else encode_uri_component target
@@ -227,6 +254,36 @@ let navigate_to_page target =
   Platform.set_location_hash (Runtime.nav_hash ("#/page/" ^ target));
   Platform.dispatch "ls:navigate" Js.Json.null
 
+(* cljs redirect-to-page!: route-info first — hidden and
+   private-built-in pages warn instead of navigating, and alias pages
+   redirect to their source page *)
+let navigate_to_page target =
+  let go () = push_page_route target in
+  ignore
+    (Runtime.invoke2 "thread-api/get-page-route-info"
+       (Wire.String (Router.repo ())) (Wire.page_ref target)
+     |> Js.Promise.then_ (fun info ->
+            let flag k =
+              Option.value
+                (Option.bind (Wire.get info k) Wire.as_bool)
+                ~default:false
+            in
+            let blocked =
+              (* cljs exempts the Recycle page *)
+              Wire.map_get_string info "block/title" <> Some "Recycle"
+              && ((flag "hidden?" && not (flag "property?"))
+                  || (flag "built-in?" && flag "private-built-in?"))
+            in
+            if blocked then Toast.warning I18n.cannot_go_to_internal_page
+            else
+              (match Wire.map_get_uuid info "alias-source-uuid" with
+               | Some src -> push_page_route src
+               | None -> go ());
+            Js.Promise.resolve ())
+     |> Js.Promise.catch (fun _ ->
+            (* cljs treats a nil route-info as navigable *)
+            go ();
+            Js.Promise.resolve ()))
 
 (* sidebar items only need decoded + tag-resolved blocks — ~plain skips
    the collapse/embed/view shaping that would touch editor state *)
@@ -505,6 +562,9 @@ let refresh_items repo st =
       (Js.Promise.all (Array.of_list (List.map (refresh_item repo) items))
        |> Js.Promise.then_ (fun arr ->
               Runtime.signal_set st.items (Array.to_list arr);
+              Js.Promise.resolve ())
+       |> Js.Promise.catch (fun e ->
+              Platform.console_error ("sidebar refresh failed", e);
               Js.Promise.resolve ()))
 
 (* ---------- favorites ---------- *)
@@ -529,11 +589,13 @@ let toggle_favorite st =
 let on_sync st =
   match (!model_ref).Model.repo with
   | Some repo ->
+      (* the route reload comes from Worker_events.dispatch's debounced
+         Router.reload — refetching it here too doubled the work per
+         broadcast *)
       load_favorites repo st;
       load_recents repo st;
       refresh_favorited repo st;
-      refresh_items repo st;
-      Router.load_route (!model_ref).Model.route
+      refresh_items repo st
   | None -> ()
 
 let install_worker_hook st =

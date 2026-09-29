@@ -7,6 +7,8 @@
 open Lui_elements
 
 let dom = Logseq_dom.dom
+let dyn = Logseq_dom.dyn
+let if_ = Logseq_dom.if_
 module T = I18n
 
 let checkbox_cls checked =
@@ -58,13 +60,21 @@ let submit cloud e2ee creating =
            ignore (Graphs_ops.navigate_journal repo);
            Js.Promise.resolve ())
          (if Signal.get_state cloud then
-            Graphs_ops.create_remote name (Signal.get_state e2ee)
+            (* cljs: db-sync-ensure-user-rsa-keys runs before
+               create-remote-graph so the private key is available (the
+               worker may ui-request an e2ee password here) *)
+            let e2ee = Signal.get_state e2ee in
+            (if e2ee then Rtc_ops.ensure_rsa_keys ()
+             else Js.Promise.resolve true)
+            |> Js.Promise.then_ (fun _ ->
+                   Graphs_ops.create_remote name e2ee)
           else Graph.create_graph name)))
 
 let body (_ms : Model.t Signal.signal) : t =
  fun ctx parent ->
   let cloud = Signal.state ctx.ui_scheduler false in
-  let e2ee = Signal.state ctx.ui_scheduler false in
+  (* cljs new-db-graph-inner: graph-e2ee? defaults to true *)
+  let e2ee = Signal.state ctx.ui_scheduler true in
   let creating = Signal.state ctx.ui_scheduler false in
   let node =
     dom ~key:"new-graph" ~style_class:"new-graph flex flex-col gap-4 p-1 pt-2"

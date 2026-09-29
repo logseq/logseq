@@ -95,7 +95,19 @@ let commit uuid buf =
      title differ from the buffer *)
   if buf <> model_title uuid then (
     S.override_title uuid (Ops.normalized_title uuid buf);
-    ignore (Ops.apply_and_refresh [ Ops.save_block uuid buf ]))
+    ignore
+      (Ops.apply_and_refresh [ Ops.save_block uuid buf ]
+      |> Js.Promise.then_ (fun _ ->
+             (* the buffer is now persisted — advance base so the undo
+                resync gate treats it as clean and can restore reverted
+                titles instead of masking them with the pre-undo text *)
+             S.set_silent (fun st ->
+                 match st.S.editing with
+                 | Some e when e.S.uuid = uuid && e.S.buffer = buf ->
+                     { st with
+                       S.editing = Some { e with S.base = buf } }
+                 | _ -> st);
+             Js.Promise.resolve ())))
 
 let save_if_dirty uuid = commit uuid (live_buffer uuid)
 
@@ -127,7 +139,7 @@ let enter_edit ?(scope = "main") uuid caret =
              |> Js.Promise.then_ (fun buffer ->
                     S.set (fun st ->
                         { st with
-                          S.editing = Some { uuid; buffer; scope }
+                          S.editing = Some { uuid; buffer; scope; base = buffer }
                         ; selected = S.String_set.empty
                         ; anchor = None
                         });
@@ -254,7 +266,7 @@ let split_at_cursor uuid =
         S.set_silent (fun st ->
             { st with
               S.editing =
-                Some { uuid = new_uuid; buffer = after; scope = e.scope } });
+                Some { uuid = new_uuid; buffer = after; scope = e.scope; base = after } });
         with_focus_after new_uuid 0 p
   | _ -> ()
 
@@ -281,7 +293,7 @@ let insert_sibling_after uuid =
       S.set_silent (fun st ->
           { st with
             S.editing =
-              Some { uuid = new_uuid; buffer = ""; scope = e.scope }
+              Some { uuid = new_uuid; buffer = ""; scope = e.scope; base = "" }
           });
       with_focus_after new_uuid 0 p
   | _ -> ()
@@ -354,6 +366,7 @@ let merge_prev uuid =
                                 { uuid = prev_uuid
                                 ; buffer = pbuf ^ buf
                                 ; scope = e.scope
+                                ; base = pbuf ^ buf
                                 }
                           });
                       with_focus_after prev_uuid
@@ -408,6 +421,7 @@ let merge_next uuid =
                                 { uuid = next_uuid
                                 ; buffer = nbuf
                                 ; scope = e.scope
+                                ; base = nbuf
                                 }
                           });
                       with_focus_after next_uuid 0
@@ -424,7 +438,11 @@ let merge_next uuid =
                       S.set_silent (fun st ->
                           { st with
                             S.editing =
-                              Some { e with S.buffer = buf ^ nbuf }
+                              Some
+                                { e with
+                                  S.buffer = buf ^ nbuf
+                                ; base = buf ^ nbuf
+                                }
                           });
                       with_focus_after uuid (String.length buf)
                         (Ops.apply_parsed_and_refresh
@@ -516,6 +534,20 @@ let clear_selection () =
   S.set (fun st ->
       { st with S.selected = S.String_set.empty; anchor = None })
 
+(* cljs editor/select-parent: with a selection, move it to the first
+   block's parent (all blocks when the parent is the page); without one,
+   select all blocks *)
+let select_parent () =
+  match selected_uuids () with
+  | u :: _ -> (
+      match S.find_parent u with
+      | Some (Some p, _) -> (
+          match p.Model.block_uuid with
+          | Some pu -> select_single pu
+          | None -> select_all ())
+      | _ -> select_all ())
+  | [] -> select_all ()
+
 (* move selection up/down one block (single-block arrow nav in normal
    mode, plain move for shift-extend callers) *)
 let move_selection_focus up =
@@ -572,6 +604,18 @@ let indent_or_outdent ~indent =
             p.Model.block_uuid
         | _ -> None
       in
+      (* optimistic local reparent: the DOM moves in this task instead of
+         remounting when the async worker refresh lands (e2e boundingBox
+         races that remount). Worker refresh stays authoritative. *)
+      (match !Runtime.current_page, parent_original with
+       | Some page, None -> (
+           match
+             (if indent then Model.indent_blocks else Model.outdent_blocks)
+               page uuids
+           with
+           | Some page' -> Runtime.send (Action.Page_loaded page')
+           | None -> ())
+       | _ -> ());
       with_focus_after focus
         (String.length (live_buffer focus))
         (Ops.apply_and_refresh
@@ -613,20 +657,26 @@ let delete_selection () =
        | Some pu -> (
            match S.find pu with
            | Some b ->
-               S.set_silent (fun st ->
-                   { st with
-                     S.editing =
-                       Some
-                         { uuid = pu
-                         ; buffer = String.trim b.Model.block_title
-                         ; scope = "main"
-                         }
-                   ; selected = S.String_set.empty
-                   ; anchor = None
-                   });
-               with_focus_after pu
-                 (String.length b.Model.block_title)
-                 (Ops.apply_and_refresh [ Ops.delete_blocks uuids ])
+               (* stored titles are id-ref form — go through the same
+                  title_for_edit rewrite as enter_edit *)
+               ignore
+                 (Ops.title_for_edit (String.trim b.Model.block_title)
+                  |> Js.Promise.then_ (fun buffer ->
+                         S.set_silent (fun st ->
+                             { st with
+                               S.editing =
+                                 Some
+                                   { uuid = pu; buffer; scope = "main"
+                                   ; base = buffer
+                                   }
+                             ; selected = S.String_set.empty
+                             ; anchor = None
+                             });
+                         with_focus_after pu
+                           (String.length buffer)
+                           (Ops.apply_and_refresh
+                              [ Ops.delete_blocks uuids ]);
+                         Js.Promise.resolve ()))
            | None ->
                ignore (Ops.apply_and_refresh [ Ops.delete_blocks uuids ]))
        | None ->
@@ -729,8 +779,15 @@ let copy_selection_text () =
         (String.concat "\n"
            (List.map (fun b -> b.Model.block_title) blocks))
 
+(* cljs edit-last-block-after-inserted! — after a paste, editing moves to
+   the last inserted block so sequential pastes append in order *)
+let edit_last_inserted resp =
+  match Ops.last_inserted_uuid resp with
+  | Some u -> enter_edit u (String.length (model_title u))
+  | None -> ()
+
 let paste_trees trees target_uuid ~replace_empty =
-  Ops.apply_and_refresh ~opts:(Ops.op_opts "paste")
+  Ops.apply_and_refresh_result ~opts:(Ops.op_opts "paste")
     [ Ops.paste_trees trees target_uuid ~replace_empty ]
 
 let paste_lines lines =
@@ -782,13 +839,17 @@ let paste_into_editor ev =
           in
           ignore
             (paste_trees trees e.uuid ~replace_empty
-            |> Js.Promise.then_ (fun () ->
+            |> Js.Promise.then_ (fun resp ->
                    (* replace-empty swaps the editing block's entity
                       in place (same uuid, new title) — resync the live
-                      textarea buffer so it doesn't mask the pasted
-                      content *)
-                   if replace_empty then Ops.resync_open_editor ();
-                   Js.Promise.resolve ()))
+                      textarea buffer first, else edit_last_inserted's
+                      save_if_dirty reads the stale "" and commits it
+                      over the pasted title *)
+                   (if replace_empty then Ops.resync_open_editor ()
+                    else Js.Promise.resolve ())
+                   |> Js.Promise.then_ (fun () ->
+                          edit_last_inserted resp;
+                          Js.Promise.resolve ())))
       | None -> ())
   | _ -> ()
 
@@ -803,7 +864,10 @@ let paste_blocks ev =
               ignore
                 (paste_trees trees
                    (List.nth sel (List.length sel - 1))
-                   ~replace_empty:false)
+                   ~replace_empty:false
+                 |> Js.Promise.then_ (fun resp ->
+                        edit_last_inserted resp;
+                        Js.Promise.resolve ()))
           | [] -> ())
       | [] -> (
           match D.ev_clipboard ev with
@@ -825,7 +889,7 @@ let paste_blocks ev =
 let toggle_collapse uuid =
   match S.find uuid with
   | Some b when S.children_of b <> [] ->
-      if b.Model.block_default_collapsed && not (S.is_collapsed uuid) then
+      if b.Model.block_default_collapsed && not (S.is_expanded uuid) then
         (* view-default collapse (page child on a non-Library page): a
            click expands it locally without persisting — cljs
            temp-collapsed? takes precedence over the default *)
@@ -857,6 +921,86 @@ let set_collapsed uuid collapsed =
           });
       ignore (Ops.apply [ Ops.collapse_expand [ (uuid, collapsed) ] ])
   | _ -> ()
+
+(* cljs editor/expand! / collapse!: edit mode toggles the open block,
+   selection toggles every selected block, and with neither it moves one
+   outline level (expand = shallowest collapsed level, collapse =
+   deepest expandable level) *)
+let collapse_expand ~collapse () =
+  let set u want =
+    match S.find u with
+    | Some b
+      when S.children_of b <> [] && S.effective_collapsed b <> want ->
+        toggle_collapse u
+    | _ -> ()
+  in
+  match S.editing_uuid () with
+  | Some u -> set u collapse
+  | None -> (
+      match selected_uuids () with
+      | _ :: _ as us -> List.iter (fun u -> set u collapse) us
+      | [] ->
+          let blocks = S.flat_all () in
+          let lvl (b : Model.block) = b.Model.block_level in
+          if collapse then (
+            let deepest =
+              List.fold_left
+                (fun acc b ->
+                  if S.children_of b <> [] && not (S.effective_collapsed b)
+                  then max acc (lvl b)
+                  else acc)
+                0 blocks
+            in
+            List.iter
+              (fun (b : Model.block) ->
+                if lvl b = deepest && S.children_of b <> []
+                   && not (S.effective_collapsed b)
+                then
+                  match b.Model.block_uuid with
+                  | Some u -> toggle_collapse u
+                  | None -> ())
+              blocks)
+          else
+            let shallowest =
+              List.fold_left
+                (fun acc b ->
+                  if S.effective_collapsed b then min acc (lvl b)
+                  else acc)
+                max_int blocks
+            in
+            List.iter
+              (fun (b : Model.block) ->
+                if lvl b = shallowest && S.effective_collapsed b then
+                  match b.Model.block_uuid with
+                  | Some u -> toggle_collapse u
+                  | None -> ())
+              blocks)
+
+(* cljs editor/toggle-collapse!: edit mode toggles the open block,
+   selection toggles all selected by the first block's state, otherwise
+   no-op *)
+let toggle_children_collapse () =
+  let cur =
+    match S.editing_uuid () with
+    | Some u -> [ u ]
+    | None -> selected_uuids ()
+  in
+  match cur with
+  | u :: us -> (
+      match S.find u with
+      | Some b ->
+          let want = not (S.effective_collapsed b) in
+          List.iter
+            (fun u ->
+              match S.find u with
+              | Some b
+                when S.children_of b <> []
+                     && S.effective_collapsed b <> want ->
+                  toggle_collapse u
+              | _ -> ())
+            (u :: us)
+      | None -> ())
+  | [] -> ()
 
 (* cljs editor/toggle-open-blocks: any collapsed block -> expand all,
    else collapse all collapsible blocks *)
@@ -966,7 +1110,7 @@ let append_block ?for_page () =
           let stage st =
             { st with
               S.editing =
-                Some { uuid = new_uuid; buffer = ""; scope = "main" }
+                Some { uuid = new_uuid; buffer = ""; scope = "main"; base = "" }
             }
           in
           (* empty page: editor state is created at the first block_row
@@ -999,3 +1143,168 @@ let consume_pending_zoom () =
   let z = !pending_zoom in
   pending_zoom := None;
   z
+
+(* cljs editor/zoom-out!: editing on a block-zoom route navigates to the
+   parent (block zoom or its page) while keeping the block in edit mode;
+   editing on a plain page is a no-op; otherwise history.back *)
+let zoom_out () =
+  match S.editing_uuid () with
+  | Some edit_u -> (
+      match !Runtime.current_route with
+      | Some (Model.Block_zoom uuid) ->
+          pending_zoom := Some edit_u;
+          ignore
+            (Runtime.invoke2 "thread-api/get-block-parent"
+               (Wire.String
+                  (Option.value !Runtime.current_repo ~default:""))
+               (Wire.Uuid uuid)
+             |> Js.Promise.then_ (fun p ->
+                    (match Wire.map_get_uuid p "block/uuid" with
+                     | Some pu ->
+                         let seg =
+                           match Wire.map_get_string p "block/name" with
+                           | Some _ -> "page"
+                           | None -> "block"
+                         in
+                         Platform.set_location_hash
+                           (Runtime.nav_hash ("#/" ^ seg ^ "/" ^ pu))
+                     | None -> ());
+                    Js.Promise.resolve ()))
+      | _ -> ())
+  | None -> Platform.history_back ()
+
+(* -- /query (cljs commands.cljs db-based-query -> editor.cljs
+   run-query-command!): create the logseq.property/query value block
+   (its title is the pre-slash buffer), tag the block Query, empty its
+   title, and exit editing — one transact! batch. -- *)
+let run_query_command ~advanced =
+  match S.editing () with
+  | None -> ()
+  | Some e ->
+      let buf = live_buffer e.uuid in
+      S.set (fun st -> { st with S.editing = None });
+      let quuid = Platform.random_uuid () in
+      let extra =
+        (* advanced-query-steps: display-type :code + code/lang clojure
+           on the query value block (pre-named via new-block-id) *)
+        if advanced then
+          [ Ops.set_block_property quuid "logseq.property.node/display-type"
+              (Wire.Keyword "code")
+          ; Ops.set_block_property quuid "logseq.property.code/lang"
+              (Wire.String "clojure")
+          ]
+        else []
+      in
+      let _ = () in
+      ignore
+        (Ops.apply_and_refresh
+           ([ Ops.op "create-property-text-block"
+                [ Wire.Uuid e.uuid
+                ; Wire.Keyword "logseq.property/query"
+                ; Wire.String buf
+                ; Wire.Map
+                    [ Ops.kw "set-block-property?" (Wire.Bool true)
+                    ; Ops.kw "new-block-id" (Wire.Uuid quuid)
+                    ]
+                ]
+            ; Ops.set_block_property e.uuid "block/tags"
+                (Wire.Keyword "logseq.class/Query")
+            ; Ops.save_block e.uuid ""
+            ]
+           @ extra)
+           |> Js.Promise.then_ (fun () -> Js.Promise.resolve ()))
+
+(* -- upload asset (cljs handler/editor/assets.cljs
+   db-based-save-assets!): write each file to pfs
+   /<graph>/assets/<uuid>.<ext>, then insert-blocks an Asset-tagged
+   block below the editing block. An empty target reuses its uuid and
+   is replaced in place. -- *)
+let trigger_asset_upload () =
+  match Properties_dom.doc_query "input#upload-file" with
+  | Some el -> Properties_dom.el_click el
+  | None -> ()
+
+let file_ext name =
+  match String.rindex_opt name '.' with
+  | Some i when i + 1 < String.length name ->
+      String.lowercase_ascii
+        (String.sub name (i + 1) (String.length name - i - 1))
+  | _ -> ""
+
+let file_title name =
+  match String.rindex_opt name '.' with
+  | Some 0 | None -> name
+  | Some i -> String.sub name 0 i
+
+let asset_block_map ~uuid ~title ~ext ~size ~checksum =
+  Wire.Map
+    [ Ops.str "block/uuid" (Wire.Uuid uuid)
+    ; Ops.str "block/title" (Wire.String title)
+    ; Ops.str "logseq.property.asset/type" (Wire.String ext)
+    ; Ops.str "logseq.property.asset/size" (Wire.Int size)
+    ; Ops.str "logseq.property.asset/checksum" (Wire.String checksum)
+    ; ( Wire.Keyword "block/tags"
+      , Wire.Set [ Wire.Keyword "logseq.class/Asset" ] )
+    ]
+
+let save_one_asset repo pfs target_uuid ~empty_target ~first
+    (f : Js.Json.t) =
+  let name = Browser_ui.file_name f in
+  let ext = file_ext name in
+  let size = int_of_float (Browser_ui.file_size f) in
+  let uuid =
+    match (first, empty_target) with
+    | true, true -> target_uuid
+    | _ -> Platform.random_uuid ()
+  in
+  ignore
+    (Browser_ui.file_buffer f
+    |> Js.Promise.then_ (fun buf ->
+           let u8 = Js.Typed_array.Uint8Array.fromBuffer buf () in
+           Platform.sha256_hex u8
+           |> Js.Promise.then_ (fun checksum ->
+                  let dir =
+                    "/" ^ Platform.strip_db_prefix repo ^ "/assets"
+                  in
+                  Platform.pfs_ensure_dir pfs dir
+                  |> Js.Promise.then_ (fun () ->
+                         Platform.pfs_write_file pfs
+                           (dir ^ "/" ^ uuid ^ "." ^ ext)
+                           u8
+                         |> Js.Promise.then_ (fun () ->
+                                Ops.apply_and_refresh
+                                  [ Ops.insert_blocks ~bottom:true
+                                      ~replace_empty_target:true
+                                      [ asset_block_map ~uuid
+                                          ~title:(file_title name) ~ext
+                                          ~size ~checksum ]
+                                      target_uuid ~sibling:true ]
+                                |> Js.Promise.then_ (fun () ->
+                                       Js.Promise.resolve ()))))))
+
+let save_uploaded_files (input : Editor_dom.el) =
+  match (!Runtime.current_repo, S.editing ()) with
+  | Some repo, Some e -> (
+      match Platform.pfs_handle () with
+      | Some pfs ->
+          let buffer = live_buffer e.uuid in
+          let empty_target = String.trim buffer = "" in
+          (* cljs db-based-save-assets! persists the unsaved edit content
+             before inserting — otherwise the worker sees a blank target
+             and replace-empty-target? swaps it for the asset block while
+             it is still being edited *)
+          let pre =
+            if empty_target then Js.Promise.resolve ()
+            else Ops.apply [ Ops.save_block e.uuid buffer ]
+          in
+          ignore
+            (pre
+             |> Js.Promise.then_ (fun () ->
+                    Array.iteri
+                      (fun i f ->
+                        save_one_asset repo pfs e.uuid ~empty_target
+                          ~first:(i = 0) f)
+                      (Browser_ui.files_of input);
+                    Js.Promise.resolve ()))
+      | None -> ())
+  | _ -> ()

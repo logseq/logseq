@@ -155,15 +155,18 @@ let content_el uuid (b : Model.block) : t =
     [ dom ~key:("bci-" ^ uuid)
         ~style_class:"block-content-inner flex flex-row justify-between"
         [ dom ~key:("bh-" ^ uuid) ~style_class:"block-head-wrap"
-            [ dom ~key:("bt-" ^ uuid) ~style_class:"inline w-full"
-                (Render.title_block ~self:uuid
-                   ~resolved:(S.title_for uuid b.block_title)
-                   b)
-            ]
+            (if b.Model.block_is_query then [ Query_builder.block_el uuid b ]
+             else
+               [ dom ~key:("bt-" ^ uuid) ~style_class:"inline w-full"
+                   (Render.title_block ~self:uuid
+                      ~resolved:(S.title_for uuid b.block_title)
+                      b)
+               ])
         ]
     ]
 
 let editor_el uuid scope : t =
+ fun ctx parent ->
   let buffer =
     match S.editing () with
     | Some e when e.uuid = uuid && e.scope = scope -> e.buffer
@@ -172,25 +175,36 @@ let editor_el uuid scope : t =
   (* textarea text must track the buffer: e2e asserts
      .editor-wrapper textarea :has-text, which reads textContent *)
   let buffer_sig =
-    Signal.map
-      (fun (st : S.t) ->
-        match st.S.editing with
-        | Some e when e.uuid = uuid && e.scope = scope ->
-            Lui_protocol.StringValue e.buffer
-        | _ -> Lui_protocol.StringValue "")
-      (S.signal ())
+    (* cutoff: typed text only lives in the DOM (live_buffer reads .value on
+       commit); without dedup every unrelated S.set publish would re-emit
+       the stale buffer and overwrite in-progress typing *)
+    Signal.cutoff ( = )
+      (Signal.map
+         (fun (st : S.t) ->
+           match st.S.editing with
+           | Some e when e.uuid = uuid && e.scope = scope ->
+               Lui_protocol.StringValue e.buffer
+           | _ -> Lui_protocol.StringValue "")
+         (S.signal ()))
   in
-  Ui_parts.editor_wrapper ~key:("ew-" ^ uuid) ~id:("editor-edit-block-" ^ uuid)
+  (Ui_parts.editor_wrapper ~key:("ew-" ^ uuid)
+    ~id:("editor-edit-block-" ^ uuid)
     [ Ui_parts.editor_inner ~key:("ei-" ^ uuid)
         [ dom ~key:("ta-" ^ uuid) ~tag:"textarea"
             ~id:("edit-block-" ^ uuid)
             ~style_class:"normal-block uniline-block"
-            ~attrs:[ ("data-testid", "block editor") ]
+            ~attrs:
+              [ ("data-testid", "block editor")
+              ; (* focus must land at mount: press-seq resolves *:focus
+                   before the 40ms pending-focus retry runs *)
+                ("autofocus", "")
+              ]
             ~text:buffer ~text_signal:buffer_sig []
         ; Ui_parts.mock_text ~key:("mt-" ^ uuid)
         ]
     ; Asset_dom.upload_input ("up-" ^ uuid)
-    ]
+    ])
+    ctx parent
 
 (* code/calc blocks edit through a contenteditable pre.CodeMirror-line —
    no textarea (cljs parity: CodeMirror owns the surface) *)
@@ -328,7 +342,10 @@ and row_el ~editable scope (b : Model.block) : t =
   let embed = b.block_link <> None in
   let has_children = S.children_of b <> [] in
   let blank = String.trim b.block_title = "" in
-  dom ~key:("ls-" ^ key)
+  (* the reload key is scope-namespaced: the same block uuid renders in the
+     main list, sidebars, previews and embeds simultaneously, and a bare
+     ls-<uuid> key makes those distinct rows claim each other's DOM node *)
+  dom ~key:("ls-" ^ scope ^ "-" ^ key)
     ~style_class_signal:(row_class_sig uuid blank embed)
     ~attrs_signal_v:(row_attrs_sig uuid b)
     [ dom ~key:("main-" ^ key)
@@ -399,14 +416,17 @@ and children_el ~editable uuid scope (b : Model.block) : t =
 (* Read-only row for linked-reference lists: same shell as row_el but the
    content never swaps to editor_el — a block shown in .references can
    simultaneously be under edit in its own page, and a second
-   #edit-block-<uuid> textarea breaks locators. *)
+   #edit-block-<uuid> textarea breaks locators. The rfs- reload key also
+   keeps the row from claiming the live row's DOM node on reconciliation —
+   both are keyed ls-…/rfs-… on the same uuid but are distinct logical
+   nodes. *)
 and block_row_static (b : Model.block) : t =
   let uuid = Option.value b.block_uuid ~default:"" in
   let key = block_key b in
   let embed = b.block_link <> None in
   let has_children = b.block_children <> [] in
   let blank = String.trim b.block_title = "" in
-  dom ~key:("ls-" ^ key)
+  dom ~key:("rfs-" ^ key)
     ~style_class_signal:(row_class_sig uuid blank embed)
     ~attrs_signal_v:(row_attrs_sig uuid b)
     [ dom ~key:("main-" ^ key)
@@ -496,7 +516,10 @@ let fetch_embed_blocks name st =
                 Outliner_ops.resolve_block_tags (Decode.blocks_of_wire w)
                 |> Js.Promise.then_ (fun blocks ->
                        Signal.set st blocks;
-                       Js.Promise.resolve ()))))
+                       Js.Promise.resolve ()))
+         |> Js.Promise.catch (fun e ->
+                Platform.console_error ("embed blocks fetch failed", e);
+                Js.Promise.resolve ())))
 
 let page_embed (name : string) : t =
  fun ctx parent ->
@@ -509,12 +532,15 @@ let page_embed (name : string) : t =
   let load () = fetch_embed_blocks name st in
   load ();
   Hashtbl.replace embed_refreshes id load;
+  (* a destroyed embed must stop refetching on every tx broadcast *)
+  Signal.on_dispose ctx.ui_scope (fun () ->
+      Hashtbl.remove embed_refreshes id);
   (dyn ~equal:(=)
      (fun blocks ->
        (* embed copies render read-only — the same uuid can exist in the
           sidebar/main tree, and only that instance should own the textarea *)
        dom ~key:"embed-page" ~tag:"div" ~style_class:"embed-page"
-         (List.map (block_row ~editable:false) blocks))
+         (List.map (block_row ~scope:"embed" ~editable:false) blocks))
      (Signal.value st))
     ctx parent
 

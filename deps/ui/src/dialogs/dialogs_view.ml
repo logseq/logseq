@@ -9,6 +9,8 @@
 open Lui_elements
 
 let dom = Logseq_dom.dom
+let dyn = Logseq_dom.dyn
+let keyed = Logseq_dom.keyed
 
 let overlay_cls =
   "ui__dialog-overlay fixed inset-0 z-50 bg-background/90 flex \
@@ -237,6 +239,9 @@ let render (ms : Model.t Signal.signal) : t =
   let prompt_sig =
     Signal.map (fun (d : Dialogs_state.t) -> d.prompt) ds
   in
+  let ureq_sig =
+    Signal.map (fun (d : Dialogs_state.t) -> d.ui_request) ds
+  in
   Logseq_dom.fragment
     [ keyed ~source:dialogs_sig ~key:(fun n -> n) ~cmp:String.compare
         ~mount:(fun name_sig ->
@@ -252,5 +257,10 @@ let render (ms : Model.t Signal.signal) : t =
           | Some p -> prompt_view p
           | None -> Logseq_dom.nothing)
         prompt_sig
+    ; dyn ~equal:( == ) (fun r ->
+          match r with
+          | Some r -> Ui_requests.view r
+          | None -> Logseq_dom.nothing)
+        ureq_sig
     ]
     ctx parent

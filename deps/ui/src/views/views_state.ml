@@ -246,6 +246,8 @@ let apply_view_entity inst (v : Views_wire.view_ent) =
   inst.hidden <-
     List.fold_left (fun s x -> Sset.add x s) Sset.empty v.vhidden;
   inst.ordered <- v.vordered;
+  inst.pinned <-
+    List.fold_left (fun s x -> Sset.add x s) Sset.empty v.vpinned;
   inst.group_sort_by <- v.vgroup_sort_by;
   inst.group_desc <- v.vgroup_desc
 

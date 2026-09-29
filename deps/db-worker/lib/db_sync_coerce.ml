@@ -35,12 +35,6 @@ let as_seq v =
   | Wire.Array xs | Wire.List xs -> xs
   | _ -> err "seq" v
 
-(* malli :keyword — a plain string is NOT a keyword *)
-let as_kw v =
-  match v with
-  | Wire.Keyword s -> s
-  | _ -> err "keyword" v
-
 let opt_kw s = Wire.Keyword s
 let kw_name = function Wire.Keyword s | Wire.String s -> s | _ -> ""
 
@@ -76,21 +70,34 @@ let norm_field kvs name f =
     List.map (fun (k, v) -> if Wire.key_matches name k then (k, f v) else (k, v)) kvs
   else kvs
 
+(* [:maybe :keyword] through mt/json-transformer: a JSON string value
+   decodes to the keyword of the same name; nil and keywords pass
+   through. Validates (rejecting other types) and rewrites the field. *)
+let norm_kwish_field kvs name =
+  let f v =
+    match v with
+    | Wire.Keyword _ | Wire.Nil -> v
+    | Wire.String s -> Wire.Keyword s
+    | _ -> err "keyword" v
+  in
+  norm_field kvs name f
+
 (* ---- schema validators: raise Coerce_error or return normalized map ---- *)
 
 let tx_entry v =
   let kvs = map_kv v in
   ignore (opt (Wire.Map kvs) "tx-id" as_uuid);
   ignore (req (Wire.Map kvs) "tx" as_str);
-  ignore (optm (Wire.Map kvs) "outliner-op" as_kw);
-  Wire.Map (norm_field kvs "tx-id" (fun x -> Wire.Uuid (as_uuid x)))
+  Wire.Map
+    (norm_kwish_field
+       (norm_field kvs "tx-id" (fun x -> Wire.Uuid (as_uuid x)))
+       "outliner-op")
 
 let tx_log_entry v =
   let kvs = map_kv v in
   ignore (req (Wire.Map kvs) "t" as_int);
   ignore (req (Wire.Map kvs) "tx" as_str);
-  ignore (optm (Wire.Map kvs) "outliner-op" as_kw);
-  Wire.Map kvs
+  Wire.Map (norm_kwish_field kvs "outliner-op")
 
 let coerce_seq elem xs = List.map elem xs
 

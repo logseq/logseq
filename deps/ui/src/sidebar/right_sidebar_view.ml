@@ -15,6 +15,7 @@ open Lui_elements
 module D = Logseq_dom
 
 let dom = D.dom
+let dyn = D.dyn
 let t = Sidebar_state.t
 
 (* .toggle-right-sidebar now lives in chrome.ml's header .r, matching

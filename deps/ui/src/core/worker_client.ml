@@ -8,6 +8,7 @@ type t =
   { worker : Comlink.worker
   ; proxy : Comlink.proxy
   ; mutable on_message : message_handler
+  ; dead : string Js.Promise.t
   }
 
 type global
@@ -32,24 +33,25 @@ let decode_args transit_args =
 
 let remote_invoke_js =
   fun [@u] name transit_args ->
-    Js.Promise.make (fun ~resolve ~reject ->
-        match Hashtbl.find_opt api_handlers name with
-        | Some f -> (
-            let args = decode_args transit_args in
-            try
-              ignore
-                (Js.Promise.then_
-                   (fun result ->
-                     resolve (Transit.to_string result) [@u];
-                     Js.Promise.resolve ())
-                   (f args))
-            with exn -> reject exn [@u])
-        | None ->
-            reject
-              (Failure ("not found thread-api: " ^ name))
-              [@u])
+    match Hashtbl.find_opt api_handlers name with
+    | Some f -> (
+        try
+          let args = decode_args transit_args in
+          (* handler rejections propagate to the returned promise — the
+             worker's remoteInvoke must settle instead of hanging *)
+          f args
+          |> Js.Promise.then_ (fun result ->
+                 Js.Promise.resolve (Transit.to_string result))
+        with exn -> Js.Promise.reject exn)
+    | None -> Js.Promise.reject (Failure ("not found thread-api: " ^ name))
 
 let install_remote_invoke worker =
+  (* cljs main-thread thread-api callbacks the worker invoke_remote's;
+     progress + ui-state pushes we don't surface yet *)
+  register_api "thread-api/search-index-build-progress"
+    (fun _ -> Js.Promise.resolve Wire.Nil);
+  register_api "thread-api/set-ui-state"
+    (fun _ -> Js.Promise.resolve Wire.Nil);
   let exposed = Js.Dict.empty () in
   Js.Dict.set exposed "remoteInvoke" remote_invoke_js;
   Comlink.expose exposed worker
@@ -77,9 +79,16 @@ let handle_frame t data =
   else
     match json_string data with
     | Some transit_text -> (
-        match Transit.of_string transit_text with
-        | Wire.Array (Wire.Keyword e :: rest)
-        | Wire.List (Wire.Keyword e :: rest) ->
+        let frame =
+          try Some (Transit.of_string transit_text)
+          with _ ->
+            Platform.console_error
+              ("db-worker frame decode failed", transit_text);
+            None
+        in
+        match frame with
+        | Some (Wire.Array (Wire.Keyword e :: rest))
+        | Some (Wire.List (Wire.Keyword e :: rest)) ->
             let payload =
               match rest with [ p ] -> p | _ -> Wire.Array rest
             in
@@ -100,7 +109,10 @@ let invoke t name args =
   let transit_args = Transit.to_string (Wire.Array args) in
   Js.Promise.then_
     (fun result -> Js.Promise.resolve (Transit.of_string result))
-    (Comlink.remote_invoke t.proxy name transit_args)
+    (* the worker never answers after it dies — race every call against
+       [dead] so a crash rejects callers instead of hanging them *)
+    (Js.Promise.race
+       [| Comlink.remote_invoke t.proxy name transit_args; t.dead |])
 
 let invoke1 t name a = invoke t name [ a ]
 let invoke2 t name a b = invoke t name [ a; b ]
@@ -119,6 +131,10 @@ let set_worker_fs worker =
   install "pfs";
   install "workerThread"
 
+(* wired by the app layer at boot — this module can't reach Toast
+   without a cycle through Runtime *)
+let notify_worker_failure = ref (fun () -> ())
+
 let create () =
   let worker =
     Comlink.new_worker
@@ -126,9 +142,19 @@ let create () =
   in
   set_worker_fs worker;
   let proxy = Comlink.wrap worker in
-  let t = { worker; proxy; on_message = (fun _ _ -> ()) } in
+  let kill = ref (fun (_ : exn) -> ()) in
+  let dead : string Js.Promise.t =
+    Js.Promise.make (fun ~resolve:_ ~reject ->
+        kill := fun e -> reject e [@u])
+  in
+  let t = { worker; proxy; on_message = (fun _ _ -> ()); dead } in
   Comlink.set_onmessage worker (fun event -> onmessage t event);
-  Comlink.set_onerror worker (fun _ -> ());
-  Comlink.set_onmessageerror worker (fun _ -> ());
+  Comlink.set_onerror worker (fun err ->
+      Platform.console_error ("db-worker error", err);
+      !notify_worker_failure ();
+      !kill (Failure "db-worker crashed"));
+  Comlink.set_onmessageerror worker (fun err ->
+      Platform.console_error ("db-worker messageerror", err);
+      !notify_worker_failure ());
   install_remote_invoke worker;
   t

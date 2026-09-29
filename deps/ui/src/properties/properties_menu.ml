@@ -21,15 +21,28 @@ type menu_ctx =
   ; mutable content : Editor_dom.el option (* current dropdown body *)
   }
 
-let menuitem ?(cls = "") label act =
+let menuitem ?(cls = "") ?icon label act =
   let el =
     mk "div"
       ~cls:(Menu_item.base_cls ^ " " ^ cls)
       ~attrs:Menu_item.item_attrs
   in
-  let t = mk "div" in
-  el_set_text t label;
-  el_append_child el t;
+  (match icon with
+   | Some name ->
+       let inner = mk ~cls:"flex flex-row items-center gap-1" "div" in
+       let s = mk ~cls:("ui__icon ti ls-icon-" ^ name) "span" in
+       (match tabler_svg_el ~size:15. name with
+        | Some svg -> el_append_child s svg
+        | None -> el_append_child s (mk ~cls:("ti ti-" ^ name) "i"));
+       el_append_child inner s;
+       let t = mk "div" in
+       el_set_text t label;
+       el_append_child inner t;
+       el_append_child el inner
+   | None ->
+       let t = mk "div" in
+       el_set_text t label;
+       el_append_child el t);
   on_click el (fun _ -> act ());
   el
 
@@ -465,12 +478,15 @@ let delete_property m =
              ~ident:(prop_ident m));
       S.refresh_all ())
 
-let menu_body m =
+let menu_body ~with_title ~more_options m =
   let body = mk "div" in
   m.content <- Some body;
-  let h3 = mk ~cls:"font-medium px-2 py-1" "h3" in
-  el_set_text h3 (I18n.t "property/configure-title");
-  el_append_child body h3;
+  (if with_title then begin
+     let h3 = mk ~cls:"font-medium px-2 py-1" "h3" in
+     el_set_text h3 (I18n.t "property/configure-title");
+     el_append_child body h3
+   end);
+  List.iter (el_append_child body) more_options;
   el_append_child body
     (menuitem (I18n.t "property/name") (fun () ->
          swap_content m (name_pane m)));
@@ -520,20 +536,22 @@ let menu_body m =
          S.close_overlays ()));
   el_append_child body
     (menuitem ~cls:"del opacity-60"
-       (I18n.t "property/delete-from-node") (fun () -> delete_property m));
+       (I18n.t
+          (if m.owner_is_tag then "property/delete-from-tag"
+           else "property/delete-from-node"))
+       (fun () -> delete_property m));
   body
 
 (* Open the dropdown anchored to a clicked element (property-k).
-   `trailing` items append after the config menuitems — cljs puts the
-   table header's sort/pin more-options there. *)
+   `more_options` items lead the config menuitems — cljs prepends the
+   table header's sort/pin options and hides the Configure title. *)
 let open_menu ~anchor ~owner_uuid ~owner_id ~owner_is_tag ~owner_title
-    ~refresh ?(trailing = []) row =
+    ~refresh ?(more_options = []) ?(with_title = true) row =
   let m =
     { owner_uuid; owner_id; owner_is_tag; owner_title; refresh; row
     ; content = None
     }
   in
-  let body = menu_body m in
-  List.iter (el_append_child body) trailing;
+  let body = menu_body ~with_title ~more_options m in
   ignore
     (Properties_popup.open_anchored ~cls:menu_root_class anchor body)

@@ -104,7 +104,7 @@ let is_uuid_string s =
   && String.get s 13 = '-'
   && String.get s 18 = '-'
   && String.get s 23 = '-'
-  && String.for_all is_uuid_char s
+  && String.for_all is_uuid_char (String.sub s 0 8)
 
 (* ref wire for get-page-blocks-tree / get-page-route-info: Uuid for uuid
    strings, String for page names (Ldb.get_page accepts Uuid/String/Int64

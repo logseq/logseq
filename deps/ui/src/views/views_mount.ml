@@ -173,10 +173,23 @@ let ensure_query_shells () =
    refresh every still-connected inst so rows/columns stay live (cljs
    refetches the view-data resource on each tx) *)
 let refresh_query_insts () =
+  let dead = ref [] in
   Hashtbl.iter
-    (fun _ (inst : V.inst) ->
-      if D.el_is_connected inst.V.container then Views_view.refresh inst)
-    insts
+    (fun id (inst : V.inst) ->
+      if D.el_is_connected inst.V.container then Views_view.refresh inst
+      else dead := id :: !dead)
+    insts;
+  (* a detached container never comes back — the observer mounts a
+     fresh inst when the route re-renders — so drop the bookkeeping
+     instead of leaking the inst's rows/caches *)
+  List.iter
+    (fun id ->
+      match Hashtbl.find_opt insts id with
+      | Some inst ->
+          Views_builder.drop_tree inst;
+          Hashtbl.remove insts id
+      | None -> ())
+    !dead
 
 (* ---------- observer ---------- *)
 

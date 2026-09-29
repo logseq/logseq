@@ -9,6 +9,8 @@ type ev
 type node_list
 type clipboard_data
 type mutation_observer
+
+type mutation_record
 type observe_opts
 
 external document_add_listener :
@@ -101,6 +103,13 @@ external el_insert_before : el -> el -> el -> unit = "insertBefore"
   [@@mel.send]
 external el_set_class : el -> string -> unit = "className" [@@mel.set]
 external el_focus : el -> unit = "focus" [@@mel.send]
+external el_scroll_into_view : el -> unit = "scrollIntoView" [@@mel.send]
+
+let el_class_add : el -> string -> unit =
+  [%mel.raw "function (e, c) { e.classList.add(c) }"]
+
+let el_class_remove : el -> string -> unit =
+  [%mel.raw "function (e, c) { e.classList.remove(c) }"]
 
 (* textarea *)
 external el_value : el -> string = "value" [@@mel.get]
@@ -122,6 +131,21 @@ external clear_timeout : int -> unit = "clearTimeout"
 
 external new_observer : (unit -> unit) -> mutation_observer
   = "MutationObserver" [@@mel.new]
+
+external new_observer_records : (mutation_record array -> unit) -> mutation_observer
+  = "MutationObserver" [@@mel.new]
+
+external rec_target : mutation_record -> el = "target" [@@mel.get]
+
+external rec_added : mutation_record -> node_list = "addedNodes" [@@mel.get]
+
+external rec_removed : mutation_record -> node_list = "removedNodes" [@@mel.get]
+
+external rec_type : mutation_record -> string = "type" [@@mel.get]
+
+external node_name : el -> string = "nodeName" [@@mel.get]
+
+external el_class : el -> string = "className" [@@mel.get]
 
 external observe_opts :
   childList:bool -> subtree:bool -> observe_opts = "" [@@mel.obj]

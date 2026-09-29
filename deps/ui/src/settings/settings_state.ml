@@ -39,8 +39,10 @@ let set f =
   Runtime.flush ()
 
 (* storage-backed toggles don't touch `config` — bump tick so the pane
-   dyn re-renders *)
-let poke () = set (fun s -> { s with tick = s.tick + 1 })
+   dyn re-renders. Toggles are reachable without the pane mounted (cmdk
+   "ui/toggle-wide-mode"), where there is nothing to re-render *)
+let poke () =
+  if ready () then set (fun s -> { s with tick = s.tick + 1 })
 
 let repo = Runtime.repo
 
@@ -130,11 +132,11 @@ let config_bool key ~default =
 let map_assoc key v kvs =
   let rec go acc = function
     | [] -> List.rev ((Wire.Keyword key, v) :: acc)
-    | (k, _) :: rest -> (
+    | ((k, _) as kv) :: rest -> (
         match k with
         | Wire.Keyword s when s = key ->
             List.rev_append acc ((k, v) :: rest)
-        | _ -> go ((k, v) :: acc) rest)
+        | _ -> go (kv :: acc) rest)
   in
   go [] kvs
 

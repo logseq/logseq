@@ -11,13 +11,14 @@ let default_config = "{:feature/enable-git-auto-commit? false}"
 let init_worker () =
   Runtime.invoke1 "thread-api/init" (Wire.Array [])
   |> Js.Promise.then_ (fun _ ->
-         Runtime.invoke2 "thread-api/set-db-sync-config" (Wire.String "")
-           (Wire.Map
-              [ (Wire.kw "enabled?", Wire.Bool true)
-              ; (Wire.kw "ws-url", Wire.Nil)
-              ; (Wire.kw "http-base", Wire.Nil)
-              ]))
-  |> Js.Promise.then_ (fun _ -> Js.Promise.resolve ())
+         (* single-arg map like cljs state/set-db-sync-config *)
+         Runtime.invoke1 "thread-api/set-db-sync-config"
+           (Rtc_ops.db_sync_config ()))
+  |> Js.Promise.then_ (fun _ ->
+         (* cljs pushes sync-app-state at boot so a stored login reaches
+            the worker before any db-sync call *)
+         Rtc_ops.sync_app_state !Runtime.current_repo;
+         Js.Promise.resolve ())
 
 let list_graphs () =
   Runtime.invoke "thread-api/list-db" []
@@ -39,13 +40,19 @@ let build_search_index repo =
          Js.Promise.resolve ())
   |> ignore
 
-let create_graph name =
+let create_graph ?(remote = false) name =
   let repo = full_graph_name name in
   Runtime.invoke2 "thread-api/create-or-open-db" (Wire.String repo)
     (Wire.Map
-       [ (Wire.kw "config", Wire.String default_config)
-       ; (Wire.kw "graph-git-sha", Wire.Nil)
-       ])
+       ([ (Wire.kw "config", Wire.String default_config)
+        ; (Wire.kw "graph-git-sha", Wire.Nil)
+        ]
+       (* cljs repo-handler/new-db! passes {:creating-remote-graph? true}
+          when the graph will sync — the worker seeds client-ops local-tx
+          on that flag, which db-sync-start requires *)
+       @ if remote then
+           [ (Wire.kw "creating-remote-graph?", Wire.Bool true) ]
+         else []))
   |> Js.Promise.then_ (fun _ -> Js.Promise.resolve repo)
 
 (* cljs <create! title {:today-journal? true} via outliner-op create-page *)

@@ -16,6 +16,10 @@ let gets m key = W.map_get_string m key
 let geti m key = W.map_get_int m key
 let getu m key = W.map_get_uuid m key
 
+(* int-keyed wire maps (extends-by-class-id, structured-children-by-class-id) *)
+let int_map_get m id =
+  match m with W.Map kvs -> List.assoc_opt (W.Int id) kvs | _ -> None
+
 let getb m key =
   match W.get m key with Some (W.Bool b) -> b | _ -> false
 
@@ -144,6 +148,19 @@ let ref_title w =
 
 let ref_uuid w = entity_uuid_of w
 let ref_dbid w = entity_id_of w
+
+(* cljs entity/class?: entity tagged with :logseq.class/Tag *)
+let ref_is_class w =
+  let w = untag w in
+  match getf w "block/tags" with
+  | Some tags ->
+      List.exists
+        (fun t ->
+          match gets t "db/ident" with
+          | Some "logseq.class/Tag" -> true
+          | _ -> false)
+        (W.elems tags)
+  | None -> false
 
 let value_elems w =
   match w with

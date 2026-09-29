@@ -5,7 +5,11 @@ open Model
 let update (model : t) (action : Action.t) : t =
   match action with
   | Action.Boot_graph_ready repo ->
-      { model with phase = Ready; repo = Some repo }
+      (* rtc broadcast state belongs to the previous graph's conn; clear it
+         so the header indicator only shows the new graph once its conn
+         reports — a stale "on.idle" would let e2e switch-graph proceed
+         while the navigation is still in flight *)
+      { model with phase = Ready; repo = Some repo; rtc = None }
   | Repos_loaded repos -> { model with repos }
   | Page_loaded page ->
       { model with route_page = Some page; page_missing = false }
@@ -24,6 +28,7 @@ let update (model : t) (action : Action.t) : t =
       ; editing_title = false
       ; page_menu = None
       ; appearance = None
+      ; confirm = None
       ; unlinked_open = false
       ; unlinked_search = false
       ; unlinked_query = ""
@@ -56,6 +61,13 @@ let update (model : t) (action : Action.t) : t =
       { model with
         toasts = List.filter (fun (t : toast) -> t.toast_id <> id) model.toasts
       }
+  | Toast_dismiss_key key ->
+      { model with
+        toasts =
+          List.filter
+            (fun (t : toast) -> t.toast_key <> Some key)
+            model.toasts
+      }
   | Toasts_clear -> { model with toasts = [] }
   | Unlinked_toggle_open ->
       { model with unlinked_open = not model.unlinked_open }
@@ -66,6 +78,8 @@ let update (model : t) (action : Action.t) : t =
       }
   | Unlinked_set_query q -> { model with unlinked_query = q }
   | Help_toggle -> { model with help_open = not model.help_open }
+  | Rtc_state rtc -> { model with rtc = Some rtc }
+  | Rtc_state_clear -> { model with rtc = None }
   | Worker_event _ | Refresh_page | Block_content_changed _ | Toggle_search
   | Noop ->
       model

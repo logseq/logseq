@@ -17,6 +17,8 @@
 
 open Lui_elements
 
+let dyn = Logseq_dom.dyn
+
 let skip_to_main =
   Logseq_dom.dom ~key:"skip" ~tag:"button" ~id:"skip-to-main"
     ~text:"Skip to main content" []
@@ -69,6 +71,53 @@ let dots_button =
         | None -> ())
     [ Icons.icon ~size:20. ~cls:"" "dots" ]
 
+(* components/rtc/indicator.cljs — cloud status button + hidden rtc-tx
+   element the e2e reads EDN from. Visible once the worker broadcasts
+   rtc-sync-state (i.e. sync is running on the current graph). *)
+let rtc_tx_text (r : Model.rtc) =
+  let tx = function Some n -> string_of_int n | None -> "nil" in
+  Printf.sprintf "{:local-tx %s, :remote-tx %s}"
+    (tx r.rtc_local_tx) (tx r.rtc_remote_tx)
+
+let rtc_indicator (ms : Model.t Signal.signal) : t =
+  dyn ~equal:( = ) (fun (r : Model.rtc option) ->
+      match r with
+      | None -> Logseq_dom.dom ~key:"rtc-off" ~style_class:"hidden" []
+      | Some r ->
+          let open_ = Platform.online () && r.rtc_lock in
+          let syncing = open_ && r.rtc_pending_server > 0 in
+          let idle =
+            open_ && r.rtc_pending_local = 0
+            && r.rtc_pending_asset = 0 && r.rtc_pending_server = 0
+          in
+          let queuing =
+            r.rtc_pending_local > 0 || r.rtc_pending_asset > 0
+          in
+          let cls =
+            "cloud ui__button"
+            ^ (if open_ then " on" else "")
+            ^ (if syncing then " syncing" else "")
+            ^ (if idle then " idle" else "")
+            ^ (if queuing then " queuing" else "")
+          in
+          Logseq_dom.dom ~key:"rtc" ~style_class:"cp__rtc-sync"
+            [ Logseq_dom.dom ~key:"rtc-tx" ~style_class:"hidden"
+                ~attrs:[ ("data-testid", "rtc-tx") ]
+                ~text:(rtc_tx_text r) []
+            ; Logseq_dom.dom ~key:"rtc-ind"
+                ~style_class:
+                  "cp__rtc-sync-indicator flex flex-row items-center \
+                   gap-1"
+                [ Logseq_dom.dom ~key:"rtc-btn" ~tag:"button"
+                    ~style_class:cls
+                    ~attrs:
+                      [ ("type", "button"); ("aria-label", "rtc sync") ]
+                    [ Logseq_dom.dom ~key:"rtc-i" ~tag:"i"
+                        ~style_class:"ti ti-cloud" [] ]
+                ]
+            ])
+    (Signal.map (fun (m : Model.t) -> m.rtc) ms)
+
 let left_menu_button =
   icon_btn ~key:"left-menu-btn" ~id:"left-menu"
     ~cls:(ghost_btn_cls ~mid:"cp__header-left-menu " ())
@@ -111,7 +160,8 @@ let header (ms : Model.t Signal.signal) =
           "r flex drag-region justify-between items-center gap-2 overflow-x-hidden w-full"
         [ Logseq_dom.dom ~key:"head-crumb" ~style_class:"flex flex-1" []
         ; Logseq_dom.dom ~key:"head-acts" ~style_class:"flex items-center"
-            [ home_button ms
+            [ rtc_indicator ms
+            ; home_button ms
             ; (* cljs header.cljs hook-ui-items :toolbar renders
                  .ui-items-container only when a plugin actually
                  contributes a toolbar item *)
@@ -220,10 +270,13 @@ let main_content (ms : Model.t Signal.signal) =
     ]
 
 (* Overlay layer — cmdk palette, popups (autocomplete/slash/context
-   menus), dialogs and toasts mount here. cljs's installers emit no
-   wrapper element, so these mount directly under #app-container. *)
+   menus), dialogs and toasts mount here (single shared container;
+   the keyed wrapper keeps these dynamic segments off #app-container's
+   child list so nav-time reconciles can't tear down a freshly
+   mounted overlay mid-batch). cljs mounts them via portals, which
+   are their own container nodes anyway. *)
 let overlays (ms : Model.t Signal.signal) =
-  Logseq_dom.fragment
+  Logseq_dom.dom ~key:"overlays" ~style_class:"cp__overlays"
     [ Cmdk_view.render ms
     ; Popups_view.render ms
     ; Left_sidebar_view.menus ms

@@ -43,7 +43,6 @@ let rec render inst =
       (* cljs views.cljs view: .flex.flex-col.gap-2.grid with filters-row
          as first child of .ls-view-body *)
       let grid = D.h ~cls:"flex flex-col gap-2 grid" () in
-      D.el_append_child grid (Views_head.render_head inst ~refresh);
       let body =
         Views_table.render_body inst ~refresh
           ~filters:(Views_head.filters_row inst ~refresh)
@@ -344,7 +343,7 @@ let export_edn inst =
        (fun () ->
          Runtime.send
            (A.Toast_push
-              { M.toast_id = 0; toast_text = I.copied_view_nodes
+              { M.toast_id = 0; toast_key = None; toast_text = I.copied_view_nodes
               ; toast_kind = "success" });
          Js.Promise.resolve ())
        (D.clipboard_write s))
@@ -438,8 +437,21 @@ let mount_query ~block_uuid ~container : V.inst =
 (* re-run every mounted query view — called on the worker's
    "sync-db-changes" broadcast so result membership updates live *)
 let refresh_query_insts () =
+  let dead = ref [] in
   Hashtbl.iter
-    (fun _ inst -> if D.el_is_connected inst.V.container then refresh inst)
-    query_insts
+    (fun uuid inst ->
+      if D.el_is_connected inst.V.container then refresh inst
+      else dead := uuid :: !dead)
+    query_insts;
+  (* drop insts whose query block is gone — mount_query re-creates an
+     equivalent inst from worker state if the block re-renders *)
+  List.iter
+    (fun uuid ->
+      match Hashtbl.find_opt query_insts uuid with
+      | Some inst ->
+          Views_builder.drop_tree inst;
+          Hashtbl.remove query_insts uuid
+      | None -> ())
+    !dead
 
 let () = install_ops ()

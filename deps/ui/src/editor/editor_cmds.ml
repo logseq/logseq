@@ -134,14 +134,9 @@ let run ~command ~block ~value =
             (Sdk_util.get_by_id (W.String uuid)
              |> Js.Promise.then_ (fun w ->
                     let cur =
-                      match W.get w "logseq.property/order-list-type" with
-                      | Some (W.String s) -> s
-                      | Some (W.Map _) -> (
-                          match W.map_get_string w
-                                  "logseq.property/order-list-type" with
-                          | Some s -> s
-                          | None -> "")
-                      | _ -> ""
+                      match Decode.order_list_type_of_wire w with
+                      | Some s -> s
+                      | None -> ""
                     in
                     (if cur = "number" then
                        apply
