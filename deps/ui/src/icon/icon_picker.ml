@@ -147,6 +147,7 @@ let add_used_item (typ, id, name) =
 
 type picker =
   { del : bool
+  ; emoji_only : bool
   ; on_chosen : choice -> unit
   ; mutable q : string
   ; mutable tab : tab
@@ -555,8 +556,10 @@ let view (p : picker) : E.el =
       D.el_append_child b (D.create_text_node label);
       D.on_click b (fun _ -> set_tab p t);
       D.el_append_child tabs_row b)
-    [ (Tab_all, I.t "icon/tab-all"); (Tab_emoji, I.t "icon/tab-emojis")
-    ; (Tab_icon, I.t "icon/tab-icons") ];
+    (if p.emoji_only then [ (Tab_emoji, I.t "icon/tab-emojis") ]
+     else
+       [ (Tab_all, I.t "icon/tab-all"); (Tab_emoji, I.t "icon/tab-emojis")
+       ; (Tab_icon, I.t "icon/tab-icons") ]);
   D.el_append_child ft tabs_row;
   (* cljs shui/popover-trigger renders a bare button wrapper with
      aria-expanded around the color-picker button *)
@@ -607,11 +610,18 @@ let view (p : picker) : E.el =
   render_tab p;
   root
 
-let open_picker ~(anchor : E.el) ~(del : bool)
-    ~(on_chosen : choice -> unit) : unit =
+(* `sub` positions the picker as a submenu (right edge of anchor);
+   `emoji_only` restricts it to the Emojis tab (reaction picker) *)
+type picker_opts = { emoji_only : bool; sub : bool }
+
+let open_picker_with_opts ~(anchor : E.el) ~(del : bool)
+    ~(opts : picker_opts) ~(on_chosen : choice -> unit) : unit =
+  let emoji_only = opts.emoji_only in
   Emoji_mart.install ();
   let p =
-    { del; on_chosen; q = ""; tab = Tab_all; gen = 0; input = None
+    { del; emoji_only; on_chosen; q = ""
+    ; tab = (if emoji_only then Tab_emoji else Tab_all); gen = 0
+    ; input = None
     ; x_btn = None; bd = None; pane = None; root = None; pal_wrap = None }
   in
   let root = view p in
@@ -634,8 +644,13 @@ let open_picker ~(anchor : E.el) ~(del : bool)
   D.el_append_child lpa row;
   D.el_append_child row pvi;
   D.el_append_child pvi root;
+
+  let open_popup =
+    if opts.sub then Properties_popup.open_anchored_right
+    else Properties_popup.open_anchored
+  in
   ignore
-    (Properties_popup.open_anchored
+    (open_popup
        ~cls:
          "ui__popover-content rounded-md border bg-popover \
           text-popover-foreground shadow-md outline-none outline-none \
@@ -649,4 +664,12 @@ let open_picker ~(anchor : E.el) ~(del : bool)
   match p.input with
   | Some i -> D.el_focus i
   | None -> ()
+;;
+
+let open_picker ~(anchor : E.el) ~(del : bool)
+    ~(on_chosen : choice -> unit) : unit =
+  open_picker_with_opts ~anchor ~del
+    ~opts:{ emoji_only = false; sub = false }
+    ~on_chosen
+;;
 

@@ -53,3 +53,9 @@ let open_at ?(cls = "") ~x ~y content =
 let open_anchored ?(cls = "") anchor content =
   let left, _top, _right, bottom, _w = el_rect anchor in
   open_at ~cls ~x:left ~y:(bottom +. 4.0) content
+
+(* submenu positioning: at the anchor's right edge, top-aligned
+   (base-ui dropdown-menu-sub-content placement inline-end) *)
+let open_anchored_right ?(cls = "") anchor content =
+  let _left, top, right, _bottom, _w = el_rect anchor in
+  open_at ~cls ~x:(right -. 4.0) ~y:(top -. 4.0) content

@@ -84,7 +84,17 @@ let page_items (p : Model.page) =
         | None -> [])
     | false, false, _ -> []
   in
-  fav @ del @ [ export_page; publish_page ] @ convert
+  (* cljs page_menu.cljs: "(Dev) Show page data" in developer-mode *)
+  let dev =
+    match
+      Platform.local_storage_get "developer-mode"
+    with
+    | Some "true" | Some "\"true\"" ->
+        [ item "dev-page-data" "(Dev) Show page data" (fun () ->
+              Runtime.send (Action.Page_menu_set None)) ]
+    | _ -> []
+  in
+  fav @ del @ [ export_page; publish_page ] @ convert @ dev
 
 (* app-wide entries mirror the cljs header dots menu
    (components/header.cljs toolbar-dots-menu): dialogs dispatch

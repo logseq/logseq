@@ -31,6 +31,20 @@ let menu_box ~style children =
     ~attrs:[ ("role", "menu"); ("style", style) ]
     children
 
+(* combo shortcut inside a menu item (ui/dropdown-shortcut):
+   span.ml-auto.pl-2 > .shui-shortcut-combo.shui-shortcut-glow > kbd* *)
+let menu_sc caps =
+  dom ~key:"sc" ~tag:"span" ~style_class:"ml-auto pl-2"
+    [ dom ~key:"sc-box" ~tag:"div"
+        ~style_class:"shui-shortcut-combo shui-shortcut-glow"
+        ~attrs:[ ("style", "white-space: nowrap") ]
+        (List.mapi
+           (fun i cap ->
+             dom ~key:("k" ^ string_of_int i) ~tag:"kbd"
+               ~style_class:"shui-shortcut-key" ~text:cap [])
+           caps) ]
+;;
+
 (* [role='menuitem'] > div text — contract uses `div:text('<label>')` *)
 let menu_item st label on_click =
   Menu_item.el ~key:("mi-" ^ label)
@@ -138,6 +152,53 @@ let plugins_menu st =
            ])
     ]
 
+(* cljs left_sidebar.cljs x-menu-content: dropdown at the pointer with
+   "Unfavorite" (favorites only) + "Open in sidebar", icons and keycap
+   shortcuts; content-props class w-60 *)
+let lp_menu st =
+  let ctx_icon n =
+    dom ~tag:"span" ~style_class:"scale-90 pr-1 opacity-80" [ icon n ]
+  in
+  let item label icon_name caps on_click =
+    dom ~key:("lp-" ^ label) ~tag:"div"
+      ~attrs:[ ("role", "menuitem"); ("tabindex", "-1") ]
+      ~style_class:
+        "ui__dropdown-menu-item relative flex cursor-pointer select-none \
+         items-center rounded-sm px-2 py-1.5 text-sm outline-none \
+         data-[highlighted]:bg-muted data-[disabled]:pointer-events-none \
+         data-[disabled]:opacity-50"
+      ~events:"click"
+      ~on_dom_event:(fun n _ ->
+        if n = "click" then (
+          Sidebar_state.close_menu st;
+          on_click ()))
+      ([ ctx_icon icon_name; dom ~tag:"span" ~text:label [] ]
+      @ (match caps with [] -> [] | _ -> [ menu_sc caps ]))
+  in
+  match !Sidebar_state.lp_ctx with
+  | None -> dom ~key:"lp-none" []
+  | Some (target, recent, x, y) ->
+      let items =
+        (if recent then []
+         else
+           [ item (t "Unfavorite") "star-off" [ "⌘"; "⇧"; "F" ]
+               (fun () ->
+                 if Wire.is_uuid_string target then
+                   Sidebar_state.unfavorite st target) ])
+        @ [ item (t "Open in sidebar") "layout-sidebar-right"
+              [ "⇧"; "Click" ]
+              (fun () -> Sidebar_state.open_ref st target) ]
+      in
+      dom ~key:"lp-menu" ~tag:"div"
+        ~attrs:
+          [ ("role", "menu")
+          ; ( "style"
+            , Printf.sprintf
+                "position:fixed;left:%.0fpx;top:%.0fpx;z-index:999" x y ) ]
+        ~style_class:
+          "ui__dropdown-menu-content ui__dropdown-menu w-60" items
+;;
+
 let menu_host st =
   let menu_sig =
     Signal.map2
@@ -153,6 +214,8 @@ let menu_host st =
       match menu with
       | "nav-edit" -> nav_edit_menu st checked
       | "plugins" -> plugins_menu st
+      | m when String.length m > 3 && String.sub m 0 3 = "lp-" ->
+          lp_menu st
       | _ -> Logseq_dom.nothing)
     menu_sig
 
@@ -302,40 +365,83 @@ let nav_group ms st =
 
 (* ---------- favorites / recents ---------- *)
 
-let page_item_el st (p : Model.page) ~li_class ~key =
+let str_contains hay needle =
+  let lh = String.length hay and ln = String.length needle in
+  let rec go i =
+    i + ln <= lh
+    && (String.sub hay i ln = needle || go (i + 1))
+  in
+  go 0
+;;
+
+let page_item_el st (p : Model.page) ~li_class ~recent ~key =
+  let lp_ref =
+    match p.Model.page_uuid with
+    | Some u -> u
+    | None -> p.Model.page_title
+  in
+  let open_lp payload =
+    let x = match payload with Some pl -> Platform.payload_num pl "clientX" | None -> 0. in
+    let y = match payload with Some pl -> Platform.payload_num pl "clientY" | None -> 0. in
+    Sidebar_state.open_lp_menu st ~target:lp_ref ~recent ~x ~y
+  in
   dom ~key ~tag:"li" ~style_class:li_class
     [ dom ~tag:"a" ~style_class:"link-item group"
+        ~attrs:
+          [ ("data-lp-ref", lp_ref)
+          ; ("data-lp-recent", if recent then "1" else "0") ]
         ~events:"click"
         ~on_dom_event:(fun name payload ->
           if name = "click" then (
-            let shift =
+            let cls =
               match payload with
               | Some pl -> (
-                  try Sidebar_state.jbool "shiftKey" (Js.Json.parseExn pl)
-                  with _ -> false)
-              | None -> false
+                  try Platform.event_str (Js.Json.parseExn pl) "targetClass"
+                  with _ -> "")
+              | None -> ""
             in
-            (* navigate by title: #/page/<uuid> hashes hit the
-               Router.page_ref lookup-ref bug (see sidebar_state). *)
-            if shift then
-              match p.Model.page_uuid with
-              | Some u -> Sidebar_state.open_uuid st u
-              | None -> ()
+            if
+              str_contains cls "sidebar-page-actions"
+              || str_contains cls "ls-icon-dots" then
+              open_lp payload
             else
-              Sidebar_state.navigate_to_page
-                (match p.Model.page_title with
-                 | "" -> Option.value p.Model.page_uuid ~default:""
-                 | title -> title)))
+              let shift =
+                match payload with
+                | Some pl -> (
+                    try Sidebar_state.jbool "shiftKey" (Js.Json.parseExn pl)
+                    with _ -> false)
+                | None -> false
+              in
+              (* navigate by title: #/page/<uuid> hashes hit the
+                 Router.page_ref lookup-ref bug (see sidebar_state). *)
+              if shift then
+                match p.Model.page_uuid with
+                | Some u -> Sidebar_state.open_uuid st u
+                | None -> ()
+              else
+                Sidebar_state.navigate_to_page
+                  (match p.Model.page_title with
+                   | "" -> Option.value p.Model.page_uuid ~default:""
+                   | title -> title)))
         [ dom ~tag:"span" ~style_class:"page-icon" [ icon "file" ]
         ; dom ~tag:"span" ~style_class:"page-title" ~text:p.Model.page_title
-            [] ]
+            []
+        (* cljs .sidebar-page-actions dots button inside .link-item *)
+        ; dom ~tag:"button"
+            ~style_class:
+              "sidebar-page-actions absolute !bg-transparent right-0 top-0 \
+               px-1.5 scale-75 opacity-40 hover:opacity-80 \
+               active:opacity-100"
+            [ dom ~tag:"i" ~style_class:"relative"
+                ~attrs:[ ("style", "top: 4px") ]
+                [ icon "dots" ] ] ]
     ]
 
 (* cljs sidebar-content-group: .bd renders only when the group supplies a
    child — favorites passes a child only when non-empty, recent always
    passes a ul (so an empty Recent still shows .bd > ul.text-sm) *)
 let content_group st ~key ~class_ ~label ~items_sig ~li_class ~ul_class
-    ~always_bd =
+    ~always_bd ~recent =
   dom ~key
     ~style_class_signal:
       (D.class_signal items_sig (fun ps ->
@@ -358,7 +464,7 @@ let content_group st ~key ~class_ ~label ~items_sig ~li_class ~ul_class
                   [ dom ~key:(key ^ "-ul") ~tag:"ul" ~style_class:ul_class
                       (List.map
                          (fun p ->
-                           page_item_el st p ~li_class
+                           page_item_el st p ~li_class ~recent
                              ~key:
                                (key ^ "-"
                                 ^ Option.value p.Model.page_uuid
@@ -372,14 +478,14 @@ let favorites_group st =
   content_group st ~key:"fav" ~class_:"favorites" ~label:(t "Favorites")
     ~items_sig:(Signal.value st.Sidebar_state.favorites)
     ~ul_class:"favorites text-sm" ~always_bd:false
-    ~li_class:"favorite-item font-medium"
+    ~li_class:"favorite-item font-medium" ~recent:false
 
 let recents_group st =
   content_group st ~key:"recent" ~class_:"recent"
     ~label:(t "Recent")
     ~items_sig:(Signal.value st.Sidebar_state.recents)
     ~ul_class:"text-sm" ~always_bd:true
-    ~li_class:"recent-item select-none font-medium"
+    ~li_class:"recent-item select-none font-medium" ~recent:true
 
 (* cljs plugins.cljs hook-ui-items :toolbar — the puzzle trigger lives
    in the header .ui-items-container. cljs gates it on (seq toolbar
