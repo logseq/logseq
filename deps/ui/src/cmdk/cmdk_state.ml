@@ -658,6 +658,7 @@ let open_palette ?(move = false) st =
      in one batch, which the store/dom replay cannot survive *)
   let tip = if js_random () < 0.5 then 0 else 1 in
   set_in st (fun v ->
+<<<<<<< HEAD
           { v with groups = []; hl = -1; input = ""; move_mode = move
           ; mouse = false
           (* cljs move-selected-blocks opens via go-to-search! :nodes,
@@ -665,6 +666,15 @@ let open_palette ?(move = false) st =
           ; filter = (if move then Some G_nodes else None)
           ; tip });
   set_in st (fun v -> { v with open_ = true });
+||||||| 69b7b56b63
+          { v with open_ = true; input = ""; move_mode = move; mouse = false
+          ; filter = None
+          ; tip = (if js_random () < 0.5 then 0 else 1) });
+=======
+          { v with groups = []; hl = -1; input = ""; move_mode = move
+          ; mouse = false; filter = None; tip });
+  set_in st (fun v -> { v with open_ = true });
+>>>>>>> origin/devin/lui-parity-sweep
   (* prime synchronously so commands show before the search lands *)
   apply_results st "" move [] [] 0;
   refresh st;
