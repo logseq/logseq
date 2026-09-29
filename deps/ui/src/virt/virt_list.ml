@@ -58,6 +58,12 @@ external disconnect : mutation_observer -> unit = "disconnect" [@@mel.send]
 external set_timeout : (unit -> unit) -> int -> unit = "setTimeout"
   [@@mel.scope "window"]
 
+external set_timeout_id : (unit -> unit) -> int -> int = "setTimeout"
+  [@@mel.scope "window"]
+
+external clear_timeout : int -> unit = "clearTimeout"
+  [@@mel.scope "window"]
+
 (* -- state -- *)
 
 type vrow = { v_index : int; v_key : string; v_start : float }
@@ -94,10 +100,12 @@ let next_id () =
 let force_virtualized () =
   Platform.query_param "virtualized" = Some "true"
 
-let enabled ~virtualize count =
+let enabled_min ~virtualize ~min count =
   let force = force_virtualized () in
-  (force || (virtualize && count >= 64))
+  (force || (virtualize && count >= min))
   && not (Platform.rtc_test_mode () && not force)
+
+let enabled ~virtualize count = enabled_min ~virtualize ~min:64 count
 
 (* measure every mounted [data-index] row, then prune dropped nodes *)
 let measure_rows list_el (v : V.t) =
@@ -144,10 +152,19 @@ let attach (ctx : Lui_ui.ui_context) st margin list_id scroll_parent_id
       let cleanup = V.did_mount v in
       V.will_update v;
       publish v;
-      let obs = new_observer (fun () -> measure_rows list_el v) in
+      (* debounced: input inside mounted rows mutates the subtree on
+         every keystroke — remeasure once per burst, not per batch *)
+      let measure_timer = ref (-1) in
+      let obs =
+        new_observer (fun () ->
+            if !measure_timer >= 0 then clear_timeout !measure_timer;
+            measure_timer :=
+              set_timeout_id (fun () -> measure_rows list_el v) 50)
+      in
       observe obs list_el (observe_opts ~childList:true ~subtree:true);
       measure_rows list_el v;
       Signal.on_dispose ctx.ui_scope (fun () ->
+          if !measure_timer >= 0 then clear_timeout !measure_timer;
           Hashtbl.remove instances list_id;
           disconnect obs;
           cleanup ())
