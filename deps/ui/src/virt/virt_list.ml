@@ -45,9 +45,16 @@ external scroll_top : element -> float = "scrollTop" [@@mel.get]
 type mutation_observer
 
 type observe_opts
+type mutation_record
 
 external new_observer : (unit -> unit) -> mutation_observer
   = "MutationObserver" [@@mel.new]
+
+external new_observer_records : (mutation_record array -> unit) -> mutation_observer
+  = "MutationObserver" [@@mel.new]
+
+external rec_added : mutation_record -> Js.Json.t = "addedNodes"
+  [@@mel.get]
 
 external observe_opts : childList:bool -> subtree:bool -> observe_opts = ""
   [@@mel.obj]
@@ -104,7 +111,11 @@ let force_virtualized () =
 
 let enabled_min ~virtualize ~min count =
   let force = force_virtualized () in
-  (force || (virtualize && count >= min))
+  (* force amplifies a virtualize:true caller — it must NOT virtualize a
+     virtualize:false one (journal items' inner block lists would nest
+     scrollers inside the outer journals scroller) *)
+  virtualize
+  && (force || count >= min)
   && not (Platform.rtc_test_mode () && not force)
 
 let enabled ~virtualize count = enabled_min ~virtualize ~min:64 count
@@ -113,7 +124,10 @@ let enabled ~virtualize count = enabled_min ~virtualize ~min:64 count
 let measure_rows list_el (v : V.t) =
   let items = nl_to_array (query_selector_all list_el "[data-index]") in
   Array.iter (fun el -> V.measure_element v (Js.Nullable.return el)) items;
-  V.measure_element v Js.Nullable.null
+  V.measure_element v Js.Nullable.null;
+  (* freshly mounted rows need IntersectionObserver registration for
+     pointer-down range selection (cljs virtuoso items-rendered) *)
+  Virtual_scroll.sync ()
 
 let rows_of (v : V.t) =
   Array.to_list (V.get_virtual_items v)
@@ -133,10 +147,33 @@ let attach (ctx : Lui_ui.ui_context) st margin list_id scroll_parent_id
         rect_top (bounding_rect list_el)
         -. rect_top (bounding_rect scroll_el)
         +. scroll_top scroll_el;
+      let last_scroll = ref (scroll_top scroll_el) in
       let publish v =
-        Signal.set st
-          { v_rows = rows_of v; v_total = V.get_total_size v };
-        Runtime.flush ()
+        let rows = rows_of v in
+        Signal.set st { v_rows = rows; v_total = V.get_total_size v };
+        Runtime.flush ();
+        (* cljs virtuoso items-rendered: while a block-range drag is in
+           progress the selection extends to the boundary row in the
+           scroll direction — a stale mid-range row must never shrink it.
+           Direction follows the scroll offset, not the rendered start —
+           an overscan row appearing at the edge is not a scroll *)
+        let cur_scroll = scroll_top scroll_el in
+        let dir =
+          if cur_scroll > !last_scroll then Some `Down
+          else if cur_scroll < !last_scroll then Some `Up
+          else None
+        in
+        last_scroll := cur_scroll;
+        match dir, rows with
+        | Some `Down, _ :: _ ->
+            (match List.nth_opt rows (List.length rows - 1) with
+             | Some r when r.v_index < Array.length data ->
+                 Virtual_scroll.extend_drag (key_of data.(r.v_index))
+             | _ -> ())
+        | Some `Up, first :: _ ->
+            if first.v_index < Array.length data then
+              Virtual_scroll.extend_drag (key_of data.(first.v_index))
+        | _ -> ()
       in
       let v =
         V.make
@@ -161,14 +198,24 @@ let attach (ctx : Lui_ui.ui_context) st margin list_id scroll_parent_id
       let cleanup = V.did_mount v in
       V.will_update v;
       publish v;
-      (* debounced: input inside mounted rows mutates the subtree on
-         every keystroke — remeasure once per burst, not per batch *)
+      (* Batches that add nodes (row mounts, raw-text swaps) must
+         measure in this microtask — a debounce starves under scroll
+         churn and rows stay at estimate height, overlapping. Pure
+         subtree churn (typing inside a mounted row) is debounced to one
+         remeasure per burst *)
       let measure_timer = ref (-1) in
       let obs =
-        new_observer (fun () ->
-            if !measure_timer >= 0 then clear_timeout !measure_timer;
-            measure_timer :=
-              set_timeout_id (fun () -> measure_rows list_el v) 50)
+        new_observer_records (fun recs ->
+            let has_add =
+              Array.exists
+                (fun r -> Array.length (nl_to_array (rec_added r)) > 0)
+                recs
+            in
+            if has_add then measure_rows list_el v
+            else (
+              if !measure_timer >= 0 then clear_timeout !measure_timer;
+              measure_timer :=
+                set_timeout_id (fun () -> measure_rows list_el v) 50))
       in
       observe obs list_el (observe_opts ~childList:true ~subtree:true);
       measure_rows list_el v;
@@ -183,7 +230,7 @@ let row_attrs margin (it : vrow) =
   [ ("data-index", string_of_int it.v_index)
   ; ( "style"
     , Printf.sprintf
-        "position:absolute;top:0;left:0;width:100%%;transform:translateY(%.2fpx)"
+        "position:absolute;top:0;left:0;width:100%%;transform:translateY(%.4fpx)"
         (it.v_start -. margin) )
   ]
 
@@ -198,7 +245,7 @@ let list ?(scroll_parent_id = "main-content-container") ?(overscan = 5)
   let spacer_attrs =
     D.attrs_signal vstate_sig (fun s ->
         [ ( "style"
-          , Printf.sprintf "height:%.2fpx;position:relative;width:100%%"
+          , Printf.sprintf "height:%.4fpx;position:relative;width:100%%"
               s.v_total )
         ])
   in

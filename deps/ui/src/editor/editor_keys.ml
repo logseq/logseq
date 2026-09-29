@@ -713,5 +713,12 @@ let install_once () =
     D.document_add_listener "dragstart" on_dragstart true;
     D.document_add_listener "dragover" on_file_dragover true;
     D.document_add_listener "drop" on_file_drop true;
-    Block_dnd.install ()
+    Block_dnd.install ();
+    (* pointer-driven range selection (cljs block/selection.cljs) *)
+    D.document_add_listener "pointerdown"
+      (fun ev -> if S.ready () then Block_selection.pointerdown ev)
+      true;
+    D.document_add_listener "pointerup"
+      (fun _ev -> Block_selection.pointerup ())
+      true
   end
