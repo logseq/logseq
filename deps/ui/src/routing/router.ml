@@ -128,21 +128,6 @@ let fetch_refs ~stale:(is_stale : unit -> bool) (p : Model.page) =
               Runtime.send (Action.Refs_loaded blocks)))
   |> ignore
 
-(* unlinked references for the page's collapsed "Unlinked references"
-   section — fetched lazily when the section opens *)
-let fetch_unlinked ~stale:(is_stale : unit -> bool) (p : Model.page) =
-  match p.Model.page_db_id with
-  | Some id ->
-      ignore
-        (Runtime.invoke2 "thread-api/get-unlinked-references"
-           (Wire.String (repo ())) (Wire.Int id)
-         |> Js.Promise.then_ (fun w ->
-                Js.Promise.resolve
-                  (if not (is_stale ()) then
-                     Runtime.send
-                       (Action.Unlinked_loaded (Decode.blocks_of_wire w)))))
-  | None -> ()
-
 let load_journals () =
   Runtime.invoke2 "thread-api/get-latest-journals" (Wire.String (repo ()))
     (Wire.Int 40)
@@ -153,18 +138,17 @@ let load_journals () =
                List.filter_map Decode.page_of_summary xs
            | _ -> []
          in
-         let rec collect acc = function
-           | [] -> Js.Promise.resolve (List.rev acc)
-           | p :: rest ->
-               fetch_blocks p
-               |> Js.Promise.then_ (fun p' ->
-                      fetch_refs_blocks p'
-                      |> Js.Promise.then_ (fun refs ->
-                             collect
-                               ({ p' with Model.page_linked_refs = refs } :: acc)
-                               rest))
+         let collect p =
+           fetch_blocks p
+           |> Js.Promise.then_ (fun p' ->
+                  fetch_refs_blocks p'
+                  |> Js.Promise.then_ (fun refs ->
+                         Js.Promise.resolve
+                           { p' with Model.page_linked_refs = refs }))
          in
-         collect [] pages
+         Js.Promise.all (Array.of_list (List.map collect pages))
+         |> Js.Promise.then_ (fun arr ->
+                Js.Promise.resolve (Array.to_list arr))
          |> Js.Promise.then_ (fun js ->
                 Js.Promise.resolve
                   (match !Runtime.current_route with
