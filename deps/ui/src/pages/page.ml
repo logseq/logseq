@@ -888,9 +888,13 @@ let unlinked_row (b : Model.block) : t =
 (* cljs reference/unlinked-references — same views/view chrome as linked
    refs; our search input + fold toggle ride on the same handlers *)
 let unlinked_references_view (m : Model.t) : t =
-  match m.unlinked_refs with
-  | [] -> Logseq_dom.nothing
-  | refs ->
+  (* cljs renders the section (foldable header included) whenever the
+     :block-unlinked-ref-exists resource is true — independent of the
+     fold state, since opening is what triggers the refs fetch *)
+  match m.unlinked_exists with
+  | false -> Logseq_dom.nothing
+  | true ->
+  let refs = m.unlinked_refs in
   let filtered =
     let q = String.trim m.unlinked_query in
     if q = "" then refs
