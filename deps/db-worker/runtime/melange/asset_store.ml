@@ -74,10 +74,13 @@ let browser_pfs () =
        | None ->
            Db_worker_effect.error (Failure "browser pfs is not available"))
 
-(* cljs graph-assets-dir / asset-path: pfs paths are the url-to-path of
-   memory:///<graph>/assets/<name>, i.e. /<graph>/assets/<name> — the URL
-   parser drops the memory: scheme and its empty host. <graph> strips one
-   leading logseq_db_ prefix. *)
+(* cljs graph-assets-dir computes url-to-path(memory:///<graph>/assets),
+   so the pfs path is js/URL-percent-encoded (a graph named "rtc 2" lives
+   at /rtc%202/…); asset-path then joins the file name unencoded.
+   <graph> strips one leading logseq_db_ prefix.
+   url_path_encode applies the WHATWG path percent-encode set: C0
+   controls, space, reserved bytes dquote hash lt gt question backquote
+   lbrace rbrace, DEL, and non-ASCII bytes; '%' stays raw. *)
 let db_version_prefix = "logseq_db_"
 
 let strip_db_prefix repo =
@@ -89,8 +92,29 @@ let strip_db_prefix repo =
   then String.trim (String.sub trimmed n (String.length trimmed - n))
   else trimmed
 
+let url_path_encode (s : string) : string =
+  let needs_encode c =
+    let b = Char.code c in
+    b <= 0x20 || b >= 0x7f
+    ||
+    match c with
+    | '"' | '#' | '<' | '>' | '?' | '`' | '{' | '}' -> true
+    | _ -> false
+  in
+  if not (String.exists needs_encode s) then s
+  else begin
+    let buf = Buffer.create (String.length s) in
+    String.iter
+      (fun c ->
+        if needs_encode c then
+          Buffer.add_string buf (Printf.sprintf "%%%02X" (Char.code c))
+        else Buffer.add_char buf c)
+      s;
+    Buffer.contents buf
+  end
+
 let browser_path ~repo ~name =
-  "/" ^ strip_db_prefix repo ^ "/assets/" ^ name
+  url_path_encode ("/" ^ strip_db_prefix repo ^ "/assets") ^ "/" ^ name
 
 let base_dir () =
   match Runtime_env.env "LOGSEQ_WORKER_DB_DIR" with
