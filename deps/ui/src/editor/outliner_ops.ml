@@ -586,6 +586,37 @@ let fetch_unlinked_refs ~stale:(is_stale : unit -> bool) (p : Model.page) =
                 Js.Promise.resolve ()))
   | _ -> ()
 
+(* cljs :block-unlinked-ref-exists resource — a cheap search-based check
+   that gates whether the collapsed .unlinked-references section renders
+   at all. Unlike get-unlinked-refs it must run regardless of the fold
+   state (the fold control can't be clicked when the section is absent). *)
+let fetch_unlinked_exists ~stale:(is_stale : unit -> bool)
+    (p : Model.page) =
+  match !Runtime.current_repo, p.Model.page_uuid with
+  | Some repo, Some uuid ->
+      let rk =
+        Wire.Array
+          [ Wire.Keyword "block-unlinked-ref-exists"; Wire.Uuid uuid ]
+      in
+      ignore
+        (Runtime.invoke2 "thread-api/get-render-snapshots"
+           (Wire.String repo)
+           (Wire.Map
+              [ (Wire.Keyword "blocks", Wire.Array [])
+              ; (Wire.Keyword "children", Wire.Array [])
+              ; (Wire.Keyword "resources", Wire.Array [ rk ]) ])
+         |> Js.Promise.then_ (fun w ->
+                Js.Promise.resolve
+                  (match Views_wire.snapshot_slot_value w rk with
+                   | Some (Wire.Bool b) when not (is_stale ()) ->
+                       Runtime.send (Action.Unlinked_exists b)
+                   | _ -> ()))
+         |> Js.Promise.catch (fun e ->
+                Platform.console_error
+                  ("block-unlinked-ref-exists failed", e);
+                Js.Promise.resolve ()))
+  | _ -> ()
+
 (* Refresh calls pile up during rapid editing (each op's
    apply_and_refresh plus remote sync-db-changes). Every refresh that
    lands runs a full reconcile, and a reparented row is dropped+recreated
@@ -602,6 +633,9 @@ let refresh_page () : unit Js.Promise.t =
   | Some repo, Some page -> (
       incr Runtime.load_gen;
       fetch_unlinked_refs
+        ~stale:(fun () -> !Runtime.current_route <> route_at_start)
+        page;
+      fetch_unlinked_exists
         ~stale:(fun () -> !Runtime.current_route <> route_at_start)
         page;
       let blocks_p =
