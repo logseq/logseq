@@ -1509,3 +1509,22 @@ Known leftovers:
   1500–2000ms.
 - cljs `mod+.` zoom-in is skipped upstream on Chrome (unbound here too).
 - `#tag` cmdk create navigates instead of opening the tag dialog.
+
+## Asset store (e2e: assets_basic_test)
+
+`url_cache` is keyed `repo ^ "|" ^ name` (`A.cache_key`) — every lookup
+must go through it; a bare-file lookup silently yields "" for `src`.
+cljs `asset.cljs` `img-src` falls back to a data URL via
+`get-asset-file-object-url` when the pfs read lands after first paint;
+OCaml resolves eagerly before the view mounts (`Sync.init` /
+`sync_assets_after_boot`), so `asset-img` renders a real object URL
+immediately and needs no async repaint.
+
+## Cmdk (e2e: cmdk_scroll_basic_test) — visible-results contract
+
+cljs `load-results :nodes` sets `:status :loading` while keeping the
+previous `:items` visible until the worker resolves — keystrokes never
+empty the result list. `Cmdk_state.refresh` must therefore carry the
+existing `G_nodes.gitems` through its synchronous `apply_results` call
+(recents/commands/filters are recomputed locally, but node rows are
+only replaced by the async response), not re-apply with `[]`.
