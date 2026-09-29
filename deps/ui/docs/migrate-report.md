@@ -1322,3 +1322,42 @@ Known unfixable / nondeterministic leftovers:
 - `#Journal` tag save is rejected on both sides ("Can't set tag with
   built-in #Journal" — private built-in class), so seeded probes that
   use it leave the same is-blank block on both.
+
+## Regression-pass fixes (navigation / keys / collapse / selection / cmdk)
+
+- **editing.base bookkeeping** (`editor_actions.ml`, `outliner_ops.ml`):
+  `merge_next` and the debounced `schedule_save`/`commit` paths now
+  advance `base` with `buffer` once the commit lands. Without it, an
+  undo after a boundary merge left `buffer<>base`, so
+  `resync_open_editor` refused the reverted title and the DOM kept
+  showing the merged text (`boundary-delete-and-backspace-merge` e2e).
+- **Navigation** (`router.ml`, `sidebar_state.ml`): page-ref clicks go
+  through cljs `redirect-to-page!` semantics — `get-page-route-info`
+  precheck warns (not navigates) on hidden/private-built-in pages
+  (`:nav/cannot-go-to-internal-page`, Recycle exempt) and redirects
+  aliases to `alias-source-uuid`; `?anchor`/`?block-id` hash params
+  poll-scroll to `ls-block-<uuid>` (uuid → select the block, other
+  fragments → 4s `block-highlight`), mirroring `jump-to-anchor!`;
+  zoom-out consumes `pending_zoom` on page routes too, so the zoomed
+  block stays in edit mode after landing on the parent page.
+- **Editing keys** (`editor_keys.ml`, `editor_commands.ml`): `mod+enter`
+  cycles `logseq.property/status` (todo→doing→done→cleared→todo) via
+  closed-values resolution instead of splitting the block;
+  `mod+shift+s` strike-through `~~`, `mod+shift+h` highlight `==`,
+  `mod+;` toggle-children-collapse, `mod+,` zoom-out bound in edit mode.
+- **Collapse/expand** (`editor_actions.ml`): `mod+up`/`mod+down` —
+  editing collapses/expands the open block, selection applies to each
+  selected block, otherwise collapses the deepest / expands the
+  shallowest-collapsed level (cljs `expand!/collapse!`).
+- **Selection**: `mod+a` = select-parent (selection → first block's
+  parent, falling back to select-all), `mod+shift+a` = select-all —
+  in both edit and normal modes.
+- **Cmdk**: `editor/cycle-todo` command arm wired; `#tag` create row now
+  issues `create-page` with `class?:true` and navigates to the class
+  (cljs opens the tag dialog — no such surface exists here yet).
+
+Known leftovers:
+- Toast auto-dismiss is 5000ms; cljs `notification/show!` defaults are
+  1500–2000ms.
+- cljs `mod+.` zoom-in is skipped upstream on Chrome (unbound here too).
+- `#tag` cmdk create navigates instead of opening the tag dialog.

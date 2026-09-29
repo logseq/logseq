@@ -95,7 +95,19 @@ let commit uuid buf =
      title differ from the buffer *)
   if buf <> model_title uuid then (
     S.override_title uuid (Ops.normalized_title uuid buf);
-    ignore (Ops.apply_and_refresh [ Ops.save_block uuid buf ]))
+    ignore
+      (Ops.apply_and_refresh [ Ops.save_block uuid buf ]
+      |> Js.Promise.then_ (fun _ ->
+             (* the buffer is now persisted — advance base so the undo
+                resync gate treats it as clean and can restore reverted
+                titles instead of masking them with the pre-undo text *)
+             S.set_silent (fun st ->
+                 match st.S.editing with
+                 | Some e when e.S.uuid = uuid && e.S.buffer = buf ->
+                     { st with
+                       S.editing = Some { e with S.base = buf } }
+                 | _ -> st);
+             Js.Promise.resolve ())))
 
 let save_if_dirty uuid = commit uuid (live_buffer uuid)
 
@@ -426,7 +438,11 @@ let merge_next uuid =
                       S.set_silent (fun st ->
                           { st with
                             S.editing =
-                              Some { e with S.buffer = buf ^ nbuf }
+                              Some
+                                { e with
+                                  S.buffer = buf ^ nbuf
+                                ; base = buf ^ nbuf
+                                }
                           });
                       with_focus_after uuid (String.length buf)
                         (Ops.apply_parsed_and_refresh
@@ -517,6 +533,20 @@ let select_all () =
 let clear_selection () =
   S.set (fun st ->
       { st with S.selected = S.String_set.empty; anchor = None })
+
+(* cljs editor/select-parent: with a selection, move it to the first
+   block's parent (all blocks when the parent is the page); without one,
+   select all blocks *)
+let select_parent () =
+  match selected_uuids () with
+  | u :: _ -> (
+      match S.find_parent u with
+      | Some (Some p, _) -> (
+          match p.Model.block_uuid with
+          | Some pu -> select_single pu
+          | None -> select_all ())
+      | _ -> select_all ())
+  | [] -> select_all ()
 
 (* move selection up/down one block (single-block arrow nav in normal
    mode, plain move for shift-extend callers) *)
@@ -892,6 +922,86 @@ let set_collapsed uuid collapsed =
       ignore (Ops.apply [ Ops.collapse_expand [ (uuid, collapsed) ] ])
   | _ -> ()
 
+(* cljs editor/expand! / collapse!: edit mode toggles the open block,
+   selection toggles every selected block, and with neither it moves one
+   outline level (expand = shallowest collapsed level, collapse =
+   deepest expandable level) *)
+let collapse_expand ~collapse () =
+  let set u want =
+    match S.find u with
+    | Some b
+      when S.children_of b <> [] && S.effective_collapsed b <> want ->
+        toggle_collapse u
+    | _ -> ()
+  in
+  match S.editing_uuid () with
+  | Some u -> set u collapse
+  | None -> (
+      match selected_uuids () with
+      | _ :: _ as us -> List.iter (fun u -> set u collapse) us
+      | [] ->
+          let blocks = S.flat_all () in
+          let lvl (b : Model.block) = b.Model.block_level in
+          if collapse then (
+            let deepest =
+              List.fold_left
+                (fun acc b ->
+                  if S.children_of b <> [] && not (S.effective_collapsed b)
+                  then max acc (lvl b)
+                  else acc)
+                0 blocks
+            in
+            List.iter
+              (fun (b : Model.block) ->
+                if lvl b = deepest && S.children_of b <> []
+                   && not (S.effective_collapsed b)
+                then
+                  match b.Model.block_uuid with
+                  | Some u -> toggle_collapse u
+                  | None -> ())
+              blocks)
+          else
+            let shallowest =
+              List.fold_left
+                (fun acc b ->
+                  if S.effective_collapsed b then min acc (lvl b)
+                  else acc)
+                max_int blocks
+            in
+            List.iter
+              (fun (b : Model.block) ->
+                if lvl b = shallowest && S.effective_collapsed b then
+                  match b.Model.block_uuid with
+                  | Some u -> toggle_collapse u
+                  | None -> ())
+              blocks)
+
+(* cljs editor/toggle-collapse!: edit mode toggles the open block,
+   selection toggles all selected by the first block's state, otherwise
+   no-op *)
+let toggle_children_collapse () =
+  let cur =
+    match S.editing_uuid () with
+    | Some u -> [ u ]
+    | None -> selected_uuids ()
+  in
+  match cur with
+  | u :: us -> (
+      match S.find u with
+      | Some b ->
+          let want = not (S.effective_collapsed b) in
+          List.iter
+            (fun u ->
+              match S.find u with
+              | Some b
+                when S.children_of b <> []
+                     && S.effective_collapsed b <> want ->
+                  toggle_collapse u
+              | _ -> ())
+            (u :: us)
+      | None -> ())
+  | [] -> ()
+
 (* cljs editor/toggle-open-blocks: any collapsed block -> expand all,
    else collapse all collapsible blocks *)
 let toggle_open_blocks () =
@@ -1033,6 +1143,35 @@ let consume_pending_zoom () =
   let z = !pending_zoom in
   pending_zoom := None;
   z
+
+(* cljs editor/zoom-out!: editing on a block-zoom route navigates to the
+   parent (block zoom or its page) while keeping the block in edit mode;
+   editing on a plain page is a no-op; otherwise history.back *)
+let zoom_out () =
+  match S.editing_uuid () with
+  | Some edit_u -> (
+      match !Runtime.current_route with
+      | Some (Model.Block_zoom uuid) ->
+          pending_zoom := Some edit_u;
+          ignore
+            (Runtime.invoke2 "thread-api/get-block-parent"
+               (Wire.String
+                  (Option.value !Runtime.current_repo ~default:""))
+               (Wire.Uuid uuid)
+             |> Js.Promise.then_ (fun p ->
+                    (match Wire.map_get_uuid p "block/uuid" with
+                     | Some pu ->
+                         let seg =
+                           match Wire.map_get_string p "block/name" with
+                           | Some _ -> "page"
+                           | None -> "block"
+                         in
+                         Platform.set_location_hash
+                           (Runtime.nav_hash ("#/" ^ seg ^ "/" ^ pu))
+                     | None -> ());
+                    Js.Promise.resolve ()))
+      | _ -> ())
+  | None -> Platform.history_back ()
 
 (* -- /query (cljs commands.cljs db-based-query -> editor.cljs
    run-query-command!): create the logseq.property/query value block
