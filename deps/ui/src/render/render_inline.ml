@@ -4,6 +4,7 @@
 
 open Lui_elements
 module D = Render_dom
+module U = Ui_strings
 
 let starts_at s i pat =
   let n = String.length pat in
@@ -34,20 +35,49 @@ let is_uuid_like s =
 
 (* ---------- emitters ---------- *)
 
-let page_link ~(tag : bool) ?label name =
+let page_link ~(tag : bool) ?label ?uuid_sig name =
   let name = String.trim name in
   let text =
     match label with
     | Some l when String.trim l <> "" -> l
     | _ -> if tag then "#" ^ name else name
   in
-  D.el ~tag:"a"
-    ~style_class:(if tag then "relative tag" else "relative page-ref")
-    ~attrs:
-      [ ("data-ref", String.lowercase_ascii name)
-      ; ("tabindex", "0")
-      ; ("draggable", "true") ]
-    [ D.txt text ]
+  let cls = if tag then "relative tag" else "relative page-ref" in
+  let base =
+    [ ("data-ref", String.lowercase_ascii name)
+    ; ("tabindex", "0")
+    ; ("draggable", "true") ]
+  in
+  match uuid_sig with
+  | None ->
+      D.el ~tag:"a" ~style_class:cls ~attrs:base
+        [ D.el ~tag:"span" [ D.txt text ] ]
+  | Some u_sig ->
+      (* cljs sets :data-uuid on the anchor once the page entity resolves;
+         attrs apply is replace-semantic so emit the whole set *)
+      D.el ~tag:"a" ~style_class:cls ~attrs:base
+        ~attrs_signal_v:
+          (D.text_of_class_signal u_sig (fun u ->
+               if u = "" then Logseq_dom.attrs_json base
+               else Logseq_dom.attrs_json (("data-uuid", u) :: base)))
+        [ D.el ~tag:"span" [ D.txt text ] ]
+
+(* name-based ref -> resolved entity uuid via thread-api/pull (empty string
+   until the pull returns; cljs resolves through a react subscription) *)
+let name_uuid_state context name =
+  let st = Signal.state context.Lui_ui.ui_scheduler "" in
+  Render_state.with_repo (fun repo ->
+      Runtime.invoke3 "thread-api/pull" (Wire.String repo)
+        (Wire.String "[:block/uuid]")
+        (Wire.Array
+           [ Wire.Keyword "block/name"; Wire.String (String.lowercase_ascii name) ])
+      |> Js.Promise.then_ (fun w ->
+             (match Wire.map_get_uuid w "block/uuid" with
+              | Some u -> Runtime.signal_set st u
+              | None -> ());
+             Js.Promise.resolve ())
+      |> ignore);
+  st
 
 let external_link href label_els =
   D.el ~tag:"a" ~style_class:"external-link"
@@ -279,11 +309,24 @@ and page_ref ?(tag = false) ~refs ~self name =
       D.el ~tag:"span" ~style_class:"page-reference"
         ~attrs:[ ("data-ref", name) ]
         [ bracket "[["; preview_link (resolved_ref ~refs ~self name); bracket "]]" ]
-  else if tag then preview_link (page_link ~tag:true name)
   else
-    D.el ~tag:"span" ~style_class:"page-reference"
-      ~attrs:[ ("data-ref", name) ]
-      [ bracket "[["; preview_link (page_link ~tag:false name); bracket "]]" ]
+    (* cljs data-ref is the resolved entity uuid, not the written name *)
+    fun context parent ->
+    let st = name_uuid_state context name in
+    let uuid_sig = Signal.value st in
+    if tag then
+      preview_link (page_link ~tag:true ~uuid_sig name) context parent
+    else
+      D.el ~tag:"span" ~style_class:"page-reference"
+        ~attrs:[ ("data-ref", name) ]
+        ~attrs_signal_v:
+          (D.text_of_class_signal uuid_sig (fun u ->
+               Logseq_dom.attrs_json
+                 [ ("data-ref", if u = "" then name else u) ]))
+        [ bracket "[["
+        ; preview_link (page_link ~tag:false ~uuid_sig name)
+        ; bracket "]]" ]
+        context parent
 
 (* ((uuid)) -> resolved block/page title; pages render as plain text,
    block titles are re-parsed with the ref chain extended *)
@@ -310,9 +353,14 @@ and resolved_ref ~refs ~self uuid : t =
     self :: (match refs with [] -> [] | _ -> uuid :: refs)
   in
   D.el ~tag:"a" ~style_class:"relative page-ref"
-    ~attrs:
-      [ ("data-uuid", uuid); ("data-ref", uuid); ("tabindex", "0")
-      ; ("draggable", "true") ]
+    ~attrs:[ ("data-uuid", uuid); ("tabindex", "0"); ("draggable", "true") ]
+    ~attrs_signal_v:
+      (D.text_of_class_signal
+         (Signal.map fst (Signal.value st))
+         (fun n ->
+           Logseq_dom.attrs_json
+             [ ("data-uuid", uuid); ("tabindex", "0"); ("draggable", "true")
+             ; ("data-ref", String.lowercase_ascii n) ]))
     [ dyn
         ~equal:(fun (a : string * bool) b -> a = b)
         (fun (title, is_page) ->
@@ -337,12 +385,18 @@ and resolved_tag_ref ~refs ~self uuid : t =
              Js.Promise.resolve ())
       |> ignore);
   D.el ~tag:"a" ~style_class:"relative tag"
-    ~attrs:
-      [ ("data-uuid", uuid); ("data-ref", uuid); ("tabindex", "0") ]
-    ~text_signal:(D.text_of_class_signal (Signal.value st) (fun n -> "#" ^ n))
-    [] context parent
+    ~attrs:[ ("data-uuid", uuid); ("tabindex", "0") ]
+    ~attrs_signal_v:
+      (D.text_of_class_signal (Signal.value st) (fun n ->
+           Logseq_dom.attrs_json
+             [ ("data-uuid", uuid); ("tabindex", "0")
+             ; ("data-ref", String.lowercase_ascii n) ]))
+    [ D.el ~tag:"span"
+        ~text_signal:(D.text_of_class_signal (Signal.value st) (fun n -> "#" ^ n))
+        [] ]
+    context parent
 
-and macro_el ~refs ~self body =
+and macro_el ~refs:_refs ~self:_self body =
   let name, args = macro_args body in
   match name with
   | "cloze" -> (
@@ -360,17 +414,10 @@ and macro_el ~refs ~self body =
             ~attrs:[ ("type", "button"); ("title", "Set query") ]
             []
         ]
-  | "embed" -> (
-      if starts_at args 0 "[[" && find_sub args 0 "]]" >= 0 then
-        let j = find_sub args 0 "]]" in
-        D.el ~tag:"div" ~style_class:"embed-block"
-          [ page_ref ~refs ~self (String.sub args 2 (j - 2)) ]
-      else if starts_at args 0 "((" && find_sub args 0 "))" >= 0 then
-        let j = find_sub args 0 "))" in
-        D.el ~tag:"div" ~style_class:"embed-block"
-          [ page_ref ~refs ~self (String.sub args 2 (j - 2)) ]
-      else if args <> "" then embed_iframe args
-      else D.el ~tag:"div" ~style_class:"embed-block" [])
+  | "embed" ->
+      (* cljs: {{embed}} is deprecated — renders a warning, not an embed *)
+      D.el ~tag:"div" ~style_class:"warning"
+        ~text:(U.t "block.macro/embed-deprecated") []
   | "youtube" | "video" ->
       embed_iframe (youtube_embed_src args)
   | "vimeo" | "bilibili" | "tweet" | "twitter" | "renderer" ->
@@ -414,7 +461,14 @@ and try_hash ~refs ~self s i =
         trim (String.length raw)
       in
       if k = 0 then None
-      else Some (page_link ~tag:true (String.sub raw 0 k), k + 1)
+      else
+        let name = String.sub raw 0 k in
+        let link : t =
+         fun context parent ->
+          let st = name_uuid_state context name in
+          page_link ~tag:true ~uuid_sig:(Signal.value st) name context parent
+        in
+        Some (link, k + 1)
 
 (* deprecated ((uuid)) block-ref form — same page-reference rendering
    as [[uuid]] *)

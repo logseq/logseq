@@ -64,7 +64,7 @@ env:
   CLOJURE_VERSION: '1.12.4.1618'
   JAVA_VERSION: '21'
   NODE_VERSION: '24'
-  OCAML_VERSION: '5.5.0'
+  OCAML_VERSION: '5.5.1'
   BABASHKA_VERSION: '1.12.215'
 
 jobs:
@@ -109,6 +109,12 @@ jobs:
       - name: Fetch OCaml deps
         working-directory: cli
         run: opam install . --deps-only --with-test --yes
+
+      - name: Fetch db-worker OCaml deps
+        working-directory: deps/db-worker
+        run: |
+          sh scripts/install-opam-deps.sh
+          pnpm install
 
       - name: Fetch pnpm deps
         run: pnpm install --frozen-lockfile
@@ -179,6 +185,12 @@ jobs:
       - name: Fetch OCaml deps
         working-directory: cli
         run: opam install . --deps-only --with-test --yes
+
+      - name: Fetch db-worker OCaml deps
+        working-directory: deps/db-worker
+        run: |
+          sh scripts/install-opam-deps.sh
+          pnpm install
 
       - name: Fetch pnpm deps
         run: pnpm install --frozen-lockfile

@@ -55,8 +55,8 @@ let owner_source () =
       else "browser"
   | Node | Native ->
       (match env "LOGSEQ_OWNER_SOURCE" with
-       | Some s -> s
-       | None -> "unknown")
+       | Some s when not (String.equal s "") -> s
+       | _ -> "unknown")
 
 let electron_owner () = String.equal (owner_source ()) "electron"
 

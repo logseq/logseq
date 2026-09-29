@@ -174,12 +174,10 @@ focus fix above.
 
 ## LUI runtime issues found and fixed (upstream; see branch notes)
 
-(The same-batch create+drop / dead-event fixes live on
-`devin/web-same-batch-drop` in logseq/lui (open PR logseq/lui#75,
-apply-side tolerance + the `enqueue_drop` emission-side cancel from
-`317b801`) — **not yet merged to main**; the opam pin tracks `#main`,
-so pin `lui` to that branch locally until it lands. Earlier items in
-this list are on main.)
+(The same-batch create+drop / dead-event fixes landed on logseq/lui
+main via PR logseq/lui#75 (`58a9563`) — apply-side tolerance plus the
+`enqueue_drop` emission-side cancel. The opam pin tracks `#main`, so
+no local repin is needed. Earlier items in this list are on main.)
 
 - Retained-store `insert_at` duplicated elements on non-end insertion,
   producing stale node ids (crash on Toast page nav).
@@ -567,10 +565,9 @@ Contracts discovered while making `logseq.e2e.commands-basic-test` green
   `devin/web-same-batch-drop` (PR logseq/lui#75): apply-side tolerance
   for dead-node ops plus `enqueue_drop` cancelling same-batch
   create+drop op groups at emission (from `317b801`, originally on
-  `devin/lui-removechild-guard`) — **the opam pin tracks `#main`, so
-  PR #75 must merge to logseq/lui main for fresh sessions/snapshots to
-  keep the fix**; locally repin with
-  `opam pin lui git+https://github.com/logseq/lui.git#devin/web-same-batch-drop`.
+  `devin/lui-removechild-guard`). PR #75 has merged into logseq/lui
+  main (`58a9563`) and the opam pin tracks `#main`, so fresh
+  sessions/snapshots get the fix with no local repin.
 - **Rows must not subscribe the whole view signal**: keyed rows read
   per-item fields that `Cmdk_state.decorate` bakes at publish
   (`ihl`/`imouse`/`iq`/`gfilter_active`), and the inner `keyed` uses
@@ -998,6 +995,48 @@ search may lag).
   `Unlinked_toggle_search`) rendered `.view-action-search` but the
   button dispatched nothing.
 
+## Property value editing (e2e: `property_basic_test`, `block_property_basic_test`)
+
+- **`replaceChildren` fires `blur` on a focused child before
+  `isConnected` flips**: when a refresh re-renders the properties area
+  (`render_block_area` → `area_el.replaceChildren`), a focused value
+  textarea gets a synchronous `blur` while it still reports connected.
+  A `blur → commit` handler that runs inline therefore nukes the edit
+  session on every routine refresh — the editor closed the instant a
+  commit tx round-tripped. `edit_text_cell` defers the commit one tick
+  (`set_timeout` + `el_is_connected` re-check): a detached editor is
+  skipped, a real user blur still commits. Any future blur-driven
+  commit near a `replaceChildren`/innerHTML refresh needs the same
+  deferral.
+- **Clicks on editing-cell chrome must not blur the textarea**: the
+  `.property-pair > .ls-block` row container is clickable, and a
+  mousedown on the editing cell's padding lands on the `.jtrigger`
+  chrome (tabindex=-1) — focus moves off the textarea, blur-commits,
+  and `*:focus` then resolves to the div (playwright `fill` times
+  out). The editing cell eats `mousedown` on non-editable targets via
+  `preventDefault` so focus stays in the textarea.
+- **Every editable property cell goes through `edit_text_cell`, not an
+  ad-hoc input**: `number_cell` used to mount its own
+  `<input type=number>` outside `active_editor` tracking, so a
+  commit-triggered pill-strip rebuild destroyed the focused input
+  mid-`press-seq`. Now number/date-adjacent text edits share the
+  single editing surface (`active_editor` keyed
+  `(block_uuid, ident)`), which is also what lets a refresh re-mount
+  the editor instead of losing it (`has_active_edit` /
+  `take_pending_edit` in `render`).
+- **Property textareas are not `stale_block_editor`s**:
+  `editor_keys.on_keydown` routed a TEXTAREA inside `.ls-block` to
+  `on_normal_key` (meta+a → outliner `select_all`), which stole
+  `ControlOrMeta+a` inside property value editors. The guard now
+  excludes targets inside `.property-value-container`.
+- **Dialogs are a singleton**: `properties_dialog.open_dialog` runs
+  `S.close_overlays ()` before pushing its overlay — a second "Add
+  property" while one is open must not stack.
+- **Overlay outside-close mirrors shui**: a document-level
+  `mousedown` (capture) drops every overlay stacked above the
+  innermost overlay containing the target (all when outside any);
+  installed lazily on first `push_overlay`.
+
 ## Explicitly not ported (product decisions)
 
 - **Graph view canvas** — the pixi.js page/local graph renderer is
@@ -1060,6 +1099,20 @@ search may lag).
 - **`#/graphs` row menu divergence** — our local-graph row menu keeps a
   "Delete remote graph" item so e2e can reach remote-delete when logged
   in; cljs only shows it on remote rows.
+- **sdk `get_entity` resolves names via `get-case-page`, then re-fetches
+  by uuid through `get-blocks`**: get-case-page returns raw entity attrs
+  (property values as bare eids, no synthesized `block/properties`);
+  the sdk entity shape needs the get-blocks wire (eid->{id} stubs,
+  display-properties merge). cljs `editor.getPage/getBlock` on a name
+  yields the full entity map, so a second fetch restores the shape
+  while keeping exact `:block/title` resolution.
+- **sdk `remove-block-property` drops the rendered row eagerly**:
+  the `sync-db-changes` → route-reload path is debounced (~80ms), so an
+  api caller asserting on the DOM right after the promise resolves
+  would still see the stale row. `Properties_area.drop_row` removes
+  `.property-pair`/`.bottom-property-pill` rows matching the property
+  title scoped to the owning block/page area; the debounced refresh
+  re-renders the same state.
 
 ## Cmdk (e2e: `cmdk_scroll_basic_test`)
 
@@ -1200,8 +1253,63 @@ search may lag).
   removed with the cljs db-worker). The node runner then crashes in
   `frontend.components.block.reactivity-test`
   (`unhighlight-blocks!` → `document is not defined`) — **preexisting
-  on `devin/native-ocaml-electron`**, verified identical.
+  on `devin/native-ocaml-electron`**, verified identical. The
+  `frontend.handler.code-test` `save-code-editor-*` cases also fail
+  when batched with other namespaces (a sibling registers `repo-a`
+  first and the fixture resolves the wrong current repo; passes solo)
+  — also **preexisting on base**, verified with the same `-n` batch.
 - **Unit tests for the OCaml UI** live in `deps/ui/test/test_main.ml`
   (Melange→node). `Platform.local_storage_*` resolves the storage
   object via `globalThis` and no-ops when absent, because
   `Model.initial` touches storage at module init under node.
+||||||| parent of be25c4ee95 (fix(ui): parity sweep — journals scaffolding, route-conditional content-wrap, ref-summary maps in block/refs, icon picker set)
+
+## Parity sweep fixes
+
+Visual parity sweep (LUI vs cljs at :3003) — DOM compared region-by-region
+via Playwright probes for: #Journal tag page, journal day page (linked
+references, block hover, block context menu), slash menu, #tag popup,
+[[ autocomplete, properties panel, icon picker, settings dialog,
+{{embed [[page]]}}, favorites sidebar.
+
+- **Journals page scaffolding**: `#journals` now wraps items in the cljs
+  `div > div > div[data-testid=virtuoso-item-list] > div > .journal-item`
+  chain (all-journals custom-scroll-parent layout); the route renders
+  inside a `journals-root` wrapper like cljs container.cljs's extra div.
+- **content-wrap is route-conditional**: `mx-auto pb-24` +
+  `margin-bottom: 120px` only for regular routes; journals/home routes
+  keep an empty class and `margin-bottom: 0` (cljs container.cljs:118).
+- **home button unmounts on Home route**: emits nothing (cljs
+  `when-not home?`), not an empty `.lui-box` div.
+- **`{{embed}}` macro**: renders `div.warning` with the
+  `block.macro/embed-deprecated` string, matching cljs block.cljs:1951.
+- **page-ref `data-ref` is the resolved entity uuid**: `[[name]]` and
+  `#[[name]]` anchors update `data-ref` from the resolved uuid via a
+  uuid signal (cljs page-reference behavior); `((uuid))` deprecated
+  block-ref keeps the same page-reference shell.
+- **block/refs entries for existing pages carry `block/name`**: LUI used
+  to emit bare `[:block/uuid u]` lookup-refs; cljs `use-cached-refs`
+  swaps parsed refs for the cached entity's ref-summary map
+  (`db/id`/`block/uuid`/`block/title`/`block/name`/`db/ident`/`block/tags`).
+  The worker's `remove-orphaned-page-refs` names refs via `block/name`;
+  a bare lookup made a still-referenced page look orphaned → retracted
+  mid-tx → the `[:block/uuid u]` assert then threw
+  `Invalid_argument(Nothing found for entity id ...)`, failing the whole
+  save-block tx. LUI now emits the same select-keys map.
+- **Icon picker**: full tabler set (~6203 entries) in
+  `icon_picker_names.ml`, filled variants, same grid/tab/search DOM.
+- **Slash / # / [[ popups**: group wrapper divs, item rows, status icon
+  names and label spans aligned to cljs popup structure.
+- **Settings/favorites/tag page/properties/block menus**: verified
+  identical after the above; only unfixable noise remains (below).
+
+Known unfixable / nondeterministic leftovers:
+- `Revision: dev` vs `16c4ed1a04` in the settings footer — build-time
+  revision string.
+- cljs popover/menu/input ids are per-mount random (`_r_f_`,
+  `base-ui-_r_n_`, `slot__*`, `-hidden-input` id suffixes).
+- Wall-clock timestamps, lazy-resolved ref titles, block `selected`
+  state, and typed-text leftovers in probes are interaction timing.
+- `#Journal` tag save is rejected on both sides ("Can't set tag with
+  built-in #Journal" — private built-in class), so seeded probes that
+  use it leave the same is-blank block on both.

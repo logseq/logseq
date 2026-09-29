@@ -197,15 +197,23 @@ let rec menu_items_el ?(cls_prefix = "") (items : menu_item list) : D.el =
             D.h ~cls:(item_cls "ui__dropdown-menu-sub-trigger")
               ~attrs:
                 [ ("role", "menuitem")
-                ; ("aria-haspopup", "menu")
+                ; ("aria-expanded", "false")
                 ; ("tabindex", "-1")
                 ]
               ()
           in
           D.el_append_child el
             (D.h ~tag:"span" ~cls:"flex-1" ~text:label ());
-          D.el_append_child el
-            (D.h ~tag:"i" ~cls:"ti ti-chevron-right ml-auto h-4 w-4" ());
+          (* cljs renders the raw tabler svg for submenu chevrons *)
+          (match Editor_dom.tabler_svg_el "chevron-right" with
+           | Some svg ->
+               Editor_dom.el_set_attr svg "class"
+                 "h-4 ml-auto tabler-icon tabler-icon-chevron-right w-4";
+               D.el_append_child el svg
+           | None ->
+               D.el_append_child el
+                 (D.h ~tag:"i" ~cls:"ti ti-chevron-right ml-auto h-4 w-4"
+                    ()));
           let sub_open = ref false in
           let open_sub () =
             if not !sub_open then begin

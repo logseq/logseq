@@ -21,7 +21,7 @@
    dictionaries once a shared i18n module lands. *)
 let t (s : string) = s
 
-let default_navs = [ "flashcards"; "all-pages" ]
+let default_navs = [ "flashcards"; "all-pages"; "graph-view" ]
 
 (* A rendered right-sidebar entry. kind maps to .item-type-<kind>. *)
 type item =

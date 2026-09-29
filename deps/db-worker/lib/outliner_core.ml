@@ -493,6 +493,23 @@ let tag_select (db : db) (v : value) : value =
       | None -> v)
   | None -> v
 
+(* matching-ref-for-tag — class titles are case-sensitive while
+   :block/name is not, so among same-name refs prefer the one whose
+   :block/title equals the tag's. *)
+let matching_ref_for_tag (tag : value) (candidates : value list)
+    : value option =
+  let by_title =
+    match map_key_of tag "block/title" with
+    | Some (Nil | Bool false) | None -> None
+    | Some t ->
+        List.find_opt
+          (fun r -> map_key_of r "block/title" = Some t)
+          candidates
+  in
+  match by_title with
+  | Some _ -> by_title
+  | None -> List.nth_opt candidates 0
+
 (* fix-tag-ids — repair block/tags from block/refs when title-based refs
    were re-resolved (Escape path). *)
 let fix_tag_ids (m : Block_map.t) (db : db) : Block_map.t =
@@ -519,7 +536,8 @@ let fix_tag_ids (m : Block_map.t) (db : db) : Block_map.t =
           match tag_name db tag with
           | Some n when List.mem n ref_names ->
               let matched =
-                List.find_opt (fun r -> tag_name db r = Some n) refs_v
+                matching_ref_for_tag tag
+                  (List.filter (fun r -> tag_name db r = Some n) refs_v)
               in
               let tag =
                 match matched with
@@ -622,8 +640,8 @@ let entity_select_map (e : entity) : value =
           | None -> None) ])
 
 (* -> (resolved ref map, page creation tx) *)
-let resolve_page_ref (db : db) (v : value) (tag_names : string list)
-    : value * tx_op list =
+let resolve_page_ref (db : db) ?(base_db : db option) (v : value)
+    (tag_names : string list) : value * tx_op list =
   if not (new_page_ref v) then (v, [])
   else
     let name =
@@ -640,6 +658,17 @@ let resolve_page_ref (db : db) (v : value) (tag_names : string list)
           match entity_select_map page with
           | Map kvs -> kvs
           | _ -> []
+        in
+        (* cljs datascript allocates eids in op order, so a page minted by an
+           earlier page-tx in this insert resolves to the same :db/id the
+           d/with snapshot reported; datascript-ocaml pre-allocates tempid
+           eids, so that :db/id would pin a different entity. block/uuid
+           upsert resolves the same page — drop the stale pin. *)
+        let m =
+          match base_db with
+          | Some base_db when Ldb.ent_of_id base_db page.id = None ->
+              List.filter (fun (k, _) -> k <> Keyword "db/id") m
+          | _ -> m
         in
         let m =
           match map_key_of v "block.temp/original-page-name" with
@@ -719,8 +748,66 @@ let resolve_page_ref (db : db) (v : value) (tag_names : string list)
              (Map m, tx_data)
          | None -> (v, []))
 
+(* cljs (select-keys m ks) over a Map value *)
+let select_map_keys (v : value) (ks : string list) : (value * value) list =
+  match v with
+  | Map kvs ->
+      List.filter
+        (fun (k, _) -> List.exists (fun a -> k = Keyword a || k = String a) ks)
+        kvs
+  | _ -> []
+
+(* cljs merge over two Map kv lists — b's keys override a's *)
+let merge_map_kvs (a : (value * value) list) (b : (value * value) list)
+    : (value * value) list =
+  List.filter (fun (k, _) -> not (List.exists (fun (k', _) -> k' = k) b)) a @ b
+
+(* resolve-refs-dedup dedup key — cljs [:class title] / [:page name] *)
+type ref_dedup_key =
+  | Class_ref of value option
+  | Page_ref of value option
+
+(* resolve-refs-dedup — resolve new-page refs, deduping pages created
+   during the pass: db doesn't see them yet, so a repeated [[same name]]
+   ref would otherwise create a duplicate page. Class titles are
+   case-sensitive (#Movie and #movie are distinct classes), so class refs
+   dedupe by :block/title instead. *)
+let resolve_refs_dedup (db : db) ?(base_db : db option) (refs : value list)
+    (tag_names : string list) : (value * tx_op list) list =
+  let resolved, _seen =
+    List.fold_left
+      (fun (resolved, seen) (r : value) ->
+        let new_page = new_page_ref r in
+        let dedup_key =
+          let name = map_key_of r "block/name" in
+          match name with
+          | Some (String n) when List.mem n tag_names ->
+              Class_ref (map_key_of r "block/title")
+          | _ -> Page_ref name
+        in
+        match if new_page then List.assoc_opt dedup_key seen else None with
+        | Some seen_ref -> (
+            let merged =
+              match seen_ref with
+              | Map kvs ->
+                  Map
+                    (merge_map_kvs kvs
+                       (select_map_keys r [ "block.temp/original-page-name" ]))
+              | _ -> seen_ref
+            in
+            ((merged, []) :: resolved, seen))
+        | None ->
+            let r', tx_data = resolve_page_ref db ?base_db r tag_names in
+            ( (r', tx_data) :: resolved
+            , if new_page && tx_data <> [] then (dedup_key, r') :: seen
+              else seen ))
+      ([], []) refs
+  in
+  List.rev resolved
+
 (* resolve-page-refs — rewrite block/refs + block/tags and title uuids *)
-let resolve_page_refs (db : db) (block : Block_map.t) : Block_map.t * tx_op list =
+let resolve_page_refs (db : db) ?(base_db : db option) (block : Block_map.t)
+    : Block_map.t * tx_op list =
   let refs =
     match mget block "block/refs" with
     | Some (Vector vs) | Some (List vs) | Some (Set vs) -> vs
@@ -739,16 +826,21 @@ let resolve_page_refs (db : db) (block : Block_map.t) : Block_map.t * tx_op list
             vs
       | _ -> []
     in
-    let resolved = List.map (fun r -> resolve_page_ref db r tag_names) refs in
+    let resolved = resolve_refs_dedup db ?base_db refs tag_names in
     let refs' = List.map fst resolved in
     let page_txs = List.concat_map snd resolved in
     let tag_refs =
-      List.filter_map
-        (fun r ->
-          match map_key_of r "db/ident", map_key_of r "block/name" with
-          | Some _, Some (String n) -> Some (n, r)
-          | _ -> None)
-        refs'
+      List.fold_left
+        (fun m (r : value) ->
+          match map_key_of r "db/ident" with
+          | Some (Keyword _) -> (
+              let n = map_key_of r "block/name" in
+              match List.assoc_opt n m with
+              | Some l -> (n, r :: l) :: List.remove_assoc n m
+              | None -> (n, [ r ]) :: m)
+          | _ -> m)
+        [] refs'
+      |> List.map (fun (n, l) -> (n, List.rev l))
     in
     let tags =
       match mget block "block/tags" with
@@ -758,25 +850,22 @@ let resolve_page_refs (db : db) (block : Block_map.t) : Block_map.t * tx_op list
     let tags' =
       List.map
         (fun tag ->
-          let tn =
-            match map_key_of tag "block/name" with
-            | Some (String s) -> Some s
-            | _ -> None
-          in
-          match tn with
-          | Some n -> (
-              match List.assoc_opt n tag_refs with
-              | Some r ->
-                  let tag = tag_dissoc tag "block/type" in
-                  let tag =
-                    match map_key_of r "block/uuid" with
-                    | Some u -> tag_put tag "block/uuid" u
-                    | None -> tag
-                  in
-                  (match map_key_of r "db/ident" with
-                   | Some i -> tag_put tag "db/ident" i
-                   | None -> tag)
-              | None -> tag)
+          match
+            matching_ref_for_tag tag
+              (Option.value
+                 (List.assoc_opt (map_key_of tag "block/name") tag_refs)
+                 ~default:[])
+          with
+          | Some r ->
+              let tag = tag_dissoc tag "block/type" in
+              let tag =
+                match map_key_of r "block/uuid" with
+                | Some u -> tag_put tag "block/uuid" u
+                | None -> tag
+              in
+              (match map_key_of r "db/ident" with
+               | Some i -> tag_put tag "db/ident" i
+               | None -> tag)
           | None -> tag)
         tags
     in
@@ -1237,23 +1326,69 @@ let blocks_with_ordered_list_props (blocks : Block_map.t list)
 
 let get_block_orders (blocks : Block_map.t list) (target_block : entity)
     (sibling : bool) (keep_block_order : bool) : string list =
+  let target_order = Ldb.string_value target_block "block/order" in
+  let start_order = if sibling then target_order else None in
+  let end_order =
+    if sibling then
+      match Ldb.get_right_sibling target_block with
+      | Some r -> Ldb.string_value r "block/order"
+      | None -> None
+    else
+      match Ldb.get_down target_block with
+      | Some c -> Ldb.string_value c "block/order"
+      | None -> None
+  in
+  let top_level b =
+    match mget b "block/level" with
+    | Some (Int64 n) -> n = 1L
+    | _ -> false
+  in
+  let at_target order =
+    (match start_order with
+     | None -> true
+     | Some s -> String.compare order s > 0)
+    &&
+    match end_order with
+    | None -> true
+    | Some e -> String.compare order e < 0
+  in
   if keep_block_order
      && List.for_all (fun b -> mget_str b "block/order" <> None) blocks
-  then List.filter_map (fun b -> mget_str b "block/order") blocks
-  else
-    let target_order = Ldb.string_value target_block "block/order" in
-    let start_order = if sibling then target_order else None in
-    let end_order =
-      if sibling then
-        match Ldb.get_right_sibling target_block with
-        | Some r -> Ldb.string_value r "block/order"
-        | None -> None
-      else
-        match Ldb.get_down target_block with
-        | Some c -> Ldb.string_value c "block/order"
-        | None -> None
-    in
-    Db_order.gen_n_keys (List.length blocks) start_order end_order
+  then begin
+    let top_level_blocks = List.filter top_level blocks in
+    if
+      List.for_all
+        (fun b ->
+           match mget_str b "block/order" with
+           | Some o -> at_target o
+           | None -> false)
+        top_level_blocks
+    then List.filter_map (fun b -> mget_str b "block/order") blocks
+    else
+      (* The kept orders of the top-level blocks no longer fall next to the
+         target, e.g. undo restoring deleted blocks after a sibling moved
+         away and back got a new order: order them at the target and keep
+         the orders of their children. *)
+      let top_level_orders =
+        Db_order.gen_n_keys (List.length top_level_blocks) start_order
+          end_order
+      in
+      fst
+        (List.fold_left
+           (fun (orders, top_level_orders) b ->
+              if top_level b then
+                match top_level_orders with
+                | o :: rest -> (o :: orders, rest)
+                | [] -> (orders, top_level_orders)
+              else
+                ( (match mget_str b "block/order" with
+                   | Some o -> o :: orders
+                   | None -> orders)
+                , top_level_orders ))
+           ([], top_level_orders) blocks
+        |> fun (orders, rest) -> (List.rev orders, rest))
+  end
+  else Db_order.gen_n_keys (List.length blocks) start_order end_order
 
 (* update-property-ref-when-paste — [:block/uuid u] values get reminted *)
 let update_property_ref_when_paste (block : Block_map.t)
@@ -1788,6 +1923,9 @@ let insert_blocks_aux (db : db) (blocks : Block_map.t list)
   let block_ids =
     List.filter_map (fun b -> mget_uuid b "block/uuid") blocks
   in
+  (* the db before any of this insert's page_txs — refs resolving to pages
+     minted earlier in the loop must not pin their ephemeral :db/id *)
+  let base_db = Some db in
   let rec loop (db : db) (idx : int) (bs : Block_map.t list) acc =
     match bs with
     | [] -> List.rev acc
@@ -1803,7 +1941,8 @@ let insert_blocks_aux (db : db) (blocks : Block_map.t list)
         (match uuid' with
          | Some uuid' ->
              let block, page_txs =
-               resolve_page_refs db (remove_disallowed_inline_classes db block)
+               resolve_page_refs db ?base_db
+                 (remove_disallowed_inline_classes db block)
              in
              let top_level =
                mget_int block "block/level" = Some 1

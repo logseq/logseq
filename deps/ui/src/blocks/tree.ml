@@ -135,12 +135,38 @@ let icon_el uuid (icon : Model.icon) : t =
           ~style_class:("ti ti-" ^ icon.icon_id) []
       ]
 
+(* cljs arrow svg inside .control-hide > .rotating-arrow *)
+let rotating_arrow key : t =
+  dom ~key ~tag:"svg"
+    ~style_class:"h-4 w-4"
+    ~attrs:
+      [ ("aria-hidden", "true"); ("version", "1.1")
+      ; ("viewBox", "0 0 192 512"); ("fill", "currentColor")
+      ; ("display", "inline-block"); ("style", "margin-left: 2px") ]
+    [ dom ~key:"p" ~tag:"path"
+        ~attrs:
+          [ ( "d"
+            , "M0 384.662V127.338c0-17.818 21.543-26.741 \
+               34.142-14.142l128.662 128.662c7.81 7.81 7.81 20.474 0 \
+               28.284L34.142 398.804C21.543 411.404 0 402.48 0 384.662z" )
+          ; ("fill-rule", "evenodd") ]
+        []
+    ]
+
+(* cljs ldb/private-tags: built-in classes hidden/locked for direct use;
+   internal idents are already filtered out upstream *)
+let private_tag_ident (ident : string) : bool =
+  List.mem ident
+    [ "logseq.class/Page"; "logseq.class/Property"; "logseq.class/Tag";
+      "logseq.class/Asset"; "logseq.class/Journal";
+      "logseq.class/Whiteboard"; "logseq.class/Pdf-annotation" ]
+
 (* cljs block-control-icon-size: heading chrome sizes differ, collapsed
    bullets shrink *)
 let control_wrap ~scope ~library uuid (b : Model.block) : t =
   let order_list = b.Model.block_order_list = Some "number" in
   let bullet_cls =
-    "bullet-container cursor-pointer"
+    "bullet-container cursor"
     ^ if order_list then " as-order-list typed-list" else ""
   in
   let heading_attrs =
@@ -166,10 +192,16 @@ let control_wrap ~scope ~library uuid (b : Model.block) : t =
             ~style_class_signal:
               (Logseq_dom.class_signal (collapsed_sig ~scope b)
                  (fun c -> if c then "control-show" else "control-hide"))
-            []
+            [ dom ~key:("ra-" ^ uuid) ~tag:"span"
+                ~style_class_signal:
+                  (Logseq_dom.class_signal (collapsed_sig ~scope b)
+                     (fun c ->
+                       "rotating-arrow"
+                       ^ if c then " collapsed" else " not-collapsed"))
+                [ rotating_arrow ("arw-" ^ uuid) ]
+            ]
         ]
     ; dom ~key:("blw-" ^ uuid) ~tag:"a" ~style_class:"bullet-link-wrap"
-        ~attrs:[ ("href", "#/block/" ^ uuid) ]
         [ dom ~key:("dotw-" ^ uuid) ~tag:"span"
             ~id:("dot-" ^ uuid)
             ~attrs:[ ("blockid", uuid); ("draggable", "true") ]
@@ -203,9 +235,12 @@ let content_el uuid (b : Model.block) : t =
     [ dom ~key:("bci-" ^ uuid)
         ~style_class:"block-content-inner flex flex-row justify-between"
         [ dom ~key:("bh-" ^ uuid) ~style_class:"block-head-wrap"
-            (Render.title_block ~self:uuid
-               ~resolved:(S.title_for uuid b.block_title)
-               b)        ]
+            [ dom ~key:("bt-" ^ uuid) ~style_class:"inline w-full"
+                (Render.title_block ~self:uuid
+                   ~resolved:(S.title_for uuid b.block_title)
+                   b)
+            ]
+        ]
     ]
 
 let editor_el uuid scope : t =
@@ -231,6 +266,7 @@ let editor_el uuid scope : t =
         ~style_class:"editor-inner flex flex-1 block-editor"
         [ dom ~key:("ta-" ^ uuid) ~tag:"textarea"
             ~id:("edit-block-" ^ uuid)
+            ~style_class:"normal-block uniline-block"
             ~attrs:[ ("data-testid", "block editor") ]
             ~text:buffer ~text_signal:buffer_sig []
         ; (* cljs mock-textarea: hidden caret mirror for popup placement *)
@@ -269,6 +305,16 @@ let code_editor_el uuid (b : Model.block) : t =
         []
     ]
 
+let content_wrapper uuid (b : Model.block) : t =
+  (* cljs puts .block-content-wrapper only around display content;
+     the editor replaces it directly under .block-row *)
+  dom ~key:("cw-" ^ uuid)
+    ~style_class:"block-content-wrapper flex flex-1 w-full"
+    [ content_el uuid b
+    ; dom ~key:("bic-" ^ uuid)
+        ~style_class:"flex flex-row items-center" []
+    ]
+
 let content_or_editor ~editable uuid scope (b : Model.block) : t =
   (* cljs unmounts .block-content while editing and removes the editor
      entirely in normal mode — .block-title-wrap must be absent for the
@@ -289,7 +335,7 @@ let content_or_editor ~editable uuid scope (b : Model.block) : t =
             match b.Model.block_display_type with
             | Some "code" -> code_editor_el uuid b
             | _ -> editor_el uuid scope
-          else content_el uuid b)
+          else content_wrapper uuid b)
     (Signal.map
        (fun (st : S.t) ->
          match st.editing with
@@ -311,40 +357,46 @@ let contains_sub hay needle =
   go 0
 
 let tags_el uuid (b : Model.block) : t =
-  let pairs =
-    try List.combine b.block_tags b.block_tag_uuids
-    with Invalid_argument _ -> List.map (fun t -> (t, "")) b.block_tags
+  let triples =
+    try List.combine b.block_tags
+           (List.combine b.block_tag_uuids b.block_tag_idents)
+    with Invalid_argument _ ->
+        List.map (fun t -> (t, ("", ""))) b.block_tags
   in
   let visible =
     List.filter_map
-      (fun (tag, tuuid) ->
+      (fun (tag, (tuuid, ident)) ->
         (* cljs inline-tag? drops tags that already appear inline in the
            raw title, as "#name" or "#[[uuid]]" *)
         let inline =
           contains_sub b.block_title ("#" ^ tag)
           || (tuuid <> "" && contains_sub b.block_title tuuid)
         in
-        if inline then None else Some tag)
-      pairs
+        if inline then None else Some (tag, ident))
+      triples
   in
   match visible with
-  | [] -> box ~key:("tags-" ^ uuid) []
+  | [] -> Logseq_dom.nothing
   | tags ->
       dom ~key:("tags-" ^ uuid) ~style_class:"block-tags gap-1"
         (List.mapi
-           (fun i tag ->
+           (fun i (tag, ident) ->
              (* cljs block-tag: .block-tag > .flex.items-center >
-                a.hash-symbol("#") + a.tag *)
+                a.hash-symbol("#") + a.tag[data-ref] *)
              dom ~key:("tag-" ^ uuid ^ "-" ^ string_of_int i)
-               ~style_class:"block-tag"
+               ~style_class:
+                 ("block-tag"
+                 ^ if private_tag_ident ident then " private-tag" else "")
                [ dom ~key:("tc-" ^ uuid ^ "-" ^ string_of_int i)
                    ~style_class:"flex items-center"
                    [ dom ~key:("th-" ^ uuid ^ "-" ^ string_of_int i) ~tag:"a"
                        ~style_class:"hash-symbol select-none flex" ~text:"#" []
                    ; dom ~key:("ta-" ^ uuid ^ "-" ^ string_of_int i) ~tag:"a"
                        ~style_class:"tag relative"
-                       ~attrs:[ ("tabindex", "0"); ("draggable", "true") ]
-                       ~text:tag []
+                       ~attrs:
+                         [ ("tabindex", "0"); ("draggable", "true")
+                         ; ("data-ref", String.lowercase_ascii tag) ]
+                       [ dom ~key:"ts" ~tag:"span" ~text:tag [] ]
                    ]
                ])
            tags)
@@ -357,7 +409,8 @@ let tags_el uuid (b : Model.block) : t =
 let () =
   Editor_keys.install_once ();
   Add_button.install ();
-  Asset_dom.install ()
+  Asset_dom.install ();
+  Editor_dom.ensure_raw_text_observer ()
 
 let rec block_row
     ?(scope = "main") ?(editable = true) ?(library = false)
@@ -386,45 +439,61 @@ and row_el ~editable scope ~(library : bool) (b : Model.block) : t =
           (match b.block_heading with
            | Some lvl -> [ ("data-has-heading", string_of_int lvl) ]
            | None -> [])
-        [ control_wrap ~scope ~library uuid b        ; dom ~key:("col-" ^ key) ~style_class:"flex flex-col w-full"
-            [ dom ~key:("bmc-" ^ key)
-                ~style_class:"block-main-content flex flex-row gap-2"
-                [ dom ~key:("cew-" ^ key)
-                    ~style_class:"block-content-or-editor-wrap flex flex-1"
-                    ~attrs:
-                      (match b.Model.block_display_type with
-                       | Some dt -> [ ("data-node-type", dt) ]
-                       | None -> [])
-                    [ dom ~key:("cei-" ^ key)
-                        ~style_class:"block-content-or-editor-inner"
-                        [ dom ~key:("row-" ^ key)
-                            ~style_class:
-                              "block-row flex flex-1 flex-row gap-1 \
-                               items-center"
-                            [ dom ~key:("cw-" ^ key)
-                                ~style_class:
-                                  "block-content-wrapper flex flex-1 w-full"
-                                [ (if Comments.is_comments_area b then
-                                     Comments.area_view uuid b
-                                   else
-                                     content_or_editor ~editable uuid
-                                       scope b)
+        [ control_wrap ~scope ~library uuid b
+        ; dom ~key:("col-" ^ key) ~style_class:"flex flex-col w-full"
+            [ dom ~key:("col2-" ^ key) ~style_class:"flex flex-col w-full"
+                [ dom ~key:("bmc-" ^ key)
+                    ~style_class:"block-main-content flex flex-row gap-2"
+                    [ dom ~key:("col3-" ^ key)
+                        ~style_class:"flex flex-col w-full"
+                        [ dom ~key:("cew-" ^ key)
+                            ~style_class:"block-content-or-editor-wrap"
+                            ~attrs:
+                              (match b.Model.block_display_type with
+                               | Some dt -> [ ("data-node-type", dt) ]
+                               | None -> [])
+                            [ dom ~key:("cei-" ^ key)
+                                ~style_class:"block-content-or-editor-inner"
+                                [ dom ~key:("row-" ^ key)
+                                    ~style_class:
+                                      "block-row flex flex-1 flex-row gap-1 \
+                                       items-center"
+                                    [ (if Comments.is_comments_area b then
+                                         Comments.area_view uuid b
+                                       else
+                                         content_or_editor ~editable uuid
+                                           scope b)
+                                    ; dom ~key:("br-" ^ key)
+                                        ~style_class:
+                                          "flex flex-row gap-1 \
+                                           items-center ls-block-right \
+                                           self-start"
+                                        [ dom ~key:("bg-" ^ key)
+                                            ~style_class:
+                                              "hover:opacity-100 opacity-70"
+                                            []
+                                        ; (* a comments area's tag chips stay
+                                             hidden — the area view already
+                                             announces itself *)
+                                          if Comments.is_comments_area b then
+                                            box ~key:("tags-" ^ uuid) []
+                                          else tags_el uuid b
+                                        ]
+                                    ]
                                 ]
-                            ; (* a comments area's tag chips stay hidden —
-                                 the area view already announces itself *)
-                              if Comments.is_comments_area b then
-                                box ~key:("tags-" ^ uuid) []
-                              else tags_el uuid b                            ]
-                        ; Comments_view.reactions_el uuid
-                            b.Model.block_reactions
+                            ]
                         ]
                     ]
                 ]
+            ; Comments_view.reactions_el uuid b.Model.block_reactions
             ]
         ]
+    ; dom ~key:("bci2-" ^ key)
+        ~style_class:"ls-block-content-indent" []
     ; (if has_children && not (Comments.is_comments_area b) then
          children_el ~editable ~library uuid scope b
-       else box ~key:("nc-" ^ key) [])    ]
+       else Logseq_dom.nothing)
+    ]
 
 and children_el ~editable ~library uuid scope (b : Model.block) : t =
 
@@ -459,29 +528,44 @@ and block_row_static ?(library = false) (b : Model.block) : t =
         ~attrs:(heading_attrs b)
         [ control_wrap ~scope:"ref" ~library uuid b
         ; dom ~key:("col-" ^ key) ~style_class:"flex flex-col w-full"
-            [ dom ~key:("bmc-" ^ key)
-                ~style_class:"block-main-content flex flex-row gap-2"
-                [ dom ~key:("cew-" ^ key)
-                    ~style_class:"block-content-or-editor-wrap flex flex-1"
-                    [ dom ~key:("cei-" ^ key)
-                        ~style_class:"block-content-or-editor-inner"
-                        [ dom ~key:("row-" ^ key)
-                            ~style_class:
-                              "block-row flex flex-1 flex-row gap-1 \
-                               items-center"
-                            [ dom ~key:("cw-" ^ key)
-                                ~style_class:
-                                  "block-content-wrapper flex flex-1 w-full"
-                                [ content_el uuid b ]
-                            ; tags_el uuid b
+            [ dom ~key:("col2-" ^ key) ~style_class:"flex flex-col w-full"
+                [ dom ~key:("bmc-" ^ key)
+                    ~style_class:"block-main-content flex flex-row gap-2"
+                    [ dom ~key:("col3-" ^ key)
+                        ~style_class:"flex flex-col w-full"
+                        [ dom ~key:("cew-" ^ key)
+                            ~style_class:"block-content-or-editor-wrap"
+                            [ dom ~key:("cei-" ^ key)
+                                ~style_class:"block-content-or-editor-inner"
+                                [ dom ~key:("row-" ^ key)
+                                    ~style_class:
+                                      "block-row flex flex-1 flex-row gap-1 \
+                                       items-center"
+                                    [ content_wrapper uuid b
+                                    ; dom ~key:("br-" ^ key)
+                                        ~style_class:
+                                          "flex flex-row gap-1 \
+                                           items-center ls-block-right \
+                                           self-start"
+                                        [ dom ~key:("bg-" ^ key)
+                                            ~style_class:
+                                              "hover:opacity-100 opacity-70"
+                                            []
+                                        ; tags_el uuid b
+                                        ]
+                                    ]
+                                ]
                             ]
                         ]
                     ]
                 ]
+            ; Comments_view.reactions_el uuid b.Model.block_reactions
             ]
         ]
+    ; dom ~key:("bci2-" ^ key)
+        ~style_class:"ls-block-content-indent" []
     ; (if has_children then children_static_el ~library uuid b
-       else box ~key:("nc-" ^ key) [])
+       else Logseq_dom.nothing)
     ]
 
 and children_static_el ~library uuid (b : Model.block) : t =

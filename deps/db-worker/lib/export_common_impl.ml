@@ -703,7 +703,7 @@ let remove_tags (inline : value) : value list =
    whitespace off the first Plain after a break line (state starts at
    break-line). *)
 let remove_prefix_spaces_in_plain (inline_coll : value) : value =
-  let r, _abl =
+  let r, _after_break_line =
     List.fold_left
       (fun (r, after_break_line) (ast : value) ->
         match ast_type ast with

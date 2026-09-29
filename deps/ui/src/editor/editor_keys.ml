@@ -356,8 +356,13 @@ let on_keydown ev =
               let stale_block_editor =
                 match target with
                 | Some el when D.el_tag el = "TEXTAREA" ->
-                    Option.is_some
-                      (uuid_of_prefixed "edit-block-" (D.el_id el))
+                    Option.is_some (D.closest_sel ".ls-block" target)
+                    && D.closest_sel ".ls-page-title" target = None
+                    (* property value editors also mount
+                       .editor-wrapper textarea inside .ls-block —
+                       they are not stale block editors *)
+                    && D.closest_sel ".property-value-container" target
+                       = None
                 | _ -> false
               in
               if stale_block_editor then on_normal_key ev

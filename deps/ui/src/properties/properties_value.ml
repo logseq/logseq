@@ -46,6 +46,48 @@ let take_pending_edit ~block_uuid ~ident =
       true
   | _ -> false
 
+(* The row whose inline editor is open and its in-progress buffer.
+   Persists across refresh_all re-renders like cljs' edit-block state
+   (cljs edits at most one block at a time); cleared on commit/cancel. *)
+let active_editor : (string * string * string) option ref = ref None
+
+let row_key ctx row =
+  (ctx.block_uuid, D.row_ident row |> Option.value ~default:"")
+
+let add_active_edit ctx row =
+  let block_uuid, ident = row_key ctx row in
+  active_editor := Some (block_uuid, ident, "")
+
+let clear_active_edit ctx row =
+  match !active_editor with
+  | Some (buuid, ident, _) when (buuid, ident) = row_key ctx row ->
+      active_editor := None
+  | _ -> ()
+
+let has_active_edit ctx row =
+  match !active_editor with
+  | Some (buuid, ident, _) -> (buuid, ident) = row_key ctx row
+  | None -> false
+
+let edit_buffer ctx row =
+  match !active_editor with
+  | Some (buuid, ident, buf) when (buuid, ident) = row_key ctx row -> buf
+  | _ -> ""
+
+let set_edit_buffer ctx row buf =
+  match !active_editor with
+  | Some (buuid, ident, _) when (buuid, ident) = row_key ctx row ->
+      active_editor := Some (buuid, ident, buf)
+  | _ -> ()
+
+(* commit thunk of the currently open editor — bound inside
+   edit_text_cell; editor_actions.enter_edit runs it via
+   Editor_state.close_property_editor so a block editor opening commits
+   the property editor (cljs single editing block) *)
+let close_editor : (unit -> unit) ref = ref (fun () -> ())
+
+let () = Editor_state.close_property_editor := fun () -> !close_editor ()
+
 (* ---------- writes ---------- *)
 
 let set_scalar ctx ~ident ~value =
@@ -80,17 +122,23 @@ let save_text_value ctx row new_title =
 
 (* ---------- inline text/number editors ---------- *)
 
-let commit_or_cancel ctx row input =
+let commit_or_cancel ctx row value =
   let ident = D.row_ident row |> Option.value ~default:"" in
   match D.row_type row with
   | "number" -> (
-      match Float.of_string_opt (String.trim (el_value input)) with
+      match Float.of_string_opt (String.trim value) with
       | Some n -> set_scalar ctx ~ident ~value:(W.Float n)
       | None -> ())
-  | _ -> save_text_value ctx row (el_value input);
+  | _ -> save_text_value ctx row value;
   ctx.refresh ()
 
-let edit_text_cell ctx row cell initial =
+(* [steal] marks user-initiated opens (cell click): entering the
+   property editor exits block editing and takes focus, matching cljs'
+   single editing surface. Render-path opens (pending_edit after the
+   dialog commits, refresh re-renders) must not hijack focus or commit
+   the outliner — the value row mounts asynchronously, and the user may
+   already be typing elsewhere by the time it lands. *)
+let edit_text_cell ?(steal = false) ctx row cell initial =
   el_clear cell;
   let wrap = mk ~cls:"editor-wrapper" "div" in
   let inner = mk ~cls:"editor-inner flex flex-1 block-editor" "div" in
@@ -103,14 +151,49 @@ let edit_text_cell ctx row cell initial =
   el_append_child wrap inner;
   el_append_child cell wrap;
   el_set_value ta initial;
-  focus_end ta;
+  (* single editing surface: commit the property editor still open
+     elsewhere before this one registers — the previous commit's row
+     re-renders and must not see this row's pending active record *)
+  !close_editor ();
+  add_active_edit ctx row;
+  set_edit_buffer ctx row initial;
+  if steal then !(Editor_state.close_block_editor) ();
+  (* the cell is still detached while render builds it — focus once it
+     lands in the document, unless focus already sits in another
+     editable surface *)
+  set_timeout
+    (fun () ->
+      if el_is_connected ta && (steal || not (is_editable_target active_element))
+      then focus_end ta)
+    0;
   let committed = ref false in
   let done_ save =
     if !committed then ()
     else (
       committed := true;
-      if save then commit_or_cancel ctx row ta else ctx.refresh ())
+      clear_active_edit ctx row;
+      (* a refresh may have already detached the textarea — committing
+         a stale element would write the old value back over the fresh
+         render *)
+      if not (el_is_connected ta) then ()
+      else (
+        (* detach the editor DOM synchronously: the row only re-renders
+           after a worker round-trip, and leaving .editor-wrapper
+           textarea in the document lets it coexist with a block editor
+           (cljs keeps a single editing surface) *)
+        let value = el_value ta in
+        let h = el_client_height cell in
+        el_clear cell;
+        (* repaint the committed value now and pin the row's geometry —
+           an empty/shrinking cell shifts the layout and a click already
+           in flight (blur -> commit between mousedown and mouseup)
+           retargets onto whatever moved under the pointer *)
+        if h > 0 then
+          set_style cell ("min-height:" ^ string_of_int h ^ "px");
+        ignore (child_text "span" "block-title-wrap" value cell);
+        if save then commit_or_cancel ctx row value else ctx.refresh ()))
   in
+  close_editor := (fun () -> done_ true);
   el_listen ta "keydown"
     (fun ev ->
       match ev_key ev with
@@ -121,10 +204,20 @@ let edit_text_cell ctx row cell initial =
       | "Escape" ->
           prevent_default ev;
           stop_propagation ev;
-          done_ false
+          (* cljs exit-edit saves — Escape commits like Enter *)
+          done_ true
       | _ -> ())
     true;
-  el_listen ta "blur" (fun _ -> done_ true) true
+  (* a refresh re-render detaches a focused textarea and the removal
+     fires blur synchronously, before the node reports disconnected —
+     that blur is not a user exit; defer the commit one tick so a
+     detached editor is skipped while a real user blur still commits *)
+  el_listen ta "blur"
+    (fun _ ->
+      set_timeout (fun () -> if el_is_connected ta then done_ true) 0)
+    true;
+  el_listen ta "input" (fun _ -> set_edit_buffer ctx row (el_value ta))
+    true
 
 let text_cell ctx row =
   let value = D.row_value row in
@@ -143,7 +236,7 @@ let text_cell ctx row =
              cell))
       (D.value_elems value);
   on_click cell (fun _ ->
-      edit_text_cell ctx row cell (D.ref_title value));
+      edit_text_cell ~steal:true ctx row cell (D.ref_title value));
   cell
 
 (* ---------- number ---------- *)
@@ -154,39 +247,7 @@ let number_cell ctx row =
   if not (D.value_empty_p value) then
     el_set_text cell (D.value_display value);
   on_click cell (fun _ ->
-      el_clear cell;
-      let input =
-        mk ~cls:"ls-number-input" "input" ~attrs:[ ("type", "number") ]
-      in
-      el_set_value input (D.value_display value);
-      el_append_child cell input;
-      focus_end input;
-      let committed = ref false in
-      let done_ save =
-        if !committed then ()
-        else (
-          committed := true;
-          if save then (
-            let ident = D.row_ident row |> Option.value ~default:"" in
-            match Float.of_string_opt (String.trim (el_value input)) with
-            | Some n -> set_scalar ctx ~ident ~value:(W.Float n)
-            | None -> ());
-          ctx.refresh ())
-      in
-      el_listen input "keydown"
-        (fun ev ->
-          match ev_key ev with
-          | "Enter" ->
-              prevent_default ev;
-              stop_propagation ev;
-              done_ true
-          | "Escape" ->
-              prevent_default ev;
-              stop_propagation ev;
-              done_ false
-          | _ -> ())
-        true;
-      el_listen input "blur" (fun _ -> done_ true) true);
+      edit_text_cell ~steal:true ctx row cell (D.value_display value));
   cell
 
 (* ---------- checkbox ---------- *)
@@ -352,13 +413,16 @@ let date_cell ctx row =
 
 (* ---------- select popups (choices / node refs) ---------- *)
 
-(* db/ids of the owner block's tags *)
+(* db/ids of the owner block's tags — the bare entity endpoint omits
+   block/tags, so pull it explicitly like sidebar_state/pull_entity *)
 let block_tag_ids ctx f =
-  D.entity_by_uuid ctx.block_uuid
-  |> Js.Promise.then_ (fun ent ->
+  Runtime.invoke3 "thread-api/pull" (D.repo ())
+    (W.String "[:block/uuid {:block/tags [:db/id]}]")
+    (W.Array [ W.Keyword "block/uuid"; W.Uuid ctx.block_uuid ])
+  |> Js.Promise.then_ (fun w ->
          let tags =
-           match D.getf (D.untag ent) "block/tags" with
-           | Some w -> List.filter_map D.entity_id_of (D.elems w)
+           match D.getf w "block/tags" with
+           | Some xs -> List.filter_map D.entity_id_of (D.elems xs)
            | None -> []
          in
          f tags |> Js.Promise.resolve)
@@ -370,7 +434,9 @@ let gather_exclusions tag_ids f =
   let rec go = function
     | [] -> f !acc
     | id :: rest ->
-        D.entity (W.Int id)
+        Runtime.invoke3 "thread-api/pull" (D.repo ())
+          (W.String "[:db/id {:logseq.property/choice-exclusions [:db/id]}]")
+          (W.Int id)
         |> Js.Promise.then_ (fun ent ->
                (match D.getf (D.untag ent) "logseq.property/choice-exclusions" with
                 | Some xs ->
@@ -522,9 +588,21 @@ let closed_value_icon_id value =
 let closed_value_cell ctx row anchor =
   let value = D.row_value row in
   let cell = mk ~cls:"jtrigger flex flex-1 w-full" "div" in
+  (* cljs select-item: an empty closed value renders .select-item >
+     .empty-btn with the line-dashed icon — keeps the jtrigger
+     visible/clickable *)
   (match closed_value_icon_id value with
-   | Some id -> el_append_child cell (Views_dom.icon id)
-   | None -> ());
+   | Some id ->
+       let item = mk ~cls:"select-item cursor-pointer" "div" in
+       el_append_child item (Views_dom.icon id);
+       el_append_child cell item
+   | None ->
+       if D.value_empty_p value then (
+         let item = mk ~cls:"select-item cursor-pointer" "div" in
+         let btn = mk ~cls:"empty-btn" "button" ~attrs:[ ("type", "button") ] in
+         el_append_child btn (Views_dom.icon "line-dashed");
+         el_append_child item btn;
+         el_append_child cell item));
   let txt = D.value_display value in
   let txt =
     if txt = "logseq.property/empty-placeholder" then "" else txt
@@ -641,6 +719,45 @@ let node_cell ctx row =
   el_append_child wrap cell;
   wrap
 
+(* While an inline value editor (textarea / number input) is open inside
+   `container`, a mousedown anywhere in the value cell must keep focus in
+   the editor — the tabindex=-1 wrapper would otherwise take focus and the
+   textarea's blur handler would commit. cljs keeps the caret inside the
+   editing block the same way. *)
+let guard_editing_focus container =
+  el_listen container "mousedown"
+    (fun ev ->
+      match
+        el_query container ".editor-wrapper textarea, .ls-number-input"
+      with
+      | Some _ -> prevent_default ev
+      | None -> ())
+    true
+
+(* cljs value cells fill the whole .ls-block row — a click anywhere on
+   the container activates the cell. Forward clicks that miss every
+   interactive descendant to the cell; while the inline editor is open
+   do nothing (the mousedown guard already keeps the caret). *)
+let forward_container_click container =
+  el_listen container "click"
+    (fun ev ->
+      match ev_target ev with
+      | Some target -> (
+          match
+            el_closest target
+              ".jtrigger, .editor-wrapper, input, textarea, a, button"
+          with
+          | Some _ -> ()
+          | None -> (
+              match el_query container ".editor-wrapper" with
+              | Some _ -> ()
+              | None -> (
+                  match el_query container ".jtrigger" with
+                  | Some cell -> el_click cell
+                  | None -> ())))
+      | None -> ())
+    true
+
 (* ---------- dispatch ---------- *)
 
 let editing_cell ctx row inner =
@@ -648,16 +765,34 @@ let editing_cell ctx row inner =
     mk ~cls:"property-block-container content w-full" "div"
       ~attrs:[ ("tabindex", "-1") ]
   in
+  (* keep the inline editor focused when the click lands on the cell
+     chrome around the textarea — the container itself is focusable
+     and would otherwise steal focus and blur-commit the edit *)
+  el_listen cell "mousedown"
+    (fun ev ->
+      match ev_target ev with
+      | Some target -> (
+          match el_closest target "textarea, input, a, button" with
+          | Some _ -> ()
+          | None -> prevent_default ev)
+      | None -> ())
+    true;
   el_append_child inner cell;
-  edit_text_cell ctx row cell ""
+  edit_text_cell ctx row cell (edit_buffer ctx row)
 
 let render ctx row =
   let inner =
     mk ~cls:"property-value property-value-panel-inner flex flex-1" "div"
   in
   let ident = D.row_ident row |> Option.value ~default:"" in
-  if take_pending_edit ~block_uuid:ctx.block_uuid ~ident then
-    editing_cell ctx row inner
+  (* cljs keeps a single editing surface: while a block is open in the
+     outliner editor a pending/stale value editor must not mount —
+     two .editor-wrapper textareas would coexist *)
+  if
+    (take_pending_edit ~block_uuid:ctx.block_uuid ~ident
+     || has_active_edit ctx row)
+    && Editor_state.editing () = None
+  then editing_cell ctx row inner
   else (
     let row = D.row_with_effective_value row in
     let value = D.row_value row in
@@ -679,7 +814,9 @@ let render ctx row =
                   ~cls:
                     "w-full h-full jtrigger ls-empty-text-property \
                      text-muted-foreground"
-                  ~attrs:[ ("tabindex", "0") ]
+                  ~attrs:
+                    [ ("tabindex", "0")
+                    ; ("style", "min-height:20px;margin-left:3px") ]
               in
               on_click empty (fun _ ->
                   let cell = text_cell ctx row in
