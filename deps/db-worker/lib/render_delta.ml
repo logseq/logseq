@@ -215,6 +215,222 @@ let build_children_patches rev (tx_report : tx_report) : Wire.t =
           |> Option.map (fun p -> (Wire.Uuid parent_uuid, p)))
   |> fun kvs -> Wire.Map kvs
 
+(* ---------- order-list-index propagation ----------
+
+   A child's derived :block.temp/order-list-index depends on its
+   left-sibling chain and on its count of same-type ancestors, so
+   reordering or reparenting one sibling can renumber neighbours whose
+   own datoms did not change.  canonical-blocks only refreshes entities
+   that appear in tx-data, so the emitted index is recomputed for the
+   children of every parent touched by a membership or order-list-type
+   datom (and for the descendants of entities whose type or parent
+   changed, where the ancestor count moves) and the uuids whose value
+   differs are reported as extra block replacements. *)
+
+type index_marker =
+  | Absent
+  | Present of Wire.t
+
+(* emitted value, identical to the field entity-forward-map attaches:
+   absent when the block has no order-list-type, Nil when the index
+   itself is unrepresentable *)
+let index_marker_of (b : entity) : index_marker =
+  match Plain_value.order_list_type b with
+  | None -> Absent
+  | Some lt -> (
+      Present
+        (match Plain_value.order_list_index b lt with
+         | Some v -> v
+         | None -> Wire.Nil))
+
+(* markers for a whole sorted sibling list in one pass — equivalent to
+   index_marker_of per child but the left-chain index and ancestor-type
+   counts are memoized, so the list costs O(children) sibling seeks
+   instead of O(children x chain-length) *)
+let sibling_index_markers (children : entity list)
+    : (entity_id, index_marker) Hashtbl.t =
+  let idx_of = Hashtbl.create 16 and ancestor_chain = Hashtbl.create 16 in
+  let type_of (b : entity) = Plain_value.order_list_type b in
+  (* consecutive entities on the parent chain, b included, typed lt *)
+  let rec typed_chain (b : entity) (lt : string) : int =
+    match Hashtbl.find_opt ancestor_chain (b.id, lt) with
+    | Some n -> n
+    | None ->
+        let n =
+          match type_of b with
+          | Some t when String.equal t lt ->
+              1
+              +
+              (match Ldb.ref_ent b "block/parent" with
+               | Some p -> typed_chain p lt
+               | None -> 0)
+          | _ -> 0
+        in
+        Hashtbl.replace ancestor_chain (b.id, lt) n;
+        n
+  in
+  let markers = Hashtbl.create (List.length children) in
+  List.iter
+    (fun (c : entity) ->
+       match type_of c with
+       | None -> Hashtbl.replace markers c.id Absent
+       | Some lt ->
+           (* a left sibling is always a lower-order member of the same
+              list, hence already visited *)
+           let idx =
+             match Ldb.get_left_sibling c with
+             | Some l -> (
+                 match type_of l with
+                 | Some t when String.equal t lt -> (
+                     match Hashtbl.find_opt idx_of l.id with
+                     | Some i -> i + 1
+                     | None -> 1)
+                 | _ -> 1)
+             | None -> 1
+           in
+           Hashtbl.replace idx_of c.id idx;
+           let parents_count = typed_chain c lt - 1 in
+           let delta =
+             if parents_count < 0 then 0 else parents_count mod 3
+           in
+           let v =
+             match delta with
+             | 0 -> Some (Wire.Int idx)
+             | 1 -> (
+                 match Plain_value.number_to_letters idx with
+                 | Some s -> Some (Wire.String (Unicode.lowercase s))
+                 | None -> None)
+             | _ -> (
+                 match Plain_value.number_to_roman idx with
+                 | Some s -> Some (Wire.String s)
+                 | None -> None)
+           in
+           Hashtbl.replace markers c.id
+             (Present (Option.value v ~default:Wire.Nil)))
+    children;
+  markers
+
+(* the sibling list the touched entity participates in on `db`; its
+   disposition is read on `e_db` because the entity itself may be absent
+   from `db` (deleted/moved). Returns (variant-key, children): the key is
+   the property-child's id or 0 for the ordinary children list *)
+let sibling_list_for_parent (db : db) (e_db : db) (eid : entity_id)
+    (pid : entity_id) : entity_id * entity list =
+  match entity db (Entity_id pid) with
+  | None -> (0, [])
+  | Some p -> (
+      match entity e_db (Entity_id eid) with
+      | Some e
+        when Ldb.closed_value e
+             || Ldb.ref_ids e "logseq.property/created-from-property" <> []
+        ->
+          (e.id, Ldb.block_children_or_property_children e p)
+      | _ -> (0, Ldb.get_children p))
+
+(* entity ids whose emitted :block.temp/order-list-index differs between
+   db_before and db_after *)
+let order_list_shifted_eids (r : tx_report) : entity_id list =
+  let relevant (a : attr) =
+    List.exists (String.equal a) membership_affecting_attrs
+    || String.equal a "logseq.property/order-list-type"
+  in
+  let touched =
+    r.tx_data
+    |> List.filter_map (fun (d : datom) ->
+           if relevant d.a then Some d.e else None)
+    |> List.sort_uniq compare
+  in
+  if touched = [] then []
+  else
+    let shifted = Hashtbl.create 16 and marker_tbls = Hashtbl.create 4 in
+    let markers (side : int) (eid : entity_id) (pid : entity_id)
+        : (entity_id, index_marker) Hashtbl.t =
+      let db = if side = 0 then r.db_before else r.db_after in
+      let e_db =
+        match entity db (Entity_id eid) with
+        | Some _ -> db
+        | None -> if side = 0 then r.db_after else r.db_before
+      in
+      let variant, children = sibling_list_for_parent db e_db eid pid in
+      let key = (side, pid, variant) in
+      match Hashtbl.find_opt marker_tbls key with
+      | Some t -> t
+      | None ->
+          let t = sibling_index_markers children in
+          Hashtbl.replace marker_tbls key t;
+          t
+    in
+    let diff (before : (entity_id, index_marker) Hashtbl.t)
+        (after : (entity_id, index_marker) Hashtbl.t) : unit =
+      Hashtbl.iter
+        (fun cid m_before ->
+           let m_after =
+             Option.value (Hashtbl.find_opt after cid) ~default:Absent
+           in
+           if m_before <> m_after then Hashtbl.replace shifted cid ())
+        before;
+      Hashtbl.iter
+        (fun cid m_after ->
+           if not (Hashtbl.mem before cid) then
+             match m_after with
+             | Present _ -> Hashtbl.replace shifted cid ()
+             | Absent -> ())
+        after
+    in
+    let mark_descendants (eid : entity_id) : unit =
+      match entity r.db_after (Entity_id eid) with
+      | None -> ()
+      | Some e ->
+          let rec walk (c : entity) : unit =
+            let m_before =
+              match entity r.db_before (Entity_id c.id) with
+              | Some b -> index_marker_of b
+              | None -> Absent
+            and m_after = index_marker_of c in
+            if m_before <> m_after then Hashtbl.replace shifted c.id ();
+            List.iter walk (Ldb.ref_ents c "block/_parent")
+          in
+          List.iter walk (Ldb.ref_ents e "block/_parent")
+    in
+    List.iter
+      (fun eid ->
+         let pids =
+           [ r.db_before; r.db_after ]
+           |> List.filter_map (fun db ->
+                  match entity db (Entity_id eid) with
+                  | Some e -> (
+                      match Ldb.ref_ent e "block/parent" with
+                      | Some p -> Some p.id
+                      | None -> None)
+                  | None -> None)
+           |> List.sort_uniq compare
+         in
+         List.iter
+           (fun pid -> diff (markers 0 eid pid) (markers 1 eid pid))
+           pids;
+         if
+           List.exists
+             (fun (d : datom) ->
+                d.e = eid
+                && (d.a = "logseq.property/order-list-type"
+                   || d.a = "block/parent"))
+             r.tx_data
+         then mark_descendants eid)
+      touched;
+    Hashtbl.fold (fun eid () acc -> eid :: acc) shifted []
+
+(* uuids of blocks whose derived order-list-index moved — extra block
+   replacements so the renderer refreshes displaced siblings' numbers *)
+let order_list_shifted_uuids (r : tx_report) : string list =
+  order_list_shifted_eids r
+  |> List.filter_map (fun eid ->
+         match entity r.db_after (Entity_id eid) with
+         | Some e -> (
+             match Ldb.value e "block/uuid" with
+             | Some (Uuid u) -> Some u
+             | _ -> None)
+         | None -> None)
+
 (* build — one renderer delta from block replacements + tx-report *)
 let build ~(graph_id : string) ~(rev : int) ~(op_id : Wire.t)
     ~(blocks : Wire.t) ~(deleted_block_uuids : string list)

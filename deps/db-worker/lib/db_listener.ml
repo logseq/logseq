@@ -209,13 +209,17 @@ let canonical_replacements (r : tx_report) : Wire.t =
          else None)
       r.tx_data
   in
+  let shifted_uuids = Render_delta.order_list_shifted_uuids r in
+  let uuids =
+    List.sort_uniq String.compare
+      (block_uuids @ parent_uuids @ shifted_uuids)
+  in
   (* canonical_blocks lives in render_snapshot which transitively
      depends on db_listener — late-bound ref like endpoint_transaction *)
   match !Sync_deps.canonical_blocks_fn with
   | Some f -> (
       match
-        f db_after
-          (List.map (fun u -> Wire.Uuid u) (block_uuids @ parent_uuids))
+        f db_after (List.map (fun u -> Wire.Uuid u) uuids)
       with
       | Wire.Map _ as m ->
           Option.value (Wire.get "blocks" m) ~default:(Wire.Map [])
