@@ -537,20 +537,20 @@ let test_fuzzy2 () =
   check "non-matching extract dropped"
     (Fuzzy.fuzzy_search ~extract:fst ~limit:5 data "zzz" = [])
 
-(* ---- Ui_strings + Commands_data ---- *)
+(* ---- I18n + Commands_data ---- *)
 
 let test_ui_strings () =
-  eqs "t known key" "Create page" (Ui_strings.t "cmdk.create/page");
+  eqs "t known key" "Create page" (I18n.t "cmdk.create/page");
   eqs "t unknown falls back to key" "no/such-key"
-    (Ui_strings.t "no/such-key");
+    (I18n.t "no/such-key");
   eqs "tf {1}" "Create page called 'X'"
-    (Ui_strings.tf "cmdk.info/create-page" [ "X" ]);
+    (I18n.tf "cmdk.info/create-page" [ "X" ]);
   eqs "tf extra arg unused" "Create page called 'X'"
-    (Ui_strings.tf "cmdk.info/create-page" [ "X"; "Y" ]);
+    (I18n.tf "cmdk.info/create-page" [ "X"; "Y" ]);
   eqs "replace_all" "a-b-c"
-    (Ui_strings.replace_all "a+b+c" "+" "-");
+    (I18n.replace_all "a+b+c" "+" "-");
   eqs "replace_all miss" "abc"
-    (Ui_strings.replace_all "abc" "+" "-");
+    (I18n.replace_all "abc" "+" "-");
   (* this runner is macOS (navigator.platform = MacIntel): mod -> ⌘ *)
   eqs "decorate mod" (Platform.utf8 "\xe2\x8c\x98" ^ "+enter")
     (Commands_data.decorate_binding "mod+enter");

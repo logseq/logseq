@@ -7,7 +7,7 @@ module D = Views_dom
 module V = Views_state
 module W = Wire
 module Wr = Views_wire
-module I = Views_i18n
+module I = I18n
 module P = Views_popup
 module Db = Views_db
 

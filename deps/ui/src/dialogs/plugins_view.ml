@@ -18,9 +18,9 @@ let icon name = Icons.icon name
    substring on title/name/description covers the e2e queries *)
 let matches search pkg =
   search = ""
-  || Strings.contains_ci (Plugin_host.jstr pkg "title") search
-  || Strings.contains_ci (Plugin_host.jstr pkg "description") search
-  || Strings.contains_ci (Plugin_host.jstr pkg "name") search
+  || I18n.contains_ci (Plugin_host.jstr pkg "title") search
+  || I18n.contains_ci (Plugin_host.jstr pkg "description") search
+  || I18n.contains_ci (Plugin_host.jstr pkg "name") search
 
 let category_ok cat pkg =
   match cat with
@@ -278,8 +278,8 @@ let installed_panel ~key ~search ~cat ~search_st ~cat_st =
              card_name plj web_pkg (Plugin_host.jstr plj "id")
            in
            search = ""
-           || Strings.contains_ci name search
-           || Strings.contains_ci (Plugin_host.jstr web_pkg "description") search)
+           || I18n.contains_ci name search
+           || I18n.contains_ci (Plugin_host.jstr web_pkg "description") search)
   in
   let all =
     Js.Dict.values Plugin_host.installed

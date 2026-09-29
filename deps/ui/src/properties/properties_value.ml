@@ -17,7 +17,6 @@
 
 open Editor_dom
 open Properties_dom
-module I18n = Properties_i18n
 module D = Properties_data
 module S = Properties_state
 module W = Wire

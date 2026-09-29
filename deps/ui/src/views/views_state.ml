@@ -250,7 +250,7 @@ let apply_view_entity inst (v : Views_wire.view_ent) =
   inst.group_desc <- v.vgroup_desc
 
 let display_title (v : Views_wire.view_ent) =
-  if String.trim v.vtitle = "" then Views_i18n.new_view else v.vtitle
+  if String.trim v.vtitle = "" then I18n.new_view else v.vtitle
 
 (* persisted write helpers *)
 let persist_sorting inst =

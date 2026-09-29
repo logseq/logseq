@@ -164,7 +164,7 @@ let item_header st idx (it : Sidebar_state.item) =
             ~style_class:"opacity-50 hover:opacity-100 flex items-center pr-1"
             (* cljs: .rotating-arrow.not-collapsed > FA caret-right *)
             [ dom ~tag:"span" ~style_class:"rotating-arrow not-collapsed"
-                [ Page.rotating_arrow ("arw-" ^ it.key) ] ]
+                [ Ui_parts.rotating_arrow ("arw-" ^ it.key) ] ]
         ; dom ~key:("ht-" ^ it.key)
             ~style_class:
               "ml-1 font-medium text-sm overflow-hidden whitespace-nowrap"

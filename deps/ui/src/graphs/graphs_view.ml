@@ -4,7 +4,7 @@
    components/repo.cljs repos-inner: div#graphs > h1 "All graphs" +
    "Create a new graph" button + local rows + remote section. *)
 
-module T = Graphs_text
+module T = I18n
 module B = Browser_ui
 
 let short_name repo =

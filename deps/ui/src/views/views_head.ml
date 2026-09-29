@@ -3,7 +3,7 @@
    filters-row. *)
 
 module D = Views_dom
-module I = Views_i18n
+module I = I18n
 module V = Views_state
 module Wr = Views_wire
 module W = Wire

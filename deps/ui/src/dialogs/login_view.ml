@@ -9,7 +9,7 @@
 open Lui_elements
 
 let dom = Logseq_dom.dom
-module T = Graphs_text
+module T = I18n
 
 let cognito_url = "https://cognito-idp.us-east-1.amazonaws.com/"
 let client_id = "69cs1lgme7p8kbgld8n5kseii6"

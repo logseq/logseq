@@ -16,7 +16,7 @@ module D = struct
 end
 
 module E = Editor_dom
-module I = Ui_strings
+module I = I18n
 
 type choice = Emoji of string | Tabler of (string * string option) | Remove
 type tab = Tab_all | Tab_emoji | Tab_icon
@@ -85,7 +85,7 @@ let rec take n xs =
 let search_icons q =
   icon_items ()
   |> List.filter (fun (display, kebab) ->
-         Strings.contains_ci display q || Strings.contains_ci kebab q)
+         I18n.contains_ci display q || I18n.contains_ci kebab q)
   |> take 100
 
 (* ---------- frequently used (storage :ui/ls-icons-used) ---------- *)

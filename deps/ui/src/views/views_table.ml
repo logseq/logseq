@@ -4,7 +4,7 @@
    Views_view to keep modules acyclic. *)
 
 module D = Views_dom
-module I = Views_i18n
+module I = I18n
 module V = Views_state
 module Wr = Views_wire
 module W = Wire
@@ -1137,7 +1137,7 @@ let render_body inst ~refresh ?(filters = None) () : D.el =
    | None -> ());
   (if inst.V.loading then
      D.el_append_child body
-       (D.h ~cls:"p-2 text-sm opacity-50" ~text:I.loading ())
+       (D.h ~cls:"p-2 text-sm opacity-50" ~text:I.loading_ ())
    else (
      (match inst.V.display_type with
       | "list" -> render_list inst ~refresh body

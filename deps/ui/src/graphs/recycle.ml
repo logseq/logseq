@@ -6,7 +6,7 @@
    "Page deleted {ts}"/"Block deleted {ts}" + Restore/Delete buttons.
    Restore/delete go through apply-outliner-ops like the cljs flow. *)
 
-module T = Graphs_text
+module T = I18n
 module B = Browser_ui
 
 let repo () =
