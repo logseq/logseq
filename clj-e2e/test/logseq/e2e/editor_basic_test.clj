@@ -141,9 +141,16 @@
     item))
 
 (defn- leave-context-menu-by-tab!
+  "Press Tab until focus leaves the menu's content and the focus-out close
+  takes effect. Focusable controls inside the menu each take their own Tab
+  step, so a single press is not enough to exit."
   []
   (let [item (highlight-context-menu-item!)]
-    (.press item "Tab")))
+    (.press item "Tab")
+    (loop [n 40]
+      (when (and (pos? n) (w/visible? ".ls-context-menu-content"))
+        (k/tab)
+        (recur (dec n))))))
 
 (defn- leave-context-menu-by-shift-tab!
   []
