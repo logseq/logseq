@@ -284,13 +284,6 @@ let content_or_editor ~editable uuid scope (b : Model.block) : t =
    still appear inline in the title ("#tag") are skipped — they render in
    the title itself. -- *)
 
-let contains_sub hay needle =
-  let n = String.length hay and m = String.length needle in
-  let rec go i =
-    i + m <= n && (String.sub hay i m = needle || go (i + 1))
-  in
-  go 0
-
 let tags_el uuid (b : Model.block) : t =
   let triples =
     try List.combine b.block_tags
@@ -304,8 +297,8 @@ let tags_el uuid (b : Model.block) : t =
         (* cljs inline-tag? drops tags that already appear inline in the
            raw title, as "#name" or "#[[uuid]]" *)
         let inline =
-          contains_sub b.block_title ("#" ^ tag)
-          || (tuuid <> "" && contains_sub b.block_title tuuid)
+          Strings.contains b.block_title ("#" ^ tag)
+          || (tuuid <> "" && Strings.contains b.block_title tuuid)
         in
         if inline then None else Some (tag, ident))
       triples

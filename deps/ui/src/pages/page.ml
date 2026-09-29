@@ -856,15 +856,6 @@ let unlinked_search_input () : t =
         []
     ]
 
-let contains_ci ~needle hay =
-  let n = String.lowercase_ascii needle in
-  let h = String.lowercase_ascii hay in
-  let nl = String.length n and hl = String.length h in
-  let rec go i =
-    i + nl <= hl && (String.sub h i nl = n || go (i + 1))
-  in
-  nl > 0 && go 0
-
 let unlinked_row (b : Model.block) : t =
   let key =
     match b.block_uuid, b.block_db_id with
@@ -895,10 +886,10 @@ let unlinked_references_view (m : Model.t) : t =
     else
       List.filter
         (fun (b : Model.block) ->
-          contains_ci ~needle:q b.block_title
+          Strings.contains_ci b.block_title q
           ||
           (match b.block_page_name with
-           | Some p -> contains_ci ~needle:q p
+           | Some p -> Strings.contains_ci p q
            | None -> false))
         refs
   in

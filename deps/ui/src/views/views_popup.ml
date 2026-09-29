@@ -284,19 +284,6 @@ let show_menu ~anchor ?(align_end = false) ?(cls_prefix = "")
 
 type select_item = { si_label : string; si_value : string; si_extra : Wire.t option }
 
-let fuzzy_match q s =
-  let q = String.lowercase_ascii q and s = String.lowercase_ascii s in
-  let n = String.length q and m = String.length s in
-  if n = 0 then true
-  else
-    let rec loop i j =
-      if j >= n then true
-      else if i >= m then false
-      else if s.[i] = q.[j] then loop (i + 1) (j + 1)
-      else loop (i + 1) j
-    in
-    loop 0 0
-
 (* renders the item label row; multiple mode adds a checkbox box *)
 let select_item_row it chosen multiple sel_set =
   let row =
@@ -343,7 +330,7 @@ let show_select ~anchor ~items ~placeholder ?(multiple = false)
   D.el_append_child results_wrap item_results;
   let apply_wrap = D.h ~cls:"p-4" () in
   let filtered () =
-    List.filter (fun it -> fuzzy_match !query it.si_label) items
+    List.filter (fun it -> Fuzzy.score !query it.si_label > 0.) items
   in
   let rec rerender () =
     D.clear results;

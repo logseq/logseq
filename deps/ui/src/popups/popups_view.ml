@@ -49,18 +49,6 @@ let mark_el ~key s =
 
 let text_span ~key s = Logseq_dom.dom ~key ~tag:"span" ~text:s [];;
 
-let index_ci hay needle =
-  let n = String.length needle and h = String.length hay in
-  let needle' = String.lowercase_ascii needle in
-  let rec go i =
-    if n = 0 || i + n > h then None
-    else if String.lowercase_ascii (String.sub hay i n) = needle' then
-      Some i
-    else go (i + 1)
-  in
-  go 0
-;;
-
 (* cljs hiccup renders plain strings as bare DOM text nodes; LUI mounts
    only elements, so a <raw-text> placeholder marks the exact position
    and the MutationObserver in Editor_dom swaps it for a text node *)
@@ -81,7 +69,7 @@ let highlight_el ~key ~query label : t =
       match words with
       | [] -> List.rev (text_span ~key:("r" ^ string_of_int i) rest :: acc)
       | w :: ws -> (
-          match index_ci rest w with
+          match Strings.index_ci rest w with
           | Some j ->
               let hit_len = String.length w in
               let rest' =
@@ -98,7 +86,7 @@ let highlight_el ~key ~query label : t =
     in
     Logseq_dom.dom ~key ~tag:"span" ~style_class:"m-0" (loop 0 words label []))
   else
-    match index_ci label query with
+    match Strings.index_ci label query with
     | Some i ->
         let before = String.sub label 0 i in
         let hit = String.sub label i (String.length query) in
