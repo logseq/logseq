@@ -597,6 +597,73 @@ let title_actions (p : Model.page) =
   el_append_child actions row;
   actions
 
+(* cljs class-properties-key: the built-in
+   logseq.property.class/properties key — letter-p icon + "Tag
+   Properties" *)
+let class_properties_key () =
+  let key = mk ~cls:"property-key text-sm" "div" in
+  let inner = mk ~cls:"property-key-inner jtrigger-view" "div" in
+  let icon = mk ~cls:"property-icon" "div" in
+  let btn = mk "button" ~cls:"flex items-center property-m" in
+  let s = mk ~cls:"ui__icon ti ls-icon-letter-p opacity-50" "span" in
+  el_append_child s (mk ~cls:"ti ti-letter-p" "i");
+  el_append_child btn s;
+  el_append_child icon btn;
+  el_append_child inner icon;
+  let a =
+    mk "a" ~cls:"property-k flex select-none jtrigger w-full"
+      ~attrs:[ ("tabindex", "0") ]
+  in
+  el_set_text a (I18n.t "property.built-in/class-properties");
+  el_append_child inner a;
+  el_append_child key inner;
+  key
+
+(* class-schema rows: get-class-properties returns property entities
+   (db/ident is a keyword — getk, not map_get_string);
+   properties-section renders each as a row whose value is the schema
+   config (nil here — same shape positioned_rows synthesizes) *)
+let class_schema_row prop =
+  match D.getk (D.untag prop) "db/ident" with
+  | Some ident ->
+      Some
+        (W.Map
+           [ (W.Keyword "property-id", W.Keyword ident)
+           ; (W.Keyword "property", prop)
+           ; (W.Keyword "value", W.Nil) ])
+  | None -> None
+
+let render_class_section (ctx : V.ctx) ~owner_title host =
+  (* .flex.flex-col.gap-1.mt-2 > [header; .gap-1.flex.flex-col > rows +
+     .ml-5 > new-property] *)
+  let section = mk ~cls:"flex flex-col gap-1 mt-2" "div" in
+  let head = mk ~attrs:[ ("style", "font-size: 15px") ] "div" in
+  el_append_child head (class_properties_key ());
+  ignore
+    (child_text "div" "text-muted-foreground ml-5"
+       (I18n.t "class/tag-properties-desc") head);
+  el_append_child section head;
+  let col = mk ~cls:"gap-1 flex flex-col" "div" in
+  el_append_child section col;
+  el_append_child host section;
+  D.class_properties (D.uuid_ref ctx.block_uuid)
+  |> Js.Promise.then_ (fun w ->
+         let props = D.elems w in
+         List.iter
+           (fun p ->
+             match class_schema_row p with
+             | Some row ->
+                 el_append_child col
+                   (row_el ctx ~owner_is_tag:true ~owner_title row)
+             | None -> ())
+           props;
+         let add_wrap = mk ~cls:"ml-5" "div" in
+         el_append_child add_wrap
+           (new_property_btn ctx ~for_class:true ~owner_title);
+         el_append_child col add_wrap;
+         Js.Promise.resolve ())
+  |> ignore
+
 (* Page surface: attach .ls-properties-area only when there are rows to
    show (cljs show-properties-area?); attach .ls-bidirectional-properties
    only when bidirectional groups exist. *)
@@ -608,26 +675,33 @@ let rec render_page_area ctx (p : Model.page) ~attach_area ~attach_bidi
          let rows, hidden = D.split_display wire in
          let rows = List.filter is_panel_row rows in
          let _left, _below, panel_rows = partition_rows rows in
-         (* cljs: on a class/tag page the title block is collapsed, so
-            db-properties-cp never mounts — no .ls-properties-area at
-            all; the class section only lives in the tag dialog *)
-         if p.Model.page_is_tag then
-           detach ()
-         else if panel_rows = [] && hidden = [] then
+         (* cljs show-class-properties-area? — a tag page still mounts
+            .ls-properties-area to host the class-properties section *)
+         if
+           (not p.Model.page_is_tag)
+           && panel_rows = []
+           && hidden = []
+         then
            detach ()
          else (
            attach_area ();
            el_clear area;
            let panel = mk ~cls:"properties-panel" "div" in
            el_append_child area panel;
-           render_panel ctx ~owner_is_tag:false
+           render_panel ctx ~owner_is_tag:p.Model.page_is_tag
              ~owner_title:p.Model.page_title ~page_area:true
              ~show_hidden:!S.show_hidden
              ~can_toggle:(can_toggle_hidden ctx ~below_rows:[])
              panel panel_rows hidden;
-           el_append_child area
-             (new_property_btn ctx ~for_class:false
-                ~owner_title:p.Model.page_title));
+           (* cljs renders new-property at page level only for non-class
+              pages — the class section hosts its own *)
+           if p.Model.page_is_tag then
+             render_class_section ctx ~owner_title:p.Model.page_title
+               area
+           else
+             el_append_child area
+               (new_property_btn ctx ~for_class:false
+                  ~owner_title:p.Model.page_title));
          fill_bidirectional_page p ~attach_bidi bidi;
          Js.Promise.resolve ())
 
@@ -708,8 +782,13 @@ let mount_page_props page_inner (p : Model.page) uuid =
       ; class_schema = false
       }
     and refresh () =
-      render_page_area ctx p ~attach_area ~attach_bidi ~detach
-        area bidi
+      (* resolve the live page each refresh — page_is_tag changes under
+         us when a page converts to a tag *)
+      match !Runtime.current_page with
+      | Some live when live.Model.page_uuid = Some uuid ->
+          render_page_area ctx live ~attach_area ~attach_bidi ~detach
+            area bidi
+      | _ -> Js.Promise.resolve ()
     in
     ignore (refresh ());
     S.unregister_area page_inner;
@@ -790,71 +869,6 @@ let mount_page_area page_inner =
    Unlike the main-page surface, tag/class pages DO mount the area here;
    a non-class page with no rows renders only the "Add property" button
    (no .ls-properties-area). *)
-
-(* cljs class-properties-key: the built-in
-   logseq.property.class/properties key — letter-p icon + "Tag
-   Properties" *)
-let class_properties_key () =
-  let key = mk ~cls:"property-key text-sm" "div" in
-  let inner = mk ~cls:"property-key-inner jtrigger-view" "div" in
-  let icon = mk ~cls:"property-icon" "div" in
-  let btn = mk "button" ~cls:"flex items-center property-m" in
-  let s = mk ~cls:"ui__icon ti ls-icon-letter-p opacity-50" "span" in
-  el_append_child s (mk ~cls:"ti ti-letter-p" "i");
-  el_append_child btn s;
-  el_append_child icon btn;
-  el_append_child inner icon;
-  let a =
-    mk "a" ~cls:"property-k flex select-none jtrigger w-full"
-      ~attrs:[ ("tabindex", "0") ]
-  in
-  el_set_text a (I18n.t "property.built-in/class-properties");
-  el_append_child inner a;
-  el_append_child key inner;
-  key
-
-(* class-schema rows: get-class-properties returns property entities;
-   properties-section renders each as a row whose value is the schema
-   config (nil here — same shape positioned_rows synthesizes) *)
-let class_schema_row prop =
-  match W.map_get_string prop "db/ident" with
-  | Some ident ->
-      Some
-        (W.Map
-           [ (W.Keyword "property-id", W.Keyword ident)
-           ; (W.Keyword "property", prop)
-           ; (W.Keyword "value", W.Nil) ])
-  | None -> None
-
-let render_class_section (ctx : V.ctx) ~owner_title host =
-  (* .flex.flex-col.gap-1.mt-2 > [header; .gap-1.flex.flex-col > rows +
-     .ml-5 > new-property] *)
-  let section = mk ~cls:"flex flex-col gap-1 mt-2" "div" in
-  let head = mk ~attrs:[ ("style", "font-size: 15px") ] "div" in
-  el_append_child head (class_properties_key ());
-  ignore (child_text "div" "text-muted-foreground ml-5"
-            (I18n.t "class/tag-properties-desc") head);
-  el_append_child section head;
-  let col = mk ~cls:"gap-1 flex flex-col" "div" in
-  el_append_child section col;
-  el_append_child host section;
-  D.class_properties (D.uuid_ref ctx.block_uuid)
-  |> Js.Promise.then_ (fun w ->
-         let props = W.args_list w in
-         List.iter
-           (fun p ->
-             match class_schema_row p with
-             | Some row ->
-                 el_append_child col
-                   (row_el ctx ~owner_is_tag:true ~owner_title row)
-             | None -> ())
-           props;
-         let add_wrap = mk ~cls:"ml-5" "div" in
-         el_append_child add_wrap
-           (new_property_btn ctx ~for_class:true ~owner_title);
-         el_append_child col add_wrap;
-         Js.Promise.resolve ())
-  |> ignore
 
 (* host is the emitted .ls-properties-area.ls-page-properties div;
    mounts once per element via the data-props-mounted marker *)
