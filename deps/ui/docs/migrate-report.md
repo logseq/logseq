@@ -1300,7 +1300,7 @@ search may lag).
   or the worker's `non_consecutive` check misfires and
   `sort_non_consecutive_blocks` silently drops blocks (e.g. the Page
   tag block in `move-pages-to-library`).
-- **`Virt_list` overscan default is 1, not 5.** The cljs virtuoso
+- **`Virt_list` overscan is 5 (upstream default).** The cljs virtuoso
   unmounts aggressively; e2e asserts rows actually unmount
   (`journals-list-remounts-*` watches row 0 disappear). Playwright
   "visible" = non-empty bounding box, so off-viewport-but-mounted rows
@@ -1441,6 +1441,45 @@ search may lag).
   `editor_actions.focus_page_title` must select the title textarea via
   `D.query_selector ".ls-page-title"` (added to `editor_dom`).
 
+
+## Editor / virt merge-regression notes (post-merge follow-up)
+
+- **`Virt_list.enabled_min` keeps `virtualize &&` in the gate.**
+  `(force || (virtualize && count >= min))` virtualizes EVERY caller
+  under `?virtualized=true` — including `blocks_inner` invocations that
+  pass `virtualize:false` (journal items' inner block lists), which
+  nests `[data-virtuoso-scroller]` inside the outer journals scroller
+  (`journals-list-does-not-nest-*` counts 9). Force must amplify a
+  `virtualize:true` caller, never override `virtualize:false`.
+- **Row measurement can't be purely debounced.** A 50ms debounce that
+  resets per mutation starves under scroll churn — freshly mounted rows
+  stay at estimate height and overlap. The row MutationObserver must
+  measure synchronously (same microtask) when a batch has `addedNodes`,
+  debouncing only pure subtree churn.
+- **translateY precision matters.** `%.2fpx` truncation (~0.005px per
+  row) accumulates a sub-pixel boundary overlap that
+  `mixed-height-virtual-page-*` detects (`rect.top < prev.bottom`); keep
+  `%.4fpx`.
+- **`<raw-text>` swap must run in the observer microtask.** Coalescing
+  it into the 60ms debounced doc-scan leaves the placeholder empty for
+  ~4 frames; `*-first-frame-*` tests read `.page-ref`/`.block-title-wrap`
+  textContent on every rAF after Escape and fail on the blank frames.
+  `register_doc_scan ~sync:true` runs such scans inside the mutation
+  callback, before paint.
+- **Undo must bypass the `base` resync gate.** The gate (`buffer = base`
+  ⇒ safe to overwrite) exists so remote refreshes don't clobber typed
+  text, but `undo`/`redo` deliberately revert; when the pre-undo edit
+  hadn't committed (400ms `schedule_save` debounce), `buffer <> base`
+  and the gate left the textarea stale. `resync_open_editor ~force:true`
+  from undo/redo.
+- **In-editor paste needs the text/plain fallback.** `paste_into_editor`
+  pastes stored block trees only when the event's text/plain equals what
+  our copy wrote (`S.clipboard_text`); any other text (external, html's
+  text/plain sibling) splices into the live textarea at the cursor.
+- **Pointer range selection is orthogonal to dnd-kit.** `Block_dnd`
+  (drag-move) does not cover pointerdown→scroll→pointerup selection:
+  `Block_selection.pointerdown/pointerup` document listeners plus
+  `Virtual_scroll.extend_drag`/`sync` from `Virt_list` must stay wired.
 
 ## Block drag-and-drop (dnd-kit)
 

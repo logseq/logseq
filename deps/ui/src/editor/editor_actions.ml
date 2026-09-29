@@ -978,8 +978,13 @@ let splice_clipboard_text uuid el text =
    plain text at the cursor. text/html is ignored — the plain text
    carries the same content without running any markup *)
 let paste_into_editor ev =
+  let clip_text =
+    match D.ev_clipboard ev with
+    | Some clip -> D.clipboard_get_text clip "text/plain"
+    | None -> ""
+  in
   match (S.editing (), !(S.clipboard)) with
-  | Some e, (_ :: _ as trees) -> (
+  | Some e, (_ :: _ as trees) when clip_text = !(S.clipboard_text) -> (
       match S.find e.uuid with
       | Some b ->
           D.prevent_default ev;
@@ -1001,7 +1006,17 @@ let paste_into_editor ev =
                           edit_last_inserted resp;
                           Js.Promise.resolve ())))
       | None -> ())
-  | _ -> ()
+  | Some e, _ -> (
+      (* external paste while editing (no stored trees, or the event
+         text differs from what our copy wrote): splice the plain text
+         into the live textarea at the cursor *)
+      match D.textarea_of e.uuid with
+      | Some el ->
+          if clip_text <> "" then (
+            D.prevent_default ev;
+            splice_clipboard_text e.uuid el clip_text)
+      | None -> ())
+  | None, _ -> ()
 
 let paste_blocks ev =
   match S.editing () with

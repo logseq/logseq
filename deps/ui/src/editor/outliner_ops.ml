@@ -912,7 +912,7 @@ let apply_and_refresh_result ?opts ops =
    editor's buffer so a stale textarea does not mask the restored title.
    Returns the promise so callers that move editing afterwards (paste)
    sequence after the textarea write *)
-let resync_open_editor () : unit Js.Promise.t =
+let resync_open_editor ?(force = false) () : unit Js.Promise.t =
   match S.editing () with
   | None -> Js.Promise.resolve ()
   | Some e -> (
@@ -923,8 +923,11 @@ let resync_open_editor () : unit Js.Promise.t =
           |> Js.Promise.then_ (fun title ->
                  (* remote refresh must not clobber typed text: only
                     overwrite when the buffer is still the value the editor
-                    opened with and the stored title moved since *)
-                 if e.S.buffer = e.S.base && e.S.base <> title then begin
+                    opened with and the stored title moved since. undo/redo
+                    force it — the user asked for the revert even when an
+                    unsaved edit is in flight *)
+                 if (force || (e.S.buffer = e.S.base)) && e.S.buffer <> title
+                 then begin
                    S.set_silent (fun st ->
                        match st.S.editing with
                        | Some e' when e'.uuid = e.uuid ->
@@ -949,7 +952,7 @@ let undo () =
   | Some repo ->
       Runtime.invoke1 "thread-api/undo-redo-undo" (Wire.String repo)
       |> Js.Promise.then_ (fun _ -> refresh_page ())
-      |> Js.Promise.then_ (fun () -> resync_open_editor ())
+      |> Js.Promise.then_ (fun () -> resync_open_editor ~force:true ())
       |> Js.Promise.catch (fun e ->
              Platform.console_error ("undo failed", e);
              Toast.error "Undo failed";
@@ -962,7 +965,7 @@ let redo () =
   | Some repo ->
       Runtime.invoke1 "thread-api/undo-redo-redo" (Wire.String repo)
       |> Js.Promise.then_ (fun _ -> refresh_page ())
-      |> Js.Promise.then_ (fun () -> resync_open_editor ())
+      |> Js.Promise.then_ (fun () -> resync_open_editor ~force:true ())
       |> Js.Promise.catch (fun e ->
              Platform.console_error ("redo failed", e);
              Toast.error "Redo failed";

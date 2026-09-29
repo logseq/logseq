@@ -238,44 +238,59 @@ let for_each_touched roots sel f =
    changed subtrees instead of re-scanning the whole document *)
 type doc_scan =
   { ds_run_if : mutation_record array -> bool
-  ; ds_scan : el list -> unit }
+  ; ds_scan : el list -> unit
+  ; ds_sync : bool (* run in the observer microtask, before paint *)
+  }
 
 let doc_scans : doc_scan list ref = ref []
 let doc_scan_timer = ref (-1)
 let doc_pending_recs : mutation_record list ref = ref []
 
+let roots_of_recs recs =
+  Array.fold_left
+    (fun acc r ->
+      let nl = rec_added r in
+      let rec collect i acc =
+        if i >= node_list_length nl then acc
+        else
+          collect (i + 1)
+            (match node_list_item nl i with
+             | Some el when node_type el = 1 -> el :: acc
+             | _ -> acc)
+      in
+      collect 0 acc)
+    [] recs
+
 let doc_flush () =
   doc_scan_timer := -1;
   let recs = Array.of_list (List.rev !doc_pending_recs) in
   doc_pending_recs := [];
-  let roots =
-    Array.fold_left
-      (fun acc r ->
-        let nl = rec_added r in
-        let rec collect i acc =
-          if i >= node_list_length nl then acc
-          else
-            collect (i + 1)
-              (match node_list_item nl i with
-               | Some el when node_type el = 1 -> el :: acc
-               | _ -> acc)
-        in
-        collect 0 acc)
-      [] recs
-  in
+  let roots = roots_of_recs recs in
   List.iter
-    (fun ds -> if ds.ds_run_if recs then ds.ds_scan roots)
+    (fun ds ->
+      if (not ds.ds_sync) && ds.ds_run_if recs then ds.ds_scan roots)
     !doc_scans
 
 let doc_observer_installed = ref false
 
-let register_doc_scan ?(run_if = fun _ -> true) scan =
-  doc_scans := !doc_scans @ [ { ds_run_if = run_if; ds_scan = scan } ];
+let register_doc_scan ?(run_if = fun _ -> true) ?(sync = false) scan =
+  doc_scans :=
+    !doc_scans
+    @ [ { ds_run_if = run_if; ds_scan = scan; ds_sync = sync } ];
   scan [ document_element ];
   if not !doc_observer_installed then (
     doc_observer_installed := true;
     let obs =
       new_observer_records (fun recs ->
+          (* sync scans run inside the observer microtask — their DOM
+             writes must land before the next paint (a 60ms debounce
+             leaves e.g. <raw-text> placeholders visibly empty for
+             several frames) *)
+          List.iter
+            (fun ds ->
+              if ds.ds_sync && ds.ds_run_if recs then
+                ds.ds_scan (roots_of_recs recs))
+            !doc_scans;
           doc_pending_recs := Array.to_list recs @ !doc_pending_recs;
           if !doc_scan_timer < 0 then
             doc_scan_timer := set_timeout_id doc_flush 60)
@@ -327,7 +342,7 @@ let raw_text_observer_installed = ref false
 let ensure_raw_text_observer () =
   if not !raw_text_observer_installed then (
     raw_text_observer_installed := true;
-    register_doc_scan dom_fixups)
+    register_doc_scan ~sync:true dom_fixups)
 
 let closest_sel sel target =
   match target with
