@@ -372,8 +372,11 @@ let on_keydown ev =
     if Editor_commands.popup_key ev then ()
     else
       let target = D.ev_target ev in
-      match D.closest_sel "pre.CodeMirror-line" target with
-      | Some el -> Editor_commands.code_pre_key el ev
+      (* CodeMirror surfaces (fenced-code editor, query source editor)
+         own their keys — Esc/arrows/Tab go through the editor's own
+         listeners, never the block-editor dispatch *)
+      match D.closest_sel ".CodeMirror" target with
+      | Some _ -> ()
       | None -> (
           match (S.editing (), !S.pending_focus) with
           | Some e, Some (uuid, caret)
@@ -462,10 +465,7 @@ let on_input ev =
             (* non-block editors (e.g. a comment textarea) still need
                textContent synced for :has-text *)
             D.el_set_text_content el (D.el_value el))
-    | None -> (
-        match D.closest_sel "pre.CodeMirror-line" (D.ev_target ev) with
-        | Some el -> Editor_commands.code_pre_input el
-        | None -> ())
+    | None -> ()
 
 (* -- clipboard events -- *)
 
@@ -537,7 +537,8 @@ let on_click ev =
                         "button, a, input, audio, video, details, summary, \
                          sup.fn, [contenteditable=true], .cloze, \
                          .cloze-revealed, .query-table, .image-resize, \
-                         .custom-query-results, .cp__query-builder"
+                         .custom-query-results, .cp__query-builder, \
+                         .ui-fenced-code-editor"
                         target
                     with
                     | Some _ -> ()
@@ -672,7 +673,7 @@ let on_editor_insert ev =
 let on_mousedown ev =
   if S.ready () && S.editing () <> None then
     match
-      D.closest_sel ".editor-wrapper, .extensions__code"
+      D.closest_sel ".editor-wrapper, .ui-fenced-code-editor"
         (D.ev_target ev)
     with
     | Some _ -> ()
@@ -746,7 +747,15 @@ let install_once () =
     Block_dnd.install ();
     (* pointer-driven range selection (cljs block/selection.cljs) *)
     D.document_add_listener "pointerdown"
-      (fun ev -> if S.ready () then Block_selection.pointerdown ev)
+      (fun ev ->
+        if
+          S.ready ()
+          (* capture-phase listener fires before the CM wrapper's
+             stopPropagation — fenced-code clicks must not start a
+             block range selection (cljs clears selection instead) *)
+          && D.closest_sel ".ui-fenced-code-editor" (D.ev_target ev)
+             = None
+        then Block_selection.pointerdown ev)
       true;
     D.document_add_listener "pointerup"
       (fun _ev -> Block_selection.pointerup ())

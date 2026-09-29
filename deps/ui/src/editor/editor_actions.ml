@@ -9,12 +9,17 @@ module Ops = Outliner_ops
 (* ---- buffer + focus ---- *)
 
 let live_buffer uuid =
-  match D.textarea_of uuid with
-  | Some el -> D.el_value el
+  (* code-fence blocks edit inside a mounted CodeMirror — its doc, not
+     the hidden textarea, holds the live value *)
+  match !(S.code_buffer_of) uuid with
+  | Some v -> v
   | None -> (
-      match S.editing () with
-      | Some e when e.uuid = uuid -> e.buffer
-      | _ -> "")
+      match D.textarea_of uuid with
+      | Some el -> D.el_value el
+      | None -> (
+          match S.editing () with
+          | Some e when e.uuid = uuid -> e.buffer
+          | _ -> ""))
 
 let sync_buffer uuid v =
   S.set_silent (fun st ->
@@ -49,6 +54,12 @@ let rec apply_focus () =
   match !S.pending_focus with
   | None -> S.pending_focus_actions := []
   | Some (uuid, caret) -> (
+      if !(S.code_focus) ~caret uuid then (
+        (* CodeMirror-backed code block: cm.focus() + setCursor landed *)
+        S.pending_focus := None;
+        focus_attempts := 0;
+        run_pending_focus_actions ())
+      else
       match D.textarea_of uuid with
       | Some el -> (
           D.autosize_textarea el;
@@ -66,22 +77,7 @@ let rec apply_focus () =
               D.el_set_selection_range el c c;
               run_pending_focus_actions ()
           | _ -> retry_focus ())
-      | None -> (
-          (* code/calc blocks edit through pre.CodeMirror-line — no
-             textarea exists on that surface *)
-          match D.get_element_by_id ("editor-edit-block-" ^ uuid) with
-          | Some wrap -> (
-              match D.el_query wrap "pre.CodeMirror-line" with
-              | Some pre -> (
-                  D.el_focus pre;
-                  match D.active_element with
-                  | Some ae when ae == pre ->
-                      S.pending_focus := None;
-                      focus_attempts := 0;
-                      run_pending_focus_actions ()
-                  | _ -> retry_focus ())
-              | None -> retry_focus ())
-          | None -> retry_focus ()))
+      | None -> retry_focus ())
 
 and retry_focus () =
   incr focus_attempts;
