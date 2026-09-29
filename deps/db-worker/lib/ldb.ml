@@ -340,44 +340,70 @@ let block_children_or_property_children (block : entity) (parent : entity) : ent
   | None, [] -> sort_by_order (parent_children parent)
 
 (* get-ordinary-sibling — sibling by :block/order among :block/parent
-   children, skipping property-created and closed-value children. *)
+   children, skipping property-created and closed-value children.
+
+   cljs folds over every (:block/parent parent) datom with three index
+   lookups per child (order + two exclusion checks) — O(siblings) seeks.
+   The :block/order avet index already stores the same ordering, so scan
+   it from the block's own order toward the requested direction and take
+   the first owner whose :block/parent is the same parent and that is not
+   excluded: the answer is identical to the cljs fold (closest eligible
+   order; same-order ties pick the smallest e, matching the fold's
+   first-seen in e-ascending iteration) but costs only the order gap
+   between siblings, typically ~1-3 candidate lookups.
+
+   Eligibility uses the child's effective :block/order (the entity read,
+   first eavt datom — same value the cljs fold sees), not the scanned
+   index datom: raw-datom replay can leave a second :block/order datom on
+   an entity (e.g. a batch-remove marker string), and that stale index
+   position must not make the entity a candidate. *)
 let ordinary_sibling (block : entity) (dir : [ `Left | `Right ]) : entity option =
   let db = block.db in
   match ref_ids block "block/parent", value block "block/order" with
   | parent_id :: _, Some (String block_order) ->
-      let eligible, closer =
+      let same_parent e =
+        Seq.exists
+          (fun (d : datom) ->
+            match d.v with Ref pid -> pid = parent_id | _ -> false)
+          (datoms db Eavt ~e ~a:"block/parent" ())
+      in
+      let excluded e =
+        Option.is_some
+          (Seq.uncons (datoms db Eavt ~e ~a:"logseq.property/created-from-property" ()))
+        || Option.is_some
+             (Seq.uncons (datoms db Eavt ~e ~a:"block/closed-value-property" ()))
+      in
+      let live_order e =
+        match Seq.uncons (datoms db Eavt ~e ~a:"block/order" ()) with
+        | Some (od, _) -> (match od.v with String s -> Some s | _ -> None)
+        | None -> None
+      in
+      let eligible o =
         match dir with
-        | `Left -> ((fun c -> c < 0), fun c -> c > 0)
-        | `Right -> ((fun c -> c > 0), fun c -> c < 0)
+        | `Left -> String.compare o block_order < 0
+        | `Right -> String.compare o block_order > 0
       in
-      let has_datom e a =
-        Option.is_some (Seq.uncons (datoms db Eavt ~e ~a ()))
+      let candidates =
+        (match dir with
+         | `Left -> rseek_datoms db Avet ~a:"block/order" ~v:(String block_order) ()
+         | `Right -> seek_datoms db Avet ~a:"block/order" ~v:(String block_order) ())
+        |> Seq.filter_map (fun (d : datom) ->
+            match live_order d.e with
+            | Some o
+              when eligible o && same_parent d.e && not (excluded d.e) ->
+                Some (d.e, o)
+            | _ -> None)
       in
-      let best_id, _ =
-        Seq.fold_left
-          (fun (best_id, best_order) (d : datom) ->
-            let child_id = d.e in
-            let child_order =
-              match
-                Seq.uncons (datoms db Eavt ~e:child_id ~a:"block/order" ())
-              with
-              | Some (od, _) -> (match od.v with String s -> Some s | _ -> None)
-              | None -> None
-            in
-            match child_order with
-            | Some child_order
-              when eligible (String.compare child_order block_order)
-                   && not (has_datom child_id "logseq.property/created-from-property")
-                   && not (has_datom child_id "block/closed-value-property")
-                   && (match best_order with
-                       | None -> true
-                       | Some bo -> closer (String.compare child_order bo)) ->
-                (Some child_id, Some child_order)
-            | _ -> (best_id, best_order))
-          (None, None)
-          (datoms db Avet ~a:"block/parent" ~v:(Ref parent_id) ())
-      in
-      (match best_id with Some id -> ent_of_id db id | None -> None)
+      (match Seq.uncons candidates with
+       | None -> None
+       | Some ((first_e, first_o), rest) ->
+           let rec collect best_e rest =
+             match Seq.uncons rest with
+             | Some ((e, o), rest') when String.compare o first_o = 0 ->
+                 collect (min best_e e) rest'
+             | _ -> best_e
+           in
+           ent_of_id db (collect first_e rest))
   | _ -> None
 
 (* get-left/right-sibling-for-property-children *)
