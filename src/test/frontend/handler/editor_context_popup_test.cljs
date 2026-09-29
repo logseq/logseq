@@ -15,18 +15,18 @@
   (is (false? (#'editor/context-menu-popup? {:content-props {:class "something-else"}})))
   (is (false? (#'editor/context-menu-popup? nil))))
 
-(deftest tab-does-not-indent-when-focus-is-in-shui-popup-test
+(deftest tab-does-not-indent-when-focus-is-in-shui-menu-test
   (let [stopped? (atom false)]
-    (with-redefs [editor/focus-in-shui-popup? (constantly true)
+    (with-redefs [editor/focus-in-shui-menu? (constantly true)
                   state/selection? (constantly true)
                   util/stop (fn [_] (reset! stopped? true))]
       ((editor/keydown-tab-handler :right) #js {})
       (is (false? @stopped?)
-          "Tab must reach the focused popup so it can close instead of indenting a selected block."))))
+          "Tab must reach the focused menu so it can close instead of indenting a selected block."))))
 
-(deftest tab-indents-when-unfocused-popup-node-exists-test
+(deftest tab-indents-when-focus-is-not-in-shui-menu-test
   (let [stopped? (atom false)]
-    (with-redefs [editor/focus-in-shui-popup? (constantly nil)
+    (with-redefs [editor/focus-in-shui-menu? (constantly nil)
                   editor/pending-new-block? (constantly false)
                   state/editing? (constantly false)
                   state/selection? (constantly true)
@@ -35,7 +35,7 @@
                   editor/on-tab (fn [_])]
       ((editor/keydown-tab-handler :right) #js {})
       (is (true? @stopped?)
-          "Leftover popup DOM must not block indent when focus is not in a popup."))))
+          "A leftover popup or selection action bar must not block indent."))))
 
 (deftest shortcut-cut-and-delete-close-context-popup-test
   (let [calls (atom [])

@@ -1755,6 +1755,13 @@
   (some-> js/document.activeElement
           (.closest ".ui__dropdown-menu-content, .ui__popover-content, .ui__context-menu-content")))
 
+(defn- focus-in-shui-menu?
+  "True when Tab should leave a menu instead of indenting. The selection
+  action bar is a popover, so it is intentionally excluded."
+  []
+  (some-> js/document.activeElement
+          (.closest ".ui__dropdown-menu-content, .ui__dropdown-menu-sub-content, .ui__context-menu-content, .ui__context-menu-sub-content")))
+
 (defn in-shui-popup?
   []
   (or (focus-in-shui-popup?)
@@ -3033,7 +3040,7 @@
 (defn keydown-tab-handler
   [direction]
   (fn [e]
-    (when-not (focus-in-shui-popup?)
+    (when-not (focus-in-shui-menu?)
       (cond
         (pending-new-block?)
         (do
