@@ -1502,6 +1502,40 @@ the correctness batch; each fixes the findings of its own report:
   issues `create-page` with `class?:true` and navigates to the class
   (cljs opens the tag dialog — no such surface exists here yet).
 
+## Property-e2e sweep (second pass)
+
+- **Zoom-breadcrumb refetch** (`outliner_ops.ml`): `refresh_page` on a
+  `Block_zoom` route now refetches `page_parents` (not just
+  `page_blocks`) — cljs re-queries the ancestor chain on reload, so a
+  renamed parent updates `.breadcrumb` text (`rename` e2e in
+  `block_property_basic_test`).
+- **Container click handlers need an interactive-hit gate**
+  (`dom_adapter.ml`, `page.ml`): the `.ls-page-title` node's `click`
+  dom-event is a fallback that starts `Title_edit_start` whenever the
+  payload `targetId` is `""`/`page-title`/`page-title-text`. Playwright's
+  click on `a.block-control` lands on the id-less bullet/icon child, so
+  targetId was `""` and the gate passed — the title editor mounted
+  (+54px), then a `sync-db-changes` reflow unmounted it ~1s later,
+  shifting `.property-k` upward between Playwright's actionability check
+  and click dispatch (`tag-scoped-property-choices` e2e). cljs binds
+  title-edit on the `.block-content` pointer-down only. The event
+  payload now carries an `interactive` flag
+  (`target.closest("a, button, input, textarea, select, summary,
+   .block-control-wrap, .bullet-container, .ls-properties-area,
+   .ls-page-title-actions, .lsp-hook-ui-slot")`) and both title-edit
+  handlers require `not interactive`.
+- **Property-area refresh preserves nodes** (`properties_area.ml`):
+  `render_page_area` builds the candidate DOM detached and swaps children
+  only when `innerHTML` differs (`replace_if_changed`) — clearing and
+  rebuilding on every `sync-db-changes` churned focused editors and
+  element identity across refreshes.
+- **Sidebar / modal details**: `ref_group` titles render
+  `foldable_title ~control:false` (unlinked-references e2e expects
+  exactly one `.ls-foldable-title-control`); the icon-picker popup
+  carries the `ls-icon-picker` class (`ls-icon-picker input` locator);
+  `#cards-modal` is wrapped in the `.ui__dialog-overlay` /
+  `.ui__dialog-content` dialog chrome so overlay-clicks behave like cljs.
+
 Known leftovers:
 - Toast auto-dismiss is 5000ms; cljs `notification/show!` defaults are
   1500–2000ms.
