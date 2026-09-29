@@ -11,7 +11,10 @@ module String_set = Stdlib.Set.Make (String)
    "sidebar") — the same block can render in both trees, so only the
    initiating scope mounts the textarea (cljs keys the editor by
    container-local edit-input-id) *)
-type editing = { uuid : string; buffer : string; scope : string }
+(* base: the committed title the editor opened with — resync only
+   overwrites a still-pristine buffer when the stored title changed
+   externally; a divergent buffer is typed-not-yet-saved text *)
+type editing = { uuid : string; buffer : string; scope : string; base : string }
 
 type t =
   { editing : editing option
@@ -78,11 +81,14 @@ let signal () = (state ()).Signal.state_signal
    LUI's event dispatch); Signal.update composes with any pending staged
    value so deferred on_init writes aren't lost *)
 let set f =
-  Signal.update (state ()) f;
+  let st = state () in
+  Signal.update st f;
   Runtime.flush ()
 
 (* updates with no visual dependency — folded into the next flush *)
-let set_silent f = Signal.update (state ()) f
+let set_silent f =
+  let st = state () in
+  Signal.update st f
 
 (* reads fall back to `initial` before the first editor mounts — e.g. on
    an empty page only the title editor exists, but renderers still query

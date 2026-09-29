@@ -149,6 +149,7 @@ let content_el uuid (b : Model.block) : t =
     ]
 
 let editor_el uuid scope : t =
+ fun ctx parent ->
   let buffer =
     match S.editing () with
     | Some e when e.uuid = uuid && e.scope = scope -> e.buffer
@@ -157,21 +158,30 @@ let editor_el uuid scope : t =
   (* textarea text must track the buffer: e2e asserts
      .editor-wrapper textarea :has-text, which reads textContent *)
   let buffer_sig =
-    Signal.map
-      (fun (st : S.t) ->
-        match st.S.editing with
-        | Some e when e.uuid = uuid && e.scope = scope ->
-            Lui_protocol.StringValue e.buffer
-        | _ -> Lui_protocol.StringValue "")
-      (S.signal ())
+    (* cutoff: typed text only lives in the DOM (live_buffer reads .value on
+       commit); without dedup every unrelated S.set publish would re-emit
+       the stale buffer and overwrite in-progress typing *)
+    Signal.cutoff ( = )
+      (Signal.map
+         (fun (st : S.t) ->
+           match st.S.editing with
+           | Some e when e.uuid = uuid && e.scope = scope ->
+               Lui_protocol.StringValue e.buffer
+           | _ -> Lui_protocol.StringValue "")
+         (S.signal ()))
   in
-  dom ~key:("ew-" ^ uuid) ~style_class:"editor-wrapper flex flex-1 w-full"
+    (dom ~key:("ew-" ^ uuid) ~style_class:"editor-wrapper flex flex-1 w-full"
     ~id:("editor-edit-block-" ^ uuid)
     [ dom ~key:("ei-" ^ uuid)
         ~style_class:"editor-inner flex flex-1 block-editor"
         [ dom ~key:("ta-" ^ uuid) ~tag:"textarea"
             ~id:("edit-block-" ^ uuid)
-            ~attrs:[ ("data-testid", "block editor") ]
+            ~attrs:
+              [ ("data-testid", "block editor")
+              ; (* focus must land at mount: press-seq resolves *:focus
+                   before the 40ms pending-focus retry runs *)
+                ("autofocus", "")
+              ]
             ~text:buffer ~text_signal:buffer_sig []
         ; (* cljs mock-textarea: hidden caret mirror for popup placement *)
           dom ~key:("mt-" ^ uuid) ~style_class:"mock-text"
@@ -182,7 +192,8 @@ let editor_el uuid scope : t =
             []
         ]
     ; Asset_dom.upload_input ("up-" ^ uuid)
-    ]
+    ])
+    ctx parent
 
 (* code/calc blocks edit through a contenteditable pre.CodeMirror-line —
    no textarea (cljs parity: CodeMirror owns the surface) *)
@@ -310,7 +321,10 @@ and row_el ~editable scope (b : Model.block) : t =
   let embed = b.block_link <> None in
   let has_children = S.children_of b <> [] in
   let blank = String.trim b.block_title = "" in
-  dom ~key:("ls-" ^ key)
+  (* the reload key is scope-namespaced: the same block uuid renders in the
+     main list, sidebars, previews and embeds simultaneously, and a bare
+     ls-<uuid> key makes those distinct rows claim each other's DOM node *)
+  dom ~key:("ls-" ^ scope ^ "-" ^ key)
     ~style_class_signal:(row_class_sig uuid blank embed)
     ~attrs_signal_v:(row_attrs_sig uuid b)
     [ dom ~key:("main-" ^ key)
@@ -367,14 +381,17 @@ and children_el ~editable uuid scope (b : Model.block) : t =
 (* Read-only row for linked-reference lists: same shell as row_el but the
    content never swaps to editor_el — a block shown in .references can
    simultaneously be under edit in its own page, and a second
-   #edit-block-<uuid> textarea breaks locators. *)
+   #edit-block-<uuid> textarea breaks locators. The rfs- reload key also
+   keeps the row from claiming the live row's DOM node on reconciliation —
+   both are keyed ls-…/rfs-… on the same uuid but are distinct logical
+   nodes. *)
 and block_row_static (b : Model.block) : t =
   let uuid = Option.value b.block_uuid ~default:"" in
   let key = block_key b in
   let embed = b.block_link <> None in
   let has_children = b.block_children <> [] in
   let blank = String.trim b.block_title = "" in
-  dom ~key:("ls-" ^ key)
+  dom ~key:("rfs-" ^ key)
     ~style_class_signal:(row_class_sig uuid blank embed)
     ~attrs_signal_v:(row_attrs_sig uuid b)
     [ dom ~key:("main-" ^ key)
@@ -467,7 +484,7 @@ let page_embed (name : string) : t =
        (* embed copies render read-only — the same uuid can exist in the
           sidebar/main tree, and only that instance should own the textarea *)
        dom ~key:"embed-page" ~tag:"div" ~style_class:"embed-page"
-         (List.map (block_row ~editable:false) blocks))
+         (List.map (block_row ~scope:"embed" ~editable:false) blocks))
      (Signal.value st))
     ctx parent
 

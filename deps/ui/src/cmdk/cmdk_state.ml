@@ -554,8 +554,11 @@ let refresh st =
   let v = get st in
   incr st.gen;
   let gen = !(st.gen) in
+  (* commands/filters are local — apply them synchronously so a hanging
+     worker query (e.g. repo mid-transition) can't leave stale groups *)
+  apply_results st v.input v.move_mode v.expanded [] 0;
   match !(Runtime.current_repo) with
-  | None -> apply_results st v.input v.move_mode v.expanded [] 0
+  | None -> ()
   | Some repo ->
       ignore
         (run_search repo v.input v.move_mode

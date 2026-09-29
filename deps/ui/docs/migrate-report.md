@@ -830,16 +830,42 @@ Needs an upstream PR.
   `Rtc_ops.download` start (`Action.Rtc_state_clear`), so `on.idle` can
   only appear once the *current* graph's conn reports — this is what
   `switch-graph`'s `wait-for` actually gates on.
-- **LUI reconcile does not preserve keyed nodes across reparents**:
-  `collect_node_mapping` matches children per-parent only, so an
-  outdented block row is dropped+recreated — including the editing
-  textarea (new DOM node). Playwright `boundingBox` resolves the old
-  node and returns null → NPE instead of TimeoutError (e2e
-  `bounding-xy`). Mitigation in `outliner_ops.refresh_page`: a
-  `refresh_gen` guard drops stale in-flight refreshes (each refresh
-  refetches latest state, so skipping strictly-older results is safe) —
-  shrinks the window by coalescing the per-op `apply_and_refresh` pileup
-  during the stress seed loop.
+- **Keyed nodes now survive cross-parent reparents**: outdent/refresh
+  reparents used to drop+recreate keyed rows (LUI sibling-only key
+  matching) — including the focused editor textarea — which raced
+  Playwright `boundingBox`'s two-step resolve+measure into a null →
+  NPE. Fixed in LUI `reconcile_subtree`: a subtree-wide key index
+  adopts sibling-miss keyed children (each old node claimed once, so
+  duplicate keys across branches still create fresh nodes), with the
+  reparented child's `RemoveChild` emitted before all parent diffs.
+- **Keyed nodes inside *freshly-mounted* containers must also adopt**:
+  when a block gains children (`nc-<uuid>` ↔ `children-<uuid>` toggle)
+  or any unmapped container mounts, `collect_node_mapping` only recursed
+  into *matched* candidate children — a keyed row nested inside the new
+  container was never offered for adoption, so its live DOM row (and the
+  editing textarea inside it) was dropped and recreated on every nest
+  op. LUI now walks unmapped candidate subtrees (`rescue_subtree`) and
+  lets keyed descendants adopt their old nodes under the same
+  uniqueness/claimed/compatible guards. Row keys are also
+  scope-namespaced (`ls-<scope>-<uuid>`) so the same uuid rendered in
+  main list, sidebar, preview and embed can't claim each other's DOM.
+  `outliner_ops.refresh_page` also keeps a `refresh_gen` guard dropping
+  stale in-flight refreshes to shrink the op pileup window.
+- **Editor textarea text lives in the DOM, not the model**: typing only
+  reaches `S.editing.buffer` through the document `input` listener
+  (`sync_buffer`, silent). Two consequences: (1) `buffer_sig` needs
+  `Signal.cutoff` or every unrelated publish (e.g. `Rtc_state`
+  broadcasts during the stress test) re-emits the stale buffer and
+  wipes in-progress typing; (2) `resync_open_editor` must not clobber
+  a divergent buffer — it only writes when `buffer = base` (untouched
+  since open) and the stored title changed, tracked by the new
+  `editing.base` field.
+- **`autofocus` on the editor textarea is load-bearing**: removing it
+  broke `*:focus` press-seq flows (`rtc-extra-part2` asset test) because
+  the slash-command path types into the focused element. The textarea
+  keeps `autofocus` AND `request_focus`'s retry loop as backup. The real
+  culprit behind textarea churn was upstream in LUI reconcile — see the
+  LUI note on keyed adoption.
 - **Graphs view must not rebuild on every refresh**: cljs React
   reconciles rows in place; our wholesale `B.remove`+rebuild detached the
   remote row's span mid-click (Playwright "element not stable" → 10s

@@ -124,7 +124,7 @@ let enter_edit ?(scope = "main") uuid caret =
              |> Js.Promise.then_ (fun buffer ->
                     S.set (fun st ->
                         { st with
-                          S.editing = Some { uuid; buffer; scope }
+                          S.editing = Some { uuid; buffer; scope; base = buffer }
                         ; selected = S.String_set.empty
                         ; anchor = None
                         });
@@ -247,7 +247,7 @@ let split_at_cursor uuid =
         S.set_silent (fun st ->
             { st with
               S.editing =
-                Some { uuid = new_uuid; buffer = after; scope = e.scope } });
+                Some { uuid = new_uuid; buffer = after; scope = e.scope; base = after } });
         with_focus_after new_uuid 0 p
   | _ -> ()
 
@@ -274,7 +274,7 @@ let insert_sibling_after uuid =
       S.set_silent (fun st ->
           { st with
             S.editing =
-              Some { uuid = new_uuid; buffer = ""; scope = e.scope }
+              Some { uuid = new_uuid; buffer = ""; scope = e.scope; base = "" }
           });
       with_focus_after new_uuid 0 p
   | _ -> ()
@@ -347,6 +347,7 @@ let merge_prev uuid =
                                 { uuid = prev_uuid
                                 ; buffer = pbuf ^ buf
                                 ; scope = e.scope
+                                ; base = pbuf ^ buf
                                 }
                           });
                       with_focus_after prev_uuid
@@ -401,6 +402,7 @@ let merge_next uuid =
                                 { uuid = next_uuid
                                 ; buffer = nbuf
                                 ; scope = e.scope
+                                ; base = nbuf
                                 }
                           });
                       with_focus_after next_uuid 0
@@ -565,6 +567,18 @@ let indent_or_outdent ~indent =
             p.Model.block_uuid
         | _ -> None
       in
+      (* optimistic local reparent: the DOM moves in this task instead of
+         remounting when the async worker refresh lands (e2e boundingBox
+         races that remount). Worker refresh stays authoritative. *)
+      (match !Runtime.current_page, parent_original with
+       | Some page, None -> (
+           match
+             (if indent then Model.indent_blocks else Model.outdent_blocks)
+               page uuids
+           with
+           | Some page' -> Runtime.send (Action.Page_loaded page')
+           | None -> ())
+       | _ -> ());
       with_focus_after focus
         (String.length (live_buffer focus))
         (Ops.apply_and_refresh
@@ -613,6 +627,7 @@ let delete_selection () =
                          { uuid = pu
                          ; buffer = String.trim b.Model.block_title
                          ; scope = "main"
+                         ; base = String.trim b.Model.block_title
                          }
                    ; selected = S.String_set.empty
                    ; anchor = None
@@ -785,11 +800,14 @@ let paste_into_editor ev =
             |> Js.Promise.then_ (fun resp ->
                    (* replace-empty swaps the editing block's entity
                       in place (same uuid, new title) — resync the live
-                      textarea buffer so it doesn't mask the pasted
-                      content *)
-                   if replace_empty then Ops.resync_open_editor ();
-                   edit_last_inserted resp;
-                   Js.Promise.resolve ()))
+                      textarea buffer first, else edit_last_inserted's
+                      save_if_dirty reads the stale "" and commits it
+                      over the pasted title *)
+                   (if replace_empty then Ops.resync_open_editor ()
+                    else Js.Promise.resolve ())
+                   |> Js.Promise.then_ (fun () ->
+                          edit_last_inserted resp;
+                          Js.Promise.resolve ())))
       | None -> ())
   | _ -> ()
 
@@ -970,7 +988,7 @@ let append_block ?for_page () =
           let stage st =
             { st with
               S.editing =
-                Some { uuid = new_uuid; buffer = ""; scope = "main" }
+                Some { uuid = new_uuid; buffer = ""; scope = "main"; base = "" }
             }
           in
           (* empty page: editor state is created at the first block_row
