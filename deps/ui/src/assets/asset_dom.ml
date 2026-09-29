@@ -541,7 +541,8 @@ let measure_on_load uuid (b : Model.block) =
 
 let asset_img uuid (b : Model.block) file : t =
   let src =
-    match Hashtbl.find_opt A.url_cache file with
+    (* url_cache keys are repo|name — see Asset_store.cache_key *)
+    match Hashtbl.find_opt A.url_cache (A.cache_key (repo ()) file) with
     | Some u -> u
     | None -> ""
   in
