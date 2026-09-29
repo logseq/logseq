@@ -727,6 +727,9 @@ let goto_page repo uuid =
      page stops rendering an editor during the async load gap (e2e
      waits on .editor-visible and must not see the stale one) *)
   Editor_actions.exit_edit ~select:false;
+  (* cljs redirect-to-page! adds the page to recents — mark the nav so
+     the sidebar pushes it once the page loads *)
+  Runtime.mark_nav ();
   Runtime.invoke2 "thread-api/get-page-route-info" (Wire.String repo)
 
     (Wire.String uuid)
@@ -1015,8 +1018,13 @@ let rec run_item st it =
 and run_command st repo (cid : string) =
   let nav hash route =
     close st;
+    let target = Runtime.nav_hash hash in
+    (* setting an identical hash fires no hashchange, so resolve would
+       never run and the cleared route would stick on the empty view *)
+    let same = Platform.location_hash () = target in
     Runtime.send (Action.Navigate_to route);
-    Platform.set_location_hash (Runtime.nav_hash hash)
+    Platform.set_location_hash target;
+    if same then Router.resolve ()
   in
   let goto_journal_day day =
     match repo with
@@ -1046,8 +1054,10 @@ and run_command st repo (cid : string) =
    | None -> ());
   match cid with
   | "editor/move-blocks" ->
-      (* stay open in move-blocks mode; page-only search *)
-      set_in st (fun v -> { v with move_mode = true; input = "" });
+      (* stay open in move-blocks mode; cljs go-to-search! :nodes scopes
+         the palette to the nodes group — no recents/filters *)
+      set_in st (fun v ->
+          { v with move_mode = true; filter = Some G_nodes; input = "" });
       (match Dom_ext.doc_query_selector ".cp__cmdk-search-input" with
        | Some el -> Dom_ext.set_value el ""; Dom_ext.focus el
        | None -> ());

@@ -33,30 +33,65 @@ let sync_buffer uuid v =
    longer than the fixed delays the old version used *)
 let focus_attempts = ref 0
 
+(* replay keys queued while the textarea was remounting — the refreshed
+   model (and the new textarea) exist by the time focus lands *)
+let run_pending_focus_actions () =
+  let fs = List.rev !S.pending_focus_actions in
+  S.pending_focus_actions := [];
+  if fs <> [] then
+    Platform.console_log
+      (Printf.sprintf "[dbg] run-pending n=%d" (List.length fs));
+  List.iter (fun f -> f ()) fs
+
 let rec apply_focus () =
   match !S.pending_focus with
-  | None -> ()
+  | None -> S.pending_focus_actions := []
   | Some (uuid, caret) -> (
+      Platform.console_log
+        (Printf.sprintf "[dbg] apply-focus probe uuid=%s caret=%d found=%b"
+           uuid caret
+           (Option.is_some (D.textarea_of uuid)));
       match D.textarea_of uuid with
-      | Some el ->
-          S.pending_focus := None;
-          focus_attempts := 0;
+      | Some el -> (
           D.autosize_textarea el;
           D.el_focus el;
-          let len = String.length (D.el_value el) in
-          let c = max 0 (min caret len) in
-          D.el_set_selection_range el c c
+          (* a pending apply+refresh can still replace this node after
+             landing — only consume the pending state once the element
+             really holds focus; otherwise keep retrying so the remounted
+             editor gets it *)
+          match D.active_element with
+          | Some ae when ae == el ->
+              Platform.console_log
+                (Printf.sprintf "[dbg] pending-land uuid=%s caret=%d"
+                   uuid caret);
+              S.pending_focus := None;
+              focus_attempts := 0;
+              let len = String.length (D.el_value el) in
+              let c = max 0 (min caret len) in
+              D.el_set_selection_range el c c;
+              run_pending_focus_actions ()
+          | _ ->
+              Platform.console_log
+                (Printf.sprintf "[dbg] pending-nofocus uuid=%s" uuid);
+              retry_focus ())
       | None -> (
           (* code/calc blocks edit through pre.CodeMirror-line — no
              textarea exists on that surface *)
           match D.get_element_by_id ("editor-edit-block-" ^ uuid) with
           | Some wrap -> (
               match D.el_query wrap "pre.CodeMirror-line" with
-              | Some pre ->
-                  S.pending_focus := None;
-                  focus_attempts := 0;
-                  D.el_focus pre
-              | None -> retry_focus ())       
+              | Some pre -> (
+                  D.el_focus pre;
+                  match D.active_element with
+                  | Some ae when ae == pre ->
+                      Platform.console_log
+                        (Printf.sprintf "[dbg] pending-land uuid=%s caret=%d"
+                           uuid caret);
+                      S.pending_focus := None;
+                      focus_attempts := 0;
+                      run_pending_focus_actions ()
+                  | _ -> retry_focus ())
+              | None -> retry_focus ())
           | None -> retry_focus ()))
 
 and retry_focus () =
@@ -64,10 +99,12 @@ and retry_focus () =
   if !focus_attempts < 50 then D.set_timeout apply_focus 40
   else (
     S.pending_focus := None;
+    S.pending_focus_actions := [];
     focus_attempts := 0)
 
 let request_focus uuid caret =
   S.pending_focus := Some (uuid, caret);
+  S.pending_focus_actions := [];
   focus_attempts := 0;
   D.set_timeout apply_focus 0
 
@@ -75,7 +112,10 @@ let request_focus uuid caret =
    remounted textarea still ends up focused *)
 let with_focus_after uuid caret p =
   S.pending_focus := Some (uuid, caret);
+  S.pending_focus_actions := [];
   focus_attempts := 0;
+  Platform.console_log
+    (Printf.sprintf "[dbg] pending-set uuid=%s caret=%d" uuid caret);
   ignore
     (p
     |> Js.Promise.then_ (fun () ->
@@ -156,12 +196,19 @@ let enter_edit ?scope uuid caret =
    context commands (e.g. Add comment via cmdk) still need the block *)
 let last_edit_uuid : string option ref = ref None
 
+(* leaving edit mode cancels both a pending refocus and the editing
+   keys queued behind it *)
+let cancel_pending_focus () =
+  S.pending_focus := None;
+  S.pending_focus_actions := []
+
 let exit_edit ~select =
   if S.ready () then
     match S.editing () with
     | None -> ()
     | Some e ->
         last_edit_uuid := Some e.uuid;
+        cancel_pending_focus ();
       let buf = live_buffer e.uuid in
       (* set the override before the state change so the post-edit render
          already paints the committed text *)
@@ -182,6 +229,7 @@ let blur_commit () =
   | None -> ()
   | Some e ->
       last_edit_uuid := Some e.uuid;
+      cancel_pending_focus ();
       let buf = live_buffer e.uuid in
       if buf <> model_title e.uuid then
         S.override_title e.uuid (Ops.normalized_title e.uuid buf);
@@ -195,6 +243,7 @@ let flush_edit () =
     match S.editing () with
     | None -> ()
   | Some e ->
+      cancel_pending_focus ();
       let buf = live_buffer e.uuid in
       S.set (fun st -> { st with S.editing = None });
       if buf <> model_title e.uuid then
@@ -287,7 +336,9 @@ let split_at_cursor uuid =
                    [ Ops.op "save-block" [ a.(0); Wire.Map [] ]
                    ; Ops.insert_blocks [ a.(1) ] uuid ~sibling ])
         in
-        S.set_silent (fun st ->
+        (* S.set (not silent): the old textarea must unmount before the
+           next keypress, or keystrokes keep landing in the stale editor *)
+        S.set (fun st ->
             { st with
               S.editing =
                 Some { uuid = new_uuid; buffer = after; scope = e.scope } });
@@ -499,13 +550,16 @@ let index_of lst u =
   in
   go 0 lst
 
-(* range anchor..head (inclusive) in visible order *)
+(* range anchor..head (inclusive) in visible order; [] when either
+   endpoint isn't a visible block (e.g. a journal row's page uuid from a
+   co-mounted virt list extending on the same scroller) *)
 let range_between anchor head =
   let uuids = flat_uuids () in
   let ia = index_of uuids anchor and ih = index_of uuids head in
-  let lo, hi = (min ia ih, max ia ih) in
-  List.filter (fun u -> index_of uuids u >= lo && index_of uuids u <= hi)
-    uuids
+  if ia < 0 || ih < 0 then []
+  else
+    let lo, hi = (min ia ih, max ia ih) in
+    List.filteri (fun i _ -> i >= lo && i <= hi) uuids
 
 (* extend selection one visible step from the current head *)
 let extend_selection up =

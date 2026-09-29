@@ -30,12 +30,19 @@ let pointerup () = down := false
 
 (* virtual-scroll row appeared/disappeared while the pointer is down:
    extend the range from the anchor to the boundary block (cljs
-   highlight-selection-area! driven by virtuoso items-rendered) *)
+   highlight-selection-area! driven by virtuoso items-rendered). The
+   cljs append path conjoins — scroll-driven extension only ever grows
+   the selection, so a late/stale boundary can't regress it *)
 let extend_to uuid =
   match S.anchor () with
   | Some anchor ->
       let range = Editor_actions.range_between anchor uuid in
       if range <> [] then
         S.set (fun st ->
-            { st with S.selected = S.String_set.of_list range })
+            { st with
+              S.selected =
+                List.fold_left
+                  (fun s u -> S.String_set.add u s)
+                  st.S.selected range
+            })
   | None -> ()

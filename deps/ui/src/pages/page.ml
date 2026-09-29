@@ -1062,14 +1062,19 @@ let page_view_of_model (m : Model.t) : t =
   match m.phase, m.route with
   | Model.Ready, Model.Journals -> journals_view m m.journals
   | Model.Ready, Model.Home -> (
-      (* cljs :home renders today's journal inside the same
-         #journals > .journal-item structure as :all-journals *)
-      match m.route_page with
-      | Some p when p.page_journal_day <> None ->
-          dom ~key:"journals" ~id:"journals" ~style_class:"cp__journals h-full"
-            [ journal_item ~last:true m p ]
-      | Some p -> page_view m p
-      | None -> empty_state ())
+      (* cljs :home is the journals stream (same #journals > .journal-item
+         view as :all-journals); today's single journal is only a stand-in
+         until get-latest-journals resolves *)
+      match m.journals with
+      | _ :: _ -> journals_view m m.journals
+      | [] -> (
+          match m.route_page with
+          | Some p when p.page_journal_day <> None ->
+              dom ~key:"journals" ~id:"journals"
+                ~style_class:"cp__journals h-full"
+                [ journal_item ~last:true m p ]
+          | Some p -> page_view m p
+          | None -> empty_state ()))
   | Model.Ready, Model.Library -> (
       match m.route_page with
       | Some p -> library_view m p

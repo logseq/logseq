@@ -21,7 +21,7 @@ external get_element_by_id : string -> el option = "getElementById"
 external query_selector_all : string -> node_list = "querySelectorAll"
   [@@mel.scope "document"]
 
-external active_element : unit -> el option = "activeElement"
+external active_element : el option = "activeElement"
   [@@mel.scope "document"] [@@mel.return nullable]
 
 external document_element : el = "document.documentElement"

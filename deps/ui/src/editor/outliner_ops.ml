@@ -63,6 +63,11 @@ let uuids_list uuids = Wire.List (List.map (fun u -> Wire.Uuid u) uuids)
    single-op batches get it auto-derived from the op name) *)
 let op_opts name = Wire.Map [ kw "outliner-op" (Wire.Keyword name) ]
 
+(* cljs apply-outliner-ops generates a fresh :ui/perf-id per call; the
+   worker requires it before emitting the :db-worker/outliner-op-perf
+   console line that e2e counts per op *)
+let perf_id () = Wire.Uuid (Platform.random_uuid ())
+
 (* cljs wrap-parse-block: a leading "#"+ whitespace normalizes into
    logseq.property/heading and is stripped from block/title (skipped for
    code/math display types) *)
@@ -445,8 +450,11 @@ let resolve_block_tags (blocks : Model.block list) : Model.block list Js.Promise
                        List.map (fun (t, _, _, _) -> t) visible
                    ; block_tag_uuids =
                        List.map (fun (_, _, _, u) -> u) visible
-                   ; block_tag_idents =
-                       List.map (fun (_, i, _, _) -> i) visible
+                   ; (* block_tag_idents stays unfiltered: internal
+                        classes (Page, Comments, Query, …) drive the
+                        node icon and structural checks even though
+                        they never render as chips *)
+                     block_tag_idents = idents
                    ; block_is_comments_area =
                        List.mem "logseq.class/Comments" idents
                    ; block_is_comment =
@@ -639,6 +647,12 @@ let rec apply ?(opts = Wire.Map []) ops : unit Js.Promise.t =
       match !Runtime.current_repo with
       | None -> Js.Promise.resolve ()
       | Some repo ->
+          let opts =
+            match opts with
+            | Wire.Map kvs ->
+                Wire.Map (kvs @ [ kw "ui/perf-id" (perf_id ()) ])
+            | _ -> opts
+          in
           Runtime.invoke3 "thread-api/apply-outliner-ops" (Wire.String repo)
             (Wire.Array ops) opts
           |> Js.Promise.then_ (fun _ -> Js.Promise.resolve ())

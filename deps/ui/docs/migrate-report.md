@@ -1077,6 +1077,117 @@ search may lag).
   `v.groups` while `refresh` is in flight — the stale-input check in
   `apply_results` (`v.input <> q`) must stay.
 
+## Editor (e2e: `editor_basic_test`)
+
+- **`#/` (Home) is the journals stream, not today's page.** cljs
+  `route.cljs:go-to-journals!` routes to `:home` (or `:all-journals`
+  only when a custom home page is set), and `:home` renders the full
+  journals list. `router.ml:load_home` must call `load_journals` (and
+  install it in `reload_current_view`), and `page.ml` `page_view_of_model`
+  `Home` renders `journals_view` whenever `m.journals` is non-empty —
+  the single-journal fallback is only the not-loaded-yet state. Cmdk
+  `go/journals` resolves to `#/`+`Model.Home`; when the hash is already
+  `#/` `nav` must still call `Router.resolve ()` or the view never swaps.
+- **Vite must define `process.env.NODE_ENV` for the IIFE bundle.**
+  `@tanstack/virtual-core`'s `Virtualizer` constructor reads it
+  unconditionally; without a `define` the lib/iife output throws
+  `ReferenceError: process is not defined` at first use and the whole
+  virtualization path is dead.
+- **Virtualized scroll-driven selection is append-only.** cljs
+  `components/block.cljs` `items-rendered` calls
+  `highlight-selection-area!` with the rendered-range boundary
+  (`virtual-range-boundary-id`: last rendered row scrolling down, first
+  scrolling up) and `append?` true → `conj-selection-block!`. So
+  `Block_selection.extend_to` must UNION `range_between anchor boundary`
+  into `S.selected`, never replace it: the spacer re-measurement can
+  clamp `scrollTop` and emit publishes that look like scroll-up, and a
+  replace-semantics extend collapses the selection to the mounted window.
+  Direction comes from the `scrollTop` delta on the scroller, not from
+  the rendered start-index delta (overscan growth changes the start index
+  without any scroll).
+- **Multiple `Virt_list` instances share `#main-content-container`.**
+  Stale lists from previous views (e.g. journals) keep publishing during
+  the current page's scroll; their `key_of` yields ids that are not in
+  the flat block order. `Editor_actions.range_between` must return `[]`
+  when either endpoint index is `-1` — otherwise the clamp produces a
+  bogus 1-element range that nukes the selection.
+- **`get_selected_blocks` (sdk) reads selection state, not the DOM.**
+  cljs `state/get-selection-blocks` returns the full selected set;
+  unmounted rows under virtualization still count. `Platform.
+  selected_block_uuids` (DOM `.ls-block.selected`) is only the mounted
+  subset — `sdk_ui.get_selected_blocks` must go through
+  `Editor_actions.selected_uuids` (document order).
+- **`S.selected` is a uuid set (lexicographic, not document order).**
+  Any caller that needs document order — move-block ranges, multi-block
+  ops — must use `selected_uuids`/`range_between` over `flat_visible`,
+  or the worker's `non_consecutive` check misfires and
+  `sort_non_consecutive_blocks` silently drops blocks (e.g. the Page
+  tag block in `move-pages-to-library`).
+- **`Virt_list` overscan default is 1, not 5.** The cljs virtuoso
+  unmounts aggressively; e2e asserts rows actually unmount
+  (`journals-list-remounts-*` watches row 0 disappear). Playwright
+  "visible" = non-empty bounding box, so off-viewport-but-mounted rows
+  still count.
+- **`Virt_list` rows are nested under `.ls-virt-spacer`**, so the
+  virtual-scroll IO selector must be
+  `[data-virtuoso-scroller] [data-index]` (descendant), not `>`.
+  `Virtual_scroll.sync` has to be driven from `measure_rows` — it was
+  previously dead code.
+- **Slash-menu trigger parity** (`handler/editor.cljs`): `/` opens the
+  menu only when the last char is `/` AND (`re-find #"(?m)^/"` OR the
+  char before it is space/tab) — not mid-word.
+- **`:db-worker/outliner-op-perf` console contract:** the e2e suite
+  greps worker console lines for `:op-names`. The worker only emits
+  them when the op carries `ui/perf-id` AND the worker context has
+  `dev?` true (UI sends it from `Platform.rtc_test_mode()` =
+  `?rtc-test=true`, which all e2e URLs carry). `outliner_ops.ml` stamps
+  `ui/perf-id` on every `apply-outliner-ops` call.
+- **Comments header title is editable inline:** clicking `.ls-comments-
+  title` swaps to `.ls-comments-title-editor` (`comments_view.ml`
+  `header` wraps the label in `dyn` on `Comments.editing_sig`).
+- **OCaml pitfall — `if … then match … ; match …`** swallows the second
+  expression into the then-branch (`sidebar_state.ml` `on_doc_click` /
+  `on_doc_keydown` Escape had dead-code branches until parenthesized).
+- **Melange pitfall — DOM property reads must not be `unit ->`.**
+  `external x : unit -> t = "prop" [@@mel.scope "o"]` emits
+  `o.prop()` — a *call* — not `o.prop`. Declaring
+  `document.activeElement` that way threw `TypeError` on every call,
+  killed `apply_focus` inside its `setTimeout`, and left
+  `S.pending_focus` armed forever (next char went to a stale buffer,
+  caret stayed at end). Correct binding is a value read:
+  `external active_element : el option = "activeElement"
+  [@@mel.scope "document"] [@@mel.return nullable]`, call sites use it
+  without `()`. Same shape fixed in `popups/dom_ext.ml`.
+- **`S.set_silent` vs `S.set` for editing transitions.** `set_silent`
+  only stages the signal (`Signal.update`); `S.editing()` still returns
+  the OLD value until the next flush, so the old textarea stays mounted
+  and swallows the next keypress (chars landed in the old block:
+  `alphamiddle-omega`). `S.set` publishes synchronously — the old
+  textarea unmounts immediately. Any edit op that ends an editing
+  session (`split_at_cursor`, `insert_sibling_after`, …) must use
+  `S.set` before the next keypress can arrive.
+- **pending-focus window contract.** `with_focus_after`/`request_focus`
+  arm `S.pending_focus`; `apply_focus` must NOT consume it until
+  `document.activeElement` actually *is* the target textarea —
+  existence in the DOM is not enough (the probe ran before the real
+  focus landed, consumed pending, and the caret defaulted to 0).
+  Keypresses arriving in the window route through
+  `editor_keys.on_pending_focus_key`: printable chars patch the edit
+  buffer AND mirror into the mounted textarea (`el_set_value` +
+  `el_set_selection_range`); structural keys (Backspace/Delete/Enter/
+  Tab) queue onto `S.pending_focus_actions`, replayed by
+  `run_pending_focus_actions` once focus is verified. If the freshly
+  focused node is replaced before the next keypress (refresh/reconcile),
+  `on_keydown`'s rearm clause (`Some e, _` non-targets) re-arms
+  `pending_focus` and reschedules `apply_focus` — required because LUI
+  re-renders can swap the textarea node after focus landed.
+- **cmdk move-blocks mode is scoped to `:nodes`.** cljs opens it via
+  `go-to-search! :nodes` (filter-group `:nodes`) — only the nodes group
+  + create row render. Without `filter = Some G_nodes` the recents
+  group also matches (e.g. a just-visited page "Library"), producing
+  two `[data-testid="<title>"]` spans and a playwright strict-mode
+  violation.
+
 ## Toolchain / test-suite state
 
 - **`bb dev:lint-and-test` baseline** — clj-kondo lint is clean on the

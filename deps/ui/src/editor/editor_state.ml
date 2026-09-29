@@ -42,6 +42,11 @@ let st : t Signal.state option ref = ref None
    subtree, so the textarea must be re-focused once it exists again *)
 let pending_focus : (string * int) option ref = ref None
 
+(* editing keys that arrive while a structure op's textarea is still
+   remounting (keydown landed on <body>): queued here and replayed by
+   apply_focus once the refreshed model and DOM exist *)
+let pending_focus_actions : (unit -> unit) list ref = ref []
+
 (* structured block clipboard (titles + hierarchy), set by copy/cut *)
 let clipboard : Model.block list ref = ref []
 

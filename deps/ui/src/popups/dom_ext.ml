@@ -144,7 +144,7 @@ external offset_top : element -> float = "offsetTop" [@@mel.get]
 external offset_height : element -> float = "offsetHeight" [@@mel.get]
 external client_height : element -> float = "clientHeight" [@@mel.get]
 
-external active_element : unit -> element option = "activeElement"
+external active_element : element option = "activeElement"
   [@@mel.scope "document"] [@@mel.return nullable]
 
 external set_timeout : (unit -> unit) -> int -> unit = "setTimeout"

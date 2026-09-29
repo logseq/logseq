@@ -628,7 +628,7 @@ let open_item_menu st key = Runtime.signal_set st.open_menu ("item-" ^ key)
 let on_doc_click st ev =
   (* dropdown menus dismiss on outside interaction; the trigger controls and
      the menu content itself are excluded so their own handlers can run *)
-  if Signal.get_state st.open_menu <> "" then
+  if Signal.get_state st.open_menu <> "" then (
     match
       click_target
         ".ui__dropdown-menu-content, .toolbar-plugins-manager, .as-edit, \
@@ -636,10 +636,16 @@ let on_doc_click st ev =
         ev
     with
     | Some _ -> ()
-    | None -> close_menu st;
+    | None -> close_menu st);
   match click_target "a.page-ref" ev with
   | Some el -> (
-      match Platform.get_attribute el "data-ref" with
+      match
+        (* uuid refs ([[uuid]]/((uuid))) carry data-uuid; data-ref holds the
+           resolved title, which drifts out of sync on rename *)
+        match Platform.get_attribute el "data-uuid" with
+        | Some u -> Some u
+        | None -> Platform.get_attribute el "data-ref"
+      with
       | Some ref_ ->
           if jbool "shiftKey" ev then open_ref st ref_
           else if not (jbool "metaKey" ev || jbool "ctrlKey" ev) then
@@ -662,8 +668,8 @@ let on_doc_keydown st ev =
   | Some k -> (
       match jstring k with
       | Some "Escape" ->
-          if Signal.get_state st.open_menu <> "" then close_menu st;
-          if (!model_ref).Model.appearance <> None then
+          if Signal.get_state st.open_menu <> "" then close_menu st
+          else if (!model_ref).Model.appearance <> None then
             Runtime.send (Action.Appearance_set None)
 
       (* mod+shift+f = :page/toggle-favorite (cljs shortcut config) *)
