@@ -147,15 +147,25 @@ let tls_client_flow (flow : _ Eio.Flow.two_way) ~host : Tls_eio.t =
 let parse_url url =
   let split ~scheme s =
     let rest = String.sub s (String.length scheme) (String.length s - String.length scheme) in
+    (* authority ends at '/', '?' or '#' — a bare `host?query` URL must
+       not leak the query into the hostname; the request target still
+       carries it, rooted at '/'. *)
     let authority_end =
-      match String.index_opt rest '/' with
-      | Some i -> i
-      | None -> String.length rest
+      let cut c =
+        match String.index_opt rest c with
+        | Some i -> i
+        | None -> String.length rest
+      in
+      min (cut '/') (min (cut '?') (cut '#'))
     in
     let authority = String.sub rest 0 authority_end in
     let target =
       if authority_end < String.length rest
-      then String.sub rest authority_end (String.length rest - authority_end)
+      then
+        let tail =
+          String.sub rest authority_end (String.length rest - authority_end)
+        in
+        if rest.[authority_end] = '/' then tail else "/" ^ tail
       else "/"
     in
     let host, port =

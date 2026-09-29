@@ -81,6 +81,11 @@ let rec command_loop t (src : _ Eio.Flow.source) =
        | true -> ()
        | false -> command_loop t src)
 
+(* A server that accepts TCP but never completes the WS handshake would
+   otherwise leave [connect] pending forever — bound the whole setup
+   (DNS/TCP/TLS/handshake) so sync can schedule a reconnect. *)
+let connect_timeout_s = 30.
+
 let connect ~url ~on_event =
   let task, resolver = Db_worker_effect.wait () in
   let pipe_r, pipe_w = Unix.pipe ~cloexec:true () in
@@ -109,10 +114,18 @@ let connect ~url ~on_event =
       on_event (Close (code, ""))
     end
   in
+  let setup_failure = ref None in
   let run () =
     try
       Eio_posix.run (fun env ->
         Eio.Switch.run (fun sw ->
+          let clock = Eio.Stdenv.clock env in
+          Eio.Fiber.fork ~sw (fun () ->
+            Eio.Time.sleep clock connect_timeout_s;
+            if not !resolved then begin
+              setup_failure := Some "websocket: connect timed out";
+              Eio.Switch.fail sw (Failure "websocket: connect timed out")
+            end);
           let host, target, flow = Net_eio.connect_flow ~env ~sw url in
           Lazy.force Net_eio.rng_init;
           let nonce = Mirage_crypto_rng.generate 16 in
@@ -195,12 +208,17 @@ let connect ~url ~on_event =
     | exn ->
         finish ws;
         (try Unix.close pipe_r with _ -> ());
-        if !resolved then begin
-          on_event (Error (Printexc.to_string exn));
-          emit_close 1006
-        end else (
-          resolved := true;
-          Db_worker_effect.reject resolver exn)
+        (match !setup_failure with
+         | Some msg when not !resolved ->
+             resolved := true;
+             Db_worker_effect.reject resolver (Failure msg)
+         | _ ->
+             if !resolved then begin
+               on_event (Error (Printexc.to_string exn));
+               emit_close 1006
+             end else (
+               resolved := true;
+               Db_worker_effect.reject resolver exn))
   in
   ignore (Thread.create (fun () -> run ()) ());
   task

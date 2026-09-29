@@ -84,8 +84,15 @@ let all tasks_list =
   let result, resolver = wait () in
   let pending = ref (Rrbvec.length tasks) in
   let values = Array.make (Rrbvec.length tasks) None in
+  (* [on_state] callbacks fire on whichever thread resolves each task, so
+     the shared countdown must be serialized — a lost decrement would
+     leave the aggregate pending forever. *)
+  let count_mutex = Mutex.create () in
   let finish_if_ready () =
-    if !pending = 0 && is_pending result then
+    Mutex.lock count_mutex;
+    let ready = !pending = 0 in
+    Mutex.unlock count_mutex;
+    if ready && is_pending result then
       wakeup resolver (Array.map Option.get values |> Array.to_list)
   in
   Rrbvec.iteri
@@ -93,8 +100,10 @@ let all tasks_list =
        on_state task (function
          | Pending -> ()
          | Resolved value ->
+             Mutex.lock count_mutex;
              values.(index) <- Some value;
              decr pending;
+             Mutex.unlock count_mutex;
              finish_if_ready ()
          | Rejected exn -> if is_pending result then reject resolver exn))
     tasks;
