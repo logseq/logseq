@@ -4,7 +4,7 @@
 open Lui_elements
 open Logseq_dom
 
-let t_ (s : string) = s
+let t_ = I18n.t
 let icon name = Icons.icon name
 
 let opt_row st i label =
@@ -20,7 +20,7 @@ let opts_box st =
       if not opts_open then dom ~key:"opts-closed" []
       else
         let options =
-          opt_row st (-1) (t_ "All cards")
+          opt_row st (-1) (t_ "flashcard/all-cards")
           :: List.mapi
                (fun i d -> opt_row st i d.Cards_state.deck_label)
                decks
@@ -43,7 +43,7 @@ let selector_row st =
         ~style_class:"!px-2 !py-0 !h-8 w-64 relative"
         [ opts_box st ]
     ; dom ~key:"add" ~tag:"button" ~id:"ls-cards-add"
-        ~attrs:[ ("title", t_ "Add cards query") ]
+        ~attrs:[ ("title", t_ "flashcard/add-cards-query-tooltip") ]
         ~style_class:"!px-1 text-muted-foreground"
         ~events:"click"
         ~on_dom_event:(fun name _ ->
@@ -104,10 +104,10 @@ let rating_buttons st =
   dom ~key:"ratings" ~style_class:"flex justify-center"
     [ dom ~key:"row"
         ~style_class:"flex flex-row items-center gap-8 flex-wrap"
-        [ rating_btn st "again" "Again"
-        ; rating_btn st "hard" "Hard"
-        ; rating_btn st "good" "Good"
-        ; rating_btn st "easy" "Easy"
+        [ rating_btn st "again" (t_ "flashcard.rating/again")
+        ; rating_btn st "hard" (t_ "flashcard.rating/hard")
+        ; rating_btn st "good" (t_ "flashcard.rating/good")
+        ; rating_btn st "easy" (t_ "flashcard.rating/easy")
         ]
     ]
 
@@ -129,9 +129,9 @@ let card_view st _pos phase title =
                  if n = "click" then advance_phase st cloze)
                [ text ~key:"t"
                    ~value:
-                     (if np = "show-answer" then t_ "Show answers"
-                      else if np = "show-cloze" then t_ "Show clozes"
-                      else t_ "Hide answers")
+                     (if np = "show-answer" then t_ "flashcard.review/show-answers"
+                      else if np = "show-cloze" then t_ "flashcard.review/show-clozes"
+                      else t_ "flashcard.review/hide-answers")
                  [] ]
            else rating_buttons st)
         ]
@@ -147,9 +147,7 @@ let cards_body st =
             [ dom ~key:"h" ~tag:"h2" ~style_class:"font-medium"
                 [ text ~key:"t"
                     ~value:
-                      (t_
-                         "Congrats, you've reviewed all the cards for \
-                          this query, see you next time!")
+                      (t_ "flashcard.review/finished")
                     [] ] ]
       | Some title ->
           dom ~key:"cards" ~style_class:"flex flex-col flex-1 min-h-0"

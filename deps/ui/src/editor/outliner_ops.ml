@@ -747,7 +747,7 @@ let rec apply ?(opts = Wire.Map []) ops : unit Js.Promise.t =
                             | _ -> "?")
                           ops)
                    , e );
-                 Toast.error "Failed to save changes";
+                 Toast.error (I18n.t "ui/save-changes-error");
                  Js.Promise.resolve ()))
 
 let apply_and_refresh ?opts ops =
@@ -989,7 +989,7 @@ let undo () =
       |> Js.Promise.then_ (fun () -> resync_open_editor ~force:true ())
       |> Js.Promise.catch (fun e ->
              Platform.console_error ("undo failed", e);
-             Toast.error "Undo failed";
+             Toast.error (I18n.t "editor/undo-error");
              Js.Promise.resolve ())
   | None -> Js.Promise.resolve ()
 
@@ -1002,7 +1002,7 @@ let redo () =
       |> Js.Promise.then_ (fun () -> resync_open_editor ~force:true ())
       |> Js.Promise.catch (fun e ->
              Platform.console_error ("redo failed", e);
-             Toast.error "Redo failed";
+             Toast.error (I18n.t "editor/redo-error");
              Js.Promise.resolve ())
   | None -> Js.Promise.resolve ()
 

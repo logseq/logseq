@@ -27,7 +27,6 @@ type t =
   }
 
 let st_ref : t option ref = ref None
-let t_ (s : string) = s
 
 let repo = Runtime.repo
 

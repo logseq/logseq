@@ -363,9 +363,10 @@ let slash_items ~has_heading : ac_item list =  List.concat
         ; "editor.slash/cloze", "brackets-contain", Desc_none, Emit ("{{cloze }}", 2) ]    ]
 ;;
 
-(* cljs editor.cljs keeps a fallback item for slash — literal there too *)
+(* cljs editor.cljs keeps a fallback item for slash *)
 let slash_fallback =
-  mk_item ~key:"no-matched" ~label:"No matched commands" Noop
+  mk_item ~key:"no-matched"
+    ~label:(U.t "editor.slash/no-matched-commands") Noop
 ;;
 
 (* ---- filtering ---- *)
