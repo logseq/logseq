@@ -295,6 +295,12 @@ let strip_db_prefix repo =
     String.sub repo n (String.length repo - n)
   else repo
 
+(* cljs config/dev? = dev-release? || goog.DEBUG — true in every build
+   we ship (the vite bundle has no separate release config). Injected via
+   vite `define`; guarded so the node test runner (no define) is safe. *)
+let dev_build : bool =
+  [%mel.raw "typeof logseq_dev !== 'undefined' && logseq_dev"]
+
 (* dispatch a DOM CustomEvent on document — cross-area comms *)
 external custom_event : string -> Js.Json.t -> Js.Json.t = "CustomEvent"
   [@@mel.new]
