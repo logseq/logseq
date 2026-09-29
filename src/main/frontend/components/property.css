@@ -677,3 +677,7 @@ a.control-link {
     }
   }
 }
+
+.property-select .item-results-wrap #ui__ac-inner {
+  max-height: 240px;
+}

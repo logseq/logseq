@@ -87,3 +87,24 @@
   (testing "nil input returns nil; non-string input returns nil"
     (is (nil? (fuzzy/hanzi->initials nil)))
     (is (nil? (fuzzy/hanzi->initials 42)))))
+
+(deftest fuzzy-search-blank-query-returns-prefix
+  (testing "empty input skips scoring and keeps original order"
+    (let [data (mapv str (range 50))]
+      (is (= (mapv str (range 20))
+             (fuzzy/fuzzy-search data "" :limit 20)))
+      (is (= (mapv str (range 5))
+             (fuzzy/fuzzy-search data "   " :limit 5))))))
+
+(deftest fuzzy-search-large-list-prefilters-then-ranks
+  (testing "a large list still finds a later exact title without scoring every item as the only path"
+    (let [data (into (mapv #(str "page-" %) (range 400))
+                     ["watched"])
+          result (fuzzy/fuzzy-search data "watched" :limit 5)]
+      (is (vector? result))
+      (is (= ["watched"] result))))
+  (testing "sequential characters still match after the cheap prefilter"
+    (let [data (into (mapv #(str "page-" %) (range 400))
+                     ["watched"])]
+      (is (= ["watched"]
+             (fuzzy/fuzzy-search data "wchd" :limit 5))))))

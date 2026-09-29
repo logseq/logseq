@@ -44,11 +44,29 @@
        row]
       row)))
 
+(def default-input-debounce-ms
+  "Delay before `*input` (the query used by fuzzy-search) and `on-input`
+  update. The visible field updates immediately; scoring waits this long
+  after the last keystroke."
+  200)
+
+(defn- clear-search-input!
+  "Clear the fuzzy-search query and bump `*clear-epoch` so `search-input`
+  drops local state immediately. A debounced empty-sync is not enough:
+  choosing an item can reuse the same select with a new list while a
+  pending keystroke still writes the previous query into `*input`."
+  [*input *clear-epoch]
+  (reset! *input "")
+  (swap! *clear-epoch inc))
+
 (hsx/defc search-input
-  [*input {:keys [prompt-key input-default-placeholder input-opts on-input]}]
+  [*input {:keys [prompt-key input-default-placeholder input-opts on-input input-debounce-ms *clear-epoch]}]
   (let [[input set-input!] (hooks/use-state @*input)
+        [external-input] (hooks/use-atom *input)
+        [clear-epoch] (hooks/use-atom *clear-epoch)
         *input-el (hooks/use-ref nil)
-        auto-focus? (not (util/mobile?))]
+        auto-focus? (not (util/mobile?))
+        debounce-ms (or input-debounce-ms default-input-debounce-ms)]
     (hooks/use-effect!
      (fn []
        (when auto-focus?
@@ -60,13 +78,13 @@
      (fn []
        (reset! *input input)
        (when (fn? on-input) (on-input input)))
-     [(hooks/use-debounced-value input 100)])
+     [(hooks/use-debounced-value input debounce-ms)])
 
     (hooks/use-effect!
      (fn []
-       (when (= "" @*input)
+       (when (= "" external-input)
          (set-input! "")))
-     [(hooks/use-debounced-value @*input 100)])
+     [external-input clear-epoch])
 
     (hooks/use-effect!
      (fn []
@@ -111,7 +129,7 @@
            multiple-choices? on-apply new-case-sensitive?
            dropdown? show-new-when-not-exact-match? exact-match-exclude-items
            input-container initial-open? loading?
-           clear-input-on-chosen?]
+           clear-input-on-chosen? input-debounce-ms virtualize?]
     :or {limit 100
          prompt-key :select/default-prompt
          empty-placeholder (fn [_t] [:div])
@@ -124,6 +142,7 @@
     :as opts}]
   (shortcut/use-disable-all-shortcuts!)
   (let [*input (hooks/use-memo #(atom "") [])
+        *clear-epoch (hooks/use-memo #(atom 0) [])
         *toggle (hooks/use-memo #(atom nil) [])
         *selected-choices (hooks/use-memo #(atom (set (:selected-choices opts))) [])
         [input] (hooks/use-atom *input)
@@ -187,7 +206,7 @@
         choose-result! (fn [raw-chosen e]
                          (util/stop-propagation e)
                          (when clear-input-on-chosen?
-                           (reset! *input ""))
+                           (clear-search-input! *input *clear-epoch))
                          (let [chosen (extract-chosen-fn raw-chosen)]
                            (if multiple-choices?
                              (if (selected-choices chosen)
@@ -209,6 +228,8 @@
                                        {:prompt-key prompt-key
                                         :input-default-placeholder input-default-placeholder
                                         :input-opts input-opts*
+                                        :input-debounce-ms input-debounce-ms
+                                        :*clear-epoch *clear-epoch
                                         :on-input on-input}))
         results-container-f (fn []
                               (if loading?
@@ -220,6 +241,7 @@
                                   (ui/auto-complete
                                    search-result
                                    {:grouped? grouped?
+                                    :virtualize? virtualize?
                                     :item-render       (or item-cp (fn [result chosen?]
                                                                      (render-item result chosen? multiple-choices? *selected-choices)))
                                     :class             "cp__select-results"

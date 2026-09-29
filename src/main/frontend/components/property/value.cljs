@@ -31,7 +31,6 @@
             [frontend.util.cursor :as cursor]
             [frontend.util.entity :as entity]
             [frontend.util.page :as page-util]
-            [goog.functions :refer [debounce]]
             [lambdaisland.glogi :as log]
             [logseq.common.config :as common-config]
             [logseq.common.util.macro :as macro-util]
@@ -1435,7 +1434,7 @@
                  :extract-chosen-fn :value
                  :extract-fn (fn [x] (or (:label-value x) (:label x)))
                  :input-opts input-opts
-                 :on-input (debounce on-input 50)
+                 :on-input on-input
                  :on-chosen (fn [chosen selected?]
                               (p/let [add-tag-property? (and (= (:db/ident property) :logseq.property.class/properties) (not (integer? chosen)))
                                       id (if (integer? chosen)

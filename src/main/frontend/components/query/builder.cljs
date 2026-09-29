@@ -348,8 +348,9 @@
     [:div.query-builder-picker
      (if mode
        (when-not (operator? mode)
-         (db-based-query-filter-picker *mode *property *private-property? *tree loc clause opts))
-       [:div
+         [:div {:key (str "filter-" mode)}
+          (db-based-query-filter-picker *mode *property *private-property? *tree loc clause opts)])
+       [:div {:key "filter-type"}
         (select
          select-items
          (fn [{:keys [value]}]
