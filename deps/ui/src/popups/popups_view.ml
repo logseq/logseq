@@ -18,44 +18,205 @@ let attrs_v pairs = sv (Logseq_dom.attrs_json pairs)
 
 (* -- autocomplete item ----------------------------------------------- *)
 
-(* cljs item-render: div[title] > (icon+strong.font-normal | bare text) *)
-let ac_label_el (it : S.ac_item) : t =
+(* cljs svg/help-circle used inside the Query item's doc tooltip *)
+let help_circle_svg : t =
+  Logseq_dom.dom ~key:"hc" ~tag:"svg"
+    ~attrs:
+      [ ("width", "16"); ("height", "16"); ("viewBox", "0 0 24 24")
+      ; ("stroke-width", "2"); ("stroke", "currentColor"); ("fill", "none")
+      ; ("stroke-linecap", "round"); ("stroke-linejoin", "round")
+      ; ("class", "icon") ]
+    [ Logseq_dom.dom ~key:"p0" ~tag:"path"
+        ~attrs:[ ("stroke", "none"); ("d", "M0 0h24v24H0z")
+               ; ("fill", "none") ] []
+    ; Logseq_dom.dom ~key:"c" ~tag:"circle"
+        ~attrs:[ ("cx", "12"); ("cy", "12"); ("r", "9") ] []
+    ; Logseq_dom.dom ~key:"l" ~tag:"line"
+        ~attrs:[ ("x1", "12"); ("y1", "17"); ("x2", "12"); ("y2", "17.01") ]
+        []
+    ; Logseq_dom.dom ~key:"p1" ~tag:"path"
+        ~attrs:[ ("d", "M12 13.5a1.5 1.5 0 0 1 1 -1.5a2.6 2.6 0 1 0 -3 -4") ]
+        [] ]
+;;
+
+(* cljs search-handler/highlight-exact-query: a whole-word hit is
+   wrapped in mark{padding:0;border-radius:0} inside a span *)
+let mark_el ~key s =
+  Logseq_dom.dom ~key ~tag:"mark"
+    ~attrs:[ ("style", "padding: 0; border-radius: 0") ]
+    ~text:s []
+;;
+
+let text_span ~key s = Logseq_dom.dom ~key ~tag:"span" ~text:s [];;
+
+let index_ci hay needle =
+  let n = String.length needle and h = String.length hay in
+  let needle' = String.lowercase_ascii needle in
+  let rec go i =
+    if n = 0 || i + n > h then None
+    else if String.lowercase_ascii (String.sub hay i n) = needle' then
+      Some i
+    else go (i + 1)
+  in
+  go 0
+;;
+
+(* cljs hiccup renders plain strings as bare DOM text nodes; LUI mounts
+   only elements, so a <raw-text> placeholder marks the exact position
+   and the MutationObserver in Editor_dom swaps it for a text node *)
+let bare_text (s : string) : t =
+ fun context parent ->
+  Editor_dom.ensure_raw_text_observer ();
+  Logseq_dom.dom ~tag:"raw-text" ~attrs:[ ("data-raw-text", s) ] []
+    context parent
+;;
+
+let highlight_el ~key ~query label : t =
+  if label = "" || query = "" then bare_text label
+  else if String.contains query ' ' then (
+    let words =
+      List.filter (fun w -> w <> "") (String.split_on_char ' ' query)
+    in
+    let rec loop i words rest acc =
+      match words with
+      | [] -> List.rev (text_span ~key:("r" ^ string_of_int i) rest :: acc)
+      | w :: ws -> (
+          match index_ci rest w with
+          | Some j ->
+              let hit_len = String.length w in
+              let rest' =
+                String.sub rest (j + hit_len)
+                  (String.length rest - j - hit_len)
+              in
+              loop (i + 2) ws rest'
+                (mark_el ~key:("m" ^ string_of_int (i + 1))
+                   (String.sub rest j hit_len)
+                 :: text_span ~key:("b" ^ string_of_int i)
+                      (String.sub rest 0 j)
+                 :: acc)
+          | None -> List.rev (text_span ~key:"x" rest :: acc))
+    in
+    Logseq_dom.dom ~key ~tag:"span" ~style_class:"m-0" (loop 0 words label []))
+  else
+    match index_ci label query with
+    | Some i ->
+        let before = String.sub label 0 i in
+        let hit = String.sub label i (String.length query) in
+        let after =
+          String.sub label (i + String.length query)
+            (String.length label - i - String.length query)
+        in
+        Logseq_dom.dom ~key ~tag:"span"
+          ((if before = "" then [] else [ text_span ~key:"b" before ])
+          @ [ mark_el ~key:"m" hit ]
+          @ if after = "" then [] else [ text_span ~key:"a" after ])
+    (* cljs falls through to the multi-word branch on no match, so the
+       label lands in a span inside a span.m-0 wrapper *)
+    | None ->
+        Logseq_dom.dom ~key ~tag:"span" ~style_class:"m-0"
+          [ text_span ~key:"x" label ]
+;;
+
+(* cljs block-title-with-icon: an entity icon wraps the (highlighted)
+   title in a gap-1 row; the icon renders at size 14 like ui/icon.
+   New-tag/new-page rows render the raw title (cljs skips highlight
+   for the New-* prefix) *)
+let node_title_el ~key ~query (it : S.ac_item) : t =
+  let hl =
+    if String.length it.S.ai_key >= 4
+       && String.sub it.S.ai_key 0 4 = "new:"
+    then bare_text it.S.ai_label
+    else highlight_el ~key:"hl" ~query it.S.ai_label
+  in
+  match it.S.ai_title_icon with
+  | Some ic ->
+      Logseq_dom.dom ~key ~style_class:"flex flex-row items-center gap-1"
+        [ Icons.icon ~size:14. ic; hl ]
+  | None -> hl
+;;
+
+(* cljs node-render icon slot: the h-5 wrap is always present for
+   non-db-tag popups, empty when the node has no icon *)
+let node_icon_slot ~key (it : S.ac_item) : t =
+  Logseq_dom.dom ~key ~style_class:"flex items-center h-5 mr-1 opacity-50"
+    (match it.S.ai_node_icon with
+     | Some (icn, true) ->
+         [ Logseq_dom.dom ~key:"cp"
+             ~style_class:"icon-cp-container flex items-center"
+             ~attrs:[ ("style", "color: inherit") ]
+             [ Icons.icon ~size:14. icn ] ]
+     | Some (icn, false) -> [ Icons.icon ~size:14. icn ]
+     | None -> [])
+;;
+
+(* cljs node-render: div.flex.flex-col > [.text-xs.opacity-70.mb-1
+   breadcrumb] + div.flex.flex-row.items-start > [icon-slot] + title *)
+let ac_node_label_el (v : S.view) (it : S.ac_item) : t =
+  let db_tag =
+    match v.S.ac with
+    | Some a -> a.S.kind = S.Tag_search
+    | None -> false
+  in
+  let query =
+    match v.S.ac with
+    | Some a -> a.S.query
+    | None -> ""
+  in
+  Logseq_dom.dom ~key:"node" ~style_class:"flex flex-col"
+    ((match it.S.ai_breadcrumb with
+      | Some bc ->
+          [ Logseq_dom.dom ~key:"bc"
+              ~style_class:"text-xs opacity-70 mb-1"
+              ~attrs:[ ("style", "margin-left: 3px") ]
+              ~text:bc [] ]
+      | None -> [])
+    @ [ Logseq_dom.dom ~key:"row"
+          ~style_class:"flex flex-row items-start"
+          ((if db_tag then [] else [ node_icon_slot ~key:"ic" it ])
+          @ [ node_title_el ~key:"ti" ~query it ]) ])
+;;
+
+(* cljs item-render: div[title?|has-help] > (icon+strong.font-normal |
+   bare text) [+ small>help-circle tooltip trigger] *)
+let ac_label_el (v : S.view) (it : S.ac_item) : t =
+  if it.S.ai_node then ac_node_label_el v it
+  else
   let txt =
     match it.S.ai_info with
     | Some info -> it.S.ai_label ^ " — " ^ info
     | None -> it.S.ai_label
   in
-  let inner =
-    match it.S.ai_icon with
-    | Some ic ->
-        Logseq_dom.dom ~key:"ic" ~tag:"span"
-          ~style_class:"flex items-center gap-1"
-          [ Icons.icon ic
-          ; Logseq_dom.dom ~key:"s" ~tag:"strong" ~style_class:"font-normal"
-              ~text:txt [] ]
-    | None -> Logseq_dom.dom ~key:"s" ~tag:"span" ~text:txt []
-  in
-  Logseq_dom.dom ~key:"lbl" ~tag:"div" [ inner ]
+  Logseq_dom.dom ~key:"lbl" ~tag:"div"
+    ~style_class:(if it.S.ai_help then "has-help" else "")
+    (* no-icon commands render the label as a raw text node *)
+    ~text:(match it.S.ai_icon with None -> txt | Some _ -> "")
+    ~attrs:
+      (match it.S.ai_title with
+       | Some t -> [ ("title", t) ]
+       | None -> [])
+    ((match it.S.ai_icon with
+      | Some ic ->
+          [ Logseq_dom.dom ~key:"ic" ~tag:"span"
+              ~style_class:"flex items-center gap-1"
+              [ Icons.icon ic
+              ; Logseq_dom.dom ~key:"s" ~tag:"strong"
+                  ~style_class:"font-normal" ~text:txt [] ] ]
+      | None -> [])
+    @ if it.S.ai_help then
+        [ Logseq_dom.dom ~key:"help" ~tag:"small"
+            ~attrs:[ ("data-base-ui-tooltip-trigger", "") ]
+            [ help_circle_svg ] ]
+      else [])
 ;;
 
-let ac_item_el (st : S.t) (item_sig : S.ac_item Signal.signal) : t =
+let ac_item_el ~key (st : S.t) (item_sig : S.ac_item Signal.signal) : t =
   let pair =
     Signal.map2
       (fun (it : S.ac_item) (v : S.view) -> (it, v))
       item_sig st.S.vs.Signal.state_signal
   in
-  box ~key:"ac-item"
-    [ dyn
-        ~equal:(fun (a : S.ac_item) b -> a.S.ai_hdr = b.S.ai_hdr)
-        (fun it ->
-          match it.S.ai_hdr with
-          | None -> box ~key:"no-hdr" []
-          | Some h ->
-              Logseq_dom.dom ~key:"ghdr"
-                ~style_class:"ui__ac-group-name" ~text:h [])
-        item_sig
-    ; Logseq_dom.dom ~key:"wrap" ~style_class:"menu-link-wrap"
-        [ Logseq_dom.dom ~key:"lnk" ~tag:"a"
+  Logseq_dom.dom ~key ~style_class:"menu-link-wrap"
+    [ Logseq_dom.dom ~key:"lnk" ~tag:"a"
             ~style_class_signal:
               (Signal.map
                  (fun (it, v) ->
@@ -77,13 +238,25 @@ let ac_item_el (st : S.t) (item_sig : S.ac_item Signal.signal) : t =
                  pair)
             [ Logseq_dom.dom ~key:"flex1" ~tag:"span" ~style_class:"flex-1"
                 [ dyn
-                    ~equal:(fun (a : S.ac_item) b ->
-                      a.S.ai_label = b.S.ai_label && a.S.ai_info = b.S.ai_info
-                      && a.S.ai_icon = b.S.ai_icon)
-                    (fun it -> ac_label_el it)
-                    item_sig
+                    ~equal:(fun (a : S.ac_item * S.view) (b : S.ac_item * S.view) ->
+                      let ai, av = a and bi, bv = b in
+                      ai.S.ai_label = bi.S.ai_label
+                      && ai.S.ai_info = bi.S.ai_info
+                      && ai.S.ai_title = bi.S.ai_title
+                      && ai.S.ai_help = bi.S.ai_help
+                      && ai.S.ai_icon = bi.S.ai_icon
+                      && ai.S.ai_node = bi.S.ai_node
+                      && ai.S.ai_node_icon = bi.S.ai_node_icon
+                      && ai.S.ai_title_icon = bi.S.ai_title_icon
+                      && ai.S.ai_breadcrumb = bi.S.ai_breadcrumb
+                      && (match av.S.ac, bv.S.ac with
+                          | Some x, Some y ->
+                              x.S.kind = y.S.kind && x.S.query = y.S.query
+                          | None, None -> true
+                          | _ -> false))
+                    (fun (it, v) -> ac_label_el v it)
+                    pair
                 ]
-            ]
         ]
     ]
 ;;
@@ -100,31 +273,127 @@ let ac_empty_placeholder (v : S.view) : t =
     ~style_class:"text-gray-500 text-sm px-4 py-2" ~text []
 ;;
 
+(* cljs ui/auto-complete groups slash items by :group — each group is a
+   bare <div> wrapping its .ui__ac-group-name header plus all its items;
+   a leading group-less run (and non-grouped popups) stay unwrapped *)
+type ac_group = {
+  g_key : string;
+  g_hdr : string option;
+  g_items : S.ac_item list;
+}
+
+let ac_groups items =
+  let flush acc hdr xs =
+    if xs = [] then acc else (hdr, List.rev xs) :: acc
+  in
+  let rec go acc hdr xs items =
+    match items with
+    | [] -> List.rev (flush acc hdr xs)
+    | it :: rest -> (
+        match it.S.ai_hdr with
+        | Some _ -> go (flush acc hdr xs) it.S.ai_hdr [ it ] rest
+        | None -> go acc hdr (it :: xs) rest)
+  in
+  List.map
+    (fun (hdr, xs) ->
+      { g_key = (match hdr with Some h -> "g:" ^ h | None -> "g:lead")
+      ; g_hdr = hdr
+      ; g_items = xs })
+    (go [] None [] items)
+;;
+
+
+(* Every rendered field of an item feeds the group key, so a content
+   change remounts the whole group (rows stay static; chosen/highlight
+   still update live through the per-item view signals). Nested keyed
+   inside a keyed mount raced the DOM batch ("unknown DOM node"). *)
+let ac_item_fp (it : S.ac_item) =
+  let o = Option.value ~default:"-" in
+  Printf.sprintf "%s|%s|%d|%b|%b|%s|%s|%s|%s" it.S.ai_key it.S.ai_label
+    it.S.ai_idx it.S.ai_help it.S.ai_node
+    (o it.S.ai_icon) (o it.S.ai_title) (o it.S.ai_breadcrumb)
+    (o it.S.ai_info)
+
+let ac_item_static (st : S.t) (it : S.ac_item) : t =
+ fun context parent ->
+  let item_sig = Signal.constant context.Lui_ui.ui_scheduler it in
+  ac_item_el ~key:("ai-" ^ it.S.ai_key) st item_sig context parent
+
+(* cljs mounts ungrouped items directly under #ui__ac-inner and wraps a
+   headed group (header + items) in one bare <div>; keyed units mirror
+   that — one keyed node per bare item or per group *)
+type ac_unit =
+  | AItem of S.ac_item
+  | AGroup of ac_group
+
 let ac_inner (st : S.t) : t =
-  (* the empty state is a sentinel keyed item: a dyn sibling of keyed would
-     crash the DOM batch ("unknown DOM node"), so it lives inside the list *)
-  let items_sig =
+  (* the empty state is a sentinel keyed item *)
+  let units_sig =
     Signal.map
       (fun (v : S.view) ->
         match v.S.ac with
-        | Some a -> (match a.S.items with [] -> [ S.empty_item ] | xs -> xs)
+        | Some a -> (
+            match a.S.items with
+            | [] -> [ AItem S.empty_item ]
+            | xs ->
+                List.concat_map
+                  (fun g ->
+                    match g.g_hdr with
+                    | Some _ -> [ AGroup g ]
+                    | None -> List.map (fun it -> AItem it) g.g_items)
+                  (ac_groups xs))
         | None -> [])
       st.S.vs.Signal.state_signal
   in
+  let unit_key u =
+    match u with
+    | AItem it -> "i:" ^ ac_item_fp it
+    | AGroup g ->
+        "g:" ^ g.g_key ^ "|"
+        ^ String.concat "," (List.map ac_item_fp g.g_items)
+  in
+  let row (it : S.ac_item) =
+    if it.S.ai_key = S.empty_key then ac_empty_placeholder (S.get st)
+    else ac_item_static st it
+  in
   Logseq_dom.dom ~key:"ac-inner" ~id:"ui__ac-inner"
     ~style_class:"hide-scrollbar"
-    [ keyed ~source:items_sig ~key:(fun (it : S.ac_item) -> it.S.ai_key)
-        ~cmp:Stdlib.compare
-        ~mount:(fun item_sig ->
-          box ~key:"ac-row"
-            [ dyn
-                ~equal:(fun (a : S.ac_item) b ->
-                  (a.S.ai_key = S.empty_key) = (b.S.ai_key = S.empty_key))
-                (fun it ->
-                  if it.S.ai_key = S.empty_key then
-                    ac_empty_placeholder (S.get st)
-                  else ac_item_el st item_sig)
-                item_sig ]) ]
+    [ keyed ~source:units_sig ~key:unit_key ~cmp:Stdlib.compare
+        ~mount:(fun u_sig ->
+          (* the key fingerprints the unit fully, so sampling once is
+             stable *)
+          match Signal.sample u_sig with
+          | AItem it -> row it
+          | AGroup g ->
+              Logseq_dom.dom ~key:("grp" ^ g.g_key)
+                (Logseq_dom.dom ~key:"ghdr"
+                   ~style_class:"ui__ac-group-name"
+                   ~text:(Option.value ~default:"" g.g_hdr)
+                   []
+                 :: List.map row g.g_items)) ]
+;;
+
+(* cljs shui composed-popup merges popup-transition-class + the focus
+   ring classes onto every PopoverContent *)
+let popover_transition_classes =
+  "animate-in fade-in-0 zoom-in-95 \
+   data-[side=bottom]:slide-in-from-top-2 \
+   data-[side=left]:slide-in-from-right-2 \
+   data-[side=right]:slide-in-from-left-2 \
+   data-[side=top]:slide-in-from-bottom-2 \
+   outline-none focus:outline-none focus-visible:outline-none"
+;;
+
+(* cljs popup-normal-style: type metrics + scroll bounds; the cljs
+   positioner sets --available-height on a wrapper — LUI positions the
+   popup itself so the var is bound inline *)
+let popover_style ~x ~y =
+  Printf.sprintf
+    "position: fixed; left: %.0fpx; top: %.0fpx; z-index: 99999; \
+     font-size: 1rem; line-height: 1.5; max-height: var(--available-height); \
+     overflow: hidden auto; \
+     --ls-page-title-size: 1rem; --available-height: calc(100vh - %.0fpx)"
+    x y (y +. 8.)
 ;;
 
 let ac_popover (st : S.t) : t =
@@ -132,22 +401,26 @@ let ac_popover (st : S.t) : t =
      derived signal bound under that scope, so an eagerly-created map would
      throw "cannot observe a disposed signal" on the next mount *)
  fun context parent ->
-  (* cljs PopoverContent: ui__popover-content + card classes *)
+  (* cljs PopoverContent: ui__popover-content + card + transition classes *)
   (Logseq_dom.dom ~key:"ac-pop"
     ~style_class:
-      "ui__popover-content z-50 rounded-md border bg-popover \
-       text-popover-foreground shadow-md outline-none"
+      ("ui__popover-content z-50 rounded-md border bg-popover \
+        text-popover-foreground shadow-md outline-none "
+      ^ popover_transition_classes)
     ~attrs_signal_v:
       (Signal.map
          (fun (v : S.view) ->
            match v.S.ac with
            | Some a ->
                attrs_v
-                 [ ( "style"
-                   , Printf.sprintf
-                       "position: fixed; left: %.0fpx; top: %.0fpx; z-index: 999"
-                       a.S.x a.S.y )
+                 [ ("style", popover_style ~x:a.S.x ~y:a.S.y)
+                 ; ("data-open", "")
                  ; ("data-side", "bottom")
+                 ; ("data-align", "start")
+                 ; ("tabindex", "-1")
+                 ; ("data-base-ui-focusable", "")
+                 ; ("role", "dialog")
+                 ; ("data-state", "open")
                  ; ( "data-editor-popup-ref"
                    , S.popup_ref_of_kind a.S.kind ) ]
            | None -> attrs_v [])
@@ -176,8 +449,10 @@ let ac_popover (st : S.t) : t =
         (Logseq_dom.dom ~key:"ac-hint" ~tag:"p"
            ~style_class:
              "px-1 opacity-50 text-sm flex flex-row items-center gap-2"
-           [ (* shui/shortcut "mod+enter" → combo glow container *)
-             Logseq_dom.dom ~key:"sc" ~tag:"div"
+           [ (* shui/shortcut "mod+enter" → combo glow container inside a
+                span *)
+             Logseq_dom.dom ~key:"scw" ~tag:"span"
+               [ Logseq_dom.dom ~key:"sc" ~tag:"div"
                ~style_class:"shui-shortcut-combo shui-shortcut-glow"
                ~attrs:
                  [ ("data-shortcut-binding", "mod+enter")
@@ -189,7 +464,7 @@ let ac_popover (st : S.t) : t =
                    ~style_class:"shui-shortcut-separator" []
                ; Logseq_dom.dom ~key:"k1" ~tag:"kbd"
                    ~style_class:"shui-shortcut-key"
-                   ~text:(Platform.utf8 "\xe2\x8f\x8e") [] ]
+                   ~text:(Platform.utf8 "\xe2\x8f\x8e") [] ] ]
            ; Logseq_dom.dom ~key:"ht" ~tag:"span"
                ~text:(U.t "editor/display-tag-inline-hint") [] ])
     ])
@@ -202,10 +477,9 @@ let cm_color_row () : t =
   let swatch c =
     Logseq_dom.dom ~key:("color-" ^ c) ~tag:"a"
       ~style_class:
-        "cursor-pointer inline-flex items-center justify-center w-[30px] h-[30px]"
+        "inline-flex items-center justify-center w-[30px] h-[30px]"
       ~attrs:
-        [ ("title", U.t ("color/" ^ c)); ("data-cm-color", c)
-        ; ("style", "cursor: pointer") ]
+        [ ("title", U.t ("color/" ^ c)); ("data-cm-color", c) ]
       [ Logseq_dom.dom ~key:"bg" ~style_class:"heading-bg"
           ~attrs:
             [ ( "style"
@@ -215,10 +489,9 @@ let cm_color_row () : t =
   let remove =
     Logseq_dom.dom ~key:"color-rm" ~tag:"a"
       ~style_class:
-        "cursor-pointer inline-flex items-center justify-center w-[30px] h-[30px]"
+        "inline-flex items-center justify-center w-[30px] h-[30px]"
       ~attrs:
-        [ ("title", U.t "ui/remove-background"); ("data-cm-color", "")
-        ; ("style", "cursor: pointer") ]
+        [ ("title", U.t "ui/remove-background"); ("data-cm-color", "") ]
       [ Logseq_dom.dom ~key:"bg" ~style_class:"heading-bg remove" ~text:"-" [] ]
   in
   Logseq_dom.dom ~key:"colors"
@@ -230,19 +503,22 @@ let cm_color_row () : t =
 
 (* shui button :ghost :icon + to-heading-button — full class list from
    with-button-classes so the ghost hover/size styles come out identical *)
-let cm_heading_btn key title value icon : t =
+let cm_heading_btn ?(comma = true) key title value icon : t =
   Logseq_dom.dom ~key ~tag:"button"
     ~style_class:
-      "ui__button inline-flex cursor-pointer items-center justify-center \
-       whitespace-nowrap rounded-md text-sm gap-1 font-medium \
-       ring-offset-background transition-colors focus-visible:outline-none \
-       focus-visible:ring-2 focus-visible:ring-ring \
-       focus-visible:ring-offset-2 disabled:pointer-events-none \
-       disabled:opacity-50 select-none hover:bg-secondary/70 \
-       hover:text-secondary-foreground active:opacity-80 as-ghost \
-       box-content h-6 w-6 p-1 overflow-hidden to-heading-button"
+      ("ui__button inline-flex cursor-pointer items-center justify-center \
+        whitespace-nowrap rounded-md text-sm gap-1 font-medium \
+        ring-offset-background transition-colors focus-visible:outline-none \
+        focus-visible:ring-2 focus-visible:ring-ring \
+        focus-visible:ring-offset-2 disabled:pointer-events-none \
+        disabled:opacity-50 select-none hover:bg-secondary/70 \
+        hover:text-secondary-foreground active:opacity-80 as-ghost \
+        box-content h-6 w-6 p-1 overflow-hidden to-heading-button"
+      ^ (* cljs menu-heading joins the class list with "," — every button
+           except the last carries a literal trailing comma *)
+        if comma then "," else "")
     ~attrs:
-      [ ("title", title); ("data-cm-heading", value)
+      [ ("type", "button"); ("title", title); ("data-cm-heading", value)
       ; ("style", "box-sizing: border-box; height: 30px; padding: 0; width: 30px") ]
     [ icon ]
 ;;
@@ -253,7 +529,9 @@ let cm_heading_row () : t =
     List.init 6 (fun i ->
         let n = string_of_int (i + 1) in
         cm_heading_btn ("h-" ^ n) (U.tf "editor/heading" [ n ]) n
-          (Icons.icon ("h-" ^ n)))
+          (* cljs menu-heading uses the ti font glyph for h1-h6 *)
+          (Logseq_dom.dom ~key:"ic" ~tag:"span"
+             ~style_class:("ti ti-h-" ^ n ^ " ui__icon") []))
   in
   Logseq_dom.dom ~key:"headings"
     ~style_class:"flex flex-row justify-between pb-2 pt-1 px-2 items-center"
@@ -262,8 +540,8 @@ let cm_heading_row () : t =
         (hs
         @ [ cm_heading_btn "h-auto" (U.t "editor/auto-heading") "auto"
               (Icons.icon "h-auto")
-          ; cm_heading_btn "h-rm" (U.t "editor/remove-heading") "none"
-              (Icons.icon "heading-off") ]) ]
+          ; cm_heading_btn ~comma:false "h-rm" (U.t "editor/remove-heading")
+              "none" (Icons.icon "heading-off") ]) ]
 ;;
 
 (* shui/shortcut root for :combo (binding has "+") and :separate styles *)
@@ -287,56 +565,58 @@ let cm_shortcut_el (binding, caps) : t =
          caps)
   in
   Logseq_dom.dom ~key:"sc" ~tag:"span" ~style_class:"ml-auto pl-2"
-    [ Logseq_dom.dom ~key:"sc-box" ~tag:"div"
-        ~style_class:
-          (if combo then "shui-shortcut-combo shui-shortcut-glow"
-           else "shui-shortcut-separate shui-shortcut-glow")
-        ~attrs:
-          [ ("data-shortcut-binding", binding)
-          ; ( "style"
-            , if combo then "white-space: nowrap"
-              else "white-space: nowrap; gap: 4px" ) ]
-        children ]
+    [ Logseq_dom.dom ~key:"sc-wrap" ~tag:"span"
+        [ Logseq_dom.dom ~key:"sc-box" ~tag:"div"
+            ~style_class:
+              (if combo then "shui-shortcut-combo shui-shortcut-glow"
+               else "shui-shortcut-separate shui-shortcut-glow")
+            ~attrs:
+              [ ("data-shortcut-binding", binding)
+              ; ( "style"
+                , if combo then "white-space: nowrap"
+                  else "white-space: nowrap; gap: 4px" ) ]
+            children
+        ]
+    ]
 ;;
 
 let cm_item_cls =
   "ui__dropdown-menu-item relative flex cursor-pointer select-none \
-   items-center rounded-sm px-2 py-1.5 text-sm outline-none"
+   items-center rounded-sm px-2 py-1.5 text-sm outline-none \
+   data-[disabled]:opacity-50 data-[disabled]:pointer-events-none \
+   data-[highlighted]:bg-muted"
 ;;
 
 let cm_item_el (entry_sig : S.cm_item Signal.signal) : t =
-  (* keyed mounts run with parent=None, so the entry point must be a real
-     node — wrap the dynamic branch in a box *)
-  box ~key:"cm-entry"
-    [ dyn
-      ~equal:(fun (a : S.cm_item) b -> a = b)
-      (function
-      | S.Ci_sep ->
-          Logseq_dom.dom ~key:"sep" ~attrs:[ ("role", "separator") ]
-            ~style_class:"ui__dropdown-menu-separator -mx-1 my-1 h-px bg-muted" []
-      | S.Ci_colors -> cm_color_row ()
-      | S.Ci_headings -> cm_heading_row ()
-      | S.Ci_sub label ->
-          Logseq_dom.dom ~key:"sub"
-            ~style_class:
-              "ui__dropdown-menu-sub-trigger flex cursor-pointer select-none \
-               items-center rounded-sm px-2 py-1.5 text-sm outline-none"
-            ~attrs:
-              [ ("role", "menuitem"); ("aria-haspopup", "menu")
-              ; ("data-cm-item", label)
-              ; ("style", "cursor: pointer") ]
-            [ Logseq_dom.dom ~key:"lbl" ~tag:"span" ~text:label []
-            ; Icons.icon ~cls:"ml-auto h-4 w-4" "chevron-right" ]
-      | S.Ci_item (label, scut, cmd) ->
-          Logseq_dom.dom ~key:"item" ~style_class:cm_item_cls
-            ~attrs:
-              [ ("role", "menuitem"); ("data-cm-item", cmd)
-              ; ("style", "cursor: pointer") ]
-            (Logseq_dom.dom ~key:"lbl" ~tag:"span" ~text:label []
-             :: (match scut with
-                 | Some s -> [ cm_shortcut_el s ]
-                 | None -> [])))
-        entry_sig ]
+  (* cm entries are static for the menu's lifetime, so sampling once is
+     stable and the keyed mount can return the item node directly *)
+  match Signal.sample entry_sig with
+  | S.Ci_sep ->
+      Logseq_dom.dom ~key:"sep" ~attrs:[ ("role", "separator") ]
+        ~style_class:"ui__dropdown-menu-separator -mx-1 my-1 h-px bg-muted" []
+  | S.Ci_colors -> cm_color_row ()
+  | S.Ci_headings -> cm_heading_row ()
+  | S.Ci_sub label ->
+      Logseq_dom.dom ~key:"sub"
+        ~style_class:
+          "ui__dropdown-menu-sub-trigger flex cursor-pointer select-none \
+           items-center rounded-sm px-2 py-1.5 text-sm outline-none \
+           data-[highlighted]:bg-muted data-[open]:bg-muted"
+        ~attrs:
+          [ ("role", "menuitem"); ("aria-expanded", "false")
+          ; ("data-cm-item", label)
+          ; ("style", "cursor: pointer") ]
+        ~text:label
+        [ Icons.raw ~cls:"ml-auto h-4 w-4" "chevron-right" ]
+  | S.Ci_item (label, scut, cmd) ->
+      Logseq_dom.dom ~key:"item" ~style_class:cm_item_cls
+        ~attrs:
+          [ ("role", "menuitem"); ("data-cm-item", cmd)
+          ; ("style", "cursor: pointer") ]
+        ~text:label
+        (match scut with
+         | Some s -> [ cm_shortcut_el s ]
+         | None -> [])
 ;;
 
 let cm_popover (st : S.t) : t =
@@ -352,30 +632,43 @@ let cm_popover (st : S.t) : t =
   in
   (* cljs as-dropdown? context menu: dropdown-menu-content card classes
      merged with content-props class w-[280px] ls-context-menu-content *)
-  (Logseq_dom.dom ~key:"cm"
-    ~style_class:
-      "ui__dropdown-menu-content ls-context-menu-content w-[280px] z-50 \
-       min-w-[8rem] rounded-md border bg-popover p-1 \
-       text-popover-foreground shadow-md outline-none"
-    ~attrs_signal_v:
-      (Signal.map
-         (fun (v : S.view) ->
-           match v.S.cm with
-           | Some m ->
-               attrs_v
-                 [ ( "style"
-                   , Printf.sprintf
-                       "position: fixed; left: %.0fpx; top: %.0fpx; z-index: 999"
-                       m.S.cx m.S.cy ) ]
-           | None -> attrs_v [])
-         st.S.vs.Signal.state_signal)
-    [ Logseq_dom.dom ~key:"cm-wrap" ~style_class:"menu-links-wrapper"
-        [ keyed ~source:entries_sig ~key:(fun ((i, _) : int * S.cm_item) -> i)
-            ~cmp:Stdlib.compare
-            ~mount:(fun entry_sig ->
-              cm_item_el (Signal.map (fun ((_, e) : int * S.cm_item) -> e) entry_sig)) ]
-    ])
-    context parent
+  (* cljs DropdownMenuContent mounts inside base-ui presentation wrappers *)
+  Logseq_dom.dom ~key:"cm-pw1" ~attrs:[ ("role", "presentation") ]
+    [ Logseq_dom.dom ~key:"cm-pw2" ~attrs:[ ("role", "presentation") ]
+        [ Logseq_dom.dom ~key:"cm-ps" ~tag:"span"
+            [ Logseq_dom.dom ~key:"cm"
+                ~style_class:
+                  ("ui__dropdown-menu-content ls-context-menu-content \
+                    w-[280px] z-50 min-w-[8rem] rounded-md border bg-popover \
+                    p-1 text-popover-foreground shadow-md "
+                  ^ popover_transition_classes)
+                ~attrs_signal_v:
+                  (Signal.map
+                     (fun (v : S.view) ->
+                       match v.S.cm with
+                       | Some m ->
+                           attrs_v
+                             [ ("role", "menu")
+                             ; ( "style"
+                               , Printf.sprintf
+                                   "position: fixed; left: %.0fpx; top: \
+                                    %.0fpx; z-index: 999"
+                                   m.S.cx m.S.cy ) ]
+                       | None -> attrs_v [])
+                     st.S.vs.Signal.state_signal)
+                [ Logseq_dom.dom ~key:"cm-wrap"
+                    [ keyed ~source:entries_sig
+                        ~key:(fun ((i, _) : int * S.cm_item) -> i)
+                        ~cmp:Stdlib.compare
+                        ~mount:(fun entry_sig ->
+                          cm_item_el
+                            (Signal.map
+                               (fun ((_, e) : int * S.cm_item) -> e)
+                               entry_sig)) ]
+                ]
+            ]
+        ]
+    ]
 ;;
 
 (* -- delegated listeners --------------------------------------------- *)
@@ -504,7 +797,7 @@ let pv_dyn (st : S.t) : t =
      ~equal:(fun a b -> a == b)
      (fun pv ->
        match pv with
-       | None -> box ~key:"pv-empty" []
+       | None -> Logseq_dom.nothing
        | Some p -> pv_popover p)
      (Signal.map (fun (v : S.view) -> v.S.pv)
         st.S.vs.Signal.state_signal))
@@ -637,7 +930,7 @@ let render (_ms : Model.t Signal.signal) : t =
       st.S.vs.Signal.state_signal
   in
   let body =
-    box ~key:"popups_view"
+    Logseq_dom.fragment
       [ if_ ~test:ac_open (ac_popover st)
       ; if_ ~test:cm_open (cm_popover st)
       ; pv_dyn st ]

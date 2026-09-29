@@ -154,7 +154,7 @@ let menu_host st =
       match menu with
       | "nav-edit" -> nav_edit_menu st checked
       | "plugins" -> plugins_menu st
-      | _ -> dom ~key:"menu-closed" [])
+      | _ -> Logseq_dom.nothing)
     menu_sig
 
 (* ---------- navigations ---------- *)
@@ -186,13 +186,15 @@ let shortcut_hint binding =
 
 (* cljs sidebar-item: wrapper div gets the nav class (+ `active`), the
    inner `a.item` also gets `active` when the route matches *)
-let nav_link ~key ~class_ ~active ~title ~icon_name ?shortcut ~on_click () =
+let nav_link ~key ~class_ ~active ~title ~icon_name ?shortcut ?href
+    ~on_click () =
   let act = if active then " active" else "" in
   let tail = match shortcut with Some s -> [ shortcut_hint s ] | None -> [] in
   dom ~key ~style_class:(class_ ^ act)
     [ dom ~tag:"a"
         ~style_class:
           ("item group flex items-center text-sm rounded-md font-medium" ^ act)
+        ~attrs:(match href with Some h -> [ ("href", h) ] | None -> [])
         ~events:"click" ~on_dom_event:on_click
         ([ icon icon_name
          ; dom ~tag:"span" ~style_class:"flex-1" ~text:title [] ]
@@ -201,6 +203,7 @@ let nav_link ~key ~class_ ~active ~title ~icon_name ?shortcut ~on_click () =
 
 let nav_route ~class_ ~active ~title ~icon_name ?shortcut hash =
   nav_link ~key:("nl-" ^ class_) ~class_ ~active ~title ~icon_name ?shortcut
+    ~href:hash
     ~on_click:(fun name _ ->
       if name = "click" then (
         Platform.set_location_hash (Runtime.nav_hash hash);
@@ -237,6 +240,11 @@ let nav_items ~active_route (checked, tag_titles) =
             (nav_route ~class_:"all-pages-nav"
                ~active:(active_route = Model.All_pages) ~title:(t "Pages")
                ~icon_name:"files" "#/all-pages")
+      | "graph-view" ->
+          Some
+            (nav_route ~class_:"graph-view-nav" ~active:false
+               ~title:(t "Graph view") ~icon_name:"hierarchy"
+               ~shortcut:"g g" "#/graph")
       | "tag/tasks" -> tag_nav ~active_route "tasks" "Tasks" tag_titles
       | "tag/assets" -> tag_nav ~active_route "assets" "Assets" tag_titles
       | _ -> None)
@@ -253,7 +261,7 @@ let nav_group ms st =
          (Signal.value st.nav_tag_titles))
   in
   dom ~key:"nav-group"
-    ~style_class:"sidebar-content-group navigations is-expand has-children"
+    ~style_class:"sidebar-content-group is-expand"
     [ dom ~key:"nav-inner" ~style_class:"sidebar-content-group-inner"
         [ dom ~key:"nav-hd"
             ~style_class:"hd items-center non-collapsable enter-show-more"
@@ -265,7 +273,6 @@ let nav_group ms st =
                 [ dom ~tag:"a"
                     ~style_class:
                       "as-edit !opacity-60 hover:!opacity-80 relative -top-0.5 -right-0.5"
-                    ~attrs:[ ("title", t "Edit navigations") ]
                     ~events:"click"
                     ~on_dom_event:(fun name _ ->
                       if name = "click" then Sidebar_state.open_nav_menu st)
@@ -275,11 +282,20 @@ let nav_group ms st =
                 (fun (route, (checked, tag_titles)) ->
                   dom ~key:"navs"
                     ~style_class:"sidebar-navigations flex flex-col mt-1"
-                    (nav_route ~class_:"journals-nav"
+                    (* cljs journals item navigates on click; its anchor
+                       carries no href *)
+                    ((nav_link ~key:"nl-journals" ~class_:"journals-nav"
                        ~active:(route = Model.Journals || route = Model.Home)
                        ~title:(t "Journals") ~icon_name:"calendar"
-                       ~shortcut:"g j" "#/"
-                    :: nav_items ~active_route:route (checked, tag_titles)))
+                       ~shortcut:"g j"
+                       ~on_click:(fun name _ ->
+                         if name = "click" then (
+                           Platform.set_location_hash
+                             (Runtime.nav_hash "#/");
+                           Platform.dispatch "ls:navigate" Js.Json.null))
+                       ())
+                    :: nav_items ~active_route:route (checked, tag_titles)
+                  ))
                 navs_sig
             ]
         ]
@@ -316,7 +332,11 @@ let page_item_el st (p : Model.page) ~li_class ~key =
             [] ]
     ]
 
-let content_group st ~key ~class_ ~label ~items_sig ~li_class =
+(* cljs sidebar-content-group: .bd renders only when the group supplies a
+   child — favorites passes a child only when non-empty, recent always
+   passes a ul (so an empty Recent still shows .bd > ul.text-sm) *)
+let content_group st ~key ~class_ ~label ~items_sig ~li_class ~ul_class
+    ~always_bd =
   dom ~key
     ~style_class_signal:
       (D.class_signal items_sig (fun ps ->
@@ -330,31 +350,36 @@ let content_group st ~key ~class_ ~label ~items_sig ~li_class =
                         [] ] ]
             ; dom ~key:(key ^ "-b") ~tag:"span" ~style_class:"b"
                 [ Icons.icon ~cls:"more" ~size:15. "chevron-right" ] ]
-        ; dom ~key:(key ^ "-bd") ~style_class:"bd"
-            [ dyn ~equal:(fun a b -> a = b)
-                (fun ps ->
-                  dom ~key:(key ^ "-ul") ~tag:"ul" ~style_class:"text-sm"
-                    (List.map
-                       (fun p ->
-                         page_item_el st p ~li_class
-                           ~key:
-                             (key ^ "-"
-                              ^ Option.value p.Model.page_uuid
-                                  ~default:p.Model.page_title))
-                       ps))
-                items_sig ]
+        ; dyn
+            ~equal:(fun a b -> (a = []) = (b = []))
+            (fun ps ->
+              if ps = [] && not always_bd then Logseq_dom.nothing
+              else
+                dom ~key:(key ^ "-bd") ~style_class:"bd"
+                  [ dom ~key:(key ^ "-ul") ~tag:"ul" ~style_class:ul_class
+                      (List.map
+                         (fun p ->
+                           page_item_el st p ~li_class
+                             ~key:
+                               (key ^ "-"
+                                ^ Option.value p.Model.page_uuid
+                                    ~default:p.Model.page_title))
+                         ps) ])
+            items_sig
         ]
     ]
 
 let favorites_group st =
   content_group st ~key:"fav" ~class_:"favorites" ~label:(t "Favorites")
     ~items_sig:(Signal.value st.Sidebar_state.favorites)
+    ~ul_class:"favorites text-sm" ~always_bd:false
     ~li_class:"favorite-item font-medium"
 
 let recents_group st =
   content_group st ~key:"recent" ~class_:"recent"
     ~label:(t "Recent")
     ~items_sig:(Signal.value st.Sidebar_state.recents)
+    ~ul_class:"text-sm" ~always_bd:true
     ~li_class:"recent-item select-none font-medium"
 
 (* cljs plugins.cljs hook-ui-items :toolbar — the puzzle trigger lives
@@ -376,17 +401,21 @@ let plugins_toolbar (ms : Model.t Signal.signal) : t =
       with
       | false, false -> dom ~key:"pm-none" []
       | _ ->
-          dom ~key:"pm" ~tag:"div"
-            ~style_class:"toolbar-plugins-manager flex items-center"
-            ~events:"click"
-            ~on_dom_event:(fun n _ ->
-              if n = "click" then (
-                Runtime.signal_set st.Sidebar_state.open_menu "plugins";
-                Plugin_host.inject_toolbar_ui ()))
-            [ dom ~key:"pm-trigger" ~tag:"a"
-                ~style_class:"flex relative toolbar-plugins-manager-trigger"
-                ~attrs:[ ("title", t "Plugins") ]
-                [ icon "puzzle" ] ])
+          dom ~key:"ui-items" ~style_class:"ui-items-container"
+            ~attrs:[ ("data-type", "toolbar") ]
+            [ dom ~key:"ui-items-wrap" ~style_class:"list-wrap"
+                [ dom ~key:"pm" ~tag:"div"
+                    ~style_class:"toolbar-plugins-manager flex items-center"
+                    ~events:"click"
+                    ~on_dom_event:(fun n _ ->
+                      if n = "click" then (
+                        Runtime.signal_set st.Sidebar_state.open_menu
+                          "plugins";
+                        Plugin_host.inject_toolbar_ui ()))
+                    [ dom ~key:"pm-trigger" ~tag:"a"
+                        ~style_class:"flex relative toolbar-plugins-manager-trigger"
+                        ~attrs:[ ("title", t "Plugins") ]
+                        [ icon "puzzle" ] ] ] ])
     (Plugin_host.dirty_value owner)
 
 (* ---------- root ---------- *)
@@ -422,14 +451,12 @@ let graphs_selector (ms : Model.t Signal.signal) : t =
 
 let header (ms : Model.t Signal.signal) : t =
   let st = Sidebar_state.ensure ms in
-  dom ~key:"ls-header" ~style_class:"flex flex-col"
-    [ graphs_selector ms; nav_group ms st ]
+  Logseq_dom.fragment [ graphs_selector ms; nav_group ms st ]
 
 let contents (ms : Model.t Signal.signal) : t =
   let st = Sidebar_state.ensure ms in
   dom ~key:"ls-contents" ~style_class:"sidebar-contents-container"
-    [ dom ~key:"ls-left" ~style_class:"cp__sidebar-left"
-        [ favorites_group st; recents_group st ] ]
+    [ favorites_group st; recents_group st ]
 
 let menus (ms : Model.t Signal.signal) : t =
   let st = Sidebar_state.ensure ms in

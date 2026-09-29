@@ -257,4 +257,4 @@ let dialog_view (m : Model.t) =
   | None -> (
       match m.confirm with
       | Some c -> confirm_view c
-      | None -> dom ~key:"menu-none" [])
+      | None -> Logseq_dom.nothing)

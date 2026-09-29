@@ -33,12 +33,16 @@ let el ?key ~tag ?(attrs = []) ?(events = "") ?(style_class = "")
   Logseq_dom.dom ?key ~tag ~attrs ~events ~style_class ?style_class_signal
     ?attrs_signal_v ?text_signal ?id_signal ~id ~text ?on_dom_event children
 
-(* Plain text run — mounts a Text node (renders as a bare span on web). *)
+(* Plain text run — a real DOM text node. cljs hiccup emits raw strings
+   interleaved with elements; LUI's own text nodes render as
+   span.lui-text (an extra element), so a <raw-text> placeholder is
+   mounted at the exact DOM position and the MutationObserver in
+   Editor_dom swaps it for a real text node. *)
 let txt (s : string) : t =
  fun context parent ->
-  let node = Lui_ui.text context s in
-  attach context parent node;
-  node
+  Editor_dom.ensure_raw_text_observer ();
+  Logseq_dom.dom ~tag:"raw-text" ~attrs:[ ("data-raw-text", s) ] []
+    context parent
 
 let text_of_class_signal source f =
   Signal.map (fun v -> Lui_protocol.StringValue (f v)) source

@@ -72,6 +72,7 @@ type page =
        private (worker-computed "add-object?") *)
     page_add_object : bool
   ; page_tags : string list
+  ; page_tag_idents : string list (* aligned with page_tags *)
   ; page_blocks : block list
   ; page_linked_refs : block list (* linked references, for journal items *)
   ; page_parents : block list (* block-zoom breadcrumb chain, root first *)

@@ -377,7 +377,7 @@ let inner st =
 
 let render (ms : Model.t Signal.signal) : t =
   let st = Sidebar_state.ensure ms in
-  dom ~key:"rs-root"
+  Logseq_dom.fragment
     [ dom ~key:"rs-resizer" ~style_class:"resizer"
         ~attrs:
           [ ("role", "separator")

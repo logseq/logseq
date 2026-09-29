@@ -82,7 +82,7 @@ let toggle_reaction uuid emoji_id =
 (* shared reaction chips row — used by both block rows and comment rows *)
 let reactions_el uuid (rs : (string * int) list) : t =
   match rs with
-  | [] -> box ~key:("rx0-" ^ uuid) []
+  | [] -> Logseq_dom.nothing
   | _ ->
       dom ~key:("rx-" ^ uuid) ~style_class:"ls-block-reactions"
         (List.map

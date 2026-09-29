@@ -64,7 +64,7 @@ let render (ms : Model.t Signal.signal) : t =
     ~equal:(fun (a : Model.t) (b : Model.t) -> a.toasts = b.toasts)
     (fun (m : Model.t) ->
       match m.toasts with
-      | [] -> box ~key:"toaster-empty" []
+      | [] -> Logseq_dom.nothing
       | ts ->
           dom ~key:"toaster" ~style_class:"ui__toaster-viewport"
             (* sonner DOM order is oldest->newest with --toast-index 0 on
