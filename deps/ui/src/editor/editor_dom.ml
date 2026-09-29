@@ -192,19 +192,15 @@ external observe : mutation_observer -> el -> observe_opts -> unit
 
 external el_replace_with : el -> el -> unit = "replaceWith" [@@mel.send]
 
+(* the adapter reads this back to keep the Text node in sync — see
+   dom_adapter.raw_text_node_get *)
+external el_set_swap_text : el -> el -> unit = "__lsText" [@@mel.set]
+
 let for_each_selector sel f =
   let nl = query_selector_all sel in
   for i = 0 to node_list_length nl - 1 do
     match node_list_item nl i with Some el -> f el | None -> ()
   done
-
-external el_raw_text_node : el -> el Js.Undefined.t = "__lsTextNode"
-  [@@mel.get]
-
-external el_set_raw_text_node : el -> el -> unit = "__lsTextNode"
-  [@@mel.set]
-
-external node_set_data : el -> string -> unit = "data" [@@mel.set]
 
 external el_query_all : el -> string -> node_list = "querySelectorAll"
   [@@mel.send]
@@ -301,22 +297,18 @@ let register_doc_scan ?(run_if = fun _ -> true) ?(sync = false) scan =
    are swapped for real text nodes once they enter the DOM — extension
    create() can only return Elements, so this observer performs the
    swap the adapter cannot.  The swapped node is kept on the placeholder
-   as __lsTextNode so later property writes/removals on the (detached)
-   placeholder can still reach the live text node, and a re-inserted
-   placeholder reuses it so the text moves with the node. *)
+   as __lsText so later property writes/removals on the (detached)
+   placeholder can still reach the live text node. *)
 let replace_all_raw_text roots =
   for_each_touched roots "raw-text" (fun el ->
-      let s =
-        Option.value (el_get_attr el "data-raw-text") ~default:""
-      in
       let tn =
-        match Js.Undefined.toOption (el_raw_text_node el) with
-        | Some n -> n
-        | None -> create_text_node s
+        create_text_node
+          (match el_get_attr el "data-raw-text" with
+           | Some s -> s
+           | None -> "")
       in
-      node_set_data tn s;
-      el_replace_with el tn;
-      el_set_raw_text_node el tn)
+      el_set_swap_text el tn;
+      el_replace_with el tn)
 
 (* LUI core stamps id="lui-node-<n>" on every registered/extension node
    at create time; cljs emits no such ids, so strip them for DOM parity.

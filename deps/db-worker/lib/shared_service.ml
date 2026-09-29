@@ -159,7 +159,12 @@ let listen_client_channel (ch : Broadcast_channel.t)
    unknown methods instead of asserting Some. *)
 let apply_target_f (target : target) (method_name : string)
     (args : Wire.t list) : Wire.t E.t =
-  target method_name args
+  (* handlers can raise synchronously (Dispatcher.invoke_transit
+     re-raises Exn_info for eager handler throws); inside a channel
+     handler there is no Comlink boundary to absorb the throw, so
+     convert it to a rejected effect — callers turn it into an error
+     response or rejection instead of letting it escape uncaught. *)
+  try target method_name args with exn -> E.error exn
 
 (* ---- election ---- *)
 

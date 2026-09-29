@@ -69,6 +69,14 @@ external node_type : W.Node.t -> int = "nodeType" [@@mel.get]
 
 external set_node_data : W.Node.t -> string -> unit = "data" [@@mel.set]
 
+external node_remove : W.Node.t -> unit = "remove" [@@mel.send]
+
+(* <raw-text> placeholders are swapped for real Text nodes by the
+   document observer; the placeholder keeps a handle on its Text node
+   here so attr updates and cleanup can reach it after the swap *)
+external raw_text_node_get : W.Element.t -> W.Node.t Js.Undefined.t =
+  "__lsText" [@@mel.get]
+
 external insert_before_node :
   W.Element.t -> W.Node.t -> W.Node.t -> unit = "insertBefore" [@@mel.send]
 
@@ -112,21 +120,7 @@ let set_class el s =
 
 let json_string v = Option.value (Js.Json.decodeString v) ~default:""
 
-external raw_text_node_get : W.Element.t -> W.Node.t Js.Undefined.t
-  = "__lsTextNode" [@@mel.get]
-
-external node_remove : W.Node.t -> unit = "remove" [@@mel.send]
-
 let apply_attrs el json =
-  (* a <raw-text> placeholder swapped for a real text node is detached —
-     forward data-raw-text writes to the live node instead of the element *)
-  match Js.Undefined.toOption (raw_text_node_get el) with
-  | Some tn -> (
-      let obj = parse_json json in
-      match Js.Undefined.toOption (json_get obj "data-raw-text") with
-      | Some v -> set_node_data tn (json_string v)
-      | None -> set_node_data tn "")
-  | None ->
   let prev =
     managed_get el
     |> Js.Undefined.toOption
@@ -146,7 +140,16 @@ let apply_attrs el json =
     (fun k ->
       if not (List.mem k keys) then W.Element.removeAttribute k el)
     prev;
-  managed_set el (String.concat "," keys)
+  managed_set el (String.concat "," keys);
+  (* after the swap the placeholder is detached and setAttribute writes
+     are invisible — mirror the text payload onto the live Text node *)
+  (match Js.Undefined.toOption (raw_text_node_get el) with
+   | Some tn ->
+       set_node_data tn
+         (match Js.Undefined.toOption (json_get obj "data-raw-text") with
+          | Some v -> json_string v
+          | None -> "")
+   | None -> ())
 
 (* -- events prop -- *)
 
@@ -289,8 +292,8 @@ let remove_property el prop =
   | _ -> ()
 
 let cleanup el =
-  (* a swapped <raw-text> placeholder is detached; DropNode must remove the
-     live text node it stands for *)
+  (* drop the swapped-in Text node too — removeChild ops target the
+     detached placeholder, which cannot reach it *)
   (match Js.Undefined.toOption (raw_text_node_get el) with
    | Some tn -> node_remove tn
    | None -> ());
