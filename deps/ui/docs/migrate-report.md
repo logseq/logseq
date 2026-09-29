@@ -1383,3 +1383,21 @@ the correctness batch; each fixes the findings of its own report:
   sdk_convert/sdk_util, decoder/encoder pure paths.
 - `devin/review-fix-contract` — endpoint/arg/decode contract sweep.
 - `devin/review-fix-regress` — cljs parity regression hunt + fixes.
+
+## Page-title locator / property-value DOM alignment
+
+- `extends_cell` now emits `a.relative.tag` / `a.relative.page-ref` (cljs
+  `property-block-value` → `page-cp`) instead of
+  `span.block-title-wrap`; the extra `.block-title-wrap` under
+  `[data-testid='page title']` was a Playwright strict-mode duplicate
+  (left-sidebar-basic 4 errors → green).
+- `.ls-bidirectional-properties` mounts inside `.page-inner` after the
+  title row (cljs sibling placement in `properties-area`), not inside
+  `.ls-page-title`.
+- Preview popup (`pv_popover`) now also closes on outside click and
+  `hashchange`, matching cljs tippy death with its reference node.
+- Known parity gap: cljs `bidirectional-properties-section` renders a
+  `shui/tabs` UI (per-class tabs + blocks-container); ours renders flat
+  `.ls-bidirectional-group` rows. Tracked for the parity sweep.
+- `custom_report.clj` dumps `e2e-dump/title-dups-<ts>.txt` on failure:
+  every `[data-testid='page title']` match + ancestor chain.
