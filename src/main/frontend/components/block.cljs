@@ -4421,7 +4421,9 @@
 (defn- same-block-revision?
   [previous-block next-block]
   (and (= (:block/uuid previous-block) (:block/uuid next-block))
-       (= (:block/tx-id previous-block) (:block/tx-id next-block))))
+       (= (:block/tx-id previous-block) (:block/tx-id next-block))
+       (= (:block.temp/order-list-index previous-block)
+          (:block.temp/order-list-index next-block))))
 
 (hsx/defc block-container-inner
   [container-state repo config* block opts]
