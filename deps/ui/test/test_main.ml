@@ -1292,7 +1292,7 @@ let test_cmdk_items () =
    | [ it ] ->
        check "create tag item"
          (it.ititle = "Create tag"
-         && it.act = Cmdk_state.Create_page "mytag")
+         && it.act = Cmdk_state.Create_tag "mytag")
    | _ -> check "create tag item" false);
   (* filter rows: leading current-page row only when a page is current *)
   eqi "filters no page" 5 (List.length (Cmdk_state.filter_items ()));
