@@ -1750,12 +1750,14 @@
   (or @*asset-uploading?
       (state/get-editor-action)))
 
+(defn- focus-in-shui-popup?
+  []
+  (some-> js/document.activeElement
+          (.closest ".ui__dropdown-menu-content, .ui__popover-content, .ui__context-menu-content")))
+
 (defn in-shui-popup?
   []
-  (or (some-> js/document.activeElement
-              (.closest ".ui__dropdown-menu-content, .ui__popover-content, .ui__context-menu-content")
-              (nil?)
-              (not))
+  (or (focus-in-shui-popup?)
       (.querySelector js/document.body
                       ".ui__dropdown-menu-content, .ui__popover-content, .ui__context-menu-content")))
 
@@ -3031,7 +3033,7 @@
 (defn keydown-tab-handler
   [direction]
   (fn [e]
-    (when-not (in-shui-popup?)
+    (when-not (focus-in-shui-popup?)
       (cond
         (pending-new-block?)
         (do
