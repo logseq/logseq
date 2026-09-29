@@ -128,8 +128,12 @@ let ac_inner (st : S.t) : t =
 ;;
 
 let ac_popover (st : S.t) : t =
+  (* signals are built inside the mount closure: if_ unmounts dispose any
+     derived signal bound under that scope, so an eagerly-created map would
+     throw "cannot observe a disposed signal" on the next mount *)
+ fun context parent ->
   (* cljs PopoverContent: ui__popover-content + card classes *)
-  Logseq_dom.dom ~key:"ac-pop"
+  (Logseq_dom.dom ~key:"ac-pop"
     ~style_class:
       "ui__popover-content z-50 rounded-md border bg-popover \
        text-popover-foreground shadow-md outline-none"
@@ -188,7 +192,8 @@ let ac_popover (st : S.t) : t =
                    ~text:(Platform.utf8 "\xe2\x8f\x8e") [] ]
            ; Logseq_dom.dom ~key:"ht" ~tag:"span"
                ~text:(U.t "editor/display-tag-inline-hint") [] ])
-    ]
+    ])
+    context parent
 ;;
 
 (* -- context menu ---------------------------------------------------- *)
@@ -335,6 +340,8 @@ let cm_item_el (entry_sig : S.cm_item Signal.signal) : t =
 ;;
 
 let cm_popover (st : S.t) : t =
+  (* see ac_popover: signals must be built per mount *)
+ fun context parent ->
   let entries_sig =
     Signal.map
       (fun (v : S.view) ->
@@ -345,7 +352,7 @@ let cm_popover (st : S.t) : t =
   in
   (* cljs as-dropdown? context menu: dropdown-menu-content card classes
      merged with content-props class w-[280px] ls-context-menu-content *)
-  Logseq_dom.dom ~key:"cm"
+  (Logseq_dom.dom ~key:"cm"
     ~style_class:
       "ui__dropdown-menu-content ls-context-menu-content w-[280px] z-50 \
        min-w-[8rem] rounded-md border bg-popover p-1 \
@@ -367,7 +374,8 @@ let cm_popover (st : S.t) : t =
             ~cmp:Stdlib.compare
             ~mount:(fun entry_sig ->
               cm_item_el (Signal.map (fun ((_, e) : int * S.cm_item) -> e) entry_sig)) ]
-    ]
+    ])
+    context parent
 ;;
 
 (* -- delegated listeners --------------------------------------------- *)
@@ -490,14 +498,17 @@ let pv_popover (p : S.pv) : t =
     ]
 
 let pv_dyn (st : S.t) : t =
-  dyn
-    ~equal:(fun a b -> a == b)
-    (fun pv ->
-      match pv with
-      | None -> box ~key:"pv-empty" []
-      | Some p -> pv_popover p)
-    (Signal.map (fun (v : S.view) -> v.S.pv)
-       st.S.vs.Signal.state_signal)
+  (* see ac_popover: signals must be built per mount *)
+ fun context parent ->
+  (dyn
+     ~equal:(fun a b -> a == b)
+     (fun pv ->
+       match pv with
+       | None -> box ~key:"pv-empty" []
+       | Some p -> pv_popover p)
+     (Signal.map (fun (v : S.view) -> v.S.pv)
+        st.S.vs.Signal.state_signal))
+    context parent
 
 let handle_input st (ev : Dom_ext.event) =
   match Dom_ext.target ev with

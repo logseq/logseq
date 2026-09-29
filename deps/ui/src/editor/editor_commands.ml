@@ -69,7 +69,7 @@ let prop_batch ~caret uuid ops =
    the textarea while the view re-renders the code surface) *)
 let exit_to_props uuid ops =
   let buf = A.live_buffer uuid in
-  S.set_silent (fun st -> { st with S.editing = None });
+  S.set (fun st -> { st with S.editing = None });
   ignore
     (Ops.apply_and_refresh (Ops.save_block uuid buf :: ops))
 

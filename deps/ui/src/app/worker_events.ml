@@ -50,9 +50,22 @@ let dispatch kind payload =
       | Some prev when prev = rtc -> ()
       | _ ->
           last_rtc := Some rtc;
+          (* a fresh client means earlier asset-download requests may have
+             been dropped — give pending imgs another chance *)
+          Asset_dom.retry_pending ();
           Runtime.send (Action.Rtc_state rtc);
           Runtime.flush ())
   | "db-worker/ui-request" -> Ui_requests.handle payload
+  | "asset-file-write-finish" -> (
+      (* worker finished writing a downloaded asset to pfs — set src on
+         any mounted img that requested the download *)
+      match
+        ( Wire.map_get_string payload "repo"
+        , Wire.map_get_string payload "asset-id" )
+      with
+      | Some repo, Some asset_id ->
+          Asset_dom.on_asset_write_finish ~repo':repo ~asset_id
+      | _ -> ())
   | "remote-graph-gone" ->
       (* cljs :rtc/remote-graph-gone: refresh remote graph list *)
       !Runtime.remote_graph_gone ()

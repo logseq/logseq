@@ -106,8 +106,7 @@ let attrs_signal source (f : 'a -> (string * string) list) =
    (Signal.value/state_signal) carry no upstream links and are left alone so
    they survive the unmount. *)
 let own context (source : 'a Signal.signal) =
-  if !(source.Signal.disposed_signal) then source
-  else if !(source.Signal.upstream_subscriptions) <> [] then
+  if !(source.Signal.upstream_subscriptions) <> [] then
     Signal.own_signal context.Lui_ui.ui_scope source
   else
     source

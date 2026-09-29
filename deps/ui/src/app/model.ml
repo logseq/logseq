@@ -169,6 +169,103 @@ let initial =
   ; rtc = None
   }
 
+(* optimistic indent: move the selected run under its previous sibling so
+   the reparent repaints synchronously (the async worker refresh then
+   reconciles an identical structure instead of remounting the editing
+   textarea mid-flight — e2e boundingBox races that remount). Returns None
+   when nothing moves; worker refresh stays authoritative. *)
+let indent_blocks (page : page) (uuids : string list) : page option =
+  let sel = List.sort_uniq compare uuids in
+  let is_sel b =
+    match b.block_uuid with Some u -> List.mem u sel | None -> false
+  in
+  let changed = ref false in
+  let absorb_runs (blocks : block list) : block list =
+    let rec loop acc = function
+      | b1 :: b2 :: rest when (not (is_sel b1)) && is_sel b2 -> (
+          let rec take_run acc = function
+            | b :: tl when is_sel b -> take_run (b :: acc) tl
+            | l -> List.rev acc, l
+          in
+          let run, rest' = take_run [ b2 ] rest in
+          match b1.block_link with
+          | Some _ ->
+              (* linked/embed rows are not indent targets *)
+              loop (b1 :: acc) (b2 :: rest)
+          | None ->
+              changed := true;
+              loop
+                acc
+                ({ b1 with
+                   block_children = b1.block_children @ run
+                 }
+                :: rest'))
+      | b :: rest -> loop (b :: acc) rest
+      | [] -> List.rev acc
+    in
+    loop [] blocks
+  in
+  let rec go (blocks : block list) : block list =
+    absorb_runs
+      (List.map
+         (fun b -> { b with block_children = go b.block_children })
+         blocks)
+  in
+  let blocks' = go page.page_blocks in
+  if !changed then Some { page with page_blocks = blocks' } else None
+
+(* optimistic outdent: lift selected children out of their parent and
+   reinsert them after it *)
+let outdent_blocks (page : page) (uuids : string list) : page option =
+  let sel = List.sort_uniq compare uuids in
+  let is_sel b =
+    match b.block_uuid with Some u -> List.mem u sel | None -> false
+  in
+  let changed = ref false in
+  (* outdent = move the selected run to be siblings right after their
+     parent, then move the run's former right-siblings under the LAST
+     outdented block (cljs/worker get_right_siblings drag). *)
+  let rec go (blocks : block list) : block list =
+    List.concat_map
+      (fun b ->
+        let children = go b.block_children in
+        let inside = List.filter is_sel children in
+        match inside with
+        | [] -> [ { b with block_children = children } ]
+        | _ ->
+            changed := true;
+            (* children after the last selected become its children;
+               children before the first selected stay with the parent *)
+            let prefix, after =
+              let rec split acc = function
+                | c :: tl when not (is_sel c) -> split (c :: acc) tl
+                | rest -> List.rev acc, rest
+              in
+              split [] children
+            in
+            let selected, suffix =
+              let rec take acc = function
+                | c :: tl when is_sel c -> take (c :: acc) tl
+                | rest -> List.rev acc, rest
+              in
+              take [] after
+            in
+            let selected =
+              match List.rev selected, suffix with
+              | last :: rprev, _ :: _ ->
+                  let last =
+                    { last with
+                      block_children = last.block_children @ suffix }
+                  in
+                  List.rev (last :: rprev)
+              | _ -> selected
+            in
+            { b with block_children = prefix } :: selected)
+      blocks
+  in
+  let blocks' = go page.page_blocks in
+  if !changed then Some { page with page_blocks = blocks' } else None
+
 (* optimistic reorder for move-up/down: only handles the common case of a
    contiguous run of top-level blocks; anything else is left for the worker
    refresh to reconcile *)

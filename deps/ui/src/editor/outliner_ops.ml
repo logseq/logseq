@@ -842,32 +842,39 @@ let apply_and_refresh_result ?opts ops =
          |> Js.Promise.then_ (fun () -> Js.Promise.resolve r))
 
 (* undo/redo writes datoms straight into the db — resync the open
-   editor's buffer so a stale textarea does not mask the restored title *)
-let resync_open_editor () =
+   editor's buffer so a stale textarea does not mask the restored title.
+   Returns the promise so callers that move editing afterwards (paste)
+   sequence after the textarea write *)
+let resync_open_editor () : unit Js.Promise.t =
   match S.editing () with
-  | None -> ()
+  | None -> Js.Promise.resolve ()
   | Some e -> (
       match S.find e.uuid with
       | Some b ->
           let title = String.trim b.Model.block_title in
-          ignore
-            (title_for_edit title
-             |> Js.Promise.then_ (fun title ->
-                    if e.S.buffer <> title then begin
-                      S.set_silent (fun st ->
-                          match st.S.editing with
-                          | Some e' when e'.uuid = e.uuid ->
-                              { st with
-                                S.editing =
-                                  Some { e' with S.buffer = title }
-                              }
-                          | _ -> st);
-                      match Editor_dom.textarea_of e.uuid with
-                      | Some el -> Editor_dom.el_set_value el title
-                      | None -> ()
-                    end;
-                    Js.Promise.resolve ()))
-      | None -> S.set_silent (fun st -> { st with S.editing = None }))
+          title_for_edit title
+          |> Js.Promise.then_ (fun title ->
+                 (* remote refresh must not clobber typed text: only
+                    overwrite when the buffer is still the value the editor
+                    opened with and the stored title moved since *)
+                 if e.S.buffer = e.S.base && e.S.base <> title then begin
+                   S.set_silent (fun st ->
+                       match st.S.editing with
+                       | Some e' when e'.uuid = e.uuid ->
+                           { st with
+                          S.editing =
+                            Some
+                              { e' with S.buffer = title; base = title }
+                           }
+                       | _ -> st);
+                   match Editor_dom.textarea_of e.uuid with
+                   | Some el -> Editor_dom.el_set_value el title
+                   | None -> ()
+                 end;
+                 Js.Promise.resolve ())
+      | None ->
+          S.set (fun st -> { st with S.editing = None });
+          Js.Promise.resolve ())
 
 let undo () =
   cancel_pending_save ();
@@ -875,9 +882,7 @@ let undo () =
   | Some repo ->
       Runtime.invoke1 "thread-api/undo-redo-undo" (Wire.String repo)
       |> Js.Promise.then_ (fun _ -> refresh_page ())
-      |> Js.Promise.then_ (fun () ->
-             resync_open_editor ();
-             Js.Promise.resolve ())
+      |> Js.Promise.then_ (fun () -> resync_open_editor ())
   | None -> Js.Promise.resolve ()
 
 let redo () =
@@ -886,9 +891,7 @@ let redo () =
   | Some repo ->
       Runtime.invoke1 "thread-api/undo-redo-redo" (Wire.String repo)
       |> Js.Promise.then_ (fun _ -> refresh_page ())
-      |> Js.Promise.then_ (fun () ->
-             resync_open_editor ();
-             Js.Promise.resolve ())
+      |> Js.Promise.then_ (fun () -> resync_open_editor ())
   | None -> Js.Promise.resolve ()
 
 (* sdk bridge (and other non-editor mutation paths) refresh the view

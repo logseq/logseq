@@ -36,8 +36,7 @@ let insert title =
               | Some page_id ->
                   (* cljs state/clear-edit!: the empty editing block is
                      replaced by the embed, drop edit mode without saving *)
-                  S.set_silent
-                    (fun st -> { st with S.editing = None });
+                  S.set (fun st -> { st with S.editing = None });
                   Ops.apply_and_refresh
                     [ Ops.insert_blocks ~replace_empty_target:true
                         [ Ops.block_map ~title ~link:page_id
