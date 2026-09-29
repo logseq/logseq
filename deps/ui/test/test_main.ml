@@ -23,6 +23,7 @@ let eqi name expected actual = eq name expected actual string_of_int
 
 let block ?(children = []) uuid title : Model.block =
   { Model.block_uuid = Some uuid
+  ; block_is_query = false
   ; block_db_id = None
   ; block_title = title
   ; block_level = 1
