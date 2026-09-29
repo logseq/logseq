@@ -29,7 +29,7 @@ type t =
 let st_ref : t option ref = ref None
 let t_ (s : string) = s
 
-let repo () = Option.value !Runtime.current_repo ~default:""
+let repo = Runtime.repo
 
 let q repo query =
   Runtime.invoke2 "thread-api/q" (Wire.String repo)
@@ -46,10 +46,6 @@ let cards_class_uuid repo =
      [?e :block/uuid ?u]]"
   |> Js.Promise.then_ (fun w ->
          Js.Promise.resolve (Wire.as_uuid w))
-
-let elems = function
-  | Wire.Array xs | Wire.List xs | Wire.Set xs -> xs
-  | _ -> []
 
 (* cljs db-content/recur-replace-uuid-in-block-title (single pass — no
    recursive ref-of-ref resolution): [[u]] -> [[title]], #[[u]] -> #title
@@ -95,7 +91,7 @@ let deck_label repo eid title =
                     let pairs =
                       List.filter_map
                         (fun row ->
-                          match elems row with
+                          match Wire.elems row with
                           | [ u; Wire.String rt ] -> (
                               match Wire.as_uuid u with
                               | Some u -> Some (u, rt)
@@ -104,7 +100,7 @@ let deck_label repo eid title =
                                   | Some u -> Some (u, rt)
                                   | None -> None))
                           | _ -> None)
-                        (elems w)
+                        (Wire.elems w)
                     in
                     Js.Promise.resolve (refs_to_names qt pairs)))
 

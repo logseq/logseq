@@ -9,6 +9,8 @@ let app_flush : (unit -> unit) ref = ref (fun () -> ())
 let current_repo : string option ref = ref None
 let current_page : Model.page option ref = ref None
 let current_route : Model.route option ref = ref None
+
+let repo () = Option.value !current_repo ~default:""
 (* journals view renders several pages at once — editor actions like
    append/find need access to every journal item's blocks *)
 let current_journals : Model.page list ref = ref []

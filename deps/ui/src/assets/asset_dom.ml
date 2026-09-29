@@ -14,7 +14,7 @@ module D = Views_dom
 open Lui_elements
 
 let dom = Logseq_dom.dom
-let repo () = Option.value !Runtime.current_repo ~default:""
+let repo = Runtime.repo
 
 (* ---------- raw externals ---------- *)
 

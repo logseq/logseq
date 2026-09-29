@@ -3,10 +3,6 @@
 
 module W = Wire
 
-let seq_items = function
-  | W.Array xs | W.List xs | W.Set xs -> xs
-  | _ -> []
-
 let as_float = function
   | W.Float f -> Some f
   | W.Int n -> Some (float_of_int n)
@@ -70,7 +66,7 @@ let ident_of_value v =
   | _ -> None
 
 let str_list v =
-  seq_items v
+  W.elems v
   |> List.filter_map (fun x ->
          match x with
          | W.Keyword s -> Some s
@@ -146,7 +142,7 @@ type view_data =
   | VEmpty
 
 let uuids_of w =
-  seq_items w |> List.filter_map (fun x -> W.as_uuid x)
+  W.elems w |> List.filter_map (fun x -> W.as_uuid x)
 
 let decode_view_data (v : W.t) : view_data =
   match v with
@@ -156,7 +152,7 @@ let decode_view_data (v : W.t) : view_data =
             W.get v "partition" with
       | _, Some (W.Keyword "grouped") ->
           let groups =
-            seq_items (Option.value (W.get v "groups") ~default:W.Nil)
+            W.elems (Option.value (W.get v "groups") ~default:W.Nil)
             |> List.map (fun g ->
                    { gv = Option.value (W.get g "value") ~default:W.Nil
                    ; grows =
@@ -167,10 +163,10 @@ let decode_view_data (v : W.t) : view_data =
           VGrouped groups
       | _, Some (W.Keyword "grouped-list") ->
           let groups =
-            seq_items (Option.value (W.get v "groups") ~default:W.Nil)
+            W.elems (Option.value (W.get v "groups") ~default:W.Nil)
             |> List.map (fun g ->
                    let parts =
-                     seq_items
+                     W.elems
                        (Option.value (W.get g "partitions") ~default:W.Nil)
                      |> List.filter_map (fun p ->
                             match W.get p "breadcrumb-uuid" with
@@ -197,7 +193,7 @@ let decode_view_data (v : W.t) : view_data =
                  kvs
            | _ -> ());
           let qprops =
-            seq_items (Option.value (W.get v "properties") ~default:W.Nil)
+            W.elems (Option.value (W.get v "properties") ~default:W.Nil)
             |> List.filter_map ident_of_value
           in
           VFlat

@@ -158,7 +158,7 @@ let filters_of_wire w : filter_clause list * bool =
                            | [] -> None)
                       }
                 | _ -> None)
-              (Views_wire.seq_items fs)
+              (W.elems fs)
           , or_ )
       | None -> ([], or_))
   | _ -> ([], false)

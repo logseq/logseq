@@ -2,7 +2,7 @@
 
 module W = Wire
 
-let repo () = Option.value !Runtime.current_repo ~default:""
+let repo = Runtime.repo
 
 let then_ f p = Js.Promise.then_ f p
 

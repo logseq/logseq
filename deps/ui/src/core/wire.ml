@@ -77,3 +77,37 @@ let nth_arg args n =
   match args with
   | Array xs | List xs -> List.nth_opt xs n
   | _ -> None
+
+(* transit vectors may decode as Array|List|Set — treat all three as seqs *)
+let elems = function
+  | Array xs | List xs | Set xs -> xs
+  | _ -> []
+
+(* get-blocks result element: {id, block} pair map — the entity is the
+   "block" slot, or the second positional element of the pair vector *)
+let block_of_pair pair =
+  match get pair "block" with
+  | Some res -> Some res
+  | None -> (
+      match elems pair with
+      | [ _; res ] -> Some res
+      | _ -> None)
+
+(* uuid-string check (36-char canonical form) — cljs uuid-string? *)
+let is_uuid_char c =
+  ('0' <= c && c <= '9') || ('a' <= c && c <= 'f') || ('A' <= c && c <= 'F')
+  || c = '-'
+
+let is_uuid_string s =
+  String.length s = 36
+  && String.get s 8 = '-'
+  && String.get s 13 = '-'
+  && String.get s 18 = '-'
+  && String.get s 23 = '-'
+  && String.for_all is_uuid_char s
+
+(* ref wire for get-page-blocks-tree / get-page-route-info: Uuid for uuid
+   strings, String for page names (Ldb.get_page accepts Uuid/String/Int64
+   only — a [:block/uuid u] lookup-ref vector decodes to Vector and
+   returns no page) *)
+let page_ref s = if is_uuid_string s then Uuid s else String s

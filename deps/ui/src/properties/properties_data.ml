@@ -7,7 +7,7 @@
 
 module W = Wire
 
-let repo () = W.String (Sdk_util.repo ())
+let repo () = W.String (Runtime.repo ())
 
 (* ---------- generic wire accessors ---------- *)
 
@@ -22,8 +22,7 @@ let getb m key =
 let getk m key =
   match W.get m key with Some (W.Keyword s) -> Some s | _ -> None
 
-(* Elements of Array|List|Set — choice lists come back as Set. *)
-let elems w = match w with W.Array l | W.List l | W.Set l -> l | _ -> []
+
 
 (* unwrap datascript/Entity tagged maps *)
 let untag = function W.Tagged (_, inner) -> inner | w -> w
@@ -52,7 +51,7 @@ let tag_idents entity =
   | Some w ->
       List.filter_map
         (fun item -> getk (untag item) "db/ident")
-        (elems w)
+        (W.elems w)
   | None -> []
 
 (* ---------- display-property rows ---------- *)
@@ -75,7 +74,7 @@ let row_many row =
 
 let row_closed_values row =
   match getf (row_prop row) "property/closed-values" with
-  | Some w -> elems w
+  | Some w -> W.elems w
   | None -> []
 
 let row_is_class_schema row = match getf row "schema?" with Some _ -> true | None -> false
@@ -236,19 +235,19 @@ let positioned_rows block_wire position =
                        ; (W.String "property", prop)
                        ; (W.String "value", value) ])
               | None -> None)
-            (elems props_w)
+            (W.elems props_w)
       | None -> [])
   | None -> []
 
 let split_display wire =
   let rows =
     match W.get wire "full-properties" with
-    | Some w -> elems w
+    | Some w -> W.elems w
     | None -> []
   in
   let hidden =
     match W.get wire "hidden-properties" with
-    | Some w -> elems w
+    | Some w -> W.elems w
     | None -> []
   in
   (rows, hidden)
@@ -346,12 +345,12 @@ let block_render_data uuid =
     ]
   |> Js.Promise.then_ (fun w ->
          Js.Promise.resolve
-           (match elems w with
+           (match W.elems w with
             | [ pair ] -> (
                 match getf pair "block" with
                 | Some res -> res
                 | None -> (
-                    match elems pair with [ _; res ] -> res | _ -> W.Nil))
+                    match W.elems pair with [ _; res ] -> res | _ -> W.Nil))
             | _ -> W.Nil))
 
 (* ---------- ops ---------- *)

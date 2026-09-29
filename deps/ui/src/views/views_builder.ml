@@ -266,7 +266,7 @@ let value_picker inst ~tree ~loc ~anchor ident ~refresh =
             let its =
               List.filter_map
                 (fun v -> W.map_get_string v "label")
-                (Wr.seq_items vs)
+                (Wr.W.elems vs)
             in
             open_select its))
 
