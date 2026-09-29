@@ -1640,8 +1640,8 @@ Sizes:
 
 | build | main.js bytes | gzip |
 |---|---:|---:|
-| dev | 3,976,891 | 703,625 |
-| production | 2,452,989 | 555,165 |
+| dev | 3,686,203 | 691,344 |
+| production | 2,438,496 | 554,822 |
 | `js/icon-data.js` (both modes) | 1,778,026 | 331,469 |
 
 (Baseline before this branch: dev 8,546,822 / gzip 1,204,745, prod
@@ -1660,6 +1660,19 @@ of our own emitted-but-unreachable modules). No `[%mel.raw]` `require`
 emitted modules directly. OCaml-side dead code is otherwise invisible
 to warning 32: without `.mli` files every structure binding is
 exported, so nothing can ever be flagged unused.
+
+### Data tables → embedded JSON
+
+`keymap_data.ml`, `icon_picker_names.ml` and `commands_data.ml` were
+re-encoded from OCaml list/record literals to a single embedded JSON
+string each, decoded once at module init (same wire shape decoded into
+the same public types — call sites unchanged). The emitted JS dropped
+~630KB (445→19KB, 318→244KB, 138→8KB), but most of the old emit was
+melange pretty-printing whitespace the minifier already removed: prod
+main.js gained only ~14KB, while the unminified dev bundle dropped
+~290KB. Kept because JSON.parse at init is also cheaper than building
+~6.4k cons cells. Lesson vs the icon split: icon data was real
+megabytes; small tables gain little once minified.
 
 ### Icon data split (`resources/js/icon-data.js`)
 
@@ -1683,9 +1696,9 @@ app code. If `__tablerChildren` is absent (e.g. test environments)
 `tabler_children` returns `[]` and icons degrade to font glyphs, same
 as an unknown icon name before.
 
-Remaining bundle weight is `keymap_data.js` (~445KB source),
-`@emoji-mart/data` (~410KB), `icon_picker_names.js` (~318KB) — all
-candidates for the same treatment — plus melange runtime and npm deps
+Remaining bundle weight is `icon_picker_names.js` (~244KB),
+`camlinternalFormat` (~215KB, the Printf/sprintf runtime),
+`@emoji-mart/data` (~410KB) plus melange runtime and npm deps
 (transit-js, dnd-kit, lui); the build is intentionally a single IIFE
 (`codeSplitting:false`).
 
