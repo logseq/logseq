@@ -56,6 +56,8 @@ external ev_type : ev -> string = "type" [@@mel.get]
 external el_rect_json : el -> Js.Json.t = "getBoundingClientRect"
   [@@mel.send]
 
+external window_inner_height : float = "innerHeight"
+
 external rect_get : Js.Json.t -> string -> float = ""
   [@@mel.get_index]
 

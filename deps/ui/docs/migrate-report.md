@@ -1191,6 +1191,29 @@ references, block hover, block context menu), slash menu, #tag popup,
   names and label spans aligned to cljs popup structure.
 - **Settings/favorites/tag page/properties/block menus**: verified
   identical after the above; only unfixable noise remains (below).
+- **Table header property-column menu**: sort more-options now precede
+  the configure items (cljs `more-options` order) with arrow-up/down
+  icons, the Configure title is hidden (`with-title? false`), the
+  delete row reads "Delete property from tag" on tag pages, and the
+  `.ls-property-dropdown` popup is capped at
+  `max-height: innerHeight - top - 8` with `overflow-y:auto` (radix
+  available-height) so trailing items scroll instead of overflowing
+  the viewport. Still missing vs cljs: the Pin/Unpin item — LUI has no
+  `logseq.property.table/pinned-columns` rendering support yet.
+- **Dynamic overlay containers**: cmdk conditional mounts inside a
+  keyed `box` and app overlays inside a keyed `.cp__overlays` div —
+  keeps dynamic segments off `#app-container`'s child list so
+  nav-time reconciles can't emit inconsistent op batches (cmdk reopen
+  crash); cljs mounts these through portals, i.e. their own container
+  nodes anyway.
+- **Row-select checkbox chrome**: header/row checkboxes carry
+  `tabindex`/`aria-checked`/`data-checked`/`data-unchecked` and the
+  cljs visually-hidden native input sibling (1px clipped fixed box),
+  and the row `select` cell exposes `data-table-row-select="true"` —
+  a plain checkbox overlapped the button and swallowed its clicks.
+- **Duplicate views head**: the extra `render_head` appended above the
+  view grid is gone; the head renders only via `filters_row` inside
+  `.ls-view-body` (was the second `Add new view` button).
 
 Known unfixable / nondeterministic leftovers:
 - `Revision: dev` vs `16c4ed1a04` in the settings footer — build-time
