@@ -193,15 +193,18 @@ let set_home_page name k =
 
 (* ---- storage-backed prefs ---- *)
 
+(* cljs storage/get reads values with reader/read-string and storage/set
+   writes pr-str, so cljs-written booleans appear quoted ("true"/"false");
+   accept both quoted and raw forms. *)
 let storage_bool key ~default =
   match Platform.local_storage_get key with
-  | Some "true" -> true
-  | Some "false" -> false
+  | Some "true" | Some "\"true\"" -> true
+  | Some "false" | Some "\"false\"" -> false
   | Some _ -> default
   | None -> default
 
 let storage_set_bool key b =
-  Platform.local_storage_set key (if b then "true" else "false")
+  Platform.local_storage_set key (if b then "\"true\"" else "\"false\"")
 
 (* cljs ui-handler/toggle-wide-mode!: storage + ls-wide-mode on
    main#app-container-wrapper *)
