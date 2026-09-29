@@ -350,7 +350,7 @@ and rerender () =
   | Some host -> render_into host
   | None -> ()
 
-let show () =
+let rec show ?(tries = 40) () =
   Graphs_ops.on_repos_changed := (fun () ->
       match B.qs ".graphs-host" with
       | Some host ->
@@ -380,7 +380,13 @@ let show () =
                (fun _ -> rerender (); Js.Promise.resolve ())
                (Graphs_ops.list_remote_graphs ()));
           render_into host)
-  | None -> ()
+  | None ->
+      (* cold #/graphs load: the route commits Ready before the content
+         column flushes, so the host parent isn't there on the first
+         model emission — retry briefly; on_model re-invokes on every
+         change anyway, so this is a bridge, not a loop *)
+      if tries > 0 then
+        ignore (B.set_timeout (fun () -> show ~tries:(tries - 1) ()) 50)
 
 let hide () =
   close_dropdown ();
