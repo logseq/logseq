@@ -22,6 +22,12 @@ external prop_get : Js.Json.t -> string -> Js.Json.t = "" [@@mel.get_index]
 external closest_json : Js.Json.t -> string -> Js.Json.t = "closest"
   [@@mel.send]
 
+external get_attr_json : Js.Json.t -> string -> string Js.Nullable.t =
+  "getAttribute" [@@mel.send]
+
+external get_attr_opt : W.Element.t -> string -> string option =
+  "getAttribute" [@@mel.send] [@@mel.return nullable]
+
 external managed_get : W.Element.t -> string Js.Undefined.t = "__lsAttrs"
   [@@mel.get]
 
@@ -198,15 +204,22 @@ let json_of_event name (ev : Js.Json.t) : string =
           or mounted property areas *)
        if
          Js.Undefined.toOption (prop_undef t "closest") <> None
-         && not
-              (Js.Json.test
-                 (closest_json t
-                    "a, button, input, textarea, select, summary, \
-                     .block-control-wrap, .bullet-container, \
-                     .ls-properties-area, .ls-page-title-actions, \
-                     .lsp-hook-ui-slot")
-                 Js.Json.Null)
-       then put "interactive" (Js.Json.boolean true))
+       then (
+         (* nearest anchor href — readme/comment containers delegate
+            <a> clicks (cljs local-markdown-display onClick) *)
+         let a = closest_json t "a[href]" in
+         if not (Js.Json.test a Js.Json.Null) then
+           s "href" (Js.Nullable.toOption (get_attr_json a "href"));
+         if
+           not
+             (Js.Json.test
+                (closest_json t
+                   "a, button, input, textarea, select, summary, \
+                    .block-control-wrap, .bullet-container, \
+                    .ls-properties-area, .ls-page-title-actions, \
+                    .lsp-hook-ui-slot")
+                Js.Json.Null)
+         then put "interactive" (Js.Json.boolean true)))
    | None -> ());
   Js.Json.stringify (Js.Json.object_ d)
 
@@ -243,6 +256,19 @@ let apply_events el names =
       if not (Hashtbl.mem tbl name) then (
         let f (ev : Js.Json.t) =
           if name = "contextmenu" then prevent_default ev;
+          (* data-capture-click hosts handle anchor clicks themselves
+             (e.g. .cp__plugins-details opens them externally) *)
+          if
+            name = "click"
+            && get_attr_opt el "data-capture-click" <> None
+          then
+            (match Js.Undefined.toOption (prop_undef ev "target") with
+             | Some t ->
+                 if
+                   not
+                     (Js.Json.test (closest_json t "a[href]") Js.Json.Null)
+                 then prevent_default ev
+             | None -> ());
           (* keep textarea textContent matching its value so innerText and
              Playwright :has-text see what was typed *)
           if name = "input" && W.Element.tagName el = "TEXTAREA" then

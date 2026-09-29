@@ -126,15 +126,22 @@ let market_card pkg =
     "cp__plugins-item-card market"
     ^ if installed_ then " installed" else ""
   in
+  (* cljs get-open-plugin-readme-handler: icon .l and h3 .l both open
+     the readme dialog *)
+  let open_readme n _ =
+    if n = "click" then Plugin_readme.open_readme pkg
+  in
   dom ~key:("mkt-" ^ id) ~style_class:cls
     [ dom ~key:"l" ~style_class:"l link-block cursor-pointer"
+        ~events:"click" ~on_dom_event:open_readme
         [ dom ~key:"ic" ~style_class:"plugin-icon" [ icon "puzzle" ] ]
     ; dom ~key:"r" ~style_class:"r"
         [ dom ~key:"h" ~tag:"h3"
             ~style_class:"head text-xl font-bold pt-1.5"
             ~attrs:[ ("title", title) ]
             [ dom ~tag:"span"
-                ~style_class:"l link-block cursor-pointer" ~text:title []
+                ~style_class:"l link-block cursor-pointer" ~text:title
+                ~events:"click" ~on_dom_event:open_readme []
             ]
         ; dom ~key:"desc" ~style_class:"desc text-xs opacity-70"
             [ dom ~tag:"p" ~text:(jstr pkg "description") [] ]
@@ -216,15 +223,20 @@ let installed_card (pl : Js.Json.t) =
     if v = "" then jstr plj "version" else v
   in
   let disabled = jbool pl "disabled" in
+  let open_readme n _ =
+    if n = "click" then Plugin_readme.open_readme plj
+  in
   dom ~key:("inst-" ^ pid) ~style_class:"cp__plugins-item-card installed"
     [ dom ~key:"l" ~style_class:"l link-block cursor-pointer"
+        ~events:"click" ~on_dom_event:open_readme
         [ dom ~key:"ic" ~style_class:"plugin-icon" [ icon "puzzle" ] ]
     ; dom ~key:"r" ~style_class:"r"
         [ dom ~key:"h" ~tag:"h3"
             ~style_class:"head text-xl font-bold pt-1.5"
             ~attrs:[ ("title", name) ]
             [ dom ~tag:"span"
-                ~style_class:"l link-block cursor-pointer" ~text:name []
+                ~style_class:"l link-block cursor-pointer" ~text:name
+                ~events:"click" ~on_dom_event:open_readme []
             ; dom ~tag:"sup" ~key:"v"
                 ~style_class:"inline-block px-1 text-xs opacity-50"
                 ~text:version []

@@ -58,7 +58,6 @@ external ev_button : ev -> int = "button" [@@mel.get]
 external ev_type : ev -> string = "type" [@@mel.get]
 
 external window_inner_width : float = "innerWidth" [@@mel.scope "window"]
-external window_inner_height : float = "innerHeight" [@@mel.scope "window"]
 
 (* Bounding rect, decoded field-by-field via Js.Json (one external, no
    extra abstract types). *)

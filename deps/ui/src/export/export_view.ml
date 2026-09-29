@@ -15,7 +15,7 @@ let vis show = if show then "visible" else "hidden"
 let in_text st = st.S.fmt = S.Text
 
 let in_structured st =
-  match st.S.fmt with S.Text | S.Opml | S.Html -> true | S.Edn -> false
+  match st.S.fmt with S.Text | S.Opml | S.Html -> true | S.Edn | S.Png -> false
 
 let style_attr v = ("style", "visibility: " ^ v)
 
@@ -145,13 +145,19 @@ let fmt_btn ctx key label fmt cls =
 
 let copy_save_row ctx =
   if_
-    ~test:(Signal.map (fun (st : S.t) -> st.content <> None) (Signal.value (S.st ctx)))
+    ~test:
+      (Signal.map
+         (fun (st : S.t) -> st.content <> None || st.png <> None)
+         (Signal.value (S.st ctx)))
     (dom ~key:"export-btns" ~style_class:"mt-4 flex flex-row gap-2"
     [ dom ~key:"export-copy" ~tag:"button"
         ~style_class:(btn_cls ^ " mr-4")
         ~attrs:[ ("type", "button") ] ~events:"click"
         ~on_dom_event:(fun n _ ->
-          if n = "click" then P.copy (S.st ctx))
+          if n = "click" then
+            match (Signal.get_state (S.st ctx)).S.fmt with
+            | S.Png -> P.copy_png (S.st ctx)
+            | _ -> P.copy (S.st ctx))
         ~text_signal:
           (Signal.map
              (fun (st : S.t) ->
@@ -219,6 +225,44 @@ let options_rows ctx =
             ~text:"level <=" []
         ; level_select ctx ] ]
 
+(* cljs PNG preview: loading spinner until the blob lands, then
+   img#export-preview shows it *)
+let png_preview ctx =
+  dom ~key:"export-preview-png"
+    ~style_class:"flex items-center justify-center relative"
+    [ if_
+        ~test:
+          (Signal.map
+             (fun (st : S.t) -> st.png = None)
+             (Signal.value (S.st ctx)))
+        (dom ~key:"png-loading" ~style_class:"absolute"
+           [ Icons.icon "loader-2" ])
+    ; dom ~key:"export-preview-img" ~tag:"img" ~style_class:"my-4"
+        ~attrs_signal_v:
+          (Logseq_dom.attrs_signal
+             (Signal.value (S.st ctx))
+             (fun (st : S.t) ->
+               [ ("id", "export-preview"); ("alt", I18n.export_preview_alt)
+               ; ( "style"
+                 , if st.png = None then "visibility: hidden" else "" ) ]))
+        [] ]
+
+(* cljs swaps the whole options block for the transparent-bg checkbox
+   when the PNG tab is active *)
+let lower_options ctx =
+  dyn ~equal:Stdlib.( = )
+    (fun fmt ->
+      match fmt with
+      | S.Png ->
+          dom ~key:"png-opts" ~style_class:"flex items-center"
+            [ dom ~key:"png-tb-l" ~text:I18n.export_transparent_bg []
+            ; checkbox ctx ~key:"cb-tb" ~cls:"mr-2 ml-4"
+                ~show:(fun _ -> true)
+                ~on:(fun st -> st.S.png_transparent)
+                ~on_toggle:(fun () -> P.set_png_transparent (S.st ctx)) ]
+      | _ -> options_rows ctx)
+    (Signal.map (fun (st : S.t) -> st.fmt) (Signal.value (S.st ctx)))
+
 let body (_ms : Model.t Signal.signal) : t =
   fun ctx parent ->
     S.open_ ctx;
@@ -229,16 +273,24 @@ let body (_ms : Model.t Signal.signal) : t =
               [ fmt_btn ctx "ft-text" "Text" S.Text "mr-4 w-20"
               ; fmt_btn ctx "ft-opml" "OPML" S.Opml "mr-4 w-20"
               ; fmt_btn ctx "ft-html" "HTML" S.Html "mr-4 w-20"
+              ; fmt_btn ctx "ft-png" "PNG" S.Png "mr-4 w-20"
               ; fmt_btn ctx "ft-edn" "EDN" S.Edn "w-20" ]
-          ; dom ~key:"export-preview" ~tag:"textarea"
-              ~style_class:"overflow-y-auto h-96"
-              ~attrs:[ ("readonly", "") ]
-              ~text_signal:
-                (Signal.map
-                   (fun (st : S.t) ->
-                     sv (Option.value ~default:"" st.content))
-                   (Signal.value (S.st ctx)))
-              []
-          ; options_rows ctx
+          ; dyn ~equal:Stdlib.( = )
+              (fun fmt ->
+                match fmt with
+                | S.Png -> png_preview ctx
+                | _ ->
+                    dom ~key:"export-preview" ~tag:"textarea"
+                      ~style_class:"overflow-y-auto h-96"
+                      ~attrs:[ ("readonly", "") ]
+                      ~text_signal:
+                        (Signal.map
+                           (fun (st : S.t) ->
+                             sv (Option.value ~default:"" st.content))
+                           (Signal.value (S.st ctx)))
+                      [])
+              (Signal.map
+                 (fun (st : S.t) -> st.fmt) (Signal.value (S.st ctx)))
+          ; lower_options ctx
           ; copy_save_row ctx ] ]
       ctx parent
