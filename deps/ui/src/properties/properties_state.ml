@@ -28,24 +28,15 @@ let install_outside_close =
   fun () ->
     if not !installed then (
       installed := true;
-      Editor_dom.document_add_listener "mousedown" (fun ev ->
-          match Editor_dom.ev_target ev with
-          | None -> ()
-          | Some target -> (
-              match
-                List.find_index
-                  (fun o -> Editor_dom.el_contains o.el target)
-                  !overlays
-              with
-              | None ->
-                  List.iter (fun o -> el_remove o.el) !overlays;
-                  overlays := []
-              | Some i ->
-                  List.iteri
-                    (fun n o -> if n < i then el_remove o.el)
-                    !overlays;
-                  overlays := List.filteri (fun n _ -> n >= i) !overlays))
-          true)
+      Overlay.on_document_press "mousedown"
+        ~els:(fun () -> List.map (fun o -> o.el) !overlays)
+        ~on_hit:(function
+          | None ->
+              List.iter (fun o -> el_remove o.el) !overlays;
+              overlays := []
+          | Some i ->
+              List.iteri (fun n o -> if n < i then el_remove o.el) !overlays;
+              overlays := List.filteri (fun n _ -> n >= i) !overlays))
 
 let push_overlay el ~on_escape =
   install_outside_close ();
