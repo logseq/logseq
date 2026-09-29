@@ -711,6 +711,57 @@ let test_apply_outliner_ops_insert_dead_uuid_ref () =
   in
   check "block inserted" (Ldb.string_value b "block/title" <> None)
 
+(* A dangling [[uuid]] ref ships a synthetic page stub (name/title = the
+   uuid string, fresh :block/uuid, type "page") next to the lookup vector.
+   Dropping the lookup must drop the stub too — otherwise a ghost page
+   titled by the raw uuid commits and the dead ref renders [[Untitled]]. *)
+let test_apply_outliner_ops_dead_uuid_ref_no_stub_page () =
+  let conn =
+    create_conn_with_blocks
+      ~pages_and_blocks:
+        [ { page = { default_page with pg_title = Some "p1" }
+          ; blocks =
+              [ { default_block with b_uuid = Some "dddddddd-0000-0000-0000-000000000001" } ] } ]
+      ()
+  in
+  register_conn conn;
+  let dead = "deadbeef-0000-0000-0000-000000000001" in
+  let r =
+    api "apply-outliner-ops"
+      [ Wire.String test_repo
+      ; Wire.Array
+          [ Wire.Array
+              [ kw "insert-blocks"
+              ; Wire.Array
+                  [ Wire.Array
+                      [ Wire.Map
+                          [ kw "block/uuid", Wire.Uuid "dddddddd-0000-0000-0000-000000000002"
+                          ; kw "block/title"
+                            , Wire.String ("pasted ref: [[" ^ dead ^ "]]")
+                          ; ( kw "block/refs"
+                            , Wire.Array
+                                [ Wire.Map
+                                    [ kw "block/name", Wire.String dead
+                                    ; kw "block/title", Wire.String dead
+                                    ; kw "block/uuid"
+                                      , Wire.Uuid "eeeeeeee-0000-0000-0000-000000000099"
+                                    ; kw "block/type", Wire.String "page" ]
+                                ; Wire.Array [ kw "block/uuid"; Wire.Uuid dead ] ] ) ] ]
+                  ; Wire.Uuid "dddddddd-0000-0000-0000-000000000001"
+                  ; Wire.Map [ kw "sibling?", Wire.Bool true; kw "keep-uuid?", Wire.Bool true ] ] ] ]
+      ; Wire.Map [] ]
+  in
+  (match r with
+   | Wire.Tagged ("worker/error", _) ->
+       Alcotest.fail "apply-outliner-ops errored"
+   | _ -> ());
+  check "block inserted"
+    (Option.is_some
+       (entity_at_uuid (db_of conn) "dddddddd-0000-0000-0000-000000000002"));
+  check "no ghost page"
+    (Option.is_none
+       (entity_at_uuid (db_of conn) "eeeeeeee-0000-0000-0000-000000000099"))
+
 (* ensure-comments-area-for-blocks — "Add comment" on a plain block must
    create a comments-area child tagged logseq.class/Comments pointing back
    at the block via logseq.property.comments/blocks. *)
@@ -3346,6 +3397,8 @@ let cases =
       test_apply_outliner_ops_move_up_down
   ; Alcotest.test_case "apply-outliner-ops-insert-dead-uuid-ref" `Quick
       test_apply_outliner_ops_insert_dead_uuid_ref
+  ; Alcotest.test_case "apply-outliner-ops-dead-uuid-ref-no-stub-page" `Quick
+      test_apply_outliner_ops_dead_uuid_ref_no_stub_page
   ; Alcotest.test_case "ensure-comments-area-for-blocks" `Quick
       test_ensure_comments_area_for_blocks
   ; Alcotest.test_case "get-block-sibling" `Quick test_get_block_sibling
