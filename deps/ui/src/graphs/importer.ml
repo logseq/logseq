@@ -81,14 +81,16 @@ let import_file_graph repo files =
                (fun _ -> Js.Promise.resolve true)
                (Js.Promise.then_
                   (fun cfg ->
-                     Runtime.invoke3 "thread-api/import-file-graph"
-                       (Wire.String repo)
-                       (Wire.Map
-                          [ ( Wire.kw "path"
-                            , Wire.String "logseq/config.edn" )
-                          ; (Wire.kw "content", Wire.String cfg)
-                          ])
-                       (Wire.Array (Array.to_list files_w)))
+                     Runtime.invoke "thread-api/import-file-graph"
+                       [ Wire.String repo
+                       ; Wire.Map
+                           [ ( Wire.kw "path"
+                             , Wire.String "logseq/config.edn" )
+                           ; (Wire.kw "content", Wire.String cfg)
+                           ]
+                       ; Wire.Array (Array.to_list files_w)
+                       ; Wire.Map []
+                       ])
                   (B.file_text config)))
   | [] -> Js.Promise.resolve false
 
