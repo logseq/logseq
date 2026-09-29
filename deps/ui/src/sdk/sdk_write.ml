@@ -25,7 +25,7 @@ let list_items = function
 let sibling_of repo uuid dir =
   Runtime.invoke3 "thread-api/get-block-sibling"
     (Wire.String repo)
-    (Wire.Uuid uuid)
+    (Wire.Array [ Wire.kw "block/uuid"; Wire.Uuid uuid ])
     (Wire.Keyword dir)
   |> Js.Promise.then_ (fun w -> Js.Promise.resolve (block_uuid_of w))
 
