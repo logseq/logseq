@@ -176,6 +176,10 @@ external observe : mutation_observer -> el -> observe_opts -> unit
 
 external el_replace_with : el -> el -> unit = "replaceWith" [@@mel.send]
 
+(* the adapter reads this back to keep the Text node in sync — see
+   dom_adapter.raw_text_node_get *)
+external el_set_swap_text : el -> el -> unit = "__lsText" [@@mel.set]
+
 let for_each_selector sel f =
   let nl = query_selector_all sel in
   for i = 0 to node_list_length nl - 1 do
@@ -264,9 +268,14 @@ let register_doc_scan ?(run_if = fun _ -> true) scan =
    swap the adapter cannot. *)
 let replace_all_raw_text roots =
   for_each_touched roots "raw-text" (fun el ->
-      match el_get_attr el "data-raw-text" with
-      | Some s -> el_replace_with el (create_text_node s)
-      | None -> el_replace_with el (create_text_node ""))
+      let tn =
+        create_text_node
+          (match el_get_attr el "data-raw-text" with
+           | Some s -> s
+           | None -> "")
+      in
+      el_set_swap_text el tn;
+      el_replace_with el tn)
 
 (* LUI core stamps id="lui-node-<n>" on every registered/extension node
    at create time; cljs emits no such ids, so strip them for DOM parity.
