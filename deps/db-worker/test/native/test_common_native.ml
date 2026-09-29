@@ -162,7 +162,7 @@ let test_url_to_path_encodes_path () =
     (Common_path.url_to_path "memory:///rtc 2/assets"
      = "/rtc%202/assets");
   check "url-to-path encodes non-ascii utf-8"
-    (Common_path.url_to_path "memory:///café/x" = "/caf%C3%A9/x");
+    (Common_path.url_to_path "memory:///日本語/x" = "/%E6%97%A5%E6%9C%AC%E8%AA%9E/x");
   check "url-to-path keeps literal percent raw"
     (Common_path.url_to_path "memory:///a%b/x" = "/a%b/x");
   check "url-to-path decodes then re-encodes"
