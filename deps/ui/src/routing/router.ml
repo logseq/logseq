@@ -239,7 +239,8 @@ let load_page_ref for_route ref_v =
                               | Some u when Editor_state.ready () -> (
                                   match Editor_state.find u with
                                   | Some zb ->
-                                      Editor_actions.enter_edit u
+                                      Editor_actions.enter_edit ~scope:"main"
+                                        u
                                         (String.length zb.Model.block_title)
                                   | None -> ())
                               | _ -> ()));
@@ -400,7 +401,9 @@ let load_block_zoom uuid =
                                         Editor_actions.consume_pending_zoom ()
                                       with
                                       | Some u when Editor_state.ready () ->
-                                          Editor_actions.enter_edit u
+                                          Editor_actions.enter_edit
+                                            ~scope:("zoom-" ^ uuid)
+                                            u
                                             (String.length b.Model.block_title)
                                       | _ -> ());
                                      Js.Promise.resolve ())))

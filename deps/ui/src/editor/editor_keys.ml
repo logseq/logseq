@@ -278,6 +278,10 @@ let is_other_block_editor uuid target =
 let on_pending_focus_key ev e caret =
   let buf = e.S.buffer in
   let len = String.length buf in
+  (* pending_focus caret is derived from the live textarea, which can
+     outpace e.buffer while a refresh rewrites it — clamp before any
+     String.sub *)
+  let caret = max 0 (min caret len) in
   let queue f =
     S.pending_focus_actions := f :: !S.pending_focus_actions
   in
