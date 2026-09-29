@@ -1701,9 +1701,7 @@
                                                             :refresh-result-f refresh-result-f})))
                selected-choices' (get block (:db/ident property))
                selected-choices (when-not (= type :checkbox)
-                                  (if (every? #(and (map? %) (:db/id %)) selected-choices')
-                                    (map :db/id selected-choices')
-                                    [selected-choices']))]
+                                  (property-value->ids selected-choices'))]
          (select-aux block property
                      {:multiple-choices? multiple-choices?
                       :items items

@@ -86,23 +86,28 @@
 
 (defn- property-node-selector-values
   [db property option]
-  (let [values (db-view/get-property-values db (:db/ident property) option)]
-    (if (= :db.type/ref (:db/valueType property))
-      (mapv
-       (fn [choice]
-         (if-let [entity (some->> (get-in choice [:value :db/id])
-                                  (d/entity db))]
-           (assoc choice :value
-                  (cond->
-                   (worker-plain/entity-forward-map
-                    db entity
-                    {:properties [:db/ident :block/uuid :block/tags :block/alias]})
-                    (seq (:block/_alias entity))
-                    (assoc :block/alias-source-page-id
-                           (:db/id (first (:block/_alias entity))))))
-           choice))
-       values)
-      values)))
+  (mapv
+   (fn [choice]
+     (let [original-id (get-in choice [:value :db/id])
+           ;; Resolve hidden property value blocks to their target node so
+           ;; choice ids match the ids selected block snapshots resolve to
+           eid (if original-id
+                 (worker-plain/node-property-target-id db original-id)
+                 original-id)]
+       (if-let [entity (some->> eid
+                                (d/entity db))]
+         (cond-> (assoc choice :value
+                        (cond->
+                         (worker-plain/entity-forward-map
+                          db entity
+                          {:properties [:db/ident :block/uuid :block/tags :block/alias]})
+                          (seq (:block/_alias entity))
+                          (assoc :block/alias-source-page-id
+                                 (:db/id (first (:block/_alias entity))))))
+           (not= eid original-id)
+           (assoc :label (or (:block/title entity) (:label choice))))
+         choice)))
+   (db-view/get-property-values db (:db/ident property) option)))
 
 (defn- property-node-selector-initial-choices
   [db property non-root-classes option]

@@ -35,9 +35,12 @@
 	                                          (.preventDefault e))
 	                              :disabled (:disabled? result)}))
 	              value]
-             (when (and (map? result) (:id result))
-               [:div.tip.flex
-                [:code.opacity-20.bg-transparent (:id result)]])]]
+             [:div.tip.flex.items-center.gap-1
+              (when (and (not multiple-choices?)
+                         (selected-choices (:value result)))
+                (ui/icon "check" {:size 14}))
+              (when (and (map? result) (:id result))
+                [:code.opacity-20.bg-transparent (:id result)])]]]
     (if header
       [:div.flex.flex-col.gap-1
        header

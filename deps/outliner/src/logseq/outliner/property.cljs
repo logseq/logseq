@@ -964,6 +964,19 @@
                          {:outliner-op :upsert-property}))
         (d/entity @conn db-ident')))))
 
+(defn- node-value-target-id
+  "Resolves a :node property value to the id of the node it targets. Such
+   values can be hidden property value blocks whose :block/title is the
+   target's uuid."
+  [db value]
+  (let [entity (if (de/entity? value) value (d/entity db value))]
+    (if-let [target-uuid (and entity
+                              (:logseq.property/created-from-property entity)
+                              (parse-uuid (:block/title entity)))]
+      (or (:db/id (d/entity db [:block/uuid target-uuid]))
+          (:db/id entity))
+      (:db/id entity))))
+
 (defn batch-delete-property-value!
   "batch delete value when a property has multiple values"
   [conn block-eids property-id property-value]
@@ -983,14 +996,22 @@
              (doseq [block-eid block-eids]
                (when-let [block (d/entity @conn block-eid)]
                  (let [current-val (get block property-id)
-                       fv (first current-val)]
-                   (if (and (= 1 (count current-val))
-                            (or (= property-value fv)
-                                (= property-value (:db/id fv))))
+                       node? (= :node (:logseq.property/type property))
+                       match-id (some (fn [v]
+                                        (let [v-id (if (de/entity? v) (:db/id v) v)]
+                                          (when (or (= property-value v)
+                                                    (= property-value v-id)
+                                                    (and node?
+                                                         (= property-value
+                                                            (node-value-target-id @conn v))))
+                                            v-id)))
+                                      (if (coll? current-val) current-val [current-val]))]
+                   (if (and match-id (= 1 (count current-val)))
                      (remove-block-property! conn (:db/id block) property-id)
-                     (ldb/transact! conn
-                                    [[:db/retract (:db/id block) property-id property-value]]
-                                    {:outliner-op :save-block}))))))))))))
+                     (when match-id
+                       (ldb/transact! conn
+                                      [[:db/retract (:db/id block) property-id match-id]]
+                                      {:outliner-op :save-block})))))))))))))
 
 (defn delete-property-value!
   "Delete value if a property has multiple values"

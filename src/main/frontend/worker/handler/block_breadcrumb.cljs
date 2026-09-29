@@ -136,34 +136,47 @@
       (assoc :logseq.property.asset/external-url asset-external-url)
       (some? property-value-title) (assoc :block/title property-value-title))))
 
+(defn- node-value-target-id
+  "A :node property value can be stored as a hidden property value block whose
+  :block/title is the uuid of the node it targets. Returns the target's id for
+  such value blocks, nil otherwise."
+  [db ref-id collected]
+  (when (:logseq.property/created-from-property collected)
+    (when-let [target-uuid (some-> (:block/title collected) parse-uuid)]
+      (let [target-id (resolve-ref-id db target-uuid)]
+        (when (not= target-id ref-id)
+          target-id)))))
+
 (defn- compute-shallow-ref-identity
   [db ref-id]
   (when-not ref-id
     (fail! "Missing canonical block reference" {:ref-id ref-id}))
-  (let [collected (scan-ref-attrs db ref-id)
-        ref-uuid (:block/uuid collected)
-        ref-ident (:db/ident collected)
-        ref-title (when (string? (:block/title collected))
-                    (:block/title collected))
-        ref-name (when (string? (:block/name collected))
-                   (:block/name collected))
-        tag-ids (:block/tags collected)
-        tags (when (seq tag-ids)
-               (mapv #(tag-summary db %) tag-ids))]
-    (when (and (some? ref-uuid) (not (uuid? ref-uuid)))
-      (fail! "Invalid canonical block reference UUID"
-             {:ref-id ref-id :block-uuid ref-uuid}))
-    (when (and (some? ref-ident) (not (keyword? ref-ident)))
-      (fail! "Invalid canonical block reference ident"
-             {:ref-id ref-id :db-ident ref-ident}))
-    (cond-> {:db/id ref-id}
-      ref-uuid (assoc :block/uuid ref-uuid)
-      (keyword? ref-ident) (assoc :db/ident ref-ident)
-      (string? ref-title) (assoc :block/title ref-title)
-      (string? ref-name) (assoc :block/name ref-name)
-      (seq tags) (assoc :block/tags tags)
-      (not (page-ref-identity? collected))
-      (merge (property-or-asset-extras db collected)))))
+  (let [collected (scan-ref-attrs db ref-id)]
+    (if-let [target-id (node-value-target-id db ref-id collected)]
+      (compute-shallow-ref-identity db target-id)
+      (let [ref-uuid (:block/uuid collected)
+            ref-ident (:db/ident collected)
+            ref-title (when (string? (:block/title collected))
+                        (:block/title collected))
+            ref-name (when (string? (:block/name collected))
+                       (:block/name collected))
+            tag-ids (:block/tags collected)
+            tags (when (seq tag-ids)
+                   (mapv #(tag-summary db %) tag-ids))]
+        (when (and (some? ref-uuid) (not (uuid? ref-uuid)))
+          (fail! "Invalid canonical block reference UUID"
+                 {:ref-id ref-id :block-uuid ref-uuid}))
+        (when (and (some? ref-ident) (not (keyword? ref-ident)))
+          (fail! "Invalid canonical block reference ident"
+                 {:ref-id ref-id :db-ident ref-ident}))
+        (cond-> {:db/id ref-id}
+          ref-uuid (assoc :block/uuid ref-uuid)
+          (keyword? ref-ident) (assoc :db/ident ref-ident)
+          (string? ref-title) (assoc :block/title ref-title)
+          (string? ref-name) (assoc :block/name ref-name)
+          (seq tags) (assoc :block/tags tags)
+          (not (page-ref-identity? collected))
+          (merge (property-or-asset-extras db collected)))))))
 
 (defn shallow-ref-identity
   [db ref-or-id]
