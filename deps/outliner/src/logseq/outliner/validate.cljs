@@ -104,36 +104,39 @@
                                     lookup
                                     (map :db/id tags)))]
       (when common-tag-ids
-        (let [notify-duplicate (fn [title message i18n-key & [i18n-args]]
-                                 (throw (ex-info title
-                                                 {:type :notification
-                                                  :payload {:message message
-                                                            :i18n-key i18n-key
-                                                            :i18n-args (or i18n-args [new-title])
-                                                            :type :warning}})))]
+        (let [notify-duplicate (fn [title payload]
+                                 (throw (ex-info title {:type :notification
+                                                        :payload payload})))]
           (cond
             (ldb/property? entity)
             (notify-duplicate "Duplicate property"
-                              (str "Another property named " (pr-str new-title) " already exists.")
-                              :property.validation/duplicate)
+                              {:message (str "Another property named " (pr-str new-title) " already exists.")
+                               :i18n-key :property.validation/duplicate
+                               :i18n-args [new-title]
+                               :type :warning})
 
             (ldb/class? entity)
             (notify-duplicate "Duplicate class"
-                              (str "Another tag named " (pr-str new-title) " already exists.")
-                              :class.validation/duplicate)
+                              {:message (str "Another tag named " (pr-str new-title) " already exists.")
+                               :i18n-key :class.validation/duplicate
+                               :i18n-args [new-title]
+                               :type :warning})
 
             (= common-tag-ids #{:logseq.class/Page})
             (notify-duplicate "Duplicate page"
-                              (str "Another page named " (pr-str new-title) " already exists.")
-                              :page.validation/duplicate-name)
+                              {:message (str "Another page named " (pr-str new-title) " already exists.")
+                               :i18n-key :page.validation/duplicate-name
+                               :i18n-args [new-title]
+                               :type :warning})
 
             :else
             (let [common-tags-str (string/join ", " (map (fn [id] (str "#" (:block/title (d/entity db id))))
                                                          common-tag-ids))]
               (notify-duplicate "Duplicate page"
-                                (str "Another page named " (pr-str new-title) " already exists for tags: " common-tags-str)
-                                :page.validation/duplicate
-                                [new-title common-tags-str]))))))))
+                                {:message (str "Another page named " (pr-str new-title) " already exists for tags: " common-tags-str)
+                                 :i18n-key :page.validation/duplicate
+                                 :i18n-args [new-title common-tags-str]
+                                 :type :warning}))))))))
 
 (defn ^:api validate-unique-by-name-and-tags
   "Validates uniqueness of nodes for the following cases:
