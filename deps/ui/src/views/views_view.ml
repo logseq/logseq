@@ -203,7 +203,9 @@ let load_view_data inst =
 let refresh inst =
   match inst.V.kind with
   | V.KQuery _ ->
-      inst.V.loading <- true;
+      (* keep stale results visible during a refetch — only show the
+         spinner when there is nothing rendered yet *)
+      if inst.V.query_rows = [] then inst.V.loading <- true;
       render inst;
       Views_query.refresh_block inst (fun () ->
           Views_query.run inst (fun () ->
@@ -374,6 +376,17 @@ let add_new_object inst =
 let install_ops () =
   V.install_ops
     { V.o_refresh = (fun inst -> refresh inst)
+    ; o_refresh_src =
+        (fun inst src ->
+          (* the caller supplies the fresh query source — skip the
+             get_blocks re-read and evaluate immediately; render the
+             result header/count as soon as rows land instead of waiting
+             for the row-data roundtrip *)
+          inst.V.qsrc <- src;
+          inst.V.loading <- false;
+          Views_query.run inst (fun () ->
+              render inst;
+              if inst.V.query_rows <> [] then load_view_data inst))
     ; o_create_view =
         (fun inst ->
           let uuid = Platform.random_uuid () in
