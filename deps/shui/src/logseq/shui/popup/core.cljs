@@ -141,16 +141,13 @@
   (and (element? target)
        (some? (.closest target ".ui__dropdown-menu-content, .ui__dropdown-menu-sub-content, .ui__popover-content, .ui__context-menu-content, .ui__context-menu-sub-content"))))
 
-(defn- tab-key-event?
-  [^js event]
-  (let [native (or (some-> event (.-nativeEvent)) event)]
-    (= (some-> native (.-key)) "Tab")))
-
 (defn- retain-focus-out?
+  "Retain (cancel) a focus-out close only when focus lands inside popup
+  content — e.g. a stacked popup opened from a menu — and no Base UI focus
+  guard is involved in the close."
   [^js event-details targets]
   (and (popup-content-target? (event-related-target (some-> event-details (.-event))))
-       (not (some focus-guard-target? targets))
-       (not (tab-key-event? (some-> event-details (.-event))))))
+       (not (some focus-guard-target? targets))))
 
 (def ^:private menu-transition-close-reasons
   #{"trigger-hover" "trigger-focus" "list-navigation" "sibling-open"})
@@ -201,7 +198,10 @@
   (let [native-event (some-> event-details (.-event))
         result (when (fn? handler) (handler native-event))]
     (when (or (false? result)
-              (some-> native-event (.-defaultPrevented))
+              ;; A prevented close event is a veto only when it could come from
+              ;; the content handler; Base UI also preventDefaults the Shift+Tab
+              ;; keydown it uses to carry a focus-out close.
+              (and (fn? handler) (some-> native-event (.-defaultPrevented)))
               (some-> event-details (.-isCanceled)))
       (some-> event-details (.cancel))
       true)))

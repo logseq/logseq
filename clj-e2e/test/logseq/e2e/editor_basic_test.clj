@@ -141,36 +141,14 @@
     item))
 
 (defn- leave-context-menu-by-tab!
-  "Tab from a highlighted item, then (if the key is trapped) focus the
-  after-trigger Base UI guard — the start of the overflow cycle."
   []
   (let [item (highlight-context-menu-item!)]
-    (.press item "Tab")
-    (when (w/visible? ".ls-context-menu-content")
-      (w/eval-js
-       "() => {
-          const guards = Array.from(document.querySelectorAll('[data-base-ui-focus-guard]'));
-          const afterTrigger = guards[1] || guards[0];
-          if (afterTrigger) {
-            afterTrigger.focus();
-          }
-          return true;
-        }"))))
+    (.press item "Tab")))
 
 (defn- leave-context-menu-by-shift-tab!
   []
   (let [item (highlight-context-menu-item!)]
-    (.press item "Shift+Tab")
-    (when (w/visible? ".ls-context-menu-content")
-      (w/eval-js
-       "() => {
-          const guards = Array.from(document.querySelectorAll('[data-base-ui-focus-guard]'));
-          const beforeTrigger = guards[0];
-          if (beforeTrigger) {
-            beforeTrigger.focus();
-          }
-          return true;
-        }"))))
+    (.press item "Shift+Tab")))
 
 (deftest page-context-menu-tab-closes-without-stack-overflow-test
   (let [*page-errors (atom [])]
@@ -183,14 +161,12 @@
     (assert-no-stack-overflow! *page-errors)
     (assert/assert-is-visible "div[data-testid='page title']")))
 
-(deftest page-context-menu-shift-tab-then-tab-closes-without-stack-overflow-test
+(deftest page-context-menu-shift-tab-closes-without-stack-overflow-test
   (let [*page-errors (atom [])]
     (collect-page-errors! *page-errors)
     (reset-uncaught-errors!)
     (open-page-context-menu!)
     (leave-context-menu-by-shift-tab!)
-    (when (w/visible? ".ls-context-menu-content")
-      (leave-context-menu-by-tab!))
     (w/wait-for-not-visible ".ls-context-menu-content")
     (assert-no-stack-overflow! *page-errors)
     (assert/assert-is-visible "div[data-testid='page title']")))
@@ -201,8 +177,6 @@
     (reset-uncaught-errors!)
     (open-block-context-menu!)
     (leave-context-menu-by-tab!)
-    (when (w/visible? ".ls-context-menu-content")
-      (k/esc))
     (w/wait-for-not-visible ".ls-context-menu-content")
     (assert-no-stack-overflow! *page-errors)
     (assert/assert-is-visible "div[data-testid='page title']")))
