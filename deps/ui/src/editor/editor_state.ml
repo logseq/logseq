@@ -291,9 +291,8 @@ let flat_visible ?(scope = "main") () =
     | b :: rest ->
         let acc = b :: acc in
         let acc =
-          match b.Model.block_uuid with
-          | Some u when is_collapsed_in ~scope u -> acc
-          | _ -> go acc (children_of b)
+          if effective_collapsed ~scope b then acc
+          else go acc (children_of b)
         in
         go acc rest
   in
