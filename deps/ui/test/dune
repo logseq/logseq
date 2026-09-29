@@ -1,6 +1,6 @@
 (melange.emit
  (target ui_test)
- (modules test_main)
+ (modules test_main test_check drive stub_dom fake_worker test_drive)
  (module_systems commonjs)
  (libraries logseq_ui melange.js)
  (preprocess
