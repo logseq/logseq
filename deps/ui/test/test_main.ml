@@ -52,7 +52,6 @@ let block ?(children = []) uuid title : Model.block =
   ; block_order_list = None
   ; block_order_index = None
   ; block_code_lang = None
-  ; block_is_query = false
   }
 
 let page blocks : Model.page =
@@ -3047,6 +3046,195 @@ let test_boot () =
   eqs "unquote empty" "" (Boot.unquote "\"\"");
   eqs "unquote single" "\"" (Boot.unquote "\"")
 
+(* ---- update: Toast_dismiss_key + confirm reset on navigate ---- *)
+
+let test_update3 () =
+  let keyed k =
+    { Model.toast_id = 0; toast_text = "t"; toast_kind = "info"
+    ; toast_key = k }
+  in
+  let m =
+    Update.update Model.initial (Action.Toast_push (keyed (Some "k1")))
+    |> fun m -> Update.update m (Action.Toast_push (keyed (Some "k2")))
+    |> fun m -> Update.update m (Action.Toast_push (keyed None))
+  in
+  let m1 = Update.update m (Action.Toast_dismiss_key "k2") in
+  check "dismiss_key removes only that key"
+    (List.length m1.Model.toasts = 2
+    && not
+         (List.exists
+            (fun t -> t.Model.toast_key = Some "k2")
+            m1.Model.toasts)
+    && List.exists
+         (fun t -> t.Model.toast_key = Some "k1")
+         m1.Model.toasts);
+  (* sdk close_msg with an unknown key clears nothing *)
+  let m2 = Update.update m (Action.Toast_dismiss_key "absent") in
+  check "dismiss_key unknown keeps all"
+    (List.length m2.Model.toasts = 3);
+  (* Navigate_to resets confirm alongside other page-local state *)
+  let dirty =
+    { Model.initial with
+      Model.confirm = Some (Model.Confirm_delete_page "u") }
+  in
+  check "navigate clears confirm"
+    ((Update.update dirty (Action.Navigate_to Model.All_pages))
+       .Model.confirm
+     = None)
+
+(* ---- runtime: nav_hash / nav mark / after_page_load ---- *)
+
+let test_runtime_nav () =
+  let saved_uuid = !Runtime.current_graph_uuid in
+  Runtime.current_graph_uuid := None;
+  eqs "nav_hash no uuid" "#/page/u" (Runtime.nav_hash "#/page/u");
+  Runtime.current_graph_uuid := Some "g-uuid";
+  eqs "nav_hash appends graph-id" "#/page/u?graph-id=g-uuid"
+    (Runtime.nav_hash "#/page/u");
+  Runtime.current_graph_uuid := Some "";
+  eqs "nav_hash empty uuid skipped" "#/page/u"
+    (Runtime.nav_hash "#/page/u");
+  Runtime.current_graph_uuid := saved_uuid;
+  (* mark_nav/take_nav_mark is a consume-once flag *)
+  Runtime.mark_nav ();
+  check "take_nav_mark first" (Runtime.take_nav_mark ());
+  check "take_nav_mark consumed" (not (Runtime.take_nav_mark ()));
+  (* on_page_loaded arms the one-shot; cleared afterwards so no state
+     leaks into later tests *)
+  Runtime.on_page_loaded "u1" (fun () -> ());
+  (match !Runtime.after_page_load with
+   | Some (want, _) -> check "after_page_load armed" (want = "u1")
+   | None -> check "after_page_load armed" false);
+  Runtime.after_page_load := None
+
+(* ---- views: pinned columns ---- *)
+
+let test_views_pinned () =
+  let ent =
+    wmap
+      [ "block/uuid", Wire.Uuid "v1"
+      ; "logseq.property.table/pinned-columns"
+      , Wire.List
+          [ Wire.Keyword "user/rating"
+          ; wmap [ "db/ident", Wire.Keyword "p/via-map" ]
+          ; Wire.String "dropped/string" ] ]
+  in
+  (match Views_wire.decode_view_ent ent with
+   | Some v ->
+       check "vpinned decodes idents only"
+         (v.Views_wire.vpinned = [ "user/rating"; "p/via-map" ])
+   | None -> check "vpinned decodes idents only" false);
+  let inst = mk_view_inst "x" in
+  (match Views_wire.decode_view_ent ent with
+   | Some v -> Views_state.apply_view_entity inst v
+   | None -> check "pinned applied" false);
+  let col id =
+    { Views_state.c_id = id; c_name = ""; c_type = "default"
+    ; c_prop = None; c_disable_hide = false; c_many = false }
+  in
+  (* select/id are always pinned, the rest come from inst.pinned *)
+  check "is_pinned select/id always"
+    (Views_table.is_pinned inst (col "select")
+    && Views_table.is_pinned inst (col "id"));
+  check "is_pinned member"
+    (Views_table.is_pinned inst (col "user/rating"));
+  check "is_pinned non-member"
+    (not (Views_table.is_pinned inst (col "p/other")))
+
+(* ---- edn/wire edge cases ---- *)
+
+let test_edn3 () =
+  check "parse empty -> Nil" (Edn.parse "" = Wire.Nil);
+  check "parse first form only" (Edn.parse "1 2" = Wire.Int 1);
+  (try
+     ignore (Edn.parse "{");
+     check "unclosed map raises" false
+   with Edn.Parse_error _ -> check "unclosed map raises" true);
+  (try
+     ignore (Edn.parse "]");
+     check "stray close raises" false
+   with Edn.Parse_error _ -> check "stray close raises" true);
+  (* whitespace-only input parses to Nil too *)
+  check "parse whitespace" (Edn.parse "  , " = Wire.Nil);
+  (* get matches Keyword/String/Symbol keys by name; first wins *)
+  let m =
+    Wire.Map
+      [ (Wire.String "k", Wire.Int 1); (Wire.Symbol "s", Wire.Int 2)
+      ; (Wire.kw "k", Wire.Int 9) ]
+  in
+  check "get string key" (Wire.get m "k" = Some (Wire.Int 1));
+  check "get symbol key" (Wire.get m "s" = Some (Wire.Int 2));
+  check "as_uuid string" (Wire.as_uuid (Wire.String "u") = Some "u");
+  check "as_uuid uuid" (Wire.as_uuid (Wire.Uuid "v") = Some "v");
+  check "as_uuid non-string" (Wire.as_uuid (Wire.Int 1) = None);
+  check "as_bool" (Wire.as_bool (Wire.Bool true) = Some true);
+  check "as_bool non-bool" (Wire.as_bool (Wire.Int 1) = None);
+  check "as_int int64" (Wire.as_int (Wire.Int64 7L) = Some 7)
+
+(* ---- block_parse edges ---- *)
+
+let test_block_parse3 () =
+  (* only whitespace/brackets/parens/# delimit a bare tag name — a
+     trailing '.' stays part of the name *)
+  check "tag trailing dot kept"
+    (Block_parse.scan_tok "#tag." 0 = Some (`Tag, "tag.", 5));
+  check "hash at end is none"
+    (Block_parse.scan_tok "x #" 2 = None);
+  check "tag stops at bracket"
+    (Block_parse.scan_tok "#a]b" 0 = Some (`Tag, "a", 2));
+  check "tag empty name"
+    (Block_parse.scan_tok "#[x" 0 = None);
+  (* an unclosed [[ stays literal text, no refs *)
+  let t', refs, _ = Block_parse.parse_title "see [[unclosed" in
+  check "unclosed page literal" (t' = "see [[unclosed" && refs = []);
+  (* a '#' mid-word still opens a tag — no boundary requirement *)
+  let t2, _, tags2 = Block_parse.parse_title "a#b" in
+  check "mid-word tag"
+    (List.length tags2 = 1
+    && String.length t2 > 4 && String.sub t2 0 4 = "a#[[")
+
+(* ---- title_refs edges ---- *)
+
+let test_title_refs3 () =
+  (* scan_title trims [[ name ]] and drops empties *)
+  check "scan trims + drops empty"
+    (Title_refs.scan_title "[[ P ]] [[ ]] x" = ([ "P" ], []));
+  check "scan hash at end"
+    (Title_refs.scan_title "x #" = ([], []));
+  check "scan unclosed ignored"
+    (Title_refs.scan_title "a [[oops" = ([], []));
+  (* tag_name_at picks the longest matching name *)
+  let resolved =
+    [ { Title_refs.name = "y"; uuid = "u1"; is_tag = true; fresh = true
+      ; entity = Wire.Nil }
+    ; { Title_refs.name = "yard"; uuid = "u2"; is_tag = true
+      ; fresh = true; entity = Wire.Nil } ]
+  in
+  check "tag_name_at longest match"
+    (Title_refs.tag_name_at "#yard" 1 resolved
+     = Some (List.nth resolved 1));
+  (* unresolved names stay literal *)
+  eqs "rewrite unresolved kept" "a [[X]] #q"
+    (Title_refs.rewrite_title "a [[X]] #q" []);
+  (* ## is a heading marker, not a tag rewrite *)
+  eqs "rewrite ## untouched" "##h"
+    (Title_refs.rewrite_title "##h"
+       [ { Title_refs.name = "h"; uuid = "u"; is_tag = true
+         ; fresh = true; entity = Wire.Nil } ]);
+  (* tag at end of string counts as a boundary *)
+  eqs "rewrite tag at eos" "see #[[u1]]"
+    (Title_refs.rewrite_title "see #y" resolved)
+
+(* ---- editor_actions: selected_uuids fallback ---- *)
+
+let test_selected_uuids () =
+  (* no mounted editor state -> empty selection -> empty list *)
+  let saved_page = !Runtime.current_page in
+  Runtime.current_page := Some (page [ block "a" "A"; block "b" "B" ]);
+  check "selected_uuids empty sel"
+    (Editor_actions.selected_uuids () = []);
+  Runtime.current_page := saved_page
+
 let () =
   test_move ();
   test_update ();
@@ -3102,6 +3290,13 @@ let () =
   test_cards_state ();
   test_graphs_ops ();
   test_boot ();
+  test_update3 ();
+  test_runtime_nav ();
+  test_views_pinned ();
+  test_edn3 ();
+  test_block_parse3 ();
+  test_title_refs3 ();
+  test_selected_uuids ();
   Js.log
     (Printf.sprintf "%d checks, %d failures" !checks !failures);
   if !failures > 0 then exit 1
