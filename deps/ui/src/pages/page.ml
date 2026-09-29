@@ -713,7 +713,10 @@ let ref_group idx (name, blocks) : t =
                   ; ("data-item-index", string_of_int idx)
                   ; ("style", "overflow-anchor: none;") ]
     [ dom ~key:"gi" ~style_class:"flex flex-col"
-        [ foldable_title (key ^ "-t")
+        (* ref-group titles carry no fold arrow: e2e resolves
+           ".unlinked-references .ls-foldable-title-control" strictly
+           (one control per section) *)
+        [ foldable_title ~control:false (key ^ "-t")
             (dom ~key:"grp" ~style_class:""
                [ dom ~key:"grl" ~tag:"a" ~style_class:"page-ref relative"
                    ~attrs:
