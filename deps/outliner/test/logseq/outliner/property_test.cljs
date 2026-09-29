@@ -7,6 +7,19 @@
             [logseq.outliner.core :as outliner-core]
             [logseq.outliner.property :as outliner-property]))
 
+(defn- created-from-property-children
+  [db parent-id]
+  (map (fn [id]
+         (let [e (d/entity db id)]
+           {:db/id id
+            :title (db-property/property-value-content e)}))
+       (d/q '[:find [?c ...]
+              :in $ ?parent
+              :where
+              [?c :block/parent ?parent]
+              [?c :logseq.property/created-from-property]]
+            db parent-id)))
+
 (deftest upsert-property!
   (testing "Creates a property"
     (let [conn (db-test/create-conn-with-blocks [])
@@ -189,17 +202,228 @@
           "New block has property set")
       (is (= property-value (:user.property/checkbox (db-test/find-block-by-content @conn "b2")))))))
 
+(deftest default-property-string-updates-do-not-orphan-value-blocks
+  (testing "set-block-property! reuses the exclusive value block across successive string updates"
+    (let [conn (db-test/create-conn-with-blocks
+                {:properties {:note {:logseq.property/type :default}}
+                 :pages-and-blocks [{:page {:block/title "page1"}
+                                     :blocks [{:block/title "host"}]}]})
+          host-id (:db/id (db-test/find-block-by-content @conn "host"))]
+      (outliner-property/set-block-property! conn host-id :user.property/note "first value")
+      (let [first-value-id (:db/id (:user.property/note (d/entity @conn host-id)))]
+        (outliner-property/set-block-property! conn host-id :user.property/note "second value")
+        (outliner-property/set-block-property! conn host-id :user.property/note "third value")
+        (let [host (d/entity @conn host-id)
+              children (created-from-property-children @conn host-id)
+              current (:user.property/note host)]
+          (is (= 1 (count children))
+              "Only the current value block remains as a child")
+          (is (= first-value-id (:db/id current))
+              "The original value block is edited in place")
+          (is (= "third value" (db-property/property-value-content current)))
+          (is (= [{:db/id first-value-id :title "third value"}] children))))))
+
+  (testing "batch-set-property! reclaims previous :default values"
+    (let [conn (db-test/create-conn-with-blocks
+                {:properties {:note {:logseq.property/type :default}}
+                 :pages-and-blocks [{:page {:block/title "page1"}
+                                     :blocks [{:block/title "host"}]}]})
+          host-uuid (:block/uuid (db-test/find-block-by-content @conn "host"))
+          host-id (:db/id (d/entity @conn [:block/uuid host-uuid]))]
+      (outliner-property/batch-set-property! conn [host-uuid] :user.property/note "first value")
+      (outliner-property/batch-set-property! conn [host-uuid] :user.property/note "second value")
+      (outliner-property/batch-set-property! conn [host-uuid] :user.property/note "third value")
+      (let [host (d/entity @conn host-id)
+            children (created-from-property-children @conn host-id)
+            current (:user.property/note host)]
+        (is (= 1 (count children)))
+        (is (= "third value" (db-property/property-value-content current)))
+        (is (= (:db/id current) (:db/id (first children)))))))
+
+  (testing "batch-set-property! updates reused value blocks atomically"
+    (let [conn (db-test/create-conn-with-blocks
+                {:properties {:note {:logseq.property/type :default}}
+                 :pages-and-blocks [{:page {:block/title "page1"}
+                                     :blocks [{:block/title "host-a"}
+                                              {:block/title "host-b"}]}]})
+          host-uuids (mapv #(-> (db-test/find-block-by-content @conn %)
+                                :block/uuid)
+                           ["host-a" "host-b"])
+          tx-reports (atom [])]
+      (outliner-property/batch-set-property! conn host-uuids :user.property/note "first value")
+      (d/listen! conn ::capture-batch-default-update #(swap! tx-reports conj %))
+      (try
+        (outliner-property/batch-set-property! conn host-uuids :user.property/note "second value")
+        (is (= 1 (count @tx-reports))
+            "The batch update is committed as one transaction")
+        (is (= ["second value" "second value"]
+               (mapv #(-> (d/entity @conn [:block/uuid %])
+                          :user.property/note
+                          db-property/property-value-content)
+                     host-uuids)))
+        (finally
+          (d/unlisten! conn ::capture-batch-default-update)))))
+
+  (testing "in-place title edits keep the same value block"
+    (let [conn (db-test/create-conn-with-blocks
+                {:properties {:note {:logseq.property/type :default}}
+                 :pages-and-blocks [{:page {:block/title "page1"}
+                                     :blocks [{:block/title "host"}]}]})
+          host-id (:db/id (db-test/find-block-by-content @conn "host"))]
+      (outliner-property/set-block-property! conn host-id :user.property/note "first value")
+      (let [value (:user.property/note (d/entity @conn host-id))
+            value-id (:db/id value)]
+        (ldb/transact! conn [(outliner-core/block-with-updated-at
+                              {:db/id value-id
+                               :block/title "edited in place"})])
+        (let [host (d/entity @conn host-id)
+              children (created-from-property-children @conn host-id)
+              current (:user.property/note host)]
+          (is (= value-id (:db/id current)))
+          (is (= "edited in place" (db-property/property-value-content current)))
+          (is (= 1 (count children)))))))
+
+  (testing "replacing with another entity reclaims the previous exclusive value block"
+    (let [conn (db-test/create-conn-with-blocks
+                {:properties {:note {:logseq.property/type :default}}
+                 :pages-and-blocks [{:page {:block/title "page1"}
+                                     :blocks [{:block/title "host-a"}
+                                              {:block/title "host-b"}]}]})
+          host-a-id (:db/id (db-test/find-block-by-content @conn "host-a"))
+          host-b-id (:db/id (db-test/find-block-by-content @conn "host-b"))]
+      (outliner-property/set-block-property! conn host-a-id :user.property/note "a value")
+      (outliner-property/set-block-property! conn host-b-id :user.property/note "b value")
+      (let [a-value-id (:db/id (:user.property/note (d/entity @conn host-a-id)))
+            b-value-id (:db/id (:user.property/note (d/entity @conn host-b-id)))]
+        (outliner-property/set-block-property! conn host-a-id :user.property/note b-value-id)
+        (is (nil? (d/entity @conn a-value-id))
+            "Unreferenced previous value block is deleted")
+        (is (some? (d/entity @conn b-value-id)))
+        (is (= b-value-id (:db/id (:user.property/note (d/entity @conn host-a-id)))))
+        (is (= b-value-id (:db/id (:user.property/note (d/entity @conn host-b-id)))))
+        (is (= 0 (count (created-from-property-children @conn host-a-id))))
+        (is (= 1 (count (created-from-property-children @conn host-b-id)))))))
+
+  (testing "configured property defaults do not prevent reclaiming custom values"
+    (let [conn (db-test/create-conn-with-blocks
+                {:properties {:note {:logseq.property/type :default}}
+                 :pages-and-blocks [{:page {:block/title "page1"}
+                                     :blocks [{:block/title "default-source"}
+                                              {:block/title "host"}
+                                              {:block/title "replacement-source"}]}]})
+          default-source-id (:db/id (db-test/find-block-by-content @conn "default-source"))
+          host-id (:db/id (db-test/find-block-by-content @conn "host"))
+          replacement-source-id (:db/id (db-test/find-block-by-content @conn "replacement-source"))
+          property-id (:db/id (d/entity @conn :user.property/note))]
+      (outliner-property/set-block-property! conn default-source-id :user.property/note "default value")
+      (let [default-value-id (:db/id (:user.property/note (d/entity @conn default-source-id)))]
+        (ldb/transact! conn [{:db/id property-id
+                              :logseq.property/default-value default-value-id}])
+        (outliner-property/set-block-property! conn host-id :user.property/note "old custom value")
+        (outliner-property/set-block-property! conn replacement-source-id :user.property/note "replacement value")
+        (let [old-value-id (:db/id (:user.property/note (d/entity @conn host-id)))
+              replacement-value-id (:db/id (:user.property/note (d/entity @conn replacement-source-id)))]
+          (outliner-property/set-block-property! conn host-id :user.property/note replacement-value-id)
+          (is (nil? (d/entity @conn old-value-id))
+              "The replaced custom value block is reclaimed")
+          (is (some? (d/entity @conn default-value-id))
+              "The configured default value is preserved")
+          (is (= replacement-value-id
+                 (:db/id (:user.property/note (d/entity @conn host-id)))))
+          (is (empty? (created-from-property-children @conn host-id)))
+          (outliner-property/set-block-property! conn host-id :user.property/note default-value-id)
+          (outliner-property/remove-block-property! conn host-id :user.property/note)
+          (is (= :logseq.property/empty-placeholder
+                 (:db/ident (:user.property/note (d/entity @conn host-id)))))
+          (is (some? (d/entity @conn default-value-id))
+              "Removing a configured default replaces it with the placeholder")))))
+
+  (testing "url string updates also leave a single value block"
+    (let [conn (db-test/create-conn-with-blocks
+                {:properties {:homepage {:logseq.property/type :url}}
+                 :pages-and-blocks [{:page {:block/title "page1"}
+                                     :blocks [{:block/title "host"}]}]})
+          host-id (:db/id (db-test/find-block-by-content @conn "host"))]
+      (outliner-property/set-block-property! conn host-id :user.property/homepage "https://example.com/one")
+      (outliner-property/set-block-property! conn host-id :user.property/homepage "https://example.com/two")
+      (outliner-property/set-block-property! conn host-id :user.property/homepage "https://example.com/three")
+      (let [children (created-from-property-children @conn host-id)
+            current (:user.property/homepage (d/entity @conn host-id))]
+        (is (= 1 (count children)))
+        (is (= "https://example.com/three" (db-property/property-value-content current))))))
+
+  (testing "updating one block does not reclaim another block's value"
+    (let [conn (db-test/create-conn-with-blocks
+                {:properties {:note {:logseq.property/type :default}}
+                 :pages-and-blocks [{:page {:block/title "page1"}
+                                     :blocks [{:block/title "host-a"}
+                                              {:block/title "host-b"}]}]})
+          host-a-id (:db/id (db-test/find-block-by-content @conn "host-a"))
+          host-b-id (:db/id (db-test/find-block-by-content @conn "host-b"))]
+      (outliner-property/set-block-property! conn host-a-id :user.property/note "a1")
+      (outliner-property/set-block-property! conn host-b-id :user.property/note "b1")
+      (outliner-property/set-block-property! conn host-a-id :user.property/note "a2")
+      (is (= "a2" (db-property/property-value-content (:user.property/note (d/entity @conn host-a-id)))))
+      (is (= "b1" (db-property/property-value-content (:user.property/note (d/entity @conn host-b-id)))))
+      (is (= 1 (count (created-from-property-children @conn host-a-id))))
+      (is (= 1 (count (created-from-property-children @conn host-b-id))))))
+
+  (testing "many default values: add keeps existing, replace reclaims unused"
+    (let [conn (db-test/create-conn-with-blocks
+                {:properties {:notes {:logseq.property/type :default
+                                      :db/cardinality :db.cardinality/many}}
+                 :pages-and-blocks [{:page {:block/title "page1"}
+                                     :blocks [{:block/title "host"}]}]})
+          host-id (:db/id (db-test/find-block-by-content @conn "host"))
+          host-uuid (:block/uuid (d/entity @conn host-id))]
+      (outliner-property/batch-set-property! conn [host-uuid] :user.property/notes "Step 1")
+      (outliner-property/batch-set-property! conn [host-uuid] :user.property/notes "Step 2")
+      (is (= #{"Step 1" "Step 2"}
+             (->> (:user.property/notes (d/entity @conn host-id))
+                  (map db-property/property-value-content)
+                  set)))
+      (is (= 2 (count (created-from-property-children @conn host-id))))
+      (outliner-property/batch-set-property! conn [host-uuid] :user.property/notes ["Step 3"])
+      (is (= #{"Step 3"}
+             (->> (:user.property/notes (d/entity @conn host-id))
+                  (map db-property/property-value-content)
+                  set)))
+      (is (= 1 (count (created-from-property-children @conn host-id)))))))
+
+(deftest delete-one-of-many-generated-property-values
+  (testing "deleting one of many default values reclaims its value block"
+    (let [conn (db-test/create-conn-with-blocks
+                {:properties {:notes {:logseq.property/type :default
+                                      :db/cardinality :db.cardinality/many}}
+                 :pages-and-blocks [{:page {:block/title "page1"}
+                                     :blocks [{:block/title "host"}]}]})
+          host-id (:db/id (db-test/find-block-by-content @conn "host"))]
+      (outliner-property/batch-set-property! conn [host-id] :user.property/notes "Step 1")
+      (outliner-property/batch-set-property! conn [host-id] :user.property/notes "Step 2")
+      (let [step-1 (some #(when (= "Step 1" (db-property/property-value-content %)) %)
+                         (:user.property/notes (d/entity @conn host-id)))]
+        (outliner-property/delete-property-value! conn host-id :user.property/notes (:db/id step-1))
+        (is (nil? (d/entity @conn (:db/id step-1)))
+            "The removed value block is reclaimed")
+        (is (= #{"Step 2"}
+               (->> (:user.property/notes (d/entity @conn host-id))
+                    (map db-property/property-value-content)
+                    set)))
+        (is (= 1 (count (created-from-property-children @conn host-id))))))))
+
 (deftest remove-block-property!
   (let [conn (db-test/create-conn-with-blocks
               [{:page {:block/title "page1"}
                 :blocks [{:block/title "b1" :build/properties {:default "foo"}}]}])
         block (db-test/find-block-by-content @conn "b1")
+        value-id (:db/id (:user.property/default block))
         _ (assert (:user.property/default block))
         ;; Use same args as outliner.op
         _ (outliner-property/remove-block-property! conn [:block/uuid (:block/uuid block)] :user.property/default)
         updated-block (db-test/find-block-by-content @conn "b1")]
     (is (some? updated-block))
-    (is (nil? (:user.property/default updated-block)) "Block property is deleted")))
+    (is (nil? (:user.property/default updated-block)) "Block property is deleted")
+    (is (nil? (d/entity @conn value-id)) "Unreferenced value block is reclaimed")))
 
 (deftest batch-set-property!
   (testing "Set built-in property values for multiple blocks"
@@ -361,6 +585,25 @@
          js/Error
          #"Can't remove required"
          (outliner-property/batch-remove-property! conn [(:db/id (d/entity @conn :user.class/C1))] :logseq.property.class/extends)))))
+
+(deftest batch-remove-generated-property-values
+  (let [conn (db-test/create-conn-with-blocks
+              {:properties {:note {:logseq.property/type :default}}
+               :pages-and-blocks [{:page {:block/title "page1"}
+                                   :blocks [{:block/title "host-a"}
+                                            {:block/title "host-b"}]}]})
+        host-ids (mapv #(-> (db-test/find-block-by-content @conn %) :db/id)
+                       ["host-a" "host-b"])]
+    (outliner-property/batch-set-property! conn host-ids :user.property/note "value")
+    (let [value-ids (mapv #(-> (d/entity @conn %)
+                               :user.property/note
+                               :db/id)
+                          host-ids)]
+      (outliner-property/batch-remove-property! conn host-ids :user.property/note)
+      (is (every? nil? (map #(get (d/entity @conn %) :user.property/note) host-ids)))
+      (is (every? nil? (map #(d/entity @conn %) value-ids))
+          "Batch removal reclaims generated value blocks")
+      (is (every? empty? (map #(created-from-property-children @conn %) host-ids))))))
 
 (deftest batch-remove-property-rejects-private-built-in-entity
   (let [conn (db-test/create-conn)
