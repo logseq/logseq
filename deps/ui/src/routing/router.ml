@@ -170,14 +170,6 @@ let load_journals () =
                        Runtime.send (Action.Journals_loaded js)
                    | _ -> ())))
 
-(* a fetch started for route R can resolve after navigation moved on —
-   sending its Page_loaded would clobber the current page with stale data *)
-let route_still_target missing =
-  match !Runtime.current_route with
-  | Some (Model.Page s) -> s = missing
-  | Some Model.Library -> missing = "Library"
-  | _ -> false
-
 (* fetches for the same route can resolve out of order — only the
    latest-initiated load may commit, otherwise an older response lands
    last and clobbers fresher state (e.g. page_blocks before a pending

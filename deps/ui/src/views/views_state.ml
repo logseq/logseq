@@ -73,13 +73,10 @@ type inst =
 
 let next_id = ref 0
 
-let instances : (int, inst) Hashtbl.t = Hashtbl.create 8
-
 let make ~kind ~feature ~owner ~container : inst =
   incr next_id;
-  let inst =
-    { id = !next_id
-    ; kind
+  { id = !next_id
+  ; kind
     ; feature
     ; owner
     ; container
@@ -116,11 +113,6 @@ let make ~kind ~feature ~owner ~container : inst =
     ; ref_titles = Hashtbl.create 8
     ; asset_class = false
     }
-  in
-  Hashtbl.replace instances inst.id inst;
-  inst
-
-let drop inst = Hashtbl.remove instances inst.id
 
 (* -- wire encode/decode of persisted table state -- *)
 
