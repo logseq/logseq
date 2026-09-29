@@ -13,9 +13,8 @@
      `open_in_right_sidebar`, cmdk shift+enter) and document shift+click
      on a.page-ref / [data-testid='page title'] to add right-sidebar
      items.
-   - refresh: chains onto worker.on_message for the "sync-db-changes"
-     broadcast and re-fetches sidebar data + the current route.
-     TODO(app): move to a shared tx->refresh handler once one exists. *)
+   - refresh: subscribes to the "sync-db-changes" broadcast via
+     Runtime.on_sync and re-fetches sidebar data + the current route. *)
 
 (* i18n placeholder: keep the t() call shape so keys can be wired to real
    dictionaries once a shared i18n module lands. *)
@@ -538,15 +537,10 @@ let on_sync st =
   | None -> ()
 
 let install_worker_hook st =
-  match !Runtime.worker with
-  | Some w when not !hook_installed ->
-      hook_installed := true;
-      let prev = w.Worker_client.on_message in
-      w.Worker_client.on_message <-
-        (fun e payload ->
-          prev e payload;
-          if e = "sync-db-changes" then on_sync st)
-  | _ -> ()
+  if not !hook_installed then begin
+    hook_installed := true;
+    Runtime.on_sync (fun () -> on_sync st)
+  end
 
 let page_key (p : Model.page) =
   match p.Model.page_uuid with

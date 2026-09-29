@@ -501,16 +501,16 @@ let embed_refresh_seq = ref 0
 let embed_chained = ref false
 
 let chain_embed_worker () =
-  match !embed_chained, !Runtime.worker with
-  | true, _ | _, None -> ()
-  | false, Some w ->
-      embed_chained := true;
-      let prev = w.Worker_client.on_message in
-      w.Worker_client.on_message <-
-        (fun kind payload ->
-          prev kind payload;
-          if kind = "sync-db-changes" then
-            Hashtbl.iter (fun _ f -> f ()) embed_refreshes)
+  if not !embed_chained then begin
+    embed_chained := true;
+    Runtime.on_sync (fun () ->
+        Hashtbl.iter
+          (fun _ f ->
+            try f ()
+            with e ->
+              Platform.console_error ("embed refresh failed", e))
+          embed_refreshes)
+  end
 
 let fetch_embed_blocks name st =
   Render_state.with_repo (fun repo ->
