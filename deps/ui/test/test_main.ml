@@ -3923,6 +3923,72 @@ let test_props_value2 () =
      = Some "line-dashed");
   check "closed_value_icon_id none"
     (Properties_value.closed_value_icon_id (wmap []) = None)
+(* ---- vendored-libs render helpers (render_inline) ---- *)
+
+let test_render_libs () =
+  (* parse_timestamp: cljs ^(?:(\d+):)?([0-5]?\d):([0-5]?\d)$ or ^\d+$ *)
+  eq "parse ts m:ss" (Some 83)
+    (Render_inline.parse_timestamp "1:23")
+    (function Some i -> string_of_int i | None -> "none");
+  eq "parse ts h:mm:ss" (Some 3723)
+    (Render_inline.parse_timestamp "1:02:03")
+    (function Some i -> string_of_int i | None -> "none");
+  eq "parse ts bare seconds" (Some 90)
+    (Render_inline.parse_timestamp "90")
+    (function Some i -> string_of_int i | None -> "none");
+  check "parse ts invalid minute"
+    (Render_inline.parse_timestamp "1:99" = None);
+  check "parse ts empty"
+    (Render_inline.parse_timestamp "" = None);
+  check "parse ts letters"
+    (Render_inline.parse_timestamp "abc" = None);
+  check "parse ts trailing junk"
+    (Render_inline.parse_timestamp "1:23x" = None);
+  (* seconds_display: pad to 2, drop hours iff 00 *)
+  eqs "display ss" "00:18" (Render_inline.seconds_display 18);
+  eqs "display m:ss" "01:23" (Render_inline.seconds_display 83);
+  eqs "display h:mm:ss" "01:02:03"
+    (Render_inline.seconds_display 3723);
+  eqs "display zero" "00:00" (Render_inline.seconds_display 0);
+  (* youtube_id: cljs youtube-regex id extraction + bare 11-char ids *)
+  eq "yt watch v=" (Some "7xTGNNLPyMI")
+    (Render_inline.youtube_id
+       "https://www.youtube.com/watch?v=7xTGNNLPyMI")
+    (function Some s -> s | None -> "none");
+  eq "yt youtu.be" (Some "7xTGNNLPyMI")
+    (Render_inline.youtube_id "https://youtu.be/7xTGNNLPyMI")
+    (function Some s -> s | None -> "none");
+  eq "yt embed" (Some "7xTGNNLPyMI")
+    (Render_inline.youtube_id
+       "https://www.youtube.com/embed/7xTGNNLPyMI")
+    (function Some s -> s | None -> "none");
+  eq "yt shorts" (Some "7xTGNNLPyMI")
+    (Render_inline.youtube_id
+       "https://www.youtube.com/shorts/7xTGNNLPyMI")
+    (function Some s -> s | None -> "none");
+  eq "yt bare id" (Some "7xTGNNLPyMI")
+    (Render_inline.youtube_id "7xTGNNLPyMI")
+    (function Some s -> s | None -> "none");
+  check "yt v= stops at &"
+    (Render_inline.youtube_id
+       "https://www.youtube.com/watch?v=abc123&list=x"
+     = Some "abc123");
+  check "yt other host"
+    (Render_inline.youtube_id "https://vimeo.com/12345" = None);
+  (* youtube_start: [?&]t=(\d+) *)
+  eq "yt start t=" (Some "42")
+    (Render_inline.youtube_start
+       "https://www.youtube.com/watch?v=abc&t=42")
+    (function Some s -> s | None -> "none");
+  check "yt no t="
+    (Render_inline.youtube_start
+       "https://www.youtube.com/watch?v=abc"
+     = None);
+  check "yt t= inside param name ignored"
+    (Render_inline.youtube_start
+       "https://www.youtube.com/watch?start=42"
+     = None)
+
 let () =
   test_move ();
   test_update ();
@@ -4011,6 +4077,7 @@ let () =
   test_props_data4 ();
   test_props_value ();
   test_props_value2 ();
+  test_render_libs ();
   (* Drive view tests run their worker-fed assertions on a promise tick;
      the summary + exit must wait for that stage *)
   Test_drive.run ~finish:(fun () ->

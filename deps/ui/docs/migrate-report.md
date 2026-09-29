@@ -1901,3 +1901,82 @@ list. `Cmdk_state.refresh ?clear` therefore skips the synchronous
 `apply_results` entirely on the debounced input path (`~clear:false`),
 leaving prior groups rendered until the async response replaces them;
 every other caller uses the default `~clear:true`.
+
+## Vendored render libs (katex/mhchem, highlight.js, youtube timestamps)
+
+`Render_libs` (`src/render/render_libs.ml`) owns all post-mount wiring
+to the vendored bundles. It installs once per app, lazily on first use:
+a sync `register_doc_scan` that walks touched roots for `.latex` /
+`.latex-inline` shells and `pre.CodeMirror-line` code lines, plus a
+document click listener for `a.youtube-timestamp` seeks.
+
+KaTeX (`render_inline.katex_el`, `render.ml` math display-type):
+cljs `extensions/latex.cljs` renders a lazily-loaded
+`katex.render(tex, el, {displayMode, throwOnError:false, strict:false})`
+into a holder element (`span.latex-inline` / `div.latex`, class
+`initial`, `span.opacity-0` raw-tex child, random uuid id). OCaml emits
+the identical shell; the scan then calls `window.katex.render` on the
+shell element itself (matching cljs, which renders into the holder —
+`.opacity-0` is replaced). Implicit cljs behaviors reproduced:
+
+- Lazy script loading in cljs order — `./js/katex.min.js` first, then
+  `./js/mhchem.min.js`; mhchem failure still renders (cljs
+  `p/finally`), katex-script failure marks the state `Failed` and every
+  pending/later shell degrades to the `span.katex` raw-tex fallback.
+- `displayMode` comes from the block context (`$$..$$` inline and math
+  display-type blocks are display; `$..$` is not) and is tracked per
+  element id in `pending_display` until the render happens — the scan
+  alone cannot recover it from the DOM, so element ids are registered
+  at build time.
+- Elements already rendered are detected by the absence of `.opacity-0`
+  (katex replaces the holder), so re-scans are no-ops — no double
+  render.
+- Not reproduced (documented deltas): no `ui/loading` spinner while
+  katex loads (shell paints immediately; scan re-runs after load
+  completes); the `Failed` path uses the raw `span.katex` fallback
+  rather than cljs's spinner-then-error path.
+
+highlight.js: cljs only calls hljs for html-export/shortcut-help — the
+in-app editor is CodeMirror. The OCaml render emits static
+`pre.CodeMirror-line` lines inside `.CodeMirror[data-lang=...]`; the
+scan highlights each pre via a raw-JS wrapper (`hljs_highlight`)
+because stock `hljs.highlightElement` cannot be used: it ignores
+`data-lang` (reads `language-*` classes) and refuses elements with
+children. The wrapper mirrors `highlightElement`'s end state —
+`innerHTML` from `hljs.highlight` (declared `data-lang` via
+`getLanguage`, else `no-highlight`) or `highlightAuto`, sets
+`data-highlighted="yes"`, adds `hljs` + `language-<lang>` classes —
+and skips `[contenteditable]` pres (live editor lines), already
+`data-highlighted` elements, empty text, and elements with child
+elements. Code blocks get their `data-lang` on the `.CodeMirror`
+container, resolved via `closest('.CodeMirror')`.
+
+Video timestamps (`{{youtube-timestamp}}`, `render_inline.timestamp_el`):
+cljs `video/youtube.cljs` renders `a.youtube-timestamp` >
+`span.youtube-timestamp-icon` (clock svg, `h-5 w-5`,
+`fill="currentColor"`, viewBox `0 0 20 20`, single `path` with
+`clip-rule`/`fill-rule` evenodd) + `span.youtube-timestamp-label`
+(`seconds->display`: `h:m:s` 2-padded, hour dropped iff `00`, so
+`18→"00:18"`, `83→"01:23"`, `3723→"01:02:03"`). `parse_timestamp`
+accepts bare digits (`^\d+$` → seconds) or
+`h?:m:ss` (`m`/`s` ≤2 digits, ≤59); anything else renders *nothing*
+(cljs returns nil — OCaml emits `D.txt ""`). Click → `util/stop` +
+seek the **last youtube iframe that precedes the anchor** in document
+order (`compareDocumentPosition & FOLLOWING`); cljs registers a
+`YT.Player` and calls `seekTo` — OCaml posts the equivalent
+`{event:"command", func:"seekTo", args:[sec,true]}` postMessage to the
+iframe's `contentWindow` (requires `enablejsapi=1` on the embed src,
+which cljs already sets), because LUI elements have no YT API lifecycle.
+
+`{{youtube}}`/`{{video}}` embeds: id = first `[\w-]+` run after
+`youtu.be/|y2u.be/` hosts or `/shorts/|/embed/|/v/|watch?v=` paths,
+or a bare 11-char trimmed arg; `start` = `t=` digits preceded by
+`?`/`&`. iframe attrs match cljs: `id="youtube-player-<id>"`,
+`allow-full-screen`, `allow="accelerometer; autoplay; clipboard-write;
+encrypted-media; gyroscope; picture-in-picture; web-share"`,
+`referrer-policy="strict-origin-when-cross-origin"`,
+`referer="https://logseq.com"`, `frame-border="0"`, src
+`https://www.youtube.com/embed/<id>?enablejsapi=1[&start=N]`.
+Deltas vs cljs: shell stays `.embed-block > iframe` (e2e contract)
+instead of `.video-embed-shell/.video-embed-frame`; no `origin=` param;
+`w=` width args ignored.
