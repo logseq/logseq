@@ -96,7 +96,11 @@
 (defn toggle-blocks-as-own-order-list!
   [blocks]
   (when (seq blocks)
-    (let [has-ordered?    (some own-order-number-list? blocks)
+    ;; ref-valued attrs can arrive as {:db/id} stubs without :block/title
+    ;; (e.g. from get-block-immediate-children), so value resolution via
+    ;; own-order-number-list? isn't reliable; "number" is the only list type
+    ;; the UI writes, so property presence is the signal.
+    (let [has-ordered?    (some #(some? (:logseq.property/order-list-type %)) blocks)
           blocks-uuids    (some->> blocks (map :block/uuid) (remove nil?))
           order-list-prop :logseq.property/order-list-type]
       (if has-ordered?
