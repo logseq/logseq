@@ -1985,3 +1985,117 @@ scope stays frozen-at-init — same effective contract as before.
   `MelangeError: Invalid_argument` in `apply_pending_batch`, documented
   above). Reproduced identically on an `origin/devin/lui-ui-rewrite`
   bundle — not introduced by this change.
+
+## Code-block editor (branch `devin/lui-codemirror`)
+
+Real CodeMirror 5 replaces the fake `pre.CodeMirror-line` path for
+code-fence blocks (`display-type=code`, or ` ```lang ` fences in
+`src_block`). Pure OCaml FFI — no hand-written JS.
+
+### FFI shape (deps/ui/src/editor/code_mirror.ml)
+
+- `external cm : cm_module = "codemirror" [@@mel.module]` binds
+  `require("codemirror")` — the CJS `module.exports = CodeMirror`
+  object itself. A bare `= ""` external is *wrong here*: melange
+  infers the val name and emits `require("codemirror").cm`
+  (undefined). Same fix applied to all addon/mode imports:
+  `= "path" [@@mel.module]` (module-object binding, harmless to
+  reference, and it avoids the ppx `fragile` alert entirely — no
+  `[@@@alert]` needed).
+- Side-effect imports: closebrackets, matchbrackets, show-hint,
+  active-line, `mode/meta`, and all 121 vendored modes
+  (`codemirror/mode/*/*`). Sanitized OCaml names
+  (`asn.1`→`asn_1`, `haskell-literate`→`haskell_literate`, …). The
+  `_imports` list keeps references so bundlers don't drop the
+  requires; the values are module objects, not members.
+
+### Mount lifecycle
+
+- `Editor_dom.register_doc_scan ~sync:true` scans
+  `.code-editor textarea` on every added DOM root and at startup
+  (`scan [document_element]`). `~sync` runs in the observer microtask
+  so the editor exists before paint and before `set_timeout 0`
+  focus attempts (`apply_focus`/`retry_focus` cover stragglers).
+- **The scan must skip textareas already inside `.CodeMirror`** —
+  CM's own hidden input textarea also matches `.code-editor
+  textarea`, and mounting on it nests a second `.CodeMirror`
+  recursively until the renderer OOM-crashes. Guard:
+  `D.el_closest el ".CodeMirror" = None`.
+- `bound` = nextElementSibling has `.CodeMirror`; `instances` map
+  pruned when a wrapper disconnects (`prune`).
+- CM mounts in **display and edit mode alike** (cljs renders CM as
+  the code surface always). `tree.ml content_or_editor` therefore
+  keeps `content_wrapper` for `display_type=code` even while editing
+  — the dyn never swaps the subtree, so the mounted CM survives
+  edit-state flips.
+
+### Options / DOM parity (cljs extensions/code.cljs render!)
+
+theme `lsradix light|dark` (html.dark → dark), autoCloseBrackets,
+lineNumbers, matchBrackets for lisp-like (scheme|lisp|clojure|edn),
+styleActiveLine, tabIndex −1, extraKeys Esc + Shift-Enter,
+`viewportMargin Infinity` for calc. Mode via `findModeByName →
+findModeByExtension → .mime → raw lang`; lang normalized
+`edn|clj|cljc|cljs|clojurescript → clojure` (cljs src-cp).
+
+### Events
+
+- `change` → `sync_buffer` (silent, keeps `editing.buffer` + textarea
+  textContent) + `Ops.schedule_save` (400 ms debounce →
+  `apply_parsed` → worker tx) + `update_calc`.
+- `blur` → `blur_commit` when this uuid is the editing block.
+- `focus` → `enter_edit` whenever the focused CM is not the current
+  edit block — including when nothing was editing (cljs
+  edit-block! parity). The click-placed caret survives because
+  `focus_block` short-circuits when `hasFocus()`.
+- Wrapper `keydown`: Cmd/Ctrl+[ ] swallowed (history nav), arrows at
+  document start/end move to the neighbor block
+  (`A.arrow_nav`). Wrapper `pointerdown`: stopPropagation + clear the
+  block-range selection. `editor_keys` document-capture pointerdown
+  additionally skips `.ui-fenced-code-editor` targets (CM's
+  stopPropagation can't reach capture listeners).
+- `Esc`: commits via `A.exit_edit ~select:true`. **Divergence**: cljs
+  drops into a raw-textarea mode on Esc before the second Esc fully
+  exits; we exit in one step (simpler, matches `exit-edit` helper).
+- `Shift-Enter`: `insert_sibling_after`.
+- `update_calc` clears `.extensions__code-calc` and re-appends
+  `.extensions__code-calc-output-line` rows from
+  `Render_calc.results`. For that to exist on a *fresh* calc block,
+  render.ml now emits the `.extensions__code-calc.pr-2` container
+  for `lang=calc` even when empty (cljs always mounts it).
+
+### State coupling (no module cycle)
+
+`Editor_state` exposes `code_buffer_of` / `code_focus` refs that
+`Code_mirror.install` wires: `live_buffer` consults the CM doc before
+the textarea fallback; `apply_focus` tries `code_focus` (has_focus →
+keep caret, else `cm.focus()` + `setCursor`) before the textarea
+match and runs `run_pending_focus_actions` on success. `sync_titles`
+(≈ cljs `sync-editor-code!`) is subscribed to `S.signal ()` *lazily*
+from the scan — `S.state` throws `failwith "editor state not
+mounted"` until the first block row mounts the state, and an eager
+subscribe in `install` crashed boot ("Failure(editor state not
+mounted)").
+
+### Actions bar
+
+`.code-block-actions` = `.select-language` button (label =
+lower-cased lang or `editor/code-language-placeholder` + chevron) +
+copy button (`navigator.clipboard.writeText` → "Copied!" toast, via
+`let*` promise bind). The picker renders `.ls-code-lang-picker`
+menu rows under `.cp__overlays` at the button's fixed rect; a
+document mousedown outside `.ls-code-lang-picker,
+.code-block-actions` closes it. Picking a mode calls
+`setOption("mode", …)` + `set_block_property
+logseq.property.code/lang`. `window.CodeMirror` is exported for
+extensions/dev helpers.
+
+### Verification
+
+- `virtualized-late-editor-and-code-editor-test` 4/4,
+  `commands-basic-test/code-block-test` 2/2,
+  `commands-basic-test/calculator-test` 3/3 — all green on port 3013.
+- Manual probe: `/code` → `.CodeMirror` (cm-s-lsradix cm-s-light)
+  mounts, click on `pre.CodeMirror-line` focuses the hidden textarea,
+  `fill "*:focus"` writes the doc, Esc exits, `.extensions__code`
+  shows the code, block content persists across reload.
