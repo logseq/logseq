@@ -51,6 +51,13 @@ let block ?(children = []) uuid title : Model.block =
   ; block_code_lang = None
   ; block_icon = None
   ; block_tag_icons = []
+  ; block_ls_type = None
+  ; block_hl_type = None
+  ; block_hl_page = None
+  ; block_hl_color = None
+  ; block_hl = None
+  ; block_asset_ref = None
+  ; block_hl_image = None
   }
 
 let page blocks : Model.page =

@@ -211,9 +211,21 @@ let prompt_view (p : Dialogs_state.prompt) =
                 z )
           ]
         [ dom ~key:"prmt-box" ~style_class:"container"
-            [ dom ~key:"prmt-h" ~tag:"h3" ~id:"modal-headline"
-                ~style_class:"leading-6 font-medium pb-2" ~text:p.title []
-            ; dom ~key:"prmt-in" ~tag:"input"
+            ((if p.desc = "" then
+                [ dom ~key:"prmt-h" ~tag:"h3" ~id:"modal-headline"
+                    ~style_class:"leading-6 font-medium pb-2" ~text:p.title
+                    [] ]
+              else
+                (* cljs pdf-password-input: title line + desc headline *)
+                [ dom ~key:"prmt-t" ~style_class:"text-lg mb-4"
+                    ~text:p.title []
+                ; dom ~key:"prmt-h" ~tag:"h3" ~id:"modal-headline"
+                    ~style_class:
+                      "sm:flex sm:items-start mt-3 text-center sm:mt-0 \
+                       sm:text-left leading-6 font-medium"
+                    ~text:p.desc [] ])
+            @
+            [ dom ~key:"prmt-in" ~tag:"input"
                 ~style_class:
                   "form-input block w-full sm:text-sm sm:leading-5 my-2 \
                    mb-4"
@@ -223,7 +235,7 @@ let prompt_view (p : Dialogs_state.prompt) =
                 ~events:"keydown"
                 ~on_dom_event:input_events []
             ; btn "prmt-ok" I18n.submit "" (fun () -> submit ())
-            ]
+            ])
         ; close_btn
         ]
     ]

@@ -59,6 +59,49 @@ type block =
   ; block_is_query : bool
     (* db/id == parent's logseq.property/query ref — renders the query
        builder instead of plain content (cljs query-block? branch) *)
+  ; block_ls_type : string option (* logseq.property/ls-type *)
+    (* pdf annotation props — on Pdf-annotation child blocks *)
+  ; block_hl_type : string option (* logseq.property.pdf/hl-type *)
+  ; block_hl_page : int option (* logseq.property.pdf/hl-page *)
+  ; block_hl_color : string option (* hl-value properties.color *)
+  ; block_hl : hl option (* logseq.property.pdf/hl-value *)
+  ; block_asset_ref : int option (* logseq.property/asset ref db/id *)
+  ; block_hl_image : int option (* logseq.property.pdf/hl-image ref db/id *)
+  }
+
+(* pdf hl record — logseq.property.pdf/hl-value map. Scaled positions
+   carry pdf-space coords (x1/y1/x2/y2/width/height); vw rects carry
+   viewport px (left/top/width/height) — one record shape for both. *)
+and hl_rect =
+  { hl_x1 : float
+  ; hl_y1 : float
+  ; hl_x2 : float
+  ; hl_y2 : float
+  ; hl_w : float
+  ; hl_h : float
+  }
+
+and hl =
+  { hl_id : string option (* annotation block uuid *)
+  ; hl_page : int
+  ; hl_bounding : hl_rect
+  ; hl_rects : hl_rect list
+  ; hl_text : string
+  ; hl_image : int64 option (* image asset block db/id (or Date.now
+                               timestamp while the area crop persists) *)
+  ; hl_color : string option
+  }
+
+(* cljs pdf-assets/inflate-asset — an open pdf asset *)
+type pdf_asset =
+  { pdf_key : string (* stable identity source *)
+  ; pdf_block_uuid : string option
+  ; pdf_block_db_id : int option
+  ; pdf_block_external_url : string option
+  ; pdf_identity : string (* last 15 chars of key — container id suffix *)
+  ; pdf_filename : string
+  ; pdf_url : string
+  ; pdf_original_path : string
   }
 
 type page =
