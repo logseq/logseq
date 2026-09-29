@@ -14,7 +14,7 @@ let get_page a _b _c _d =
   |> Js.Promise.then_ (fun w -> resolved_result w)
 
 let page_ref_of id =
-  if is_uuid_string id then
+  if Wire.is_uuid_string id then
     Wire.Array [ Wire.kw "block/uuid"; Wire.Uuid id ]
   else Wire.String id
 
@@ -50,7 +50,7 @@ let resolve_tag_eid j =
   | Some (Wire.String s) -> (
       let s' = trim_leading s in
       if String.contains s' '/' then Wire.Keyword s'
-      else if is_uuid_string s' then Wire.Uuid s'
+      else if Wire.is_uuid_string s' then Wire.Uuid s'
       else Wire.Keyword ("plugin.class._test_plugin/" ^ s'))
   | Some w -> w
   | None -> Wire.Nil
@@ -68,7 +68,7 @@ let get_tag a _b _c _d =
               get_tags_by_name_raw name
               |> Js.Promise.then_ (fun tags ->
                      Js.Promise.resolve
-                       (match wire_elems tags with
+                       (match Wire.elems tags with
                         | t :: _ -> t
                         | [] -> Wire.Nil))
           | _ -> Js.Promise.resolve tag)

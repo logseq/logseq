@@ -163,13 +163,10 @@ let close_pv t = set_pv t None
 
 (* title + blocks of the page a .preview-ref-link points at — same bare
    uuid/name ref as sidebar_state.fetch_blocks *)
-let page_ref_of_name name =
-  if Sdk_util.is_uuid_string name then Wire.Uuid name
-  else Wire.String name
 
 let fetch_preview repo name : (string * Model.block list) Js.Promise.t =
   Runtime.invoke2 "thread-api/get-page-route-info" (Wire.String repo)
-    (page_ref_of_name name)
+    (Wire.page_ref name)
   |> Js.Promise.then_ (fun info ->
          let title =
            match Decode.page_of_summary info with
@@ -177,7 +174,7 @@ let fetch_preview repo name : (string * Model.block list) Js.Promise.t =
            | None -> name
          in
          Runtime.invoke3 "thread-api/get-page-blocks-tree"
-           (Wire.String repo) (page_ref_of_name name) Wire.Nil
+           (Wire.String repo) (Wire.page_ref name) Wire.Nil
          |> Js.Promise.then_ (fun w ->
                 Js.Promise.resolve
                   (title, Decode.blocks_of_wire w)))
@@ -575,7 +572,7 @@ let template_items_for t q =
 
 (* ---- async loads ---- *)
 
-let repo () = Option.value !(Runtime.current_repo) ~default:""
+let repo = Runtime.repo
 
 let refresh_items t ac =
   match ac.kind with
@@ -760,11 +757,11 @@ let load_templates t =
                [?b :block/uuid ?u] [?b :block/title ?ti]]"
           ])
      |> Js.Promise.then_ (fun w ->
-            let rows = Sdk_util.wire_elems w in
+            let rows = Wire.elems w in
             t.templates :=
               List.filter_map
                 (fun row ->
-                  match Sdk_util.wire_elems row with
+                  match Wire.elems row with
                   | [ u; ti ] -> (
                       match (u, Wire.as_string ti) with
                       | Wire.Uuid u, Some ti -> Some (u, ti)

@@ -42,7 +42,7 @@ let set f =
    dyn re-renders *)
 let poke () = set (fun s -> { s with tick = s.tick + 1 })
 
-let repo () = Option.value !Runtime.current_repo ~default:""
+let repo = Runtime.repo
 
 let set_tab tab =
   Platform.body_set_data "settingsTab" tab;

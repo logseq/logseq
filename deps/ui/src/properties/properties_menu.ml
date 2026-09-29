@@ -225,7 +225,7 @@ let choice_settings m choice =
   let cid = D.entity_id_of choice in
   let scoped_ids =
     match D.getf choice "logseq.property/choice-classes" with
-    | Some w -> List.filter_map D.entity_id_of (D.elems w)
+    | Some w -> List.filter_map D.entity_id_of (W.elems w)
     | None -> []
   in
   let owner_scoped =
@@ -359,7 +359,7 @@ let choices_pane m =
            (* must overflow-scroll: e2e asserts scrollHeight > clientHeight *)
            set_style ul "max-height:240px;overflow-y:auto";
            List.iter (fun c -> el_append_child ul (choice_li m c build))
-             (D.elems w);
+             (W.elems w);
            el_append_child pane ul;
            el_append_child pane
              (menuitem (I18n.t "property/add-choice") (fun () ->

@@ -119,7 +119,7 @@ and render_prop_select d body =
   el_append_child body wrap;
   D.all_properties (D.uuid_ref d.target.uuid)
   |> Js.Promise.then_ (fun w ->
-         let props = D.elems w in
+         let props = W.elems w in
          let items =
            List.filter_map
              (fun p ->
@@ -268,7 +268,7 @@ and render_node_tags d body prop =
                                  d.phase <- Value_edit prop;
                                  render d))
                       | None -> None))
-                (D.elems w)
+                (W.elems w)
          in
          let sel, input =
            Sel.create ~placeholder:(I18n.t "property/choose-tags")
@@ -283,7 +283,7 @@ and value_items d prop wire_values =
   let ty = type_of prop in
   let closed =
     match D.getf prop "property/closed-values" with
-    | Some w -> D.elems w
+    | Some w -> W.elems w
     | None -> []
   in
   if closed <> [] then
@@ -364,7 +364,7 @@ and render_value_edit d body prop =
         ( D.property_values ~property_ident:(ident_of prop)
             ~block:(D.uuid_ref d.target.uuid)
           |> Js.Promise.then_ (fun w ->
-                 Js.Promise.resolve (value_items d prop (D.elems w)))
+                 Js.Promise.resolve (value_items d prop (W.elems w)))
         , None )
     in
     fetch

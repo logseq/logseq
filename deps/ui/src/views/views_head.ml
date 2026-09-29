@@ -215,7 +215,7 @@ let filter_value_phase inst ~refresh ~anchor (c : V.column) =
                 ; si_value =
                     Option.value (W.map_get_string it "label") ~default:""
                 ; si_extra = W.get it "value" })
-              (Wr.seq_items
+              (Wr.W.elems
                  (Option.value (W.get data "values") ~default:W.Nil))
       in
       let content = D.h ~cls:"flex flex-col gap-1 text-sm" () in
@@ -571,7 +571,7 @@ let filter_chip inst ~refresh idx (f : V.filter_clause) : D.el =
       in
       Views_db.get_view_filter_data prop (fun data ->
           let ops =
-            Wr.seq_items
+            Wr.W.elems
               (Option.value (W.get data "operators") ~default:W.Nil)
             |> List.filter_map W.as_keyword
           in

@@ -9,19 +9,17 @@ module S = String
 external clipboard_write : string -> unit Js.Promise.t = "writeText"
   [@@mel.scope ("navigator", "clipboard")]
 
-let jfield = Worker_client.json_field
-let jstring = Worker_client.json_string
 
 let detail_str name ev =
-  match jfield "detail" ev with
+  match Worker_client.json_field "detail" ev with
   | Some d -> (
-      match jfield name d with
-      | Some v -> jstring v
+      match Worker_client.json_field name d with
+      | Some v -> Worker_client.json_string v
       | None -> None)
   | None -> None
 ;;
 
-let repo () = Option.value !(Runtime.current_repo) ~default:""
+let repo = Runtime.repo
 
 let batch_set uuids prop v =
   Outliner_ops.op "batch-set-property"

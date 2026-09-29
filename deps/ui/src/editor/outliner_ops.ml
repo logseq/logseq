@@ -389,12 +389,9 @@ let tag_titles repo ids : (int * (string * string * bool * string)) list Js.Prom
            (List.filter_map
               (fun pair ->
                 let blk =
-                  match Wire.get pair "block" with
+                  match Wire.block_of_pair pair with
                   | Some b -> b
-                  | None -> (
-                      match Sdk_util.wire_elems pair with
-                      | [ _; b ] -> b
-                      | _ -> Wire.Nil)
+                  | None -> Wire.Nil
                 in
                 match
                   ( Wire.map_get_int blk "db/id"
@@ -412,7 +409,7 @@ let tag_titles repo ids : (int * (string * string * bool * string)) list Js.Prom
                         , Option.value (Wire.map_get_uuid blk "block/uuid")
                             ~default:"" ) )
                 | _ -> None)
-              (Sdk_util.wire_elems w)))
+              (Wire.elems w)))
 
 let resolve_block_tags (blocks : Model.block list) : Model.block list Js.Promise.t =
   let ids =
@@ -521,20 +518,36 @@ let fetch_zoom_blocks repo uuid : Wire.t Js.Promise.t =
            ]
        ])
   |> Js.Promise.then_ (fun w ->
-         match Sdk_util.wire_elems w with
+         match Wire.elems w with
          | [ pair ] -> (
-             let blk =
-               match Wire.get pair "block" with
-               | Some b -> b
-               | None -> (
-                   match Sdk_util.wire_elems pair with
-                   | [ _; b ] -> b
-                   | _ -> Wire.Nil)
-             in
-             (match blk with
-              | Wire.Map _ -> Js.Promise.resolve (Wire.List [ blk ])
-              | _ -> Js.Promise.resolve (Wire.List [])))
+             match Wire.block_of_pair pair with
+             | Some (Wire.Map _ as blk) ->
+                 Js.Promise.resolve (Wire.List [ blk ])
+             | _ -> Js.Promise.resolve (Wire.List []))
          | _ -> Js.Promise.resolve (Wire.List []))
+
+(* shared page-blocks pipeline: collapse-state collection → embed-children
+   fill → collapse application → library view filter → tag-title resolution.
+   ~plain skips the collapse/embed/view shaping — sidebar items only need
+   decoded + tag-resolved blocks and must not touch editor collapse state. *)
+let blocks_of_tree_wire ?(plain = false) repo (p : Model.page) blocks_w =
+  if plain then resolve_block_tags (Decode.blocks_of_wire blocks_w)
+  else
+    let collapsed = ref S.String_set.empty in
+    collapsed := collect_collapsed !collapsed blocks_w;
+    fill_embed_children repo (ancestors_of p) collapsed
+      (Decode.blocks_of_wire blocks_w)
+    |> Js.Promise.then_ (fun blocks ->
+           set_collapsed !collapsed;
+           resolve_block_tags
+             (Decode.view_blocks ~library:p.Model.page_is_library blocks))
+
+let fetch_page_blocks ?(plain = false) repo (p : Model.page) =
+  Runtime.invoke3 "thread-api/get-page-blocks-tree" (Wire.String repo)
+    (Wire.page_ref
+       (Option.value p.Model.page_uuid ~default:p.Model.page_title))
+    Wire.Nil
+  |> Js.Promise.then_ (blocks_of_tree_wire ~plain repo p)
 
 (* refetch unlinked refs for the current page — a block-title edit can
    create or remove a text mention *)
@@ -558,43 +571,18 @@ let refresh_page () : unit Js.Promise.t =
       fetch_unlinked_refs page;
       let blocks_p =
         match !Runtime.current_route, page.Model.page_uuid with
-        | Some (Model.Block_zoom _), Some u -> fetch_zoom_blocks repo u
-        | _ -> (
-            let ref_v =
-              (* Ldb.get_page accepts Uuid/String/Int64 only — a
-                 [:block/uuid u] lookup-ref vector decodes to Vector and
-                 returns no page *)
-              match page.Model.page_uuid with
-              | Some u -> Wire.Uuid u
-              | None -> Wire.String page.Model.page_title
-            in
-            Runtime.invoke3 "thread-api/get-page-blocks-tree"
-              (Wire.String repo) ref_v Wire.Nil)
+        | Some (Model.Block_zoom _), Some u ->
+            fetch_zoom_blocks repo u
+            |> Js.Promise.then_ (blocks_of_tree_wire repo page)
+        | _ -> fetch_page_blocks repo page
       in
       blocks_p
-      |> Js.Promise.then_ (fun blocks_w ->
-             let collapsed = ref S.String_set.empty in
-             collapsed := collect_collapsed !collapsed blocks_w;
-             fill_embed_children repo (ancestors_of page) collapsed
-               (Decode.blocks_of_wire blocks_w)
-             |> Js.Promise.then_ (fun blocks ->
-                    let blocks =
-                      Decode.view_blocks ~library:page.Model.page_is_library
-                        blocks
-                    in
-                    Js.Promise.resolve blocks)
-             |> Js.Promise.then_ (fun blocks ->
-                    set_collapsed !collapsed;
-                    resolve_block_tags blocks
-                    |> Js.Promise.then_ (fun blocks ->
-                           let page =
-                             { page with Model.page_blocks = blocks }
-                           in
-                           (match !Runtime.current_route with
-                            | Some (Model.Block_zoom _) ->
-                                Js.Promise.resolve page
-                            | _ -> resolve_page_tags repo page)
-                           |> Js.Promise.then_ (fun page ->
+      |> Js.Promise.then_ (fun blocks ->
+             let page = { page with Model.page_blocks = blocks } in
+             (match !Runtime.current_route with
+              | Some (Model.Block_zoom _) -> Js.Promise.resolve page
+              | _ -> resolve_page_tags repo page)
+             |> Js.Promise.then_ (fun page ->
                                   (* the worker's tree is authoritative
                                      again — drop committed-buffer title
                                      overrides *)
@@ -606,7 +594,7 @@ let refresh_page () : unit Js.Promise.t =
                                   then
                                     Runtime.send
                                       (Action.Page_loaded page);
-                                  Js.Promise.resolve ())))))
+                                  Js.Promise.resolve ())))
   | Some _, None ->
       (* journals / other non-page views reload through the router hook *)
       !Runtime.reload_current_view ()

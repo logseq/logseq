@@ -56,11 +56,9 @@ let last_page_key : string option ref = ref None
 
 (* ---------- json event helpers ---------- *)
 
-let jfield = Worker_client.json_field
-let jstring = Worker_client.json_string
 
 let jbool name j =
-  match jfield name j with
+  match Worker_client.json_field name j with
   | Some v -> (
       match Js.Json.classify v with
       | Js.Json.JSONTrue -> true
@@ -72,15 +70,15 @@ external closest :
   = "closest" [@@mel.send] [@@mel.return nullable]
 
 let click_target sel ev =
-  match jfield "target" ev with
+  match Worker_client.json_field "target" ev with
   | Some tgt -> closest tgt sel
   | None -> None
 
 let detail_string name ev =
-  match jfield "detail" ev with
+  match Worker_client.json_field "detail" ev with
   | Some d -> (
-      match jfield name d with
-      | Some v -> jstring v
+      match Worker_client.json_field name d with
+      | Some v -> Worker_client.json_string v
       | None -> None)
   | None -> None
 
@@ -140,7 +138,7 @@ let recent_ids_of_storage repo =
                   | _ -> None)
                 kvs
             with
-            | Some v -> List.filter_map Wire.as_int (Sdk_util.wire_elems v)
+            | Some v -> List.filter_map Wire.as_int (Wire.elems v)
             | None -> [])
         | _ -> []
       with _ -> [])
@@ -223,36 +221,20 @@ external encode_uri_component : string -> string = "encodeURIComponent"
 
 let navigate_to_page target =
   let target =
-    if Sdk_util.is_uuid_string target then target
+    if Wire.is_uuid_string target then target
     else encode_uri_component target
   in
   Runtime.mark_nav ();
   Platform.set_location_hash (Runtime.nav_hash ("#/page/" ^ target));
   Platform.dispatch "ls:navigate" Js.Json.null
 
-(* Ref value for get-page-route-info / get-page-blocks-tree: a bare uuid
-   or page-name string. The [:block/uuid u] lookup-ref ARRAY that
-   Router.page_ref builds decodes to a Vector that the endpoints'
-   Ldb.get_page does not match (returns nil) — TODO(shared): fix
-   Router.page_ref / Ldb.get_page so #/page/<uuid> hash routes work. *)
-let route_ref s =
-  if Sdk_util.is_uuid_string s then Wire.Uuid s else Wire.String s
 
-(* Router.fetch_blocks goes through the broken lookup-ref; keep a local
-   copy that passes a bare uuid/name until the shared fix lands. *)
+(* sidebar items only need decoded + tag-resolved blocks — ~plain skips
+   the collapse/embed/view shaping that would touch editor state *)
 let fetch_blocks (p : Model.page) =
-  Runtime.invoke3 "thread-api/get-page-blocks-tree"
-    (Wire.String (Router.repo ()))
-    (route_ref
-       (match p.Model.page_uuid with
-        | Some u -> u
-        | None -> p.Model.page_title))
-    Wire.Nil
-  |> Js.Promise.then_ (fun blocks_w ->
-         Outliner_ops.resolve_block_tags (Decode.blocks_of_wire blocks_w)
-         |> Js.Promise.then_ (fun blocks ->
-                Js.Promise.resolve
-                  { p with Model.page_blocks = blocks }))
+  Outliner_ops.fetch_page_blocks ~plain:true (Runtime.repo ()) p
+  |> Js.Promise.then_ (fun blocks ->
+         Js.Promise.resolve { p with Model.page_blocks = blocks })
 let open_dialog name =
   let o = Js.Dict.empty () in
   Js.Dict.set o "name" (Js.Json.string name);
@@ -289,7 +271,7 @@ let item_of_page (p : Model.page) =
 
 let page_item_of_ref repo (target : string) : item option Js.Promise.t =
   Runtime.invoke2 "thread-api/get-page-route-info" (Wire.String repo)
-    (route_ref target)
+    (Wire.page_ref target)
   |> Js.Promise.then_ (fun info ->
          match Decode.page_of_summary info with
          | None -> Js.Promise.resolve None
@@ -323,7 +305,7 @@ let is_page_entity w =
                 String.length id > 13
                 && String.sub id 0 13 = "logseq.class/"
             | None -> false)
-          (Sdk_util.wire_elems tags)
+          (Wire.elems tags)
     | None -> false
   in
   class_tagged
@@ -331,12 +313,7 @@ let is_page_entity w =
       && Wire.map_get_string w "block/name" <> None)
 
 let block_of_pair pair =
-  match Wire.get pair "block" with
-  | Some b -> b
-  | None -> (
-      match Sdk_util.wire_elems pair with
-      | [ _; b ] -> b
-      | _ -> Wire.Nil)
+  match Wire.block_of_pair pair with Some b -> b | None -> Wire.Nil
 
 let breadcrumb_titles w =
   List.filter_map
@@ -344,7 +321,7 @@ let breadcrumb_titles w =
       match Wire.map_get_string p "block/title" with
       | Some s -> Some s
       | None -> Wire.map_get_string p "block/name")
-    (Sdk_util.wire_elems w)
+    (Wire.elems w)
 
 let block_item_of_uuid repo uuid : item option Js.Promise.t =
   Runtime.invoke2 "thread-api/get-blocks" (Wire.String repo)
@@ -356,7 +333,7 @@ let block_item_of_uuid repo uuid : item option Js.Promise.t =
            ]
        ])
   |> Js.Promise.then_ (fun w ->
-         match Sdk_util.wire_elems w with
+         match Wire.elems w with
          | [ pair ] -> (
              match block_of_pair pair with
              | Wire.Map _ as blk ->
@@ -443,7 +420,7 @@ let add_promise st p =
        p)
 
 let open_ref st target =
-  let repo = Router.repo () in
+  let repo = Runtime.repo () in
   if repo = "" then ()
   else
     let p =
@@ -451,7 +428,7 @@ let open_ref st target =
       |> Js.Promise.then_ (function
              | Some it -> Js.Promise.resolve (Some it)
              | None ->
-                 if Sdk_util.is_uuid_string target then
+                 if Wire.is_uuid_string target then
                    block_item_of_uuid repo target
                  else Js.Promise.resolve None)
     in
@@ -459,7 +436,7 @@ let open_ref st target =
     add_promise st p
 
 let open_uuid st uuid =
-  let repo = Router.repo () in
+  let repo = Runtime.repo () in
   if repo = "" then ()
   else
     let p =
@@ -471,7 +448,7 @@ let open_uuid st uuid =
                    page_item_of_ref repo uuid
                  else block_item_of_uuid repo uuid
              | _ ->
-                 if Sdk_util.is_uuid_string uuid then
+                 if Wire.is_uuid_string uuid then
                    block_item_of_uuid repo uuid
                  else Js.Promise.resolve None)
     in
@@ -479,7 +456,7 @@ let open_uuid st uuid =
     add_promise st p
 
 let open_sticky_item st kind =
-  let repo = Router.repo () in
+  let repo = Runtime.repo () in
   if repo = "" then ()
   else
     match kind with
@@ -492,7 +469,7 @@ let open_sticky_item st kind =
     | _ -> ()
 
 let ensure_contents st =
-  let repo = Router.repo () in
+  let repo = Runtime.repo () in
   if repo <> "" && Signal.get_state st.items = [] then
     add_promise st (contents_item repo)
 
@@ -592,7 +569,7 @@ let on_model st (m : Model.t) =
        let key = page_key p in
        if !last_page_key <> Some key then (
          last_page_key := Some key;
-         refresh_favorited (Router.repo ()) st;
+         refresh_favorited (Runtime.repo ()) st;
          match m.Model.repo, p.Model.page_db_id with
          | Some repo, Some id ->
              (* recents only on explicit navigation (cljs
@@ -642,9 +619,9 @@ let on_doc_click st ev =
         | None -> ()
 
 let on_doc_keydown st ev =
-  match jfield "key" ev with
+  match Worker_client.json_field "key" ev with
   | Some k -> (
-      match jstring k with
+      match Worker_client.json_string k with
       | Some "Escape" ->
           if Signal.get_state st.open_menu <> "" then close_menu st;
           if (!model_ref).Model.appearance <> None then

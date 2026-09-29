@@ -74,7 +74,7 @@ let set_state_from_store a b _c _d =
     match arg_wire a with
     | Wire.String s -> s
     | w -> (
-        match List.filter_map Wire.as_string (wire_elems w) with
+        match List.filter_map Wire.as_string (Wire.elems w) with
         | k :: _ -> k
         | [] -> "")
   in
