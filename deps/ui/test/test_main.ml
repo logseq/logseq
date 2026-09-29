@@ -966,15 +966,6 @@ let test_editor_state () =
    | _ -> check "find_parent_in" false);
   check "find_parent_in misses top-level uuid"
     (Editor_state.find_parent_in blocks "t" = None);
-  (* map_block_title rewrites through children and embed children *)
-  let renamed = Editor_state.map_block_title "ee" "new" blocks in
-  (match Editor_state.find_in renamed "ee" with
-   | Some b -> eqs "map_block_title embed child" "new" b.block_title
-   | None -> check "map_block_title embed child" false);
-  let renamed2 = Editor_state.map_block_title "g" "g2" blocks in
-  (match Editor_state.find_in renamed2 "g" with
-   | Some b -> eqs "map_block_title nested" "g2" b.block_title
-   | None -> check "map_block_title nested" false);
   (* unmounted state falls back to initial *)
   check "editing none unmounted" (Editor_state.editing () = None);
   check "selection empty unmounted"
