@@ -22,6 +22,9 @@ try {
 export default defineConfig({
   define: {
     "globalThis.logseq_revision": JSON.stringify(revision),
+    // npm deps ship dev-only `process.env.NODE_ENV` checks (e.g.
+    // @tanstack/virtual-core); the bundle is always production-served
+    "process.env.NODE_ENV": JSON.stringify("production"),
   },
   build: {
     lib: {
