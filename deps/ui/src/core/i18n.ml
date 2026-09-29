@@ -541,6 +541,12 @@ let group_by = "Group by"
 let sort_groups_by = "Sort groups by"
 let sort_groups_order = "Sort groups order"
 let export_edn = "Export EDN"
+
+(* :export/transparent-background / :export/preview-alt /
+   :plugin/readme-empty-warning *)
+let export_transparent_bg = "Transparent background"
+let export_preview_alt = "export preview"
+let plugin_readme_empty = "No README content."
 let select_all = "Select all"
 let select_row = "Select row"
 let select_col = "Select"

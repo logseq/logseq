@@ -9,6 +9,33 @@ module B = Browser_ui
 module S = Export_state
 module F = Export_formats
 
+(* html2canvas vendored UMD — cljs export.cljs get-image-blob *)
+type canvas
+
+external html2canvas_ : B.E.t -> Js.Json.t -> canvas Js.Promise.t =
+  "html2canvas" [@@mel.scope "window"]
+
+external canvas_to_blob :
+  canvas -> (Webapi.Blob.t Js.Nullable.t -> unit) -> string -> unit =
+  "toBlob" [@@mel.send]
+
+external computed_style : B.E.t -> Js.Json.t = "getComputedStyle"
+  [@@mel.scope "window"]
+
+external css_prop : Js.Json.t -> string -> string = "getPropertyValue"
+  [@@mel.send]
+
+external el_scroll_height : B.E.t -> float = "scrollHeight" [@@mel.get]
+external body_el : B.E.t = "body" [@@mel.scope "document"]
+
+external blob_as_file : Webapi.Blob.t -> Webapi.File.t = "%identity"
+
+let clipboard_write_png : Webapi.Blob.t -> unit Js.Promise.t =
+  [%mel.raw
+    "function (b) { \
+       return navigator.clipboard.write([new ClipboardItem({'image/png': b})]) \
+     }"]
+
 (* cljs export-common/get-content-config defaults *)
 let content_config =
   W.Map
@@ -96,27 +123,98 @@ let export_edn (st : S.t) =
     (W.Map [ (W.kw "export-type", W.Keyword "page"); (W.kw "page-id", page_id) ])
   |> Js.Promise.then_ (fun w -> Js.Promise.resolve (Edn.to_string w))
 
+(* cljs get-image-blob for a page export — selector is always
+   #main-content-container; page zoom/x/y/width/height cljs pulls from
+   the block-selection path do not apply here (scale 1, x/y 0) *)
+let export_png (st : S.t Signal.state) =
+  Signal.update st (fun s -> { s with png = None });
+  Runtime.flush ();
+  match B.qs "#main-content-container" with
+  | None -> ()
+  | Some container ->
+      let cur = Signal.get_state st in
+      let background =
+        if cur.S.png_transparent then "transparent"
+        else
+          match
+            css_prop
+              (computed_style body_el)
+              "--ls-primary-background-color"
+          with
+          | "" -> "transparent"
+          | v -> v
+      in
+      let options =
+        B.json_props
+          [ "allowTaint", Js.Json.boolean true
+          ; "useCORS", Js.Json.boolean true
+          ; "backgroundColor", B.str_to_json background
+          ; "x", Js.Json.number 0.
+          ; "y", Js.Json.number 0.
+          ; "width", Js.Json.null
+          ; "height", Js.Json.null
+          ; "scrollX", Js.Json.number 0.
+          ; "scrollY", Js.Json.number 0.
+          ; "scale", Js.Json.number 1.
+          ; "windowHeight", Js.Json.number (el_scroll_height container) ]
+      in
+      html2canvas_ container options
+      |> Js.Promise.then_ (fun cv ->
+             canvas_to_blob cv
+               (fun blob ->
+                 match Js.Nullable.toOption blob with
+                 | Some blob ->
+                     (match (Signal.get_state st).png_url with
+                      | Some old -> Webapi.Url.revokeObjectURL old
+                      | None -> ());
+                     let url =
+                       Webapi.Url.createObjectURL (blob_as_file blob)
+                     in
+                     Signal.update st (fun s ->
+                         { s with
+                           png = Some blob; png_url = Some url });
+                     Runtime.flush ();
+                     (* cljs sets img#export-preview .src imperatively *)
+                     (match B.qs "#export-preview" with
+                      | Some img -> B.set_attr img "src" url
+                      | None -> ())
+                 | None -> ())
+               "image/png";
+             Js.Promise.resolve ())
+      |> Js.Promise.catch (fun _ -> Js.Promise.resolve ())
+      |> ignore
+
+let set_png_transparent (st : S.t Signal.state) =
+  Signal.update st (fun s ->
+      { s with png_transparent = not s.png_transparent });
+  Runtime.flush ();
+  export_png st
+
 (* cljs reset-export-content! — refetch when tab/options change *)
 let regen (st : S.t Signal.state) =
   let cur = Signal.get_state st in
   Signal.update st (fun s -> { s with copied = false });
-  let p =
-    match cur.fmt with
-    | S.Text -> export_text cur
-    | S.Opml | S.Html -> export_structured cur
-    | S.Edn -> export_edn cur
-  in
-  p
-  |> Js.Promise.then_ (fun content ->
-         Signal.update st (fun s -> { s with content = Some content });
-         Runtime.flush ();
-         Js.Promise.resolve ())
-  |> Js.Promise.catch (fun _ ->
-         Signal.update st (fun s ->
-             { s with content = Some "<export failed>" });
-         Runtime.flush ();
-         Js.Promise.resolve ())
-  |> ignore
+  match cur.fmt with
+  | S.Png -> export_png st
+  | _ ->
+      let p =
+        match cur.fmt with
+        | S.Text -> export_text cur
+        | S.Opml | S.Html -> export_structured cur
+        | S.Edn -> export_edn cur
+        | S.Png -> Js.Promise.resolve ""
+      in
+      p
+      |> Js.Promise.then_ (fun content ->
+             Signal.update st (fun s -> { s with content = Some content });
+             Runtime.flush ();
+             Js.Promise.resolve ())
+      |> Js.Promise.catch (fun _ ->
+             Signal.update st (fun s ->
+                 { s with content = Some "<export failed>" });
+             Runtime.flush ();
+             Js.Promise.resolve ())
+      |> ignore
 
 let set_fmt (st : S.t Signal.state) fmt =
   Signal.update st (fun s -> { s with fmt; copied = false });
@@ -132,33 +230,59 @@ let opt_change (st : S.t Signal.state) f =
 external clipboard_write : string -> unit Js.Promise.t
   = "navigator.clipboard.writeText"
 
+let copied_flash (st : S.t Signal.state) p =
+  p
+  |> Js.Promise.then_ (fun _ ->
+         Signal.update st (fun s -> { s with copied = true });
+         Runtime.flush ();
+         B.later ~ms:2000 (fun () ->
+             Signal.update st (fun s -> { s with copied = false });
+             Runtime.flush ());
+         Js.Promise.resolve ())
+  |> Js.Promise.catch (fun _ -> Js.Promise.resolve ())
+  |> ignore
+
 (* cljs :on-click #(copy-to-clipboard content) — e2e reads the textarea *)
 let copy (st : S.t Signal.state) =
   match (Signal.get_state st).content with
-  | Some c ->
-      clipboard_write c
-      |> Js.Promise.then_ (fun _ ->
-             Signal.update st (fun s -> { s with copied = true });
-             Runtime.flush ();
-             B.later ~ms:2000 (fun () ->
-                 Signal.update st (fun s -> { s with copied = false });
-                 Runtime.flush ());
-             Js.Promise.resolve ())
-      |> Js.Promise.catch (fun _ -> Js.Promise.resolve ())
-      |> ignore
+  | Some c -> copied_flash st (clipboard_write c)
   | None -> ()
+
+(* cljs ClipboardItem path for the png blob *)
+let copy_png (st : S.t Signal.state) =
+  match (Signal.get_state st).png with
+  | Some b -> copied_flash st (clipboard_write_png b)
+  | None -> ()
+
+let download_blob ~filename (blob : Webapi.Blob.t) =
+  let url = Webapi.Url.createObjectURL (blob_as_file blob) in
+  let a = B.create "a" in
+  B.set_attr a "href" url;
+  B.set_attr a "download" filename;
+  (match B.qs "body" with Some b -> B.append b a | None -> ());
+  B.click a;
+  B.later ~ms:0 (fun () ->
+      B.remove a;
+      Webapi.Url.revokeObjectURL url)
 
 (* cljs filename: "logseq_" + (t/now) + ext — txt for text else format *)
 let save_to_file (st : S.t Signal.state) =
   let cur = Signal.get_state st in
-  match cur.content with
-  | Some content ->
+  match cur.fmt, cur.content, cur.png with
+  | S.Png, _, Some blob ->
+      download_blob
+        ~filename:
+          (Printf.sprintf "logseq_%s.png" (B.fmt_time (B.now_ms ())))
+        blob
+  | S.Png, _, None -> ()
+  | _, Some content, _ ->
       let ext =
         match cur.fmt with
         | S.Text -> "txt"
         | S.Opml -> "opml"
         | S.Html -> "html"
         | S.Edn -> "edn"
+        | S.Png -> "png"
       in
       let mime =
         match cur.fmt with
@@ -166,9 +290,10 @@ let save_to_file (st : S.t Signal.state) =
         | S.Opml -> "text/xml"
         | S.Html -> "text/html"
         | S.Edn -> "text/plain"
+        | S.Png -> "image/png"
       in
       B.download_text
         ~filename:
           (Printf.sprintf "logseq_%s.%s" (B.fmt_time (B.now_ms ())) ext)
         ~mime content
-  | None -> ()
+  | _, None, _ -> ()
