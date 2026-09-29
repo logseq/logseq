@@ -1621,3 +1621,87 @@ list. `Cmdk_state.refresh ?clear` therefore skips the synchronous
 `apply_results` entirely on the debounced input path (`~clear:false`),
 leaving prior groups rendered until the async response replaces them;
 every other caller uses the default `~clear:true`.
+
+## i18n: runtime dict loading + literal consolidation
+
+`src/core/i18n.ml` was a stopgap table of English literals behind a
+`TODO(i18n)` comment. It is now backed by real dictionaries.
+
+### Dict pipeline (one clear path)
+
+- `tools/dict_gen.ml` (native dune exe) parses `src/resources/dicts/*.edn`
+  and emits `src/dicts_gen.ml` — an OCaml module with
+  `en : (string * string) array` and
+  `dicts : (string * (string * string) array) list` covering all 25
+  locale files. Function-valued cljs entries (`(fn ...)` defaults, 12
+  keys) are unportable and skipped.
+- `src/dune` has a `(rule (target dicts_gen.ml) ...)` that shells out to
+  `%{exe:../tools/dict_gen.exe}` against
+  `$DUNE_SOURCEROOT/../../src/resources/dicts` (dicts live outside this
+  dune-project). Because they are not declared deps, re-run
+  `dune build --force` after editing `.edn` files.
+- Locale filenames map like cljs `frontend.dicts`: `zh-cn`→zh-CN,
+  `zh-hant`→zh-Hant, `nb-no`→nb-NO, `pt-br`→pt-BR, `pt-pt`→pt-PT,
+  otherwise the file stem.
+
+### Lookup
+
+`I18n.t key`:
+1. `current_lang` reads `localStorage["preferred-language"]` (an
+   EDN-quoted string like `"en"`), matching `settings_view.set_language`
+   / `boot` — no cljs state. Missing key or `"en"` → English.
+2. English resolves through `en_text`: `en_overrides` first (13 keys
+   where the shipped OCaml English deliberately differs from en.edn —
+   e.g. `ui/true` "Yes", `property/use-choice-in-tag`,
+   `view/unlinked-references`), then `Dicts_gen.en`, then the key
+   itself. Non-en locales resolve `Dicts_gen.dicts[locale]` with
+   `en_text` fallback, so untranslated keys degrade to English.
+3. `tf key args`/`t1 key arg` substitute `{1}`..`{n}` placeholders.
+
+Language changes only take effect on the next boot (`set_language`
+writes localStorage + `<html lang>`), so `let x = t "k"` at module
+scope stays frozen-at-init — same effective contract as before.
+
+### Audit + migration (branch `devin/lui-i18n`)
+
+- ~332 call-site literals moved to `I18n.t`/`tf`/`t1` (or a local
+  `let t = I18n.t` alias) across 29 files — menus, buttons, toasts,
+  dialogs, placeholders, aria-labels, export/publish/options labels.
+- `i18n.ml` keeps 273 named `let x = t "k"` constants + ~25 custom
+  helpers (`operator_text`, `timestamp_options`, `delete_*_confirm`,
+  `import_finished`, ...). The three identity-`t` stubs
+  (`sidebar_state`, `plugins_view`, `cards_view` + a dead one in
+  `cards_state`) were removed and their pseudo-key call sites remapped
+  to real keys.
+- Pseudo-namespace call sites renamed to real en.edn keys
+  (`cmdk.groups/*`→`cmdk.group/*`, `shortcut.category/*`,
+  `command.<id>` derived from keymap `title` attrs, etc.).
+- 41 new keys added to `en.edn` + `zh-cn.edn` (per i18n skill: every new
+  key ships a zh-CN translation) with matching `^:key$`
+  `always_used_key_patterns` exemptions in `.i18n-lint.toml`.
+  `bb lang:validate-translations`, `lang:lint-hardcoded`,
+  `lang:format-dicts` all clean.
+
+### Deliberately left inline (dev/debug only)
+
+- `(Dev) ...` command labels and their toasts ("Your graph is valid",
+  "Validation failed").
+- Brand string `"Logseq %s"`, `"rtc sync"` aria label, font names,
+  demo-graph name, `"Ag"` font sample.
+- Internal error-state fallbacks in `views_query.ml`
+  ("invalid query"/"query failed"/"query error") — machine-ish worker
+  error strings, not polished user copy.
+- `"then"` keycap chord separator (aria-hidden), `date.nlp/*` English
+  parser ids (`nlp_en_names`), icon-name quirk `"InProgress50"` as a
+  popup label, `input[placeholder='Enter password again']` e2e selector.
+
+### Verification
+
+- `dune build --force js_app test` clean; `vite build` clean;
+  `node _build/default/test/ui_test/test/test_main.js` → 884 checks, 0
+  failures.
+- `bb test -n logseq.e2e.tag-basic-test` still blocked by the known
+  base-branch `new-logseq-page` fixture crash (cmdk "Create page" →
+  `MelangeError: Invalid_argument` in `apply_pending_batch`, documented
+  above). Reproduced identically on an `origin/devin/lui-ui-rewrite`
+  bundle — not introduced by this change.

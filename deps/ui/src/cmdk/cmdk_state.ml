@@ -431,12 +431,12 @@ let group_order v q rows total =
     if node_exists q rows then None
     else
       Some
-        { gid = G_create; gtitle = I18n.t "cmdk.groups/create"
+        { gid = G_create; gtitle = I18n.t "cmdk.group/create"
         ; gitems = create_items q; gtotal = 1; glimit = 1
         ; gexpanded = false; gfilter_active = false }
   in
   let nodes_g () =
-    { gid = G_nodes; gtitle = I18n.t "cmdk.groups/nodes"
+    { gid = G_nodes; gtitle = I18n.t "cmdk.group/nodes"
     ; gitems = rows; gtotal = max total (List.length rows)
     ; glimit = nodes_limit v.move_mode v.expanded
     ; gexpanded = List.mem G_nodes v.expanded; gfilter_active = false }
@@ -452,7 +452,7 @@ let group_order v q rows total =
         rows
     in
     { gid = G_current_page
-    ; gtitle = I18n.t "cmdk.groups/current-page"
+    ; gtitle = I18n.t "cmdk.group/current-page"
     ; gitems = items; gtotal = max total (List.length items)
     ; glimit = current_page_limit v.expanded
     ; gexpanded = List.mem G_current_page v.expanded
@@ -460,27 +460,27 @@ let group_order v q rows total =
   in
   let commands_g () =
     let items = commands_items q in
-    { gid = G_commands; gtitle = I18n.t "cmdk.groups/commands"
+    { gid = G_commands; gtitle = I18n.t "cmdk.group/commands"
     ; gitems = items; gtotal = List.length items
     ; glimit = 5; gexpanded = List.mem G_commands v.expanded
     ; gfilter_active = false }
   in
   let files_g () =
     let items = file_items q in
-    { gid = G_files; gtitle = I18n.t "cmdk.groups/files"
+    { gid = G_files; gtitle = I18n.t "cmdk.group/files"
     ; gitems = items; gtotal = List.length items
     ; glimit = 5; gexpanded = List.mem G_files v.expanded
     ; gfilter_active = false }
   in
   let filters_g () =
     let items = filter_items () in
-    { gid = G_filters; gtitle = I18n.t "cmdk.groups/filters"
+    { gid = G_filters; gtitle = I18n.t "cmdk.group/filters"
     ; gitems = items; gtotal = List.length items
     ; glimit = 99; gexpanded = false; gfilter_active = false }
   in
   let recents_g () =
     { gid = G_recently_updated
-    ; gtitle = I18n.t "cmdk.groups/recently-updated"
+    ; gtitle = I18n.t "cmdk.group/recently-updated"
     ; gitems =
         (if String.trim q = "" then v.recents
          else

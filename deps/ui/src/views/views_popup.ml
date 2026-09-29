@@ -446,7 +446,7 @@ let show_select ~anchor ~items ~placeholder ?(multiple = false)
 (* -- confirm dialog -- *)
 
 let show_dialog ~headline ~body:(body : D.el list) ~on_confirm
-    ?(confirm_label = "Yes") () =
+    ?(confirm_label = I.yes) () =
   let overlay =
     D.h ~cls:
       "fixed inset-0 z-50 bg-black/80 backdrop-blur-sm" ()

@@ -297,12 +297,12 @@ let open_link_form image uuid from =
     V.h ~tag:"input" ~cls:"ls-link-url"
       ~attrs:
         [ ("type", "text")
-        ; ("placeholder", "Paste a link, input a search term") ]
+        ; ("placeholder", I18n.t "editor/link-url-placeholder") ]
       ()
   in
   let label_inp =
     V.h ~tag:"input" ~cls:"ls-link-text"
-      ~attrs:[ ("type", "text"); ("placeholder", "Label") ] ()
+      ~attrs:[ ("type", "text"); ("placeholder", I18n.t "editor/link-label-placeholder") ] ()
   in
   let root =
     V.h ~cls:"ls-editor-link-form"
