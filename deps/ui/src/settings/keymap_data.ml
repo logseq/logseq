@@ -204,6 +204,12 @@ let items =
       ; bindings = [ { kind = "combo"; data = "meta+close-square-bracket"; keys = [ "\xe2\x8c\x98"; "]" ] } ]
       }
   ; Shortcut
+      { label = "Go to graph view"
+      ; title = ":go/graph-view#global-non-editing-only"
+      ; unset = false
+      ; bindings = [ { kind = "separate"; data = "g g"; keys = [ "G"; "G" ] } ]
+      }
+  ; Shortcut
       { label = "Go to home"
       ; title = ":go/home#global-non-editing-only"
       ; unset = false
@@ -647,6 +653,60 @@ let items =
       ; title = ":auto-complete/shift-complete#auto-complete"
       ; unset = false
       ; bindings = [ { kind = "combo"; data = "shift+enter"; keys = [ "\xe2\x87\xa7"; "\xe2\x8f\x8e" ] } ]
+      }
+  ; Shortcut
+      { label = "(Dev) Export client ops sqlite"
+      ; title = ":dev/export-client-ops-sqlite#global-non-editing-only"
+      ; unset = true
+      ; bindings = [  ]
+      }
+  ; Shortcut
+      { label = "(Dev) Garbage collect graph (remove unused data in SQLite)"
+      ; title = ":dev/gc-graph#global-non-editing-only"
+      ; unset = true
+      ; bindings = [  ]
+      }
+  ; Shortcut
+      { label = "(Dev) Recompute graph checksum"
+      ; title = ":dev/recompute-checksum#global-non-editing-only"
+      ; unset = true
+      ; bindings = [  ]
+      }
+  ; Shortcut
+      { label = "(Dev) RTC Start"
+      ; title = ":dev/rtc-start#global-non-editing-only"
+      ; unset = true
+      ; bindings = [  ]
+      }
+  ; Shortcut
+      { label = "(Dev) RTC Stop"
+      ; title = ":dev/rtc-stop#global-non-editing-only"
+      ; unset = true
+      ; bindings = [  ]
+      }
+  ; Shortcut
+      { label = "(Dev) Show block AST"
+      ; title = ":dev/show-block-ast#global-non-editing-only"
+      ; unset = true
+      ; bindings = [  ]
+      }
+  ; Shortcut
+      { label = "(Dev) Show block data"
+      ; title = ":dev/show-block-data#global-non-editing-only"
+      ; unset = true
+      ; bindings = [  ]
+      }
+  ; Shortcut
+      { label = "(Dev) Show page data"
+      ; title = ":dev/show-page-data#global-non-editing-only"
+      ; unset = true
+      ; bindings = [  ]
+      }
+  ; Shortcut
+      { label = "(Dev) Validate current graph"
+      ; title = ":dev/validate-db#global-non-editing-only"
+      ; unset = true
+      ; bindings = [  ]
       }
   ; Shortcut
       { label = "Insert youtube timestamp"
