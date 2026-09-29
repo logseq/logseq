@@ -148,6 +148,44 @@ let test_ordinary_sibling_skips_closed_value_property_children () =
   check_ordinary_sibling "ordinary-sibling-skips-closed-value-property-children"
     (create_sibling_conn ":block/closed-value-property -2")
 
+(* ordinary-sibling under stale :block/order datoms: raw-datom replay
+   (sync/RTC) can leave a second :block/order datom on an entity. A stale
+   index position must not steal the candidacy from a closer live
+   sibling. conn_from_datoms keeps both datoms, as a replayed log would. *)
+let create_stale_sibling_conn () =
+  let datom = Datascript.datom in
+  let parent = Ref 1 in
+  Datascript.conn_from_datoms ~schema:(Db_test_util.schema ())
+    [ datom ~e:1 ~a:"block/title" ~v:(String "page") ();
+      datom ~e:1 ~a:"block/name" ~v:(String "page") ();
+      datom ~e:10 ~a:"block/title" ~v:(String "c0") ();
+      datom ~e:10 ~a:"block/parent" ~v:parent ();
+      datom ~e:10 ~a:"block/order" ~v:(String "a0") ();
+      datom ~e:11 ~a:"block/title" ~v:(String "c1") ();
+      datom ~e:11 ~a:"block/parent" ~v:parent ();
+      datom ~e:11 ~a:"block/order" ~v:(String "a1") ();
+      datom ~e:11 ~a:"block/order" ~v:(String "a4") ();
+      datom ~e:12 ~a:"block/title" ~v:(String "c2") ();
+      datom ~e:12 ~a:"block/parent" ~v:parent ();
+      datom ~e:12 ~a:"block/order" ~v:(String "a3") ();
+      datom ~e:13 ~a:"block/title" ~v:(String "t") ();
+      datom ~e:13 ~a:"block/parent" ~v:parent ();
+      datom ~e:13 ~a:"block/order" ~v:(String "a5") () ]
+
+let test_ordinary_sibling_ignores_stale_order_datoms () =
+  let db = db_of (create_stale_sibling_conn ()) in
+  let c1 = Option.get (block_by_title db "c1") in
+  let c2 = Option.get (block_by_title db "c2") in
+  let t = Option.get (block_by_title db "t") in
+  check "ordinary-sibling-ignores-stale-order-datoms left of t"
+    (match Ldb.get_left_sibling t with
+     | Some e -> e.id = c2.id
+     | None -> false);
+  check "ordinary-sibling-ignores-stale-order-datoms left of c2"
+    (match Ldb.get_left_sibling c2 with
+     | Some e -> e.id = c1.id
+     | None -> false)
+
 (* (deftest page-exists ...)
    cljs page-exists? returns a seq of page eids (e.g. ["foo" page]);
    Ldb.page_exists returns bool — boolean equivalents asserted. *)
@@ -3177,6 +3215,7 @@ let db_test_cases : unit Alcotest.test_case list =
     Alcotest.test_case "get-journal-page-by-day" `Quick test_get_journal_page_by_day;
     Alcotest.test_case "ordinary-sibling-skips-created-from-property-children" `Quick test_ordinary_sibling_skips_created_from_property_children;
     Alcotest.test_case "ordinary-sibling-skips-closed-value-property-children" `Quick test_ordinary_sibling_skips_closed_value_property_children;
+    Alcotest.test_case "ordinary-sibling-ignores-stale-order-datoms" `Quick test_ordinary_sibling_ignores_stale_order_datoms;
     Alcotest.test_case "page-exists" `Quick test_page_exists;
     Alcotest.test_case "test-transact-with-multiple-tx-datoms" `Quick test_transact_with_multiple_tx_datoms;
     Alcotest.test_case "get-bidirectional-properties" `Quick
