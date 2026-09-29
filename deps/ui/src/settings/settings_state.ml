@@ -132,11 +132,11 @@ let config_bool key ~default =
 let map_assoc key v kvs =
   let rec go acc = function
     | [] -> List.rev ((Wire.Keyword key, v) :: acc)
-    | (k, _) :: rest -> (
+    | ((k, _) as kv) :: rest -> (
         match k with
         | Wire.Keyword s when s = key ->
             List.rev_append acc ((k, v) :: rest)
-        | _ -> go ((k, v) :: acc) rest)
+        | _ -> go (kv :: acc) rest)
   in
   go [] kvs
 
