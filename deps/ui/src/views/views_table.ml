@@ -609,6 +609,50 @@ let sort_menuitem_els inst ~refresh (c : V.column) =
           set_column_sort inst ~refresh c asc))
     [ (I.sort_ascending, true); (I.sort_descending, false) ]
 
+let pinned_columns_ident = "logseq.property.table/pinned-columns"
+
+(* cljs pinned-properties: :select and :id are always prepended; the
+   rest are the view entity's pinned-columns property idents *)
+let is_pinned inst (c : V.column) =
+  c.V.c_id = "select" || c.V.c_id = "id"
+  || V.Sset.mem c.V.c_id inst.V.pinned
+
+(* cljs header-cp pin option: toggles membership in the view entity's
+   pinned-columns (values are property db/ids) *)
+let toggle_pin inst ~refresh (c : V.column) (p : W.t) =
+  match Properties_data.entity_id_of p with
+  | Some pid ->
+      if V.Sset.mem c.V.c_id inst.V.pinned then begin
+        inst.V.pinned <- V.Sset.remove c.V.c_id inst.V.pinned;
+        Properties_data.delete_property_value ~block_uuid:inst.V.view_uuid
+          ~ident:pinned_columns_ident ~value:(W.Int pid)
+        |> ignore
+      end
+      else begin
+        inst.V.pinned <- V.Sset.add c.V.c_id inst.V.pinned;
+        Properties_data.set_block_property ~block_uuid:inst.V.view_uuid
+          ~ident:pinned_columns_ident ~value:(W.Int pid)
+        |> ignore
+      end;
+      refresh inst
+  | None -> ()
+
+(* cljs table-options trailing the property dropdown: sort items (when
+   sortable) then Pin/Unpin (when the property has a db/id) *)
+let column_menuitem_els inst ~refresh (c : V.column) (p : W.t) =
+  let sort = if sortable c then sort_menuitem_els inst ~refresh c else [] in
+  let pin =
+    match Properties_data.entity_id_of p with
+    | Some _ ->
+        [ Properties_menu.menuitem ~icon:"pin"
+            (if V.Sset.mem c.V.c_id inst.V.pinned then I.unpin else I.pin)
+            (fun () ->
+              Properties_state.close_overlays ();
+              toggle_pin inst ~refresh c p) ]
+    | None -> []
+  in
+  sort @ pin
+
 (* cljs header-cp: property columns open one .ls-property-dropdown —
    sort more-options first, then the configure list, no title *)
 let open_property_menu inst ~refresh ~anchor (c : V.column) (p : W.t) =
@@ -623,8 +667,7 @@ let open_property_menu inst ~refresh ~anchor (c : V.column) (p : W.t) =
       (match inst.V.kind with V.KTagPage _ -> true | _ -> false)
     ~owner_title:c.V.c_name
     ~refresh:(fun () -> refresh inst)
-    ~more_options:
-      (if sortable c then sort_menuitem_els inst ~refresh c else [])
+    ~more_options:(column_menuitem_els inst ~refresh c p)
     ~with_title:false
     (W.Map
        [ (W.Keyword "property", p)
@@ -792,15 +835,15 @@ let row_el inst ~refresh ~idx ~row_uuid (cols : V.column list) : D.el =
         [ ("data-id", data_id); ("blockid", row_uuid); ("tabIndex", "0") ]
       ()
   in
-  (* cljs: sticky-columns holds the select cell, sibling .flex.flex-row
-     holds each remaining cell wrapped in .h-full *)
+  (* cljs: .sticky-columns holds pinned cells, sibling .flex.flex-row
+     holds the unpinned ones — each cell wrapped in .h-full *)
   let sticky = D.h ~cls:"flex flex-row sticky-columns" () in
   let row2 = D.h ~cls:"flex flex-row" () in
   List.iter
     (fun c ->
       let cell = cell_el inst ~refresh ~row_uuid ~blk ~idx c in
       let wrap = D.h ~cls:"h-full" ~children:[ cell ] () in
-      if c.V.c_id = "select" then D.el_append_child sticky wrap
+      if is_pinned inst c then D.el_append_child sticky wrap
       else D.el_append_child row2 wrap)
     cols;
   (match show_add_property inst with
@@ -837,8 +880,9 @@ let table_el inst ~refresh : D.el =
     D.h ~cls:"ls-table-header border-y transition-colors bg-gray-01"
       ~attrs:[ ("style", "z-index:9") ] ()
   in
-  (* cljs header: .sticky-columns > [#Select > select cell, dnd a11y
-     divs, .flex.flex-row > (div[role=button] > cell)* > #add property] *)
+  (* cljs header: .sticky-columns > pinned header cells (#Select > select
+     cell, div[role=button] > cell for pinned props); sibling
+     .flex.flex-row > unpinned (div[role=button] > cell)* > #add property] *)
   let sticky = D.h ~cls:"flex flex-row sticky-columns" () in
   let header_row = D.h ~cls:"flex flex-row" () in
   List.iter
@@ -850,8 +894,9 @@ let table_el inst ~refresh : D.el =
       else (
         D.el_append_child cell
           (D.h ~tag:"a" ~cls:"ls-table-resize-handle" ());
-        D.el_append_child header_row
-          (D.h ~attrs:[ ("role", "button") ] ~children:[ cell ] ())))
+        let item = D.h ~attrs:[ ("role", "button") ] ~children:[ cell ] () in
+        if is_pinned inst c then D.el_append_child sticky item
+        else D.el_append_child header_row item))
     cols;
   D.el_append_child sticky (dnd_described "0");
   D.el_append_child sticky (dnd_live "0");

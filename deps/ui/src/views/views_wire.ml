@@ -55,6 +55,7 @@ type view_ent =
   ; vfilters : W.t option
   ; vhidden : string list
   ; vordered : string list
+  ; vpinned : string list (* property idents *)
   ; vgroup_by : string option (* property ident *)
   ; vgroup_sort_by : string option
   ; vgroup_desc : bool option
@@ -108,6 +109,12 @@ let decode_view_ent (m : W.t) : view_ent option =
               (Option.value
                  (W.get m "logseq.property.table/ordered-columns")
                  ~default:W.Nil)
+        ; vpinned =
+            seq_items
+              (Option.value
+                 (W.get m "logseq.property.table/pinned-columns")
+                 ~default:W.Nil)
+            |> List.filter_map ident_of_value
         ; vgroup_by =
             ident_of_value
               (Option.value
