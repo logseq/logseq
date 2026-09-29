@@ -131,6 +131,10 @@ jobs:
           sh scripts/install-opam-deps.sh
           pnpm install
 
+      - name: Fetch ui OCaml deps
+        working-directory: deps/ui
+        run: sh scripts/install-opam-deps.sh
+
       - name: Fetch CLI pnpm deps
         run: pnpm --dir cli install --frozen-lockfile --ignore-workspace
 
@@ -160,11 +164,13 @@ jobs:
           echo "ENABLE_PLUGINS=${{ github.event_name == 'schedule' || github.event.inputs.enable-plugins == 'true' }}" >> $GITHUB_ENV
           echo "ENABLE_FILE_SYNC_PRODUCTION=${{ github.event_name == 'schedule' || github.event.inputs.enable-file-sync-production == 'true' }}" >> $GITHUB_ENV
 
-      - name: Compile CLJS
+      - name: Compile UI
         run: |
           pnpm install --frozen-lockfile
           gulp build
-          pnpm cljs:release-electron
+          pnpm ui:build
+          pnpm cljs:release-publishing
+          pnpm electron:build
           opam exec -- pnpm cli:release
           pnpm db-worker:build
           pnpm db-worker-node:bundle
