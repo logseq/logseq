@@ -19,10 +19,11 @@ let data_prop (k : string) : Js.Json.t =
           | None -> failwith ("emoji_mart: __emojiData." ^ k ^ " missing"))
       | None -> failwith "emoji_mart: __emojiData is not an object")
 
-let mart_categories = data_prop "categories"
-let mart_emojis = data_prop "emojis"
-let mart_aliases = data_prop "aliases"
-let mart_sheet = data_prop "sheet"
+(* lazy — window.__emojiData is absent under node tests *)
+let mart_categories = lazy (data_prop "categories")
+let mart_emojis = lazy (data_prop "emojis")
+let mart_aliases = lazy (data_prop "aliases")
+let mart_sheet = lazy (data_prop "sheet")
 
 external mart_init : Js.Json.t -> unit = "init" [@@mel.module "emoji-mart"]
 
@@ -39,10 +40,10 @@ let install () =
   if not !installed then begin
     installed := true;
     let data = Js.Dict.empty () in
-    Js.Dict.set data "categories" mart_categories;
-    Js.Dict.set data "emojis" mart_emojis;
-    Js.Dict.set data "aliases" mart_aliases;
-    Js.Dict.set data "sheet" mart_sheet;
+    Js.Dict.set data "categories" (Lazy.force mart_categories);
+    Js.Dict.set data "emojis" (Lazy.force mart_emojis);
+    Js.Dict.set data "aliases" (Lazy.force mart_aliases);
+    Js.Dict.set data "sheet" (Lazy.force mart_sheet);
     let opts = Js.Dict.empty () in
     Js.Dict.set opts "data" (Js.Json.object_ data);
     mart_init (Js.Json.object_ opts)
@@ -52,7 +53,7 @@ let install () =
 let emoji_id_valid (id : string) : bool =
   id <> ""
   &&
-  match Js.Json.decodeObject mart_emojis with
+  match Js.Json.decodeObject (Lazy.force mart_emojis) with
   | Some dict -> Js.Dict.get dict id <> None
   | None -> false
 

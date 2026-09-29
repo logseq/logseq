@@ -22,142 +22,167 @@ let ( let* ) p f = Js.Promise.then_ f p
 type cm_module
 type t
 
-external cm : cm_module = "codemirror" [@@mel.module]
+external raw_require : string -> Js.Json.t = "require"
+
+external cm_module_of_json : Js.Json.t -> cm_module = "%identity"
+
+(* codemirror.js and every mode/addon touch `document` at load time, so
+   they must not require under the node test runner — the whole ui lib is
+   linked into test_main. Requires stay literal so the bundler can still
+   resolve them statically; they only execute once install/mount runs in
+   the browser. *)
+let cm_cache : cm_module option ref = ref None
+
+let cm () : cm_module =
+  match !cm_cache with
+  | Some m -> m
+  | None ->
+      let m = cm_module_of_json (raw_require "codemirror") in
+      cm_cache := Some m;
+      m
+
+let modes_loaded = ref false
+
+let load_modes () =
+  if not !modes_loaded then begin
+    modes_loaded := true;
+    ignore (raw_require "codemirror");
+    ignore (raw_require "codemirror/addon/edit/closebrackets");
+    ignore (raw_require "codemirror/addon/edit/matchbrackets");
+    ignore (raw_require "codemirror/addon/hint/show-hint");
+    ignore (raw_require "codemirror/addon/selection/active-line");
+    ignore (raw_require "codemirror/mode/meta");
+    ignore (raw_require "codemirror/mode/apl/apl");
+    ignore (raw_require "codemirror/mode/asciiarmor/asciiarmor");
+    ignore (raw_require "codemirror/mode/asn.1/asn.1");
+    ignore (raw_require "codemirror/mode/asterisk/asterisk");
+    ignore (raw_require "codemirror/mode/brainfuck/brainfuck");
+    ignore (raw_require "codemirror/mode/clike/clike");
+    ignore (raw_require "codemirror/mode/clojure/clojure");
+    ignore (raw_require "codemirror/mode/cmake/cmake");
+    ignore (raw_require "codemirror/mode/cobol/cobol");
+    ignore (raw_require "codemirror/mode/coffeescript/coffeescript");
+    ignore (raw_require "codemirror/mode/commonlisp/commonlisp");
+    ignore (raw_require "codemirror/mode/crystal/crystal");
+    ignore (raw_require "codemirror/mode/css/css");
+    ignore (raw_require "codemirror/mode/cypher/cypher");
+    ignore (raw_require "codemirror/mode/d/d");
+    ignore (raw_require "codemirror/mode/dart/dart");
+    ignore (raw_require "codemirror/mode/diff/diff");
+    ignore (raw_require "codemirror/mode/django/django");
+    ignore (raw_require "codemirror/mode/dockerfile/dockerfile");
+    ignore (raw_require "codemirror/mode/dtd/dtd");
+    ignore (raw_require "codemirror/mode/dylan/dylan");
+    ignore (raw_require "codemirror/mode/ebnf/ebnf");
+    ignore (raw_require "codemirror/mode/ecl/ecl");
+    ignore (raw_require "codemirror/mode/eiffel/eiffel");
+    ignore (raw_require "codemirror/mode/elm/elm");
+    ignore (raw_require "codemirror/mode/erlang/erlang");
+    ignore (raw_require "codemirror/mode/factor/factor");
+    ignore (raw_require "codemirror/mode/fcl/fcl");
+    ignore (raw_require "codemirror/mode/forth/forth");
+    ignore (raw_require "codemirror/mode/fortran/fortran");
+    ignore (raw_require "codemirror/mode/gas/gas");
+    ignore (raw_require "codemirror/mode/gfm/gfm");
+    ignore (raw_require "codemirror/mode/gherkin/gherkin");
+    ignore (raw_require "codemirror/mode/go/go");
+    ignore (raw_require "codemirror/mode/groovy/groovy");
+    ignore (raw_require "codemirror/mode/haml/haml");
+    ignore (raw_require "codemirror/mode/handlebars/handlebars");
+    ignore (raw_require "codemirror/mode/haskell/haskell");
+    ignore (raw_require "codemirror/mode/haskell-literate/haskell-literate");
+    ignore (raw_require "codemirror/mode/haxe/haxe");
+    ignore (raw_require "codemirror/mode/htmlembedded/htmlembedded");
+    ignore (raw_require "codemirror/mode/htmlmixed/htmlmixed");
+    ignore (raw_require "codemirror/mode/http/http");
+    ignore (raw_require "codemirror/mode/idl/idl");
+    ignore (raw_require "codemirror/mode/javascript/javascript");
+    ignore (raw_require "codemirror/mode/jinja2/jinja2");
+    ignore (raw_require "codemirror/mode/jsx/jsx");
+    ignore (raw_require "codemirror/mode/julia/julia");
+    ignore (raw_require "codemirror/mode/livescript/livescript");
+    ignore (raw_require "codemirror/mode/lua/lua");
+    ignore (raw_require "codemirror/mode/markdown/markdown");
+    ignore (raw_require "codemirror/mode/mathematica/mathematica");
+    ignore (raw_require "codemirror/mode/mbox/mbox");
+    ignore (raw_require "codemirror/mode/mirc/mirc");
+    ignore (raw_require "codemirror/mode/mllike/mllike");
+    ignore (raw_require "codemirror/mode/modelica/modelica");
+    ignore (raw_require "codemirror/mode/mscgen/mscgen");
+    ignore (raw_require "codemirror/mode/mumps/mumps");
+    ignore (raw_require "codemirror/mode/nginx/nginx");
+    ignore (raw_require "codemirror/mode/nsis/nsis");
+    ignore (raw_require "codemirror/mode/ntriples/ntriples");
+    ignore (raw_require "codemirror/mode/octave/octave");
+    ignore (raw_require "codemirror/mode/oz/oz");
+    ignore (raw_require "codemirror/mode/pascal/pascal");
+    ignore (raw_require "codemirror/mode/pegjs/pegjs");
+    ignore (raw_require "codemirror/mode/perl/perl");
+    ignore (raw_require "codemirror/mode/php/php");
+    ignore (raw_require "codemirror/mode/pig/pig");
+    ignore (raw_require "codemirror/mode/powershell/powershell");
+    ignore (raw_require "codemirror/mode/properties/properties");
+    ignore (raw_require "codemirror/mode/protobuf/protobuf");
+    ignore (raw_require "codemirror/mode/pug/pug");
+    ignore (raw_require "codemirror/mode/puppet/puppet");
+    ignore (raw_require "codemirror/mode/python/python");
+    ignore (raw_require "codemirror/mode/q/q");
+    ignore (raw_require "codemirror/mode/r/r");
+    ignore (raw_require "codemirror/mode/rpm/rpm");
+    ignore (raw_require "codemirror/mode/rst/rst");
+    ignore (raw_require "codemirror/mode/ruby/ruby");
+    ignore (raw_require "codemirror/mode/rust/rust");
+    ignore (raw_require "codemirror/mode/sas/sas");
+    ignore (raw_require "codemirror/mode/sass/sass");
+    ignore (raw_require "codemirror/mode/scheme/scheme");
+    ignore (raw_require "codemirror/mode/shell/shell");
+    ignore (raw_require "codemirror/mode/sieve/sieve");
+    ignore (raw_require "codemirror/mode/slim/slim");
+    ignore (raw_require "codemirror/mode/smalltalk/smalltalk");
+    ignore (raw_require "codemirror/mode/smarty/smarty");
+    ignore (raw_require "codemirror/mode/solr/solr");
+    ignore (raw_require "codemirror/mode/soy/soy");
+    ignore (raw_require "codemirror/mode/sparql/sparql");
+    ignore (raw_require "codemirror/mode/spreadsheet/spreadsheet");
+    ignore (raw_require "codemirror/mode/sql/sql");
+    ignore (raw_require "codemirror/mode/stex/stex");
+    ignore (raw_require "codemirror/mode/stylus/stylus");
+    ignore (raw_require "codemirror/mode/swift/swift");
+    ignore (raw_require "codemirror/mode/tcl/tcl");
+    ignore (raw_require "codemirror/mode/textile/textile");
+    ignore (raw_require "codemirror/mode/tiddlywiki/tiddlywiki");
+    ignore (raw_require "codemirror/mode/tiki/tiki");
+    ignore (raw_require "codemirror/mode/toml/toml");
+    ignore (raw_require "codemirror/mode/tornado/tornado");
+    ignore (raw_require "codemirror/mode/troff/troff");
+    ignore (raw_require "codemirror/mode/ttcn/ttcn");
+    ignore (raw_require "codemirror/mode/ttcn-cfg/ttcn-cfg");
+    ignore (raw_require "codemirror/mode/turtle/turtle");
+    ignore (raw_require "codemirror/mode/twig/twig");
+    ignore (raw_require "codemirror/mode/vb/vb");
+    ignore (raw_require "codemirror/mode/vbscript/vbscript");
+    ignore (raw_require "codemirror/mode/velocity/velocity");
+    ignore (raw_require "codemirror/mode/verilog/verilog");
+    ignore (raw_require "codemirror/mode/vhdl/vhdl");
+    ignore (raw_require "codemirror/mode/vue/vue");
+    ignore (raw_require "codemirror/mode/wast/wast");
+    ignore (raw_require "codemirror/mode/webidl/webidl");
+    ignore (raw_require "codemirror/mode/xml/xml");
+    ignore (raw_require "codemirror/mode/xquery/xquery");
+    ignore (raw_require "codemirror/mode/yacas/yacas");
+    ignore (raw_require "codemirror/mode/yaml/yaml");
+    ignore (raw_require "codemirror/mode/yaml-frontmatter/yaml-frontmatter");
+    ignore (raw_require "codemirror/mode/z80/z80")
+  end
 
 (* addon imports — cljs extensions/code.cljs requires the same set *)
-external _closebrackets : Js.Json.t = "codemirror/addon/edit/closebrackets" [@@mel.module]
 
-external _matchbrackets : Js.Json.t = "codemirror/addon/edit/matchbrackets" [@@mel.module]
 
-external _showhint : Js.Json.t = "codemirror/addon/hint/show-hint" [@@mel.module]
 
-external _activeline : Js.Json.t = "codemirror/addon/selection/active-line" [@@mel.module]
 
-external _meta : Js.Json.t = "codemirror/mode/meta" [@@mel.module]
 
 (* mode imports: cljs loads every codemirror/mode/* so findModeByName
    can resolve any fence language *)
-external _mode_apl : Js.Json.t = "codemirror/mode/apl/apl" [@@mel.module]
-external _mode_asciiarmor : Js.Json.t = "codemirror/mode/asciiarmor/asciiarmor" [@@mel.module]
-external _mode_asn_1 : Js.Json.t = "codemirror/mode/asn.1/asn.1" [@@mel.module]
-external _mode_asterisk : Js.Json.t = "codemirror/mode/asterisk/asterisk" [@@mel.module]
-external _mode_brainfuck : Js.Json.t = "codemirror/mode/brainfuck/brainfuck" [@@mel.module]
-external _mode_clike : Js.Json.t = "codemirror/mode/clike/clike" [@@mel.module]
-external _mode_clojure : Js.Json.t = "codemirror/mode/clojure/clojure" [@@mel.module]
-external _mode_cmake : Js.Json.t = "codemirror/mode/cmake/cmake" [@@mel.module]
-external _mode_cobol : Js.Json.t = "codemirror/mode/cobol/cobol" [@@mel.module]
-external _mode_coffeescript : Js.Json.t = "codemirror/mode/coffeescript/coffeescript" [@@mel.module]
-external _mode_commonlisp : Js.Json.t = "codemirror/mode/commonlisp/commonlisp" [@@mel.module]
-external _mode_crystal : Js.Json.t = "codemirror/mode/crystal/crystal" [@@mel.module]
-external _mode_css : Js.Json.t = "codemirror/mode/css/css" [@@mel.module]
-external _mode_cypher : Js.Json.t = "codemirror/mode/cypher/cypher" [@@mel.module]
-external _mode_d : Js.Json.t = "codemirror/mode/d/d" [@@mel.module]
-external _mode_dart : Js.Json.t = "codemirror/mode/dart/dart" [@@mel.module]
-external _mode_diff : Js.Json.t = "codemirror/mode/diff/diff" [@@mel.module]
-external _mode_django : Js.Json.t = "codemirror/mode/django/django" [@@mel.module]
-external _mode_dockerfile : Js.Json.t = "codemirror/mode/dockerfile/dockerfile" [@@mel.module]
-external _mode_dtd : Js.Json.t = "codemirror/mode/dtd/dtd" [@@mel.module]
-external _mode_dylan : Js.Json.t = "codemirror/mode/dylan/dylan" [@@mel.module]
-external _mode_ebnf : Js.Json.t = "codemirror/mode/ebnf/ebnf" [@@mel.module]
-external _mode_ecl : Js.Json.t = "codemirror/mode/ecl/ecl" [@@mel.module]
-external _mode_eiffel : Js.Json.t = "codemirror/mode/eiffel/eiffel" [@@mel.module]
-external _mode_elm : Js.Json.t = "codemirror/mode/elm/elm" [@@mel.module]
-external _mode_erlang : Js.Json.t = "codemirror/mode/erlang/erlang" [@@mel.module]
-external _mode_factor : Js.Json.t = "codemirror/mode/factor/factor" [@@mel.module]
-external _mode_fcl : Js.Json.t = "codemirror/mode/fcl/fcl" [@@mel.module]
-external _mode_forth : Js.Json.t = "codemirror/mode/forth/forth" [@@mel.module]
-external _mode_fortran : Js.Json.t = "codemirror/mode/fortran/fortran" [@@mel.module]
-external _mode_gas : Js.Json.t = "codemirror/mode/gas/gas" [@@mel.module]
-external _mode_gfm : Js.Json.t = "codemirror/mode/gfm/gfm" [@@mel.module]
-external _mode_gherkin : Js.Json.t = "codemirror/mode/gherkin/gherkin" [@@mel.module]
-external _mode_go : Js.Json.t = "codemirror/mode/go/go" [@@mel.module]
-external _mode_groovy : Js.Json.t = "codemirror/mode/groovy/groovy" [@@mel.module]
-external _mode_haml : Js.Json.t = "codemirror/mode/haml/haml" [@@mel.module]
-external _mode_handlebars : Js.Json.t = "codemirror/mode/handlebars/handlebars" [@@mel.module]
-external _mode_haskell : Js.Json.t = "codemirror/mode/haskell/haskell" [@@mel.module]
-external _mode_haskell_literate : Js.Json.t = "codemirror/mode/haskell-literate/haskell-literate" [@@mel.module]
-external _mode_haxe : Js.Json.t = "codemirror/mode/haxe/haxe" [@@mel.module]
-external _mode_htmlembedded : Js.Json.t = "codemirror/mode/htmlembedded/htmlembedded" [@@mel.module]
-external _mode_htmlmixed : Js.Json.t = "codemirror/mode/htmlmixed/htmlmixed" [@@mel.module]
-external _mode_http : Js.Json.t = "codemirror/mode/http/http" [@@mel.module]
-external _mode_idl : Js.Json.t = "codemirror/mode/idl/idl" [@@mel.module]
-external _mode_javascript : Js.Json.t = "codemirror/mode/javascript/javascript" [@@mel.module]
-external _mode_jinja2 : Js.Json.t = "codemirror/mode/jinja2/jinja2" [@@mel.module]
-external _mode_jsx : Js.Json.t = "codemirror/mode/jsx/jsx" [@@mel.module]
-external _mode_julia : Js.Json.t = "codemirror/mode/julia/julia" [@@mel.module]
-external _mode_livescript : Js.Json.t = "codemirror/mode/livescript/livescript" [@@mel.module]
-external _mode_lua : Js.Json.t = "codemirror/mode/lua/lua" [@@mel.module]
-external _mode_markdown : Js.Json.t = "codemirror/mode/markdown/markdown" [@@mel.module]
-external _mode_mathematica : Js.Json.t = "codemirror/mode/mathematica/mathematica" [@@mel.module]
-external _mode_mbox : Js.Json.t = "codemirror/mode/mbox/mbox" [@@mel.module]
-external _mode_mirc : Js.Json.t = "codemirror/mode/mirc/mirc" [@@mel.module]
-external _mode_mllike : Js.Json.t = "codemirror/mode/mllike/mllike" [@@mel.module]
-external _mode_modelica : Js.Json.t = "codemirror/mode/modelica/modelica" [@@mel.module]
-external _mode_mscgen : Js.Json.t = "codemirror/mode/mscgen/mscgen" [@@mel.module]
-external _mode_mumps : Js.Json.t = "codemirror/mode/mumps/mumps" [@@mel.module]
-external _mode_nginx : Js.Json.t = "codemirror/mode/nginx/nginx" [@@mel.module]
-external _mode_nsis : Js.Json.t = "codemirror/mode/nsis/nsis" [@@mel.module]
-external _mode_ntriples : Js.Json.t = "codemirror/mode/ntriples/ntriples" [@@mel.module]
-external _mode_octave : Js.Json.t = "codemirror/mode/octave/octave" [@@mel.module]
-external _mode_oz : Js.Json.t = "codemirror/mode/oz/oz" [@@mel.module]
-external _mode_pascal : Js.Json.t = "codemirror/mode/pascal/pascal" [@@mel.module]
-external _mode_pegjs : Js.Json.t = "codemirror/mode/pegjs/pegjs" [@@mel.module]
-external _mode_perl : Js.Json.t = "codemirror/mode/perl/perl" [@@mel.module]
-external _mode_php : Js.Json.t = "codemirror/mode/php/php" [@@mel.module]
-external _mode_pig : Js.Json.t = "codemirror/mode/pig/pig" [@@mel.module]
-external _mode_powershell : Js.Json.t = "codemirror/mode/powershell/powershell" [@@mel.module]
-external _mode_properties : Js.Json.t = "codemirror/mode/properties/properties" [@@mel.module]
-external _mode_protobuf : Js.Json.t = "codemirror/mode/protobuf/protobuf" [@@mel.module]
-external _mode_pug : Js.Json.t = "codemirror/mode/pug/pug" [@@mel.module]
-external _mode_puppet : Js.Json.t = "codemirror/mode/puppet/puppet" [@@mel.module]
-external _mode_python : Js.Json.t = "codemirror/mode/python/python" [@@mel.module]
-external _mode_q : Js.Json.t = "codemirror/mode/q/q" [@@mel.module]
-external _mode_r : Js.Json.t = "codemirror/mode/r/r" [@@mel.module]
-external _mode_rpm : Js.Json.t = "codemirror/mode/rpm/rpm" [@@mel.module]
-external _mode_rst : Js.Json.t = "codemirror/mode/rst/rst" [@@mel.module]
-external _mode_ruby : Js.Json.t = "codemirror/mode/ruby/ruby" [@@mel.module]
-external _mode_rust : Js.Json.t = "codemirror/mode/rust/rust" [@@mel.module]
-external _mode_sas : Js.Json.t = "codemirror/mode/sas/sas" [@@mel.module]
-external _mode_sass : Js.Json.t = "codemirror/mode/sass/sass" [@@mel.module]
-external _mode_scheme : Js.Json.t = "codemirror/mode/scheme/scheme" [@@mel.module]
-external _mode_shell : Js.Json.t = "codemirror/mode/shell/shell" [@@mel.module]
-external _mode_sieve : Js.Json.t = "codemirror/mode/sieve/sieve" [@@mel.module]
-external _mode_slim : Js.Json.t = "codemirror/mode/slim/slim" [@@mel.module]
-external _mode_smalltalk : Js.Json.t = "codemirror/mode/smalltalk/smalltalk" [@@mel.module]
-external _mode_smarty : Js.Json.t = "codemirror/mode/smarty/smarty" [@@mel.module]
-external _mode_solr : Js.Json.t = "codemirror/mode/solr/solr" [@@mel.module]
-external _mode_soy : Js.Json.t = "codemirror/mode/soy/soy" [@@mel.module]
-external _mode_sparql : Js.Json.t = "codemirror/mode/sparql/sparql" [@@mel.module]
-external _mode_spreadsheet : Js.Json.t = "codemirror/mode/spreadsheet/spreadsheet" [@@mel.module]
-external _mode_sql : Js.Json.t = "codemirror/mode/sql/sql" [@@mel.module]
-external _mode_stex : Js.Json.t = "codemirror/mode/stex/stex" [@@mel.module]
-external _mode_stylus : Js.Json.t = "codemirror/mode/stylus/stylus" [@@mel.module]
-external _mode_swift : Js.Json.t = "codemirror/mode/swift/swift" [@@mel.module]
-external _mode_tcl : Js.Json.t = "codemirror/mode/tcl/tcl" [@@mel.module]
-external _mode_textile : Js.Json.t = "codemirror/mode/textile/textile" [@@mel.module]
-external _mode_tiddlywiki : Js.Json.t = "codemirror/mode/tiddlywiki/tiddlywiki" [@@mel.module]
-external _mode_tiki : Js.Json.t = "codemirror/mode/tiki/tiki" [@@mel.module]
-external _mode_toml : Js.Json.t = "codemirror/mode/toml/toml" [@@mel.module]
-external _mode_tornado : Js.Json.t = "codemirror/mode/tornado/tornado" [@@mel.module]
-external _mode_troff : Js.Json.t = "codemirror/mode/troff/troff" [@@mel.module]
-external _mode_ttcn : Js.Json.t = "codemirror/mode/ttcn/ttcn" [@@mel.module]
-external _mode_ttcn_cfg : Js.Json.t = "codemirror/mode/ttcn-cfg/ttcn-cfg" [@@mel.module]
-external _mode_turtle : Js.Json.t = "codemirror/mode/turtle/turtle" [@@mel.module]
-external _mode_twig : Js.Json.t = "codemirror/mode/twig/twig" [@@mel.module]
-external _mode_vb : Js.Json.t = "codemirror/mode/vb/vb" [@@mel.module]
-external _mode_vbscript : Js.Json.t = "codemirror/mode/vbscript/vbscript" [@@mel.module]
-external _mode_velocity : Js.Json.t = "codemirror/mode/velocity/velocity" [@@mel.module]
-external _mode_verilog : Js.Json.t = "codemirror/mode/verilog/verilog" [@@mel.module]
-external _mode_vhdl : Js.Json.t = "codemirror/mode/vhdl/vhdl" [@@mel.module]
-external _mode_vue : Js.Json.t = "codemirror/mode/vue/vue" [@@mel.module]
-external _mode_wast : Js.Json.t = "codemirror/mode/wast/wast" [@@mel.module]
-external _mode_webidl : Js.Json.t = "codemirror/mode/webidl/webidl" [@@mel.module]
-external _mode_xml : Js.Json.t = "codemirror/mode/xml/xml" [@@mel.module]
-external _mode_xquery : Js.Json.t = "codemirror/mode/xquery/xquery" [@@mel.module]
-external _mode_yacas : Js.Json.t = "codemirror/mode/yacas/yacas" [@@mel.module]
-external _mode_yaml : Js.Json.t = "codemirror/mode/yaml/yaml" [@@mel.module]
-external _mode_yaml_frontmatter : Js.Json.t = "codemirror/mode/yaml-frontmatter/yaml-frontmatter" [@@mel.module]
-external _mode_z80 : Js.Json.t = "codemirror/mode/z80/z80" [@@mel.module]
 
 external from_textarea : cm_module -> D.el -> Js.Json.t -> t
   = "fromTextArea" [@@mel.send]
@@ -207,132 +232,9 @@ external next_sibling : D.el -> D.el option = "nextElementSibling"
 external json_of_fn : (t -> unit) -> Js.Json.t = "%identity"
 external json_of_cm : cm_module -> Js.Json.t = "%identity"
 external window_obj : Js.Json.t = "window"
+  [@@mel.scope "globalThis"]
 
-(* reference every imported binding so dune/melange keeps the emit *)
-let _imports =
-  [ _closebrackets; _matchbrackets; _showhint; _activeline; _meta
-  ; _mode_apl
-  ; _mode_asciiarmor
-  ; _mode_asn_1
-  ; _mode_asterisk
-  ; _mode_brainfuck
-  ; _mode_clike
-  ; _mode_clojure
-  ; _mode_cmake
-  ; _mode_cobol
-  ; _mode_coffeescript
-  ; _mode_commonlisp
-  ; _mode_crystal
-  ; _mode_css
-  ; _mode_cypher
-  ; _mode_d
-  ; _mode_dart
-  ; _mode_diff
-  ; _mode_django
-  ; _mode_dockerfile
-  ; _mode_dtd
-  ; _mode_dylan
-  ; _mode_ebnf
-  ; _mode_ecl
-  ; _mode_eiffel
-  ; _mode_elm
-  ; _mode_erlang
-  ; _mode_factor
-  ; _mode_fcl
-  ; _mode_forth
-  ; _mode_fortran
-  ; _mode_gas
-  ; _mode_gfm
-  ; _mode_gherkin
-  ; _mode_go
-  ; _mode_groovy
-  ; _mode_haml
-  ; _mode_handlebars
-  ; _mode_haskell
-  ; _mode_haskell_literate
-  ; _mode_haxe
-  ; _mode_htmlembedded
-  ; _mode_htmlmixed
-  ; _mode_http
-  ; _mode_idl
-  ; _mode_javascript
-  ; _mode_jinja2
-  ; _mode_jsx
-  ; _mode_julia
-  ; _mode_livescript
-  ; _mode_lua
-  ; _mode_markdown
-  ; _mode_mathematica
-  ; _mode_mbox
-  ; _mode_mirc
-  ; _mode_mllike
-  ; _mode_modelica
-  ; _mode_mscgen
-  ; _mode_mumps
-  ; _mode_nginx
-  ; _mode_nsis
-  ; _mode_ntriples
-  ; _mode_octave
-  ; _mode_oz
-  ; _mode_pascal
-  ; _mode_pegjs
-  ; _mode_perl
-  ; _mode_php
-  ; _mode_pig
-  ; _mode_powershell
-  ; _mode_properties
-  ; _mode_protobuf
-  ; _mode_pug
-  ; _mode_puppet
-  ; _mode_python
-  ; _mode_q
-  ; _mode_r
-  ; _mode_rpm
-  ; _mode_rst
-  ; _mode_ruby
-  ; _mode_rust
-  ; _mode_sas
-  ; _mode_sass
-  ; _mode_scheme
-  ; _mode_shell
-  ; _mode_sieve
-  ; _mode_slim
-  ; _mode_smalltalk
-  ; _mode_smarty
-  ; _mode_solr
-  ; _mode_soy
-  ; _mode_sparql
-  ; _mode_spreadsheet
-  ; _mode_sql
-  ; _mode_stex
-  ; _mode_stylus
-  ; _mode_swift
-  ; _mode_tcl
-  ; _mode_textile
-  ; _mode_tiddlywiki
-  ; _mode_tiki
-  ; _mode_toml
-  ; _mode_tornado
-  ; _mode_troff
-  ; _mode_ttcn
-  ; _mode_ttcn_cfg
-  ; _mode_turtle
-  ; _mode_twig
-  ; _mode_vb
-  ; _mode_vbscript
-  ; _mode_velocity
-  ; _mode_verilog
-  ; _mode_vhdl
-  ; _mode_vue
-  ; _mode_wast
-  ; _mode_webidl
-  ; _mode_xml
-  ; _mode_xquery
-  ; _mode_yacas
-  ; _mode_yaml
-  ; _mode_yaml_frontmatter
-  ; _mode_z80
-  ]
+
 
 (* -- json helpers -- *)
 
@@ -355,9 +257,9 @@ let normalize_lang = function
 
 let cm_mode lang =
   let m =
-    match find_mode_by_name cm lang with
+    match find_mode_by_name (cm ()) lang with
     | Some _ as m -> m
-    | None -> find_mode_by_ext cm lang
+    | None -> find_mode_by_ext (cm ()) lang
   in
   match m with
   | Some info -> Option.value (json_string info "mime") ~default:lang
@@ -419,7 +321,7 @@ let focus_block ~caret uuid =
         cm_focus c;
         if has_focus c then begin
           let line, ch = pos_of_offset c caret in
-          set_cursor c (pos cm line ch);
+          set_cursor c (pos (cm ()) line ch);
           true
         end
         else false
@@ -568,7 +470,7 @@ let mount uuid textarea =
       (Option.value (D.el_get_attr textarea "data-lang") ~default:"")
   in
   let mode = cm_mode lang in
-  let c = from_textarea cm textarea (make_options ~uuid ~lang ~mode) in
+  let c = from_textarea (cm ()) textarea (make_options ~uuid ~lang ~mode) in
   Hashtbl.replace instances uuid c;
   on_event c "change" (fun c -> on_change uuid c);
   on_event c "blur" (fun _ -> on_cm_blur uuid);
@@ -631,7 +533,7 @@ let close_picker () =
 
 let pick_lang uuid lang =
   close_picker ();
-  (match (instance uuid, find_mode_by_name cm lang) with
+  (match (instance uuid, find_mode_by_name (cm ()) lang) with
    | Some c, Some info -> (
        match json_string info "mode" with
        | Some m -> set_option c "mode" (Js.Json.string m)
@@ -671,7 +573,7 @@ let open_lang_picker uuid =
                   in
                   D.el_append_child menu row
               | None -> ())
-            (mode_infos cm);
+            (mode_infos (cm ()));
           D.el_append_child host menu;
           picker := Some menu
       | _ -> ())
@@ -698,12 +600,13 @@ let installed = ref false
 let install () =
   if not !installed then begin
     installed := true;
+    load_modes ();
     (* hooks for editor_actions without a module cycle *)
     S.code_buffer_of := live_value;
     S.code_focus := focus_block;
     (* cljs exposes the module on window (used by extensions and dev
        helpers) *)
-    Platform.set_prop window_obj "CodeMirror" (json_of_cm cm);
+    Platform.set_prop window_obj "CodeMirror" (json_of_cm (cm ()));
     D.document_add_listener "mousedown"
       (fun ev ->
         match
