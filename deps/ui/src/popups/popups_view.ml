@@ -563,20 +563,11 @@ let cm_shortcut_el (binding, caps) : t =
     ]
 ;;
 
-let cm_item_cls =
-  "ui__dropdown-menu-item relative flex cursor-pointer select-none \
-   items-center rounded-sm px-2 py-1.5 text-sm outline-none \
-   data-[disabled]:opacity-50 data-[disabled]:pointer-events-none \
-   data-[highlighted]:bg-muted"
-;;
-
 let cm_item_el (entry_sig : S.cm_item Signal.signal) : t =
   (* cm entries are static for the menu's lifetime, so sampling once is
      stable and the keyed mount can return the item node directly *)
   match Signal.sample entry_sig with
-  | S.Ci_sep ->
-      Logseq_dom.dom ~key:"sep" ~attrs:[ ("role", "separator") ]
-        ~style_class:"ui__dropdown-menu-separator -mx-1 my-1 h-px bg-muted" []
+  | S.Ci_sep -> Menu_item.separator ~key:"sep"
   | S.Ci_colors -> cm_color_row ()
   | S.Ci_headings -> cm_heading_row ()
   | S.Ci_sub label ->
@@ -592,14 +583,16 @@ let cm_item_el (entry_sig : S.cm_item Signal.signal) : t =
         ~text:label
         [ Icons.raw ~cls:"ml-auto h-4 w-4" "chevron-right" ]
   | S.Ci_item (label, scut, cmd) ->
-      Logseq_dom.dom ~key:"item" ~style_class:cm_item_cls
+      Menu_item.text_el ~cls:Menu_item.cm_cls ~key:"item"
         ~attrs:
           [ ("role", "menuitem"); ("data-cm-item", cmd)
           ; ("style", "cursor: pointer") ]
-        ~text:label
-        (match scut with
-         | Some s -> [ cm_shortcut_el s ]
-         | None -> [])
+        ~label
+        ~children:
+          (match scut with
+           | Some s -> [ cm_shortcut_el s ]
+           | None -> [])
+        ()
 ;;
 
 let cm_popover (st : S.t) : t =

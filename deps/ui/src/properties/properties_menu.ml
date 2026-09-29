@@ -22,15 +22,11 @@ type menu_ctx =
   ; mutable content : Editor_dom.el option (* current dropdown body *)
   }
 
-let item_class =
-  "ui__dropdown-menu-item relative flex cursor-pointer select-none \
-   items-center rounded-sm px-2 py-1.5 text-sm outline-none"
-
 let menuitem ?(cls = "") label act =
   let el =
     mk "div"
-      ~cls:(item_class ^ " " ^ cls)
-      ~attrs:[ ("role", "menuitem"); ("tabindex", "-1") ]
+      ~cls:(Menu_item.base_cls ^ " " ^ cls)
+      ~attrs:Menu_item.item_attrs
   in
   let t = mk "div" in
   el_set_text t label;
