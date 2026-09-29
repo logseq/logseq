@@ -715,6 +715,46 @@ let in_popups el =
   <> None
 ;;
 
+(* the icon/emoji picker mounts as an overlay outside the menu DOM —
+   track it so closing the sub or the whole menu removes it like the
+   base-ui sub-content *)
+let cm_picker_el : Editor_dom.el option ref = ref None
+
+let close_cm_picker () =
+  match !cm_picker_el with
+  | Some el ->
+      cm_picker_el := None;
+      Properties_state.remove_overlay_el el
+  | None -> ()
+
+(* base-ui sets data-highlighted on the hovered item (bg-muted) *)
+let cm_hi_el : Editor_dom.el option ref = ref None
+
+let cm_highlight (el : Dom_ext.element) =
+  (match !cm_hi_el with
+   | Some e -> Editor_dom.el_remove_attr e "data-highlighted"
+   | None -> ());
+  cm_hi_el :=
+    (match Dom_ext.closest el "[role=menuitem]" with
+     | Some it when
+         Dom_ext.closest it
+           ".ls-context-menu-content, .ui__dropdown-menu-sub-content"
+         <> None ->
+         let e = Editor_dom.el_of_json it in
+         Editor_dom.el_set_attr e "data-highlighted" "";
+         Some e
+     | _ -> None)
+
+let close_cm st =
+  cm_hi_el := None;
+  close_cm_picker ();
+  S.close_cm st
+
+let run_cm_item st l = close_cm_picker (); S.run_cm_item st l
+let run_cm_color st l = close_cm_picker (); S.run_cm_color st l
+let run_cm_heading st l = close_cm_picker (); S.run_cm_heading st l
+;;
+
 (* ---- page-ref hover preview ----
    cljs popup-preview-impl: mousemove on .preview-ref-link arms a 1000ms
    show timer; leaving the link/popup starts a 300/500ms hide timer *)
@@ -856,7 +896,7 @@ let handle_keydown st (ev : Dom_ext.event) =
     Dom_ext.stop_immediate_propagation ev)
   else
     match Dom_ext.key_ ev with
-    | Some "Escape" when (S.get st).S.cm <> None -> S.close_cm st
+    | Some "Escape" when (S.get st).S.cm <> None -> close_cm st
     | _ -> ()
 ;;
 
@@ -878,6 +918,7 @@ let handle_contextmenu st (ev : Dom_ext.event) =
                  opened on, unless it is already in a multi-selection *)
               if not (Editor_state.is_selected id) then
                 Editor_actions.select_single id;
+              close_cm_picker ();
               S.open_cm st ~x:(Dom_ext.client_x ev)
                 ~y:(Dom_ext.client_y ev) ~block_id:id
                 ~multi:(List.length (Platform.selected_block_uuids ()) >= 2)
@@ -903,15 +944,15 @@ let handle_click st (ev : Dom_ext.event) =
   match Dom_ext.target ev with
   | None -> ()
   | Some el ->
-      if not (in_popups el) then (S.close_ac st; S.close_cm st; S.close_pv st)
+      if not (in_popups el) then (S.close_ac st; close_cm st; S.close_pv st)
       else (
         Dom_ext.prevent_default ev;
         if Dom_ext.closest el "[data-cm-color]" <> None then
-          with_data_attr el "data-cm-color" (S.run_cm_color st)
+          with_data_attr el "data-cm-color" (run_cm_color st)
         else if Dom_ext.closest el "[data-cm-heading]" <> None then
-          with_data_attr el "data-cm-heading" (S.run_cm_heading st)
+          with_data_attr el "data-cm-heading" (run_cm_heading st)
         else if Dom_ext.closest el "[data-cm-item]" <> None then
-          with_data_attr el "data-cm-item" (S.run_cm_item st)
+          with_data_attr el "data-cm-item" (run_cm_item st)
         else
           match Dom_ext.closest el "#ui__ac-inner a.menu-link" with
           | Some lnk ->
@@ -934,22 +975,29 @@ let open_cm_picker (st : S.t) (pk : S.cm_picker)
     else [ cm.S.block_id ]
   in
   let anchor = Editor_dom.el_of_json anchor in
+  close_cm_picker ();
   match pk with
   | S.Picker_icon ->
-      Icon_picker.open_picker_with_opts ~anchor ~del:false
-        ~opts:{ Icon_picker.emoji_only = false; sub = true }
-        ~on_chosen:(fun c ->
-          List.iter (fun u -> Page.set_icon u c) uuids;
-          S.close_cm st)
+      cm_picker_el :=
+        Some
+          (Icon_picker.open_picker_with_opts ~anchor ~del:false
+             ~opts:{ Icon_picker.emoji_only = false; sub = true }
+             ~on_chosen:(fun c ->
+               List.iter (fun u -> Page.set_icon u c) uuids;
+               close_cm st))
   | S.Picker_emoji ->
-      Icon_picker.open_picker_with_opts ~anchor ~del:false
-        ~opts:{ Icon_picker.emoji_only = true; sub = true }
-        ~on_chosen:(fun c ->
-          (match c with
-           | Icon_picker.Emoji id ->
-               List.iter (fun u -> Comments_view.toggle_reaction u id) uuids
-           | _ -> ());
-          S.close_cm st)
+      cm_picker_el :=
+        Some
+          (Icon_picker.open_picker_with_opts ~anchor ~del:false
+             ~opts:{ Icon_picker.emoji_only = true; sub = true }
+             ~on_chosen:(fun c ->
+               (match c with
+                | Icon_picker.Emoji id ->
+                    List.iter
+                      (fun u -> Comments_view.toggle_reaction u id)
+                      uuids
+                | _ -> ());
+               close_cm st))
 ;;
 
 let cm_hover st el =
@@ -959,6 +1007,7 @@ let cm_hover st el =
       | Some s -> (
           match int_of_string_opt s, (S.get st).S.cm with
           | Some idx, Some cm when cm.S.sub_open <> idx -> (
+              close_cm_picker ();
               match S.cm_sub_at st idx with
               | Some (S.Sub_menu _) ->
                   let r = Dom_ext.bounding_rect trg in
@@ -975,14 +1024,16 @@ let cm_hover st el =
       (* hovering a regular item inside the menu closes the open submenu *)
       if (S.get st).S.cm <> None
          && Dom_ext.closest el ".ls-context-menu-content" <> None
-         && Dom_ext.closest el ".ui__dropdown-menu-sub-content" = None then
-        S.close_cm_sub st
+         && Dom_ext.closest el ".ui__dropdown-menu-sub-content" = None then (
+        S.close_cm_sub st;
+        close_cm_picker ())
 ;;
 
 let handle_mousemove st (ev : Dom_ext.event) =
   match Dom_ext.target ev with
   | Some el -> (
       cm_hover st el;
+      cm_highlight el;
       (match Dom_ext.closest el ".menu-link-wrap" with
        | Some wrap -> (
            match Dom_ext.query_selector wrap "a.menu-link" with

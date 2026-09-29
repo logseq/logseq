@@ -615,7 +615,7 @@ let view (p : picker) : E.el =
 type picker_opts = { emoji_only : bool; sub : bool }
 
 let open_picker_with_opts ~(anchor : E.el) ~(del : bool)
-    ~(opts : picker_opts) ~(on_chosen : choice -> unit) : unit =
+    ~(opts : picker_opts) ~(on_chosen : choice -> unit) : E.el =
   let emoji_only = opts.emoji_only in
   Emoji_mart.install ();
   let p =
@@ -649,27 +649,30 @@ let open_picker_with_opts ~(anchor : E.el) ~(del : bool)
     if opts.sub then Properties_popup.open_anchored_right
     else Properties_popup.open_anchored
   in
-  ignore
-    (open_popup
-       ~cls:
-         "ui__popover-content ls-icon-picker rounded-md border bg-popover \
-          text-popover-foreground shadow-md outline-none outline-none \
-          animate-in fade-in-0 zoom-in-95 \
-          data-[side=bottom]:slide-in-from-top-2 \
-          data-[side=left]:slide-in-from-right-2 \
-          data-[side=right]:slide-in-from-left-2 \
-          data-[side=top]:slide-in-from-bottom-2 focus:outline-none \
-          focus-visible:outline-none z-50"
-       anchor dlg);
-  match p.input with
-  | Some i -> D.el_focus i
-  | None -> ()
+  let pop =
+    open_popup
+      ~cls:
+        "ui__popover-content ls-icon-picker rounded-md border bg-popover \
+         text-popover-foreground shadow-md outline-none outline-none \
+         animate-in fade-in-0 zoom-in-95 \
+         data-[side=bottom]:slide-in-from-top-2 \
+         data-[side=left]:slide-in-from-right-2 \
+         data-[side=right]:slide-in-from-left-2 \
+         data-[side=top]:slide-in-from-bottom-2 focus:outline-none \
+         focus-visible:outline-none z-50"
+      anchor dlg
+  in
+  (match p.input with
+   | Some i -> D.el_focus i
+   | None -> ());
+  pop
 ;;
 
 let open_picker ~(anchor : E.el) ~(del : bool)
     ~(on_chosen : choice -> unit) : unit =
-  open_picker_with_opts ~anchor ~del
-    ~opts:{ emoji_only = false; sub = false }
-    ~on_chosen
+  ignore
+    (open_picker_with_opts ~anchor ~del
+       ~opts:{ emoji_only = false; sub = false }
+       ~on_chosen)
 ;;
 
