@@ -113,6 +113,8 @@ let run () =
   (* emoji-mart: registers <em-emoji> + SearchIndex *)
   Emoji_mart.install ();
   let w = Worker_client.create () in
+  Worker_client.notify_worker_failure :=
+    (fun () -> Toast.error "Database worker crashed — reload the app.");
   w.on_message <- Worker_events.dispatch;
   Worker_events.init ();
   Runtime.worker := Some w;
@@ -137,4 +139,5 @@ let run () =
          Js.Promise.resolve ())
   |> Js.Promise.catch (fun err ->
          Platform.console_error ("boot failed", err);
+         Toast.error "Failed to load the graph — check the console for details.";
          Js.Promise.resolve ())

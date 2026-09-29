@@ -437,8 +437,22 @@ let mount_query ~block_uuid ~container : V.inst =
 (* re-run every mounted query view — called on the worker's
    "sync-db-changes" broadcast so result membership updates live *)
 let refresh_query_insts () =
+  let dead = ref [] in
   Hashtbl.iter
-    (fun _ inst -> if D.el_is_connected inst.V.container then refresh inst)
-    query_insts
+    (fun uuid inst ->
+      if D.el_is_connected inst.V.container then refresh inst
+      else dead := uuid :: !dead)
+    query_insts;
+  (* drop insts whose query block is gone — mount_query re-creates an
+     equivalent inst from worker state if the block re-renders *)
+  List.iter
+    (fun uuid ->
+      match Hashtbl.find_opt query_insts uuid with
+      | Some inst ->
+          Views_builder.drop_tree inst;
+          V.drop inst;
+          Hashtbl.remove query_insts uuid
+      | None -> ())
+    !dead
 
 let () = install_ops ()
