@@ -1277,6 +1277,14 @@ search may lag).
   sensors don't produce a native `dataTransfer` payload a `drop`
   listener could read. Routing them through the manager would need a
   separate drop-target path; out of scope for the block-move migration.
+- **Journal views have no `Runtime.current_page`**: since the journals
+  scaffolding sweep, journal routes populate `current_journals`
+  (`get-latest-journals`, newest-first) and leave `current_page`
+  `None`. Anything that resolves "the current page" must fall back to
+  `current_journals`: `drop_dragged_block` `"top"` finds the journal
+  page containing the target block, and `upload_files` treats the head
+  of `current_journals` as today's journal — both were silent no-ops
+  before that fallback was added.
 - **Verified locally** (Playwright, same steps as
   `outliner_basic_test.drag-block!`): `top` (first block + near-top ≤16px),
   `nested` (x-offset > 50), `sibling` all reorder via

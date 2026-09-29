@@ -220,10 +220,16 @@ let upload_files (files : Js.Json.t array) =
     let target =
       match edit_uuid with
       | Some u -> Some u
-      | None ->
-          Option.bind
-            !Runtime.current_page
-            (fun (p : Model.page) -> p.Model.page_uuid)
+      | None -> (
+          match !Runtime.current_page with
+          | Some (p : Model.page) -> p.Model.page_uuid
+          | None -> (
+              (* cljs falls back to today's journal — the journals view
+                 is fetched newest-first so today's page leads
+                 current_journals *)
+              match !Runtime.current_journals with
+              | j :: _ -> j.Model.page_uuid
+              | [] -> None))
     in
     match target with
     | None -> ()
