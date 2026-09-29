@@ -551,13 +551,16 @@ let apply_results st q move_mode expanded rows total =
              | [] -> -1)
         })
 
-let refresh st =
+(* ~clear:false keeps the previous groups visible while the async search
+   is in flight — cljs keeps rendering the last results during the input
+   debounce instead of blanking the list *)
+let refresh ?(clear = true) st =
   let v = get st in
   incr st.gen;
   let gen = !(st.gen) in
   (* commands/filters are local — apply them synchronously so a hanging
      worker query (e.g. repo mid-transition) can't leave stale groups *)
-  apply_results st v.input v.move_mode v.expanded [] 0;
+  if clear then apply_results st v.input v.move_mode v.expanded [] 0;
   match !(Runtime.current_repo) with
   | None -> ()
   | Some repo ->
@@ -635,7 +638,9 @@ let load_recents st repo =
 let on_input st q =
   set_in st (fun v -> upsert_create { v with input = q });
   let gen = (incr st.gen; !(st.gen)) in
-  Dom_ext.set_timeout (fun () -> if gen = !(st.gen) then refresh st) 100
+  Dom_ext.set_timeout
+    (fun () -> if gen = !(st.gen) then refresh ~clear:false st)
+    100
 
 (* -- open/close ------------------------------------------------------ *)
 
