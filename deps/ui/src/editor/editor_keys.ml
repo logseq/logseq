@@ -329,6 +329,32 @@ let on_pending_focus_key ev e caret =
   | ("ArrowUp" | "ArrowDown") as key when D.ev_shift ev ->
       D.prevent_default ev;
       queue (fun () -> A.shift_arrow_select (key = "ArrowUp"))
+  | ("ArrowUp" | "ArrowDown") as key
+    when not (mods ev || D.ev_alt ev) ->
+      (* mirror on_editor_arrows: a plain arrow only leaves the block when
+         the caret sits on a boundary line; mid-buffer arrows just prevent
+         the browser default while the textarea is remounting *)
+      D.prevent_default ev;
+      let up = key = "ArrowUp" in
+      let first_line =
+        (match String.index_opt (String.sub buf 0 caret) '\n' with
+        | Some _ -> false
+        | None -> true)
+      in
+      let last_line =
+        (match String.index_opt (String.sub buf caret (len - caret)) '\n' with
+        | Some _ -> false
+        | None -> true)
+      in
+      if (up && first_line) || ((not up) && last_line) then
+        (* resolve the editing block at replay time: several arrows can
+           queue in one remount window and each replayed nav switches
+           editing to a new block — a captured uuid would navigate the
+           same origin repeatedly and collapse two hops into one *)
+        queue (fun () ->
+            match S.editing_uuid () with
+            | Some u -> A.arrow_nav u up
+            | None -> ())
   | key
     when String.length key = 1
          && (not (D.ev_composing ev))

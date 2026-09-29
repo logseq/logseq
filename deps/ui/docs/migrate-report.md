@@ -1480,6 +1480,31 @@ search may lag).
   (drag-move) does not cover pointerdown→scroll→pointerup selection:
   `Block_selection.pointerdown/pointerup` document listeners plus
   `Virtual_scroll.extend_drag`/`sync` from `Virt_list` must stay wired.
+- **`.block-add-button` injection must be a sync doc scan.** cljs renders
+  `add-button-inner` inside the page component, so the row exists
+  atomically with the blocks; the OCaml imperative `MutationObserver`
+  port debounced it 60ms, so a just-remounted journal item measured
+  28px short (the button's row) before the injection landed
+  (`journals-list-remounts-*`). `register_doc_scan ~sync:true` — and
+  because the scan now revisits the button on every flush,
+  `refresh_opacity`/`set_parent_attr` must only write attrs when the
+  value actually changed, or the observer spins on its own mutations.
+- **Keys in the remount window replay one per focus landing.**
+  `on_pending_focus_key` queues structural keys (Tab/Enter/arrows…) while
+  `S.editing` is set but the textarea is detached; plain
+  ArrowUp/ArrowDown previously fell into the catch-all `prevent_default`
+  and were lost. Two subtleties: (a) the queued closure must resolve
+  `S.editing_uuid ()` at replay time, not capture the keypress-time
+  block, and (b) `run_pending_focus_actions` must pop ONE action per
+  focus landing — `enter_edit` updates `S.editing` only after the
+  async `title_for_edit` resolves, so a full-batch replay applies every
+  follow-up key against the stale editing block (two queued arrows end
+  up navigating from the same origin, and a queued Tab indents the
+  pre-nav block — `multi-selection-indent-roundtrip-test`). Replays that
+  re-arm `pending_focus` (`enter_edit`/`with_focus_after`) chain the
+  drain naturally; `request_focus`/`with_focus_after` therefore must not
+  clear `pending_focus_actions` — `exit_edit`'s `cancel_pending_focus`
+  remains the only abort path.
 
 ## Block drag-and-drop (dnd-kit)
 

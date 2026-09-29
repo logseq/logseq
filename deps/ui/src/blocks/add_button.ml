@@ -7,7 +7,13 @@
 
 open Editor_dom
 
-let set_parent_attr btn puuid = el_set_attr btn "parentblockid" puuid
+(* attr writes queue a mutation record even when the value is unchanged;
+   the sync doc scan revisits this button on every flush, so only write
+   when the value differs or the observer would spin forever *)
+let set_parent_attr btn puuid =
+  match el_get_attr btn "parentblockid" with
+  | Some v when String.equal v puuid -> ()
+  | _ -> el_set_attr btn "parentblockid" puuid
 
 let build_el ?puuid () =
   let btn = create_element "div" in
@@ -66,7 +72,9 @@ let refresh_opacity ?puuid btn =
         "ls-block block-add-button flex-1 flex-col rounded-sm cursor-text \
          transition-opacity ease-in duration-100 !py-0 opacity-50"
   in
-  el_set_class btn cls;
+  (match el_get_attr btn "class" with
+   | Some c when String.equal c cls -> ()
+   | _ -> el_set_class btn cls);
   match puuid with
   | Some u -> set_parent_attr btn u
   | None -> ()
@@ -90,5 +98,9 @@ let installed = ref false
 let install () =
   if not !installed then begin
     installed := true;
-    register_doc_scan ensure_all
+    (* sync: cljs renders add-button-inner inside the page component, so
+       the row exists atomically with the blocks. Debounced injection
+       leaves the row absent for ~60ms after a (re)mount — visible as a
+       shorter journal item on remount *)
+    register_doc_scan ~sync:true ensure_all
   end
