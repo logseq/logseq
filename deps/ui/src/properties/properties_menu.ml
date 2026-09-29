@@ -21,21 +21,7 @@ type menu_ctx =
   ; mutable content : Editor_dom.el option (* current dropdown body *)
   }
 
-<<<<<<< HEAD
 let menuitem ?(cls = "") ?icon label act =
-||||||| 69b7b56b63
-let item_class =
-  "ui__dropdown-menu-item relative flex cursor-pointer select-none \
-   items-center rounded-sm px-2 py-1.5 text-sm outline-none"
-
-let menuitem ?(cls = "") label act =
-=======
-let item_class =
-  "ui__dropdown-menu-item relative flex cursor-pointer select-none \
-   items-center rounded-sm px-2 py-1.5 text-sm outline-none"
-
-let menuitem ?(cls = "") ?icon label act =
->>>>>>> origin/devin/lui-parity-sweep
   let el =
     mk "div"
       ~cls:(Menu_item.base_cls ^ " " ^ cls)
