@@ -79,6 +79,9 @@ type page =
   ; page_blocks : block list
   ; page_linked_refs : block list (* linked references, for journal items *)
   ; page_parents : block list (* block-zoom breadcrumb chain, root first *)
+  ; page_db_collapsable : bool
+    (* cljs db-collapsable? on the page entity — drives the title-row
+       fold arrow + data-db-collapsable *)
   }
 
 type phase =

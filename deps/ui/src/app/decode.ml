@@ -415,6 +415,7 @@ let page_of_summary (w : Wire.t) : Model.page option =
         ; page_blocks = []
         ; page_linked_refs = []
         ; page_parents = []
+        ; page_db_collapsable = db_collapsable_of_wire w
         }
   | _ -> None
 

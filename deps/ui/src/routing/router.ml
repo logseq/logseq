@@ -376,6 +376,9 @@ let load_block_zoom uuid =
                                             ; page_blocks = bs
                                             ; page_linked_refs = []
                                             ; page_parents
+                                            ; page_db_collapsable =
+                                                b.Model
+                                                  .block_db_collapsable
                                             }));
                                      (match
                                         Editor_actions.consume_pending_zoom ()
