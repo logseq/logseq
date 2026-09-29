@@ -1050,6 +1050,10 @@ let rec run_item st it =
    cljs does when the context is missing *)
 and run_command st repo (cid : string) =
   let nav hash route =
+    (* navigation intent, same as goto_page: commit and close any
+       in-progress edit — go/journals etc. can target the current route,
+       where the hash no-ops and no later hook clears the editor *)
+    Editor_actions.exit_edit ~select:false;
     close st;
     let target = Runtime.nav_hash hash in
     (* setting an identical hash fires no hashchange, so resolve would
