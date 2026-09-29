@@ -36,9 +36,14 @@ let focus_attempts = ref 0
 (* replay keys queued while the textarea was remounting — the refreshed
    model (and the new textarea) exist by the time focus lands *)
 let run_pending_focus_actions () =
-  let fs = List.rev !S.pending_focus_actions in
-  S.pending_focus_actions := [];
-  List.iter (fun f -> f ()) fs
+  (* replay one queued key per focus landing: a replayed nav/structural
+     op re-enters edit mode asynchronously (enter_edit awaits the title
+     ref before updating S.editing), so running the whole batch at once
+     applies follow-up keys against the stale editing block — leave the
+     rest for the pending_focus cycle the replay re-arms *)
+  match List.rev !S.pending_focus_actions with
+  | f :: rest -> S.pending_focus_actions := List.rev rest; f ()
+  | [] -> ()
 
 let rec apply_focus () =
   match !S.pending_focus with
@@ -88,7 +93,8 @@ and retry_focus () =
 
 let request_focus uuid caret =
   S.pending_focus := Some (uuid, caret);
-  S.pending_focus_actions := [];
+  (* pending_focus_actions intentionally kept: keys queued during the
+     remount window belong to the next focus landing as well *)
   focus_attempts := 0;
   D.set_timeout apply_focus 0
 
@@ -96,7 +102,6 @@ let request_focus uuid caret =
    remounted textarea still ends up focused *)
 let with_focus_after uuid caret p =
   S.pending_focus := Some (uuid, caret);
-  S.pending_focus_actions := [];
   focus_attempts := 0;
   ignore
     (p
