@@ -363,7 +363,25 @@ let order_list_shifted_eids (r : tx_report) : entity_id list =
     |> List.sort_uniq compare
   in
   if touched = [] then []
-  else
+  else begin
+    (* parents that own >=1 order-list-typed child on each db side —
+       only those can hold a meaningful marker diff, so untyped parents
+       skip the O(children) marker pass entirely *)
+    let typed_parents (db : db) : (entity_id, unit) Hashtbl.t =
+      let t = Hashtbl.create 16 in
+      Seq.iter
+        (fun (d : datom) ->
+           match entity db (Entity_id d.e) with
+           | Some e -> (
+               match Ldb.ref_ent e "block/parent" with
+               | Some p -> Hashtbl.replace t p.id ()
+               | None -> ())
+           | None -> ())
+        (datoms db Aevt ~a:"logseq.property/order-list-type" ());
+      t
+    in
+    let typed_before = typed_parents r.db_before
+    and typed_after = typed_parents r.db_after in
     let shifted = Hashtbl.create 16 and marker_tbls = Hashtbl.create 4 in
     let markers (side : int) (eid : entity_id) (pid : entity_id)
         : (entity_id, index_marker) Hashtbl.t =
@@ -428,7 +446,11 @@ let order_list_shifted_eids (r : tx_report) : entity_id list =
            |> List.sort_uniq compare
          in
          List.iter
-           (fun pid -> diff (markers 0 eid pid) (markers 1 eid pid))
+           (fun pid ->
+              if
+                Hashtbl.mem typed_before pid
+                || Hashtbl.mem typed_after pid
+              then diff (markers 0 eid pid) (markers 1 eid pid))
            pids;
          if
            List.mem eid referrers
@@ -441,6 +463,7 @@ let order_list_shifted_eids (r : tx_report) : entity_id list =
          then mark_descendants eid)
       touched;
     Hashtbl.fold (fun eid () acc -> eid :: acc) shifted []
+  end
 
 (* uuids of blocks whose derived order-list-index moved — extra block
    replacements so the renderer refreshes displaced siblings' numbers *)
