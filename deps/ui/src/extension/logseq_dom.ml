@@ -29,7 +29,7 @@ let tags =
     (* SVG (tabler icons render circle/rect/line/polyline/polygon/g/…
        alongside svg/path) *)
   ; "svg"; "path"; "circle"; "rect"; "line"; "polyline"; "polygon"; "g"
-  ; "defs"; "use"; "ellipse"; "tspan"; "sup"; "em-emoji" ]
+  ; "defs"; "use"; "ellipse"; "tspan"; "sup"; "em-emoji"; "raw-text" ]
 let identifier tag = "logseq-" ^ tag
 
 let child_identifiers = List.map identifier tags
@@ -154,3 +154,19 @@ let dom ?key ?(tag = "div") ?(attrs = []) ?(events = "")
    | None -> ());
   Lui_elements.mount_children context node children;
   node
+
+(* Renders nothing visible: a <raw-text> placeholder that the document
+   observer swaps for an empty Text node — a real anchor node for
+   dyn/if_/keyed positions that yields zero extra elements (cljs's nil). *)
+let nothing : Lui_elements.t =
+  dom ~tag:"raw-text" ~attrs:[ ("data-raw-text", "") ] []
+
+(* Mounts children directly into the parent with no wrapper element —
+   only valid in static child lists where parent is always Some. *)
+let fragment (children : Lui_elements.t list) : Lui_elements.t =
+ fun context parent ->
+  match parent with
+  | Some p ->
+      Lui_elements.mount_children context p children;
+      p
+  | None -> invalid_arg "fragment requires a parent node"

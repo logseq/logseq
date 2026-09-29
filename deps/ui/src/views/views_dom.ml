@@ -237,18 +237,21 @@ let tabler_icon_el name : el option =
   | None -> None
 
 (* <span class="ui__icon ti ls-icon-{name}">…</span> matches shui icon markup;
-   cljs prefers window.tablerIcons (inline SVG) and falls back to the
-   ti-<name> font glyph — same split here *)
+   cljs prefers window.tablerIcons (custom ext icons), then the
+   @tabler/icons-react svg, then the font glyph *)
 let icon ?(cls = "") name =
   let span = Editor_dom.create_element "span" in
   Editor_dom.el_set_class span
     ("ui__icon ti ls-icon-" ^ name ^ if cls = "" then "" else " " ^ cls);
   (match tabler_icon_el name with
    | Some el -> Editor_dom.el_append_child span el
-   | None ->
-     let i = Editor_dom.create_element "i" in
-     Editor_dom.el_set_class i ("ti ti-" ^ name);
-     Editor_dom.el_append_child span i);
+   | None -> (
+     match Editor_dom.tabler_svg_el name with
+     | Some svg -> Editor_dom.el_append_child span svg
+     | None ->
+       let i = Editor_dom.create_element "i" in
+       Editor_dom.el_set_class i ("ti ti-" ^ name);
+       Editor_dom.el_append_child span i));
   span
 
 let clear el = el_replace_children el
@@ -260,6 +263,78 @@ let button_base_cls =
    ring-offset-background transition-colors focus-visible:outline-none \
    focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 \
    disabled:pointer-events-none disabled:opacity-50 select-none"
+
+(* cljs shui cn (deps/shui components.cljs): a small tailwind-merge —
+   only height/width/padding utilities conflict; later wins unless the
+   earlier match is marked important (!). Returns (variant-prefix ^ group,
+   important?). *)
+let variant_split_index s =
+  let n = String.length s in
+  let rec go i depth idx =
+    if i >= n then idx
+    else
+      let c = s.[i] in
+      if c = '[' then go (i + 1) (depth + 1) idx
+      else if c = ']' then go (i + 1) (max 0 (depth - 1)) idx
+      else if c = ':' && depth = 0 then go (i + 1) depth (Some i)
+      else go (i + 1) depth idx
+  in
+  go 0 0 None
+
+let utility_groups =
+  [ ("min-h-", "min-h"); ("max-h-", "max-h"); ("h-", "h")
+  ; ("min-w-", "min-w"); ("max-w-", "max-w"); ("w-", "w")
+  ; ("px-", "px"); ("py-", "py"); ("pt-", "pt"); ("pr-", "pr")
+  ; ("pb-", "pb"); ("pl-", "pl"); ("p-", "p") ]
+
+let utility_conflict s =
+  let vp, u =
+    match variant_split_index s with
+    | Some i ->
+        (String.sub s 0 (i + 1), String.sub s (i + 1) (String.length s - i - 1))
+    | None -> ("", s)
+  in
+  let imp = String.length u > 0 && u.[0] = '!' in
+  let u = if imp then String.sub u 1 (String.length u - 1) else u in
+  let u = if String.length u > 0 && u.[0] = '-' then String.sub u 1 (String.length u - 1) else u in
+  match
+    List.find_opt (fun (p, _) ->
+        String.length u > String.length p && String.sub u 0 (String.length p) = p)
+      utility_groups
+  with
+  | Some (_, g) -> Some (vp ^ g, imp)
+  | None -> None
+
+let merge_classes toks =
+  let classes = ref [] in
+  let indexes = Hashtbl.create 16 and important = Hashtbl.create 8 in
+  List.iteri
+    (fun _ tok ->
+      match utility_conflict tok with
+      | Some (key, imp) -> (
+          match Hashtbl.find_opt indexes key with
+          | Some i ->
+              if not (Hashtbl.find important key && not imp) then (
+                classes :=
+                  List.mapi (fun j c -> if j = i then "" else c) !classes
+                  @ [ tok ];
+                Hashtbl.replace indexes key (List.length !classes - 1);
+                Hashtbl.replace important key imp)
+          | None ->
+              classes := !classes @ [ tok ];
+              Hashtbl.add indexes key (List.length !classes - 1);
+              Hashtbl.add important key imp)
+      | None -> classes := !classes @ [ tok ])
+    toks;
+  !classes
+
+let cn parts =
+  parts
+  |> List.concat_map
+       (fun s -> List.filter (fun t -> t <> "") (String.split_on_char ' ' s))
+  |> merge_classes
+  |> List.filter (fun t -> t <> "")
+  |> String.concat " "
 
 let button_cls ?(variant = "default") ?(size = "default") ?(cls = "") () =
   let v =
@@ -296,10 +371,7 @@ let button_cls ?(variant = "default") ?(size = "default") ?(cls = "") () =
     | "icon" -> "box-content h-6 w-6 p-1 overflow-hidden"
     | _ -> "h-10 px-4 py-2"
   in
-  String.concat " "
-    (List.filter
-       (fun x -> x <> "")
-       [ button_base_cls; v; s; cls ])
+  cn [ button_base_cls; v; s; cls ]
 
 let query_inside (root : el) sel = Editor_dom.el_query root sel
 

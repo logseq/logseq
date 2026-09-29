@@ -12,24 +12,9 @@ module V = Settings_view
 
 let version = "2.0.1"
 
-let extension_icons =
-  [ "add-link"; "app-feature"; "block"; "block-search"; "cloud-exclamation"
-  ; "connector"; "group"; "h-auto"; "heading-off"; "internal-link"
-  ; "link-to-block"; "link-to-page"; "link-to-whiteboard"
-  ; "move-to-sidebar-right"; "new-block"; "new-page"; "new-whiteboard"
-  ; "new-whiteboard-element"; "object-compact"; "object-expanded"
-  ; "open-as-page"; "page"; "page-search"; "references-hide"
-  ; "references-show"; "select-cursor"; "text"; "ungroup"; "whiteboard"
-  ; "whiteboard-element"; "whiteboard-search" ]
-
-(* shui icon: tabler -> span.ui__icon.ti.ls-icon-<n> (i.ti inside, like
-   views_dom), extension names -> span.ui__icon.tie tie-<n> font icon *)
-let icon ~key name =
-  if List.mem name extension_icons then
-    dom ~key ~tag:"span" ~style_class:("ui__icon tie tie-" ^ name) []
-  else
-    dom ~key ~tag:"span" ~style_class:("ui__icon ti ls-icon-" ^ name)
-      [ dom ~key:(key ^ "-i") ~tag:"i" ~style_class:("ti ti-" ^ name) [] ]
+(* cljs ui/icon resolves via shui.icon.v2: svg first, font glyph as
+   fallback — Icons.icon applies the same order *)
+let icon ~key:_ name = Icons.icon name
 
 (* svg/info *)
 let info_icon ~key ~title =
@@ -87,7 +72,7 @@ let kbd_seq ~key ~binding keys =
                nowrap;" )
           ]
         [ dom ~key:(key ^ "b") ~tag:"div"
-            ~style_class:"shui-shortcut-separate shui-shortcut-glow"
+            ~style_class:"shui-shortcut-glow shui-shortcut-separate"
             ~attrs:
               [ ("data-shortcut-binding", binding); ("aria-hidden", "true")
               ; ("style", "white-space: nowrap; gap: 4px;")
@@ -304,7 +289,9 @@ let language_row ctx =
       [ V.lang_trigger ~key:"lang-sel" ~h_cls:"w-64 h-8" ~st:lang_label
           ~anchor_sel:"#settings-lang-trigger"
       ; dom ~key:"lang-sel-i" ~tag:"input"
-          ~attrs:[ ("style", "clip-path: inset(50%); overflow: hidden;") ]
+          ~attrs:
+            [ ("style", "clip-path: inset(50%); overflow: hidden;")
+            ; ("value", V.current_lang ()) ]
           []
       ]
     ()
@@ -336,7 +323,7 @@ let theme_row ctx =
         ~attrs:
           [ ("style", "display: flex; gap: 0.5rem; align-items: center") ]
         [ dom ~key:"theme-a" [ V.theme_modes_ul ~st:mode ]
-        ; dom ~key:"theme-desc" ~style_class:"text-sm flex"
+        ; dom ~key:"theme-desc" ~style_class:"flex text-sm"
             [ kbd_seq ~key:"theme-k" ~binding:"t t" [ "t"; "t" ] ]
         ]
     ]

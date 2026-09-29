@@ -492,6 +492,14 @@ let resolve_page_tags repo (page : Model.page) : Model.page Js.Promise.t =
                               then Some t
                               else None)
                             titles
+                      ; page_tag_idents =
+                          List.filter_map
+                            (fun (i, (_t, ident, _hidden, _uuid)) ->
+                              if List.mem i ids
+                                 && ident <> "logseq.class/Page"
+                              then Some ident
+                              else None)
+                            titles
                       ; page_internal =
                           List.exists
                             (fun (i, (_, ident, _hidden, _uuid)) ->

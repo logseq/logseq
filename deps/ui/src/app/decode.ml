@@ -269,6 +269,18 @@ let page_tag_titles (w : Wire.t) : string list =
         xs
   | _ -> []
 
+(* idents aligned with page_tag_titles *)
+let page_tag_idents (w : Wire.t) : string list =
+  match Wire.get w "tags" with
+  | Some (Wire.Array xs) | Some (Wire.List xs) ->
+      List.map
+        (fun t ->
+          match Wire.map_get_string t "ident" with
+          | Some s -> s
+          | None -> "")
+        xs
+  | _ -> []
+
 (* logseq.property/icon is a map {type: :emoji|:tabler-icon, id: str} *)
 let icon_of_wire (w : Wire.t) : (string * string) option =
   let ty =
@@ -348,6 +360,7 @@ let page_of_summary (w : Wire.t) : Model.page option =
              | Some (Wire.Bool b) -> b
              | _ -> false)
         ; page_tags = page_tag_titles w
+        ; page_tag_idents = page_tag_idents w
         ; page_blocks = []
         ; page_linked_refs = []
         ; page_parents = []

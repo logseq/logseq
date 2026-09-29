@@ -426,19 +426,28 @@ let open_dialog ?anchor target =
         "position:fixed;left:50%;top:30%;transform:translateX(-50%);\
          z-index:9999;min-width:320px"
   in
-  (* cljs popup content chrome: rounded popover card *)
+  (* cljs popup chrome: ui__popover-content card > .ls-property-dialog *)
   let root =
     mk
       ~cls:
-        "ls-property-dialog rounded-md border bg-popover p-1 \
-         text-popover-foreground shadow-md"
-      "div" ~attrs:[ ("style", style) ]
+        "ui__popover-content rounded-md border bg-popover \
+         text-popover-foreground shadow-md outline-none outline-none \
+         animate-in fade-in-0 zoom-in-95 \
+         data-[side=bottom]:slide-in-from-top-2 \
+         data-[side=left]:slide-in-from-right-2 \
+         data-[side=right]:slide-in-from-left-2 \
+         data-[side=top]:slide-in-from-bottom-2 \
+         focus:outline-none focus-visible:outline-none z-50"
+      "div"
+      ~attrs:[ ("role", "dialog"); ("style", style) ]
   in
+  let dlg = mk ~cls:"ls-property-dialog" "div" in
+  el_append_child root dlg;
   let inner =
     mk ~cls:"ls-property-input flex flex-1 flex-row items-center \
              flex-wrap gap-1" "div"
   in
-  el_append_child root inner;
+  el_append_child dlg inner;
   d.body <- Some inner;
   (* cljs mounts the property dialog as the single active modal — a
      second open replaces any popups left over from the previous flow *)

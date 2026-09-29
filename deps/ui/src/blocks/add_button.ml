@@ -92,5 +92,6 @@ let install () =
     installed := true;
     let obs = new_observer (fun () -> ensure_all ()) in
     observe obs document_element
-      (observe_opts ~childList:true ~subtree:true)
+      (observe_opts ~childList:true ~subtree:true);
+    ensure_all ()
   end

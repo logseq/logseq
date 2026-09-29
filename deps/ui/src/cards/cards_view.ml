@@ -170,5 +170,5 @@ let modal st =
 let render (ms : Model.t Signal.signal) : t =
   let st = Cards_state.init ms in
   dyn ~equal:(fun a b -> a = b)
-    (fun open_ -> if open_ then modal st else dom ~key:"cards-closed" [])
+    (fun open_ -> if open_ then modal st else Logseq_dom.nothing)
     (Signal.value st.Cards_state.open_)
