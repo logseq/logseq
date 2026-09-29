@@ -633,7 +633,7 @@ let cm_popover (st : S.t) : t =
   (* cljs as-dropdown? context menu: dropdown-menu-content card classes
      merged with content-props class w-[280px] ls-context-menu-content *)
   (* cljs DropdownMenuContent mounts inside base-ui presentation wrappers *)
-  Logseq_dom.dom ~key:"cm-pw1" ~attrs:[ ("role", "presentation") ]
+  (Logseq_dom.dom ~key:"cm-pw1" ~attrs:[ ("role", "presentation") ]
     [ Logseq_dom.dom ~key:"cm-pw2" ~attrs:[ ("role", "presentation") ]
         [ Logseq_dom.dom ~key:"cm-ps" ~tag:"span"
             [ Logseq_dom.dom ~key:"cm"
@@ -668,7 +668,8 @@ let cm_popover (st : S.t) : t =
                 ]
             ]
         ]
-    ]
+    ])
+    context parent
 ;;
 
 (* -- delegated listeners --------------------------------------------- *)
