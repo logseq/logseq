@@ -39,8 +39,10 @@ let set f =
   Runtime.flush ()
 
 (* storage-backed toggles don't touch `config` — bump tick so the pane
-   dyn re-renders *)
-let poke () = set (fun s -> { s with tick = s.tick + 1 })
+   dyn re-renders. Toggles are reachable without the pane mounted (cmdk
+   "ui/toggle-wide-mode"), where there is nothing to re-render *)
+let poke () =
+  if ready () then set (fun s -> { s with tick = s.tick + 1 })
 
 let repo () = Option.value !Runtime.current_repo ~default:""
 
