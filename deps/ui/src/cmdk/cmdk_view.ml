@@ -993,5 +993,7 @@ let render (_ms : Model.t Signal.signal) : t =
   let open_sig =
     Signal.map (fun (v : S.view) -> v.S.open_) st.S.vs.Signal.state_signal
   in
-  let body = if_ ~test:open_sig (modal_shell st) in
-  body context parent
+  (* The keyed box gives the conditional its own reconcile-stable parent:
+     spliced directly under #app-container its dynamic segment goes stale
+     after navigation and later mounts emit an inconsistent op batch *)
+  box ~key:"cmdk_view" [ if_ ~test:open_sig (modal_shell st) ] context parent

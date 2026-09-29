@@ -30,13 +30,19 @@ let clamp_in_view root =
    extra root class the e2e contract requires (e.g. "ui__popover-content",
    "ls-property-dropdown"). Returns the popup element. *)
 let open_at ?(cls = "") ~x ~y content =
+  (* cap at the space left below the anchor so long menus scroll instead
+     of overflowing the viewport (radix's available-height behaviour) *)
+  let avail = window_inner_height -. y -. 8. in
   let root =
     mk "div" ~cls
       ~attrs:
         [ ("role", "dialog")
         ; ( "style"
-          , Printf.sprintf "position:fixed;left:%dpx;top:%dpx;z-index:9999"
-              (int_of_float x) (int_of_float y) )
+          , Printf.sprintf
+              "position:fixed;left:%dpx;top:%dpx;z-index:9999;\
+               max-height:%dpx;overflow-y:auto"
+              (int_of_float x) (int_of_float y)
+              (int_of_float (Float.max avail 120.)) )
         ]
   in
   el_append_child root content;
