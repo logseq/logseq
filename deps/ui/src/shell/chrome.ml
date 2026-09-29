@@ -17,6 +17,8 @@
 
 open Lui_elements
 
+let dyn = Logseq_dom.dyn
+
 let skip_to_main =
   Logseq_dom.dom ~key:"skip" ~tag:"button" ~id:"skip-to-main"
     ~text:"Skip to main content" []
@@ -69,6 +71,53 @@ let dots_button =
         | None -> ())
     [ Icons.icon ~size:20. ~cls:"" "dots" ]
 
+(* components/rtc/indicator.cljs — cloud status button + hidden rtc-tx
+   element the e2e reads EDN from. Visible once the worker broadcasts
+   rtc-sync-state (i.e. sync is running on the current graph). *)
+let rtc_tx_text (r : Model.rtc) =
+  let tx = function Some n -> string_of_int n | None -> "nil" in
+  Printf.sprintf "{:local-tx %s, :remote-tx %s}"
+    (tx r.rtc_local_tx) (tx r.rtc_remote_tx)
+
+let rtc_indicator (ms : Model.t Signal.signal) : t =
+  dyn ~equal:( = ) (fun (r : Model.rtc option) ->
+      match r with
+      | None -> Logseq_dom.dom ~key:"rtc-off" ~style_class:"hidden" []
+      | Some r ->
+          let open_ = Platform.online () && r.rtc_lock in
+          let syncing = open_ && r.rtc_pending_server > 0 in
+          let idle =
+            open_ && r.rtc_pending_local = 0
+            && r.rtc_pending_asset = 0 && r.rtc_pending_server = 0
+          in
+          let queuing =
+            r.rtc_pending_local > 0 || r.rtc_pending_asset > 0
+          in
+          let cls =
+            "cloud ui__button"
+            ^ (if open_ then " on" else "")
+            ^ (if syncing then " syncing" else "")
+            ^ (if idle then " idle" else "")
+            ^ (if queuing then " queuing" else "")
+          in
+          Logseq_dom.dom ~key:"rtc" ~style_class:"cp__rtc-sync"
+            [ Logseq_dom.dom ~key:"rtc-tx" ~style_class:"hidden"
+                ~attrs:[ ("data-testid", "rtc-tx") ]
+                ~text:(rtc_tx_text r) []
+            ; Logseq_dom.dom ~key:"rtc-ind"
+                ~style_class:
+                  "cp__rtc-sync-indicator flex flex-row items-center \
+                   gap-1"
+                [ Logseq_dom.dom ~key:"rtc-btn" ~tag:"button"
+                    ~style_class:cls
+                    ~attrs:
+                      [ ("type", "button"); ("aria-label", "rtc sync") ]
+                    [ Logseq_dom.dom ~key:"rtc-i" ~tag:"i"
+                        ~style_class:"ti ti-cloud" [] ]
+                ]
+            ])
+    (Signal.map (fun (m : Model.t) -> m.rtc) ms)
+
 let left_menu_button =
   icon_btn ~key:"left-menu-btn" ~id:"left-menu"
     ~cls:(ghost_btn_cls ~mid:"cp__header-left-menu " ())
@@ -111,7 +160,8 @@ let header (ms : Model.t Signal.signal) =
           "r flex drag-region justify-between items-center gap-2 overflow-x-hidden w-full"
         [ Logseq_dom.dom ~key:"head-crumb" ~style_class:"flex flex-1" []
         ; Logseq_dom.dom ~key:"head-acts" ~style_class:"flex items-center"
-            [ home_button ms
+            [ rtc_indicator ms
+            ; home_button ms
             ; (* cljs header.cljs hook-ui-items :toolbar renders
                  .ui-items-container only when a plugin actually
                  contributes a toolbar item *)
@@ -199,20 +249,18 @@ let main_content (ms : Model.t Signal.signal) =
                            ; ("style", "margin-bottom: 120px") ]))
                 [ dyn
                 ~equal:(fun (a : Model.t) (b : Model.t) ->
+                  (* block-bearing fields compare by revision — a
+                     structural [=] walks both trees on every publish *)
                   a.phase = b.phase
                   && a.route = b.route
-                  && a.route_page = b.route_page
+                  && a.data_gen = b.data_gen
                   && a.page_missing = b.page_missing
-                  && a.journals = b.journals
-                  && a.page_refs = b.page_refs
-                  && a.unlinked_refs = b.unlinked_refs
                   && a.editing_title = b.editing_title
                   && a.page_menu = b.page_menu
                   && a.confirm = b.confirm
                   && a.unlinked_open = b.unlinked_open
                   && a.unlinked_search = b.unlinked_search
-                  && a.unlinked_query = b.unlinked_query
-                  && a.unlinked_blocks = b.unlinked_blocks)
+                  && a.unlinked_query = b.unlinked_query)
                 (fun m -> Page.page_view_of_model m)
                 ms ]
             ]
@@ -220,10 +268,13 @@ let main_content (ms : Model.t Signal.signal) =
     ]
 
 (* Overlay layer — cmdk palette, popups (autocomplete/slash/context
-   menus), dialogs and toasts mount here. cljs's installers emit no
-   wrapper element, so these mount directly under #app-container. *)
+   menus), dialogs and toasts mount here (single shared container;
+   the keyed wrapper keeps these dynamic segments off #app-container's
+   child list so nav-time reconciles can't tear down a freshly
+   mounted overlay mid-batch). cljs mounts them via portals, which
+   are their own container nodes anyway. *)
 let overlays (ms : Model.t Signal.signal) =
-  Logseq_dom.fragment
+  Logseq_dom.dom ~key:"overlays" ~style_class:"cp__overlays"
     [ Cmdk_view.render ms
     ; Popups_view.render ms
     ; Left_sidebar_view.menus ms
@@ -233,7 +284,7 @@ let overlays (ms : Model.t Signal.signal) =
     ; dyn
         ~equal:(fun (a : Model.t) (b : Model.t) ->
           a.page_menu = b.page_menu && a.confirm = b.confirm
-          && a.route_page = b.route_page)
+          && a.data_gen = b.data_gen)
         (fun m -> Page_menu.dialog_view m)
         ms
     ; dyn
@@ -311,27 +362,27 @@ let help_menu_popup : t =
   in
   Logseq_dom.dom ~key:"help-menu" ~style_class:"cp__sidebar-help-menu-popup"
     [ Logseq_dom.dom ~key:"hm-wrap" ~style_class:"list-wrap"
-        [ help_item "hm-handbook" (Strings.help_handbook) "book-2" close
-        ; help_item "hm-shortcuts" (Strings.help_shortcuts) "command" close
-        ; help_item "hm-docs" (Strings.help_docs) "help" (fun () ->
+        [ help_item "hm-handbook" (I18n.help_handbook) "book-2" close
+        ; help_item "hm-shortcuts" (I18n.help_shortcuts) "command" close
+        ; help_item "hm-docs" (I18n.help_docs) "help" (fun () ->
             open_url "https://docs.logseq.com/"; close ())
         ; Logseq_dom.dom ~key:"hm-hr1" ~tag:"hr" ~style_class:"!my-2" []
-        ; help_item "hm-bug" (Strings.help_bug) "bug" close
-        ; help_item "hm-feature" (Strings.help_feature) "git-pull-request"
+        ; help_item "hm-bug" (I18n.help_bug) "bug" close
+        ; help_item "hm-feature" (I18n.help_feature) "git-pull-request"
             (fun () ->
               open_url
                 "https://discuss.logseq.com/c/feedback/feature-requests/";
               close ())
-        ; help_item "hm-feedback" (Strings.help_feedback) "messages"
+        ; help_item "hm-feedback" (I18n.help_feedback) "messages"
             (fun () ->
               open_url "https://discuss.logseq.com/c/feedback/13"; close ())
         ; Logseq_dom.dom ~key:"hm-hr2" ~tag:"hr" ~style_class:"!my-2" []
-        ; help_item "hm-discord" (Strings.help_discord) "brand-discord"
+        ; help_item "hm-discord" (I18n.help_discord) "brand-discord"
             (fun () -> open_url "https://discord.com/invite/KpN4eHY"; close ())
-        ; help_item "hm-forum" (Strings.help_forum) "message" (fun () ->
+        ; help_item "hm-forum" (I18n.help_forum) "message" (fun () ->
             open_url "https://discuss.logseq.com/"; close ())
         ; Logseq_dom.dom ~key:"hm-hr3" ~tag:"hr" ~style_class:"!my-2" []
-        ; help_item "hm-notes" (Strings.help_release_notes) "asterisk"
+        ; help_item "hm-notes" (I18n.help_release_notes) "asterisk"
             (fun () ->
               open_url "https://docs.logseq.com/#/page/changelog"; close ())
         ]
@@ -380,10 +431,10 @@ let not_found_page : t =
         ~style_class:"text-6xl font-bold text-gray-12 mb-4" ~text:"404" []
     ; Logseq_dom.dom ~key:"nf-h2" ~tag:"h2"
         ~style_class:"text-2xl font-semibold text-gray-10 mb-6"
-        ~text:(Ui_strings.t "page/not-found-title") []
+        ~text:(I18n.t "page/not-found-title") []
     ; Logseq_dom.dom ~key:"nf-p" ~tag:"p"
         ~style_class:"text-gray-500 mb-8"
-        ~text:(Ui_strings.t "page/not-found-desc") []
+        ~text:(I18n.t "page/not-found-desc") []
     ; Logseq_dom.dom ~key:"nf-btn" ~tag:"button"
         ~style_class:
           "ui__button inline-flex cursor-pointer items-center justify-center whitespace-nowrap rounded-md text-sm gap-1 font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 select-none border bg-background hover:bg-accent hover:text-accent-foreground active:opacity-80 as-outline h-10 px-4 py-2"
@@ -394,7 +445,7 @@ let not_found_page : t =
             ~style_class:"ls-icon-home  ui__icon ti"
             [ Icons.icon ~size:18. ~cls:"" "home" ]
         ; Logseq_dom.dom ~key:"nf-txt" ~tag:"span"
-            ~text:(Ui_strings.t "page/go-back-home") []
+            ~text:(I18n.t "page/go-back-home") []
         ]
     ]
 

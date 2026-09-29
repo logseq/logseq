@@ -389,29 +389,22 @@ let for_each_inside root sel f =
 
 let focus_end el = Editor_dom.el_focus el
 
-(* debounce: returns a function; each call resets the timer *)
-external clear_timeout : int -> unit = "clearTimeout" [@@mel.scope "window"]
+(* debounce: shared impl lives in Editor_dom *)
+let debounce = Editor_dom.debounce
 
-external set_timeout_id : (unit -> unit) -> int -> int = "setTimeout"
-  [@@mel.scope "window"]
-
-let debounce ms =
-  let id = ref (-1) in
-  fun f ->
-    if !id >= 0 then clear_timeout !id;
-    id := set_timeout_id f ms
-
+(* mel.send on the receiver's classList: el.classList.add(c) — a bare
+   [@@mel.scope "classList"] (no send) would emit global classList.add(el,c) *)
 external el_class_add : el -> string -> unit = "add"
-  [@@mel.scope "classList"]
+  [@@mel.send] [@@mel.scope "classList"]
 
 external el_class_remove : el -> string -> unit = "remove"
-  [@@mel.scope "classList"]
+  [@@mel.send] [@@mel.scope "classList"]
 
 external el_class_toggle : el -> string -> bool -> unit = "toggle"
-  [@@mel.scope "classList"]
+  [@@mel.send] [@@mel.scope "classList"]
 
 external el_class_contains : el -> string -> bool = "contains"
-  [@@mel.scope "classList"]
+  [@@mel.send] [@@mel.scope "classList"]
 
 external el_remove_attr : el -> string -> unit = "removeAttribute" [@@mel.send]
 

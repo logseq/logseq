@@ -22,10 +22,12 @@ try {
 export default defineConfig({
   define: {
     "globalThis.logseq_revision": JSON.stringify(revision),
-    // lib/iife output keeps `process.env.NODE_ENV` literal (no runtime
-    // `process` in the browser); third-party deps like
-    // @tanstack/virtual-core reference it in their constructors
-    "process.env.NODE_ENV": JSON.stringify("production"),
+    // cljs goog.DEBUG equivalent — the only bundle we ship is the
+    // dev/debug build; a release pipeline would flip this.
+    logseq_dev: "true",
+    // @tanstack/virtual-core's esm build reads process.env.NODE_ENV;
+    // browsers have no process, so substitute a literal.
+    "process.env.NODE_ENV": '"production"',
   },
   build: {
     lib: {

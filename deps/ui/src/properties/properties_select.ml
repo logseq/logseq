@@ -16,7 +16,6 @@
 
 open Editor_dom
 open Properties_dom
-module I18n = Properties_i18n
 
 type item =
   { it_title : string

@@ -22,6 +22,7 @@ type badge_kind =
 
 type action =
   | Create_page of string
+  | Create_tag of string
   | Open_page of string (* block/uuid *)
   | Open_block of string (* block/uuid -> resolve owning page *)
   | Open_file of string (* file/path, e.g. logseq/config.edn *)
@@ -77,8 +78,12 @@ let initial_view =
   ; expanded = []; hl = -1; mouse = false; filter = None
   ; recents = []; tip = 0 }
 
+let latest_vs : view Signal.signal option ref = ref None
+
 let make scheduler : t =
-  { vs = Signal.state scheduler initial_view; gen = ref 0 }
+  let vs = Signal.state scheduler initial_view in
+  latest_vs := Some vs.Signal.state_signal;
+  { vs; gen = ref 0 }
 
 let get st = Signal.get st.vs.state_signal
 
@@ -206,7 +211,7 @@ let command_table () : Commands_data.cmd list =
   |> List.rev
 
 let cmd_label (c : Commands_data.cmd) =
-  if c.i18n then Ui_strings.t c.label else c.label
+  if c.i18n then I18n.t c.label else c.label
 
 let command_item (c : Commands_data.cmd) : item =
   { ikey = "cmd-" ^ c.id; idx = -1; gid = G_commands
@@ -242,14 +247,14 @@ let create_items q =
     if String.trim tag = "" then []
     else
       [ { ikey = "create-" ^ q; idx = -1; gid = G_create
-        ; ititle = Ui_strings.t "cmdk.create/tag"
-        ; info = Some (Ui_strings.tf "cmdk.info/create-tag" [ tag ])
+        ; ititle = I18n.t "cmdk.create/tag"
+        ; info = Some (I18n.tf "cmdk.info/create-tag" [ tag ])
         ; header = None; iicon = "new-page"; isc = ""; ibadge = No_badge
-        ; act = Create_page tag; ihl = false; imouse = false; iq = "" } ]
+        ; act = Create_tag tag; ihl = false; imouse = false; iq = "" } ]
   else
     [ { ikey = "create-" ^ q; idx = -1; gid = G_create
-      ; ititle = Ui_strings.t "cmdk.create/page"
-      ; info = Some (Ui_strings.tf "cmdk.info/create-page" [ q ])
+      ; ititle = I18n.t "cmdk.create/page"
+      ; info = Some (I18n.tf "cmdk.info/create-page" [ q ])
       ; header = None; iicon = "new-page"; isc = ""; ibadge = No_badge
       ; act = Create_page q; ihl = false; imouse = false; iq = "" } ]
 
@@ -266,20 +271,20 @@ let current_page_uuid () =
 let filter_items () : item list =
   let row gid label icon =
     { ikey = "filter-" ^ label; idx = -1; gid = G_filters
-    ; ititle = label; info = Some (Ui_strings.t "cmdk.filter/add")
+    ; ititle = label; info = Some (I18n.t "cmdk.filter/add")
     ; header = None; iicon = icon; isc = ""; ibadge = No_badge
     ; act = Set_filter gid; ihl = false; imouse = false; iq = "" }
   in
   (match current_page_uuid () with
    | Some _ ->
-       [ row G_current_page (Ui_strings.t "cmdk.filter/current-page")
+       [ row G_current_page (I18n.t "cmdk.filter/current-page")
            "file" ]
    | None -> [])
-  @ [ row G_nodes (Ui_strings.t "cmdk.filter/nodes") "point-filled"
-    ; row G_codes (Ui_strings.t "cmdk.filter/codes") "code"
-    ; row G_commands (Ui_strings.t "cmdk.filter/commands") "command"
-    ; row G_files (Ui_strings.t "cmdk.filter/files") "file"
-    ; row G_themes (Ui_strings.t "cmdk.filter/themes") "palette" ]
+  @ [ row G_nodes (I18n.t "cmdk.filter/nodes") "point-filled"
+    ; row G_codes (I18n.t "cmdk.filter/codes") "code"
+    ; row G_commands (I18n.t "cmdk.filter/commands") "command"
+    ; row G_files (I18n.t "cmdk.filter/files") "file"
+    ; row G_themes (I18n.t "cmdk.filter/themes") "palette" ]
 
 (* cljs search/file-search on a db graph — the only :file/path entity is
    logseq/config.edn; fuzzy-match like cljs (clean-str + limit 99) *)
@@ -428,12 +433,12 @@ let group_order v q rows total =
     if node_exists q rows then None
     else
       Some
-        { gid = G_create; gtitle = Ui_strings.t "cmdk.groups/create"
+        { gid = G_create; gtitle = I18n.t "cmdk.groups/create"
         ; gitems = create_items q; gtotal = 1; glimit = 1
         ; gexpanded = false; gfilter_active = false }
   in
   let nodes_g () =
-    { gid = G_nodes; gtitle = Ui_strings.t "cmdk.groups/nodes"
+    { gid = G_nodes; gtitle = I18n.t "cmdk.groups/nodes"
     ; gitems = rows; gtotal = max total (List.length rows)
     ; glimit = nodes_limit v.move_mode v.expanded
     ; gexpanded = List.mem G_nodes v.expanded; gfilter_active = false }
@@ -449,7 +454,7 @@ let group_order v q rows total =
         rows
     in
     { gid = G_current_page
-    ; gtitle = Ui_strings.t "cmdk.groups/current-page"
+    ; gtitle = I18n.t "cmdk.groups/current-page"
     ; gitems = items; gtotal = max total (List.length items)
     ; glimit = current_page_limit v.expanded
     ; gexpanded = List.mem G_current_page v.expanded
@@ -457,27 +462,27 @@ let group_order v q rows total =
   in
   let commands_g () =
     let items = commands_items q in
-    { gid = G_commands; gtitle = Ui_strings.t "cmdk.groups/commands"
+    { gid = G_commands; gtitle = I18n.t "cmdk.groups/commands"
     ; gitems = items; gtotal = List.length items
     ; glimit = 5; gexpanded = List.mem G_commands v.expanded
     ; gfilter_active = false }
   in
   let files_g () =
     let items = file_items q in
-    { gid = G_files; gtitle = Ui_strings.t "cmdk.groups/files"
+    { gid = G_files; gtitle = I18n.t "cmdk.groups/files"
     ; gitems = items; gtotal = List.length items
     ; glimit = 5; gexpanded = List.mem G_files v.expanded
     ; gfilter_active = false }
   in
   let filters_g () =
     let items = filter_items () in
-    { gid = G_filters; gtitle = Ui_strings.t "cmdk.groups/filters"
+    { gid = G_filters; gtitle = I18n.t "cmdk.groups/filters"
     ; gitems = items; gtotal = List.length items
     ; glimit = 99; gexpanded = false; gfilter_active = false }
   in
   let recents_g () =
     { gid = G_recently_updated
-    ; gtitle = Ui_strings.t "cmdk.groups/recently-updated"
+    ; gtitle = I18n.t "cmdk.groups/recently-updated"
     ; gitems =
         (if String.trim q = "" then v.recents
          else
@@ -552,8 +557,11 @@ let refresh st =
   let v = get st in
   incr st.gen;
   let gen = !(st.gen) in
+  (* commands/filters are local — apply them synchronously so a hanging
+     worker query (e.g. repo mid-transition) can't leave stale groups *)
+  apply_results st v.input v.move_mode v.expanded [] 0;
   match !(Runtime.current_repo) with
-  | None -> apply_results st v.input v.move_mode v.expanded [] 0
+  | None -> ()
   | Some repo ->
       ignore
         (run_search repo v.input v.move_mode
@@ -637,12 +645,21 @@ external js_random : unit -> float = "random" [@@mel.scope "Math"]
 
 let open_palette ?(move = false) st =
   st.gen := !(st.gen) + 1;
+  (* publish the reset view before opening: the mount reads derived signals
+     whose republish lags the source publish by one stabilize round, so
+     this separate flush guarantees every derived map already carries the
+     values the modal must mount with — a stale mount remounts
+     mid-stabilize and emits create+drop ops for the same extension nodes
+     in one batch, which the store/dom replay cannot survive *)
+  let tip = if js_random () < 0.5 then 0 else 1 in
   set_in st (fun v ->
-          { v with open_ = true; input = ""; move_mode = move; mouse = false
-          (* cljs move-selected-blocks opens via go-to-search! :nodes, which
-             pins the nodes filter — keeps recents/filters out of the list *)
+          { v with groups = []; hl = -1; input = ""; move_mode = move
+          ; mouse = false
+          (* cljs move-selected-blocks opens via go-to-search! :nodes,
+             which pins the nodes filter — keeps recents/filters out *)
           ; filter = (if move then Some G_nodes else None)
-          ; tip = (if js_random () < 0.5 then 0 else 1) });
+          ; tip });
+  set_in st (fun v -> { v with open_ = true });
   (* prime synchronously so commands show before the search lands *)
   apply_results st "" move [] [] 0;
   refresh st;
@@ -721,13 +738,7 @@ let toast msg cls =
   Js.Dict.set d "cls" (Js.Json.string cls);
   Dom_ext.dispatch_custom "ls:toast" (Js.Json.object_ d)
 
-let load_page repo ref_v =
-  Runtime.invoke3 "thread-api/get-page-blocks-tree" (Wire.String repo)
-    ref_v Wire.Nil
-  |> Js.Promise.then_ (fun blocks_w ->
-         Js.Promise.resolve (Decode.blocks_of_wire blocks_w))
-
-let goto_page repo uuid =
+let goto_page _repo uuid =
   (* navigation intent: commit and close any in-progress edit so the old
      page stops rendering an editor during the async load gap (e2e
      waits on .editor-visible and must not see the stale one) *)
@@ -735,25 +746,11 @@ let goto_page repo uuid =
   (* cljs redirect-to-page! adds the page to recents — mark the nav so
      the sidebar pushes it once the page loads *)
   Runtime.mark_nav ();
-  Runtime.invoke2 "thread-api/get-page-route-info" (Wire.String repo)
-
-    (Wire.String uuid)
-  |> Js.Promise.then_ (fun page_w ->
-         match Decode.page_of_summary page_w with
-         | None -> Js.Promise.resolve ()
-         | Some page ->
-             load_page repo
-               (Wire.Array [ Wire.Keyword "block/uuid"; Wire.Uuid uuid ])
-             |> Js.Promise.then_ (fun blocks ->
-                    let page = { page with Model.page_blocks = blocks } in
-                    (* invalidate in-flight route loads so their late
-                       Page_loaded cannot clobber this fresh page *)
-                    Router.bump_load_gen ();
-                    Runtime.send (Action.Navigate_to (Model.Page uuid));
-                    Runtime.send (Action.Page_loaded page);
-                    Router.fetch_refs page;
-                    Platform.set_location_hash ("#/page/" ^ uuid);
-                    Js.Promise.resolve ()))
+  (* one navigation path: set the hash and let the router's hashchange
+     resolve drive Navigate_to + load (a manual prefetch here double-
+     fetched and bypassed nav_hash's ?graph-id) *)
+  Platform.set_location_hash
+    (Runtime.nav_hash ("#/page/" ^ uuid))
 let goto_today_journal repo =
   let day = Dates.today_journal_day () in
   Runtime.invoke2 "thread-api/get-journal-page-by-day" (Wire.String repo)
@@ -763,10 +760,20 @@ let goto_today_journal repo =
          | None -> Js.Promise.resolve ()
          | Some page -> (
              match page.Model.page_uuid with
-             | Some uuid -> goto_page repo uuid
+             | Some uuid ->
+                 goto_page repo uuid;
+                 Js.Promise.resolve ()
              | None -> Js.Promise.resolve ()))
 
-let create_page title =
+(* worker create-page/create-class ops return the new entity's uuid as
+   [:op-name uuid] *)
+let created_uuid w =
+  match Wire.get w "result" with
+  | Some (Wire.Array [ _; Wire.Uuid u ]) -> Some u
+  | Some (Wire.List [ _; Wire.Uuid u ]) -> Some u
+  | _ -> None
+
+let apply_create op label on_ok =
   match !(Runtime.current_repo) with
   | None -> ()
   | Some repo ->
@@ -776,29 +783,35 @@ let create_page title =
       Editor_actions.exit_edit ~select:false;
       ignore
         (Runtime.invoke3 "thread-api/apply-outliner-ops" (Wire.String repo)
-           (Wire.Array
-              [ Wire.Array
-                  [ Wire.Keyword "create-page"
-                  ; Wire.Array
-                      [ Wire.String title; Wire.Map [] ] ] ])
-           (Wire.Map [])
+           (Wire.Array [ op ]) (Wire.Map [])
          |> Js.Promise.then_ (fun w ->
-                let uuid =
-                  match Wire.get w "result" with
-                  | Some (Wire.Array [ _; Wire.Uuid u ]) -> u
-                  | Some (Wire.List [ _; Wire.Uuid u ]) -> u
-                  | _ -> ""
-                in
-                goto_page repo uuid
-                |> Js.Promise.then_ (fun () ->
-                       (* a fresh page has no blocks; append_block inserts
-                          the first block and enters edit mode on it *)
-                       Editor_actions.append_block ();
-                       Js.Promise.resolve ()))
+                (match created_uuid w with Some uuid -> on_ok repo uuid
+                 | None -> ());
+                Js.Promise.resolve ())
          |> Js.Promise.catch (fun e ->
-                Platform.console_error
-                  ("cmdk create-page failed", Platform.error_inner e);
+                Platform.console_error (label, Platform.error_inner e);
                 Js.Promise.resolve ()))
+
+let create_page title =
+  apply_create
+    (Outliner_ops.create_page title)
+    "cmdk create-page failed"
+    (fun repo uuid ->
+      (* a fresh page has no blocks; append_block inserts the first
+         block and enters edit mode on it — wait for the navigation's
+         Page_loaded so it lands on the new page *)
+      Runtime.on_page_loaded uuid (fun () ->
+          Editor_actions.append_block ());
+      goto_page repo uuid)
+
+(* cljs cmdk "#tag" create: <create-class! without redirect, then the
+   tag dialog opens — there is no tag dialog surface, so navigate to
+   the new class page instead *)
+let create_tag title =
+  apply_create
+    (Outliner_ops.create_class title)
+    "cmdk create-tag failed"
+    (fun repo uuid -> goto_page repo uuid)
 
 let validate_graph repo =
   ignore
@@ -817,6 +830,8 @@ let validate_graph repo =
 let run_move st target =
   let uuids =
     if Editor_state.ready () then
+      (* document order, not String_set uuid order — the worker applies
+         move-blocks in the given order *)
       match Editor_actions.selected_uuids () with
       | [] -> Option.to_list (Editor_state.editing_uuid ())
       | sel -> sel
@@ -930,6 +945,9 @@ let editor_action cid : (unit -> unit) option =
   | "editor/collapse-block-children" ->
       Some (first_target (fun u -> Editor_actions.set_collapsed u true))
   | "editor/toggle-open-blocks" -> Some (fun () -> Editor_actions.toggle_open_blocks ())
+  | "editor/cycle-todo" ->
+      Some
+        (fun () -> List.iter Editor_commands.cycle_todo (target_uuids ()))
   | "editor/undo" -> Some (fun () -> Editor_actions.undo ())
   | "editor/redo" -> Some (fun () -> Editor_actions.redo ())
   | "editor/quick-add" -> Some (fun () -> Editor_actions.quick_add ())
@@ -987,9 +1005,12 @@ let rec run_item st it =
    | Create_page title ->
        close st;
        create_page title
+   | Create_tag title ->
+       close st;
+       create_tag title
    | Open_page uuid ->
        close st;
-       Option.iter (fun repo -> ignore (goto_page repo uuid)) repo
+       Option.iter (fun repo -> goto_page repo uuid) repo
    | Open_block uuid ->
        close st;
        Option.iter
@@ -1000,7 +1021,9 @@ let rec run_item st it =
                 (Wire.Array [ Wire.Keyword "block/uuid"; Wire.Uuid uuid ])
               |> Js.Promise.then_ (fun w ->
                      match Wire.map_get_uuid w "block/uuid" with
-                     | Some puuid -> goto_page repo puuid
+                     | Some puuid ->
+                         goto_page repo puuid;
+                         Js.Promise.resolve ()
                      | None -> Js.Promise.resolve ())))
          repo
    | Set_filter gid ->
@@ -1041,7 +1064,9 @@ and run_command st repo (cid : string) =
                   match Decode.page_of_summary w with
                   | Some p -> (
                       match p.Model.page_uuid with
-                      | Some u -> goto_page repo u
+                      | Some u ->
+                          goto_page repo u;
+                          Js.Promise.resolve ()
                       | None -> Js.Promise.resolve ())
                   | None -> Js.Promise.resolve ()))
     | None -> ()
@@ -1100,6 +1125,12 @@ and run_command st repo (cid : string) =
   | "dev/validate-db" ->
       close st;
       Option.iter validate_graph repo
+  | "dev/rtc-start" -> (
+      close st;
+      match repo with Some r -> Rtc_ops.start r | None -> ())
+  | "dev/rtc-stop" ->
+      close st;
+      Rtc_ops.stop ()
   | "ui/toggle-left-sidebar" ->
       close st;
       Runtime.send Action.Toggle_left_sidebar

@@ -48,7 +48,7 @@ external options :
   (* (element, entry, instance) -> size; entry is the
      ResizeObserverEntry when the library observes resizes, undefined in
      the MutationObserver-driven path *)
-  measureElement:(element -> Js.Json.t -> t -> float) ->
+  ?measureElement:(element -> Js.Json.t -> t -> float) ->
   unit -> options = "" [@@mel.obj]
 
 external make : options -> t = "Virtualizer"

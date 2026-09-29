@@ -50,6 +50,18 @@ let local_storage_set k v =
 let local_storage_remove k =
   match local_storage_obj with Some s -> ls_remove_item s k | None -> ()
 
+(* sessionStorage — cljs graph_tab.cljs persists the per-tab graph so a
+   reload restores it; absent outside the browser *)
+external session_storage_obj : Js.Json.t option = "sessionStorage"
+
+let session_storage_get k =
+  match session_storage_obj with
+  | Some s -> ls_get_item s k
+  | None -> None
+
+let session_storage_set k v =
+  match session_storage_obj with Some s -> ls_set_item s k v | None -> ()
+
 external document_element : Js.Json.t = "document.documentElement"
 external document_body : Js.Json.t = "document.body"
 
@@ -219,8 +231,82 @@ let event_bool ev key =
 let rtc_test_mode () =
   match query_param "rtc-test" with Some "true" -> true | _ -> false
 
+external navigator_on_line : bool = "navigator.onLine"
+
+(* util/network-online? *)
+let online () = navigator_on_line
+
 external random_uuid : unit -> string = "randomUUID"
   [@@mel.scope "crypto"]
+
+(* window.pfs — the LightningFS handle installed by the db-worker client
+   (worker_client.ml set_worker_fs). Asset file writes go through it so
+   the worker's asset-sync listener can upload them. *)
+type pfs
+
+external window_pfs : pfs Js.Nullable.t = "pfs" [@@mel.scope "window"]
+
+let pfs_handle () = Js.Nullable.toOption window_pfs
+
+external pfs_mkdir : pfs -> string -> unit Js.Promise.t = "mkdir"
+  [@@mel.send]
+
+external pfs_write_file :
+  pfs -> string -> Js.Typed_array.Uint8Array.t -> unit Js.Promise.t =
+  "writeFile" [@@mel.send]
+
+type subtle
+
+external crypto_subtle : subtle = "subtle" [@@mel.scope "crypto"]
+
+external crypto_digest :
+  subtle -> string -> Js.Typed_array.Uint8Array.t
+  -> Js.Typed_array.ArrayBuffer.t Js.Promise.t = "digest" [@@mel.send]
+
+(* cljs decode-digest: bytes -> lowercase hex *)
+let sha256_hex (u8 : Js.Typed_array.Uint8Array.t) =
+  crypto_digest crypto_subtle "SHA-256" u8
+  |> Js.Promise.then_ (fun buf ->
+         let a = Js.Typed_array.Uint8Array.fromBuffer buf () in
+         let n = Js.Typed_array.Uint8Array.length a in
+         let b = Buffer.create (n * 2) in
+         for i = 0 to n - 1 do
+           Buffer.add_string b
+             (Printf.sprintf "%02x"
+                (Js.Typed_array.Uint8Array.unsafe_get a i))
+         done;
+         Js.Promise.resolve (Buffer.contents b))
+
+(* lightning-fs mkdir has no recursive flag — create each path segment,
+   ignoring EEXIST-style rejections *)
+let pfs_ensure_dir pfs path =
+  let segs =
+    List.filter (fun s -> s <> "") (String.split_on_char '/' path)
+  in
+  List.fold_left
+    (fun acc seg ->
+      acc
+      |> Js.Promise.then_ (fun prefix ->
+             let p = prefix ^ "/" ^ seg in
+             pfs_mkdir pfs p
+             |> Js.Promise.catch (fun _ -> Js.Promise.resolve ())
+             |> Js.Promise.then_ (fun () -> Js.Promise.resolve p)))
+    (Js.Promise.resolve "") segs
+  |> Js.Promise.then_ (fun _ -> Js.Promise.resolve ())
+
+(* asset_store.ml browser_path — pfs paths strip one logseq_db_ prefix *)
+let strip_db_prefix repo =
+  let prefix = "logseq_db_" in
+  let n = String.length prefix in
+  if String.length repo >= n && String.sub repo 0 n = prefix then
+    String.sub repo n (String.length repo - n)
+  else repo
+
+(* cljs config/dev? = dev-release? || goog.DEBUG — true in every build
+   we ship (the vite bundle has no separate release config). Injected via
+   vite `define`; guarded so the node test runner (no define) is safe. *)
+let dev_build : bool =
+  [%mel.raw "typeof logseq_dev !== 'undefined' && logseq_dev"]
 
 (* dispatch a DOM CustomEvent on document — cross-area comms *)
 external custom_event : string -> Js.Json.t -> Js.Json.t = "CustomEvent"

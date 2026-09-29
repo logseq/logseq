@@ -38,17 +38,34 @@ let open_in_right_sidebar a _b _c _d =
    | None -> ());
   resolved_nil
 
-let show_msg a b _c _d =
+(* cljs -show_msg(content, status, opts) — opts {key, timeout}; returns
+   the notification key (generated when opts.key is absent) so the plugin
+   can later close_msg it *)
+let show_msg a b c _d =
   let msg = Option.value ~default:"" (arg_string a) in
   let cls =
     match arg_string b with
     | Some s -> s
     | None -> "success"
   in
+  let key =
+    match
+      Js.Json.decodeObject (Sdk_convert.json_of_wire (arg_wire c))
+    with
+    | Some o -> (
+        match Js.Dict.get o "key" with
+        | Some v -> Js.Json.decodeString v
+        | None -> None)
+    | None -> None
+  in
+  let key' = Option.value key ~default:(Platform.random_uuid ()) in
   Platform.dispatch "ls:toast"
     (detail_obj
-       [ ("msg", Js.Json.string msg); ("cls", Js.Json.string cls) ]);
-  resolved_nil
+       [ ("msg", Js.Json.string msg)
+       ; ("cls", Js.Json.string cls)
+       ; ("key", Js.Json.string key')
+       ]);
+  resolved (Js.Json.string key')
 
 let close_msg a _b _c _d =
   (match arg_string a with
@@ -74,7 +91,7 @@ let set_state_from_store a b _c _d =
     match arg_wire a with
     | Wire.String s -> s
     | w -> (
-        match List.filter_map Wire.as_string (wire_elems w) with
+        match List.filter_map Wire.as_string (Wire.elems w) with
         | k :: _ -> k
         | [] -> "")
   in

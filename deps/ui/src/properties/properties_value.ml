@@ -17,7 +17,6 @@
 
 open Editor_dom
 open Properties_dom
-module I18n = Properties_i18n
 module D = Properties_data
 module S = Properties_state
 module W = Wire
@@ -422,7 +421,7 @@ let block_tag_ids ctx f =
   |> Js.Promise.then_ (fun w ->
          let tags =
            match D.getf w "block/tags" with
-           | Some xs -> List.filter_map D.entity_id_of (D.elems xs)
+           | Some xs -> List.filter_map D.entity_id_of (W.elems xs)
            | None -> []
          in
          f tags |> Js.Promise.resolve)
@@ -441,7 +440,7 @@ let gather_exclusions tag_ids f =
                (match D.getf (D.untag ent) "logseq.property/choice-exclusions" with
                 | Some xs ->
                     acc :=
-                      !acc @ List.filter_map D.entity_id_of (D.elems xs)
+                      !acc @ List.filter_map D.entity_id_of (W.elems xs)
                 | None -> ());
                go rest;
                Js.Promise.resolve ())
@@ -455,7 +454,7 @@ let choice_visible choice tag_ids exclusions =
   let cid = D.entity_id_of choice in
   let scoped =
     match D.getf choice "logseq.property/choice-classes" with
-    | Some w -> List.filter_map D.entity_id_of (D.elems w)
+    | Some w -> List.filter_map D.entity_id_of (W.elems w)
     | None -> []
   in
   let scoped_ok =
@@ -477,7 +476,7 @@ let node_items_source ~block ~prop ~on_pick =
         Some (Properties_select.item (D.ref_title v) (fun () -> on_pick id))
     | None -> None
   in
-  let items_of w = List.filter_map to_item (D.elems w) in
+  let items_of w = List.filter_map to_item (W.elems w) in
   let initial =
     (match D.entity_id_of prop with
      | Some property_id ->
@@ -758,6 +757,132 @@ let forward_container_click container =
       | None -> ())
     true
 
+(* cljs select-node for :logseq.property.class/extends — a multi-toggle
+   picker inside .ui__dropdown-menu-content that stays open across picks.
+   Options: extends-class-options minus self, the class's structured
+   children, and each current extends' own parents (cycle prevention —
+   value.cljs exclude-ids). Toggle: an already-selected class is removed
+   via delete-property-value, otherwise set-block-property adds it to the
+   set (a scalar on a many-cardinality ref property appends). *)
+let open_extends_menu ctx ~ident row anchor =
+  match D.entity_id_of (D.row_prop row) with
+  | None -> ()
+  | Some property_id ->
+      ignore
+        (D.node_selector_data ~property_id ~block:(D.uuid_ref ctx.block_uuid)
+        |> Js.Promise.then_ (fun data ->
+               let selected =
+                 ref
+                   (List.filter_map D.entity_id_of
+                      (D.value_elems (D.row_value row)))
+               in
+               let ids_of m id =
+                 match D.int_map_get m id with
+                 | Some w -> List.filter_map D.entity_id_of (W.elems w)
+                 | None -> []
+               in
+               let children =
+                 match
+                   ( ctx.block_id
+                   , D.getf data "structured-children-by-class-id" )
+                 with
+                 | Some id, Some m -> (
+                     match D.int_map_get m id with
+                     | Some w ->
+                         List.filter_map (fun v -> W.as_int v) (W.elems w)
+                     | None -> [])
+                 | _ -> []
+               and grandparents =
+                 match D.getf data "extends-by-class-id" with
+                 | Some m ->
+                     List.concat_map (fun pid -> ids_of m pid) !selected
+                 | None -> []
+               in
+               let excluded =
+                 (match ctx.block_id with Some id -> [ id ] | None -> [])
+                 @ children @ grandparents
+               in
+               let options =
+                 (match D.getf data "extends-class-options" with
+                  | Some w -> W.elems w
+                  | None -> [])
+                 |> List.filter (fun o ->
+                        match D.entity_id_of o with
+                        | Some id -> not (List.mem id excluded)
+                        | None -> false)
+               in
+               let menu = mk ~cls:"ui__dropdown-menu" "div" in
+               let rec rebuild () =
+                 el_clear menu;
+                 List.iter
+                   (fun o ->
+                     match D.entity_id_of o with
+                     | None -> ()
+                     | Some id ->
+                         let a =
+                           mk ~cls:"flex justify-between menu-link" "a"
+                             ~attrs:[ ("tabindex", "0") ]
+                         in
+                         ignore
+                           (child_text "span" "flex-1" (D.ref_title o) a);
+                         (if List.mem id !selected then
+                            ignore
+                              (el_append_child a
+                                 (mk ~cls:"ui__icon ti ti-check" "i")));
+                         on_click a (fun _ ->
+                             (if List.mem id !selected then (
+                                selected :=
+                                  List.filter (fun x -> x <> id) !selected;
+                                ignore
+                                  (D.delete_property_value
+                                     ~block_uuid:ctx.block_uuid ~ident
+                                     ~value:(W.Int id)))
+                              else (
+                                selected := id :: !selected;
+                                ignore
+                                  (D.set_block_property
+                                     ~block_uuid:ctx.block_uuid ~ident
+                                     ~value:(W.Int id))));
+                             rebuild ();
+                             S.refresh_all ());
+                         el_append_child menu a)
+                   options
+               in
+               rebuild ();
+               ignore
+                 (Properties_popup.open_anchored
+                    ~cls:"ui__dropdown-menu-content" anchor menu);
+               Js.Promise.resolve ()))
+
+let extends_cell ctx row =
+  let value = D.row_value row in
+  let ident = D.row_ident row |> Option.value ~default:"" in
+  let cell = mk ~cls:"jtrigger flex flex-1 multi-values" "div" in
+  el_set_attr cell "tabindex" "0";
+  (* cljs property-block-value -> page-cp: page entities render as
+     a.relative.tag / a.relative.page-ref, not .block-title-wrap *)
+  List.iter
+    (fun r ->
+      let class_p = D.ref_is_class r in
+      let a =
+        mk "a"
+          ~cls:("relative " ^ if class_p then "tag" else "page-ref")
+          ~attrs:
+            [ ("tabindex", "0")
+            ; ("data-ref", String.lowercase_ascii (D.ref_title r))
+            ; ("data-uuid", Option.value ~default:"" (D.ref_uuid r))
+            ; ("draggable", "true")
+            ]
+      in
+      ignore
+        (child_text "span" ""
+           ((if class_p then "#" else "") ^ D.ref_title r)
+           a);
+      el_append_child cell a)
+    (D.value_elems value);
+  on_click cell (fun _ -> open_extends_menu ctx ~ident row cell);
+  cell
+
 (* ---------- dispatch ---------- *)
 
 let editing_cell ctx row inner =
@@ -806,7 +931,9 @@ let render ctx row =
         | "number" -> number_cell ctx row
         | "date" | "datetime" -> date_cell ctx row
         | "node" | "asset" | "page" | "class" | "property" ->
-            node_cell ctx row
+            if ident = "logseq.property.class/extends" then
+              extends_cell ctx row
+            else node_cell ctx row
         | _ ->
             if D.value_empty_p value then (
               let empty =

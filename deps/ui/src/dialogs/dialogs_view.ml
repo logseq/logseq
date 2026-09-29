@@ -9,6 +9,8 @@
 open Lui_elements
 
 let dom = Logseq_dom.dom
+let dyn = Logseq_dom.dyn
+let keyed = Logseq_dom.keyed
 
 let overlay_cls =
   "ui__dialog-overlay fixed inset-0 z-50 bg-background/90 flex \
@@ -173,9 +175,9 @@ let confirm_view (c : Dialogs_state.confirm) =
             ~style_class:
               "ui__alert-dialog-footer flex flex-col-reverse \
                sm:flex-row sm:justify-end sm:space-x-2"
-            [ btn "cfrm-cancel" Graphs_text.cancel "border"
+            [ btn "cfrm-cancel" I18n.cancel "border"
                 Dialogs_state.close_confirm
-            ; btn "cfrm-ok" Graphs_text.confirm
+            ; btn "cfrm-ok" I18n.confirm
                 "bg-primary text-primary-foreground"
                 Dialogs_state.confirm
             ]
@@ -220,7 +222,7 @@ let prompt_view (p : Dialogs_state.prompt) =
                   ; ("autofocus", "true") ]
                 ~events:"keydown"
                 ~on_dom_event:input_events []
-            ; btn "prmt-ok" Graphs_text.submit "" (fun () -> submit ())
+            ; btn "prmt-ok" I18n.submit "" (fun () -> submit ())
             ]
         ; close_btn
         ]
@@ -239,6 +241,9 @@ let render (ms : Model.t Signal.signal) : t =
   let prompt_sig =
     Signal.map (fun (d : Dialogs_state.t) -> d.prompt) ds
   in
+  let ureq_sig =
+    Signal.map (fun (d : Dialogs_state.t) -> d.ui_request) ds
+  in
   Logseq_dom.fragment
     [ keyed ~source:dialogs_sig ~key:(fun n -> n) ~cmp:String.compare
         ~mount:(fun name_sig ->
@@ -254,5 +259,10 @@ let render (ms : Model.t Signal.signal) : t =
           | Some p -> prompt_view p
           | None -> Logseq_dom.nothing)
         prompt_sig
+    ; dyn ~equal:( == ) (fun r ->
+          match r with
+          | Some r -> Ui_requests.view r
+          | None -> Logseq_dom.nothing)
+        ureq_sig
     ]
     ctx parent

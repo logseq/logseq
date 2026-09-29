@@ -5,7 +5,7 @@
 open Lui_elements
 
 let dom = Logseq_dom.dom
-module U = Ui_strings
+module U = I18n
 
 let body (_ms : Model.t Signal.signal) : t =
  fun ctx parent ->

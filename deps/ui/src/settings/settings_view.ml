@@ -6,7 +6,7 @@
 open Lui_elements
 
 let dom = Logseq_dom.dom
-module T = Graphs_text
+module T = I18n
 
 let languages =
   [ ("en", "English"); ("fr", "Français"); ("de", "Deutsch")

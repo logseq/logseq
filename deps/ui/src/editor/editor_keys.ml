@@ -30,6 +30,17 @@ let ac_owned_key = function
 
 (* -- editor-mode keys -- *)
 
+(* cljs shortcut tables key on the unshifted key plus modifier flags; DOM
+   `key` already applies Shift ("Z", ">"), so letter/symbol shortcuts must
+   be normalized back before matching *)
+let shortcut_key ev =
+  match String.lowercase_ascii (D.ev_key ev) with
+  | ">" -> "." | "<" -> "," | "?" -> "/" | ":" -> ";" | "\"" -> "'"
+  | "~" -> "`" | "{" -> "[" | "}" -> "]" | "|" -> "\\" | "_" -> "-"
+  | "+" -> "=" | "!" -> "1" | "@" -> "2" | "#" -> "3" | "$" -> "4"
+  | "%" -> "5" | "^" -> "6" | "&" -> "7" | "*" -> "8" | "(" -> "9"
+  | ")" -> "0" | k -> k
+
 let on_editor_arrows ev uuid el =
   let key = D.ev_key ev in
   let up = key = "ArrowUp" in
@@ -39,6 +50,10 @@ let on_editor_arrows ev uuid el =
     ignore
       (Outliner_ops.apply_and_refresh
          [ Outliner_ops.move_up_down [ uuid ] up ]))
+  else if mods ev then (
+    (* cljs mod+up / mod+down collapse/expand the block's children *)
+    D.prevent_default ev;
+    A.collapse_expand ~collapse:up ())
   else
     let v = D.el_value el in
     let s, e = caret_span el in
@@ -75,6 +90,10 @@ let on_editor_key ev uuid el =
       else if ac_popup_open () && ac_owned_key key then ()
   else
     match key with
+    | "Enter" when mods ev && not shift ->
+        (* cljs editor/cycle-todo — mod+enter never splits *)
+        D.prevent_default ev;
+        Editor_commands.cycle_todo uuid
     | "Enter" when not shift ->
         D.prevent_default ev;
         A.split_at_cursor uuid
@@ -104,26 +123,37 @@ let on_editor_key ev uuid el =
         if s < String.length v && String.get v s = c then (
           D.prevent_default ev;
           D.el_set_selection_range el (s + 1) (s + 1)))
-    | "z" when mods ev ->
-        D.prevent_default ev;
-        if shift then A.redo () else A.undo ()
-    | "y" when mods ev ->
-        D.prevent_default ev;
-        A.redo ()
-    | "b" when mods ev ->
-        D.prevent_default ev;
-        A.wrap_selection uuid "**"
-    | "i" when mods ev ->
-        D.prevent_default ev;
-        A.wrap_selection uuid "*"
-    | "h" when mods ev && shift ->
-        D.prevent_default ev;
-        A.wrap_selection uuid "=="
-    | "e" when D.ev_meta ev -> A.quick_add ()
-    | "." when mods ev && shift ->
-        D.prevent_default ev;
-        A.zoom_to uuid
-    | _ -> ()
+    | _ -> (
+        match shortcut_key ev with
+        | "z" when mods ev ->
+            D.prevent_default ev;
+            if shift then A.redo () else A.undo ()
+        | "y" when mods ev ->
+            D.prevent_default ev;
+            A.redo ()
+        | "b" when mods ev ->
+            D.prevent_default ev;
+            A.wrap_selection uuid "**"
+        | "i" when mods ev ->
+            D.prevent_default ev;
+            A.wrap_selection uuid "*"
+        | "s" when mods ev && shift ->
+            D.prevent_default ev;
+            A.wrap_selection uuid "~~"
+        | ";" when mods ev && not shift ->
+            D.prevent_default ev;
+            A.toggle_children_collapse ()
+        | "," when mods ev && not shift ->
+            D.prevent_default ev;
+            A.zoom_out ()
+        | "h" when mods ev && shift ->
+            D.prevent_default ev;
+            A.wrap_selection uuid "=="
+        | "e" when D.ev_meta ev -> A.quick_add ()
+        | "." when mods ev && shift ->
+            D.prevent_default ev;
+            A.zoom_to uuid
+        | _ -> ())
 
 (* -- normal-mode keys (block selection) -- *)
 
@@ -143,6 +173,14 @@ let on_normal_key ev =
   | "ArrowDown" when (meta || alt) && shift ->
       D.prevent_default ev;
       A.move_blocks_up_down false
+  | "ArrowUp" when mods ev && not shift ->
+      (* cljs mod+up collapses one level / the selection *)
+      D.prevent_default ev;
+      A.collapse_expand ~collapse:true ()
+  | "ArrowDown" when mods ev && not shift ->
+      (* cljs mod+down expands one level / the selection *)
+      D.prevent_default ev;
+      A.collapse_expand ~collapse:false ()
   | "ArrowUp" when shift ->
       D.prevent_default ev;
       A.extend_selection true
@@ -158,6 +196,9 @@ let on_normal_key ev =
   | "Tab" when selected () ->
       D.prevent_default ev;
       A.indent_or_outdent ~indent:(not shift)
+  | "Enter" when mods ev ->
+      D.prevent_default ev;
+      List.iter Editor_commands.cycle_todo (A.selected_uuids ())
   | "Enter" -> (
       match D.closest_sel ".block-add-button" (D.ev_target ev) with
       | Some btn ->
@@ -169,20 +210,35 @@ let on_normal_key ev =
               D.prevent_default ev;
               A.enter_edit u 0
           | _ -> ()))
-  | "a" when mods ev ->
-      D.prevent_default ev;
-      A.select_all ()
-  | "e" when meta || mods ev && alt ->
-      D.prevent_default ev;
-      A.quick_add ()
-  | "z" when mods ev ->
-      D.prevent_default ev;
-      if shift then A.redo () else A.undo ()
-  | "y" when mods ev ->
-      D.prevent_default ev;
-      A.redo ()
   | "Escape" -> A.clear_selection ()
-  | _ -> ()
+  | _ -> (
+      match shortcut_key ev with
+      | "a" when mods ev && shift ->
+          (* cljs mod+shift+a = select-all-blocks *)
+          D.prevent_default ev;
+          A.select_all ()
+      | "a" when mods ev ->
+          (* cljs mod+a = select-parent *)
+          D.prevent_default ev;
+          A.select_parent ()
+      | ";" when mods ev && not shift ->
+          D.prevent_default ev;
+          A.toggle_children_collapse ()
+      | "," when mods ev && not shift ->
+          (* cljs zoom-out outside edit mode is history.back *)
+          D.prevent_default ev;
+          Platform.history_back ()
+      | "z" when mods ev ->
+          D.prevent_default ev;
+          if shift then A.redo () else A.undo ()
+      | "y" when mods ev ->
+          D.prevent_default ev;
+          A.redo ()
+      | "e" when mods ev ->
+          (* cljs mod+e quick-add also fires outside edit mode *)
+          D.prevent_default ev;
+          A.quick_add ()
+      | _ -> ())
 
 (* while an autocomplete popup is open its own document listener
    (registered after ours) owns Enter/Tab/Escape/arrows — skip *)
@@ -608,74 +664,38 @@ let on_mousedown ev =
 (* -- drag & drop (cljs components/block.cljs on-drag-start/
    block-drag-over/block-drop) -- *)
 
-let dragging_uuid : string option ref = ref None
-let drop_target : (string * string) option ref = ref None
+(* block drags run through the dnd-kit DragDropManager (Block_dnd). The
+   document listeners below cover what the manager cannot see:
+
+   - a native HTML5 dragstart on a [draggable] bullet would cancel the
+     sensor activation and replay the old path, so it is suppressed;
+     this listener installs before any pointerdown, meaning it runs
+     ahead of the sensor's own document dragstart binding and hides the
+     event from it via stopImmediatePropagation
+   - OS file drops never produce a dnd-kit operation; keep the cljs
+     handle-data-transfer-drop! "Files" branch as a native path *)
 
 let on_dragstart ev =
   match D.closest_sel ".bullet-container" (D.ev_target ev) with
-  | Some el -> (
-      match D.el_get_attr el "blockid" with
-      | Some u -> (
-          dragging_uuid := Some u;
-          match D.ev_data_transfer ev with
-          | Some dt -> D.dt_set_data dt "block-dom-id" u
-          | None -> ())
-      | None -> ())
+  | Some _ ->
+      D.prevent_default ev;
+      D.stop_immediate ev
   | None -> ()
 
-(* cljs block-drag-over: near the top of the first block -> :top; deep
-   indent (x-offset > 50) -> :nested; else :sibling *)
-let on_dragover ev =
-  if S.ready () then
-    match !dragging_uuid with
-    | None -> ()
-    | Some src -> (
-        match D.closest_sel ".ls-block" (D.ev_target ev) with
-        | Some el -> (
-            match D.el_get_attr el "blockid" with
-            | Some tgt when tgt <> src && not (A.is_descendant tgt src) -> (
-                D.prevent_default ev;
-                let rect = D.el_bounding_rect el in
-                let first =
-                  match S.find_parent tgt with
-                  | Some (_, idx) -> idx = 0
-                  | None -> false
-                in
-                let near_top =
-                  Float.abs (D.ev_client_y ev -. D.rect_top rect) <= 16.0
-                in
-                let x_off = D.ev_page_x ev -. D.rect_left rect in
-                let move_to =
-                  if first && near_top then "top"
-                  else if x_off > 50.0 then "nested"
-                  else "sibling"
-                in
-                drop_target := Some (tgt, move_to))
-            | _ -> drop_target := None)
-        | None -> ())
+let files_of ev =
+  match D.ev_data_transfer ev with
+  | Some dt -> D.dt_files dt
+  | None -> [||]
 
-let on_drop ev =
-  (match (!dragging_uuid, !drop_target) with
-   | Some src, Some (tgt, move_to) ->
-       D.prevent_default ev;
-       A.drop_dragged_block src tgt move_to
-   | _ ->
-       (* cljs container.cljs :upload-files dnd subscription — a file drop
-          anywhere on the main container uploads as asset blocks *)
-       match D.ev_data_transfer ev with
-       | Some dt ->
-           let files = D.dt_files dt in
-           if Array.length files > 0 then begin
-             D.prevent_default ev;
-             Asset_dom.upload_files files
-           end
-       | None -> ());
-  dragging_uuid := None;
-  drop_target := None
+let on_file_dragover ev =
+  if Array.length (files_of ev) > 0 then D.prevent_default ev
 
-let on_dragend _ev =
-  dragging_uuid := None;
-  drop_target := None
+let on_file_drop ev =
+  let files = files_of ev in
+  if Array.length files > 0 then begin
+    D.prevent_default ev;
+    Asset_dom.upload_files files
+  end
 
 let installed = ref false
 
@@ -691,14 +711,7 @@ let install_once () =
     D.document_add_listener "mousedown" on_mousedown true;
     D.document_add_listener "ls:editor-insert" on_editor_insert true;
     D.document_add_listener "dragstart" on_dragstart true;
-    D.document_add_listener "dragover" on_dragover true;
-    D.document_add_listener "drop" on_drop true;
-    D.document_add_listener "dragend" on_dragend true;
-    (* pointer-driven range selection (cljs block/selection.cljs) *)
-    D.document_add_listener "pointerdown"
-      (fun ev -> if S.ready () then Block_selection.pointerdown ev)
-      true;
-    D.document_add_listener "pointerup"
-      (fun _ev -> Block_selection.pointerup ())
-      true
+    D.document_add_listener "dragover" on_file_dragover true;
+    D.document_add_listener "drop" on_file_drop true;
+    Block_dnd.install ()
   end

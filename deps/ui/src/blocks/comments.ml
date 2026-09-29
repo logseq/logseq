@@ -12,7 +12,7 @@ open Lui_elements
 module S = Editor_state
 module D = Editor_dom
 module W = Wire
-module U = Ui_strings
+module U = I18n
 
 let dom = Logseq_dom.dom
 

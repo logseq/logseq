@@ -5,7 +5,7 @@
    and .ui__dialog-content confirm dialogs. *)
 
 module D = Views_dom
-module I = Views_i18n
+module I = I18n
 
 external document_body : D.el = "document.body"
 
@@ -14,12 +14,6 @@ external document_body : D.el = "document.body"
 (* open popups (menu contents, selects, dialogs) — all close on outside
    mousedown or Escape *)
 let open_popups : D.el list ref = ref []
-
-let in_open_popups (t : D.el option) =
-  match t with
-  | None -> false
-  | Some t ->
-      List.exists (fun p -> p == t || D.el_contains p t) !open_popups
 
 let close_top () =
   match !open_popups with
@@ -32,13 +26,6 @@ let close_all () =
   List.iter D.el_remove !open_popups;
   open_popups := []
 
-let on_doc_mousedown ev =
-  match Editor_dom.ev_target ev with
-  | None -> ()
-  | Some t ->
-      if !open_popups <> [] && not (in_open_popups (Some t)) then
-        close_all ()
-
 let on_doc_keydown ev =
   if Editor_dom.ev_key ev = "Escape" && !open_popups <> [] then begin
     Editor_dom.stop_propagation ev;
@@ -47,7 +34,11 @@ let on_doc_keydown ev =
   end
 
 let install_listeners () =
-  Editor_dom.document_add_listener "pointerdown" on_doc_mousedown true;
+  Overlay.on_document_press "pointerdown"
+    ~els:(fun () -> !open_popups)
+    ~on_hit:(function
+      | None -> close_all ()
+      | Some _ -> ());
   Editor_dom.document_add_listener "keydown" on_doc_keydown true
 
 let push_popup el = open_popups := el :: !open_popups
@@ -90,11 +81,7 @@ type menu_item =
   | MCustom of D.el
   | MSep
 
-let item_cls base =
-  base
-  ^ " relative flex cursor-pointer select-none items-center rounded-sm \
-     px-2 py-1.5 text-sm outline-none data-[highlighted]:bg-muted \
-     data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
+let item_cls = Menu_item.views_item_cls
 
 let focus_item (items : D.el array) idx =
   if idx >= 0 && idx < Array.length items then begin
@@ -284,19 +271,6 @@ let show_menu ~anchor ?(align_end = false) ?(cls_prefix = "")
 
 type select_item = { si_label : string; si_value : string; si_extra : Wire.t option }
 
-let fuzzy_match q s =
-  let q = String.lowercase_ascii q and s = String.lowercase_ascii s in
-  let n = String.length q and m = String.length s in
-  if n = 0 then true
-  else
-    let rec loop i j =
-      if j >= n then true
-      else if i >= m then false
-      else if s.[i] = q.[j] then loop (i + 1) (j + 1)
-      else loop (i + 1) j
-    in
-    loop 0 0
-
 (* renders the item label row; multiple mode adds a checkbox box *)
 let select_item_row it chosen multiple sel_set =
   let row =
@@ -343,7 +317,7 @@ let show_select ~anchor ~items ~placeholder ?(multiple = false)
   D.el_append_child results_wrap item_results;
   let apply_wrap = D.h ~cls:"p-4" () in
   let filtered () =
-    List.filter (fun it -> fuzzy_match !query it.si_label) items
+    List.filter (fun it -> Fuzzy.score !query it.si_label > 0.) items
   in
   let rec rerender () =
     D.clear results;

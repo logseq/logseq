@@ -1446,14 +1446,18 @@ let truncate_vector_index (vector_index : Vector_index.index option) =
 
 (* ---- build index ---- *)
 
-let get_all_blocks (db : db) : entity list =
+let get_all_blocks ?(on_hidden = fun (_ : entity) -> ()) (db : db)
+    : entity list =
   datoms db Avet ~a:"block/uuid" ()
   |> Seq.filter_map (fun (d : datom) ->
          match d.v with
          | Uuid u -> entity db (Lookup_ref ("block/uuid", Uuid u))
          | _ -> None)
   |> List.of_seq
-  |> List.filter (fun e -> not (hidden_entity (Ev.of_entity e)))
+  |> List.filter (fun e ->
+         let hidden = hidden_entity (Ev.of_entity e) in
+         if hidden then on_hidden e;
+         not hidden)
 
 let build_blocks_indice ?(include_vector_title = false) (db : db) : index_item list =
   List.filter_map
@@ -1770,9 +1774,9 @@ let search_blocks ~(conn : conn) ~(search_db : Sqlite.db option)
             ~query_embedding:opts.opt_query_embedding
       | _ -> []
     in
+    let raw = exact_title_result @ fuzzy_result @ matched_result @ non_match_result in
     let combined =
-      combine_results ~vector_results:vector_result ~q db_ctx
-        (exact_title_result @ fuzzy_result @ matched_result @ non_match_result)
+      combine_results ~vector_results:vector_result ~q db_ctx raw
     in
     let code_class =
       if opts.opt_code_only then

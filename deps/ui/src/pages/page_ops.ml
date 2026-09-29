@@ -1,7 +1,7 @@
 (* Page mutations against the db-worker outliner ops. Each applies then
    re-resolves the current route so views re-render. *)
 
-let repo () = Option.value !Runtime.current_repo ~default:""
+let repo = Runtime.repo
 
 let reload () = Router.resolve ()
 

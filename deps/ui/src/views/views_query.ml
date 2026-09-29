@@ -8,7 +8,7 @@ module D = Views_dom
 module V = Views_state
 module W = Wire
 module Wr = Views_wire
-module I = Views_i18n
+module I = I18n
 module Db = Views_db
 module M = Model
 
@@ -99,8 +99,8 @@ let decode_result inst (v : W.t) =
       inst.V.query_error <- None;
       let items =
         match W.get v "rows" with
-        | Some w -> Wr.seq_items w
-        | None -> Wr.seq_items v
+        | Some w -> W.elems w
+        | None -> W.elems v
       in
       let uuids = List.filter_map W.as_uuid items in
       if items <> [] && List.length uuids = List.length items then (
@@ -177,9 +177,13 @@ let refresh_block inst f =
                     inst.V.query_block_uuid <-
                       Option.value (W.map_get_uuid vb "block/uuid")
                         ~default:"";
-                    inst.V.qsrc <-
-                      Option.value (W.map_get_string vb "block/title")
-                        ~default:"";
+                    (* while the source editor is open the in-flight text
+                       is authoritative — don't clobber qsrc with the
+                       last-saved title, which lags the keystrokes *)
+                    if not inst.V.query_editor_open then
+                      inst.V.qsrc <-
+                        Option.value (W.map_get_string vb "block/title")
+                          ~default:"";
                     (* id-refs in the stored source resolve through the
                        value block's block/refs — collect uuid -> title
                        so clause chips can show titles (cljs page-title) *)
@@ -207,7 +211,7 @@ let refresh_block inst f =
                        | _ -> false)
                 | None ->
                     inst.V.query_block_uuid <- "";
-                    inst.V.qsrc <- "";
+                    if not inst.V.query_editor_open then inst.V.qsrc <- "";
                     inst.V.is_advanced <- false);
                (match Wr.decode_view_ent b with
                 | Some v -> V.apply_view_entity inst v
@@ -219,8 +223,6 @@ let refresh_block inst f =
 (* -- query source editor (fake CodeMirror contract) --
    .ls-query-setting toggles a .CodeMirror > pre.CodeMirror-line[contenteditable]
    inside the shell; Esc commits the raw source to the value block title. *)
-
-let editor_open : V.inst -> bool ref = fun _ -> ref false
 
 let open_editor inst (shell : D.el) =
   let buuid =
@@ -249,26 +251,49 @@ let open_editor inst (shell : D.el) =
    | Some old -> D.el_remove old
    | None -> ());
   D.el_append_child shell cm;
+  inst.V.query_editor_open <- true;
   D.focus_end line;
+  (* cljs's CodeMirror editor evaluates as you type — fire the query eval
+     immediately on input (the spec carries the source; it does not wait
+     for the save to land) and persist the title on a debounce *)
+  let autosave = D.debounce 300 in
+  D.el_add_listener line "input" (fun _ ->
+      let src = D.el_text_content line |> String.trim in
+      (V.ops ()).V.o_refresh_src inst src;
+      autosave (fun () ->
+          Db.save_block_title buuid src (fun () -> ())));
   D.el_add_listener line "keydown" (fun ev ->
       match Editor_dom.ev_key ev with
       | "Escape" ->
           Editor_dom.prevent_default ev;
           let src = D.el_text_content line |> String.trim in
           (* cljs keeps the editor open after Esc commits; the next tx
-             broadcast re-renders the shell anyway *)
+             broadcast re-renders the shell anyway. The eval already ran
+             on input — only re-run it if the text changed since, and
+             always persist the final source. *)
+          if src <> inst.V.qsrc then (V.ops ()).V.o_refresh_src inst src;
           Db.save_block_title buuid src (fun () -> ())
       | "Enter" ->
           (* single-line editor contract *)
           Editor_dom.prevent_default ev
       | _ -> ())
 
-let wire_settings_button inst (shell : D.el) =
-  match D.query_inside shell ".ls-query-setting" with
-  | None -> ()
-  | Some btn ->
-      D.el_add_listener btn "click" (fun ev ->
-          Editor_dom.stop_propagation ev;
-          match D.query_inside shell ".CodeMirror" with
-          | Some cm -> D.el_remove cm
-          | None -> open_editor inst shell)
+(* toggle the raw-source editor for `inst` inside `shell` — called from
+   the delegated click handler in Views_mount *)
+let toggle_source_editor inst (shell : D.el) =
+  (* a page remount can swap the shell between wiring and the click —
+     retarget to the live shell holding this inst's container *)
+  let shell =
+    if D.el_is_connected shell then shell
+    else
+      match
+        Editor_dom.el_closest inst.V.container ".custom-query-results"
+      with
+      | Some live -> live
+      | None -> shell
+  in
+  match D.query_inside shell ".CodeMirror" with
+  | Some cm ->
+      D.el_remove cm;
+      inst.V.query_editor_open <- false
+  | None -> open_editor inst shell

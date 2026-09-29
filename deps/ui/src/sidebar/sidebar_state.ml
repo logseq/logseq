@@ -13,9 +13,8 @@
      `open_in_right_sidebar`, cmdk shift+enter) and document shift+click
      on a.page-ref / [data-testid='page title'] to add right-sidebar
      items.
-   - refresh: chains onto worker.on_message for the "sync-db-changes"
-     broadcast and re-fetches sidebar data + the current route.
-     TODO(app): move to a shared tx->refresh handler once one exists. *)
+   - refresh: subscribes to the "sync-db-changes" broadcast via
+     Runtime.on_sync and re-fetches sidebar data + the current route. *)
 
 (* i18n placeholder: keep the t() call shape so keys can be wired to real
    dictionaries once a shared i18n module lands. *)
@@ -36,6 +35,7 @@ type item =
   ; page_ref : string option
   ; page : Model.page option (* source page for page/contents items *)
   ; props_collapsed : bool (* cljs: collapsed? = (not (entity/class? page)) *)
+  ; collapsed : bool (* cljs :ui/sidebar-collapsed-blocks — panel body *)
   }
 
 type t =
@@ -56,11 +56,9 @@ let last_page_key : string option ref = ref None
 
 (* ---------- json event helpers ---------- *)
 
-let jfield = Worker_client.json_field
-let jstring = Worker_client.json_string
 
 let jbool name j =
-  match jfield name j with
+  match Worker_client.json_field name j with
   | Some v -> (
       match Js.Json.classify v with
       | Js.Json.JSONTrue -> true
@@ -71,16 +69,32 @@ external closest :
   Js.Json.t -> string -> Js.Json.t option
   = "closest" [@@mel.send] [@@mel.return nullable]
 
+external prevent_default : Js.Json.t -> unit = "preventDefault"
+  [@@mel.send]
+
+external ev_client_x : Js.Json.t -> float = "clientX" [@@mel.get]
+external ev_client_y : Js.Json.t -> float = "clientY" [@@mel.get]
+
+(* open state for the left-sidebar link-item menu: (page ref, is-recent,
+   anchor x, anchor y). open_menu carries "lp-<ref>" while this holds the
+   rest of the menu context *)
+let lp_ctx : (string * bool * float * float) option ref = ref None
+
+let open_lp_menu st ~target ~recent ~x ~y =
+  lp_ctx := Some (target, recent, x, y);
+  Runtime.signal_set st.open_menu ("lp-" ^ target)
+;;
+
 let click_target sel ev =
-  match jfield "target" ev with
+  match Worker_client.json_field "target" ev with
   | Some tgt -> closest tgt sel
   | None -> None
 
 let detail_string name ev =
-  match jfield "detail" ev with
+  match Worker_client.json_field "detail" ev with
   | Some d -> (
-      match jfield name d with
-      | Some v -> jstring v
+      match Worker_client.json_field name d with
+      | Some v -> Worker_client.json_string v
       | None -> None)
   | None -> None
 
@@ -140,7 +154,7 @@ let recent_ids_of_storage repo =
                   | _ -> None)
                 kvs
             with
-            | Some v -> List.filter_map Wire.as_int (Sdk_util.wire_elems v)
+            | Some v -> List.filter_map Wire.as_int (Wire.elems v)
             | None -> [])
         | _ -> []
       with _ -> [])
@@ -150,11 +164,30 @@ let push_recent repo id =
   let ids =
     id :: take 14 (List.filter (fun x -> x <> id) (recent_ids_of_storage repo))
   in
+  (* merge into the stored per-graph map — rewriting the whole value
+     would drop every other repo's recents on each visit *)
+  let kvs =
+    match Platform.local_storage_get "recent-pages" with
+    | Some s -> (
+        try
+          match Edn.parse s with
+          | Wire.Map kvs ->
+              List.filter
+                (fun (k, _) ->
+                  match k with
+                  | Wire.String r | Wire.Keyword r | Wire.Symbol r ->
+                      r <> repo
+                  | _ -> true)
+                kvs
+          | _ -> []
+        with _ -> [])
+    | None -> []
+  in
   Platform.local_storage_set "recent-pages"
     (Edn.to_string
        (Wire.Map
-          [ ( Wire.String repo
-            , Wire.List (List.map (fun i -> Wire.Int i) ids) ) ]))
+          ((Wire.String repo, Wire.List (List.map (fun i -> Wire.Int i) ids))
+           :: kvs)))
 
 (* ---------- worker loaders ---------- *)
 
@@ -165,11 +198,13 @@ let pages_of_wire w =
 
 let then_keep p k =
   ignore
-    (Js.Promise.then_
-       (fun w ->
-         k w;
-         Js.Promise.resolve ())
-       p)
+    (p
+     |> Js.Promise.then_ (fun w ->
+            k w;
+            Js.Promise.resolve ())
+     |> Js.Promise.catch (fun e ->
+            Platform.console_error ("sidebar loader failed", e);
+            Js.Promise.resolve ()))
 
 (* loads race with writes (push_recent/set-page-favorite) and with each
    other via the sync-db-changes broadcast; a stale RPC resolving last would
@@ -236,38 +271,62 @@ let refresh_favorited repo st =
 
 external encode_uri_component : string -> string = "encodeURIComponent"
 
-let navigate_to_page target =
-  let target =
-    if Sdk_util.is_uuid_string target then target
-    else encode_uri_component target
-  in
-  Runtime.mark_nav ();
-  Platform.set_location_hash (Runtime.nav_hash ("#/page/" ^ target));
-  Platform.dispatch "ls:navigate" Js.Json.null
-
 (* Ref value for get-page-route-info / get-page-blocks-tree: a bare uuid
    or page-name string. The [:block/uuid u] lookup-ref ARRAY that
    Router.page_ref builds decodes to a Vector that the endpoints'
    Ldb.get_page does not match (returns nil) — TODO(shared): fix
    Router.page_ref / Ldb.get_page so #/page/<uuid> hash routes work. *)
 let route_ref s =
-  if Sdk_util.is_uuid_string s then Wire.Uuid s else Wire.String s
+  if Wire.is_uuid_string s then Wire.Uuid s else Wire.String s
 
-(* Router.fetch_blocks goes through the broken lookup-ref; keep a local
-   copy that passes a bare uuid/name until the shared fix lands. *)
+let push_page_route target =
+  let target =
+    if Wire.is_uuid_string target then target
+    else encode_uri_component target
+  in
+  Runtime.mark_nav ();
+  Platform.set_location_hash (Runtime.nav_hash ("#/page/" ^ target));
+  Platform.dispatch "ls:navigate" Js.Json.null
+
+(* cljs redirect-to-page!: route-info first — hidden and
+   private-built-in pages warn instead of navigating, and alias pages
+   redirect to their source page *)
+let navigate_to_page target =
+  let go () = push_page_route target in
+  ignore
+    (Runtime.invoke2 "thread-api/get-page-route-info"
+       (Wire.String (Runtime.repo ())) (route_ref target)
+     |> Js.Promise.then_ (fun info ->
+            let flag k =
+              Option.value
+                (Option.bind (Wire.get info k) Wire.as_bool)
+                ~default:false
+            in
+            let blocked =
+              (* cljs gates this on (not config/dev?) — our bundle is
+                 the dev build — and exempts the Recycle page *)
+              (not Platform.dev_build)
+              && Wire.map_get_string info "block/title" <> Some "Recycle"
+              && ((flag "hidden?" && not (flag "property?"))
+                  || (flag "built-in?" && flag "private-built-in?"))
+            in
+            if blocked then Toast.warning I18n.cannot_go_to_internal_page
+            else
+              (match Wire.map_get_uuid info "alias-source-uuid" with
+               | Some src -> push_page_route src
+               | None -> go ());
+            Js.Promise.resolve ())
+     |> Js.Promise.catch (fun _ ->
+            (* cljs treats a nil route-info as navigable *)
+            go ();
+            Js.Promise.resolve ()))
+
+(* sidebar items only need decoded + tag-resolved blocks — ~plain skips
+   the collapse/embed/view shaping that would touch editor state *)
 let fetch_blocks (p : Model.page) =
-  Runtime.invoke3 "thread-api/get-page-blocks-tree"
-    (Wire.String (Router.repo ()))
-    (route_ref
-       (match p.Model.page_uuid with
-        | Some u -> u
-        | None -> p.Model.page_title))
-    Wire.Nil
-  |> Js.Promise.then_ (fun blocks_w ->
-         Outliner_ops.resolve_block_tags (Decode.blocks_of_wire blocks_w)
-         |> Js.Promise.then_ (fun blocks ->
-                Js.Promise.resolve
-                  { p with Model.page_blocks = blocks }))
+  Outliner_ops.fetch_page_blocks ~plain:true (Runtime.repo ()) p
+  |> Js.Promise.then_ (fun blocks ->
+         Js.Promise.resolve { p with Model.page_blocks = blocks })
 let open_dialog name =
   let o = Js.Dict.empty () in
   Js.Dict.set o "name" (Js.Json.string name);
@@ -292,6 +351,7 @@ let item_of_page (p : Model.page) =
   ; linked_refs = p.Model.page_linked_refs
   ; page = Some p
   ; props_collapsed = not p.Model.page_is_tag
+  ; collapsed = false
   ; page_ref =
       Some
         (match p.Model.page_title with
@@ -304,7 +364,7 @@ let item_of_page (p : Model.page) =
 
 let page_item_of_ref repo (target : string) : item option Js.Promise.t =
   Runtime.invoke2 "thread-api/get-page-route-info" (Wire.String repo)
-    (route_ref target)
+    (Wire.page_ref target)
   |> Js.Promise.then_ (fun info ->
          match Decode.page_of_summary info with
          | None -> Js.Promise.resolve None
@@ -338,7 +398,7 @@ let is_page_entity w =
                 String.length id > 13
                 && String.sub id 0 13 = "logseq.class/"
             | None -> false)
-          (Sdk_util.wire_elems tags)
+          (Wire.elems tags)
     | None -> false
   in
   class_tagged
@@ -346,12 +406,7 @@ let is_page_entity w =
       && Wire.map_get_string w "block/name" <> None)
 
 let block_of_pair pair =
-  match Wire.get pair "block" with
-  | Some b -> b
-  | None -> (
-      match Sdk_util.wire_elems pair with
-      | [ _; b ] -> b
-      | _ -> Wire.Nil)
+  match Wire.block_of_pair pair with Some b -> b | None -> Wire.Nil
 
 let breadcrumb_titles w =
   List.filter_map
@@ -359,7 +414,7 @@ let breadcrumb_titles w =
       match Wire.map_get_string p "block/title" with
       | Some s -> Some s
       | None -> Wire.map_get_string p "block/name")
-    (Sdk_util.wire_elems w)
+    (Wire.elems w)
 
 let block_item_of_uuid repo uuid : item option Js.Promise.t =
   Runtime.invoke2 "thread-api/get-blocks" (Wire.String repo)
@@ -377,7 +432,7 @@ let block_item_of_uuid repo uuid : item option Js.Promise.t =
            ]
        ])
   |> Js.Promise.then_ (fun w ->
-         match Sdk_util.wire_elems w with
+         match Wire.elems w with
          | [ pair ] -> (
              match block_of_pair pair with
              | Wire.Map _ as blk ->
@@ -410,6 +465,7 @@ let block_item_of_uuid repo uuid : item option Js.Promise.t =
                              ; linked_refs = []
                              ; page = None
                              ; props_collapsed = true
+                             ; collapsed = false
                              ; page_ref = List.nth_opt crumbs 0
                              }))
              | _ -> Js.Promise.resolve None)
@@ -439,6 +495,7 @@ let static_item key kind title =
     ; linked_refs = []
     ; page = None
     ; props_collapsed = true
+    ; collapsed = false
     ; page_ref = None
     }
 
@@ -463,6 +520,45 @@ let toggle_props st key =
          else i)
        (Signal.get_state st.items))
 
+let toggle_collapsed st key =
+  Runtime.signal_set st.items
+    (List.map
+       (fun (i : item) ->
+         if i.key = key then { i with collapsed = not i.collapsed }
+         else i)
+       (Signal.get_state st.items))
+
+let set_collapsed st key v =
+  Runtime.signal_set st.items
+    (List.map
+       (fun (i : item) ->
+         if i.key = key then { i with collapsed = v } else i)
+       (Signal.get_state st.items))
+
+let collapse_others st key v =
+  Runtime.signal_set st.items
+    (List.map
+       (fun (i : item) ->
+         if i.key = key then i else { i with collapsed = v })
+       (Signal.get_state st.items))
+
+let collapse_all st v =
+  Runtime.signal_set st.items
+    (List.map
+       (fun (i : item) -> { i with collapsed = v })
+       (Signal.get_state st.items))
+
+let remove_rest st key =
+  Runtime.signal_set st.items
+    (List.filter (fun (i : item) -> i.key = key)
+       (Signal.get_state st.items))
+
+let clear_items st =
+  Runtime.signal_set st.items [];
+  if (!model_ref).Model.right_sidebar_open then
+    Runtime.send Action.Toggle_right_sidebar
+;;
+
 let add_promise st p =
   ignore
     (Js.Promise.then_
@@ -474,7 +570,7 @@ let add_promise st p =
        p)
 
 let open_ref st target =
-  let repo = Router.repo () in
+  let repo = Runtime.repo () in
   if repo = "" then ()
   else
     let p =
@@ -482,7 +578,7 @@ let open_ref st target =
       |> Js.Promise.then_ (function
              | Some it -> Js.Promise.resolve (Some it)
              | None ->
-                 if Sdk_util.is_uuid_string target then
+                 if Wire.is_uuid_string target then
                    block_item_of_uuid repo target
                  else Js.Promise.resolve None)
     in
@@ -490,7 +586,7 @@ let open_ref st target =
     add_promise st p
 
 let open_uuid st uuid =
-  let repo = Router.repo () in
+  let repo = Runtime.repo () in
   if repo = "" then ()
   else
     let p =
@@ -502,7 +598,7 @@ let open_uuid st uuid =
                    page_item_of_ref repo uuid
                  else block_item_of_uuid repo uuid
              | _ ->
-                 if Sdk_util.is_uuid_string uuid then
+                 if Wire.is_uuid_string uuid then
                    block_item_of_uuid repo uuid
                  else Js.Promise.resolve None)
     in
@@ -510,7 +606,7 @@ let open_uuid st uuid =
     add_promise st p
 
 let open_sticky_item st kind =
-  let repo = Router.repo () in
+  let repo = Runtime.repo () in
   if repo = "" then ()
   else
     match kind with
@@ -523,7 +619,7 @@ let open_sticky_item st kind =
     | _ -> ()
 
 let ensure_contents st =
-  let repo = Router.repo () in
+  let repo = Runtime.repo () in
   if repo <> "" && Signal.get_state st.items = [] then
     add_promise st (contents_item repo)
 
@@ -560,6 +656,9 @@ let refresh_items repo st =
       (Js.Promise.all (Array.of_list (List.map (refresh_item repo) items))
        |> Js.Promise.then_ (fun arr ->
               Runtime.signal_set st.items (Array.to_list arr);
+              Js.Promise.resolve ())
+       |> Js.Promise.catch (fun e ->
+              Platform.console_error ("sidebar refresh failed", e);
               Js.Promise.resolve ()))
 
 (* ---------- favorites ---------- *)
@@ -586,28 +685,34 @@ let toggle_favorite st =
       | None -> ())
   | _ -> ()
 
+let unfavorite st uuid =
+  match (!model_ref).Model.repo with
+  | Some repo ->
+      then_keep
+        (Runtime.invoke3 "thread-api/set-page-favorite" (Wire.String repo)
+           (Wire.Uuid uuid) (Wire.Bool false))
+        (fun _ -> load_favorites repo st)
+  | None -> ()
+
 (* ---------- model / worker wiring ---------- *)
 
 let on_sync st =
   match (!model_ref).Model.repo with
   | Some repo ->
+      (* the route reload comes from Worker_events.dispatch's debounced
+         Router.reload — refetching it here too doubled the work per
+         broadcast *)
       load_favorites repo st;
       load_recents repo st;
       refresh_favorited repo st;
-      refresh_items repo st;
-      Router.load_route (!model_ref).Model.route
+      refresh_items repo st
   | None -> ()
 
 let install_worker_hook st =
-  match !Runtime.worker with
-  | Some w when not !hook_installed ->
-      hook_installed := true;
-      let prev = w.Worker_client.on_message in
-      w.Worker_client.on_message <-
-        (fun e payload ->
-          prev e payload;
-          if e = "sync-db-changes" then on_sync st)
-  | _ -> ()
+  if not !hook_installed then begin
+    hook_installed := true;
+    Runtime.on_sync (fun () -> on_sync st)
+  end
 
 let page_key (p : Model.page) =
   match p.Model.page_uuid with
@@ -630,7 +735,7 @@ let on_model st (m : Model.t) =
        let key = page_key p in
        if !last_page_key <> Some key then (
          last_page_key := Some key;
-         refresh_favorited (Router.repo ()) st;
+         refresh_favorited (Runtime.repo ()) st;
          match m.Model.repo, p.Model.page_db_id with
          | Some repo, Some id ->
              (* recents only on explicit navigation (cljs
@@ -645,7 +750,44 @@ let on_model st (m : Model.t) =
 let close_menu st = Runtime.signal_set st.open_menu ""
 let open_nav_menu st = Runtime.signal_set st.open_menu "nav-edit"
 let open_dots_menu st = Runtime.signal_set st.open_menu "dots"
-let open_item_menu st key = Runtime.signal_set st.open_menu ("item-" ^ key)
+(* anchor for the right-sidebar item actions menu — cljs popup-show!
+   positions at the pointer (contextmenu) / trigger click *)
+let im_xy : (float * float) ref = ref (0., 0.)
+
+let open_item_menu st key ~x ~y =
+  im_xy := (x, y);
+  Runtime.signal_set st.open_menu ("item-" ^ key)
+
+(* cljs left_sidebar.cljs x-menu-content: right-click or the dots
+   button on a favorites/recent row opens the unfavorite/open-in-sidebar
+   dropdown at the pointer; right-click on a right-sidebar item header
+   opens its actions menu *)
+let on_doc_contextmenu st ev =
+  match click_target "#left-sidebar a.link-item" ev with
+  | Some el -> (
+      prevent_default ev;
+      match Platform.get_attribute el "data-lp-ref" with
+      | Some target ->
+          open_lp_menu st ~target
+            ~recent:(Platform.get_attribute el "data-lp-recent" = Some "1")
+            ~x:(ev_client_x ev) ~y:(ev_client_y ev)
+      | None -> ())
+  | None -> (
+      match
+        click_target "#right-sidebar .sidebar-item-header" ev
+      with
+      | Some hdr -> (
+          match closest hdr ".sidebar-item[data-item-key]" with
+          | Some it -> (
+              prevent_default ev;
+              match Platform.get_attribute it "data-item-key" with
+              | Some key ->
+                  open_item_menu st key ~x:(ev_client_x ev)
+                    ~y:(ev_client_y ev)
+              | None -> ())
+          | None -> ())
+      | None -> ())
+;;
 
 let on_doc_click st ev =
   (* dropdown menus dismiss on outside interaction; the trigger controls and
@@ -654,7 +796,7 @@ let on_doc_click st ev =
     match
       click_target
         ".ui__dropdown-menu-content, .toolbar-plugins-manager, .as-edit, \
-         [data-testid='sidebar-item-more']"
+         .sidebar-page-actions, [data-testid='sidebar-item-more']"
         ev
     with
     | Some _ -> ()
@@ -686,9 +828,9 @@ let on_doc_click st ev =
         | None -> ()
 
 let on_doc_keydown st ev =
-  match jfield "key" ev with
+  match Worker_client.json_field "key" ev with
   | Some k -> (
-      match jstring k with
+      match Worker_client.json_string k with
       | Some "Escape" ->
           if Signal.get_state st.open_menu <> "" then close_menu st
           else if (!model_ref).Model.appearance <> None then
@@ -729,6 +871,7 @@ let init (ms : Model.t Signal.signal) : t =
           | Some u -> open_uuid st u
           | None -> ());
       Platform.on_document_event "click" (on_doc_click st);
+      Platform.on_document_event "contextmenu" (on_doc_contextmenu st);
       Platform.on_document_event "keydown" (on_doc_keydown st);
       st
 
