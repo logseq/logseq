@@ -846,12 +846,40 @@ let resolve_page_refs (db : db) ?(base_db : db option) ?(pending_uuids : string 
             vs
       | _ -> []
     in
+    let resolved =
+      List.combine refs (resolve_refs_dedup db ?base_db refs tag_names)
+    in
+    let dropped_uuids =
+      List.filter_map
+        (fun (_src, (r', _tx)) ->
+          match r' with
+          | (Vector [ Keyword "block/uuid"; Uuid u ]
+            | List [ Keyword "block/uuid"; Uuid u ])
+            when dangling_ref db pending_uuids r' ->
+              Some u
+          | _ -> None)
+        resolved
+    in
+    (* Each [[uuid]] ref ships a synthetic page stub (name/title = the uuid
+       string, fresh :block/uuid) next to the lookup. Once the lookup is
+       dropped as dangling the stub would still mint a ghost page titled by
+       the raw uuid — drop the stub with its create-tx too. A stub whose
+       name resolves to an existing page (empty tx) is kept. *)
+    let dead_stub ((src, (r', tx)) : value * (value * tx_op list)) : bool =
+      new_page_ref src && tx <> []
+      &&
+      (match map_key_of r' "block/name" with
+       | Some (String n) -> List.mem n dropped_uuids
+       | _ -> false)
+    in
     (* resolve + drop dangling refs, keeping src->resolved pairing for the
        title rewrite below *)
     let kept =
-      List.combine refs (resolve_refs_dedup db ?base_db refs tag_names)
-      |> List.filter (fun (_src, (r', _tx)) ->
-             not (dangling_ref db pending_uuids r'))
+      List.filter
+        (fun p ->
+          (not (dangling_ref db pending_uuids (fst (snd p))))
+          && not (dead_stub p))
+        resolved
     in
     let refs' = List.map (fun (_, (r', _)) -> r') kept in
     let page_txs = List.concat_map (fun (_, (_, tx)) -> tx) kept in
