@@ -2445,7 +2445,8 @@ let ac_it ?group label =
   Popups_state.mk_item ~key:label ~label ?group Popups_state.Noop
 
 let mk_ac kind =
-  { Popups_state.kind; x = 0.; y = 0.; query = ""; tpos = 0; tlen = 0
+  { Popups_state.kind; x = 0.; y = 0.; cy = 0.; flip = None; query = ""
+  ; tpos = 0; tlen = 0
   ; items = []; chosen = 0; editor = Js.Json.null }
 
 let test_popups_state () =

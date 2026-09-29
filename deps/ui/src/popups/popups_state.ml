@@ -84,6 +84,10 @@ type ac =
   { kind : ac_kind
   ; x : float
   ; y : float
+  ; cy : float (* caret line top — flip-above anchor *)
+  ; flip : (float * float) option
+    (* Some (top, avail-h) once the popup measured too tall for the
+       space below the caret — base-ui avoidCollisions flips it above *)
   ; query : string
   ; tpos : int (* query-trigger offset (the "/" "[[" "((" "#" start) *)
   ; tlen : int
@@ -743,14 +747,58 @@ let load_templates t =
 (* ---- open / update ---- *)
 
 let open_ac t kind editor =
-  let x, y = Dom_ext.caret_popup_pos editor in
+  let x, y, cy = Dom_ext.caret_popup_pos editor in
   let tlen = trigger_len_of_kind kind in
   let tpos = Dom_ext.selection_start editor - tlen in
   let ac =
-    { kind; x; y; query = ""
+    { kind; x; y; cy; flip = None; query = ""
     ; tpos; tlen
     ; items = []; chosen = 0; editor }
   in
+  (* base-ui avoidCollisions: the popup mounts below the caret, then
+     flips above when it overflows the viewport and there is more room
+     above — measure once mounted and record (top, avail). Items can
+     resolve after the mount, so retry while the popup is up (~480ms).
+     The popover's --available-height clamp already bounds the rendered
+     rect, so lift it briefly to learn the real height (CSS caps such
+     as the commands list's own max-height still apply — matching what
+     the popup can actually render on either side) *)
+  let rec measure tries =
+    match (get t).ac with
+    | Some a when a.flip = None && a.kind = kind -> (
+        match Dom_ext.doc_query_selector "#ui__ac-inner" with
+        | Some inner -> (
+            match Dom_ext.closest inner ".ui__popover-content" with
+            | Some pop ->
+                (* --available-height propagates to #ui__ac-inner's own
+                   max-height; lift it to read the real rendered height
+                   (the list's own CSS max still applies) *)
+                Dom_ext.style_set_property pop "--available-height" "2000px";
+                let h = Dom_ext.rect_height (Dom_ext.bounding_rect pop) in
+                let below = Dom_ext.window_inner_height -. a.y -. 8. in
+                let above = a.cy -. 8. in
+                if h > below && above > below then (
+                  (* avail is the constraint, h the measured render —
+                     the inner's own max-height subtracts chrome from
+                     avail, so pass the whole space and place the top
+                     so the bottom edge lands just above the caret *)
+                  let avail = above -. 4. in
+                  let h_eff = Float.min h avail in
+                  let top' = Float.max 4.0 (a.cy -. 8. -. h_eff) in
+                  set_ac t (Some { a with flip = Some (top', avail) }))
+                else (
+                  Dom_ext.style_set_property pop "--available-height"
+                    (Printf.sprintf "calc(100vh - %.0fpx)" (a.y +. 8.));
+                  retry tries)
+            | None -> retry tries)
+        | None -> retry tries)
+    | None -> retry tries
+    | _ -> ()
+  and retry tries =
+    if tries > 0 then
+      Dom_ext.set_timeout (fun () -> measure (tries - 1)) 16
+  in
+  measure 30;
   (* cljs autopair: typing [[ inputs ]] immediately with the caret kept
      inside the brackets; insert_text consumes the ghost pair on choice *)
   (match kind with
