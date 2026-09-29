@@ -71,8 +71,8 @@ let refresh_opacity ?puuid btn =
   | Some u -> set_parent_attr btn u
   | None -> ()
 
-let ensure_all () =
-  for_each_selector ".page-blocks-inner" (fun parent ->
+let ensure_all roots =
+  for_each_touched roots ".page-blocks-inner" (fun parent ->
       let puuid =
         match el_get_attr parent "data-pu" with
         | Some u -> Some u
@@ -90,8 +90,5 @@ let installed = ref false
 let install () =
   if not !installed then begin
     installed := true;
-    let obs = new_observer (fun () -> ensure_all ()) in
-    observe obs document_element
-      (observe_opts ~childList:true ~subtree:true);
-    ensure_all ()
+    register_doc_scan ensure_all
   end
