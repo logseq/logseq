@@ -382,6 +382,32 @@
         (is (= (:block/uuid today-child)
                (get-in today-insert-op [1 0 0 :block/uuid])))))))
 
+(deftest derive-history-outliner-ops-delete-page-restores-view-group-by-test
+  (testing "delete-page inverse restores view group-by refs to the deleted property"
+    (let [conn (db-test/create-conn-with-blocks
+                {:properties {:note {:logseq.property/type :default}}
+                 :pages-and-blocks [{:page {:block/title "page"}
+                                     :blocks [{:block/title "view"}]}]})
+          property (d/entity @conn :user.property/note)
+          view (db-test/find-block-by-content @conn "view")
+          _ (d/transact! conn [[:db/add (:db/id view)
+                                :logseq.property.view/group-by-property
+                                (:db/id property)]])
+          inverse (:inverse-outliner-ops
+                   (op-construct/derive-history-outliner-ops
+                    @conn @conn [] {:outliner-op :delete-page
+                                    :outliner-ops [[:delete-page [(:block/uuid property) {}]]]}))
+          group-by-restore (some (fn [[op [block]]]
+                                   (when (and (= :save-block op)
+                                              (= (:block/uuid view) (:block/uuid block))
+                                              (contains? block :logseq.property.view/group-by-property))
+                                     block))
+                                 inverse)]
+      (is (some? group-by-restore)
+          "Inverse should save the view's group-by ref back onto the property")
+      (is (= :user.property/note
+             (:logseq.property.view/group-by-property group-by-restore))))))
+
 (deftest derive-history-outliner-ops-builds-inverse-for-all-supported-ops-test
   (let [conn (db-test/create-conn-with-blocks
               {:classes {:c1 {:build/class-properties [:p1]}}
