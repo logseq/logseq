@@ -21,8 +21,8 @@ external get_element_by_id : string -> el option = "getElementById"
 external query_selector_all : string -> node_list = "querySelectorAll"
   [@@mel.scope "document"]
 
-external active_element : unit -> el option = "activeElement"
-  [@@mel.scope "document"] [@@mel.return nullable]
+external active_element : el option = "document.activeElement"
+  [@@mel.return nullable]
 
 external document_element : el = "document.documentElement"
 
@@ -91,6 +91,7 @@ external el_get_attr : el -> string -> string option = "getAttribute"
 external el_set_attr : el -> string -> string -> unit = "setAttribute"
   [@@mel.send]
 external el_append_child : el -> el -> unit = "appendChild" [@@mel.send]
+external el_contains : el -> el -> bool = "contains" [@@mel.send]
 external el_set_class : el -> string -> unit = "className" [@@mel.set]
 external el_focus : el -> unit = "focus" [@@mel.send]
 
