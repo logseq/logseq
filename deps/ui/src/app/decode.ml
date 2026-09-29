@@ -327,16 +327,25 @@ let page_of_summary (w : Wire.t) : Model.page option =
           (str [ "block/title"; "page-title"; "block/raw-title" ])
           ~default:""
       in
-      Some
-        { Model.page_title = title
-        ; page_uuid =
-            (match Wire.map_get_uuid w "block/uuid" with
-             | Some u -> Some u
-             | None -> Wire.map_get_uuid w "page-uuid")
-        ; page_db_id =
-            (match Wire.map_get_int w "db/id" with
-             | Some i -> Some i
-             | None -> Wire.map_get_int w "page-id")
+      let page_uuid =
+        match Wire.map_get_uuid w "block/uuid" with
+        | Some u -> Some u
+        | None -> Wire.map_get_uuid w "page-uuid"
+      in
+      let page_db_id =
+        match Wire.map_get_int w "db/id" with
+        | Some i -> Some i
+        | None -> Wire.map_get_int w "page-id"
+      in
+      (* a map with no identity fields isn't a page — fabricating an
+         empty record would render an anonymous row instead of dropping
+         the malformed entry *)
+      if title = "" && page_uuid = None && page_db_id = None then None
+      else
+        Some
+          { Model.page_title = title
+        ; page_uuid
+        ; page_db_id
         ; page_is_tag = is_tag_page w
         ; page_is_property = is_property_page w
         ; page_icon =
