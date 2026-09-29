@@ -57,6 +57,9 @@ external ev_clipboard : ev -> clipboard_data option = "clipboardData"
 external prevent_default : ev -> unit = "preventDefault" [@@mel.send]
 external stop_propagation : ev -> unit = "stopPropagation" [@@mel.send]
 
+external stop_immediate : ev -> unit = "stopImmediatePropagation"
+  [@@mel.send]
+
 (* CustomEvent.detail for the ls:editor-* channel (popups) *)
 external ev_detail : ev -> Js.Json.t option = "detail"
   [@@mel.get] [@@mel.return nullable]
@@ -75,6 +78,13 @@ external dt_set_data : clipboard_data -> string -> string -> unit = "setData"
   [@@mel.send]
 external ev_client_y : ev -> float = "clientY" [@@mel.get]
 external ev_page_x : ev -> float = "pageX" [@@mel.get]
+
+external json_array_from : Js.Json.t -> Js.Json.t array = "from"
+  [@@mel.scope "Array"]
+
+external dt_file_list : clipboard_data -> Js.Json.t = "files" [@@mel.get]
+
+let dt_files dt = json_array_from (dt_file_list dt)
 
 type rect
 external el_bounding_rect : el -> rect = "getBoundingClientRect" [@@mel.send]

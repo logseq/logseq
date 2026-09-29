@@ -452,64 +452,38 @@ let on_mousedown ev =
 (* -- drag & drop (cljs components/block.cljs on-drag-start/
    block-drag-over/block-drop) -- *)
 
-let dragging_uuid : string option ref = ref None
-let drop_target : (string * string) option ref = ref None
+(* block drags run through the dnd-kit DragDropManager (Block_dnd). The
+   document listeners below cover what the manager cannot see:
+
+   - a native HTML5 dragstart on a [draggable] bullet would cancel the
+     sensor activation and replay the old path, so it is suppressed;
+     this listener installs before any pointerdown, meaning it runs
+     ahead of the sensor's own document dragstart binding and hides the
+     event from it via stopImmediatePropagation
+   - OS file drops never produce a dnd-kit operation; keep the cljs
+     handle-data-transfer-drop! "Files" branch as a native path *)
 
 let on_dragstart ev =
   match D.closest_sel ".bullet-container" (D.ev_target ev) with
-  | Some el -> (
-      match D.el_get_attr el "blockid" with
-      | Some u -> (
-          dragging_uuid := Some u;
-          match D.ev_data_transfer ev with
-          | Some dt -> D.dt_set_data dt "block-dom-id" u
-          | None -> ())
-      | None -> ())
+  | Some _ ->
+      D.prevent_default ev;
+      D.stop_immediate ev
   | None -> ()
 
-(* cljs block-drag-over: near the top of the first block -> :top; deep
-   indent (x-offset > 50) -> :nested; else :sibling *)
-let on_dragover ev =
-  if S.ready () then
-    match !dragging_uuid with
-    | None -> ()
-    | Some src -> (
-        match D.closest_sel ".ls-block" (D.ev_target ev) with
-        | Some el -> (
-            match D.el_get_attr el "blockid" with
-            | Some tgt when tgt <> src && not (A.is_descendant tgt src) -> (
-                D.prevent_default ev;
-                let rect = D.el_bounding_rect el in
-                let first =
-                  match S.find_parent tgt with
-                  | Some (_, idx) -> idx = 0
-                  | None -> false
-                in
-                let near_top =
-                  Float.abs (D.ev_client_y ev -. D.rect_top rect) <= 16.0
-                in
-                let x_off = D.ev_page_x ev -. D.rect_left rect in
-                let move_to =
-                  if first && near_top then "top"
-                  else if x_off > 50.0 then "nested"
-                  else "sibling"
-                in
-                drop_target := Some (tgt, move_to))
-            | _ -> drop_target := None)
-        | None -> ())
+let files_of ev =
+  match D.ev_data_transfer ev with
+  | Some dt -> D.dt_files dt
+  | None -> [||]
 
-let on_drop ev =
-  (match (!dragging_uuid, !drop_target) with
-   | Some src, Some (tgt, move_to) ->
-       D.prevent_default ev;
-       A.drop_dragged_block src tgt move_to
-   | _ -> ());
-  dragging_uuid := None;
-  drop_target := None
+let on_file_dragover ev =
+  if Array.length (files_of ev) > 0 then D.prevent_default ev
 
-let on_dragend _ev =
-  dragging_uuid := None;
-  drop_target := None
+let on_file_drop ev =
+  let files = files_of ev in
+  if Array.length files > 0 then begin
+    D.prevent_default ev;
+    Asset_dom.upload_files files
+  end
 
 let installed = ref false
 
@@ -525,7 +499,7 @@ let install_once () =
     D.document_add_listener "mousedown" on_mousedown true;
     D.document_add_listener "ls:editor-insert" on_editor_insert true;
     D.document_add_listener "dragstart" on_dragstart true;
-    D.document_add_listener "dragover" on_dragover true;
-    D.document_add_listener "drop" on_drop true;
-    D.document_add_listener "dragend" on_dragend true
+    D.document_add_listener "dragover" on_file_dragover true;
+    D.document_add_listener "drop" on_file_drop true;
+    Block_dnd.install ()
   end
