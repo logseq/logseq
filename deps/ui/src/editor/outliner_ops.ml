@@ -548,6 +548,19 @@ let fetch_page_blocks ?(plain = false) repo (p : Model.page) =
     Wire.Nil
   |> Js.Promise.then_ (blocks_of_tree_wire ~plain repo p)
 
+(* block-zoom breadcrumb chain: ancestor titles must be refetched on
+   refresh too — a renamed parent shows stale text otherwise *)
+let fetch_zoom_parents repo uuid : Model.block list Js.Promise.t =
+  Runtime.invoke2 "thread-api/get-block-parents" (Wire.String repo)
+    (Wire.List [ Wire.Keyword "block/uuid"; Wire.Uuid uuid ])
+  |> Js.Promise.then_ (fun parents_w ->
+         Js.Promise.resolve
+           (Wire.elems parents_w
+            |> List.filter_map (fun w ->
+                   match w with
+                   | Wire.Map _ -> Some (Decode.block_of_wire w)
+                   | _ -> None)))
+
 (* refetch unlinked refs for the current page — a block-title edit can
    create or remove a text mention; the send is guarded so an in-flight
    fetch can't overwrite a page the user navigated to *)
@@ -606,7 +619,11 @@ let refresh_page () : unit Js.Promise.t =
              else
                let page = { page with Model.page_blocks = blocks } in
                (match !Runtime.current_route with
-                | Some (Model.Block_zoom _) -> Js.Promise.resolve page
+                | Some (Model.Block_zoom uuid) ->
+                    fetch_zoom_parents repo uuid
+                    |> Js.Promise.then_ (fun page_parents ->
+                           Js.Promise.resolve
+                             { page with Model.page_parents })
                 | _ -> resolve_page_tags repo page)
                |> Js.Promise.then_ (fun page ->
                       (* the worker's tree is authoritative

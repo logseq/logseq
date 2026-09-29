@@ -219,18 +219,16 @@ let title_content (page : Model.page) : t =
         ( [ "click" ]
         , Some
             (fun _name payload ->
-              let shift =
+              let shift, interactive =
                 match payload with
-                | Some p ->
-                    Js.Json.decodeBoolean
-                      (Platform.json_prop (Platform.json_parse p) "shiftKey")
-                    = Some true
-                | None -> false
+                | Some p -> (Platform.payload_bool p "shiftKey",
+                             Platform.payload_bool p "interactive")
+                | None -> (false, false)
               in
               (* shift+click opens the page in the right sidebar (handled by
                  the document-level listener); starting title edit would
                  replace the clicked node mid-dispatch *)
-              if page.page_uuid <> None && not shift then (
+              if page.page_uuid <> None && not shift && not interactive then (
                 Runtime.send Action.Title_edit_start;
                 Runtime.flush ();
                 (* autofocus doesn't re-fire on remount — focus explicitly
@@ -473,15 +471,17 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
       | "click" ->
           (* icon buttons live inside #page-title; skip title-edit when
              they (or their children) are the click target *)
-          let target =
+          let target, interactive =
             match payload with
-            | Some p -> Platform.payload_str p "targetId"
-            | None -> ""
+            | Some p -> (Platform.payload_str p "targetId",
+                         Platform.payload_bool p "interactive")
+            | None -> ("", false)
           in
           if
             page.page_uuid <> None
             && (target = "" || target = "page-title"
                 || target = "page-title-text")
+            && not interactive
           then (
             Runtime.send Action.Title_edit_start;
             Runtime.flush ();
@@ -701,7 +701,10 @@ let ref_group ?(extra_attrs = []) (name, blocks) : t =
   let key = "rg-" ^ name in
   dom ~key ~attrs:extra_attrs
     [ dom ~key:"gi" ~style_class:"flex flex-col"
-        [ foldable_title (key ^ "-t")
+        (* ref-group titles carry no fold arrow: e2e resolves
+           ".unlinked-references .ls-foldable-title-control" strictly
+           (one control per section) *)
+        [ foldable_title ~control:false (key ^ "-t")
             (dom ~key:"grp" ~style_class:""
                [ dom ~key:"grl" ~tag:"a" ~style_class:"page-ref relative"
                    ~attrs:

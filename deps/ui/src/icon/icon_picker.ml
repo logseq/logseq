@@ -652,7 +652,7 @@ let open_picker_with_opts ~(anchor : E.el) ~(del : bool)
   ignore
     (open_popup
        ~cls:
-         "ui__popover-content rounded-md border bg-popover \
+         "ui__popover-content ls-icon-picker rounded-md border bg-popover \
           text-popover-foreground shadow-md outline-none outline-none \
           animate-in fade-in-0 zoom-in-95 \
           data-[side=bottom]:slide-in-from-top-2 \
