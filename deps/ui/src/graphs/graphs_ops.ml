@@ -178,7 +178,7 @@ let remember_open repo =
    has no thread-api delete endpoint. *)
 let delete_remote_http uuid =
   match Platform.local_storage_get "id-token" with
-  | None -> Js.Promise.resolve ()
+  | None -> Js.Promise.resolve false
   | Some token ->
       let init =
         Fetch.RequestInit.make ~method_:Delete
@@ -188,8 +188,10 @@ let delete_remote_http uuid =
           ()
       in
       Fetch.fetchWithInit ("https://api.logseq.io/graphs/" ^ uuid) init
-      |> Js.Promise.then_ (fun _ -> Js.Promise.resolve ())
-      |> Js.Promise.catch (fun _ -> Js.Promise.resolve ())
+      |> Js.Promise.then_ (fun _ -> Js.Promise.resolve true)
+      |> Js.Promise.catch (fun e ->
+             Platform.console_error ("remote graph delete failed", e);
+             Js.Promise.resolve false)
 
 let delete_graph repo ~remote =
   let drop_from_repos () =
@@ -238,7 +240,12 @@ let delete_graph repo ~remote =
     with
     | Some (_, uuid, _) ->
         delete_remote_http uuid
-        |> Js.Promise.then_ (fun () -> finish ())
+        |> Js.Promise.then_ (fun remote_ok ->
+             if remote_ok then finish ()
+             else (
+               Toast.error
+                 "Couldn't reach the server — remote graph not deleted.";
+               Js.Promise.resolve ()))
     | None -> finish ()
   else finish ()
 

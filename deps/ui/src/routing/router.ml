@@ -126,6 +126,9 @@ let fetch_refs ~stale:(is_stale : unit -> bool) (p : Model.page) =
          Js.Promise.resolve
            (if not (is_stale ()) then
               Runtime.send (Action.Refs_loaded blocks)))
+  |> Js.Promise.catch (fun e ->
+         Platform.console_error ("get-block-refs failed", e);
+         Js.Promise.resolve ())
   |> ignore
 
 (* unlinked references for the page's collapsed "Unlinked references"
@@ -140,7 +143,11 @@ let fetch_unlinked ~stale:(is_stale : unit -> bool) (p : Model.page) =
                 Js.Promise.resolve
                   (if not (is_stale ()) then
                      Runtime.send
-                       (Action.Unlinked_loaded (Decode.blocks_of_wire w)))))
+                       (Action.Unlinked_loaded (Decode.blocks_of_wire w))))
+         |> Js.Promise.catch (fun e ->
+                Platform.console_error
+                  ("get-unlinked-references failed", e);
+                Js.Promise.resolve ()))
   | None -> ()
 
 let load_journals () =
@@ -171,6 +178,13 @@ let load_journals () =
                    | Some (Model.Journals | Model.Home) ->
                        Runtime.send (Action.Journals_loaded js)
                    | _ -> ())))
+  |> Js.Promise.catch (fun e ->
+         Platform.console_error ("load_journals failed", e);
+         (match !Runtime.current_route with
+          | Some (Model.Journals | Model.Home) ->
+              Runtime.send Action.Page_load_failed
+          | _ -> ());
+         Js.Promise.resolve ())
 
 (* a fetch started for route R can resolve after navigation moved on —
    sending its Page_loaded would clobber the current page with stale data *)
@@ -266,6 +280,12 @@ let load_home () =
          | None ->
              Runtime.reload_current_view := load_journals;
              load_journals ())
+  |> Js.Promise.catch (fun e ->
+         Platform.console_error ("load_home failed", e);
+         (match !Runtime.current_route with
+          | Some Model.Home -> Runtime.send Action.Page_load_failed
+          | _ -> ());
+         Js.Promise.resolve ())
 
 let load_block_zoom uuid =
   incr Runtime.load_gen;
@@ -355,28 +375,58 @@ let load_block_zoom uuid =
                                           Editor_actions.enter_edit u
                                             (String.length b.Model.block_title)
                                       | _ -> ());
-                                     Js.Promise.resolve ())))))
+                                     Js.Promise.resolve ())))
+                             |> Js.Promise.catch (fun e ->
+                                    Platform.console_error
+                                      ("load_block_zoom parents failed", e);
+                                    if
+                                      gen = !Runtime.load_gen
+                                      && !Runtime.current_route
+                                         = Some (Model.Block_zoom uuid)
+                                    then
+                                      Runtime.send Action.Page_load_failed;
+                                    Js.Promise.resolve ())))
                 | _ ->
                     if not (stale (Model.Block_zoom uuid)) then
                       Runtime.send Action.Page_load_failed)
             | _ ->
                 if not (stale (Model.Block_zoom uuid)) then
                   Runtime.send Action.Page_load_failed))
+  |> Js.Promise.catch (fun e ->
+         Platform.console_error ("load_block_zoom failed", e);
+         if not (stale (Model.Block_zoom uuid)) then
+           Runtime.send Action.Page_load_failed;
+         Js.Promise.resolve ())
 
 let load_route (route : Model.route) =
+  (* the non-page refresh hook belongs to the route that assigned it —
+     re-arm it per route so callers (page-icon writes, the refresh
+     fallback) reload *this* view instead of whatever route last set it *)
+  (match route with
+   | Model.Journals | Model.Home ->
+       Runtime.reload_current_view := load_journals
+   | Model.Page s ->
+       Runtime.reload_current_view :=
+         (fun () -> load_page_ref route (page_ref s))
+   | Model.Block_zoom uuid ->
+       Runtime.reload_current_view := (fun () -> load_block_zoom uuid)
+   | Model.Library ->
+       Runtime.reload_current_view :=
+         (fun () -> load_page_ref route (Wire.String "Library"))
+   | Model.All_pages | Model.All_graphs | Model.Import | Model.Not_found _
+   | Model.Settings ->
+       Runtime.reload_current_view := (fun () -> Js.Promise.resolve ()));
   match route with
   | Model.Home -> ignore (load_home ())
   | Model.Page s ->
       ignore (load_page_ref route (page_ref s))
   | Model.Block_zoom uuid -> ignore (load_block_zoom uuid)
-  | Model.Journals ->
-      Runtime.reload_current_view := load_journals;
-      ignore (load_journals ())
+  | Model.Journals -> ignore (load_journals ())
   | Model.Library ->
       ignore (load_page_ref route (Wire.String "Library"))
-  | Model.All_pages | Model.All_graphs | Model.Import | Model.Not_found _ ->
+  | Model.All_pages | Model.All_graphs | Model.Import | Model.Not_found _
+  | Model.Settings ->
       ()
-  | Model.Settings -> ()
 
 let resolve () =
   let route = parse_hash () in

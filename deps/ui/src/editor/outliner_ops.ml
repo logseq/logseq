@@ -550,7 +550,10 @@ let fetch_unlinked_refs ~stale:(is_stale : unit -> bool) (p : Model.page) =
                 Js.Promise.resolve
                   (if not (is_stale ()) then
                      Runtime.send
-                       (Action.Unlinked_loaded (Decode.blocks_of_wire w)))))
+                       (Action.Unlinked_loaded (Decode.blocks_of_wire w))))
+         |> Js.Promise.catch (fun e ->
+                Platform.console_error ("get-unlinked-refs failed", e);
+                Js.Promise.resolve ()))
   | _ -> ()
 
 (* Refresh calls pile up during rapid editing (each op's
@@ -678,6 +681,7 @@ let rec apply ?(opts = Wire.Map []) ops : unit Js.Promise.t =
                             | _ -> "?")
                           ops)
                    , e );
+                 Toast.error "Failed to save changes";
                  Js.Promise.resolve ()))
 
 let apply_and_refresh ?opts ops =
@@ -895,6 +899,10 @@ let undo () =
       Runtime.invoke1 "thread-api/undo-redo-undo" (Wire.String repo)
       |> Js.Promise.then_ (fun _ -> refresh_page ())
       |> Js.Promise.then_ (fun () -> resync_open_editor ())
+      |> Js.Promise.catch (fun e ->
+             Platform.console_error ("undo failed", e);
+             Toast.error "Undo failed";
+             Js.Promise.resolve ())
   | None -> Js.Promise.resolve ()
 
 let redo () =
@@ -904,6 +912,10 @@ let redo () =
       Runtime.invoke1 "thread-api/undo-redo-redo" (Wire.String repo)
       |> Js.Promise.then_ (fun _ -> refresh_page ())
       |> Js.Promise.then_ (fun () -> resync_open_editor ())
+      |> Js.Promise.catch (fun e ->
+             Platform.console_error ("redo failed", e);
+             Toast.error "Redo failed";
+             Js.Promise.resolve ())
   | None -> Js.Promise.resolve ()
 
 (* sdk bridge (and other non-editor mutation paths) refresh the view
