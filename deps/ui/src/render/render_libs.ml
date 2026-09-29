@@ -9,6 +9,8 @@ module D = Editor_dom
 
 external el_text_content : D.el -> string = "textContent" [@@mel.get]
 
+let ( let* ) p f = Js.Promise.then_ f p
+
 (* ---------- katex ---------- *)
 
 type lib_state =
@@ -38,12 +40,14 @@ let katex_render : D.el -> string -> bool -> unit =
     \  } catch (e) { console.error(e) }\n\
     \  }"]
 
-let inject_script : string -> (unit -> unit) -> (unit -> unit) -> unit =
+let inject_script : string -> unit Js.Promise.t =
   [%mel.raw
-    "function (src, ok, bad) {\n\
-    \  var s = document.createElement('script');\n\
-    \  s.src = src; s.onload = ok; s.onerror = bad;\n\
-    \  (document.head || document.documentElement).appendChild(s);\n\
+    "function (src) {\n\
+    \  return new Promise(function (ok, bad) {\n\
+    \    var s = document.createElement('script');\n\
+    \    s.src = src; s.onload = function () { ok() }; s.onerror = bad;\n\
+    \    (document.head || document.documentElement).appendChild(s);\n\
+    \  })\n\
     \  }"]
 
 let hljs_ready () : bool = [%mel.raw "!!window.hljs"]
@@ -124,16 +128,27 @@ and highlight_one el =
 and load_katex () =
   match !katex_state with
   | Idle ->
-      let finish () =
-        katex_state := Ready;
-        render_scan [ D.document_element ]
-      in
       katex_state := Loading;
-      inject_script "./js/katex.min.js"
-        (fun () -> inject_script "./js/mhchem.min.js" finish finish)
-        (fun () ->
-          katex_state := Failed;
-          render_scan [ D.document_element ])
+      let load =
+        let* () = inject_script "./js/katex.min.js" in
+        let* () =
+          Js.Promise.catch
+            (fun _ -> Js.Promise.resolve ())
+            (inject_script "./js/mhchem.min.js")
+        in
+        katex_state := Ready;
+        render_scan [ D.document_element ];
+        Js.Promise.resolve ()
+      in
+      let (_ : unit Js.Promise.t) =
+        Js.Promise.catch
+          (fun _ ->
+            katex_state := Failed;
+            render_scan [ D.document_element ];
+            Js.Promise.resolve ())
+          load
+      in
+      ()
   | _ -> ()
 
 (* ---------- youtube-timestamp seek ----------
