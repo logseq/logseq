@@ -20,7 +20,35 @@ let overlays : overlay list ref = ref []
    safe; e2e locators are class-scoped. *)
 let overlays_root () = doc_query "body"
 
+(* cljs shui popups dismiss on window mousedown outside their root: a
+   click drops every overlay stacked above the innermost overlay that
+   contains the click target (all when outside any). *)
+let install_outside_close =
+  let installed = ref false in
+  fun () ->
+    if not !installed then (
+      installed := true;
+      Editor_dom.document_add_listener "mousedown" (fun ev ->
+          match Editor_dom.ev_target ev with
+          | None -> ()
+          | Some target -> (
+              match
+                List.find_index
+                  (fun o -> Editor_dom.el_contains o.el target)
+                  !overlays
+              with
+              | None ->
+                  List.iter (fun o -> el_remove o.el) !overlays;
+                  overlays := []
+              | Some i ->
+                  List.iteri
+                    (fun n o -> if n < i then el_remove o.el)
+                    !overlays;
+                  overlays := List.filteri (fun n _ -> n >= i) !overlays))
+          true)
+
 let push_overlay el ~on_escape =
+  install_outside_close ();
   (match overlays_root () with
    | Some root -> Editor_dom.el_append_child root el
    | None -> ());
