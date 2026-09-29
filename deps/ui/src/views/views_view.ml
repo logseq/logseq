@@ -43,7 +43,6 @@ let rec render inst =
       (* cljs views.cljs view: .flex.flex-col.gap-2.grid with filters-row
          as first child of .ls-view-body *)
       let grid = D.h ~cls:"flex flex-col gap-2 grid" () in
-      D.el_append_child grid (Views_head.render_head inst ~refresh);
       let body =
         Views_table.render_body inst ~refresh
           ~filters:(Views_head.filters_row inst ~refresh)

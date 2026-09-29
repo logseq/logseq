@@ -220,10 +220,13 @@ let main_content (ms : Model.t Signal.signal) =
     ]
 
 (* Overlay layer — cmdk palette, popups (autocomplete/slash/context
-   menus), dialogs and toasts mount here. cljs's installers emit no
-   wrapper element, so these mount directly under #app-container. *)
+   menus), dialogs and toasts mount here (single shared container;
+   the keyed wrapper keeps these dynamic segments off #app-container's
+   child list so nav-time reconciles can't tear down a freshly
+   mounted overlay mid-batch). cljs mounts them via portals, which
+   are their own container nodes anyway. *)
 let overlays (ms : Model.t Signal.signal) =
-  Logseq_dom.fragment
+  Logseq_dom.dom ~key:"overlays" ~style_class:"cp__overlays"
     [ Cmdk_view.render ms
     ; Popups_view.render ms
     ; Left_sidebar_view.menus ms
