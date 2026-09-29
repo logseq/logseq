@@ -2,7 +2,44 @@
 
 module W = Webapi.Dom
 
+(* forward uncaught errors/rejections to console.error so the e2e console
+   dumps see them (Playwright's console event misses pageerror) *)
+external add_window_listener : string -> (Js.Json.t -> unit) -> unit =
+  "addEventListener"
+  [@@mel.scope "window"]
+
+external rejection_reason : Js.Json.t -> Js.Json.t = "reason" [@@mel.get]
+
+external error_error : Js.Json.t -> Js.Json.t = "error" [@@mel.get]
+
+external set_interval : (unit -> unit) -> int -> unit = "setInterval"
+  [@@mel.scope "window"]
+
+let describe_json (v : Js.Json.t) =
+  match Js.Json.decodeString v with
+  | Some s -> s
+  | None -> (
+      match Js.Json.decodeObject v with
+      | Some o -> (
+          match Js.Dict.get o "stack", Js.Dict.get o "message" with
+          | Some m, _ | None, Some m -> (
+              match Js.Json.decodeString m with
+              | Some s -> s
+              | None -> Js.Json.stringify v)
+          | None, None -> Js.Json.stringify v)
+      | None -> Js.Json.stringify v)
+;;
+
+let install_error_reporting () =
+  add_window_listener "error" (fun ev ->
+      Platform.console_error ("UNCAUGHT " ^ describe_json (error_error ev)));
+  add_window_listener "unhandledrejection" (fun ev ->
+      Platform.console_error
+        ("UNHANDLED-REJECTION " ^ describe_json (rejection_reason ev)))
+;;
+
 let main root =
+  install_error_reporting ();
   let registry = Lui_extension.registry () in
   Logseq_dom.register registry;
   let renderer =
@@ -37,7 +74,6 @@ let main root =
   Properties_view.install ();
   Editor_commands.install ();
   Views_mount.install ();
-  Icon_picker.init_emoji ();
   Router.init ();
   ignore (Boot.run ())
 

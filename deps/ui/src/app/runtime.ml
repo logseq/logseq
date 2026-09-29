@@ -9,6 +9,8 @@ let app_flush : (unit -> unit) ref = ref (fun () -> ())
 let current_repo : string option ref = ref None
 let current_page : Model.page option ref = ref None
 let current_route : Model.route option ref = ref None
+
+let repo () = Option.value !current_repo ~default:""
 (* journals view renders several pages at once — editor actions like
    append/find need access to every journal item's blocks *)
 let current_journals : Model.page list ref = ref []
@@ -27,6 +29,21 @@ let refresh_after_ops : (unit -> unit Js.Promise.t) ref =
    this so sdk mutations can rebuild them without the 150ms debounce *)
 let refresh_property_areas : (unit -> unit Js.Promise.t) ref =
   ref (fun () -> Js.Promise.resolve ())
+
+(* "sync-db-changes" subscribers — one ordered list (drained by
+   Worker_events.dispatch) instead of each area monkey-patching
+   Worker_client.on_message. A failing handler is logged and the rest
+   still run. *)
+let sync_subs : (unit -> unit) list ref = ref []
+
+let on_sync f = sync_subs := !sync_subs @ [ f ]
+
+let run_sync_subs () =
+  List.iter
+    (fun f ->
+      try f ()
+      with e -> Platform.console_error ("sync-db-changes handler failed", e))
+    !sync_subs
 
 (* the open graph's worker uuid — carried as ?graph-id=<uuid> inside the
    location hash (e.g. "#/page/u?graph-id=u") like cljs
@@ -75,6 +92,26 @@ let take_nav_mark () =
    latest-initiated load always wins *)
 let load_gen : int ref = ref 0
 
+(* set by graphs_ops (avoids a Worker_events -> Graphs_ops -> Boot
+   module cycle): remote-graph-gone broadcast refreshes the remote
+   list and the all-graphs view *)
+let remote_graph_gone : (unit -> unit) ref = ref (fun () -> ())
+
+(* set by graphs_ops (same cycle-avoidance): worker add-repo broadcast
+   appends a downloaded graph to the local list *)
+let add_repo : (string -> unit) ref = ref (fun _ -> ())
+
+(* one-shot (page_uuid, callback) armed before a hash navigation — runs
+   when that page's Page_loaded lands; consumed by fire or load failure *)
+let after_page_load : (string * (unit -> unit)) option ref = ref None
+
+let on_page_loaded uuid f = after_page_load := Some (uuid, f)
+
+(* mirrors Model.unlinked_open so fetch paths outside the model (router,
+   outliner refresh) can gate the full-title unlinked scan on the
+   section being open *)
+let unlinked_open = ref true
+
 let track action =
   match action with
   | Action.Boot_graph_ready repo ->
@@ -83,17 +120,25 @@ let track action =
       !on_graph_opened repo
   | Action.Page_loaded page ->
       current_page := Some page;
-      sync_hash_graph_id ()
+      sync_hash_graph_id ();
+      (match !after_page_load, page.Model.page_uuid with
+       | Some (want, f), Some u when u = want ->
+           after_page_load := None;
+           f ()
+       | _ -> ())
+  | Action.Page_load_failed -> after_page_load := None
   | Action.Journals_loaded js -> current_journals := js
   | Action.Navigate_to r ->
       current_page := None;
       current_journals := [];
       current_route := Some r;
+      unlinked_open := false;
       (* in-graph routes always carry ?graph-id — navigation call sites
          write raw hashes, so re-append it here after the hash settles *)
       (match r with
        | Model.All_graphs | Model.Import | Model.Not_found _ -> ()
        | _ -> sync_hash_graph_id ())
+  | Action.Unlinked_toggle_open -> unlinked_open := not !unlinked_open
   | _ -> ()
 
 let flush () = !app_flush ()

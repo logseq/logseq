@@ -9,19 +9,17 @@ module S = String
 external clipboard_write : string -> unit Js.Promise.t = "writeText"
   [@@mel.scope ("navigator", "clipboard")]
 
-let jfield = Worker_client.json_field
-let jstring = Worker_client.json_string
 
 let detail_str name ev =
-  match jfield "detail" ev with
+  match Worker_client.json_field "detail" ev with
   | Some d -> (
-      match jfield name d with
-      | Some v -> jstring v
+      match Worker_client.json_field name d with
+      | Some v -> Worker_client.json_string v
       | None -> None)
   | None -> None
 ;;
 
-let repo () = Option.value !(Runtime.current_repo) ~default:""
+let repo = Runtime.repo
 
 let batch_set uuids prop v =
   Outliner_ops.op "batch-set-property"
@@ -136,14 +134,9 @@ let run ~command ~block ~value =
             (Sdk_util.get_by_id (W.String uuid)
              |> Js.Promise.then_ (fun w ->
                     let cur =
-                      match W.get w "logseq.property/order-list-type" with
-                      | Some (W.String s) -> s
-                      | Some (W.Map _) -> (
-                          match W.map_get_string w
-                                  "logseq.property/order-list-type" with
-                          | Some s -> s
-                          | None -> "")
-                      | _ -> ""
+                      match Decode.order_list_type_of_wire w with
+                      | Some s -> s
+                      | None -> ""
                     in
                     (if cur = "number" then
                        apply

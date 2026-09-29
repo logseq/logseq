@@ -19,6 +19,9 @@ external prop_undef : Js.Json.t -> string -> 'a Js.Undefined.t = ""
 
 external prop_get : Js.Json.t -> string -> Js.Json.t = "" [@@mel.get_index]
 
+external closest_json : Js.Json.t -> string -> Js.Json.t = "closest"
+  [@@mel.send]
+
 external managed_get : W.Element.t -> string Js.Undefined.t = "__lsAttrs"
   [@@mel.get]
 
@@ -183,9 +186,24 @@ let json_of_event name (ev : Js.Json.t) : string =
        (match Js.Undefined.toOption (prop_undef t "id") with
         | Some v -> put "targetId" (Js.Json.string v)
         | None -> ());
-       match Js.Undefined.toOption (prop_undef t "className") with
-       | Some v -> put "targetClass" (Js.Json.string v)
-       | None -> ())
+       (match Js.Undefined.toOption (prop_undef t "className") with
+        | Some v -> put "targetClass" (Js.Json.string v)
+        | None -> ());
+       (* true when the click target sits inside a control/interactive
+          region — lets container-level click handlers (e.g. page-title
+          starting title edit) skip clicks aimed at buttons, fold controls,
+          or mounted property areas *)
+       if
+         Js.Undefined.toOption (prop_undef t "closest") <> None
+         && not
+              (Js.Json.test
+                 (closest_json t
+                    "a, button, input, textarea, select, summary, \
+                     .block-control-wrap, .bullet-container, \
+                     .ls-properties-area, .ls-page-title-actions, \
+                     .lsp-hook-ui-slot")
+                 Js.Json.Null)
+       then put "interactive" (Js.Json.boolean true))
    | None -> ());
   Js.Json.stringify (Js.Json.object_ d)
 

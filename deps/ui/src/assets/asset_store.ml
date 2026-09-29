@@ -81,12 +81,33 @@ let read_asset ~repo ~name =
   | None -> Js.Promise.reject (Failure "window.pfs is not available")
   | Some p -> pfs_read p (asset_path repo name)
 
+(* (repo,name) -> object URL, cached so re-renders reuse it; revoked in
+   delete_asset *)
+let url_cache : (string, string) Hashtbl.t = Hashtbl.create 17
+
+external make_url : Webapi.Blob.t -> string = "createObjectURL"
+  [@@mel.scope "URL"]
+
+let cache_key repo name = repo ^ "|" ^ name
+
+let clear_url ~repo ~name =
+  let k = cache_key repo name in
+  match Hashtbl.find_opt url_cache k with
+  | Some url ->
+      Hashtbl.remove url_cache k;
+      Webapi.Url.revokeObjectURL url
+  | None -> ()
+
 let delete_asset ~repo ~name =
   match Js.Undefined.toOption window_pfs with
   | None -> Js.Promise.resolve ()
   | Some p ->
+      clear_url ~repo ~name;
       pfs_unlink p (asset_path repo name)
-      |> Js.Promise.catch (fun _ -> Js.Promise.resolve ())
+      |> Js.Promise.catch (fun e ->
+             Platform.console_error
+               ("asset delete failed", asset_path repo name, e);
+             Js.Promise.resolve ())
 
 let sha256_hex (u8 : Js.Typed_array.Uint8Array.t) : string Js.Promise.t =
   subtle_digest crypto_subtle "SHA-256" (u8_buffer u8)
@@ -100,23 +121,11 @@ let sha256_hex (u8 : Js.Typed_array.Uint8Array.t) : string Js.Promise.t =
          done;
          Js.Promise.resolve (Buffer.contents b))
 
-(* uuid.ext -> object URL, cached per file name so re-renders reuse it *)
-let url_cache : (string, string) Hashtbl.t = Hashtbl.create 17
-
-external make_url : Webapi.Blob.t -> string = "createObjectURL"
-  [@@mel.scope "URL"]
-
-let clear_url name =
-  match Hashtbl.find_opt url_cache name with
-  | Some url ->
-      Hashtbl.remove url_cache name;
-      Webapi.Url.revokeObjectURL url
-  | None -> ()
-
 (* resolved object URL for assets/<uuid>.<ext>; extension drives the Blob
    MIME so <img> can decode it *)
 let object_url ~repo ~name ~mime : string Js.Promise.t =
-  match Hashtbl.find_opt url_cache name with
+  let k = cache_key repo name in
+  match Hashtbl.find_opt url_cache k with
   | Some url -> Js.Promise.resolve url
   | None ->
       read_asset ~repo ~name
@@ -128,5 +137,5 @@ let object_url ~repo ~name ~mime : string Js.Promise.t =
                     [ ("type", Browser_ui.str_to_json mime) ])
              in
              let url = make_url blob in
-             Hashtbl.replace url_cache name url;
+             Hashtbl.replace url_cache k url;
              Js.Promise.resolve url)

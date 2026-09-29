@@ -12,7 +12,6 @@
 
 open Editor_dom
 open Properties_dom
-module I18n = Properties_i18n
 module D = Properties_data
 module S = Properties_state
 module V = Properties_value
@@ -308,7 +307,7 @@ let positioned_rows block_w position =
                              (W.get block_w ident) )
                        ])
               | _ -> None)
-            (D.elems props)
+            (W.elems props)
       | None -> [])
   | None -> []
 
@@ -527,12 +526,12 @@ let render_bidi_groups wrap w =
              (fun e ->
                ignore
                  (child_text "span" "block-title-wrap" (D.ref_title e) pv))
-             (D.elems ents)
+             (W.elems ents)
        | None -> ());
       el_append_child vc pv;
       el_append_child g vc;
       el_append_child wrap g)
-    (D.elems w)
+    (W.elems w)
 
 (* shui button ghost sm — cljs components.cljs with-button-classes *)
 let ghost_btn_cls =
@@ -661,7 +660,7 @@ let render_class_section (ctx : V.ctx) ~owner_title host =
   el_append_child host section;
   D.class_properties (D.uuid_ref ctx.block_uuid)
   |> Js.Promise.then_ (fun w ->
-         let props = D.elems w in
+         let props = W.elems w in
          List.iter
            (fun p ->
              match class_schema_row p with
@@ -675,7 +674,23 @@ let render_class_section (ctx : V.ctx) ~owner_title host =
            (new_property_btn ctx ~for_class:true ~owner_title);
          el_append_child col add_wrap;
          Js.Promise.resolve ())
-  |> ignore
+
+(* a clear+rebuild detaches every node it replaces; a click that
+   resolved .property-k just before the swap lands on whatever sits at
+   its old coordinates now (cljs/React reconciliation preserves nodes
+   on unrelated txs). Render into a detached candidate and swap only
+   when the markup actually changed. *)
+let rec move_children src dst =
+  match el_first_child src with
+  | Some c ->
+      el_append_child dst c;
+      move_children src dst
+  | None -> ()
+
+let replace_if_changed host cand =
+  if el_inner_html cand <> el_inner_html host then (
+    el_clear host;
+    move_children cand host)
 
 (* Page surface: attach .ls-properties-area only when there are rows to
    show (cljs show-properties-area?); attach .ls-bidirectional-properties
@@ -698,9 +713,9 @@ let rec render_page_area ctx (p : Model.page) ~attach_area ~attach_bidi
            detach ()
          else (
            attach_area ();
-           el_clear area;
+           let cand = mk "div" in
            let panel = mk ~cls:"properties-panel" "div" in
-           el_append_child area panel;
+           el_append_child cand panel;
            render_panel ctx ~owner_is_tag:p.Model.page_is_tag
              ~owner_title:p.Model.page_title ~page_area:true
              ~show_hidden:!S.show_hidden
@@ -708,13 +723,18 @@ let rec render_page_area ctx (p : Model.page) ~attach_area ~attach_bidi
              panel panel_rows hidden;
            (* cljs renders new-property at page level only for non-class
               pages — the class section hosts its own *)
-           if p.Model.page_is_tag then
-             render_class_section ctx ~owner_title:p.Model.page_title
-               area
-           else
-             el_append_child area
-               (new_property_btn ctx ~for_class:false
-                  ~owner_title:p.Model.page_title));
+           (if p.Model.page_is_tag then
+              render_class_section ctx ~owner_title:p.Model.page_title
+                cand
+            else (
+              el_append_child cand
+                (new_property_btn ctx ~for_class:false
+                   ~owner_title:p.Model.page_title);
+              Js.Promise.resolve ()))
+           |> Js.Promise.then_ (fun () ->
+                  replace_if_changed area cand;
+                  Js.Promise.resolve ())
+           |> ignore);
          fill_bidirectional_page p ~attach_bidi bidi;
          Js.Promise.resolve ())
 
@@ -798,7 +818,14 @@ let mount_page_props page_inner (p : Model.page) uuid =
     let attach_bidi () =
       if not (el_is_connected bidi) then (
         attach_area ();
-        el_append_child (holder ()) bidi)
+        (* cljs bidirectional-properties-area is a sibling of the title
+           row inside .page-inner, not a descendant of .ls-page-title —
+           keeping it out of the title also keeps its .block-title-wrap
+           refs out of the [data-testid='page title'] locator *)
+        match el_query page_inner ".ls-page-blocks" with
+        | Some blocks_el ->
+            el_insert_before page_inner bidi blocks_el
+        | None -> el_append_child page_inner bidi)
     in
     let detach () =
       if el_is_connected bidi then el_remove bidi;
@@ -967,7 +994,9 @@ let mount_sidebar_area (area : el) =
                      ~can_toggle:(can_toggle_hidden ctx ~below_rows)
                      panel panel_rows hidden;
                    if is_tag then
-                     render_class_section ctx ~owner_title:title area
+                     ignore
+                       (render_class_section ctx ~owner_title:title
+                          area)
                    else
                      el_append_child area
                        (new_property_btn ctx ~for_class:false
@@ -1001,15 +1030,9 @@ let mount_sidebar_area (area : el) =
               S.unregister_area area;
               Js.Promise.resolve ())))
 
-let ensure_sidebar_areas () =
-  let els =
-    query_selector_all ".ls-sidebar-page-properties [data-sb-uuid]"
-  in
-  for i = 0 to node_list_length els - 1 do
-    match node_list_item els i with
-    | Some el -> mount_sidebar_area el
-    | None -> ()
-  done
+let ensure_sidebar_areas roots =
+  for_each_touched roots ".ls-sidebar-page-properties [data-sb-uuid]"
+    mount_sidebar_area
 
 (* A remove-block-property op commits in the worker before the debounced
    sync-db-changes refresh (~80ms) reaches the DOM, so an sdk caller
@@ -1042,25 +1065,19 @@ let drop_row ~owner_uuid ~title =
 
 (* ---------- observer entry ---------- *)
 
-let ensure_all () =
+(* scoped to the shared document observer's added roots *)
+let ensure_all roots =
   S.chain_worker ();
   (* page-level *)
-  (match doc_query ".page-inner" with
-   | Some inner -> mount_page_area inner
-   | None -> ());
-  ensure_sidebar_areas ();
+  for_each_touched roots ".page-inner" mount_page_area;
+  ensure_sidebar_areas roots;
   (* block-level *)
-  let blocks = query_selector_all ".ls-block" in
-  for i = 0 to node_list_length blocks - 1 do
-    match node_list_item blocks i with
-    | Some el ->
-        if
-          not
-            (el_matches el ".block-add-button"
-             || el_closest el ".ls-page-title" <> None)
-        then (
-          match block_uuid_of_ls_block el with
-          | Some uuid -> mount_block_area el uuid
-          | None -> ())
-    | None -> ()
-  done
+  for_each_touched roots ".ls-block" (fun el ->
+      if
+        not
+          (el_matches el ".block-add-button"
+           || el_closest el ".ls-page-title" <> None)
+      then (
+        match block_uuid_of_ls_block el with
+        | Some uuid -> mount_block_area el uuid
+        | None -> ()))

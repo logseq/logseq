@@ -69,7 +69,7 @@ let prop_batch ~caret uuid ops =
    the textarea while the view re-renders the code surface) *)
 let exit_to_props uuid ops =
   let buf = A.live_buffer uuid in
-  S.set_silent (fun st -> { st with S.editing = None });
+  S.set (fun st -> { st with S.editing = None });
   ignore
     (Ops.apply_and_refresh (Ops.save_block uuid buf :: ops))
 
@@ -492,6 +492,90 @@ let set_closed_prop ~caret uuid ident title =
      |> Js.Promise.catch (fun e ->
             Platform.console_error ("closed-prop failed", e);
             Js.Promise.resolve ()))
+
+(* cljs editor/cycle-todo!: the status closed value cycles by db/ident
+   todo -> doing -> done -> cleared -> todo. Editing buffer is
+   untouched — the property write goes through apply_and_refresh and the
+   open editor resync keeps typed-but-unsaved text. *)
+let cycle_todo uuid =
+  let next_ident = function
+    | "logseq.property/status.todo" -> Some "logseq.property/status.doing"
+    | "logseq.property/status.doing" -> Some "logseq.property/status.done"
+    | "logseq.property/status.done" -> None
+    | _ -> Some "logseq.property/status.todo"
+  in
+  let row_ident e =
+    Properties_data.getk (Properties_data.untag e) "db/ident"
+  in
+  let row_id e =
+    Properties_data.geti (Properties_data.untag e) "db/id"
+  in
+  match !Runtime.current_repo with
+  | None -> ()
+  | Some repo ->
+      ignore
+        (Runtime.invoke2 "thread-api/get-blocks" (W.String repo)
+           (W.Array
+              [ W.Map
+                  [ (W.String "id", W.Uuid uuid)
+                  ; ( W.String "opts"
+                    , W.Map [ (W.Keyword "children?", W.Bool false) ] )
+                  ]
+              ])
+         |> Js.Promise.then_ (fun w ->
+                let blk =
+                  match Wire.elems w with
+                  | [ pair ] -> (
+                      match W.get pair "block" with
+                      | Some b -> b
+                      | None -> (
+                          match Wire.elems pair with
+                          | [ _; b ] -> b
+                          | _ -> W.Nil))
+                  | _ -> W.Nil
+                in
+                let cur_id =
+                  match W.get blk "logseq.property/status" with
+                  | Some v -> Properties_data.entity_id_of v
+                  | None -> None
+                in
+                Properties_data.closed_values
+                  (W.Keyword "logseq.property/status")
+                |> Js.Promise.then_ (fun rows_w ->
+                       let rows = Wire.elems rows_w in
+                       let ident_of id =
+                         List.find_map
+                           (fun e ->
+                             if row_id e = Some id then row_ident e
+                             else None)
+                           rows
+                       and id_of ident =
+                         List.find_map
+                           (fun e ->
+                             if row_ident e = Some ident then row_id e
+                             else None)
+                           rows
+                       in
+                       (match next_ident
+                                (Option.value
+                                   (Option.bind cur_id ident_of)
+                                   ~default:"")
+                        with
+                        | Some ni -> (
+                            match id_of ni with
+                            | Some id ->
+                                ignore
+                                  (Ops.apply_and_refresh
+                                     [ Ops.batch_set_property [ uuid ]
+                                         "logseq.property/status"
+                                         (W.Int id) ~entity_id:true ])
+                            | None -> ())
+                        | None ->
+                            ignore
+                              (Ops.apply_and_refresh
+                                 [ Ops.remove_block_property uuid
+                                     "logseq.property/status" ]));
+                       Js.Promise.resolve ())))
 
 (* toggle this block's own logseq.property/order-list-type *)
 let toggle_own_list uuid caret =

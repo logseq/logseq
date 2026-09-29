@@ -4,7 +4,7 @@
    components/repo.cljs repos-inner: div#graphs > h1 "All graphs" +
    "Create a new graph" button + local rows + remote section. *)
 
-module T = Graphs_text
+module T = I18n
 module B = Browser_ui
 
 let short_name repo =
@@ -51,10 +51,7 @@ let close_dropdown () =
 let menu_item ~cls label ~disabled on_click =
   let b = B.create "div" in
   B.set_attr b "role" "menuitem";
-  B.set_class b
-    ("ui__dropdown-menu-item relative flex select-none items-center \
-      rounded-sm px-2 py-1.5 text-sm outline-none cursor-pointer "
-    ^ cls);
+  B.set_class b (Menu_item.graphs_cls ^ cls);
   B.set_text b label;
   if disabled then (
     B.set_attr b "data-disabled" "";
@@ -162,6 +159,14 @@ let remote_menu name _uuid anchor =
   B.set_attr menu "style"
     (Printf.sprintf "position:fixed;left:%.0fpx;top:%.0fpx"
        (B.rect_right r) (B.rect_top r));
+  (* cljs shows the local-delete item on a remote row too when the graph
+     is also downloaded locally (repo.cljs: root is truthy) *)
+  let local_repo = Graph.full_graph_name name in
+  if List.mem local_repo !Graphs_ops.repos then
+    B.append menu
+      (menu_item ~cls:"delete-local-graph-menu-item" T.delete_local_graph
+         ~disabled:(not (Graphs_ops.removable local_repo))
+         (fun () -> Graphs_ops.ask_delete ~remote:false local_repo));
   B.append menu
     (menu_item ~cls:"delete-remote-graph-menu-item" T.delete_remote_graph
        ~disabled:false
@@ -171,14 +176,28 @@ let remote_menu name _uuid anchor =
   (match B.qs "body" with Some b -> B.append b menu | None -> ());
   dropdown_open := Some menu
 
-let remote_row (name, uuid) =
+(* e2e: (.last (w/-query "div[data-testid='logseq_db_<n>']
+   span:has-text('<n>')")) clicks the remote row to download+switch *)
+let remote_row (name, uuid, e2ee) =
   let row = B.create "div" in
-  B.set_attr row "data-testid" ("remote_" ^ name);
+  B.set_attr row "data-testid" ("logseq_db_" ^ name);
   B.set_class row "flex justify-between mb-2 items-center group";
   let left = B.create "div" in
-  let label = B.create "div" in
+  let name_span = B.create "div" in
+  B.set_class name_span "flex items-center gap-1";
+  let label = B.create "span" in
   B.set_text label name;
-  B.append left label;
+  B.set_attr label "style" "cursor:pointer";
+  B.add_listener label "click" (fun _ ->
+      (* cljs: clicking a merged remote row with a local root switches
+         instead of re-downloading *)
+      let repo = Graph.full_graph_name name in
+      let local = List.mem repo !Graphs_ops.repos in
+      if local then
+        ignore (Graphs_ops.navigate_journal repo)
+      else ignore (Graphs_ops.download_remote ~name ~uuid ~e2ee));
+  B.append name_span label;
+  B.append left name_span;
   let controls = B.create "div" in
   B.set_class controls "controls";
   let wrap = B.create "div" in
@@ -196,7 +215,9 @@ let remote_row (name, uuid) =
   row
 
 (* cljs repos-cp remote section: hr + h2 Remote graphs: + refresh button +
-   rows — only rendered for a logged-in user with remote graphs *)
+   rows — only rendered for a logged-in user with remote graphs.
+   The Refresh button is a ui/button with an inner span; disabled while
+   the remote list is loading (e2e asserts the [disabled] toggle) *)
 let remote_section rerender =
   let sec = B.create "div" in
   let hr = B.create "hr" in
@@ -210,13 +231,21 @@ let remote_section rerender =
   B.append head h;
   let refresh_btn = B.create "button" in
   B.set_attr refresh_btn "type" "button";
-  B.set_class refresh_btn ghost_btn_cls;
-  B.set_text refresh_btn T.refresh;
+  B.set_class refresh_btn "ui__button flex items-center gap-1";
+  let refresh_label = B.create "span" in
+  B.set_class refresh_label "flex items-center";
+  B.set_text refresh_label T.refresh;
+  B.append refresh_btn refresh_label;
   B.add_listener refresh_btn "click" (fun _ ->
+      B.set_attr refresh_btn "disabled" "true";
       Graphs_ops.refresh ()
       |> Js.Promise.then_ (fun _ -> Graphs_ops.list_remote_graphs ())
       |> Js.Promise.then_ (fun _ ->
+             B.remove_attr refresh_btn "disabled";
              rerender ();
+             Js.Promise.resolve ())
+      |> Js.Promise.catch (fun _ ->
+             B.remove_attr refresh_btn "disabled";
              Js.Promise.resolve ())
       |> ignore);
   B.append head refresh_btn;
@@ -226,8 +255,43 @@ let remote_section rerender =
     !Graphs_ops.remote_graphs;
   sec
 
+(* cljs React reconciles rows in place, so a Playwright locator keeps
+   pointing at the same DOM node while remote/local lists refetch. Our
+   render rebuilds #graphs wholesale; when the underlying data is
+   unchanged the rebuild only detaches nodes mid-interaction (e2e
+   switch-graph click retries on "element was detached from the DOM"),
+   so skip it. *)
+let last_sig = ref ""
+
+let view_sig () =
+  let local =
+    List.map
+      (fun r ->
+        r ^ ":"
+        ^
+        (match Graphs_ops.meta_last_seen r with
+         | Some ms -> Printf.sprintf "%.0f" ms
+         | None -> "-"))
+      !Graphs_ops.repos
+  in
+  let remote =
+    List.map
+      (fun (n, u, e) -> Printf.sprintf "%s:%s:%b" n u e)
+      !Graphs_ops.remote_graphs
+  in
+  String.concat "|" (local @ [ "##" ] @ remote)
+
 let rec render_into host =
-  (match B.qs_in host "#graphs" with Some g -> B.remove g | None -> ());
+  let existing = B.qs_in host "#graphs" in
+  let sig_ = view_sig () in
+  if existing <> None && sig_ = !last_sig then ()
+  else begin
+    last_sig := sig_;
+    (match existing with Some g -> B.remove g | None -> ());
+    render_fresh host
+  end
+
+and render_fresh host =
   let root = B.create "div" in
   B.set_attr root "id" "graphs";
   let h1 = B.create "h1" in
@@ -262,7 +326,16 @@ let rec render_into host =
   B.set_class h2 "text-lg font-medium mb-4";
   B.set_text h2 T.local_graphs;
   B.append local h2;
-  List.iter (fun r -> B.append local (graph_row r)) !Graphs_ops.repos;
+  (* cljs combine-local-&-remote-graphs merges by :url — a remote graph
+     that exists locally renders once, under Remote graphs *)
+  let remote_names =
+    List.map (fun (n, _, _) -> n) !Graphs_ops.remote_graphs
+  in
+  List.iter
+    (fun r ->
+      if not (List.mem (short_name r) remote_names) then
+        B.append local (graph_row r))
+    !Graphs_ops.repos;
   B.append content local;
   if !Graphs_ops.remote_graphs <> [] then
     B.append content (remote_section (fun () -> rerender ()));
@@ -274,7 +347,7 @@ and rerender () =
   | Some host -> render_into host
   | None -> ()
 
-let show () =
+let rec show ?(tries = 40) () =
   Graphs_ops.on_repos_changed := (fun () ->
       match B.qs ".graphs-host" with
       | Some host ->
@@ -304,7 +377,13 @@ let show () =
                (fun _ -> rerender (); Js.Promise.resolve ())
                (Graphs_ops.list_remote_graphs ()));
           render_into host)
-  | None -> ()
+  | None ->
+      (* cold #/graphs load: the route commits Ready before the content
+         column flushes, so the host parent isn't there on the first
+         model emission — retry briefly; on_model re-invokes on every
+         change anyway, so this is a bridge, not a loop *)
+      if tries > 0 then
+        ignore (B.set_timeout (fun () -> show ~tries:(tries - 1) ()) 50)
 
 let hide () =
   close_dropdown ();

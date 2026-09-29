@@ -28,10 +28,10 @@ let mark el inst =
 (* all-pages route: page.ml renders an empty graphs-view box; append the
    .ls-all-pages container into the .mx-auto.pb-24 content wrapper, like
    cljs all_pages.cljs which renders inside the page wrapper *)
-let ensure_all_pages () =
+let ensure_all_pages roots =
   match !Runtime.current_route with
   | Some Model.All_pages ->
-      Ed.for_each_selector ".cp__sidebar-main-content > .mx-auto" (fun main ->
+      Ed.for_each_touched roots ".cp__sidebar-main-content > .mx-auto" (fun main ->
           match Ed.el_query main ".ls-all-pages" with
           | Some _ -> ()
           | None ->
@@ -79,8 +79,8 @@ let ensure_sidebar_object_view inner =
 
 (* tag/class and property pages get an objects view above the block
    list (class-objects / property-objects) *)
-let rec ensure_object_view () =
-  Ed.for_each_selector ".page-inner" (fun inner ->
+let rec ensure_object_view roots =
+  Ed.for_each_touched roots ".page-inner" (fun inner ->
       match Ed.el_get_attr inner "data-sb-inner" with
       | Some _ -> ensure_sidebar_object_view inner
       | None -> (
@@ -144,10 +144,25 @@ and ensure_object_view_container inner uuid kind =
   in
   mark container inst
 
+(* mount a query-result view for `block_uuid` inside `shell` and mark the
+   shell — returns the inst on success *)
+let mount_query_shell ~block_uuid shell =
+  let inner = D.h ~cls:"views-query-inner" () in
+  D.el_append_child shell inner;
+  try
+    let inst =
+      Views_view.mount_query ~block_uuid ~container:inner
+    in
+    mark shell inst;
+    Some inst
+  with e ->
+    Platform.console_error ("mount_query exn: " ^ Printexc.to_string e);
+    None
+
 (* logseq.class/Query blocks render a .custom-query-results shell; mount
    a query-result view inside it *)
-let ensure_query_shells () =
-  Ed.for_each_selector ".custom-query-results" (fun shell ->
+let ensure_query_shells roots =
+  Ed.for_each_touched roots ".custom-query-results" (fun shell ->
       match Ed.el_closest shell ".ls-block" with
       | None -> ()
       | Some block_el -> (
@@ -159,56 +174,114 @@ let ensure_query_shells () =
               match
                 (mounted_id shell, Ed.el_query shell ".views-query-inner")
               with
-              | Some _, Some _ -> ()
-              | _ ->
-                  let inner = D.h ~cls:"views-query-inner" () in
-                  D.el_append_child shell inner;
-                  let inst =
-                    Views_view.mount_query ~block_uuid:buuid ~container:inner
-                  in
-                  mark shell inst;
-                  Views_query.wire_settings_button inst shell)))
+              | Some id, Some _ -> (
+                  (* DOM patching can rebuild the shell's children while
+                     keeping the marker — restore the source editor when
+                     the inst says it was open *)
+                  match Hashtbl.find_opt insts id with
+                  | Some inst
+                    when inst.V.query_editor_open
+                         && Ed.el_query shell ".CodeMirror" = None ->
+                      Views_query.open_editor inst shell
+                  | _ -> ())
+              | _ -> (
+                  match mount_query_shell ~block_uuid:buuid shell with
+                  | Some inst ->
+                      (* a page remount rebuilt the shell — restore the raw
+                         source editor if it was open before the rebuild *)
+                      if inst.V.query_editor_open then
+                        Views_query.open_editor inst shell
+                  | None -> ()))))
 
 (* worker tx broadcast (sync-db-changes) invalidates view resources —
    refresh every still-connected inst so rows/columns stay live (cljs
    refetches the view-data resource on each tx) *)
+(* debounced: a sync-db-changes burst should coalesce into one view
+   refetch — the reload debounce in worker_events already collapses the
+   page side *)
+let debounced_refresh = D.debounce 150
+
 let refresh_query_insts () =
-  Hashtbl.iter
-    (fun _ (inst : V.inst) ->
-      if D.el_is_connected inst.V.container then Views_view.refresh inst)
-    insts
+  debounced_refresh (fun () ->
+      let dead = ref [] in
+      Hashtbl.iter
+        (fun id (inst : V.inst) ->
+          if not (D.el_is_connected inst.V.container) then dead := id :: !dead
+          else
+            match inst.V.kind with
+            | V.KQuery _ ->
+                (* query insts are refreshed through
+                   Views_view.refresh_query_insts — running them again here
+                   would refetch twice per broadcast *)
+                ()
+            | _ -> Views_view.refresh inst)
+        insts;
+      (* a detached container never comes back — the observer mounts a
+         fresh inst when the route re-renders — so drop the bookkeeping
+         instead of leaking the inst's rows/caches *)
+      List.iter
+        (fun id ->
+          match Hashtbl.find_opt insts id with
+          | Some inst ->
+              Views_builder.drop_tree inst;
+              Hashtbl.remove insts id
+          | None -> ())
+        !dead)
 
 (* ---------- observer ---------- *)
 
-(* chain onto worker.on_message once the worker exists: query views hold
-   worker data outside the model, so refresh them on every
-   "sync-db-changes" broadcast (same pattern as properties_state) *)
+(* query views hold worker data outside the model, so they refresh on
+   every "sync-db-changes" broadcast via the shared subscription list *)
 let worker_chained = ref false
 
 let chain_worker () =
-  match !worker_chained, !Runtime.worker with
-  | true, _ | _, None -> ()
-  | false, Some w ->
-      worker_chained := true;
-      let prev = w.Worker_client.on_message in
-      w.Worker_client.on_message <-
-        (fun kind payload ->
-          (try prev kind payload with _ -> ());
-          if kind = "sync-db-changes" then Views_view.refresh_query_insts ())
+  if not !worker_chained then begin
+    worker_chained := true;
+    Runtime.on_sync (fun () -> Views_view.refresh_query_insts ())
+  end
 
-let scan () =
+let scan roots =
   chain_worker ();
-  ensure_all_pages ();
-  ensure_object_view ();
-  ensure_query_shells ()
+  ensure_all_pages roots;
+  ensure_object_view roots;
+  ensure_query_shells roots
 
 let installed = ref false
+
+(* delegated click handler for every `.ls-query-setting` button —
+   per-shell wiring raced with clicks arriving before the mutation scan
+   ran, so the inst is resolved at click time instead *)
+let on_document_click (ev : Ed.ev) =
+  match Ed.ev_target ev with
+  | None -> ()
+  | Some target -> (
+      match Ed.el_closest target ".ls-query-setting" with
+      | None -> ()
+      | Some btn -> (
+          Ed.stop_propagation ev;
+          match Ed.el_closest btn ".custom-query-results" with
+          | None -> ()
+          | Some shell -> (
+              let inst =
+                match mounted_id shell with
+                | Some id -> Hashtbl.find_opt insts id
+                | None -> (
+                    (* click beat the mutation scan — mount now *)
+                    match Ed.el_closest shell ".ls-block" with
+                    | Some block_el -> (
+                        match Ed.el_get_attr block_el "blockid" with
+                        | Some buuid ->
+                            mount_query_shell ~block_uuid:buuid shell
+                        | None -> None)
+                    | None -> None)
+              in
+              match inst with
+              | Some inst -> Views_query.toggle_source_editor inst shell
+              | None -> ())))
 
 let install () =
   if not !installed then begin
     installed := true;
-    let obs = Ed.new_observer scan in
-    Ed.observe obs Ed.document_element
-      (Ed.observe_opts ~childList:true ~subtree:true);
-    scan ()
+    Ed.document_add_listener "click" on_document_click false;
+    Ed.register_doc_scan scan
   end

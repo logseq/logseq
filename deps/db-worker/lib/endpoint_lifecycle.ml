@@ -326,7 +326,6 @@ let create_or_open_db args =
            Db_worker_effect.bind
              (Sqlite.prepare_pool ~name:(Graph_dir.pool_name repo))
              (fun () ->
-           Worker_log.info "lifecycle/pool-prepared" [ "repo", repo ];
            let ensure_dir =
              if Sqlite.pooled_runtime () then Db_worker_effect.pure ()
              else File_sys.mkdir_p (db_dir repo)
@@ -348,7 +347,6 @@ let create_or_open_db args =
                  Sqlite.exec db ~sql:"pragma journal_mode=WAL" ~bind:[||];
                  Sqlite.exec db ~sql:"pragma wal_autocheckpoint=0" ~bind:[||];
                  Worker_state.set_sqlite_conn repo db;
-                 Worker_log.info "lifecycle/db-opened" [ "repo", repo ];
                  (db, true)
            in
            (* cljs get-dbs opens the client-ops sqlite beside the graph
@@ -452,16 +450,18 @@ let create_or_open_db args =
                else None
              in
              (if not sync_download then begin
-                (* cljs (if migrate-result (handle-migrate-result-local-txs!
-                   ...) (maybe-enqueue-built-in-sync-repair! ...)) *)
-                match Db_migrate.migrate conn with
-                | Some result ->
-                    handle_migrate_result_local_txs repo result
-                | None ->
-                    maybe_enqueue_built_in_sync_repair repo conn None
-                      initial_data_exists
-              end;
-              Endpoint_transaction.maybe_run_recycle_gc conn);
+                (* cljs (when-not sync-download-graph?
+                   (if migrate-result (handle-migrate-result-local-txs! ...)
+                     (maybe-enqueue-built-in-sync-repair! ...))
+                   (maybe-run-recycle-gc! conn)) *)
+                (match Db_migrate.migrate conn with
+                 | Some result ->
+                     handle_migrate_result_local_txs repo result
+                 | None ->
+                     maybe_enqueue_built_in_sync_repair repo conn None
+                       initial_data_exists);
+                Endpoint_transaction.maybe_run_recycle_gc conn
+              end);
              (* cljs (when initial-tx-report (db-sync/handle-local-tx! repo
                 initial-tx-report)). *)
              (match initial_tx_report with
@@ -624,7 +624,8 @@ let () =
              clears the repo dir's contents but keeps the dir itself —
              the graph-lifecycle admission check requires the graph dir
              to exist. *)
-          (if Sqlite.pooled_runtime () then Sqlite.remove_vfs ~repo
+          (if Sqlite.pooled_runtime () then
+             Db_worker_effect.map (fun () -> ()) (Sqlite.remove_vfs ~repo)
            else
              Db_worker_effect.bind
                (File_sys.readdir (db_dir repo))

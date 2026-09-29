@@ -830,6 +830,102 @@ Needs an upstream PR.
   has no installed-presence gate: a plugin's `provideUI` can beat the
   `registered` event on fresh installs.
 
+
+## RTC surface (e2e: `rtc_basic_test`, `rtc_extra_test`, `rtc_extra_part2_test`)
+
+- **Cloud indicator must reset on graph switch**: the worker's
+  `rtc-sync-state` broadcast carries no repo field, and `db_sync_client`
+  broadcasts `rtc-lock=false` only via `set_ws_state` on close — a deleted
+  graph's conn leaves the UI holding a stale `idle` state, so
+  `button.cloud.on.idle` stays visible on the next (unsynced) graph.
+  cljs gets away with it because `state/set-state! :rtc/state` merges and
+  the close broadcast lands. We clear `Model.rtc` on `Boot_graph_ready`
+  (`Worker_events.reset_rtc` resets the dedup ref too) and on
+  `Rtc_ops.download` start (`Action.Rtc_state_clear`), so `on.idle` can
+  only appear once the *current* graph's conn reports — this is what
+  `switch-graph`'s `wait-for` actually gates on.
+- **Keyed nodes now survive cross-parent reparents**: outdent/refresh
+  reparents used to drop+recreate keyed rows (LUI sibling-only key
+  matching) — including the focused editor textarea — which raced
+  Playwright `boundingBox`'s two-step resolve+measure into a null →
+  NPE. Fixed in LUI `reconcile_subtree`: a subtree-wide key index
+  adopts sibling-miss keyed children (each old node claimed once, so
+  duplicate keys across branches still create fresh nodes), with the
+  reparented child's `RemoveChild` emitted before all parent diffs.
+- **Keyed nodes inside *freshly-mounted* containers must also adopt**:
+  when a block gains children (`nc-<uuid>` ↔ `children-<uuid>` toggle)
+  or any unmapped container mounts, `collect_node_mapping` only recursed
+  into *matched* candidate children — a keyed row nested inside the new
+  container was never offered for adoption, so its live DOM row (and the
+  editing textarea inside it) was dropped and recreated on every nest
+  op. LUI now walks unmapped candidate subtrees (`rescue_subtree`) and
+  lets keyed descendants adopt their old nodes under the same
+  uniqueness/claimed/compatible guards. Row keys are also
+  scope-namespaced (`ls-<scope>-<uuid>`) so the same uuid rendered in
+  main list, sidebar, preview and embed can't claim each other's DOM.
+  `outliner_ops.refresh_page` also keeps a `refresh_gen` guard dropping
+  stale in-flight refreshes to shrink the op pileup window.
+- **Editor textarea text lives in the DOM, not the model**: typing only
+  reaches `S.editing.buffer` through the document `input` listener
+  (`sync_buffer`, silent). Two consequences: (1) `buffer_sig` needs
+  `Signal.cutoff` or every unrelated publish (e.g. `Rtc_state`
+  broadcasts during the stress test) re-emits the stale buffer and
+  wipes in-progress typing; (2) `resync_open_editor` must not clobber
+  a divergent buffer — it only writes when `buffer = base` (untouched
+  since open) and the stored title changed, tracked by the new
+  `editing.base` field.
+- **`autofocus` on the editor textarea is load-bearing**: removing it
+  broke `*:focus` press-seq flows (`rtc-extra-part2` asset test) because
+  the slash-command path types into the focused element. The textarea
+  keeps `autofocus` AND `request_focus`'s retry loop as backup. The real
+  culprit behind textarea churn was upstream in LUI reconcile — see the
+  LUI note on keyed adoption.
+- **Graphs view must not rebuild on every refresh**: cljs React
+  reconciles rows in place; our wholesale `B.remove`+rebuild detached the
+  remote row's span mid-click (Playwright "element not stable" → 10s
+  TimeoutError on `.last` row click). `graphs_view.render_into` now skips
+  when `view_sig` (repos + meta last-seen + remote_graphs) is unchanged.
+- **Delete must drop the repo optimistically**: `delete_graph` removes
+  from `repos` at entry (before the unlink round-trip) — the remote row
+  click during the in-flight unlink checks `repos` to decide
+  navigate-vs-download, and a stale `local=true` navigated into a
+  deleted graph and recreated an empty DB.
+- **Navigation requests need a generation guard**: the delete-redirect
+  nav and the remote-row download nav race; `nav_req` lets only the
+  newest continuation apply (`navigate_journal`).
+- **`remote_row` uses the same `data-testid` as local rows**
+  (`logseq_db_<name>`) so `.last`/`w/-query` locators hit it.
+- **e2ee password modal**: `db-worker/ui-request` broadcast →
+  `Ui_requests.handle` → password dialog (`e2ee` flow in
+  `dialogs_view.ml`); the modal must not appear when keys already exist.
+- **cmdk `(Dev)` RTC commands**: Start/Stop/Validate entries invoke
+  `db-sync-start`/`db-sync-stop`/`db-sync-validate` via
+  `thread-api/*`; `Rtc_ops.start` pushes `sync-app-state` +
+  `set_sync_config` first.
+- **RTC tx element**: hidden `data-testid="rtc-tx"` div renders
+  `{:local-tx N, :remote-tx N}` EDN — the e2e `rtc/with-wait-tx-updated`
+  reads it. `worker_events` dedupes identical `rtc-sync-state` payloads
+  (`last_rtc`) and debounces `sync-db-changes` → `schedule_reload` (150ms,
+  defers while an editor is open) — without it the broadcast flood
+  starves typing.
+- **Asset upload**: hidden `#upload-file` input + `Upload an asset` slash
+  command → `db-based-save-assets!` (pfs write + Asset-tagged block) →
+  `.ls-block img` renders from `logseq.property.asset/type` blocks.
+- **`/query` slash command** → Query block with `.cp__query-builder`
+  (issue-651): `run_query_command` in `editor_actions.ml` transacts a
+  query block + code-type value block in one batch (advanced variant gets
+  `logseq.property.node/display-type = :code` + `code/lang clojure`).
+- **Extends picker**: class/property rows render with
+  `.ui__dropdown-menu-content` toggle menu; the `/extends` command path
+  filters `logseq.class/*` extends candidates.
+- **Status/priority slash commands apply closed-value properties**:
+  `rtc-task-blocks-test` needs `apply-closed-value` on status/priority
+  change (worker-side `closed-value` property ops).
+- **Stress-test seeding is deterministic**: `seed-long-nested-page!`
+  uses `java.util.Random` seeded per run — failures reproduce at the same
+  tree position across runs, which made the reparent-detach race
+  diagnosable.
+
 ## cljs ↔ OCaml 行为对照表 (interaction semantics map)
 
 | 交互 / 隐式契约 | cljs 语义来源 | LUI/OCaml 实现位置 |
@@ -858,6 +954,7 @@ Needs an upstream PR.
 - stale-node 容错（lui PR #67）：unmounted 节点上的事件/属性写入不再崩溃或卡住批次。
 - same-batch create+drop 容错（lui PR #75）：keyed remount 在同一 flush 内 create→insert→drop 的节点，DOM apply 按 batch 末状态找不到 platform_node 导致整个 flush abort（e2e 里表现为 Meta+k 打不开 cmdk——`resync_open_editor` 在同一 flush 重建并卸载了 editor 子树）。DOM apply 现在跳过 current∪previous 两边都解析不到的节点。
 - dropdown dismiss / modal hit-testing / retained-store 顺序（lui PR #65）。
+- DOM 插入索引按实际挂载父节点计数（lui PR #76）：`visible_child_index` 原先按节点类型估算（只跳过 ContextMenu/DropdownMenu/Toast/modal/tooltip），portal 子节点、从未挂载的 dyn/`nothing` 段和同 batch create+drop 的节点仍计入索引，任何 overlay 挂载（页面菜单、toast、对话框）都会抛 `DOM child index is out of bounds` 并 abort 整个 flush（view-basic/tag-basic 曾因此回归）。现在改为 `platform_node.parentElement = container` 实测计数，原来的 kind 启发式 `child_hidden_in_parent` 被这条规则完全覆盖并删除。
 
 
 ## Graph navigation
@@ -1344,6 +1441,76 @@ search may lag).
   `editor_actions.focus_page_title` must select the title textarea via
   `D.query_selector ".ls-page-title"` (added to `editor_dom`).
 
+
+## Block drag-and-drop (dnd-kit)
+
+- **Block move runs on `@dnd-kit/dom`** (`DragDropManager` +
+  `PointerSensor`), not native HTML5 drag events. `deps/ui/src/dnd/`
+  holds the Melange externals (`dnd_kit.ml`) and the block-move wiring
+  (`block_dnd.ml`); `editor_keys.install_once` keeps only the file-drop
+  listeners natively.
+- **`draggable="true"` is NOT harmless under PointerSensor**: while a
+  pointerdown is active the sensor binds a document capture-phase
+  `dragstart` listener that calls `handleCancel` when the target is a
+  native draggable (otherwise `preventDefault`) — i.e. a browser HTML5
+  drag started on a bullet aborts the dnd-kit activation mid-flight.
+  `editor_keys` registers a capture-phase `dragstart` listener at
+  install time — earlier than any sensor binding, so it runs first —
+  that `preventDefault`s + `stopImmediatePropagation`s native drags
+  started from a `.bullet-container`: the browser never begins an HTML5
+  drag and the sensor's listener never sees the event.
+- **Activation is `Distance(4)` with `preventActivation: false`**: the
+  default `preventActivation` refuses drags whose pointerdown lands
+  inside an interactive element (`a.bullet-link-wrap` wraps the bullet),
+  and a bare `undefined` constraint would activate on pointerdown.
+- **Collision = per-block droppables ranked by nesting depth**:
+  `defaultCollisionDetection` (pointer intersection) picks the
+  highest `collisionPriority` droppable, so `block_dnd` sets
+  `collisionPriority` to the block's `.ls-block` ancestor count —
+  innermost block wins, which reproduces `closest('.ls-block')` from
+  the native `dragover` handler.
+- **Registration is MutationObserver-driven**: draggables
+  (`.bullet-container[blockid]`) and droppables (`.ls-block[blockid]`)
+  are discovered on every DOM mutation; disconnected elements are
+  destroyed + swept each batch. `dragstart`/`dragmove`/`dragover`/
+  `dragend` monitor events carry `operation.source/target`; `dragover`
+  fires only when the collision target changes (use `dragmove` for
+  pointer coordinates — `nativeEvent.pageX`/`clientY`).
+- **The `drop_target` "no-target keeps last" quirk is preserved**: the
+  native `dragover` handler did `| None -> ()` when no `.ls-block`
+  matched, so the previous valid target persisted while hovering
+  invalid areas; `block_dnd` reproduces that.
+- **File drop stays native**: dnd-kit has no file-drop concept; the
+  document `dragover`/`drop` listeners now only act when
+  `dataTransfer.files` is non-empty and call `Asset_dom.upload_files`
+  — same handler as before, split from block-drag. Synthetic e2e
+  `DragEvent`s take this path unchanged.
+- **Tag/ref anchors (`views_table.ml`, `page.ml`) keep
+  `draggable="true"` but were NOT routed through the manager**: their
+  payload is `dataTransfer` `text/plain` data consumed by
+  `on_editor_drop` (property rows), not the block-move path, and dnd-kit
+  sensors don't produce a native `dataTransfer` payload a `drop`
+  listener could read. Routing them through the manager would need a
+  separate drop-target path; out of scope for the block-move migration.
+- **Journal views have no `Runtime.current_page`**: since the journals
+  scaffolding sweep, journal routes populate `current_journals`
+  (`get-latest-journals`, newest-first) and leave `current_page`
+  `None`. Anything that resolves "the current page" must fall back to
+  `current_journals`: `drop_dragged_block` `"top"` finds the journal
+  page containing the target block, and `upload_files` treats the head
+  of `current_journals` as today's journal — both were silent no-ops
+  before that fallback was added.
+- **Verified locally** (Playwright, same steps as
+  `outliner_basic_test.drag-block!`): `top` (first block + near-top ≤16px),
+  `nested` (x-offset > 50), `sibling` all reorder via
+  `A.drop_dragged_block`; file drop creates `.asset-container img`.
+  The clj-e2e suite itself is blocked upstream of this change: page
+  creation through search throws `Invalid_argument` in
+  `apply_pending_batch` (`close_ac` → `set_ac`) on the base build too —
+  preexisting LUI bug, so `new-logseq-page`'s `wait-editor-visible`
+  times out before any drag test runs.
+
+
 ## Toolchain / test-suite state
 
 - **`bb dev:lint-and-test` baseline** — clj-kondo lint is clean on the
@@ -1404,6 +1571,29 @@ references, block hover, block context menu), slash menu, #tag popup,
   names and label spans aligned to cljs popup structure.
 - **Settings/favorites/tag page/properties/block menus**: verified
   identical after the above; only unfixable noise remains (below).
+- **Table header property-column menu**: sort more-options now precede
+  the configure items (cljs `more-options` order) with arrow-up/down
+  icons, the Configure title is hidden (`with-title? false`), the
+  delete row reads "Delete property from tag" on tag pages, and the
+  `.ls-property-dropdown` popup is capped at
+  `max-height: innerHeight - top - 8` with `overflow-y:auto` (radix
+  available-height) so trailing items scroll instead of overflowing
+  the viewport. Still missing vs cljs: the Pin/Unpin item — LUI has no
+  `logseq.property.table/pinned-columns` rendering support yet.
+- **Dynamic overlay containers**: cmdk conditional mounts inside a
+  keyed `box` and app overlays inside a keyed `.cp__overlays` div —
+  keeps dynamic segments off `#app-container`'s child list so
+  nav-time reconciles can't emit inconsistent op batches (cmdk reopen
+  crash); cljs mounts these through portals, i.e. their own container
+  nodes anyway.
+- **Row-select checkbox chrome**: header/row checkboxes carry
+  `tabindex`/`aria-checked`/`data-checked`/`data-unchecked` and the
+  cljs visually-hidden native input sibling (1px clipped fixed box),
+  and the row `select` cell exposes `data-table-row-select="true"` —
+  a plain checkbox overlapped the button and swallowed its clicks.
+- **Duplicate views head**: the extra `render_head` appended above the
+  view grid is gone; the head renders only via `filters_row` inside
+  `.ls-view-body` (was the second `Add new view` button).
 
 Known unfixable / nondeterministic leftovers:
 - `Revision: dev` vs `16c4ed1a04` in the settings footer — build-time
@@ -1415,3 +1605,204 @@ Known unfixable / nondeterministic leftovers:
 - `#Journal` tag save is rejected on both sides ("Can't set tag with
   built-in #Journal" — private built-in class), so seeded probes that
   use it leave the same is-blank block on both.
+
+## Review-pass correctness batch (3e4a41f / ed58c9a)
+
+Findings from the logseq-review-workflow correctness pass, fixed on the
+main branch:
+
+- **Modifier shortcuts**: DOM `key` reports the shifted glyph
+  (`"Z"`, `">"`, `"H"`), so `Cmd+Shift+Z` redo, `Cmd+Shift+H` highlight
+  and `Cmd+Shift+.` zoom never matched. `shortcut_key` lowercases and
+  un-shifts symbols for the modifier-guarded arms only — raw keys still
+  feed the autopair/`)`/`]` overtype paths.
+- **toggle-collapse**: temp-expand now keys off `is_expanded`, so a
+  default-collapsed block the user temporarily expanded collapses back
+  instead of expanding permanently.
+- **Async staleness**: refs/unlinked/page fetch results were sent
+  unconditionally; in-flight loads could clobber a newer route.
+  `fetch_refs`/`fetch_unlinked`/`fetch_unlinked_refs` take a `~stale`
+  predicate and `load_page_ref` captures `!Runtime.load_gen` after
+  `incr` and compares at commit time.
+- **cmdk move-blocks**: selection was sent in `String_set` uuid order;
+  now `selected_uuids` (document order).
+- **Numbered-list toggle**: the `W.Map` decode arm was dead (entity
+  maps aren't fetched that way); now uses
+  `Decode.order_list_type_of_wire`.
+- **delete-selection**: entered edit mode on the previous block with
+  the raw stored title (id-ref form); now runs through
+  `Ops.title_for_edit` like `enter_edit`.
+- **cmdk page open**: bypassed `nav_hash` (dropped `?graph-id`) and
+  double-loaded (manual prefetch + hashchange reload). Now sets the
+  `nav_hash` URL and lets the router load — create-page chains its
+  `append_block` through a one-shot `Runtime.on_page_loaded` hook.
+- **SDK toasts**: `show_msg` now accepts `opts.key`/`timeout`, returns
+  the notification key, and `close_msg` dismisses only that toast
+  (`Toast_dismiss_key`) instead of clearing all.
+- **Startup repo**: `pick_graph` now follows cljs
+  `resolve-startup-repo` — url `?graph-id` → sessionStorage tab graph
+  (`ls-tab-repo`/`ls-tab-graph-id`, written on graph open) → first
+  repo → Demo.
+- **Navigate_to** clears the transient `confirm` (and already cleared
+  `page_menu`/`appearance`).
+
+## Review-fix streams (in flight)
+
+Read-only review passes flipped to fix mode on dedicated branches off
+the correctness batch; each fixes the findings of its own report:
+
+- `devin/review-fix-perf` — views eager table + refresh rebuild,
+  journals parallel fetch + unconditional virtualization, Mutation
+  Observer consolidation, root-dyn structural compare → revision
+  compare, anchor-pull cache, unlinked-refs lazy fetch, embed/minor
+  perf.
+- `devin/review-fix-sysadd` — matcher consolidation to `Fuzzy`, shared
+  menu-item builder, worker `on_message` chains → one subscription,
+  shared wire/fetch helpers, i18n consolidation, dead-code deletion,
+  shared icon/textarea builders.
+- `devin/review-fix-failure` — worker-client rejection/onerror
+  forwarding, unmounted-state command crashes, swallowed exceptions.
+- `devin/review-fix-tests` — unit-test coverage for indent/outdent,
+  sdk_convert/sdk_util, decoder/encoder pure paths.
+- `devin/review-fix-contract` — endpoint/arg/decode contract sweep.
+- `devin/review-fix-regress` — cljs parity regression hunt + fixes.
+
+## Page-title locator / property-value DOM alignment
+
+- `extends_cell` now emits `a.relative.tag` / `a.relative.page-ref` (cljs
+  `property-block-value` → `page-cp`) instead of
+  `span.block-title-wrap`; the extra `.block-title-wrap` under
+  `[data-testid='page title']` was a Playwright strict-mode duplicate
+  (left-sidebar-basic 4 errors → green).
+- `.ls-bidirectional-properties` mounts inside `.page-inner` after the
+  title row (cljs sibling placement in `properties-area`), not inside
+  `.ls-page-title`.
+- Preview popup (`pv_popover`) now also closes on outside click and
+  `hashchange`, matching cljs tippy death with its reference node.
+- Known parity gap: cljs `bidirectional-properties-section` renders a
+  `shui/tabs` UI (per-class tabs + blocks-container); ours renders flat
+  `.ls-bidirectional-group` rows. Tracked for the parity sweep.
+- `custom_report.clj` dumps `e2e-dump/title-dups-<ts>.txt` on failure:
+  every `[data-testid='page title']` match + ancestor chain.
+
+## Regression-pass fixes (navigation / keys / collapse / selection / cmdk)
+
+- **editing.base bookkeeping** (`editor_actions.ml`, `outliner_ops.ml`):
+  `merge_next` and the debounced `schedule_save`/`commit` paths now
+  advance `base` with `buffer` once the commit lands. Without it, an
+  undo after a boundary merge left `buffer<>base`, so
+  `resync_open_editor` refused the reverted title and the DOM kept
+  showing the merged text (`boundary-delete-and-backspace-merge` e2e).
+- **Navigation** (`router.ml`, `sidebar_state.ml`): page-ref clicks go
+  through cljs `redirect-to-page!` semantics — `get-page-route-info`
+  precheck warns (not navigates) on hidden/private-built-in pages
+  (`:nav/cannot-go-to-internal-page`, Recycle exempt) and redirects
+  aliases to `alias-source-uuid`; `?anchor`/`?block-id` hash params
+  poll-scroll to `ls-block-<uuid>` (uuid → select the block, other
+  fragments → 4s `block-highlight`), mirroring `jump-to-anchor!`;
+  zoom-out consumes `pending_zoom` on page routes too, so the zoomed
+  block stays in edit mode after landing on the parent page.
+- **Editing keys** (`editor_keys.ml`, `editor_commands.ml`): `mod+enter`
+  cycles `logseq.property/status` (todo→doing→done→cleared→todo) via
+  closed-values resolution instead of splitting the block;
+  `mod+shift+s` strike-through `~~`, `mod+shift+h` highlight `==`,
+  `mod+;` toggle-children-collapse, `mod+,` zoom-out bound in edit mode.
+- **Collapse/expand** (`editor_actions.ml`): `mod+up`/`mod+down` —
+  editing collapses/expands the open block, selection applies to each
+  selected block, otherwise collapses the deepest / expands the
+  shallowest-collapsed level (cljs `expand!/collapse!`).
+- **Selection**: `mod+a` = select-parent (selection → first block's
+  parent, falling back to select-all), `mod+shift+a` = select-all —
+  in both edit and normal modes.
+- **Cmdk**: `editor/cycle-todo` command arm wired; `#tag` create row now
+  issues `create-page` with `class?:true` and navigates to the class
+  (cljs opens the tag dialog — no such surface exists here yet).
+
+## Property-e2e sweep (second pass)
+
+- **Zoom-breadcrumb refetch** (`outliner_ops.ml`): `refresh_page` on a
+  `Block_zoom` route now refetches `page_parents` (not just
+  `page_blocks`) — cljs re-queries the ancestor chain on reload, so a
+  renamed parent updates `.breadcrumb` text (`rename` e2e in
+  `block_property_basic_test`).
+- **Container click handlers need an interactive-hit gate**
+  (`dom_adapter.ml`, `page.ml`): the `.ls-page-title` node's `click`
+  dom-event is a fallback that starts `Title_edit_start` whenever the
+  payload `targetId` is `""`/`page-title`/`page-title-text`. Playwright's
+  click on `a.block-control` lands on the id-less bullet/icon child, so
+  targetId was `""` and the gate passed — the title editor mounted
+  (+54px), then a `sync-db-changes` reflow unmounted it ~1s later,
+  shifting `.property-k` upward between Playwright's actionability check
+  and click dispatch (`tag-scoped-property-choices` e2e). cljs binds
+  title-edit on the `.block-content` pointer-down only. The event
+  payload now carries an `interactive` flag
+  (`target.closest("a, button, input, textarea, select, summary,
+   .block-control-wrap, .bullet-container, .ls-properties-area,
+   .ls-page-title-actions, .lsp-hook-ui-slot")`) and both title-edit
+  handlers require `not interactive`.
+- **Property-area refresh preserves nodes** (`properties_area.ml`):
+  `render_page_area` builds the candidate DOM detached and swaps children
+  only when `innerHTML` differs (`replace_if_changed`) — clearing and
+  rebuilding on every `sync-db-changes` churned focused editors and
+  element identity across refreshes.
+- **Sidebar / modal details**: `ref_group` titles render
+  `foldable_title ~control:false` (unlinked-references e2e expects
+  exactly one `.ls-foldable-title-control`); the icon-picker popup
+  carries the `ls-icon-picker` class (`ls-icon-picker input` locator);
+  `#cards-modal` is wrapped in the `.ui__dialog-overlay` /
+  `.ui__dialog-content` dialog chrome so overlay-clicks behave like cljs.
+
+Known leftovers:
+- Toast auto-dismiss is 5000ms; cljs `notification/show!` defaults are
+  1500–2000ms.
+- cljs `mod+.` zoom-in is skipped upstream on Chrome (unbound here too).
+- `#tag` cmdk create navigates instead of opening the tag dialog.
+
+## Menus & sidebar chrome (parity: `devin/lui-parity-menus`)
+
+- **Block context-menu submenus** (cljs `content.cljs` + shui
+  `components.cljs`): sub-content class
+  `ui__dropdown-menu-sub-content z-50 min-w-[8rem] rounded-md border
+  bg-popover p-1 text-popover-foreground shadow-lg`, `role="menu"`,
+  `tabindex="-1"`, positioned at `(trigger.right-4, trigger.top-4)`;
+  sub-trigger is a cm-item + `data-[open]:bg-muted` + trailing
+  `chevron-right ml-auto h-4 w-4`. "Set icon"/"Add reaction" open the
+  icon picker as a right-edge submenu (`emoji_only` gate for the
+  reaction picker). Items carry a bare-text label and the full
+  `ui__dropdown-menu-item` class incl. `data-[highlighted]:bg-muted`
+  + `data-[disabled]:pointer-events-none data-[disabled]:opacity-50`.
+- **LUI `if_` is eager** — `Lui_elements.if_ ~test t` evaluates `t` at
+  parent construction; a child built from popup state must be wrapped
+  in `dyn` over a signal-derived value instead, or it snapshots the
+  closed state.
+- **Right-sidebar panel chrome** (cljs `right_sidebar.cljs`):
+  `.sidebar-item` gets `collapsed`; header gets `rounded-b-md` when
+  collapsed; title button toggles collapse, `aria-expanded = not
+  collapsed`; `.rotating-arrow` gets `collapsed|not-collapsed`; the
+  body keeps `role="region"`/`sidebar-panel-content` and switches
+  `hidden` ↔ `initial` (plus `px-2` unless `:search`/`:shortcut-
+  settings`). `collapsed?` (panel body) and `props_collapsed`
+  (properties section, `not class?`) are **separate** cljs states —
+  do not conflate. Middle-click (`which=2`) on the header removes the
+  item; context-menu on the header or the `sidebar-item-more` button
+  opens the actions menu **at the pointer/trigger**.
+- **Right-sidebar actions menu** (`actions-menu-content`): Close /
+  [multi] Close others / [multi] Close all / [multi && !collapsed]
+  `hr.menu-separator` / [!collapsed] Collapse / [multi] Collapse
+  others / [multi] Collapse all / [multi && collapsed] sep / [collapsed]
+  Expand / [multi] Expand all / [type ∈ {page,contents}] sep +
+  "Open as page".
+- **Left-sidebar link-item menu** (`left_sidebar.cljs` x-menu):
+  right-click or the `.sidebar-page-actions` dots button on a
+  favorites/recents row opens a `ui__dropdown-menu-content ... w-60`
+  dropdown at the pointer: [not recent] "Unfavorite" (star-off,
+  ⌘⇧F) + "Open in sidebar" (layout-sidebar-right, ⇧Click), each
+  `ctx-icon` span `scale-90 pr-1 opacity-80` + `dropdown-shortcut`
+  combo kbds.
+- **Recents populate only on user navigation** — cmdk
+  `goto_page`/`open-node` must call `Runtime.mark_nav ()` *before*
+  `Runtime.send Page_loaded`, because sends dispatch `on_sync`
+  synchronously and `on_sync` takes the mark to `push_recent`.
+- **`/Add property` type picker** lists
+  `user-built-in-property-types` in order: default(Text), number,
+  date, datetime, checkbox, url, node, asset.

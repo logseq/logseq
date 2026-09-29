@@ -11,7 +11,10 @@ module String_set = Stdlib.Set.Make (String)
    "sidebar") — the same block can render in both trees, so only the
    initiating scope mounts the textarea (cljs keys the editor by
    container-local edit-input-id) *)
-type editing = { uuid : string; buffer : string; scope : string }
+(* base: the committed title the editor opened with — resync only
+   overwrites a still-pristine buffer when the stored title changed
+   externally; a divergent buffer is typed-not-yet-saved text *)
+type editing = { uuid : string; buffer : string; scope : string; base : string }
 
 
 type t =
@@ -35,6 +38,9 @@ let initial =
   ; collapsed_ui = String_set.empty
   ; expanded_ui = String_set.empty
   }
+
+let scope_of (st : t) =
+  match st.editing with Some e -> e.scope | None -> "main"
 
 let st : t Signal.state option ref = ref None
 
@@ -96,11 +102,14 @@ let signal () = (state ()).Signal.state_signal
    LUI's event dispatch); Signal.update composes with any pending staged
    value so deferred on_init writes aren't lost *)
 let set f =
-  Signal.update (state ()) f;
+  let st = state () in
+  Signal.update st f;
   Runtime.flush ()
 
 (* updates with no visual dependency — folded into the next flush *)
-let set_silent f = Signal.update (state ()) f
+let set_silent f =
+  let st = state () in
+  Signal.update st f
 
 (* reads fall back to `initial` before the first editor mounts — e.g. on
    an empty page only the title editor exists, but renderers still query
@@ -314,33 +323,6 @@ let neighbor_of ?(scope = "main") uuid dir =
 
 let prev_visible ?(scope = "main") uuid = neighbor_of ~scope uuid `Prev
 let next_visible ?(scope = "main") uuid = neighbor_of ~scope uuid `Next
-
-(* optimistic title write: a commit updates the model so the row re-renders
-   immediately instead of waiting for the worker refresh round-trip *)
-let rec map_block_title uuid title blocks =
-  List.map
-    (fun (b : Model.block) ->
-      { b with
-        Model.block_title =
-          (if b.Model.block_uuid = Some uuid then title
-           else b.Model.block_title)
-      ; block_children = map_block_title uuid title b.Model.block_children
-      ; block_embed_children =
-          map_block_title uuid title b.Model.block_embed_children
-      })
-    blocks
-
-let update_block_title uuid title =
-  match !Runtime.current_page with
-  | None -> ()
-  | Some p ->
-      Runtime.current_page :=
-        Some
-          { p with
-            Model.page_blocks =
-              map_block_title uuid title p.Model.page_blocks
-          };
-      set (fun st -> st)
 
 let prev_sibling uuid =
   match find_parent uuid with

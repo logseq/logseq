@@ -9,7 +9,13 @@ type ev
 type node_list
 type clipboard_data
 type mutation_observer
+
+type mutation_record
 type observe_opts
+
+(* identity conversion for code paths that hold elements as Js.Json.t
+   (Dom_ext.element) — same runtime value, different abstract view *)
+external el_of_json : Js.Json.t -> el = "%identity"
 
 external document_add_listener :
   string -> (ev -> unit) -> bool -> unit = "addEventListener"
@@ -58,6 +64,9 @@ external ev_clipboard : ev -> clipboard_data option = "clipboardData"
 external prevent_default : ev -> unit = "preventDefault" [@@mel.send]
 external stop_propagation : ev -> unit = "stopPropagation" [@@mel.send]
 
+external stop_immediate : ev -> unit = "stopImmediatePropagation"
+  [@@mel.send]
+
 (* CustomEvent.detail for the ls:editor-* channel (popups) *)
 external ev_detail : ev -> Js.Json.t option = "detail"
   [@@mel.get] [@@mel.return nullable]
@@ -75,13 +84,17 @@ external ev_data_transfer : ev -> clipboard_data option = "dataTransfer"
 external dt_set_data : clipboard_data -> string -> string -> unit = "setData"
   [@@mel.send]
 
-(* FileList isn't a Js.Array — copy it *)
-let dt_files : clipboard_data -> Js.Json.t array =
-  [%mel.raw "function (dt) { return Array.from((dt && dt.files) || []) }"]
 external ev_buttons : ev -> int = "buttons" [@@mel.get]
 
 external ev_client_y : ev -> float = "clientY" [@@mel.get]
 external ev_page_x : ev -> float = "pageX" [@@mel.get]
+
+external json_array_from : Js.Json.t -> Js.Json.t array = "from"
+  [@@mel.scope "Array"]
+
+external dt_file_list : clipboard_data -> Js.Json.t = "files" [@@mel.get]
+
+let dt_files dt = json_array_from (dt_file_list dt)
 
 type rect
 external el_bounding_rect : el -> rect = "getBoundingClientRect" [@@mel.send]
@@ -110,6 +123,13 @@ external el_insert_before : el -> el -> el -> unit = "insertBefore"
   [@@mel.send]
 external el_set_class : el -> string -> unit = "className" [@@mel.set]
 external el_focus : el -> unit = "focus" [@@mel.send]
+external el_scroll_into_view : el -> unit = "scrollIntoView" [@@mel.send]
+
+let el_class_add : el -> string -> unit =
+  [%mel.raw "function (e, c) { e.classList.add(c) }"]
+
+let el_class_remove : el -> string -> unit =
+  [%mel.raw "function (e, c) { e.classList.remove(c) }"]
 
 (* textarea *)
 external el_value : el -> string = "value" [@@mel.get]
@@ -139,8 +159,30 @@ external set_timeout_id : (unit -> unit) -> int -> int = "setTimeout"
 
 external clear_timeout : int -> unit = "clearTimeout"
 
+(* debounce: returns a function; each call resets the timer *)
+let debounce ms =
+  let id = ref (-1) in
+  fun f ->
+    if !id >= 0 then clear_timeout !id;
+    id := set_timeout_id f ms
+
 external new_observer : (unit -> unit) -> mutation_observer
   = "MutationObserver" [@@mel.new]
+
+external new_observer_records : (mutation_record array -> unit) -> mutation_observer
+  = "MutationObserver" [@@mel.new]
+
+external rec_target : mutation_record -> el = "target" [@@mel.get]
+
+external rec_added : mutation_record -> node_list = "addedNodes" [@@mel.get]
+
+external rec_removed : mutation_record -> node_list = "removedNodes" [@@mel.get]
+
+external rec_type : mutation_record -> string = "type" [@@mel.get]
+
+external node_name : el -> string = "nodeName" [@@mel.get]
+
+external el_class : el -> string = "className" [@@mel.get]
 
 external observe_opts :
   childList:bool -> subtree:bool -> observe_opts = "" [@@mel.obj]
@@ -164,6 +206,82 @@ external el_set_raw_text_node : el -> el -> unit = "__lsTextNode"
 
 external node_set_data : el -> string -> unit = "data" [@@mel.set]
 
+external el_query_all : el -> string -> node_list = "querySelectorAll"
+  [@@mel.send]
+
+external node_type : el -> int = "nodeType" [@@mel.get]
+
+(* elements matching [sel] touched by the mutation roots: each root's
+   closest ancestor-or-self match plus its matching descendants. Roots
+   are the mutation records' addedNodes — a subtree inserted under an
+   already-mounted shell is covered by the ancestor direction. *)
+let for_each_touched roots sel f =
+  let seen : el list ref = ref [] in
+  let emit el =
+    if not (List.exists (fun e -> e == el) !seen) then begin
+      seen := el :: !seen;
+      f el
+    end
+  in
+  List.iter
+    (fun root ->
+      (match el_closest root sel with Some el -> emit el | None -> ());
+      let nl = el_query_all root sel in
+      for i = 0 to node_list_length nl - 1 do
+        match node_list_item nl i with Some el -> emit el | None -> ()
+      done)
+    roots
+
+(* shared document observer: feature installers register one scan each;
+   mutation batches coalesce into a single debounced pass that hands each
+   scan the added element roots so scans scope their selector work to the
+   changed subtrees instead of re-scanning the whole document *)
+type doc_scan =
+  { ds_run_if : mutation_record array -> bool
+  ; ds_scan : el list -> unit }
+
+let doc_scans : doc_scan list ref = ref []
+let doc_scan_timer = ref (-1)
+let doc_pending_recs : mutation_record list ref = ref []
+
+let doc_flush () =
+  doc_scan_timer := -1;
+  let recs = Array.of_list (List.rev !doc_pending_recs) in
+  doc_pending_recs := [];
+  let roots =
+    Array.fold_left
+      (fun acc r ->
+        let nl = rec_added r in
+        let rec collect i acc =
+          if i >= node_list_length nl then acc
+          else
+            collect (i + 1)
+              (match node_list_item nl i with
+               | Some el when node_type el = 1 -> el :: acc
+               | _ -> acc)
+        in
+        collect 0 acc)
+      [] recs
+  in
+  List.iter
+    (fun ds -> if ds.ds_run_if recs then ds.ds_scan roots)
+    !doc_scans
+
+let doc_observer_installed = ref false
+
+let register_doc_scan ?(run_if = fun _ -> true) scan =
+  doc_scans := !doc_scans @ [ { ds_run_if = run_if; ds_scan = scan } ];
+  scan [ document_element ];
+  if not !doc_observer_installed then (
+    doc_observer_installed := true;
+    let obs =
+      new_observer_records (fun recs ->
+          doc_pending_recs := Array.to_list recs @ !doc_pending_recs;
+          if !doc_scan_timer < 0 then
+            doc_scan_timer := set_timeout_id doc_flush 60)
+    in
+    observe obs document_element (observe_opts ~childList:true ~subtree:true))
+
 (* <raw-text> placeholders carry the intended text in data-raw-text and
    are swapped for real text nodes once they enter the DOM — extension
    create() can only return Elements, so this observer performs the
@@ -171,8 +289,8 @@ external node_set_data : el -> string -> unit = "data" [@@mel.set]
    as __lsTextNode so later property writes/removals on the (detached)
    placeholder can still reach the live text node, and a re-inserted
    placeholder reuses it so the text moves with the node. *)
-let replace_all_raw_text () =
-  for_each_selector "raw-text" (fun el ->
+let replace_all_raw_text roots =
+  for_each_touched roots "raw-text" (fun el ->
       let s =
         Option.value (el_get_attr el "data-raw-text") ~default:""
       in
@@ -189,8 +307,8 @@ let replace_all_raw_text () =
    at create time; cljs emits no such ids, so strip them for DOM parity.
    Ids with a suffix (menu popups, accordion triggers/panels) keep the
    "lui-node-N-*" form and are left alone since LUI core references them. *)
-let strip_lui_node_ids () =
-  for_each_selector "[id^='lui-node-']" (fun el ->
+let strip_lui_node_ids roots =
+  for_each_touched roots "[id^='lui-node-']" (fun el ->
       match el_get_attr el "id" with
       | Some id ->
           let n = String.length id in
@@ -200,18 +318,16 @@ let strip_lui_node_ids () =
           if n > 9 && digits 9 then el_remove_attr el "id"
       | None -> ())
 
-let dom_fixups () =
-  replace_all_raw_text ();
-  strip_lui_node_ids ()
+let dom_fixups roots =
+  replace_all_raw_text roots;
+  strip_lui_node_ids roots
 
 let raw_text_observer_installed = ref false
 
 let ensure_raw_text_observer () =
   if not !raw_text_observer_installed then (
     raw_text_observer_installed := true;
-    let obs = new_observer dom_fixups in
-    observe obs document_element (observe_opts ~childList:true ~subtree:true);
-    dom_fixups ())
+    register_doc_scan dom_fixups)
 
 let closest_sel sel target =
   match target with

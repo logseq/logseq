@@ -403,7 +403,9 @@ let schedule_vector_index_rebuild repo build_id
 let lt_build_blocks_index repo search_db (conn : conn) build_id : unit E.t =
   ensure_active_search_index_build repo build_id;
   let db = Datascript.db conn in
-  let blocks = Search_index.get_all_blocks db in
+  let blocks =
+    Search_index.get_all_blocks db
+  in
   let total = List.length blocks in
   let vector_index = Worker_state.vector_index repo in
   let include_vector_title = Option.is_some vector_index in
@@ -439,8 +441,12 @@ let lt_build_blocks_index repo search_db (conn : conn) build_id : unit E.t =
         let processed' = processed + List.length batch in
         let indexed =
           List.filter_map
-            (Search_index.block_to_index ~include_vector_title)
-            (List.map Ev.of_entity batch)
+            (fun en ->
+               let node = Ev.of_entity en in
+               match Search_index.block_to_index ~include_vector_title node with
+               | Some it -> Some it
+               | None -> None)
+            batch
         in
         let indexed_blocks' = indexed_blocks @ indexed in
         let progress = progress_for_fts processed' in
@@ -602,7 +608,11 @@ let search_blocks_handler args : Wire.t E.t =
   let args = normalize_repo_args args in
   match args with
   | Wire.String repo :: Wire.String q :: option_rest ->
-      let opts = match option_rest with t :: _ -> decode_search_opts t | [] -> Search_index.default_opts in
+      let opts =
+        match option_rest with
+        | t :: _ -> decode_search_opts t
+        | [] -> Search_index.default_opts
+      in
       lt_search_blocks repo q opts
   | _ -> invalid_arg "search-blocks expects (repo q option)"
 

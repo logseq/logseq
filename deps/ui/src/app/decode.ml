@@ -146,7 +146,8 @@ let block_icon_of_wire (w : Wire.t) : Model.icon option =
       | None -> None)
   | _ -> None
 
-let rec block_of_wire ?(order_index = 1) (w : Wire.t) : Model.block =
+let rec block_of_wire ?(order_index = 1) ?(parent_query_id = None)
+    (w : Wire.t) : Model.block =
   let uuid = Wire.map_get_uuid w "block/uuid" in
   let db_id = Wire.map_get_int w "db/id" in
   let title =
@@ -158,6 +159,16 @@ let rec block_of_wire ?(order_index = 1) (w : Wire.t) : Model.block =
     Option.value (Wire.map_get_int w "block/level") ~default:1
   in
   let order_list = order_list_type_of_wire w in
+  (* the pull's forward ref is a {:db/id} stub — a child is this block's
+     query value block when its db/id matches *)
+  let query_ref_id =
+    match Wire.get w "logseq.property/query" with
+    | Some q -> (
+        match q with
+        | Wire.Tagged (_, inner) -> Wire.map_get_int inner "db/id"
+        | _ -> Wire.map_get_int q "db/id")
+    | None -> None
+  in
   let children =
     (* cljs :block/children accessor (entity-plus) excludes
        property-created and closed-value children *)
@@ -167,7 +178,8 @@ let rec block_of_wire ?(order_index = 1) (w : Wire.t) : Model.block =
     in
     match Wire.get w "block/children" with
     | Some (Wire.List xs) | Some (Wire.Array xs) ->
-        assign_order_indices [] (List.filter renderable xs)
+        assign_order_indices ~parent_query_id:query_ref_id []
+          (List.filter renderable xs)
     | _ -> []
   in
   (* a pulled [:block/link ...] ref arrives as a {:db/id n} stub *)
@@ -278,11 +290,15 @@ let rec block_of_wire ?(order_index = 1) (w : Wire.t) : Model.block =
       (match Wire.get w "logseq.property.asset/align" with
        | Some (Wire.Keyword s) | Some (Wire.String s) -> Some s
        | _ -> None)
+  ; block_is_query =
+      (match parent_query_id, db_id with
+       | Some p, Some id -> p = id
+       | _ -> false)
   }
 
 (* number = 1 + the run of consecutive same-type ordered-list siblings
    immediately to the left (plain_value.ml order_list_index) *)
-and assign_order_indices acc ws =
+and assign_order_indices ?(parent_query_id = None) acc ws =
   match ws with
   | [] -> List.rev acc
   | w :: rest ->
@@ -296,7 +312,9 @@ and assign_order_indices acc ws =
             | _ -> 1)
         | [] -> 1
       in
-      assign_order_indices (block_of_wire ~order_index w :: acc) rest
+      assign_order_indices ~parent_query_id
+        (block_of_wire ~order_index ~parent_query_id w :: acc)
+        rest
 
 let blocks_of_wire (w : Wire.t) : Model.block list =
   match w with
@@ -412,16 +430,25 @@ let page_of_summary (w : Wire.t) : Model.page option =
           (str [ "block/title"; "page-title"; "block/raw-title" ])
           ~default:""
       in
-      Some
-        { Model.page_title = title
-        ; page_uuid =
-            (match Wire.map_get_uuid w "block/uuid" with
-             | Some u -> Some u
-             | None -> Wire.map_get_uuid w "page-uuid")
-        ; page_db_id =
-            (match Wire.map_get_int w "db/id" with
-             | Some i -> Some i
-             | None -> Wire.map_get_int w "page-id")
+      let page_uuid =
+        match Wire.map_get_uuid w "block/uuid" with
+        | Some u -> Some u
+        | None -> Wire.map_get_uuid w "page-uuid"
+      in
+      let page_db_id =
+        match Wire.map_get_int w "db/id" with
+        | Some i -> Some i
+        | None -> Wire.map_get_int w "page-id"
+      in
+      (* a map with no identity fields isn't a page — fabricating an
+         empty record would render an anonymous row instead of dropping
+         the malformed entry *)
+      if title = "" && page_uuid = None && page_db_id = None then None
+      else
+        Some
+          { Model.page_title = title
+        ; page_uuid
+        ; page_db_id
         ; page_is_tag = is_tag_page w
         ; page_is_property = is_property_page w
         ; page_icon =
@@ -498,6 +525,30 @@ let toast_of_wire (w : Wire.t) : Model.toast option =
             { Model.toast_id = 0
             ; toast_text = text
             ; toast_kind = Option.value (text_of ty) ~default:"info"
+            ; toast_key = None
             }
       | None -> None)
   | _ -> None
+
+(* rtc-sync-state broadcast (deps/db-worker sync_presence.ml rtc_state_payload):
+   rtc-state {ws-state} / rtc-lock / tx counters / pending op counts *)
+let rtc_of_wire (w : Wire.t) : Model.rtc =
+  let ws_state =
+    match Wire.get w "rtc-state" with
+    | Some m -> (
+        match Wire.get m "ws-state" with
+        | Some (Wire.Keyword s) | Some (Wire.String s) -> s
+        | _ -> "")
+    | _ -> ""
+  in
+  let int k = Option.value (Wire.map_get_int w k) ~default:0 in
+  { Model.rtc_lock =
+      Option.value (Option.bind (Wire.get w "rtc-lock") Wire.as_bool)
+        ~default:false
+  ; rtc_ws_state = ws_state
+  ; rtc_local_tx = Wire.map_get_int w "local-tx"
+  ; rtc_remote_tx = Wire.map_get_int w "remote-tx"
+  ; rtc_pending_local = int "unpushed-block-update-count"
+  ; rtc_pending_asset = int "pending-asset-ops-count"
+  ; rtc_pending_server = int "pending-server-ops-count"
+  }

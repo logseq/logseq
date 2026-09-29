@@ -3,7 +3,7 @@
    filters-row. *)
 
 module D = Views_dom
-module I = Views_i18n
+module I = I18n
 module V = Views_state
 module Wr = Views_wire
 module W = Wire
@@ -215,7 +215,7 @@ let filter_value_phase inst ~refresh ~anchor (c : V.column) =
                 ; si_value =
                     Option.value (W.map_get_string it "label") ~default:""
                 ; si_extra = W.get it "value" })
-              (Wr.seq_items
+              (Wr.W.elems
                  (Option.value (W.get data "values") ~default:W.Nil))
       in
       let content = D.h ~cls:"flex flex-col gap-1 text-sm" () in
@@ -232,7 +232,7 @@ let filter_value_phase inst ~refresh ~anchor (c : V.column) =
         D.clear results;
         List.iter
           (fun it ->
-            if P.fuzzy_match q it.P.si_label then begin
+            if Fuzzy.score q it.P.si_label > 0. then begin
               let a =
                 D.h ~tag:"a" ~cls:"flex justify-between menu-link"
                   ~attrs:[ ("tabindex", "0") ]
@@ -571,7 +571,7 @@ let filter_chip inst ~refresh idx (f : V.filter_clause) : D.el =
       in
       Views_db.get_view_filter_data prop (fun data ->
           let ops =
-            Wr.seq_items
+            Wr.W.elems
               (Option.value (W.get data "operators") ~default:W.Nil)
             |> List.filter_map W.as_keyword
           in

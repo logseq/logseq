@@ -18,6 +18,8 @@ open Lui_elements
 module V = Virtualizer
 module D = Logseq_dom
 
+let keyed = D.keyed
+
 type element = V.element
 
 (* -- local DOM helpers (elements as opaque JSON values) -- *)
@@ -58,6 +60,12 @@ external disconnect : mutation_observer -> unit = "disconnect" [@@mel.send]
 external set_timeout : (unit -> unit) -> int -> unit = "setTimeout"
   [@@mel.scope "window"]
 
+external set_timeout_id : (unit -> unit) -> int -> int = "setTimeout"
+  [@@mel.scope "window"]
+
+external clear_timeout : int -> unit = "clearTimeout"
+  [@@mel.scope "window"]
+
 (* -- state -- *)
 
 type vrow = { v_index : int; v_key : string; v_start : float }
@@ -94,20 +102,18 @@ let next_id () =
 let force_virtualized () =
   Platform.query_param "virtualized" = Some "true"
 
-let enabled ~virtualize count =
+let enabled_min ~virtualize ~min count =
   let force = force_virtualized () in
-  virtualize
-  && (force || count >= 64)
+  (force || (virtualize && count >= min))
   && not (Platform.rtc_test_mode () && not force)
+
+let enabled ~virtualize count = enabled_min ~virtualize ~min:64 count
 
 (* measure every mounted [data-index] row, then prune dropped nodes *)
 let measure_rows list_el (v : V.t) =
   let items = nl_to_array (query_selector_all list_el "[data-index]") in
   Array.iter (fun el -> V.measure_element v (Js.Nullable.return el)) items;
-  V.measure_element v Js.Nullable.null;
-  (* freshly mounted rows need IntersectionObserver registration for
-     pointer-down range selection (cljs virtuoso items-rendered) *)
-  Virtual_scroll.sync ()
+  V.measure_element v Js.Nullable.null
 
 let rows_of (v : V.t) =
   Array.to_list (V.get_virtual_items v)
@@ -127,33 +133,10 @@ let attach (ctx : Lui_ui.ui_context) st margin list_id scroll_parent_id
         rect_top (bounding_rect list_el)
         -. rect_top (bounding_rect scroll_el)
         +. scroll_top scroll_el;
-      let last_scroll = ref (scroll_top scroll_el) in
       let publish v =
-        let rows = rows_of v in
-        Signal.set st { v_rows = rows; v_total = V.get_total_size v };
-        Runtime.flush ();
-        (* cljs virtuoso items-rendered: while a block-range drag is in
-           progress the selection extends to the boundary row in the
-           scroll direction — a stale mid-range row must never shrink it.
-           Direction follows the scroll offset, not the rendered start —
-           an overscan row appearing at the edge is not a scroll *)
-        let cur_scroll = scroll_top scroll_el in
-        let dir =
-          if cur_scroll > !last_scroll then Some `Down
-          else if cur_scroll < !last_scroll then Some `Up
-          else None
-        in
-        last_scroll := cur_scroll;
-        match dir, rows with
-        | Some `Down, _ :: _ ->
-            (match List.nth_opt rows (List.length rows - 1) with
-             | Some r when r.v_index < Array.length data ->
-                 Virtual_scroll.extend_drag (key_of data.(r.v_index))
-             | _ -> ())
-        | Some `Up, first :: _ ->
-            if first.v_index < Array.length data then
-              Virtual_scroll.extend_drag (key_of data.(first.v_index))
-        | _ -> ()
+        Signal.set st
+          { v_rows = rows_of v; v_total = V.get_total_size v };
+        Runtime.flush ()
       in
       let v =
         V.make
@@ -178,10 +161,19 @@ let attach (ctx : Lui_ui.ui_context) st margin list_id scroll_parent_id
       let cleanup = V.did_mount v in
       V.will_update v;
       publish v;
-      let obs = new_observer (fun () -> measure_rows list_el v) in
+      (* debounced: input inside mounted rows mutates the subtree on
+         every keystroke — remeasure once per burst, not per batch *)
+      let measure_timer = ref (-1) in
+      let obs =
+        new_observer (fun () ->
+            if !measure_timer >= 0 then clear_timeout !measure_timer;
+            measure_timer :=
+              set_timeout_id (fun () -> measure_rows list_el v) 50)
+      in
       observe obs list_el (observe_opts ~childList:true ~subtree:true);
       measure_rows list_el v;
       Signal.on_dispose ctx.ui_scope (fun () ->
+          if !measure_timer >= 0 then clear_timeout !measure_timer;
           Hashtbl.remove instances list_id;
           disconnect obs;
           cleanup ())
@@ -191,11 +183,11 @@ let row_attrs margin (it : vrow) =
   [ ("data-index", string_of_int it.v_index)
   ; ( "style"
     , Printf.sprintf
-        "position:absolute;top:0;left:0;width:100%%;transform:translateY(%.4fpx)"
+        "position:absolute;top:0;left:0;width:100%%;transform:translateY(%.2fpx)"
         (it.v_start -. margin) )
   ]
 
-let list ?(scroll_parent_id = "main-content-container") ?(overscan = 1)
+let list ?(scroll_parent_id = "main-content-container") ?(overscan = 5)
     ?(estimate_size = fun _ -> 32.) ?(list_attrs = [])
     ?(list_class = "ls-virt-list") ~key_of ~render (data : 'a array) : t =
  fun ctx parent ->
@@ -206,7 +198,7 @@ let list ?(scroll_parent_id = "main-content-container") ?(overscan = 1)
   let spacer_attrs =
     D.attrs_signal vstate_sig (fun s ->
         [ ( "style"
-          , Printf.sprintf "height:%.4fpx;position:relative;width:100%%"
+          , Printf.sprintf "height:%.2fpx;position:relative;width:100%%"
               s.v_total )
         ])
   in
@@ -217,21 +209,11 @@ let list ?(scroll_parent_id = "main-content-container") ?(overscan = 1)
       [ if row.v_index < Array.length data then render data.(row.v_index)
         else box ~key:("vrx-" ^ row.v_key) [] ]
   in
-  (* LUI applies the enclosing dom tree asynchronously — the list element
-     may not exist yet at +0ms; retry briefly, then fail loudly rather
-     than leaving the list permanently empty *)
-  let rec try_attach attempt =
-    if get_by_id list_id <> None && get_by_id scroll_parent_id <> None then
+  set_timeout
+    (fun () ->
       attach ctx st margin list_id scroll_parent_id data key_of overscan
-        estimate_size
-    else if attempt < 100 then
-      set_timeout (fun () -> try_attach (attempt + 1)) 50
-    else
-      Platform.console_log
-        ("virt-list attach failed: missing "
-        ^ (if get_by_id list_id = None then list_id else scroll_parent_id))
-  in
-  set_timeout (fun () -> try_attach 0) 0;
+        estimate_size)
+    0;
   D.dom ~key:("vl-" ^ list_id) ~id:list_id ~style_class:list_class
     ~attrs:list_attrs
     [ D.dom ~key:("vs-" ^ list_id) ~style_class:"ls-virt-spacer"

@@ -10,7 +10,7 @@
 open Lui_elements
 
 module S = Popups_state
-module U = Ui_strings
+module U = I18n
 
 let sv s = Lui_protocol.StringValue s
 
@@ -49,18 +49,6 @@ let mark_el ~key s =
 
 let text_span ~key s = Logseq_dom.dom ~key ~tag:"span" ~text:s [];;
 
-let index_ci hay needle =
-  let n = String.length needle and h = String.length hay in
-  let needle' = String.lowercase_ascii needle in
-  let rec go i =
-    if n = 0 || i + n > h then None
-    else if String.lowercase_ascii (String.sub hay i n) = needle' then
-      Some i
-    else go (i + 1)
-  in
-  go 0
-;;
-
 (* cljs hiccup renders plain strings as bare DOM text nodes; LUI mounts
    only elements, so a <raw-text> placeholder marks the exact position
    and the MutationObserver in Editor_dom swaps it for a text node *)
@@ -81,7 +69,7 @@ let highlight_el ~key ~query label : t =
       match words with
       | [] -> List.rev (text_span ~key:("r" ^ string_of_int i) rest :: acc)
       | w :: ws -> (
-          match index_ci rest w with
+          match I18n.index_ci rest w with
           | Some j ->
               let hit_len = String.length w in
               let rest' =
@@ -98,7 +86,7 @@ let highlight_el ~key ~query label : t =
     in
     Logseq_dom.dom ~key ~tag:"span" ~style_class:"m-0" (loop 0 words label []))
   else
-    match index_ci label query with
+    match I18n.index_ci label query with
     | Some i ->
         let before = String.sub label 0 i in
         let hit = String.sub label i (String.length query) in
@@ -399,8 +387,12 @@ let popover_style ~x ~y =
 ;;
 
 let ac_popover (st : S.t) : t =
+  (* signals are built inside the mount closure: if_ unmounts dispose any
+     derived signal bound under that scope, so an eagerly-created map would
+     throw "cannot observe a disposed signal" on the next mount *)
+ fun context parent ->
   (* cljs PopoverContent: ui__popover-content + card + transition classes *)
-  Logseq_dom.dom ~key:"ac-pop"
+  (Logseq_dom.dom ~key:"ac-pop"
     ~style_class:
       ("ui__popover-content z-50 rounded-md border bg-popover \
         text-popover-foreground shadow-md outline-none "
@@ -465,7 +457,8 @@ let ac_popover (st : S.t) : t =
                    ~text:(Platform.utf8 "\xe2\x8f\x8e") [] ] ]
            ; Logseq_dom.dom ~key:"ht" ~tag:"span"
                ~text:(U.t "editor/display-tag-inline-hint") [] ])
-    ]
+    ])
+    context parent
 ;;
 
 (* -- context menu ---------------------------------------------------- *)
@@ -575,48 +568,106 @@ let cm_shortcut_el (binding, caps) : t =
             children
         ]
     ]
-;;
 
 let cm_item_cls =
   "ui__dropdown-menu-item relative flex cursor-pointer select-none \
    items-center rounded-sm px-2 py-1.5 text-sm outline-none \
-   data-[disabled]:opacity-50 data-[disabled]:pointer-events-none \
-   data-[highlighted]:bg-muted"
+   data-[highlighted]:bg-muted data-[disabled]:pointer-events-none \
+   data-[disabled]:opacity-50"
 ;;
 
-let cm_item_el (entry_sig : S.cm_item Signal.signal) : t =
-  (* cm entries are static for the menu's lifetime, so sampling once is
-     stable and the keyed mount can return the item node directly *)
-  match Signal.sample entry_sig with
-  | S.Ci_sep ->
-      Logseq_dom.dom ~key:"sep" ~attrs:[ ("role", "separator") ]
-        ~style_class:"ui__dropdown-menu-separator -mx-1 my-1 h-px bg-muted" []
-  | S.Ci_colors -> cm_color_row ()
-  | S.Ci_headings -> cm_heading_row ()
-  | S.Ci_sub label ->
-      Logseq_dom.dom ~key:"sub"
-        ~style_class:
-          "ui__dropdown-menu-sub-trigger flex cursor-pointer select-none \
-           items-center rounded-sm px-2 py-1.5 text-sm outline-none \
-           data-[highlighted]:bg-muted data-[open]:bg-muted"
-        ~attrs:
-          [ ("role", "menuitem"); ("aria-expanded", "false")
-          ; ("data-cm-item", label)
-          ; ("style", "cursor: pointer") ]
-        ~text:label
-        [ Icons.raw ~cls:"ml-auto h-4 w-4" "chevron-right" ]
+let cm_item_el (entry_sig : (int * S.cm_item) Signal.signal) : t =
+  let idx = Signal.get (Signal.map fst entry_sig) in
+  (* keyed mounts run with parent=None, so the entry point must be a real
+     node — wrap the dynamic branch in a box *)
+  box ~key:"cm-entry"
+    [ dyn
+      ~equal:(fun (a : S.cm_item) b -> a = b)
+      (function
+      | S.Ci_sep ->
+          Logseq_dom.dom ~key:"sep" ~attrs:[ ("role", "separator") ]
+            ~style_class:"ui__dropdown-menu-separator -mx-1 my-1 h-px bg-muted" []
+      | S.Ci_colors -> cm_color_row ()
+      | S.Ci_headings -> cm_heading_row ()
+      | S.Ci_sub (label, _sub) ->
+          Logseq_dom.dom ~key:"sub"
+            ~style_class:
+              "ui__dropdown-menu-sub-trigger flex cursor-pointer select-none \
+               items-center rounded-sm px-2 py-1.5 text-sm outline-none \
+               data-[highlighted]:bg-muted data-[open]:bg-muted"
+            ~attrs:
+              [ ("role", "menuitem"); ("aria-haspopup", "menu")
+              ; ("tabindex", "-1"); ("data-cm-sub", string_of_int idx)
+              ; ("style", "cursor: pointer") ]
+            [ Logseq_dom.dom ~key:"lbl" ~tag:"span" ~text:label []
+            ; Icons.icon ~cls:"ml-auto h-4 w-4" "chevron-right" ]
+      | S.Ci_item (label, scut, cmd) ->
+          Logseq_dom.dom ~key:"item" ~style_class:cm_item_cls
+            ~attrs:
+              [ ("role", "menuitem"); ("tabindex", "-1")
+              ; ("data-cm-item", cmd); ("style", "cursor: pointer") ]
+            (Logseq_dom.dom ~key:"lbl" ~tag:"span" ~text:label []
+             :: (match scut with
+                 | Some s -> [ cm_shortcut_el s ]
+                 | None -> [])))
+        (Signal.map snd entry_sig) ]
+;;
+
+let cm_sub_item_el (it : S.cm_item) : t =
+  match it with
   | S.Ci_item (label, scut, cmd) ->
-      Logseq_dom.dom ~key:"item" ~style_class:cm_item_cls
+      Logseq_dom.dom ~key:"sub-item" ~style_class:cm_item_cls
         ~attrs:
-          [ ("role", "menuitem"); ("data-cm-item", cmd)
-          ; ("style", "cursor: pointer") ]
-        ~text:label
-        (match scut with
-         | Some s -> [ cm_shortcut_el s ]
-         | None -> [])
+          [ ("role", "menuitem"); ("tabindex", "-1")
+          ; ("data-cm-item", cmd); ("style", "cursor: pointer") ]
+        (Logseq_dom.dom ~key:"lbl" ~tag:"span" ~text:label []
+         :: (match scut with
+             | Some s -> [ cm_shortcut_el s ]
+             | None -> []))
+  | _ -> Logseq_dom.dom ~key:"x" []
+;;
+
+(* dropdown-menu-sub-content for Sub_menu entries — positioned at the
+   trigger's right edge (coords stored on hover in cm.sub_xy) *)
+let cm_sub_el (x : float) (y : float) (items : S.cm_item list) : t =
+  Logseq_dom.dom ~key:"cm-sub"
+    ~style_class:
+      "ui__dropdown-menu-sub-content z-50 min-w-[8rem] rounded-md border \
+       bg-popover p-1 text-popover-foreground shadow-lg animate-in \
+       fade-in-0 zoom-in-95 data-[side=bottom]:slide-in-from-top-2 \
+       data-[side=left]:slide-in-from-right-2 \
+       data-[side=right]:slide-in-from-left-2 \
+       data-[side=top]:slide-in-from-bottom-2 outline-none \
+       focus:outline-none focus-visible:outline-none"
+    ~attrs:
+      [ ("role", "menu"); ("tabindex", "-1")
+      ; ( "style"
+        , Printf.sprintf "position:fixed;left:%.0fpx;top:%.0fpx;z-index:1000"
+            x y ) ]
+    [ Logseq_dom.dom ~key:"w" ~style_class:"menu-links-wrapper"
+        (List.map cm_sub_item_el items) ]
+;;
+
+(* (idx, x, y, items) while a Sub_menu is open; None otherwise — the
+   tuple feeds dyn so the submenu mounts lazily with live coords *)
+let cm_sub_state (st : S.t)
+    : (int * float * float * S.cm_item list) option Signal.signal =
+  Signal.map
+    (fun (v : S.view) ->
+      match v.S.cm with
+      | Some m when m.S.sub_open >= 0 -> (
+          let x, y = m.S.sub_xy in
+          match List.nth_opt m.S.entries m.S.sub_open with
+          | Some (S.Ci_sub (_, S.Sub_menu items)) ->
+              Some (m.S.sub_open, x, y, items)
+          | _ -> None)
+      | _ -> None)
+    st.S.vs.Signal.state_signal
 ;;
 
 let cm_popover (st : S.t) : t =
+  (* see ac_popover: signals must be built per mount *)
+ fun context parent ->
   let entries_sig =
     Signal.map
       (fun (v : S.view) ->
@@ -627,43 +678,35 @@ let cm_popover (st : S.t) : t =
   in
   (* cljs as-dropdown? context menu: dropdown-menu-content card classes
      merged with content-props class w-[280px] ls-context-menu-content *)
-  (* cljs DropdownMenuContent mounts inside base-ui presentation wrappers *)
-  Logseq_dom.dom ~key:"cm-pw1" ~attrs:[ ("role", "presentation") ]
-    [ Logseq_dom.dom ~key:"cm-pw2" ~attrs:[ ("role", "presentation") ]
-        [ Logseq_dom.dom ~key:"cm-ps" ~tag:"span"
-            [ Logseq_dom.dom ~key:"cm"
-                ~style_class:
-                  ("ui__dropdown-menu-content ls-context-menu-content \
-                    w-[280px] z-50 min-w-[8rem] rounded-md border bg-popover \
-                    p-1 text-popover-foreground shadow-md "
-                  ^ popover_transition_classes)
-                ~attrs_signal_v:
-                  (Signal.map
-                     (fun (v : S.view) ->
-                       match v.S.cm with
-                       | Some m ->
-                           attrs_v
-                             [ ("role", "menu")
-                             ; ( "style"
-                               , Printf.sprintf
-                                   "position: fixed; left: %.0fpx; top: \
-                                    %.0fpx; z-index: 999"
-                                   m.S.cx m.S.cy ) ]
-                       | None -> attrs_v [])
-                     st.S.vs.Signal.state_signal)
-                [ Logseq_dom.dom ~key:"cm-wrap"
-                    [ keyed ~source:entries_sig
-                        ~key:(fun ((i, _) : int * S.cm_item) -> i)
-                        ~cmp:Stdlib.compare
-                        ~mount:(fun entry_sig ->
-                          cm_item_el
-                            (Signal.map
-                               (fun ((_, e) : int * S.cm_item) -> e)
-                               entry_sig)) ]
-                ]
-            ]
-        ]
+  Logseq_dom.dom ~key:"cm"
+    ~style_class:
+      "ui__dropdown-menu-content ls-context-menu-content w-[280px] z-50 \
+       min-w-[8rem] rounded-md border bg-popover p-1 \
+       text-popover-foreground shadow-md outline-none"
+    ~attrs_signal_v:
+      (Signal.map
+         (fun (v : S.view) ->
+           match v.S.cm with
+           | Some m ->
+               attrs_v
+                 [ ( "style"
+                   , Printf.sprintf
+                       "position: fixed; left: %.0fpx; top: %.0fpx; z-index: 999"
+                       m.S.cx m.S.cy ) ]
+           | None -> attrs_v [])
+         st.S.vs.Signal.state_signal)
+    [ Logseq_dom.dom ~key:"cm-wrap" ~style_class:"menu-links-wrapper"
+        [ keyed ~source:entries_sig ~key:(fun ((i, _) : int * S.cm_item) -> i)
+            ~cmp:Stdlib.compare
+            ~mount:(fun entry_sig -> cm_item_el entry_sig) ]
+    ; dyn ~equal:Stdlib.( = )
+        (fun sub ->
+          match sub with
+          | Some (_, x, y, items) -> cm_sub_el x y items
+          | None -> box ~key:"cm-sub-empty" [])
+        (cm_sub_state st)
     ]
+    context parent
 ;;
 
 (* -- delegated listeners --------------------------------------------- *)
@@ -786,14 +829,17 @@ let pv_popover (p : S.pv) : t =
     ]
 
 let pv_dyn (st : S.t) : t =
-  dyn
-    ~equal:(fun a b -> a == b)
-    (fun pv ->
-      match pv with
-      | None -> Logseq_dom.nothing
-      | Some p -> pv_popover p)
-    (Signal.map (fun (v : S.view) -> v.S.pv)
-       st.S.vs.Signal.state_signal)
+  (* see ac_popover: signals must be built per mount *)
+ fun context parent ->
+  (dyn
+     ~equal:(fun a b -> a == b)
+     (fun pv ->
+       match pv with
+       | None -> Logseq_dom.nothing
+       | Some p -> pv_popover p)
+     (Signal.map (fun (v : S.view) -> v.S.pv)
+        st.S.vs.Signal.state_signal))
+    context parent
 
 let handle_input st (ev : Dom_ext.event) =
   match Dom_ext.target ev with
@@ -863,7 +909,7 @@ let handle_click st (ev : Dom_ext.event) =
   match Dom_ext.target ev with
   | None -> ()
   | Some el ->
-      if not (in_popups el) then (S.close_ac st; S.close_cm st)
+      if not (in_popups el) then (S.close_ac st; S.close_cm st; S.close_pv st)
       else (
         Dom_ext.prevent_default ev;
         if Dom_ext.closest el "[data-cm-color]" <> None then
@@ -883,9 +929,66 @@ let handle_click st (ev : Dom_ext.event) =
           | None -> ())
 ;;
 
+(* Set icon / Add reaction sub-triggers open the icon picker to the
+   right of the menu (base-ui inline-end placement); the choice applies
+   to every selected block for the multi-select menu *)
+let open_cm_picker (st : S.t) (pk : S.cm_picker)
+    (anchor : Dom_ext.element) (cm : S.cm) =
+  let uuids =
+    if cm.S.multi && Platform.selected_block_uuids () <> [] then
+      Platform.selected_block_uuids ()
+    else [ cm.S.block_id ]
+  in
+  let anchor = Editor_dom.el_of_json anchor in
+  match pk with
+  | S.Picker_icon ->
+      Icon_picker.open_picker_with_opts ~anchor ~del:false
+        ~opts:{ Icon_picker.emoji_only = false; sub = true }
+        ~on_chosen:(fun c ->
+          List.iter (fun u -> Page.set_icon u c) uuids;
+          S.close_cm st)
+  | S.Picker_emoji ->
+      Icon_picker.open_picker_with_opts ~anchor ~del:false
+        ~opts:{ Icon_picker.emoji_only = true; sub = true }
+        ~on_chosen:(fun c ->
+          (match c with
+           | Icon_picker.Emoji id ->
+               List.iter (fun u -> Comments_view.toggle_reaction u id) uuids
+           | _ -> ());
+          S.close_cm st)
+;;
+
+let cm_hover st el =
+  match Dom_ext.closest el "[data-cm-sub]" with
+  | Some trg -> (
+      match Dom_ext.get_attribute trg "data-cm-sub" with
+      | Some s -> (
+          match int_of_string_opt s, (S.get st).S.cm with
+          | Some idx, Some cm when cm.S.sub_open <> idx -> (
+              match S.cm_sub_at st idx with
+              | Some (S.Sub_menu _) ->
+                  let r = Dom_ext.bounding_rect trg in
+                  S.open_cm_sub st ~index:idx
+                    ~x:(Dom_ext.rect_right r -. 4.)
+                    ~y:(Dom_ext.rect_top r -. 4.)
+              | Some (S.Sub_picker pk) ->
+                  S.open_cm_sub st ~index:idx ~x:0. ~y:0.;
+                  open_cm_picker st pk trg cm
+              | None -> ())
+          | _ -> ())
+      | None -> ())
+  | None ->
+      (* hovering a regular item inside the menu closes the open submenu *)
+      if (S.get st).S.cm <> None
+         && Dom_ext.closest el ".ls-context-menu-content" <> None
+         && Dom_ext.closest el ".ui__dropdown-menu-sub-content" = None then
+        S.close_cm_sub st
+;;
+
 let handle_mousemove st (ev : Dom_ext.event) =
   match Dom_ext.target ev with
   | Some el -> (
+      cm_hover st el;
       (match Dom_ext.closest el ".menu-link-wrap" with
        | Some wrap -> (
            match Dom_ext.query_selector wrap "a.menu-link" with
@@ -910,7 +1013,11 @@ let install_listeners st =
   Dom_ext.add_document_listener "contextmenu" (handle_contextmenu st) true;
   Dom_ext.add_document_listener "click" (handle_click st) true;
   Dom_ext.add_document_listener "mousedown" (handle_mousedown st) true;
-  Dom_ext.add_document_listener "mousemove" (handle_mousemove st) false
+  Dom_ext.add_document_listener "mousemove" (handle_mousemove st) false;
+  (* the preview survives its trigger element (popup lives in the overlay
+     layer); navigation must drop it like cljs' tippy instance dying with
+     the reference node *)
+  Platform.on_hash_change (fun () -> S.close_pv st)
 ;;
 
 let render (_ms : Model.t Signal.signal) : t =

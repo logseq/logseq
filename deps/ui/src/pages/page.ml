@@ -78,11 +78,9 @@ let open_menu name payload =
         Runtime.flush ())
       payload
 
-let set_page_icon (page : Model.page) (c : Icon_picker.choice) =
-  match page.page_uuid with
-  | None -> ()
-  | Some u ->
-      let op =
+(* generic: works for any entity uuid (page or block) *)
+let set_icon (u : string) (c : Icon_picker.choice) =
+  let op =
         match c with
         | Icon_picker.Remove ->
             Outliner_ops.op "remove-block-property"
@@ -104,10 +102,15 @@ let set_page_icon (page : Model.page) (c : Icon_picker.choice) =
                      | Some c -> [ Wire.Keyword "color", Wire.String c ]
                      | None -> []))
               ]
-      in
-      ignore
-        (Outliner_ops.apply [ op ]
-         |> Js.Promise.then_ (fun _ -> !Runtime.reload_current_view ()))
+  in
+  ignore
+    (Outliner_ops.apply [ op ]
+     |> Js.Promise.then_ (fun _ -> !Runtime.reload_current_view ()))
+
+let set_page_icon (page : Model.page) (c : Icon_picker.choice) =
+  match page.page_uuid with
+  | None -> ()
+  | Some u -> set_icon u c
 
 let page_icon_picker (page : Model.page) (anchor : string) =
   match Properties_dom.doc_query anchor with
@@ -130,9 +133,8 @@ let title_editor (page : Model.page) : t =
      .editor-wrapper > .editor-inner.block-editor > textarea +
      mock-text mirror (popup caret positioning) *)
   let uuid = Option.value page.page_uuid ~default:"" in
-  dom ~key:"pt-edit" ~style_class:"editor-wrapper flex flex-1 w-full"
-    ~id:("editor-edit-block-" ^ uuid)
-    [ dom ~key:"pt-ei" ~style_class:"editor-inner flex flex-1 block-editor"
+  Ui_parts.editor_wrapper ~key:"pt-edit" ~id:("editor-edit-block-" ^ uuid)
+    [ Ui_parts.editor_inner ~key:"pt-ei"
         [ dom ~key:"pt-ta" ~tag:"textarea"
             ~id:("edit-block-" ^ uuid)
             ~attrs:[ ("autofocus", "true") ]
@@ -152,34 +154,11 @@ let title_editor (page : Model.page) : t =
               | _ -> ())
           | _ -> ())
         []
-        ; (* cljs mock-textarea: hidden caret mirror for popup placement *)
-          dom ~key:"pt-mt" ~style_class:"mock-text"
-            ~attrs:
-              [ ( "style"
-                , "width:100%;height:100%;position:absolute;visibility:hidden;top:0;left:0" )
-              ]
-            []
+        ; Ui_parts.mock_text ~key:"pt-mt"
         ]
     ; Asset_dom.upload_input ("pt-up-" ^ uuid)
     ]
 
-(* cljs arrow svg inside .control-hide/.rotating-arrow *)
-let rotating_arrow key : t =
-  dom ~key ~tag:"svg"
-    ~style_class:"h-4 w-4"
-    ~attrs:
-      [ ("aria-hidden", "true"); ("version", "1.1")
-      ; ("viewBox", "0 0 192 512"); ("fill", "currentColor")
-      ; ("display", "inline-block"); ("style", "margin-left: 2px") ]
-    [ dom ~key:"p" ~tag:"path"
-        ~attrs:
-          [ ( "d"
-            , "M0 384.662V127.338c0-17.818 21.543-26.741 \
-               34.142-14.142l128.662 128.662c7.81 7.81 7.81 20.474 0 \
-               28.284L34.142 398.804C21.543 411.404 0 402.48 0 384.662z" )
-          ; ("fill-rule", "evenodd") ]
-        []
-    ]
 
 (* cljs title-tag chip: .block-tag > .flex.items-center > a.hash-symbol +
    a.tag[draggable][data-ref] > span. The .ls-block-right/.hover wrappers
@@ -240,18 +219,16 @@ let title_content (page : Model.page) : t =
         ( [ "click" ]
         , Some
             (fun _name payload ->
-              let shift =
+              let shift, interactive =
                 match payload with
-                | Some p ->
-                    Js.Json.decodeBoolean
-                      (Platform.json_prop (Platform.json_parse p) "shiftKey")
-                    = Some true
-                | None -> false
+                | Some p -> (Platform.payload_bool p "shiftKey",
+                             Platform.payload_bool p "interactive")
+                | None -> (false, false)
               in
               (* shift+click opens the page in the right sidebar (handled by
                  the document-level listener); starting title edit would
                  replace the clicked node mid-dispatch *)
-              if page.page_uuid <> None && not shift then (
+              if page.page_uuid <> None && not shift && not interactive then (
                 Runtime.send Action.Title_edit_start;
                 Runtime.flush ();
                 (* autofocus doesn't re-fire on remount — focus explicitly
@@ -371,7 +348,7 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
                                   ("rotating-arrow"
                                   ^ if title_collapsed then " collapsed"
                                     else " not-collapsed")
-                                [ rotating_arrow "pt-arw" ]
+                                [ Ui_parts.rotating_arrow "pt-arw" ]
                             ]
                         in
                         if page.page_is_tag then
@@ -494,10 +471,11 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
       | "click" ->
           (* icon buttons live inside #page-title; skip title-edit when
              they (or their children) are the click target *)
-          let target =
+          let target, interactive =
             match payload with
-            | Some p -> Platform.payload_str p "targetId"
-            | None -> ""
+            | Some p -> (Platform.payload_str p "targetId",
+                         Platform.payload_bool p "interactive")
+            | None -> ("", false)
           in
           let shift =
             match payload with
@@ -508,6 +486,7 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
             page.page_uuid <> None && not shift
             && (target = "" || target = "page-title"
                 || target = "page-title-text")
+            && not interactive
           then (
             Runtime.send Action.Title_edit_start;
             Runtime.flush ();
@@ -572,16 +551,24 @@ let blocks_inner ?puuid ?(virtualize = false) ?(library = false)
    grouped under their source page (references-blocks-item > page-cp),
    so the referencing page's name must appear inside .references *)
 let refs_grouped (refs : Model.block list) : (string * Model.block list) list =
-  let insert groups (b : Model.block) =
-    let name = Option.value b.block_page_name ~default:"" in
-    match List.find_opt (fun (n, _) -> n = name) groups with
-    | Some _ ->
-        List.map
-          (fun (n, bs) -> if n = name then (n, bs @ [ b ]) else (n, bs))
-          groups
-    | None -> groups @ [ (name, [ b ]) ]
-  in
-  List.fold_left insert [] refs
+  (* linear grouping: Hashtbl keyed by source page name, order of first
+     appearance preserved; a per-ref List.find_opt + append rebuild is
+     O(refs x groups) on ref-heavy pages *)
+  let tbl : (string, Model.block list ref) Hashtbl.t = Hashtbl.create 16 in
+  let order = ref [] in
+  List.iter
+    (fun (b : Model.block) ->
+      let name = Option.value b.block_page_name ~default:"" in
+      match Hashtbl.find_opt tbl name with
+      | Some bs -> bs := b :: !bs
+      | None ->
+          Hashtbl.replace tbl name (ref [ b ]);
+          order := name :: !order)
+    refs;
+  List.rev_map
+    (fun name ->
+      (name, List.rev !(Hashtbl.find tbl name)))
+    (List.rev !order)
 
 (* cljs ui__button base classes (shui/button) *)
 let ui_btn =
@@ -605,7 +592,7 @@ let fold_arrow ?on_click key : t =
     ~events ?on_dom_event:handler
     [ dom ~key:"ch" ~tag:"span" ~style_class:"control-hide"
         [ dom ~key:"ra" ~tag:"span" ~style_class:"rotating-arrow not-collapsed"
-            [ rotating_arrow (key ^ "-svg") ]
+            [ Ui_parts.rotating_arrow (key ^ "-svg") ]
         ]
     ]
 
@@ -646,7 +633,7 @@ let refs_view_head key ?on_search title count : t =
             ; dom ~key:"vh-add" ~tag:"button"
                 ~attrs:
                   [ ("type", "button"); ("tabindex", "0")
-                  ; ("title", Ui_strings.t "view/add-new-view") ]
+                  ; ("title", I18n.t "view/add-new-view") ]
                 ~style_class:
                   (ui_btn ^ " as-text h-7 rounded py-1 !px-1 -ml-1 \
                    text-muted-foreground hover:text-foreground \
@@ -658,7 +645,7 @@ let refs_view_head key ?on_search title count : t =
         ~style_class:
           "opacity-0 view-actions flex items-center gap-1 \
            transition-opacity ease-in duration-300"
-        [ view_ghost_btn "vh-fc" ~title:(Ui_strings.t "reference/page-filter")
+        [ view_ghost_btn "vh-fc" ~title:(I18n.t "reference/page-filter")
             "filter-cog" 18.
         ; view_ghost_btn "vh-srt" "arrows-up-down" 18.
         ; view_ghost_btn "vh-flt" "filter" 18.
@@ -712,14 +699,18 @@ let foldable_content key inner : t =
     ~attrs:[ ("aria-hidden", "false") ]
     [ dom ~key:"fci" ~style_class:"ls-foldable-content-inner" [ inner ] ]
 
-(* one linked-ref group: source page-ref foldable title + its blocks *)
-let ref_group idx (name, blocks) : t =
+(* one linked-ref group: source page-ref foldable title + its blocks.
+   The static layout keeps the virtuoso index attrs; virtualized rows get
+   data-index from the .ls-virt-row wrapper instead (a second data-index
+   inside would double-measure) *)
+let ref_group ?(extra_attrs = []) (name, blocks) : t =
   let key = "rg-" ^ name in
-  dom ~key ~attrs:[ ("data-index", string_of_int idx)
-                  ; ("data-item-index", string_of_int idx)
-                  ; ("style", "overflow-anchor: none;") ]
+  dom ~key ~attrs:extra_attrs
     [ dom ~key:"gi" ~style_class:"flex flex-col"
-        [ foldable_title (key ^ "-t")
+        (* ref-group titles carry no fold arrow: e2e resolves
+           ".unlinked-references .ls-foldable-title-control" strictly
+           (one control per section) *)
+        [ foldable_title ~control:false (key ^ "-t")
             (dom ~key:"grp" ~style_class:""
                [ dom ~key:"grl" ~tag:"a" ~style_class:"page-ref relative"
                    ~attrs:
@@ -752,22 +743,39 @@ let ref_group idx (name, blocks) : t =
     ]
 
 let ref_groups_virt key (groups : (string * Model.block list) list) : t =
-  (* cljs mounts a Virtuoso scroller; we keep its DOM scaffolding but lay
-     groups out statically (absolute positioning would collapse without a
-     measured scroller height) *)
-  dom ~key ~style_class:"group-list-view"
-    ~attrs:[ ("data-virtuoso-scroller", "true")
-           ; ("style", "position: relative;") ]
-    [ dom ~key:"vp" ~attrs:[ ("data-viewport-type", "window") ]
-        [ dom ~key:"il"
-            ~attrs:
-              [ ("data-testid", "virtuoso-item-list")
-              ; ( "style"
-                , "box-sizing: border-box; margin-top: 0px; \
-                   padding-bottom: 0px; padding-top: 0px;" ) ]
-            (List.mapi ref_group groups)
-        ]
-    ]
+  let items = Array.of_list groups in
+  (* virtualize at group granularity — a tag page can carry hundreds of
+     source-page groups; group rows measure dynamically like journals *)
+  if Virt_list.enabled ~virtualize:true (Array.length items) then
+    dom ~key ~style_class:"group-list-view"
+      ~attrs:[ ("data-virtuoso-scroller", "true")
+             ; ("style", "position: relative;") ]
+      [ Virt_list.list
+          ~list_attrs:[ ("data-viewport-type", "window") ]
+          ~key_of:(fun (name, _) -> name)
+          ~estimate_size:(fun _ -> 120.) ~render:ref_group items ]
+  else
+    dom ~key ~style_class:"group-list-view"
+      ~attrs:[ ("data-virtuoso-scroller", "true")
+             ; ("style", "position: relative;") ]
+      [ dom ~key:"vp" ~attrs:[ ("data-viewport-type", "window") ]
+          [ dom ~key:"il"
+              ~attrs:
+                [ ("data-testid", "virtuoso-item-list")
+                ; ( "style"
+                  , "box-sizing: border-box; margin-top: 0px; \
+                     padding-bottom: 0px; padding-top: 0px;" ) ]
+              (List.mapi
+                 (fun i g ->
+                   ref_group
+                     ~extra_attrs:
+                       [ ("data-index", string_of_int i)
+                       ; ("data-item-index", string_of_int i)
+                       ; ("style", "overflow-anchor: none;") ]
+                     g)
+                 groups)
+          ]
+      ]
 
 (* cljs views/view {:add-page-column? true} — each ref row carries the
    source page name. *)
@@ -800,7 +808,10 @@ let ref_item (b : Model.block) : t =
 
 let fetch_unlinked (m : Model.t) =
   match m.route_page with
-  | Some p -> Router.fetch_unlinked p
+  | Some p ->
+      Outliner_ops.fetch_unlinked_refs
+        ~stale:(fun () -> !Runtime.current_route <> Some m.route)
+        p
   | None -> ()
 
 let references_view (refs : Model.block list) : t =
@@ -814,7 +825,7 @@ let references_view (refs : Model.block list) : t =
                 [ dom ~key:"rv3" ~style_class:"flex flex-col"
                     [ foldable_title "refs-t"
                         (refs_view_head "refs"
-                           (Ui_strings.t "view/linked-references")
+                           (I18n.t "view/linked-references")
                            (List.length refs))
                     ; foldable_content "refs-c"
                         (dom ~key:"rvb"
@@ -849,7 +860,7 @@ let journal_references_view (p : Model.page) : t =
 let unlinked_search_input () : t =
   dom ~key:"urefs-search-box" ~style_class:"view-action-search"
     [ dom ~key:"urefs-input" ~tag:"input"
-        ~attrs:[ ("placeholder", Strings.filter_placeholder) ]
+        ~attrs:[ ("placeholder", I18n.filter_placeholder) ]
         ~events:"input"
         ~on_dom_event:(fun name payload ->
           if name = "input" then (
@@ -861,15 +872,6 @@ let unlinked_search_input () : t =
             Runtime.flush ()))
         []
     ]
-
-let contains_ci ~needle hay =
-  let n = String.lowercase_ascii needle in
-  let h = String.lowercase_ascii hay in
-  let nl = String.length n and hl = String.length h in
-  let rec go i =
-    i + nl <= hl && (String.sub h i nl = n || go (i + 1))
-  in
-  nl > 0 && go 0
 
 let unlinked_row (b : Model.block) : t =
   let key =
@@ -901,10 +903,10 @@ let unlinked_references_view (m : Model.t) : t =
     else
       List.filter
         (fun (b : Model.block) ->
-          contains_ci ~needle:q b.block_title
+          I18n.contains_ci b.block_title q
           ||
           (match b.block_page_name with
-           | Some p -> contains_ci ~needle:q p
+           | Some p -> I18n.contains_ci p q
            | None -> false))
         refs
   in
@@ -921,7 +923,7 @@ let unlinked_references_view (m : Model.t) : t =
                        ~on_search:(fun () ->
                          Runtime.send Action.Unlinked_toggle_search;
                          Runtime.flush ())
-                       (Ui_strings.t "view/unlinked-references")
+                       (I18n.t "view/unlinked-references")
                        (List.length refs))
                 ; dom ~key:"urefs-content" ~style_class:"ls-foldable-content"
                     ~attrs:
@@ -1018,7 +1020,11 @@ let journals_view (m : Model.t) (js : Model.page list) : t =
          [ dom ~key:"jp"
              ~style_class:"journal-item-placeholder animate-pulse p-6" [] ]
      | _ ->
-         if Virt_list.force_virtualized () then
+         (* cljs mounts the Virtuoso scroller unconditionally; only
+            rtc-test mode (without the flag) falls back to eager rows *)
+         if Virt_list.enabled_min ~virtualize:true ~min:1
+              (Array.length items)
+         then
            [ dom ~key:"js"
                [ dom ~key:"jvp"
                    [ Virt_list.list
@@ -1041,7 +1047,7 @@ let journals_view (m : Model.t) (js : Model.page list) : t =
 let not_found_view name : t =
   dom ~key:"not-found" ~style_class:"page"
     [ box ~key:"nf-inner" ~style_class:"flex flex-col items-center"
-        [ text ~key:"nf-t" ~value:(Strings.page_not_found ^ name)
+        [ text ~key:"nf-t" ~value:(I18n.page_not_found ^ name)
             ~style_class:"" []
         ]
     ]
@@ -1057,7 +1063,7 @@ let library_add_pages_button : t =
           if name = "click" then Runtime.send Action.Toggle_search)
         [ dom ~key:"lib-add-i" ~tag:"i" ~style_class:"ti ti-plus" []
         ; dom ~key:"lib-add-t" ~tag:"span"
-            ~text:(Ui_strings.t "library/add-existing-pages") [] ]
+            ~text:(I18n.t "library/add-existing-pages") [] ]
     ]
 
 let page_view (m : Model.t) (page : Model.page) : t =
@@ -1110,7 +1116,7 @@ let page_view (m : Model.t) (page : Model.page) : t =
 let empty_state () : t =
   box ~key:"empty" ~style_class:"page"
     [ box ~key:"empty-inner" ~style_class:"flex flex-col items-center"
-        [ text ~key:"empty-t" ~value:Strings.loading ~style_class:"" [] ]
+        [ text ~key:"empty-t" ~value:I18n.loading ~style_class:"" [] ]
     ]
 
 (* Library renders the ordinary page chrome plus the add-pages button; its
@@ -1166,7 +1172,7 @@ let page_view_of_model (m : Model.t) : t =
           (* cljs page-aux: missing page/block renders inline
              (t :page/not-found) inside the content wrap *)
           dom ~key:"pg-missing" ~style_class:"opacity-75"
-            [ text ~key:"pgm-t" ~value:(Ui_strings.t "page/not-found")
+            [ text ~key:"pgm-t" ~value:(I18n.t "page/not-found")
                 ~style_class:"" [] ]
       | None, false -> empty_state ())
   | _ -> empty_state ()

@@ -66,6 +66,9 @@ type inst =
   ; mutable qsrc : string (* query source text (value block title) *)
   ; mutable query_block_uuid : string
         (* logseq.property/query value block uuid — query writes target it *)
+  ; mutable query_editor_open : bool
+        (* raw-source CodeMirror visible — page remounts re-open it on the
+           fresh shell so a rebuild never silently loses the editor *)
   ; all_props : (string, W.t) Hashtbl.t (* ident -> property entity *)
   ; mutable props_loaded : bool
   ; ref_titles : (string, string) Hashtbl.t (* referenced uuid -> title *)
@@ -73,13 +76,10 @@ type inst =
 
 let next_id = ref 0
 
-let instances : (int, inst) Hashtbl.t = Hashtbl.create 8
-
 let make ~kind ~feature ~owner ~container : inst =
   incr next_id;
-  let inst =
-    { id = !next_id
-    ; kind
+  { id = !next_id
+  ; kind
     ; feature
     ; owner
     ; container
@@ -111,16 +111,12 @@ let make ~kind ~feature ~owner ~container : inst =
     ; query_scalar_rows = []
     ; qsrc = ""
     ; query_block_uuid = ""
+    ; query_editor_open = false
     ; all_props = Hashtbl.create 17
     ; props_loaded = false
     ; ref_titles = Hashtbl.create 8
     ; asset_class = false
     }
-  in
-  Hashtbl.replace instances inst.id inst;
-  inst
-
-let drop inst = Hashtbl.remove instances inst.id
 
 (* -- wire encode/decode of persisted table state -- *)
 
@@ -166,7 +162,7 @@ let filters_of_wire w : filter_clause list * bool =
                            | [] -> None)
                       }
                 | _ -> None)
-              (Views_wire.seq_items fs)
+              (W.elems fs)
           , or_ )
       | None -> ([], or_))
   | _ -> ([], false)
@@ -254,11 +250,13 @@ let apply_view_entity inst (v : Views_wire.view_ent) =
   inst.hidden <-
     List.fold_left (fun s x -> Sset.add x s) Sset.empty v.vhidden;
   inst.ordered <- v.vordered;
+  inst.pinned <-
+    List.fold_left (fun s x -> Sset.add x s) Sset.empty v.vpinned;
   inst.group_sort_by <- v.vgroup_sort_by;
   inst.group_desc <- v.vgroup_desc
 
 let display_title (v : Views_wire.view_ent) =
-  if String.trim v.vtitle = "" then Views_i18n.new_view else v.vtitle
+  if String.trim v.vtitle = "" then I18n.new_view else v.vtitle
 
 (* persisted write helpers *)
 let persist_sorting inst =
@@ -332,6 +330,7 @@ let persist_group_sort_by_ident inst ident f =
    this record) *)
 type ops =
   { o_refresh : inst -> unit
+  ; o_refresh_src : inst -> string -> unit
   ; o_create_view : inst -> unit
   ; o_rename : inst -> Views_wire.view_ent -> unit
   ; o_export : inst -> unit

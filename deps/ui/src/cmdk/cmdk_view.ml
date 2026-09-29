@@ -18,6 +18,9 @@
 
 open Lui_elements
 
+let if_ = Logseq_dom.if_
+let keyed = Logseq_dom.keyed
+
 module S = Cmdk_state
 
 let scroller_class =
@@ -118,13 +121,13 @@ let is_combo = function Sc_combo _ -> true | Sc_single _ -> false
 let norm_binding s =
   let mac = Platform.is_mac () in
   String.lowercase_ascii (String.trim s)
-  |> (fun x -> Ui_strings.replace_all x "mod" (if mac then "meta" else "ctrl"))
-  |> (fun x -> Ui_strings.replace_all x "command" "meta")
-  |> (fun x -> Ui_strings.replace_all x "cmd" "meta")
+  |> (fun x -> I18n.replace_all x "mod" (if mac then "meta" else "ctrl"))
+  |> (fun x -> I18n.replace_all x "command" "meta")
+  |> (fun x -> I18n.replace_all x "cmd" "meta")
   |> (fun x ->
-       Ui_strings.replace_all x "option" "alt"
-       |> fun y -> Ui_strings.replace_all y "opt" "alt")
-  |> fun y -> Ui_strings.replace_all y g_opt "alt"
+       I18n.replace_all x "option" "alt"
+       |> fun y -> I18n.replace_all y "opt" "alt")
+  |> fun y -> I18n.replace_all y g_opt "alt"
 
 let kbd_el key txt =
   Logseq_dom.dom ~key ~tag:"kbd" ~style_class:"shui-shortcut-key"
@@ -506,15 +509,15 @@ let gid_name = function
   | S.G_themes -> "themes"
 
 let gid_label = function
-  | S.G_nodes -> Ui_strings.t "cmdk.groups/nodes"
-  | S.G_commands -> Ui_strings.t "cmdk.groups/commands"
-  | S.G_filters -> Ui_strings.t "cmdk.groups/filters"
-  | S.G_create -> Ui_strings.t "cmdk.groups/create"
-  | S.G_current_page -> Ui_strings.t "cmdk.groups/current-page"
-  | S.G_recently_updated -> Ui_strings.t "cmdk.groups/recently-updated"
-  | S.G_files -> Ui_strings.t "cmdk.groups/files"
-  | S.G_codes -> Ui_strings.t "cmdk.groups/codes"
-  | S.G_themes -> Ui_strings.t "cmdk.groups/themes"
+  | S.G_nodes -> I18n.t "cmdk.groups/nodes"
+  | S.G_commands -> I18n.t "cmdk.groups/commands"
+  | S.G_filters -> I18n.t "cmdk.groups/filters"
+  | S.G_create -> I18n.t "cmdk.groups/create"
+  | S.G_current_page -> I18n.t "cmdk.groups/current-page"
+  | S.G_recently_updated -> I18n.t "cmdk.groups/recently-updated"
+  | S.G_files -> I18n.t "cmdk.groups/files"
+  | S.G_codes -> I18n.t "cmdk.groups/codes"
+  | S.G_themes -> I18n.t "cmdk.groups/themes"
 
 let gid_of_name = function
   | "current-page" -> Some S.G_current_page
@@ -535,8 +538,8 @@ let group_header (g : S.group) : t =
     let count = if g.S.gtotal >= 99 then "99+" else string_of_int g.S.gtotal in
     let can_toggle = g.S.gtotal > g.S.glimit || g.S.gexpanded in
     let label, sc =
-      if g.S.gexpanded then (Ui_strings.t "ui/show-less", "mod up")
-      else (Ui_strings.t "ui/show-more", "mod down")
+      if g.S.gexpanded then (I18n.t "ui/show-less", "mod up")
+      else (I18n.t "ui/show-more", "mod down")
     in
     Logseq_dom.dom ~key:"gheader"
       ~style_class:
@@ -590,19 +593,21 @@ let group_el (st : S.t) (group_sig : S.group Signal.signal) : t =
 (* -- palette body ---------------------------------------------------- *)
 
 let groups_body st : t =
+ fun ctx parent ->
   let groups_sig =
     Signal.map (fun (v : S.view) -> v.S.groups) st.S.vs.Signal.state_signal
   in
-  keyed ~source:groups_sig ~key:(fun (g : S.group) -> gid_name g.S.gid)
-    ~cmp:Stdlib.compare
-    ~mount:(fun group_sig -> group_el st group_sig)
+  (keyed ~source:groups_sig ~key:(fun (g : S.group) -> gid_name g.S.gid)
+     ~cmp:Stdlib.compare
+     ~mount:(fun group_sig -> group_el st group_sig))
+    ctx parent
 
 let search_only_chip gid =
   Logseq_dom.dom ~key:"search-only"
     ~style_class:"flex flex-col px-3 py-1 opacity-70 text-sm"
     [ Logseq_dom.dom ~key:"row" ~style_class:"flex flex-row gap-1 items-center"
         [ Logseq_dom.dom ~key:"lbl"
-            ~text:(Ui_strings.t "cmdk.filter/only-label") []
+            ~text:(I18n.t "cmdk.filter/only-label") []
         ; Logseq_dom.dom ~key:"grp" ~text:(gid_label gid) []
         ; Logseq_dom.dom ~key:"clr" ~tag:"button"
             ~style_class:"p-1 scale-75"
@@ -612,6 +617,7 @@ let search_only_chip gid =
     ]
 
 let scroller st : t =
+ fun ctx parent ->
   let has_items_sig =
     Signal.map
       (fun (v : S.view) ->
@@ -640,12 +646,14 @@ let scroller st : t =
           if not has && q <> "" then
             Logseq_dom.dom ~key:"empty"
               ~style_class:"flex flex-col p-4 opacity-50"
-              ~text:(Ui_strings.t "search/no-result") []
+              ~text:(I18n.t "search/no-result") []
           else box ~key:"empty-none" [])
         (Signal.map2 (fun q has -> (q, has)) input_sig has_items_sig)
     ]
+    ctx parent
 
 let input_row st : t =
+ fun ctx parent ->
   Logseq_dom.dom ~key:"input-row"
     ~style_class:"cp__cmdk-input-row bg-gray-02 border-b border-1 border-gray-07"
     [ Logseq_dom.dom ~key:"input" ~tag:"input"
@@ -658,8 +666,8 @@ let input_row st : t =
                  (Logseq_dom.attrs_json
                     [ ( "placeholder"
                       , if v.S.move_mode then
-                          Ui_strings.t "cmdk.input/move-blocks-placeholder"
-                        else Ui_strings.t "cmdk.input/default-placeholder" )
+                          I18n.t "cmdk.input/move-blocks-placeholder"
+                        else I18n.t "cmdk.input/default-placeholder" )
                     ; ("autocomplete", "off"); ("autocapitalize", "off") ]))
              st.S.vs.Signal.state_signal)
         ~events:"input"
@@ -674,6 +682,7 @@ let input_row st : t =
             S.on_input st q))
         []
     ]
+    ctx parent
 
 (* shui shortcut: combo container + kbd.shui-shortcut-key cells *)
 let key_glyph = function
@@ -726,7 +735,7 @@ let tip_el (filtered, tip) =
     else ("cmdk.tip/filter-results", [ "/" ], false)
   in
   let parts =
-    Ui_strings.replace_all (Ui_strings.t key) "{1}" "\x00"
+    I18n.replace_all (I18n.t key) "{1}" "\x00"
   in
   let pre, post =
     match String.split_on_char '\x00' parts with
@@ -743,7 +752,7 @@ let tip_el (filtered, tip) =
 
 let hint_action_of (it : S.item) =
   match it.S.act with
-  | S.Create_page _ -> (`create, false)
+  | S.Create_page _ | S.Create_tag _ -> (`create, false)
   | S.Set_filter _ -> (`filter, false)
   | S.Run _ -> (`trigger, false)
   | S.Open_page _ -> (`open_, true)
@@ -757,21 +766,21 @@ let action_hints (it : S.item option) =
       let btns =
         match hint_action_of it with
         | `open_, has_block ->
-            [ hint_button (Ui_strings.t "cmdk.action/open") [ "return" ]
+            [ hint_button (I18n.t "cmdk.action/open") [ "return" ]
             ; hint_button
-                (Ui_strings.t "cmdk.action/open-in-sidebar")
+                (I18n.t "cmdk.action/open-in-sidebar")
                 [ "shift"; "return" ]
             ]
             @ (if has_block then
-                 [ hint_button (Ui_strings.t "cmdk.action/copy-ref")
+                 [ hint_button (I18n.t "cmdk.action/copy-ref")
                      [ "cmd"; "c" ] ]
                else [])
         | `create, _ ->
-            [ hint_button (Ui_strings.t "cmdk.action/create") [ "return" ] ]
+            [ hint_button (I18n.t "cmdk.action/create") [ "return" ] ]
         | `filter, _ ->
-            [ hint_button (Ui_strings.t "cmdk.action/filter") [ "return" ] ]
+            [ hint_button (I18n.t "cmdk.action/filter") [ "return" ] ]
         | `trigger, _ ->
-            [ hint_button (Ui_strings.t "cmdk.action/trigger") [ "return" ] ]
+            [ hint_button (I18n.t "cmdk.action/trigger") [ "return" ] ]
       in
       Logseq_dom.dom ~key:"actions"
         ~style_class:"gap-2 hidden md:flex"
@@ -786,7 +795,7 @@ let hints st : t =
             ~style_class:"flex flex-row gap-1 items-center"
             [ Logseq_dom.dom ~key:"hint-label" ~tag:"span"
                 ~style_class:"font-medium text-gray-12"
-                ~text:(Ui_strings.t "cmdk.tip/label") []
+                ~text:(I18n.t "cmdk.tip/label") []
             ; dyn
                 ~equal:(fun (a : bool * int) b -> a = b)
                 tip_el
@@ -984,5 +993,7 @@ let render (_ms : Model.t Signal.signal) : t =
   let open_sig =
     Signal.map (fun (v : S.view) -> v.S.open_) st.S.vs.Signal.state_signal
   in
-  let body = if_ ~test:open_sig (modal_shell st) in
-  body context parent
+  (* The keyed box gives the conditional its own reconcile-stable parent:
+     spliced directly under #app-container its dynamic segment goes stale
+     after navigation and later mounts emit an inconsistent op batch *)
+  box ~key:"cmdk_view" [ if_ ~test:open_sig (modal_shell st) ] context parent

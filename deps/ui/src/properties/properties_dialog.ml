@@ -15,7 +15,6 @@
 
 open Editor_dom
 open Properties_dom
-module I18n = Properties_i18n
 module D = Properties_data
 module S = Properties_state
 module Sel = Properties_select
@@ -80,14 +79,18 @@ let is_many prop =
 let close () = S.pop_overlay ()
 
 (* after "Text"/"URL" is chosen the cljs flow creates the empty value
-   block and lands the caret in it — entering that editor exits the
-   outliner edit (single editing surface) *)
+   block and lands the caret in it — refresh as soon as the write lands
+   so the pending editor mounts before the user's next click; entering
+   that editor exits the outliner edit (single editing surface) *)
 let add_empty_text_block d prop =
   let ident = ident_of prop in
   !(Editor_state.close_block_editor) ();
   V.set_pending_edit ~block_uuid:d.target.uuid ~ident;
   D.create_property_text_block ~block_uuid:d.target.uuid ~ident
     ~title:"" ~new_block_id:(Platform.random_uuid ()) ()
+  |> Js.Promise.then_ (fun _ ->
+         S.refresh_now ();
+         Js.Promise.resolve ())
   |> ignore;
   S.refresh_all ()
 
@@ -121,7 +124,7 @@ and value_ids ent ident =
             | Some (W.Int i) -> (i :: ids, idents)
             | Some (W.Keyword k) -> (ids, k :: idents)
             | _ -> (ids, idents)))
-        ([], []) (D.elems w)
+        ([], []) (W.elems w)
   | None -> ([], [])
 
 and pick_value d prop id =
@@ -193,7 +196,7 @@ and render_prop_select d body =
   el_append_child body wrap;
   D.all_properties (D.uuid_ref d.target.uuid)
   |> Js.Promise.then_ (fun w ->
-         let props = D.elems w in
+         let props = W.elems w in
          let items =
            List.filter_map
              (fun p ->
@@ -242,8 +245,9 @@ and render_type_select d body name =
   let items =
     List.map
       (fun ty -> type_item d name ty)
+      (* cljs db-property-type/user-built-in-property-types order *)
       [ "default"; "number"; "date"; "datetime"; "checkbox"; "url"
-      ; "node" ]
+      ; "node"; "asset" ]
   in
   let sel, _input =
     Sel.create
@@ -342,7 +346,7 @@ and render_node_tags d body prop =
                                  d.phase <- Value_edit prop;
                                  render d))
                       | None -> None))
-                (D.elems w)
+                (W.elems w)
          in
          let sel, input =
            Sel.create ~placeholder:(I18n.t "property/choose-tags")
@@ -357,7 +361,7 @@ and value_items d prop wire_values =
   let ty = type_of prop in
   let closed =
     match D.getf prop "property/closed-values" with
-    | Some w -> D.elems w
+    | Some w -> W.elems w
     | None -> []
   in
   if closed <> [] then
@@ -433,7 +437,7 @@ and render_value_edit d body prop =
         ( D.property_values ~property_ident:(ident_of prop)
             ~block:(D.uuid_ref d.target.uuid)
           |> Js.Promise.then_ (fun w ->
-                 Js.Promise.resolve (value_items d prop (D.elems w)))
+                 Js.Promise.resolve (value_items d prop (W.elems w)))
         , None )
     in
     fetch

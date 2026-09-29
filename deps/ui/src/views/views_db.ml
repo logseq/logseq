@@ -2,7 +2,7 @@
 
 module W = Wire
 
-let repo () = Option.value !Runtime.current_repo ~default:""
+let repo = Runtime.repo
 
 let then_ f p = Js.Promise.then_ f p
 
@@ -10,6 +10,15 @@ let catch_quiet (p : unit Js.Promise.t) =
   Js.Promise.catch
     (fun e ->
       Platform.console_error ("views worker call failed", e);
+      Js.Promise.resolve ())
+    p
+
+(* writes bypassing Outliner_ops.apply must still surface failure *)
+let catch_write (p : unit Js.Promise.t) =
+  Js.Promise.catch
+    (fun e ->
+      Platform.console_error ("views write failed", e);
+      Toast.error "Failed to save changes";
       Js.Promise.resolve ())
     p
 
@@ -49,7 +58,8 @@ let resource_query spec = res (key_query spec)
 let pull_many selector_edn ids f =
   Runtime.invoke3 "thread-api/pull-many" (W.String (repo ()))
     (W.String selector_edn)
-    (W.Array (List.map (fun u -> W.Uuid u) ids))
+    (W.Array
+       (List.map (fun u -> W.Array [ W.kw "block/uuid"; W.Uuid u ]) ids))
   |> then_ (fun w -> f (W.args_list w); Js.Promise.resolve ())
   |> catch_quiet
   |> ignore
@@ -249,7 +259,7 @@ let insert_view_block ?(after = fun () -> ()) ~title ~uuid ~page_uuid
            ])
         (W.Map [])
       |> then_ (fun _ -> after (); Js.Promise.resolve ())
-      |> catch_quiet
+      |> catch_write
       |> ignore)
 
 let insert_object_block ~uuid ~page_uuid ~title ~tags ~props f =
@@ -287,7 +297,7 @@ let insert_object_block ~uuid ~page_uuid ~title ~tags ~props f =
        ])
     (W.Map [])
   |> then_ (fun w -> f w; Js.Promise.resolve ())
-  |> catch_quiet
+  |> catch_write
   |> ignore
 
 (* common-uuid/gen-uuid :view-block-uuid port — verbatim copy of

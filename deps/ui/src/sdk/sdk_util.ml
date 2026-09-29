@@ -1,9 +1,6 @@
 (* Shared helpers for the logseq.api bridge methods. *)
 
-let repo () =
-  match !Runtime.current_repo with
-  | Some r -> r
-  | None -> ""
+let repo = Runtime.repo
 
 external as_undefined : Js.Json.t -> Js.Json.t Js.Undefined.t
   = "%identity"
@@ -31,16 +28,6 @@ let call name args =
   Runtime.invoke name args
   |> Js.Promise.then_ (fun w -> resolved (Sdk_convert.result_json_of_wire w))
 
-let is_hex c =
-  ('0' <= c && c <= '9') || ('a' <= c && c <= 'f') || ('A' <= c && c <= 'F')
-
-let is_uuid_string s =
-  String.length s = 36
-  && String.get s 8 = '-'
-  && String.get s 13 = '-'
-  && String.get s 18 = '-'
-  && String.get s 23 = '-'
-  && String.for_all (fun c -> is_hex c) (String.sub s 0 8)
 
 let trim_leading s =
   let n = String.length s in
@@ -81,11 +68,6 @@ let property_ident name =
   if String.contains stripped '/' then stripped
   else "plugin.property._test_plugin/" ^ normalize_ident_name stripped
 
-(* transit vectors may decode as Array or List — treat both as seqs *)
-let wire_elems w =
-  match w with
-  | Wire.Array xs | Wire.List xs | Wire.Set xs -> xs
-  | _ -> []
 
 (* ---------- [[name]] → [[uuid]] title refs (cljs wrap-parse-block) -------
 
@@ -132,7 +114,7 @@ let page_ref_names (title : string) : string list =
         | j ->
             let inner = String.trim (String.sub title (i + 2) (j - i - 2)) in
             go (j + 2)
-              (if inner = "" || is_uuid_string inner || List.mem inner acc
+              (if inner = "" || Wire.is_uuid_string inner || List.mem inner acc
                then acc
                else inner :: acc))
   in
@@ -221,7 +203,7 @@ let fetch_tag_names (names : string list) : string list Js.Promise.t =
                  [(contains? " ^ set_edn ^ " ?n)]]")
            ])
       |> Js.Promise.then_ (fun w ->
-             resolved (List.filter_map Wire.as_string (wire_elems w)))
+             resolved (List.filter_map Wire.as_string (Wire.elems w)))
       |> Js.Promise.catch (fun e ->
              Platform.console_error ("tag-name lookup failed", e);
              resolved [])
@@ -247,11 +229,11 @@ let fetch_ref_uuids (names : string list)
              resolved
                (List.filter_map
                   (fun row ->
-                    match wire_elems row with
+                    match Wire.elems row with
                     | [ Wire.String n; u ] ->
                         Option.map (fun uuid -> (n, uuid)) (Wire.as_uuid u)
                     | _ -> None)
-                  (wire_elems w)))
+                  (Wire.elems w)))
       |> Js.Promise.catch (fun e ->
              Platform.console_error ("page-ref uuid lookup failed", e);
              resolved [])
@@ -373,14 +355,6 @@ let resolve_title_refs (ops : Wire.t list) : Wire.t list Js.Promise.t =
          resolved
            (List.map (rewrite_title_refs ~tags known) ops))
 
-(* get-blocks result element: {id, block} pair map *)
-let block_of_pair pair =
-  match Wire.get pair "block" with
-  | Some res -> Some res
-  | None -> (
-      match wire_elems pair with
-      | [ _; res ] -> Some res
-      | _ -> None)
 
 let get_many ids =
   Runtime.invoke2 "thread-api/get-blocks" (Wire.String (repo ()))
@@ -391,7 +365,7 @@ let get_many ids =
               [ (Wire.String "id", id); (Wire.String "opts", Wire.Map []) ])
           ids))
   |> Js.Promise.then_ (fun w ->
-         Js.Promise.resolve (List.map block_of_pair (wire_elems w)))
+         Js.Promise.resolve (List.map Wire.block_of_pair (Wire.elems w)))
 
 
 (* dispatch outliner ops; each op entry is [kw-name, [args...]].
@@ -430,12 +404,12 @@ let get_by_id id_wire =
        ])
   |> Js.Promise.then_ (fun w ->
          Js.Promise.resolve
-           (match wire_elems w with
+           (match Wire.elems w with
             | [ pair ] -> (
                 match Wire.get pair "block" with
                 | Some res -> res
                 | None -> (
-                    match wire_elems pair with
+                    match Wire.elems pair with
                     | [ _; res ] -> res
                     | _ -> Wire.Nil))
             | _ -> Wire.Nil))
@@ -449,7 +423,7 @@ let get_by_id id_wire =
    no :block/properties) — a hit is re-fetched through get-blocks by uuid
    so the wire carries the sdk entity shape. *)
 let get_entity id_or_name =
-  if is_uuid_string id_or_name then get_by_id (Wire.String id_or_name)
+  if Wire.is_uuid_string id_or_name then get_by_id (Wire.String id_or_name)
   else
     Runtime.invoke2 "thread-api/get-case-page" (Wire.String (repo ()))
       (Wire.String id_or_name)
@@ -510,7 +484,7 @@ let is_class_entity (w : Wire.t) =
            | Some (Wire.Keyword s) | Some (Wire.String s) ->
                s = "logseq.class/Tag"
            | _ -> false)
-        (wire_elems tags)
+        (Wire.elems tags)
   | None -> false
 
 
