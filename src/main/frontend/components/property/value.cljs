@@ -1319,6 +1319,7 @@
    {:keys [block multiple-choices? dropdown? input-opts on-input add-new-choice! target] :as opts}
   result]
   (let [[*input set-input!] (hooks/use-state nil)
+        [*selected-choices set-*selected-choices!] (hooks/use-state nil)
         {:keys [all-classes class-options extends-class-options structured-children-by-class-id
                 extends-by-class-id]} (:class-data opts)
         classes (:logseq.property/classes property)
@@ -1464,6 +1465,7 @@
                 opts
                 {:multiple-choices? multiple-choices?
                  :tap-*input-val set-input!
+                 :tap-*selected-choices set-*selected-choices!
                  :items options
                  :selected-choices selected-choices
                  :dropdown? dropdown?
@@ -1505,7 +1507,11 @@
                                    (when (fn? add-new-choice!)
                                      (add-new-choice!
                                       {:value (select-keys entity [:db/id :block/uuid])
-                                       :label (:block/title entity)})))
+                                       :label (:block/title entity)}))
+                                   ;; A new option selects the raw input string, so swap it for the
+                                   ;; created entity's id to keep the checkbox and toggles consistent
+                                   (when (and selected? *selected-choices (not (integer? chosen)))
+                                     (swap! *selected-choices (fn [choices] (-> (set choices) (disj chosen) (conj id))))))
                                   (when-not add-tag-property?
                                     (log/error :msg "No :db/id found or created for chosen" :chosen chosen)))))})
 
@@ -1604,7 +1610,9 @@
                                                               (string/lower-case v)))
                                        (conj page-class))))))
                      :add-new-choice! (fn [new-choice]
-                                        (set-initial-choices! (add-initial-node-choice (current-initial-choices) new-choice))))
+                                        (let [choices' (add-initial-node-choice (current-initial-choices) new-choice)]
+                                          (set-initial-choices! choices')
+                                          (set-result! choices'))))
         extends-property? (= (:db/ident property) :logseq.property.class/extends)]
 
     (hooks/use-effect!

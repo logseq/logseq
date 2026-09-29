@@ -110,7 +110,7 @@
   [{:keys [items limit on-chosen empty-placeholder grouped?
            prompt-key input-default-placeholder close-modal?
            extract-fn extract-chosen-fn host-opts on-input input-opts
-           item-cp transform-fn tap-*input-val
+           item-cp transform-fn tap-*input-val tap-*selected-choices
            multiple-choices? on-apply new-case-sensitive?
            dropdown? show-new-when-not-exact-match? exact-match-exclude-items
            input-container initial-open? loading?
@@ -146,6 +146,12 @@
              (when (fn? tap-*input-val)
                (tap-*input-val *input)))
            [tap-*input-val *input])
+        _ (hooks/use-effect!
+           (fn []
+             (when (fn? tap-*selected-choices)
+               (tap-*selected-choices *selected-choices))
+             nil)
+           [tap-*selected-choices])
         full-choices (cond->>
                       (remove nil? items)
                        (seq input)
