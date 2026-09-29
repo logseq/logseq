@@ -439,7 +439,7 @@ let t (key : string) : string =
   | "ui/new" -> "New"
   | "ui/true" -> "true"
   | "ui/false" -> "false"
-  | "select/new-option" -> "New option:"
+  | "select/new-option" -> "+ New option: {1}"
   | "search-result-item/new-page" -> "Create page called '{1}'"
   | _ -> key
 
