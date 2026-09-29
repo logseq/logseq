@@ -642,10 +642,17 @@ external js_random : unit -> float = "random" [@@mel.scope "Math"]
 
 let open_palette ?(move = false) st =
   st.gen := !(st.gen) + 1;
+  (* publish the reset view before opening: the mount reads derived signals
+     whose republish lags the source publish by one stabilize round, so
+     this separate flush guarantees every derived map already carries the
+     values the modal must mount with — a stale mount remounts
+     mid-stabilize and emits create+drop ops for the same extension nodes
+     in one batch, which the store/dom replay cannot survive *)
+  let tip = if js_random () < 0.5 then 0 else 1 in
   set_in st (fun v ->
-          { v with open_ = true; input = ""; move_mode = move; mouse = false
-          ; filter = None
-          ; tip = (if js_random () < 0.5 then 0 else 1) });
+          { v with groups = []; hl = -1; input = ""; move_mode = move
+          ; mouse = false; filter = None; tip });
+  set_in st (fun v -> { v with open_ = true });
   (* prime synchronously so commands show before the search lands *)
   apply_results st "" move [] [] 0;
   refresh st;

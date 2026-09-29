@@ -263,22 +263,40 @@ let checkbox_btn ~jtrigger ~checked ~id ~aria_label ~on_toggle : D.el =
   let btn =
     D.h ~tag:"button" ~cls:(checkbox_cls ~jtrigger checked)
       ~attrs:
-        [ ("type", "button"); ("role", "checkbox"); ("id", id)
-        ; ("aria-label", aria_label) ]
+        [ ("type", "button"); ("tabindex", "0"); ("role", "checkbox")
+        ; ("id", id); ("aria-label", aria_label)
+        ; ("aria-checked", if checked then "true" else "false") ]
       ()
   in
-  if checked then D.el_set_attr btn "aria-checked" "true";
+  if checked then D.el_set_attr btn "data-checked" ""
+  else D.el_set_attr btn "data-unchecked" "";
   D.el_add_listener btn "click" (fun ev ->
       Editor_dom.stop_propagation ev;
       let on = not checked in
       D.el_set_attr btn "aria-checked" (if on then "true" else "false");
-      if on then D.el_set_attr btn "data-checked" ""
-      else D.el_remove_attr btn "data-checked";
+      if on then begin
+        D.el_set_attr btn "data-checked" "";
+        D.el_remove_attr btn "data-unchecked"
+      end
+      else begin
+        D.el_set_attr btn "data-unchecked" "";
+        D.el_remove_attr btn "data-checked"
+      end;
       on_toggle on);
   btn
 
+(* cljs mounts a visually-hidden native input sibling inside the label
+   (1px clipped fixed box); a normal checkbox would overlap the button
+   and swallow its clicks *)
 let checkbox_hidden_input () : D.el =
-  D.h ~tag:"input" ~attrs:[ ("type", "checkbox") ] ()
+  D.h ~tag:"input"
+    ~attrs:
+      [ ("tabindex", "-1"); ("aria-hidden", "true"); ("type", "checkbox")
+      ; ( "style"
+        , "clip-path: inset(50%); overflow: hidden; white-space: nowrap; \
+           border: 0px; padding: 0px; width: 1px; height: 1px; margin: \
+           -1px; position: fixed; top: 0px; left: 0px;" ) ]
+    ()
 
 (* cljs row-checkbox: label.jtrigger > shui checkbox; opacity flips on
    hover of the label *)
@@ -301,8 +319,9 @@ let select_cell inst ~refresh ~row_uuid ~blk : D.el =
   in
   let label =
     D.h ~tag:"label"
-      ~cls:"jtrigger h-8 w-8 flex items-center justify-center cursor-pointer"
-      ~attrs:[ ("for", dbid ^ "-checkbox"); ("data-table-row-select", "") ]
+      ~cls:" jtrigger h-8 w-8 flex items-center justify-center cursor-pointer"
+      ~attrs:
+        [ ("for", dbid ^ "-checkbox"); ("data-table-row-select", "true") ]
       ~children:[ cb; checkbox_hidden_input () ] ()
   in
   D.el_add_listener label "mouseover" (fun _ ->
@@ -578,18 +597,20 @@ let sort_menu_items inst ~refresh (c : V.column) =
       (I.sort_descending, fun () -> set_column_sort inst ~refresh c false)
   ]
 
-(* sort options as dropdown menuitems — cljs appends them as
-   more-options at the end of the property configure list *)
+(* sort options as dropdown menuitems — cljs prepends them as
+   more-options before the property configure list, with arrow icons *)
 let sort_menuitem_els inst ~refresh (c : V.column) =
   List.map
     (fun (label, asc) ->
-      Properties_menu.menuitem label (fun () ->
+      Properties_menu.menuitem
+        ~icon:(if asc then "arrow-up" else "arrow-down")
+        label (fun () ->
           Properties_state.close_overlays ();
           set_column_sort inst ~refresh c asc))
     [ (I.sort_ascending, true); (I.sort_descending, false) ]
 
 (* cljs header-cp: property columns open one .ls-property-dropdown —
-   the configure menu with sort/pin more-options trailing *)
+   sort more-options first, then the configure list, no title *)
 let open_property_menu inst ~refresh ~anchor (c : V.column) (p : W.t) =
   let owner_uuid =
     match inst.V.kind with
@@ -602,7 +623,9 @@ let open_property_menu inst ~refresh ~anchor (c : V.column) (p : W.t) =
       (match inst.V.kind with V.KTagPage _ -> true | _ -> false)
     ~owner_title:c.V.c_name
     ~refresh:(fun () -> refresh inst)
-    ~trailing:(if sortable c then sort_menuitem_els inst ~refresh c else [])
+    ~more_options:
+      (if sortable c then sort_menuitem_els inst ~refresh c else [])
+    ~with_title:false
     (W.Map
        [ (W.Keyword "property", p)
        ; (W.Keyword "property-id", W.Keyword c.V.c_id) ])
@@ -718,9 +741,12 @@ let action_bar inst ~refresh : D.el option =
 
 (* ---------- table ---------- *)
 
-(* dnd-kit mounts these a11y nodes inside each DndContext *)
+(* dnd-kit mounts these a11y nodes inside each DndContext; cljs hides
+   both inline (the described node is display:none, the live region a
+   clipped 1px fixed box) *)
 let dnd_described n =
-  D.h ~attrs:[ ("id", "DndDescribedBy-" ^ n) ]
+  D.h
+    ~attrs:[ ("id", "DndDescribedBy-" ^ n); ("style", "display: none;") ]
     ~text:
       "To pick up a draggable item, press the space bar. While dragging, \
        use the arrow keys to move the item. Press space again to drop the \
@@ -728,7 +754,16 @@ let dnd_described n =
     ()
 
 let dnd_live n =
-  D.h ~attrs:[ ("id", "DndLiveRegion-" ^ n); ("role", "status") ] ()
+  D.h
+    ~attrs:
+      [ ("id", "DndLiveRegion-" ^ n); ("role", "status")
+      ; ("aria-live", "assertive"); ("aria-atomic", "true")
+      ; ( "style"
+        , "position: fixed; top: 0px; left: 0px; width: 1px; height: 1px; \
+           margin: -1px; border: 0px; padding: 0px; overflow: hidden; \
+           clip: rect(0px, 0px, 0px, 0px); clip-path: inset(100%); \
+           white-space: nowrap;" ) ]
+    ()
 
 (* class-objects tables show the add-property column; matching rows get
    a trailing empty cell *)
@@ -783,8 +818,8 @@ let row_el inst ~refresh ~idx ~row_uuid (cols : V.column list) : D.el =
                   () ]
             ())
    | None -> ());
-  D.el_append_child sticky row2;
   D.el_append_child row sticky;
+  D.el_append_child row row2;
   row
 
 (* cljs: shui/table > .ls-table-rows.content.overflow-x-auto
@@ -856,8 +891,8 @@ let table_el inst ~refresh : D.el =
    | None -> ());
   D.el_append_child header_row (dnd_described "1");
   D.el_append_child header_row (dnd_live "1");
-  D.el_append_child sticky header_row;
   D.el_append_child header sticky;
+  D.el_append_child header header_row;
   (match action_bar inst ~refresh with
    | Some bar -> D.el_append_child header bar
    | None -> ());
