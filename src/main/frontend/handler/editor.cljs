@@ -3031,22 +3031,23 @@
 (defn keydown-tab-handler
   [direction]
   (fn [e]
-    (cond
-      (pending-new-block?)
-      (do
-        (util/stop e)
-        (queue-pending-new-block-tab! (not= :left direction)))
+    (when-not (in-shui-popup?)
+      (cond
+        (pending-new-block?)
+        (do
+          (util/stop e)
+          (queue-pending-new-block-tab! (not= :left direction)))
 
-      (state/editing?)
-      (when-not (state/get-editor-action)
-        (util/stop e)
-        (indent-outdent (not (= :left direction))))
+        (state/editing?)
+        (when-not (state/get-editor-action)
+          (util/stop e)
+          (indent-outdent (not (= :left direction))))
 
-      (state/selection?)
-      (do
-        (util/stop e)
-        (state/pub-event! [:editor/hide-action-bar])
-        (on-tab direction)))
+        (state/selection?)
+        (do
+          (util/stop e)
+          (state/pub-event! [:editor/hide-action-bar])
+          (on-tab direction))))
     nil))
 
 (defn- double-chars-typed?

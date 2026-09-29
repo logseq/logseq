@@ -15,6 +15,15 @@
   (is (false? (#'editor/context-menu-popup? {:content-props {:class "something-else"}})))
   (is (false? (#'editor/context-menu-popup? nil))))
 
+(deftest tab-does-not-indent-when-shui-popup-is-open-test
+  (let [stopped? (atom false)]
+    (with-redefs [editor/in-shui-popup? (constantly true)
+                  state/selection? (constantly true)
+                  util/stop (fn [_] (reset! stopped? true))]
+      ((editor/keydown-tab-handler :right) #js {})
+      (is (false? @stopped?)
+          "Tab must reach the open popup so it can close instead of indenting a selected block."))))
+
 (deftest shortcut-cut-and-delete-close-context-popup-test
   (let [calls (atom [])
         event #js {:target #js {}}
