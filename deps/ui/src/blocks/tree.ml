@@ -534,7 +534,10 @@ let chain_embed_worker () =
       let prev = w.Worker_client.on_message in
       w.Worker_client.on_message <-
         (fun kind payload ->
-          prev kind payload;
+          (try prev kind payload
+           with err ->
+             Platform.console_error
+               ("worker broadcast handler failed", err));
           if kind = "sync-db-changes" then
             Hashtbl.iter (fun _ f -> f ()) embed_refreshes)
 
@@ -547,7 +550,10 @@ let fetch_embed_blocks name st =
                 Outliner_ops.resolve_block_tags (Decode.blocks_of_wire w)
                 |> Js.Promise.then_ (fun blocks ->
                        Signal.set st blocks;
-                       Js.Promise.resolve ()))))
+                       Js.Promise.resolve ()))
+         |> Js.Promise.catch (fun e ->
+                Platform.console_error ("embed blocks fetch failed", e);
+                Js.Promise.resolve ())))
 
 let page_embed (name : string) : t =
  fun ctx parent ->
@@ -560,6 +566,9 @@ let page_embed (name : string) : t =
   let load () = fetch_embed_blocks name st in
   load ();
   Hashtbl.replace embed_refreshes id load;
+  (* a destroyed embed must stop refetching on every tx broadcast *)
+  Signal.on_dispose ctx.ui_scope (fun () ->
+      Hashtbl.remove embed_refreshes id);
   (dyn ~equal:(=)
      (fun blocks ->
        (* embed copies render read-only — the same uuid can exist in the

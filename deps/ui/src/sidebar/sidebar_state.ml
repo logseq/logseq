@@ -150,11 +150,30 @@ let push_recent repo id =
   let ids =
     id :: take 14 (List.filter (fun x -> x <> id) (recent_ids_of_storage repo))
   in
+  (* merge into the stored per-graph map — rewriting the whole value
+     would drop every other repo's recents on each visit *)
+  let kvs =
+    match Platform.local_storage_get "recent-pages" with
+    | Some s -> (
+        try
+          match Edn.parse s with
+          | Wire.Map kvs ->
+              List.filter
+                (fun (k, _) ->
+                  match k with
+                  | Wire.String r | Wire.Keyword r | Wire.Symbol r ->
+                      r <> repo
+                  | _ -> true)
+                kvs
+          | _ -> []
+        with _ -> [])
+    | None -> []
+  in
   Platform.local_storage_set "recent-pages"
     (Edn.to_string
        (Wire.Map
-          [ ( Wire.String repo
-            , Wire.List (List.map (fun i -> Wire.Int i) ids) ) ]))
+          ((Wire.String repo, Wire.List (List.map (fun i -> Wire.Int i) ids))
+           :: kvs)))
 
 (* ---------- worker loaders ---------- *)
 
@@ -165,11 +184,13 @@ let pages_of_wire w =
 
 let then_keep p k =
   ignore
-    (Js.Promise.then_
-       (fun w ->
-         k w;
-         Js.Promise.resolve ())
-       p)
+    (p
+     |> Js.Promise.then_ (fun w ->
+            k w;
+            Js.Promise.resolve ())
+     |> Js.Promise.catch (fun e ->
+            Platform.console_error ("sidebar loader failed", e);
+            Js.Promise.resolve ()))
 
 let load_favorites repo st =
   then_keep
@@ -529,6 +550,9 @@ let refresh_items repo st =
       (Js.Promise.all (Array.of_list (List.map (refresh_item repo) items))
        |> Js.Promise.then_ (fun arr ->
               Runtime.signal_set st.items (Array.to_list arr);
+              Js.Promise.resolve ())
+       |> Js.Promise.catch (fun e ->
+              Platform.console_error ("sidebar refresh failed", e);
               Js.Promise.resolve ()))
 
 (* ---------- favorites ---------- *)
@@ -553,11 +577,13 @@ let toggle_favorite st =
 let on_sync st =
   match (!model_ref).Model.repo with
   | Some repo ->
+      (* the route reload comes from Worker_events.dispatch's debounced
+         Router.reload — refetching it here too doubled the work per
+         broadcast *)
       load_favorites repo st;
       load_recents repo st;
       refresh_favorited repo st;
-      refresh_items repo st;
-      Router.load_route (!model_ref).Model.route
+      refresh_items repo st
   | None -> ()
 
 let install_worker_hook st =
@@ -567,7 +593,10 @@ let install_worker_hook st =
       let prev = w.Worker_client.on_message in
       w.Worker_client.on_message <-
         (fun e payload ->
-          prev e payload;
+          (try prev e payload
+           with err ->
+             Platform.console_error
+               ("worker broadcast handler failed", err));
           if e = "sync-db-changes" then on_sync st)
   | _ -> ()
 
