@@ -972,7 +972,7 @@
   (let [entity (if (de/entity? value) value (d/entity db value))]
     (if-let [target-uuid (and entity
                               (:logseq.property/created-from-property entity)
-                              (parse-uuid (:block/title entity)))]
+                              (some-> (:block/title entity) parse-uuid))]
       (or (:db/id (d/entity db [:block/uuid target-uuid]))
           (:db/id entity))
       (:db/id entity))))
