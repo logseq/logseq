@@ -159,13 +159,20 @@ let parse_url url =
       min (cut '/') (min (cut '?') (cut '#'))
     in
     let authority = String.sub rest 0 authority_end in
+    (* '#' only ends the authority — the fragment itself never goes on
+       the wire, so the target stops there too. *)
     let target =
       if authority_end < String.length rest
       then
-        let tail =
-          String.sub rest authority_end (String.length rest - authority_end)
+        let target_end =
+          match String.index_from_opt rest authority_end '#' with
+          | Some i -> i
+          | None -> String.length rest
         in
-        if rest.[authority_end] = '/' then tail else "/" ^ tail
+        let tail = String.sub rest authority_end (target_end - authority_end) in
+        if String.length tail = 0
+        then "/"
+        else if rest.[authority_end] = '/' then tail else "/" ^ tail
       else "/"
     in
     let host, port =
