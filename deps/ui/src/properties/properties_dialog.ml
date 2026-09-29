@@ -23,6 +23,7 @@ module W = Wire
 
 type target =
   { uuid : string
+  ; uuids : string list (* all selected block uuids for batch ops *)
   ; db_id : int option
   ; is_tag : bool
   ; title : string
@@ -66,6 +67,15 @@ let write_prop_value d prop w =
       S.refresh_all ()
   | None -> ()
 
+(* cljs add-or-remove-property-value: for multiple-values properties
+   (many cardinality or block/tags) picking an already-selected value
+   removes it *)
+let is_many prop =
+  (match D.getk prop "db/cardinality" with
+   | Some "db.cardinality/many" -> true
+   | _ -> false)
+  || ident_of prop = "block/tags"
+
 (* close this dialog (top overlay) *)
 let close () = S.pop_overlay ()
 
@@ -106,6 +116,70 @@ let rec property_chosen d prop =
   else (
     d.phase <- Value_edit prop;
     render d)
+
+(* values may be bare eids, bare ident keywords or entity stubs whose
+   db/id is an Int / Keyword / lookup-ref *)
+and value_ids ent ident =
+  match D.getf (D.untag ent) ident with
+  | Some w ->
+      List.fold_left
+        (fun (ids, idents) e ->
+          match e with
+          | W.Int i -> (i :: ids, idents)
+          | W.Keyword k -> (ids, k :: idents)
+          | _ -> (
+            match D.getf (D.untag e) "db/id" with
+            | Some (W.Int i) -> (i :: ids, idents)
+            | Some (W.Keyword k) -> (ids, k :: idents)
+            | _ -> (ids, idents)))
+        ([], []) (W.elems w)
+  | None -> ([], [])
+
+and pick_value d prop id =
+  (* cljs stays open on many-cardinality; single picks close *)
+  let ident = ident_of prop in
+  let uuids =
+    match d.target.uuids with [] -> [ d.target.uuid ] | us -> us
+  in
+  if is_many prop then
+    D.entity_by_uuid d.target.uuid
+    |> Js.Promise.then_ (fun ent ->
+           let cur_ids, cur_idents = value_ids ent ident in
+           D.entity (W.Int id)
+           |> Js.Promise.then_ (fun picked ->
+                  let picked_ident = D.getk (D.untag picked) "db/ident" in
+                  let hit =
+                    List.mem id cur_ids
+                    || (match picked_ident with
+                        | Some i -> List.mem i cur_idents
+                        | None -> false)
+                  in
+                  (match hit, uuids with
+                   | true, _ :: _ :: _ ->
+                       D.batch_delete_property_value ~block_uuids:uuids
+                         ~ident ~value:(W.Int id)
+                   | true, _ ->
+                       D.delete_property_value ~block_uuid:d.target.uuid
+                         ~ident ~value:(W.Int id)
+                   | false, _ :: _ :: _ ->
+                       D.batch_set_property ~block_uuids:uuids ~ident
+                         ~value:(W.Int id)
+                   | false, _ ->
+                       D.set_block_property ~block_uuid:d.target.uuid ~ident
+                         ~value:(W.Int id))
+                  |> Js.Promise.then_ (fun _ ->
+                         S.refresh_all ();
+                         render d;
+                         Js.Promise.resolve ())))
+    |> ignore
+  else (
+    (match uuids with
+     | _ :: _ :: _ ->
+         D.batch_set_property ~block_uuids:uuids ~ident ~value:(W.Int id)
+         |> ignore
+     | _ -> write_prop_value d prop (Some (W.Int id)));
+    S.refresh_all ();
+    close ())
 
 (* ---------- phase renderers ---------- *)
 
@@ -398,9 +472,7 @@ and value_items d prop wire_values =
         match D.entity_id_of c with
         | Some id ->
             Some
-              (Sel.item (D.ref_title c) (fun () ->
-                   write_prop_value d prop (Some (W.Int id));
-                   close_dlg d))
+              (Sel.item (D.ref_title c) (fun () -> pick_value d prop id))
         | None -> None)
       closed
   else
@@ -413,8 +485,7 @@ and value_items d prop wire_values =
             | Some id ->
                 Some
                   (Sel.item (D.ref_title v) (fun () ->
-                       write_prop_value d prop (Some (W.Int id));
-                       close_dlg d))
+                       pick_value d prop id))
             | None -> None)
           wire_values
 
@@ -461,9 +532,7 @@ and render_value_edit d body prop =
       if List.mem ty [ "node"; "page"; "class"; "property" ] then (
         let initial, on_search =
           V.node_items_source ~block:(D.uuid_ref d.target.uuid) ~prop
-            ~on_pick:(fun id ->
-              write_prop_value d prop (Some (W.Int id));
-              close_dlg d)
+            ~on_pick:(fun id -> pick_value d prop id)
         in
         (initial, Some on_search))
       else
@@ -592,11 +661,13 @@ let open_dialog ?anchor target =
 let current_target () : target option =
   match Editor_state.editing_uuid () with
   | Some u ->
-      Some { uuid = u; db_id = None; is_tag = false; title = "" }
+      Some { uuid = u; uuids = []; db_id = None; is_tag = false
+           ; title = "" }
   | None -> (
       match Platform.selected_block_uuids () with
-      | u :: _ ->
-          Some { uuid = u; db_id = None; is_tag = false; title = "" }
+      | u :: _ as us ->
+          Some { uuid = u; uuids = us; db_id = None; is_tag = false
+               ; title = "" }
       | [] -> (
           match !Runtime.current_page with
           | Some p ->
@@ -604,7 +675,7 @@ let current_target () : target option =
               if uuid = "" then None
               else
                 Some
-                  { uuid; db_id = p.Model.page_db_id
+                  { uuid; uuids = []; db_id = p.Model.page_db_id
                   ; is_tag = p.Model.page_is_tag; title = p.Model.page_title
                   }
           | None -> None))
@@ -630,7 +701,8 @@ let open_for_block ?anchor uuid =
                 Some (l, b)
             | None -> None))
   in
-  open_dialog ?anchor { uuid; db_id = None; is_tag = false; title = "" }
+  open_dialog ?anchor
+    { uuid; uuids = []; db_id = None; is_tag = false; title = "" }
 
 (* open anchored under a DOM element (its bottom-left corner) *)
 let open_for_block_at el uuid =

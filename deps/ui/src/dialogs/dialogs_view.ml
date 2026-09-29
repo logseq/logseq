@@ -65,6 +65,8 @@ let body_of name (ms : Model.t Signal.signal) : t =
   | "publish-page" -> Publish_view.body ms
   | "sync-server" -> Settings_url_view.sync_body ms
   | "publish-server" -> Settings_url_view.publish_body ms
+
+  | "quick-add" -> Quick_add_view.body ms
   | _ -> box ~key:("empty-" ^ name) []
 
 (* cljs shui/dialog-open! :label opts — drives .ui__dialog-content[label=…]
@@ -85,7 +87,7 @@ let dialog_view name (ms : Model.t Signal.signal) : t =
       if n = "click" && is_overlay_click p then Dialogs_state.close_top ())
     [ dom ~key:("dlg-c-" ^ name)
         ~style_class:
-          (content_cls
+          (content_cls ^ " ls-dialog-" ^ name
          ^
          match name with
          | "sync-server" | "publish-server" -> " lg:max-w-2xl"

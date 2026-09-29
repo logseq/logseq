@@ -16,6 +16,7 @@ module String_set = Stdlib.Set.Make (String)
    externally; a divergent buffer is typed-not-yet-saved text *)
 type editing = { uuid : string; buffer : string; scope : string; base : string }
 
+
 type t =
   { editing : editing option
   ; selected : String_set.t
@@ -24,6 +25,8 @@ type t =
   ; expanded : String_set.t
     (* cljs temp-collapsed? inverse: user-expanded overrides a
        block_default_collapsed render flag without persisting *)
+  ; collapsed_ui : String_set.t (* per-scope overrides: "scope\x00uuid" *)
+  ; expanded_ui : String_set.t
   }
 
 let initial =
@@ -32,6 +35,8 @@ let initial =
   ; anchor = None
   ; collapsed = String_set.empty
   ; expanded = String_set.empty
+  ; collapsed_ui = String_set.empty
+  ; expanded_ui = String_set.empty
   }
 
 let scope_of (st : t) =
@@ -43,8 +48,17 @@ let st : t Signal.state option ref = ref None
    subtree, so the textarea must be re-focused once it exists again *)
 let pending_focus : (string * int) option ref = ref None
 
+(* editing keys that arrive while a structure op's textarea is still
+   remounting (keydown landed on <body>): queued here and replayed by
+   apply_focus once the refreshed model and DOM exist *)
+let pending_focus_actions : (unit -> unit) list ref = ref []
+
 (* structured block clipboard (titles + hierarchy), set by copy/cut *)
 let clipboard : Model.block list ref = ref []
+
+(* the text/plain payload written alongside `clipboard`; an internal
+   paste is detected by comparing the event's text against it *)
+let clipboard_text : string ref = ref ""
 
 (* cljs has a single editing block: entering block edit dismisses any
    inline secondary editor (e.g. a property value cell) and vice versa.
@@ -120,14 +134,56 @@ let collapsed () = (read ()).collapsed
 let is_collapsed uuid = String_set.mem uuid (collapsed ())
 let is_expanded uuid = String_set.mem uuid (read ()).expanded
 
-(* render-time collapse: persisted flag || view default, overridable by
-   an explicit user expand (cljs temp-collapsed? has priority) *)
-let effective_collapsed (b : Model.block) =
+(* per-scope collapse: cljs scopes UI collapse overrides by container
+   (the same block can render collapsed in the page but expanded as a
+   sidebar/zoom root); "scope\x00uuid" keys the override sets *)
+let collapse_key scope uuid = scope ^ "\x00" ^ uuid
+
+(* cljs get-block-collapsed: the per-scope UI override wins, then the
+   global expanded override, then the persisted :block/collapsed? datom *)
+let collapsed_in ~scope (st : t) uuid =
+  let k = collapse_key scope uuid in
+  if String_set.mem k st.expanded_ui then false
+  else if String_set.mem k st.collapsed_ui then true
+  else if String_set.mem uuid st.expanded then false
+  else String_set.mem uuid st.collapsed
+
+let is_collapsed_in ?(scope = "main") uuid = collapsed_in ~scope (read ()) uuid
+
+let collapsed_ui_transform ~scope uuid v (st : t) =
+  let k = collapse_key scope uuid in
+  { st with
+    collapsed_ui =
+      (if v then String_set.add k st.collapsed_ui
+       else String_set.remove k st.collapsed_ui)
+  ; expanded_ui =
+      (if v then String_set.remove k st.expanded_ui
+       else String_set.add k st.expanded_ui)
+  }
+
+let set_collapsed ?(scope = "main") uuid v =
+  if ready () then set (collapsed_ui_transform ~scope uuid v)
+  else defer_init (collapsed_ui_transform ~scope uuid v)
+
+(* cljs block.cljs mounts a container's root block with
+   set-collapsed-block! false — a zoomed/sidebar root always shows its
+   children there even when the db datom is collapsed *)
+let expand_root ~scope uuid = set_collapsed ~scope uuid false
+
+(* render-time collapse: scoped overrides first, then persisted flag ||
+   view default, minus the explicit user-expand override *)
+let effective_collapsed_in ~scope uuid default (st : t) =
+  if String_set.mem uuid st.expanded
+     || String_set.mem (collapse_key scope uuid) st.expanded_ui
+  then false
+  else collapsed_in ~scope st uuid || default
+
+let effective_collapsed ?(scope = "main") (b : Model.block) =
   match b.Model.block_uuid with
   | None -> false
   | Some u ->
-      if is_expanded u then false
-      else is_collapsed u || b.Model.block_default_collapsed
+      effective_collapsed_in ~scope u b.Model.block_default_collapsed
+        (read ())
 let anchor () = (read ()).anchor
 let selection_active () = not (String_set.is_empty (selected ()))
 
@@ -176,6 +232,14 @@ let find uuid =
             match f uuid with Some _ as r -> r | None -> go fs)
       in
       go !extra_sources
+      |> (fun r ->
+           match r with
+           | Some _ -> r
+           | None ->
+               (* quick-add dialog blocks live outside the current page
+                  tree *)
+               find_in (Quick_add_state.value ()).Quick_add_state.blocks
+                 uuid)
 
 (* committed edit buffers, applied to rendered titles immediately — the
    page model only catches up once the worker transact+refresh lands, and
@@ -188,6 +252,13 @@ let title_for uuid fallback =
   Option.value (Hashtbl.find_opt display_overrides uuid) ~default:fallback
 
 let clear_overrides () = Hashtbl.reset display_overrides
+
+(* CodeMirror buffer/focus providers for code-fence blocks, wired by
+   Code_mirror.install — refs so Editor_actions needs no CM module dep *)
+let code_buffer_of : (string -> string option) ref = ref (fun _ -> None)
+
+let code_focus : (caret:int -> string -> bool) ref =
+  ref (fun ~caret:_ _ -> false)
 
 (* returns (parent, index) of uuid among its siblings *)
 let rec find_parent_in blocks uuid =
@@ -220,14 +291,15 @@ let find_parent uuid =
   | None -> find_parent_in tops uuid
 
 (* DFS over visible (non-collapsed-subtree) blocks *)
-let flat_visible () =
+let flat_visible ?(scope = "main") () =
   let rec go acc blocks =
     match blocks with
     | [] -> acc
     | b :: rest ->
         let acc = b :: acc in
         let acc =
-          if effective_collapsed b then acc else go acc (children_of b)
+          if effective_collapsed ~scope b then acc
+          else go acc (children_of b)
         in
         go acc rest
   in
@@ -241,8 +313,8 @@ let flat_all () =
   in
   List.rev (go [] (page_blocks ()))
 
-let neighbor_of uuid dir =
-  let flat = flat_visible () in
+let neighbor_of ?(scope = "main") uuid dir =
+  let flat = flat_visible ~scope () in
   let rec scan prev = function
     | [] -> None
     | b :: rest ->
@@ -255,8 +327,8 @@ let neighbor_of uuid dir =
   in
   scan None flat
 
-let prev_visible uuid = neighbor_of uuid `Prev
-let next_visible uuid = neighbor_of uuid `Next
+let prev_visible ?(scope = "main") uuid = neighbor_of ~scope uuid `Prev
+let next_visible ?(scope = "main") uuid = neighbor_of ~scope uuid `Next
 
 let prev_sibling uuid =
   match find_parent uuid with

@@ -27,6 +27,9 @@ external get_element_by_id : string -> el option = "getElementById"
 external query_selector_all : string -> node_list = "querySelectorAll"
   [@@mel.scope "document"]
 
+external query_selector : string -> el option = "querySelector"
+  [@@mel.scope "document"] [@@mel.return nullable]
+
 external active_element : el option = "document.activeElement"
   [@@mel.return nullable]
 
@@ -80,6 +83,9 @@ external ev_data_transfer : ev -> clipboard_data option = "dataTransfer"
   [@@mel.get] [@@mel.return nullable]
 external dt_set_data : clipboard_data -> string -> string -> unit = "setData"
   [@@mel.send]
+
+external ev_buttons : ev -> int = "buttons" [@@mel.get]
+
 external ev_client_y : ev -> float = "clientY" [@@mel.get]
 external ev_page_x : ev -> float = "pageX" [@@mel.get]
 
@@ -135,6 +141,16 @@ external el_selection_end : el -> int = "selectionEnd" [@@mel.get]
 
 external el_set_selection_range : el -> int -> int -> unit
   = "setSelectionRange" [@@mel.send]
+
+external el_scroll_height : el -> int = "scrollHeight" [@@mel.get]
+
+external el_set_style_height :
+  el -> string -> unit = "height" [@@mel.set] [@@mel.scope "style"]
+
+(* cljs mock-textarea autosize: collapse then grow to the content height *)
+let autosize_textarea el =
+  el_set_style_height el "auto";
+  el_set_style_height el (string_of_int (el_scroll_height el) ^ "px")
 
 (* misc *)
 external set_timeout : (unit -> unit) -> int -> unit = "setTimeout"
@@ -218,44 +234,59 @@ let for_each_touched roots sel f =
    changed subtrees instead of re-scanning the whole document *)
 type doc_scan =
   { ds_run_if : mutation_record array -> bool
-  ; ds_scan : el list -> unit }
+  ; ds_scan : el list -> unit
+  ; ds_sync : bool (* run in the observer microtask, before paint *)
+  }
 
 let doc_scans : doc_scan list ref = ref []
 let doc_scan_timer = ref (-1)
 let doc_pending_recs : mutation_record list ref = ref []
 
+let roots_of_recs recs =
+  Array.fold_left
+    (fun acc r ->
+      let nl = rec_added r in
+      let rec collect i acc =
+        if i >= node_list_length nl then acc
+        else
+          collect (i + 1)
+            (match node_list_item nl i with
+             | Some el when node_type el = 1 -> el :: acc
+             | _ -> acc)
+      in
+      collect 0 acc)
+    [] recs
+
 let doc_flush () =
   doc_scan_timer := -1;
   let recs = Array.of_list (List.rev !doc_pending_recs) in
   doc_pending_recs := [];
-  let roots =
-    Array.fold_left
-      (fun acc r ->
-        let nl = rec_added r in
-        let rec collect i acc =
-          if i >= node_list_length nl then acc
-          else
-            collect (i + 1)
-              (match node_list_item nl i with
-               | Some el when node_type el = 1 -> el :: acc
-               | _ -> acc)
-        in
-        collect 0 acc)
-      [] recs
-  in
+  let roots = roots_of_recs recs in
   List.iter
-    (fun ds -> if ds.ds_run_if recs then ds.ds_scan roots)
+    (fun ds ->
+      if (not ds.ds_sync) && ds.ds_run_if recs then ds.ds_scan roots)
     !doc_scans
 
 let doc_observer_installed = ref false
 
-let register_doc_scan ?(run_if = fun _ -> true) scan =
-  doc_scans := !doc_scans @ [ { ds_run_if = run_if; ds_scan = scan } ];
+let register_doc_scan ?(run_if = fun _ -> true) ?(sync = false) scan =
+  doc_scans :=
+    !doc_scans
+    @ [ { ds_run_if = run_if; ds_scan = scan; ds_sync = sync } ];
   scan [ document_element ];
   if not !doc_observer_installed then (
     doc_observer_installed := true;
     let obs =
       new_observer_records (fun recs ->
+          (* sync scans run inside the observer microtask — their DOM
+             writes must land before the next paint (a 60ms debounce
+             leaves e.g. <raw-text> placeholders visibly empty for
+             several frames) *)
+          List.iter
+            (fun ds ->
+              if ds.ds_sync && ds.ds_run_if recs then
+                ds.ds_scan (roots_of_recs recs))
+            !doc_scans;
           doc_pending_recs := Array.to_list recs @ !doc_pending_recs;
           if !doc_scan_timer < 0 then
             doc_scan_timer := set_timeout_id doc_flush 60)
@@ -265,7 +296,9 @@ let register_doc_scan ?(run_if = fun _ -> true) scan =
 (* <raw-text> placeholders carry the intended text in data-raw-text and
    are swapped for real text nodes once they enter the DOM — extension
    create() can only return Elements, so this observer performs the
-   swap the adapter cannot. *)
+   swap the adapter cannot.  The swapped node is kept on the placeholder
+   as __lsText so later property writes/removals on the (detached)
+   placeholder can still reach the live text node. *)
 let replace_all_raw_text roots =
   for_each_touched roots "raw-text" (fun el ->
       let tn =
@@ -301,7 +334,7 @@ let raw_text_observer_installed = ref false
 let ensure_raw_text_observer () =
   if not !raw_text_observer_installed then (
     raw_text_observer_installed := true;
-    register_doc_scan dom_fixups)
+    register_doc_scan ~sync:true dom_fixups)
 
 let closest_sel sel target =
   match target with

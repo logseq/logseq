@@ -74,6 +74,10 @@ external dataset_of : Js.Json.t -> Js.Json.t = "dataset" [@@mel.get]
 external dataset_set :
   Js.Json.t -> string -> string -> unit = "" [@@mel.set_index]
 
+(* generic object field set, e.g. el.style.visibility *)
+external set_prop : Js.Json.t -> string -> Js.Json.t -> unit = ""
+  [@@mel.set_index]
+
 let document_set_data name value =
   dataset_set (dataset_of document_element) name value
 
@@ -220,6 +224,9 @@ let event_str ev key =
   match Js.Json.decodeString (json_prop ev key) with
   | Some s -> s
   | None -> ""
+
+let event_bool ev key =
+  Js.Json.decodeBoolean (json_prop ev key) = Some true
 
 let rtc_test_mode () =
   match query_param "rtc-test" with Some "true" -> true | _ -> false

@@ -16,9 +16,7 @@
    - refresh: subscribes to the "sync-db-changes" broadcast via
      Runtime.on_sync and re-fetches sidebar data + the current route. *)
 
-(* i18n placeholder: keep the t() call shape so keys can be wired to real
-   dictionaries once a shared i18n module lands. *)
-let t (s : string) = s
+let t = I18n.t
 
 let default_navs = [ "flashcards"; "all-pages"; "graph-view" ]
 
@@ -206,18 +204,33 @@ let then_keep p k =
             Platform.console_error ("sidebar loader failed", e);
             Js.Promise.resolve ()))
 
+(* loads race with writes (push_recent/set-page-favorite) and with each
+   other via the sync-db-changes broadcast; a stale RPC resolving last would
+   clobber fresher state, so only the latest issued load may apply *)
+let favorites_gen = ref 0
+
 let load_favorites repo st =
+  incr favorites_gen;
+  let gen = !favorites_gen in
   then_keep
     (Runtime.invoke1 "thread-api/get-favorite-pages" (Wire.String repo))
-    (fun w -> Runtime.signal_set st.favorites (pages_of_wire w))
+    (fun w ->
+      if gen = !favorites_gen then
+        Runtime.signal_set st.favorites (pages_of_wire w))
+
+let recents_gen = ref 0
 
 let load_recents repo st =
+  incr recents_gen;
+  let gen = !recents_gen in
   let ids =
     Wire.List (List.map (fun i -> Wire.Int i) (recent_ids_of_storage repo))
   in
   then_keep
     (Runtime.invoke2 "thread-api/get-recent-pages" (Wire.String repo) ids)
-    (fun w -> Runtime.signal_set st.recents (pages_of_wire w))
+    (fun w ->
+      if gen = !recents_gen then
+        Runtime.signal_set st.recents (pages_of_wire w))
 
 let load_nav_tag_titles repo st =
   let pull_cls cls =
@@ -407,7 +420,13 @@ let block_item_of_uuid repo uuid : item option Js.Promise.t =
        [ Wire.Map
            [ (Wire.String "id", Wire.Uuid uuid)
            ; ( Wire.String "opts"
-             , Wire.Map [ (Wire.Keyword "children?", Wire.Bool true) ] )
+             , Wire.Map
+                 [ (Wire.Keyword "children?", Wire.Bool true)
+                 ; (* a container's root always renders its children,
+                      even when collapsed in the page — fetch them *)
+                   ( Wire.Keyword "include-collapsed-children?"
+                   , Wire.Bool true )
+                 ] )
            ]
        ])
   |> Js.Promise.then_ (fun w ->
@@ -415,13 +434,23 @@ let block_item_of_uuid repo uuid : item option Js.Promise.t =
          | [ pair ] -> (
              match block_of_pair pair with
              | Wire.Map _ as blk ->
-                 let b = Decode.block_of_wire blk in
+                 let b =
+                   (* the pair's flat `children` carry the full maps;
+                      splice them into block/children before decoding *)
+                   match Decode.nest_get_blocks pair with
+                   | Some w -> Decode.block_of_wire w
+                   | None -> Decode.block_of_wire blk
+                 in
                  Runtime.invoke3 "thread-api/get-block-parents"
                    (Wire.String repo)
                    (Wire.Array [ Wire.Keyword "block/uuid"; Wire.Uuid uuid ])
                    (Wire.Int 8)
                  |> Js.Promise.then_ (fun parents ->
                         let crumbs = breadcrumb_titles parents in
+                        (* a sidebar block is its container's root — it
+                           expands there regardless of the db collapsed
+                           datom *)
+                        Editor_state.expand_root ~scope:"sidebar" uuid;
                         Js.Promise.resolve
                           (Some
                              { key = "block-" ^ uuid
@@ -582,7 +611,7 @@ let open_sticky_item st kind =
     | "contents" when not (has_item st "contents") ->
         add_promise st (contents_item repo)
     | "help" when not (has_item st "help") ->
-        (match static_item "help" "help" "Help" with
+        (match static_item "help" "help" (t "nav/help") with
          | Some it -> push_item st it
          | None -> ())
     | _ -> ()
@@ -637,13 +666,20 @@ let toggle_favorite st =
   | Some p, Some repo -> (
       match p.Model.page_uuid with
       | Some u ->
-          let fav = Signal.get_state st.favorited in
+          (* the cached favorited signal can still hold the previous page's
+             flag right after navigation; ask the worker for this page's
+             state instead of toggling from stale UI state *)
           then_keep
-            (Runtime.invoke3 "thread-api/set-page-favorite"
-               (Wire.String repo) (Wire.Uuid u) (Wire.Bool (not fav)))
-            (fun _ ->
-              load_favorites repo st;
-              refresh_favorited repo st)
+            (Runtime.invoke2 "thread-api/favorited-page?"
+               (Wire.String repo) (Wire.Uuid u))
+            (fun w ->
+              let fav = Wire.as_bool w = Some true in
+              then_keep
+                (Runtime.invoke3 "thread-api/set-page-favorite"
+                   (Wire.String repo) (Wire.Uuid u) (Wire.Bool (not fav)))
+                (fun _ ->
+                  load_favorites repo st;
+                  refresh_favorited repo st))
       | None -> ())
   | _ -> ()
 
@@ -754,7 +790,7 @@ let on_doc_contextmenu st ev =
 let on_doc_click st ev =
   (* dropdown menus dismiss on outside interaction; the trigger controls and
      the menu content itself are excluded so their own handlers can run *)
-  if Signal.get_state st.open_menu <> "" then
+  if Signal.get_state st.open_menu <> "" then (
     match
       click_target
         ".ui__dropdown-menu-content, .toolbar-plugins-manager, .as-edit, \
@@ -762,10 +798,16 @@ let on_doc_click st ev =
         ev
     with
     | Some _ -> ()
-    | None -> close_menu st;
+    | None -> close_menu st);
   match click_target "a.page-ref" ev with
   | Some el -> (
-      match Platform.get_attribute el "data-ref" with
+      match
+        (* uuid refs ([[uuid]]/((uuid))) carry data-uuid; data-ref holds the
+           resolved title, which drifts out of sync on rename *)
+        match Platform.get_attribute el "data-uuid" with
+        | Some u -> Some u
+        | None -> Platform.get_attribute el "data-ref"
+      with
       | Some ref_ ->
           if jbool "shiftKey" ev then open_ref st ref_
           else if not (jbool "metaKey" ev || jbool "ctrlKey" ev) then
@@ -788,9 +830,14 @@ let on_doc_keydown st ev =
   | Some k -> (
       match Worker_client.json_string k with
       | Some "Escape" ->
-          if Signal.get_state st.open_menu <> "" then close_menu st;
-          if (!model_ref).Model.appearance <> None then
+          if Signal.get_state st.open_menu <> "" then close_menu st
+          else if (!model_ref).Model.appearance <> None then
             Runtime.send (Action.Appearance_set None)
+
+      (* mod+shift+f = :page/toggle-favorite (cljs shortcut config) *)
+      | Some ("f" | "F")
+        when jbool "shiftKey" ev && (jbool "metaKey" ev || jbool "ctrlKey" ev) ->
+          toggle_favorite st
       | _ -> ())
   | None -> ()
 
@@ -827,6 +874,9 @@ let init (ms : Model.t Signal.signal) : t =
       st
 
 let ensure ms = init ms
+
+(* the singleton — set once init runs *)
+let current () = !st_ref
 
 let toggle_nav st nav checked =
   let cur = Signal.get_state st.nav_checked in

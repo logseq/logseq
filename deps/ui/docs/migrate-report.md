@@ -204,7 +204,24 @@ no local repin is needed. Earlier items in this list are on main.)
   attached at that point in the op stream, can take the write.
 - DOM `removeChild`/`MoveChild` ops now detach nodes from their actual
   DOM parent instead of assuming the recorded parent (stale tree state
-  after navigation raced removals).
+  after navigation raced removals). Host apps may also swap tracked
+  elements outside op dispatch entirely: `editor_dom.ml` replaces
+  `<raw-text>` placeholders with real text nodes via a MutationObserver
+  (`dom_fixups`), leaving the retained store pointing at detached
+  elements — `detach_dom_child` therefore no-ops when the DOM reports
+  a different `parentNode` (lui `5a00864`).
+- **`lui_runtime.flush` claims `pending_ops` + `runtime_generation`
+  before `apply_pending_batch`** (lui `1d58d13`). If apply re-enters
+  flush (a dom-event handler sending actions mid-batch), the nested
+  call used to replay the same ops or drop the generation bump; the
+  claim-first ordering makes re-entry a no-op.
+- **`apply_dom_batch` wraps every JS exception as `Invalid_argument`**
+  ("dom batch: <exn>") so it joins the `apply_pending_batch` catch
+  (lui `5a00864`). Raw JS errors (e.g. `NotFoundError` from
+  `removeChild`) used to escape past it: the store had committed while
+  `runtime_generation` stayed behind, and every subsequent batch threw
+  `expected patch generation N+1, received N` — the same wedge as the
+  generation-desync above, via a different door.
 
 ## Open / intermittent issues
 
@@ -1227,6 +1244,268 @@ search may lag).
   `v.groups` while `refresh` is in flight — the stale-input check in
   `apply_results` (`v.input <> q`) must stay.
 
+## Editor (e2e: `editor_basic_test`)
+
+- **Shift+click on the page title opens the page in the right sidebar
+  and must NOT enter title edit.** Two click paths reach
+  `Title_edit_start`: the `title_content` `.block-content` handler and
+  the `.ls-page-title` wrapper handler in `page_title_el` (which fires
+  for any descendant click whose target has no `id` — `targetId`
+  serializes to `""`, so `target = ""` matches `.block-title-wrap`
+  too). Both must guard on `payload_bool "shiftKey"`; the wrapper
+  handler lacked the check, so shift+click swapped the title into the
+  editor mid-dispatch — Playwright's real click then saw its target
+  element detached before `Sidebar_state.on_doc_click` ran.
+- **`#/` (Home) is the journals stream, not today's page.** cljs
+  `route.cljs:go-to-journals!` routes to `:home` (or `:all-journals`
+  only when a custom home page is set), and `:home` renders the full
+  journals list. `router.ml:load_home` must call `load_journals` (and
+  install it in `reload_current_view`), and `page.ml` `page_view_of_model`
+  `Home` renders `journals_view` whenever `m.journals` is non-empty —
+  the single-journal fallback is only the not-loaded-yet state. Cmdk
+  `go/journals` resolves to `#/`+`Model.Home`; when the hash is already
+  `#/` `nav` must still call `Router.resolve ()` or the view never swaps.
+- **Vite must define `process.env.NODE_ENV` for the IIFE bundle.**
+  `@tanstack/virtual-core`'s `Virtualizer` constructor reads it
+  unconditionally; without a `define` the lib/iife output throws
+  `ReferenceError: process is not defined` at first use and the whole
+  virtualization path is dead.
+- **Virtualized scroll-driven selection is append-only.** cljs
+  `components/block.cljs` `items-rendered` calls
+  `highlight-selection-area!` with the rendered-range boundary
+  (`virtual-range-boundary-id`: last rendered row scrolling down, first
+  scrolling up) and `append?` true → `conj-selection-block!`. So
+  `Block_selection.extend_to` must UNION `range_between anchor boundary`
+  into `S.selected`, never replace it: the spacer re-measurement can
+  clamp `scrollTop` and emit publishes that look like scroll-up, and a
+  replace-semantics extend collapses the selection to the mounted window.
+  Direction comes from the `scrollTop` delta on the scroller, not from
+  the rendered start-index delta (overscan growth changes the start index
+  without any scroll).
+- **Multiple `Virt_list` instances share `#main-content-container`.**
+  Stale lists from previous views (e.g. journals) keep publishing during
+  the current page's scroll; their `key_of` yields ids that are not in
+  the flat block order. `Editor_actions.range_between` must return `[]`
+  when either endpoint index is `-1` — otherwise the clamp produces a
+  bogus 1-element range that nukes the selection.
+- **`get_selected_blocks` (sdk) reads selection state, not the DOM.**
+  cljs `state/get-selection-blocks` returns the full selected set;
+  unmounted rows under virtualization still count. `Platform.
+  selected_block_uuids` (DOM `.ls-block.selected`) is only the mounted
+  subset — `sdk_ui.get_selected_blocks` must go through
+  `Editor_actions.selected_uuids` (document order).
+- **`S.selected` is a uuid set (lexicographic, not document order).**
+  Any caller that needs document order — move-block ranges, multi-block
+  ops — must use `selected_uuids`/`range_between` over `flat_visible`,
+  or the worker's `non_consecutive` check misfires and
+  `sort_non_consecutive_blocks` silently drops blocks (e.g. the Page
+  tag block in `move-pages-to-library`).
+- **`Virt_list` overscan is 5 (upstream default).** The cljs virtuoso
+  unmounts aggressively; e2e asserts rows actually unmount
+  (`journals-list-remounts-*` watches row 0 disappear). Playwright
+  "visible" = non-empty bounding box, so off-viewport-but-mounted rows
+  still count.
+- **`Virt_list` rows are nested under `.ls-virt-spacer`**, so the
+  virtual-scroll IO selector must be
+  `[data-virtuoso-scroller] [data-index]` (descendant), not `>`.
+  `Virtual_scroll.sync` has to be driven from `measure_rows` — it was
+  previously dead code.
+- **Slash-menu trigger parity** (`handler/editor.cljs`): `/` opens the
+  menu only when the last char is `/` AND (`re-find #"(?m)^/"` OR the
+  char before it is space/tab) — not mid-word.
+- **`:db-worker/outliner-op-perf` console contract:** the e2e suite
+  greps worker console lines for `:op-names`. The worker only emits
+  them when the op carries `ui/perf-id` AND the worker context has
+  `dev?` true (UI sends it from `Platform.rtc_test_mode()` =
+  `?rtc-test=true`, which all e2e URLs carry). `outliner_ops.ml` stamps
+  `ui/perf-id` on every `apply-outliner-ops` call.
+- **Comments header title is editable inline:** clicking `.ls-comments-
+  title` swaps to `.ls-comments-title-editor` (`comments_view.ml`
+  `header` wraps the label in `dyn` on `Comments.editing_sig`).
+- **OCaml pitfall — `if … then match … ; match …`** swallows the second
+  expression into the then-branch (`sidebar_state.ml` `on_doc_click` /
+  `on_doc_keydown` Escape had dead-code branches until parenthesized).
+- **Melange pitfall — DOM property reads must not be `unit ->`.**
+  `external x : unit -> t = "prop" [@@mel.scope "o"]` emits
+  `o.prop()` — a *call* — not `o.prop`. Declaring
+  `document.activeElement` that way threw `TypeError` on every call,
+  killed `apply_focus` inside its `setTimeout`, and left
+  `S.pending_focus` armed forever (next char went to a stale buffer,
+  caret stayed at end). Correct binding is a value read:
+  `external active_element : el option = "activeElement"
+  [@@mel.scope "document"] [@@mel.return nullable]`, call sites use it
+  without `()`. Same shape fixed in `popups/dom_ext.ml`.
+- **`S.set_silent` vs `S.set` for editing transitions.** `set_silent`
+  only stages the signal (`Signal.update`); `S.editing()` still returns
+  the OLD value until the next flush, so the old textarea stays mounted
+  and swallows the next keypress (chars landed in the old block:
+  `alphamiddle-omega`). `S.set` publishes synchronously — the old
+  textarea unmounts immediately. Any edit op that ends an editing
+  session (`split_at_cursor`, `insert_sibling_after`, …) must use
+  `S.set` before the next keypress can arrive.
+- **pending-focus window contract.** `with_focus_after`/`request_focus`
+  arm `S.pending_focus`; `apply_focus` must NOT consume it until
+  `document.activeElement` actually *is* the target textarea —
+  existence in the DOM is not enough (the probe ran before the real
+  focus landed, consumed pending, and the caret defaulted to 0).
+  Keypresses arriving in the window route through
+  `editor_keys.on_pending_focus_key`: printable chars patch the edit
+  buffer AND mirror into the mounted textarea (`el_set_value` +
+  `el_set_selection_range`); structural keys (Backspace/Delete/Enter/
+  Tab) queue onto `S.pending_focus_actions`, replayed by
+  `run_pending_focus_actions` once focus is verified. If the freshly
+  focused node is replaced before the next keypress (refresh/reconcile),
+  `on_keydown`'s rearm clause (`Some e, _` non-targets) re-arms
+  `pending_focus` and reschedules `apply_focus` — required because LUI
+  re-renders can swap the textarea node after focus landed.
+- **cmdk move-blocks mode is scoped to `:nodes`.** cljs opens it via
+  `go-to-search! :nodes` (filter-group `:nodes`) — only the nodes group
+  + create row render. Without `filter = Some G_nodes` the recents
+  group also matches (e.g. a just-visited page "Library"), producing
+  two `[data-testid="<title>"]` spans and a playwright strict-mode
+  violation.
+- **Every store schedules a debounced `wal_checkpoint(TRUNCATE)`**
+  (cljs `db-core.cljs` `schedule-wal-checkpoint!`, 2000ms idle, keyed
+  by repo). The OPFS pool runs `journal_mode=WAL` +
+  `wal_autocheckpoint=0` + `locking_mode=exclusive`, so without the
+  idle checkpoint `db.sqlite-wal` grows unboundedly — under sustained
+  commit bursts (the e2e suite seeds ~30 journals) it exceeds the
+  access-handle write cap and `sah.write()` returns
+  `FILE_ERROR_NO_SPACE` (-8), surfacing as a permanent SQLITE_IOERR on
+  every subsequent commit. Ported to
+  `db-worker/lib/graph_store.ml:schedule_wal_checkpoint` via
+  `Timers.set_timeout`, fired after each `store`'s transaction.
+- **Lazy-state readers must `S.ensure` before `S.signal`/`S.state`.**
+  `block_row_static` (linked-reference rows) called `S.signal()` without
+  `ensure`; on a journals refresh the first mounted row is a ref row, so
+  `state ()` hit `failwith "editor state not mounted"` mid-mount. Worse,
+  the throw happens inside a `Runtime.flush` effect: the failing effect
+  stays queued and *every subsequent flush dies on the same exception* —
+  the MutationObserver driven publish never fires again and the page
+  freezes with boot complete. Any `S.*` read inside a component body
+  needs `ensure` first (or a not-mounted fallback).
+- **LUI `InsertChild` cannot use a bare DOM index.** In one batch a
+  child may be created then dropped later, or a lower-indexed insert may
+  land after a higher-indexed one — `insertBefore` with the stored index
+  then throws `IndexSizeError`, and because the batch is mid-apply the
+  store and DOM diverge permanently (cmdk reopened empty, suite died at
+  the next test). `lui_web_apply.insert_child_anchored` anchors on the
+  next retained sibling whose DOM element is already seated in the
+  target container, falling back to append (lui
+  `devin/remove-child-order`).
+- **`<raw-text>` placeholders need a live-node backlink.**
+  `Editor_dom.replace_all_raw_text` swaps `<raw-text
+  data-raw-text="s">` for a real text node via `replaceWith`; after the
+  swap the LUI node's element is DETACHED — later `data-raw-text` attr
+  writes land on a dead element (dynamic `D.txt` inside `dyn` never
+  updates, e.g. `[[uuid]]` `a.page-ref` inner span stayed empty after
+  `thread-api/pull` resolved) and `DropNode` removes nothing. The
+  placeholder now keeps `__lsTextNode` pointing at the live node
+  (reused on re-insert); `dom_adapter.apply_attrs` forwards
+  `data-raw-text` writes to `textNode.data` and adapter `cleanup`
+  removes the live node.
+- **Sidebar `dyn ~equal` must compare contents, not shape.**
+  `left_sidebar_view` favorites/recents used
+  `~equal:(fun a b -> (a = []) = (b = []))` — once the list was
+  non-empty every later load compared equal and the sidebar froze on
+  the first render (stale favorites across the whole suite). Compare
+  `List.map (fun p -> (p.page_uuid, p.page_title))`. Same class of bug:
+  both loads also need a generation counter (`favorites_gen`/
+  `recents_gen`) — a load started on page A can resolve after
+  navigation and clobber page B's list.
+- **`toggle_favorite` reads the worker, not the cached signal.** The
+  `favorited` signal still holds the previous page's flag right after
+  navigation; toggling from it can write the inverted value. Query
+  `thread-api/favorited-page?` at toggle time, then
+  `set-page-favorite`.
+- **pending-focus window: shift+arrows must be queued, not
+  swallowed.** `on_pending_focus_key`'s fallthrough only
+  `preventDefault`ed, so `Shift+ArrowUp` arriving while the editing
+  textarea was mid-remount never entered block selection — the
+  following Tab hit `indent_or_outdent`'s `[editing-uuid]` fallback,
+  which is a no-op on a first child (multi-select indent did nothing
+  and the undo history desynced). Shift+ArrowUp/Down now queue
+  `shift_arrow_select`: replayed after focus lands it runs
+  `exit_edit ~select:true` when still editing, `extend_selection`
+  otherwise.
+- **`#` tag menu suppresses "New tag" on any exact-title match.**
+  cljs hides the create row when the text matches an existing page OR
+  class (private classes included); `Tag_search` now checks an
+  `except-private-tags=false` `get-all-classes` list
+  (`tag_exact_titles`) — otherwise `#Journal`-style inputs offered a
+  create row the worker then rejects.
+- **One `#today-queries` render site.** `page.ml` rendered the
+  today-queries block twice (duplicate ids, strict-mode violations);
+  keep the journals-view instance only.
+- **Page-title focus targets `.ls-page-title`.**
+  `editor_actions.focus_page_title` must select the title textarea via
+  `D.query_selector ".ls-page-title"` (added to `editor_dom`).
+
+
+## Editor / virt merge-regression notes (post-merge follow-up)
+
+- **`Virt_list.enabled_min` keeps `virtualize &&` in the gate.**
+  `(force || (virtualize && count >= min))` virtualizes EVERY caller
+  under `?virtualized=true` — including `blocks_inner` invocations that
+  pass `virtualize:false` (journal items' inner block lists), which
+  nests `[data-virtuoso-scroller]` inside the outer journals scroller
+  (`journals-list-does-not-nest-*` counts 9). Force must amplify a
+  `virtualize:true` caller, never override `virtualize:false`.
+- **Row measurement can't be purely debounced.** A 50ms debounce that
+  resets per mutation starves under scroll churn — freshly mounted rows
+  stay at estimate height and overlap. The row MutationObserver must
+  measure synchronously (same microtask) when a batch has `addedNodes`,
+  debouncing only pure subtree churn.
+- **translateY precision matters.** `%.2fpx` truncation (~0.005px per
+  row) accumulates a sub-pixel boundary overlap that
+  `mixed-height-virtual-page-*` detects (`rect.top < prev.bottom`); keep
+  `%.4fpx`.
+- **`<raw-text>` swap must run in the observer microtask.** Coalescing
+  it into the 60ms debounced doc-scan leaves the placeholder empty for
+  ~4 frames; `*-first-frame-*` tests read `.page-ref`/`.block-title-wrap`
+  textContent on every rAF after Escape and fail on the blank frames.
+  `register_doc_scan ~sync:true` runs such scans inside the mutation
+  callback, before paint.
+- **Undo must bypass the `base` resync gate.** The gate (`buffer = base`
+  ⇒ safe to overwrite) exists so remote refreshes don't clobber typed
+  text, but `undo`/`redo` deliberately revert; when the pre-undo edit
+  hadn't committed (400ms `schedule_save` debounce), `buffer <> base`
+  and the gate left the textarea stale. `resync_open_editor ~force:true`
+  from undo/redo.
+- **In-editor paste needs the text/plain fallback.** `paste_into_editor`
+  pastes stored block trees only when the event's text/plain equals what
+  our copy wrote (`S.clipboard_text`); any other text (external, html's
+  text/plain sibling) splices into the live textarea at the cursor.
+- **Pointer range selection is orthogonal to dnd-kit.** `Block_dnd`
+  (drag-move) does not cover pointerdown→scroll→pointerup selection:
+  `Block_selection.pointerdown/pointerup` document listeners plus
+  `Virtual_scroll.extend_drag`/`sync` from `Virt_list` must stay wired.
+- **`.block-add-button` injection must be a sync doc scan.** cljs renders
+  `add-button-inner` inside the page component, so the row exists
+  atomically with the blocks; the OCaml imperative `MutationObserver`
+  port debounced it 60ms, so a just-remounted journal item measured
+  28px short (the button's row) before the injection landed
+  (`journals-list-remounts-*`). `register_doc_scan ~sync:true` — and
+  because the scan now revisits the button on every flush,
+  `refresh_opacity`/`set_parent_attr` must only write attrs when the
+  value actually changed, or the observer spins on its own mutations.
+- **Keys in the remount window replay one per focus landing.**
+  `on_pending_focus_key` queues structural keys (Tab/Enter/arrows…) while
+  `S.editing` is set but the textarea is detached; plain
+  ArrowUp/ArrowDown previously fell into the catch-all `prevent_default`
+  and were lost. Two subtleties: (a) the queued closure must resolve
+  `S.editing_uuid ()` at replay time, not capture the keypress-time
+  block, and (b) `run_pending_focus_actions` must pop ONE action per
+  focus landing — `enter_edit` updates `S.editing` only after the
+  async `title_for_edit` resolves, so a full-batch replay applies every
+  follow-up key against the stale editing block (two queued arrows end
+  up navigating from the same origin, and a queued Tab indents the
+  pre-nav block — `multi-selection-indent-roundtrip-test`). Replays that
+  re-arm `pending_focus` (`enter_edit`/`with_focus_after`) chain the
+  drain naturally; `request_focus`/`with_focus_after` therefore must not
+  clear `pending_focus_actions` — `exit_edit`'s `cancel_pending_focus`
+  remains the only abort path.
+
 ## Block drag-and-drop (dnd-kit)
 
 - **Block move runs on `@dnd-kit/dom`** (`DragDropManager` +
@@ -1294,6 +1573,7 @@ search may lag).
   `apply_pending_batch` (`close_ac` → `set_ac`) on the base build too —
   preexisting LUI bug, so `new-logseq-page`'s `wait-editor-visible`
   times out before any drag test runs.
+
 
 ## Toolchain / test-suite state
 
@@ -1691,3 +1971,319 @@ every other caller uses the default `~clear:true`.
   `<create-page-if-not-exists!` creates a *class* for `block/tags`
   (and `class`-type properties generally create classes). Writing a
   plain page as a tag value fails validation ("should be a Class").
+
+## i18n: runtime dict loading + literal consolidation
+
+`src/core/i18n.ml` was a stopgap table of English literals behind a
+`TODO(i18n)` comment. It is now backed by real dictionaries.
+
+### Dict pipeline (one clear path)
+
+- `tools/dict_gen.ml` (native dune exe) parses `src/resources/dicts/*.edn`
+  and emits `src/dicts_gen.ml` — an OCaml module with
+  `en : (string * string) array` and
+  `dicts : (string * (string * string) array) list` covering all 25
+  locale files. Function-valued cljs entries (`(fn ...)` defaults, 12
+  keys) are unportable and skipped.
+- `src/dune` has a `(rule (target dicts_gen.ml) ...)` that shells out to
+  `%{exe:../tools/dict_gen.exe}` against
+  `$DUNE_SOURCEROOT/../../src/resources/dicts` (dicts live outside this
+  dune-project). Because they are not declared deps, re-run
+  `dune build --force` after editing `.edn` files.
+- Locale filenames map like cljs `frontend.dicts`: `zh-cn`→zh-CN,
+  `zh-hant`→zh-Hant, `nb-no`→nb-NO, `pt-br`→pt-BR, `pt-pt`→pt-PT,
+  otherwise the file stem.
+
+### Lookup
+
+`I18n.t key`:
+1. `current_lang` reads `localStorage["preferred-language"]` (an
+   EDN-quoted string like `"en"`), matching `settings_view.set_language`
+   / `boot` — no cljs state. Missing key or `"en"` → English.
+2. English resolves through `en_text`: `en_overrides` first (13 keys
+   where the shipped OCaml English deliberately differs from en.edn —
+   e.g. `ui/true` "Yes", `property/use-choice-in-tag`,
+   `view/unlinked-references`), then `Dicts_gen.en`, then the key
+   itself. Non-en locales resolve `Dicts_gen.dicts[locale]` with
+   `en_text` fallback, so untranslated keys degrade to English.
+3. `tf key args`/`t1 key arg` substitute `{1}`..`{n}` placeholders.
+
+Language changes only take effect on the next boot (`set_language`
+writes localStorage + `<html lang>`), so `let x = t "k"` at module
+scope stays frozen-at-init — same effective contract as before.
+
+### Audit + migration (branch `devin/lui-i18n`)
+
+- ~332 call-site literals moved to `I18n.t`/`tf`/`t1` (or a local
+  `let t = I18n.t` alias) across 29 files — menus, buttons, toasts,
+  dialogs, placeholders, aria-labels, export/publish/options labels.
+- `i18n.ml` keeps 273 named `let x = t "k"` constants + ~25 custom
+  helpers (`operator_text`, `timestamp_options`, `delete_*_confirm`,
+  `import_finished`, ...). The three identity-`t` stubs
+  (`sidebar_state`, `plugins_view`, `cards_view` + a dead one in
+  `cards_state`) were removed and their pseudo-key call sites remapped
+  to real keys.
+- Pseudo-namespace call sites renamed to real en.edn keys
+  (`cmdk.groups/*`→`cmdk.group/*`, `shortcut.category/*`,
+  `command.<id>` derived from keymap `title` attrs, etc.).
+- 41 new keys added to `en.edn` + `zh-cn.edn` (per i18n skill: every new
+  key ships a zh-CN translation) with matching `^:key$`
+  `always_used_key_patterns` exemptions in `.i18n-lint.toml`.
+  `bb lang:validate-translations`, `lang:lint-hardcoded`,
+  `lang:format-dicts` all clean.
+
+### Deliberately left inline (dev/debug only)
+
+- `(Dev) ...` command labels and their toasts ("Your graph is valid",
+  "Validation failed").
+- Brand string `"Logseq %s"`, `"rtc sync"` aria label, font names,
+  demo-graph name, `"Ag"` font sample.
+- Internal error-state fallbacks in `views_query.ml`
+  ("invalid query"/"query failed"/"query error") — machine-ish worker
+  error strings, not polished user copy.
+- `"then"` keycap chord separator (aria-hidden), `date.nlp/*` English
+  parser ids (`nlp_en_names`), icon-name quirk `"InProgress50"` as a
+  popup label, `input[placeholder='Enter password again']` e2e selector.
+
+### Verification
+
+- `dune build --force js_app test` clean; `vite build` clean;
+  `node _build/default/test/ui_test/test/test_main.js` → 884 checks, 0
+  failures.
+- `bb test -n logseq.e2e.tag-basic-test` still blocked by the known
+  base-branch `new-logseq-page` fixture crash (cmdk "Create page" →
+  `MelangeError: Invalid_argument` in `apply_pending_batch`, documented
+  above). Reproduced identically on an `origin/devin/lui-ui-rewrite`
+  bundle — not introduced by this change.
+
+
+## Bundle / production build (devin/lui-prodbuild)
+
+`deps/ui/vite.config.mjs` now has two build modes (vite 8 defaults
+`env.mode` to `"production"` for every `vite build`, so the flag is
+detected on `process.argv`, not `ConfigEnv.mode`):
+
+- `vite build` (`npm run build`): dev bundle — `minify:false`, inline
+  sourcemap, `logseq_dev=true` (cljs `config/dev?` equivalent).
+- `vite build --mode production` (`npm run build:production`):
+  minified (built-in oxc minifier — no new dep), `sourcemap:"hidden"`
+  (emits `main.js.map` without a `sourceMappingURL` comment — cljs
+  release emitted the map and the deploy pipeline stripped it before
+  shipping), `logseq_dev=false`.
+
+Sizes:
+
+| build | main.js bytes | gzip |
+|---|---:|---:|
+| dev | 3,113,199 | 599,115 |
+| production | 1,977,328 | 467,023 |
+| `js/icon-data.js` (both modes) | 1,778,026 | 331,469 |
+| `js/emoji-data.js` (both modes) | 432,757 | 83,099 |
+
+(Baseline before this branch: dev 8,546,822 / gzip 1,204,745, prod
+4,974,916 / gzip 988,477 — the icon split is responsible for most of
+the delta; minification and tree-shaking account for the rest.)
+
+vs cljs release (`clojure -M:cljs release app`, master): `main.js`
+16,113,696 / gzip 4,008,217 with tabler icon data inlined, plus lazy
+`code-editor.js` 1,012,649 / gzip 316,163. The LUI prod surface
+(main.js + icon-data.js + emoji-data.js) is 4,188,111 / gzip 881,591
+total — ~4.6x smaller gzipped; main.js alone is ~8.6x smaller
+(467,023 vs 4,008,217). Note the cljs bundle carries the complete
+legacy frontend; the LUI rewrite does not yet implement the full
+feature set.
+
+### ESM emit → tree-shaking works
+
+`js_app/dune` emitted `(module_systems commonjs)`, which rolldown can
+only shake coarsely. Switching to `(module_systems esm)` lets it drop
+dead modules and unused exports — 186 emitted modules fell out of the
+bundle entirely (182 unused `melange-webapi`/lui/dep bindings plus 4
+of our own emitted-but-unreachable modules). No `[%mel.raw]` `require`
+/`module.exports` interop exists in `src/`, so the switch was clean.
+`test/dune` keeps `commonjs` — the node test harness `require()`s its
+emitted modules directly. OCaml-side dead code is otherwise invisible
+to warning 32: without `.mli` files every structure binding is
+exported, so nothing can ever be flagged unused.
+
+### Data tables → embedded JSON
+
+`keymap_data.ml`, `icon_picker_names.ml` and `commands_data.ml` were
+re-encoded from OCaml list/record literals to a single embedded JSON
+string each, decoded once at module init (same wire shape decoded into
+the same public types — call sites unchanged). The emitted JS dropped
+~630KB (445→19KB, 318→244KB, 138→8KB), but most of the old emit was
+melange pretty-printing whitespace the minifier already removed: prod
+main.js gained only ~14KB, while the unminified dev bundle dropped
+~290KB. Kept because JSON.parse at init is also cheaper than building
+~6.4k cons cells. Lesson vs the icon split: icon data was real
+megabytes; small tables gain little once minified.
+
+### Icon data split (`resources/js/icon-data.js`)
+
+`icon_tabler_data.ml` used to embed all 6,146 tabler icons as a giant
+`match` returning OCaml list literals — 6.8MB of emitted JS, >50% of
+the production bundle. cljs carried the same icon set more compactly:
+`@tabler/icons-react` factories ≈1.78MB minified / 333KB gzip
+(`resources/mobile/js/tabler-icons-react.min.js`).
+
+Now `deps/ui/scripts/gen-icon-data.mjs` (`npm run gen:icon-data`,
+reads `node_modules/@tabler/icons/tabler-nodes-{outline,filled}.json`)
+emits `resources/js/icon-data.js` — `globalThis.__tablerChildren` in
+the same `[[tag, {attr: v}]]` shape. `resources/index.html` loads it
+as a `<script defer>` before `main.js`, and `Icon_tabler_data` is a
+thin binding that decodes entries to the same
+`(tag * (string * string) list) list` the renderers already consumed —
+call sites (`icons.ml`, `editor_dom.ml`) are unchanged. Benefits:
+`main.js` drops ~2.2MB, the icon table parses as a plain JS object
+literal (no cons-cell construction), and it caches independently of
+app code. If `__tablerChildren` is absent (e.g. test environments)
+`tabler_children` returns `[]` and icons degrade to font glyphs, same
+as an unknown icon name before.
+
+The `@emoji-mart/data` native set followed the same pattern as
+`icon-data.js`: `scripts/gen-emoji-data.mjs` emits
+`resources/js/emoji-data.js` (`globalThis.__emojiData`) and
+`emoji_mart.ml` reads the four dataset keys off `window` (fail-fast if
+the script is absent). That removed another ~430KB of real data from
+main.js.
+
+### Printf → mini interpreter (`src/core/sprintf.ml`)
+
+`camlinternalFormat.js` (~215KB emitted) is the stdlib printf/format
+interpreter pulled in by `melange/printf.js`; dep modules (lui,
+melange-edn, melange-transit) and stdlib `printexc.js` all import it,
+so it could not be shaken. `src/core/sprintf.ml` is a ~300-line port
+of `make_printf`'s format-GADT walk covering the directives used here
+(%s %S %c %C %d %i %u %x %X %o %b %f %e %g %F %Ld %% plus literal and
+argument padding/precision; semantics byte-verified against Stdlib
+Printf across the codebase's format strings). `vite.config.mjs`
+aliases every `printf.js` specifier to `shims/printf.js`, a re-export
+of the emitted `src/core/sprintf.js`, so all callers — ours, stdlib
+printexc, and deps — use the mini interpreter and camlinternalFormat
+drops out entirely. Exotic directives (%%_ignored, %a/%t/%r/%{ %%(
+scanf sets) raise `Invalid_argument` at the first sprintf call.
+
+Remaining bundle weight is `icon_picker_names.js` (~244KB) plus
+melange runtime and npm deps (transit-js, dnd-kit, lui); the build is
+intentionally a single IIFE (`codeSplitting:false`).
+
+Verified: `bb test -n logseq.e2e.tag-basic-test -p 3007` (3 tests) and
+`bb test -n logseq.e2e.commands-basic-test -p 3007` (31 tests / 204
+assertions) both pass against the minified bundle + external icon
+data.
+
+
+## Code-block editor (branch `devin/lui-codemirror`)
+
+Real CodeMirror 5 replaces the fake `pre.CodeMirror-line` path for
+code-fence blocks (`display-type=code`, or ` ```lang ` fences in
+`src_block`). Pure OCaml FFI — no hand-written JS.
+
+### FFI shape (deps/ui/src/editor/code_mirror.ml)
+
+- `external cm : cm_module = "codemirror" [@@mel.module]` binds
+  `require("codemirror")` — the CJS `module.exports = CodeMirror`
+  object itself. A bare `= ""` external is *wrong here*: melange
+  infers the val name and emits `require("codemirror").cm`
+  (undefined). Same fix applied to all addon/mode imports:
+  `= "path" [@@mel.module]` (module-object binding, harmless to
+  reference, and it avoids the ppx `fragile` alert entirely — no
+  `[@@@alert]` needed).
+- Side-effect imports: closebrackets, matchbrackets, show-hint,
+  active-line, `mode/meta`, and all 121 vendored modes
+  (`codemirror/mode/*/*`). Sanitized OCaml names
+  (`asn.1`→`asn_1`, `haskell-literate`→`haskell_literate`, …). The
+  `_imports` list keeps references so bundlers don't drop the
+  requires; the values are module objects, not members.
+
+### Mount lifecycle
+
+- `Editor_dom.register_doc_scan ~sync:true` scans
+  `.code-editor textarea` on every added DOM root and at startup
+  (`scan [document_element]`). `~sync` runs in the observer microtask
+  so the editor exists before paint and before `set_timeout 0`
+  focus attempts (`apply_focus`/`retry_focus` cover stragglers).
+- **The scan must skip textareas already inside `.CodeMirror`** —
+  CM's own hidden input textarea also matches `.code-editor
+  textarea`, and mounting on it nests a second `.CodeMirror`
+  recursively until the renderer OOM-crashes. Guard:
+  `D.el_closest el ".CodeMirror" = None`.
+- `bound` = nextElementSibling has `.CodeMirror`; `instances` map
+  pruned when a wrapper disconnects (`prune`).
+- CM mounts in **display and edit mode alike** (cljs renders CM as
+  the code surface always). `tree.ml content_or_editor` therefore
+  keeps `content_wrapper` for `display_type=code` even while editing
+  — the dyn never swaps the subtree, so the mounted CM survives
+  edit-state flips.
+
+### Options / DOM parity (cljs extensions/code.cljs render!)
+
+theme `lsradix light|dark` (html.dark → dark), autoCloseBrackets,
+lineNumbers, matchBrackets for lisp-like (scheme|lisp|clojure|edn),
+styleActiveLine, tabIndex −1, extraKeys Esc + Shift-Enter,
+`viewportMargin Infinity` for calc. Mode via `findModeByName →
+findModeByExtension → .mime → raw lang`; lang normalized
+`edn|clj|cljc|cljs|clojurescript → clojure` (cljs src-cp).
+
+### Events
+
+- `change` → `sync_buffer` (silent, keeps `editing.buffer` + textarea
+  textContent) + `Ops.schedule_save` (400 ms debounce →
+  `apply_parsed` → worker tx) + `update_calc`.
+- `blur` → `blur_commit` when this uuid is the editing block.
+- `focus` → `enter_edit` whenever the focused CM is not the current
+  edit block — including when nothing was editing (cljs
+  edit-block! parity). The click-placed caret survives because
+  `focus_block` short-circuits when `hasFocus()`.
+- Wrapper `keydown`: Cmd/Ctrl+[ ] swallowed (history nav), arrows at
+  document start/end move to the neighbor block
+  (`A.arrow_nav`). Wrapper `pointerdown`: stopPropagation + clear the
+  block-range selection. `editor_keys` document-capture pointerdown
+  additionally skips `.ui-fenced-code-editor` targets (CM's
+  stopPropagation can't reach capture listeners).
+- `Esc`: commits via `A.exit_edit ~select:true`. **Divergence**: cljs
+  drops into a raw-textarea mode on Esc before the second Esc fully
+  exits; we exit in one step (simpler, matches `exit-edit` helper).
+- `Shift-Enter`: `insert_sibling_after`.
+- `update_calc` clears `.extensions__code-calc` and re-appends
+  `.extensions__code-calc-output-line` rows from
+  `Render_calc.results`. For that to exist on a *fresh* calc block,
+  render.ml now emits the `.extensions__code-calc.pr-2` container
+  for `lang=calc` even when empty (cljs always mounts it).
+
+### State coupling (no module cycle)
+
+`Editor_state` exposes `code_buffer_of` / `code_focus` refs that
+`Code_mirror.install` wires: `live_buffer` consults the CM doc before
+the textarea fallback; `apply_focus` tries `code_focus` (has_focus →
+keep caret, else `cm.focus()` + `setCursor`) before the textarea
+match and runs `run_pending_focus_actions` on success. `sync_titles`
+(≈ cljs `sync-editor-code!`) is subscribed to `S.signal ()` *lazily*
+from the scan — `S.state` throws `failwith "editor state not
+mounted"` until the first block row mounts the state, and an eager
+subscribe in `install` crashed boot ("Failure(editor state not
+mounted)").
+
+### Actions bar
+
+`.code-block-actions` = `.select-language` button (label =
+lower-cased lang or `editor/code-language-placeholder` + chevron) +
+copy button (`navigator.clipboard.writeText` → "Copied!" toast, via
+`let*` promise bind). The picker renders `.ls-code-lang-picker`
+menu rows under `.cp__overlays` at the button's fixed rect; a
+document mousedown outside `.ls-code-lang-picker,
+.code-block-actions` closes it. Picking a mode calls
+`setOption("mode", …)` + `set_block_property
+logseq.property.code/lang`. `window.CodeMirror` is exported for
+extensions/dev helpers.
+
+### Verification
+
+- `virtualized-late-editor-and-code-editor-test` 4/4,
+  `commands-basic-test/code-block-test` 2/2,
+  `commands-basic-test/calculator-test` 3/3 — all green on port 3013.
+- Manual probe: `/code` → `.CodeMirror` (cm-s-lsradix cm-s-light)
+  mounts, click on `pre.CodeMirror-line` focuses the hidden textarea,
+  `fill "*:focus"` writes the doc, Esc exits, `.extensions__code`
+  shows the code, block content persists across reload.

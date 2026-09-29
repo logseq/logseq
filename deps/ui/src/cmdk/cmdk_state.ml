@@ -19,6 +19,7 @@ type badge_kind =
   | Text_badge (* inline "Current Page" after the title (page results) *)
   | Header_badge (* "Current Page" on the header row (block results) *)
 
+
 type action =
   | Create_page of string
   | Create_tag of string
@@ -143,6 +144,7 @@ let dev_mode () =
   match Platform.local_storage_get "developer-mode" with
   | Some "true" | Some "\"true\"" -> true
   | _ -> false
+
 
 (* cljs command-palette/history: localStorage "commands-history" is a
    JSON array of {id,timestamp}; top-commands sorts by invoke count
@@ -431,12 +433,12 @@ let group_order v q rows total =
     if node_exists q rows then None
     else
       Some
-        { gid = G_create; gtitle = I18n.t "cmdk.groups/create"
+        { gid = G_create; gtitle = I18n.t "cmdk.group/create"
         ; gitems = create_items q; gtotal = 1; glimit = 1
         ; gexpanded = false; gfilter_active = false }
   in
   let nodes_g () =
-    { gid = G_nodes; gtitle = I18n.t "cmdk.groups/nodes"
+    { gid = G_nodes; gtitle = I18n.t "cmdk.group/nodes"
     ; gitems = rows; gtotal = max total (List.length rows)
     ; glimit = nodes_limit v.move_mode v.expanded
     ; gexpanded = List.mem G_nodes v.expanded; gfilter_active = false }
@@ -452,7 +454,7 @@ let group_order v q rows total =
         rows
     in
     { gid = G_current_page
-    ; gtitle = I18n.t "cmdk.groups/current-page"
+    ; gtitle = I18n.t "cmdk.group/current-page"
     ; gitems = items; gtotal = max total (List.length items)
     ; glimit = current_page_limit v.expanded
     ; gexpanded = List.mem G_current_page v.expanded
@@ -460,27 +462,27 @@ let group_order v q rows total =
   in
   let commands_g () =
     let items = commands_items q in
-    { gid = G_commands; gtitle = I18n.t "cmdk.groups/commands"
+    { gid = G_commands; gtitle = I18n.t "cmdk.group/commands"
     ; gitems = items; gtotal = List.length items
     ; glimit = 5; gexpanded = List.mem G_commands v.expanded
     ; gfilter_active = false }
   in
   let files_g () =
     let items = file_items q in
-    { gid = G_files; gtitle = I18n.t "cmdk.groups/files"
+    { gid = G_files; gtitle = I18n.t "cmdk.group/files"
     ; gitems = items; gtotal = List.length items
     ; glimit = 5; gexpanded = List.mem G_files v.expanded
     ; gfilter_active = false }
   in
   let filters_g () =
     let items = filter_items () in
-    { gid = G_filters; gtitle = I18n.t "cmdk.groups/filters"
+    { gid = G_filters; gtitle = I18n.t "cmdk.group/filters"
     ; gitems = items; gtotal = List.length items
     ; glimit = 99; gexpanded = false; gfilter_active = false }
   in
   let recents_g () =
     { gid = G_recently_updated
-    ; gtitle = I18n.t "cmdk.groups/recently-updated"
+    ; gtitle = I18n.t "cmdk.group/recently-updated"
     ; gitems =
         (if String.trim q = "" then v.recents
          else
@@ -657,7 +659,11 @@ let open_palette ?(move = false) st =
   let tip = if js_random () < 0.5 then 0 else 1 in
   set_in st (fun v ->
           { v with groups = []; hl = -1; input = ""; move_mode = move
-          ; mouse = false; filter = None; tip });
+          ; mouse = false
+          (* cljs move-selected-blocks opens via go-to-search! :nodes,
+             which pins the nodes filter — keeps recents/filters out *)
+          ; filter = (if move then Some G_nodes else None)
+          ; tip });
   set_in st (fun v -> { v with open_ = true });
   (* prime synchronously so commands show before the search lands *)
   apply_results st "" move [] [] 0;
@@ -681,7 +687,10 @@ let clear_filter st =
 
 let clear_or_close st =
   let v = get st in
-  if v.filter <> None then (clear_filter st; true)
+  (* cljs esc: move mode never clears its pinned nodes filter — blank input
+     closes the dialog, non-blank just clears the text *)
+  if v.move_mode && v.input = "" then (close st; true)
+  else if v.filter <> None && not v.move_mode then (clear_filter st; true)
   else if v.input <> "" then (
     set_in st (fun v -> { v with input = "" });
     (match Dom_ext.doc_query_selector ".cp__cmdk-search-input" with
@@ -739,6 +748,8 @@ let goto_page _repo uuid =
      page stops rendering an editor during the async load gap (e2e
      waits on .editor-visible and must not see the stale one) *)
   Editor_actions.exit_edit ~select:false;
+  (* cljs redirect-to-page! adds the page to recents — mark the nav so
+     the sidebar pushes it once the page loads *)
   Runtime.mark_nav ();
   (* one navigation path: set the hash and let the router's hashchange
      resolve drive Navigate_to + load (a manual prefetch here double-
@@ -1044,8 +1055,13 @@ and run_command st repo (cid : string) =
        where the hash no-ops and no later hook clears the editor *)
     Editor_actions.exit_edit ~select:false;
     close st;
+    let target = Runtime.nav_hash hash in
+    (* setting an identical hash fires no hashchange, so resolve would
+       never run and the cleared route would stick on the empty view *)
+    let same = Platform.location_hash () = target in
     Runtime.send (Action.Navigate_to route);
-    Platform.set_location_hash (Runtime.nav_hash hash)
+    Platform.set_location_hash target;
+    if same then Router.resolve ()
   in
   let goto_journal_day day =
     match repo with
@@ -1077,8 +1093,10 @@ and run_command st repo (cid : string) =
    | None -> ());
   match cid with
   | "editor/move-blocks" ->
-      (* stay open in move-blocks mode; page-only search *)
-      set_in st (fun v -> { v with move_mode = true; input = "" });
+      (* stay open in move-blocks mode; cljs go-to-search! :nodes scopes
+         the palette to the nodes group — no recents/filters *)
+      set_in st (fun v ->
+          { v with move_mode = true; filter = Some G_nodes; input = "" });
       (match Dom_ext.doc_query_selector ".cp__cmdk-search-input" with
        | Some el -> Dom_ext.set_value el ""; Dom_ext.focus el
        | None -> ());
@@ -1151,6 +1169,7 @@ and run_command st repo (cid : string) =
        | Some f -> f ()
        | None -> ());
       close st (* no local equivalent / editing-context commands *))
+
 
 let run_highlighted st =
   let v = get st in

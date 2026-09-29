@@ -35,6 +35,66 @@ let prop_label (w : Wire.t) (key : string) : string option =
   | _ -> None
 ;;
 
+let map_assoc s v kvs =
+  let hit k =
+    match k with
+    | Wire.Keyword k' | Wire.String k' | Wire.Symbol k' -> k' = s
+    | _ -> false
+  in
+  let rec go acc = function
+    | [] -> List.rev ((Wire.kw s, v) :: acc)
+    | (k, _) :: rest when hit k -> List.rev_append acc ((k, v) :: rest)
+    | kv :: rest -> go (kv :: acc) rest
+  in
+  go [] kvs
+
+(* :thread-api/get-blocks answers {block, children:<flat list>} — the
+   children are not nested under block/children there. Regroup them by
+   block/parent-uuid, ordered by block/order like the worker's tree pull,
+   so block_of_wire sees the get-page-blocks-tree shape. *)
+let nest_get_blocks (pair : Wire.t) : Wire.t option =
+  match Wire.get pair "block" with
+  | Some (Wire.Map _ as root) ->
+      let flat =
+        match Wire.get pair "children" with
+        | Some (Wire.List xs) | Some (Wire.Array xs) -> xs
+        | _ -> []
+      in
+      let by_parent = Hashtbl.create 16 in
+      List.iter
+        (fun c ->
+          match Wire.map_get_uuid c "block/parent-uuid" with
+          | Some u ->
+              Hashtbl.replace by_parent u
+                (c :: Option.value (Hashtbl.find_opt by_parent u)
+                     ~default:[])
+          | None -> ())
+        flat;
+      let order_of c =
+        Option.value (Wire.map_get_string c "block/order") ~default:""
+      in
+      let rec fill w =
+        match Wire.map_get_uuid w "block/uuid" with
+        | Some u -> (
+            (* block/children ref summaries in the flat maps are not the
+               rendered children — replace unconditionally so filtered
+               (property/recycled) children don't ghost through *)
+            let kids =
+              Option.value (Hashtbl.find_opt by_parent u) ~default:[]
+              |> List.sort (fun a b -> compare (order_of a) (order_of b))
+              |> List.map fill
+            in
+            match w with
+            | Wire.Map kvs ->
+                Wire.Map
+                  (map_assoc "block/children" (Wire.Array kids) kvs)
+            | _ -> w)
+        | None -> w
+      in
+      Some (fill root)
+  | _ -> None
+;;
+
 let order_list_type_of_wire (w : Wire.t) : string option =
   match prop_label w "logseq.property/order-list-type" with
   | Some s -> Some (String.lowercase_ascii s)
@@ -94,6 +154,26 @@ let renderable_child (c : Wire.t) : bool =
   Wire.get c "logseq.property/created-from-property" = None
   && Wire.get c "block/closed-value-property" = None
 
+(* logseq.property/icon is a {type, id} map on the entity itself; block
+   icons use the Model.icon record (page icons use the tuple form below) *)
+let block_icon_of_wire (w : Wire.t) : Model.icon option =
+  let str_or_kw = function
+    | Some (Wire.Keyword s) | Some (Wire.String s) -> Some s
+    | _ -> None
+  in
+  match Wire.get w "logseq.property/icon" with
+  | Some (Wire.Map _ as m) -> (
+      match str_or_kw (Wire.get m "id") with
+      | Some id ->
+          Some
+            { Model.icon_kind =
+                Option.value (str_or_kw (Wire.get m "type"))
+                  ~default:"tabler-icon"
+            ; icon_id = id
+            }
+      | None -> None)
+  | _ -> None
+
 let rec block_of_wire ?(order_index = 1) ?(parent_query_id = None)
     (w : Wire.t) : Model.block =
   let uuid = Wire.map_get_uuid w "block/uuid" in
@@ -130,17 +210,38 @@ let rec block_of_wire ?(order_index = 1) ?(parent_query_id = None)
     | Some l -> Wire.map_get_int l "db/id"
     | None -> None
   in
-  let tag_ids =
+  let tag_entries =
     match Wire.get w "block/tags" with
-    | Some (Wire.List xs) | Some (Wire.Array xs) | Some (Wire.Set xs) ->
-        List.filter_map
-          (fun t ->
-            match t with
-            | Wire.Int i -> Some i
-            | Wire.Int64 i -> Some (Int64.to_int i)
-            | _ -> Wire.map_get_int t "db/id")
-          xs
+    | Some (Wire.List xs) | Some (Wire.Array xs) | Some (Wire.Set xs) -> xs
     | _ -> []
+  in
+  let tag_ids =
+    List.filter_map
+      (fun t ->
+        match t with
+        | Wire.Int i -> Some i
+        | Wire.Int64 i -> Some (Int64.to_int i)
+        | _ -> Wire.map_get_int t "db/id")
+      tag_entries
+  in
+  (* tag wires carry {db/id, db/ident?, block/title?, icon?} once the
+     worker expands the ref; use them eagerly when present *)
+  let tag_titles =
+    List.filter_map
+      (fun t ->
+        match t with
+        | Wire.Map _ -> Wire.map_get_string t "block/title"
+        | Wire.Keyword s -> Some s
+        | _ -> None)
+      tag_entries
+  in
+  let tag_idents =
+    List.filter_map
+      (fun t ->
+        match Wire.get t "db/ident" with
+        | Some (Wire.Keyword s) | Some (Wire.String s) -> Some s
+        | _ -> None)
+      tag_entries
   in
   let num_prop k =
     match Wire.get w k with
@@ -164,14 +265,13 @@ let rec block_of_wire ?(order_index = 1) ?(parent_query_id = None)
   ; block_title = title
   ; block_level = level
   ; block_tag_ids = tag_ids
-  ; block_tags = []
+  ; block_tags = tag_titles
   ; block_display_type = prop_label w "logseq.property.node/display-type"
   ; block_order_list = order_list
   ; block_order_index =
       (match order_list with Some _ -> Some order_index | None -> None)
   ; block_code_lang = prop_label w "logseq.property.code/lang"
   ; block_tag_uuids = []
-  ; block_tag_idents = []
   ; block_tag_db_ids = []
   ; block_page_name =
       (match Wire.get w "block/page" with
@@ -180,6 +280,9 @@ let rec block_of_wire ?(order_index = 1) ?(parent_query_id = None)
            | Some t -> Some t
            | None -> Wire.map_get_string w "block/page-name")
        | _ -> Wire.map_get_string w "block/page-name")
+  ; block_tag_idents = tag_idents
+  ; block_icon = block_icon_of_wire w
+  ; block_tag_icons = List.filter_map block_icon_of_wire tag_entries
   ; block_reactions = reactions_of_wire w
   ; block_is_comments_area = false
   ; block_is_comment = false

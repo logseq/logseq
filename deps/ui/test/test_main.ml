@@ -3155,6 +3155,776 @@ let test_selected_uuids () =
     (Editor_actions.selected_uuids () = []);
   Runtime.current_page := saved_page
 
+(* ---- Update.update: remaining arm ---- *)
+
+let test_update_sidebar2 () =
+  let m0 = Model.initial in
+  check "right sidebar closed" (not m0.Model.right_sidebar_open);
+  let m1 = Update.update m0 Action.Toggle_right_sidebar in
+  check "right sidebar toggles on" m1.Model.right_sidebar_open;
+  let m2 = Update.update m1 Action.Toggle_right_sidebar in
+  check "right sidebar toggles off" (not m2.Model.right_sidebar_open);
+  (* left/right are independent *)
+  let m3 = Update.update m1 Action.Toggle_left_sidebar in
+  check "sidebars independent"
+    (m3.Model.right_sidebar_open && m3.Model.left_sidebar_open);
+  check "noop identity" (Update.update m3 Action.Noop == m3)
+
+(* ---- Decode: collection wrappers ---- *)
+
+let test_decode7 () =
+  let nb u t =
+    wmap
+      [ ("block/uuid", Wire.Uuid u); ("block/title", Wire.String t)
+      ; ("logseq.property/order-list-type", Wire.String "number") ]
+  in
+  let ol u t ty =
+    wmap
+      [ ("block/uuid", Wire.Uuid u); ("block/title", Wire.String t)
+      ; ("logseq.property/order-list-type", Wire.String ty) ]
+  in
+  let bs =
+    Decode.blocks_of_wire (Wire.Array [ nb "a" "A"; nb "b" "B" ])
+  in
+  eqi "blocks_of_wire count" 2 (List.length bs);
+  check "blocks_of_wire order idx"
+    ((List.nth bs 0).Model.block_order_index = Some 1
+    && (List.nth bs 1).Model.block_order_index = Some 2);
+  (* order_index resets when the list type changes; unlisted = None *)
+  let bs2 =
+    Decode.blocks_of_wire
+      (Wire.Array
+         [ nb "a" "a"; ol "b" "b" "bullet"; nb "c" "c"
+         ; wmap [ ("block/uuid", Wire.Uuid "d") ] ])
+  in
+  check "order resets on type change"
+    (List.map (fun (b : Model.block) -> b.block_order_index) bs2
+    = [ Some 1; Some 1; Some 1; None ]);
+  check "blocks_of_wire non-seq" (Decode.blocks_of_wire Wire.Nil = []);
+  (* mark_default_collapsed: page blocks collapse, others don't *)
+  let pb = Decode.block_of_wire (wmap [ ("block/uuid", Wire.Uuid "p"); ("block/name", Wire.String "p") ]) in
+  let rb = Decode.block_of_wire (wmap [ ("block/uuid", Wire.Uuid "r") ]) in
+  check "mark_default_collapsed"
+    ((Decode.mark_default_collapsed pb).Model.block_default_collapsed
+    && not (Decode.mark_default_collapsed rb).Model.block_default_collapsed);
+  (* pages_only keeps only page subtrees *)
+  let tree =
+    { (block ~children:[ block "k" "c"; { (block "kp" "cp") with
+        Model.block_is_page = true } ] "r" "r")
+      with Model.block_is_page = true }
+  in
+  let kept = Decode.pages_only [ tree; block "x" "y" ] in
+  check "pages_only drops non-pages"
+    (List.length kept = 1
+    && List.length (List.hd kept).Model.block_children = 1
+    && (List.hd (List.hd kept).Model.block_children).block_uuid = Some "kp")
+
+(* ---- Edn: more edge cases ---- *)
+
+(* ---- Sdk_convert: wire <-> json ---- *)
+
+let json_obj kvs =
+  let d = Js.Dict.empty () in
+  List.iter (fun (k, v) -> Js.Dict.set d k v) kvs;
+  Sdk_convert.json_obj d
+
+let test_sdk_convert2 () =
+  (* entity maps with uuid+title gain content/fullTitle aliases *)
+  let j =
+    Sdk_convert.json_of_wire
+      (wmap
+         [ ("block/uuid", Wire.Uuid "u"); ("block/title", Wire.String "t") ])
+  in
+  eqs "content alias" "{\"uuid\":\"u\",\"title\":\"t\",\"content\":\"t\",\"fullTitle\":\"t\"}"
+    (Js.Json.stringify j);
+  (* result side: hidden keys out, tag refs reduced *)
+  let rj =
+    Sdk_convert.result_json_of_wire
+      (wmap
+         [ ("block/tx-id", Wire.Int 9)
+         ; ("block/tags", Wire.Set [ wmap [ ("db/id", Wire.Int 4) ] ]) ])
+  in
+  eqs "result hides + reduces" "{\"tags\":[4]}"
+    (Js.Json.stringify rj);
+  (* wire_of_json direction *)
+  let jn = Js.Json.number 3.5 in
+  check "wire_of_json float"
+    (Sdk_convert.wire_of_json jn = Wire.Float 3.5);
+  check "wire_of_json int"
+    (Sdk_convert.wire_of_json (Js.Json.number 4.) = Wire.Int 4);
+  check "wire_of_json bool"
+    (Sdk_convert.wire_of_json (Js.Json.boolean true) = Wire.Bool true);
+  check "wire_of_json null"
+    (Sdk_convert.wire_of_json Js.Json.null = Wire.Nil);
+  check "wire_of_json string"
+    (Sdk_convert.wire_of_json (Js.Json.string "x") = Wire.String "x");
+  let jo = json_obj [ ("k", Js.Json.string "v"); ("n", Js.Json.number 2.) ] in
+  check "wire_of_json object"
+    (Sdk_convert.wire_of_json jo
+     = Wire.Map
+         [ (Wire.String "k", Wire.String "v"); (Wire.String "n", Wire.Int 2) ])
+
+(* ---- Sdk_util pure helpers ---- *)
+
+let test_sdk_util2 () =
+  let u = "aaaaaaaa-1111-2222-3333-444444444444" in
+  eq "page_ref_names" [ "Page X"; "Y" ]
+    (Sdk_util.page_ref_names ("see [[Page X]] and [[" ^ u ^ "]] or [[Y]]"))
+    (String.concat ",");
+  check "page_ref_names dedup"
+    (Sdk_util.page_ref_names "[[A]] [[A]]" = [ "A" ]);
+  eqs "replace_all" "x-b-x" (Sdk_util.replace_all "a-b-a" ~pat:"a" ~rep:"x");
+  eqs "replace_all empty pat" "ab"
+    (Sdk_util.replace_all "ab" ~pat:"" ~rep:"x");
+  check "collect_title_strings"
+    (Sdk_util.collect_title_strings
+       (wmap
+          [ ("block/title", Wire.String "t1")
+          ; ( "nested"
+            , Wire.Array [ wmap [ ("block/title", Wire.String "t2") ] ] )
+          ])
+       []
+    = [ "t2"; "t1" ]);
+  eqs "edn_escape" "a\\\\b\\\"c" (Sdk_util.edn_escape "a\\b\"c");
+  eq "hashtag_names" [ "tag1"; "tag_2" ]
+    (Sdk_util.hashtag_names "#tag1 and mid#no and #tag_2 x#no")
+    (String.concat ",");
+  (* '{' of '#{' is not a boundary char — set literals don't tag *)
+  check "hashtag dedup" (Sdk_util.hashtag_names "#a #a" = [ "a" ])
+
+let test_sdk_util3 () =
+  let known = [ ("page x", "u-px"); ("tag1", "u-t1") ] in
+  let w =
+    Sdk_util.rewrite_title_refs ~tags:[ "tag1" ] known
+      (wmap [ ("block/title", Wire.String "see [[Page X]] and #tag1") ])
+  in
+  eqs "title rewritten" "see [[u-px]] and #tag1"
+    (Option.get (Wire.map_get_string w "block/title"));
+  let refs =
+    match Wire.get w "block/refs" with
+    | Some (Wire.List xs) -> xs
+    | _ -> []
+  in
+  eqi "refs stubs" 2 (List.length refs);
+  check "ref stub shape"
+    (Wire.get (List.hd refs) "block/name" = Some (Wire.String "page x")
+    && Wire.get (List.hd refs) "block/uuid" = Some (Wire.Uuid "u-px")
+    && Wire.get (List.hd refs) "block/type" = Some (Wire.String "page"));
+  let tags =
+    match Wire.get w "block/tags" with
+    | Some (Wire.List xs) -> xs
+    | _ -> []
+  in
+  eqi "tags stubs" 1 (List.length tags);
+  check "tag stub has no type"
+    (Wire.get (List.hd tags) "block/name" = Some (Wire.String "tag1")
+    && Wire.get (List.hd tags) "block/type" = None);
+  (* non-class hashtag still refs but doesn't tag *)
+  let w2 =
+    Sdk_util.rewrite_title_refs ~tags:[] known
+      (wmap [ ("block/title", Wire.String "hi #tag1") ])
+  in
+  check "unclassed hashtag refs only"
+    (match Wire.get w2 "block/refs", Wire.get w2 "block/tags" with
+     | Some (Wire.List [ _ ]), None -> true
+     | _ -> false);
+  check "no refs -> untouched"
+    (Sdk_util.rewrite_title_refs ~tags:[] known
+       (wmap [ ("block/title", Wire.String "plain") ])
+     = wmap [ ("block/title", Wire.String "plain") ]);
+  check "block_of_pair map"
+    (Wire.block_of_pair
+       (wmap [ ("block", Wire.Int 3) ]) = Some (Wire.Int 3));
+  check "block_of_pair seq"
+    (Wire.block_of_pair
+       (Wire.Array [ Wire.Int 1; Wire.Int 9 ]) = Some (Wire.Int 9));
+  check "block_of_pair junk"
+    (Wire.block_of_pair (Wire.Int 5) = None)
+
+let test_sdk_util4 () =
+  check "eid number"
+    (Sdk_util.eid_wire_of_json (Js.Json.number 5.)
+     = Some (Wire.Int64 5L));
+  check "eid string"
+    (Sdk_util.eid_wire_of_json (Js.Json.string "u")
+     = Some (Wire.String "u"));
+  check "eid id map"
+    (Sdk_util.eid_wire_of_json (json_obj [ ("id", Js.Json.number 7.) ])
+     = Some (Wire.Int64 7L));
+  check "eid uuid map"
+    (Sdk_util.eid_wire_of_json
+       (json_obj [ ("uuid", Js.Json.string "u") ])
+     = Some (Wire.String "u"));
+  check "eid junk" (Sdk_util.eid_wire_of_json Js.Json.null = None);
+  let cls =
+    wmap
+      [ ( "block/tags"
+        , Wire.Array [ wmap [ ("db/ident", Wire.kw "logseq.class/Tag") ] ]
+        )
+      ]
+  in
+  check "is_class_entity yes" (Sdk_util.is_class_entity cls);
+  check "is_class_entity no"
+    (not
+       (Sdk_util.is_class_entity
+          (wmap
+             [ ( "block/tags"
+               , Wire.Array [ wmap [ ("db/ident", Wire.kw "user/x") ] ] )
+             ])));
+  check "is_class_entity missing"
+    (not (Sdk_util.is_class_entity (wmap [])));
+  eq "block_uuid_of" (Some "u")
+    (Sdk_util.block_uuid_of (wmap [ ("block/uuid", Wire.Uuid "u") ]))
+    (function
+      | Some s -> s
+      | None -> "none")
+
+(* ---- Sdk_write pure op-building ---- *)
+
+let test_sdk_write () =
+  check "url_like http" (Sdk_write.url_like "https://x.y");
+  check "url_like custom scheme" (Sdk_write.url_like "zotero://x");
+  check "url_like plain" (not (Sdk_write.url_like "just text"));
+  check "url_like leading digit scheme"
+    (not (Sdk_write.url_like "9lives:x"));
+  eqs "infer checkbox" "checkbox"
+    (Sdk_write.infer_property_type (Wire.Bool true));
+  eqs "infer number" "number" (Sdk_write.infer_property_type (Wire.Int 3));
+  eqs "infer url" "url"
+    (Sdk_write.infer_property_type (Wire.String "https://x"));
+  eqs "infer url set" "url"
+    (Sdk_write.infer_property_type
+       (Wire.Set [ Wire.String "a://x"; Wire.String "b://y" ]));
+  eqs "infer json" "json" (Sdk_write.infer_property_type (Wire.Map []));
+  eqs "infer default" "default"
+    (Sdk_write.infer_property_type (Wire.String "plain"));
+  eqs "property_name_of_ident" "tail"
+    (Sdk_write.property_name_of_ident "ns/tail");
+  eqs "property_name_of_ident bare" "x"
+    (Sdk_write.property_name_of_ident "x");
+  let v = Sdk_write.stringify_wire (wmap [ ("a", Wire.Int 1) ]) in
+  eqs "stringify_wire" "{\"a\":1}"
+    (match v with Wire.String s -> s | _ -> "");
+  eqs "str_wire string" "x"
+    (match Sdk_write.str_wire (Wire.String "x") with
+     | Wire.String s -> s
+     | _ -> "");
+  eqs "str_wire int" "4"
+    (match Sdk_write.str_wire (Wire.Int 4) with
+     | Wire.String s -> s
+     | _ -> "")
+
+let test_sdk_write2 () =
+  let ent =
+    Sdk_write.entry_ops ~reset:false "bu"
+      ("k", "plugin.property._test_plugin/k", Wire.Int 1)
+      (Wire.Map []) None
+  in
+  eqi "entry_ops upsert+set" 2 (List.length ent);
+  check "entry_ops upsert shape"
+    (match List.hd ent with
+     | Wire.Array
+         [ Wire.Keyword "upsert-property"
+         ; Wire.Array [ Wire.Keyword "plugin.property._test_plugin/k"; spec; opts ]
+         ] ->
+         Wire.get spec "logseq.property/type" = Some (Wire.Keyword "number")
+         && Wire.get spec "db/cardinality"
+            = Some (Wire.Keyword "db.cardinality/one")
+         && Wire.get opts "property-name" = Some (Wire.String "k")
+     | _ -> false);
+  check "entry_ops set shape"
+    (match List.nth ent 1 with
+     | Wire.Array
+         [ Wire.Keyword "set-block-property"
+         ; Wire.Array [ Wire.Uuid "bu"; Wire.Keyword _; Wire.Int 1 ] ] ->
+         true
+     | _ -> false);
+  (* seq value -> cardinality many + one set per element *)
+  let ent2 =
+    Sdk_write.entry_ops ~reset:false "bu" ("k", "i", Wire.Array [ Wire.Int 1; Wire.Int 2 ])
+      (Wire.Map []) None
+  in
+  eqi "entry_ops many sets" 3 (List.length ent2);
+  (* existing prop -> no upsert *)
+  let prop = wmap [ ("logseq.property/type", Wire.kw "number") ] in
+  check "entry_ops existing prop"
+    (match
+       Sdk_write.entry_ops ~reset:false "bu" ("k", "i", Wire.Int 1)
+         (Wire.Map []) (Some prop)
+     with
+     | [ Wire.Array (Wire.Keyword "set-block-property" :: _) ] -> true
+     | _ -> false)
+
+let test_sdk_write3 () =
+  let prop = wmap [ ("logseq.property/type", Wire.kw "number") ] in
+  (* nil value on existing prop -> remove op, then a set of nil *)
+  check "entry_ops nil removes"
+    (match
+       Sdk_write.entry_ops ~reset:false "bu" ("k", "i", Wire.Nil)
+         (Wire.Map []) (Some prop)
+     with
+     | [ Wire.Array
+           [ Wire.Keyword "remove-block-property"
+           ; Wire.Array [ Wire.Uuid "bu"; Wire.Keyword "i" ] ]
+       ; _ ] -> true
+     | _ -> false);
+  (* many + reset on existing prop removes first *)
+  let ops =
+    Sdk_write.entry_ops ~reset:true "bu"
+      ("k", "i", Wire.Array [ Wire.Int 1 ])
+      (Wire.Map []) (Some prop)
+  in
+  check "entry_ops reset removes first"
+    (match ops with
+     | Wire.Array (Wire.Keyword "remove-block-property" :: _)
+       :: Wire.Array (Wire.Keyword "set-block-property" :: _) :: _ ->
+         true
+     | _ -> false);
+  (* json + many raises *)
+  check "json+many raises"
+    (try
+       ignore
+         (Sdk_write.entry_ops ~reset:false "bu"
+            ("k", "i", Wire.Array [ Wire.Int 1 ])
+            (wmap [ ("type", Wire.String "json") ]) None);
+       false
+     with
+     | Js.Exn.Error _ -> true);
+  (* existing prop + schema hint raises *)
+  check "schema-hint on existing raises"
+    (try
+       ignore
+         (Sdk_write.entry_ops ~reset:false "bu" ("k", "i", Wire.Int 1)
+            (wmap [ ("type", Wire.String "number") ]) (Some prop));
+       false
+     with
+     | Js.Exn.Error _ -> true);
+  (* json conversion: map value stringified under json schema *)
+  let ops2 =
+    Sdk_write.entry_ops ~reset:false "bu" ("k", "i", Wire.Map [])
+      (wmap [ ("type", Wire.String "json") ]) None
+  in
+  check "json value converted"
+    (match List.nth ops2 1 with
+     | Wire.Array
+         [ _; Wire.Array [ _; _; Wire.String s ] ] -> s = "{}"
+     | _ -> false)
+
+let test_sdk_write4 () =
+  let flat =
+    Sdk_write.flat_map_of "u1" 2 (Some "pu")
+      { Title_refs.title = "t"; refs = []; tags = [] }
+  in
+  check "flat_map_of"
+    (Wire.get flat "block/title" = Some (Wire.String "t")
+    && Wire.get flat "block/uuid" = Some (Wire.Uuid "u1")
+    && Wire.get flat "block/level" = Some (Wire.Int 2)
+    && Wire.get flat "block/parent"
+       = Some (Wire.Array [ Wire.kw "block/uuid"; Wire.Uuid "pu" ]));
+  check "flat_map_of no parent"
+    (Wire.get
+       (Sdk_write.flat_map_of "u1" 1 None
+          { Title_refs.title = "t"; refs = []; tags = [] })
+       "block/parent"
+     = None);
+  (* flatten_batch: preorder fold, children before their siblings' rest,
+     reversed acc — callers List.rev *)
+  let tree =
+    Wire.Array
+      [ wmap
+          [ ("content", Wire.String "p")
+          ; ("uuid", Wire.Uuid "pu")
+          ; ( "children"
+            , Wire.Array
+                [ wmap
+                    [ ("content", Wire.String "c")
+                    ; ("uuid", Wire.String "cu") ] ] ) ]
+      ]
+  in
+  let flats =
+    List.rev (List.fold_left (Sdk_write.flatten_batch 1 None) []
+                (Sdk_write.list_items tree))
+  in
+  check "flatten_batch shape"
+    (match flats with
+     | [ (pu, "p", 1, None, _); (cu, "c", 2, Some pu', _) ] ->
+         pu = "pu" && cu = "cu" && pu' = "pu"
+     | _ -> false)
+
+(* ---- Views_wire decoders ---- *)
+
+let test_views_wire2 () =
+  (* snapshot slots are keyed by [:resource <key>] vectors *)
+  let snap =
+    wmap
+      [ ( "slots"
+        , Wire.Map
+            [ ( Wire.Array [ Wire.kw "resource"; Wire.String "rk" ]
+              , wmap [ ("value", Wire.Int 9) ] ) ] ) ]
+  in
+  check "snapshot_slot_value"
+    (Views_wire.snapshot_slot_value snap (Wire.String "rk")
+     = Some (Wire.Int 9));
+  check "snapshot_slot_value miss"
+    (Views_wire.snapshot_slot_value snap (Wire.String "other") = None);
+  let ent =
+    Views_wire.decode_view_ent
+      (wmap
+         [ ("block/uuid", Wire.Uuid "vu"); ("db/id", Wire.Int 7)
+         ; ("block/title", Wire.String "My View")
+         ; ("logseq.property.view/type", Wire.kw "logseq.property.view/type.list")
+         ; ("logseq.property.table/hidden-columns",
+            Wire.Array [ Wire.kw "block/journal-day" ]) ])
+  in
+  check "decode_view_ent"
+    (match ent with
+     | Some v ->
+         v.Views_wire.vu = "vu" && v.vid = 7 && v.vtitle = "My View"
+         && v.vtype = "logseq.property.view/type.list"
+         && v.vhidden = [ "block/journal-day" ]
+     | None -> false);
+  check "decode_view_ent no uuid -> None"
+    (Views_wire.decode_view_ent (wmap []) = None);
+  (* defaults when optional fields absent *)
+  check "decode_view_ent defaults"
+    (match
+       Views_wire.decode_view_ent
+         (wmap [ ("block/uuid", Wire.Uuid "v") ])
+     with
+     | Some v ->
+         v.vtype = "logseq.property.view/type.table"
+         && v.vhidden = [] && v.vordered = [] && v.vgroup_by = None
+     | None -> false)
+
+let test_views_wire3 () =
+  let flat =
+    Views_wire.decode_view_data
+      (wmap
+         [ ("count", Wire.Int 2)
+         ; ("rows", Wire.Array [ Wire.Uuid "a"; Wire.Uuid "b" ])
+         ; ("properties", Wire.Array [ Wire.kw "block/title" ])
+         ; ( "row-previews"
+           , Wire.Map [ (Wire.Uuid "a", wmap [ ("block/title", Wire.String "T") ]) ]
+           )
+         ])
+  in
+  check "view_data flat"
+    (match flat with
+     | Views_wire.VFlat { rows; count; previews; qprops } ->
+         rows = [ "a"; "b" ] && count = 2 && qprops = [ "block/title" ]
+         && Hashtbl.find previews "a"
+            = wmap [ ("block/title", Wire.String "T") ]
+     | _ -> false);
+  let grouped =
+    Views_wire.decode_view_data
+      (wmap
+         [ ("partition", Wire.kw "grouped")
+         ; ( "groups"
+           , Wire.Array
+               [ wmap
+                   [ ("value", Wire.String "g1")
+                   ; ("rows", Wire.Array [ Wire.Uuid "x" ]) ] ] ) ])
+  in
+  check "view_data grouped"
+    (match grouped with
+     | Views_wire.VGrouped [ { gv = Wire.String "g1"; grows = [ "x" ] } ] ->
+         true
+     | _ -> false);
+  let glist =
+    Views_wire.decode_view_data
+      (wmap
+         [ ("partition", Wire.kw "grouped-list")
+         ; ( "groups"
+           , Wire.Array
+               [ wmap
+                   [ ("value", Wire.Nil)
+                   ; ( "partitions"
+                     , Wire.Array
+                         [ wmap
+                             [ ("breadcrumb-uuid", Wire.Uuid "bc")
+                             ; ("rows", Wire.Array [ Wire.Uuid "r1" ]) ] ]
+                     ) ] ] ) ])
+  in
+  check "view_data grouped-list"
+    (match glist with
+     | Views_wire.VGroupedList
+         [ { glparts = [ ("bc", [ "r1" ]) ]; _ } ] -> true
+     | _ -> false);
+  check "view_data non-map empty"
+    (Views_wire.decode_view_data (Wire.Int 1) = Views_wire.VEmpty)
+
+let test_views_wire4 () =
+  eqs "prop_text str" "s" (Views_wire.prop_text (Wire.String "s"));
+  eqs "prop_text int" "4" (Views_wire.prop_text (Wire.Int 4));
+  eqs "prop_text float" "2.5" (Views_wire.prop_text (Wire.Float 2.5));
+  eqs "prop_text bool" "true" (Views_wire.prop_text (Wire.Bool true));
+  eqs "prop_text kw" "a/b" (Views_wire.prop_text (Wire.kw "a/b"));
+  eqs "prop_text map title" "t"
+    (Views_wire.prop_text (wmap [ ("block/title", Wire.String "t") ]));
+  eqs "prop_text list join" "a, b"
+    (Views_wire.prop_text
+       (Wire.List [ Wire.String "a"; Wire.String "b" ]));
+  eqs "prop_text nil" "" (Views_wire.prop_text Wire.Nil)
+
+(* ---- Views_state sorting/filters wire roundtrips ---- *)
+
+(* ---- Views_table pure helpers ---- *)
+
+let test_views_table2 () =
+  (* fmt_cell_value: Int under datetime col formats, others prop_text *)
+  let col_dt = { Views_table.created_column with Views_state.c_type = "datetime" } in
+  let s = Views_table.fmt_cell_value col_dt (Wire.Int 0) in
+  check "fmt_cell_value datetime shape"
+    (String.length s = 16 && String.get s 4 = '-' && String.get s 10 = ' ');
+  eqs "fmt_cell_value plain" "5"
+    (Views_table.fmt_cell_value Views_table.title_column (Wire.Int 5));
+  (* cell_value: builtin reads directly, else property map fallback *)
+  let blk =
+    wmap
+      [ ("block/title", Wire.String "T")
+      ; ( "block/properties"
+        , wmap [ ("user.prop/x", Wire.Int 9) ] ) ]
+  in
+  check "cell_value builtin"
+    (Views_table.cell_value blk Views_table.title_column
+     = Wire.String "T");
+  let user_col =
+    { Views_state.c_id = "user.prop/x"; c_name = "X"; c_type = "default"
+    ; c_prop = None; c_disable_hide = false; c_many = false }
+  in
+  check "cell_value props fallback"
+    (Views_table.cell_value blk user_col = Wire.Int 9);
+  check "cell_value missing -> Nil"
+    (Views_table.cell_value (wmap []) user_col = Wire.Nil);
+  (* cell_title: select/id none, empty none *)
+  check "cell_title select none"
+    (Views_table.cell_title blk Views_table.select_column = None);
+  check "cell_title value"
+    (Views_table.cell_title blk Views_table.title_column = Some "T");
+  check "cell_title empty none"
+    (Views_table.cell_title (wmap []) Views_table.title_column = None)
+
+(* ---- Properties_data pure helpers ---- *)
+
+let test_props_data () =
+  let row =
+    wmap
+      [ ("property-id", Wire.kw "user.prop/x")
+      ; ( "property"
+        , wmap
+            [ ("block/title", Wire.String "X")
+            ; ("logseq.property/type", Wire.kw "number")
+            ; ("db/cardinality", Wire.kw "db.cardinality/many")
+            ; ("logseq.property/hide?", Wire.Bool true)
+            ; ("logseq.property/hide-empty-value", Wire.Bool true)
+            ; ( "logseq.property/ui-position"
+              , wmap [ ("db/ident", Wire.kw "logseq.property.ui-position/block-right") ] )
+            ; ("property/closed-values", Wire.Array [ Wire.Int 1 ]) ] )
+      ; ("value", Wire.Int 5) ]
+  in
+  eq "row_ident" (Some "user.prop/x")
+    (Properties_data.row_ident row)
+    (function
+      | Some s -> s
+      | None -> "none");
+  eqs "row_title" "X" (Properties_data.row_title row);
+  eqs "row_type" "number" (Properties_data.row_type row);
+  check "row_many" (Properties_data.row_many row);
+  eqi "row_closed_values" 1
+    (List.length (Properties_data.row_closed_values row));
+  check "row_hidden" (Properties_data.row_hidden row);
+  check "row_hide_empty" (Properties_data.row_hide_empty row);
+  eqs "row_position" "logseq.property.ui-position/block-right"
+    (Properties_data.row_position row);
+  check "row_is_class_schema no"
+    (not (Properties_data.row_is_class_schema row));
+  check "row_is_class_schema"
+    (Properties_data.row_is_class_schema
+       (wmap [ ("schema?", Wire.Bool true) ]));
+  (* defaults on sparse row *)
+  let bare = wmap [ ("property-id", Wire.kw "p") ] in
+  eqs "row defaults" "default" (Properties_data.row_type bare);
+  eqs "row_position default" "logseq.property.ui-position/properties"
+    (Properties_data.row_position bare);
+  check "row_ident missing" (Properties_data.row_ident (wmap []) = None)
+
+let test_props_data2 () =
+  (* default value substituted when value empty *)
+  let row =
+    wmap
+      [ ( "property"
+        , wmap [ ("logseq.property/default-value", Wire.Int 42) ] )
+      ; ("value", Wire.Nil) ]
+  in
+  check "row_effective_value default"
+    (Properties_data.row_effective_value row = Wire.Int 42);
+  let eff = Properties_data.row_with_effective_value row in
+  check "row_with_effective_value swaps"
+    (Wire.get eff "value" = Some (Wire.Int 42));
+  check "row_with_effective_value keeps own"
+    (Properties_data.row_with_effective_value
+       (wmap [ ("value", Wire.Int 1) ])
+     = wmap [ ("value", Wire.Int 1) ]);
+  (* tag_idents / ident entry helpers *)
+  let ent =
+    wmap
+      [ ( "block/tags"
+        , Wire.Set
+            [ wmap [ ("db/ident", Wire.kw "a/b") ]
+            ; Wire.Tagged ("e", wmap [ ("db/ident", Wire.kw "c/d") ]) ] )
+      ]
+  in
+  eq "tag_idents" [ "a/b"; "c/d" ]
+    (Properties_data.tag_idents ent) (String.concat ",");
+  check "ident_entry_id"
+    (Properties_data.ident_entry_id (wmap [ ("db/id", Wire.Int 3) ])
+     = Some 3);
+  check "ident_entry_ident kw"
+    (Properties_data.ident_entry_ident
+       (wmap [ ("db/ident", Wire.kw "a/b") ])
+     = Some "a/b")
+
+let test_props_data3 () =
+  check "value_is_ref map"
+    (Properties_data.value_is_ref (Wire.Map []));
+  check "value_is_ref scalar no"
+    (not (Properties_data.value_is_ref (Wire.Int 1)));
+  eq "value_elems set" [ Wire.Int 1 ]
+    (Properties_data.value_elems (Wire.Set [ Wire.Int 1 ]))
+    (fun _ -> "x");
+  eq "value_elems scalar wrap" [ Wire.String "a" ]
+    (Properties_data.value_elems (Wire.String "a"))
+    (fun _ -> "x");
+  check "value_elems nil" (Properties_data.value_elems Wire.Nil = []);
+  eqs "ref_title title" "T"
+    (Properties_data.ref_title (wmap [ ("block/title", Wire.String "T") ]));
+  eqs "ref_title name fallback" "n"
+    (Properties_data.ref_title (wmap [ ("block/name", Wire.String "n") ]));
+  check "ref_dbid"
+    (Properties_data.ref_dbid (wmap [ ("db/id", Wire.Int 8) ]) = Some 8);
+  eqs "value_display int" "4" (Properties_data.value_display (Wire.Int 4));
+  eqs "value_display float int" "3"
+    (Properties_data.value_display (Wire.Float 3.0));
+  eqs "value_display set join" "a, b"
+    (Properties_data.value_display
+       (Wire.Set [ Wire.String "a"; Wire.String "b" ]));
+  eqs "value_display tagged" "x"
+    (Properties_data.value_display
+       (Wire.Tagged ("t", Wire.String "x")));
+  eqs "value_display kw" "a/b"
+    (Properties_data.value_display (Wire.kw "a/b"));
+  check "value_empty_p nil" (Properties_data.value_empty_p Wire.Nil);
+  check "value_empty_p blank"
+    (Properties_data.value_empty_p (Wire.String "  "));
+  check "value_empty_p seq"
+    (Properties_data.value_empty_p (Wire.Array []));
+  check "value_empty_p no"
+    (not (Properties_data.value_empty_p (Wire.Int 0)))
+
+let test_props_data4 () =
+  (* positioned_rows unwraps value entities and builds display rows *)
+  let blk =
+    wmap
+      [ ( "block.temp/positioned-properties"
+        , wmap
+            [ ( "logseq.property.ui-position/properties"
+              , Wire.Array
+                  [ wmap [ ("db/ident", Wire.kw "user.prop/x") ]
+                  ; wmap [ ("db/ident", Wire.kw "user.prop/y") ] ] ) ] )
+      ; ( "user.prop/x"
+        , wmap
+            [ ("db/id", Wire.Int 1)
+            ; ("logseq.property/value", Wire.String "inner") ] )
+      ; ("user.prop/y", Wire.Int 2) ]
+  in
+  let rows =
+    Properties_data.positioned_rows blk
+      "logseq.property.ui-position/properties"
+  in
+  eqi "positioned_rows count" 2 (List.length rows);
+  check "positioned_rows value unwrap"
+    (Wire.get (List.hd rows) "property-id"
+     = Some (Wire.kw "user.prop/x")
+    && Wire.get (List.hd rows) "value" = Some (Wire.String "inner")
+    && Wire.get (List.nth rows 1) "value" = Some (Wire.Int 2));
+  check "positioned_rows missing pos"
+    (Properties_data.positioned_rows blk "nope" = []);
+  check "positioned_rows no positioned"
+    (Properties_data.positioned_rows (wmap []) "x" = []);
+  (* split_display *)
+  let rows_w, hid =
+    Properties_data.split_display
+      (wmap
+         [ ("full-properties", Wire.Array [ Wire.Int 1 ])
+         ; ("hidden-properties", Wire.List [ Wire.Int 2 ]) ])
+  in
+  check "split_display" (rows_w = [ Wire.Int 1 ] && hid = [ Wire.Int 2 ])
+
+(* ---- Properties_value pure helpers ---- *)
+
+let test_props_value () =
+  check "parse_date" (Properties_value.parse_date "2026-09-27" = Some 20260927);
+  check "parse_date bad" (Properties_value.parse_date "27/9" = None);
+  check "parse_date pad" (Properties_value.parse_date "2026-9-27" = None);
+  check "ms_of_value int" (Properties_value.ms_of_value (Wire.Int 5) = Some 5.);
+  check "ms_of_value no" (Properties_value.ms_of_value (Wire.String "x") = None);
+  (* journal-day map -> utc midnight of that day *)
+  let ms =
+    Properties_value.ms_of_datetime_value
+      (wmap [ ("block/journal-day", Wire.Int 20260927) ])
+  in
+  check "ms_of_datetime_value journal-day"
+    (ms = Some (Js.Date.utc ~year:2026. ~month:8. ~date:27. ()));
+  check "ms_of_datetime_value raw"
+    (Properties_value.ms_of_datetime_value (Wire.Int 9) = Some 9.);
+  check "ms_of_datetime_value none"
+    (Properties_value.ms_of_datetime_value (wmap []) = None)
+
+let test_props_value2 () =
+  let mkchoice classes =
+    wmap
+      ([ ("db/id", Wire.Int 9) ]
+       @ (match classes with
+          | [] -> []
+          | cs ->
+              [ ( "logseq.property/choice-classes"
+                , Wire.Array
+                    (List.map
+                       (fun id -> wmap [ ("db/id", Wire.Int id) ])
+                       cs) ) ]))
+  in
+  (* unscoped choice is always visible (unless excluded) *)
+  check "choice unscoped"
+    (Properties_value.choice_visible (mkchoice []) [ 1; 2 ] []);
+  check "choice scoped hit"
+    (Properties_value.choice_visible (mkchoice [ 2 ]) [ 1; 2 ] []);
+  check "choice scoped miss"
+    (not (Properties_value.choice_visible (mkchoice [ 3 ]) [ 1; 2 ] []));
+  check "choice excluded"
+    (not (Properties_value.choice_visible (mkchoice []) [ 1; 2 ] [ 9 ]));
+  (* closed value icon: icon entity id, else empty-placeholder dash *)
+  let v =
+    wmap
+      [ ( "logseq.property/icon"
+        , wmap [ ("id", Wire.String "icn") ] ) ]
+  in
+  eq "closed_value_icon_id" (Some "icn")
+    (Properties_value.closed_value_icon_id v)
+    (function
+      | Some s -> s
+      | None -> "none");
+  eq "closed_value_icon_id placeholder" (Some "line-dashed")
+    (Properties_value.closed_value_icon_id
+       (wmap [ ("db/ident", Wire.kw "logseq.property/empty-placeholder") ]))
+    (function
+      | Some s -> s
+      | None -> "none");
+  check "closed_value_icon_id bare kw"
+    (Properties_value.closed_value_icon_id
+       (Wire.kw "logseq.property/empty-placeholder")
+     = Some "line-dashed");
+  check "closed_value_icon_id none"
+    (Properties_value.closed_value_icon_id (wmap []) = None)
 let () =
   test_move ();
   test_update ();
@@ -3217,6 +3987,32 @@ let () =
   test_block_parse3 ();
   test_title_refs3 ();
   test_selected_uuids ();
+  test_update_sidebar2 ();
+  test_decode7 ();
+  test_edn3 ();
+  test_sdk_convert ();
+  test_sdk_convert2 ();
+  test_sdk_util ();
+  test_sdk_util2 ();
+  test_sdk_util3 ();
+  test_sdk_util4 ();
+  test_sdk_write ();
+  test_sdk_write2 ();
+  test_sdk_write3 ();
+  test_sdk_write4 ();
+  test_views_wire ();
+  test_views_wire2 ();
+  test_views_wire3 ();
+  test_views_wire4 ();
+  test_views_state ();
+  test_views_table ();
+  test_views_table2 ();
+  test_props_data ();
+  test_props_data2 ();
+  test_props_data3 ();
+  test_props_data4 ();
+  test_props_value ();
+  test_props_value2 ();
   (* Drive view tests run their worker-fed assertions on a promise tick;
      the summary + exit must wait for that stage *)
   Test_drive.run ~finish:(fun () ->

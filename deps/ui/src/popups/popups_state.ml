@@ -44,6 +44,7 @@ type ac_item =
   { ai_key : string
   ; ai_label : string
   ; ai_icon : string option (* tabler/tabler-ext icon name *)
+
   ; ai_group : string option
   ; ai_info : string option
   ; ai_title : string option (* cljs item-render div[title] *)
@@ -146,6 +147,10 @@ type t =
   ; titles : string list ref
   ; tag_titles : (string * string option) list ref
     (* class/tag entities for the # popup: (title, tabler icon) *)
+  ; tag_exact_titles : string list ref
+    (* every class + alias title — feeds only the exact-match check that
+       suppresses the "New tag" row (cljs page-exists?/class-alias?); the
+       candidate list stays private-tag-filtered *)
   ; templates : (string * string) list ref (* (uuid, title) *)  }
 
 (* the live popups layer — exactly one exists per app; lets editor key
@@ -159,6 +164,7 @@ let make scheduler : t =
   ; gen = ref 0
   ; titles = ref []
     ; tag_titles = ref []
+    ; tag_exact_titles = ref []
     ; templates = ref []  }
   in
   active := Some t;
@@ -248,6 +254,7 @@ let group_items grp entries =
     (fun (key, icon, desc, act) ->
       mk_item ~key ~label:(U.t key) ~icon ?group:g ~desc act)
     entries
+
 ;;
 
 let cmd label = Editor_cmd label
@@ -317,6 +324,7 @@ let slash_items ~has_heading : ac_item list =  List.concat
                 ~desc:
                   (Desc_custom (U.tf "editor.slash/priority-desc" [ lvl_label ]))
                 ?group:g (cmd ("priority:" ^ lvl)))            [ "low"; "medium"; "high"; "urgent" ])
+
     ; group_items "editor.slash/group-time-and-date"
         [ "date.nlp/tomorrow", "tomorrow"
           , Desc_key "editor.slash/tomorrow-desc", Emit (journal_offset 1, 0)
@@ -362,12 +370,19 @@ let slash_items ~has_heading : ac_item list =  List.concat
         ; "editor.slash/cloze", "brackets-contain", Desc_none, Emit ("{{cloze }}", 2) ]    ]
 ;;
 
-(* cljs editor.cljs keeps a fallback item for slash — literal there too *)
+(* cljs editor.cljs keeps a fallback item for slash *)
 let slash_fallback =
-  mk_item ~key:"no-matched" ~label:"No matched commands" Noop
+  mk_item ~key:"no-matched"
+    ~label:(U.t "editor.slash/no-matched-commands") Noop
 ;;
 
 (* ---- filtering ---- *)
+
+let starts_with_ci hay needle =
+  let h = S.lowercase_ascii hay and n = S.lowercase_ascii needle in
+  let nl = S.length n in
+  nl <= S.length h && S.sub h 0 nl = n
+;;
 
 let rec take n xs =
   if n <= 0 then [] else match xs with [] -> [] | x :: tl -> x :: take (n - 1) tl
@@ -407,6 +422,7 @@ let filter_slash q items =
   let fs =
     Fuzzy.fuzzy_search ~extract:(fun it -> it.ai_label) ~limit:50 items q
   in
+
   (match fs with [] -> [ slash_fallback ] | _ -> fs)
   |> with_headers (q = "")
 ;;
@@ -499,7 +515,10 @@ let page_items_for t kind q =
   let exact =
     match kind with
     | Tag_search ->
-        List.exists (fun (ti, _) -> S.equal ti q) !(t.tag_titles)
+        (* cljs search-pages db-tag?: the "New tag" row is suppressed when
+           the query exactly names an existing class (internal ones like
+           Page count) or a class alias *)
+        List.exists (fun ti -> S.equal ti q) !(t.tag_exact_titles)
     | _ -> List.exists (fun ti -> S.equal ti q) !(t.titles)
   in
   (* cljs matched-pages-with-new-page: the "New tag/page" row goes after a
@@ -544,6 +563,41 @@ let template_items_for t q =
 (* ---- async loads ---- *)
 
 let repo = Runtime.repo
+
+let page_item_of_row i w =
+  let title =
+    match
+      [ Cmdk_state.str_field w "block.temp/original-title"
+      ; Cmdk_state.str_field w "block/title" ]
+      |> List.filter_map Fun.id
+    with
+    | t :: _ -> t
+    | [] -> ""
+  in
+  let uuid =
+    match Wire.map_get_uuid w "block/uuid" with
+    | Some u -> u
+    | None -> Option.value (Cmdk_state.str_field w "block/uuid") ~default:""
+  in
+  let is_page =
+    match Wire.get w "page?" with
+    | Some (Wire.Bool b) -> b
+    | _ -> false
+  in
+  (* cljs page-on-chosen-handler: non-page results are inserted as uuid
+     page-refs ([[uuid]]) so retitling the target renames the link *)
+  let act =
+    if is_page then Emit ("[[" ^ title ^ "]]", 0) else Emit ("[[" ^ uuid ^ "]]", 0)
+  in
+  (* cljs node-render: node icon + title, block rows carry a .breadcrumb
+     row with the parent page path *)
+  mk_item
+    ~key:("node-" ^ uuid ^ "-" ^ string_of_int i)
+    ~label:title ~node:true
+    ~node_icon:((if is_page then "file" else "point-filled"), true)
+    ?breadcrumb:(if is_page then None else Cmdk_state.breadcrumb_of w)
+    act
+;;
 
 let refresh_items t ac =
   match ac.kind with
@@ -598,6 +652,71 @@ let run_block_search t ac =
             Js.Promise.resolve ())
      |> Js.Promise.catch (fun e ->
             Platform.console_error ("popups block search failed", e);
+            Js.Promise.resolve ()))
+;;
+
+(* cljs search-pages/<get-matched-blocks: [[ ]] completion matches pages
+   AND blocks via block-search; block rows carry their page breadcrumb.
+   Results replace the sync title matches; a "New page" row is kept first
+   (or second, when the first match starts with the query). *)
+let run_node_search t ac =
+  incr t.gen;
+  let gen = !(t.gen) in
+  ignore
+    (Runtime.invoke3 "thread-api/search-blocks"
+       (Wire.String (repo ()))
+       (Wire.String ac.query)
+       (Cmdk_state.search_opts false 20)
+     |> Js.Promise.then_ (fun w ->
+            let rows =
+              match w with
+              | Wire.Map _ -> (
+                  match Wire.get w "items" with
+                  | Some (Wire.Array xs) | Some (Wire.List xs) -> xs
+                  | _ -> [])
+              | Wire.Array xs | Wire.List xs -> xs
+              | _ -> []
+            in
+            (match (get t).ac with
+             | Some a
+               when gen = !(t.gen) && a.kind = Page_ref
+                    && a.query = ac.query ->
+                 let pages, blocks =
+                   List.partition
+                     (fun w ->
+                       match Wire.get w "page?" with
+                       | Some (Wire.Bool b) -> b
+                       | _ -> false)
+                     rows
+                 in
+                 let matched =
+                   take 20
+                     (List.mapi page_item_of_row (pages @ blocks))
+                 in
+                 let items =
+                   match
+                     List.filter
+                       (fun it -> S.sub it.ai_key 0 4 = "new:")
+                       (page_items_for t a.kind a.query)
+                   with
+                   | [] -> matched
+                   | new_items ->
+                       let first_starts =
+                         match matched with
+                         | m :: _ -> starts_with_ci m.ai_label a.query
+                         | [] -> false
+                       in
+                       if first_starts then
+                         (match matched with
+                          | m :: rest -> m :: new_items @ rest
+                          | [] -> new_items)
+                       else new_items @ matched
+                 in
+                 set_ac t (Some { a with items = renumber items; chosen = 0 })
+             | _ -> ());
+            Js.Promise.resolve ())
+     |> Js.Promise.catch (fun e ->
+            Platform.console_error ("popups node search failed", e);
             Js.Promise.resolve ()))
 ;;
 
@@ -684,28 +803,34 @@ let load_tag_titles t _editor =
               | _ -> []
             in
             t.tag_titles := class_titles_of rows;
-            if editing_block then
-              Runtime.invoke2 "thread-api/get-all-classes"
-                (Wire.String (repo ()))
-                (wopts [ ("except-private-tags?", Wire.Bool false) ])
-              |> Js.Promise.then_ (fun w2 ->
-                     let rows2 =
-                       match w2 with
-                       | Wire.Array xs | Wire.List xs -> xs
-                       | _ -> []
-                     in
-                     let page_class =
-                       List.filter
-                         (fun r ->
-                           Cmdk_state.str_field r "db/ident"
-                           = Some "logseq.class/Page")
-                         rows2
-                     in
-                     t.tag_titles :=
-                       !(t.tag_titles)
-                       @ class_titles_of page_class;
-                     Js.Promise.resolve ())
-            else Js.Promise.resolve ())
+            (* the full class list (private tags included) feeds only
+               tag_exact_titles; Page is conjoined to the candidates just
+               when editing a non-page block *)
+            Runtime.invoke2 "thread-api/get-all-classes"
+              (Wire.String (repo ()))
+              (wopts [ ("except-private-tags?", Wire.Bool false) ])
+            |> Js.Promise.then_ (fun w2 ->
+                   let rows2 =
+                     match w2 with
+                     | Wire.Array xs | Wire.List xs -> xs
+                     | _ -> []
+                   in
+                   t.tag_exact_titles :=
+                     List.map fst (class_titles_of rows2);
+                   (if editing_block then
+                      let page_class =
+                        List.filter
+                          (fun r ->
+                            (* entity_map_wire emits db/ident as a keyword
+                               value, not a string *)
+                            Wire.get r "db/ident"
+                            = Some (Wire.Keyword "logseq.class/Page"))
+                          rows2
+                      in
+                      t.tag_titles :=
+                        !(t.tag_titles)
+                        @ class_titles_of page_class);
+                   Js.Promise.resolve ()))
      |> Js.Promise.then_ (fun () ->
             (match (get t).ac with
              | Some ({ kind = Tag_search; _ } as ac) ->
@@ -830,6 +955,7 @@ let ac_update t ac q =
   let ac = { ac with query = q; chosen = 0 } in
   set_ac t (Some (refresh_items t ac));
   if ac.kind = Block_ref then run_block_search t ac
+  else if ac.kind = Page_ref && String.trim q <> "" then run_node_search t ac
 ;;
 
 let query_closed ac q =
@@ -858,6 +984,7 @@ let overtype_skip el =
 (* after an `input` event in a .editor-wrapper textarea *)
 let on_editor_input t el ev =
   overtype_skip el;  let pos = Dom_ext.selection_start el in
+
   match (get t).ac with
   | Some ac ->
       let v = Dom_ext.value el in
@@ -929,15 +1056,36 @@ let on_editor_input t el ev =
       else
         let c = S.get v (pos - 1) in
         let two = pos >= 2 && S.get v (pos - 1) = S.get v (pos - 2) in
-        let bounded =
-          pos < 2
-          || (let p = S.get v (pos - 2) in p = ' ' || p = '\n')
-          || (pos >= 3 && S.get v (pos - 2) = ']' && S.get v (pos - 3) = ']')
+        (* cljs opens "/" / "#" menus when any line already starts with the
+           trigger, or when the char starts a new word (preceded by space or
+           tab); "#" also opens right after "]]" *)
+        let line_starts_with ch =
+          (S.length v > 0 && S.get v 0 = ch)
+          ||
+            let rec scan i =
+              if i + 1 >= S.length v then false
+              else if S.get v i = '\n' && S.get v (i + 1) = ch then true
+              else scan (i + 1)
+            in
+            scan 0
         in
-        if c = '/' && bounded then open_ac t Slash el
+        let word_before =
+          pos >= 2
+          &&
+            let p = S.get v (pos - 2) in
+            p = ' ' || p = '\t'
+        in
+        let ref_before =
+          pos >= 3 && S.get v (pos - 2) = ']' && S.get v (pos - 3) = ']'
+        in
+        if c = '/' && (line_starts_with '/' || word_before) then
+          open_ac t Slash el
         else if c = '[' && two then open_ac t Page_ref el
         else if c = '(' && two then open_ac t Block_ref el
-        else if c = '#' && bounded then open_ac t Tag_search el
+        else if
+          c = '#' && (line_starts_with '#' || word_before || ref_before)
+          && not (pos < S.length v && S.get v pos = '+')
+        then open_ac t Tag_search el
         else ()
 ;;
 
@@ -1227,6 +1375,7 @@ let apply_item t ac it =
       emit ac.editor ac.tpos "";
       emit_cmd ~pos:ac.tpos c [];
       close_ac t  | Run_query advanced -> run_query t ac ~advanced
+
   | Tag_apply title -> apply_tag t ac ~create:false title
   | Tag_create title -> apply_tag t ac ~create:true title
   | Template_apply uuid -> apply_template t ac uuid

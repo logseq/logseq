@@ -159,7 +159,9 @@ let build_columns (inst : V.inst) (properties : W.t list) : V.column list =
          before the logseq property columns *)
       [ select_column; title_column ]
       @ (if inst.V.asset_class
-         then [ builtin_column "file" "File" "default" ~disable_hide:true () ]
+         then
+           [ builtin_column "file" (I18n.t "file/label") "default"
+               ~disable_hide:true () ]
          else [])
       @ with_tags
       @ [ created_column; updated_column; page_column ]
@@ -925,6 +927,7 @@ let table_el inst ~refresh : D.el =
                     Properties_dialog.open_dialog
                       ~anchor:(D.rect_left r, D.rect_bottom r +. 4.)
                       { Properties_dialog.uuid
+                      ; uuids = []
                       ; db_id = p.Model.page_db_id
                       ; is_tag = true
                       ; title = p.Model.page_title
@@ -1021,7 +1024,7 @@ let grouped_table inst ~refresh ~rows () =
 (* ---------- list + gallery ---------- *)
 
 let list_row_el ~row_uuid ~title : D.el =
-  D.h ~cls:"ls-block swipe-item"
+  D.h ~cls:"ls-block"
     ~attrs:[ ("blockid", row_uuid); ("id", "ls-block-" ^ row_uuid) ]
     ~children:
       [ D.h ~cls:"block-main-container flex flex-row gap-1"

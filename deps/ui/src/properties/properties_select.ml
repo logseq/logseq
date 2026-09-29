@@ -59,9 +59,28 @@ let matches needle item =
 
 let visible_items cfg =
   let base =
-    match cfg.on_search, cfg.searched with
-    | Some _, Some items -> items
-    | _ -> List.filter (matches cfg.filter) cfg.items
+    let matched =
+      match cfg.on_search, cfg.searched with
+      | Some _, Some items -> items
+      | _ -> List.filter (matches cfg.filter) cfg.items
+    in
+    let q = String.lowercase_ascii (String.trim cfg.filter) in
+    if q = "" then matched
+    else
+      (* cljs fuzzy ranks exact/prefix hits first; e2e relies on #ac-0
+         being the best match *)
+      List.stable_sort
+        (fun a b ->
+          let score it =
+            let t = String.lowercase_ascii it.it_title in
+            if t = q then 0
+            else if String.length t > String.length q
+                    && String.sub t 0 (String.length q) = q
+            then 1
+            else 2
+          in
+          compare (score a) (score b))
+        matched
   in
   let exact =
     List.exists
@@ -76,8 +95,8 @@ let visible_items cfg =
       @ [ { it_title = String.trim cfg.filter
           ; it_tip = ""
           ; it_icon = ""
-          ; it_new = true
           ; it_strong = false
+          ; it_new = true
           ; on_choose = (fun () -> on_new (String.trim cfg.filter))
           }
         ]
@@ -126,7 +145,7 @@ let item_el idx cfg it =
     mk ~cls:"font-normal" (if it.it_strong then "strong" else "span")
   in
   el_set_text strong
-    (if it.it_new then I18n.t1 "select/new-option" it.it_title
+    (if it.it_new then I18n.t1 "select/new-option-label" it.it_title
      else it.it_title);
   (* cljs property select renders a leading type icon (letter-t /
      puzzle) inside .pt-1 as a ui/icon svg *)

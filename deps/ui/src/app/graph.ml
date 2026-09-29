@@ -11,6 +11,12 @@ let default_config = "{:feature/enable-git-auto-commit? false}"
 let init_worker () =
   Runtime.invoke1 "thread-api/init" (Wire.Array [])
   |> Js.Promise.then_ (fun _ ->
+         (* cljs events.cljs :graph/sync-context — :dev? flips the
+            worker's OUTLINER-PERF-LOGGING mirror used by e2e *)
+         Runtime.invoke1 "thread-api/set-context"
+           (Wire.Map
+              [ (Wire.kw "dev?", Wire.Bool Platform.dev_build) ]))
+  |> Js.Promise.then_ (fun _ ->
          (* single-arg map like cljs state/set-db-sync-config *)
          Runtime.invoke1 "thread-api/set-db-sync-config"
            (Rtc_ops.db_sync_config ()))
@@ -19,6 +25,15 @@ let init_worker () =
             the worker before any db-sync call *)
          Rtc_ops.sync_app_state !Runtime.current_repo;
          Js.Promise.resolve ())
+  |> Js.Promise.then_ (fun _ ->
+         (* cljs ships a transact context with :dev? = config/dev?
+            (DEV-RELEASE); e2e builds compile that flag in, which turns
+            on the worker's :db-worker/outliner-op-perf logging *)
+         if Platform.rtc_test_mode () then
+           Runtime.invoke1 "thread-api/set-context"
+             (Wire.Map [ (Wire.kw "dev?", Wire.Bool true) ])
+         else Js.Promise.resolve Wire.Nil)
+  |> Js.Promise.then_ (fun _ -> Js.Promise.resolve ())
 
 let list_graphs () =
   Runtime.invoke "thread-api/list-db" []

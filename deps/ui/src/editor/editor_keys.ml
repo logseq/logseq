@@ -234,6 +234,10 @@ let on_normal_key ev =
       | "y" when mods ev ->
           D.prevent_default ev;
           A.redo ()
+      | "e" when mods ev ->
+          (* cljs mod+e quick-add also fires outside edit mode *)
+          D.prevent_default ev;
+          A.quick_add ()
       | _ -> ())
 
 (* while an autocomplete popup is open its own document listener
@@ -243,14 +247,160 @@ let ac_popup_open () =
   | Some _ -> true
   | None -> false
 
+(* is [target] the editor surface of block [uuid] — its own textarea or
+   the CodeMirror line inside its editor wrapper *)
+let targets_block_editor uuid target =
+  match target with
+  | Some el ->
+      D.el_id el = "edit-block-" ^ uuid
+      || Option.is_some
+           (D.closest_sel ("#editor-edit-block-" ^ uuid) target)
+  | None -> false
+
+(* a textarea carrying another block's edit-block-<uuid> id — the
+   previous editor can still be mounted while its replacement is being
+   built; keystrokes into it would write the wrong block *)
+let is_other_block_editor uuid target =
+  match target with
+  | Some el when D.el_tag el = "TEXTAREA" -> (
+      match uuid_of_prefixed "edit-block-" (D.el_id el) with
+      | Some u -> u <> uuid
+      | None -> false)
+  | _ -> false
+
+(* a structure op (split/merge/…) remounts the editing textarea only
+   after its apply+refresh resolves; keystrokes arriving in that window
+   still target the previous block's mounted textarea (or <body>) even
+   though editing state says we're mid-edit. cljs flushes the DOM
+   synchronously so it never sees this window — apply text edits to the
+   pending buffer at the pending caret and replay structural ops once
+   focus lands *)
+let on_pending_focus_key ev e caret =
+  let buf = e.S.buffer in
+  let len = String.length buf in
+  (* pending_focus caret is derived from the live textarea, which can
+     outpace e.buffer while a refresh rewrites it — clamp before any
+     String.sub *)
+  let caret = max 0 (min caret len) in
+  let queue f =
+    S.pending_focus_actions := f :: !S.pending_focus_actions
+  in
+  let patch buf' caret' =
+    S.set_silent (fun st ->
+        { st with S.editing = Some { e with S.buffer = buf' } });
+    (* the textarea can already be mounted when pending was lost mid-
+       remount — mirror the buffer into it so the DOM doesn't diverge *)
+    (match D.textarea_of e.S.uuid with
+     | Some el ->
+         D.el_set_value el buf';
+         D.el_set_selection_range el caret' caret'
+     | None -> ());
+    S.pending_focus := Some (e.S.uuid, caret')
+  in
+  let insert s =
+    patch
+      (String.sub buf 0 caret ^ s ^ String.sub buf caret (len - caret))
+      (caret + String.length s)
+  in
+  match D.ev_key ev with
+  | "Backspace" ->
+      D.prevent_default ev;
+      if caret = 0 then queue (fun () -> A.merge_prev e.S.uuid)
+      else
+        patch
+          (String.sub buf 0 (caret - 1)
+          ^ String.sub buf caret (len - caret))
+          (caret - 1)
+  | "Delete" ->
+      D.prevent_default ev;
+      if caret = len then queue (fun () -> A.merge_next e.S.uuid)
+      else
+        patch
+          (String.sub buf 0 caret
+          ^ String.sub buf (caret + 1) (len - caret - 1))
+          caret
+  | "Enter" ->
+      D.prevent_default ev;
+      if D.ev_shift ev then insert "\n"
+      else queue (fun () -> A.split_at_cursor e.S.uuid)
+  | "Tab" ->
+      D.prevent_default ev;
+      queue (fun () ->
+          A.indent_or_outdent ~indent:(not (D.ev_shift ev)))
+  | "Escape" ->
+      D.prevent_default ev;
+      A.exit_edit ~select:true
+  | ("ArrowUp" | "ArrowDown") as key when D.ev_shift ev ->
+      D.prevent_default ev;
+      queue (fun () -> A.shift_arrow_select (key = "ArrowUp"))
+  | ("ArrowUp" | "ArrowDown") as key
+    when not (mods ev || D.ev_alt ev) ->
+      (* mirror on_editor_arrows: a plain arrow only leaves the block when
+         the caret sits on a boundary line; mid-buffer arrows just prevent
+         the browser default while the textarea is remounting *)
+      D.prevent_default ev;
+      let up = key = "ArrowUp" in
+      let first_line =
+        (match String.index_opt (String.sub buf 0 caret) '\n' with
+        | Some _ -> false
+        | None -> true)
+      in
+      let last_line =
+        (match String.index_opt (String.sub buf caret (len - caret)) '\n' with
+        | Some _ -> false
+        | None -> true)
+      in
+      if (up && first_line) || ((not up) && last_line) then
+        (* resolve the editing block at replay time: several arrows can
+           queue in one remount window and each replayed nav switches
+           editing to a new block — a captured uuid would navigate the
+           same origin repeatedly and collapse two hops into one *)
+        queue (fun () ->
+            match S.editing_uuid () with
+            | Some u -> A.arrow_nav u up
+            | None -> ())
+  | key
+    when String.length key = 1
+         && (not (D.ev_composing ev))
+         && not (mods ev || D.ev_alt ev) ->
+      D.prevent_default ev;
+      insert key
+  | _ -> D.prevent_default ev
+
 let on_keydown ev =
-  if S.ready () then
+  if S.ready () then begin
     if Editor_commands.popup_key ev then ()
     else
       let target = D.ev_target ev in
-      match D.closest_sel "pre.CodeMirror-line" target with
-      | Some el -> Editor_commands.code_pre_key el ev
+      (* CodeMirror surfaces (fenced-code editor, query source editor)
+         own their keys — Esc/arrows/Tab go through the editor's own
+         listeners, never the block-editor dispatch *)
+      match D.closest_sel ".CodeMirror" target with
+      | Some _ -> ()
       | None -> (
+          match (S.editing (), !S.pending_focus) with
+          | Some e, Some (uuid, caret)
+            when e.S.uuid = uuid
+                 && not (targets_block_editor uuid target) ->
+              on_pending_focus_key ev e caret
+          | Some e, _
+            when (not (targets_block_editor e.S.uuid target))
+                 && (is_other_block_editor e.S.uuid target
+                    || not (D.is_editable_target target)) ->
+              (* pending_focus was consumed on a node the following
+                 refresh replaced (or focus otherwise failed to land):
+                 editing still says mid-edit but the press arrived at
+                 <body>. Re-arm pending focus on the editing block and
+                 route the key through the remount-window handler. *)
+              let caret =
+                match D.textarea_of e.S.uuid with
+                | Some el -> D.el_selection_start el
+                | None -> String.length e.S.buffer
+              in
+              S.pending_focus := Some (e.S.uuid, caret);
+              D.set_timeout A.apply_focus 0;
+              on_pending_focus_key ev e caret
+          | _ -> (
           match
             (S.editing_uuid (), D.closest_sel ".editor-wrapper" target)
           with
@@ -269,7 +419,10 @@ let on_keydown ev =
                  (e.g. Shift+Arrow exiting edit mode) can still receive the
                  follow-up keydown before focus moves; route it through the
                  normal handler so selection-extension keys aren't
-                 swallowed *)
+                 swallowed. Only a block editor textarea (id
+                 edit-block-<uuid>) counts — other textareas inside
+                 .ls-block (e.g. the comment box) keep their own key
+                 handling *)
               let stale_block_editor =
                 match target with
                 | Some el when D.el_tag el = "TEXTAREA" ->
@@ -284,18 +437,20 @@ let on_keydown ev =
               in
               if stale_block_editor then on_normal_key ev
               else if D.is_editable_target target then ()
-              else on_normal_key ev)
+              else on_normal_key ev))
+  end
 
 (* -- input: keep the editing buffer in sync (silently) -- *)
 
 let on_input ev =
   if S.ready () then
     match D.closest_sel ".editor-wrapper textarea" (D.ev_target ev) with
-    | Some _
+    | Some el
       when D.closest_sel ".ls-page-title" (D.ev_target ev) <> None ->
         (* the page-title textarea is not a block editor — its own dom-event
-           keydown/blur handlers commit the rename *)
-        ()
+           keydown/blur handlers commit the rename; still keep textContent
+           in lockstep so :has-text sees the typed value *)
+        D.el_set_text_content el (D.el_value el)
     | Some el -> (
         match uuid_of_prefixed "edit-block-" (D.el_id el) with
         | Some uuid ->
@@ -304,12 +459,13 @@ let on_input ev =
             (* keep textContent in lockstep so innerText/:has-text see the
                buffer (textarea innerText follows textContent, not value) *)
             D.el_set_text_content el v;
+            D.autosize_textarea el;
             Outliner_ops.schedule_save uuid v
-        | None -> ())
-    | None -> (
-        match D.closest_sel "pre.CodeMirror-line" (D.ev_target ev) with
-        | Some el -> Editor_commands.code_pre_input el
-        | None -> ())
+        | None ->
+            (* non-block editors (e.g. a comment textarea) still need
+               textContent synced for :has-text *)
+            D.el_set_text_content el (D.el_value el))
+    | None -> ()
 
 (* -- clipboard events -- *)
 
@@ -341,26 +497,36 @@ let on_click ev =
   (* the add-button path defers through S.defer_init, so it works even on
      an empty page where no block_row has mounted the state yet *)
   match D.closest_sel ".block-add-button" target with
-  | Some btn -> A.append_block ?for_page:(D.el_get_attr btn "parentblockid") ()
+  | Some btn ->
+      A.append_block ?for_page:(D.el_get_attr btn "parentblockid")
+        ~scope:(A.scope_of_el btn) ()
   | None ->
       if S.ready () then
         (
         match D.closest_sel ".block-control" target with
         | Some el -> (
             match uuid_of_prefixed "control-" (D.el_id el) with
-            | Some u -> A.toggle_collapse u
+            | Some u ->
+                A.toggle_collapse ~scope:(A.scope_of_el el) u
             | None -> ())
         | None -> (
             match D.closest_sel ".block-children-left-border" target with
             | Some el -> (
                 match D.el_get_attr el "blockid" with
-                | Some u -> A.toggle_collapse u
+                | Some u ->
+                    A.toggle_collapse ~scope:(A.scope_of_el el) u
                 | None -> ())
             | None -> (
                 match D.closest_sel ".bullet-container" target with
                 | Some el -> (
                     match uuid_of_prefixed "dot-" (D.el_id el) with
-                    | Some u -> A.zoom_to u
+                    | Some u ->
+                        (* the wrapping a.bullet-link-wrap's default
+                           hash navigation would push a second history
+                           entry, leaving history.back() stuck on the
+                           zoom route *)
+                        D.prevent_default ev;
+                        A.zoom_to u
                     | None -> ())
                 | None -> (
                     (* capture listener fires before the query shell's own
@@ -371,44 +537,81 @@ let on_click ev =
                         "button, a, input, audio, video, details, summary, \
                          sup.fn, [contenteditable=true], .cloze, \
                          .cloze-revealed, .query-table, .image-resize, \
-                         .custom-query-results, .cp__query-builder"
+                         .custom-query-results, .cp__query-builder, \
+                         .ui-fenced-code-editor"
                         target
                     with
                     | Some _ -> ()
                     | None -> (
-                        match D.closest_sel "a.page-ref" target with
-                        | Some _ ->
-                            (* page-ref navigation happens in the document-level
-                               listener; the editor only has to not enter edit *)
-                            ()
+                        match D.closest_sel ".ls-comments-label" target with
+                        | Some el -> (
+                            match D.el_get_attr el "data-area-uuid" with
+                            | Some u ->
+                                (* edit-comments-area-title! *)
+                                A.enter_edit u
+                                  (String.length (A.model_title u))
+                            | None -> ())
                         | None -> (
-                            match D.closest_sel ".block-content" target with
-                            | Some _
-                              when D.closest_sel ".ls-page-title" target
-                                   <> None ->
-                                (* the page title's own click handler starts
-                                   Title_edit; the page uuid is not an
-                                   editable block *)
-                                ()
+                            match D.closest_sel ".ls-comment-submit" target with
                             | Some el -> (
-                                match D.el_get_attr el "blockid" with
-                                | Some u ->
-                                    (* scope by container: the same block can
-                                       render in main and the right sidebar;
-                                       only the tree where the click landed
-                                       mounts the editor *)
-                                    let scope =
-                                      match
-                                        D.closest_sel ".cp__right-sidebar"
-                                          target
-                                      with
-                                      | Some _ -> "sidebar"
-                                      | None -> "main"
-                                    in
-                                    A.enter_edit ~scope u
-                                      (String.length (A.model_title u))
+                                match D.el_get_attr el "data-area-uuid" with
+                                | Some u -> Comments.submit u
                                 | None -> ())
-                            | None -> ()))))))
+                            | None -> (
+                                match
+                                  D.closest_sel ".ls-comment-delete" target
+                                with
+                                | Some el -> (
+                                    match
+                                      D.el_get_attr el "data-comment-uuid"
+                                    with
+                                    | Some u -> Comments.delete u
+                                    | None -> ())
+                                | None -> (
+                                    match
+                                      D.closest_sel "a.page-ref" target
+                                    with
+                                    | Some _ ->
+                                        (* page-ref navigation happens in the
+                                           document-level listener; the editor
+                                           only has to not enter edit *)
+                                        ()
+                                    | None -> (
+                                        match
+                                          D.closest_sel ".block-content"
+                                            target
+                                        with
+                                        | Some _
+                                          when D.closest_sel
+                                                 ".ls-page-title" target
+                                               <> None ->
+                                            (* the page title's own click
+                                               handler starts Title_edit *)
+                                            ()
+                                        | Some el -> (
+                                            match
+                                              D.el_get_attr el "blockid"
+                                            with
+                                            | Some u ->
+                                                (* scope by container: the
+                                                   same block can render in
+                                                   main and the sidebar; only
+                                                   the tree where the click
+                                                   landed mounts the editor *)
+                                                let scope =
+                                                  match
+                                                    D.closest_sel
+                                                      ".cp__right-sidebar"
+                                                      target
+                                                  with
+                                                  | Some _ -> "sidebar"
+                                                  | None -> "main"
+                                                in
+                                                A.enter_edit ~scope u
+                                                  (String.length
+                                                     (A.model_title u))
+                                            | None -> ())
+                                        | None -> ())))))))))
 
 (* -- ls:editor-insert channel (autocomplete pick: replace the typed
    trigger range with the chosen text) -- *)
@@ -470,7 +673,7 @@ let on_editor_insert ev =
 let on_mousedown ev =
   if S.ready () && S.editing () <> None then
     match
-      D.closest_sel ".editor-wrapper, .extensions__code"
+      D.closest_sel ".editor-wrapper, .ui-fenced-code-editor"
         (D.ev_target ev)
     with
     | Some _ -> ()
@@ -541,5 +744,20 @@ let install_once () =
     D.document_add_listener "dragstart" on_dragstart true;
     D.document_add_listener "dragover" on_file_dragover true;
     D.document_add_listener "drop" on_file_drop true;
-    Block_dnd.install ()
+    Block_dnd.install ();
+    (* pointer-driven range selection (cljs block/selection.cljs) *)
+    D.document_add_listener "pointerdown"
+      (fun ev ->
+        if
+          S.ready ()
+          (* capture-phase listener fires before the CM wrapper's
+             stopPropagation — fenced-code clicks must not start a
+             block range selection (cljs clears selection instead) *)
+          && D.closest_sel ".ui-fenced-code-editor" (D.ev_target ev)
+             = None
+        then Block_selection.pointerdown ev)
+      true;
+    D.document_add_listener "pointerup"
+      (fun _ev -> Block_selection.pointerup ())
+      true
   end

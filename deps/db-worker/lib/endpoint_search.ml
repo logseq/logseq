@@ -166,13 +166,13 @@ let report_search_index_progress repo (payload : Wire.t) : unit E.t =
     E.pure ()
   end
   else
-    E.map
+    ( E.map
       (fun _ -> ())
       (E.catch
          (Comlink.invoke_remote "thread-api/search-index-build-progress"
             (Transit_codec.to_string
                (Wire.Array [ Wire.String repo; payload ])))
-         (fun _ -> E.pure ""))
+         (fun _ -> E.pure "")) )
 
 let progress_payload ~build_id ~status ~stage ~progress ~processed ~total :
     Wire.t =

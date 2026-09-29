@@ -239,7 +239,8 @@ let load_page_ref for_route ref_v =
                               | Some u when Editor_state.ready () -> (
                                   match Editor_state.find u with
                                   | Some zb ->
-                                      Editor_actions.enter_edit u
+                                      Editor_actions.enter_edit ~scope:"main"
+                                        u
                                         (String.length zb.Model.block_title)
                                   | None -> ())
                               | _ -> ()));
@@ -312,16 +313,35 @@ let load_block_zoom uuid =
        [ Wire.Map
            [ (Wire.String "id", Wire.Uuid uuid)
            ; ( Wire.String "opts"
-             , Wire.Map [ (Wire.Keyword "children?", Wire.Bool true) ] )
+             , Wire.Map
+                 [ (Wire.Keyword "children?", Wire.Bool true)
+                 ; (* the zoomed block is the container's root — its
+                      children render even when the block is collapsed in
+                      the page *)
+                   ( Wire.Keyword "include-collapsed-children?"
+                   , Wire.Bool true )
+                 ] )
            ]
        ])
   |> Js.Promise.then_ (fun w ->
          Js.Promise.resolve
            (match Wire.elems w with
             | [ pair ] -> (
-                match Wire.block_of_pair pair with
+                let blk =
+                  (* the pair's flat `children` carry the full maps;
+                     splice them into block/children before decoding *)
+                  match Decode.nest_get_blocks pair with
+                  | Some w -> Some w
+                  | None -> Wire.block_of_pair pair
+                in
+                match blk with
                 | Some (Wire.Map _ as blk) -> (
                     let b = Decode.block_of_wire blk in
+                    (match b.Model.block_uuid with
+                     | Some u ->
+                         Editor_state.expand_root
+                           ~scope:("zoom-" ^ u) u
+                     | None -> ());
                     (* cljs block-route-root renders the zoomed block itself
                        as the root row (children nested under it) *)
                     let ancestors =
@@ -388,7 +408,9 @@ let load_block_zoom uuid =
                                         Editor_actions.consume_pending_zoom ()
                                       with
                                       | Some u when Editor_state.ready () ->
-                                          Editor_actions.enter_edit u
+                                          Editor_actions.enter_edit
+                                            ~scope:("zoom-" ^ uuid)
+                                            u
                                             (String.length b.Model.block_title)
                                       | _ -> ());
                                      Js.Promise.resolve ())))
