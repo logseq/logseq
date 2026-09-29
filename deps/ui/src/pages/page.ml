@@ -78,11 +78,9 @@ let open_menu name payload =
         Runtime.flush ())
       payload
 
-let set_page_icon (page : Model.page) (c : Icon_picker.choice) =
-  match page.page_uuid with
-  | None -> ()
-  | Some u ->
-      let op =
+(* generic: works for any entity uuid (page or block) *)
+let set_icon (u : string) (c : Icon_picker.choice) =
+  let op =
         match c with
         | Icon_picker.Remove ->
             Outliner_ops.op "remove-block-property"
@@ -104,10 +102,15 @@ let set_page_icon (page : Model.page) (c : Icon_picker.choice) =
                      | Some c -> [ Wire.Keyword "color", Wire.String c ]
                      | None -> []))
               ]
-      in
-      ignore
-        (Outliner_ops.apply [ op ]
-         |> Js.Promise.then_ (fun _ -> !Runtime.reload_current_view ()))
+  in
+  ignore
+    (Outliner_ops.apply [ op ]
+     |> Js.Promise.then_ (fun _ -> !Runtime.reload_current_view ()))
+
+let set_page_icon (page : Model.page) (c : Icon_picker.choice) =
+  match page.page_uuid with
+  | None -> ()
+  | Some u -> set_icon u c
 
 let page_icon_picker (page : Model.page) (anchor : string) =
   match Properties_dom.doc_query anchor with

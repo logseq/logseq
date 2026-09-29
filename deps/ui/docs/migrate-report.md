@@ -1316,7 +1316,6 @@ search may lag).
   (Melange→node). `Platform.local_storage_*` resolves the storage
   object via `globalThis` and no-ops when absent, because
   `Model.initial` touches storage at module init under node.
-||||||| parent of be25c4ee95 (fix(ui): parity sweep — journals scaffolding, route-conditional content-wrap, ref-summary maps in block/refs, icon picker set)
 
 ## Parity sweep fixes
 
@@ -1469,7 +1468,6 @@ the correctness batch; each fixes the findings of its own report:
   `.ls-bidirectional-group` rows. Tracked for the parity sweep.
 - `custom_report.clj` dumps `e2e-dump/title-dups-<ts>.txt` on failure:
   every `[data-testid='page title']` match + ancestor chain.
-||||||| d2b01d2a33
 
 ## Regression-pass fixes (navigation / keys / collapse / selection / cmdk)
 
@@ -1509,3 +1507,52 @@ Known leftovers:
   1500–2000ms.
 - cljs `mod+.` zoom-in is skipped upstream on Chrome (unbound here too).
 - `#tag` cmdk create navigates instead of opening the tag dialog.
+
+## Menus & sidebar chrome (parity: `devin/lui-parity-menus`)
+
+- **Block context-menu submenus** (cljs `content.cljs` + shui
+  `components.cljs`): sub-content class
+  `ui__dropdown-menu-sub-content z-50 min-w-[8rem] rounded-md border
+  bg-popover p-1 text-popover-foreground shadow-lg`, `role="menu"`,
+  `tabindex="-1"`, positioned at `(trigger.right-4, trigger.top-4)`;
+  sub-trigger is a cm-item + `data-[open]:bg-muted` + trailing
+  `chevron-right ml-auto h-4 w-4`. "Set icon"/"Add reaction" open the
+  icon picker as a right-edge submenu (`emoji_only` gate for the
+  reaction picker). Items carry a bare-text label and the full
+  `ui__dropdown-menu-item` class incl. `data-[highlighted]:bg-muted`
+  + `data-[disabled]:pointer-events-none data-[disabled]:opacity-50`.
+- **LUI `if_` is eager** — `Lui_elements.if_ ~test t` evaluates `t` at
+  parent construction; a child built from popup state must be wrapped
+  in `dyn` over a signal-derived value instead, or it snapshots the
+  closed state.
+- **Right-sidebar panel chrome** (cljs `right_sidebar.cljs`):
+  `.sidebar-item` gets `collapsed`; header gets `rounded-b-md` when
+  collapsed; title button toggles collapse, `aria-expanded = not
+  collapsed`; `.rotating-arrow` gets `collapsed|not-collapsed`; the
+  body keeps `role="region"`/`sidebar-panel-content` and switches
+  `hidden` ↔ `initial` (plus `px-2` unless `:search`/`:shortcut-
+  settings`). `collapsed?` (panel body) and `props_collapsed`
+  (properties section, `not class?`) are **separate** cljs states —
+  do not conflate. Middle-click (`which=2`) on the header removes the
+  item; context-menu on the header or the `sidebar-item-more` button
+  opens the actions menu **at the pointer/trigger**.
+- **Right-sidebar actions menu** (`actions-menu-content`): Close /
+  [multi] Close others / [multi] Close all / [multi && !collapsed]
+  `hr.menu-separator` / [!collapsed] Collapse / [multi] Collapse
+  others / [multi] Collapse all / [multi && collapsed] sep / [collapsed]
+  Expand / [multi] Expand all / [type ∈ {page,contents}] sep +
+  "Open as page".
+- **Left-sidebar link-item menu** (`left_sidebar.cljs` x-menu):
+  right-click or the `.sidebar-page-actions` dots button on a
+  favorites/recents row opens a `ui__dropdown-menu-content ... w-60`
+  dropdown at the pointer: [not recent] "Unfavorite" (star-off,
+  ⌘⇧F) + "Open in sidebar" (layout-sidebar-right, ⇧Click), each
+  `ctx-icon` span `scale-90 pr-1 opacity-80` + `dropdown-shortcut`
+  combo kbds.
+- **Recents populate only on user navigation** — cmdk
+  `goto_page`/`open-node` must call `Runtime.mark_nav ()` *before*
+  `Runtime.send Page_loaded`, because sends dispatch `on_sync`
+  synchronously and `on_sync` takes the mark to `push_recent`.
+- **`/Add property` type picker** lists
+  `user-built-in-property-types` in order: default(Text), number,
+  date, datetime, checkbox, url, node, asset.

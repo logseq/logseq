@@ -35,6 +35,7 @@ type item =
   ; page_ref : string option
   ; page : Model.page option (* source page for page/contents items *)
   ; props_collapsed : bool (* cljs: collapsed? = (not (entity/class? page)) *)
+  ; collapsed : bool (* cljs :ui/sidebar-collapsed-blocks — panel body *)
   }
 
 type t =
@@ -67,6 +68,22 @@ let jbool name j =
 external closest :
   Js.Json.t -> string -> Js.Json.t option
   = "closest" [@@mel.send] [@@mel.return nullable]
+
+external prevent_default : Js.Json.t -> unit = "preventDefault"
+  [@@mel.send]
+
+external ev_client_x : Js.Json.t -> float = "clientX" [@@mel.get]
+external ev_client_y : Js.Json.t -> float = "clientY" [@@mel.get]
+
+(* open state for the left-sidebar link-item menu: (page ref, is-recent,
+   anchor x, anchor y). open_menu carries "lp-<ref>" while this holds the
+   rest of the menu context *)
+let lp_ctx : (string * bool * float * float) option ref = ref None
+
+let open_lp_menu st ~target ~recent ~x ~y =
+  lp_ctx := Some (target, recent, x, y);
+  Runtime.signal_set st.open_menu ("lp-" ^ target)
+;;
 
 let click_target sel ev =
   match Worker_client.json_field "target" ev with
@@ -319,6 +336,7 @@ let item_of_page (p : Model.page) =
   ; linked_refs = p.Model.page_linked_refs
   ; page = Some p
   ; props_collapsed = not p.Model.page_is_tag
+  ; collapsed = false
   ; page_ref =
       Some
         (match p.Model.page_title with
@@ -416,6 +434,7 @@ let block_item_of_uuid repo uuid : item option Js.Promise.t =
                              ; linked_refs = []
                              ; page = None
                              ; props_collapsed = true
+                             ; collapsed = false
                              ; page_ref = List.nth_opt crumbs 0
                              }))
              | _ -> Js.Promise.resolve None)
@@ -445,6 +464,7 @@ let static_item key kind title =
     ; linked_refs = []
     ; page = None
     ; props_collapsed = true
+    ; collapsed = false
     ; page_ref = None
     }
 
@@ -468,6 +488,45 @@ let toggle_props st key =
          if i.key = key then { i with props_collapsed = not i.props_collapsed }
          else i)
        (Signal.get_state st.items))
+
+let toggle_collapsed st key =
+  Runtime.signal_set st.items
+    (List.map
+       (fun (i : item) ->
+         if i.key = key then { i with collapsed = not i.collapsed }
+         else i)
+       (Signal.get_state st.items))
+
+let set_collapsed st key v =
+  Runtime.signal_set st.items
+    (List.map
+       (fun (i : item) ->
+         if i.key = key then { i with collapsed = v } else i)
+       (Signal.get_state st.items))
+
+let collapse_others st key v =
+  Runtime.signal_set st.items
+    (List.map
+       (fun (i : item) ->
+         if i.key = key then i else { i with collapsed = v })
+       (Signal.get_state st.items))
+
+let collapse_all st v =
+  Runtime.signal_set st.items
+    (List.map
+       (fun (i : item) -> { i with collapsed = v })
+       (Signal.get_state st.items))
+
+let remove_rest st key =
+  Runtime.signal_set st.items
+    (List.filter (fun (i : item) -> i.key = key)
+       (Signal.get_state st.items))
+
+let clear_items st =
+  Runtime.signal_set st.items [];
+  if (!model_ref).Model.right_sidebar_open then
+    Runtime.send Action.Toggle_right_sidebar
+;;
 
 let add_promise st p =
   ignore
@@ -588,6 +647,15 @@ let toggle_favorite st =
       | None -> ())
   | _ -> ()
 
+let unfavorite st uuid =
+  match (!model_ref).Model.repo with
+  | Some repo ->
+      then_keep
+        (Runtime.invoke3 "thread-api/set-page-favorite" (Wire.String repo)
+           (Wire.Uuid uuid) (Wire.Bool false))
+        (fun _ -> load_favorites repo st)
+  | None -> ()
+
 (* ---------- model / worker wiring ---------- *)
 
 let on_sync st =
@@ -644,7 +712,44 @@ let on_model st (m : Model.t) =
 let close_menu st = Runtime.signal_set st.open_menu ""
 let open_nav_menu st = Runtime.signal_set st.open_menu "nav-edit"
 let open_dots_menu st = Runtime.signal_set st.open_menu "dots"
-let open_item_menu st key = Runtime.signal_set st.open_menu ("item-" ^ key)
+(* anchor for the right-sidebar item actions menu — cljs popup-show!
+   positions at the pointer (contextmenu) / trigger click *)
+let im_xy : (float * float) ref = ref (0., 0.)
+
+let open_item_menu st key ~x ~y =
+  im_xy := (x, y);
+  Runtime.signal_set st.open_menu ("item-" ^ key)
+
+(* cljs left_sidebar.cljs x-menu-content: right-click or the dots
+   button on a favorites/recent row opens the unfavorite/open-in-sidebar
+   dropdown at the pointer; right-click on a right-sidebar item header
+   opens its actions menu *)
+let on_doc_contextmenu st ev =
+  match click_target "#left-sidebar a.link-item" ev with
+  | Some el -> (
+      prevent_default ev;
+      match Platform.get_attribute el "data-lp-ref" with
+      | Some target ->
+          open_lp_menu st ~target
+            ~recent:(Platform.get_attribute el "data-lp-recent" = Some "1")
+            ~x:(ev_client_x ev) ~y:(ev_client_y ev)
+      | None -> ())
+  | None -> (
+      match
+        click_target "#right-sidebar .sidebar-item-header" ev
+      with
+      | Some hdr -> (
+          match closest hdr ".sidebar-item[data-item-key]" with
+          | Some it -> (
+              prevent_default ev;
+              match Platform.get_attribute it "data-item-key" with
+              | Some key ->
+                  open_item_menu st key ~x:(ev_client_x ev)
+                    ~y:(ev_client_y ev)
+              | None -> ())
+          | None -> ())
+      | None -> ())
+;;
 
 let on_doc_click st ev =
   (* dropdown menus dismiss on outside interaction; the trigger controls and
@@ -653,7 +758,7 @@ let on_doc_click st ev =
     match
       click_target
         ".ui__dropdown-menu-content, .toolbar-plugins-manager, .as-edit, \
-         [data-testid='sidebar-item-more']"
+         .sidebar-page-actions, [data-testid='sidebar-item-more']"
         ev
     with
     | Some _ -> ()
@@ -717,6 +822,7 @@ let init (ms : Model.t Signal.signal) : t =
           | Some u -> open_uuid st u
           | None -> ());
       Platform.on_document_event "click" (on_doc_click st);
+      Platform.on_document_event "contextmenu" (on_doc_contextmenu st);
       Platform.on_document_event "keydown" (on_doc_keydown st);
       st
 
