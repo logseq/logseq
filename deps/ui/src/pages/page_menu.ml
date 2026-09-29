@@ -5,13 +5,6 @@
 
 let dom = Logseq_dom.dom
 
-let string_contains s sub =
-  let ls, lsub = (String.length s, String.length sub) in
-  let rec go i =
-    i + lsub <= ls && (String.sub s i lsub = sub || go (i + 1))
-  in
-  go 0
-
 let item_class =
   "ui__dropdown-menu-item relative flex cursor-pointer select-none \
    items-center rounded-sm px-2 py-1.5 text-sm outline-none"
@@ -212,7 +205,7 @@ let confirm_view (c : Model.confirm) =
         name = "click"
         && Option.fold ~none:false
              ~some:(fun p ->
-               string_contains
+               Strings.contains
                  (Platform.payload_str p "targetClass")
                  "ui__alert-dialog-overlay")
              payload

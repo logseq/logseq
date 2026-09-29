@@ -207,34 +207,6 @@ let trigger_text_of_kind = function
   | Slash | Template_search -> "/"
 ;;
 
-(* ---- fuzzy match (cljs search/fuzzy-search is subsequence based —
-   "h1" must match "Heading 1", "te 1" must match "template 1") ---- *)
-
-let fuzzy_score hay needle =
-  let h = S.lowercase_ascii hay and n = S.lowercase_ascii needle in
-  let hl = S.length h and nl = S.length n in
-  if nl = 0 then Some 0
-  else if nl > hl then None
-  else
-    let rec first_hit i =
-      if i >= hl then None
-      else if h.[i] = n.[0] then Some i
-      else first_hit (i + 1)
-    in
-    match first_hit 0 with
-    | None -> None
-    | Some first ->
-        let rec go hi ni =
-          if ni = nl then Some hi
-          else if hi >= hl then None
-          else if h.[hi] = n.[ni] then go (hi + 1) (ni + 1)
-          else go (hi + 1) ni
-        in
-        (match go (first + 1) 1 with
-         | Some last -> Some ((first * 1000) + (last - first))
-         | None -> None)
-;;
-
 (* ---- slash command table ---- *)
 
 let journal_offset days =
@@ -380,13 +352,6 @@ let slash_fallback =
 
 (* ---- filtering ---- *)
 
-let contains_ci hay needle =
-  let n = S.lowercase_ascii needle and h = S.lowercase_ascii hay in
-  let nl = S.length n and hl = S.length h in
-  let rec go i = i + nl <= hl && (S.sub h i nl = n || go (i + 1)) in
-  nl = 0 || go 0
-;;
-
 let rec take n xs =
   if n <= 0 then [] else match xs with [] -> [] | x :: tl -> x :: take (n - 1) tl
 ;;
@@ -420,17 +385,10 @@ let editing_has_heading () =
 ;;
 
 let filter_slash q items =
-  (* cljs filter-commands fuzzy-matches on the label — "h1" hits
-     "Heading 1" — then hides the group banners while filtered *)
+  (* cljs get-matched-commands → fuzzy-search-multi (label, limit 50) —
+     hides the group banners while filtered *)
   let fs =
-    List.filter_map
-      (fun it ->
-        Option.map (fun s -> (s, it)) (fuzzy_score it.ai_label q))
-      items
-  in
-  let fs =
-    List.map snd
-      (List.sort (fun (a, _) (b, _) -> Int.compare a b) fs)
+    Fuzzy.fuzzy_search ~extract:(fun it -> it.ai_label) ~limit:50 items q
   in
   (match fs with [] -> [ slash_fallback ] | _ -> fs)
   |> with_headers (q = "")
@@ -519,7 +477,7 @@ let page_items_for t kind q =
     | _ ->
         take 20
           (List.map wrap
-             (List.filter (fun ti -> contains_ci ti q) !(t.titles)))
+             (List.filter (fun ti -> Strings.contains_ci ti q) !(t.titles)))
   in
   let exact =
     match kind with
@@ -558,16 +516,12 @@ let page_items_for t kind q =
 ;;
 let template_items_for t q =
   let q = S.trim q in
+  (* cljs template-search → fuzzy-search (block/title, limit 100) *)
   renumber
-    (List.filter_map
+    (List.map
        (fun (uuid, title) ->
-         match fuzzy_score title q with
-         | Some _ ->
-             Some
-               (mk_item ~key:("tpl:" ^ uuid) ~label:title
-                  (Template_apply uuid))
-         | None -> None)
-       !(t.templates))
+         mk_item ~key:("tpl:" ^ uuid) ~label:title (Template_apply uuid))
+       (Fuzzy.fuzzy_search ~extract:snd ~limit:100 !(t.templates) q))
 ;;
 
 (* ---- async loads ---- *)

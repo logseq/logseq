@@ -82,17 +82,10 @@ let rec take n xs =
   | 0, _ | _, [] -> []
   | n, x :: tl -> x :: take (n - 1) tl
 
-let contains_ci hay needle =
-  let h = String.lowercase_ascii hay
-  and n = String.lowercase_ascii needle in
-  let hl = String.length h and nl = String.length n in
-  let rec go i = i + nl <= hl && (String.sub h i nl = n || go (i + 1)) in
-  nl = 0 || go 0
-
 let search_icons q =
   icon_items ()
   |> List.filter (fun (display, kebab) ->
-         contains_ci display q || contains_ci kebab q)
+         Strings.contains_ci display q || Strings.contains_ci kebab q)
   |> take 100
 
 (* ---------- frequently used (storage :ui/ls-icons-used) ---------- *)

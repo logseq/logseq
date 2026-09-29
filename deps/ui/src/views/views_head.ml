@@ -232,7 +232,7 @@ let filter_value_phase inst ~refresh ~anchor (c : V.column) =
         D.clear results;
         List.iter
           (fun it ->
-            if P.fuzzy_match q it.P.si_label then begin
+            if Fuzzy.score q it.P.si_label > 0. then begin
               let a =
                 D.h ~tag:"a" ~cls:"flex justify-between menu-link"
                   ~attrs:[ ("tabindex", "0") ]

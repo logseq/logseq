@@ -1,3 +1,25 @@
+(* substring search helpers (case-sensitive contains, case-insensitive
+   contains/index) shared by popups, menus, icon picker, plugin list *)
+
+let contains hay needle =
+  let lh = String.length hay and ln = String.length needle in
+  let rec go i = i + ln <= lh && (String.sub hay i ln = needle || go (i + 1)) in
+  ln = 0 || go 0
+
+let contains_ci hay needle =
+  let h = String.lowercase_ascii hay and n = String.lowercase_ascii needle in
+  contains h n
+
+let index_ci hay needle =
+  let h = String.lowercase_ascii hay and n = String.lowercase_ascii needle in
+  let ln = String.length n and lh = String.length h in
+  let rec go i =
+    if ln = 0 || i + ln > lh then None
+    else if String.sub h i ln = n then Some i
+    else go (i + 1)
+  in
+  go 0
+
 (* User-facing strings, centralized until en.edn dict loading lands.
    Values match src/resources/dicts/en.edn so e2e text selectors hit. *)
 
