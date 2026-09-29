@@ -50,6 +50,10 @@ let on_editor_arrows ev uuid el =
     ignore
       (Outliner_ops.apply_and_refresh
          [ Outliner_ops.move_up_down [ uuid ] up ]))
+  else if mods ev then (
+    (* cljs mod+up / mod+down collapse/expand the block's children *)
+    D.prevent_default ev;
+    A.collapse_expand ~collapse:up ())
   else
     let v = D.el_value el in
     let s, e = caret_span el in
@@ -86,6 +90,10 @@ let on_editor_key ev uuid el =
       else if ac_popup_open () && ac_owned_key key then ()
   else
     match key with
+    | "Enter" when mods ev && not shift ->
+        (* cljs editor/cycle-todo — mod+enter never splits *)
+        D.prevent_default ev;
+        Editor_commands.cycle_todo uuid
     | "Enter" when not shift ->
         D.prevent_default ev;
         A.split_at_cursor uuid
@@ -129,6 +137,15 @@ let on_editor_key ev uuid el =
         | "i" when mods ev ->
             D.prevent_default ev;
             A.wrap_selection uuid "*"
+        | "s" when mods ev && shift ->
+            D.prevent_default ev;
+            A.wrap_selection uuid "~~"
+        | ";" when mods ev && not shift ->
+            D.prevent_default ev;
+            A.toggle_children_collapse ()
+        | "," when mods ev && not shift ->
+            D.prevent_default ev;
+            A.zoom_out ()
         | "h" when mods ev && shift ->
             D.prevent_default ev;
             A.wrap_selection uuid "=="
@@ -156,6 +173,14 @@ let on_normal_key ev =
   | "ArrowDown" when (meta || alt) && shift ->
       D.prevent_default ev;
       A.move_blocks_up_down false
+  | "ArrowUp" when mods ev && not shift ->
+      (* cljs mod+up collapses one level / the selection *)
+      D.prevent_default ev;
+      A.collapse_expand ~collapse:true ()
+  | "ArrowDown" when mods ev && not shift ->
+      (* cljs mod+down expands one level / the selection *)
+      D.prevent_default ev;
+      A.collapse_expand ~collapse:false ()
   | "ArrowUp" when shift ->
       D.prevent_default ev;
       A.extend_selection true
@@ -171,6 +196,9 @@ let on_normal_key ev =
   | "Tab" when selected () ->
       D.prevent_default ev;
       A.indent_or_outdent ~indent:(not shift)
+  | "Enter" when mods ev ->
+      D.prevent_default ev;
+      List.iter Editor_commands.cycle_todo (A.selected_uuids ())
   | "Enter" -> (
       match D.closest_sel ".block-add-button" (D.ev_target ev) with
       | Some btn ->
@@ -185,9 +213,21 @@ let on_normal_key ev =
   | "Escape" -> A.clear_selection ()
   | _ -> (
       match shortcut_key ev with
-      | "a" when mods ev ->
+      | "a" when mods ev && shift ->
+          (* cljs mod+shift+a = select-all-blocks *)
           D.prevent_default ev;
           A.select_all ()
+      | "a" when mods ev ->
+          (* cljs mod+a = select-parent *)
+          D.prevent_default ev;
+          A.select_parent ()
+      | ";" when mods ev && not shift ->
+          D.prevent_default ev;
+          A.toggle_children_collapse ()
+      | "," when mods ev && not shift ->
+          (* cljs zoom-out outside edit mode is history.back *)
+          D.prevent_default ev;
+          Platform.history_back ()
       | "z" when mods ev ->
           D.prevent_default ev;
           if shift then A.redo () else A.undo ()

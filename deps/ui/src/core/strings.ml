@@ -26,6 +26,8 @@ let asset_already_exists title uuid =
 let delete_page_title = "Delete page?"
 let delete_page_desc = "Are you sure you want to delete this page?"
 let page_not_found = "Page not found: "
+(* en.edn :nav/cannot-go-to-internal-page *)
+let cannot_go_to_internal_page = "Cannot go to an internal page."
 let loading = "Loading..."
 let go_to_journals = "Go to journals"
 let unlinked_references = "Unlinked References"

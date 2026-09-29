@@ -56,6 +56,52 @@ let parse_hash () : Model.route =
 
 let repo () = Option.value !Runtime.current_repo ~default:""
 
+(* cljs set-route-match!: the hash can carry query params —
+   ?anchor=ls-block-<uuid> on block-ref/backlink navigation *)
+let route_anchor () =
+  let h = Platform.location_hash () in
+  match String.index_opt h '?' with
+  | None -> None
+  | Some i ->
+      Platform.search_params_get
+        (Platform.new_url_search_params
+           (String.sub h (i + 1) (String.length h - i - 1)))
+        "anchor"
+
+(* cljs ui-handler/highlight-element!: a "ls-block-<uuid>" anchor
+   scrolls the row into view and selects the block; other fragment ids
+   scroll and flash block-highlight for 4s. Rows inside collapsed or
+   lazily mounted subtrees appear after the route commits — poll like
+   cljs wait-for-anchor-element! *)
+let anchor_timer = ref 0
+
+let rec poll_anchor anchor n =
+  match Editor_dom.get_element_by_id anchor with
+  | Some el ->
+      Editor_dom.el_scroll_into_view el;
+      if String.length anchor > 36 then
+        let tail =
+          String.sub anchor (String.length anchor - 36) 36
+        in
+        if Sdk_util.is_uuid_string tail then
+          Editor_actions.select_single tail
+        else (
+          Editor_dom.el_class_add el "block-highlight";
+          anchor_timer :=
+            Editor_dom.set_timeout_id
+              (fun () ->
+                Editor_dom.el_class_remove el "block-highlight")
+              4000)
+  | None ->
+      if n < 120 then
+        anchor_timer :=
+          Editor_dom.set_timeout_id (fun () -> poll_anchor anchor (n + 1))
+            50
+
+let jump_to_anchor anchor =
+  Editor_dom.clear_timeout !anchor_timer;
+  poll_anchor anchor 0
+
 (* ref wire for get-page-blocks-tree / get-page-route-info:
    Uuid for uuid strings, String for page names *)
 let page_ref s =
@@ -212,6 +258,19 @@ let load_page_ref for_route ref_v =
   Runtime.invoke2 "thread-api/get-page-route-info"
     (Wire.String (repo ())) ref_v
   |> Js.Promise.then_ (fun info ->
+         (* cljs redirect-to-page!: an alias page's route resolves to
+            its source page (self-alias guard: don't loop when the route
+            already targets the source uuid) *)
+         match
+           ( Wire.map_get_uuid info "alias-source-uuid"
+           , Wire.as_uuid ref_v )
+         with
+         | Some src, cur when cur <> Some src ->
+             if not (is_stale ()) then
+               Platform.set_location_hash
+                 (Runtime.nav_hash ("#/page/" ^ src));
+             Js.Promise.resolve ()
+         | _ -> (
          match Decode.page_of_summary info with
          | Some p ->
              fetch_blocks p
@@ -225,7 +284,18 @@ let load_page_ref for_route ref_v =
                              Runtime.send (Action.Page_loaded p'');
                              fetch_refs ~stale:is_stale p'';
                              Outliner_ops.fetch_unlinked_refs
-                               ~stale:is_stale p'');
+                               ~stale:is_stale p'';
+                             (* zoom-out to a page parent keeps the zoomed
+                                block in edit mode (cljs pending-edit) *)
+                             (match Editor_actions.consume_pending_zoom ()
+                              with
+                              | Some u when Editor_state.ready () -> (
+                                  match Editor_state.find u with
+                                  | Some zb ->
+                                      Editor_actions.enter_edit u
+                                        (String.length zb.Model.block_title)
+                                  | None -> ())
+                              | _ -> ()));
                            Js.Promise.resolve ()))
          | None ->
              (* cljs keeps the :page route and paints inline
@@ -233,7 +303,7 @@ let load_page_ref for_route ref_v =
                 the full-screen 404 *)
              if not (is_stale ()) then
                Runtime.send Action.Page_load_failed;
-             Js.Promise.resolve ())
+             Js.Promise.resolve ()))
   |> Js.Promise.catch (fun _ ->
          if not (is_stale ()) then
            Runtime.send Action.Page_load_failed;
@@ -435,7 +505,8 @@ let resolve () =
       (* our own set_location_hash (or a repeat hashchange) for the route
          already shown — Navigate_to would blank route_page/current_page
          while the same data refetches; just refresh in place *)
-      load_route route
+      load_route route;
+      Option.iter jump_to_anchor (route_anchor ())
   | _ ->
       (* commit and close any in-progress edit before the route swaps
          (cljs exits editing on navigation) *)
@@ -447,6 +518,7 @@ let resolve () =
          settings route/dialog is active *)
       if route <> Model.Settings then Settings_state.deactivate ();
       load_route route;
+      Option.iter jump_to_anchor (route_anchor ());
       Runtime.flush ()
 (* worker sync-db-changes broadcast: reload the current route's data
    without Navigate_to (keeps route_page until the fresh one lands, so
