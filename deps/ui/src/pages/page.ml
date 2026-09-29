@@ -795,7 +795,7 @@ let ref_item (b : Model.block) : t =
 let fetch_unlinked (m : Model.t) =
   match m.route_page with
   | Some p ->
-      Router.fetch_unlinked
+      Outliner_ops.fetch_unlinked_refs
         ~stale:(fun () -> !Runtime.current_route <> Some m.route)
         p
   | None -> ()

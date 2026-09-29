@@ -306,38 +306,36 @@ let set_collapsed set =
    the embed wires (Decode drops the flag). *)
 let rec fill_embed_children repo ancestors collapsed
     (blocks : Model.block list) : Model.block list Js.Promise.t =
-  let rec go acc = function
-    | [] -> Js.Promise.resolve (List.rev acc)
-    | (b : Model.block) :: rest -> (
-        let children_p =
-          fill_embed_children repo ancestors collapsed
-            b.Model.block_children
-        in
-        let embed_p =
-          match b.Model.block_link with
-          | Some link_id when not (List.mem link_id ancestors) ->
-              Runtime.invoke3 "thread-api/get-page-blocks-tree"
-                (Wire.String repo) (Wire.Int link_id) Wire.Nil
-              |> Js.Promise.then_ (fun w ->
-                     collapsed := collect_collapsed !collapsed w;
-                     fill_embed_children repo (link_id :: ancestors)
-                       collapsed (Decode.blocks_of_wire w))
-              |> Js.Promise.catch (fun _ -> Js.Promise.resolve [])
-          | _ -> Js.Promise.resolve []
-        in
-        children_p
-        |> Js.Promise.then_ (fun children ->
-               embed_p
-               |> Js.Promise.then_ (fun embed_children ->
-                      go
-                        ({ b with
-                           Model.block_children = children
-                         ; block_embed_children = embed_children
-                         }
-                        :: acc)
-                        rest)))
+  (* siblings fetch their children/embed trees in parallel —
+     Promise.all preserves list order; the ancestors set still guards
+     self-embed loops *)
+  let item_p (b : Model.block) =
+    let children_p =
+      fill_embed_children repo ancestors collapsed
+        b.Model.block_children
+    in
+    let embed_p =
+      match b.Model.block_link with
+      | Some link_id when not (List.mem link_id ancestors) ->
+          Runtime.invoke3 "thread-api/get-page-blocks-tree"
+            (Wire.String repo) (Wire.Int link_id) Wire.Nil
+          |> Js.Promise.then_ (fun w ->
+                 collapsed := collect_collapsed !collapsed w;
+                 fill_embed_children repo (link_id :: ancestors)
+                   collapsed (Decode.blocks_of_wire w))
+          |> Js.Promise.catch (fun _ -> Js.Promise.resolve [])
+      | _ -> Js.Promise.resolve []
+    in
+    Js.Promise.all [| children_p; embed_p |]
+    |> Js.Promise.then_ (fun a ->
+           Js.Promise.resolve
+             { b with
+               Model.block_children = a.(0)
+             ; block_embed_children = a.(1)
+             })
   in
-  go [] blocks
+  Js.Promise.all (Array.of_list (List.map item_p blocks))
+  |> Js.Promise.then_ (fun arr -> Js.Promise.resolve (Array.to_list arr))
 
 let ancestors_of (page : Model.page) =
   match page.Model.page_db_id with Some id -> [ id ] | None -> []
@@ -541,6 +539,12 @@ let fetch_zoom_blocks repo uuid : Wire.t Js.Promise.t =
    create or remove a text mention; the send is guarded so an in-flight
    fetch can't overwrite a page the user navigated to *)
 let fetch_unlinked_refs ~stale:(is_stale : unit -> bool) (p : Model.page) =
+  (* gated on the unlinked section being open — get-unlinked-references
+     scans every block/title datom, so a collapsed section must not pay
+     it on every refresh. The fold toggle's send flips
+     Runtime.unlinked_open before its fetch, so opening still fetches *)
+  if not !Runtime.unlinked_open then ()
+  else
   match !Runtime.current_repo, p.Model.page_db_id with
   | Some repo, Some id ->
       ignore
