@@ -6,6 +6,7 @@
     "@dnd-kit/abstract": "0.5.0",
     "@dnd-kit/dom": "0.5.0",
     "@tanstack/virtual-core": "3.17.11",
+    "codemirror": "5.65.18",
     "comlink": "^4.4.2",
     "transit-js": "^0.8.874"
   },

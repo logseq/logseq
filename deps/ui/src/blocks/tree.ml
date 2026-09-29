@@ -270,31 +270,6 @@ let editor_el uuid scope : t =
     ])
     ctx parent
 
-(* code/calc blocks edit through a contenteditable pre.CodeMirror-line —
-   no textarea (cljs parity: CodeMirror owns the surface) *)
-let code_editor_el uuid (b : Model.block) : t =
-  let buffer =
-    match S.editing () with
-    | Some e when e.uuid = uuid -> e.buffer
-    | _ -> ""
-  in
-  let lang = Option.value b.Model.block_code_lang ~default:"" in
-  dom ~key:("ew-" ^ uuid) ~style_class:"extensions__code w-full"
-    ~id:("editor-edit-block-" ^ uuid)
-    [ dom ~key:("cm-" ^ uuid) ~style_class:"CodeMirror"
-        ~attrs:[ ("data-lang", lang) ]
-        [ dom ~key:("cp-" ^ uuid) ~tag:"pre"
-            ~style_class:"CodeMirror-line"
-            ~attrs:
-              [ ("contenteditable", "true")
-              ; ("spellcheck", "false")
-              ; ("data-code-uuid", uuid) ]
-            ~text:buffer []
-        ]
-    ; dom ~key:("cr-" ^ uuid) ~style_class:"extensions__code-calc-results"
-        []
-    ]
-
 let content_wrapper uuid (b : Model.block) : t =
   (* cljs puts .block-content-wrapper only around display content;
      the editor replaces it directly under .block-row *)
@@ -320,12 +295,16 @@ let content_or_editor ~editable uuid scope (b : Model.block) : t =
             dom ~key:("ae-" ^ uuid) ~style_class:"flex flex-col w-full"
               [ Asset_dom.block_view uuid b; editor_el uuid scope ]
           else Asset_dom.block_view uuid b
-      | None ->
-          if editing && editable then
-            match b.Model.block_display_type with
-            | Some "code" -> code_editor_el uuid b
-            | _ -> editor_el uuid scope
-          else content_wrapper uuid b)
+      | None -> (
+          match b.Model.block_display_type with
+          | Some "code" ->
+              (* fenced-code blocks keep their rendered surface while
+                 editing — the mounted CodeMirror IS the editor, so the
+                 DOM must not swap or the instance is destroyed *)
+              content_wrapper uuid b
+          | _ ->
+              if editing && editable then editor_el uuid scope
+              else content_wrapper uuid b))
     (Signal.map
        (fun (st : S.t) ->
          match st.editing with
