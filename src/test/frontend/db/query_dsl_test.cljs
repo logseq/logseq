@@ -160,7 +160,21 @@
       "(and \"for #clojure\" #tag foo)"
 
       "(and [[outside]] (property prop \"2 [[6a8ead3b-a450-4916-a7e2-d16d0d2b59fd]]\"))"
-      "(and \"[[outside]]\" (property prop \"2 [[6a8ead3b-a450-4916-a7e2-d16d0d2b59fd]]\"))")))
+      "(and \"[[outside]]\" (property prop \"2 [[6a8ead3b-a450-4916-a7e2-d16d0d2b59fd]]\"))"))
+
+  (testing "page refs with special title characters stay readable EDN"
+    (are [x y] (= (query-dsl/pre-transform x) y)
+      "(tags [[Project\"]])"
+      (str "(tags " (pr-str "[[Project\"]]") ")")
+
+      "(tags [[Project\\]])"
+      (str "(tags " (pr-str "[[Project\\]]") ")")
+
+      "(tags [[Project[[Gremlin Garden]]]])"
+      (str "(tags " (pr-str "[[Project[[Gremlin Garden]]]]") ")")
+
+      "(tags [[Project]]]])"
+      (str "(tags " (pr-str "[[Project]]]]") ")")))))
 
 (defn- testable-content
   "Only test :block/title up to page-ref to make tests readable"
@@ -624,6 +638,34 @@
 
     "(tags [page-tag-1 page-tag-2])"
     ["page1" "page2"]))
+
+(deftest tags-queries-special-title-characters
+  (load-test-files
+   {:classes {:quote-tag {:block/title "Project\""}
+              :backslash-tag {:block/title "Project\\"}
+              :nested-open-tag {:block/title "Project[[Gremlin Garden]]"}
+              :nested-close-tag {:block/title "Project]]"}}
+    :pages-and-blocks
+    [{:page {:block/title "page-quote" :build/tags [:quote-tag]}}
+     {:page {:block/title "page-backslash" :build/tags [:backslash-tag]}}
+     {:page {:block/title "page-nested-open" :build/tags [:nested-open-tag]}}
+     {:page {:block/title "page-nested-close" :build/tags [:nested-close-tag]}}]})
+
+  (is (= ["page-quote"]
+         (map :block/name (dsl-query "(tags [[Project\"]])")))
+      "Query still matches after a tag title gains a double quote")
+
+  (is (= ["page-backslash"]
+         (map :block/name (dsl-query "(tags [[Project\\]])")))
+      "Query still matches after a tag title gains a backslash")
+
+  (is (= ["page-nested-open"]
+         (map :block/name (dsl-query "(tags [[Project[[Gremlin Garden]]]])")))
+      "Query still matches after a tag title gains [[")
+
+  (is (= ["page-nested-close"]
+         (map :block/name (dsl-query "(tags [[Project]]]])")))
+      "Query still matches after a tag title gains ]]"))
 
 (deftest block-content-query
   (load-test-files [{:page {:block/title "page1"}
