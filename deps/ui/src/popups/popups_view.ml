@@ -85,7 +85,7 @@ let highlight_el ~key ~query label : t =
                  :: acc)
           | None -> List.rev (text_span ~key:"x" rest :: acc))
     in
-    Logseq_dom.dom ~key ~tag:"span" ~style_class:"m-0" (loop 0 words label []))
+    Logseq_dom.dom ~key ~tag:"span" (loop 0 words label []))
   else
     match I18n.index_ci label query with
     | Some i ->
@@ -102,7 +102,7 @@ let highlight_el ~key ~query label : t =
     (* cljs falls through to the multi-word branch on no match, so the
        label lands in a span inside a span.m-0 wrapper *)
     | None ->
-        Logseq_dom.dom ~key ~tag:"span" ~style_class:"m-0"
+        Logseq_dom.dom ~key ~tag:"span"
           [ text_span ~key:"x" label ]
 ;;
 
@@ -119,7 +119,7 @@ let node_title_el ~key ~query (it : S.ac_item) : t =
   in
   match it.S.ai_title_icon with
   | Some ic ->
-      Logseq_dom.dom ~key ~style_class:"flex flex-row items-center gap-1"
+      Logseq_dom.dom ~key ~style_class:"icon-cp-container"
         [ Icons.icon ~size:14. ic; hl ]
   | None -> hl
 ;;
@@ -127,11 +127,11 @@ let node_title_el ~key ~query (it : S.ac_item) : t =
 (* cljs node-render icon slot: the h-5 wrap is always present for
    non-db-tag popups, empty when the node has no icon *)
 let node_icon_slot ~key (it : S.ac_item) : t =
-  Logseq_dom.dom ~key ~style_class:"flex items-center h-5 mr-1 opacity-50"
+  Logseq_dom.dom ~key ~style_class:"ls-ac-node-icon"
     (match it.S.ai_node_icon with
      | Some (icn, true) ->
          [ Logseq_dom.dom ~key:"cp"
-             ~style_class:"icon-cp-container flex items-center"
+             ~style_class:"icon-cp-container"
              ~attrs:[ ("style", "color: inherit") ]
              [ Icons.icon ~size:14. icn ] ]
      | Some (icn, false) -> [ Icons.icon ~size:14. icn ]
@@ -151,18 +151,15 @@ let ac_node_label_el (v : S.view) (it : S.ac_item) : t =
     | Some a -> a.S.query
     | None -> ""
   in
-  Logseq_dom.dom ~key:"node" ~style_class:"flex flex-col"
+  Logseq_dom.dom ~key:"node" ~style_class:"ls-ac-node"
     ((match it.S.ai_breadcrumb with
-      | Some bc ->
-          [ Logseq_dom.dom ~key:"bc"
-              ~style_class:"text-xs opacity-70 mb-1"
-              ~attrs:[ ("style", "margin-left: 3px") ]
+      | Some bc when bc <> "" ->
+          [ Logseq_dom.dom ~key:"bc" ~style_class:"ls-ac-bc"
               [ Logseq_dom.dom ~key:"b"
                   ~style_class:"breadcrumb block-parents breadcrumb--search-result"
                   ~text:bc [] ] ]
-      | None -> [])
-    @ [ Logseq_dom.dom ~key:"row"
-          ~style_class:"flex flex-row items-start"
+      | _ -> [])
+    @ [ Logseq_dom.dom ~key:"row" ~style_class:"ls-ac-node-row"
           ((if db_tag then [] else [ node_icon_slot ~key:"ic" it ])
           @ [ node_title_el ~key:"ti" ~query it ]) ])
 ;;
@@ -188,10 +185,9 @@ let ac_label_el (v : S.view) (it : S.ac_item) : t =
     ((match it.S.ai_icon with
       | Some ic ->
           [ Logseq_dom.dom ~key:"ic" ~tag:"span"
-              ~style_class:"flex items-center gap-1"
+              ~style_class:"ls-ac-ic"
               [ Icons.icon ic
-              ; Logseq_dom.dom ~key:"s" ~tag:"strong"
-                  ~style_class:"font-normal" ~text:txt [] ] ]
+              ; Logseq_dom.dom ~key:"s" ~tag:"strong" ~text:txt [] ] ]
       | None -> [])
     @ if it.S.ai_help then
         [ Logseq_dom.dom ~key:"help" ~tag:"small"
@@ -217,8 +213,7 @@ let ac_item_el ~key (st : S.t) (item_sig : S.ac_item Signal.signal) : t =
                      | None -> false
                    in
                    sv
-                     ((if chosen then "chosen " else " ")
-                    ^ "flex justify-between menu-link"))
+                     ((if chosen then "chosen " else " ") ^ "menu-link"))
                  pair)
             ~attrs_signal_v:
               (Signal.map
@@ -227,7 +222,7 @@ let ac_item_el ~key (st : S.t) (item_sig : S.ac_item Signal.signal) : t =
                      [ ("id", "ac-" ^ string_of_int it.S.ai_idx)
                      ; ("tabindex", "0") ])
                  pair)
-            [ Logseq_dom.dom ~key:"flex1" ~tag:"span" ~style_class:"flex-1"
+            [ Logseq_dom.dom ~key:"flex1" ~tag:"span"
                 [ dyn
                     ~equal:(fun (a : S.ac_item * S.view) (b : S.ac_item * S.view) ->
                       let ai, av = a and bi, bv = b in
@@ -261,7 +256,7 @@ let ac_empty_placeholder (v : S.view) : t =
     | _ -> U.t "editor/block-search"
   in
   Logseq_dom.dom ~key:"ac-empty"
-    ~style_class:"text-gray-500 text-sm px-4 py-2" ~text []
+    ~style_class:"ls-ac-empty" ~text []
 ;;
 
 (* cljs ui/auto-complete groups slash items by :group — each group is a
@@ -364,34 +359,28 @@ let ac_inner (st : S.t) : t =
                  :: List.map row g.g_items)) ]
 ;;
 
-(* cljs shui composed-popup merges popup-transition-class + the focus
-   ring classes onto every PopoverContent *)
-let popover_transition_classes =
-  "animate-in fade-in-0 zoom-in-95 \
-   data-[side=bottom]:slide-in-from-top-2 \
-   data-[side=left]:slide-in-from-right-2 \
-   data-[side=right]:slide-in-from-left-2 \
-   data-[side=top]:slide-in-from-bottom-2 \
-   outline-none focus:outline-none focus-visible:outline-none"
-;;
+(* cljs base-ui anchors the popup at a 1x1 rect at the caret point, so
+   side=bottom lands its top edge at anchor.bottom = y+1 *)
+let popup_anchor_dy = 1.
 
-(* cljs popup-normal-style: type metrics + scroll bounds; the cljs
-   positioner sets --available-height on a wrapper — LUI positions the
-   popup itself so the var is bound inline. `flip` = (top, avail) when
-   the popup measured too tall for the space below and moved above the
-   caret (base-ui avoidCollisions; positioner flips data-side to top) *)
+(* cljs shui composed-popup bakes popup-transition-class into the
+   PopoverContent classes; LUI authors them as rules on
+   .ui__popover-content et al. (lui-overlay.css), so the emit side only
+   carries the semantic class. The cljs positioner sets
+   --available-height on a wrapper — LUI positions the popup itself, so
+   the var is bound inline. `flip` = (top, avail) when the popup
+   measured too tall for the space below and moved above the caret
+   (base-ui avoidCollisions; positioner flips data-side to top) *)
 let popover_style ~x ~y ~flip =
   let top, avail =
     match flip with
     | Some (top', avail') -> (top', Printf.sprintf "%.0fpx" avail')
     | None ->
-        (y, Printf.sprintf "calc(100vh - %.0fpx)" (y +. 8.))
+        (y +. popup_anchor_dy, Printf.sprintf "calc(100vh - %.0fpx)" (y +. 8.))
   in
   Printf.sprintf
     "position: fixed; left: %.0fpx; top: %.0fpx; z-index: 99999; \
-     font-size: 1rem; line-height: 1.5; max-height: var(--available-height); \
-     overflow: hidden auto; \
-     --ls-page-title-size: 1rem; --available-height: %s"
+     --available-height: %s"
     x top avail
 ;;
 
@@ -402,10 +391,7 @@ let ac_popover (st : S.t) : t =
  fun context parent ->
   (* cljs PopoverContent: ui__popover-content + card + transition classes *)
   (Logseq_dom.dom ~key:"ac-pop"
-    ~style_class:
-      ("ui__popover-content z-50 rounded-md border bg-popover \
-        text-popover-foreground shadow-md outline-none "
-      ^ popover_transition_classes)
+    ~style_class:"ui__popover-content"
     ~attrs_signal_v:
       (Signal.map
          (fun (v : S.view) ->
@@ -447,8 +433,7 @@ let ac_popover (st : S.t) : t =
                | None -> false)
              st.S.vs.Signal.state_signal)
         (Logseq_dom.dom ~key:"ac-hint" ~tag:"p"
-           ~style_class:
-             "px-1 opacity-50 text-sm flex flex-row items-center gap-2"
+           ~style_class:"ls-tag-search-hint"
            [ (* shui/shortcut "mod+enter" → combo glow container inside a
                 span *)
              Logseq_dom.dom ~key:"scw" ~tag:"span"
@@ -476,8 +461,7 @@ let ac_popover (st : S.t) : t =
 let cm_color_row () : t =
   let swatch c =
     Logseq_dom.dom ~key:("color-" ^ c) ~tag:"a"
-      ~style_class:
-        "inline-flex items-center justify-center w-[30px] h-[30px]"
+      ~style_class:"ls-cm-swatch"
       ~attrs:
         [ ("title", U.t ("color/" ^ c)); ("data-cm-color", c) ]
       [ Logseq_dom.dom ~key:"bg" ~style_class:"heading-bg"
@@ -488,38 +472,29 @@ let cm_color_row () : t =
   in
   let remove =
     Logseq_dom.dom ~key:"color-rm" ~tag:"a"
-      ~style_class:
-        "inline-flex items-center justify-center w-[30px] h-[30px]"
+      ~style_class:"ls-cm-swatch"
       ~attrs:
         [ ("title", U.t "ui/remove-background"); ("data-cm-color", "") ]
       [ Logseq_dom.dom ~key:"bg" ~style_class:"heading-bg remove" ~text:"-" [] ]
   in
   Logseq_dom.dom ~key:"colors"
-    ~style_class:"flex flex-row justify-between py-1 px-2 items-center"
+    ~style_class:"ls-cm-colors"
     [ Logseq_dom.dom ~key:"colors-row"
-        ~style_class:"flex flex-row justify-between flex-1 mx-2 mt-2"
+        ~style_class:"ls-cm-colors-row"
         (List.map swatch S.colors @ [ remove ]) ]
 ;;
 
-(* shui button :ghost :icon + to-heading-button — full class list from
-   with-button-classes so the ghost hover/size styles come out identical *)
+(* shui button :ghost :icon + to-heading-button; the ghost/size styles
+   live in lui-overlay.css (to-heading-button). cljs menu-heading joins
+   the class list with "," — every button except the last carries a
+   literal trailing comma *)
 let cm_heading_btn ?(comma = true) key title value icon : t =
   Logseq_dom.dom ~key ~tag:"button"
     ~style_class:
-      ("ui__button inline-flex cursor-pointer items-center justify-center \
-        whitespace-nowrap rounded-md text-sm gap-1 font-medium \
-        ring-offset-background transition-colors focus-visible:outline-none \
-        focus-visible:ring-2 focus-visible:ring-ring \
-        focus-visible:ring-offset-2 disabled:pointer-events-none \
-        disabled:opacity-50 select-none hover:bg-secondary/70 \
-        hover:text-secondary-foreground active:opacity-80 as-ghost \
-        box-content h-6 w-6 p-1 overflow-hidden to-heading-button"
-      ^ (* cljs menu-heading joins the class list with "," — every button
-           except the last carries a literal trailing comma *)
-        if comma then "," else "")
+      ("ui__button as-ghost to-heading-button ls-cm-heading-btn"
+      ^ if comma then "," else "")
     ~attrs:
-      [ ("type", "button"); ("title", title); ("data-cm-heading", value)
-      ; ("style", "box-sizing: border-box; height: 30px; padding: 0; width: 30px") ]
+      [ ("type", "button"); ("title", title); ("data-cm-heading", value) ]
     [ icon ]
 ;;
 
@@ -534,9 +509,9 @@ let cm_heading_row () : t =
              ~style_class:("ti ti-h-" ^ n ^ " ui__icon") []))
   in
   Logseq_dom.dom ~key:"headings"
-    ~style_class:"flex flex-row justify-between pb-2 pt-1 px-2 items-center"
+    ~style_class:"ls-cm-headings"
     [ Logseq_dom.dom ~key:"headings-row"
-        ~style_class:"flex flex-row items-center justify-between flex-1 mx-2"
+        ~style_class:"ls-cm-headings-row"
         (hs
         @ [ cm_heading_btn "h-auto" (U.t "editor/auto-heading") "auto"
               (Icons.icon "h-auto")
@@ -564,7 +539,7 @@ let cm_shortcut_el (binding, caps) : t =
            sep @ [ kbd i cap ])
          caps)
   in
-  Logseq_dom.dom ~key:"sc" ~tag:"span" ~style_class:"ml-auto pl-2"
+  Logseq_dom.dom ~key:"sc" ~tag:"span" ~style_class:"ls-cm-sc"
     [ Logseq_dom.dom ~key:"sc-wrap" ~tag:"span"
         [ Logseq_dom.dom ~key:"sc-box" ~tag:"div"
             ~style_class:
@@ -579,11 +554,7 @@ let cm_shortcut_el (binding, caps) : t =
         ]
     ]
 
-let cm_item_cls =
-  "ui__dropdown-menu-item relative flex cursor-pointer select-none \
-   items-center rounded-sm px-2 py-1.5 text-sm outline-none \
-   data-[highlighted]:bg-muted data-[disabled]:pointer-events-none \
-   data-[disabled]:opacity-50"
+let cm_item_cls = "ui__dropdown-menu-item"
 ;;
 
 let cm_item_el (entry_sig : (int * S.cm_item) Signal.signal) : t =
@@ -596,26 +567,22 @@ let cm_item_el (entry_sig : (int * S.cm_item) Signal.signal) : t =
       (function
       | S.Ci_sep ->
           Logseq_dom.dom ~key:"sep" ~attrs:[ ("role", "separator") ]
-            ~style_class:"ui__dropdown-menu-separator -mx-1 my-1 h-px bg-muted" []
+            ~style_class:"ui__dropdown-menu-separator" []
       | S.Ci_colors -> cm_color_row ()
       | S.Ci_headings -> cm_heading_row ()
       | S.Ci_sub (label, _sub) ->
           Logseq_dom.dom ~key:"sub"
-            ~style_class:
-              "ui__dropdown-menu-sub-trigger flex cursor-pointer select-none \
-               items-center rounded-sm px-2 py-1.5 text-sm outline-none \
-               data-[highlighted]:bg-muted data-[open]:bg-muted"
+            ~style_class:"ui__dropdown-menu-sub-trigger"
             ~attrs:
               [ ("role", "menuitem"); ("aria-haspopup", "menu")
-              ; ("tabindex", "-1"); ("data-cm-sub", string_of_int idx)
-              ; ("style", "cursor: pointer") ]
+              ; ("tabindex", "-1"); ("data-cm-sub", string_of_int idx) ]
             [ Logseq_dom.dom ~key:"lbl" ~tag:"span" ~text:label []
-            ; Icons.icon ~cls:"ml-auto h-4 w-4" "chevron-right" ]
+            ; Icons.icon ~cls:"ls-menu-chevron" "chevron-right" ]
       | S.Ci_item (label, scut, cmd) ->
           Logseq_dom.dom ~key:"item" ~style_class:cm_item_cls
             ~attrs:
               [ ("role", "menuitem"); ("tabindex", "-1")
-              ; ("data-cm-item", cmd); ("style", "cursor: pointer") ]
+              ; ("data-cm-item", cmd) ]
             (Logseq_dom.dom ~key:"lbl" ~tag:"span" ~text:label []
              :: (match scut with
                  | Some s -> [ cm_shortcut_el s ]
@@ -629,7 +596,7 @@ let cm_sub_item_el (it : S.cm_item) : t =
       Logseq_dom.dom ~key:"sub-item" ~style_class:cm_item_cls
         ~attrs:
           [ ("role", "menuitem"); ("tabindex", "-1")
-          ; ("data-cm-item", cmd); ("style", "cursor: pointer") ]
+          ; ("data-cm-item", cmd) ]
         (Logseq_dom.dom ~key:"lbl" ~tag:"span" ~text:label []
          :: (match scut with
              | Some s -> [ cm_shortcut_el s ]
@@ -641,20 +608,16 @@ let cm_sub_item_el (it : S.cm_item) : t =
    trigger's right edge (coords stored on hover in cm.sub_xy) *)
 let cm_sub_el (x : float) (y : float) (items : S.cm_item list) : t =
   Logseq_dom.dom ~key:"cm-sub"
-    ~style_class:
-      "ui__dropdown-menu-sub-content z-50 min-w-[8rem] rounded-md border \
-       bg-popover p-1 text-popover-foreground shadow-lg animate-in \
-       fade-in-0 zoom-in-95 data-[side=bottom]:slide-in-from-top-2 \
-       data-[side=left]:slide-in-from-right-2 \
-       data-[side=right]:slide-in-from-left-2 \
-       data-[side=top]:slide-in-from-bottom-2 outline-none \
-       focus:outline-none focus-visible:outline-none"
+    ~style_class:"ui__dropdown-menu-sub-content"
     ~attrs:
       [ ("role", "menu"); ("tabindex", "-1")
       ; ( "style"
-        , Printf.sprintf "position:fixed;left:%.0fpx;top:%.0fpx;z-index:1000"
-            x y ) ]
-    [ Logseq_dom.dom ~key:"w" ~style_class:"menu-links-wrapper"
+        , Printf.sprintf
+            "position:fixed;left:%.0fpx;top:%.0fpx;z-index:1000;\
+             --available-height:calc(100vh - %.0fpx)"
+            x y (y +. 8.) ) ]
+    [ Logseq_dom.dom ~key:"w"
+        ~attrs:[ ("data-keep-selection", "") ]
         (List.map cm_sub_item_el items) ]
 ;;
 
@@ -686,13 +649,11 @@ let cm_popover (st : S.t) : t =
         | None -> [])
       st.S.vs.Signal.state_signal
   in
-  (* cljs as-dropdown? context menu: dropdown-menu-content card classes
-     merged with content-props class w-[280px] ls-context-menu-content *)
+  (* cljs as-dropdown? context menu: dropdown-menu-content merged with
+     the content-props class (280px ls-context-menu-content); the items
+     sit in a flat div[data-keep-selection], not a second card *)
   Logseq_dom.dom ~key:"cm"
-    ~style_class:
-      "ui__dropdown-menu-content ls-context-menu-content w-[280px] z-50 \
-       min-w-[8rem] rounded-md border bg-popover p-1 \
-       text-popover-foreground shadow-md outline-none"
+    ~style_class:"ui__dropdown-menu-content ls-context-menu-content"
     ~attrs_signal_v:
       (Signal.map
          (fun (v : S.view) ->
@@ -701,11 +662,14 @@ let cm_popover (st : S.t) : t =
                attrs_v
                  [ ( "style"
                    , Printf.sprintf
-                       "position: fixed; left: %.0fpx; top: %.0fpx; z-index: 999"
-                       m.S.cx m.S.cy ) ]
+                       "position: fixed; left: %.0fpx; top: %.0fpx; \
+                        z-index: 999; --available-height: calc(100vh - %.0fpx)"
+                       m.S.cx m.S.cy (m.S.cy +. 8.) )
+                 ; ("role", "menu") ]
            | None -> attrs_v [])
          st.S.vs.Signal.state_signal)
-    [ Logseq_dom.dom ~key:"cm-wrap" ~style_class:"menu-links-wrapper"
+    [ Logseq_dom.dom ~key:"cm-wrap"
+        ~attrs:[ ("data-keep-selection", "") ]
         [ keyed ~source:entries_sig ~key:(fun ((i, _) : int * S.cm_item) -> i)
             ~cmp:Stdlib.compare
             ~mount:(fun entry_sig -> cm_item_el entry_sig) ]
@@ -713,7 +677,7 @@ let cm_popover (st : S.t) : t =
         (fun sub ->
           match sub with
           | Some (_, x, y, items) -> cm_sub_el x y items
-          | None -> box ~key:"cm-sub-empty" [])
+          | None -> Logseq_dom.nothing)
         (cm_sub_state st)
     ]
     context parent
@@ -843,9 +807,7 @@ let pv_popover (p : S.pv) : t =
   (* cljs popup-show! content = PopoverContent card classes +
      ls-preview-popup (page.css: pl-6, .tippy-wrapper paddings) *)
   Logseq_dom.dom ~key:"pv-pop"
-    ~style_class:
-      "ui__popover-content z-50 rounded-md border bg-popover \
-       text-popover-foreground shadow-md outline-none ls-preview-popup"
+    ~style_class:"ui__popover-content ls-preview-popup"
     ~attrs:
       [ ( "style"
         , Printf.sprintf
@@ -860,15 +822,13 @@ let pv_popover (p : S.pv) : t =
           ]
         [ Logseq_dom.dom ~key:"pvp" ~style_class:"page"
             [ Logseq_dom.dom ~key:"pvt"
-                ~style_class:
-                  "ls-page-title flex flex-1 w-full content items-start \
-                   title"
+                ~style_class:"ls-page-title content title"
                 ~attrs:[ ("data-testid", "page title") ]
                 [ Logseq_dom.dom ~key:"pvtw" ~style_class:"block-title-wrap"
                     ~text:p.S.pv_title [] ]
             ; Logseq_dom.dom ~key:"pvb" ~style_class:"ls-page-blocks"
                 [ Logseq_dom.dom ~key:"pvbi"
-                    ~style_class:"page-blocks-inner relative"
+                    ~style_class:"page-blocks-inner"
                     (List.map
                        (Tree.block_row ~scope:"preview" ~editable:false)
                        p.S.pv_blocks)

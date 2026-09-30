@@ -1,31 +1,21 @@
 (* Shared ui__dropdown-menu-item markup — the cljs shui dropdown-menu-item
-   DOM. Class/attr strings must stay byte-identical to the cljs output
-   (the e2e contract queries [role=menuitem] and its exact classes). *)
+   DOM. The visuals live in lui-overlay.css (styled on the ui__* classes
+   and the [role]/[data-*] hooks); the emit side carries only the
+   semantic class names. *)
 
-let base_cls =
-  "ui__dropdown-menu-item relative flex cursor-pointer select-none \
-   items-center rounded-sm px-2 py-1.5 text-sm outline-none"
+let base_cls = "ui__dropdown-menu-item"
 
-(* context-menu variant adds data-state styling *)
-let cm_cls =
-  base_cls
-  ^ " data-[disabled]:opacity-50 data-[disabled]:pointer-events-none \
-     data-[highlighted]:bg-muted"
+(* context-menu variant (same semantics — kept for call-site parity) *)
+let cm_cls = base_cls
 
 (* shui item suffix shared across the views popup's menu-item /
    checkbox-item / sub-trigger bases *)
-let views_item_cls base =
-  base
-  ^ " relative flex cursor-pointer select-none items-center rounded-sm \
-     px-2 py-1.5 text-sm outline-none data-[highlighted]:bg-muted \
-     data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
+let views_item_cls base = base
 
-(* graphs dropdown uses the cljs shui order (cursor-pointer last) *)
-let graphs_cls =
-  "ui__dropdown-menu-item relative flex select-none items-center \
-   rounded-sm px-2 py-1.5 text-sm outline-none cursor-pointer "
+(* graphs dropdown items *)
+let graphs_cls = base_cls
 
-let separator_cls = "ui__dropdown-menu-separator -mx-1 my-1 h-px bg-muted"
+let separator_cls = "ui__dropdown-menu-separator"
 
 let item_attrs = [ ("role", "menuitem"); ("tabindex", "-1") ]
 

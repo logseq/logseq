@@ -202,7 +202,7 @@ and render (d : dlg) =
 
 and render_prop_select d body =
   let wrap =
-    mk ~cls:"ls-property-add flex flex-row items-center property-key" "div"
+    mk ~cls:"ls-property-add property-key" "div"
       ~attrs:[ ("data-keep-selection", "true") ]
   in
   let key_wrap = mk ~cls:"ls-property-key" "div" in
@@ -286,7 +286,7 @@ and open_type_menu d name trigger =
               (Float.max avail 120.) ) ]
   in
   let listbox =
-    mk ~cls:"p-1" "div"
+    mk ~cls:"ls-p1" "div"
       ~attrs:
         [ ("role", "listbox")
         ; ( "style"
@@ -312,7 +312,7 @@ and open_type_menu d name trigger =
       in
       if i = 0 then el_set_attr opt "data-highlighted" "";
       el_append_child opt
-        (mk ~cls:"flex h-4 w-4 shrink-0 items-center justify-center" "span");
+        (mk ~cls:"ls-check-cell" "span");
       let lbl = mk "div" in
       ignore (child_text "span" "" (I18n.t ("property/type-" ^ ty)) lbl);
       el_append_child opt lbl;
@@ -329,10 +329,10 @@ and render_type_select d body name =
      .ls-property-add > .property-key > bullet + name, then
      .flex.flex-row > .flex.items-center > button.ui__select-trigger *)
   let wrap =
-    mk ~cls:"ls-property-add gap-1 flex flex-1 flex-row items-center" "div"
+    mk ~cls:"ls-property-add ls-pa-row" "div"
   in
   let key =
-    mk ~cls:"flex flex-row items-center property-key gap-1" "div"
+    mk ~cls:"property-key" "div"
   in
   let bullet = mk ~cls:"bullet-container" "span" in
   el_append_child bullet (mk ~cls:"bullet" "span");
@@ -341,8 +341,8 @@ and render_type_select d body name =
   el_set_text label name;
   el_append_child key label;
   el_append_child wrap key;
-  let row = mk ~cls:"flex flex-row" "div" in
-  let cell = mk ~cls:"flex items-center" "div" in
+  let row = mk ~cls:"ls-pd-row" "div" in
+  let cell = mk ~cls:"ls-row" "div" in
   el_append_child row cell;
   el_append_child wrap row;
   el_append_child body wrap;
@@ -360,13 +360,13 @@ and render_type_select d body name =
   in
   el_set_attr ph "data-placeholder" "";
   let icon =
-    mk ~cls:"ui__select-icon shrink-0 text-muted-foreground" "span"
+    mk ~cls:"ui__select-icon" "span"
       ~attrs:[ ("data-popup-open", ""); ("aria-hidden", "true") ]
   in
   (match tabler_svg_el ~size:24. "chevron-down" with
    | Some svg ->
        el_set_attr svg "class"
-         "tabler-icon tabler-icon-chevron-down h-4 w-4";
+         "tabler-icon tabler-icon-chevron-down ls-icon-sm";
        el_append_child icon svg
    | None -> ());
   el_append_child trigger icon;
@@ -430,7 +430,7 @@ and on_type_chosen d name ty =
   |> ignore
 
 and render_node_tags d body prop =
-  let wrap = mk ~cls:"flex flex-1 col-span-3" "div" in
+  let wrap = mk ~cls:"ls-span3" "div" in
   el_append_child body wrap;
   (let* w = D.all_classes () in
   let items =
@@ -505,13 +505,13 @@ and value_items d prop wire_values =
           wire_values
 
 and render_value_edit d body prop =
-  let wrap = mk ~cls:"flex flex-1 property-select" "div" in
+  let wrap = mk ~cls:"property-select" "div" in
   el_append_child body wrap;
   let ty = type_of prop in
   if ty = "date" || ty = "datetime" then (
     (* inline date picker in the dialog *)
     let picker =
-      mk ~cls:"ls-property-date-picker flex flex-row gap-2" "div"
+      mk ~cls:"ls-property-date-picker" "div"
     in
     let input =
       mk "input"

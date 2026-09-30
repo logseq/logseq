@@ -331,6 +331,32 @@ let badge_of w is_page uuid =
            if is_page then Text_badge else Header_badge
        | _ -> No_badge)
 
+(* cljs icon-component/get-node-icon: the entity's own
+   logseq.property/icon, then class -> hash, property -> letter-p, a
+   first-tag icon, page -> file, else the generic block point *)
+let node_icon_of w is_page =
+  let tags =
+    match Wire.get w "block/tags" with
+    | Some (Wire.List xs) | Some (Wire.Array xs) -> xs
+    | _ -> []
+  in
+  let has_tag ident =
+    List.exists (fun t -> str_field t "db/ident" = Some ident) tags
+  in
+  match str_field w "logseq.property/icon" with
+  | Some ic when ic <> "" -> ic
+  | _ ->
+      if has_tag "logseq.class/Tag" then "hash"
+      else if has_tag "logseq.class/Property" then "letter-p"
+      else
+        (match
+           List.find_map
+             (fun t -> str_field t "logseq.property/icon")
+             tags
+         with
+         | Some ic when ic <> "" -> ic
+         | _ -> if is_page then "file" else "point-filled")
+
 let item_of_row w i : item =
   let uuid =
     match Wire.map_get_uuid w "block/uuid" with
@@ -353,7 +379,7 @@ let item_of_row w i : item =
   { ikey = "node-" ^ uuid ^ "-" ^ string_of_int i; idx = -1
   ; gid = G_nodes; ititle = title; info = None
   ; header = (if is_page then None else breadcrumb_of w)
-  ; iicon = (if is_page then "file" else "point-filled")
+  ; iicon = node_icon_of w is_page
   ; isc = ""; ibadge = badge_of w is_page uuid
   ; act = (if is_page then Open_page uuid else Open_block uuid)
   ; ihl = false; imouse = false; iq = "" }
@@ -496,6 +522,11 @@ let group_order v q rows total =
     ; glimit = 5; gexpanded = List.mem G_recently_updated v.expanded
     ; gfilter_active = false }
   in
+  (* cljs emits the "Search only current page" row only on page
+     routes — no page, no group *)
+  let cp () =
+    if current_page_uuid () <> None then [ current_page_g () ] else []
+  in
   let starts_slash =
     String.length q > 0 && String.get q 0 = '/'
   in
@@ -507,7 +538,7 @@ let group_order v q rows total =
   | Some gid ->
       let only =
         match gid with
-        | G_nodes -> [ nodes_g () ]
+        | G_nodes -> cp () @ [ nodes_g () ]
         | G_current_page -> [ current_page_g () ]
         | G_commands -> [ commands_g () ]
         | G_files -> [ files_g () ]
@@ -516,15 +547,21 @@ let group_order v q rows total =
       (* cljs filtered order puts the Create row after the group *)
       only @ Option.to_list (create_g ())
   | None ->
-      if starts_slash then [ filters_g (); nodes_g () ]
+      (* cljs group order: create?, current-page, nodes,
+         recently-updated, commands, files, filters — slash-prefixed
+         queries reorder to filters, current-page, nodes *)
+      if starts_slash then filters_g () :: cp () @ [ nodes_g () ]
       else if has_slash then
         Option.to_list (create_g ())
-        @ [ nodes_g (); files_g (); filters_g () ]
+        @ cp () @ [ nodes_g (); files_g (); filters_g () ]
       else if String.trim q = "" then
-        (* cljs :default on blank input runs :initial + :filters only *)
-        [ recents_g (); filters_g () ]
+        (* cljs :default on blank input runs :initial + :filters; the
+           current-page group is emitted too but stays empty without
+           search rows and gets filtered below *)
+        cp () @ [ recents_g (); filters_g () ]
       else
         Option.to_list (create_g ())
+        @ cp ()
         @ [ nodes_g (); recents_g (); commands_g (); files_g ()
           ; filters_g () ]
 
@@ -719,7 +756,7 @@ let move_hl st dir =
       else ((v.hl + dir) mod n + n) mod n
     in
     set_in st (fun v -> { v with hl = i; mouse = false });
-    (match Dom_ext.doc_query_selector ".cp__cmdk .overflow-y-auto" with
+    (match Dom_ext.doc_query_selector ".cp__cmdk .cp__cmdk-scroller" with
      | Some scroller -> (
          match
            Dom_ext.query_selector scroller

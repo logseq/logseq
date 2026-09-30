@@ -19,6 +19,7 @@
 @import-glob "./src/main/frontend/[!_]*.css";
 @import-glob "./src/main/frontend/components/**/[!_]*.css";
 @import-glob "./src/main/frontend/extensions/**/[!_]*.css";
+@import "./resources/css/lui-overlay.css";
 
 @source "./src/main/**/*.{cljs,cljc,js,css,html}";
 @source "./resources/**/*.html";
