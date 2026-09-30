@@ -66,6 +66,9 @@ dependency cone, master SHAs):
     f632f9eb7a  fix: store plugin integer number properties as values (#13488)
     792f86328b  perf(search): find FTS rows by rowid (#13475)
     e8f044822a  fix(search): validate migration before creating temporary index (#13529)
+    eb9eb1a541  fix(db): restore :max-tx of pipeline transactions (#13468)
+    2be6bfc156  fix(worker): allow a missing :block/order on a direct child (#13081)
+    68a68263b7  fix: repair nested pages missing block order (#13280)
 
 When diffs against the baseline reference these, the OCaml side already
 carries them (canonicalize-insert-ops, Library move restriction,
@@ -87,7 +90,7 @@ same change.
 The engine follows `logseq/datascript-ocaml#main` (opam pin). Baseline
 for this port state:
 
-    c9cc0b7 fix tempid group order + memoize schema_attr lookups
+    e6ac32c add Conn.update_db / Conn.storage_tail accessors
             (includes 5a5d3fb index-order restore verification/heal)
 
 When the engine pin moves, re-run `dune build @runtest` plus
