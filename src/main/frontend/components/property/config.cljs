@@ -343,7 +343,8 @@
         or-close-menu-sub! (fn [event-details]
                              (if (or (shui-popup/get-popup :ls-icon-picker)
                                      (shui-popup/get-popup :ls-base-edit-form)
-                                     (shui-popup/get-popup :ls-node-tags-sub-pane))
+                                     (shui-popup/get-popup :ls-node-tags-sub-pane)
+                                     (shui-popup/get-popup :ls-choice-more-settings))
                                (some-> event-details (.cancel))
                                (do
                                  (set-sub-open! false)
@@ -525,31 +526,33 @@
                                               :align "start"}))
                :title value}
       value]
-     (shui/dropdown-menu
-      (shui/dropdown-menu-trigger
-       {:as-child true
-        :disabled disabled?}
-       (shui/button
-         {:size :sm :variant :ghost
-          :title (t :property/more-settings)}
-         (shui/tabler-icon "dots" {:size 16})))
-      (shui/dropdown-menu-content
-       (choice-default-menu-item property block scoped-choice-from-other-tags?)
-       (choice-exclude-for-tag-menu-item owner-class? owner-block owner-block' block global-choice? excluded-ids)
-
-       (when scoped-choice-in-current-tag?
-         (shui/dropdown-menu-item
-          {:key "remove scope for tag"
-           :on-click remove-scope-for-current-tag!}
-          (t :property/remove-scope-for-tag (:block/title owner-block'))))
-
-       (when scoped-choice-from-other-tags?
-         (shui/dropdown-menu-item
-          {:key "use in current tag"
-           :on-click use-in-current-tag!}
-          (t :property/use-choice-in-tag (:block/title owner-block'))))
-
-       (choice-delete-menu-item owner-class? global-choice? scoped-choice-from-other-tags? block delete-choice!)))]))
+     (shui/button
+       {:size :sm :variant :ghost
+        :disabled disabled?
+        :title (t :property/more-settings)
+        :on-click (fn [^js e]
+                    (when-not disabled?
+                      (shui/popup-show! (.-currentTarget e)
+                                        (fn []
+                                          [:<>
+                                           (choice-default-menu-item property block scoped-choice-from-other-tags?)
+                                           (choice-exclude-for-tag-menu-item owner-class? owner-block owner-block' block global-choice? excluded-ids)
+                                           (when scoped-choice-in-current-tag?
+                                             (shui/dropdown-menu-item
+                                              {:key "remove scope for tag"
+                                               :on-click remove-scope-for-current-tag!}
+                                              (t :property/remove-scope-for-tag (:block/title owner-block'))))
+                                           (when scoped-choice-from-other-tags?
+                                             (shui/dropdown-menu-item
+                                              {:key "use in current tag"
+                                               :on-click use-in-current-tag!}
+                                              (t :property/use-choice-in-tag (:block/title owner-block'))))
+                                           (choice-delete-menu-item owner-class? global-choice? scoped-choice-from-other-tags? block delete-choice!)])
+                                        {:id :ls-choice-more-settings
+                                         :as-dropdown? true
+                                         :align "end"
+                                         :content-props {:class "ls-choice-more-settings"}})))}
+       (shui/tabler-icon "dots" {:size 16}))]))
 
 (hsx/defc add-existing-values
   [property values {:keys [toggle-fn]}]

@@ -1,5 +1,6 @@
 (ns logseq.e2e.property-config-basic-test
   (:require [clojure.test :refer [deftest is use-fixtures]]
+            [jsonista.core :as json]
             [logseq.e2e.assert :as assert]
             [logseq.e2e.block :as b]
             [logseq.e2e.fixtures :as fixtures]
@@ -105,7 +106,44 @@
     (assert/assert-is-visible ".ls-view-body .ls-table-header-cell")
     (assert/assert-have-count ".ls-view-body .ls-table-header-cell:text('#')" 0)))
 
-(deftest available-choices-list-is-scrollable-test
+(defn- more-settings-first-open-position
+  []
+  (json/read-value
+   (w/eval-js
+    "() => {
+       const trigger = document.querySelector(\".choices-list li button[title='More settings']\");
+       const menu = document.querySelector('.ls-choice-more-settings');
+       if (!trigger || !menu) {
+         return JSON.stringify({ok: false, reason: 'missing'});
+       }
+       const t = trigger.getBoundingClientRect();
+       const m = menu.getBoundingClientRect();
+       const dx = Math.min(Math.abs(m.left - t.right), Math.abs(m.right - t.left), Math.abs(m.left - t.left));
+       const dy = Math.min(Math.abs(m.top - t.bottom), Math.abs(m.bottom - t.top));
+       return JSON.stringify({
+         ok: m.left > 8 && m.top > 8 && dx < 240 && dy < 120,
+         menu: {left: m.left, top: m.top},
+         trigger: {left: t.left, top: t.top, right: t.right, bottom: t.bottom},
+         dx, dy
+       });
+     }")
+   json/keyword-keys-object-mapper))
+
+(deftest property-choice-more-settings-menu-anchors-on-first-open-test
+  (let [property-name "choice-more-settings-pos"
+        choice "option1"]
+    (add-text-property property-name)
+    (open-choices-pane property-name)
+    (add-choice choice)
+    (w/click
+     (format ".choices-list li:has-text('%s') button[title='More settings']"
+             choice))
+    (assert/assert-is-visible ".ls-choice-more-settings")
+    (let [pos (more-settings-first-open-position)]
+      (is (true? (:ok pos))
+          (str "More settings menu must anchor next to the trigger on first open: " pos)))))
+
+(deftest available-choices-list-is-scrollable-test)
   (let [property-name "many-choices-scroll"
         choices (mapv #(str "Choice " %) (range 1 16))]
     (add-text-property property-name)
