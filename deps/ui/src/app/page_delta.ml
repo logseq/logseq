@@ -152,6 +152,9 @@ type helpers =
       (** block_embed_children fetch for :block/link nodes *)
   ; merge_collapsed : SSet.t -> SSet.t -> unit
       (** (added, removed) :block/collapsed? uuids into editor state *)
+  ; refresh_page_fields : Model.page -> Model.page Js.Promise.t
+      (** re-resolve the page entity's own fields (tag chips live on the
+          page row, outside page_blocks) when its canon row changed *)
   }
 
 
@@ -422,5 +425,11 @@ let apply_to_page ?(strict = true) (h : helpers) (page : Model.page)
             h.merge_collapsed add_c rem_c;
           note_applied p.rev;
           let page' = { page with Model.page_blocks = top } in
+          let* page' =
+            match page.Model.page_uuid with
+            | Some u when SMap.mem u p.canon ->
+                h.refresh_page_fields page'
+            | _ -> Js.Promise.resolve page'
+          in
           own_commit := Some page';
           Js.Promise.resolve (Some page')))

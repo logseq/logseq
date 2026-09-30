@@ -33,7 +33,7 @@
       (assert/assert-is-visible selector)
       (assert/assert-have-count selector 1)
       (w/click selector)
-      (is (= title (page/get-page-name))))))
+      (page/wait-page-name title))))
 
 (deftest selected-class-navigations-survive-graph-lifecycle-test
   (testing "selected Tasks and Assets appear after toggling, reload, and graph changes"
