@@ -10,6 +10,7 @@
    [frontend.handler.assets :as assets-handler]
    [frontend.handler.db-based.property :as db-property-handler]
    [frontend.handler.editor :as editor-handler]
+   [frontend.handler.editor.assets :as editor-assets]
    [frontend.handler.notification :as notification]
    [frontend.handler.route :as route-handler]
    [frontend.rfx :as rfx]
@@ -238,7 +239,7 @@
                                       (notification/show! (str e)))]
                      (if create?
                        (-> (do (set-saving? true)
-                               (editor-handler/db-based-save-assets! repo [{:title title :src src}]))
+                               (editor-assets/db-based-save-assets! repo [{:title title :src src}]))
                            (p/then (fn [res]
                                      (when-let [asset-block (some-> (seq res) (first))]
                                        (when on-saved (on-saved asset-block)))))

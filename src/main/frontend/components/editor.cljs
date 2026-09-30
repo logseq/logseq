@@ -10,6 +10,7 @@
             [frontend.db.async :as db-async]
             [frontend.handler.block :as block-handler]
             [frontend.handler.editor :as editor-handler]
+            [frontend.handler.editor.assets :as editor-assets]
             [frontend.handler.editor.lifecycle :as lifecycle]
             [frontend.handler.page :as page-handler]
             [frontend.handler.paste :as paste-handler]
@@ -39,17 +40,28 @@
   (rfx/use-sub [:editor/content (:block/uuid (state/get-edit-block))]))
 
 (defn filter-commands
-  [page? commands]
-  (if page?
-    (let [task-groups #{(t :editor.slash/group-task-status)
-                        (t :editor.slash/group-task-date)
-                        (t :editor.slash/group-priority)}]
-      (filter (fn [item]
-                (or
-                 (= (t :command.editor/add-property) (first item))
-                 (when (= (count item) 5)
-                   (contains? task-groups (last item))))) commands))
-    commands))
+  [page? has-heading? commands]
+  (seq
+   (if page?
+     (let [task-groups #{(t :editor.slash/group-task-status)
+                         (t :editor.slash/group-task-date)
+                         (t :editor.slash/group-priority)}]
+       (filter (fn [item]
+                 (or
+                  (= (t :command.editor/add-property) (first item))
+                  (when (= (count item) 5)
+                    (contains? task-groups (last item))))) commands))
+     (if has-heading?
+       commands
+       (remove #(= (t :editor.slash/clear-heading) (first %)) commands)))))
+
+(defn slash-commands-search-filtered?
+  "True when the slash popup was narrowed by user search text.
+
+  Contextual filters such as hiding Clear heading on non-heading blocks
+  do not count as a search filter and must not hide group headings."
+  [search-matched initial-commands]
+  (not= search-matched initial-commands))
 
 (defn node-render
   [block q {:keys [db-tag?]}]
@@ -90,9 +102,11 @@
 (hsx/defc commands
   [id format]
   (let [[matched'] (hooks/use-atom *matched-commands)
-        page? (entity/page? (state/get-edit-block))
-        matched (or (filter-commands page? matched') no-matched-commands)
-        filtered? (not= matched @commands/*initial-commands)]
+        edit-block (state/get-edit-block)
+        page? (entity/page? edit-block)
+        has-heading? (boolean (pu/lookup edit-block :logseq.property/heading))
+        matched (or (filter-commands page? has-heading? matched') no-matched-commands)
+        filtered? (slash-commands-search-filtered? matched' @commands/*initial-commands)]
     (ui/auto-complete
      matched
      (cond->
@@ -499,7 +513,7 @@
      :type "file"
      :on-change (fn [e]
                   (let [files (.-files (.-target e))]
-                    (editor-handler/upload-asset! id files format editor-handler/*asset-uploading? false)))
+                    (editor-assets/upload-asset! id files format editor-handler/*asset-uploading? false)))
      :hidden true}]])
 
 (def search-timeout (atom nil))

@@ -43,8 +43,8 @@ def main():
         run("upsert", "page", "--page", name)
         return query(f'[:find ?e . :where [?e :block/title {json.dumps(name)}]]')
 
-    def block_id(block_uuid):
-        return query(f'[:find ?e . :where [?e :block/uuid #uuid "{block_uuid}"]]')
+    def title_id(title):
+        return query(f'[:find ?e . :where [?e :block/title {json.dumps(title)}]]')
 
     page("Home")
     reference = page("ExistingReference")
@@ -91,36 +91,30 @@ def main():
     for source in ("--blocks", "--blocks-file"):
         for output in ("json", "edn"):
             for refs in (False, True):
-                uuids = [str(uuid.uuid4()) for _ in range(4)]
+                marker = uuid.uuid4().hex
                 new_page = "AutoReference" + uuid.uuid4().hex
-                titles = [title + " " + uuids[0]
+                titles = [title + " " + marker
                           for title in ("Root", "Child", "Grandchild", "Sibling")]
                 if refs:
                     titles = [title + f" [[ExistingReference]] [[{new_page}]] [[ExistingReference]]"
                               for title in titles]
 
-                def block(index, children=""):
-                    identity = ("" if source == "--blocks-file" and not refs
-                                else f':block/uuid #uuid "{uuids[index]}"')
-                    return (f'{{:block/title {json.dumps(titles[index])} '
-                            f'{identity} {children}}}')
-
-                tree = ("[" + block(0, ":block/children [" +
-                        block(1, ":block/children [" + block(2) + "]") + "]") +
-                        " " + block(3) + "]")
+                tree = "\n".join((
+                    f"- {titles[0]}",
+                    f"  - {titles[1]}",
+                    f"    - {titles[2]}",
+                    f"- {titles[3]}",
+                ))
                 value = tree
                 if source == "--blocks-file":
-                    path = pathlib.Path(args.root_dir) / "blocks.edn"
+                    path = pathlib.Path(args.root_dir) / "blocks.md"
                     path.write_text(tree)
                     value = str(path)
                 result = run("upsert", "block", "--target-page", "Home", source, value,
                              "--update-tags", '["ResultTag"]',
                              "--update-properties", '{"Result Note" 1}', output=output)
                 ids = result if output == "edn" else result["result"]
-                expected = ([query(f'[:find ?e . :where [?e :block/title {json.dumps(title)}]]')
-                             for title in titles]
-                            if source == "--blocks-file" and not refs
-                            else [block_id(value) for value in uuids])
+                expected = [title_id(title) for title in titles]
                 print(f"{args.case} {source} {output} refs={refs}: {ids}; expected {expected}", flush=True)
                 assert all(expected), expected
                 assert entity(reference) == before, "Command metadata changed the reference page"

@@ -2524,7 +2524,8 @@ let () =
         "only one of --id or --page is allowed"
         (expect_some "invalid"
            (Remove.invalid_options
-              (Remove.Parsed_page { id = Some 1L; page = Some "Home" })));
+              (Remove.Parsed_page
+                 { id = Some 1L; page = Some "Home"; force = false })));
       expect_equal "remove tag blank" "name must be non-empty"
         (expect_some "invalid"
            (Remove.invalid_options
@@ -2566,12 +2567,23 @@ let () =
       let page =
         expect_ok "remove page by title"
           (Remove.build (config ~repo:"demo" ()) (Global_opts.create ())
-             (Remove.Parsed_page { id = None; page = Some " Home " }))
+             (Remove.Parsed_page
+                { id = None; page = Some " Home "; force = false }))
       in
       (match page with
       | Remove.Remove_page { page = Some page; id = None; _ } ->
           expect_equal "remove page trims" "Home" page
       | _ -> fail_test "expected remove page by title");
+      let forced_page =
+        expect_ok "remove page with force"
+          (Remove.build (config ~repo:"demo" ()) (Global_opts.create ())
+             (Remove.Parsed_page
+                { id = None; page = Some "Home"; force = true }))
+      in
+      (match forced_page with
+      | Remove.Remove_page { force; _ } ->
+          expect_bool "remove page force flows through" true force
+      | _ -> fail_test "expected remove page with force");
       let tag =
         expect_ok "remove tag by id"
           (Remove.build (config ~repo:"demo" ()) (Global_opts.create ())
@@ -2588,7 +2600,7 @@ let () =
            (Remove.Parsed_block { id_raw = None; uuid = None }));
       expect_error_code "remove page missing" "missing-page-name"
         (Remove.build (config ~repo:"demo" ()) (Global_opts.create ())
-           (Remove.Parsed_page { id = None; page = None })));
+           (Remove.Parsed_page { id = None; page = None; force = false })));
 
   test_promise "CLI parity remove page unwraps apply result map" (fun () ->
       let server =
@@ -2610,6 +2622,7 @@ let () =
                 graph = Cli_config.repo_to_graph repo;
                 id = None;
                 page = Some "Home";
+                force = false;
               }
           in
           let cfg =
@@ -2629,6 +2642,117 @@ let () =
           expect_bool "remove page result" true
             (expect_some "remove page result bool"
                (Edn_util.get_bool data "result"));
+          expect_bool "remove page not permanent" false
+            (expect_some "remove page permanent flag"
+               (Edn_util.get_bool data "permanently-deleted?"));
+          Js.Promise.resolve pass));
+
+  test_promise "CLI parity remove page --force permanently deletes the page"
+    (fun () ->
+      let calls = ref Vec.empty in
+      let server =
+        invoke_server (fun body ->
+            calls := Vec.push_front !calls body;
+            if Js.String.includes ~search:"thread-api/cli-list-pages" body then
+              "[[\"^ \
+               \",\"~:db/id\",190,\"~:block/title\",\"Home\",\"~:block/name\",\"home\",\"~:block/uuid\",\"~u00000000-0000-4000-8000-000000000190\"]]"
+            else if
+              Js.String.includes ~search:"thread-api/apply-outliner-ops" body
+            then "[\"^ \",\"~:result\",true]"
+            else "null")
+      in
+      with_server server (fun base_url ->
+          let repo = Cli_primitive.create_repo "demo" in
+          let action =
+            Remove.Remove_page
+              {
+                repo;
+                graph = Cli_config.repo_to_graph repo;
+                id = None;
+                page = Some "Home";
+                force = true;
+              }
+          in
+          let cfg =
+            {
+              (config ~repo:"demo" ()) with
+              Cli_config.base_url = Some base_url;
+            }
+          in
+          let* result =
+            effect_to_promise
+              (execute_with_output Remove.execute action cfg Output.Mode.Json)
+          in
+          expect_bool "remove page --force succeeds" false
+            (Cli_result.is_error result);
+          let data =
+            expect_some "remove page --force data" (Cli_result.data_value result)
+          in
+          expect_bool "remove page --force result" true
+            (expect_some "remove page --force result bool"
+               (Edn_util.get_bool data "result"));
+          expect_bool "remove page --force is permanent" true
+            (expect_some "remove page --force permanent flag"
+               (Edn_util.get_bool data "permanently-deleted?"));
+          let ops_call =
+            expect_some "apply-outliner-ops call"
+              (Vec.find_opt
+                 (fun body ->
+                   Js.String.includes ~search:"thread-api/apply-outliner-ops"
+                     body)
+                 !calls)
+          in
+          expect_named_contains "force sends delete-page op" ops_call
+            "delete-page";
+          expect_named_contains "force sends recycle-delete-permanently op"
+            ops_call "recycle-delete-permanently";
+          Js.Promise.resolve pass));
+
+  test_promise "CLI parity remove page rejects non-page id before delete"
+    (fun () ->
+      let apply_called = ref false in
+      let server =
+        invoke_server (fun body ->
+            if Js.String.includes ~search:"thread-api/pull" body then
+              "[\"^ \
+               \",\"~:db/id\",190,\"~:block/uuid\",\"~u00000000-0000-4000-8000-000000000190\",\"~:block/title\",\"a block\"]"
+            else if
+              Js.String.includes ~search:"thread-api/apply-outliner-ops" body
+            then (
+              apply_called := true;
+              "[\"^ \",\"~:result\",true]")
+            else "null")
+      in
+      with_server server (fun base_url ->
+          let repo = Cli_primitive.create_repo "demo" in
+          let action =
+            Remove.Remove_page
+              {
+                repo;
+                graph = Cli_config.repo_to_graph repo;
+                id = Some 190L;
+                page = None;
+                force = true;
+              }
+          in
+          let cfg =
+            {
+              (config ~repo:"demo" ()) with
+              Cli_config.base_url = Some base_url;
+            }
+          in
+          let* result =
+            effect_to_promise
+              (execute_with_output Remove.execute action cfg Output.Mode.Human)
+          in
+          expect_bool "remove page block target is error" true
+            (Cli_result.is_error result);
+          (match result.Cli_result.error with
+          | Some err ->
+              expect_equal "remove page block target code" "page-not-found"
+                (Error.code_to_string err.Error.code)
+          | None -> fail_test "expected remove error");
+          expect_bool "delete not called" false !apply_called;
           Js.Promise.resolve pass));
 
   test_promise "CLI parity remove block rejects page entities before delete"
@@ -3264,7 +3388,9 @@ let () =
                    tags = Vec.empty;
                    properties = Vec.empty;
                    blocks = Vec.singleton (Block.make ~title:"Child" ());
+                   markdown_blocks = false;
                    update_plan = Property.empty_update_plan;
+                   dry_run = false;
                  })
           in
           let* result =
@@ -3358,8 +3484,9 @@ let () =
           target_page = None;
           pos = None;
           content = None;
-          blocks_edn = None;
+          blocks_markdown = None;
           blocks_file = None;
+          dry_run = false;
           update_tags_edn = None;
           update_properties_edn = None;
           remove_tags_edn = None;
@@ -3690,32 +3817,150 @@ let () =
       expect_bool "serialized child vector" true
         (Option.is_some (Edn_util.get serialized "block/children")));
 
-  test "CLI parity add block parsing preserves uuids tags and raw blocks"
+  test "CLI parity add block markdown parsing produces a block tree"
     (fun () ->
       let parsed =
         expect_ok "parse blocks"
-          (Add.parse_blocks_edn ~label:"blocks"
-             "[{:block/title \"Root\" :block/uuid #uuid \
-              \"00000000-0000-4000-8000-000000000301\" :block/tags \
-              [\"Project\" :logseq.class/Tag] :block/children [{:block/content \
-              \"Child\" :block/uuid #uuid \
-              \"00000000-0000-4000-8000-000000000302\"}]} \"Loose\"]")
+          (Markdown_blocks.of_markdown "- Root\n  - Child\n- Loose")
       in
       expect_int "parsed block count" 2 (Vec.length parsed);
       let root = Vec.nth parsed 0 in
       expect_equal "root title" "Root" (expect_some "root title" root.title);
-      expect_equal "root uuid" "00000000-0000-4000-8000-000000000301"
-        (expect_some "root uuid" root.uuid);
-      expect_int "root tags" 2 (Vec.length root.tags);
       expect_int "root children" 1 (Vec.length root.children);
-      expect_equal "child content title" "Child"
+      expect_equal "child title" "Child"
         (expect_some "child title" (Vec.peek_front root.children).title);
-      expect_equal "string block title" "Loose"
+      expect_equal "loose title" "Loose"
         (expect_some "loose title" (Vec.nth parsed 1).title);
-      expect_error_code "blocks must be vector" "invalid-blocks"
-        (Add.parse_blocks_edn ~label:"blocks" "{:block/title \"Root\"}");
-      expect_error_code "invalid blocks edn" "invalid-options"
-        (Add.parse_blocks_edn ~label:"blocks" "[{:block/title"));
+      expect_error_code "no headings" "invalid-blocks"
+        (Markdown_blocks.of_markdown "plain text without list items"));
+
+  test "CLI parity add block markdown keeps multibyte titles intact"
+    (fun () ->
+      let parsed =
+        expect_ok "parse multibyte"
+          (Markdown_blocks.of_markdown "- CJK 测试 🎉 tail")
+      in
+      expect_equal "multibyte title" "CJK 测试 🎉 tail"
+        (expect_some "multibyte title" (Vec.nth parsed 0).title));
+
+  test "CLI parity add block markdown heading marker becomes a property"
+    (fun () ->
+      let parsed =
+        expect_ok "parse heading"
+          (Markdown_blocks.of_markdown "- ## Section")
+      in
+      let block = Vec.nth parsed 0 in
+      expect_equal "stripped title" "Section"
+        (expect_some "stripped title" block.title);
+      expect_int "one property" 1 (Vec.length block.properties);
+      let assignment = Vec.nth block.properties 0 in
+      (match assignment.Property.key with
+      | Property.Key_ident _ -> ()
+      | _ -> fail_test "expected logseq.property/heading ident");
+      expect_bool "heading level 2" true
+        (Edn_util.as_int64 assignment.value = Some (Int64.of_int 2)));
+
+  test "CLI parity add block markdown drawer becomes properties" (fun () ->
+      let parsed =
+        expect_ok "parse drawer"
+          (Markdown_blocks.of_markdown "- Note\n  status:: todo")
+      in
+      let block = Vec.nth parsed 0 in
+      expect_int "one property" 1 (Vec.length block.properties);
+      let assignment = Vec.nth block.properties 0 in
+      (match assignment.Property.key with
+      | Property.Key_name "status" -> ()
+      | _ -> fail_test "expected status property key");
+      expect_bool "todo value" true
+        (Edn_util.as_string_like assignment.value = Some "todo"));
+
+  test "CLI parity add block markdown folds irregular indents" (fun () ->
+      let parsed =
+        expect_ok "parse indents"
+          (Markdown_blocks.of_markdown "- a\n    - deep\n  - mid")
+      in
+      expect_int "one root" 1 (Vec.length parsed);
+      let root = Vec.nth parsed 0 in
+      expect_int "root children" 2 (Vec.length root.children);
+      expect_equal "deep title" "deep"
+        (expect_some "deep title" (Vec.nth root.children 0).title);
+      expect_equal "mid title" "mid"
+        (expect_some "mid title" (Vec.nth root.children 1).title));
+
+  test "CLI parity add block markdown rejects leading non-block content"
+    (fun () ->
+      expect_error_code "leading paragraph" "invalid-blocks"
+        (Markdown_blocks.of_markdown "intro paragraph\n- b");
+      expect_error_code "leading ordered list" "invalid-blocks"
+        (Markdown_blocks.of_markdown "1. ordered\n- b");
+      expect_error_code "mid-outline ordered list" "invalid-blocks"
+        (Markdown_blocks.of_markdown "- a\n1. ordered\n- b");
+      expect_error_code "leading drawer" "invalid-blocks"
+        (Markdown_blocks.of_markdown "status:: todo\n- b"));
+
+  test "CLI parity add block markdown keeps fenced code in titles" (fun () ->
+      let parsed =
+        expect_ok "fenced code body"
+          (Markdown_blocks.of_markdown
+             "- Example\n  ```clojure\n  (+ 1 2)\n  ```\n- b")
+      in
+      expect_int "two blocks" 2 (Vec.length parsed);
+      let title =
+        expect_some "first title" (Vec.nth parsed 0).Block.title
+      in
+      if not (String.contains title '`') then
+        fail_test ("fenced code missing from title: " ^ title));
+
+  test "CLI parity add block markdown normalizes ((uuid)) titles"
+    (fun () ->
+      let parsed =
+        expect_ok "block ref rewrite"
+          (Markdown_blocks.of_markdown
+             "- see ((aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa)) done")
+      in
+      expect_equal "normalized ref"
+        "see [[aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa]] done"
+        (expect_some "block title" (Vec.nth parsed 0).Block.title);
+      let parsed =
+        expect_ok "code span kept"
+          (Markdown_blocks.of_markdown
+             "- real ((bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb)) code `((cccccccc-cccc-4ccc-8ccc-cccccccccccc))`")
+      in
+      expect_equal "code verbatim"
+        "real [[bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb]] code `((cccccccc-cccc-4ccc-8ccc-cccccccccccc))`"
+        (expect_some "block title" (Vec.nth parsed 0).Block.title);
+      let parsed =
+        expect_ok "real ref beside code"
+          (Markdown_blocks.of_markdown
+             "- real ((dddddddd-dddd-4ddd-8ddd-dddddddddddd)) code `((dddddddd-dddd-4ddd-8ddd-dddddddddddd))`")
+      in
+      expect_equal "only real ref normalized"
+        "real [[dddddddd-dddd-4ddd-8ddd-dddddddddddd]] code `((dddddddd-dddd-4ddd-8ddd-dddddddddddd))`"
+        (expect_some "block title" (Vec.nth parsed 0).Block.title);
+      let parsed =
+        expect_ok "escaped backtick"
+          (Markdown_blocks.of_markdown
+             "- lit \\` then ((eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee))")
+      in
+      expect_equal "escaped backtick ref"
+        "lit \\` then [[eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee]]"
+        (expect_some "block title" (Vec.nth parsed 0).Block.title);
+      let parsed =
+        expect_ok "backslash inside code"
+          (Markdown_blocks.of_markdown
+             "- text `code\\` then ((ffffffff-ffff-4fff-8fff-ffffffffffff))")
+      in
+      expect_equal "ref after code backslash"
+        "text `code\\` then [[ffffffff-ffff-4fff-8fff-ffffffffffff]]"
+        (expect_some "block title" (Vec.nth parsed 0).Block.title);
+      let parsed =
+        expect_ok "crlf fence"
+          (Markdown_blocks.of_markdown
+             "- ex\r\n  ```\r\n  code\r\n  ```\r\n  see ((ffffffff-ffff-4fff-8fff-ffffffffffff))")
+      in
+      expect_equal "ref after crlf fence"
+        "ex\r\n```\r\ncode\r\n```\r\nsee [[ffffffff-ffff-4fff-8fff-ffffffffffff]]"
+        (expect_some "block title" (Vec.nth parsed 0).Block.title));
 
   test "CLI parity add collect created block uuids depth-first and unique"
     (fun () ->
@@ -3773,32 +4018,31 @@ let () =
                 }
               in
               let action =
-                expect_ok "create action"
-                  (Add.build_add_block_action
-                     {
-                       Add.target_id = Some 627L;
-                       target_uuid = None;
-                       target_page_name = None;
-                       pos = None;
-                       status = None;
-                       tags_edn = None;
-                       properties_edn = None;
-                       content = None;
-                       blocks_edn =
-                         Some
-                           (Printf.sprintf
-                              "[{:block/title \"Root\" :block/uuid #uuid \
-                               \"%s\" :block/children [{:block/title \"Child\" \
-                               :block/uuid #uuid \"%s\"}]}]"
-                              root_uuid child_uuid);
-                       blocks_file = None;
-                     }
-                     Vec.empty
-                     (Cli_primitive.create_repo "demo"))
+                {
+                  Add.repo = Cli_primitive.create_repo "demo";
+                  graph =
+                    Cli_config.repo_to_graph
+                      (Cli_primitive.create_repo "demo");
+                  target_id = Some 627L;
+                  target_uuid = None;
+                  target_page_name = None;
+                  pos = Block.Last_child;
+                  status = None;
+                  tags = Vec.empty;
+                  properties = Vec.empty;
+                  blocks =
+                    Vec.singleton
+                      (Block.make ~uuid:root_uuid ~title:"Root"
+                         ~children:
+                           (Vec.singleton
+                              (Block.make ~uuid:child_uuid ~title:"Child" ()))
+                         ());
+                  markdown_blocks = false;
+                }
               in
               let* result =
                 effect_to_promise
-                  (Add.execute_add_block action
+                  (Add.execute_add_block ~extra_ops:Vec.empty action
                      (config_with_output cfg Output.Mode.Json)
                      Output.Mode.Json)
               in
@@ -3834,7 +4078,7 @@ let () =
           tags_edn = None;
           properties_edn = None;
           content = Some "Hello from add";
-          blocks_edn = None;
+          blocks_markdown = None;
           blocks_file = None;
         }
       in
@@ -3857,7 +4101,7 @@ let () =
         (Add.build_add_block_action
            {
              base_opts with
-             blocks_edn = Some "[\"Block\"]";
+             blocks_markdown = Some "[\"Block\"]";
              tags_edn = Some "[\"Project\"]";
            }
            Vec.empty
@@ -3971,7 +4215,7 @@ let () =
                    tags_edn = None;
                    properties_edn = None;
                    content = Some "Child";
-                   blocks_edn = None;
+                   blocks_markdown = None;
                    blocks_file = None;
                  }
                  Vec.empty
@@ -3979,7 +4223,7 @@ let () =
           in
           let* result =
             effect_to_promise
-              (Add.execute_add_block action
+              (Add.execute_add_block ~extra_ops:Vec.empty action
                  (config_with_output cfg Output.Mode.Human)
                  Output.Mode.Human)
           in
@@ -4009,7 +4253,7 @@ let () =
           update_properties_edn = None;
           remove_tags_edn = None;
           remove_properties_edn = None;
-          blocks_edn = None;
+          blocks_markdown = None;
           blocks_file = None;
         }
       in
@@ -6635,6 +6879,30 @@ let () =
       | Cli_request.List (List_command.Parsed_page opts) ->
           expect_bool "list page -e is expand" true opts.expand
       | _ -> fail_test "expected list page");
+      let remove_page =
+        expect_parse_ok "remove page -f"
+          [| "remove"; "page"; "--page"; "Home"; "-f" |]
+      in
+      (match remove_page.command with
+      | Cli_request.Remove (Remove.Parsed_page opts) ->
+          expect_bool "remove page -f is force" true opts.force
+      | _ -> fail_test "expected remove page");
+      let remove_page_force_eq_false =
+        expect_parse_ok "remove page --force=false"
+          [| "remove"; "page"; "--page"; "Home"; "--force=false" |]
+      in
+      (match remove_page_force_eq_false.command with
+      | Cli_request.Remove (Remove.Parsed_page opts) ->
+          expect_bool "remove page --force=false is not force" false opts.force
+      | _ -> fail_test "expected remove page");
+      let remove_page_force_space_false =
+        expect_parse_ok "remove page --force false"
+          [| "remove"; "page"; "--page"; "Home"; "--force"; "false" |]
+      in
+      (match remove_page_force_space_false.command with
+      | Cli_request.Remove (Remove.Parsed_page opts) ->
+          expect_bool "remove page --force false is not force" false opts.force
+      | _ -> fail_test "expected remove page");
       expect_parse_error_code "graph validate rejects --fields"
         ":invalid-options"
         [| "graph"; "validate"; "--fields"; "id" |]);

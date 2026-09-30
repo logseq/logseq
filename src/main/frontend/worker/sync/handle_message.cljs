@@ -62,13 +62,6 @@
   [ws]
   (sync-transport/ws-open? ws))
 
-(defn- enqueue-asset-task!
-  [client task]
-  (when-let [queue (:asset-queue client)]
-    (swap! queue
-           (fn [prev]
-             (p/then prev (fn [_] (task)))))))
-
 (defn- enqueue-send-task!
   [client task]
   (if-let [queue (:send-queue client)]
@@ -236,7 +229,7 @@
     (request-pull! client local-tx))
   (sync-assets/enqueue-asset-sync!
    repo client
-   {:enqueue-asset-task-f enqueue-asset-task!
+   {:enqueue-asset-task-f sync-assets/enqueue-asset-task!
     :current-client-f current-client
     :broadcast-rtc-state!-f broadcast-rtc-state!
     :fail-fast-f fail-fast})

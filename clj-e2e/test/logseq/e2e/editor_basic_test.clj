@@ -89,6 +89,105 @@
    ".ls-page-blocks .ls-block:not(.block-add-button) .bullet-container")
   (w/wait-for ".ls-context-menu-content"))
 
+(defn- open-page-context-menu!
+  []
+  (util/exit-edit)
+  (util/right-click "div[data-testid='page title']")
+  (w/wait-for ".ls-context-menu-content"))
+
+(defn- reset-uncaught-errors!
+  []
+  (w/eval-js
+   "() => {
+      window.__lsUncaughtErrors = [];
+      if (!window.__lsUncaughtErrorsInstalled) {
+        window.__lsUncaughtErrorsInstalled = true;
+        window.addEventListener('error', (event) => {
+          window.__lsUncaughtErrors.push(String(event.error || event.message || ''));
+        });
+      }
+      return true;
+    }"))
+
+(defn- uncaught-errors
+  []
+  (json/read-value
+   (w/eval-js "() => JSON.stringify(window.__lsUncaughtErrors || [])")))
+
+(defn- stack-overflow-messages
+  [messages]
+  (filter #(string/includes? (str %) "Maximum call stack size exceeded") messages))
+
+(defn- collect-page-errors!
+  [*errors]
+  (.onPageError (w/get-page)
+                (reify Consumer
+                  (accept [_ error]
+                    (swap! *errors conj (str error))))))
+
+(defn- assert-no-stack-overflow!
+  [*page-errors]
+  (let [console (->> (some-> custom-report/*pw-page->console-logs* deref vals)
+                     (mapcat identity))
+        overflows (concat (stack-overflow-messages @*page-errors)
+                          (stack-overflow-messages (uncaught-errors))
+                          (stack-overflow-messages console))]
+    (is (empty? overflows) (pr-str overflows))))
+
+(defn- highlight-context-menu-item!
+  []
+  (let [item (.first (w/-query ".ls-context-menu-content [role='menuitem']"))]
+    (.hover item)
+    item))
+
+(defn- leave-context-menu-by-tab!
+  "Press Tab until focus leaves the menu's content and the focus-out close
+  takes effect. Focusable controls inside the menu each take their own Tab
+  step, so a single press is not enough to exit."
+  []
+  (let [item (highlight-context-menu-item!)]
+    (.press item "Tab")
+    (loop [n 40]
+      (when (and (pos? n) (w/visible? ".ls-context-menu-content"))
+        (k/tab)
+        (recur (dec n))))))
+
+(defn- leave-context-menu-by-shift-tab!
+  []
+  (let [item (highlight-context-menu-item!)]
+    (.press item "Shift+Tab")))
+
+(deftest page-context-menu-tab-closes-without-stack-overflow-test
+  (let [*page-errors (atom [])]
+    (collect-page-errors! *page-errors)
+    (reset-uncaught-errors!)
+    (open-page-context-menu!)
+    (assert/assert-is-visible (loc/filter "[role='menuitem']" :has-text "Delete page"))
+    (leave-context-menu-by-tab!)
+    (w/wait-for-not-visible ".ls-context-menu-content")
+    (assert-no-stack-overflow! *page-errors)
+    (assert/assert-is-visible "div[data-testid='page title']")))
+
+(deftest page-context-menu-shift-tab-closes-without-stack-overflow-test
+  (let [*page-errors (atom [])]
+    (collect-page-errors! *page-errors)
+    (reset-uncaught-errors!)
+    (open-page-context-menu!)
+    (leave-context-menu-by-shift-tab!)
+    (w/wait-for-not-visible ".ls-context-menu-content")
+    (assert-no-stack-overflow! *page-errors)
+    (assert/assert-is-visible "div[data-testid='page title']")))
+
+(deftest block-context-menu-tab-does-not-overflow-test
+  (let [*page-errors (atom [])]
+    (collect-page-errors! *page-errors)
+    (reset-uncaught-errors!)
+    (open-block-context-menu!)
+    (leave-context-menu-by-tab!)
+    (w/wait-for-not-visible ".ls-context-menu-content")
+    (assert-no-stack-overflow! *page-errors)
+    (assert/assert-is-visible "div[data-testid='page title']")))
+
 (deftest block-context-menu-clickable-controls-use-pointer-test
   (open-block-context-menu!)
   (let [heading-button (w/-query "button[title='Auto heading']")
@@ -1797,3 +1896,74 @@
       (let [{:keys [client scroll]} (editor-box-heights)]
         (is (<= scroll client)
             (str "textarea clientHeight " client " scrollHeight " scroll))))))
+
+(deftest page-ref-navigate-persists-unsaved-edit-buffer-test
+  (testing "clicking a page-ref while editing flushes the editor so typed text is not lost (db-test#1250)"
+    (let [target-page (str "pageref-flush-target-" (random-uuid))
+          marker (str "pageref-flush-marker-" (random-uuid))
+          host-page (p/get-page-name)]
+      (p/new-page target-page)
+      (p/goto-page host-page)
+      (b/new-block (str "See [[" target-page "]] here"))
+      ;; Enter directly into a new empty block so the ref block renders without
+      ;; being clicked (clicking it could hit the page-ref link and navigate)
+      (b/new-block "")
+      (assert/assert-is-visible
+       (loc/filter ".page-reference .page-ref" :has-text target-page))
+      (is (= host-page (p/get-page-name)))
+      ;; type without idle autosave, then immediately navigate via page-ref
+      (w/fill util/editor-q marker)
+      (is (= marker (util/get-edit-content)))
+      (w/click
+       (.first (loc/filter ".page-reference .page-ref" :has-text target-page)))
+      (is (= target-page (p/get-page-name)))
+      (p/goto-page host-page)
+      (assert/assert-is-visible
+       (loc/filter ".ls-page-blocks .block-title-wrap" :has-text marker))
+      (is (some #(= marker %) (util/get-page-blocks-contents))))))
+
+(deftest shift-click-select-persists-unsaved-edit-buffer-test
+  (testing "shift+click block selection flushes the editor buffer (db-test#1250)"
+    (let [marker (str "shift-flush-marker-" (random-uuid))
+          shift-click (fn [text]
+                        (.click
+                         (.first (loc/filter ".ls-page-blocks .ls-block .block-content"
+                                             :has-text text))
+                         (doto (Locator$ClickOptions.)
+                           (.setModifiers [KeyboardModifier/SHIFT]))))]
+      (b/new-block "shift flush target one")
+      (b/new-block "shift flush target two")
+      (util/exit-edit)
+      ;; New empty block, type without idle autosave, then shift+click twice to
+      ;; select a range, which exits editing
+      (b/new-block "")
+      (w/fill util/editor-q marker)
+      (is (= marker (util/get-edit-content)))
+      (shift-click "shift flush target one")
+      (shift-click "shift flush target two")
+      (assert/assert-is-visible
+       (loc/filter ".ls-page-blocks .block-title-wrap" :has-text marker))
+      (is (some #(= marker %) (util/get-page-blocks-contents))))))
+
+(deftest page-ref-navigate-persists-edit-buffer-with-open-popup-test
+  (testing "clicking a page-ref while the page-search popup is open still flushes the editor"
+    (let [target-page (str "pageref-popup-target-" (random-uuid))
+          marker (str "pageref-popup-marker-" (random-uuid))
+          host-page (p/get-page-name)]
+      (p/new-page target-page)
+      (p/goto-page host-page)
+      (b/new-block (str "See [[" target-page "]] here"))
+      (b/new-block "")
+      (assert/assert-is-visible
+       (loc/filter ".page-reference .page-ref" :has-text target-page))
+      (is (= host-page (p/get-page-name)))
+      ;; typing "[[" opens the page-search popup, setting :editor/action
+      (util/press-seq (str marker " [[draft"))
+      (assert/assert-is-visible ".ui__popover-content a.menu-link")
+      (w/click
+       (.first (loc/filter ".page-reference .page-ref" :has-text target-page)))
+      (is (= target-page (p/get-page-name)))
+      (p/goto-page host-page)
+      (assert/assert-is-visible
+       (loc/filter ".ls-page-blocks .block-title-wrap" :has-text marker))
+      (is (some #(string/starts-with? % marker) (util/get-page-blocks-contents))))))

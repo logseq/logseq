@@ -19,9 +19,9 @@ import "@logseq/libs"
 #### APIs & Samples & References
 - https://logseq.github.io/plugins/
 - https://github.com/logseq/logseq-plugin-samples
-- [The New DB properties developer guide - A](./development-notes/db_properties_guide.md)
-- [The New DB properties developer guide - B](./development-notes/db_properties_skill.md)
-- [Logseq Plugin Development Agents Guide](./development-notes/AGENTS.md)
+- [The New DB properties developer guide - A](./guides/db_properties_guide.md)
+- [The New DB properties developer guide - B](./guides/db_properties_references.md)
+- [Logseq Plugin Development Agents Guide](./guides/AGENTS.md)
 
 #### Community templates
 

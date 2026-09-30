@@ -13,6 +13,9 @@
             [frontend.handler.assets :as assets-handler]
             [frontend.handler.block :as block-handler]
             [frontend.handler.editor :as editor]
+            [frontend.handler.editor.assets :as editor-assets]
+            [frontend.handler.editor.autopair :as editor-autopair]
+            [frontend.handler.editor.format :as editor-format]
             [frontend.handler.paste :as paste-handler]
             [frontend.handler.property :as property-handler]
             [frontend.handler.route :as route-handler]
@@ -247,6 +250,7 @@
            (fn []
              (is (= [inserted-block 0 {:container-id 7
                                        :save-code-editor? false
+                                       :save-current-block? false
                                        :skip-load? true}]
                     @calls))))
           (p/catch
@@ -388,8 +392,8 @@
             (fn [& args]
               (swap! sidebar-calls conj (vec args))))
       (-> (p/do!
-           (editor/open-block-in-sidebar! page-id)
-           (editor/open-block-in-sidebar! block-id))
+           (editor-format/open-block-in-sidebar! page-id)
+           (editor-format/open-block-in-sidebar! block-id))
           (p/then
            (fn []
              (is (= [[:thread-api/pull "test" [:db/id {:block/page [:db/id]}] [:block/uuid page-id]]
@@ -590,7 +594,7 @@
         (#'editor/edit-last-block-after-inserted! {:blocks [inserted-block]})
         (is (= [[:schedule]
                 [:clear-when-saved]
-                [:edit-block inserted-block :max]]
+                [:edit-block inserted-block :max {:save-current-block? false}]]
                @calls))
         (catch :default error
           (is false (str error)))))))
@@ -918,14 +922,15 @@
 
 (defn- keyup-handler
   "Spied version of editor/keyup-handler"
-  [{:keys [value cursor-pos action commands]
+  [{:keys [value cursor-pos action commands event-key]
     ;; Default to some commands matching which matches default behavior for most
     ;; completion scenarios
     :or {commands [:fake-command]}}]
   ;; Reset editor action in order to test result
   (state/set-editor-action! action)
-  ;; Default cursor pos to end of line
+  ;; Default cursor pos to end of line and released key to last char of value
   (let [pos (or cursor-pos (count value))
+        event-key (or event-key (subs value (dec (count value))))
         input #js {:value value}
         command (subs value 1)]
     (with-redefs [editor/get-last-command (constantly command)
@@ -934,7 +939,7 @@
                   editor/default-case-for-keyup-handler (constantly nil)
                   cursor/pos (constantly pos)]
       ((editor/keyup-handler nil input)
-       #js {:key (subs value (dec (count value)))}
+       #js {:key event-key}
        nil))))
 
 (deftest keyup-handler-test
@@ -984,6 +989,34 @@
         "Completion stays open when typing tag before another tag"))
   ;; Reset state
   (state/set-editor-action! nil))
+
+(deftest keyup-handler-converts-backticks-to-code-block-test
+  (doseq [[value event-key] [["```" "`"]
+                             ["``````" "`"]
+                             ;; dead-key commits the backtick via space or a
+                             ;; repeated Dead key release
+                             ["```" " "]
+                             ["```" "Dead"]
+                             ;; IME process/unidentified key releases
+                             ["```" "Process"]
+                             ["```" "Unidentified"]]]
+    (let [events (atom [])]
+      (with-redefs [state/set-edit-content! (constantly nil)
+                    state/get-edit-block (constantly {:block/uuid (random-uuid)})
+                    state/pub-event! (fn [event] (swap! events conj event))]
+        (keyup-handler {:value value :event-key event-key}))
+      (is (= [[:editor/upsert-type-block :code]]
+             (map (fn [[event-name {:keys [type]}]] [event-name type]) @events))
+          (str value " with key " (pr-str event-key))))))
+
+(deftest keyup-handler-ignores-backticks-on-non-typing-keyup-test
+  (doseq [event-key ["ArrowLeft" "ArrowRight" "Shift" "Escape"]]
+    (let [events (atom [])]
+      (with-redefs [state/set-edit-content! (constantly nil)
+                    state/get-edit-block (constantly {:block/uuid (random-uuid)})
+                    state/pub-event! (fn [event] (swap! events conj event))]
+        (keyup-handler {:value "```" :event-key event-key}))
+      (is (empty? @events) event-key))))
 
 (defn- create-tag-with-alias!
   []
@@ -1312,6 +1345,29 @@
          (keydown-dollar-without-selection-result {:value "inline $$"
                                                    :cursor-pos 8}))))
 
+(defn- keydown-backtick-autopaired?
+  [event]
+  (let [autopaired? (atom false)
+        input #js {:id "edit-block-test"
+                   :value ""}]
+    (with-redefs [state/get-edit-input-id (constantly "edit-block-test")
+                  state/get-input (constantly input)
+                  state/get-editor-action (constantly nil)
+                  state/set-state! (constantly nil)
+                  util/get-selected-text (constantly "")
+                  util/stop (constantly nil)
+                  cursor/pos (constantly 0)
+                  editor-autopair/autopair (fn [& _] (reset! autopaired? true))]
+      ((editor/keydown-not-matched-handler :markdown) event nil)
+      @autopaired?)))
+
+(deftest keydown-not-matched-handler-skips-autopair-during-composition
+  (is (keydown-backtick-autopaired? #js {:key "`"
+                                         :isComposing false}))
+  (is (not (keydown-backtick-autopaired? #js {:key "`"
+                                              :isComposing true
+                                              :keyCode 229}))))
+
 (defn- delete-block-at-zero-pos-result
   [block & {:keys [left-sibling]}]
   (let [deleted? (atom false)
@@ -1447,6 +1503,53 @@
                         "Delete must use the editor state captured by its keydown.")))
           (p/finally done)))))
 
+(deftest editor-delete-guards-nil-input-test
+  (testing "stale editing state without a textarea is a no-op"
+    (let [deleted (atom [])]
+      (with-redefs [state/editing? (constantly true)
+                    state/get-input (constantly nil)
+                    state/get-edit-block (constantly {:block/uuid (random-uuid)
+                                                      :block/title ""})
+                    util/stop (constantly nil)
+                    editor/delete-and-update (fn [& args]
+                                               (swap! deleted conj args))]
+        (editor/editor-delete #js {})
+        (editor/keydown-delete-handler #js {})
+        (is (empty? @deleted)
+            "Delete must not mutate content when the edit textarea is gone"))))
+
+  (testing "Delete in a real editor still deletes the next character"
+    (let [input #js {:value "abc"
+                     :selectionStart 1
+                     :selectionEnd 1}
+          deleted (atom nil)]
+      (with-redefs [state/editing? (constantly true)
+                    state/get-input (constantly input)
+                    state/get-edit-block (constantly {:block/uuid (random-uuid)
+                                                      :block/title "abc"})
+                    util/stop (constantly nil)
+                    editor/delete-and-update (fn [in start end]
+                                               (reset! deleted [in start end]))]
+        (editor/editor-delete #js {})
+        (is (= [input 1 2] @deleted)
+            "Delete in an open editor still removes the character after the cursor"))))
+
+  (testing "Delete with a selection still deletes the selected range"
+    (let [input #js {:value "abc"
+                     :selectionStart 0
+                     :selectionEnd 2}
+          deleted (atom nil)]
+      (with-redefs [state/editing? (constantly true)
+                    state/get-input (constantly input)
+                    state/get-edit-block (constantly {:block/uuid (random-uuid)
+                                                      :block/title "abc"})
+                    util/stop (constantly nil)
+                    editor/delete-and-update (fn [in start end]
+                                               (reset! deleted [in start end]))]
+        (editor/editor-delete #js {})
+        (is (= [input 0 2] @deleted)
+            "Delete with a selection still removes the selected text")))))
+
 (deftest repeated-backspace-does-not-restore-erased-current-title-test
   (let [current {:db/id 2
                  :block/uuid #uuid "22222222-2222-2222-2222-222222222222"
@@ -1476,6 +1579,7 @@
       (is (= [(assoc current :block/title "" :block/raw-title "")
               0
               {:save-code-editor? false
+               :save-current-block? false
                :skip-load? true}]
              @edited)
           "Deleting an empty predecessor must not restore the erased mounted title."))))
@@ -1721,6 +1825,7 @@
                              :tail-len 0
                              :container-id 7
                              :save-code-editor? false
+                             :save-current-block? false
                              :skip-load? true}]]
                @calls))))))
 
@@ -2177,6 +2282,7 @@
                             :tail-len 5
                             :container-id nil
                             :save-code-editor? false
+                            :save-current-block? false
                             :skip-load? true}}]
                    @edit-calls)))
           (p/catch (fn [error]
@@ -2225,6 +2331,7 @@
                             :tail-len 5
                             :container-id nil
                             :save-code-editor? false
+                            :save-current-block? false
                             :skip-load? true}}]
                    @edit-calls)))
           (p/catch (fn [error]
@@ -2399,6 +2506,49 @@
       (finally
         (state/set-editor-action! prev-action)))))
 
+(deftest set-editing-clears-slash-commands-when-switching-blocks-test
+  ;; Click-to-edit goes through set-editing! on pointerdown, not editor-on-hide.
+  (let [block-a {:block/uuid (random-uuid) :block/title "/"}
+        block-b {:block/uuid (random-uuid) :block/title "other"}
+        prev-action (state/get-editor-action)
+        prev-block (state/get-edit-block)]
+    (try
+      (state/set-state! :editor/block block-a)
+      (handle-last-input-handler {:value "/"})
+      (is (= :commands (state/get-editor-action))
+          "Typing / in the current block opens slash commands")
+      (state/set-editing! (str "edit-block-" (:block/uuid block-b))
+                          (:block/title block-b)
+                          block-b
+                          ""
+                          {:container-id :test-container})
+      (is (nil? (state/get-editor-action))
+          "Slash commands close when entering edit on a different block")
+      (handle-last-input-handler {:value "/"})
+      (is (= :commands (state/get-editor-action))
+          "Typing / after the switch still opens slash commands")
+      (finally
+        (state/set-editor-action! prev-action)
+        (state/set-state! :editor/block prev-block)))))
+
+(deftest set-editing-keeps-slash-commands-when-re-editing-same-block-test
+  (let [block {:block/uuid (random-uuid) :block/title "/"}
+        prev-action (state/get-editor-action)
+        prev-block (state/get-edit-block)]
+    (try
+      (state/set-state! :editor/block block)
+      (state/set-editor-action! :commands)
+      (state/set-editing! (str "edit-block-" (:block/uuid block))
+                          (:block/title block)
+                          block
+                          "/"
+                          {:container-id :test-container})
+      (is (= :commands (state/get-editor-action))
+          "Same-block re-edit keeps slash commands open")
+      (finally
+        (state/set-editor-action! prev-action)
+        (state/set-state! :editor/block prev-block)))))
+
 (deftest comment-editor-quote-trigger-does-not-convert-draft-block
   (let [input #js {:id "edit-block-test"
                    :value ">"}
@@ -2441,6 +2591,57 @@
           "Comment editor expand shortcut should not expand synthetic draft blocks")
       (is (empty? @collapsed)
           "Comment editor collapse shortcut should not collapse synthetic draft blocks"))))
+
+(deftest toggle-collapse-does-not-throw-on-property-value-row-only-selection
+  (let [empty-row (mock-ls-block {:class-name "ls-block property-value-container"})
+        threw (atom nil)]
+    (with-redefs [util/stop (constantly nil)
+                  state/editing? (constantly false)
+                  state/selection? (constantly true)
+                  editor/get-selected-blocks (constantly [empty-row])]
+      (try
+        (editor/toggle-collapse! nil)
+        (catch :default e
+          (reset! threw e)))
+      (is (nil? @threw)
+          "A property-value row with no blockid must be skipped, not passed to uuid"))))
+
+(deftest toggle-collapse-skips-property-value-rows-without-blockid
+  (async done
+         (let [real-uuid #uuid "11111111-1111-1111-1111-111111111111"
+               real-block (mock-ls-block {:blockid (str real-uuid)})
+               empty-row (mock-ls-block {:class-name "ls-block property-value-container"})
+               collapsed (atom [])
+               expanded (atom [])
+               loaded (atom [])]
+           (-> (try
+                 (p/with-redefs [util/stop (constantly nil)
+                                 state/editing? (constantly false)
+                                 state/selection? (constantly true)
+                                 state/get-current-repo (constantly "test")
+                                 editor/get-selected-blocks (constantly [empty-row real-block])
+                                 db-async/<get-block
+                                 (fn [_repo block-id _opts]
+                                   (swap! loaded conj block-id)
+                                   (p/resolved {:block/uuid block-id
+                                                :block/collapsed? false}))
+                                 editor/collapse-block! (fn [block-id & _]
+                                                          (swap! collapsed conj block-id))
+                                 editor/expand-block! (fn [block-id & _]
+                                                        (swap! expanded conj block-id))]
+                   (editor/toggle-collapse! nil)
+                   (p/delay 20))
+                 (catch :default e
+                   (p/rejected e)))
+               (p/then (fn [_]
+                         (is (= [real-uuid] @loaded)
+                             "First real selected block decides collapse vs expand")
+                         (is (= [real-uuid] @collapsed)
+                             "Property rows without blockid are skipped; real selected blocks collapse")
+                         (is (empty? @expanded))))
+               (p/catch (fn [error]
+                          (is false (str error))))
+               (p/finally done)))))
 
 (defn- <expand-unselected-block-ids
   [blocks]
@@ -2505,7 +2706,7 @@
           original-exceed-limit-size? assets-handler/exceed-limit-size?
           original-<get-today-journal-title db-async/<get-today-journal-title
           original-<get-journal-page-by-day db-async/<get-journal-page-by-day
-          original-db-based-write-asset! editor/db-based-write-asset!
+          original-db-based-write-asset! editor-assets/db-based-write-asset!
           original-insert-blocks! frontend-outliner-op/insert-blocks!
           original-<get-blocks db-async/<get-blocks
           original-get-edit-block state/get-edit-block
@@ -2519,7 +2720,7 @@
                                                 (p/resolved "Today")))
       (set! db-async/<get-journal-page-by-day (fn [_repo _journal-day]
                                                 (p/resolved {:block/uuid #uuid "f43caf78-18c4-4724-99d2-b2f61f697a0e"})))
-      (set! editor/db-based-write-asset! (fn [& _args]
+      (set! editor-assets/db-based-write-asset! (fn [& _args]
                                            (p/resolved nil)))
       (set! frontend-outliner-op/insert-blocks! (fn [blocks target opts]
                                          (reset! inserted {:blocks blocks
@@ -2534,7 +2735,7 @@
       (set! state/get-edit-content (constantly ""))
       (set! state/get-editor-args (constantly [nil nil {:comment-editor? true
                                                         :comment-asset-target-block target-block}]))
-      (-> (editor/db-based-save-assets! "repo" [#js {:name "image.jpeg"}]
+      (-> (editor-assets/db-based-save-assets! "repo" [#js {:name "image.jpeg"}]
                                         :target-block target-block)
           (p/then (fn [_]
                     (is (= target-block (:target @inserted)))
@@ -2551,7 +2752,7 @@
                        (set! assets-handler/exceed-limit-size? original-exceed-limit-size?)
                        (set! db-async/<get-today-journal-title original-<get-today-journal-title)
                        (set! db-async/<get-journal-page-by-day original-<get-journal-page-by-day)
-                       (set! editor/db-based-write-asset! original-db-based-write-asset!)
+                       (set! editor-assets/db-based-write-asset! original-db-based-write-asset!)
                        (set! frontend-outliner-op/insert-blocks! original-insert-blocks!)
                        (set! db-async/<get-blocks original-<get-blocks)
                        (set! state/get-edit-block original-get-edit-block)
@@ -2571,7 +2772,7 @@
           original-exceed-limit-size? assets-handler/exceed-limit-size?
           original-<get-today-journal-title db-async/<get-today-journal-title
           original-<get-journal-page-by-day db-async/<get-journal-page-by-day
-          original-db-based-write-asset! editor/db-based-write-asset!
+          original-db-based-write-asset! editor-assets/db-based-write-asset!
           original-insert-blocks! frontend-outliner-op/insert-blocks!
           original-<get-blocks db-async/<get-blocks
           original-get-edit-block state/get-edit-block
@@ -2585,7 +2786,7 @@
                                                 (p/resolved "Today")))
       (set! db-async/<get-journal-page-by-day (fn [_repo _journal-day]
                                                 (p/resolved {:block/uuid #uuid "f43caf78-18c4-4724-99d2-b2f61f697a0e"})))
-      (set! editor/db-based-write-asset! (fn [& _args]
+      (set! editor-assets/db-based-write-asset! (fn [& _args]
                                            (p/resolved nil)))
       (set! frontend-outliner-op/insert-blocks! (fn [blocks target opts]
                                          (reset! inserted {:blocks blocks
@@ -2599,7 +2800,7 @@
       (set! state/get-edit-content (constantly "Current block"))
       (set! state/get-editor-args (constantly [nil nil {:comment-editor? true
                                                         :comment-asset-target-block stale-comment-target}]))
-      (-> (editor/db-based-save-assets! "repo" [#js {:name "image.jpeg"}])
+      (-> (editor-assets/db-based-save-assets! "repo" [#js {:name "image.jpeg"}])
           (p/then (fn [_]
                     (is (= edit-block (:target @inserted)))
                     (is (= {:bottom? true
@@ -2615,7 +2816,7 @@
                        (set! assets-handler/exceed-limit-size? original-exceed-limit-size?)
                        (set! db-async/<get-today-journal-title original-<get-today-journal-title)
                        (set! db-async/<get-journal-page-by-day original-<get-journal-page-by-day)
-                       (set! editor/db-based-write-asset! original-db-based-write-asset!)
+                       (set! editor-assets/db-based-write-asset! original-db-based-write-asset!)
                        (set! frontend-outliner-op/insert-blocks! original-insert-blocks!)
                        (set! db-async/<get-blocks original-<get-blocks)
                        (set! state/get-edit-block original-get-edit-block)

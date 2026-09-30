@@ -15,7 +15,9 @@
             [frontend.worker.undo-redo :as undo-redo]
             [logseq.db :as ldb]
             [logseq.db-sync.checksum :as sync-checksum]
+            [logseq.db-sync.worker.handler.sync :as sync-handler]
             [logseq.db.common.normalize :as db-normalize]
+            [logseq.db.sqlite.util :as sqlite-util]
             [logseq.db.test.helper :as db-test]
             [logseq.outliner.core :as outliner-core]
             [logseq.outliner.op :as outliner-op]
@@ -35,6 +37,13 @@
         db (new Database ":memory:")]
     (client-op/ensure-sqlite-schema! db)
     db))
+
+(defn- create-remote-conn
+  "A client graph that syncs, marked as upload and download mark it. The stored
+  checksum is kept only on such a graph."
+  []
+  (doto (db-test/create-conn)
+    (d/transact! [(ldb/kv :logseq.kv/graph-remote? true)])))
 
 (defn- env-seed []
   (try
@@ -453,17 +462,21 @@
       @progress?)))
 
 (defn- active-block-uuids
+  "Uuids of the non-built-in, non-deleted pages (ldb/page?) and blocks. Read
+  from datoms: through entities, the lookups of absent property keys (they
+  also look for default values) made this most of a sync-loop! check."
   [db]
-  (->> (d/datoms db :avet :block/uuid)
-       (keep (fn [datom]
-               (let [ent (d/entity db (:e datom))]
-                 (when (and ent
-                            (not (ldb/built-in? ent))
-                            (nil? (:logseq.property/deleted-at ent))
-                            (or (ldb/page? ent)
-                                (:block/page ent)))
-                   (:v datom)))))
-       set))
+  (let [page-tag-eids (set (keep #(d/entid db %) [:logseq.class/Page :logseq.class/Journal
+                                                  :logseq.class/Tag :logseq.class/Property]))
+        has? (fn [e attr] (some? (first (d/datoms db :eavt e attr))))]
+    (->> (d/datoms db :avet :block/uuid)
+         (keep (fn [{:keys [e v]}]
+                 (when (and (not (:v (first (d/datoms db :eavt e :logseq.property/built-in?))))
+                            (not (has? e :logseq.property/deleted-at))
+                            (or (some #(contains? page-tag-eids (:v %)) (d/datoms db :eavt e :block/tags))
+                                (has? e :block/page)))
+                   v)))
+         set)))
 
 (defn- sync-loop! [server clients]
   (loop [i 0]
@@ -1705,8 +1718,8 @@
           rng (make-rng seed)
           gen-uuid #(rng-uuid rng)
           base-uuid (gen-uuid)
-          conn-a (db-test/create-conn)
-          conn-b (db-test/create-conn)
+          conn-a (create-remote-conn)
+          conn-b (create-remote-conn)
           ops-a (new-client-ops-db)
           ops-b (new-client-ops-db)
           client-a (make-client repo-a)
@@ -1737,8 +1750,8 @@
                 (ensure-base-page! conn base-uuid))
               (doseq [repo [repo-a repo-b]]
                 (client-op/update-local-tx repo 0))
-              (client-op/update-local-checksum repo-a (sync-checksum/recompute-checksum @conn-a))
-              (client-op/update-local-checksum repo-b (sync-checksum/recompute-checksum @conn-b))
+              (client-op/update-local-checksum repo-a (sync-checksum/recompute-checksum @conn-a) (:max-tx @conn-a))
+              (client-op/update-local-checksum repo-b (sync-checksum/recompute-checksum @conn-b) (:max-tx @conn-b))
 
               ;; Seed stable anchors (non-empty titles) that A won't touch.
               (let [base-a (d/entity @conn-a [:block/uuid base-uuid])
@@ -1850,8 +1863,8 @@
   (testing "two clients keep local title after reverse tx with newer tx id"
     (let [base-uuid (uuid "11111111-1111-1111-1111-111111111111")
           block-uuid (uuid "22222222-2222-2222-2222-222222222222")
-          conn-a (db-test/create-conn)
-          conn-b (db-test/create-conn)
+          conn-a (create-remote-conn)
+          conn-b (create-remote-conn)
           ops-a (new-client-ops-db)
           ops-b (new-client-ops-db)
           client-a (make-client repo-a)
@@ -1875,8 +1888,8 @@
               (reset! db-sync/*repo->latest-remote-tx {})
               (client-op/update-local-tx repo-a 0)
               (client-op/update-local-tx repo-b 0)
-              (client-op/update-local-checksum repo-a (sync-checksum/recompute-checksum @conn-a))
-              (client-op/update-local-checksum repo-b (sync-checksum/recompute-checksum @conn-b))
+              (client-op/update-local-checksum repo-a (sync-checksum/recompute-checksum @conn-a) (:max-tx @conn-a))
+              (client-op/update-local-checksum repo-b (sync-checksum/recompute-checksum @conn-b) (:max-tx @conn-b))
               (ensure-base-page! conn-a base-uuid)
               (let [base (d/entity @conn-a [:block/uuid base-uuid])]
                 (create-block! conn-a base "before" block-uuid))
@@ -2119,8 +2132,8 @@
           rng (make-rng seed)
           gen-uuid #(rng-uuid rng)
           base-uuid (gen-uuid)
-          conn-a (db-test/create-conn)
-          conn-b (db-test/create-conn)
+          conn-a (create-remote-conn)
+          conn-b (create-remote-conn)
           ops-a (new-client-ops-db)
           ops-b (new-client-ops-db)
           client-a (make-client repo-a)
@@ -2162,8 +2175,8 @@
               (ensure-base-page! conn-a base-uuid)
               (sync-loop! server [{:repo repo-a :conn conn-a :client client-a :online? true}
                                   {:repo repo-b :conn conn-b :client client-b :online? true}])
-              (client-op/update-local-checksum repo-a (sync-checksum/recompute-checksum @conn-a))
-              (client-op/update-local-checksum repo-b (sync-checksum/recompute-checksum @conn-b))
+              (client-op/update-local-checksum repo-a (sync-checksum/recompute-checksum @conn-a) (:max-tx @conn-a))
+              (client-op/update-local-checksum repo-b (sync-checksum/recompute-checksum @conn-b) (:max-tx @conn-b))
 
               (run-offline-seq! repo-a conn-a "a")
               (run-offline-seq! repo-b conn-b "b")
@@ -2190,8 +2203,8 @@
           root-uuid (uuid "82222222-2222-2222-2222-222222222222")
           child-a-uuid (uuid "83333333-3333-3333-3333-333333333333")
           child-b-uuid (uuid "84444444-4444-4444-4444-444444444444")
-          conn-a (db-test/create-conn)
-          conn-b (db-test/create-conn)
+          conn-a (create-remote-conn)
+          conn-b (create-remote-conn)
           ops-a (new-client-ops-db)
           ops-b (new-client-ops-db)
           client-a (make-client repo-a)
@@ -2225,8 +2238,8 @@
               (sync-until-idle! server [{:repo repo-a :conn conn-a :client client-a :online? true}
                                         {:repo repo-b :conn conn-b :client client-b :online? true}]
                                 128)
-              (client-op/update-local-checksum repo-a (sync-checksum/recompute-checksum @conn-a))
-              (client-op/update-local-checksum repo-b (sync-checksum/recompute-checksum @conn-b))
+              (client-op/update-local-checksum repo-a (sync-checksum/recompute-checksum @conn-a) (:max-tx @conn-a))
+              (client-op/update-local-checksum repo-b (sync-checksum/recompute-checksum @conn-b) (:max-tx @conn-b))
 
               ;; A stays online and adds an empty child under block 1.
               (create-block! conn-a (d/entity @conn-a [:block/uuid root-uuid]) "" child-a-uuid)
@@ -2437,6 +2450,49 @@
         (str "server checksum mismatch seed=" seed
              " server=" server-checksum
              " client-full=" (first full-checksums)))))
+
+(deftest ^:long every-core-outliner-op-uploads-with-and-without-rebase-test
+  (doseq [op (sort (conj required-core-outliner-op-names :undo :redo))
+          rebase? [false true]]
+    (testing (str "upload " op ", rebase=" rebase?)
+      (let [rng (make-rng 1337)
+            gen-uuid #(rng-uuid rng)
+            base-uuid (gen-uuid)
+            remote-uuid (gen-uuid)
+            conn (db-test/create-conn)
+            server (make-server)
+            history (atom [])
+            client {:repo repo-a :conn conn :client (make-client repo-a)
+                    :online? true :base-uuid base-uuid :gen-uuid gen-uuid
+                    :state (atom {:pages #{base-uuid} :blocks #{}})}
+            upload! server-upload!]
+        (with-test-repos {repo-a {:conn conn :ops-conn (new-client-ops-db)}}
+          (fn []
+            (reset! db-sync/*repo->latest-remote-tx {})
+            (client-op/update-local-tx repo-a 0)
+            (ensure-base-page! conn base-uuid)
+            (create-page! conn "Remote marker" remote-uuid)
+            (sync-client! server client)
+            (is (ensure-op-recorded! rng client history op 120))
+            (when rebase?
+              (server-upload! server (:t @server)
+                              [{:tx-data [[:db/add [:block/uuid remote-uuid]
+                                           :block/title "Remote marker edited"]]}]))
+            (with-redefs [server-upload!
+                          (fn [server t-before entries]
+                            (let [actual-server (d/conn-from-db @(get @server :conn))]
+                              (doseq [{:keys [tx-data outliner-op]} entries]
+                                (#'sync-handler/apply-tx-entry!
+                                 actual-server {:tx (sqlite-util/write-transit-str tx-data)
+                                                :outliner-op outliner-op}))
+                              (let [result (upload! server t-before entries)]
+                                (is (= (sync-checksum/recompute-checksum @actual-server)
+                                       (sync-checksum/recompute-checksum @(get @server :conn))))
+                                result)))]
+              (sync-client! server client))
+            (is (empty? (sync-apply/pending-txs repo-a)))
+            (is (= (sync-checksum/recompute-checksum @conn)
+                   (sync-checksum/recompute-checksum @(get @server :conn))))))))))
 
 (deftest ^:long two-clients-online-sim-test
   (testing "db-sync convergence with two online clients"
@@ -2912,9 +2968,9 @@
           rng (make-rng seed)
           gen-uuid #(rng-uuid rng)
           base-uuid (gen-uuid)
-          conn-a (db-test/create-conn)
-          conn-b (db-test/create-conn)
-          conn-c (db-test/create-conn)
+          conn-a (create-remote-conn)
+          conn-b (create-remote-conn)
+          conn-c (create-remote-conn)
           ops-a (new-client-ops-db)
           ops-b (new-client-ops-db)
           ops-c (new-client-ops-db)
@@ -2955,9 +3011,9 @@
                 (ensure-base-page! conn base-uuid))
               (doseq [repo [repo-a repo-b repo-c]]
                 (client-op/update-local-tx repo 0))
-              (client-op/update-local-checksum repo-a (sync-checksum/recompute-checksum @conn-a))
-              (client-op/update-local-checksum repo-b (sync-checksum/recompute-checksum @conn-b))
-              (client-op/update-local-checksum repo-c (sync-checksum/recompute-checksum @conn-c))
+              (client-op/update-local-checksum repo-a (sync-checksum/recompute-checksum @conn-a) (:max-tx @conn-a))
+              (client-op/update-local-checksum repo-b (sync-checksum/recompute-checksum @conn-b) (:max-tx @conn-b))
+              (client-op/update-local-checksum repo-c (sync-checksum/recompute-checksum @conn-c) (:max-tx @conn-c))
               (let [clients [{:repo repo-a :conn conn-a :client client-a :online? true :gen-uuid gen-uuid}
                              {:repo repo-b :conn conn-b :client client-b :online? true :gen-uuid gen-uuid}
                              {:repo repo-c :conn conn-c :client client-c :online? true :gen-uuid gen-uuid}]

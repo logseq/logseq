@@ -131,6 +131,26 @@
            :scoped-choice-from-other-tags? true
            :choice {:db/id 11 :block/title ""}})))))
 
+(deftest delete-property-from-owner-confirm-content-includes-property-name-test
+  (testing "Node deletion confirm includes the property title"
+    (is (= "Are you sure you want to delete the property \"Priority\" from this node?"
+           (property-config/delete-property-from-owner-confirm-content
+            {:block/title "Priority"}
+            {}))))
+
+  (testing "Tag deletion confirm includes the property title"
+    (is (= [:p "Are you sure you want to delete the property \"Priority\" from this tag?"]
+           (property-config/delete-property-from-owner-confirm-content
+            {:block/title "Priority"}
+            {:class-schema? true}))))
+
+  (testing "Built-in properties use their localized display title"
+    (is (= "Are you sure you want to delete the property \"Status\" from this node?"
+           (property-config/delete-property-from-owner-confirm-content
+            {:db/ident :logseq.property/status
+             :block/title "status"}
+            {})))))
+
 (deftest property-dropdown-renders-sort-actions-for-built-in-table-columns-test
   (testing "Name/Created/Updated table columns are stubs without :block/uuid"
     (doseq [column-id [:block/title :block/created-at :block/updated-at]]

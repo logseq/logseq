@@ -52,8 +52,11 @@
 
 (defn ^:api get-journal-day-from-long
   [db v]
-  (when v
-    (let [day (date-time-util/ms->journal-day v)]
+  ;; Only millisecond timestamps can resolve to a journal. Cleared datetime
+  ;; values are :logseq.property/empty-placeholder; treating those as `v` would
+  ;; call `d/datoms` with a nil journal-day and keep a stale journal ref.
+  (when (number? v)
+    (when-let [day (date-time-util/ms->journal-day v)]
       (:e (first (d/datoms db :avet :block/journal-day day))))))
 
 (def ^:private private-built-in-props (set (keep (fn [[k v]] (when-not (get-in v [:schema :public?]) k))

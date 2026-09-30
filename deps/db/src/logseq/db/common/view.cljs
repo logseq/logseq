@@ -330,21 +330,40 @@
 
 (defonce ^:private exclude-page-ids-cache (js/WeakMap.))
 
+(defn- with-descendant-eids
+  "Each eid plus every :block/parent descendant. Recycled/hidden parents
+  must also drop nested child pages from All Pages."
+  [db eids]
+  (loop [queue (vec eids)
+         seen (transient #{})]
+    (if-let [id (peek queue)]
+      (if (contains? seen id)
+        (recur (pop queue) seen)
+        (recur (into (pop queue) (map :e (d/datoms db :avet :block/parent id)))
+               (conj! seen id)))
+      (persistent! seen))))
+
 (defn- get-exclude-page-ids
-  "Hidden/deleted/built-in/property-page ids only change when the snapshot
-  changes, so cache them per immutable db value instead of rescanning four
-  AVET slices per request."
+  "Hidden/deleted (including descendants)/built-in/property-page ids only
+  change when the snapshot changes, so cache them per immutable db value
+  instead of rescanning AVET slices per request."
   [db]
   (or (.get exclude-page-ids-cache db)
       (let [property-tag-id (ident-eid db :logseq.class/Property)
-            exclude-ids
+            hidden-or-deleted
             (persistent!
              (reduce (fn [result d]
                        (conj! result (:e d)))
                      (transient #{})
                      (concat
                       (d/datoms db :avet :logseq.property/hide? true)
-                      (d/datoms db :avet :logseq.property/deleted-at)
+                      (d/datoms db :avet :logseq.property/deleted-at))))
+            exclude-ids
+            (persistent!
+             (reduce (fn [result d]
+                       (conj! result (:e d)))
+                     (transient (with-descendant-eids db hidden-or-deleted))
+                     (concat
                       (d/datoms db :avet :logseq.property/built-in? true)
                       (d/datoms db :avet :block/tags property-tag-id))))]
         (.set exclude-page-ids-cache db exclude-ids)
@@ -611,8 +630,12 @@
                   matched
 
                   :else
+                  ;; Eids with no value on the sort attr tie on nil in
+                  ;; sort-eids-by-sorting; keep its eid tie-break order here.
                   (let [seen (set matched)]
-                    (into matched (remove seen) leftover-eids)))))))))))
+                    (into matched
+                          (sort (if asc? compare #(compare %2 %1))
+                                (remove seen leftover-eids)))))))))))))
 
 (defn- sort-eids-by-sorting
   [db eids sorting]
@@ -634,7 +657,11 @@
     (sort (fn [a b]
             (loop [i 0]
               (if (>= i (count schemas))
-                0
+                ;; Break ties by eid in the direction of the first sort, the
+                ;; order an AVET walk ([a v e], reversed when descending)
+                ;; gives, so a window read from the index and a list sorted
+                ;; here agree on equal values.
+                (if (:asc? (first schemas)) (compare a b) (compare b a))
                 (let [c (compare-sort-values (get (nth value-maps i) a)
                                              (get (nth value-maps i) b)
                                              (:asc? (nth schemas i)))]
@@ -643,14 +670,25 @@
                     c)))))
           eid-vec)))
 
+(def ^:private unlimited-eid-sort-max
+  "Without a row limit, sets up to this size sort their own eids. The AVET
+  walk would copy the whole index of the sort attribute (79034 updated-at
+  datoms took 132-165ms), while sorting reads one value per eid (a 40k All
+  Pages window spent ~2s, about 50us per eid)."
+  1000)
+
 (defn- take-sorted-eids
   [db eids sorting row-limit row-offset]
   (let [eid-vec (vec eids)
         wanted (set eid-vec)
         match? #(contains? wanted %)
         ;; 21 Tags spent 165ms copying 79034 updated-at datoms. The leftover
-        ;; set already fits the window, so sort those eids directly.
-        use-eid-sort? (and row-limit (<= (count eid-vec) row-limit))
+        ;; set already fits the window, so sort those eids directly. A request
+        ;; without a row limit (a table's remaining rows) does the same for a
+        ;; small set.
+        use-eid-sort? (if row-limit
+                        (<= (count eid-vec) row-limit)
+                        (<= (count eid-vec) unlimited-eid-sort-max))
         avet (when-not use-eid-sort?
                (sort-eids-from-avet db match? sorting row-limit eid-vec row-offset))
         sorted (or avet (sort-eids-by-sorting db eid-vec sorting))]

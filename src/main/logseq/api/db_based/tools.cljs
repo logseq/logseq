@@ -111,13 +111,22 @@
     (get-in op [:data :tags])
     (assoc :build/tags (mapv #(get-ident class-idents %) (get-in op [:data :tags])))))
 
+(defn- ops->new-page-ids
+  "Local :id's of pages added in the same call"
+  [operations]
+  (->> operations
+       (filter #(and (= "page" (:entityType %)) (= "add" (:operation %))))
+       (keep :id)
+       set))
+
 (defn- ops->existing-pages-and-blocks
   "Converts block operations for existing pages and prepares them for :pages-and-blocks"
   [db operations idents]
-  (let [new-blocks-for-existing-pages
+  (let [new-page-ids (ops->new-page-ids operations)
+        new-blocks-for-existing-pages
         (->> (filter #(and (= "block" (:entityType %))
                            (= "add" (:operation %))
-                           (common-util/uuid-string? (get-in % [:data :page-id]))) operations)
+                           (not (contains? new-page-ids (get-in % [:data :page-id])))) operations)
              (map (fn [op] (assoc op ::page-id (uuid (get-in op [:data :page-id]))))))
         edit-blocks
         (->> (filter #(and (= "block" (:entityType %)) (= "edit" (:operation %))) operations)
@@ -300,6 +309,22 @@
 (def ^:private Upsert-nodes-operations-schema
   [:sequential upsert-nodes-operation-schema])
 
+(defn- assert-add-block-page-ids!
+  "page-id must be the :id of a page added in the same call or the uuid of an
+   existing page. A page name is not resolved and would otherwise be silently dropped."
+  [db operations]
+  (let [new-page-ids (ops->new-page-ids operations)]
+    (doseq [op (filter #(and (= "block" (:entityType %)) (= "add" (:operation %))) operations)]
+      (let [page-id (get-in op [:data :page-id])]
+        (when-not (contains? new-page-ids page-id)
+          (when-not (common-util/uuid-string? page-id)
+            (throw (ex-info (str "Block page-id " (pr-str page-id)
+                                 " must be a page uuid or the id of a page added in the same call")
+                            {:page-id page-id})))
+          (when-not (entity-util/page? (d/entity db [:block/uuid (uuid page-id)]))
+            (throw (ex-info (str "Block page-id " (pr-str page-id) " is not an existing page")
+                            {:page-id page-id}))))))))
+
 (defn- validate-import-edn
   "Validates everything as coming from add operations, failing fast on first invalid
   node. Will need to adjust add operation assumption when supporting editing pages"
@@ -343,6 +368,7 @@
         _ (when-let [errors (m/explain Upsert-nodes-operations-schema operations)]
             (throw (ex-info (str "Tool arguments are invalid:\n" (me/humanize errors))
                             {:errors errors})))
+        _ (assert-add-block-page-ids! db operations)
         idents (operations->idents db operations)
         pages-and-blocks (ops->pages-and-blocks db operations idents)
         classes (ops->classes operations idents)

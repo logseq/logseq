@@ -111,8 +111,10 @@ let default_entries =
           "logseq upsert block --graph my-graph --target-page Meeting Notes \
            --content \"AI summary of the discussion\" --update-tags \
            '[\"AI-GENERATED\"]'";
-          "logseq upsert block --graph my-graph --blocks '[{:block/title \
-           \"A\"} {:block/title \"B\"}]'";
+          "logseq upsert block --graph my-graph --target-page Home --blocks \
+           '- Parent'";
+          "logseq upsert block --graph my-graph --target-page Home \
+           --blocks-file ./blocks.md --dry-run";
         |];
       entry [| "upsert"; "page" |]
         [|

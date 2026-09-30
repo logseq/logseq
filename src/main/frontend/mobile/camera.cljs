@@ -5,6 +5,7 @@
             [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
             [frontend.handler.editor :as editor-handler]
+            [frontend.handler.editor.assets :as editor-assets]
             [frontend.handler.notification :as notification]
             [frontend.state :as state]
             [goog.object :as gobj]
@@ -66,7 +67,7 @@
      (p/let [file (take-or-choose-photo)]
        (when file
          (if target-block
-           (editor-handler/db-based-save-assets! (state/get-current-repo) [file]
+           (editor-assets/db-based-save-assets! (state/get-current-repo) [file]
                                                  :target-block target-block)
            (when id
-             (editor-handler/upload-asset! id [file] format editor-handler/*asset-uploading? true))))))))
+             (editor-assets/upload-asset! id [file] format editor-handler/*asset-uploading? true))))))))

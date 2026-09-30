@@ -9,6 +9,7 @@
             [frontend.worker.undo-redo :as worker-undo-redo]
             [logseq.common.util.date-time :as date-time-util]
             [logseq.db :as ldb]
+            [logseq.db.sqlite.build :as sqlite-build]
             [logseq.db.test.helper :as db-test]
             [logseq.outliner.op :as outliner-op]))
 
@@ -1209,3 +1210,534 @@
       (is (= ::worker-undo-redo/empty-redo-stack
              (worker-undo-redo/redo test-repo)))
       (is (= "v3" (:block/title (d/entity @conn [:block/uuid child-uuid])))))))
+
+(deftest full-undo-stack-keeps-newest-entries-test
+  (testing "a full undo stack drops its oldest entries, so undo still steps back one change at a time"
+    (worker-undo-redo/clear-history! test-repo)
+    (with-redefs [worker-undo-redo/max-stack-length 10]
+      (let [conn (worker-state/get-datascript-conn test-repo)
+            {:keys [child-uuid]} (seed-page-parent-child!)
+            title #(:block/title (d/entity @conn [:block/uuid child-uuid]))]
+        (doseq [i (range 1 13)]
+          (save-block-title! conn child-uuid (str "v" i)))
+        (is (= 7 (count (get @worker-undo-redo/*undo-ops test-repo))))
+        (is (= ["v11" "v10" "v9" "v8" "v7" "v6" "v5"]
+               (vec (for [_ (range 7)]
+                      (do (worker-undo-redo/undo test-repo) (title))))))
+        (is (= ::worker-undo-redo/empty-undo-stack
+               (worker-undo-redo/undo test-repo)))))))
+
+(def ^:private outline-1-start ["outline 1" ["a" ["b" ["b1" "b2"]] "c"]])
+
+(defn- seed-outline!
+  "Adds page \"outline 1\" with blocks a, b (children b1, b2), c and page
+  \"outline 2\" with block d, clears history, and returns a fn from a block
+  title to its uuid."
+  []
+  (let [conn (worker-state/get-datascript-conn test-repo)]
+    (sqlite-build/create-blocks
+     conn
+     [{:page {:block/title "outline 1"}
+       :blocks [{:block/title "a"}
+                {:block/title "b"
+                 :build/children [{:block/title "b1"}
+                                  {:block/title "b2"}]}
+                {:block/title "c"}]}
+      {:page {:block/title "outline 2"}
+       :blocks [{:block/title "d"}]}])
+    (worker-undo-redo/clear-history! test-repo)
+    (fn [title]
+      (:block/uuid (db-test/find-block-by-content @conn title)))))
+
+(defn- outline
+  "The page titled page-title and its live blocks, as nested titles."
+  [page-title]
+  (let [db @(worker-state/get-datascript-conn test-repo)
+        node (fn node [e]
+               (let [children (->> (:block/_parent e)
+                                   (remove ldb/recycled?)
+                                   ldb/sort-by-order)]
+                 (if (seq children)
+                   [(:block/title e) (mapv node children)]
+                   (:block/title e))))]
+    (node (db-test/find-page-by-title db page-title))))
+
+(deftest undo-move-down-of-blocks-at-different-levels-test
+  (testing "undoing a move down of a top-level block and a nested block (Ctrl+click selection) puts each back"
+    (let [conn (worker-state/get-datascript-conn test-repo)
+          uuid-of (seed-outline!)]
+      (apply-ops! conn
+                  [[:move-blocks-up-down [[(uuid-of "a") (uuid-of "b1")] false]]]
+                  (local-tx-meta {:client-id "test-client"}))
+      (is (= ["outline 1" [["b" ["b2" "a" "b1"]] "c"]] (outline "outline 1")))
+      (is (map? (worker-undo-redo/undo test-repo)))
+      (is (= outline-1-start (outline "outline 1"))))))
+
+(deftest undo-move-up-of-blocks-at-different-levels-test
+  (testing "undoing a move up of a top-level block and a nested block (Ctrl+click selection) puts each back"
+    (let [conn (worker-state/get-datascript-conn test-repo)
+          uuid-of (seed-outline!)]
+      (apply-ops! conn
+                  [[:move-blocks-up-down [[(uuid-of "a") (uuid-of "b1")] true]]]
+                  (local-tx-meta {:client-id "test-client"}))
+      (is (= ["outline 1" ["a" "b1" ["b" ["b2"]] "c"]] (outline "outline 1")))
+      (is (map? (worker-undo-redo/undo test-repo)))
+      (is (= outline-1-start (outline "outline 1"))))))
+
+(deftest undo-move-up-of-siblings-that-are-not-adjacent-test
+  (testing "undoing a move up of 2 siblings with a block between them puts each back"
+    (let [conn (worker-state/get-datascript-conn test-repo)
+          uuid-of (seed-outline!)]
+      (apply-ops! conn
+                  [[:move-blocks-up-down [[(uuid-of "a") (uuid-of "c")] true]]]
+                  (local-tx-meta {:client-id "test-client"}))
+      (is (= ["outline 1" ["a" "c" ["b" ["b1" "b2"]]]] (outline "outline 1")))
+      (is (map? (worker-undo-redo/undo test-repo)))
+      (is (= outline-1-start (outline "outline 1"))))))
+
+(deftest undo-move-down-of-last-children-into-next-block-test
+  (testing "undoing a move down of a block's last children, which puts them into the next block, puts them back"
+    (let [conn (worker-state/get-datascript-conn test-repo)
+          uuid-of (seed-outline!)]
+      (apply-ops! conn
+                  [[:move-blocks-up-down [[(uuid-of "b1") (uuid-of "b2")] false]]]
+                  (local-tx-meta {:client-id "test-client"}))
+      (is (= ["outline 1" ["a" "b" ["c" ["b1" "b2"]]]] (outline "outline 1")))
+      (is (map? (worker-undo-redo/undo test-repo)))
+      (is (= outline-1-start (outline "outline 1"))))))
+
+(deftest undo-move-up-of-first-children-into-previous-block-test
+  (testing "undoing a move up of a block's first children, which puts them into the previous block, puts them back"
+    (let [conn (worker-state/get-datascript-conn test-repo)
+          uuid-of (seed-outline!)]
+      (apply-ops! conn
+                  [[:move-blocks-up-down [[(uuid-of "b1") (uuid-of "b2")] true]]]
+                  (local-tx-meta {:client-id "test-client"}))
+      (is (= ["outline 1" [["a" ["b1" "b2"]] "b" "c"]] (outline "outline 1")))
+      (is (map? (worker-undo-redo/undo test-repo)))
+      (is (= outline-1-start (outline "outline 1"))))))
+
+(defn- embed-block!
+  "Makes the block titled `title` an embed of the block titled `linked-title`,
+  as pasting a block copied as an embed does, and clears history."
+  [uuid-of title linked-title]
+  (let [conn (worker-state/get-datascript-conn test-repo)]
+    (d/transact! conn [[:db/add [:block/uuid (uuid-of title)]
+                        :block/link [:block/uuid (uuid-of linked-title)]]])
+    (worker-undo-redo/clear-history! test-repo)))
+
+(deftest undo-move-down-of-last-children-into-next-embed-test
+  (testing "undoing a move down of a block's last children into the next block, an embed, puts them back"
+    (let [conn (worker-state/get-datascript-conn test-repo)
+          uuid-of (seed-outline!)]
+      (embed-block! uuid-of "c" "d")
+      (apply-ops! conn
+                  [[:move-blocks-up-down [[(uuid-of "b1") (uuid-of "b2")] false]]]
+                  (local-tx-meta {:client-id "test-client"}))
+      (is (= ["outline 2" [["d" ["b1" "b2"]]]] (outline "outline 2")))
+      (is (map? (worker-undo-redo/undo test-repo)))
+      (is (= outline-1-start (outline "outline 1")))
+      (is (= ["outline 2" ["d"]] (outline "outline 2"))))))
+
+(deftest undo-move-up-of-first-children-into-previous-embed-test
+  (testing "undoing a move up of a block's first children into the previous block, an embed, puts them back"
+    (let [conn (worker-state/get-datascript-conn test-repo)
+          uuid-of (seed-outline!)]
+      (embed-block! uuid-of "a" "d")
+      (apply-ops! conn
+                  [[:move-blocks-up-down [[(uuid-of "b1") (uuid-of "b2")] true]]]
+                  (local-tx-meta {:client-id "test-client"}))
+      (is (= ["outline 2" [["d" ["b1" "b2"]]]] (outline "outline 2")))
+      (is (map? (worker-undo-redo/undo test-repo)))
+      (is (= outline-1-start (outline "outline 1")))
+      (is (= ["outline 2" ["d"]] (outline "outline 2"))))))
+
+(deftest undo-move-of-block-and-its-grandchild-restores-both-test
+  (testing "undoing a move of a block and its grandchild (Ctrl+click selection) puts the grandchild back too"
+    (let [conn (worker-state/get-datascript-conn test-repo)
+          uuid-of (seed-outline!)
+          page-2-uuid (:block/uuid (db-test/find-page-by-title @conn "outline 2"))]
+      (apply-ops! conn
+                  [[:move-blocks [[(uuid-of "b")] (uuid-of "a") {:sibling? false}]]]
+                  (local-tx-meta {:client-id "test-client"}))
+      (apply-ops! conn
+                  [[:move-blocks [[(uuid-of "a") (uuid-of "b2")] page-2-uuid {:sibling? false}]]]
+                  (local-tx-meta {:client-id "test-client"}))
+      (is (= ["outline 2" [["a" [["b" ["b1"]]]] "b2" "d"]] (outline "outline 2")))
+      (is (= 2 (count (undo-all!))))
+      (is (= outline-1-start (outline "outline 1")))
+      (is (= ["outline 2" ["d"]] (outline "outline 2"))))))
+
+(deftest undo-move-of-blocks-selected-bottom-up-restores-both-test
+  (testing "undoing a move of 2 blocks selected bottom first (Ctrl+click order) puts both back"
+    (let [conn (worker-state/get-datascript-conn test-repo)
+          uuid-of (seed-outline!)
+          page-2-uuid (:block/uuid (db-test/find-page-by-title @conn "outline 2"))]
+      (apply-ops! conn
+                  [[:move-blocks [[(uuid-of "b2") (uuid-of "b1")] page-2-uuid {:sibling? false}]]]
+                  (local-tx-meta {:client-id "test-client"}))
+      (is (= ["outline 2" ["b1" "b2" "d"]] (outline "outline 2")))
+      (is (map? (worker-undo-redo/undo test-repo)))
+      (is (= outline-1-start (outline "outline 1")))
+      (is (= ["outline 2" ["d"]] (outline "outline 2"))))))
+
+(deftest undo-delete-after-undoing-move-of-block-left-behind-test
+  (testing "undoing a delete, after undoing a move of the block that stayed, puts the deleted blocks back above that block"
+    (let [conn (worker-state/get-datascript-conn test-repo)
+          uuid-of (seed-outline!)
+          page-2-uuid (:block/uuid (db-test/find-page-by-title @conn "outline 2"))]
+      (apply-ops! conn
+                  [[:delete-blocks [[(uuid-of "a") (uuid-of "b")] {}]]]
+                  (local-tx-meta {:client-id "test-client"}))
+      (apply-ops! conn
+                  [[:move-blocks [[(uuid-of "c")] page-2-uuid {:sibling? false}]]]
+                  (local-tx-meta {:client-id "test-client"}))
+      (is (= ["outline 2" ["c" "d"]] (outline "outline 2")))
+      (is (= 2 (count (undo-all!))))
+      (is (= outline-1-start (outline "outline 1")))
+      (is (= ["outline 2" ["d"]] (outline "outline 2"))))))
+
+(deftest undo-delete-of-tag-renamed-to-page-title-restores-tag-test
+  (testing "undoing a delete of a tag renamed to an existing page's title, then the rename, brings the tag back"
+    (let [conn (worker-state/get-datascript-conn test-repo)
+          [_ tag-uuid] (apply-ops! conn
+                                   [[:create-page ["undo tag topic" {:class? true
+                                                                     :redirect? false
+                                                                     :split-namespace? true
+                                                                     :tags ()}]]]
+                                   (local-tx-meta {:client-id "test-client"}))
+          tag-ident (:db/ident (d/entity @conn [:block/uuid tag-uuid]))]
+      (worker-undo-redo/clear-history! test-repo)
+      (apply-ops! conn
+                  [[:rename-page [tag-uuid "page 1"]]]
+                  (local-tx-meta {:client-id "test-client"}))
+      (apply-ops! conn
+                  [[:delete-page [tag-uuid {}]]]
+                  (local-tx-meta {:client-id "test-client"}))
+      (is (nil? (d/entity @conn [:block/uuid tag-uuid])))
+      (is (= 2 (count (undo-all!))))
+      (let [tag (d/entity @conn [:block/uuid tag-uuid])]
+        (is (ldb/class? tag))
+        (is (= "undo tag topic" (:block/title tag)))
+        (is (= tag-ident (:db/ident tag)))))))
+
+(deftest replay-create-page-titled-like-property-creates-page-test
+  (testing "replaying a page create whose title an older property has creates the page and leaves the property"
+    (let [conn (worker-state/get-datascript-conn test-repo)
+          _ (apply-ops! conn
+                        [[:upsert-property [:user.property/undo-replay-rating
+                                            {:logseq.property/type :number}
+                                            {:property-name "undo replay rating"}]]]
+                        (local-tx-meta {:client-id "test-client"}))
+          page-uuid (random-uuid)
+          [_ result-uuid] (#'sync-apply/replay-canonical-outliner-op!
+                           conn
+                           [:create-page ["undo replay rating" {:uuid page-uuid
+                                                                :redirect? false
+                                                                :split-namespace? true
+                                                                :tags ()}]]
+                           nil)
+          page (d/entity @conn [:block/uuid page-uuid])]
+      (is (= page-uuid result-uuid))
+      (is (= "undo replay rating" (:block/title page)))
+      (is (not (ldb/property? page)))
+      (is (ldb/property? (d/entity @conn :user.property/undo-replay-rating))))))
+
+(deftest undo-delete-of-property-valued-on-itself-restores-property-test
+  (testing "undoing a delete of a property set on its own page, then the set, brings the property back"
+    (let [conn (worker-state/get-datascript-conn test-repo)
+          _ (apply-ops! conn
+                        [[:upsert-property [:user.property/undo-self-rating
+                                            {:logseq.property/type :number}
+                                            {:property-name "undo-self-rating"}]]]
+                        (local-tx-meta {:client-id "test-client"}))
+          property-uuid (:block/uuid (d/entity @conn :user.property/undo-self-rating))]
+      (worker-undo-redo/clear-history! test-repo)
+      (apply-ops! conn
+                  [[:set-block-property [property-uuid :user.property/undo-self-rating 1]]]
+                  (local-tx-meta {:client-id "test-client"}))
+      (apply-ops! conn
+                  [[:delete-page [property-uuid {}]]]
+                  (local-tx-meta {:client-id "test-client"}))
+      (is (nil? (d/entity @conn :user.property/undo-self-rating)))
+      (is (map? (worker-undo-redo/undo test-repo)))
+      (let [property (d/entity @conn :user.property/undo-self-rating)]
+        (is (= property-uuid (:block/uuid property)))
+        (is (= 1 (:logseq.property/value (:user.property/undo-self-rating property)))))
+      (is (map? (worker-undo-redo/undo test-repo)))
+      (let [property (d/entity @conn :user.property/undo-self-rating)]
+        (is (= property-uuid (:block/uuid property)))
+        (is (nil? (:user.property/undo-self-rating property)))))))
+
+(deftest undo-upsert-property-one-to-many-with-values-does-not-revert-cardinality-test
+  (testing "undo of one-to-many with values succeeds without reverting :many to :one"
+    (worker-undo-redo/clear-history! test-repo)
+    (let [conn (worker-state/get-datascript-conn test-repo)
+          {:keys [child-uuid]} (seed-page-parent-child!)
+          property-id :user.property/undo-note]
+      (apply-ops! conn
+                  [[:upsert-property [property-id
+                                      {:logseq.property/type :default
+                                       :db/cardinality :one}
+                                      {:property-name "note"}]]]
+                  (local-tx-meta {:client-id "test-client"}))
+      (apply-ops! conn
+                  [[:set-block-property [child-uuid property-id "text 1"]]]
+                  (local-tx-meta {:client-id "test-client"}))
+      (worker-undo-redo/clear-history! test-repo)
+      (apply-ops! conn
+                  [[:upsert-property [property-id
+                                      {:logseq.property/type :default
+                                       :db/cardinality :many}
+                                      {}]]]
+                  (local-tx-meta {:client-id "test-client"}))
+      (is (= :db.cardinality/many (:db/cardinality (d/entity @conn property-id))))
+      (is (set? (get (d/entity @conn [:block/uuid child-uuid]) property-id)))
+      (let [history (latest-undo-history-data)
+            inverse-op (first (:db-sync/inverse-outliner-ops history))]
+        (is (= :upsert-property (first inverse-op)))
+        (is (nil? (get-in inverse-op [1 1 :db/cardinality])))
+        (when-let [undo-tx-id (:db-sync/tx-id history)]
+          (poison-history-tx-order! undo-tx-id)))
+      (is (map? (worker-undo-redo/undo test-repo)))
+      (is (= :db.cardinality/many (:db/cardinality (d/entity @conn property-id))))
+      (let [value-after (get (d/entity @conn [:block/uuid child-uuid]) property-id)]
+        (is (set? value-after))
+        (is (= ["text 1"] (property-value-titles value-after))))
+      (is (map? (worker-undo-redo/redo test-repo)))
+      (is (= :db.cardinality/many (:db/cardinality (d/entity @conn property-id)))))))
+
+(deftest undo-upsert-property-one-to-many-with-choices-does-not-revert-cardinality-test
+  (testing "undo of one-to-many with choices and a value keeps :many"
+    (worker-undo-redo/clear-history! test-repo)
+    (let [conn (worker-state/get-datascript-conn test-repo)
+          {:keys [child-uuid]} (seed-page-parent-child!)
+          property-id :user.property/undo-status]
+      (apply-ops! conn
+                  [[:upsert-property [property-id
+                                      {:logseq.property/type :default
+                                       :db/cardinality :one}
+                                      {:property-name "status"}]]]
+                  (local-tx-meta {:client-id "test-client"}))
+      (apply-ops! conn
+                  [[:upsert-closed-value [property-id {:value "active"}]]]
+                  (local-tx-meta {:client-id "test-client"}))
+      (apply-ops! conn
+                  [[:set-block-property [child-uuid property-id "active"]]]
+                  (local-tx-meta {:client-id "test-client"}))
+      (worker-undo-redo/clear-history! test-repo)
+      (apply-ops! conn
+                  [[:upsert-property [property-id
+                                      {:logseq.property/type :default
+                                       :db/cardinality :many}
+                                      {}]]]
+                  (local-tx-meta {:client-id "test-client"}))
+      (is (= :db.cardinality/many (:db/cardinality (d/entity @conn property-id))))
+      (let [history (latest-undo-history-data)
+            inverse-op (first (:db-sync/inverse-outliner-ops history))]
+        (is (= :upsert-property (first inverse-op)))
+        (is (nil? (get-in inverse-op [1 1 :db/cardinality])))
+        (when-let [undo-tx-id (:db-sync/tx-id history)]
+          (poison-history-tx-order! undo-tx-id)))
+      (is (map? (worker-undo-redo/undo test-repo)))
+      (is (= :db.cardinality/many (:db/cardinality (d/entity @conn property-id))))
+      (is (set? (get (d/entity @conn [:block/uuid child-uuid]) property-id))))))
+
+(defn- seed-inner-ref-graph!
+  "Adds the node property \"related\" (cardinality many), page \"refs 1\" with
+  blocks a, b (children b1, b2), c, page \"refs 2\" with blocks d and tmpl
+  (tagged Template, child \"tmpl child\"), and a journal with block e. Clears
+  history and returns a fn from a block title to its uuid."
+  []
+  (let [conn (worker-state/get-datascript-conn test-repo)]
+    (sqlite-build/create-blocks
+     conn
+     {:properties {:related {:logseq.property/type :node
+                             :db/cardinality :db.cardinality/many}}
+      :pages-and-blocks
+      [{:page {:block/title "refs 1"}
+        :blocks [{:block/title "a"}
+                 {:block/title "b"
+                  :build/children [{:block/title "b1"}
+                                   {:block/title "b2"}]}
+                 {:block/title "c"}]}
+       {:page {:block/title "refs 2"}
+        :blocks [{:block/title "d"}
+                 {:block/title "tmpl"
+                  :build/tags [:logseq.class/Template]
+                  :build/children [{:block/title "tmpl child"}]}]}
+       {:page {:build/journal 20260925}
+        :blocks [{:block/title "e"}]}]})
+    (worker-undo-redo/clear-history! test-repo)
+    (fn [title]
+      (:block/uuid (db-test/find-block-by-content @conn title)))))
+
+(defn- page-tree
+  "The page titled page-title and its blocks, as nested titles."
+  [page-title]
+  (let [db @(worker-state/get-datascript-conn test-repo)
+        node (fn node [e]
+               (let [children (ldb/sort-by-order (:block/_parent e))]
+                 (if (seq children)
+                   [(:block/title e) (mapv node children)]
+                   (:block/title e))))]
+    (node (db-test/find-page-by-title db page-title))))
+
+(defn- undo-with-history-action-results!
+  "Undoes once and returns the undo result and the results of the worker's
+  history actions it ran."
+  []
+  (let [apply-action @worker-undo-redo/*apply-history-action!
+        *results (atom [])]
+    (reset! worker-undo-redo/*apply-history-action!
+            (fn [& args]
+              (let [result (apply apply-action args)]
+                (swap! *results conj result)
+                result)))
+    (try
+      [(worker-undo-redo/undo test-repo) @*results]
+      (finally
+        (reset! worker-undo-redo/*apply-history-action! apply-action)))))
+
+(deftest undo-delete-of-blocks-referring-to-each-other-test
+  (testing "undoing a delete of blocks where one holds a node property value pointing at another restores both"
+    (let [conn (worker-state/get-datascript-conn test-repo)
+          uuid-of (seed-inner-ref-graph!)
+          related (d/q '[:find ?ident . :where
+                         [?p :block/title "related"]
+                         [?p :db/ident ?ident]]
+                       @conn)]
+      (apply-ops! conn
+                  [[:set-block-property [(uuid-of "a") related
+                                         (:db/id (d/entity @conn [:block/uuid (uuid-of "b1")]))]]]
+                  (local-tx-meta {:client-id "test-client"}))
+      (let [a-uuid (uuid-of "a")
+            b1-uuid (uuid-of "b1")]
+        (apply-ops! conn
+                    [[:delete-blocks [[a-uuid (uuid-of "b")] {}]]]
+                    (local-tx-meta {:client-id "test-client"}))
+        (is (= ["refs 1" ["c"]] (page-tree "refs 1")))
+        (let [[undo-result results] (undo-with-history-action-results!)]
+          (is (map? undo-result))
+          (is (= [true] (mapv :applied? results))))
+        (is (= ["refs 1" ["a" ["b" ["b1" "b2"]] "c"]] (page-tree "refs 1")))
+        (is (= #{b1-uuid}
+               (set (map :block/uuid (get (d/entity @conn [:block/uuid a-uuid]) related)))))
+        (testing "redo deletes them again and a second undo restores them again"
+          (is (map? (worker-undo-redo/redo test-repo)))
+          (is (= ["refs 1" ["c"]] (page-tree "refs 1")))
+          (is (map? (worker-undo-redo/undo test-repo)))
+          (is (= ["refs 1" ["a" ["b" ["b1" "b2"]] "c"]] (page-tree "refs 1")))
+          (is (= #{b1-uuid}
+                 (set (map :block/uuid (get (d/entity @conn [:block/uuid a-uuid]) related))))))))))
+
+(deftest undo-delete-of-template-and-its-applied-copy-test
+  (testing "undoing a delete of a template and a copy of it (selected copy first) restores both"
+    (let [conn (worker-state/get-datascript-conn test-repo)
+          uuid-of (seed-inner-ref-graph!)
+          tmpl-uuid (uuid-of "tmpl")
+          e-uuid (uuid-of "e")]
+      (apply-ops! conn
+                  [[:apply-template [tmpl-uuid e-uuid {:sibling? false}]]]
+                  (local-tx-meta {:client-id "test-client"}))
+      (let [copy-uuid (d/q '[:find ?uuid . :in $ ?tmpl-uuid :where
+                             [?t :block/uuid ?tmpl-uuid]
+                             [?b :logseq.property/used-template ?t]
+                             [?b :block/uuid ?uuid]]
+                           @conn tmpl-uuid)]
+        (is (uuid? copy-uuid))
+        (apply-ops! conn
+                    [[:delete-blocks [[copy-uuid tmpl-uuid] {}]]]
+                    (local-tx-meta {:client-id "test-client"}))
+        (is (= ["refs 2" ["d"]] (page-tree "refs 2")))
+        (let [[undo-result results] (undo-with-history-action-results!)]
+          (is (map? undo-result))
+          (is (= [true] (mapv :applied? results))))
+        (is (= ["refs 2" ["d" ["tmpl" ["tmpl child"]]]] (page-tree "refs 2")))
+        (let [copy (d/entity @conn [:block/uuid copy-uuid])]
+          (is (= e-uuid (:block/uuid (:block/parent copy))))
+          (is (= tmpl-uuid (:block/uuid (:logseq.property/used-template copy)))))))))
+
+(defn- related-ident
+  [conn]
+  (d/q '[:find ?ident . :where
+         [?p :block/title "related"]
+         [?p :db/ident ?ident]]
+       @conn))
+
+(defn- add-x-pointing-at-y!
+  "Adds top-level blocks x, y to the page page-id, x's \"related\" pointing
+  at y. Returns [x-uuid y-uuid]."
+  [conn page-id related]
+  (let [x-uuid (random-uuid)
+        y-uuid (random-uuid)]
+    (apply-ops! conn
+                [[:insert-blocks [[{:block/uuid x-uuid :block/title "x"}
+                                   {:block/uuid y-uuid :block/title "y"}]
+                                  page-id
+                                  {:sibling? false
+                                   :keep-uuid? true}]]]
+                (local-tx-meta {:client-id "test-client"}))
+    (apply-ops! conn
+                [[:set-block-property [x-uuid related
+                                       (:db/id (d/entity @conn [:block/uuid y-uuid]))]]]
+                (local-tx-meta {:client-id "test-client"}))
+    [x-uuid y-uuid]))
+
+(deftest undo-delete-of-today-page-with-blocks-referring-to-each-other-test
+  (testing "undoing a delete of today's page, where a block holds a node property value pointing at a later block, restores both"
+    (let [conn (worker-state/get-datascript-conn test-repo)
+          _ (seed-inner-ref-graph!)
+          related (related-ident conn)
+          today-day (date-time-util/ms->journal-day (js/Date.))
+          today-title (date-time-util/int->journal-title
+                       today-day
+                       (:logseq.property.journal/title-format
+                        (d/entity @conn :logseq.class/Journal)))
+          [_ today-page-uuid] (apply-ops! conn
+                                          [[:create-page [today-title
+                                                          {:today-journal? true
+                                                           :redirect? false
+                                                           :split-namespace? true
+                                                           :tags ()}]]]
+                                          (local-tx-meta {:client-id "test-client"}))
+          [x-uuid y-uuid] (add-x-pointing-at-y! conn
+                                                (:db/id (d/entity @conn [:block/uuid today-page-uuid]))
+                                                related)]
+      (worker-undo-redo/clear-history! test-repo)
+      (apply-ops! conn
+                  [[:delete-page [today-page-uuid {}]]]
+                  (local-tx-meta {:client-id "test-client"}))
+      (is (nil? (d/entity @conn [:block/uuid x-uuid])))
+      (let [[undo-result results] (undo-with-history-action-results!)]
+        (is (map? undo-result))
+        (is (= [true] (mapv :applied? results))))
+      (is (= #{y-uuid}
+             (set (map :block/uuid (get (d/entity @conn [:block/uuid x-uuid]) related))))))))
+
+(deftest undo-delete-of-tag-page-with-blocks-referring-to-each-other-test
+  (testing "undoing a delete of a tag page, where a block holds a node property value pointing at a later block, restores both"
+    (let [conn (worker-state/get-datascript-conn test-repo)
+          _ (seed-inner-ref-graph!)
+          related (related-ident conn)
+          [_ class-uuid] (apply-ops! conn
+                                     [[:create-page ["undo inner refs tag"
+                                                     {:class? true
+                                                      :redirect? false
+                                                      :split-namespace? true
+                                                      :tags ()}]]]
+                                     (local-tx-meta {:client-id "test-client"}))
+          [x-uuid y-uuid] (add-x-pointing-at-y! conn
+                                                (:db/id (d/entity @conn [:block/uuid class-uuid]))
+                                                related)]
+      (worker-undo-redo/clear-history! test-repo)
+      (apply-ops! conn
+                  [[:delete-page [class-uuid {}]]]
+                  (local-tx-meta {:client-id "test-client"}))
+      (is (nil? (d/entity @conn [:block/uuid class-uuid])))
+      (let [[undo-result results] (undo-with-history-action-results!)]
+        (is (map? undo-result))
+        (is (= [true] (mapv :applied? results))))
+      (is (some? (d/entity @conn [:block/uuid class-uuid])))
+      (is (= #{y-uuid}
+             (set (map :block/uuid (get (d/entity @conn [:block/uuid x-uuid]) related))))))))

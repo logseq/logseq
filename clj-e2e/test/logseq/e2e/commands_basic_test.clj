@@ -92,6 +92,20 @@
     (k/backspace)
     (w/wait-for-not-visible ".ui__popover-content")))
 
+(deftest slash-command-group-headings-test
+  (testing "unfiltered slash popup shows section headings"
+    (b/new-block "slash-headings")
+    (util/press-seq " /")
+    (w/wait-for "a.menu-link.chosen:has-text('Node reference')")
+    (assert/assert-is-visible ".ui__ac-group-name:has-text('BASIC')")
+    (assert/assert-is-visible ".ui__ac-group-name:has-text('FORMAT')")
+    (assert/assert-is-visible ".ui__ac-group-name:has-text('Heading')")
+    (assert/assert-is-hidden "a.menu-link:has-text('Clear heading')"))
+  (testing "typed slash filter hides section headings"
+    (util/press-seq "node" {:delay 20})
+    (w/wait-for "a.menu-link:has-text('Node reference')")
+    (assert/assert-is-hidden ".ui__ac-group-name")))
+
 (defn- chosen-slash-command-visibility
   []
   (json/read-value
@@ -256,6 +270,24 @@
         (is (= text (util/get-edit-content)))
         (util/exit-edit)
         (w/wait-for heading)))))
+
+(deftest clear-heading-test
+  (testing "/clear heading"
+    (b/new-block "clear heading test")
+    (util/input-command "h1")
+    (util/exit-edit)
+    (w/wait-for "h1.block-title-wrap.as-heading:has-text('clear heading test')")
+    (b/jump-to-block "clear heading test")
+    (util/input-command "Clear heading")
+    (util/exit-edit)
+    (assert/assert-is-hidden "h1.block-title-wrap.as-heading:has-text('clear heading test')")
+    (assert/assert-is-visible "span.block-title-wrap:has-text('clear heading test')")
+    ;; Clear heading is only offered on blocks that already have a heading
+    (b/new-block "normal block")
+    (util/press-seq " /clear")
+    (w/wait-for ".ui__popover-content")
+    (assert/assert-is-hidden "a.menu-link:has-text('Clear heading')")
+    (assert/assert-is-visible "a.menu-link:has-text('No matched commands')")))
 
 (deftest status-test
   (testing "task status commands"

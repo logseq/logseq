@@ -1,4 +1,12 @@
-let is_option token = String.length token > 0 && token.[0] = '-'
+(* A dash followed by markdown whitespace (space, tab, newline, CR)
+   starts a list item in a quoted free-text value such as --blocks, not
+   an option. Every other dash prefix keeps the strict option meaning so
+   `--1`-style tokens are still rejected as unknown options rather than
+   swallowed as values. *)
+let is_option token =
+  let is_blank c = c = ' ' || c = '\t' || c = '\n' || c = '\r' in
+  let n = String.length token in
+  n > 0 && token.[0] = '-' && not (n > 1 && is_blank token.[1])
 
 let option_value key options =
   Vec.find_map
@@ -34,10 +42,10 @@ let split_equals_option token =
 
 let boolean_option = function
   | "version" | "help" | "verbose" | "profile" | "enable-sync" | "expand"
-  | "fix" | "include-built-in" | "include-journal" | "journal-only"
+  | "fix" | "force" | "include-built-in" | "include-journal" | "journal-only"
   | "include-hidden" | "with-properties" | "with-extends" | "with-classes"
   | "with-type" | "page-hierarchy" | "linked-references" | "ref-id-footer"
-  | "progress" | "upload-keys" | "pretty-print" ->
+  | "progress" | "upload-keys" | "pretty-print" | "dry-run" ->
       true
   | _ -> false
 
@@ -215,7 +223,8 @@ let allowed_options_for_path path =
     Vec.append common_list_options (option_names [| "tags"; "properties" |])
   else if path2 path "list" "asset" then common_list_options
   else if path2 path "remove" "block" then option_names [| "id"; "uuid" |]
-  else if path2 path "remove" "page" then option_names [| "id"; "page" |]
+  else if path2 path "remove" "page" then
+    option_names [| "id"; "page"; "force" |]
   else if path2_any path "remove" (option_names [| "tag"; "property" |]) then
     option_names [| "id"; "name" |]
   else if path2 path "upsert" "block" then
@@ -230,6 +239,7 @@ let allowed_options_for_path path =
         "content";
         "blocks";
         "blocks-file";
+        "dry-run";
         "update-tags";
         "update-properties";
         "remove-tags";
@@ -560,6 +570,9 @@ let parsed_remove_command options = function
               {
                 id = int64_option "id" options;
                 page = option_value "page" options;
+                force =
+                  Option.value (bool_option_value "force" options)
+                    ~default:false;
               }))
   | "tag" ->
       Some
@@ -601,8 +614,12 @@ let parsed_upsert_command ?(args = Vec.empty) options = function
                     (option_value "pos" options)
                     Block.position_of_string;
                 content = content_option_or_args options args;
-                blocks_edn = option_value "blocks" options;
+                blocks_markdown = option_value "blocks" options;
                 blocks_file = option_value "blocks-file" options;
+                dry_run =
+                  Option.value
+                    (bool_option_value "dry-run" options)
+                    ~default:false;
                 update_tags_edn = option_value "update-tags" options;
                 update_properties_edn = option_value "update-properties" options;
                 remove_tags_edn = option_value "remove-tags" options;
@@ -765,6 +782,7 @@ let parsed_list_command options = function
 let path_alias_overrides = function
   | [| "graph"; "validate" |] -> [ ("-f", "--fix") ]
   | [| "graph"; "export" |] -> [ ("-f", "--file") ]
+  | [| "remove"; "page" |] -> [ ("-f", "--force") ]
   | [| "list"; "page" | "tag" | "property" |] -> [ ("-e", "--expand") ]
   | _ -> []
 
