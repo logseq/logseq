@@ -137,9 +137,42 @@ let create_blocks_table (db : Sqlite.db) =
                         title TEXT NOT NULL,
                         page TEXT)" ~bind:[||]
 
-let create_blocks_fts_table (db : Sqlite.db) =
+(* blocks-fts-triggers — triggers that keep `fts_table` in step with
+   blocks. An FTS row has the rowid of its blocks row, so delete/update
+   find it by rowid: FTS5 cannot index the id column, and a lookup by id
+   reads every FTS row. *)
+let blocks_fts_triggers ~(trigger_prefix : string) ~(fts_table : string) :
+    string list =
+  [ Printf.sprintf
+      "CREATE TRIGGER IF NOT EXISTS %s_ad AFTER DELETE ON blocks
+         BEGIN
+             DELETE FROM %s WHERE rowid = old.rowid;
+         END;"
+      trigger_prefix fts_table
+  ; Printf.sprintf
+      "CREATE TRIGGER IF NOT EXISTS %s_ai AFTER INSERT ON blocks
+         BEGIN
+             INSERT INTO %s (rowid, id, title, page)
+             VALUES (new.rowid, new.id, new.title, new.page);
+         END;"
+      trigger_prefix fts_table
+  ; Printf.sprintf
+      "CREATE TRIGGER IF NOT EXISTS %s_au AFTER UPDATE ON blocks
+         BEGIN
+             DELETE FROM %s WHERE rowid = old.rowid;
+             INSERT INTO %s (rowid, id, title, page)
+             VALUES (new.rowid, new.id, new.title, new.page);
+         END;"
+      trigger_prefix fts_table fts_table ]
+
+let create_blocks_fts_table (db : Sqlite.db) (table : string) =
+  (* The trigram tokenizer extends FTS5 to support substring matching in
+     general, instead of the usual token matching. *)
   Sqlite.exec db
-    ~sql:"CREATE VIRTUAL TABLE IF NOT EXISTS blocks_fts USING fts5(id, title, page, tokenize=\"trigram\")"
+    ~sql:
+      (Printf.sprintf
+         "CREATE VIRTUAL TABLE IF NOT EXISTS %s USING fts5(id, title, page, tokenize=\"trigram\")"
+         table)
     ~bind:[||]
 
 let create_blocks_title_index (db : Sqlite.db) =
@@ -150,26 +183,12 @@ let create_blocks_title_index (db : Sqlite.db) =
 let add_blocks_fts_triggers (db : Sqlite.db) =
   List.iter
     (fun sql -> Sqlite.exec db ~sql ~bind:[||])
-    [ "CREATE TRIGGER IF NOT EXISTS blocks_ad AFTER DELETE ON blocks
-                  BEGIN
-                      DELETE from blocks_fts where id = old.id;
-                  END;"
-    ; "CREATE TRIGGER IF NOT EXISTS blocks_ai AFTER INSERT ON blocks
-                  BEGIN
-                      INSERT INTO blocks_fts (id, title, page)
-                      VALUES (new.id, new.title, new.page);
-                  END;"
-    ; "CREATE TRIGGER IF NOT EXISTS blocks_au AFTER UPDATE ON blocks
-                  BEGIN
-                      DELETE from blocks_fts where id = old.id;
-                      INSERT INTO blocks_fts (id, title, page)
-                      VALUES (new.id, new.title, new.page);
-                  END;" ]
+    (blocks_fts_triggers ~trigger_prefix:"blocks" ~fts_table:"blocks_fts")
 
 let create_tables_and_triggers (db : Sqlite.db) =
   try
     create_blocks_table db;
-    create_blocks_fts_table db;
+    create_blocks_fts_table db "blocks_fts";
     create_blocks_title_index db;
     add_blocks_fts_triggers db
   with exn ->
@@ -179,9 +198,77 @@ let create_tables_and_triggers (db : Sqlite.db) =
 let drop_tables_and_triggers (db : Sqlite.db) =
   Sqlite.exec db ~sql:"DROP TABLE IF EXISTS blocks" ~bind:[||];
   Sqlite.exec db ~sql:"DROP TABLE IF EXISTS blocks_fts" ~bind:[||];
+  Sqlite.exec db ~sql:"DROP TABLE IF EXISTS blocks_fts_next" ~bind:[||];
   Sqlite.exec db ~sql:"DROP TRIGGER IF EXISTS blocks_ad" ~bind:[||];
   Sqlite.exec db ~sql:"DROP TRIGGER IF EXISTS blocks_ai" ~bind:[||];
   Sqlite.exec db ~sql:"DROP TRIGGER IF EXISTS blocks_au" ~bind:[||]
+
+let drop_next_fts_triggers_sql = "
+DROP TRIGGER IF EXISTS blocks_fts_next_ad;
+DROP TRIGGER IF EXISTS blocks_fts_next_ai;
+DROP TRIGGER IF EXISTS blocks_fts_next_au;
+"
+
+(* start-fts-rowid-migration! — moves an index whose blocks_fts rows
+   have rowids unrelated to their blocks rows (version 4 and older) to
+   rowid keys: creates blocks_fts_next with rowid triggers of its own.
+   blocks_fts and its triggers keep serving queries until
+   finish_fts_rowid_migration. A move cut short starts over. *)
+let start_fts_rowid_migration (db : Sqlite.db) : unit =
+  Sqlite.transaction db (fun () ->
+      Sqlite.exec db
+        ~sql:(drop_next_fts_triggers_sql ^ "DROP TABLE IF EXISTS blocks_fts_next;")
+        ~bind:[||];
+      create_blocks_fts_table db "blocks_fts_next";
+      List.iter
+        (fun sql -> Sqlite.exec db ~sql ~bind:[||])
+        (blocks_fts_triggers ~trigger_prefix:"blocks_fts_next"
+           ~fts_table:"blocks_fts_next"))
+
+(* copy-fts-rowid-batch! — copies into blocks_fts_next the blocks rows
+   after rowid `after`, at most `limit` of them, that it lacks (its
+   triggers add rows written since the start). Returns the last rowid
+   of the batch, None when no row is left. *)
+let copy_fts_rowid_batch (db : Sqlite.db) ~(after : int64) ~(limit : int)
+    : int64 option =
+  let last_rowid =
+    match
+      Sqlite.query db
+        ~sql:"SELECT max(rowid) FROM (SELECT rowid FROM blocks WHERE rowid > ? ORDER BY rowid LIMIT ?)"
+        ~bind:[| Sqlite.Integer after; Sqlite.Integer (Int64.of_int limit) |]
+    with
+    | [ [| Sqlite.Integer n |] ] -> Some n
+    | _ -> None
+  in
+  match last_rowid with
+  | None -> None
+  | Some last_rowid ->
+      Sqlite.exec db
+        ~sql:"INSERT INTO blocks_fts_next (rowid, id, title, page)
+              SELECT rowid, id, title, page FROM blocks
+              WHERE rowid > ? AND rowid <= ?
+                AND NOT EXISTS (SELECT 1 FROM blocks_fts_next f WHERE f.rowid = blocks.rowid)"
+        ~bind:[| Sqlite.Integer after; Sqlite.Integer last_rowid |];
+      Some last_rowid
+
+(* finish-fts-rowid-migration! — replaces blocks_fts and its triggers
+   with blocks_fts_next and rowid triggers, and sets the index version,
+   in 1 transaction. *)
+let finish_fts_rowid_migration (db : Sqlite.db) (version : int) : unit =
+  Sqlite.transaction db (fun () ->
+      Sqlite.exec db
+        ~sql:
+          (drop_next_fts_triggers_sql
+          ^ "DROP TRIGGER IF EXISTS blocks_ad;
+DROP TRIGGER IF EXISTS blocks_ai;
+DROP TRIGGER IF EXISTS blocks_au;
+DROP TABLE blocks_fts;
+ALTER TABLE blocks_fts_next RENAME TO blocks_fts;")
+        ~bind:[||];
+      add_blocks_fts_triggers db;
+      Sqlite.exec db
+        ~sql:(Printf.sprintf "PRAGMA user_version = %d" version)
+        ~bind:[||])
 
 (* ---- upsert / delete / truncate ---- *)
 
