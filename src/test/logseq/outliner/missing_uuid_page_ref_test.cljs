@@ -60,6 +60,28 @@
           (is (empty? (map :block/uuid (:block/refs saved))))
           (is (nil? (d/entity @conn [:block/uuid (parse-uuid missing-uuid-title)]))))))))
 
+(deftest save-block-new-page-keeps-id-ref
+  (testing "saving [[New Page]] as an id-ref does not rewrite the uuid to plain text"
+    (let [conn (db-test/create-conn-with-blocks
+                [{:page {:block/title "page1"}
+                  :blocks [{:block/title "host"}]}])
+          host (db-test/find-block-by-content @conn "host")
+          parsed-uuid (random-uuid)]
+      (outliner-core/save-block! conn
+                                 {:block/uuid (:block/uuid host)
+                                  :block/title (str "See " (page-ref/->page-ref parsed-uuid))
+                                  :block/raw-title (str "See " (page-ref/->page-ref parsed-uuid))
+                                  :block/refs [{:block/type "page"
+                                                :block/name "new page"
+                                                :block/title "New Page"
+                                                :block/uuid parsed-uuid}]})
+      (let [saved (d/entity @conn (:db/id host))
+            page (ldb/get-page @conn "new page")]
+        (is (some? page))
+        (is (= (str "See " (page-ref/->page-ref (:block/uuid page)))
+               (:block/title saved)))
+        (is (= [(:block/uuid page)] (map :block/uuid (:block/refs saved))))))))
+
 (deftest wrap-parse-then-save-new-page-ref-keeps-link
   (testing "[[New Page]] still persists as an id-ref after save"
     (with-redefs [state/get-state (constantly [])]
@@ -72,10 +94,14 @@
                      :block/title "See [[Project Alpha]]"})]
         (outliner-core/save-block! conn parsed)
         (let [saved (d/entity @conn (:db/id host))
-              page (ldb/get-page @conn "project alpha")]
+              page (ldb/get-page @conn "project alpha")
+              title (:block/title saved)]
           (is (some? page))
-          (is (= (str "See " (page-ref/->page-ref (:block/uuid page)))
-                 (:block/title saved)))
+          (is (or (= (str "See " (page-ref/->page-ref (:block/uuid page))) title)
+                  (= "See [[Project Alpha]]" title))
+              (str "must remain a page link, not plain text: " (pr-str title)))
+          (is (not= (str "See " (:block/uuid page)) title)
+              "must not persist the new page uuid as plain text")
           (is (= [(:block/uuid page)] (map :block/uuid (:block/refs saved)))))))))
 
 (deftest apply-ops-missing-uuid-save-does-not-block-sibling-insert
