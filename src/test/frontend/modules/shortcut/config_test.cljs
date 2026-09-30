@@ -1,7 +1,8 @@
 (ns frontend.modules.shortcut.config-test
   (:require [cljs.test :refer [deftest is testing]]
             [frontend.modules.shortcut.config :as shortcut-config]
-            [frontend.state :as state]))
+            [frontend.state :as state]
+            [frontend.util :as util]))
 
 (defn- published-property-key
   [shortcut-id]
@@ -20,6 +21,12 @@
                  [:graph/db-save :fn]))
         (is (= [[:graph/db-save-shortcut]]
                @events*))))))
+
+(deftest publish-open-dialog-does-not-steal-mac-minimize
+  (testing "publish default binding keeps Command+M free on macOS only"
+    (is (= (if util/mac? false "mod+m")
+           (get-in shortcut-config/all-built-in-keyboard-shortcuts
+                   [:publish/open-dialog :binding])))))
 
 (deftest task-property-shortcuts-use-keyword-idents
   (testing "status, priority, and deadline shortcuts seed built-in property idents"

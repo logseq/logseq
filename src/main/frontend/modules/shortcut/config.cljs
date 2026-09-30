@@ -379,7 +379,8 @@
                                              :inactive (not (util/electron?))
                                              :binding "mod+s"}
 
-   :publish/open-dialog                     {:binding "mod+m"
+   ;; Command+M minimizes the window on macOS; leave it unbound for publish
+   :publish/open-dialog                     {:binding (if mac? false "mod+m")
                                              :inactive config/publishing?
                                              :fn      #(state/pub-event! [:publish/open-dialog])}
 
