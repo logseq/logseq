@@ -35,6 +35,9 @@ dependency cone, master SHAs):
     74b61250e3  fix: keep recycle parent until both sides restore
     829fb85cca  fix: use local days for scheduled and deadline range
     53db271a4b  fix: refuse converting namespaced pages to properties
+    cda0f025a5  fix(repeat): keep date repeats on the right day
+    79a5201bad  fix(views): order leftover eids by eid in unlimited index walk
+    5391127cb8  perf(views): sort small sets without a row limit
 
 When diffs against the baseline reference these, the OCaml side already
 carries them (canonicalize-insert-ops, Library move restriction,
