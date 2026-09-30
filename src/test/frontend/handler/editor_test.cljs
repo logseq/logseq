@@ -3238,21 +3238,43 @@
     (is (= comments-node (#'editor/navigable-sibling-block current-node sibling-f {:up-down? true}))
         "Up/down navigation should enter comments instead of skipping the comments area")))
 
+(defn- this-sensitive-contains
+  "Mirrors Node.contains: throws Illegal invocation when called without its receiver."
+  [owner contained]
+  (fn [node]
+    (this-as this
+      (when-not (identical? this owner)
+        (throw (js/TypeError. "Illegal invocation")))
+      (= node contained))))
+
+(deftest node-contains?-does-not-throw-when-child-is-outside-test
+  (let [child (js-obj "id" "child" "nodeType" 1)
+        other (js-obj "id" "other" "nodeType" 1)
+        parent (js-obj "id" "parent" "nodeType" 1)]
+    (aset parent "contains" (this-sensitive-contains parent child))
+    (is (true? (#'editor/node-contains? parent child))
+        "A parent reports true for a contained child")
+    (is (false? (#'editor/node-contains? parent other))
+        "A parent reports false for an outside child without throwing")))
+
 (deftest navigable-sibling-block-skips-open-comments-subtree-for-left-right-test
   (let [current-node (js-obj "id" "current")
         comment-node (js-obj "id" "comment" "nodeType" 1)
         comments-node (js-obj "id" "comments"
                               "data-comments-area" "true"
-                              "nodeType" 1
-                              "contains" (fn [node] (= node comment-node)))
-        target-node (js-obj "id" "target")
+                              "nodeType" 1)
+        target-node (js-obj "id" "target" "nodeType" 1)
         sibling-f (fn [node _opts]
                     (cond
                       (= node current-node) comments-node
                       (= node comments-node) comment-node))]
+    (aset comments-node "contains" (this-sensitive-contains comments-node comment-node))
     (with-redefs [util/get-blocks-noncollapse (fn [] [current-node comments-node comment-node target-node])]
       (is (= target-node (#'editor/navigable-sibling-block current-node sibling-f {:direction :right}))
-          "Left/right navigation should skip the whole open comments subtree"))))
+          "Right navigation should skip the whole open comments subtree without throwing"))
+    (with-redefs [util/get-blocks-noncollapse (fn [] [target-node comments-node comment-node current-node])]
+      (is (= target-node (#'editor/navigable-sibling-block current-node sibling-f {:direction :left}))
+          "Left navigation should skip the whole open comments subtree without throwing"))))
 
 (deftest navigable-sibling-block-skips-comment-item-before-block-below-comments-test
   (let [target-node (js-obj "id" "target")
