@@ -1670,7 +1670,12 @@ let execute_query (db : db) (query_string : string) (opts : exec_opts) : query_r
               | Some e -> int e.id
               | None -> QueryFormNil
             in
-            vec_ [ sym "?b"; kw "block/tags"; card_id ] :: query_star
+            let clauses =
+              match query_star with
+              | first :: _ when is_coll first -> query_star
+              | _ -> [ list_ query_star ]
+            in
+            vec_ [ sym "?b"; kw "block/tags"; card_id ] :: clauses
           else query_star
         in
         let q' = query_wrapper query_star ~blocks:true ~block_attrs_edn:opts.opt_block_attrs in
