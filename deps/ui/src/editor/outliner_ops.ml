@@ -1008,6 +1008,10 @@ let refresh_via_delta (resp : Wire.t option) : unit Js.Promise.t =
           (* the whole-tree fetch is skipped, but linked/unlinked refs
              still need their cheap refresh *)
           !Runtime.refresh_page_side page';
+          (* property areas hold worker data outside the spliced model;
+             the broadcast echo of this tx is deduped, so refresh them
+             here or their chips stay stale *)
+          let* () = !Runtime.refresh_property_areas () in
           Js.Promise.resolve ()
       | Some _ ->
           (* page moved on mid-splice — this page is gone *)

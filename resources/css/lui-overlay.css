@@ -151,10 +151,6 @@
   outline: none;
 }
 
-.ui__context-menu-item {
-  cursor: default;
-}
-
 .ui__dropdown-menu-item[data-highlighted],
 .ui__context-menu-item[data-highlighted],
 .ui__dropdown-menu-sub-trigger[data-highlighted],
@@ -563,6 +559,7 @@ div[data-keep-selection].menu-links-wrapper {
   justify-content: center;
   width: 30px;
   height: 30px;
+  cursor: pointer;
 }
 
 .ls-cm-swatch .heading-bg {

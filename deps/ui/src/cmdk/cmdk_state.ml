@@ -485,10 +485,17 @@ let group_order v q rows total =
     in
     { gid = G_current_page
     ; gtitle = I18n.t "cmdk.group/current-page"
-    ; gitems = items; gtotal = max total (List.length items)
+      (* cljs laziness: current-page results load only via the filter row
+         or group expansion — a normal search leaves the group empty so it
+         renders nothing *)
+    ; gitems =
+        (if v.filter = Some G_current_page
+            || List.mem G_current_page v.expanded
+         then items else [])
+    ; gtotal = max total (List.length items)
     ; glimit = current_page_limit v.expanded
     ; gexpanded = List.mem G_current_page v.expanded
-    ; gfilter_active = false }
+    ; gfilter_active = v.filter = Some G_current_page }
   in
   let commands_g () =
     let items = commands_items q in
