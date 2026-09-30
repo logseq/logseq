@@ -74,6 +74,11 @@ let clipboard_text : string ref = ref ""
 let close_block_editor : (unit -> unit) ref = ref (fun () -> ())
 let close_property_editor : (unit -> unit) ref = ref (fun () -> ())
 
+(* Virt_list binds this to its item-key scroller — editor_actions pulls
+   the editing row back into the virtual window when its textarea can't
+   mount (the row scrolled out or an insert landed below the edge) *)
+let scroll_key_into_view : (string -> unit) ref = ref (fun _ -> ())
+
 (* state transforms deferred until the first block_row mounts the state —
    an empty page mounts no rows, so click-to-add on .block-add-button must
    queue its edit-mode entry here. They fold into [initial] before the
@@ -314,6 +319,17 @@ let find_parent uuid =
   match top_idx 0 tops with
   | Some i -> Some (None, i)
   | None -> find_parent_in tops uuid
+
+(* uuid of the top-level row containing [uuid] — virtual lists window
+   top-level items only, so a nested block's row lives under its
+   highest ancestor *)
+let rec top_level_uuid uuid =
+  match find_parent uuid with
+  | Some (Some p, _) -> (
+      match p.Model.block_uuid with
+      | Some u -> top_level_uuid u
+      | None -> uuid)
+  | _ -> uuid
 
 (* DFS over visible (non-collapsed-subtree) blocks *)
 let flat_visible ?(scope = "main") () =

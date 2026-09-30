@@ -87,7 +87,19 @@ let rec apply_focus () =
 
 and retry_focus () =
   incr focus_attempts;
-  if !focus_attempts < 50 then D.set_timeout apply_focus 40
+  if !focus_attempts < 50 then begin
+    (* the editing row can sit outside the virtual window — a scroll
+       jump (Home/End, a remount, an insert below the viewport edge)
+       unmounts it and focus retries would spin forever on a textarea
+       that can't render. Pulling its item key back into the rendered
+       range remounts the row so focus can land *)
+    if !focus_attempts = 1 || !focus_attempts mod 10 = 5 then
+      (match !S.pending_focus with
+       | Some (u, _, _) ->
+           !(S.scroll_key_into_view) (S.top_level_uuid u)
+       | None -> ());
+    D.set_timeout apply_focus 40
+  end
   else (
     S.pending_focus := None;
     S.pending_focus_actions := [];
