@@ -85,4 +85,24 @@
     (is (= (str "(between " (pr-str "[[Dec 26th, 2020]]") " tomorrow)")
            (query-dsl/pre-transform "(between [[Dec 26th, 2020]] tomorrow)")))
     (is (= (list 'between "[[Dec 26th, 2020]]" 'tomorrow)
-           (read-query "(between [[Dec 26th, 2020]] tomorrow)")))))
+           (read-query "(between [[Dec 26th, 2020]] tomorrow)"))))
+
+  (testing "title ending with ] inside a tags vector"
+    (is (= (str "(tags [ " (pr-str "[[foo]]]") "])")
+           (query-dsl/pre-transform "(tags [ [[foo]]]])")))
+    (is (= '(tags ["[[foo]]]"])
+           (read-query "(tags [ [[foo]]]])"))))
+
+  (testing "title ending with ]] inside a tags vector"
+    (is (= (str "(tags [ " (pr-str "[[foo]]]]") "])")
+           (query-dsl/pre-transform "(tags [ [[foo]]]]])")))
+    (is (= '(tags ["[[foo]]]]"])
+           (read-query "(tags [ [[foo]]]]])"))))
+
+  (testing "later tag ending with ]] does not swallow an earlier between date"
+    (is (= (str "(and (between " (pr-str "[[Dec 26th, 2020]]") " tomorrow) (tags "
+                (pr-str "[[bar]]]]") "))")
+           (query-dsl/pre-transform
+            "(and (between [[Dec 26th, 2020]] tomorrow) (tags [[bar]]]]))")))
+    (is (= (list 'and (list 'between "[[Dec 26th, 2020]]" 'tomorrow) (list 'tags "[[bar]]]]"))
+           (read-query "(and (between [[Dec 26th, 2020]] tomorrow) (tags [[bar]]]]))")))))

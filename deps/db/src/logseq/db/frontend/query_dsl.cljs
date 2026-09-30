@@ -41,41 +41,51 @@
 
 (defn- unmatched-page-ref-close?
   "True when `s` from `start` still contains a `]]` that is not paired with a
-  later `[[`. That leftover close belongs to the current page-ref."
+  later `[[` in the current list. Stop at a `)` that closes this form so a
+  later tag such as `[[bar]]]]` cannot steal an earlier date page-ref."
   [s start]
   (let [n (count s)]
     (loop [i start
-           open 0]
+           open 0
+           paren 0]
       (cond
         (>= i n)
         false
 
         (= \" (nth s i))
         (if-let [end (quoted-string-end s i)]
-          (recur end open)
+          (recur end open paren)
           false)
+
+        (= \( (nth s i))
+        (recur (inc i) open (inc paren))
+
+        (= \) (nth s i))
+        (if (zero? paren)
+          false
+          (recur (inc i) open (dec paren)))
 
         (and (< (inc i) n)
              (= \[ (nth s i))
              (= \[ (nth s (inc i))))
-        (recur (+ i 2) (inc open))
+        (recur (+ i 2) (inc open) paren)
 
         (and (< (inc i) n)
              (= \] (nth s i))
              (= \] (nth s (inc i))))
         (if (zero? open)
           true
-          (recur (+ i 2) (dec open)))
+          (recur (+ i 2) (dec open) paren))
 
         :else
-        (recur (inc i) open)))))
+        (recur (inc i) open paren)))))
 
 (defn- page-ref-terminator?
   "True when the text after a candidate `]]` is the next DSL token or closer,
-  not more title text. A bare `]` is a terminator only inside an EDN vector so
-  `(tags [ [[foo]]])` keeps the vector close, while `(tags [[Project]]])`
-  can still treat a trailing `]` as part of the title. A following symbol such
-  as `tomorrow` is a terminator unless the remainder still has a dangling `]]`."
+  not more title text. A lone `]` is a terminator only inside an EDN vector so
+  `(tags [ [[foo]]])` keeps the vector close, while `(tags [ [[foo]]]])` can
+  keep a title that ends with `]`. A following symbol such as `tomorrow` is a
+  terminator unless the current form still has a dangling `]]`."
   [s i vector-depth]
   (let [i (skip-ws s i)
         n (count s)]
@@ -92,11 +102,12 @@
       true
 
       (and (= \] (nth s i))
-           (pos? vector-depth))
+           (pos? vector-depth)
+           (or (>= (inc i) n)
+               (not= \] (nth s (inc i)))))
       true
 
-      (and (= \] (nth s i))
-           (zero? vector-depth))
+      (= \] (nth s i))
       false
 
       :else
