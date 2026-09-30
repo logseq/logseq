@@ -104,6 +104,18 @@
              {}
              schema))
 
+(defn- inverse-upsert-property-schema
+  "Restore the previous schema, except :db/cardinality when that would revert
+   :many to :one while values exist."
+  [db-before db-after property]
+  (let [schema (sanitize-upsert-property-schema
+                db-before
+                (db-property/get-property-schema (into {} property)))]
+    (if (and (contains? #{:one :db.cardinality/one} (:db/cardinality schema))
+             (seq (d/datoms db-after :avet (:db/ident property))))
+      (dissoc schema :db/cardinality)
+      schema)))
+
 (defn- sanitize-block-refs
   [refs]
   (->> refs
@@ -942,7 +954,7 @@
   (build-inverse-save-block db-before (into {} ent) nil))
 
 (defn- build-inverse-delete-page
-  [db-before page-uuid]
+  [db-before db-after page-uuid]
   (when-let [page (d/entity db-before [:block/uuid page-uuid])]
     (let [class-or-property? (or (ldb/class? page)
                                  (ldb/property? page))
@@ -964,7 +976,7 @@
                                 (assoc :class-ident-namespace class-ident-namespace))]])
                           [:upsert-property
                            [(:db/ident page)
-                            (db-property/get-property-schema (into {} page))
+                            (inverse-upsert-property-schema db-before db-after page)
                             {:property-name (:block/title page)}]])
               restore-root-ops (when (every? some? root-plans)
                                  (restore-plans->ops db-before root-plans))]
@@ -1084,7 +1096,7 @@
 
                           :delete-page
                           (let [[page-uuid _opts] args]
-                            (build-inverse-delete-page db-before page-uuid))
+                            (build-inverse-delete-page db-before db-after page-uuid))
 
                           :upsert-property
                           (let [[property-id _schema _opts] args]
@@ -1092,9 +1104,7 @@
                               (if-let [property (d/entity db-before property-id)]
                                 [:upsert-property
                                  [property-id
-                                  (sanitize-upsert-property-schema
-                                   db-before
-                                   (db-property/get-property-schema (into {} property)))
+                                  (inverse-upsert-property-schema db-before db-after property)
                                   {:property-name (:block/title property)}]]
                                 [:delete-page [(common-uuid/gen-uuid :db-ident-block-uuid property-id) {}]])))
 
