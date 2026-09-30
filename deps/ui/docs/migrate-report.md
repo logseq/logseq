@@ -1990,6 +1990,62 @@ Deltas vs cljs: shell stays `.embed-block > iframe` (e2e contract)
 instead of `.video-embed-shell/.video-embed-frame`; no `origin=` param;
 `w=` width args ignored.
 
+||||||| cd857694df
+## Vendored-lib surface ports: marked / PhotoSwipe / html2canvas
+
+**Plugin README (marked + DOMPurify).** cljs `plugins.open-readme!`
+branches on `(:repo item)`: repo plugins get `iframe.lsp-frame-readme`
+→ `marketplace.html?repo=…` (unchanged — that page still runs
+`DOMPurify.sanitize(marked.parse(content))` over the GitHub-raw
+readme). Local plugins route through `load_plugin_readme`, which is a
+`nil_fn` stub on web — the cljs read path **never renders local README
+content**. deps/ui therefore fetches the readme itself
+(`Plugin_readme.endpoints`: `github.com/o/r[/…]` →
+`raw.githubusercontent.com/o/r/{master,main}/{README.md,readme.md}`;
+other hosts → `<url>/{README.md,readme.md}`), renders it through the
+new `sdk/markdown.ml` (`marked.parse` → `DOMPurify.sanitize` with the
+cljs `security.cljs` opts `ADD_TAGS:["iframe"], ADD_ATTR:["is"],
+ALLOW_UNKNOWN_PROTOCOLS:true`, resolving both purify module shapes),
+and substitutes it for the cljs mldoc render — a deliberate web
+deviation since mldoc output was unreachable on web anyway. cljs
+`parse-user-md-content` rewrites relative `![](…)` image links
+against the readme dir — preserved. Anchor clicks inside
+`.cp__plugins-details` go through `data-capture-click`
+(`dom_adapter`): click inside `a[href]` → `preventDefault` +
+`window.open`, standing in for `apis.openExternal`. Blank body →
+`:plugin/readme-empty-warning` toast, dialog suppressed (cljs shows
+the toast and still opens an empty dialog — suppressed because the
+empty panel is dead UI). `resources/index.html` gained the missing
+`<script defer src="./js/purify.js">` tag (the gulp task already
+copied the file).
+
+**PhotoSwipe lightbox.** cljs `preview-images!` constructs the
+lightbox with `{dataSource, pswpModule: window.PhotoSwipe,
+showHideAnimationType: "fade"}`, stores it on `window.photoLightbox`,
+then `init` + `loadAndOpen 0`. `asset_dom.open_lightbox` now sets
+`window.photoLightbox` identically (the only contract piece that was
+missing; open/close behavior was already in place). cljs sorts images
+by `(juxt #(.-x %) #(.-y %))` before rotating the clicked one to the
+front — a **no-op** (HTMLImageElement has no `.x`/`.y` props, every
+sort key is `undefined`, so DOM order is preserved); the OCaml port
+keeps DOM order and rotates only.
+
+**Export page as PNG (html2canvas).** cljs
+`export/export_to_png.cljs` is registered under a
+`when-not (seq? top-level-uuids)` guard — `(seq? (map …))` is always
+truthy or `()` which `seq?` also accepts, so the PNG tab never
+actually appears for a page with content. deps/ui shows the PNG tab
+unconditionally and documents this as porting a dead cljs path.
+`Export_page.export_png` targets `#main-content-container` with the
+cljs option set (`backgroundColor` from
+`--ls-primary-background-color` else `"transparent"`,
+`allowTaint/useCORS`, `x/y/scrollX/scrollY: 0`, `scale: 1`,
+`windowHeight = scrollHeight`), `canvas.toBlob … "image/png"` →
+object URL into `img#export-preview`. Copy uses
+`navigator.clipboard.write` with a `ClipboardItem` (`"image/png"`);
+save is an anchor-download `logseq_<t/now>.png`. The "Transparent
+background" toggle drives the `backgroundColor` override.
+
 ## i18n: runtime dict loading + literal consolidation
 
 `src/core/i18n.ml` was a stopgap table of English literals behind a
