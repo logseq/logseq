@@ -13495,6 +13495,83 @@ let test_checksum_eligible_entity_raw_datom_semantics () =
   Alcotest.(check bool)
     "uuid alone without name/page/tags" false (eligible f)
 
+(* (deftest reopened-graph-keeps-max-tx-of-pipeline-transaction-test ...)
+   src/test/frontend/worker/db_sync_test.cljs — a transaction the worker
+   pipeline extends spans several tx ids in 1 stored tail entry; the graph
+   reopened from storage keeps its :max-tx, so the stored checksum still
+   covers it and the reopen does not recompute. cljs InMemoryStorage ->
+   Datascript.memory_storage. *)
+let test_reopened_graph_keeps_max_tx_of_pipeline_transaction () =
+  preserve_state (fun () ->
+      let conn, ops, parent, _c1, _c2, _c3 = setup_parent_child () in
+      mark_graph_remote conn;
+      let storage = Datascript.memory_storage () in
+      (* cljs (d/conn-from-datoms (d/datoms @conn :eavt) (:schema @conn)
+              {:storage storage}) — new index nodes: storing the test
+         graph's own db would give addresses to nodes other graphs share *)
+      ignore
+        (Datascript.conn_from_datoms
+           ~schema:(Datascript.schema (Datascript.db conn))
+           ~storage
+           (List.of_seq (Datascript.datoms (Datascript.db conn) Eavt ())));
+      let stored_conn =
+        match Datascript.restore_conn storage with
+        | Some c -> c
+        | None -> failwith "restore-conn failed on memory storage"
+      in
+      let pipeline_before = !Db_tx.transact_pipeline_fn in
+      Db_tx.transact_pipeline_fn := Some Worker_pipeline.transact_pipeline;
+      Fun.protect
+        ~finally:(fun () -> Db_tx.transact_pipeline_fn := pipeline_before)
+        (fun () ->
+          ignore
+            (Db_transact.transact stored_conn
+               [ db_add (Wire.Int parent.id) "block/title"
+                   (Wire.String "edited") ]
+               [ "outliner-op", Keyword "save-block" ]);
+          let max_tx = (Datascript.db stored_conn).max_tx in
+          let tail_txs =
+            match List.rev (Datascript.Conn.storage_tail stored_conn) with
+            | last :: _ ->
+                List.sort_uniq compare
+                  (List.map (fun (d : datom) -> d.tx) last)
+            | [] -> []
+          in
+          let reopened =
+            Common_sqlite.get_storage_conn storage (Db_schema.schema ())
+          in
+          let datoms_with_tx (db : db) =
+            Datascript.datoms db Eavt ()
+            |> Seq.map (fun (d : datom) -> d.e, d.a, d.v, d.tx)
+            |> List.of_seq |> List.sort compare
+          in
+          check "the pipeline added a d/with of its own"
+            (List.length tail_txs > 1);
+          check "max-tx = largest tail tx"
+            (max_tx = List.fold_left max min_int tail_txs);
+          check "replayed tail datoms keep their own tx ids"
+            (datoms_with_tx (Datascript.db stored_conn)
+             = datoms_with_tx (Datascript.db reopened));
+          check "reopened max-tx kept"
+            ((Datascript.db reopened).max_tx = max_tx);
+          check
+            "the next tx id the reopened graph hands out is on no datom yet"
+            (Seq.for_all
+               (fun (d : datom) -> d.tx <= (Datascript.db reopened).max_tx)
+               (Datascript.datoms (Datascript.db reopened) Eavt ()));
+          check "edited title replayed"
+            (match
+               Datascript.entity (Datascript.db reopened)
+                 (Entity_id parent.id)
+             with
+             | Some e -> Ldb.value e "block/title" = Some (String "edited")
+             | None -> false);
+          with_datascript_conns reopened (Some ops) (fun () ->
+              Sync_client_op.update_local_checksum test_repo "stale" max_tx;
+              Sync_client.reconcile_local_checksum test_repo reopened;
+              check "stored checksum still covers the reopened graph"
+                (Sync_client_op.get_local_checksum test_repo = Some "stale"))))
+
 let () =
   Alcotest.run "db-sync-native"
     [ ( "db-sync"
@@ -13667,6 +13744,9 @@ let () =
             `Quick test_local_graph_edit_writes_no_checksum
         ; Alcotest.test_case "remote-graph-edit-writes-checksum"
             `Quick test_remote_graph_edit_writes_checksum
+        ; Alcotest.test_case
+            "reopened-graph-keeps-max-tx-of-pipeline-transaction-test"
+            `Quick test_reopened_graph_keeps_max_tx_of_pipeline_transaction
         ; Alcotest.test_case
             "local-graph-open-does-not-recompute-checksum"
             `Quick test_local_graph_open_does_not_recompute_checksum
