@@ -363,14 +363,14 @@ external open_url : string -> unit = "open" [@@mel.scope "window"]
 (* cljs container.cljs help-menu-items -> .cp__sidebar-help-menu-popup *)
 let help_item key title icon_name act =
   Logseq_dom.dom ~key ~tag:"a"
-    ~style_class:"it flex items-center px-4 py-1 select-none"
+    ~style_class:"it"
     ~events:"click"
     ~on_dom_event:(fun n _ -> if n = "click" then act ())
     [ Logseq_dom.dom ~key:(key ^ "-i") ~tag:"span"
-        ~style_class:"flex items-center pr-2 opacity-40"
+        ~style_class:"ls-hm-icon"
         [ Icons.icon ~size:20. icon_name ]
     ; Logseq_dom.dom ~key:(key ^ "-t") ~tag:"strong"
-        ~style_class:"font-normal" ~text:title []
+        ~style_class:"ls-hm-title" ~text:title []
     ]
 
 let help_menu_popup : t =
@@ -384,7 +384,7 @@ let help_menu_popup : t =
         ; help_item "hm-shortcuts" (I18n.help_shortcuts) "command" close
         ; help_item "hm-docs" (I18n.help_docs) "help" (fun () ->
             open_url "https://docs.logseq.com/"; close ())
-        ; Logseq_dom.dom ~key:"hm-hr1" ~tag:"hr" ~style_class:"!my-2" []
+        ; Logseq_dom.dom ~key:"hm-hr1" ~tag:"hr" ~style_class:"ls-hm-hr" []
         ; help_item "hm-bug" (I18n.help_bug) "bug" close
         ; help_item "hm-feature" (I18n.help_feature) "git-pull-request"
             (fun () ->
@@ -394,26 +394,26 @@ let help_menu_popup : t =
         ; help_item "hm-feedback" (I18n.help_feedback) "messages"
             (fun () ->
               open_url "https://discuss.logseq.com/c/feedback/13"; close ())
-        ; Logseq_dom.dom ~key:"hm-hr2" ~tag:"hr" ~style_class:"!my-2" []
+        ; Logseq_dom.dom ~key:"hm-hr2" ~tag:"hr" ~style_class:"ls-hm-hr" []
         ; help_item "hm-discord" (I18n.help_discord) "brand-discord"
             (fun () -> open_url "https://discord.com/invite/KpN4eHY"; close ())
         ; help_item "hm-forum" (I18n.help_forum) "message" (fun () ->
             open_url "https://discuss.logseq.com/"; close ())
-        ; Logseq_dom.dom ~key:"hm-hr3" ~tag:"hr" ~style_class:"!my-2" []
+        ; Logseq_dom.dom ~key:"hm-hr3" ~tag:"hr" ~style_class:"ls-hm-hr" []
         ; help_item "hm-notes" (I18n.help_release_notes) "asterisk"
             (fun () ->
               open_url "https://docs.logseq.com/#/page/changelog"; close ())
         ]
     ; Logseq_dom.dom ~key:"hm-ft"
-        ~style_class:"ft pl-11 pb-3 flex flex-col gap-1"
+        ~style_class:"ft"
         ([ Logseq_dom.dom ~key:"hm-ver" ~tag:"span"
-             ~style_class:"opacity text-xs opacity-30"
+             ~style_class:"ls-hm-meta"
              ~text:(Printf.sprintf "Logseq %s" Version.app) [] ]
         @ (match Version.revision () with
            | "" -> []
            | rev ->
                [ Logseq_dom.dom ~key:"hm-rev" ~tag:"span"
-                   ~style_class:"opacity text-xs opacity-30"
+                   ~style_class:"ls-hm-meta"
                    ~text:(I18n.tf "help/revision" [ rev ]) [] ]))
     ]
 

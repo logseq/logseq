@@ -30,7 +30,7 @@ let category_ok cat pkg =
 
 let search_input ~key st =
   dom ~key ~style_class:"search-ctls"
-    [ dom ~key:(key ^ "-ic") ~tag:"small" ~style_class:"absolute s1"
+    [ dom ~key:(key ^ "-ic") ~tag:"small" ~style_class:"ls-search-ico"
         [ icon "search" ]
     ; dom ~key:(key ^ "-in") ~tag:"input"
         ~style_class:"form-input is-small"
@@ -52,12 +52,12 @@ let category_tabs ~key ~nums cat cat_st =
   let btn id label ic n =
     dom ~key:(key ^ "-" ^ id) ~tag:"button"
       ~style_class:
-        ("ui__button inline-flex items-center justify-center gap-1 px-3           py-1.5 text-sm"
+        ("ui__button ls-tab-btn"
          ^ if cat = id then " active" else "")
       ~events:"click"
       ~on_dom_event:(fun n _ ->
         if n = "click" then Runtime.signal_set cat_st id)
-      [ dom ~tag:"span" ~style_class:"flex items-center"
+      [ dom ~tag:"span" ~style_class:"ls-row"
           [ icon ic
           ; dom ~tag:"span" ~text:(label ^ " (" ^ string_of_int n ^ ")") [] ]
         ]
@@ -77,14 +77,14 @@ let control_tabs ~key ~search_st ~cat ~cat_st ~nums =
   let ghost_btn id cls ic =
     dom ~key:(key ^ "-" ^ id) ~tag:"button"
       ~style_class:
-        ("ui__button inline-flex items-center justify-center h-8 w-8 " ^ cls)
+        ("ui__button ls-icon-btn-md " ^ cls)
       [ icon ic ]
   in
   dom ~key:(key ^ "-ctls")
-    ~style_class:"pb-3 flex justify-between control-tabs relative"
-    [ dom ~key:(key ^ "-l") ~style_class:"flex items-center l"
+    ~style_class:"control-tabs"
+    [ dom ~key:(key ^ "-l") ~style_class:"l"
         [ category_tabs ~key ~nums cat cat_st ]
-    ; dom ~key:(key ^ "-r") ~style_class:"flex items-center r"
+    ; dom ~key:(key ^ "-r") ~style_class:"r"
         [ search_input ~key:(key ^ "-search") search_st
         ; ghost_btn "filter" "sort-or-filter-by" "filter"
         ; ghost_btn "more" "more-do" "dots-vertical"
@@ -102,9 +102,9 @@ let empty_item =
   fun key ->
     dom ~key
       ~style_class:
-        "flex items-center justify-center py-28 flex-col gap-2 opacity-30"
+        "ls-pl-empty"
       [ Icons.icon ~size:40. "list-search"
-      ; dom ~tag:"span" ~style_class:"text-sm"
+      ; dom ~tag:"span" ~style_class:"ls-pl-empty-text"
           ~text:(t "plugin/empty") []
       ]
 
@@ -133,30 +133,30 @@ let market_card pkg =
     if n = "click" then Plugin_readme.open_readme pkg
   in
   dom ~key:("mkt-" ^ id) ~style_class:cls
-    [ dom ~key:"l" ~style_class:"l link-block cursor-pointer"
+    [ dom ~key:"l" ~style_class:"l link-block"
         ~events:"click" ~on_dom_event:open_readme
         [ dom ~key:"ic" ~style_class:"plugin-icon" [ icon "puzzle" ] ]
     ; dom ~key:"r" ~style_class:"r"
         [ dom ~key:"h" ~tag:"h3"
-            ~style_class:"head text-xl font-bold pt-1.5"
+            ~style_class:"head"
             ~attrs:[ ("title", title) ]
             [ dom ~tag:"span"
-                ~style_class:"l link-block cursor-pointer" ~text:title
+                ~style_class:"l link-block" ~text:title
                 ~events:"click" ~on_dom_event:open_readme []
             ]
-        ; dom ~key:"desc" ~style_class:"desc text-xs opacity-70"
+        ; dom ~key:"desc" ~style_class:"desc"
             [ dom ~tag:"p" ~text:(jstr pkg "description") [] ]
         ; dom ~key:"flag" ~style_class:"flag"
             [ dom ~tag:"p"
-                ~style_class:"text-xs pr-2 flex justify-between"
+                ~style_class:"ls-pl-meta"
                 [ dom ~tag:"small" ~text:(jstr pkg "author") []
                 ; dom ~tag:"small" ~text:("ID: " ^ id) []
                 ]
             ]
         ; dom ~key:"ctl" ~style_class:"ctl"
             [ dom ~key:"ctl-l" ~tag:"ul"
-                ~style_class:"l flex items-center" []
-            ; dom ~key:"ctl-r" ~style_class:"r flex items-center"
+                ~style_class:"l" []
+            ; dom ~key:"ctl-r" ~style_class:"r"
                 [ dom ~key:"btn" ~tag:"a"
                     ~style_class:
                       ("btn" ^ if installed_ then " disabled" else "")
@@ -196,8 +196,7 @@ let card_name plj web_pkg pid =
 let switch_btn ~checked ~on_click =
   dom ~tag:"button" ~key:"sw"
     ~style_class:
-      "ui__switch inline-flex h-5 w-9 items-center rounded-full \
-       transition-colors"
+      "ui__switch ls-switch-lg"
     ~attrs:
       [ ("role", "switch")
       ; ("type", "button")
@@ -207,8 +206,7 @@ let switch_btn ~checked ~on_click =
     ~on_dom_event:(fun n _ -> if n = "click" then on_click ())
     [ dom ~tag:"span" ~key:"knob"
         ~style_class:
-          "ui__switch-thumb inline-block h-4 w-4 rounded-full \
-           bg-white shadow"
+          "ui__switch-thumb ls-thumb-lg"
         []
     ]
 
@@ -261,25 +259,25 @@ let installed_card (pl : Js.Json.t) =
     if n = "click" then Plugin_readme.open_readme plj
   in
   dom ~key:("inst-" ^ pid) ~style_class:"cp__plugins-item-card installed"
-    [ dom ~key:"l" ~style_class:"l link-block cursor-pointer"
+    [ dom ~key:"l" ~style_class:"l link-block"
         ~events:"click" ~on_dom_event:open_readme
         [ dom ~key:"ic" ~style_class:"plugin-icon" [ icon "puzzle" ] ]
     ; dom ~key:"r" ~style_class:"r"
         [ dom ~key:"h" ~tag:"h3"
-            ~style_class:"head text-xl font-bold pt-1.5"
+            ~style_class:"head"
             ~attrs:[ ("title", name) ]
             [ dom ~tag:"span"
-                ~style_class:"l link-block cursor-pointer" ~text:name
+                ~style_class:"l link-block" ~text:name
                 ~events:"click" ~on_dom_event:open_readme []
             ; dom ~tag:"sup" ~key:"v"
-                ~style_class:"inline-block px-1 text-xs opacity-50"
+                ~style_class:"ls-pl-status"
                 ~text:version []
             ]
-        ; dom ~key:"desc" ~style_class:"desc text-xs opacity-70"
+        ; dom ~key:"desc" ~style_class:"desc"
             [ dom ~tag:"p" ~text:desc [] ]
         ; dom ~key:"flag" ~style_class:"flag"
             [ dom ~tag:"p"
-                ~style_class:"text-xs pr-2 flex justify-between"
+                ~style_class:"ls-pl-meta"
                 [ dom ~tag:"small" ~text:(jstr web_pkg "author") []
                 ; dom ~tag:"small" ~text:("ID: " ^ pid) []
                 ]
@@ -312,7 +310,7 @@ let installed_card (pl : Js.Json.t) =
                         ]
                     ]
                 ]
-            ; dom ~key:"ctl-r" ~style_class:"r flex items-center"
+            ; dom ~key:"ctl-r" ~style_class:"r"
                 [ updates_btn ~pid ~plj ~web_pkg
                 ; switch_btn ~checked:(not disabled) ~on_click:(fun () ->
                       set_plugin_disabled pid (not disabled))
@@ -374,7 +372,7 @@ let market_panel ~key ~search ~cat ~search_st ~cat_st ~pkgs ~loading =
         ~nums:(0, 0)
     ; if loading && pkgs = [] then
         dom ~key:"pl-loading" ~tag:"p"
-          ~style_class:"flex justify-center py-20" [ icon "loader-2" ]
+          ~style_class:"ls-pl-loading" [ icon "loader-2" ]
       else
         dom ~key:(key ^ "-cnt") ~style_class:"cp__plugins-marketplace-cnt"
           [ list_wrap ~key:(key ^ "-list")
@@ -408,7 +406,7 @@ let body (_ms : Model.t Signal.signal) : t =
   let tab_btn id label ic active =
     dom ~key:("tab-" ^ id) ~tag:"button"
       ~style_class:
-        ("inline-flex items-center gap-1 px-3 py-1 text-sm"
+        ("ls-tab-btn"
          ^ if active then " active" else "")
       ~events:"click"
       ~on_dom_event:(fun n _ ->
@@ -424,9 +422,9 @@ let body (_ms : Model.t Signal.signal) : t =
           ~attrs:[ ("tabindex", "-1") ]
           [ dom ~key:"pl-h" ~tag:"h1" ~text:(t "nav/plugins") []
           ; dom ~key:"pl-tabs"
-              ~style_class:"tabs flex items-center justify-center"
+              ~style_class:"tabs"
               [ dom ~key:"pl-tabs-in"
-                  ~style_class:"tabs-inner flex items-center"
+                  ~style_class:"tabs-inner"
                   [ tab_btn "installed" "plugin/installed" "cube"
                       (tab_now = "installed")
                   ; tab_btn "marketplace" "plugin/marketplace" "apps"
@@ -490,7 +488,7 @@ let html_desc key desc =
   if desc = "" then []
   else
     [ dom ~key:("hd-" ^ key)
-        ~style_class:"html-content pl-1 flex-1 text-sm"
+        ~style_class:"html-content ls-pl-html"
         ~html:(Markdown.markdown_to_html desc) [] ]
 
 let set_v pid key v =
@@ -654,12 +652,12 @@ let item_button pid key s =
    plus reset/save keeps the same settings round-trip on web *)
 let code_mode_wrap pid code_mode =
   let content = json_pretty (Plugin_host.plugin_settings_json pid) in
-  dom ~key:"cmw" ~style_class:"code-mode-wrap pl-3 pr-1 py-1 mb-8 -ml-1"
+  dom ~key:"cmw" ~style_class:"code-mode-wrap"
     [ dom ~key:"ta" ~tag:"textarea"
-        ~style_class:"form-input font-mono"
+        ~style_class:"form-input ls-mono"
         ~attrs:[ ("rows", "12"); ("data-lang", "json") ]
         ~text:content []
-    ; dom ~key:"btns" ~style_class:"flex justify-end pt-2 gap-2"
+    ; dom ~key:"btns" ~style_class:"ls-form-actions"
         [ dom ~key:"reset" ~tag:"button"
             ~style_class:"ui__button is-small variant-ghost"
             ~attrs:[ ("type", "button") ] ~text:(t "ui/reset")
@@ -735,11 +733,11 @@ let settings_body (_ms : Model.t Signal.signal) : t =
             let body =
               if schema = [] then
                 [ dom ~tag:"h2" ~key:"none"
-                    ~style_class:"font-bold text-lg py-4 warning"
+                    ~style_class:"warning ls-pl-warn"
                     ~text:(t "plugin/no-settings-schema") [] ]
               else
                 [ dom ~tag:"h2" ~key:"id"
-                    ~style_class:"text-xl px-2 pt-1 opacity-90"
+                    ~style_class:"ls-pl-id"
                     ~text:("ID: " ^ pid) []
                 ; dom ~key:"in"
                     ~style_class:"cp__plugins-settings-inner"
@@ -748,7 +746,7 @@ let settings_body (_ms : Model.t Signal.signal) : t =
                     ( dom ~key:"ef" ~tag:"span"
                         ~style_class:"edit-file"
                         [ dom ~tag:"a"
-                            ~style_class:"text-sm hover:underline"
+                            ~style_class:"ls-pl-link"
                             ~events:"click"
                             ~on_dom_event:(fun n _ ->
                               if n = "click" then

@@ -110,20 +110,20 @@ let export_transit () =
 
 let link ~key label desc on_click =
   dom ~key
-    [ dom ~key:(key ^ "-a") ~tag:"a" ~style_class:"font-medium"
+    [ dom ~key:(key ^ "-a") ~tag:"a" ~style_class:"ls-strong"
         ~text:label ~events:"click"
         ~attrs:[ ("href", "#"); ("onclick", "return false") ]
         ~on_dom_event:(fun n _ -> if n = "click" then ignore (on_click ()))
         []
     ; dom ~key:(key ^ "-d") ~tag:"p"
-        ~style_class:"text-sm opacity-70 mb-0" ~text:desc []
+        ~style_class:"ls-desc" ~text:desc []
     ]
 
 let body (_ms : Model.t Signal.signal) : t =
   dom ~key:"export" ~style_class:"export"
-    [ dom ~key:"ex-h" ~tag:"h1" ~style_class:"title mb-8"
+    [ dom ~key:"ex-h" ~tag:"h1" ~style_class:"title ls-mb"
         ~text:T.export_title []
-    ; dom ~key:"ex-list" ~style_class:"flex flex-col gap-4 ml-1"
+    ; dom ~key:"ex-list" ~style_class:"ls-ex-list"
         [ link ~key:"ex-db" T.export_sqlite_db T.export_sqlite_desc
             export_binary
         ; link ~key:"ex-zip" T.export_sqlite_zip T.export_zip_desc

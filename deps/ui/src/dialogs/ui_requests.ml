@@ -66,9 +66,9 @@ let submit r two warn =
     Dialogs_state.clear_ui_request ())
 
 let pw_input ~key ~placeholder ~on_enter =
-  dom ~key ~style_class:"ls-toggle-password-input relative"
+  dom ~key ~style_class:"ls-toggle-password-input"
     [ dom ~key:(key ^ "-i") ~tag:"input"
-        ~style_class:"form-input block w-full sm:text-sm sm:leading-5"
+        ~style_class:"form-input"
         ~attrs:
           [ ("type", "password"); ("placeholder", placeholder)
           ; ("autocomplete", "off"); ("autofocus", "true") ]
@@ -81,8 +81,8 @@ let pw_input ~key ~placeholder ~on_enter =
           then on_enter ())
         []
     ; dom ~key:(key ^ "-eye") ~tag:"button"
-        ~style_class:"absolute right-1"
-        ~attrs:[ ("type", "button"); ("style", "top:6px") ]
+        ~style_class:"ls-eye-btn"
+        ~attrs:[ ("type", "button") ]
         [ dom ~key:"ic" ~tag:"i" ~style_class:"ti ti-eye" [] ]
     ]
 
@@ -98,17 +98,13 @@ let view (r : Dialogs_state.ui_request) : t =
     else (I18n.e2ee_enter_password_title, "")
   in
   dom ~key:"e2ee-ov"
-    ~style_class:
-      "e2ee-password-modal-overlay fixed inset-0 z-50 bg-background/90 \
-       flex justify-center items-center"
+    ~style_class:"e2ee-password-modal-overlay ui__dialog-overlay"
     [ dom ~key:"e2ee-c"
         ~style_class:
-          ("e2ee-password-modal-content flex flex-col gap-8 p-4 \
-            ui__dialog-content w-full max-w-2xl border bg-background \
-            sm:rounded-lg shadow-lg"
+          ("e2ee-password-modal-content ui__dialog-content"
           ^ extra)
-        [ dom ~key:"t" ~style_class:"text-2xl font-medium" ~text:title []
-        ; dom ~key:"f" ~style_class:"flex flex-col gap-4"
+        [ dom ~key:"t" ~style_class:"ls-e2ee-title" ~text:title []
+        ; dom ~key:"f" ~style_class:"ls-e2ee-form"
             ( [ pw_input ~key:"p1"
                   ~placeholder:I18n.e2ee_password_ph
                   ~on_enter:submit_now ]
@@ -121,18 +117,15 @@ let view (r : Dialogs_state.ui_request) : t =
                         if w
                         then
                           dom ~key:"mm"
-                            ~style_class:"text-warning text-sm"
+                            ~style_class:"ls-warn-text"
                             ~text:I18n.e2ee_password_not_matched
                             []
-                        else box ~key:"mm-ok" [])
+                        else Logseq_dom.nothing)
                       warn.Signal.state_signal
                   ]
                 else [] )
             @ [ dom ~key:"s" ~tag:"button"
-                  ~style_class:
-                    "ui__button inline-flex items-center justify-center \
-                     rounded-md text-sm font-medium px-4 py-2 \
-                     bg-primary text-primary-foreground"
+                  ~style_class:"ui__button ls-btn-primary"
                   ~attrs:[ ("type", "button") ]
                   ~text:I18n.submit ~events:"click"
                   ~on_dom_event:(fun n _ ->

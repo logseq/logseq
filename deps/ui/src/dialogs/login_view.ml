@@ -125,8 +125,7 @@ let submit () =
 
 let field ~key ~name ~type_ ~placeholder ~autofocus =
   dom ~key ~tag:"input"
-    ~style_class:
-      "form-input block w-full sm:text-sm sm:leading-5 my-2"
+    ~style_class:"form-input ls-login-input"
     ~attrs:
       ([ ("name", name); ("type", type_); ("placeholder", placeholder)
        ; ("autocomplete", "off") ]
@@ -151,17 +150,13 @@ let body (_ms : Model.t Signal.signal) : t =
       ~events:"submit"
       ~on_dom_event:(fun n _ -> if n = "submit" then submit ())
       [ dom ~key:"lg-t" ~tag:"h2"
-          ~style_class:
-            "ui__dialog-title text-lg font-semibold leading-none \
-             tracking-tight" ~text:T.login_title []
+          ~style_class:"ui__dialog-title" ~text:T.login_title []
       ; field ~key:"lg-u" ~name:"username" ~type_:"text"
           ~placeholder:T.login_username ~autofocus:true
       ; field ~key:"lg-p" ~name:"password" ~type_:"password"
           ~placeholder:T.login_password ~autofocus:false
       ; dom ~key:"lg-s" ~tag:"button" ~text:T.submit
-          ~style_class:
-            "inline-flex items-center justify-center rounded-md text-sm \
-             font-medium bg-primary text-primary-foreground px-4 py-2"
+          ~style_class:"ui__button ls-btn-primary"
           ~attrs:[ ("type", "submit") ]
           ~events:"click"
           ~on_dom_event:(fun n _ -> if n = "click" then submit ())

@@ -208,10 +208,10 @@ let block_editor_frame u cell wrap =
   in
   el_append_child brow wrap;
   let right =
-    mk ~cls:"ls-block-right flex flex-row items-center self-start gap-1"
+    mk ~cls:"ls-block-right"
       "div"
   in
-  el_append_child right (mk ~cls:"opacity-70 hover:opacity-100" "div");
+  el_append_child right (mk ~cls:"ls-hover-lit" "div");
   el_append_child brow right;
   el_append_child boei brow;
   el_append_child boew boei;
@@ -233,10 +233,10 @@ let edit_text_cell ?(steal = false) ctx row cell initial =
      commit this buffer onto the owner's title *)
   let vu = Option.value ~default:u (D.ref_uuid (D.row_value row)) in
   let wrap =
-    mk ~cls:"editor-wrapper flex flex-1 w-full" "div"
+    mk ~cls:"editor-wrapper" "div"
       ~attrs:[ ("id", "editor-edit-block-" ^ vu) ]
   in
-  let inner = mk ~cls:"editor-inner flex flex-1 block-editor" "div" in
+  let inner = mk ~cls:"editor-inner block-editor" "div" in
   let ta =
     mk ~cls:"uniline-block normal-block" "textarea"
       ~attrs:
@@ -330,7 +330,7 @@ let edit_text_cell ?(steal = false) ctx row cell initial =
 let text_cell ctx row =
   let value = D.row_value row in
   let cell =
-    mk ~cls:"property-block-container content w-full jtrigger" "div"
+    mk ~cls:"property-block-container content jtrigger" "div"
       ~attrs:[ ("tabindex", "-1") ]
   in
   if not (D.value_empty_p value) then
@@ -351,7 +351,7 @@ let text_cell ctx row =
 
 let number_cell ctx row =
   let value = D.row_value row in
-  let cell = mk ~cls:"ls-number flex flex-1 jtrigger" "div" in
+  let cell = mk ~cls:"ls-number jtrigger" "div" in
   if not (D.value_empty_p value) then
     el_set_text cell (D.value_display value);
   on_click cell (fun _ ->
@@ -426,7 +426,7 @@ let date_picker ctx row anchor =
   let ident = D.row_ident row |> Option.value ~default:"" in
   let is_datetime = D.row_type row = "datetime" in
   let picker =
-    mk ~cls:"ls-property-date-picker flex flex-row gap-2" "div"
+    mk ~cls:"ls-property-date-picker" "div"
   in
   let input =
     mk "input"
@@ -482,7 +482,7 @@ let datetime_content cell ms =
          (Js.Date.utc ~year:(float y) ~month:(float (m - 1))
             ~date:(float d) ()))
   in
-  let wrap = mk ~cls:"ls-datetime flex flex-row gap-1 items-center" "div" in
+  let wrap = mk ~cls:"ls-datetime" "div" in
   let inner = mk ~cls:"inline-flex" "span" in
   let a =
     mk ~cls:"page-ref" "a"
@@ -510,7 +510,7 @@ let ms_of_datetime_value (v : W.t) : float option =
 
 let date_cell ctx row =
   let value = D.row_value row in
-  let cell = mk ~cls:"jtrigger flex flex-1" "div" in
+  let cell = mk ~cls:"jtrigger" "div" in
   if not (D.value_empty_p value) then
     (match D.row_type row = "datetime", ms_of_datetime_value value with
      | true, Some ms -> datetime_content cell ms
@@ -693,18 +693,18 @@ let closed_value_icon_id value =
 
 let closed_value_cell ctx row anchor =
   let value = D.row_value row in
-  let cell = mk ~cls:"jtrigger flex flex-1 w-full" "div" in
+  let cell = mk ~cls:"jtrigger" "div" in
   (* cljs select-item: an empty closed value renders .select-item >
      .empty-btn with the line-dashed icon — keeps the jtrigger
      visible/clickable *)
   (match closed_value_icon_id value with
    | Some id ->
-       let item = mk ~cls:"select-item cursor-pointer" "div" in
+       let item = mk ~cls:"select-item" "div" in
        el_append_child item (Views_dom.icon id);
        el_append_child cell item
    | None ->
        if D.value_empty_p value then (
-         let item = mk ~cls:"select-item cursor-pointer" "div" in
+         let item = mk ~cls:"select-item" "div" in
          let btn = mk ~cls:"empty-btn" "button" ~attrs:[ ("type", "button") ] in
          el_append_child btn (Views_dom.icon "line-dashed");
          el_append_child item btn;
@@ -751,7 +751,7 @@ let node_cell ctx row =
      .select-item.cursor-pointer > a.page-ref.relative[data-uuid][data-ref]
      — refs render as clickable links, not bare text *)
   let wrap =
-    mk ~cls:"w-full property-value-inner"
+    mk ~cls:"property-value-inner"
       ~attrs:[ ("data-type", D.row_type row) ]
       "div"
   in
@@ -766,7 +766,7 @@ let node_cell ctx row =
   el_set_attr cell "tabindex" "0";
   List.iter
     (fun r ->
-      let item = mk ~cls:"select-item cursor-pointer" "div" in
+      let item = mk ~cls:"select-item" "div" in
       let t = D.ref_title r in
       let a =
         mk "a" ~cls:"page-ref relative"
@@ -939,7 +939,7 @@ let open_extends_menu ctx ~ident row anchor =
               | None -> ()
               | Some id ->
                   let a =
-                    mk ~cls:"flex justify-between menu-link" "a"
+                    mk ~cls:"menu-link" "a"
                       ~attrs:[ ("tabindex", "0") ]
                   in
                   ignore
@@ -976,7 +976,7 @@ let open_extends_menu ctx ~ident row anchor =
 let extends_cell ctx row =
   let value = D.row_value row in
   let ident = D.row_ident row |> Option.value ~default:"" in
-  let cell = mk ~cls:"jtrigger flex flex-1 multi-values" "div" in
+  let cell = mk ~cls:"jtrigger multi-values" "div" in
   el_set_attr cell "tabindex" "0";
   (* cljs property-block-value -> page-cp: page entities render as
      a.relative.tag / a.relative.page-ref, not .block-title-wrap *)
@@ -1006,7 +1006,7 @@ let extends_cell ctx row =
 
 let editing_cell ctx row inner =
   let cell =
-    mk ~cls:"property-block-container content w-full" "div"
+    mk ~cls:"property-block-container content" "div"
       ~attrs:[ ("tabindex", "-1") ]
   in
   (* keep the inline editor focused when the click lands on the cell
@@ -1026,7 +1026,7 @@ let editing_cell ctx row inner =
 
 let render ctx row =
   let inner =
-    mk ~cls:"property-value property-value-panel-inner flex flex-1" "div"
+    mk ~cls:"property-value property-value-panel-inner" "div"
   in
   let ident = D.row_ident row |> Option.value ~default:"" in
   (* cljs keeps a single editing surface: while a block is open in the
