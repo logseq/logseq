@@ -796,7 +796,15 @@ let on_doc_click st ev =
     with
     | Some _ -> ()
     | None -> close_menu st);
-  match click_target "a.page-ref" ev with
+  match
+    (match click_target "a.page-ref" ev with
+     | Some _ as r -> r
+     | None ->
+         (* the anchor inside .page-reference mounts empty (lazy title
+            pull) — a click on the bracket shell still has data-ref on the
+            wrapper *)
+         click_target ".page-reference" ev)
+  with
   | Some el -> (
       match
         (* uuid refs ([[uuid]]/((uuid))) carry data-uuid; data-ref holds the
