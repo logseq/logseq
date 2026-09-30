@@ -162,8 +162,7 @@ let arrow_svg_el () =
    editor): .ls-block.is-blank > .block-main-container >
    .block-control-wrap (arrow + bullet) + .block-main-content >
    .block-content-or-editor-wrap > .block-row > .editor-wrapper *)
-let block_editor_frame ctx cell wrap =
-  let u = ctx.block_uuid in
+let block_editor_frame u cell wrap =
   let blk =
     mk ~cls:"is-blank ls-block swipe-item" "div"
       ~attrs:
@@ -228,16 +227,21 @@ let block_editor_frame ctx cell wrap =
 let edit_text_cell ?(steal = false) ctx row cell initial =
   el_clear cell;
   let u = ctx.block_uuid in
+  (* the editor edits the value block, so its edit-block ids must resolve
+     to the value block's uuid — carrying the owner's makes document-level
+     editor dispatch (on_input's schedule_save, exit_edit's live_buffer)
+     commit this buffer onto the owner's title *)
+  let vu = Option.value ~default:u (D.ref_uuid (D.row_value row)) in
   let wrap =
     mk ~cls:"editor-wrapper flex flex-1 w-full" "div"
-      ~attrs:[ ("id", "editor-edit-block-" ^ u) ]
+      ~attrs:[ ("id", "editor-edit-block-" ^ vu) ]
   in
   let inner = mk ~cls:"editor-inner flex flex-1 block-editor" "div" in
   let ta =
     mk ~cls:"uniline-block normal-block" "textarea"
       ~attrs:
         [ ("autocapitalize", "off"); ("autocorrect", "false")
-        ; ("data-testid", "block editor"); ("id", "edit-block-" ^ u)
+        ; ("data-testid", "block editor"); ("id", "edit-block-" ^ vu)
         ; ("style", "field-sizing: content; min-height: 1lh;") ]
   in
   let mt = mk ~cls:"mock-text" "div" in
@@ -253,7 +257,7 @@ let edit_text_cell ?(steal = false) ctx row cell initial =
   el_append_child inner mt;
   el_append_child inner uploader;
   el_append_child wrap inner;
-  block_editor_frame ctx cell wrap;
+  block_editor_frame vu cell wrap;
   el_set_value ta initial;
   (* single editing surface: commit the property editor still open
      elsewhere before this one registers — the previous commit's row
