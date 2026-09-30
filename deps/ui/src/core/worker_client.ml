@@ -2,6 +2,7 @@
    Comlink surface both directions, and the postMessage dispatch loop.
    Mirrors frontend/persist_db/browser.cljs + frontend/handler/worker.cljs. *)
 
+open Promise_ext
 type message_handler = string -> Wire.t -> unit
 
 type t =
@@ -39,9 +40,8 @@ let remote_invoke_js =
           let args = decode_args transit_args in
           (* handler rejections propagate to the returned promise — the
              worker's remoteInvoke must settle instead of hanging *)
-          f args
-          |> Js.Promise.then_ (fun result ->
-                 Js.Promise.resolve (Transit.to_string result))
+          let* result = f args in
+          Js.Promise.resolve (Transit.to_string result)
         with exn -> Js.Promise.reject exn)
     | None -> Js.Promise.reject (Failure ("not found thread-api: " ^ name))
 
@@ -107,12 +107,12 @@ let onmessage t event =
 (* invoke qkw (e.g. "thread-api/init") with decoded wire args *)
 let invoke t name args =
   let transit_args = Transit.to_string (Wire.Array args) in
-  Js.Promise.then_
-    (fun result -> Js.Promise.resolve (Transit.of_string result))
-    (* the worker never answers after it dies — race every call against
-       [dead] so a crash rejects callers instead of hanging them *)
+  let* result =
     (Js.Promise.race
        [| Comlink.remote_invoke t.proxy name transit_args; t.dead |])
+  in
+  Js.Promise.resolve (Transit.of_string result) (* the worker never answers after it dies — race every call against
+       [dead] so a crash rejects callers instead of hanging them *)
 
 let invoke1 t name a = invoke t name [ a ]
 let invoke2 t name a b = invoke t name [ a; b ]
@@ -121,11 +121,9 @@ let set_worker_fs worker =
   let portal = Comlink.new_portal worker in
   let install name =
     ignore
-      (Js.Promise.then_
-         (fun v ->
-           set_global name v;
-           Js.Promise.resolve ())
-         (Comlink.portal_get portal name))
+      (let* v = (Comlink.portal_get portal name) in
+      set_global name v;
+      Js.Promise.resolve ())
   in
   install "fs";
   install "pfs";

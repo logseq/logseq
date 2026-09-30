@@ -3,6 +3,7 @@
    raw wire (Decode drops block/collapsed?), and republish the page via
    Runtime.send (Page_loaded ...). *)
 
+open Promise_ext
 module S = Editor_state
 
 let kw k v = (Wire.Keyword k, v)
@@ -322,25 +323,25 @@ let rec fill_embed_children repo ancestors collapsed
     let embed_p =
       match b.Model.block_link with
       | Some link_id when not (List.mem link_id ancestors) ->
-          Runtime.invoke3 "thread-api/get-page-blocks-tree"
-            (Wire.String repo) (Wire.Int link_id) Wire.Nil
-          |> Js.Promise.then_ (fun w ->
-                 collapsed := collect_collapsed !collapsed w;
-                 fill_embed_children repo (link_id :: ancestors)
-                   collapsed (Decode.blocks_of_wire w))
+          (let* w =
+            Runtime.invoke3 "thread-api/get-page-blocks-tree"
+              (Wire.String repo) (Wire.Int link_id) Wire.Nil
+          in
+          collapsed := collect_collapsed !collapsed w;
+          fill_embed_children repo (link_id :: ancestors)
+            collapsed (Decode.blocks_of_wire w))
           |> Js.Promise.catch (fun _ -> Js.Promise.resolve [])
       | _ -> Js.Promise.resolve []
     in
-    Js.Promise.all [| children_p; embed_p |]
-    |> Js.Promise.then_ (fun a ->
-           Js.Promise.resolve
-             { b with
-               Model.block_children = a.(0)
-             ; block_embed_children = a.(1)
-             })
+    let* a = Js.Promise.all [| children_p; embed_p |] in
+    Js.Promise.resolve
+      { b with
+        Model.block_children = a.(0)
+      ; block_embed_children = a.(1)
+      }
   in
-  Js.Promise.all (Array.of_list (List.map item_p blocks))
-  |> Js.Promise.then_ (fun arr -> Js.Promise.resolve (Array.to_list arr))
+  let* arr = Js.Promise.all (Array.of_list (List.map item_p blocks)) in
+  Js.Promise.resolve (Array.to_list arr)
 
 let ancestors_of (page : Model.page) =
   match page.Model.page_db_id with Some id -> [ id ] | None -> []
@@ -373,47 +374,48 @@ let tag_hidden blk =
 
 (* (db-id, (title, ident, hidden, uuid)) per tag entity *)
 let tag_titles repo ids : (int * (string * string * bool * string)) list Js.Promise.t =
-  Runtime.invoke2 "thread-api/get-blocks" (Wire.String repo)
-    (Wire.Array
-       (List.map
-          (fun i ->
-            Wire.Map
-              [ (Wire.String "id", Wire.Int i)
-              ; ( Wire.String "opts"
-                , Wire.Map
-                    [ ( Wire.String "properties"
-                      , Wire.Array
-                          [ Wire.Keyword "db/ident"
-                          ; Wire.Keyword
-                              "logseq.property.class/hide-from-node" ])
-                    ]) ])
-          ids))
-  |> Js.Promise.then_ (fun w ->
-         Js.Promise.resolve
-           (List.filter_map
-              (fun pair ->
-                let blk =
-                  match Wire.block_of_pair pair with
-                  | Some b -> b
-                  | None -> Wire.Nil
-                in
-                match
-                  ( Wire.map_get_int blk "db/id"
-                  , Wire.map_get_string blk "block/title" )
-                with
-                | Some id, Some t ->
-                    Some
-                      ( id
-                      , ( t
-                        , (match Wire.get blk "db/ident" with
-                           | Some (Wire.Keyword s) | Some (Wire.String s) ->
-                               s
-                           | _ -> "")
-                        , tag_hidden blk
-                        , Option.value (Wire.map_get_uuid blk "block/uuid")
-                            ~default:"" ) )
-                | _ -> None)
-              (Wire.elems w)))
+  let* w =
+    Runtime.invoke2 "thread-api/get-blocks" (Wire.String repo)
+      (Wire.Array
+         (List.map
+            (fun i ->
+              Wire.Map
+                [ (Wire.String "id", Wire.Int i)
+                ; ( Wire.String "opts"
+                  , Wire.Map
+                      [ ( Wire.String "properties"
+                        , Wire.Array
+                            [ Wire.Keyword "db/ident"
+                            ; Wire.Keyword
+                                "logseq.property.class/hide-from-node" ])
+                      ]) ])
+            ids))
+  in
+  Js.Promise.resolve
+    (List.filter_map
+       (fun pair ->
+         let blk =
+           match Wire.block_of_pair pair with
+           | Some b -> b
+           | None -> Wire.Nil
+         in
+         match
+           ( Wire.map_get_int blk "db/id"
+           , Wire.map_get_string blk "block/title" )
+         with
+         | Some id, Some t ->
+             Some
+               ( id
+               , ( t
+                 , (match Wire.get blk "db/ident" with
+                    | Some (Wire.Keyword s) | Some (Wire.String s) ->
+                        s
+                    | _ -> "")
+                 , tag_hidden blk
+                 , Option.value (Wire.map_get_uuid blk "block/uuid")
+                     ~default:"" ) )
+         | _ -> None)
+       (Wire.elems w))
 
 let resolve_block_tags (blocks : Model.block list) : Model.block list Js.Promise.t =
   let ids =
@@ -425,128 +427,127 @@ let resolve_block_tags (blocks : Model.block list) : Model.block list Js.Promise
       match !Runtime.current_repo with
       | None -> Js.Promise.resolve blocks
       | Some repo ->
-          tag_titles repo ids
-          |> Js.Promise.then_ (fun titles ->
-
-                 let rec fill (b : Model.block) =
-                   let resolved =
-                     List.filter_map
-                       (fun i ->
-                         Option.map (fun r -> (i, r))
-                           (List.assoc_opt i titles))
-                       b.Model.block_tag_ids
-                   in
-                   let idents =
-                     List.map (fun (_, (_, i, _, _)) -> i) resolved
-                   in
-                   let visible =
-                     List.filter
-                       (fun (_, (_, ident, hidden, _uuid)) ->
-                         not hidden && not (internal_tag_ident ident))
-                       resolved
-                   in
-                   { b with
-                     Model.block_tags =
-                       List.map (fun (_, (t, _, _, _)) -> t) visible
-                   ; block_tag_uuids =
-                       List.map (fun (_, (_, _, _, u)) -> u) visible
-                   ; (* block_tag_idents stays unfiltered: internal
-                        classes (Page, Comments, Query, …) drive the
-                        node icon and structural checks even though
-                        they never render as chips *)
-                     block_tag_idents = idents
-                   ; block_tag_db_ids =
-                       List.map (fun (i, _) -> i) visible
-                   ; block_is_comments_area =
-                       List.mem "logseq.class/Comments" idents
-                   ; block_is_comment =
-                       List.mem "logseq.class/Comment" idents
-                   ; block_children = List.map fill b.block_children
-                   }
-                 in
-                 Js.Promise.resolve (List.map fill blocks)))
+          let* titles = tag_titles repo ids in
+          let rec fill (b : Model.block) =
+            let resolved =
+              List.filter_map
+                (fun i ->
+                  Option.map (fun r -> (i, r))
+                    (List.assoc_opt i titles))
+                b.Model.block_tag_ids
+            in
+            let idents =
+              List.map (fun (_, (_, i, _, _)) -> i) resolved
+            in
+            let visible =
+              List.filter
+                (fun (_, (_, ident, hidden, _uuid)) ->
+                  not hidden && not (internal_tag_ident ident))
+                resolved
+            in
+            { b with
+              Model.block_tags =
+                List.map (fun (_, (t, _, _, _)) -> t) visible
+            ; block_tag_uuids =
+                List.map (fun (_, (_, _, _, u)) -> u) visible
+            ; (* block_tag_idents stays unfiltered: internal
+                 classes (Page, Comments, Query, …) drive the
+                 node icon and structural checks even though
+                 they never render as chips *)
+              block_tag_idents = idents
+            ; block_tag_db_ids =
+                List.map (fun (i, _) -> i) visible
+            ; block_is_comments_area =
+                List.mem "logseq.class/Comments" idents
+            ; block_is_comment =
+                List.mem "logseq.class/Comment" idents
+            ; block_children = List.map fill b.block_children
+            }
+          in
+          Js.Promise.resolve (List.map fill blocks))
 
 (* the page entity's own block/tags -> resolved titles (page-title chips) *)
 let resolve_page_tags repo (page : Model.page) : Model.page Js.Promise.t =
-  Runtime.invoke2 "thread-api/get-case-page" (Wire.String repo)
-    (Wire.String page.Model.page_title)
-  |> Js.Promise.then_ (fun w ->
-         (* get-case-page encodes multi-ref values as a plain set of
+  let* w =
+    Runtime.invoke2 "thread-api/get-case-page" (Wire.String repo)
+      (Wire.String page.Model.page_title)
+  in
+  (* get-case-page encodes multi-ref values as a plain set of
             entity ids (unlike the {:db/id} stubs in entity maps) *)
-         let ids =
-           match Wire.get w "block/tags" with
-           | Some (Wire.List xs) | Some (Wire.Array xs) | Some (Wire.Set xs) ->
-               List.filter_map
-                 (fun t ->
-                   match t with
-                   | Wire.Int _ | Wire.Int64 _ -> Wire.as_int t
-                   | Wire.Tagged (_, inner) -> Wire.map_get_int inner "db/id"
-                   | w -> Wire.map_get_int w "db/id")
-                 xs
-           | _ -> []
-         in
-         match ids with
-         | [] -> Js.Promise.resolve page
-         | _ ->
-             tag_titles repo ids
-             |> Js.Promise.then_ (fun titles ->
-                    (* the built-in Page class is implicit on every page —
-                       cljs never renders it as a chip *)
-                    let keep (i, (_, ident, _, _)) =
-                      List.mem i ids && ident <> "logseq.class/Page"
-                    in
-                    let kept = List.filter keep titles in
-                    Js.Promise.resolve
-                      { page with
-                        Model.page_tags =
-                          List.map (fun (_, (t, _, _, _)) -> t) kept
-                      ; page_tag_idents =
-                          List.map (fun (_, (_, ident, _, _)) -> ident) kept
-                      ; page_tag_uuids =
-                          List.map (fun (_, (_, _, _, u)) -> u) kept
-                      ; page_tag_db_ids =
-                          List.map (fun (i, _) -> i) kept
-                      ; page_internal =
-                          List.exists
-                            (fun (i, (_, ident, _hidden, _uuid)) ->
-                              List.mem i ids
-                              && ident = "logseq.class/Page")
-                            titles
-                      }))
+  let ids =
+    match Wire.get w "block/tags" with
+    | Some (Wire.List xs) | Some (Wire.Array xs) | Some (Wire.Set xs) ->
+        List.filter_map
+          (fun t ->
+            match t with
+            | Wire.Int _ | Wire.Int64 _ -> Wire.as_int t
+            | Wire.Tagged (_, inner) -> Wire.map_get_int inner "db/id"
+            | w -> Wire.map_get_int w "db/id")
+          xs
+    | _ -> []
+  in
+  match ids with
+  | [] -> Js.Promise.resolve page
+  | _ ->
+      let* titles = tag_titles repo ids in
+      (* the built-in Page class is implicit on every page —
+                cljs never renders it as a chip *)
+      let keep (i, (_, ident, _, _)) =
+        List.mem i ids && ident <> "logseq.class/Page"
+      in
+      let kept = List.filter keep titles in
+      Js.Promise.resolve
+        { page with
+          Model.page_tags =
+            List.map (fun (_, (t, _, _, _)) -> t) kept
+        ; page_tag_idents =
+            List.map (fun (_, (_, ident, _, _)) -> ident) kept
+        ; page_tag_uuids =
+            List.map (fun (_, (_, _, _, u)) -> u) kept
+        ; page_tag_db_ids =
+            List.map (fun (i, _) -> i) kept
+        ; page_internal =
+            List.exists
+              (fun (i, (_, ident, _hidden, _uuid)) ->
+                List.mem i ids
+                && ident = "logseq.class/Page")
+              titles
+        }
 
 (* block zoom: the route root is a block, not a page — refetch it via
    get-blocks (get-page-blocks-tree would return its children or nothing).
    Returns the raw wire list like get-page-blocks-tree. *)
 let fetch_zoom_blocks repo uuid : Wire.t Js.Promise.t =
-  Runtime.invoke2 "thread-api/get-blocks" (Wire.String repo)
-    (Wire.Array
-       [ Wire.Map
-           [ (Wire.String "id", Wire.Uuid uuid)
-           ; ( Wire.String "opts"
-             , Wire.Map
-                 [ (Wire.Keyword "children?", Wire.Bool true)
-                 ; (* a container's root always renders its children,
-                      even when collapsed in the page — fetch them *)
-                   ( Wire.Keyword "include-collapsed-children?"
-                   , Wire.Bool true )
-                 ] )
-           ]
-       ])
-  |> Js.Promise.then_ (fun w ->
-         match Wire.elems w with
-         | [ pair ] -> (
-             let blk =
-               (* the pair's flat `children` carry the full maps; splice
-                  them into block/children before decoding *)
-               match Decode.nest_get_blocks pair with
-               | Some w -> Some w
-               | None -> Wire.block_of_pair pair
-             in
-             (match blk with
-              | Some (Wire.Map _ as blk) ->
-                  Js.Promise.resolve (Wire.List [ blk ])
-              | _ -> Js.Promise.resolve (Wire.List [])))
-         | _ -> Js.Promise.resolve (Wire.List []))
+  let* w =
+    Runtime.invoke2 "thread-api/get-blocks" (Wire.String repo)
+      (Wire.Array
+         [ Wire.Map
+             [ (Wire.String "id", Wire.Uuid uuid)
+             ; ( Wire.String "opts"
+               , Wire.Map
+                   [ (Wire.Keyword "children?", Wire.Bool true)
+                   ; (* a container's root always renders its children,
+                        even when collapsed in the page — fetch them *)
+                     ( Wire.Keyword "include-collapsed-children?"
+                     , Wire.Bool true )
+                   ] )
+             ]
+         ])
+  in
+  match Wire.elems w with
+  | [ pair ] -> (
+      let blk =
+        (* the pair's flat `children` carry the full maps; splice
+           them into block/children before decoding *)
+        match Decode.nest_get_blocks pair with
+        | Some w -> Some w
+        | None -> Wire.block_of_pair pair
+      in
+      (match blk with
+       | Some (Wire.Map _ as blk) ->
+           Js.Promise.resolve (Wire.List [ blk ])
+       | _ -> Js.Promise.resolve (Wire.List [])))
+  | _ -> Js.Promise.resolve (Wire.List [])
 
 (* shared page-blocks pipeline: collapse-state collection → embed-children
    fill → collapse application → library view filter → tag-title resolution.
@@ -557,32 +558,36 @@ let blocks_of_tree_wire ?(plain = false) repo (p : Model.page) blocks_w =
   else
     let collapsed = ref S.String_set.empty in
     collapsed := collect_collapsed !collapsed blocks_w;
-    fill_embed_children repo (ancestors_of p) collapsed
-      (Decode.blocks_of_wire blocks_w)
-    |> Js.Promise.then_ (fun blocks ->
-           set_collapsed !collapsed;
-           resolve_block_tags
-             (Decode.view_blocks ~library:p.Model.page_is_library blocks))
+    let* blocks =
+      fill_embed_children repo (ancestors_of p) collapsed
+        (Decode.blocks_of_wire blocks_w)
+    in
+    set_collapsed !collapsed;
+    resolve_block_tags
+      (Decode.view_blocks ~library:p.Model.page_is_library blocks)
 
 let fetch_page_blocks ?(plain = false) repo (p : Model.page) =
-  Runtime.invoke3 "thread-api/get-page-blocks-tree" (Wire.String repo)
-    (Wire.page_ref
-       (Option.value p.Model.page_uuid ~default:p.Model.page_title))
-    Wire.Nil
-  |> Js.Promise.then_ (blocks_of_tree_wire ~plain repo p)
+  let* v =
+    Runtime.invoke3 "thread-api/get-page-blocks-tree" (Wire.String repo)
+      (Wire.page_ref
+         (Option.value p.Model.page_uuid ~default:p.Model.page_title))
+      Wire.Nil
+  in
+  (blocks_of_tree_wire ~plain repo p) v
 
 (* block-zoom breadcrumb chain: ancestor titles must be refetched on
    refresh too — a renamed parent shows stale text otherwise *)
 let fetch_zoom_parents repo uuid : Model.block list Js.Promise.t =
-  Runtime.invoke2 "thread-api/get-block-parents" (Wire.String repo)
-    (Wire.List [ Wire.Keyword "block/uuid"; Wire.Uuid uuid ])
-  |> Js.Promise.then_ (fun parents_w ->
-         Js.Promise.resolve
-           (Wire.elems parents_w
-            |> List.filter_map (fun w ->
-                   match w with
-                   | Wire.Map _ -> Some (Decode.block_of_wire w)
-                   | _ -> None)))
+  let* parents_w =
+    Runtime.invoke2 "thread-api/get-block-parents" (Wire.String repo)
+      (Wire.List [ Wire.Keyword "block/uuid"; Wire.Uuid uuid ])
+  in
+  Js.Promise.resolve
+    (Wire.elems parents_w
+     |> List.filter_map (fun w ->
+            match w with
+            | Wire.Map _ -> Some (Decode.block_of_wire w)
+            | _ -> None))
 
 (* refetch unlinked refs for the current page — a block-title edit can
    create or remove a text mention; the send is guarded so an in-flight
@@ -597,13 +602,14 @@ let fetch_unlinked_refs ~stale:(is_stale : unit -> bool) (p : Model.page) =
   match !Runtime.current_repo, p.Model.page_db_id with
   | Some repo, Some id ->
       ignore
-        (Runtime.invoke2 "thread-api/get-unlinked-refs" (Wire.String repo)
-           (Wire.Int id)
-         |> Js.Promise.then_ (fun w ->
-                Js.Promise.resolve
-                  (if not (is_stale ()) then
-                     Runtime.send
-                       (Action.Unlinked_loaded (Decode.blocks_of_wire w))))
+        ((let* w =
+           Runtime.invoke2 "thread-api/get-unlinked-refs" (Wire.String repo)
+             (Wire.Int id)
+         in
+         Js.Promise.resolve
+           (if not (is_stale ()) then
+              Runtime.send
+                (Action.Unlinked_loaded (Decode.blocks_of_wire w))))
          |> Js.Promise.catch (fun e ->
                 Platform.console_error ("get-unlinked-refs failed", e);
                 Js.Promise.resolve ()))
@@ -622,18 +628,19 @@ let fetch_unlinked_exists ~stale:(is_stale : unit -> bool)
           [ Wire.Keyword "block-unlinked-ref-exists"; Wire.Uuid uuid ]
       in
       ignore
-        (Runtime.invoke2 "thread-api/get-render-snapshots"
-           (Wire.String repo)
-           (Wire.Map
-              [ (Wire.Keyword "blocks", Wire.Array [])
-              ; (Wire.Keyword "children", Wire.Array [])
-              ; (Wire.Keyword "resources", Wire.Array [ rk ]) ])
-         |> Js.Promise.then_ (fun w ->
-                Js.Promise.resolve
-                  (match Views_wire.snapshot_slot_value w rk with
-                   | Some (Wire.Bool b) when not (is_stale ()) ->
-                       Runtime.send (Action.Unlinked_exists b)
-                   | _ -> ()))
+        ((let* w =
+           Runtime.invoke2 "thread-api/get-render-snapshots"
+             (Wire.String repo)
+             (Wire.Map
+                [ (Wire.Keyword "blocks", Wire.Array [])
+                ; (Wire.Keyword "children", Wire.Array [])
+                ; (Wire.Keyword "resources", Wire.Array [ rk ]) ])
+         in
+         Js.Promise.resolve
+           (match Views_wire.snapshot_slot_value w rk with
+            | Some (Wire.Bool b) when not (is_stale ()) ->
+                Runtime.send (Action.Unlinked_exists b)
+            | _ -> ()))
          |> Js.Promise.catch (fun e ->
                 Platform.console_error
                   ("block-unlinked-ref-exists failed", e);
@@ -664,35 +671,34 @@ let refresh_page () : unit Js.Promise.t =
       let blocks_p =
         match !Runtime.current_route, page.Model.page_uuid with
         | Some (Model.Block_zoom _), Some u ->
-            fetch_zoom_blocks repo u
-            |> Js.Promise.then_ (blocks_of_tree_wire repo page)
+            let* v = fetch_zoom_blocks repo u in
+            (blocks_of_tree_wire repo page) v
         | _ -> fetch_page_blocks repo page
       in
-      blocks_p
-      |> Js.Promise.then_ (fun blocks ->
-             (* a newer refresh superseded this fetch — a stale apply
+      (let* blocks = blocks_p in
+      (* a newer refresh superseded this fetch — a stale apply
                 would tear the open editor (recreated textarea reads) *)
-             if !refresh_gen <> gen then Js.Promise.resolve ()
-             else
-               let page = { page with Model.page_blocks = blocks } in
-               (match !Runtime.current_route with
-                | Some (Model.Block_zoom uuid) ->
-                    fetch_zoom_parents repo uuid
-                    |> Js.Promise.then_ (fun page_parents ->
-                           Js.Promise.resolve
-                             { page with Model.page_parents })
-                | _ -> resolve_page_tags repo page)
-               |> Js.Promise.then_ (fun page ->
-                      (* the worker's tree is authoritative
-                         again — drop committed-buffer title
-                         overrides *)
-                      S.clear_overrides ();
-                      (* the user may have navigated while the
-                         refetch was in-flight — never
-                         overwrite the new route's page *)
-                      if !Runtime.current_route = route_at_start then
-                        Runtime.send (Action.Page_loaded page);
-                      Js.Promise.resolve ()))
+      if !refresh_gen <> gen then Js.Promise.resolve ()
+      else
+        let page = { page with Model.page_blocks = blocks } in
+        let* page =
+          (match !Runtime.current_route with
+           | Some (Model.Block_zoom uuid) ->
+               let* page_parents = fetch_zoom_parents repo uuid in
+               Js.Promise.resolve
+                 { page with Model.page_parents }
+           | _ -> resolve_page_tags repo page)
+        in
+        (* the worker's tree is authoritative
+                  again — drop committed-buffer title
+                  overrides *)
+        S.clear_overrides ();
+        (* the user may have navigated while the
+           refetch was in-flight — never
+           overwrite the new route's page *)
+        if !Runtime.current_route = route_at_start then
+          Runtime.send (Action.Page_loaded page);
+        Js.Promise.resolve ())
       |> Js.Promise.catch (fun e ->
              Platform.console_error ("refresh_page failed", e);
              Js.Promise.resolve ()))
@@ -718,8 +724,8 @@ let rec apply ?(opts = Wire.Map []) ops : unit Js.Promise.t =
   match !pending_save with
   | Some (uuid, title) ->
       pending_save := None;
-      apply [ save_block uuid title ]
-      |> Js.Promise.then_ (fun () -> apply ~opts ops)
+      let* () = apply [ save_block uuid title ] in
+      apply ~opts ops
   | None -> (
       Editor_dom.clear_timeout !save_timer;
       match !Runtime.current_repo with
@@ -731,9 +737,11 @@ let rec apply ?(opts = Wire.Map []) ops : unit Js.Promise.t =
                 Wire.Map (kvs @ [ kw "ui/perf-id" (perf_id ()) ])
             | _ -> opts
           in
-          Runtime.invoke3 "thread-api/apply-outliner-ops" (Wire.String repo)
-            (Wire.Array ops) opts
-          |> Js.Promise.then_ (fun _ -> Js.Promise.resolve ())
+          (let* _ =
+            Runtime.invoke3 "thread-api/apply-outliner-ops" (Wire.String repo)
+              (Wire.Array ops) opts
+          in
+          Js.Promise.resolve ())
           |> Js.Promise.catch (fun e ->
                  Platform.console_error
                    ( "apply-outliner-ops failed"
@@ -764,18 +772,17 @@ let refresh_page_deferred () : unit Js.Promise.t =
   else refresh_page ()
 
 let apply_and_refresh ?opts ops =
-  apply ?opts ops
-  |> Js.Promise.then_ (fun () -> refresh_page ())
-  |> Js.Promise.then_ (fun () ->
-         (* the quick-add dialog's block list lives outside
+  let* () = apply ?opts ops in
+  let* () = refresh_page () in
+  (* the quick-add dialog's block list lives outside
             .page-blocks-inner; a page refresh alone won't repaint it *)
-         if Dialogs_state.ready () && Dialogs_state.is_open "quick-add" then
-           Quick_add_state.reload ();
-         Js.Promise.resolve ())
+  if Dialogs_state.ready () && Dialogs_state.is_open "quick-add" then
+    Quick_add_state.reload ();
+  Js.Promise.resolve ()
 
 let apply_and_refresh_deferred ?opts ops =
-  apply ?opts ops
-  |> Js.Promise.then_ (fun () -> refresh_page_deferred ())
+  let* () = apply ?opts ops in
+  refresh_page_deferred ()
 
 (* cljs wrap-parse-block on save: markdown headings normalize into
    logseq.property/heading, and [[page]]/#tag references resolve into
@@ -793,39 +800,39 @@ let block_map_parsed ?(page = false) uuid title =
         (strip_markdown_heading title lvl, Some lvl)
     | _ -> (String.trim title, None)
   in
-  Title_refs.parse title
-  |> Js.Promise.then_ (fun p ->
-         Js.Promise.resolve
-           (Wire.Map
-              ([ str "block/uuid" (Wire.Uuid uuid)
-               ; str "block/title" (Wire.String p.Title_refs.title) ]
-              @ (match heading with
-                 | Some lvl -> [ str "logseq.property/heading" (Wire.Int lvl) ]
-                 | None -> [])
-              @ Title_refs.kvs_of_parsed p
-              @
-              if page then
-                [ ( Wire.String "block/tags"
-                  , Wire.Set [ Wire.Keyword "logseq.class/Page" ] )
-                ; ( Wire.String "block/name"
-                  , Wire.String (page_name_sanity_lc p.Title_refs.title) )
-                ]
-              else [])))
+  let* p = Title_refs.parse title in
+  Js.Promise.resolve
+    (Wire.Map
+       ([ str "block/uuid" (Wire.Uuid uuid)
+        ; str "block/title" (Wire.String p.Title_refs.title) ]
+       @ (match heading with
+          | Some lvl -> [ str "logseq.property/heading" (Wire.Int lvl) ]
+          | None -> [])
+       @ Title_refs.kvs_of_parsed p
+       @
+       if page then
+         [ ( Wire.String "block/tags"
+           , Wire.Set [ Wire.Keyword "logseq.class/Page" ] )
+         ; ( Wire.String "block/name"
+           , Wire.String (page_name_sanity_lc p.Title_refs.title) )
+         ]
+       else []))
 
 let save_block_parsed uuid title =
-  block_map_parsed uuid title
-  |> Js.Promise.then_ (fun bm ->
-         Js.Promise.resolve (op "save-block" [ bm; Wire.Map [] ]))
+  let* bm = block_map_parsed uuid title in
+  Js.Promise.resolve (op "save-block" [ bm; Wire.Map [] ])
 
 (* parse (uuid, title) pairs into save ops, prepend to rest, apply *)
 let apply_parsed ?opts ~rest pairs =
-  Js.Promise.all
-    (Array.of_list (List.map (fun (u, t) -> save_block_parsed u t) pairs))
-  |> Js.Promise.then_ (fun a -> apply ?opts (Array.to_list a @ rest))
+  let* a =
+    Js.Promise.all
+      (Array.of_list (List.map (fun (u, t) -> save_block_parsed u t) pairs))
+  in
+  apply ?opts (Array.to_list a @ rest)
 
 let apply_parsed_and_refresh ?opts ~rest pairs =
-  apply_parsed ?opts ~rest pairs
-  |> Js.Promise.then_ (fun () -> refresh_page ())
+  let* () = apply_parsed ?opts ~rest pairs in
+  refresh_page ()
 (* same ops as [apply] but the promise carries the worker response
    — callers that act on inserted uuids need {:blocks [...]} (cljs
    insert-blocks! result) *)
@@ -834,16 +841,18 @@ let rec apply_result ?(opts = Wire.Map []) ops : Wire.t option Js.Promise.t
   match !pending_save with
   | Some (uuid, title) ->
       pending_save := None;
-      apply [ save_block uuid title ]
-      |> Js.Promise.then_ (fun () -> apply_result ~opts ops)
+      let* () = apply [ save_block uuid title ] in
+      apply_result ~opts ops
   | None -> (
       Editor_dom.clear_timeout !save_timer;
       match !Runtime.current_repo with
       | None -> Js.Promise.resolve None
       | Some repo ->
-          Runtime.invoke3 "thread-api/apply-outliner-ops" (Wire.String repo)
-            (Wire.Array ops) opts
-          |> Js.Promise.then_ (fun r -> Js.Promise.resolve (Some r))
+          (let* r =
+            Runtime.invoke3 "thread-api/apply-outliner-ops" (Wire.String repo)
+              (Wire.Array ops) opts
+          in
+          Js.Promise.resolve (Some r))
           |> Js.Promise.catch (fun e ->
                  Platform.console_error ("apply-outliner-ops failed", e);
                  Js.Promise.resolve None))
@@ -871,17 +880,16 @@ let schedule_save uuid title =
       (fun () ->
         pending_save := None;
         ignore
-          (apply_parsed ~rest:[] [ (uuid, title) ]
-          |> Js.Promise.then_ (fun _ ->
-                 (* committed — advance base so the undo resync gate sees
+          (let* _ = apply_parsed ~rest:[] [ (uuid, title) ] in
+          (* committed — advance base so the undo resync gate sees
                     the buffer as clean and can restore reverted titles *)
-                 S.set_silent (fun st ->
-                     match st.S.editing with
-                     | Some e when e.S.uuid = uuid && e.S.buffer = title ->
-                         { st with
-                           S.editing = Some { e with S.base = title } }
-                     | _ -> st);
-                 Js.Promise.resolve ())))
+          S.set_silent (fun st ->
+              match st.S.editing with
+              | Some e when e.S.uuid = uuid && e.S.buffer = title ->
+                  { st with
+                    S.editing = Some { e with S.base = title } }
+              | _ -> st);
+          Js.Promise.resolve ()))
       400
 
 
@@ -916,47 +924,48 @@ let title_for_edit (title : string) : string Js.Promise.t =
       | None -> Js.Promise.resolve title
       | Some repo ->
           let uuids = List.map (fun (_, _, _, u) -> u) toks in
-          Js.Promise.all
-            (Array.of_list
-               (List.map
-                  (fun u ->
-                 Runtime.invoke3 "thread-api/pull" (Wire.String repo)
-                   (Wire.String "[:block/title]")
-                   (Wire.Array [ Wire.Keyword "block/uuid"; Wire.Uuid u ])
-                 |> Js.Promise.then_ (fun w ->
-                        Js.Promise.resolve
-                          (match Wire.map_get_string w "block/title" with
-                           | Some t when String.trim t <> "" -> Some t
-                           | _ -> None)))
-                  uuids))
-          |> Js.Promise.then_ (fun names ->
-                 let tbl = Hashtbl.create 8 in
-                 List.iter2
-                   (fun u n ->
-                     match n with Some t -> Hashtbl.replace tbl u t | None -> ())
-                   uuids
-                   (Array.to_list names);
-                 let b = Buffer.create n in
-                 let cursor = ref 0 in
-                 List.iter
-                   (fun (i, e, has_hash, u) ->
-                     match Hashtbl.find_opt tbl u with
-                     | None -> ()
-                     | Some t ->
-                         Buffer.add_substring b title !cursor
-                           ((if has_hash then i - 1 else i) - !cursor);
-                         Buffer.add_string b
-                           (if has_hash then "#" ^ t else "[[" ^ t ^ "]]");
-                         cursor := e)
-                   toks;
-                 Buffer.add_substring b title !cursor (n - !cursor);
-                 Js.Promise.resolve (Buffer.contents b)))
+          let* names =
+            Js.Promise.all
+              (Array.of_list
+                 (List.map
+                    (fun u ->
+                   let* w =
+                     Runtime.invoke3 "thread-api/pull" (Wire.String repo)
+                       (Wire.String "[:block/title]")
+                       (Wire.Array [ Wire.Keyword "block/uuid"; Wire.Uuid u ])
+                   in
+                   Js.Promise.resolve
+                     (match Wire.map_get_string w "block/title" with
+                      | Some t when String.trim t <> "" -> Some t
+                      | _ -> None))
+                    uuids))
+          in
+          let tbl = Hashtbl.create 8 in
+          List.iter2
+            (fun u n ->
+              match n with Some t -> Hashtbl.replace tbl u t | None -> ())
+            uuids
+            (Array.to_list names);
+          let b = Buffer.create n in
+          let cursor = ref 0 in
+          List.iter
+            (fun (i, e, has_hash, u) ->
+              match Hashtbl.find_opt tbl u with
+              | None -> ()
+              | Some t ->
+                  Buffer.add_substring b title !cursor
+                    ((if has_hash then i - 1 else i) - !cursor);
+                  Buffer.add_string b
+                    (if has_hash then "#" ^ t else "[[" ^ t ^ "]]");
+                  cursor := e)
+            toks;
+          Buffer.add_substring b title !cursor (n - !cursor);
+          Js.Promise.resolve (Buffer.contents b))
 
 let apply_and_refresh_result ?opts ops =
-  apply_result ?opts ops
-  |> Js.Promise.then_ (fun r ->
-         refresh_page ()
-         |> Js.Promise.then_ (fun () -> Js.Promise.resolve r))
+  let* r = apply_result ?opts ops in
+  let* () = refresh_page () in
+  Js.Promise.resolve r
 
 
 (* undo/redo writes datoms straight into the db — resync the open
@@ -970,29 +979,28 @@ let resync_open_editor ?(force = false) () : unit Js.Promise.t =
       match S.find e.uuid with
       | Some b ->
           let title = String.trim b.Model.block_title in
-          title_for_edit title
-          |> Js.Promise.then_ (fun title ->
-                 (* remote refresh must not clobber typed text: only
+          let* title = title_for_edit title in
+          (* remote refresh must not clobber typed text: only
                     overwrite when the buffer is still the value the editor
                     opened with and the stored title moved since. undo/redo
                     force it — the user asked for the revert even when an
                     unsaved edit is in flight *)
-                 if (force || (e.S.buffer = e.S.base)) && e.S.buffer <> title
-                 then begin
-                   S.set_silent (fun st ->
-                       match st.S.editing with
-                       | Some e' when e'.uuid = e.uuid ->
-                           { st with
-                          S.editing =
-                            Some
-                              { e' with S.buffer = title; base = title }
-                           }
-                       | _ -> st);
-                   match Editor_dom.textarea_of e.uuid with
-                   | Some el -> Editor_dom.el_set_value el title
-                   | None -> ()
-                 end;
-                 Js.Promise.resolve ())
+          if (force || (e.S.buffer = e.S.base)) && e.S.buffer <> title
+          then begin
+            S.set_silent (fun st ->
+                match st.S.editing with
+                | Some e' when e'.uuid = e.uuid ->
+                    { st with
+                   S.editing =
+                     Some
+                       { e' with S.buffer = title; base = title }
+                    }
+                | _ -> st);
+            match Editor_dom.textarea_of e.uuid with
+            | Some el -> Editor_dom.el_set_value el title
+            | None -> ()
+          end;
+          Js.Promise.resolve ()
       | None ->
           S.set (fun st -> { st with S.editing = None });
           Js.Promise.resolve ())
@@ -1001,9 +1009,9 @@ let undo () =
   cancel_pending_save ();
   match !Runtime.current_repo with
   | Some repo ->
-      Runtime.invoke1 "thread-api/undo-redo-undo" (Wire.String repo)
-      |> Js.Promise.then_ (fun _ -> refresh_page ())
-      |> Js.Promise.then_ (fun () -> resync_open_editor ~force:true ())
+      (let* _ = Runtime.invoke1 "thread-api/undo-redo-undo" (Wire.String repo) in
+      let* () = refresh_page () in
+      resync_open_editor ~force:true ())
       |> Js.Promise.catch (fun e ->
              Platform.console_error ("undo failed", e);
              Toast.error (I18n.t "editor/undo-error");
@@ -1014,9 +1022,9 @@ let redo () =
   cancel_pending_save ();
   match !Runtime.current_repo with
   | Some repo ->
-      Runtime.invoke1 "thread-api/undo-redo-redo" (Wire.String repo)
-      |> Js.Promise.then_ (fun _ -> refresh_page ())
-      |> Js.Promise.then_ (fun () -> resync_open_editor ~force:true ())
+      (let* _ = Runtime.invoke1 "thread-api/undo-redo-redo" (Wire.String repo) in
+      let* () = refresh_page () in
+      resync_open_editor ~force:true ())
       |> Js.Promise.catch (fun e ->
              Platform.console_error ("redo failed", e);
              Toast.error (I18n.t "editor/redo-error");

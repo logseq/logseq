@@ -5,11 +5,10 @@
    hiccup; a sync document MutationObserver scan (same channel as the
    raw-text fixup) calls the libs on fresh elements before paint. *)
 
+open Promise_ext
 module D = Editor_dom
 
 external el_text_content : D.el -> string = "textContent" [@@mel.get]
-
-let ( let* ) p f = Js.Promise.then_ f p
 
 (* ---------- katex ---------- *)
 

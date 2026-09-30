@@ -13,6 +13,7 @@
    For tag (class) pages an existing property is added via
    class-add-property instead of taking a value. *)
 
+open Promise_ext
 open Editor_dom
 open Properties_dom
 module D = Properties_data
@@ -94,11 +95,12 @@ let add_empty_text_block d prop =
   let ident = ident_of prop in
   !(Editor_state.close_block_editor) ();
   V.set_pending_edit ~block_uuid:d.target.uuid ~ident;
-  D.create_property_text_block ~block_uuid:d.target.uuid ~ident
-    ~title:"" ~new_block_id:(Platform.random_uuid ()) ()
-  |> Js.Promise.then_ (fun _ ->
-         S.refresh_now ();
-         Js.Promise.resolve ())
+  (let* _ =
+    D.create_property_text_block ~block_uuid:d.target.uuid ~ident
+      ~title:"" ~new_block_id:(Platform.random_uuid ()) ()
+  in
+  S.refresh_now ();
+  Js.Promise.resolve ())
   |> ignore;
   S.refresh_all ()
 
@@ -142,35 +144,34 @@ and pick_value d prop id =
     match d.target.uuids with [] -> [ d.target.uuid ] | us -> us
   in
   if is_many prop then
-    D.entity_by_uuid d.target.uuid
-    |> Js.Promise.then_ (fun ent ->
-           let cur_ids, cur_idents = value_ids ent ident in
-           D.entity (W.Int id)
-           |> Js.Promise.then_ (fun picked ->
-                  let picked_ident = D.getk (D.untag picked) "db/ident" in
-                  let hit =
-                    List.mem id cur_ids
-                    || (match picked_ident with
-                        | Some i -> List.mem i cur_idents
-                        | None -> false)
-                  in
-                  (match hit, uuids with
-                   | true, _ :: _ :: _ ->
-                       D.batch_delete_property_value ~block_uuids:uuids
-                         ~ident ~value:(W.Int id)
-                   | true, _ ->
-                       D.delete_property_value ~block_uuid:d.target.uuid
-                         ~ident ~value:(W.Int id)
-                   | false, _ :: _ :: _ ->
-                       D.batch_set_property ~block_uuids:uuids ~ident
-                         ~value:(W.Int id)
-                   | false, _ ->
-                       D.set_block_property ~block_uuid:d.target.uuid ~ident
-                         ~value:(W.Int id))
-                  |> Js.Promise.then_ (fun _ ->
-                         S.refresh_all ();
-                         render d;
-                         Js.Promise.resolve ())))
+    (let* ent = D.entity_by_uuid d.target.uuid in
+    let cur_ids, cur_idents = value_ids ent ident in
+    let* picked = D.entity (W.Int id) in
+    let picked_ident = D.getk (D.untag picked) "db/ident" in
+    let hit =
+      List.mem id cur_ids
+      || (match picked_ident with
+          | Some i -> List.mem i cur_idents
+          | None -> false)
+    in
+    let* _ =
+      (match hit, uuids with
+       | true, _ :: _ :: _ ->
+           D.batch_delete_property_value ~block_uuids:uuids
+             ~ident ~value:(W.Int id)
+       | true, _ ->
+           D.delete_property_value ~block_uuid:d.target.uuid
+             ~ident ~value:(W.Int id)
+       | false, _ :: _ :: _ ->
+           D.batch_set_property ~block_uuids:uuids ~ident
+             ~value:(W.Int id)
+       | false, _ ->
+           D.set_block_property ~block_uuid:d.target.uuid ~ident
+             ~value:(W.Int id))
+    in
+    S.refresh_all ();
+    render d;
+    Js.Promise.resolve ())
     |> ignore
   else (
     (match uuids with
@@ -207,35 +208,34 @@ and render_prop_select d body =
   let key_wrap = mk ~cls:"ls-property-key" "div" in
   el_append_child wrap key_wrap;
   el_append_child body wrap;
-  D.all_properties (D.uuid_ref d.target.uuid)
-  |> Js.Promise.then_ (fun w ->
-         let props = W.elems w in
-         let items =
-           List.filter_map
-             (fun p ->
-               match title_of p with
-               | "" -> None
-               | t ->
-                   Some
-                     (Sel.item ~tip:(ident_of p) ~icon:"letter-t"
-                        ~strong:true t
-                        (fun () -> property_chosen d p)))
-             props
-         in
-         let sel, input =
-           Sel.create ~placeholder:(I18n.t "property/add-or-change")
-             ~new_option:
-               (Some (fun name ->
-                    (* no client-side name validation: invalid names go
-                       through type-select and the worker rejects the
-                       upsert with a notification toast *)
-                    d.phase <- Type_select name;
-                    render d))
-             ~on_escape:close items
-         in
-         el_append_child key_wrap sel;
-         el_focus input;
-         Js.Promise.resolve ())
+  (let* w = D.all_properties (D.uuid_ref d.target.uuid) in
+  let props = W.elems w in
+  let items =
+    List.filter_map
+      (fun p ->
+        match title_of p with
+        | "" -> None
+        | t ->
+            Some
+              (Sel.item ~tip:(ident_of p) ~icon:"letter-t"
+                 ~strong:true t
+                 (fun () -> property_chosen d p)))
+      props
+  in
+  let sel, input =
+    Sel.create ~placeholder:(I18n.t "property/add-or-change")
+      ~new_option:
+        (Some (fun name ->
+             (* no client-side name validation: invalid names go
+                through type-select and the worker rejects the
+                upsert with a notification toast *)
+             d.phase <- Type_select name;
+             render d))
+      ~on_escape:close items
+  in
+  el_append_child key_wrap sel;
+  el_focus input;
+  Js.Promise.resolve ())
   |> ignore
 
 and select_trigger_cls =
@@ -369,94 +369,94 @@ and on_type_chosen d name ty =
   if not (valid_property_name name) then
     S.toast_error (I18n.t "property/invalid-name-error")
   else
-  D.upsert_property
-    ~schema:(W.Map [ (W.Keyword "logseq.property/type", W.Keyword ty) ])
-    ~property_name:name ()
-  |> (fun p ->
-      Js.Promise.catch
-        (fun _ ->
-          (* normalize rejection to Nil — the W.Nil arm owns the single
-             "failed to create" toast *)
-          Js.Promise.resolve W.Nil)
-        p)
-  |> Js.Promise.then_ (fun res ->
-         (match D.untag res with
-          | W.Nil ->
-              S.toast_error (I18n.t "property/create-error")
-          | W.Map _ as m ->
-              let prop = m in
-              if d.target.is_tag then (
-                (* on a class page the new property is added as schema *)
-                (match ident_of prop with
-                 | "" -> ()
-                 | ident ->
-                     ignore
-                       (D.class_add_property ~class_uuid:d.target.uuid
-                          ~ident));
-                S.refresh_all ();
-                close_dlg d)
-              else (
-                match ty with
-                | "checkbox" ->
-                    write_prop_value d prop (Some (W.Bool false));
-                    close_dlg d
-                | "default" | "url" ->
-                    add_empty_text_block d prop;
-                    close_dlg d
-                | "node" ->
-                    d.phase <- Node_tags prop;
-                    render d
-                | _ ->
-                    d.phase <- Value_edit prop;
-                    render d)
-          | _ -> S.toast_error (I18n.t "property/create-error"));
-         Js.Promise.resolve ())
+  (let* res =
+    D.upsert_property
+      ~schema:(W.Map [ (W.Keyword "logseq.property/type", W.Keyword ty) ])
+      ~property_name:name ()
+    |> (fun p ->
+        Js.Promise.catch
+          (fun _ ->
+            (* normalize rejection to Nil — the W.Nil arm owns the single
+               "failed to create" toast *)
+            Js.Promise.resolve W.Nil)
+          p)
+  in
+  (match D.untag res with
+   | W.Nil ->
+       S.toast_error (I18n.t "property/create-error")
+   | W.Map _ as m ->
+       let prop = m in
+       if d.target.is_tag then (
+         (* on a class page the new property is added as schema *)
+         (match ident_of prop with
+          | "" -> ()
+          | ident ->
+              ignore
+                (D.class_add_property ~class_uuid:d.target.uuid
+                   ~ident));
+         S.refresh_all ();
+         close_dlg d)
+       else (
+         match ty with
+         | "checkbox" ->
+             write_prop_value d prop (Some (W.Bool false));
+             close_dlg d
+         | "default" | "url" ->
+             add_empty_text_block d prop;
+             close_dlg d
+         | "node" ->
+             d.phase <- Node_tags prop;
+             render d
+         | _ ->
+             d.phase <- Value_edit prop;
+             render d)
+   | _ -> S.toast_error (I18n.t "property/create-error"));
+  Js.Promise.resolve ())
   |> ignore
 
 and render_node_tags d body prop =
   let wrap = mk ~cls:"flex flex-1 col-span-3" "div" in
   el_append_child body wrap;
-  D.all_classes ()
-  |> Js.Promise.then_ (fun w ->
-         let items =
-           Sel.item (I18n.t "property/skip-choosing-tag") (fun () ->
-               d.phase <- Value_edit prop;
-               render d)
-           :: List.filter_map
-                (fun c ->
-                  match title_of c with
-                  | "" -> None
-                  | t -> (
-                      match D.entity_id_of c with
-                      | Some id ->
-                          Some
-                            (Sel.item t (fun () ->
-                                 (match ident_of prop with
-                                  | "" -> ()
-                                  | _ ->
-                                      ignore
-                                        (D.set_block_property
-                                           ~block_uuid:
-                                             (match
-                                                D.entity_uuid_of prop
-                                              with
-                                             | Some u -> u
-                                             | None -> d.target.uuid)
-                                           ~ident:
-                                             "logseq.property/classes"
-                                           ~value:(W.Int id)));
-                                 d.phase <- Value_edit prop;
-                                 render d))
-                      | None -> None))
-                (W.elems w)
-         in
-         let sel, input =
-           Sel.create ~placeholder:(I18n.t "property/choose-tags")
-             ~on_escape:close items
-         in
-         el_append_child wrap sel;
-         el_focus input;
-         Js.Promise.resolve ())
+  (let* w = D.all_classes () in
+  let items =
+    Sel.item (I18n.t "property/skip-choosing-tag") (fun () ->
+        d.phase <- Value_edit prop;
+        render d)
+    :: List.filter_map
+         (fun c ->
+           match title_of c with
+           | "" -> None
+           | t -> (
+               match D.entity_id_of c with
+               | Some id ->
+                   Some
+                     (Sel.item t (fun () ->
+                          (match ident_of prop with
+                           | "" -> ()
+                           | _ ->
+                               ignore
+                                 (D.set_block_property
+                                    ~block_uuid:
+                                      (match
+                                         D.entity_uuid_of prop
+                                       with
+                                      | Some u -> u
+                                      | None -> d.target.uuid)
+                                    ~ident:
+                                      "logseq.property/classes"
+                                    ~value:(W.Int id)));
+                          d.phase <- Value_edit prop;
+                          render d))
+               | None -> None))
+         (W.elems w)
+  in
+  let sel, input =
+    Sel.create ~placeholder:(I18n.t "property/choose-tags")
+      ~on_escape:close items
+  in
+  el_append_child wrap sel;
+  el_focus input;
+  Js.Promise.resolve ())
   |> ignore
 
 and value_items d prop wire_values =
@@ -536,66 +536,65 @@ and render_value_edit d body prop =
         in
         (initial, Some on_search))
       else
-        ( D.property_values ~property_ident:(ident_of prop)
-            ~block:(D.uuid_ref d.target.uuid)
-          |> Js.Promise.then_ (fun w ->
-                 Js.Promise.resolve (value_items d prop (W.elems w)))
+        ( (let* w =
+            D.property_values ~property_ident:(ident_of prop)
+              ~block:(D.uuid_ref d.target.uuid)
+          in
+          Js.Promise.resolve (value_items d prop (W.elems w)))
         , None )
     in
-    fetch
-    |> Js.Promise.then_ (fun items ->
-           let on_new =
-             if ty = "number" then
-               Some
-                 (fun text ->
-                   match Float.of_string_opt (String.trim text) with
-                   | Some n ->
-                       write_prop_value d prop (Some (W.Float n));
-                       close_dlg d
-                   | None -> ())
-             else if ty = "node" || ty = "class" then
-               Some
-                 (fun text ->
-                   let ( let* ) p f = Js.Promise.then_ f p in
-                   ignore
-                     (let* res =
-                        (* cljs <create-page-if-not-exists!: class-type
-                           and block/tags values are classes *)
-                        if ty = "class" || ident_of prop = "block/tags"
-                        then D.create_class text
-                        else D.create_page text
-                      in
-                      let* () =
-                        match D.create_result_uuid res with
-                        | Some uuid -> (
-                            let* id = D.db_id_of_uuid uuid in
-                            match id with
-                            | Some id ->
-                                write_prop_value d prop (Some (W.Int id));
-                                Js.Promise.resolve ()
-                            | None -> Js.Promise.resolve ())
-                        | None -> Js.Promise.resolve ()
-                      in
-                      close_dlg d;
-                      Js.Promise.resolve ()))
-             else
-               Some
-                 (fun text ->
-                   (* text value -> create value block *)
-                   D.create_property_text_block ~block_uuid:d.target.uuid
-                     ~ident:(ident_of prop) ~title:text
-                     ~new_block_id:(Platform.random_uuid ()) ()
-                   |> ignore;
-                   S.refresh_all ();
-                   close_dlg d)
-           in
-           let sel, input =
-             Sel.create ~placeholder ~new_option:on_new ~on_escape:close
-               ~on_search items
-           in
-           el_append_child wrap sel;
-           el_focus input;
-           Js.Promise.resolve ())
+    (let* items = fetch in
+    let on_new =
+      if ty = "number" then
+        Some
+          (fun text ->
+            match Float.of_string_opt (String.trim text) with
+            | Some n ->
+                write_prop_value d prop (Some (W.Float n));
+                close_dlg d
+            | None -> ())
+      else if ty = "node" || ty = "class" then
+        Some
+          (fun text ->
+            ignore
+              (let* res =
+                 (* cljs <create-page-if-not-exists!: class-type
+                    and block/tags values are classes *)
+                 if ty = "class" || ident_of prop = "block/tags"
+                 then D.create_class text
+                 else D.create_page text
+               in
+               let* () =
+                 match D.create_result_uuid res with
+                 | Some uuid -> (
+                     let* id = D.db_id_of_uuid uuid in
+                     match id with
+                     | Some id ->
+                         write_prop_value d prop (Some (W.Int id));
+                         Js.Promise.resolve ()
+                     | None -> Js.Promise.resolve ())
+                 | None -> Js.Promise.resolve ()
+               in
+               close_dlg d;
+               Js.Promise.resolve ()))
+      else
+        Some
+          (fun text ->
+            (* text value -> create value block *)
+            D.create_property_text_block ~block_uuid:d.target.uuid
+              ~ident:(ident_of prop) ~title:text
+              ~new_block_id:(Platform.random_uuid ()) ()
+            |> ignore;
+            S.refresh_all ();
+            close_dlg d)
+    in
+    let sel, input =
+      Sel.create ~placeholder ~new_option:on_new ~on_escape:close
+        ~on_search items
+    in
+    el_append_child wrap sel;
+    el_focus input;
+    Js.Promise.resolve ())
     |> ignore)
 
 (* ---------- open ---------- *)

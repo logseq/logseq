@@ -1,5 +1,6 @@
 (* Write-side logseq.api methods — implemented on apply-outliner-ops. *)
 
+open Promise_ext
 open Sdk_util
 
 let opt_bool name (opts : Wire.t) =
@@ -23,51 +24,53 @@ let list_items = function
    start -> first child as sibling, else as first child of block
    default/end -> last child as sibling, else as child of block *)
 let sibling_of repo uuid dir =
-  Runtime.invoke3 "thread-api/get-block-sibling"
-    (Wire.String repo)
-    (Wire.Array [ Wire.kw "block/uuid"; Wire.Uuid uuid ])
-    (Wire.Keyword dir)
-  |> Js.Promise.then_ (fun w -> Js.Promise.resolve (block_uuid_of w))
+  let* w =
+    Runtime.invoke3 "thread-api/get-block-sibling"
+      (Wire.String repo)
+      (Wire.Array [ Wire.kw "block/uuid"; Wire.Uuid uuid ])
+      (Wire.Keyword dir)
+  in
+  Js.Promise.resolve (block_uuid_of w)
 
 let parent_of repo uuid =
-  Runtime.invoke2 "thread-api/get-block-parent"
-    (Wire.String repo)
-    (Wire.Uuid uuid)
-  |> Js.Promise.then_ (fun w -> Js.Promise.resolve (block_uuid_of w))
+  let* w =
+    Runtime.invoke2 "thread-api/get-block-parent"
+      (Wire.String repo)
+      (Wire.Uuid uuid)
+  in
+  Js.Promise.resolve (block_uuid_of w)
 
 let children_of repo uuid =
-  Runtime.invoke2 "thread-api/get-block-immediate-children"
-    (Wire.String repo)
-    (Wire.Uuid uuid)
-  |> Js.Promise.then_ (fun w -> Js.Promise.resolve (list_items w))
+  let* w =
+    Runtime.invoke2 "thread-api/get-block-immediate-children"
+      (Wire.String repo)
+      (Wire.Uuid uuid)
+  in
+  Js.Promise.resolve (list_items w)
 
 let resolve_target repo block_uuid opts =
   let sibling = opt_bool "sibling" opts in
   let before = opt_bool "before" opts in
   let start = opt_bool "start" opts in
   if before then
-    sibling_of repo block_uuid "left"
-    |> Js.Promise.then_ (fun left ->
-           match left with
-           | Some u -> Js.Promise.resolve (u, true)
-           | None ->
-               parent_of repo block_uuid
-               |> Js.Promise.then_ (fun p ->
-                      Js.Promise.resolve
-                        (Option.value p ~default:block_uuid, p = None)))
+    let* left = sibling_of repo block_uuid "left" in
+    match left with
+    | Some u -> Js.Promise.resolve (u, true)
+    | None ->
+        let* p = parent_of repo block_uuid in
+        Js.Promise.resolve
+          (Option.value p ~default:block_uuid, p = None)
   else if sibling then Js.Promise.resolve (block_uuid, true)
   else if start then
-    children_of repo block_uuid
-    |> Js.Promise.then_ (fun cs ->
-           match List.filter_map block_uuid_of cs with
-           | first :: _ -> Js.Promise.resolve (first, true)
-           | [] -> Js.Promise.resolve (block_uuid, false))
+    let* cs = children_of repo block_uuid in
+    match List.filter_map block_uuid_of cs with
+    | first :: _ -> Js.Promise.resolve (first, true)
+    | [] -> Js.Promise.resolve (block_uuid, false)
   else
-    children_of repo block_uuid
-    |> Js.Promise.then_ (fun cs ->
-           match List.rev (List.filter_map block_uuid_of cs) with
-           | last :: _ -> Js.Promise.resolve (last, true)
-           | [] -> Js.Promise.resolve (block_uuid, false))
+    let* cs = children_of repo block_uuid in
+    match List.rev (List.filter_map block_uuid_of cs) with
+    | last :: _ -> Js.Promise.resolve (last, true)
+    | [] -> Js.Promise.resolve (block_uuid, false)
 
 (* properties arg {name: value} -> list of (raw-key, ident, wire value) *)
 let properties_of (props : Wire.t) =
@@ -245,44 +248,41 @@ let entry_ops ~reset block_uuid (key, ident, v) schema_entry
    the outliner ops (upsert + remove + set) in order *)
 let block_property_ops ?(reset = false) block_uuid props schema =
   let idents = List.map (fun (_, i, _) -> Wire.Keyword i) props in
-  get_many idents
-  |> Js.Promise.then_ (fun existing ->
-         let schema = match schema with Wire.Map _ -> schema | _ -> Wire.Map [] in
-         let ops =
-           List.concat_map
-             (fun ((key, ident, v), prop) ->
-               entry_ops ~reset block_uuid (key, ident, v)
-                 (schema_for schema key) prop)
-             (List.combine props existing)
-         in
-         Js.Promise.resolve ops)
+  let* existing = get_many idents in
+  let schema = match schema with Wire.Map _ -> schema | _ -> Wire.Map [] in
+  let ops =
+    List.concat_map
+      (fun ((key, ident, v), prop) ->
+        entry_ops ~reset block_uuid (key, ident, v)
+          (schema_for schema key) prop)
+      (List.combine props existing)
+  in
+  Js.Promise.resolve ops
 
 (* apply block properties for a known block uuid *)
 let save_block_properties ?(reset = false) block_uuid props schema =
   match props with
   | [] -> Js.Promise.resolve ()
   | _ ->
-      block_property_ops ~reset block_uuid props schema
-      |> Js.Promise.then_ (fun ops ->
-             apply_ops ops (Wire.Map [])
-             |> Js.Promise.then_ (fun _ -> Js.Promise.resolve ()))
+      let* ops = block_property_ops ~reset block_uuid props schema in
+      let* _ = apply_ops ops (Wire.Map []) in
+      Js.Promise.resolve ()
 
 (* cljs wrap-parse-block: extract refs/tags from the title before
    insert — see Title_refs *)
 let parsed_block_map content custom_uuid =
-  Title_refs.parse content
-  |> Js.Promise.then_ (fun p ->
-         Js.Promise.resolve
-           (Wire.Map
-              ([ ( Wire.String "block/title"
-                 , Wire.String p.Title_refs.title )
-               ; ( Wire.String "block/uuid"
-                 , Wire.Uuid
-                     (match custom_uuid with
-                      | Some u -> u
-                      | None -> Platform.random_uuid ()) )
-               ]
-              @ Title_refs.kvs_of_parsed p)))
+  let* p = Title_refs.parse content in
+  Js.Promise.resolve
+    (Wire.Map
+       ([ ( Wire.String "block/title"
+          , Wire.String p.Title_refs.title )
+        ; ( Wire.String "block/uuid"
+          , Wire.Uuid
+              (match custom_uuid with
+               | Some u -> u
+               | None -> Platform.random_uuid ()) )
+        ]
+       @ Title_refs.kvs_of_parsed p))
 
 let insert_block a b c _d =
   match arg_string b with
@@ -309,50 +309,45 @@ let insert_block a b c _d =
         | Some s -> s
         | None -> Wire.Map []
       in
-      get_entity_json a
-      |> Js.Promise.then_ (fun block ->
-             match block_uuid_of block with
-             | None -> resolved_nil
-             | Some uuid ->
-                 resolve_target (repo ()) uuid opts
-                 |> Js.Promise.then_ (fun (target, sibling) ->
-                        parsed_block_map content custom_uuid
-                        |> Js.Promise.then_ (fun new_block ->
-                        let new_uuid =
-                          match custom_uuid with
-                          | Some u -> u
-                          | None ->
-                              Option.value
-                                ~default:"" (block_uuid_of new_block)
-                        in
-                        let insert_opts =
-                          Wire.Map
-                            [ (Wire.kw "sibling?", Wire.Bool sibling)
-                            ; (Wire.kw "keep-uuid?", Wire.Bool true)
-                            ; ( Wire.kw "ordered-list?"
-                              , Wire.Bool (opt_bool "autoOrderedList" opts))
-                            ; ( Wire.kw "outliner-op"
-                              , Wire.Keyword "insert-blocks" )
-                            ]
-                        in
-                        block_property_ops new_uuid props schema
-                        |> Js.Promise.then_ (fun prop_ops ->
-                               apply_ops
-                                 (Wire.Array
-                                    [ Wire.Keyword "insert-blocks"
-                                    ; Wire.Array
-                                        [ Wire.Array [ new_block ]
-                                        ; Wire.Uuid target
-                                        ; insert_opts
-                                        ]
-                                    ]
-                                 :: prop_ops)
-                                 (Wire.Map []))
-
-                        |> Js.Promise.then_ (fun _ ->
-                               get_entity new_uuid
-                               |> Js.Promise.then_ (fun w ->
-                                      resolved_result w))))))
+      (let* block = get_entity_json a in
+      match block_uuid_of block with
+      | None -> resolved_nil
+      | Some uuid ->
+          let* (target, sibling) = resolve_target (repo ()) uuid opts in
+          let* new_block = parsed_block_map content custom_uuid in
+          let new_uuid =
+            match custom_uuid with
+            | Some u -> u
+            | None ->
+                Option.value
+                  ~default:"" (block_uuid_of new_block)
+          in
+          let insert_opts =
+            Wire.Map
+              [ (Wire.kw "sibling?", Wire.Bool sibling)
+              ; (Wire.kw "keep-uuid?", Wire.Bool true)
+              ; ( Wire.kw "ordered-list?"
+                , Wire.Bool (opt_bool "autoOrderedList" opts))
+              ; ( Wire.kw "outliner-op"
+                , Wire.Keyword "insert-blocks" )
+              ]
+          in
+          let* prop_ops = block_property_ops new_uuid props schema in
+          let* _ =
+            apply_ops
+              (Wire.Array
+                 [ Wire.Keyword "insert-blocks"
+                 ; Wire.Array
+                     [ Wire.Array [ new_block ]
+                     ; Wire.Uuid target
+                     ; insert_opts
+                     ]
+                 ]
+              :: prop_ops)
+              (Wire.Map [])
+          in
+          let* w = get_entity new_uuid in
+          resolved_result w))
   | _ -> resolved_nil
 
 (* batch blocks [{content, uuid?, properties?, children?}] -> flat
@@ -406,14 +401,15 @@ let flat_map_of uuid level parent_uuid (p : Title_refs.parsed) =
     @ Title_refs.kvs_of_parsed p @ parent_kv)
 
 let parse_flats flats =
-  flats
-  |> List.map (fun (uuid, content, level, parent, props) ->
-         Title_refs.parse content
-         |> Js.Promise.then_ (fun p ->
-                Js.Promise.resolve
-                  (uuid, flat_map_of uuid level parent p, props)))
-  |> Array.of_list |> Js.Promise.all
-  |> Js.Promise.then_ (fun a -> Js.Promise.resolve (Array.to_list a))
+  let* a =
+    flats
+    |> List.map (fun (uuid, content, level, parent, props) ->
+           let* p = Title_refs.parse content in
+           Js.Promise.resolve
+             (uuid, flat_map_of uuid level parent p, props))
+    |> Array.of_list |> Js.Promise.all
+  in
+  Js.Promise.resolve (Array.to_list a)
 
 let insert_batch_block a b c _d =
   match arg_string a with
@@ -424,89 +420,87 @@ let insert_batch_block a b c _d =
           (List.fold_left (flatten_batch 1 None) [] (list_items (arg_wire b)))
       in
       let opts = arg_map c in
-      get_entity id
-      |> Js.Promise.then_ (fun target ->
-             match block_uuid_of target with
-             | None -> resolved_nil
-             | Some uuid ->
-                 parse_flats flats
-                 |> Js.Promise.then_ (fun flats ->
-                 (* cljs insert-batch-blocks: a page target forces sibling?
-                    false — children of the page *)
-                 let is_page = Wire.get target "block/name" <> None in
-                 let insert_opts =
-                   Wire.Map
-                     [ ( Wire.kw "sibling?"
-                       , Wire.Bool (opt_bool "sibling" opts && not is_page) )
-                     ; (Wire.kw "keep-uuid?", Wire.Bool true)
-                     ; (Wire.kw "outliner-op", Wire.Keyword "paste")
-                     ; (Wire.kw "replace-empty-target?", Wire.Bool false)
+      (let* target = get_entity id in
+      match block_uuid_of target with
+      | None -> resolved_nil
+      | Some uuid ->
+          let* flats = parse_flats flats in
+          (* cljs insert-batch-blocks: a page target forces sibling?
+             false — children of the page *)
+          let is_page = Wire.get target "block/name" <> None in
+          let insert_opts =
+            Wire.Map
+              [ ( Wire.kw "sibling?"
+                , Wire.Bool (opt_bool "sibling" opts && not is_page) )
+              ; (Wire.kw "keep-uuid?", Wire.Bool true)
+              ; (Wire.kw "outliner-op", Wire.Keyword "paste")
+              ; (Wire.kw "replace-empty-target?", Wire.Bool false)
+              ]
+          in
+          let schema =
+            match Wire.get opts "schema" with
+            | Some s -> s
+            | None -> Wire.Map []
+          in
+          let all_idents =
+            List.concat_map
+              (fun (_, _, props) ->
+                List.map (fun (_, i, _) -> Wire.Keyword i) props)
+              flats
+          in
+          let* existing = get_many all_idents in
+          (* existing aligns with all_idents order; carve it
+                    back per node *)
+          let pool = ref existing in
+          let prop_ops =
+            List.concat_map
+              (fun (u, _, props) ->
+                let n = List.length props in
+                let mine = List.filteri (fun i _ -> i < n) !pool in
+                pool := List.filteri (fun i _ -> i >= n) !pool;
+                List.concat_map
+                  (fun ((key, ident, v), prop) ->
+                    entry_ops ~reset:false u (key, ident, v)
+                      (schema_for schema key) prop)
+                  (List.combine props mine))
+              flats
+          in
+          let* _ =
+            apply_ops
+              (Wire.Array
+                 [ Wire.Keyword "insert-blocks"
+                 ; Wire.Array
+                     [ Wire.Array
+                         (List.map (fun (_, m, _) -> m) flats)
+                     ; Wire.Uuid uuid
+                     ; insert_opts
                      ]
-                 in
-                 let schema =
-                   match Wire.get opts "schema" with
-                   | Some s -> s
-                   | None -> Wire.Map []
-                 in
-                 let all_idents =
-                   List.concat_map
-                     (fun (_, _, props) ->
-                       List.map (fun (_, i, _) -> Wire.Keyword i) props)
-                     flats
-                 in
-                 get_many all_idents
-                 |> Js.Promise.then_ (fun existing ->
-                        (* existing aligns with all_idents order; carve it
-                           back per node *)
-                        let pool = ref existing in
-                        let prop_ops =
-                          List.concat_map
-                            (fun (u, _, props) ->
-                              let n = List.length props in
-                              let mine = List.filteri (fun i _ -> i < n) !pool in
-                              pool := List.filteri (fun i _ -> i >= n) !pool;
-                              List.concat_map
-                                (fun ((key, ident, v), prop) ->
-                                  entry_ops ~reset:false u (key, ident, v)
-                                    (schema_for schema key) prop)
-                                (List.combine props mine))
-                            flats
-                        in
-                        apply_ops
-                          (Wire.Array
-                             [ Wire.Keyword "insert-blocks"
-                             ; Wire.Array
-                                 [ Wire.Array
-                                     (List.map (fun (_, m, _) -> m) flats)
-                                 ; Wire.Uuid uuid
-                                 ; insert_opts
-                                 ]
-                             ]
-                          :: prop_ops)
-                          (Wire.Map []))
-
-                 |> Js.Promise.then_ (fun _ ->
-                        Runtime.invoke2 "thread-api/get-blocks"
-                          (Wire.String (repo ()))
-                          (Wire.Array
-                             (List.map
-                                (fun (u, _, _) ->
-                                  Wire.Map
-                                    [ (Wire.String "id", Wire.String u)
-                                    ; (Wire.String "opts", Wire.Map [])
-                                    ])
-                                flats))
-                        |> Js.Promise.then_ (fun w ->
-                               let blocks =
-                                 List.filter_map
-                                   Wire.block_of_pair
-                                   (Wire.elems w)
-                               in
-                               resolved
-                                 (Sdk_convert.json_arr
-                                    (Array.of_list
-                                       (List.map Sdk_convert.json_of_wire
-                                          blocks)))))))
+                 ]
+              :: prop_ops)
+              (Wire.Map [])
+          in
+          let* w =
+            Runtime.invoke2 "thread-api/get-blocks"
+              (Wire.String (repo ()))
+              (Wire.Array
+                 (List.map
+                    (fun (u, _, _) ->
+                      Wire.Map
+                        [ (Wire.String "id", Wire.String u)
+                        ; (Wire.String "opts", Wire.Map [])
+                        ])
+                    flats))
+          in
+          let blocks =
+            List.filter_map
+              Wire.block_of_pair
+              (Wire.elems w)
+          in
+          resolved
+            (Sdk_convert.json_arr
+               (Array.of_list
+                  (List.map Sdk_convert.json_of_wire
+                     blocks))))
 
 let append_block_in_page a b c _d =
   (* overloads: (content) | (page, content) | (page, content, opts) *)
@@ -527,87 +521,91 @@ let append_block_in_page a b c _d =
               (Option.value ~default:"" p.Model.page_uuid)
         | None ->
             let r = Option.value ~default:"" !Runtime.current_repo in
-            Runtime.invoke2 "thread-api/get-journal-page-by-day"
-              (Wire.String r)
-              (Wire.Int (Dates.today_journal_day ()))
-            |> Js.Promise.then_ (fun page_w ->
-                   Js.Promise.resolve
-                     (Option.value ~default:""
-                        (Wire.map_get_uuid page_w "block/uuid"))))
+            let* page_w =
+              Runtime.invoke2 "thread-api/get-journal-page-by-day"
+                (Wire.String r)
+                (Wire.Int (Dates.today_journal_day ()))
+            in
+            Js.Promise.resolve
+              (Option.value ~default:""
+                 (Wire.map_get_uuid page_w "block/uuid")))
   in
   let opts' =
     match opts with
     | Wire.Map kvs -> Wire.Map ((Wire.String "sibling", Wire.Bool false) :: kvs)
     | _ -> opts
   in
-  target_id
-  |> Js.Promise.then_ (fun target_id ->
-         (* cljs append-block-in-page creates a missing named page first *)
-         get_entity target_id
-         |> Js.Promise.then_ (fun e ->
-                match e, Wire.is_uuid_string target_id, target_id with
-                | Wire.Nil, false, name when name <> "" ->
-                    apply_op "create-page"
-                      [ Wire.String name; Wire.Map [] ]
-                    |> Js.Promise.then_ (fun _ -> Js.Promise.resolve ())
-                | _ -> Js.Promise.resolve ())
-         |> Js.Promise.then_ (fun () ->
-                insert_block (Js.Json.string target_id)
-                  (Js.Json.string content)
-                  (Sdk_convert.json_of_wire opts')
-                  Js.Json.null))
+  let* target_id = target_id in
+  (* cljs append-block-in-page creates a missing named page first *)
+  let* e = get_entity target_id in
+  let* () =
+    match e, Wire.is_uuid_string target_id, target_id with
+    | Wire.Nil, false, name when name <> "" ->
+        let* _ =
+          apply_op "create-page"
+            [ Wire.String name; Wire.Map [] ]
+        in
+        Js.Promise.resolve ()
+    | _ -> Js.Promise.resolve ()
+  in
+  insert_block (Js.Json.string target_id)
+    (Js.Json.string content)
+    (Sdk_convert.json_of_wire opts')
+    Js.Json.null
 
 let update_block a b c _d =
   match arg_string b with
   | Some content ->
       let opts = arg_map c in
-      get_entity_json a
-      |> Js.Promise.then_ (fun block ->
-             match block_uuid_of block with
-             | None -> resolved_nil
-             | Some uuid ->
-                 let props =
-                   match Wire.get opts "properties" with
-                   | Some p -> properties_of p
-                   | None -> []
-                 in
-                 let schema =
-                   match Wire.get opts "schema" with
-                   | Some s -> s
-                   | None -> Wire.Map []
-                 in
-                 (* cljs update-block applies properties BEFORE save-block *)
-                 save_block_properties
-                   ~reset:(opt_bool "resetPropertyValues" opts
-                           || opt_bool "reset-property-values" opts
-                           || opt_bool "reset" opts)
-                   uuid props schema
-                 |> Js.Promise.then_ (fun () ->
-                        (* cljs updateBlock -> save-block! -> wrap-parse-block *)
-                        Title_refs.parse content
-                        |> Js.Promise.then_ (fun p ->
-                               apply_op "save-block"
-                                 [ Wire.Map
-                                     ([ ( Wire.String "block/uuid"
-                                        , Wire.Uuid uuid )
-                                      ; ( Wire.String "block/title"
-                                        , Wire.String p.Title_refs.title )
-                                      ]
-                                     @ Title_refs.kvs_of_parsed p)
-                                 ; Wire.Map []
-                                 ]
-                               |> Js.Promise.then_ (fun _ -> resolved_nil))))
+      (let* block = get_entity_json a in
+      match block_uuid_of block with
+      | None -> resolved_nil
+      | Some uuid ->
+          let props =
+            match Wire.get opts "properties" with
+            | Some p -> properties_of p
+            | None -> []
+          in
+          let schema =
+            match Wire.get opts "schema" with
+            | Some s -> s
+            | None -> Wire.Map []
+          in
+          (* cljs update-block applies properties BEFORE save-block *)
+          let* () =
+            save_block_properties
+              ~reset:(opt_bool "resetPropertyValues" opts
+                      || opt_bool "reset-property-values" opts
+                      || opt_bool "reset" opts)
+              uuid props schema
+          in
+          (* cljs updateBlock -> save-block! -> wrap-parse-block *)
+          let* p = Title_refs.parse content in
+          let* _ =
+            apply_op "save-block"
+              [ Wire.Map
+                  ([ ( Wire.String "block/uuid"
+                     , Wire.Uuid uuid )
+                   ; ( Wire.String "block/title"
+                     , Wire.String p.Title_refs.title )
+                   ]
+                  @ Title_refs.kvs_of_parsed p)
+              ; Wire.Map []
+              ]
+          in
+          resolved_nil)
   | _ -> resolved_nil
 
 let remove_block a _b _c _d =
-  get_entity_json a
-  |> Js.Promise.then_ (fun block ->
-         match block_uuid_of block with
-         | None -> resolved_nil
-         | Some uuid ->
-             apply_op "delete-blocks"
-               [ Wire.Array [ Wire.Uuid uuid ]; Wire.Map [] ]
-             |> Js.Promise.then_ (fun _ -> resolved_nil))
+  let* block = get_entity_json a in
+  match block_uuid_of block with
+  | None -> resolved_nil
+  | Some uuid ->
+      let* _ =
+        apply_op "delete-blocks"
+          [ Wire.Array [ Wire.Uuid uuid ]; Wire.Map [] ]
+      in
+      resolved_nil
 
 (* cljs create-page: create (or reuse) the page, then run its
    properties through db-based-save-block-properties! with opts.schema *)
@@ -620,25 +618,25 @@ let create_page_with_flags name journal class_ uuid custom_uuid props schema =
     ]
 
   in
-  apply_op "create-page" [ Wire.String name; Wire.Map opts ]
-  |> Js.Promise.then_ (fun r ->
-         Js.Promise.resolve
-           (match Wire.elems r with
-            | [ _; Wire.Uuid u ] -> u
-            | [ _; Wire.String u ] -> u
-            | _ -> uuid))
-  |> Js.Promise.then_ (fun u ->
-         get_entity u
-         |> Js.Promise.then_ (fun page ->
-                match block_uuid_of page with
-                | Some puuid ->
-                    save_block_properties puuid props schema
-                | None -> Js.Promise.resolve ())
-         |> Js.Promise.then_ (fun () ->
-                (* journals get a worker-assigned day uuid — resolve the
-                   entity under u, not the caller's uuid *)
-                get_entity u)
-         |> Js.Promise.then_ (fun w -> resolved_result w))
+  let* r = apply_op "create-page" [ Wire.String name; Wire.Map opts ] in
+  let* u =
+    Js.Promise.resolve
+      (match Wire.elems r with
+       | [ _; Wire.Uuid u ] -> u
+       | [ _; Wire.String u ] -> u
+       | _ -> uuid)
+  in
+  let* page = get_entity u in
+  let* () =
+    match block_uuid_of page with
+    | Some puuid ->
+        save_block_properties puuid props schema
+    | None -> Js.Promise.resolve ()
+  in
+  (* journals get a worker-assigned day uuid — resolve the
+            entity under u, not the caller's uuid *)
+  let* w = get_entity u in
+  resolved_result w
 
 
 let create_page a b c _d =
@@ -658,14 +656,13 @@ let create_page a b c _d =
         | Some s -> s
         | None -> Wire.Map []
       in
-      get_entity name
-      |> Js.Promise.then_ (fun existing ->
-             match existing with
-             | Wire.Nil ->
-                 create_page_with_flags name (opt_bool "journal" opts)
-                   (opt_bool "class" opts) uuid
-                   (opt_string "customUUID" opts) props schema
-             | _ -> resolved_result existing)
+      (let* existing = get_entity name in
+      match existing with
+      | Wire.Nil ->
+          create_page_with_flags name (opt_bool "journal" opts)
+            (opt_bool "class" opts) uuid
+            (opt_string "customUUID" opts) props schema
+      | _ -> resolved_result existing)
 
 external date_of_epoch : float -> Js.Date.t = "Date" [@@mel.new]
 
@@ -747,45 +744,45 @@ let upsert_property_op name ident schema_wire =
 
 (* upsert each tagProperty unless it already exists *)
 let upsert_tag_properties idents =
-  get_many (List.map (fun (_, i, _) -> Wire.Keyword i) idents)
-  |> Js.Promise.then_ (fun existing ->
-         let upserts =
-           List.filter_map
-             (fun ((name, ident, tp), ex) ->
-               match ex with
-               | Some _ -> None
-               | None ->
-                   Some
-                     (upsert_property_op name ident
-                        (match Wire.get tp "schema" with
-                         | Some s -> s
-                         | None -> Wire.Map [])))
-             (List.combine idents existing)
-         in
-         match upserts with
-         | [] -> Js.Promise.resolve ()
-         | _ ->
-             apply_ops upserts (Wire.Map [])
-             |> Js.Promise.then_ (fun _ -> Js.Promise.resolve ()))
+  let* existing = get_many (List.map (fun (_, i, _) -> Wire.Keyword i) idents) in
+  let upserts =
+    List.filter_map
+      (fun ((name, ident, tp), ex) ->
+        match ex with
+        | Some _ -> None
+        | None ->
+            Some
+              (upsert_property_op name ident
+                 (match Wire.get tp "schema" with
+                  | Some s -> s
+                  | None -> Wire.Map [])))
+      (List.combine idents existing)
+  in
+  match upserts with
+  | [] -> Js.Promise.resolve ()
+  | _ ->
+      let* _ = apply_ops upserts (Wire.Map []) in
+      Js.Promise.resolve ()
 
 (* link tagProperties via :logseq.property.class/properties [db-ids] *)
 let link_tag_properties uuid idents =
-  get_many (List.map (fun (_, i, _) -> Wire.Keyword i) idents)
-  |> Js.Promise.then_ (fun ps ->
-         let ids =
-           List.filter_map
-             (fun p ->
-               match p with
-               | Some p -> Wire.map_get_int p "db/id"
-               | None -> None)
-             ps
-         in
-         apply_op "set-block-property"
-           [ Wire.Uuid uuid
-           ; Wire.Keyword "logseq.property.class/properties"
-           ; Wire.Array (List.map (fun i -> Wire.Int i) ids)
-           ]
-         |> Js.Promise.then_ (fun _ -> Js.Promise.resolve ()))
+  let* ps = get_many (List.map (fun (_, i, _) -> Wire.Keyword i) idents) in
+  let ids =
+    List.filter_map
+      (fun p ->
+        match p with
+        | Some p -> Wire.map_get_int p "db/id"
+        | None -> None)
+      ps
+  in
+  let* _ =
+    apply_op "set-block-property"
+      [ Wire.Uuid uuid
+      ; Wire.Keyword "logseq.property.class/properties"
+      ; Wire.Array (List.map (fun i -> Wire.Int i) ids)
+      ]
+  in
+  Js.Promise.resolve ()
 
 (* cljs create-tag: <create-class! title {:class-ident-namespace
    plugin-ns} then tagProperties each upsert-property-aux'd and linked
@@ -807,81 +804,82 @@ let create_tag a b _c _d =
               xs
         | _ -> []
       in
-      apply_op "create-page"
-        [ Wire.String title
-        ; Wire.Map
-            [ (Wire.kw "class?", Wire.Bool true)
-            ; (Wire.kw "uuid", Wire.Uuid uuid)
-            ; ( Wire.kw "class-ident-namespace"
-              , Wire.kw "plugin.class._test_plugin" )
-            ]
-        ]
-      |> Js.Promise.then_ (fun _ -> upsert_tag_properties idents)
-      |> Js.Promise.then_ (fun () ->
-             match idents with
-             | [] -> Js.Promise.resolve ()
-             | _ -> link_tag_properties uuid idents)
-      |> Js.Promise.then_ (fun () ->
-             get_entity uuid
-             |> Js.Promise.then_ (fun w -> resolved_result w))
+      let* _ =
+        apply_op "create-page"
+          [ Wire.String title
+          ; Wire.Map
+              [ (Wire.kw "class?", Wire.Bool true)
+              ; (Wire.kw "uuid", Wire.Uuid uuid)
+              ; ( Wire.kw "class-ident-namespace"
+                , Wire.kw "plugin.class._test_plugin" )
+              ]
+          ]
+      in
+      let* () = upsert_tag_properties idents in
+      let* () =
+        match idents with
+        | [] -> Js.Promise.resolve ()
+        | _ -> link_tag_properties uuid idents
+      in
+      let* w = get_entity uuid in
+      resolved_result w
 
 let delete_page a _b _c _d =
-  get_entity_json a
-  |> Js.Promise.then_ (fun page ->
-         match block_uuid_of page with
-         | None -> resolved_nil
-         | Some uuid ->
-             apply_op "delete-page" [ Wire.Uuid uuid; Wire.Map [] ]
-             |> Js.Promise.then_ (fun _ -> resolved_nil))
+  let* page = get_entity_json a in
+  match block_uuid_of page with
+  | None -> resolved_nil
+  | Some uuid ->
+      let* _ = apply_op "delete-page" [ Wire.Uuid uuid; Wire.Map [] ] in
+      resolved_nil
 
 let upsert_block_property a b c d =
   match arg_string b with
   | Some key -> (
       let opts = arg_map d in
-      get_entity_json a
-      |> Js.Promise.then_ (fun block ->
-             match block_uuid_of block with
-             | None -> resolved_nil
-             | Some uuid ->
-                 (* cljs upsert-block-property → db-based-save-block-properties!
-                    with {key schema} *)
-                 let schema =
-                   match Wire.get opts "schema" with
-                   | Some s -> Wire.Map [ (Wire.String key, s) ]
-                   | None -> Wire.Map []
-                 in
-                 save_block_properties
-                   ~reset:(opt_bool "reset" opts
-                           || opt_bool "resetPropertyValues" opts)
-                   uuid [ (key, property_ident key, arg_wire c) ] schema
-                 |> Js.Promise.then_ (fun () -> resolved_nil)))
+      (let* block = get_entity_json a in
+      match block_uuid_of block with
+      | None -> resolved_nil
+      | Some uuid ->
+          (* cljs upsert-block-property → db-based-save-block-properties!
+             with {key schema} *)
+          let schema =
+            match Wire.get opts "schema" with
+            | Some s -> Wire.Map [ (Wire.String key, s) ]
+            | None -> Wire.Map []
+          in
+          let* () =
+            save_block_properties
+              ~reset:(opt_bool "reset" opts
+                      || opt_bool "resetPropertyValues" opts)
+              uuid [ (key, property_ident key, arg_wire c) ] schema
+          in
+          resolved_nil))
   | _ -> resolved_nil
 
 let remove_block_property a b _c _d =
   match arg_string b with
   | Some key -> (
       let ident = property_ident key in
-      get_entity_json a
-      |> Js.Promise.then_ (fun block ->
-             match block_uuid_of block with
-             | None -> resolved_nil
-             | Some uuid ->
-                 apply_op "remove-block-property"
-                   [ Wire.Uuid uuid; Wire.Keyword ident ]
-                 |> Js.Promise.then_ (fun _ ->
-                        get_entity_ident ident
-                        |> Js.Promise.then_ (fun prop ->
-                               (* the broadcast refresh is debounced;
-                                  drop the rendered row so the DOM is
-                                  settled when this promise resolves *)
-                               (match
-                                  Wire.map_get_string prop "block/title"
-                                with
-                                | Some t ->
-                                    Properties_area.drop_row
-                                      ~owner_uuid:uuid ~title:t
-                                | None -> ());
-                               resolved_nil))))
+      (let* block = get_entity_json a in
+      match block_uuid_of block with
+      | None -> resolved_nil
+      | Some uuid ->
+          let* _ =
+            apply_op "remove-block-property"
+              [ Wire.Uuid uuid; Wire.Keyword ident ]
+          in
+          let* prop = get_entity_ident ident in
+          (* the broadcast refresh is debounced;
+                    drop the rendered row so the DOM is
+                    settled when this promise resolves *)
+          (match
+             Wire.map_get_string prop "block/title"
+           with
+           | Some t ->
+               Properties_area.drop_row
+                 ~owner_uuid:uuid ~title:t
+           | None -> ());
+          resolved_nil))
   | _ -> resolved_nil
 
 
@@ -913,41 +911,40 @@ let upsert_property a b c _d =
               | Wire.Map kvs -> kvs
               | _ -> []) )
       in
-      apply_op "upsert-property" [ Wire.Keyword ident; schema'; opts ]
-      |> Js.Promise.then_ (fun w ->
-             match w with
-             | Wire.Map _ -> resolved_result w
-             | _ ->
-                 get_entity_ident ident
-                 |> Js.Promise.then_ (fun p -> resolved_wire p))
+      (let* w = apply_op "upsert-property" [ Wire.Keyword ident; schema'; opts ] in
+      match w with
+      | Wire.Map _ -> resolved_result w
+      | _ ->
+          let* p = get_entity_ident ident in
+          resolved_wire p)
 
 let remove_property a _b _c _d =
   match arg_string a with
   | None -> resolved_nil
   | Some name ->
-      get_entity_ident (property_ident name)
-      |> Js.Promise.then_ (fun p ->
-             match block_uuid_of p with
-             | None -> resolved_nil
-             | Some uuid ->
-                 apply_op "delete-page" [ Wire.Uuid uuid; Wire.Map [] ]
-                 |> Js.Promise.then_ (fun _ -> resolved_nil))
+      (let* p = get_entity_ident (property_ident name) in
+      match block_uuid_of p with
+      | None -> resolved_nil
+      | Some uuid ->
+          let* _ = apply_op "delete-page" [ Wire.Uuid uuid; Wire.Map [] ] in
+          resolved_nil)
 
 (* cljs add-tag-extends passes (:db/id tag) (:db/id extend); the
    set-block-property op's SBlockId arg accepts uuids only *)
 
 let add_tag_extends a b _c _d =
-  Js.Promise.all2 (get_entity_json a, get_entity_json b)
-  |> Js.Promise.then_ (fun (tag, ext) ->
-         match block_uuid_of tag, Wire.map_get_int ext "db/id" with
-         | Some t, Some e ->
-             apply_op "set-block-property"
-               [ Wire.Uuid t
-               ; Wire.Keyword "logseq.property.class/extends"
-               ; Wire.Int e
-               ]
-             |> Js.Promise.then_ (fun _ -> resolved_nil)
-         | _ -> resolved_nil)
+  let* (tag, ext) = Js.Promise.all2 (get_entity_json a, get_entity_json b) in
+  match block_uuid_of tag, Wire.map_get_int ext "db/id" with
+  | Some t, Some e ->
+      let* _ =
+        apply_op "set-block-property"
+          [ Wire.Uuid t
+          ; Wire.Keyword "logseq.property.class/extends"
+          ; Wire.Int e
+          ]
+      in
+      resolved_nil
+  | _ -> resolved_nil
 
 
 (* cljs set-property-node-tags: set-block-property! (:db/id property)
@@ -966,14 +963,15 @@ let set_property_node_tags a b _c _d =
                | Wire.Float f -> Some (Wire.Int (int_of_float f))
                | _ -> None)
       in
-      get_entity_ident ident
-      |> Js.Promise.then_ (fun p ->
-             match block_uuid_of p with
-             | None -> resolved_nil
-             | Some puuid ->
-                 apply_op "set-block-property"
-                   [ Wire.Uuid puuid
-                   ; Wire.Keyword "logseq.property/classes"
-                   ; Wire.Array tags
-                   ]
-                 |> Js.Promise.then_ (fun _ -> resolved_nil))
+      (let* p = get_entity_ident ident in
+      match block_uuid_of p with
+      | None -> resolved_nil
+      | Some puuid ->
+          let* _ =
+            apply_op "set-block-property"
+              [ Wire.Uuid puuid
+              ; Wire.Keyword "logseq.property/classes"
+              ; Wire.Array tags
+              ]
+          in
+          resolved_nil)
