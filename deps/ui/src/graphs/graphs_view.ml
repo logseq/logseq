@@ -4,6 +4,7 @@
    components/repo.cljs repos-inner: div#graphs > h1 "All graphs" +
    "Create a new graph" button + local rows + remote section. *)
 
+open Promise_ext
 module T = I18n
 module B = Browser_ui
 
@@ -238,12 +239,11 @@ let remote_section rerender =
   B.append refresh_btn refresh_label;
   B.add_listener refresh_btn "click" (fun _ ->
       B.set_attr refresh_btn "disabled" "true";
-      Graphs_ops.refresh ()
-      |> Js.Promise.then_ (fun _ -> Graphs_ops.list_remote_graphs ())
-      |> Js.Promise.then_ (fun _ ->
-             B.remove_attr refresh_btn "disabled";
-             rerender ();
-             Js.Promise.resolve ())
+      (let* _ = Graphs_ops.refresh () in
+      let* _ = Graphs_ops.list_remote_graphs () in
+      B.remove_attr refresh_btn "disabled";
+      rerender ();
+      Js.Promise.resolve ())
       |> Js.Promise.catch (fun _ ->
              B.remove_attr refresh_btn "disabled";
              Js.Promise.resolve ())
@@ -352,9 +352,8 @@ let rec show ?(tries = 40) () =
       match B.qs ".graphs-host" with
       | Some host ->
           ignore
-            (Js.Promise.then_
-               (fun _ -> render_into host; Js.Promise.resolve ())
-               (Graphs_ops.list_remote_graphs ()))
+            (let* _ = (Graphs_ops.list_remote_graphs ()) in
+            render_into host; Js.Promise.resolve ())
       | None -> ());
   (* cljs mounts #graphs inside .cp__sidebar-main-content > .mx-auto.pb-24
      (the route content column) — append our host there so centering and
@@ -369,13 +368,11 @@ let rec show ?(tries = 40) () =
           B.append parent host;
           if !Graphs_ops.repos = [] then
             ignore
-              (Js.Promise.then_
-                 (fun _ -> rerender (); Js.Promise.resolve ())
-                 (Graphs_ops.refresh ()));
+              (let* _ = (Graphs_ops.refresh ()) in
+              rerender (); Js.Promise.resolve ());
           ignore
-            (Js.Promise.then_
-               (fun _ -> rerender (); Js.Promise.resolve ())
-               (Graphs_ops.list_remote_graphs ()));
+            (let* _ = (Graphs_ops.list_remote_graphs ()) in
+            rerender (); Js.Promise.resolve ());
           render_into host)
   | None ->
       (* cold #/graphs load: the route commits Ready before the content

@@ -3,6 +3,7 @@
    groups create -> nodes -> commands, flat data-item-index,
    keyboard/mouse highlight, debounced search-blocks. *)
 
+open Promise_ext
 type group_id =
   | G_create
   | G_current_page
@@ -380,24 +381,25 @@ let current_page_limit expanded =
 (* include-matched-count? returns {items, matched-count}; fall back to
    a bare array if the shape differs *)
 let run_search repo q move_mode nodes_limit =
-  Runtime.invoke3 "thread-api/search-blocks" (Wire.String repo)
-    (Wire.String q) (search_opts move_mode nodes_limit)
-  |> Js.Promise.then_ (fun w ->
-         let rows, total =
-           match w with
-           | Wire.Array xs | Wire.List xs -> (xs, List.length xs)
-           | Wire.Map _ ->
-               let items =
-                 match Wire.get w "items" with
-                 | Some (Wire.Array xs) | Some (Wire.List xs) -> xs
-                 | _ -> []
-               in
-               ( items
-               , Option.value (Wire.map_get_int w "matched-count")
-                   ~default:(List.length items) )
-           | _ -> ([], 0)
-         in
-         Js.Promise.resolve (List.mapi (fun i w -> item_of_row w i) rows, total))
+  let* w =
+    Runtime.invoke3 "thread-api/search-blocks" (Wire.String repo)
+      (Wire.String q) (search_opts move_mode nodes_limit)
+  in
+  let rows, total =
+    match w with
+    | Wire.Array xs | Wire.List xs -> (xs, List.length xs)
+    | Wire.Map _ ->
+        let items =
+          match Wire.get w "items" with
+          | Some (Wire.Array xs) | Some (Wire.List xs) -> xs
+          | _ -> []
+        in
+        ( items
+        , Option.value (Wire.map_get_int w "matched-count")
+            ~default:(List.length items) )
+    | _ -> ([], 0)
+  in
+  Js.Promise.resolve (List.mapi (fun i w -> item_of_row w i) rows, total)
 
 
 
@@ -569,14 +571,15 @@ let refresh ?(clear = true) st =
   | None -> ()
   | Some repo ->
       ignore
-        (run_search repo v.input v.move_mode
-           (match v.filter with
-            | Some G_current_page -> current_page_limit v.expanded
-            | _ -> nodes_limit v.move_mode v.expanded)
-         |> Js.Promise.then_ (fun (rows, total) ->
-                if gen = !(st.gen) then
-                  apply_results st v.input v.move_mode v.expanded rows total;
-                Js.Promise.resolve ())
+        ((let* (rows, total) =
+           run_search repo v.input v.move_mode
+             (match v.filter with
+              | Some G_current_page -> current_page_limit v.expanded
+              | _ -> nodes_limit v.move_mode v.expanded)
+         in
+         if gen = !(st.gen) then
+           apply_results st v.input v.move_mode v.expanded rows total;
+         Js.Promise.resolve ())
          |> Js.Promise.catch (fun e ->
                 Platform.console_error
                   ( "cmdk search failed"
@@ -626,17 +629,16 @@ let load_recents st repo =
          (Sidebar_state.recent_ids_of_storage repo))
   in
   ignore
-    (Runtime.invoke2 "thread-api/get-recent-pages" (Wire.String repo) ids
-     |> Js.Promise.then_ (fun w ->
-            let items =
-              match w with
-              | Wire.Array xs | Wire.List xs ->
-                  List.filter_map recents_item_of_wire xs
-              | _ -> []
-            in
-            set_in st (fun v -> { v with recents = items });
-            refresh st;
-            Js.Promise.resolve ())
+    ((let* w = Runtime.invoke2 "thread-api/get-recent-pages" (Wire.String repo) ids in
+     let items =
+       match w with
+       | Wire.Array xs | Wire.List xs ->
+           List.filter_map recents_item_of_wire xs
+       | _ -> []
+     in
+     set_in st (fun v -> { v with recents = items });
+     refresh st;
+     Js.Promise.resolve ())
      |> Js.Promise.catch (fun _ -> Js.Promise.resolve ()))
 
 let on_input st q =
@@ -760,17 +762,18 @@ let goto_page _repo uuid =
     (Runtime.nav_hash ("#/page/" ^ uuid))
 let goto_today_journal repo =
   let day = Dates.today_journal_day () in
-  Runtime.invoke2 "thread-api/get-journal-page-by-day" (Wire.String repo)
-    (Wire.Int day)
-  |> Js.Promise.then_ (fun page_w ->
-         match Decode.page_of_summary page_w with
-         | None -> Js.Promise.resolve ()
-         | Some page -> (
-             match page.Model.page_uuid with
-             | Some uuid ->
-                 goto_page repo uuid;
-                 Js.Promise.resolve ()
-             | None -> Js.Promise.resolve ()))
+  let* page_w =
+    Runtime.invoke2 "thread-api/get-journal-page-by-day" (Wire.String repo)
+      (Wire.Int day)
+  in
+  match Decode.page_of_summary page_w with
+  | None -> Js.Promise.resolve ()
+  | Some page -> (
+      match page.Model.page_uuid with
+      | Some uuid ->
+          goto_page repo uuid;
+          Js.Promise.resolve ()
+      | None -> Js.Promise.resolve ())
 
 (* worker create-page/create-class ops return the new entity's uuid as
    [:op-name uuid] *)
@@ -789,12 +792,13 @@ let apply_create op label on_ok =
          waits on .editor-visible and must not see the stale one) *)
       Editor_actions.exit_edit ~select:false;
       ignore
-        (Runtime.invoke3 "thread-api/apply-outliner-ops" (Wire.String repo)
-           (Wire.Array [ op ]) (Wire.Map [])
-         |> Js.Promise.then_ (fun w ->
-                (match created_uuid w with Some uuid -> on_ok repo uuid
-                 | None -> ());
-                Js.Promise.resolve ())
+        ((let* w =
+           Runtime.invoke3 "thread-api/apply-outliner-ops" (Wire.String repo)
+             (Wire.Array [ op ]) (Wire.Map [])
+         in
+         (match created_uuid w with Some uuid -> on_ok repo uuid
+          | None -> ());
+         Js.Promise.resolve ())
          |> Js.Promise.catch (fun e ->
                 Platform.console_error (label, Platform.error_inner e);
                 Js.Promise.resolve ()))
@@ -822,11 +826,12 @@ let create_tag title =
 
 let validate_graph repo =
   ignore
-    (Runtime.invoke2 "thread-api/validate-db" (Wire.String repo)
-       (Wire.Map [])
-     |> Js.Promise.then_ (fun _ ->
-            toast "Your graph is valid" "success";
-            Js.Promise.resolve ())
+    ((let* _ =
+       Runtime.invoke2 "thread-api/validate-db" (Wire.String repo)
+         (Wire.Map [])
+     in
+     toast "Your graph is valid" "success";
+     Js.Promise.resolve ())
      |> Js.Promise.catch (fun e ->
             toast "Validation failed" "error";
             Platform.console_error ("validate-db failed", e);
@@ -903,10 +908,12 @@ let run_add_comment repo st =
   match repo, uuids with
   | Some repo, _ :: _ ->
       ignore
-        (Runtime.invoke2 "thread-api/ensure-comments-area-for-blocks"
-           (Wire.String repo)
-           (Wire.Array (List.map (fun u -> Wire.Uuid u) uuids))
-        |> Js.Promise.then_ (fun _ -> Outliner_ops.refresh_page ()))
+        (let* _ =
+          Runtime.invoke2 "thread-api/ensure-comments-area-for-blocks"
+            (Wire.String repo)
+            (Wire.Array (List.map (fun u -> Wire.Uuid u) uuids))
+        in
+        Outliner_ops.refresh_page ())
   | _ -> ()
 
 let with_sidebar f () =
@@ -1023,15 +1030,16 @@ let rec run_item st it =
        Option.iter
          (fun repo ->
            ignore
-             (Runtime.invoke2 "thread-api/get-block-page-info"
-                (Wire.String repo)
-                (Wire.Array [ Wire.Keyword "block/uuid"; Wire.Uuid uuid ])
-              |> Js.Promise.then_ (fun w ->
-                     match Wire.map_get_uuid w "block/uuid" with
-                     | Some puuid ->
-                         goto_page repo puuid;
-                         Js.Promise.resolve ()
-                     | None -> Js.Promise.resolve ())))
+             (let* w =
+               Runtime.invoke2 "thread-api/get-block-page-info"
+                 (Wire.String repo)
+                 (Wire.Array [ Wire.Keyword "block/uuid"; Wire.Uuid uuid ])
+             in
+             match Wire.map_get_uuid w "block/uuid" with
+             | Some puuid ->
+                 goto_page repo puuid;
+                 Js.Promise.resolve ()
+             | None -> Js.Promise.resolve ()))
          repo
    | Set_filter gid ->
        set_in st (fun v ->
@@ -1075,17 +1083,18 @@ and run_command st repo (cid : string) =
     match repo with
     | Some repo ->
         ignore
-          (Runtime.invoke2 "thread-api/get-journal-page-by-day"
-             (Wire.String repo) (Wire.Int day)
-           |> Js.Promise.then_ (fun w ->
-                  match Decode.page_of_summary w with
-                  | Some p -> (
-                      match p.Model.page_uuid with
-                      | Some u ->
-                          goto_page repo u;
-                          Js.Promise.resolve ()
-                      | None -> Js.Promise.resolve ())
-                  | None -> Js.Promise.resolve ()))
+          (let* w =
+            Runtime.invoke2 "thread-api/get-journal-page-by-day"
+              (Wire.String repo) (Wire.Int day)
+          in
+          match Decode.page_of_summary w with
+          | Some p -> (
+              match p.Model.page_uuid with
+              | Some u ->
+                  goto_page repo u;
+                  Js.Promise.resolve ()
+              | None -> Js.Promise.resolve ())
+          | None -> Js.Promise.resolve ())
     | None -> ()
   in
   let rel_journal delta = (* today's journal +/- delta days *)

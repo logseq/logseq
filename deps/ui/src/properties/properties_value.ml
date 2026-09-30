@@ -15,6 +15,7 @@
    set-block-property for scalars and refs, remove-block-property /
    delete-property-value to clear. *)
 
+open Promise_ext
 open Editor_dom
 open Properties_dom
 module D = Properties_data
@@ -398,12 +399,11 @@ let today_day () =
   + int_of_float (Js.Date.getDate d)
 
 let set_date ctx ident day =
-  D.journal_page_by_day day
-  |> Js.Promise.then_ (fun w ->
-         (match D.geti w "db/id" with
-          | Some id -> set_scalar ctx ~ident ~value:(W.Int id)
-          | None -> ());
-         Js.Promise.resolve ())
+  (let* w = D.journal_page_by_day day in
+  (match D.geti w "db/id" with
+   | Some id -> set_scalar ctx ~ident ~value:(W.Int id)
+   | None -> ());
+  Js.Promise.resolve ())
   |> ignore
 
 let commit_date_input ctx ident ~is_datetime input =
@@ -519,16 +519,17 @@ let date_cell ctx row =
 (* db/ids of the owner block's tags — the bare entity endpoint omits
    block/tags, so pull it explicitly like sidebar_state/pull_entity *)
 let block_tag_ids ctx f =
-  Runtime.invoke3 "thread-api/pull" (D.repo ())
-    (W.String "[:block/uuid {:block/tags [:db/id]}]")
-    (W.Array [ W.Keyword "block/uuid"; W.Uuid ctx.block_uuid ])
-  |> Js.Promise.then_ (fun w ->
-         let tags =
-           match D.getf w "block/tags" with
-           | Some xs -> List.filter_map D.entity_id_of (W.elems xs)
-           | None -> []
-         in
-         f tags |> Js.Promise.resolve)
+  (let* w =
+    Runtime.invoke3 "thread-api/pull" (D.repo ())
+      (W.String "[:block/uuid {:block/tags [:db/id]}]")
+      (W.Array [ W.Keyword "block/uuid"; W.Uuid ctx.block_uuid ])
+  in
+  let tags =
+    match D.getf w "block/tags" with
+    | Some xs -> List.filter_map D.entity_id_of (W.elems xs)
+    | None -> []
+  in
+  f tags |> Js.Promise.resolve)
   |> ignore
 
 (* choice db/ids excluded by any of the owner's tags *)
@@ -537,17 +538,18 @@ let gather_exclusions tag_ids f =
   let rec go = function
     | [] -> f !acc
     | id :: rest ->
-        Runtime.invoke3 "thread-api/pull" (D.repo ())
-          (W.String "[:db/id {:logseq.property/choice-exclusions [:db/id]}]")
-          (W.Int id)
-        |> Js.Promise.then_ (fun ent ->
-               (match D.getf (D.untag ent) "logseq.property/choice-exclusions" with
-                | Some xs ->
-                    acc :=
-                      !acc @ List.filter_map D.entity_id_of (W.elems xs)
-                | None -> ());
-               go rest;
-               Js.Promise.resolve ())
+        (let* ent =
+          Runtime.invoke3 "thread-api/pull" (D.repo ())
+            (W.String "[:db/id {:logseq.property/choice-exclusions [:db/id]}]")
+            (W.Int id)
+        in
+        (match D.getf (D.untag ent) "logseq.property/choice-exclusions" with
+         | Some xs ->
+             acc :=
+               !acc @ List.filter_map D.entity_id_of (W.elems xs)
+         | None -> ());
+        go rest;
+        Js.Promise.resolve ())
         |> ignore
   in
   go tag_ids
@@ -584,12 +586,11 @@ let node_items_source ~block ~prop ~on_pick =
   let initial =
     (match D.entity_id_of prop with
      | Some property_id ->
-         D.node_selector_data ~property_id ~block
-         |> Js.Promise.then_ (fun w ->
-                Js.Promise.resolve
-                  (match D.getf w "initial-choices" with
-                   | Some v -> items_of v
-                   | None -> []))
+         let* w = D.node_selector_data ~property_id ~block in
+         Js.Promise.resolve
+           (match D.getf w "initial-choices" with
+            | Some v -> items_of v
+            | None -> [])
      | None -> Js.Promise.resolve [])
   in
   let sub_of needle hay =
@@ -604,8 +605,8 @@ let node_items_source ~block ~prop ~on_pick =
     if q' = "" then initial
     else
       let searched =
-        D.search_blocks q
-        |> Js.Promise.then_ (fun w -> Js.Promise.resolve (items_of w))
+        (let* w = D.search_blocks q in
+        Js.Promise.resolve (items_of w))
       in
       (* cljs re-adds the built-in Page class for block/tags — block-search
          filters built-ins out *)
@@ -614,15 +615,15 @@ let node_items_source ~block ~prop ~on_pick =
         && sub_of (String.lowercase_ascii q') "page"
       in
       if is_tags then
-        searched
-        |> Js.Promise.then_ (fun items ->
-               D.entity
-                 (W.List [ W.Keyword "db/ident"; W.Keyword "logseq.class/Page" ])
-               |> Js.Promise.then_ (fun e ->
-                      Js.Promise.resolve
-                        (match to_item e with
-                         | Some it -> items @ [ it ]
-                         | None -> items)))
+        let* items = searched in
+        let* e =
+          D.entity
+            (W.List [ W.Keyword "db/ident"; W.Keyword "logseq.class/Page" ])
+        in
+        Js.Promise.resolve
+          (match to_item e with
+           | Some it -> items @ [ it ]
+           | None -> items)
       else searched
   in
   (initial, on_search)
@@ -642,30 +643,28 @@ let open_select_popup _row items ~placeholder anchor
 let open_node_select_popup ~placeholder anchor ~block ~prop ~on_pick
     ~on_new =
   let initial, on_search = node_items_source ~block ~prop ~on_pick in
-  initial
-  |> Js.Promise.then_ (fun items ->
-         let sel, input =
-           Properties_select.create ~placeholder ~new_option:on_new
-             ~on_search:(Some on_search)
-             ~on_escape:(fun () -> S.pop_overlay ())
-             items
-         in
-         let wrap = mk ~cls:"property-select" "div" in
-         el_append_child wrap sel;
-         ignore (Properties_popup.open_anchored anchor wrap);
-         el_focus input;
-         Js.Promise.resolve ())
+  (let* items = initial in
+  let sel, input =
+    Properties_select.create ~placeholder ~new_option:on_new
+      ~on_search:(Some on_search)
+      ~on_escape:(fun () -> S.pop_overlay ())
+      items
+  in
+  let wrap = mk ~cls:"property-select" "div" in
+  el_append_child wrap sel;
+  ignore (Properties_popup.open_anchored anchor wrap);
+  el_focus input;
+  Js.Promise.resolve ())
   |> ignore
 
 let new_choice ctx row text =
   let ident = D.row_ident row |> Option.value ~default:"" in
-  D.upsert_closed_value ~ident ~value:text ()
-  |> Js.Promise.then_ (fun res ->
-         (match D.geti res "db/id" with
-          | Some id -> set_scalar ctx ~ident ~value:(W.Int id)
-          | None -> ());
-         S.pop_overlay ();
-         Js.Promise.resolve ())
+  (let* res = D.upsert_closed_value ~ident ~value:text () in
+  (match D.geti res "db/id" with
+   | Some id -> set_scalar ctx ~ident ~value:(W.Int id)
+   | None -> ());
+  S.pop_overlay ();
+  Js.Promise.resolve ())
   |> ignore
 
 (* icon id for a closed-choice value — the value's own
@@ -799,7 +798,6 @@ let node_cell ctx row =
         S.pop_overlay ())
       ~on_new:(Some (new_node ctx row))
   and new_node ctx row text =
-    let ( let* ) p f = Js.Promise.then_ f p in
     ignore
       (let* res =
          (* cljs <create-page-if-not-exists!: class-type and block/tags
@@ -887,90 +885,89 @@ let open_extends_menu ctx ~ident row anchor =
   | None -> ()
   | Some property_id ->
       ignore
-        (D.node_selector_data ~property_id ~block:(D.uuid_ref ctx.block_uuid)
-        |> Js.Promise.then_ (fun data ->
-               let selected =
-                 ref
-                   (List.filter_map D.entity_id_of
-                      (D.value_elems (D.row_value row)))
-               in
-               let ids_of m id =
-                 match D.int_map_get m id with
-                 | Some w -> List.filter_map D.entity_id_of (W.elems w)
-                 | None -> []
-               in
-               let children =
-                 match
-                   ( ctx.block_id
-                   , D.getf data "structured-children-by-class-id" )
-                 with
-                 | Some id, Some m -> (
-                     match D.int_map_get m id with
-                     | Some w ->
-                         List.filter_map (fun v -> W.as_int v) (W.elems w)
-                     | None -> [])
-                 | _ -> []
-               and grandparents =
-                 match D.getf data "extends-by-class-id" with
-                 | Some m ->
-                     List.concat_map (fun pid -> ids_of m pid) !selected
-                 | None -> []
-               in
-               let excluded =
-                 (match ctx.block_id with Some id -> [ id ] | None -> [])
-                 @ children @ grandparents
-               in
-               let options =
-                 (match D.getf data "extends-class-options" with
-                  | Some w -> W.elems w
-                  | None -> [])
-                 |> List.filter (fun o ->
-                        match D.entity_id_of o with
-                        | Some id -> not (List.mem id excluded)
-                        | None -> false)
-               in
-               let menu = mk ~cls:"ui__dropdown-menu" "div" in
-               let rec rebuild () =
-                 el_clear menu;
-                 List.iter
-                   (fun o ->
-                     match D.entity_id_of o with
-                     | None -> ()
-                     | Some id ->
-                         let a =
-                           mk ~cls:"flex justify-between menu-link" "a"
-                             ~attrs:[ ("tabindex", "0") ]
-                         in
+        (let* data = D.node_selector_data ~property_id ~block:(D.uuid_ref ctx.block_uuid) in
+        let selected =
+          ref
+            (List.filter_map D.entity_id_of
+               (D.value_elems (D.row_value row)))
+        in
+        let ids_of m id =
+          match D.int_map_get m id with
+          | Some w -> List.filter_map D.entity_id_of (W.elems w)
+          | None -> []
+        in
+        let children =
+          match
+            ( ctx.block_id
+            , D.getf data "structured-children-by-class-id" )
+          with
+          | Some id, Some m -> (
+              match D.int_map_get m id with
+              | Some w ->
+                  List.filter_map (fun v -> W.as_int v) (W.elems w)
+              | None -> [])
+          | _ -> []
+        and grandparents =
+          match D.getf data "extends-by-class-id" with
+          | Some m ->
+              List.concat_map (fun pid -> ids_of m pid) !selected
+          | None -> []
+        in
+        let excluded =
+          (match ctx.block_id with Some id -> [ id ] | None -> [])
+          @ children @ grandparents
+        in
+        let options =
+          (match D.getf data "extends-class-options" with
+           | Some w -> W.elems w
+           | None -> [])
+          |> List.filter (fun o ->
+                 match D.entity_id_of o with
+                 | Some id -> not (List.mem id excluded)
+                 | None -> false)
+        in
+        let menu = mk ~cls:"ui__dropdown-menu" "div" in
+        let rec rebuild () =
+          el_clear menu;
+          List.iter
+            (fun o ->
+              match D.entity_id_of o with
+              | None -> ()
+              | Some id ->
+                  let a =
+                    mk ~cls:"flex justify-between menu-link" "a"
+                      ~attrs:[ ("tabindex", "0") ]
+                  in
+                  ignore
+                    (child_text "span" "flex-1" (D.ref_title o) a);
+                  (if List.mem id !selected then
+                     ignore
+                       (el_append_child a
+                          (mk ~cls:"ui__icon ti ti-check" "i")));
+                  on_click a (fun _ ->
+                      (if List.mem id !selected then (
+                         selected :=
+                           List.filter (fun x -> x <> id) !selected;
                          ignore
-                           (child_text "span" "flex-1" (D.ref_title o) a);
-                         (if List.mem id !selected then
-                            ignore
-                              (el_append_child a
-                                 (mk ~cls:"ui__icon ti ti-check" "i")));
-                         on_click a (fun _ ->
-                             (if List.mem id !selected then (
-                                selected :=
-                                  List.filter (fun x -> x <> id) !selected;
-                                ignore
-                                  (D.delete_property_value
-                                     ~block_uuid:ctx.block_uuid ~ident
-                                     ~value:(W.Int id)))
-                              else (
-                                selected := id :: !selected;
-                                ignore
-                                  (D.set_block_property
-                                     ~block_uuid:ctx.block_uuid ~ident
-                                     ~value:(W.Int id))));
-                             rebuild ();
-                             S.refresh_all ());
-                         el_append_child menu a)
-                   options
-               in
-               rebuild ();
-               ignore
-                 (Properties_popup.open_anchored
-                    ~cls:"ui__dropdown-menu-content" anchor menu);
-               Js.Promise.resolve ()))
+                           (D.delete_property_value
+                              ~block_uuid:ctx.block_uuid ~ident
+                              ~value:(W.Int id)))
+                       else (
+                         selected := id :: !selected;
+                         ignore
+                           (D.set_block_property
+                              ~block_uuid:ctx.block_uuid ~ident
+                              ~value:(W.Int id))));
+                      rebuild ();
+                      S.refresh_all ());
+                  el_append_child menu a)
+            options
+        in
+        rebuild ();
+        ignore
+          (Properties_popup.open_anchored
+             ~cls:"ui__dropdown-menu-content" anchor menu);
+        Js.Promise.resolve ())
 
 let extends_cell ctx row =
   let value = D.row_value row in

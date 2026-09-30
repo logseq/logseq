@@ -4,6 +4,7 @@
    value, available choices, cardinality, ui-position, hide toggles,
    delete-from-node. *)
 
+open Promise_ext
 open Editor_dom
 open Properties_dom
 module D = Properties_data
@@ -339,12 +340,13 @@ let choice_li m choice rebuild =
       let form, input =
         base_edit_form ~title_v:title ~desc_v:"" (fun v _d ->
             ignore
-              (D.upsert_closed_value ~ident:(prop_ident m)
-                 ?choice_id:(D.entity_uuid_of choice) ~value:v ()
-               |> Js.Promise.then_ (fun _ ->
-                      rebuild ();
-                      S.refresh_all ();
-                      Js.Promise.resolve ())))
+              (let* _ =
+                D.upsert_closed_value ~ident:(prop_ident m)
+                  ?choice_id:(D.entity_uuid_of choice) ~value:v ()
+              in
+              rebuild ();
+              S.refresh_all ();
+              Js.Promise.resolve ()))
       in
       ignore
         (Properties_popup.open_anchored ~cls:"ui__popover-content" li
@@ -360,40 +362,40 @@ let choices_pane m =
   (* refetch on every build — the row's closed-values snapshot is stale
      after add/edit/delete *)
   let rec build () =
-    D.closed_values (W.Keyword (prop_ident m))
-    |> Js.Promise.then_ (fun w ->
-           el_clear pane;
-           let ul = mk ~cls:"choices-list" "ul" in
-           (* must overflow-scroll: e2e asserts scrollHeight > clientHeight *)
-           set_style ul "max-height:240px;overflow-y:auto";
-           List.iter (fun c -> el_append_child ul (choice_li m c build))
-             (W.elems w);
-           el_append_child pane ul;
-           el_append_child pane
-             (menuitem (I18n.t "property/add-choice") (fun () ->
-                  let form, input =
-                    base_edit_form ~title_v:"" ~desc_v:"" (fun v _d ->
-                        (* creating a choice while the owner is a tag scopes
-                           it to that class (cljs ->closed-choice-scope-opts) *)
-                        let scoped =
-                          match m.owner_is_tag, m.owner_id with
-                          | true, Some id -> Some id
-                          | _ -> None
-                        in
-                        ignore
-                          (D.upsert_closed_value ~ident:(prop_ident m)
-                             ~value:v ?scoped_class_id:scoped ()
-                          |> Js.Promise.then_ (fun _ ->
-                                 build ();
-                                 S.refresh_all ();
-                                 Js.Promise.resolve ()));
-                        S.refresh_all ())
-                  in
-                  ignore
-                    (Properties_popup.open_anchored
-                       ~cls:"ui__popover-content" ul form);
-                  el_focus input));
-           Js.Promise.resolve ())
+    (let* w = D.closed_values (W.Keyword (prop_ident m)) in
+    el_clear pane;
+    let ul = mk ~cls:"choices-list" "ul" in
+    (* must overflow-scroll: e2e asserts scrollHeight > clientHeight *)
+    set_style ul "max-height:240px;overflow-y:auto";
+    List.iter (fun c -> el_append_child ul (choice_li m c build))
+      (W.elems w);
+    el_append_child pane ul;
+    el_append_child pane
+      (menuitem (I18n.t "property/add-choice") (fun () ->
+           let form, input =
+             base_edit_form ~title_v:"" ~desc_v:"" (fun v _d ->
+                 (* creating a choice while the owner is a tag scopes
+                    it to that class (cljs ->closed-choice-scope-opts) *)
+                 let scoped =
+                   match m.owner_is_tag, m.owner_id with
+                   | true, Some id -> Some id
+                   | _ -> None
+                 in
+                 ignore
+                   (let* _ =
+                     D.upsert_closed_value ~ident:(prop_ident m)
+                       ~value:v ?scoped_class_id:scoped ()
+                   in
+                   build ();
+                   S.refresh_all ();
+                   Js.Promise.resolve ());
+                 S.refresh_all ())
+           in
+           ignore
+             (Properties_popup.open_anchored
+                ~cls:"ui__popover-content" ul form);
+           el_focus input));
+    Js.Promise.resolve ())
     |> ignore
   in
   build ();

@@ -3,6 +3,7 @@
    property areas (for refresh-on-tx), and the show-hidden-properties
    toggle. *)
 
+open Promise_ext
 open Properties_dom
 
 (* ---------- overlay stack ---------- *)
@@ -134,10 +135,12 @@ let refresh_all () =
 (* immediate rebuild for commit paths (sdk writes) — skips the 150ms
    debounce so callers observe applied property changes *)
 let refresh_all_now () =
-  List.map (fun a -> guarded a.refresh) (live_areas ())
-  |> Array.of_list
-  |> Js.Promise.all
-  |> Js.Promise.then_ (fun _ -> Js.Promise.resolve ())
+  let* _ =
+    List.map (fun a -> guarded a.refresh) (live_areas ())
+    |> Array.of_list
+    |> Js.Promise.all
+  in
+  Js.Promise.resolve ()
 
 (* sdk apply_ops awaits this before resolving — avoids a
    properties->sdk dependency cycle *)

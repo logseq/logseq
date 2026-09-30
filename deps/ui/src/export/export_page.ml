@@ -90,26 +90,28 @@ let map_str w k =
   | _ -> ""
 
 let export_text (st : S.t) =
-  Runtime.invoke "thread-api/export-blocks-as-format"
-    [ W.String (repo ())
-    ; uuids_v st
-    ; W.Keyword "markdown"
-    ; options_v st
-    ; content_config ]
-  |> Js.Promise.then_ (fun w ->
-         Js.Promise.resolve (Option.value ~default:"" (W.as_string w)))
+  let* w =
+    Runtime.invoke "thread-api/export-blocks-as-format"
+      [ W.String (repo ())
+      ; uuids_v st
+      ; W.Keyword "markdown"
+      ; options_v st
+      ; content_config ]
+  in
+  Js.Promise.resolve (Option.value ~default:"" (W.as_string w))
 
 let export_structured (st : S.t) =
-  Runtime.invoke "thread-api/export-get-blocks-data"
-    [ W.String (repo ()); uuids_v st; tree_opts_v st; content_config ]
-  |> Js.Promise.then_ (fun w ->
-         let content = map_str w "content" in
-         let title = map_str w "title" in
-         Js.Promise.resolve
-           (match st.fmt with
-            | S.Opml -> F.opml ~title ~indent_unit content
-            | S.Html -> F.html ~indent_unit content
-            | _ -> content))
+  let* w =
+    Runtime.invoke "thread-api/export-get-blocks-data"
+      [ W.String (repo ()); uuids_v st; tree_opts_v st; content_config ]
+  in
+  let content = map_str w "content" in
+  let title = map_str w "title" in
+  Js.Promise.resolve
+    (match st.fmt with
+     | S.Opml -> F.opml ~title ~indent_unit content
+     | S.Html -> F.html ~indent_unit content
+     | _ -> content)
 
 let export_edn (st : S.t) =
   let page_id =
@@ -120,9 +122,11 @@ let export_edn (st : S.t) =
         | Some id -> W.Int id
         | None -> W.Nil)
   in
-  Runtime.invoke2 "thread-api/export-edn" (W.String (repo ()))
-    (W.Map [ (W.kw "export-type", W.Keyword "page"); (W.kw "page-id", page_id) ])
-  |> Js.Promise.then_ (fun w -> Js.Promise.resolve (Edn.to_string w))
+  let* w =
+    Runtime.invoke2 "thread-api/export-edn" (W.String (repo ()))
+      (W.Map [ (W.kw "export-type", W.Keyword "page"); (W.kw "page-id", page_id) ])
+  in
+  Js.Promise.resolve (Edn.to_string w)
 
 (* cljs get-image-blob for a page export — selector is always
    #main-content-container; page zoom/x/y/width/height cljs pulls from
@@ -203,11 +207,10 @@ let regen (st : S.t Signal.state) =
         | S.Edn -> export_edn cur
         | S.Png -> Js.Promise.resolve ""
       in
-      p
-      |> Js.Promise.then_ (fun content ->
-             Signal.update st (fun s -> { s with content = Some content });
-             Runtime.flush ();
-             Js.Promise.resolve ())
+      (let* content = p in
+      Signal.update st (fun s -> { s with content = Some content });
+      Runtime.flush ();
+      Js.Promise.resolve ())
       |> Js.Promise.catch (fun _ ->
              Signal.update st (fun s ->
                  { s with content = Some "<export failed>" });
@@ -230,14 +233,13 @@ external clipboard_write : string -> unit Js.Promise.t
   = "navigator.clipboard.writeText"
 
 let copied_flash (st : S.t Signal.state) p =
-  p
-  |> Js.Promise.then_ (fun _ ->
-         Signal.update st (fun s -> { s with copied = true });
-         Runtime.flush ();
-         B.later ~ms:2000 (fun () ->
-             Signal.update st (fun s -> { s with copied = false });
-             Runtime.flush ());
-         Js.Promise.resolve ())
+  (let* _ = p in
+  Signal.update st (fun s -> { s with copied = true });
+  Runtime.flush ();
+  B.later ~ms:2000 (fun () ->
+      Signal.update st (fun s -> { s with copied = false });
+      Runtime.flush ());
+  Js.Promise.resolve ())
   |> Js.Promise.catch (fun _ -> Js.Promise.resolve ())
   |> ignore
 

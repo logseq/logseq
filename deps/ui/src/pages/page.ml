@@ -8,6 +8,7 @@
    Route views: journals list (#journals > .journal-item), not-found,
    library (title rows only). *)
 
+open Promise_ext
 open Lui_elements
 
 module S = Editor_state
@@ -115,8 +116,8 @@ let set_icon (u : string) (c : Icon_picker.choice) =
               ]
   in
   ignore
-    (Outliner_ops.apply [ op ]
-     |> Js.Promise.then_ (fun _ -> !Runtime.reload_current_view ()))
+    (let* _ = Outliner_ops.apply [ op ] in
+    !Runtime.reload_current_view ())
 
 let set_page_icon (page : Model.page) (c : Icon_picker.choice) =
   match page.page_uuid with

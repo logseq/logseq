@@ -12,6 +12,7 @@
      the consumer clears before running the command.
    The editor area wires the listeners; see e2e-contract.md. *)
 
+open Promise_ext
 module S = String
 module U = I18n
 
@@ -202,19 +203,21 @@ let close_pv t = set_pv t None
    uuid/name ref as sidebar_state.fetch_blocks *)
 
 let fetch_preview repo name : (string * Model.block list) Js.Promise.t =
-  Runtime.invoke2 "thread-api/get-page-route-info" (Wire.String repo)
-    (Wire.page_ref name)
-  |> Js.Promise.then_ (fun info ->
-         let title =
-           match Decode.page_of_summary info with
-           | Some p -> p.Model.page_title
-           | None -> name
-         in
-         Runtime.invoke3 "thread-api/get-page-blocks-tree"
-           (Wire.String repo) (Wire.page_ref name) Wire.Nil
-         |> Js.Promise.then_ (fun w ->
-                Js.Promise.resolve
-                  (title, Decode.blocks_of_wire w)))
+  let* info =
+    Runtime.invoke2 "thread-api/get-page-route-info" (Wire.String repo)
+      (Wire.page_ref name)
+  in
+  let title =
+    match Decode.page_of_summary info with
+    | Some p -> p.Model.page_title
+    | None -> name
+  in
+  let* w =
+    Runtime.invoke3 "thread-api/get-page-blocks-tree"
+      (Wire.String repo) (Wire.page_ref name) Wire.Nil
+  in
+  Js.Promise.resolve
+    (title, Decode.blocks_of_wire w)
 
 let ac_class_of_kind = function
   | Slash -> "cp__commands-slash"
@@ -657,26 +660,27 @@ let run_block_search t ac =
   incr t.gen;
   let gen = !(t.gen) in
   ignore
-    (Runtime.invoke3 "thread-api/search-blocks"
-       (Wire.String (repo ()))
-       (Wire.String ac.query)
-       (Cmdk_state.search_opts false 20)
-     |> Js.Promise.then_ (fun w ->
-            let rows =
-              match w with
-              | Wire.Array xs | Wire.List xs -> xs
-              | _ -> []
-            in
-            (match (get t).ac with
-             | Some a
-               when gen = !(t.gen) && a.kind = Block_ref && a.query = ac.query ->
-                 set_ac t
-                   (Some
-                      { a with
-                        items = renumber (take 20 (List.mapi block_item_of_row rows))
-                      ; chosen = 0 })
-             | _ -> ());
-            Js.Promise.resolve ())
+    ((let* w =
+       Runtime.invoke3 "thread-api/search-blocks"
+         (Wire.String (repo ()))
+         (Wire.String ac.query)
+         (Cmdk_state.search_opts false 20)
+     in
+     let rows =
+       match w with
+       | Wire.Array xs | Wire.List xs -> xs
+       | _ -> []
+     in
+     (match (get t).ac with
+      | Some a
+        when gen = !(t.gen) && a.kind = Block_ref && a.query = ac.query ->
+          set_ac t
+            (Some
+               { a with
+                 items = renumber (take 20 (List.mapi block_item_of_row rows))
+               ; chosen = 0 })
+      | _ -> ());
+     Js.Promise.resolve ())
      |> Js.Promise.catch (fun e ->
             Platform.console_error ("popups block search failed", e);
             Js.Promise.resolve ()))
@@ -690,58 +694,59 @@ let run_node_search t ac =
   incr t.gen;
   let gen = !(t.gen) in
   ignore
-    (Runtime.invoke3 "thread-api/search-blocks"
-       (Wire.String (repo ()))
-       (Wire.String ac.query)
-       (Cmdk_state.search_opts false 20)
-     |> Js.Promise.then_ (fun w ->
-            let rows =
-              match w with
-              | Wire.Map _ -> (
-                  match Wire.get w "items" with
-                  | Some (Wire.Array xs) | Some (Wire.List xs) -> xs
-                  | _ -> [])
-              | Wire.Array xs | Wire.List xs -> xs
-              | _ -> []
-            in
-            (match (get t).ac with
-             | Some a
-               when gen = !(t.gen) && a.kind = Page_ref
-                    && a.query = ac.query ->
-                 let pages, blocks =
-                   List.partition
-                     (fun w ->
-                       match Wire.get w "page?" with
-                       | Some (Wire.Bool b) -> b
-                       | _ -> false)
-                     rows
-                 in
-                 let matched =
-                   take 20
-                     (List.mapi page_item_of_row (pages @ blocks))
-                 in
-                 let items =
-                   match
-                     List.filter
-                       (fun it -> S.sub it.ai_key 0 4 = "new:")
-                       (page_items_for t a.kind a.query)
-                   with
-                   | [] -> matched
-                   | new_items ->
-                       let first_starts =
-                         match matched with
-                         | m :: _ -> starts_with_ci m.ai_label a.query
-                         | [] -> false
-                       in
-                       if first_starts then
-                         (match matched with
-                          | m :: rest -> m :: new_items @ rest
-                          | [] -> new_items)
-                       else new_items @ matched
-                 in
-                 set_ac t (Some { a with items = renumber items; chosen = 0 })
-             | _ -> ());
-            Js.Promise.resolve ())
+    ((let* w =
+       Runtime.invoke3 "thread-api/search-blocks"
+         (Wire.String (repo ()))
+         (Wire.String ac.query)
+         (Cmdk_state.search_opts false 20)
+     in
+     let rows =
+       match w with
+       | Wire.Map _ -> (
+           match Wire.get w "items" with
+           | Some (Wire.Array xs) | Some (Wire.List xs) -> xs
+           | _ -> [])
+       | Wire.Array xs | Wire.List xs -> xs
+       | _ -> []
+     in
+     (match (get t).ac with
+      | Some a
+        when gen = !(t.gen) && a.kind = Page_ref
+             && a.query = ac.query ->
+          let pages, blocks =
+            List.partition
+              (fun w ->
+                match Wire.get w "page?" with
+                | Some (Wire.Bool b) -> b
+                | _ -> false)
+              rows
+          in
+          let matched =
+            take 20
+              (List.mapi page_item_of_row (pages @ blocks))
+          in
+          let items =
+            match
+              List.filter
+                (fun it -> S.sub it.ai_key 0 4 = "new:")
+                (page_items_for t a.kind a.query)
+            with
+            | [] -> matched
+            | new_items ->
+                let first_starts =
+                  match matched with
+                  | m :: _ -> starts_with_ci m.ai_label a.query
+                  | [] -> false
+                in
+                if first_starts then
+                  (match matched with
+                   | m :: rest -> m :: new_items @ rest
+                   | [] -> new_items)
+                else new_items @ matched
+          in
+          set_ac t (Some { a with items = renumber items; chosen = 0 })
+      | _ -> ());
+     Js.Promise.resolve ())
      |> Js.Promise.catch (fun e ->
             Platform.console_error ("popups node search failed", e);
             Js.Promise.resolve ()))
@@ -749,26 +754,27 @@ let run_node_search t ac =
 
 let load_titles t =
   ignore
-    (Runtime.invoke1 "thread-api/get-all-page-titles"
-       (Wire.String (repo ()))
-     |> Js.Promise.then_ (fun w ->
-            let rows =
-              match w with
-              | Wire.Array xs | Wire.List xs -> xs
-              | _ -> []
-            in
-            t.titles :=
-              List.filter_map
-                (fun row ->
-                  match row with
-                  | Wire.String s -> Some s
-                  | _ -> Cmdk_state.str_field row "block/title")
-                rows;
-            (match (get t).ac with
-             | Some ({ kind = Page_ref | Page_embed | Tag_search | Embed_ref; _ } as ac) ->
-                 set_ac t (Some (refresh_items t ac))
-             | _ -> ());
-            Js.Promise.resolve ())
+    ((let* w =
+       Runtime.invoke1 "thread-api/get-all-page-titles"
+         (Wire.String (repo ()))
+     in
+     let rows =
+       match w with
+       | Wire.Array xs | Wire.List xs -> xs
+       | _ -> []
+     in
+     t.titles :=
+       List.filter_map
+         (fun row ->
+           match row with
+           | Wire.String s -> Some s
+           | _ -> Cmdk_state.str_field row "block/title")
+         rows;
+     (match (get t).ac with
+      | Some ({ kind = Page_ref | Page_embed | Tag_search | Embed_ref; _ } as ac) ->
+          set_ac t (Some (refresh_items t ac))
+      | _ -> ());
+     Js.Promise.resolve ())
      |> Js.Promise.catch (fun e ->
             Platform.console_error ("popups titles failed", e);
             Js.Promise.resolve ()))
@@ -820,50 +826,53 @@ let load_tag_titles t _editor =
           @ extra))
   in
   ignore
-    (Runtime.invoke2 "thread-api/get-all-classes"
-       (Wire.String (repo ()))
-       (wopts [ ("except-private-tags?", Wire.Bool true) ])
-     |> Js.Promise.then_ (fun w ->
-            let rows =
-              match w with
-              | Wire.Array xs | Wire.List xs -> xs
-              | _ -> []
-            in
-            t.tag_titles := class_titles_of rows;
-            (* the full class list (private tags included) feeds only
-               tag_exact_titles; Page is conjoined to the candidates just
-               when editing a non-page block *)
-            Runtime.invoke2 "thread-api/get-all-classes"
-              (Wire.String (repo ()))
-              (wopts [ ("except-private-tags?", Wire.Bool false) ])
-            |> Js.Promise.then_ (fun w2 ->
-                   let rows2 =
-                     match w2 with
-                     | Wire.Array xs | Wire.List xs -> xs
-                     | _ -> []
-                   in
-                   t.tag_exact_titles :=
-                     List.map fst (class_titles_of rows2);
-                   (if editing_block then
-                      let page_class =
-                        List.filter
-                          (fun r ->
-                            (* entity_map_wire emits db/ident as a keyword
-                               value, not a string *)
-                            Wire.get r "db/ident"
-                            = Some (Wire.Keyword "logseq.class/Page"))
-                          rows2
-                      in
-                      t.tag_titles :=
-                        !(t.tag_titles)
-                        @ class_titles_of page_class);
-                   Js.Promise.resolve ()))
-     |> Js.Promise.then_ (fun () ->
-            (match (get t).ac with
-             | Some ({ kind = Tag_search; _ } as ac) ->
-                 set_ac t (Some (refresh_items t ac))
-             | _ -> ());
-            Js.Promise.resolve ())
+    ((let* w =
+       Runtime.invoke2 "thread-api/get-all-classes"
+         (Wire.String (repo ()))
+         (wopts [ ("except-private-tags?", Wire.Bool true) ])
+     in
+     let rows =
+       match w with
+       | Wire.Array xs | Wire.List xs -> xs
+       | _ -> []
+     in
+     let* () =
+       t.tag_titles := class_titles_of rows;
+       (* the full class list (private tags included) feeds only
+          tag_exact_titles; Page is conjoined to the candidates just
+          when editing a non-page block *)
+       let* w2 =
+         Runtime.invoke2 "thread-api/get-all-classes"
+           (Wire.String (repo ()))
+           (wopts [ ("except-private-tags?", Wire.Bool false) ])
+       in
+       let rows2 =
+         match w2 with
+         | Wire.Array xs | Wire.List xs -> xs
+         | _ -> []
+       in
+       t.tag_exact_titles :=
+         List.map fst (class_titles_of rows2);
+       (if editing_block then
+          let page_class =
+            List.filter
+              (fun r ->
+                (* entity_map_wire emits db/ident as a keyword
+                   value, not a string *)
+                Wire.get r "db/ident"
+                = Some (Wire.Keyword "logseq.class/Page"))
+              rows2
+          in
+          t.tag_titles :=
+            !(t.tag_titles)
+            @ class_titles_of page_class);
+       Js.Promise.resolve ()
+     in
+     (match (get t).ac with
+      | Some ({ kind = Tag_search; _ } as ac) ->
+          set_ac t (Some (refresh_items t ac))
+      | _ -> ());
+     Js.Promise.resolve ())
      |> Js.Promise.catch (fun e ->
             Platform.console_error ("popups classes failed", e);            Js.Promise.resolve ()))
 ;;
@@ -872,31 +881,32 @@ let load_tag_titles t _editor =
    search/template-search = get-tag-objects + fuzzy) *)
 let load_templates t =
   ignore
-    (Runtime.invoke2 "thread-api/q" (Wire.String (repo ()))
-       (Wire.Array
-          [ Wire.String
-              "[:find ?u ?ti :where [?b :block/tags ?t] \
-               [?t :db/ident :logseq.class/Template] \
-               [?b :block/uuid ?u] [?b :block/title ?ti]]"
-          ])
-     |> Js.Promise.then_ (fun w ->
-            let rows = Wire.elems w in
-            t.templates :=
-              List.filter_map
-                (fun row ->
-                  match Wire.elems row with
-                  | [ u; ti ] -> (
-                      match (u, Wire.as_string ti) with
-                      | Wire.Uuid u, Some ti -> Some (u, ti)
-                      | Wire.String u, Some ti -> Some (u, ti)
-                      | _ -> None)
-                  | _ -> None)
-                rows;
-            (match (get t).ac with
-             | Some ({ kind = Template_search; _ } as ac) ->
-                 set_ac t (Some (refresh_items t ac))
-             | _ -> ());
-            Js.Promise.resolve ()))
+    (let* w =
+      Runtime.invoke2 "thread-api/q" (Wire.String (repo ()))
+        (Wire.Array
+           [ Wire.String
+               "[:find ?u ?ti :where [?b :block/tags ?t] \
+                [?t :db/ident :logseq.class/Template] \
+                [?b :block/uuid ?u] [?b :block/title ?ti]]"
+           ])
+    in
+    let rows = Wire.elems w in
+    t.templates :=
+      List.filter_map
+        (fun row ->
+          match Wire.elems row with
+          | [ u; ti ] -> (
+              match (u, Wire.as_string ti) with
+              | Wire.Uuid u, Some ti -> Some (u, ti)
+              | Wire.String u, Some ti -> Some (u, ti)
+              | _ -> None)
+          | _ -> None)
+        rows;
+    (match (get t).ac with
+     | Some ({ kind = Template_search; _ } as ac) ->
+         set_ac t (Some (refresh_items t ac))
+     | _ -> ());
+    Js.Promise.resolve ())
 ;;
 
 (* ---- open / update ---- *)
@@ -1250,51 +1260,55 @@ let apply_tag t ac ~create title =
         emit ac.editor ac.tpos "";
         close_ac t;
         ignore
-          (Runtime.invoke3 "thread-api/apply-outliner-ops"
-             (Wire.String repo_v)
-             (Wire.Array [ Outliner_ops.create_class title ])
-             (Wire.Map [])
-           |> Js.Promise.then_ (fun _ ->
-                  Runtime.invoke2 "thread-api/get-case-page"
-                    (Wire.String repo_v) (Wire.String title))
-           |> Js.Promise.then_ (fun e ->
-                  (match Wire.map_get_int e "db/id" with
-                   | Some dbid -> save_and_tag dbid
-                   | None -> ());
-                  Js.Promise.resolve ()))
+          (let* _ =
+             Runtime.invoke3 "thread-api/apply-outliner-ops"
+               (Wire.String repo_v)
+               (Wire.Array [ Outliner_ops.create_class title ])
+               (Wire.Map [])
+           in
+           let* e =
+            Runtime.invoke2 "thread-api/get-case-page"
+              (Wire.String repo_v) (Wire.String title)
+          in
+          (match Wire.map_get_int e "db/id" with
+           | Some dbid -> save_and_tag dbid
+           | None -> ());
+          Js.Promise.resolve ())
       in
       if create then create_and_tag ()
       else
         ignore
-          (Runtime.invoke2 "thread-api/get-case-page" (Wire.String repo_v)
-             (Wire.String title)
-           |> Js.Promise.then_ (fun w ->
-                  match w with
-                  | Wire.Map _ -> (
-                      match Wire.map_get_int w "db/id" with
-                      | None -> Js.Promise.resolve ()
-                      | Some dbid ->
-                          (match Wire.get w "db/ident" with
-                           | Some _ ->
-                               emit ac.editor ac.tpos "";
-                               close_ac t;
-                               save_and_tag dbid;
-                               Js.Promise.resolve ()
-                           | None ->
-                               (* cljs tag-on-chosen-handler: a plain page
-                                  chosen in the hashtag search is converted
-                                  to a class, then attached via block/tags *)
-                               emit ac.editor ac.tpos "";
-                               close_ac t;
-                               Runtime.invoke2
-                                 "thread-api/convert-page-to-tag"
-                                 (Wire.String repo_v) (Wire.Int dbid)
-                               |> Js.Promise.then_ (fun _ ->
-                                      save_and_tag dbid;
-                                      Js.Promise.resolve ())))
-                  | _ ->
-                      create_and_tag ();
-                      Js.Promise.resolve ()))
+          (let* w =
+            Runtime.invoke2 "thread-api/get-case-page" (Wire.String repo_v)
+              (Wire.String title)
+          in
+          match w with
+          | Wire.Map _ -> (
+              match Wire.map_get_int w "db/id" with
+              | None -> Js.Promise.resolve ()
+              | Some dbid ->
+                  (match Wire.get w "db/ident" with
+                   | Some _ ->
+                       emit ac.editor ac.tpos "";
+                       close_ac t;
+                       save_and_tag dbid;
+                       Js.Promise.resolve ()
+                   | None ->
+                       (* cljs tag-on-chosen-handler: a plain page
+                          chosen in the hashtag search is converted
+                          to a class, then attached via block/tags *)
+                       emit ac.editor ac.tpos "";
+                       close_ac t;
+                       let* _ =
+                         Runtime.invoke2
+                           "thread-api/convert-page-to-tag"
+                           (Wire.String repo_v) (Wire.Int dbid)
+                       in
+                       save_and_tag dbid;
+                       Js.Promise.resolve ()))
+          | _ ->
+              create_and_tag ();
+              Js.Promise.resolve ())
 
 let apply_template t ac uuid =
   match Editor_state.editing_uuid () with
@@ -1323,62 +1337,64 @@ let run_query t ac ~advanced =
       Editor_actions.exit_edit ~select:false;
       let repo_v = repo () in
       ignore
-        (Outliner_ops.apply
-           [ Outliner_ops.save_block buuid title
-           ; Outliner_ops.op "create-property-text-block"
-               [ Wire.Uuid buuid
-               ; Wire.Keyword "logseq.property/query"
-               ; Wire.String ""
-               ; Wire.Map
-                   [ (Wire.Keyword "set-block-property?", Wire.Bool true) ] ]
-           ]
-        |> Js.Promise.then_ (fun _ ->
-               Runtime.invoke2 "thread-api/get-blocks" (Wire.String repo_v)
-                 (Wire.Array
-                    [ Wire.Map
-                        [ (Wire.Keyword "id", Wire.Uuid buuid)
-                        ; ( Wire.Keyword "opts"
-                          , Wire.Map
-                              [ (Wire.Keyword "children?", Wire.Bool true)
-                              ; ( Wire.Keyword "include-property-block?"
-                                , Wire.Bool true ) ] ) ]
-                    ]))
-        |> Js.Promise.then_ (fun w ->
-               let quuid =
-                 match Wire.args_list w with
-                 | res :: _ -> (
-                     let b =
-                       match Wire.get res "block" with
-                       | Some b -> b
-                       | None -> res
-                     in
-                     match Wire.get b "logseq.property/query" with
-                     | Some v -> (
-                         match Wire.map_get_uuid v "block/uuid" with
-                         | Some u -> u
-                         | None -> (
-                             match Wire.as_uuid v with
-                             | Some u -> u
-                             | None -> ""))
-                     | None -> "")
-                 | [] -> ""
-               in
-               if quuid = "" then Js.Promise.resolve ()
-               else
-                 let rest =
-                   [ Outliner_ops.set_block_property buuid "block/tags"
-                       (Wire.Keyword "logseq.class/Query") ]
-                   @ if advanced then
-                       [ Outliner_ops.set_block_property quuid
-                           "logseq.property.node/display-type"
-                           (Wire.Keyword "code")
-                       ; Outliner_ops.set_block_property quuid
-                           "logseq.property.code/lang"
-                           (Wire.String "clojure") ]
-                     else []
-                 in
-                 Outliner_ops.apply_parsed ~rest
-                   [ (quuid, title); (buuid, "") ]))
+        (let* _ =
+           Outliner_ops.apply
+             [ Outliner_ops.save_block buuid title
+             ; Outliner_ops.op "create-property-text-block"
+                 [ Wire.Uuid buuid
+                 ; Wire.Keyword "logseq.property/query"
+                 ; Wire.String ""
+                 ; Wire.Map
+                     [ (Wire.Keyword "set-block-property?", Wire.Bool true) ] ]
+             ]
+         in
+         let* w =
+          Runtime.invoke2 "thread-api/get-blocks" (Wire.String repo_v)
+            (Wire.Array
+               [ Wire.Map
+                   [ (Wire.Keyword "id", Wire.Uuid buuid)
+                   ; ( Wire.Keyword "opts"
+                     , Wire.Map
+                         [ (Wire.Keyword "children?", Wire.Bool true)
+                         ; ( Wire.Keyword "include-property-block?"
+                           , Wire.Bool true ) ] ) ]
+               ])
+        in
+        let quuid =
+          match Wire.args_list w with
+          | res :: _ -> (
+              let b =
+                match Wire.get res "block" with
+                | Some b -> b
+                | None -> res
+              in
+              match Wire.get b "logseq.property/query" with
+              | Some v -> (
+                  match Wire.map_get_uuid v "block/uuid" with
+                  | Some u -> u
+                  | None -> (
+                      match Wire.as_uuid v with
+                      | Some u -> u
+                      | None -> ""))
+              | None -> "")
+          | [] -> ""
+        in
+        if quuid = "" then Js.Promise.resolve ()
+        else
+          let rest =
+            [ Outliner_ops.set_block_property buuid "block/tags"
+                (Wire.Keyword "logseq.class/Query") ]
+            @ if advanced then
+                [ Outliner_ops.set_block_property quuid
+                    "logseq.property.node/display-type"
+                    (Wire.Keyword "code")
+                ; Outliner_ops.set_block_property quuid
+                    "logseq.property.code/lang"
+                    (Wire.String "clojure") ]
+              else []
+          in
+          Outliner_ops.apply_parsed ~rest
+            [ (quuid, title); (buuid, "") ])
 
 let apply_item t ac it =
   match it.ai_act with
