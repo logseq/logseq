@@ -1288,7 +1288,8 @@ let find_or_create_property_value conn (property_id : string) (v : Wire.t)
 
 (* convert-ref-property-value *)
 let convert_ref_property_value conn (property_id : string) (v : Wire.t)
-    (property_type : string) (block_id : Wire.t option) : Wire.t =
+    (property_type : string) ~(entity_id : bool option)
+    (block_id : Wire.t option) : Wire.t =
   let db = Datascript.db conn in
   let number_property = property_type = "number" in
   match v with
@@ -1304,12 +1305,13 @@ let convert_ref_property_value conn (property_id : string) (v : Wire.t)
   | Wire.Int id when
       (not number_property)
       ||
-      (match Ldb.ent_of_id db id with
-       | Some e ->
-           (match Ldb.ref_ent e "logseq.property/created-from-property" with
-            | Some p -> Ldb.ident_of p = Some property_id
-            | None -> false)
-       | None -> false) ->
+      (entity_id <> Some false
+       && (match Ldb.ent_of_id db id with
+           | Some e ->
+               (match Ldb.ref_ent e "logseq.property/created-from-property" with
+                | Some p -> Ldb.ident_of p = Some property_id
+                | None -> false)
+           | None -> false)) ->
       v
   | _ when property_type = "page" ->
       (match v with
@@ -1348,7 +1350,8 @@ let convert_ref_property_value conn (property_id : string) (v : Wire.t)
 
 (* convert-ref-property-values *)
 let convert_ref_property_values conn (property_id : string) (value : Wire.t)
-    (property_type : string) ~(many : bool) ~(block_id : Wire.t option) : Wire.t =
+    (property_type : string) ~(many : bool) ~(entity_id : bool option)
+    ~(block_id : Wire.t option) : Wire.t =
   match value with
   | (Wire.Array vs | Wire.List vs | Wire.Set vs) when many ->
       (try
@@ -1356,7 +1359,7 @@ let convert_ref_property_values conn (property_id : string) (value : Wire.t)
            (List.map
               (fun v ->
                  convert_ref_property_value conn property_id v property_type
-                   block_id)
+                   ~entity_id block_id)
               vs)
        with e ->
          raise
@@ -1372,7 +1375,8 @@ let convert_ref_property_values conn (property_id : string) (value : Wire.t)
                       ("Failed to convert many property values: "
                        ^ Printexc.to_string e)) ])))
   | _ ->
-      convert_ref_property_value conn property_id value property_type block_id
+      convert_ref_property_value conn property_id value property_type
+        ~entity_id block_id
 
 (* throw-error-if-self-value *)
 let throw_error_if_self_value (block : entity) (value : Wire.t) (ref_ : bool)
@@ -1702,7 +1706,8 @@ let throw_error_if_batch_alias_targets (block_eids : Wire.t list)
 
 (* batch-set-property! *)
 let batch_set_property conn (block_ids : Wire.t list) (property_id : string)
-    (v : Wire.t) ?(entity_id_opt = false) ?(preserve_task_tag = false) () : unit =
+    (v : Wire.t) ?(entity_id_opt : bool option = None)
+    ?(preserve_task_tag = false) () : unit =
   throw_error_if_read_only_property property_id;
   let db = Datascript.db conn in
   if v = Wire.Nil then
@@ -1733,7 +1738,7 @@ let batch_set_property conn (block_ids : Wire.t list) (property_id : string)
       Option.value (ent_property_type property) ~default:"default"
     in
     let many = ent_many property in
-    let entity_id_v = entity_id_opt && (match v with Wire.Int _ -> true | _ -> false) in
+    let entity_id_v = entity_id_opt = Some true && (match v with Wire.Int _ -> true | _ -> false) in
     let ref_ = List.mem property_type Db_schema.all_ref_property_types in
     let extends_ = property_id = "logseq.property.class/extends" in
     let default_url_not_closed =
@@ -1747,7 +1752,7 @@ let batch_set_property conn (block_ids : Wire.t list) (property_id : string)
           normalize_and_validate_default_url_property_values db property v ~many
         else
           convert_ref_property_values conn property_id v property_type ~many
-            ~block_id:None
+            ~entity_id:entity_id_opt ~block_id:None
       else v
     in
     if v' = Wire.Nil then failwith "Property value must be not nil";
@@ -1765,7 +1770,7 @@ let batch_set_property conn (block_ids : Wire.t list) (property_id : string)
                          | _ -> false)
                  then
                    convert_ref_property_values conn property_id v' property_type
-                     ~many ~block_id:(Some (Wire.Int block.id))
+                     ~many ~entity_id:None ~block_id:(Some (Wire.Int block.id))
                  else v'
                in
                throw_error_if_self_value block v' ref_;
@@ -1925,7 +1930,7 @@ let set_block_property conn (block_eid : Wire.t) (property_id : string)
          if extends_ then normalize_extends_value db v
          else if ref_ then
            convert_ref_property_value conn property_id v property_type
-             (Some block_eid')
+             ~entity_id:None (Some block_eid')
          else v
        in
        (match block, property with

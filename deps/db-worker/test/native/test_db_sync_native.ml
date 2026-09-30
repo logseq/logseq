@@ -9916,13 +9916,13 @@ let test_pending_reversed_txs_batch_status_restore_base () =
           in
           Outliner_property.batch_set_property conn
             [ Wire.Int block_before.id ] "logseq.property/status"
-            (Wire.Int status_doing) ~entity_id_opt:true ();
+            (Wire.Int status_doing) ~entity_id_opt:(Some true) ();
           Outliner_property.batch_set_property conn
             [ Wire.Int block_before.id ] "logseq.property/status"
-            (Wire.Int status_todo) ~entity_id_opt:true ();
+            (Wire.Int status_todo) ~entity_id_opt:(Some true) ();
           Outliner_property.batch_set_property conn
             [ Wire.Int block_before.id ] "logseq.property/status"
-            (Wire.Int status_doing) ~entity_id_opt:true ();
+            (Wire.Int status_doing) ~entity_id_opt:(Some true) ();
           let pending = Sync_apply.pending_txs test_repo () in
           let restored_db =
             restore_base_db (Datascript.db conn) pending

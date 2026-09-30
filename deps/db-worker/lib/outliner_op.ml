@@ -511,7 +511,7 @@ let apply_op (conn : conn) (opts' : Wire.t) (op : string) (args : Wire.t list)
       Outliner_property.batch_set_property conn (get_block_ids block_ids)
         (Option.value (kw_value property_id) ~default:"")
         v
-        ?entity_id_opt:(Option.bind (Cljs_map.get
+        ~entity_id_opt:(Option.bind (Cljs_map.get
                           (match _opts with Wire.Map _ -> _opts | _ -> Cljs_map.empty_map)
                           "entity-id?") bool_of_wire)
         ?preserve_task_tag:(Option.bind (Cljs_map.get
