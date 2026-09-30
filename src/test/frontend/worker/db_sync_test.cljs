@@ -5,6 +5,7 @@
    [clojure.string :as string]
    [datascript.conn :as dc]
    [datascript.core :as d]
+   [datascript.storage :as ds-storage]
    [frontend.common.crypt :as crypt]
    [frontend.test.noise :as test-noise]
    [frontend.worker.db-listener :as db-listener]
@@ -39,6 +40,7 @@
    [logseq.db-sync.worker.handler.sync :as sync-handler]
    [logseq.db-sync.worker.ws :as ws]
    [logseq.db.common.delete-blocks :as delete-blocks]
+   [logseq.db.common.sqlite :as common-sqlite]
    [logseq.db.common.normalize :as db-normalize]
    [logseq.db.frontend.schema :as db-schema]
    [logseq.db.frontend.validate :as db-validate]
@@ -2801,6 +2803,49 @@
           (client-op/update-local-checksum test-repo "stale" (:max-tx @conn))
           (db-sync/reconcile-local-checksum! test-repo conn)
           (is (= "stale" (client-op/get-local-checksum test-repo))))))))
+
+(defrecord ^:private InMemoryStorage [*disk]
+  ds-storage/IStorage
+  (-store [_ addr+data-seq _delete-addrs]
+    (doseq [[addr data] addr+data-seq]
+      (vswap! *disk assoc addr data)))
+  (-restore [_ addr]
+    (get @*disk addr)))
+
+(deftest reopened-graph-keeps-max-tx-of-pipeline-transaction-test
+  (testing "a transaction the worker pipeline extends spans several tx ids in 1
+           stored tail entry; the graph reopened from storage keeps its :max-tx,
+           so the stored checksum still covers it and the reopen does not recompute"
+    (let [{:keys [conn client-ops-conn parent]} (mark-graph-remote! (setup-parent-child))
+          storage (->InMemoryStorage (volatile! {}))
+          ;; new index nodes: storing the test graph's own db would give
+          ;; addresses to nodes other tests' graphs share
+          _ (d/conn-from-datoms (d/datoms @conn :eavt) (:schema @conn) {:storage storage})
+          stored-conn (d/restore-conn storage)
+          pipeline-before @ldb/*transact-pipeline-fn]
+      (ldb/register-transact-pipeline-fn! worker-pipeline/transact-pipeline)
+      (try
+        (ldb/transact! stored-conn [[:db/add (:db/id parent) :block/title "edited"]]
+                       {:outliner-op :save-block})
+        (let [max-tx (:max-tx @stored-conn)
+              tail-txs (set (map :tx (last (:tx-tail @(:atom stored-conn)))))
+              reopened (common-sqlite/get-storage-conn storage db-schema/schema)
+              datoms-with-tx #(set (map (juxt :e :a :v :tx) (d/datoms % :eavt)))]
+          (is (< 1 (count tail-txs)) "the pipeline added a d/with of its own")
+          (is (= max-tx (apply max tail-txs)))
+          (is (= (datoms-with-tx @stored-conn) (datoms-with-tx @reopened))
+              "the replayed tail datoms keep their own tx ids")
+          (is (= max-tx (:max-tx @reopened)))
+          (is (every? #(<= (:tx %) (:max-tx @reopened)) (d/datoms @reopened :eavt))
+              "the next tx id the reopened graph hands out is on no datom yet")
+          (is (= "edited" (:block/title (d/entity @reopened (:db/id parent)))))
+          (with-datascript-conns reopened client-ops-conn
+            (fn []
+              (client-op/update-local-checksum test-repo "stale" max-tx)
+              (db-sync/reconcile-local-checksum! test-repo reopened)
+              (is (= "stale" (client-op/get-local-checksum test-repo))))))
+        (finally
+          (reset! ldb/*transact-pipeline-fn pipeline-before))))))
 
 (defn- count-checksum-writes
   "Runs f with client-op/update-local-checksum counted; returns the count."
