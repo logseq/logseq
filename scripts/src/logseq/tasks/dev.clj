@@ -42,6 +42,7 @@
     "frontend.handler.editor-lifecycle-test"
     "frontend.handler.editor-test"
     "frontend.handler.route-test"
+    "frontend.persist-db-test"
     "frontend.rfx-test"
     "frontend.worker.db-core-test"})
 
