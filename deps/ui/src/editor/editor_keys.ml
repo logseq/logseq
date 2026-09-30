@@ -551,15 +551,17 @@ let on_click ev =
                     (* capture listener fires before the query shell's own
                        handlers; interactive targets inside the view (the
                        .ls-query-setting and add-filter buttons, result
-                       links, .query-table cells) are the view's controls,
-                       not an edit request — elsewhere in .block-content the
-                       click opens the title editor like cljs *)
+                       links, .query-table cells, the .view-action-type
+                       display-type select — a div trigger, not a button)
+                       are the view's controls, not an edit request —
+                       elsewhere in .block-content the click opens the
+                       title editor like cljs *)
                     match
                       D.closest_sel
                         "button, a, input, audio, video, details, summary, \
                          sup.fn, [contenteditable=true], .cloze, \
                          .cloze-revealed, .query-table, .image-resize, \
-                         .ui-fenced-code-editor"
+                         .view-action-type, .ui-fenced-code-editor"
                         target
                     with
                     | Some _ -> ()
