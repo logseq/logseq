@@ -431,26 +431,32 @@ let resolve_block_tags (blocks : Model.block list) : Model.block list Js.Promise
                  let rec fill (b : Model.block) =
                    let resolved =
                      List.filter_map
-                       (fun i -> List.assoc_opt i titles)
+                       (fun i ->
+                         Option.map (fun r -> (i, r))
+                           (List.assoc_opt i titles))
                        b.Model.block_tag_ids
                    in
-                   let idents = List.map (fun (_, i, _, _) -> i) resolved in
+                   let idents =
+                     List.map (fun (_, (_, i, _, _)) -> i) resolved
+                   in
                    let visible =
                      List.filter
-                       (fun (_, ident, hidden, _uuid) ->
+                       (fun (_, (_, ident, hidden, _uuid)) ->
                          not hidden && not (internal_tag_ident ident))
                        resolved
                    in
                    { b with
                      Model.block_tags =
-                       List.map (fun (t, _, _, _) -> t) visible
+                       List.map (fun (_, (t, _, _, _)) -> t) visible
                    ; block_tag_uuids =
-                       List.map (fun (_, _, _, u) -> u) visible
+                       List.map (fun (_, (_, _, _, u)) -> u) visible
                    ; (* block_tag_idents stays unfiltered: internal
                         classes (Page, Comments, Query, …) drive the
                         node icon and structural checks even though
                         they never render as chips *)
                      block_tag_idents = idents
+                   ; block_tag_db_ids =
+                       List.map (fun (i, _) -> i) visible
                    ; block_is_comments_area =
                        List.mem "logseq.class/Comments" idents
                    ; block_is_comment =
@@ -486,24 +492,20 @@ let resolve_page_tags repo (page : Model.page) : Model.page Js.Promise.t =
              |> Js.Promise.then_ (fun titles ->
                     (* the built-in Page class is implicit on every page —
                        cljs never renders it as a chip *)
+                    let keep (i, (_, ident, _, _)) =
+                      List.mem i ids && ident <> "logseq.class/Page"
+                    in
+                    let kept = List.filter keep titles in
                     Js.Promise.resolve
                       { page with
                         Model.page_tags =
-                          List.filter_map
-                            (fun (i, (t, ident, _hidden, _uuid)) ->
-                              if List.mem i ids
-                                 && ident <> "logseq.class/Page"
-                              then Some t
-                              else None)
-                            titles
+                          List.map (fun (_, (t, _, _, _)) -> t) kept
                       ; page_tag_idents =
-                          List.filter_map
-                            (fun (i, (_t, ident, _hidden, _uuid)) ->
-                              if List.mem i ids
-                                 && ident <> "logseq.class/Page"
-                              then Some ident
-                              else None)
-                            titles
+                          List.map (fun (_, (_, ident, _, _)) -> ident) kept
+                      ; page_tag_uuids =
+                          List.map (fun (_, (_, _, _, u)) -> u) kept
+                      ; page_tag_db_ids =
+                          List.map (fun (i, _) -> i) kept
                       ; page_internal =
                           List.exists
                             (fun (i, (_, ident, _hidden, _uuid)) ->

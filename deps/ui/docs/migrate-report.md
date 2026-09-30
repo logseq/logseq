@@ -1990,7 +1990,6 @@ Deltas vs cljs: shell stays `.embed-block > iframe` (e2e contract)
 instead of `.video-embed-shell/.video-embed-frame`; no `origin=` param;
 `w=` width args ignored.
 
-||||||| cd857694df
 ## Vendored-lib surface ports: marked / PhotoSwipe / html2canvas
 
 **Plugin README (marked + DOMPurify).** cljs `plugins.open-readme!`
@@ -2045,6 +2044,76 @@ object URL into `img#export-preview`. Copy uses
 `navigator.clipboard.write` with a `ClipboardItem` (`"image/png"`);
 save is an anchor-download `logseq_<t/now>.png`. The "Transparent
 background" toggle drives the `backgroundColor` override.
+
+## Ac popup edge cases (parity: `devin/lui-parity2`)
+
+- **`menu-link` class order is dynamic-first**: cljs builds the class
+  list with `(when chosen? "chosen")` first, so a chosen row is
+  `"chosen flex justify-between menu-link"` and a non-chosen row keeps
+  the leading join space (`" flex justify-between menu-link"`).
+- **Keep-visible scrolling** (`handler/ui.cljs`
+  `auto-complete-keep-visible-scroll-top`): arrow-key navigation
+  scrolls `#ui__ac-inner` only enough to reveal the row (no padding);
+  on a group-start row the `.ui__ac-group-name` heading above it counts
+  toward the row's top.
+- **Popup collision flip** (base-ui `avoidCollisions`): an ac popup
+  mounts below the caret; when its rendered height exceeds the space
+  below and more room exists above, it flips to `data-side="top"`,
+  anchored so its bottom edge sits just above the caret. To measure
+  the real rendered height the `--available-height` clamp (propagated
+  to `#ui__ac-inner`'s own `max-height`) is lifted briefly; the
+  list's own CSS cap still applies (`min(avail-60, 460px)` flipped for
+  commands, `min(avail-20, 480px)` below / for search popups).
+  `caret_popup_pos` therefore also returns the caret line top as the
+  flip anchor.
+- **Context-menu icon/emoji picker is a `Properties_state` overlay**:
+  `Icon_picker.open_picker_with_opts` pushes a body-level overlay on
+  the `overlays` stack (not a `.ui__dropdown-menu-sub-content`); the
+  returned root el is tracked in `cm_picker_el` and removed via
+  `Properties_state.remove_overlay_el` on every close path
+  (hover-away, Escape, outside click, submenu switch).
+- **Hover highlight mirrors base-ui `data-highlighted`**: moving over
+  a `[role=menuitem]` inside `.ls-context-menu-content` /
+  `.ui__dropdown-menu-sub-content` sets `data-highlighted` (→
+  `bg-muted`), cleared on the previously hovered row.
+
+## Page-menu dialogs (parity: `devin/lui-parity2`)
+
+- **`shui/dialog-confirm!` contract (delete page)**: title is a
+  `flex gap-2 items-center` row with a `span.relative` tabler
+  `alert-triangle` icon + the confirm title text; body is
+  `p.opacity-60` containing `- <page title>` (not a description
+  sentence). `Model.Confirm_delete_page` therefore carries
+  `(uuid, title, permanent?)` — `permanent` swaps the title text to
+  the `:page.delete/permanent-confirm-title` wording for class
+  entities, property entities, and today's journal.
+- **`shui/button` default variant is filled primary**
+  (`bg-primary text-primary-foreground hover:bg-primary/90`) —
+  e.g. the publish-page submit. `btn_base` alone renders ghost-like;
+  append the primary classes for a default-variant button.
+
+## Tag chips & node-value "New option" (parity: `devin/lui-parity2`)
+
+- **`.block-tag` chips carry `data-tag-uuid` / `data-tag-id` /
+  `data-tag-title` / `data-tag-priv`** so the document contextmenu
+  handler can open the cljs tag menu (`Go to #<title>` `⌘ Click`,
+  `Open in sidebar` `⇧ Click`, `Remove tag` — the last hidden for
+  private/built-in tags). The `data-ref` attr stays lowercase; the
+  menu label needs original case, hence `data-tag-title`.
+  `Remove tag` uses `delete-property-value` on `block/tags`, which
+  validates + retracts by `Wire.Int` db/id — uuid args fail, so
+  `resolve_block_tags`/`resolve_page_tags` must ship aligned
+  uuid+dbid per visible tag. `tags_wire` only carries
+  `{ident,title}`; decode-only chips (e.g. refs listing) fall back
+  to `""`/`0` and the menu simply doesn't open.
+- **create-page op returns `[title, uuid]`** — never `db/id`. Any
+  "New option" write must resolve the uuid back to a db/id
+  (`get-case-page` by uuid) before `set-block-property`; a bare
+  `geti res "db/id"` silently no-ops.
+- **`block/tags` schema type is `class`, not `node`**: cljs
+  `<create-page-if-not-exists!` creates a *class* for `block/tags`
+  (and `class`-type properties generally create classes). Writing a
+  plain page as a tag value fails validation ("should be a Class").
 
 ## i18n: runtime dict loading + literal consolidation
 
@@ -2247,7 +2316,6 @@ Verified: `bb test -n logseq.e2e.tag-basic-test -p 3007` (3 tests) and
 assertions) both pass against the minified bundle + external icon
 data.
 
-||||||| cd857694df
 
 ## Code-block editor (branch `devin/lui-codemirror`)
 

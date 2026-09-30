@@ -502,3 +502,17 @@ let convert_page_to_tag db_id =
 
 let create_page title =
   apply "create-page" [ W.String title; W.Map [] ]
+
+let create_class title =
+  apply "create-page"
+    [ W.String title; W.Map [ (W.Keyword "class?", W.Bool true) ] ]
+
+(* the create-page op result is [title, uuid] — no db/id *)
+let create_result_uuid res =
+  match W.elems res with
+  | [ _; W.Uuid u ] | [ _; W.String u ] -> Some u
+  | _ -> None
+
+let db_id_of_uuid uuid =
+  invoke "get-case-page" [ repo (); W.Uuid uuid ]
+  |> Js.Promise.then_ (fun w -> Js.Promise.resolve (geti w "db/id"))

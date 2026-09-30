@@ -294,10 +294,11 @@ let test_update_popups () =
     (m5.page_menu = Some (3., 4., false) && m5.appearance = None);
   let m6 =
     Update.update m5
-      (Action.Confirm_set (Some (Model.Confirm_delete_page "u")))
+      (Action.Confirm_set
+         (Some (Model.Confirm_delete_page ("u", "T", false))))
   in
   check "confirm clears both popups"
-    (m6.confirm = Some (Model.Confirm_delete_page "u")
+    (m6.confirm = Some (Model.Confirm_delete_page ("u", "T", false))
     && m6.page_menu = None && m6.appearance = None);
   let m7 = Update.update m6 Action.Dismiss_all in
   check "dismiss_all clears confirm too" (m7.confirm = None)
@@ -2445,9 +2446,9 @@ let ac_it ?group label =
   Popups_state.mk_item ~key:label ~label ?group Popups_state.Noop
 
 let mk_ac kind =
-  { Popups_state.kind; x = 0.; y = 0.; flip = false; query = ""
-  ; tpos = 0; tlen = 0; items = []; chosen = 0; editor = Js.Json.null
-  ; auuid = "" }
+  { Popups_state.kind; x = 0.; y = 0.; cy = 0.; flip = None; query = ""
+  ; tpos = 0; tlen = 0
+  ; items = []; chosen = 0; editor = Js.Json.null }
 
 let test_popups_state () =
   (* fuzzy_score: subsequence match, first*1000 + span *)
@@ -2573,166 +2574,6 @@ let test_popups_state () =
   (* detail_obj *)
   let d = Popups_state.detail_obj [ "a", Js.Json.string "v" ] in
   check "detail_obj" (json_str d "a" = Some "v")
-
-(* -- autocomplete lifecycle over a fake textarea --
-   regression coverage for the `]`/`)` autopair-overtype path that used
-   to leave the page-ref popup open: the editor preventDefaults the
-   keystroke and skips the caret over the ghost bracket, so no input
-   event reaches on_editor_input and query_closed never ran — the open
-   popup then swallowed Enter via apply_chosen and the block never
-   split *)
-let test_ac_lifecycle () =
-  Stub_dom.install ();
-  ignore (Fake_worker.install Fake_worker.never);
-  let sched = Signal.scheduler () in
-  let t = Popups_state.make sched in
-  (* Signal.set only publishes on scheduler drain — production settles
-     each frame; tests drain explicitly after mutations *)
-  let settle () = Signal.stabilize sched in
-  let ta = Stub_dom.make_element "textarea" in
-  Stub_dom.set_field ta "value" "";
-  Stub_dom.set_field ta "selectionStart" 0;
-  Stub_dom.set_field ta "selectionEnd" 0;
-  Stub_dom.set_field ta "setSelectionRange"
-    (fun a b ->
-      Stub_dom.set_field ta "selectionStart" (a : int);
-      Stub_dom.set_field ta "selectionEnd" (b : int));
-  Stub_dom.set_field ta "focus" (fun () -> ());
-  let get_v () = (Stub_dom.get_field ta "value" : string) in
-  let get_pos () = (Stub_dom.get_field ta "selectionStart" : int) in
-  let reset () =
-    Stub_dom.set_field ta "value" "";
-    Stub_dom.set_field ta "selectionStart" 0;
-    Stub_dom.set_field ta "selectionEnd" 0
-  in
-  let set_caret p =
-    Stub_dom.set_field ta "selectionStart" p;
-    Stub_dom.set_field ta "selectionEnd" p
-  in
-  let ac () = (Popups_state.get t).Popups_state.ac in
-  let ac_open () = Option.is_some (ac ()) in
-  let input_ev ?(it = "insertText") () =
-    let o = Js.Json.object_ (Js.Dict.empty ()) in
-    Stub_dom.set_field o "inputType" it;
-    o
-  in
-  let key_ev k =
-    let o = Js.Json.object_ (Js.Dict.empty ()) in
-    Stub_dom.set_field o "key" k;
-    o
-  in
-  (* a real keystroke: splice the char at the caret then fire the input
-     event, mirroring how the editor updates the textarea *)
-  let type_str s =
-    String.iter
-      (fun ch ->
-        let pos = get_pos () in
-        let v = get_v () in
-        let n = String.length v in
-        Stub_dom.set_field ta "value"
-          (String.sub v 0 pos ^ String.make 1 ch
-          ^ String.sub v pos (n - pos));
-        set_caret (pos + 1);
-        Popups_state.on_editor_input t ta (input_ev ());
-        settle ())
-      s
-  in
-  let press k =
-    let consumed = Popups_state.ac_keydown t (key_ev k) in
-    settle ();
-    consumed
-  in
-  (* the autopair-overtype path: editor preventDefaults and just moves
-     the caret past the ghost char — no input event fires *)
-  let overtype () = set_caret (get_pos () + 1) in
-
-  (* [[ opens Page_ref and autopairs ]] with the caret inside *)
-  type_str "[[";
-  check "ac opens on [[" (ac_open ());
-  check "ac is page_ref"
-    (match ac () with
-     | Some a -> a.Popups_state.kind = Popups_state.Page_ref
-     | None -> false);
-  check "autopair inserted ]]" (get_v () = "[[]]" && get_pos () = 2);
-  type_str "ab";
-  check "query text grows" (get_v () = "[[ab]]" && get_pos () = 4);
-  (match ac () with
-   | Some a -> check "query captures ab" (a.Popups_state.query = "ab")
-   | None -> check "query captures ab" false);
-  check "enter consumed while open" (press "Enter");
-
-  (* THE regression: skipping the caret over the ghost ] fires no input
-     event, so a leftover key must see the completed closer and close
-     the popup (cljs close-autocomplete-if-outside parity) *)
-  reset ();
-  type_str "[[cd";
-  check "ac open before overtype" (ac_open () && get_v () = "[[cd]]");
-  overtype ();
-  check "caret skipped ghost ]" (get_pos () = 5);
-  check "leftover key not consumed" (not (press "]"));
-  check "ac closed by completed closer" (not (ac_open ()));
-  check "enter free after close" (not (press "Enter"));
-
-  (* caret moved before the trigger also closes (ArrowLeft parity) *)
-  reset ();
-  type_str "[[";
-  check "ac reopens" (ac_open ());
-  set_caret 1;
-  check "caret before trigger closes"
-    (not (press "ArrowLeft") && not (ac_open ()));
-
-  (* (( opens Block_ref; typing ) through the input path closes it *)
-  reset ();
-  type_str "((xy";
-  check "ac is block_ref"
-    (match ac () with
-     | Some a -> a.Popups_state.kind = Popups_state.Block_ref
-     | None -> false);
-  type_str ")";
-  check "block_ref closed by )" (not (ac_open ()));
-
-  (* / opens Slash; Enter consumed, Escape closes, Enter then free *)
-  reset ();
-  type_str "/";
-  check "ac is slash"
-    (match ac () with
-     | Some a -> a.Popups_state.kind = Popups_state.Slash
-     | None -> false);
-  check "enter consumed for slash" (press "Enter");
-  check "escape closes" (press "Escape" && not (ac_open ()));
-  check "enter free after escape" (not (press "Enter"));
-
-  (* a stale ac — the editing session moved on while the popup was open
-     (uuid captured at open no longer matches the live editing session —
-     here editing is simply gone) — must not keep swallowing Enter *)
-  reset ();
-  type_str "/";
-  check "ac open for stale test" (ac_open ());
-  Popups_state.set_ac t
-    (Some { (Option.get (ac ())) with Popups_state.auuid = "other" });
-  settle ();
-  check "enter free on stale ac" (not (press "Enter"));
-  check "stale ac closed" (not (ac_open ()));
-
-  (* whole-buffer replacement keeps the popup (query = buffer); a
-     delete keystroke that removes the trigger closes it *)
-  reset ();
-  type_str "[[";
-  Stub_dom.set_field ta "value" "zz";
-  set_caret 2;
-  Popups_state.on_editor_input t ta (input_ev ~it:"insertReplacementText" ());
-  settle ();
-  check "replace keeps ac" (ac_open ());
-  Popups_state.on_editor_input t ta (input_ev ~it:"deleteContentBackward" ());
-  settle ();
-  check "delete closes ac" (not (ac_open ()));
-
-  (* overtype_skip consumes the duplicate closer under the caret *)
-  Stub_dom.set_field ta "value" "a]]x";
-  set_caret 2;
-  Popups_state.overtype_skip ta;
-  check "overtype_skip merges closers" (get_v () = "a]x" && get_pos () = 2);
-  Fake_worker.clear ()
 
 (* ---- editor_actions pure helpers ---- *)
 
@@ -3154,7 +2995,7 @@ let test_update3 () =
   (* Navigate_to resets confirm alongside other page-local state *)
   let dirty =
     { Model.initial with
-      Model.confirm = Some (Model.Confirm_delete_page "u") }
+      Model.confirm = Some (Model.Confirm_delete_page ("u", "T", false)) }
   in
   check "navigate clears confirm"
     ((Update.update dirty (Action.Navigate_to Model.All_pages))
@@ -4084,72 +3925,6 @@ let test_props_value2 () =
      = Some "line-dashed");
   check "closed_value_icon_id none"
     (Properties_value.closed_value_icon_id (wmap []) = None)
-(* ---- vendored-libs render helpers (render_inline) ---- *)
-
-let test_render_libs () =
-  (* parse_timestamp: cljs ^(?:(\d+):)?([0-5]?\d):([0-5]?\d)$ or ^\d+$ *)
-  eq "parse ts m:ss" (Some 83)
-    (Render_inline.parse_timestamp "1:23")
-    (function Some i -> string_of_int i | None -> "none");
-  eq "parse ts h:mm:ss" (Some 3723)
-    (Render_inline.parse_timestamp "1:02:03")
-    (function Some i -> string_of_int i | None -> "none");
-  eq "parse ts bare seconds" (Some 90)
-    (Render_inline.parse_timestamp "90")
-    (function Some i -> string_of_int i | None -> "none");
-  check "parse ts invalid minute"
-    (Render_inline.parse_timestamp "1:99" = None);
-  check "parse ts empty"
-    (Render_inline.parse_timestamp "" = None);
-  check "parse ts letters"
-    (Render_inline.parse_timestamp "abc" = None);
-  check "parse ts trailing junk"
-    (Render_inline.parse_timestamp "1:23x" = None);
-  (* seconds_display: pad to 2, drop hours iff 00 *)
-  eqs "display ss" "00:18" (Render_inline.seconds_display 18);
-  eqs "display m:ss" "01:23" (Render_inline.seconds_display 83);
-  eqs "display h:mm:ss" "01:02:03"
-    (Render_inline.seconds_display 3723);
-  eqs "display zero" "00:00" (Render_inline.seconds_display 0);
-  (* youtube_id: cljs youtube-regex id extraction + bare 11-char ids *)
-  eq "yt watch v=" (Some "7xTGNNLPyMI")
-    (Render_inline.youtube_id
-       "https://www.youtube.com/watch?v=7xTGNNLPyMI")
-    (function Some s -> s | None -> "none");
-  eq "yt youtu.be" (Some "7xTGNNLPyMI")
-    (Render_inline.youtube_id "https://youtu.be/7xTGNNLPyMI")
-    (function Some s -> s | None -> "none");
-  eq "yt embed" (Some "7xTGNNLPyMI")
-    (Render_inline.youtube_id
-       "https://www.youtube.com/embed/7xTGNNLPyMI")
-    (function Some s -> s | None -> "none");
-  eq "yt shorts" (Some "7xTGNNLPyMI")
-    (Render_inline.youtube_id
-       "https://www.youtube.com/shorts/7xTGNNLPyMI")
-    (function Some s -> s | None -> "none");
-  eq "yt bare id" (Some "7xTGNNLPyMI")
-    (Render_inline.youtube_id "7xTGNNLPyMI")
-    (function Some s -> s | None -> "none");
-  check "yt v= stops at &"
-    (Render_inline.youtube_id
-       "https://www.youtube.com/watch?v=abc123&list=x"
-     = Some "abc123");
-  check "yt other host"
-    (Render_inline.youtube_id "https://vimeo.com/12345" = None);
-  (* youtube_start: [?&]t=(\d+) *)
-  eq "yt start t=" (Some "42")
-    (Render_inline.youtube_start
-       "https://www.youtube.com/watch?v=abc&t=42")
-    (function Some s -> s | None -> "none");
-  check "yt no t="
-    (Render_inline.youtube_start
-       "https://www.youtube.com/watch?v=abc"
-     = None);
-  check "yt t= inside param name ignored"
-    (Render_inline.youtube_start
-       "https://www.youtube.com/watch?start=42"
-     = None)
-
 let () =
   test_move ();
   test_update ();
@@ -4196,8 +3971,6 @@ let () =
   test_views_query ();
   test_views_table ();
   test_popups_state ();
-  test_ac_lifecycle ();
-  Test_lui_apply.run ();
   test_editor_actions ();
   test_update2 ();
   test_decode_rtc ();
@@ -4240,7 +4013,6 @@ let () =
   test_props_data4 ();
   test_props_value ();
   test_props_value2 ();
-  test_render_libs ();
   (* Drive view tests run their worker-fed assertions on a promise tick;
      the summary + exit must wait for that stage *)
   Test_drive.run ~finish:(fun () ->

@@ -375,7 +375,8 @@ let test_page_menu () =
 
 let test_confirm () =
   send
-    (Action.Confirm_set (Some (Model.Confirm_delete_page "puuid")));
+    (Action.Confirm_set
+       (Some (Model.Confirm_delete_page ("puuid", "P Title", false))));
   check "alertdialog layer"
     (find_where (fun n -> attr_val n "role" = Some "alertdialog") <> []);
   has "text:\"Confirm\"";

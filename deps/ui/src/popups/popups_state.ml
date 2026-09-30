@@ -84,19 +84,17 @@ let empty_item = mk_item ~key:empty_key ~label:"" Noop
 type ac =
   { kind : ac_kind
   ; x : float
-  ; y : float (* caret bottom; the popup anchors its bottom edge here
-     when flipped *)
-  ; flip : bool (* render above the caret (cljs auto-side "top") *)
+  ; y : float
+  ; cy : float (* caret line top — flip-above anchor *)
+  ; flip : (float * float) option
+    (* Some (top, avail-h) once the popup measured too tall for the
+       space below the caret — base-ui avoidCollisions flips it above *)
   ; query : string
   ; tpos : int (* query-trigger offset (the "/" "[[" "((" "#" start) *)
   ; tlen : int
   ; items : ac_item list
   ; chosen : int
   ; editor : Dom_ext.element
-  ; auuid : string (* editing uuid the popup was opened on — a remount
-                      keeps it (the ac stays live); an editing-swap or
-                      exit means the ac is stale and must not swallow
-                      keys *)
   }
 
 type cm_picker = Picker_emoji | Picker_icon
@@ -120,11 +118,14 @@ and cm_sub =
 type cm =
   { cx : float
   ; cy : float
-  ; block_id : string
+  ; block_id : string (* owner block/page entity of the menu target *)
   ; multi : bool
   ; entries : cm_item list
   ; sub_open : int (* index into entries, -1 = none *)
   ; sub_xy : float * float
+  ; tag : (string * int * bool) option
+    (* Some (uuid, db/id, private?) => block-tag chip menu, not the
+       block context menu *)
   }
 
 type pv =
@@ -173,19 +174,6 @@ let get t = Signal.get t.vs.Signal.state_signal
 let ac_open () =
   match !active with
   | Some t -> (get t).ac <> None
-  | None -> false
-
-(* editor_keys' popup-key guard — an ac outlives its textarea on
-   remount/navigation; it is stale once the editing block it opened on
-   is no longer the editing session (a remount keeps the uuid) and
-   must not keep swallowing Enter/Tab/arrows *)
-let ac_attached () =
-  match !active with
-  | Some t -> (
-      match (get t).ac with
-      | Some ac ->
-        ac.auuid = "" || Editor_state.editing_uuid () = Some ac.auuid
-      | None -> false)
   | None -> false
 
 let set t v = Runtime.signal_set t.vs v
@@ -887,20 +875,58 @@ let load_templates t =
 (* ---- open / update ---- *)
 
 let open_ac t kind editor =
-  let x, y = Dom_ext.caret_popup_pos editor in
-  (* cljs popup-core auto-side-fn: anchor-height defaults to 1 for the
-     caret popup, so flip to "top" when bottom space <= 280 and top
-     exceeds bottom by > 100 *)
-  let bh = Dom_ext.inner_height -. y -. 1. in
-  let flip = (not (bh > 280.)) && y -. bh > 100. in
+  let x, y, cy = Dom_ext.caret_popup_pos editor in
   let tlen = trigger_len_of_kind kind in
   let tpos = Dom_ext.selection_start editor - tlen in
   let ac =
-    { kind; x; y; flip; query = ""
+    { kind; x; y; cy; flip = None; query = ""
     ; tpos; tlen
-    ; items = []; chosen = 0; editor
-    ; auuid = Option.value (Editor_state.editing_uuid ()) ~default:"" }
+    ; items = []; chosen = 0; editor }
   in
+  (* base-ui avoidCollisions: the popup mounts below the caret, then
+     flips above when it overflows the viewport and there is more room
+     above — measure once mounted and record (top, avail). Items can
+     resolve after the mount, so retry while the popup is up (~480ms).
+     The popover's --available-height clamp already bounds the rendered
+     rect, so lift it briefly to learn the real height (CSS caps such
+     as the commands list's own max-height still apply — matching what
+     the popup can actually render on either side) *)
+  let rec measure tries =
+    match (get t).ac with
+    | Some a when a.flip = None && a.kind = kind -> (
+        match Dom_ext.doc_query_selector "#ui__ac-inner" with
+        | Some inner -> (
+            match Dom_ext.closest inner ".ui__popover-content" with
+            | Some pop ->
+                (* --available-height propagates to #ui__ac-inner's own
+                   max-height; lift it to read the real rendered height
+                   (the list's own CSS max still applies) *)
+                Dom_ext.style_set_property pop "--available-height" "2000px";
+                let h = Dom_ext.rect_height (Dom_ext.bounding_rect pop) in
+                let below = Dom_ext.window_inner_height -. a.y -. 8. in
+                let above = a.cy -. 8. in
+                if h > below && above > below then (
+                  (* avail is the constraint, h the measured render —
+                     the inner's own max-height subtracts chrome from
+                     avail, so pass the whole space and place the top
+                     so the bottom edge lands just above the caret *)
+                  let avail = above -. 4. in
+                  let h_eff = Float.min h avail in
+                  let top' = Float.max 4.0 (a.cy -. 8. -. h_eff) in
+                  set_ac t (Some { a with flip = Some (top', avail) }))
+                else (
+                  Dom_ext.style_set_property pop "--available-height"
+                    (Printf.sprintf "calc(100vh - %.0fpx)" (a.y +. 8.));
+                  retry tries)
+            | None -> retry tries)
+        | None -> retry tries)
+    | None -> retry tries
+    | _ -> ()
+  and retry tries =
+    if tries > 0 then
+      Dom_ext.set_timeout (fun () -> measure (tries - 1)) 16
+  in
+  measure 30;
   (* cljs autopair: typing [[ inputs ]] immediately with the caret kept
      inside the brackets; insert_text consumes the ghost pair on choice *)
   (match kind with
@@ -960,12 +986,7 @@ let on_editor_input t el ev =
   overtype_skip el;  let pos = Dom_ext.selection_start el in
 
   match (get t).ac with
-  | Some ac0 ->
-      (* the event target is the live textarea — a reload may have
-         remounted the node since the ac opened, so always re-anchor
-         instead of writing to a detached element *)
-      let ac = { ac0 with editor = el } in
-      if ac.editor != ac0.editor then set_ac t (Some ac);
+  | Some ac ->
       let v = Dom_ext.value el in
       let trig_missing =
         ac.tpos + ac.tlen > S.length v
@@ -1403,50 +1424,16 @@ let apply_chosen t =
   | None -> ()
 ;;
 
-(* cljs closes the mention/search popup on keyup once the caret is no
-   longer wrapped by its trigger pair (close-autocomplete-if-outside).
-   Our editor `]`/`)` autopair-overtype preventDefaults the keystroke and
-   skips the caret past the ghost bracket, so no input event reaches
-   on_editor_input — check the same close condition on leftover keys:
-   caret moved before the trigger, or the buffer shows a completed
-   closer in the query. Read the event's live target rather than
-   ac.editor — a reload can remount the textarea, leaving ac.editor
-   detached where selectionStart reads 0 and the position check
-   mis-closes an ac that is still valid *)
-let ac_position_closed ac el =
-  let pos = Dom_ext.selection_start el in
-  let v = Dom_ext.value el in
-  let qend = pos - ac.tpos - ac.tlen in
-  qend < 0 || qend > S.length v
-  || query_closed ac (S.sub v (ac.tpos + ac.tlen) qend)
-;;
-
 (* true if the keydown was consumed by the open popup *)
 let ac_keydown t ev =
-  match (get t).ac with
-  | None -> false
-  | Some ac ->
-      (* the ac outlives its textarea on remount — Enter/Tab reach
-         apply_chosen before the position check could close it, eating
-         the key forever; once the editing session it opened on is gone
-         the popup is dead, so close it and let the key through *)
-      if
-        ac.auuid <> "" && Editor_state.editing_uuid () <> Some ac.auuid
-      then (
-        close_ac t;
-        false)
-      else (
-        match Dom_ext.key_ ev with
-        | Some "ArrowDown" -> move_chosen t 1; true
-        | Some "ArrowUp" -> move_chosen t (-1); true
-        | Some ("Enter" | "Tab") -> apply_chosen t; true
-        | Some "Escape" -> close_ac t; true
-        | _ ->
-            (let el =
-               Option.value (Dom_ext.target ev) ~default:ac.editor
-             in
-             if ac_position_closed ac el then close_ac t);
-            false)
+  if (get t).ac = None then false
+  else
+    match Dom_ext.key_ ev with
+    | Some "ArrowDown" -> move_chosen t 1; true
+    | Some "ArrowUp" -> move_chosen t (-1); true
+    | Some ("Enter" | "Tab") -> apply_chosen t; true
+    | Some "Escape" -> close_ac t; true
+    | _ -> false
 ;;
 
 let ac_mousemove t el =
@@ -1533,7 +1520,32 @@ let open_cm t ~x ~y ~block_id ~multi =
   set_cm t
     (Some
        { cx = x; cy = y; block_id; multi; entries; sub_open = -1
-       ; sub_xy = (0., 0.) })
+       ; sub_xy = (0., 0.); tag = None })
+;;
+
+(* cljs block-tag popup (block.cljs): Go to #tag (mod+click) / Open in
+   sidebar (shift+click) / Remove tag — the last hidden for private
+   class idents *)
+let tag_entries ~title ~priv =
+  [ Ci_item
+      ( "Go to #" ^ title
+      , Some ("mod+click", [ "\u{2318}"; "Click" ])
+      , "go-to-tag" )
+  ; Ci_item
+      ( U.t "sidebar.right/open"
+      , Some ("shift+click", [ "\u{21e7}"; "Click" ])
+      , "open-tag-sidebar" ) ]
+  @ if priv then []
+    else [ Ci_item (U.t "block/remove-tag", None, "remove-tag") ]
+
+let open_cm_tag t ~x ~y ~block_id ~tag_uuid ~tag_id ~tag_title ~priv =
+  close_ac t;
+  set_cm t
+    (Some
+       { cx = x; cy = y; block_id; multi = false
+       ; entries = tag_entries ~title:tag_title ~priv
+       ; sub_open = -1; sub_xy = (0., 0.)
+       ; tag = Some (tag_uuid, tag_id, priv) })
 ;;
 
 let open_cm_sub t ~index ~x ~y =
@@ -1562,7 +1574,26 @@ let cm_sub_at t index =
 let run_cm_item t label =
   match (get t).cm with
   | Some cm ->
-      emit_cmd label [ "block", Js.Json.string cm.block_id ];
+      (match cm.tag with
+       | Some (tuuid, tid, _) -> (
+           match label with
+           | "go-to-tag" ->
+               Platform.set_location_hash
+                 (Runtime.nav_hash ("#/page/" ^ tuuid))
+           | "open-tag-sidebar" ->
+               Platform.dispatch "ls:open-right-sidebar"
+                 (Js.Json.object_
+                    (Js.Dict.fromList
+                       [ ("uuid", Js.Json.string tuuid) ]))
+           | "remove-tag" ->
+               ignore
+                 (Outliner_ops.apply_and_refresh
+                    [ Outliner_ops.op "delete-property-value"
+                        [ Wire.Uuid cm.block_id
+                        ; Wire.Keyword "block/tags"
+                        ; Wire.Int tid ] ])
+           | _ -> ())
+       | None -> emit_cmd label [ "block", Js.Json.string cm.block_id ]);
       close_cm t
   | None -> ()
 ;;

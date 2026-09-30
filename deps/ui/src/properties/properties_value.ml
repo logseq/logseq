@@ -137,18 +137,122 @@ let commit_or_cancel ctx row value =
    dialog commits, refresh re-renders) must not hijack focus or commit
    the outliner — the value row mounts asynchronously, and the user may
    already be typing elsewhere by the time it lands. *)
+(* cljs collapse-arrow svg inside .control-hide > .rotating-arrow *)
+let arrow_svg_el () =
+  let svg = svg_ns_el "svg" in
+  List.iter
+    (fun (k, v) -> el_set_attr svg k v)
+    [ ("aria-hidden", "true"); ("version", "1.1"); ("viewBox", "0 0 192 512")
+    ; ("fill", "currentColor"); ("display", "inline-block")
+    ; ("class", "h-4 w-4"); ("style", "margin-left: 2px") ];
+  let p = svg_ns_el "path" in
+  List.iter
+    (fun (k, v) -> el_set_attr p k v)
+    [ ( "d"
+      , "M0 384.662V127.338c0-17.818 21.543-26.741 34.142-14.142l128.662 \
+         128.662c7.81 7.81 7.81 20.474 0 28.284L34.142 \
+         398.804C21.543 411.404 0 402.48 0 384.662z" )
+    ; ("fill-rule", "evenodd") ];
+  el_append_child svg p;
+  svg
+
+(* cljs mounts the property-value editor as a whole .ls-block skeleton
+   (components/property.cljs property-value renders an inline block
+   editor): .ls-block.is-blank > .block-main-container >
+   .block-control-wrap (arrow + bullet) + .block-main-content >
+   .block-content-or-editor-wrap > .block-row > .editor-wrapper *)
+let block_editor_frame ctx cell wrap =
+  let u = ctx.block_uuid in
+  let blk =
+    mk ~cls:"is-blank ls-block swipe-item" "div"
+      ~attrs:
+        [ ("data-block-title", ""); ("haschild", "false")
+        ; ("data-comment-item", "false"); ("data-comments-area", "false")
+        ; ("level", "0"); ("blockid", u); ("data-collapsed", "false")
+        ; ("id", "ls-block-" ^ u); ("containerid", "4")
+        ; ("data-db-collapsable", "false")
+        ; ("data-block-format", "markdown") ]
+  in
+  let main = mk ~cls:"block-main-container flex flex-row gap-1" "div" in
+  let ctrl =
+    mk ~cls:"block-control-wrap flex flex-row items-center h-6" "div"
+      ~attrs:[ ("data-has-children", "false") ]
+  in
+  let ctrl_a =
+    mk ~cls:"block-control" "a" ~attrs:[ ("id", "control-" ^ u) ]
+  in
+  let hide = mk ~cls:"control-hide" "span" in
+  let arrow = mk ~cls:"rotating-arrow not-collapsed" "span" in
+  el_append_child arrow (arrow_svg_el ());
+  el_append_child hide arrow;
+  el_append_child ctrl_a hide;
+  el_append_child ctrl ctrl_a;
+  let blw = mk ~cls:"bullet-link-wrap" "a" in
+  let dot =
+    mk ~cls:"bullet-container cursor" "span"
+      ~attrs:
+        [ ("id", "dot-" ^ u); ("blockid", u); ("draggable", "true") ]
+  in
+  el_append_child dot (mk ~cls:"bullet" "span" ~attrs:[ ("blockid", u) ]);
+  el_append_child blw dot;
+  el_append_child ctrl blw;
+  el_append_child main ctrl;
+  let col1 = mk ~cls:"flex flex-col w-full" "div" in
+  let col2 = mk ~cls:"flex flex-col w-full" "div" in
+  let bmc = mk ~cls:"block-main-content flex flex-row gap-2" "div" in
+  let col3 = mk ~cls:"flex flex-col w-full" "div" in
+  let boew = mk ~cls:"block-content-or-editor-wrap" "div" in
+  let boei = mk ~cls:"block-content-or-editor-inner" "div" in
+  let brow =
+    mk ~cls:"block-row flex flex-1 flex-row gap-1 items-center" "div"
+  in
+  el_append_child brow wrap;
+  let right =
+    mk ~cls:"ls-block-right flex flex-row items-center self-start gap-1"
+      "div"
+  in
+  el_append_child right (mk ~cls:"opacity-70 hover:opacity-100" "div");
+  el_append_child brow right;
+  el_append_child boei brow;
+  el_append_child boew boei;
+  el_append_child col3 boew;
+  el_append_child bmc col3;
+  el_append_child col2 bmc;
+  el_append_child col1 col2;
+  el_append_child main col1;
+  el_append_child blk main;
+  el_append_child blk (mk ~cls:"ls-block-content-indent" "div");
+  el_append_child cell blk
+
 let edit_text_cell ?(steal = false) ctx row cell initial =
   el_clear cell;
-  let wrap = mk ~cls:"editor-wrapper" "div" in
+  let u = ctx.block_uuid in
+  let wrap =
+    mk ~cls:"editor-wrapper flex flex-1 w-full" "div"
+      ~attrs:[ ("id", "editor-edit-block-" ^ u) ]
+  in
   let inner = mk ~cls:"editor-inner flex flex-1 block-editor" "div" in
-  let ta = mk "textarea" in
+  let ta =
+    mk ~cls:"uniline-block normal-block" "textarea"
+      ~attrs:
+        [ ("autocapitalize", "off"); ("autocorrect", "false")
+        ; ("data-testid", "block editor"); ("id", "edit-block-" ^ u)
+        ; ("style", "field-sizing: content; min-height: 1lh;") ]
+  in
   let mt = mk ~cls:"mock-text" "div" in
   el_set_attr mt "style"
     "width:100%;height:100%;position:absolute;visibility:hidden;top:0;left:0";
+  let uploader = mk ~cls:"image-uploader" "div" in
+  let file_in =
+    mk "input"
+      ~attrs:[ ("id", "upload-file"); ("hidden", ""); ("type", "file") ]
+  in
+  el_append_child uploader file_in;
   el_append_child inner ta;
   el_append_child inner mt;
+  el_append_child inner uploader;
   el_append_child wrap inner;
-  el_append_child cell wrap;
+  block_editor_frame ctx cell wrap;
   el_set_value ta initial;
   (* single editing surface: commit the property editor still open
      elsewhere before this one registers — the previous commit's row
@@ -695,16 +799,30 @@ let node_cell ctx row =
         S.pop_overlay ())
       ~on_new:(Some (new_node ctx row))
   and new_node ctx row text =
-    D.create_page text
-    |> Js.Promise.then_ (fun res ->
-           (match D.geti res "db/id" with
-            | Some id ->
-                let ident = D.row_ident row |> Option.value ~default:"" in
-                set_scalar ctx ~ident ~value:(W.Int id)
-            | None -> ());
-           S.pop_overlay ();
-           Js.Promise.resolve ())
-    |> ignore
+    let ( let* ) p f = Js.Promise.then_ f p in
+    ignore
+      (let* res =
+         (* cljs <create-page-if-not-exists!: class-type and block/tags
+            values are classes *)
+         if D.row_type row = "class" || D.row_ident row = Some "block/tags"
+         then D.create_class text
+         else D.create_page text
+       in
+       let* () =
+         match D.create_result_uuid res with
+         | Some uuid -> (
+             let* id = D.db_id_of_uuid uuid in
+             match id with
+             | Some id ->
+                 let ident =
+                   D.row_ident row |> Option.value ~default:"" in
+                 set_scalar ctx ~ident ~value:(W.Int id);
+                 Js.Promise.resolve ()
+             | None -> Js.Promise.resolve ())
+         | None -> Js.Promise.resolve ()
+       in
+       S.pop_overlay ();
+       Js.Promise.resolve ())
   in
   on_click cell (fun _ -> open_values ());
   el_listen cell "keydown"

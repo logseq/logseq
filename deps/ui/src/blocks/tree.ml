@@ -34,13 +34,15 @@ let block_key (b : Model.block) =
 (* -- per-row signals -- *)
 
 let row_class_sig uuid blank embed (b : Model.block) =
+  let order_list = b.Model.block_order_list = Some "number" in
   Logseq_dom.class_signal (S.signal ()) (fun (st : S.t) ->
-      "ls-block"
-      ^ (if S.String_set.mem uuid st.selected then " selected" else "")
-      ^ (if embed then " embed-block" else "")
-      ^ (if Comments.is_comments_area b then " is-comments-area"
-         else "")
-      ^ if blank then " is-blank" else "")
+      (* cljs :class order — dynamic flags first, base classes last *)
+      (if S.String_set.mem uuid st.selected then "selected " else "")
+      ^ (if order_list then "is-order-list " else "")
+      ^ (if blank then "is-blank " else "")
+      ^ (if embed then "embed-block " else "")
+      ^ (if Comments.is_comments_area b then "is-comments-area " else "")
+      ^ "ls-block")
 
 (* effective collapse for a block: scoped UI overrides, then persisted
    set || view default — Editor_state.effective_collapsed_in on the
@@ -48,7 +50,7 @@ let row_class_sig uuid blank embed (b : Model.block) =
 let effective_collapsed_st ~scope uuid default (st : S.t) =
   S.effective_collapsed_in ~scope uuid default st
 
-let row_attrs_sig ~scope uuid (b : Model.block) =
+let row_attrs_sig ~scope ~depth uuid (b : Model.block) =
   let has_children = S.children_of b <> [] in
   let embed = b.Model.block_link <> None in
   Logseq_dom.attrs_signal (S.signal ()) (fun (st : S.t) ->
@@ -56,13 +58,18 @@ let row_attrs_sig ~scope uuid (b : Model.block) =
       ; ("blockid", uuid)
       ; ("containerid", uuid)
       ; ("data-block-title", b.block_title)
+      ; ("data-comment-item", string_of_bool b.Model.block_is_comment)
       ; ("data-block-format", "markdown")
       ; ("haschild", string_of_bool has_children)
       ; ( "data-collapsed"
         , string_of_bool
-            (effective_collapsed_st ~scope uuid
-               b.block_default_collapsed st) )
-      ; ("level", string_of_int b.block_level)
+            (has_children
+             && effective_collapsed_st ~scope uuid
+                  b.block_default_collapsed st) )
+      ; ("data-db-collapsable", string_of_bool b.Model.block_db_collapsable)
+      ; (* cljs level = render depth (config :level, 0 at page root), not
+           the db block/level *)
+        ("level", string_of_int depth)
       ]
       @ (if Comments.is_comments_area b then
            [ ("data-comments-area", "true") ]
@@ -196,7 +203,11 @@ let control_wrap ~scope ~library uuid (b : Model.block) : t =
                | Some icon -> icon_el uuid icon
                | None ->
                    dom ~key:("b-" ^ uuid) ~tag:"span"
-                     ~style_class:"bullet"
+                     ~style_class_signal:
+                       (Logseq_dom.class_signal (S.signal ()) (fun (st : S.t) ->
+                            if S.String_set.mem uuid st.selected then
+                              "selected bullet"
+                            else "bullet"))
                      ~attrs:[ ("blockid", uuid) ]
                      (match b.Model.block_order_index with
                       | Some idx when order_list ->
@@ -215,7 +226,10 @@ let content_el uuid (b : Model.block) : t =
   dom ~key:("content-" ^ uuid) ~style_class:"block-content inline"
     ~id:("block-content-" ^ uuid)
     ~attrs:
-      [ ("blockid", uuid); ("containerid", uuid); ("style", "width:100%") ]
+      [ ("blockid", uuid); ("containerid", uuid)
+      ; ( "data-type"
+        , Option.value b.Model.block_display_type ~default:"default" )
+      ; ("style", "width:100%") ]
     [ dom ~key:("bci-" ^ uuid)
         ~style_class:"block-content-inner flex flex-row justify-between"
         [ dom ~key:("bh-" ^ uuid) ~style_class:"block-head-wrap"
@@ -275,6 +289,7 @@ let content_wrapper uuid (b : Model.block) : t =
      the editor replaces it directly under .block-row *)
   dom ~key:("cw-" ^ uuid)
     ~style_class:"block-content-wrapper flex flex-1 w-full"
+    ~attrs:[ ("style", "display: flex;") ]
     [ content_el uuid b
     ; dom ~key:("bic-" ^ uuid)
         ~style_class:"flex flex-row items-center" []
@@ -319,36 +334,47 @@ let content_or_editor ~editable uuid scope (b : Model.block) : t =
    the title itself. -- *)
 
 let tags_el uuid (b : Model.block) : t =
-  let triples =
-    try List.combine b.block_tags
-           (List.combine b.block_tag_uuids b.block_tag_idents)
+  let quads =
+    try List.map2
+          (fun (tag, (tuuid, ident)) dbid -> (tag, tuuid, ident, dbid))
+          (List.combine b.block_tags
+             (List.combine b.block_tag_uuids b.block_tag_idents))
+          b.block_tag_db_ids
     with Invalid_argument _ ->
-        List.map (fun t -> (t, ("", ""))) b.block_tags
+        List.map (fun t -> (t, "", "", 0)) b.block_tags
   in
   let visible =
     List.filter_map
-      (fun (tag, (tuuid, ident)) ->
+      (fun (tag, tuuid, ident, dbid) ->
         (* cljs inline-tag? drops tags that already appear inline in the
            raw title, as "#name" or "#[[uuid]]" *)
         let inline =
           I18n.contains b.block_title ("#" ^ tag)
           || (tuuid <> "" && I18n.contains b.block_title tuuid)
         in
-        if inline then None else Some (tag, ident))
-      triples
+        if inline then None else Some (tag, tuuid, ident, dbid))
+      quads
   in
   match visible with
   | [] -> Logseq_dom.nothing
   | tags ->
       dom ~key:("tags-" ^ uuid) ~style_class:"block-tags gap-1"
         (List.mapi
-           (fun i (tag, ident) ->
+           (fun i (tag, tuuid, ident, dbid) ->
              (* cljs block-tag: .block-tag > .flex.items-center >
                 a.hash-symbol("#") + a.tag[data-ref] *)
+             let priv = private_tag_ident ident in
              dom ~key:("tag-" ^ uuid ^ "-" ^ string_of_int i)
                ~style_class:
-                 ("block-tag"
-                 ^ if private_tag_ident ident then " private-tag" else "")
+                 ("block-tag" ^ if priv then " private-tag" else "")
+               (* cljs keeps the tag entity in the chip's click closure;
+                  the delegated context-menu handler reads it off data
+                  attrs instead *)
+               ~attrs:
+                 [ ("data-tag-uuid", tuuid)
+                 ; ("data-tag-id", string_of_int dbid)
+                 ; ("data-tag-title", tag)
+                 ; ("data-tag-priv", if priv then "true" else "false") ]
                [ dom ~key:("tc-" ^ uuid ^ "-" ^ string_of_int i)
                    ~style_class:"flex items-center"
                    [ dom ~key:("th-" ^ uuid ^ "-" ^ string_of_int i) ~tag:"a"
@@ -363,6 +389,8 @@ let tags_el uuid (b : Model.block) : t =
                ])
            tags)
 
+
+
 (* -- row -- *)
 
 (* module init runs at app load (page.ml references block_row): install
@@ -375,15 +403,15 @@ let () =
   Editor_dom.ensure_raw_text_observer ()
 
 let rec block_row
-    ?(scope = "main") ?(editable = true) ?(library = false)
+    ?(depth = 0) ?(scope = "main") ?(editable = true) ?(library = false)
     (b : Model.block) : t =
 
  fun ctx parent ->
   S.ensure ctx;
-  (row_el ~editable ~library scope b) ctx parent
+  (row_el ~depth ~editable ~library scope b) ctx parent
 
 
-and row_el ~editable scope ~(library : bool) (b : Model.block) : t =
+and row_el ~depth ~editable scope ~(library : bool) (b : Model.block) : t =
 
   let uuid = Option.value b.block_uuid ~default:"" in
   if b.Model.block_is_comments_area then Comments_view.area_el b
@@ -397,7 +425,7 @@ and row_el ~editable scope ~(library : bool) (b : Model.block) : t =
      ls-<uuid> key makes those distinct rows claim each other's DOM node *)
   dom ~key:("ls-" ^ scope ^ "-" ^ key)
     ~style_class_signal:(row_class_sig uuid blank embed b)
-    ~attrs_signal_v:(row_attrs_sig ~scope uuid b)
+    ~attrs_signal_v:(row_attrs_sig ~scope ~depth uuid b)
     [ dom ~key:("main-" ^ key)
         ~style_class:"block-main-container flex flex-row gap-1"
         ~attrs:
@@ -456,11 +484,11 @@ and row_el ~editable scope ~(library : bool) (b : Model.block) : t =
     ; dom ~key:("bci2-" ^ key)
         ~style_class:"ls-block-content-indent" []
     ; (if has_children && not (Comments.is_comments_area b) then
-         children_el ~editable ~library uuid scope b
+         children_el ~depth ~editable ~library uuid scope b
        else Logseq_dom.nothing)
     ]
 
-and children_el ~editable ~library uuid scope (b : Model.block) : t =
+and children_el ~depth ~editable ~library uuid scope (b : Model.block) : t =
 
   if_
     ~test:(Signal.map (fun c -> not c) (collapsed_sig ~scope b))
@@ -470,7 +498,7 @@ and children_el ~editable ~library uuid scope (b : Model.block) : t =
            ~style_class:"block-children-left-border"
            ~attrs:[ ("blockid", uuid) ] []
        ; dom ~key:("clist-" ^ uuid) ~style_class:"block-children w-full"
-           (List.map (block_row ~scope ~editable ~library)
+           (List.map (block_row ~scope ~editable ~depth:(depth + 1) ~library)
               (S.children_of b))
 
        ])
@@ -482,7 +510,7 @@ and children_el ~editable ~library uuid scope (b : Model.block) : t =
    keeps the row from claiming the live row's DOM node on reconciliation —
    both are keyed ls-…/rfs-… on the same uuid but are distinct logical
    nodes. *)
-and block_row_static ?(library = false) (b : Model.block) : t =
+and block_row_static ?(depth = 0) ?(library = false) (b : Model.block) : t =
  fun ctx parent ->
   (* references rows can be the first block render on a page (journals
      refresh mounts ref rows before any editable row) — the state must
@@ -495,7 +523,7 @@ and block_row_static ?(library = false) (b : Model.block) : t =
   let blank = String.trim b.block_title = "" in
   dom ~key:("rfs-" ^ key)
     ~style_class_signal:(row_class_sig uuid blank embed b)
-    ~attrs_signal_v:(row_attrs_sig ~scope:"ref" uuid b)
+    ~attrs_signal_v:(row_attrs_sig ~scope:"ref" ~depth uuid b)
     [ dom ~key:("main-" ^ key)
         ~style_class:"block-main-container flex flex-row gap-1"
         ~attrs:(heading_attrs b)
@@ -537,19 +565,20 @@ and block_row_static ?(library = false) (b : Model.block) : t =
         ]
     ; dom ~key:("bci2-" ^ key)
         ~style_class:"ls-block-content-indent" []
-    ; (if has_children then children_static_el ~library uuid b
+    ; (if has_children then children_static_el ~depth ~library uuid b
        else Logseq_dom.nothing)
     ])
   ctx parent
 
-and children_static_el ~library uuid (b : Model.block) : t =
+and children_static_el ~depth ~library uuid (b : Model.block) : t =
   dom ~key:("children-" ^ uuid)
     ~style_class:"block-children-container flex"
     [ dom ~key:("border-" ^ uuid)
         ~style_class:"block-children-left-border"
         ~attrs:[ ("blockid", uuid) ] []
     ; dom ~key:("clist-" ^ uuid) ~style_class:"block-children w-full"
-        (List.map (block_row_static ~library) b.block_children)
+        (List.map (block_row_static ~depth:(depth + 1) ~library)
+           b.block_children)
     ]
 
 

@@ -637,11 +637,11 @@ let keymap_controls () =
             ]
         ; dom ~key:"km-pills" ~style_class:"shortcut-pills-row"
             [ dom ~key:"km-fp" ~style_class:"shortcut-filter-pills"
-                [ keymap_pill ~key:"km-pa" ~title:T.keymap_all ~count:"116"
+                [ keymap_pill ~key:"km-pa" ~title:T.keymap_all ~count:"125"
                     ~active:true
                 ; keymap_pill ~key:"km-pc" ~title:T.keymap_custom ~count:"0"
                     ~active:false
-                ; keymap_pill ~key:"km-pu" ~title:T.keymap_unset ~count:"9"
+                ; keymap_pill ~key:"km-pu" ~title:T.keymap_unset ~count:"18"
                     ~active:false
                 ; keymap_pill ~key:"km-pd" ~title:T.keymap_disabled
                     ~count:"4" ~active:false
