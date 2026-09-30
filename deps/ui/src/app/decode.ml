@@ -154,6 +154,19 @@ let renderable_child (c : Wire.t) : bool =
   Wire.get c "logseq.property/created-from-property" = None
   && Wire.get c "block/closed-value-property" = None
 
+(* worker str_of_value for :block/order — the fractional keys are
+   strings but the wire may carry another scalar *)
+let order_str_of_wire (w : Wire.t) : string option =
+  match w with
+  | Wire.String s -> Some s
+  | Wire.Int n -> Some (string_of_int n)
+  | Wire.Int64 n -> Some (Int64.to_string n)
+  | Wire.Float f -> Some (string_of_float f)
+  | Wire.Uuid s -> Some s
+  | Wire.Keyword s -> Some s
+  | Wire.Bool b -> Some (string_of_bool b)
+  | _ -> None
+
 (* logseq.property/icon is a {type, id} map on the entity itself; block
    icons use the Model.icon record (page icons use the tuple form below) *)
 let block_icon_of_wire (w : Wire.t) : Model.icon option =
@@ -270,6 +283,8 @@ let rec block_of_wire ?(order_index = 1) ?(parent_query_id = None)
   ; block_order_list = order_list
   ; block_order_index =
       (match order_list with Some _ -> Some order_index | None -> None)
+  ; block_order =
+      Option.bind (Wire.get w "block/order") order_str_of_wire
   ; block_code_lang = prop_label w "logseq.property.code/lang"
   ; block_tag_uuids = []
   ; block_tag_db_ids = []

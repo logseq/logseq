@@ -1605,9 +1605,9 @@ let test_model_outdent () =
   (match Model.outdent_blocks pd [ "y" ] with
    | Some p' -> (
        match p'.Model.page_blocks with
-       | [ pr; yr ] -> (
+       | [ pr ] -> (
            match pr.Model.block_children with
-           | [ m' ] ->
+           | [ m'; yr ] ->
                check "outdent deep"
                  (uus m'.Model.block_children = [ "x" ]
                  && yr.Model.block_uuid = Some "y")

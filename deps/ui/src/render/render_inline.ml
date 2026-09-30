@@ -83,6 +83,64 @@ let repo_cache repo =
 
 let invalidate_pull_caches () = Hashtbl.reset pull_caches
 
+(* drop only the entities a tx touched — a broadcast used to reset every
+   repo cache, so each op re-pulled every [[ref]]/anchor title on the
+   page (the N+1 pull storm in the profile) *)
+let invalidate_pull_uuids (uuids : string list) =
+  match uuids with
+  | [] -> ()
+  | _ ->
+      Hashtbl.iter
+        (fun _repo (c : pull_cache) ->
+          List.iter (Hashtbl.remove c.c_uuid_meta) uuids;
+          (* name entries store the resolved uuid — remove ones whose
+             target entity changed *)
+          let names =
+            Hashtbl.fold
+              (fun name u acc ->
+                if List.mem u uuids then name :: acc else acc)
+              c.c_name_uuid []
+          in
+          List.iter (Hashtbl.remove c.c_name_uuid) names)
+        pull_caches
+
+(* batch-fill both caches from a get-blocks response — a page's [[ref]]
+   anchors then mount on hits instead of paying a thread-api/pull each *)
+let prime_pull_caches repo (w : Wire.t) =
+  let cache = repo_cache repo in
+  List.iter
+    (fun pair ->
+      let uuid =
+        match Wire.block_of_pair pair with
+        | Some blk -> (
+            match Wire.map_get_uuid blk "block/uuid" with
+            | Some uuid ->
+                let title =
+                  Option.value
+                    (Wire.map_get_string blk "block/title")
+                    ~default:""
+                in
+                let is_page =
+                  match Wire.map_get_string blk "block/name" with
+                  | Some n -> String.trim n <> ""
+                  | None -> false
+                in
+                Hashtbl.replace cache.c_uuid_meta uuid (title, is_page);
+                Some uuid
+            | None -> None)
+        | None -> None
+      in
+      (* name-ref requests echo a plain-string id — seed name->uuid off
+         it; a miss records "" so unresolvable [[names]] stop re-pulling
+         on every mount *)
+      (match Wire.get pair "id" with
+       | Some (Wire.String s) when not (Wire.is_uuid_string s) ->
+           Hashtbl.replace cache.c_name_uuid
+             (String.lowercase_ascii s)
+             (Option.value uuid ~default:"")
+       | _ -> ()))
+    (Wire.elems w)
+
 (* resolved-meta signal behind [c_uuid_meta]: initialized synchronously
    on a cache hit (plain set — the mount's own flush publishes it), the
    pull fills + publishes on a miss *)

@@ -305,6 +305,16 @@ let set_collapsed set =
   if S.ready () then S.set_silent apply
   else S.defer_init apply
 
+let merge_collapsed add rem =
+  let apply st =
+    { st with
+      S.collapsed =
+        S.String_set.union add (S.String_set.diff st.S.collapsed rem)
+    }
+  in
+  if S.ready () then S.set_silent apply
+  else S.defer_init apply
+
 (* Fetch the linked entity's blocks for every :block/link (embed) block in
    a decoded tree and attach them as block_embed_children. Recurses into
    fetched trees; [ancestors] is the chain of linked db ids guarding
@@ -549,6 +559,81 @@ let fetch_zoom_blocks repo uuid : Wire.t Js.Promise.t =
        | _ -> Js.Promise.resolve (Wire.List [])))
   | _ -> Js.Promise.resolve (Wire.List [])
 
+(* [[...]] tokens inside a display title — name refs and uuid refs
+   alike *)
+let title_ref_tokens (title : string) : string list =
+  let n = String.length title in
+  let toks = ref [] in
+  let rec scan i =
+    if i + 3 >= n then ()
+    else if title.[i] = '[' && title.[i + 1] = '[' then (
+      let rec close j =
+        if j + 1 >= n then -1
+        else if title.[j] = ']' && title.[j + 1] = ']' then j
+        else close (j + 1)
+      in
+      let c = close (i + 2) in
+      if c > i + 2 then (
+        toks := String.sub title (i + 2) (c - i - 2) :: !toks;
+        scan (c + 2))
+      else scan (i + 1))
+    else scan (i + 1)
+  in
+  scan 0;
+  List.rev !toks
+
+(* one get-blocks batch resolving every [[ref]] target on the page —
+   primes the pull caches so anchors mount on hits instead of paying a
+   thread-api/pull each (the N+1 pull storm the nav profile shows) *)
+let prefetch_anchor_refs repo (blocks : Model.block list) :
+    unit Js.Promise.t =
+  let rec collect acc (b : Model.block) =
+    List.fold_left collect
+      (List.rev_append (title_ref_tokens b.Model.block_title) acc)
+      b.Model.block_children
+  in
+  let toks = List.fold_left collect [] blocks in
+  let names, uuids =
+    List.fold_left
+      (fun (ns, us) tok ->
+        if Block_parse.uuid_shaped tok then (ns, tok :: us)
+        else if String.trim tok <> "" then
+          (String.lowercase_ascii tok :: ns, us)
+        else (ns, us))
+      ([], []) toks
+  in
+  let props =
+    Wire.Map
+      [ ( Wire.Keyword "properties"
+        , Wire.Array
+            [ Wire.Keyword "block/uuid"; Wire.Keyword "block/title"
+            ; Wire.Keyword "block/name" ]) ]
+  in
+  let reqs =
+    List.map
+      (fun u ->
+        (* get-blocks resolves String/Uuid ids only — lookup-refs are
+           unsupported on this endpoint *)
+        Wire.Map
+          [ (Wire.String "id", Wire.Uuid u); (Wire.String "opts", props) ])
+      (List.sort_uniq String.compare uuids)
+    @ List.map
+        (fun nm ->
+          Wire.Map
+            [ (Wire.String "id", Wire.String nm)
+            ; (Wire.String "opts", props) ])
+        (List.sort_uniq String.compare names)
+  in
+  match reqs with
+  | [] -> Js.Promise.resolve ()
+  | _ ->
+      (let* w =
+         Runtime.invoke2 "thread-api/get-blocks" (Wire.String repo)
+           (Wire.Array reqs)
+       in
+       Js.Promise.resolve (Render_inline.prime_pull_caches repo w))
+      |> Js.Promise.catch (fun _ -> Js.Promise.resolve ())
+
 (* shared page-blocks pipeline: collapse-state collection → embed-children
    fill → collapse application → library view filter → tag-title resolution.
    ~plain skips the collapse/embed/view shaping — sidebar items only need
@@ -558,9 +643,10 @@ let blocks_of_tree_wire ?(plain = false) repo (p : Model.page) blocks_w =
   else
     let collapsed = ref S.String_set.empty in
     collapsed := collect_collapsed !collapsed blocks_w;
+    let decoded = Decode.blocks_of_wire blocks_w in
+    let* () = prefetch_anchor_refs repo decoded in
     let* blocks =
-      fill_embed_children repo (ancestors_of p) collapsed
-        (Decode.blocks_of_wire blocks_w)
+      fill_embed_children repo (ancestors_of p) collapsed decoded
     in
     set_collapsed !collapsed;
     resolve_block_tags
@@ -737,10 +823,16 @@ let rec apply ?(opts = Wire.Map []) ops : unit Js.Promise.t =
                 Wire.Map (kvs @ [ kw "ui/perf-id" (perf_id ()) ])
             | _ -> opts
           in
-          (let* _ =
+          (let* r =
             Runtime.invoke3 "thread-api/apply-outliner-ops" (Wire.String repo)
               (Wire.Array ops) opts
           in
+          (* callers that ignore the response (autosave, the pending_save
+             flush) never refresh — queue the delta so the next refresh
+             or broadcast merges the change it carries *)
+          (match Wire.get r "delta" with
+           | Some d -> Page_delta.stash_deferred d
+           | None -> ());
           Js.Promise.resolve ())
           |> Js.Promise.catch (fun e ->
                  Platform.console_error
@@ -771,18 +863,14 @@ let refresh_page_deferred () : unit Js.Promise.t =
   if S.ready () && S.editing () <> None then Js.Promise.resolve ()
   else refresh_page ()
 
-let apply_and_refresh ?opts ops =
-  let* () = apply ?opts ops in
-  let* () = refresh_page () in
-  (* the quick-add dialog's block list lives outside
-            .page-blocks-inner; a page refresh alone won't repaint it *)
-  if Dialogs_state.ready () && Dialogs_state.is_open "quick-add" then
-    Quick_add_state.reload ();
-  Js.Promise.resolve ()
-
-let apply_and_refresh_deferred ?opts ops =
-  let* () = apply ?opts ops in
-  refresh_page_deferred ()
+(* the stale-commit guard for a spliced page — the resolve/fill_embeds
+   roundtrips may outlive the page they were started on *)
+let page_still_current (route : Model.route option) (page : Model.page) =
+  !Runtime.current_route = route
+  &&
+  match !Runtime.current_page with
+  | Some c -> c == page
+  | None -> false
 
 (* cljs wrap-parse-block on save: markdown headings normalize into
    logseq.property/heading, and [[page]]/#tag references resolve into
@@ -848,6 +936,12 @@ let rec apply_result ?(opts = Wire.Map []) ops : Wire.t option Js.Promise.t
       match !Runtime.current_repo with
       | None -> Js.Promise.resolve None
       | Some repo ->
+          let opts =
+            match opts with
+            | Wire.Map kvs ->
+                Wire.Map (kvs @ [ kw "ui/perf-id" (perf_id ()) ])
+            | _ -> opts
+          in
           (let* r =
             Runtime.invoke3 "thread-api/apply-outliner-ops" (Wire.String repo)
               (Wire.Array ops) opts
@@ -856,6 +950,90 @@ let rec apply_result ?(opts = Wire.Map []) ops : Wire.t option Js.Promise.t
           |> Js.Promise.catch (fun e ->
                  Platform.console_error ("apply-outliner-ops failed", e);
                  Js.Promise.resolve None))
+
+(* page-delta splice path: op responses carry the worker's render delta
+   ({blocks, deleted, children, rev}) — patch only the touched rows
+   instead of refetching+remounting the whole page (cljs apply-delta!).
+   refresh_page is the fallback when the delta can't splice *)
+let delta_helpers (page : Model.page) : Page_delta.helpers =
+  { Page_delta.resolve =
+      (fun bs ->
+        match !Runtime.current_repo with
+        | None -> resolve_block_tags bs
+        | Some repo ->
+            let* () = prefetch_anchor_refs repo bs in
+            resolve_block_tags bs)
+  ; fill_embeds =
+      (fun bs ->
+        match !Runtime.current_repo with
+        | None -> Js.Promise.resolve bs
+        | Some repo ->
+            let collapsed = ref S.String_set.empty in
+            let* bs' =
+              fill_embed_children repo (ancestors_of page) collapsed bs
+            in
+            merge_collapsed !collapsed S.String_set.empty;
+            Js.Promise.resolve bs')
+  ; merge_collapsed
+  }
+
+(* fold the queued deferred deltas then [delta] onto [page],
+   ~strict:false — op-side patches are absolute set-ops *)
+let apply_queued page delta =
+  let h = delta_helpers page in
+  let deltas = Page_delta.drain_deferred () @ [ delta ] in
+  let rec go page = function
+    | [] -> Js.Promise.resolve (Some page)
+    | d :: rest -> (
+        let* applied = Page_delta.apply_to_page ~strict:false h page d in
+        match applied with
+        | Some page' -> go page' rest
+        | None -> Js.Promise.resolve None)
+  in
+  go page deltas
+
+let refresh_via_delta (resp : Wire.t option) : unit Js.Promise.t =
+  match
+    (Option.bind resp (fun r -> Wire.get r "delta"), !Runtime.current_page)
+  with
+  | Some delta, Some page -> (
+      let route_at_start = !Runtime.current_route in
+      let* applied = apply_queued page delta in
+      match applied with
+      | Some page' when page_still_current route_at_start page ->
+          (* the spliced tree is authoritative — drop committed-buffer
+             title overrides like refresh_page does *)
+          S.clear_overrides ();
+          Runtime.send (Action.Page_loaded page');
+          (* the whole-tree fetch is skipped, but linked/unlinked refs
+             still need their cheap refresh *)
+          !Runtime.refresh_page_side page';
+          Js.Promise.resolve ()
+      | Some _ ->
+          (* page moved on mid-splice — this page is gone *)
+          Js.Promise.resolve ()
+      | None -> refresh_page ())
+  | _ -> refresh_page ()
+
+let apply_and_refresh ?opts ops =
+  let* resp = apply_result ?opts ops in
+  let* () = refresh_via_delta resp in
+  (* the quick-add dialog's block list lives outside
+            .page-blocks-inner; a page refresh alone won't repaint it *)
+  if Dialogs_state.ready () && Dialogs_state.is_open "quick-add" then
+    Quick_add_state.reload ();
+  Js.Promise.resolve ()
+
+let apply_and_refresh_deferred ?opts ops =
+  let* resp = apply_result ?opts ops in
+  if S.ready () && S.editing () <> None then (
+    (* the deferred refresh would drop the op's delta — queue it so the
+       next refresh/broadcast merges the saves it carries *)
+    (match Option.bind resp (fun r -> Wire.get r "delta") with
+     | Some d -> Page_delta.stash_deferred d
+     | None -> ());
+    Js.Promise.resolve ())
+  else refresh_via_delta resp
 
 (* cljs insert-blocks! result {:blocks [...inserted maps]} — last block's
    real uuid (keep-uuid? regenerates on collision, so callers cannot
@@ -964,8 +1142,9 @@ let title_for_edit (title : string) : string Js.Promise.t =
 
 let apply_and_refresh_result ?opts ops =
   let* r = apply_result ?opts ops in
-  let* () = refresh_page () in
+  let* () = refresh_via_delta r in
   Js.Promise.resolve r
+
 
 
 (* undo/redo writes datoms straight into the db — resync the open

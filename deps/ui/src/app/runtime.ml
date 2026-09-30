@@ -110,6 +110,19 @@ let remote_graph_gone : (unit -> unit) ref = ref (fun () -> ())
    appends a downloaded graph to the local list *)
 let add_repo : (string -> unit) ref = ref (fun _ -> ())
 
+(* Worker_events clears its stashed broadcast deltas on every route
+   change (avoids a Runtime -> Worker_events cycle) *)
+let on_navigate : (unit -> unit) ref = ref (fun () -> ())
+
+(* the cheap side-fetches a page load also runs (linked refs, unlinked
+   refs/exists) — Router registers it so the delta-splice path can
+   refresh them without a routing -> outliner_ops cycle *)
+let refresh_page_side : (Model.page -> unit) ref = ref (fun _ -> ())
+
+(* Router clears its loading_route dedupe when a route load commits or
+   fails (avoids a Runtime -> Router cycle) *)
+let nav_load_done : (unit -> unit) ref = ref (fun () -> ())
+
 (* one-shot (page_uuid, callback) armed before a hash navigation — runs
    when that page's Page_loaded lands; consumed by fire or load failure *)
 let after_page_load : (string * (unit -> unit)) option ref = ref None
@@ -129,6 +142,10 @@ let track action =
       !on_graph_opened repo;
       !rtc_graph_ready repo
   | Action.Page_loaded page ->
+      !nav_load_done ();
+      (* a fresh full-fetch replaces the tree at an unknown rev — the
+         delta basis only survives splices applied through Page_delta *)
+      if not (Page_delta.is_own_commit page) then Page_delta.reset ();
       current_page := Some page;
       (* cljs route.cljs update-page-title!: document.title follows the
          loaded page's title *)
@@ -139,9 +156,15 @@ let track action =
            after_page_load := None;
            f ()
        | _ -> ())
-  | Action.Page_load_failed -> after_page_load := None
-  | Action.Journals_loaded js -> current_journals := js
+  | Action.Page_load_failed ->
+      !nav_load_done ();
+      after_page_load := None
+  | Action.Journals_loaded js ->
+      !nav_load_done ();
+      current_journals := js
   | Action.Navigate_to r ->
+      Page_delta.reset ();
+      !on_navigate ();
       current_page := None;
       current_journals := [];
       current_route := Some r;
@@ -174,6 +197,11 @@ let track action =
 let flush () = !app_flush ()
 
 let send action =
+  (match action with
+   | Action.Navigate_to _ -> Platform.perf_mark "action:navigate"
+   | Action.Page_loaded _ -> Platform.perf_mark "action:page-loaded"
+   | Action.Boot_graph_ready _ -> Platform.perf_mark "action:boot-ready"
+   | _ -> ());
   track action;
   ignore (!app_send action);
   flush ()
@@ -189,7 +217,16 @@ let worker_or_fail () =
   | Some w -> w
   | None -> failwith "db-worker not started"
 
-let invoke name args = Worker_client.invoke (worker_or_fail ()) name args
+let invoke name args =
+  Platform.perf_mark ("invoke:" ^ name);
+  let p = Worker_client.invoke (worker_or_fail ()) name args in
+  ignore
+    (Js.Promise.then_
+       (fun r ->
+         Platform.perf_mark ("done:" ^ name);
+         Js.Promise.resolve r)
+       p);
+  p
 let invoke1 name a = invoke name [ a ]
 let invoke2 name a b = invoke name [ a; b ]
 let invoke3 name a b c = invoke name [ a; b; c ]
