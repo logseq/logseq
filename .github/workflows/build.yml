@@ -98,6 +98,10 @@ jobs:
       - name: Build db-worker node bundle
         run: pnpm db-worker:build
 
+      - name: Run db-worker OCaml tests
+        working-directory: deps/db-worker
+        run: opam exec -- dune runtest
+
       - name: Build test asset
         run: pnpm cljs:test
 
