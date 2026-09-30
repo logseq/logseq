@@ -284,9 +284,13 @@ let rec splice_children env parent_key (cur : Model.block list)
         | Some u -> (
             match Hashtbl.find_opt env.canon_nodes u with
             | Some n when n != c ->
+                (* keep the positionally-assigned index — the canon wire
+                   carries none and decode defaults it to 1, so swapping
+                   blindly makes every touched sibling render "1." *)
                 { n with
                   Model.block_children = c.Model.block_children
                 ; block_embed_children = c.Model.block_embed_children
+                ; block_order_index = c.Model.block_order_index
                 }
             | _ -> c)
         | None -> c
