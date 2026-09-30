@@ -16,13 +16,14 @@
 @import "pdfjs-dist/web/pdf_viewer.css";
 @import "./resources/css/tabler-extension.css";
 @import "./resources/css/codemirror.lsradix.css";
-@import-glob "./src/main/frontend/[!_]*.css";
-@import-glob "./src/main/frontend/components/**/[!_]*.css";
-@import-glob "./src/main/frontend/extensions/**/[!_]*.css";
+@import "./resources/css/lui-core.css";
 @import "./resources/css/lui-overlay.css";
+/* cljs-era sheets (src/main/frontend/**) are no longer imported: replaced by
+   resources/css/lui-core.css + resources/css/lui-overlay.css above. */
 
 @source "./src/main/**/*.{cljs,cljc,js,css,html}";
 @source "./resources/**/*.html";
 @source "./deps/shui/src/**/*.{cljs,cljc,css}";
+@source "./deps/ui/src/**/*.ml";
 
 @config "./tailwind.config.js";
