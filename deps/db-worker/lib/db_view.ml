@@ -1868,9 +1868,16 @@ let sort_eids_from_avet db (match_ : entity_id -> bool) (sorting : sorting_item 
            (match leftover with
             | None -> Some matched
             | Some ids ->
+                (* Eids with no value on the sort attr tie on nil in
+                   sort_eids_by_sorting; keep its eid tie-break order here. *)
                 let seen = Hashtbl.create 31 in
                 List.iter (fun i -> Hashtbl.replace seen i ()) matched;
-                Some (matched @ List.filter (fun i -> not (Hashtbl.mem seen i)) ids)))
+                let rest =
+                  ids
+                  |> List.filter (fun i -> not (Hashtbl.mem seen i))
+                  |> List.sort (fun a b -> if s_asc then compare a b else compare b a)
+                in
+                Some (matched @ rest)))
   | _ -> None
 
 (* view/sort-eids-by-sorting *)
