@@ -48,12 +48,42 @@
       (update :last-repeat inst-ms->instant)
       (update :due inst-ms->instant)))
 
+(defn- tag-ident
+  [tag]
+  (cond
+    (keyword? tag) tag
+    (map? tag) (:db/ident tag)
+    :else nil))
+
+(defn- tag-extends
+  [tag]
+  (when (map? tag)
+    (let [extends (:logseq.property.class/extends tag)]
+      (cond
+        (sequential? extends) extends
+        (some? extends) [extends]
+        :else nil))))
+
+(defn- tag-or-extends-card?
+  "True when `tag` is Card or any ancestor in :logseq.property.class/extends is Card.
+  Matches worker `get-structured-children` of :logseq.class/Card."
+  [tag]
+  (loop [tags (list tag)
+         seen #{}]
+    (when-let [current (first tags)]
+      (let [ident (tag-ident current)]
+        (cond
+          (= :logseq.class/Card ident) true
+          (contains? seen ident) (recur (rest tags) seen)
+          :else (recur (concat (rest tags) (tag-extends current))
+                       (cond-> seen ident (conj ident))))))))
+
 (defn- card-block?
   [block]
-  (some #(= :logseq.class/Card (:db/ident %)) (:block/tags block)))
+  (boolean (some tag-or-extends-card? (:block/tags block))))
 
 (defn- get-card-map
-  "Return nil if block is not #Card.
+  "Return nil if block is not #Card and does not have a tag that extends Card.
   Return default card-map if `:logseq.property.fsrs/state` or `:logseq.property.fsrs/due` is nil"
   [block-entity]
   (when (card-block? block-entity)
@@ -73,7 +103,10 @@
   (let [eid (if (uuid? block-id) [:block/uuid block-id] block-id)]
     (p/let [block-entity (state/<invoke-db-worker :thread-api/pull
                                                   repo
-                                                  '[* {:block/tags [:db/ident]}]
+                                                  '[* {:block/tags [:db/ident
+                                                                    {:logseq.property.class/extends
+                                                                     [:db/ident
+                                                                      {:logseq.property.class/extends [:db/ident]}]}]}]
                                                   eid)]
     (when-let [card-map (get-card-map block-entity)]
       (let [next-card-map (fsrs.core/repeat-card! card-map rating)
@@ -207,7 +240,8 @@
      (mapv
       (fn [rating]
         (let [card-map (get-card-map block)
-              due (:due (fsrs.core/repeat-card! card-map rating))]
+              due (when card-map
+                    (:due (fsrs.core/repeat-card! card-map rating)))]
           (btn-with-shortcut {:btn-text (rating-label rating)
                               :shortcut (rating->shortcut rating)
                               :due due

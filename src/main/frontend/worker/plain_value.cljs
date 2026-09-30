@@ -7,6 +7,16 @@
             [logseq.db :as ldb]
             [logseq.db.frontend.property :as db-property]))
 
+(defn- class-extends-summaries
+  "Ancestor class identities for renderer card detection (Card + structured children)."
+  [entity]
+  (when (ldb/class? entity)
+    (into []
+          (keep (fn [parent]
+                  (when-let [ident (:db/ident parent)]
+                    {:db/ident ident})))
+          (ldb/get-class-extends entity))))
+
 (defn- ref-value->summary
   [db value]
   (if-let [entity (d/entity db value)]
@@ -15,7 +25,8 @@
           tag-idents (into []
                            (keep (fn [datom]
                                    (:db/ident (d/entity db (:v datom)))))
-                           (d/datoms db :eavt (:db/id entity) :block/tags))]
+                           (d/datoms db :eavt (:db/id entity) :block/tags))
+          class-extends (class-extends-summaries entity)]
       (cond-> {:db/id (:db/id entity)}
         (seq tag-idents)
         (assoc :block/tags tag-idents)
@@ -47,7 +58,9 @@
         (assoc :logseq.property.asset/external-url
                (:logseq.property.asset/external-url entity))
         (:db/ident entity)
-        (assoc :db/ident (:db/ident entity))))
+        (assoc :db/ident (:db/ident entity))
+        (seq class-extends)
+        (assoc :logseq.property.class/extends class-extends)))
     {:db/id value}))
 
 (defn- ref-attr?

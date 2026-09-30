@@ -1,9 +1,83 @@
 (ns frontend.extensions.fsrs-test
-  (:require [cljs.test :as test :refer [async deftest is]]
+  (:require [cljs.test :as test :refer [async deftest is testing]]
             [frontend.extensions.fsrs :as fsrs]
             [frontend.handler.property :as property-handler]
             [frontend.state :as state]
             [promesa.core :as p]))
+
+(defn- extends-card-block
+  []
+  {:db/id 7
+   :block/uuid (random-uuid)
+   :block/tags [{:db/ident :user.class/Project
+                 :logseq.property.class/extends [{:db/ident :logseq.class/Card}]}]
+   :block/created-at (js/Date.now)})
+
+(deftest card-block?-matches-worker-structured-children
+  (testing "direct Card tag"
+    (is (true? (#'fsrs/card-block? {:block/tags [{:db/ident :logseq.class/Card}]}))))
+  (testing "tag that extends Card"
+    (is (true? (#'fsrs/card-block? (extends-card-block)))))
+  (testing "nested tag that extends a Card child"
+    (is (true? (#'fsrs/card-block?
+                {:block/tags [{:db/ident :user.class/Project
+                               :logseq.property.class/extends
+                               [{:db/ident :user.class/Mid
+                                 :logseq.property.class/extends [{:db/ident :logseq.class/Card}]}]}]}))))
+  (testing "unrelated tag"
+    (is (false? (#'fsrs/card-block? {:block/tags [{:db/ident :user.class/Project}]}))))
+  (testing "no tags"
+    (is (false? (#'fsrs/card-block? {:block/tags []})))))
+
+(deftest get-card-map-treats-extends-card-as-card
+  (let [card-map (#'fsrs/get-card-map (extends-card-block))]
+    (is (some? card-map)
+        "A #Project block whose tag extends Card must get a card-map, matching the worker.")
+    (is (some? (:due card-map)))))
+
+(deftest get-card-map-is-nil-when-block-is-not-a-card
+  (is (nil? (#'fsrs/get-card-map {:block/tags [{:db/ident :user.class/Project}]}))))
+
+(deftest rating-btns-nil-card-map-does-not-throw
+  (testing "Show answers must not crash when get-card-map is nil (#1088 / #1373)"
+    (is (vector? (#'fsrs/rating-btns "test-graph"
+                                     {:db/id 1 :block/tags []}
+                                     (atom 0)
+                                     (atom :show-answer)
+                                     {})))))
+
+(deftest rating-btns-extends-card-does-not-throw
+  (is (vector? (#'fsrs/rating-btns "test-graph"
+                                   (extends-card-block)
+                                   (atom 0)
+                                   (atom :show-answer)
+                                   {}))))
+
+(deftest rating-extends-card-persists-state
+  (async done
+    (let [block (extends-card-block)
+          persisted (atom nil)]
+      (-> (p/with-redefs [state/<invoke-db-worker
+                          (fn [api & _args]
+                            (case api
+                              :thread-api/pull
+                              (p/resolved block)
+                              :thread-api/get-fsrs-due-card-block-ids
+                              (p/resolved [])))
+                          property-handler/set-block-properties!
+                          (fn [_block-id properties]
+                            (reset! persisted properties)
+                            (p/resolved nil))
+                          state/get-current-repo (constantly "test-graph")]
+            (#'fsrs/rate-card! "test-graph" (:db/id block) :good))
+          (p/then
+           (fn [_]
+             (is (some? (:logseq.property.fsrs/state @persisted)))
+             (is (some? (:logseq.property.fsrs/due @persisted)))))
+          (p/catch
+           (fn [error]
+             (is false (str error))))
+          (p/finally done)))))
 
 (deftest rating-last-due-card-updates-due-count
   (async done

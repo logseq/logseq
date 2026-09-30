@@ -86,6 +86,18 @@
     (testing "private built-in properties stay out of the Property table"
       (is (not (contains? titles "Property type"))))))
 
+(deftest card-class-ids-includes-tags-that-extend-card
+  (let [conn (db-test/create-conn-with-blocks
+              {:classes {:Project {:block/title "Project"
+                                   :build/class-extends [:logseq.class/Card]}}})
+        db @conn
+        card-id (:db/id (d/entity db :logseq.class/Card))
+        project-id (:db/id (d/entity db :user.class/Project))
+        ids (set (db-class/card-class-ids db))]
+    (is (contains? ids card-id))
+    (is (contains? ids project-id)
+        "A tag that extends Card is a structured child of Card.")))
+
 (deftest private-create-page-tag-test
   (testing "ident is authoritative"
     (is (true? (db-class/private-create-page-tag? {:db/ident :logseq.class/Tag
