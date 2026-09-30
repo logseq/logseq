@@ -280,6 +280,37 @@ let test_client_ops_cleanup_timer_lifecycle () =
         (not
            (Hashtbl.mem Endpoint_lifecycle.client_ops_cleanup_timers repo)))
 
+(* cljs db-wal-synchronous-normal-test — every WAL db the worker opens
+   runs synchronous=NORMAL: per-commit fsyncs are skipped while WAL
+   checkpoints still fsync. Native asserts the pragmas on the real
+   sqlite handles that thread-api/create-or-open-db leaves behind. *)
+let pragma_value (db : Sqlite.db) name =
+  match Sqlite.query db ~sql:("pragma " ^ name) ~bind:[||] with
+  | [ row ] -> (
+      match row.(0) with
+      | Sqlite.Integer n -> Int64.to_string n
+      | Sqlite.Text s -> s
+      | _ -> "")
+  | _ -> ""
+
+let test_db_wal_synchronous_normal () =
+  with_repo_env (fun () ->
+      let repo = "test-db-pragma-repo" in
+      ignore (invoke "thread-api/create-or-open-db" [ Wire.String repo ]);
+      let graph_db = Option.get (Worker_state.sqlite_conn repo) in
+      let search_db = Option.get (Endpoint_search.get_search_db repo) in
+      let ops_db = Sync_state.client_ops_conn repo in
+      check "graph synchronous=NORMAL"
+        (pragma_value graph_db "synchronous" = "1");
+      check "graph locking_mode=exclusive"
+        (pragma_value graph_db "locking_mode" = "exclusive");
+      check "graph journal_mode=wal"
+        (pragma_value graph_db "journal_mode" = "wal");
+      check "search synchronous=NORMAL"
+        (pragma_value search_db "synchronous" = "1");
+      check "client-ops synchronous=NORMAL"
+        (pragma_value ops_db "synchronous" = "1"))
+
 (* (deftest complete-datoms-import-invalidates-existing-search-db-test ...) *)
 let test_complete_datoms_import () =
   with_repo_env (fun () ->
@@ -1044,6 +1075,8 @@ let cases : unit Alcotest.test_case list =
   ; Alcotest.test_case
       "client-ops-cleanup-timer-starts-once-and-clears-on-close-test"
       `Quick test_client_ops_cleanup_timer_lifecycle
+  ; Alcotest.test_case "db-wal-synchronous-normal-test" `Quick
+      test_db_wal_synchronous_normal
   ; Alcotest.test_case
       "complete-datoms-import-invalidates-existing-search-db-test"
       `Quick test_complete_datoms_import
