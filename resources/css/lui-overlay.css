@@ -553,7 +553,11 @@ div[data-keep-selection].menu-links-wrapper {
 }
 
 .ls-cm-swatch,
-.ls-cm-heading-btn {
+.ls-cm-heading-btn,
+/* DOM parity: the heading buttons emit a literal trailing comma in the
+   class list (cljs menu-heading join quirk), so the token is
+   'ls-cm-heading-btn,' — match it too */
+.ls-cm-heading-btn\, {
   display: inline-flex;
   align-items: center;
   justify-content: center;
