@@ -190,11 +190,12 @@
                           :property-ident (:db/ident property)})))))))
 
 (defn upsert-block-property
-  [this block key' value {:keys [schema reset-property-values]}]
+  [this block key' value {:keys [schema reset-property-values entity-id?]}]
   (let [opts {:plugin this
               :schema (when schema
                         {key schema})
-              :reset-property-values reset-property-values}]
+              :reset-property-values reset-property-values
+              :entity-id? entity-id?}]
     (api-block/db-based-save-block-properties! block {key' value} opts)))
 
 (defn get-all-tags
