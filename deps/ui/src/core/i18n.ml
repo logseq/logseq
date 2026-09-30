@@ -76,9 +76,12 @@ let current_lang () =
   | Some v -> unquote v
   | None -> "en"
 
+(* dict values are OCaml literals — Melange emits them as JS strings
+   treating the UTF-8 source bytes as Latin-1, so non-ASCII entries must
+   pass through Platform.utf8 (same convention as keymap_data/settings_view) *)
 let tbl_of arr =
   let h = Hashtbl.create (Array.length arr) in
-  Array.iter (fun (k, v) -> Hashtbl.replace h k v) arr;
+  Array.iter (fun (k, v) -> Hashtbl.replace h k (Platform.utf8 v)) arr;
   h
 
 (* lazy per-locale lookup tables over Dicts_gen.dicts *)
