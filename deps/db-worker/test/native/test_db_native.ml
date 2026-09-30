@@ -383,6 +383,41 @@ let test_get_bidirectional_properties_ignores_recycled_entities () =
   check "get-bidirectional-properties-ignores-recycled-entities"
     (Ldb.get_bidirectional_properties (db_of conn) target.id = [])
 
+(* get-all-pages-excludes-nested-pages-under-recycled-parent — cljs
+   db_test: pages nested under a recycled page drop out of
+   ldb/get-all-pages with their parent. *)
+let test_get_all_pages_excludes_nested_under_recycled_parent () =
+  let conn =
+    Db_test_util.create_conn_with_blocks
+      ~pages_and_blocks:
+        [ { Db_test_util.page =
+              Db_test_util.{ default_page with pg_title = Some "page1" };
+            Db_test_util.blocks =
+              [ Db_test_util.{ default_block with
+                    b_title = Some "page2"
+                  ; b_tags = [ "logseq.class/Page" ]
+                  ; b_extra = [ "block/name", Db_test_util.Str "page2" ] } ] }
+        ; { Db_test_util.page =
+              Db_test_util.{ default_page with pg_title = Some "keep" };
+            Db_test_util.blocks = [] } ]
+      ()
+  in
+  let titles () =
+    Ldb.get_all_pages (db_of conn)
+    |> List.filter_map (fun e -> Ldb.string_value e "block/title")
+  in
+  check "page2 visible before" (List.mem "page2" (titles ()));
+  let page1 =
+    Option.get (Db_test_util.find_page_by_title (db_of conn) "page1")
+  in
+  ignore
+    (Datascript.transact_conn_string conn
+       (Printf.sprintf "[{:db/id %d :logseq.property/deleted-at 1}]" page1.id));
+  let after = titles () in
+  check "keep remains" (List.mem "keep" after);
+  check "page1 gone" (not (List.mem "page1" after));
+  check "page2 gone with parent" (not (List.mem "page2" after))
+
 (* cljs bidirectional-perf-conn: n Person pages each pointing all given
    properties at the Target page. *)
 let bidirectional_perf_conn n property_titles =
@@ -3583,6 +3618,7 @@ let db_test_cases : unit Alcotest.test_case list =
         test_get_bidirectional_properties_disabled ();
         test_get_bidirectional_properties ());
     Alcotest.test_case "get-bidirectional-properties-ignores-recycled-entities" `Quick test_get_bidirectional_properties_ignores_recycled_entities;
+    Alcotest.test_case "get-all-pages-excludes-nested-pages-under-recycled-parent" `Quick test_get_all_pages_excludes_nested_under_recycled_parent;
     Alcotest.test_case "get-block-parents-returns-parents" `Quick test_get_block_parents_returns_parents;
     Alcotest.test_case "get-block-refs-returns-linked-references" `Quick test_get_block_refs_returns_linked_references;
     Alcotest.test_case "get-bidirectional-properties-performance-single-property" `Quick test_get_bidirectional_properties_performance_single_property;
