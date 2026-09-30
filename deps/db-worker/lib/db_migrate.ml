@@ -60,6 +60,12 @@ let delete_property (db : db) (property_key : attr) : Wire.t list =
 let remove_block_path_refs (db : db) : Wire.t list =
   delete_property db "block/path-refs"
 
+(* 65.34 fix — db-order/missing-internal-page-parent-order-tx emits
+   {:db/id :block/order} entity maps; callers reset the global max-key
+   per emitted order after the update transacts. *)
+let missing_internal_page_parent_orders (db : db) : Wire.t list =
+  List.map wire_map (Db_order.missing_internal_page_parent_order_tx db)
+
 (* db-migrate/remove-position-property-from-url-properties *)
 let remove_position_property_from_url_properties (db : db) : Wire.t list =
   List.of_seq
@@ -285,7 +291,11 @@ let schema_version_updates : (string * update_spec) list =
         ; "logseq.property.view/gallery-display-properties"
         ; "logseq.property.view/gallery-card-size"
         ; "logseq.property.view/gallery-card-width"
-        ; "logseq.property.view/gallery-card-height" ] () ]
+        ; "logseq.property.view/gallery-card-height" ] ()
+  ; "65.34",
+    update
+      ~fix:("missing-internal-page-parent-orders",
+            missing_internal_page_parent_orders) () ]
 
 (* cljs (sqlite-create-graph/build-db-initial-data config-content) restricted
    to what ensure-built-in-data-exists! consumes: the seed entity maps
@@ -588,6 +598,14 @@ let upgrade_version (conn : conn) (version : string) (update : update_spec) :
       [ "db-migrate?", Bool true; "skip-validate-db?", Bool true ]
   with
   | Some (r : tx_report) ->
+      (* cljs (doseq [order (keep :block/order fixes)]
+           (db-order/reset-max-key! order)) *)
+      List.iter
+        (fun (w : Wire.t) ->
+          match Wire.get "block/order" w with
+          | Some (Wire.String o) -> Db_order.reset_max_key (Some o)
+          | _ -> ())
+        fixes;
       Some
         { r with
           tx_meta = r.tx_meta @ [ ("migrate-updates", migrate_updates_value update) ] }
