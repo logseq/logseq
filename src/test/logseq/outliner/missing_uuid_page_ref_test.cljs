@@ -5,6 +5,7 @@
             [frontend.handler.db-based.editor :as db-editor-handler]
             [frontend.state :as state]
             [logseq.common.util.page-ref :as page-ref]
+            [logseq.db :as ldb]
             [logseq.db.test.helper :as db-test]
             [logseq.outliner.core :as outliner-core]
             [logseq.outliner.op :as outliner-op]
@@ -58,6 +59,24 @@
           (is (= (str "UUID host " missing-uuid-title) (:block/title saved)))
           (is (empty? (map :block/uuid (:block/refs saved))))
           (is (nil? (d/entity @conn [:block/uuid (parse-uuid missing-uuid-title)]))))))))
+
+(deftest wrap-parse-then-save-new-page-ref-keeps-link
+  (testing "[[New Page]] still persists as an id-ref after save"
+    (with-redefs [state/get-state (constantly [])]
+      (let [conn (db-test/create-conn-with-blocks
+                  [{:page {:block/title "page1"}
+                    :blocks [{:block/title "host"}]}])
+            host (db-test/find-block-by-content @conn "host")
+            parsed (db-editor-handler/wrap-parse-block
+                    {:block/uuid (:block/uuid host)
+                     :block/title "See [[Project Alpha]]"})]
+        (outliner-core/save-block! conn parsed)
+        (let [saved (d/entity @conn (:db/id host))
+              page (ldb/get-page @conn "project alpha")]
+          (is (some? page))
+          (is (= (str "See " (page-ref/->page-ref (:block/uuid page)))
+                 (:block/title saved)))
+          (is (= [(:block/uuid page)] (map :block/uuid (:block/refs saved)))))))))
 
 (deftest apply-ops-missing-uuid-save-does-not-block-sibling-insert
   (testing "a refused/nil page create must not fail an unrelated insert in the same apply-ops batch"

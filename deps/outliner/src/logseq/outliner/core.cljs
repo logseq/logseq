@@ -286,25 +286,32 @@
         (string/replace (page-ref/->page-ref plain) plain)))))
 
 (defn- rewrite-missing-uuid-id-refs
-  "[[uuid]] with no entity renders as an empty link. Persist the uuid as text."
-  [db title]
+  "[[uuid]] with no entity renders as an empty link. Persist the uuid as text.
+  keep-uuids are pages/blocks created or kept in this save; they are not in db yet."
+  [db title keep-uuids]
   (if-not (string? title)
     title
     (reduce (fn [title uuid-str]
-              (if (d/entity db [:block/uuid (uuid uuid-str)])
-                title
-                (string/replace title (page-ref/->page-ref uuid-str) uuid-str)))
+              (let [id (uuid uuid-str)]
+                (if (or (contains? keep-uuids id)
+                        (d/entity db [:block/uuid id]))
+                  title
+                  (string/replace title (page-ref/->page-ref uuid-str) uuid-str))))
             title
             (map str (db-content/get-matched-ids title)))))
 
 (defn- rewrite-block-missing-uuid-id-refs
-  [db block]
+  [db block keep-uuids]
   (cond-> block
     (string? (:block/title block))
-    (update :block/title #(rewrite-missing-uuid-id-refs db %))
+    (update :block/title #(rewrite-missing-uuid-id-refs db % keep-uuids))
 
     (string? (:block/raw-title block))
-    (update :block/raw-title #(rewrite-missing-uuid-id-refs db %))))
+    (update :block/raw-title #(rewrite-missing-uuid-id-refs db % keep-uuids))))
+
+(defn- created-or-kept-uuids
+  [refs page-txs]
+  (into #{} (keep :block/uuid) (concat refs page-txs)))
 
 (defn- resolve-page-ref
   [db ref tag-names]
@@ -405,7 +412,8 @@
                                          title
                                          replacements)
                                  dropped-refs))
-          rewrite-title? (or (seq replacements) (seq dropped-refs))]
+          rewrite-title? (or (seq replacements) (seq dropped-refs))
+          keep-uuids (created-or-kept-uuids refs'' page-txs)]
       {:block (rewrite-block-missing-uuid-id-refs
                db
                (cond-> (assoc block :block/refs refs''
@@ -414,9 +422,10 @@
                  (update :block/title replace-refs)
 
                  (and rewrite-title? (string? (:block/raw-title block)))
-                 (update :block/raw-title replace-refs)))
+                 (update :block/raw-title replace-refs))
+               keep-uuids)
        :page-txs page-txs})
-    {:block (rewrite-block-missing-uuid-id-refs db block)}))
+    {:block (rewrite-block-missing-uuid-id-refs db block #{})}))
 
 (defn- remove-tags-when-title-changed
   [block new-content]

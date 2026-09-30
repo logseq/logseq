@@ -177,6 +177,25 @@
     :block/title missing-uuid-title
     :block/uuid parsed-uuid}))
 
+(deftest resolve-page-refs-new-page-keeps-id-ref
+  (testing "creating [[New Page]] keeps the uuid link; do not rewrite it to plain text"
+    (let [conn (db-test/create-conn-with-blocks
+                [{:page {:block/title "page1"} :blocks []}])
+          parsed-uuid (random-uuid)
+          {:keys [block page-txs]}
+          (#'outliner-core/resolve-page-refs
+           @conn
+           {:block/title (str "See " (page-ref/->page-ref parsed-uuid))
+            :block/raw-title (str "See " (page-ref/->page-ref parsed-uuid))
+            :block/refs [{:block/type "page"
+                          :block/name "new page"
+                          :block/title "New Page"
+                          :block/uuid parsed-uuid}]})]
+      (is (seq page-txs))
+      (is (= [parsed-uuid] (mapv :block/uuid (:block/refs block))))
+      (is (= (str "See " (page-ref/->page-ref parsed-uuid)) (:block/title block)))
+      (is (= (str "See " (page-ref/->page-ref parsed-uuid)) (:block/raw-title block))))))
+
 (deftest resolve-page-refs-missing-uuid-id-ref-without-page-ref-map
   (testing "[[uuid]] left in the title with no :block/refs is persisted as plain text"
     (let [conn (db-test/create-conn-with-blocks
