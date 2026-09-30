@@ -111,4 +111,12 @@
     (is (= (quoted-tags-query "A]] B) C")
            (query-dsl/pre-transform "(tags [[A]] B) C]])")))
     (is (= '(tags "[[A]] B) C]]")
-           (read-query "(tags [[A]] B) C]])")))))
+           (read-query "(tags [[A]] B) C]])"))))
+
+  (testing "later page-ref sibling ending with ]] does not swallow a between date"
+    (is (= (str "(and (between " (pr-str "[[Dec 26th, 2020]]") " tomorrow) "
+                (pr-str "[[foo]]]]") ")")
+           (query-dsl/pre-transform
+            "(and (between [[Dec 26th, 2020]] tomorrow) [[foo]]]])")))
+    (is (= (list 'and (list 'between "[[Dec 26th, 2020]]" 'tomorrow) "[[foo]]]]")
+           (read-query "(and (between [[Dec 26th, 2020]] tomorrow) [[foo]]]])")))))
