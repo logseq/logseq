@@ -68,15 +68,18 @@ let install () =
     (* mutations inside our own managed areas are self-inflicted (value
        editors, pill renders); rebuilding on them would wipe a live
        textarea — only structural changes outside need ensure_all *)
-    let rec in_managed el =
-      if node_name el = "#text" then
-        match Properties_dom.el_parent el with Some p -> in_managed p | None -> false
-      else if
-        el_matches el
-          ".ls-properties-area, .ls-bidirectional-properties"
-      then true
-      else
-        match Properties_dom.el_parent el with Some p -> in_managed p | None -> false
+    (* closest() only exists on elements — start a #text mutation's walk
+       at its parent *)
+    let in_managed el =
+      match
+        if node_name el = "#text" then Properties_dom.el_parent el
+        else Some el
+      with
+      | Some el ->
+          el_closest el
+            ".ls-properties-area, .ls-bidirectional-properties"
+          <> None
+      | None -> false
     in
     register_doc_scan
       ~run_if:(fun recs ->
@@ -96,9 +99,3 @@ let () = install ()
    mount the page properties section into their own container instead of
    relying on the observer). *)
 
-let mount_page_properties page_inner = Area.mount_page_area page_inner
-
-let mount_block_properties ls_block_el uuid =
-  Area.mount_block_area ls_block_el uuid
-
-let open_property_dialog = Dialog.open_for_current

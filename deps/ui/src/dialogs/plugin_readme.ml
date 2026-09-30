@@ -190,11 +190,8 @@ let body (_ms : Model.t Signal.signal) : t =
          ~events:"click"
          ~on_dom_event:(fun name payload ->
            if name = "click" then
-             match payload with
-             | Some p ->
-                 let href = Platform.payload_str p "href" in
-                 if String.trim href <> "" then B.open_url href
-             | None -> ())
+          let href = Platform.payload_str payload "href" in
+          if String.trim href <> "" then B.open_url href)
          [ (if t.repository = "" then Logseq_dom.nothing
             else
               dom ~key:"rd-repo"

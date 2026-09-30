@@ -76,7 +76,7 @@ let pw_input ~key ~placeholder ~on_enter =
         ~on_dom_event:(fun n p ->
           if
             n = "keydown"
-            && Platform.payload_str (Option.value p ~default:"{}") "key"
+            && Platform.payload_str p "key"
                = "Enter"
           then on_enter ())
         []
@@ -113,15 +113,11 @@ let view (r : Dialogs_state.ui_request) : t =
                   [ pw_input ~key:"p2"
                       ~placeholder:I18n.e2ee_password_again_ph
                       ~on_enter:submit_now
-                  ; dyn ~equal:( = ) (fun w ->
-                        if w
-                        then
-                          dom ~key:"mm"
-                            ~style_class:"ls-warn-text"
-                            ~text:I18n.e2ee_password_not_matched
-                            []
-                        else Logseq_dom.nothing)
-                      warn.Signal.state_signal
+                  ; if_ ~test:warn.Signal.state_signal
+                      (dom ~key:"mm"
+                         ~style_class:"ls-warn-text"
+                         ~text:I18n.e2ee_password_not_matched
+                         [])
                   ]
                 else [] )
             @ [ dom ~key:"s" ~tag:"button"

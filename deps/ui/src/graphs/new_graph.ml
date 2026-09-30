@@ -19,19 +19,21 @@ let checkbox_cls checked =
 
 let checkbox ~key ~id ~checked ~on_click =
   dom ~key ~tag:"button" ~id
-    ~style_class:(checkbox_cls checked)
+    ~style_class:(reactive checkbox_cls checked)
     ~attrs:
-      [ ("role", "checkbox")
-      ; ("type", "button")
-      ; ("aria-checked", string_of_bool checked)
-      ; ("data-state", if checked then "checked" else "unchecked")
-      ]
+      (reactive
+         (fun c ->
+           [ ("role", "checkbox")
+           ; ("type", "button")
+           ; ("aria-checked", string_of_bool c)
+           ; ("data-state", if c then "checked" else "unchecked")
+           ])
+         checked)
     ~events:"click"
     ~on_dom_event:(fun n _ -> if n = "click" then on_click ())
-    (if checked then
-       [ dom ~key:(key ^ "-ck") ~tag:"i" ~style_class:"ti ti-check ls-icon-sm"
-           [] ]
-     else [])
+    [ if_ ~test:checked
+        (dom ~key:(key ^ "-ck") ~tag:"i" ~style_class:"ti ti-check ls-icon-sm"
+           []) ]
 
 let name_input () =
   match Browser_ui.qs ".new-graph input" with
@@ -96,8 +98,7 @@ let body (_ms : Model.t Signal.signal) : t =
             match n with
             | "keydown" -> (
                 match
-                  Platform.payload_str
-                    (Option.value p ~default:"{}")
+                  Platform.payload_str p
                     "key"
                 with
                 | "Enter" -> submit cloud e2ee creating
@@ -108,13 +109,11 @@ let body (_ms : Model.t Signal.signal) : t =
           dom ~key:"ng-rtc" ~style_class:"ls-ng-rtc"
             [ dom ~key:"ng-rtc-row"
                 ~style_class:"ls-ng-row"
-                [ dyn ~equal:Stdlib.( = )
-                    (fun c ->
-                      checkbox ~key:"rtc" ~id:"rtc-sync" ~checked:c
-                        ~on_click:(fun () ->
-                          Signal.set cloud (not (Signal.get_state cloud));
-                          Runtime.flush ()))
-                    (Signal.value cloud)
+                [ checkbox ~key:"rtc" ~id:"rtc-sync"
+                    ~checked:(Signal.value cloud)
+                    ~on_click:(fun () ->
+                      Signal.set cloud (not (Signal.get_state cloud));
+                      Runtime.flush ())
                 ; dom ~key:"rtc-lbl" ~tag:"label"
                     ~style_class:"ls-ng-label"
                     ~attrs:[ ("for", "rtc-sync") ]
@@ -122,15 +121,12 @@ let body (_ms : Model.t Signal.signal) : t =
                 ; if_ ~test:(Signal.value cloud)
                     (dom ~key:"ng-e2ee-row"
                        ~style_class:"ls-ng-row ls-ng-sub"
-                       [ dyn ~equal:Stdlib.( = )
-                           (fun c ->
-                             checkbox ~key:"e2ee" ~id:"rtc-graph-e2ee"
-                               ~checked:c
-                               ~on_click:(fun () ->
-                                 Signal.set e2ee
-                                   (not (Signal.get_state e2ee));
-                                 Runtime.flush ()))
-                           (Signal.value e2ee)
+                       [ checkbox ~key:"e2ee" ~id:"rtc-graph-e2ee"
+                           ~checked:(Signal.value e2ee)
+                           ~on_click:(fun () ->
+                             Signal.set e2ee
+                               (not (Signal.get_state e2ee));
+                             Runtime.flush ())
                        ; dom ~key:"e2ee-lbl" ~tag:"label"
                            ~style_class:"ls-ng-label"
                            ~attrs:[ ("for", "rtc-graph-e2ee") ]
@@ -143,9 +139,10 @@ let body (_ms : Model.t Signal.signal) : t =
           ~style_class:
             "inline-flex items-center justify-center rounded-md text-sm \
              font-medium bg-primary text-primary-foreground px-4 py-2"
-          ~attrs_signal_v:
-            (Logseq_dom.attrs_signal (Signal.value creating) (fun c ->
-                 if c then [ ("disabled", "true") ] else []))
+          ~attrs:
+            (reactive
+               (fun c -> if c then [ ("disabled", "true") ] else [])
+               (Signal.value creating))
           ~on_dom_event:(fun n _ ->
             if n = "click" then submit cloud e2ee creating)
           []

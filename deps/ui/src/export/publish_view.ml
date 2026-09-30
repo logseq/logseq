@@ -39,7 +39,6 @@ let pending : (string * int option) option ref = ref None
 
 let arm uuid db_id = pending := Some (uuid, db_id)
 
-let sv s = Lui_protocol.StringValue s
 
 let btn_base =
   "ui__button inline-flex cursor-pointer items-center justify-center \
@@ -243,21 +242,22 @@ let toggle_pw ctx =
   let st_sig = Signal.value (st ctx) in
   dom ~key:"pub-pw-wrap" ~style_class:"ls-toggle-password-input relative"
     [ dom ~key:"pub-pw" ~tag:"input" ~style_class:input_cls
-        ~attrs_signal_v:
-          (Logseq_dom.attrs_signal st_sig (fun (s : pst) ->
+        ~attrs:
+          (reactive
+             (fun (s : pst) ->
                [ ("type", if s.visible then "text" else "password")
-               ; ("placeholder", I18n.t "publish/password-optional-placeholder") ]))
+               ; ("placeholder", I18n.t "publish/password-optional-placeholder") ])
+             st_sig)
         ~events:"input"
         ~on_dom_event:(fun n payload ->
           if n = "input" then
             match payload with
-            | Some p ->
+            | Some _ ->
                 Signal.update (st ctx) (fun s ->
                     { s with
-                      password = Platform.payload_str p "value" })
+                      password = Platform.payload_str payload "value" })
             | None -> ())
-        ~text_signal:
-          (Signal.map (fun (s : pst) -> sv s.password) st_sig)
+        ~text:(reactive (fun (s : pst) -> s.password) st_sig)
         []
     ; if_
         ~test:
@@ -312,19 +312,19 @@ let body (_ms : Model.t Signal.signal) : t =
               ~style_class:
                 (btn_base
                ^ " bg-primary text-primary-foreground hover:bg-primary/90")
-              ~attrs_signal_v:
-                (Logseq_dom.attrs_signal
-                   (Signal.value st)
+              ~attrs:
+                (reactive
                    (fun (s : pst) ->
                      [ ("type", "submit"); ("autofocus", "") ]
-                     @ if s.publishing then [ ("disabled", "") ] else []))
+                     @ if s.publishing then [ ("disabled", "") ] else [])
+                   (Signal.value st))
               ~events:"click"
               ~on_dom_event:(fun n _ ->
                 if n = "click" then submit ctx)
-              ~text_signal:
-                (Signal.map
+              ~text:
+                (reactive
                    (fun (s : pst) ->
-                     sv (if s.publishing then "Publishing..." else "Publish"))
+                     if s.publishing then "Publishing..." else "Publish")
                    (Signal.value st))
               [] ] ]
       ctx parent

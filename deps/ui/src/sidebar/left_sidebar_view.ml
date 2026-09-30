@@ -76,12 +76,13 @@ let nav_edit_menu st checked =
         if name = "click" then
           Sidebar_state.toggle_nav st nav (not (List.mem nav checked)))
       [ dom ~tag:"div"
-          ~attrs_signal_v:
-            (D.attrs_signal (Signal.value st.Sidebar_state.nav_checked)
+          ~attrs:
+            (reactive
                (fun cur ->
                  [ ("role", "menuitemcheckbox")
                  ; ("aria-checked", string_of_bool (List.mem nav cur))
-                 ]))
+                 ])
+               (Signal.value st.Sidebar_state.nav_checked))
           ~text:(t label) [] ]
   in
   dom ~key:"nav-edit-menu"
@@ -381,8 +382,8 @@ let page_item_el st (p : Model.page) ~li_class ~recent ~key =
     | None -> p.Model.page_title
   in
   let open_lp payload =
-    let x = match payload with Some pl -> Platform.payload_num pl "clientX" | None -> 0. in
-    let y = match payload with Some pl -> Platform.payload_num pl "clientY" | None -> 0. in
+    let x = Platform.payload_num payload "clientX" in
+    let y = Platform.payload_num payload "clientY" in
     Sidebar_state.open_lp_menu st ~target:lp_ref ~recent ~x ~y
   in
   dom ~key ~tag:"li" ~style_class:li_class
@@ -443,10 +444,12 @@ let page_item_el st (p : Model.page) ~li_class ~recent ~key =
 let content_group st ~key ~class_ ~label ~items_sig ~li_class ~ul_class
     ~always_bd ~recent =
   dom ~key
-    ~style_class_signal:
-      (D.class_signal items_sig (fun ps ->
+    ~style_class:
+      (reactive
+         (fun ps ->
            "sidebar-content-group " ^ class_ ^ " is-expand"
-           ^ if ps = [] then "" else " has-children"))
+           ^ if ps = [] then "" else " has-children")
+         items_sig)
     [ dom ~key:(key ^ "-inner") ~style_class:"sidebar-content-group-inner"
         [ dom ~key:(key ^ "-hd") ~style_class:"hd items-center"
             [ dom ~key:(key ^ "-a") ~tag:"span" ~style_class:"a"
@@ -535,30 +538,27 @@ let plugins_toolbar (ms : Model.t Signal.signal) : t =
 
 (* cljs repo/graphs-selector: icon + graph display name + selector chevron *)
 let graphs_selector (ms : Model.t Signal.signal) : t =
-  dyn ~equal:(fun a b -> a = b)
-    (fun (m : Model.t) ->
-      let name =
-        match m.repo with
-        | Some r ->
-            if String.length r > 10
-               && String.sub r 0 10 = "logseq_db_"
-            then String.sub r 10 (String.length r - 10)
-            else r
-        | None -> t "graph.switch/select-prompt"
-      in
-      dom ~key:"gsel" ~style_class:"sidebar-graphs"
-        [ dom ~key:"gsel-box"
-            ~style_class:"cp__graphs-selector flex items-center justify-between"
-            [ dom ~key:"gsel-a" ~tag:"a"
-                ~style_class:"item flex items-center gap-1 select-none"
-                ~events:"click"
-                ~on_dom_event:(fun n _ ->
-                  if n = "click" then Sidebar_state.open_dialog "graphs")
-                [ dom ~key:"gsel-th" ~tag:"span" ~style_class:"thumb"
-                    [ icon "topology-star" ]
-                ; dom ~key:"gsel-n" ~tag:"strong" ~text:name []
-                ; icon "selector" ] ] ])
-    ms
+  let name_of (m : Model.t) =
+    match m.repo with
+    | Some r ->
+        if String.length r > 10 && String.sub r 0 10 = "logseq_db_"
+        then String.sub r 10 (String.length r - 10)
+        else r
+    | None -> t "graph.switch/select-prompt"
+  in
+  dom ~key:"gsel" ~style_class:"sidebar-graphs"
+    [ dom ~key:"gsel-box"
+        ~style_class:"cp__graphs-selector flex items-center justify-between"
+        [ dom ~key:"gsel-a" ~tag:"a"
+            ~style_class:"item flex items-center gap-1 select-none"
+            ~events:"click"
+            ~on_dom_event:(fun n _ ->
+              if n = "click" then Sidebar_state.open_dialog "graphs")
+            [ dom ~key:"gsel-th" ~tag:"span" ~style_class:"thumb"
+                [ icon "topology-star" ]
+            ; dom ~key:"gsel-n" ~tag:"strong"
+                ~text:(reactive name_of ms) []
+            ; icon "selector" ] ] ]
 
 let header (ms : Model.t Signal.signal) : t =
   let st = Sidebar_state.ensure ms in

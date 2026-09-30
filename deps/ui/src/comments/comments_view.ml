@@ -141,9 +141,9 @@ let comment_body st (c : Model.block) : t =
             ~attrs:[ ("aria-label", I.t "block.comments/placeholder") ]
             ~text:c.Model.block_title ~events:"keydown"
             ~on_dom_event:(fun _ payload ->
-              let key = Platform.payload_str (Option.value payload ~default:"{}") "key" in
-              let shift = Platform.payload_bool (Option.value payload ~default:"{}") "shiftKey" in
-              let v = Platform.payload_str (Option.value payload ~default:"{}") "value" in
+              let key = Platform.payload_str payload "key" in
+              let shift = Platform.payload_bool payload "shiftKey" in
+              let v = Platform.payload_str payload "value" in
               match key with
               | "Escape" ->
                   Signal.set st
@@ -185,11 +185,11 @@ let add_box st (area_uuid : string) : t =
           ~on_dom_event:(fun name payload ->
             match name with
             | "input" ->
-                save_draft area_uuid (Platform.payload_str (Option.value payload ~default:"{}") "value")
+                save_draft area_uuid (Platform.payload_str payload "value")
             | "keydown" -> (
-                let key = Platform.payload_str (Option.value payload ~default:"{}") "key" in
-                let shift = Platform.payload_bool (Option.value payload ~default:"{}") "shiftKey" in
-                let v = Platform.payload_str (Option.value payload ~default:"{}") "value" in
+                let key = Platform.payload_str payload "key" in
+                let shift = Platform.payload_bool payload "shiftKey" in
+                let v = Platform.payload_str payload "value" in
                 match key with
                 | "Escape" ->
                     save_draft area_uuid v;

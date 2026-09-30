@@ -144,14 +144,11 @@ let title_editor_el uuid : t =
     | Some e when e.S.uuid = uuid -> e.S.buffer
     | _ -> ""
   in
-  dom ~key:("ctew-" ^ uuid) ~style_class:"editor-wrapper flex flex-1 w-full"
+  Ui_parts.editor_wrapper ~key:("ctew-" ^ uuid)
     ~id:("editor-edit-block-" ^ uuid)
-    [ dom ~key:("ctei-" ^ uuid)
-        ~style_class:"editor-inner flex flex-1 block-editor"
+    [ Ui_parts.editor_inner ~key:("ctei-" ^ uuid)
         [ dom ~key:("ctet-" ^ uuid) ~tag:"textarea"
-            ~id:("edit-block-" ^ uuid) ~text:buffer []
-        ]
-    ]
+            ~id:("edit-block-" ^ uuid) ~text:buffer [] ] ]
 
 (* cljs comments-area-title-view: the label swaps for the block editor
    while the area's title is being edited *)

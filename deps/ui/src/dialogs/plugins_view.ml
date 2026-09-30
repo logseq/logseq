@@ -43,7 +43,7 @@ let search_input ~key st =
         ~on_dom_event:(fun n p ->
           if n = "input" then
             Runtime.signal_set st
-              (Platform.payload_str (Option.value p ~default:"{}") "value"))
+              (Platform.payload_str p "value"))
         []
     ]
 
@@ -518,7 +518,7 @@ let item_input pid key s cur =
         | None -> "")
   in
   let on_change p =
-    let raw = Platform.payload_str (Option.value p ~default:"{}") "value" in
+    let raw = Platform.payload_str p "value" in
     set_v pid key
       (if input_as = "number" then
          match float_of_string_opt raw with
@@ -572,8 +572,7 @@ let item_toggle pid key s cur =
                 if n = "change" then
                   set_v pid key
                     (Js.Json.boolean
-                       (Platform.payload_bool
-                          (Option.value p ~default:"{}") "checked")))
+                       (Platform.payload_bool p "checked")))
               [] ]
         @ html_desc key desc )
     ]
@@ -606,8 +605,7 @@ let item_enum pid key s cur' =
                     if n = "change" then
                       set_v pid key
                         (jstr_
-                           (Platform.payload_str
-                              (Option.value p ~default:"{}") "value")))
+                           (Platform.payload_str p "value")))
                   (List.map
                      (fun c ->
                        dom ~key:c ~tag:"option"

@@ -36,7 +36,8 @@ let block_key (b : Model.block) =
 
 let row_class_sig uuid blank embed (b : Model.block) =
   let order_list = b.Model.block_order_list = Some "number" in
-  Logseq_dom.class_signal (S.signal ()) (fun (st : S.t) ->
+  Signal.map
+    (fun (st : S.t) ->
       (* cljs :class order — dynamic flags first, base classes last *)
       (if S.String_set.mem uuid st.selected then "selected " else "")
       ^ (if order_list then "is-order-list " else "")
@@ -44,6 +45,7 @@ let row_class_sig uuid blank embed (b : Model.block) =
       ^ (if embed then "embed-block " else "")
       ^ (if Comments.is_comments_area b then "is-comments-area " else "")
       ^ "ls-block")
+    (S.signal ())
 
 (* effective collapse for a block: scoped UI overrides, then persisted
    set || view default — Editor_state.effective_collapsed_in on the
@@ -54,7 +56,8 @@ let effective_collapsed_st ~scope uuid default (st : S.t) =
 let row_attrs_sig ~scope ~depth uuid (b : Model.block) =
   let has_children = S.children_of b <> [] in
   let embed = b.Model.block_link <> None in
-  Logseq_dom.attrs_signal (S.signal ()) (fun (st : S.t) ->
+  Signal.map
+    (fun (st : S.t) ->
       [ ("id", "ls-block-" ^ uuid)
       ; ("blockid", uuid)
       ; ("containerid", uuid)
@@ -81,6 +84,8 @@ let row_attrs_sig ~scope ~depth uuid (b : Model.block) =
       @ (if embed then
            [ ("originalblockid", uuid); ("data-embed", "true") ]
          else []))
+    (S.signal ())
+
 let collapsed_sig ~scope (b : Model.block) =
   let uuid = Option.value b.block_uuid ~default:"" in
   Signal.map
@@ -181,15 +186,17 @@ let control_wrap ~scope ~library uuid (b : Model.block) : t =
     [ dom ~key:("ctrl-" ^ uuid) ~tag:"a" ~style_class:"block-control"
         ~id:("control-" ^ uuid)
         [ dom ~key:("ctrlspan-" ^ uuid) ~tag:"span"
-            ~style_class_signal:
-              (Logseq_dom.class_signal (collapsed_sig ~scope b)
-                 (fun c -> if c then "control-show" else "control-hide"))
+            ~style_class:
+              (reactive
+                 (fun c -> if c then "control-show" else "control-hide")
+                 (collapsed_sig ~scope b))
             [ dom ~key:("ra-" ^ uuid) ~tag:"span"
-                ~style_class_signal:
-                  (Logseq_dom.class_signal (collapsed_sig ~scope b)
+                ~style_class:
+                  (reactive
                      (fun c ->
                        "rotating-arrow"
-                       ^ if c then " collapsed" else " not-collapsed"))
+                       ^ if c then " collapsed" else " not-collapsed")
+                     (collapsed_sig ~scope b))
                 [ Ui_parts.rotating_arrow ("arw-" ^ uuid) ]
             ]
         ]
@@ -197,18 +204,21 @@ let control_wrap ~scope ~library uuid (b : Model.block) : t =
         [ dom ~key:("dotw-" ^ uuid) ~tag:"span"
             ~id:("dot-" ^ uuid)
             ~attrs:[ ("blockid", uuid); ("draggable", "true") ]
-            ~style_class_signal:
-              (Logseq_dom.class_signal (collapsed_sig ~scope b) (fun c ->
-                   bullet_cls ^ if c then " bullet-closed" else ""))
+            ~style_class:
+              (reactive
+                 (fun c -> bullet_cls ^ if c then " bullet-closed" else "")
+                 (collapsed_sig ~scope b))
             [ (match node_icon ~library b with
                | Some icon -> icon_el uuid icon
                | None ->
                    dom ~key:("b-" ^ uuid) ~tag:"span"
-                     ~style_class_signal:
-                       (Logseq_dom.class_signal (S.signal ()) (fun (st : S.t) ->
+                     ~style_class:
+                       (reactive
+                          (fun (st : S.t) ->
                             if S.String_set.mem uuid st.selected then
                               "selected bullet"
-                            else "bullet"))
+                            else "bullet")
+                          (S.signal ()))
                      ~attrs:[ ("blockid", uuid) ]
                      (match b.Model.block_order_index with
                       | Some idx when order_list ->
@@ -261,9 +271,8 @@ let editor_el uuid scope : t =
       (Signal.map
          (fun (st : S.t) ->
            match st.S.editing with
-           | Some e when e.uuid = uuid && e.scope = scope ->
-               Lui_protocol.StringValue e.buffer
-           | _ -> Lui_protocol.StringValue "")
+           | Some e when e.uuid = uuid && e.scope = scope -> e.buffer
+           | _ -> "")
          (S.signal ()))
   in
     (Ui_parts.editor_wrapper ~key:("ew-" ^ uuid)
@@ -426,7 +435,7 @@ and row_el ~depth ~editable scope ~(library : bool) (b : Model.block) : t =
      ls-<uuid> key makes those distinct rows claim each other's DOM node *)
   dom ~key:("ls-" ^ scope ^ "-" ^ key)
     ~style_class_signal:(row_class_sig uuid blank embed b)
-    ~attrs_signal_v:(row_attrs_sig ~scope ~depth uuid b)
+    ~attrs_signal:(row_attrs_sig ~scope ~depth uuid b)
     [ dom ~key:("main-" ^ key)
         ~style_class:"block-main-container flex flex-row gap-1"
         ~attrs:
@@ -524,7 +533,7 @@ and block_row_static ?(depth = 0) ?(library = false) (b : Model.block) : t =
   let blank = String.trim b.block_title = "" in
   dom ~key:("rfs-" ^ key)
     ~style_class_signal:(row_class_sig uuid blank embed b)
-    ~attrs_signal_v:(row_attrs_sig ~scope:"ref" ~depth uuid b)
+    ~attrs_signal:(row_attrs_sig ~scope:"ref" ~depth uuid b)
     [ dom ~key:("main-" ^ key)
         ~style_class:"block-main-container flex flex-row gap-1"
         ~attrs:(heading_attrs b)

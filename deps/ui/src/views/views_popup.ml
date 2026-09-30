@@ -366,18 +366,7 @@ let show_select ~anchor ~items ~placeholder ?(multiple = false)
              D.el_add_listener a "click" (fun ev ->
                  Editor_dom.stop_propagation ev;
                  Editor_dom.prevent_default ev;
-                 if multiple then begin
-                   (if sel_mem !sel_values it.si_value then
-                      sel_values :=
-                        List.filter
-                          (fun v -> v <> it.si_value) !sel_values
-                    else sel_values := it.si_value :: !sel_values);
-                   on_chosen it (sel_mem !sel_values it.si_value);
-                   rerender ()
-                 end else begin
-                   close_all ();
-                   on_chosen it true
-                 end);
+                 choose it);
              D.el_append_child link_wrap a;
              D.el_append_child ac_inner link_wrap)
            its);
@@ -393,6 +382,17 @@ let show_select ~anchor ~items ~placeholder ?(multiple = false)
            on_apply !sel_values);
        D.el_append_child apply_wrap btn
      end)
+  and choose it =
+    if multiple then begin
+      (if sel_mem !sel_values it.si_value then
+         sel_values := List.filter (fun v -> v <> it.si_value) !sel_values
+       else sel_values := it.si_value :: !sel_values);
+      on_chosen it (sel_mem !sel_values it.si_value);
+      rerender ()
+    end else begin
+      close_all ();
+      on_chosen it true
+    end
   in
   rerender ();
   (* extra leading content (e.g. a header row) inside the wrapper *)
@@ -425,24 +425,9 @@ let show_select ~anchor ~items ~placeholder ?(multiple = false)
           rerender ()
       | "Enter" ->
           Editor_dom.prevent_default ev;
-          (match filtered () with
-           | [] -> ()
-           | its -> (
-               match List.nth_opt its !chosen_idx with
-               | Some it ->
-                   if multiple then begin
-                     (if sel_mem !sel_values it.si_value then
-                        sel_values :=
-                          List.filter (fun v -> v <> it.si_value)
-                              !sel_values
-                      else sel_values := it.si_value :: !sel_values);
-                     on_chosen it (sel_mem !sel_values it.si_value);
-                     rerender ()
-                   end else begin
-                     close_all ();
-                     on_chosen it true
-                   end
-               | None -> ()))
+          (match List.nth_opt (filtered ()) !chosen_idx with
+           | Some it -> choose it
+           | None -> ())
       | "Escape" ->
           Editor_dom.prevent_default ev;
           Editor_dom.stop_propagation ev;

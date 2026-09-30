@@ -269,10 +269,9 @@ let theme_row ctx =
                        else "light"
                      else m
                    in
-                   Lui_protocol.StringValue
-                     (T.switch_to_theme
-                        (if effective = "dark" then T.theme_light
-                         else T.theme_dark)))
+                   T.switch_to_theme
+                     (if effective = "dark" then T.theme_light
+                      else T.theme_dark))
                  (Signal.value mode))
             []
         ]
@@ -477,8 +476,7 @@ let date_format_row () =
                 ~on_dom_event:(fun n p ->
                   if n = "change" then
                     let fmt =
-                      Platform.payload_str
-                        (Option.value p ~default:"{}") "value"
+                      Platform.payload_str p "value"
                     in
                     if String.trim fmt <> "" then (
                       S.set_date_format fmt;
@@ -781,7 +779,7 @@ let advanced_pane () =
 
 let home_page_input_events _n p =
   let value =
-    Platform.payload_str (Option.value p ~default:"{}") "value"
+    Platform.payload_str p "value"
   in
   S.set_home_page value (fun res ->
       match res with
@@ -813,8 +811,7 @@ let home_page_row () =
                   | "blur" -> home_page_input_events n p
                   | "keypress" -> (
                       match
-                        Platform.payload_str
-                          (Option.value p ~default:"{}") "key"
+                        Platform.payload_str p "key"
                       with
                       | "Enter" -> home_page_input_events n p
                       | _ -> ())
@@ -870,12 +867,12 @@ let tab_title = function
 let nav_item ~key (id, label, icn) =
   dom ~key ~tag:"li" ~style_class:"settings-menu-item"
     ~attrs:[ ("data-id", id) ]
-    ~style_class_signal:
-      (Logseq_dom.class_signal
-         (Signal.map (fun (s : S.t) -> s.tab) (S.signal ()))
-         (fun tab ->
-           if tab = id then "active settings-menu-item"
-           else "settings-menu-item"))
+    ~style_class:
+      (reactive
+         (fun (s : S.t) ->
+           if s.tab = id then "active settings-menu-item"
+           else "settings-menu-item")
+         (S.signal ()))
     ~events:"click"
     ~on_dom_event:(fun n _ -> if n = "click" then S.set_tab id)
     [ dom ~key:(key ^ "-b") ~tag:"button"
@@ -899,11 +896,7 @@ let article ~modal ctx =
     [ dom ~key:"art-h" ~tag:"header" ~style_class:"cp__settings-header"
         [ dom ~key:"art-ht" ~tag:"h1"
             ~style_class:"cp__settings-category-title"
-            ~text_signal:
-              (Signal.map
-                 (fun (s : S.t) ->
-                   Lui_protocol.StringValue (tab_title s.tab))
-                 (S.signal ()))
+            ~text:(reactive (fun (s : S.t) -> tab_title s.tab) (S.signal ()))
             []
         ]
     ; dyn ~equal:( = ) (fun (s : S.t) -> pane_of ~modal ctx s.tab)

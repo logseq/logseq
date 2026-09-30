@@ -24,14 +24,14 @@ let fallback_tag = function
   | _ -> "span"
 
 let el ?key ~tag ?(attrs = []) ?(events = "") ?(style_class = "")
-    ?style_class_signal ?attrs_signal_v ?text_signal ?id_signal ?(id = "")
+    ?style_class_signal ?attrs_signal ?text_signal ?id_signal ?(id = "")
     ?(text = "") ?on_dom_event children =
   let tag, attrs =
     if registered_tag tag then (tag, attrs)
     else (fallback_tag tag, attrs @ [ ("data-tag", tag) ])
   in
   Logseq_dom.dom ?key ~tag ~attrs ~events ~style_class ?style_class_signal
-    ?attrs_signal_v ?text_signal ?id_signal ~id ~text ?on_dom_event children
+    ?attrs_signal ?text_signal ?id_signal ~id ~text ?on_dom_event children
 
 (* Plain text run — a real DOM text node. cljs hiccup emits raw strings
    interleaved with elements; LUI's own text nodes render as
@@ -44,5 +44,3 @@ let txt (s : string) : t =
   Logseq_dom.dom ~tag:"raw-text" ~attrs:[ ("data-raw-text", s) ] []
     context parent
 
-let text_of_class_signal source f =
-  Signal.map (fun v -> Lui_protocol.StringValue (f v)) source

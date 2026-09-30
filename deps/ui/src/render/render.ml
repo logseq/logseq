@@ -220,8 +220,6 @@ let query_shell =
         ~attrs:[ ("type", "button"); ("title", I18n.t "block/set-query") ] []
     ]
 
-let heading_tag lvl = "h" ^ string_of_int (max 1 (min lvl 6))
-
 (* content for a (possibly quoted) body — headings nest inside quote *)
 let content ?(heading : int option) ?(self = "") s =
   match heading with

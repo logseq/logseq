@@ -70,25 +70,19 @@ let open_menu name payload =
   (* title-tag chips get their own context menu (.block-tag, cljs
      block-tag popup) — only the bare title opens the page menu *)
   let on_tag_chip =
-    Option.fold ~none:false
-      ~some:(fun p ->
-        (* chip anchors/children count interactive; the bare .block-tag
-           container only shows up via targetClass *)
-        Platform.payload_bool p "interactive"
-        || I18n.contains (Platform.payload_str p "targetClass") "block-tag")
-      payload
+    (* chip anchors/children count interactive; the bare .block-tag
+       container only shows up via targetClass *)
+    Platform.payload_bool payload "interactive"
+    || I18n.contains (Platform.payload_str payload "targetClass") "block-tag"
   in
-  if name = "contextmenu" && not on_tag_chip then
-    Option.iter
-      (fun p ->
-        Runtime.send
-          (Action.Page_menu_set
-             (Some
-                ( Platform.payload_num p "clientX"
-                , Platform.payload_num p "clientY"
-                , false )));
-        Runtime.flush ())
-      payload
+  if name = "contextmenu" && not on_tag_chip && Option.is_some payload then (
+    Runtime.send
+      (Action.Page_menu_set
+         (Some
+            ( Platform.payload_num payload "clientX"
+            , Platform.payload_num payload "clientY"
+            , false )));
+    Runtime.flush ())
 
 (* generic: works for any entity uuid (page or block) *)
 let set_icon (u : string) (c : Icon_picker.choice) =
@@ -153,16 +147,14 @@ let title_editor (page : Model.page) : t =
             ~text:page.page_title ~events:"keydown blur"
         ~on_dom_event:(fun name payload ->
           match name with
-          | "blur" -> commit (Platform.payload_str (Option.value payload ~default:"{}") "value")
+          | "blur" -> commit (Platform.payload_str payload "value")
           | "keydown" -> (
               match
-                Platform.payload_str
-                  (Option.value payload ~default:"{}") "key"
+                Platform.payload_str payload "key"
               with
               | "Enter" | "Escape" ->
                   commit
-                    (Platform.payload_str
-                       (Option.value payload ~default:"{}") "value")
+                    (Platform.payload_str payload "value")
               | _ -> ())
           | _ -> ())
         []
@@ -247,10 +239,8 @@ let title_content (page : Model.page) : t =
         , Some
             (fun _name payload ->
               let shift, interactive =
-                match payload with
-                | Some p -> (Platform.payload_bool p "shiftKey",
-                             Platform.payload_bool p "interactive")
-                | None -> (false, false)
+                ( Platform.payload_bool payload "shiftKey"
+                , Platform.payload_bool payload "interactive" )
               in
               (* shift+click opens the page in the right sidebar (handled by
                  the document-level listener); starting title edit would
@@ -511,15 +501,10 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
           (* icon buttons live inside #page-title; skip title-edit when
              they (or their children) are the click target *)
           let target, interactive =
-            match payload with
-            | Some p -> (Platform.payload_str p "targetId",
-                         Platform.payload_bool p "interactive")
-            | None -> ("", false)
+            ( Platform.payload_str payload "targetId"
+            , Platform.payload_bool payload "interactive" )
           in
-          let shift =
-            match payload with
-            | Some p -> Platform.payload_bool p "shiftKey"
-            | None -> false
+          let shift = Platform.payload_bool payload "shiftKey"
           in
           if
             page.page_uuid <> None && not shift
@@ -904,8 +889,7 @@ let unlinked_search_input () : t =
         ~on_dom_event:(fun name payload ->
           if name = "input" then (
             let q =
-              Platform.payload_str
-                (Option.value payload ~default:"{}") "value"
+              Platform.payload_str payload "value"
             in
             Runtime.send (Action.Unlinked_set_query q);
             Runtime.flush ()))

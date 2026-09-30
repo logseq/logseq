@@ -73,11 +73,6 @@ let args_list = function
   | Array xs | List xs -> xs
   | _ -> []
 
-let nth_arg args n =
-  match args with
-  | Array xs | List xs -> List.nth_opt xs n
-  | _ -> None
-
 (* transit vectors may decode as Array|List|Set — treat all three as seqs *)
 let elems = function
   | Array xs | List xs | Set xs -> xs

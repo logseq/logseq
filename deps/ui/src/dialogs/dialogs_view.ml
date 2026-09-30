@@ -19,19 +19,16 @@ let content_cls = "ui__dialog-content"
 let btn_style = "ui__button ls-btn"
 
 let is_overlay_click payload =
-  Option.fold ~none:false
-    ~some:(fun p ->
-      String.length
-        (Platform.payload_str p "targetClass")
-      > 0
-      && let tc = Platform.payload_str p "targetClass" in
-         let needle = "ui__dialog-overlay" in
-         let ln = String.length needle and lt = String.length tc in
-         let rec go i =
-           i + ln <= lt && (String.sub tc i ln = needle || go (i + 1))
-         in
-         go 0)
-    payload
+  String.length
+    (Platform.payload_str payload "targetClass")
+  > 0
+  && let tc = Platform.payload_str payload "targetClass" in
+     let needle = "ui__dialog-overlay" in
+     let ln = String.length needle and lt = String.length tc in
+     let rec go i =
+       i + ln <= lt && (String.sub tc i ln = needle || go (i + 1))
+     in
+     go 0
 
 let close_btn =
   dom ~key:"dlg-close" ~tag:"button"
@@ -115,18 +112,15 @@ let confirm_view (c : Dialogs_state.confirm) =
     ~on_dom_event:(fun n payload ->
       if
         n = "click"
-        && Option.fold ~none:false
-             ~some:(fun p ->
-               let tc = Platform.payload_str p "targetClass" in
-               let needle = "ui__alert-dialog-overlay" in
-               let ln = String.length needle
-               and lt = String.length tc in
-               let rec go i =
-                 i + ln <= lt
-                 && (String.sub tc i ln = needle || go (i + 1))
-               in
-               go 0)
-             payload
+        && let tc = Platform.payload_str payload "targetClass" in
+           let needle = "ui__alert-dialog-overlay" in
+           let ln = String.length needle
+           and lt = String.length tc in
+           let rec go i =
+             i + ln <= lt
+             && (String.sub tc i ln = needle || go (i + 1))
+           in
+           go 0
       then Dialogs_state.close_confirm ())
     [ dom ~key:"cfrm"
         ~attrs:
@@ -159,7 +153,7 @@ let prompt_view (p : Dialogs_state.prompt) =
     match name with
     | "keydown" -> (
         match
-          Platform.payload_str (Option.value payload ~default:"{}") "key"
+          Platform.payload_str payload "key"
         with
         | "Enter" -> submit ()
         | _ -> ())
