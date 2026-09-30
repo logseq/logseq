@@ -379,6 +379,60 @@
           (p/finally
            done)))))
 
+(deftest apply-outliner-ops-does-not-wait-on-flush-sync-when-ui-publish-is-skipped-test
+  (async done
+    (let [repo "api-write-no-flush-wait"
+          inserted-block-id (random-uuid)
+          inserted-block {:block/uuid inserted-block-id
+                          :block/tx-id 2}
+          delta {:graph-id repo
+                 :rev 1
+                 :blocks {inserted-block-id inserted-block}
+                 :deleted {}
+                 :children {}
+                 :affected-keys #{[:graph]}}
+          original-flush-sync (.-flushSync react-dom)
+          calls (atom [])]
+      (set! (.-flushSync react-dom)
+            (fn [f]
+              (swap! calls conj :flush)
+              (f)))
+      (-> (p/with-redefs [util/node-test? false
+                          db-subs/apply-delta!
+                          (fn [value]
+                            (swap! calls conj [:delta value])
+                            true)
+                          state/get-current-repo (constantly repo)
+                          state/get-route-match (constantly nil)
+                          state/get-editor-info (constantly nil)
+                          state/<invoke-db-worker
+                          (fn [api & _args]
+                            (case api
+                              :thread-api/undo-redo-set-pending-editor-info
+                              (p/resolved nil)
+
+                              :thread-api/apply-outliner-ops
+                              (p/resolved {:result {:block/uuid inserted-block-id}
+                                           :delta delta})
+
+                              (p/resolved nil)))]
+            (p/let [value (db-transact/apply-outliner-ops
+                           nil
+                           [[:insert-blocks [[{:block/uuid inserted-block-id}] nil {}]]]
+                           {:await-ui-publish? false})
+                    _ (is (= {:block/uuid inserted-block-id} value)
+                          "The worker write result must be returned without waiting on flushSync.")
+                    _ (is (not (some #{:flush} @calls))
+                          "flushSync must not run before the write promise resolves.")
+                    _ (p/delay 0)]
+              (is (some #{:flush} @calls)
+                  "UI publish should still be scheduled after the write returns.")))
+          (p/catch (fn [error]
+                     (is false (str "Unexpected transaction failure: " error))))
+          (p/finally (fn []
+                       (set! (.-flushSync react-dom) original-flush-sync)
+                       (done)))))))
+
 (deftest apply-outliner-ops-does-not-run-editor-callback-on-worker-failure-test
   (async done
     (let [callback-called? (atom false)]
