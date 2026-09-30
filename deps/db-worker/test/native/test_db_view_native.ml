@@ -213,6 +213,128 @@ let test_all_pages_sorts_and_filters_hidden () =
   check "count = 2" (view_count result = 2);
   str_list_eq' "titles" (result_titles (db_of conn) result) [ "Beta"; "Alpha" ]
 
+(* get-view-data-all-pages-excludes-nested-pages-under-recycled-parent —
+   cljs view_test: full, first-window, and filtered All Pages must all
+   drop pages nested under a recycled parent. *)
+let test_all_pages_excludes_nested_pages_under_recycled_parent () =
+  let conn =
+    create_conn_with_blocks
+      ~pages_and_blocks:
+        [ { page =
+              { default_page with
+                pg_title = Some "page1"
+              ; pg_extra = [ "block/updated-at", Int64 10 ] }
+          ; blocks =
+              [ { default_block with
+                    b_title = Some "page2"
+                  ; b_tags = [ "logseq.class/Page" ]
+                  ; b_extra =
+                      [ "block/name", Str "page2"
+                      ; "block/updated-at", Int64 20 ]
+                  ; b_children =
+                      [ { default_block with
+                            b_title = Some "page3"
+                          ; b_tags = [ "logseq.class/Page" ]
+                          ; b_extra =
+                              [ "block/name", Str "page3"
+                              ; "block/updated-at", Int64 25 ] } ] } ] }
+        ; { page =
+              { default_page with
+                pg_title = Some "keep"
+              ; pg_extra = [ "block/updated-at", Int64 30 ] }
+          ; blocks = [] } ]
+      ()
+  in
+  let view_id = create_view_id conn "all-pages" in
+  let option =
+    opts [ "view-feature-type", kw "all-pages"
+         ; "sorting", sorting [ ("block/title", true) ] ]
+  in
+  let before_full =
+    Db_view.get_view_data (db_of conn) (Some view_id) option
+  in
+  let before_window =
+    Db_view.get_view_data (db_of conn) (Some view_id)
+      (opt_add option [ "row-limit", Wire.Int 10 ])
+  in
+  let page1 = Option.get (find_page_by_title (db_of conn) "page1") in
+  ignore
+    (Datascript.transact_conn_string conn
+       (Printf.sprintf "[{:db/id %d :logseq.property/deleted-at 1}]" page1.id));
+  let after_full =
+    Db_view.get_view_data (db_of conn) (Some view_id) option
+  in
+  let after_window =
+    Db_view.get_view_data (db_of conn) (Some view_id)
+      (opt_add option [ "row-limit", Wire.Int 10 ])
+  in
+  let after_filtered =
+    Db_view.get_view_data (db_of conn) (Some view_id)
+      (opt_add option
+         [ "row-limit", Wire.Int 10
+         ; "filters",
+           filters ~or_:false
+             [ clause "block/title" "text-contains" (Wire.String "page") ] ])
+  in
+  check "before titles"
+    (result_titles (db_of conn) before_full
+     = [ "keep"; "page1"; "page2"; "page3" ]);
+  check "before count = window count"
+    (view_count before_full = view_count before_window);
+  str_list_eq' "after full titles" (result_titles (db_of conn) after_full)
+    [ "keep" ];
+  check "after window count = full count"
+    (view_count after_window = view_count after_full
+     && view_count after_full = 1);
+  str_list_eq' "after window titles" (result_titles (db_of conn) after_window)
+    [ "keep" ];
+  check "filter cannot resurrect recycled nested pages"
+    (result_titles (db_of conn) after_filtered = [])
+
+(* get-view-data-all-pages-excludes-nested-pages-under-hidden-parent —
+   cljs view_test: same contract via :logseq.property/hide?. *)
+let test_all_pages_excludes_nested_pages_under_hidden_parent () =
+  let conn =
+    create_conn_with_blocks
+      ~pages_and_blocks:
+        [ { page =
+              { default_page with
+                pg_title = Some "hidden-parent"
+              ; pg_extra = [ "block/updated-at", Int64 10 ] }
+          ; blocks =
+              [ { default_block with
+                    b_title = Some "hidden-child"
+                  ; b_tags = [ "logseq.class/Page" ]
+                  ; b_extra =
+                      [ "block/name", Str "hidden-child"
+                      ; "block/updated-at", Int64 20 ] } ] }
+        ; { page =
+              { default_page with
+                pg_title = Some "keep"
+              ; pg_extra = [ "block/updated-at", Int64 30 ] }
+          ; blocks = [] } ]
+      ()
+  in
+  let view_id = create_view_id conn "all-pages" in
+  let option =
+    opts [ "view-feature-type", kw "all-pages"
+         ; "sorting", sorting [ ("block/title", true) ] ]
+  in
+  let parent = Option.get (find_page_by_title (db_of conn) "hidden-parent") in
+  ignore
+    (Datascript.transact_conn_string conn
+       (Printf.sprintf "[{:db/id %d :logseq.property/hide? true}]" parent.id));
+  let full = Db_view.get_view_data (db_of conn) (Some view_id) option in
+  let window =
+    Db_view.get_view_data (db_of conn) (Some view_id)
+      (opt_add option [ "row-limit", Wire.Int 10 ])
+  in
+  str_list_eq' "full titles" (result_titles (db_of conn) full) [ "keep" ];
+  check "window count = full count"
+    (view_count full = view_count window);
+  str_list_eq' "window titles" (result_titles (db_of conn) window)
+    [ "keep" ]
+
 let test_journal_window_excludes_future_with_aliases () =
   let conn =
     create_conn_with_blocks
@@ -2074,4 +2196,10 @@ let () =
             test_class_objects_ref_filter_fast_path
         ; Alcotest.test_case
             "get-view-data-class-objects-groups-by-number-property-sorts-numerically-test"
-            `Quick test_class_objects_groups_by_number_sorts_numerically ] ) ]
+            `Quick test_class_objects_groups_by_number_sorts_numerically
+        ; Alcotest.test_case
+            "get-view-data-all-pages-excludes-nested-pages-under-recycled-parent-test"
+            `Quick test_all_pages_excludes_nested_pages_under_recycled_parent
+        ; Alcotest.test_case
+            "get-view-data-all-pages-excludes-nested-pages-under-hidden-parent-test"
+            `Quick test_all_pages_excludes_nested_pages_under_hidden_parent ] ) ]

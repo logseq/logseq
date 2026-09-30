@@ -1959,6 +1959,28 @@ let take_sorted_eids db (eids : entity_id list) (sorting : sorting_item list)
 let feature_filters (filters : view_filters) (input : string) : bool =
   Unicode.trim input <> "" || filters.vf_clauses <> []
 
+(* view/with-descendant-eids — each eid plus every :block/parent
+   descendant; recycled/hidden parents must also drop nested pages *)
+let with_descendant_eids db (eids : entity_id list) : entity_id list =
+  let seen = Hashtbl.create 61 in
+  let rec loop queue =
+    match queue with
+    | [] -> ()
+    | id :: rest ->
+        if Hashtbl.mem seen id then loop rest
+        else begin
+          Hashtbl.replace seen id ();
+          let children =
+            List.map
+              (fun (d : datom) -> d.e)
+              (List.of_seq (datoms db Avet ~a:"block/parent" ~v:(Ref id) ()))
+          in
+          loop (children @ rest)
+        end
+  in
+  loop eids;
+  Hashtbl.fold (fun k () acc -> k :: acc) seen []
+
 (* view/get-exclude-page-ids — shared by the entity and eid paths *)
 let get_exclude_page_ids db : entity_id list =
   let prop_tag_eids =
@@ -1966,11 +1988,14 @@ let get_exclude_page_ids db : entity_id list =
     | Some tag_id -> [ tag_id ]
     | None -> []
   in
-  List.sort_uniq compare
-    ( List.map (fun (d : datom) -> d.e)
-        (List.of_seq (datoms db Avet ~a:"logseq.property/hide?" ~v:(Bool true) ()))
+  let hidden_or_deleted =
+    List.map (fun (d : datom) -> d.e)
+      (List.of_seq (datoms db Avet ~a:"logseq.property/hide?" ~v:(Bool true) ()))
     @ List.map (fun (d : datom) -> d.e)
         (List.of_seq (datoms db Avet ~a:"logseq.property/deleted-at" ()))
+  in
+  List.sort_uniq compare
+    ( with_descendant_eids db hidden_or_deleted
     @ List.map (fun (d : datom) -> d.e)
         (List.of_seq (datoms db Avet ~a:"logseq.property/built-in?" ~v:(Bool true) ()))
     @ List.concat_map
