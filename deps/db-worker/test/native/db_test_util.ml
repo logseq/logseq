@@ -363,6 +363,7 @@ let schema_edn =
     :block/name {:db/index true}
     :block/title {:db/index true}
     :block/journal-day {:db/index true}
+    :logseq.property.asset/type {:db/index true}
     :block/tx-id {}
     :block/closed-value-property {:db/valueType :db.type/ref :db/cardinality :db.cardinality/many}
     :file/path {:db/unique :db.unique/identity}
