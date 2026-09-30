@@ -13,6 +13,10 @@
 
 (def ^:private missing-uuid-title "00000000-0000-4000-8000-000000000001")
 
+(defn- raw-block-title
+  [db eid]
+  (:v (first (d/datoms db :eavt eid :block/title))))
+
 (defn- missing-uuid-page-ref
   [parsed-uuid]
   {:block/type "page"
@@ -78,8 +82,9 @@
       (let [saved (d/entity @conn (:db/id host))
             page (ldb/get-page @conn "new page")]
         (is (some? page))
+        (is (= "See [[New Page]]" (:block/title saved)))
         (is (= (str "See " (page-ref/->page-ref (:block/uuid page)))
-               (:block/title saved)))
+               (raw-block-title @conn (:db/id host))))
         (is (= [(:block/uuid page)] (map :block/uuid (:block/refs saved))))))))
 
 (deftest wrap-parse-then-save-new-page-ref-keeps-link
@@ -94,14 +99,11 @@
                      :block/title "See [[Project Alpha]]"})]
         (outliner-core/save-block! conn parsed)
         (let [saved (d/entity @conn (:db/id host))
-              page (ldb/get-page @conn "project alpha")
-              title (:block/title saved)]
+              page (ldb/get-page @conn "project alpha")]
           (is (some? page))
-          (is (or (= (str "See " (page-ref/->page-ref (:block/uuid page))) title)
-                  (= "See [[Project Alpha]]" title))
-              (str "must remain a page link, not plain text: " (pr-str title)))
-          (is (not= (str "See " (:block/uuid page)) title)
-              "must not persist the new page uuid as plain text")
+          (is (= "See [[Project Alpha]]" (:block/title saved)))
+          (is (= (str "See " (page-ref/->page-ref (:block/uuid page)))
+                 (raw-block-title @conn (:db/id host))))
           (is (= [(:block/uuid page)] (map :block/uuid (:block/refs saved)))))))))
 
 (deftest apply-ops-missing-uuid-save-does-not-block-sibling-insert
