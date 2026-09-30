@@ -266,11 +266,11 @@ let cm_mode lang =
 
 let lisp_like mode = List.mem mode [ "scheme"; "lisp"; "clojure"; "edn" ]
 
-(* theme ("lsradix <light|dark>") follows the root .dark class the same
+(* theme ("solarized <light|dark>") follows the root .dark class the same
    way cljs theme-name does via the ui/theme subscription *)
 let theme_name () =
-  if V.el_class_contains D.document_element "dark" then "lsradix dark"
-  else "lsradix light"
+  if V.el_class_contains D.document_element "dark" then "solarized dark"
+  else "solarized light"
 
 (* -- instances keyed by block uuid -- *)
 
