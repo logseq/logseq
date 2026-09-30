@@ -293,7 +293,7 @@ let title_block ?(self = "") ?resolved (b : Model.block) : t list =
       [ code_block ~self lang s ]
   | Some "math" ->
       [ D.el ~tag:"div" ~style_class:"math-block"
-          [ Render_inline.katex_el s ] ]
+          [ Render_inline.katex_el ~block:true ~display:true s ] ]
   | _ ->
       title ?heading
         ~is_query:(List.mem "logseq.class/Query" b.Model.block_tag_idents)
