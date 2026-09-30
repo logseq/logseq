@@ -381,6 +381,12 @@ let on_keydown ev =
       match D.closest_sel ".CodeMirror" target with
       | Some _ -> ()
       | None -> (
+          (* property value textareas own their key handling
+             (properties_value.ml) — the block-editor dispatch below must
+             leave their keys alone *)
+          match D.closest_sel ".property-value-container" target with
+          | Some _ -> ()
+          | None -> (
           match (S.editing (), !S.pending_focus) with
           | Some e, Some (uuid, caret, _)
             when e.S.uuid = uuid
@@ -442,7 +448,7 @@ let on_keydown ev =
               in
               if stale_block_editor then on_normal_key ev
               else if D.is_editable_target target then ()
-              else on_normal_key ev))
+              else on_normal_key ev)))
   end
 
 (* -- input: keep the editing buffer in sync (silently) -- *)
@@ -455,6 +461,13 @@ let on_input ev =
         (* the page-title textarea is not a block editor — its own dom-event
            keydown/blur handlers commit the rename; still keep textContent
            in lockstep so :has-text sees the typed value *)
+        D.el_set_text_content el (D.el_value el)
+    | Some el
+      when D.closest_sel ".property-value-container" (D.ev_target ev)
+           <> None ->
+        (* property value textareas own their buffer and commit path —
+           keep textContent in lockstep for :has-text but never sync the
+           block buffer or schedule a block save *)
         D.el_set_text_content el (D.el_value el)
     | Some el -> (
         match uuid_of_prefixed "edit-block-" (D.el_id el) with
