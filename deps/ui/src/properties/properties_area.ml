@@ -695,13 +695,22 @@ let replace_if_changed host cand =
 (* Page surface: attach .ls-properties-area only when there are rows to
    show (cljs show-properties-area?); attach .ls-bidirectional-properties
    only when bidirectional groups exist. *)
-let rec render_page_area ctx (p : Model.page) ~attach_area ~attach_bidi
-    ~detach area bidi =
+let rec render_page_area ctx (p : Model.page) ~page_inner ~attach_area
+    ~attach_bidi ~detach area bidi =
   D.display_props ~page_title:true ~tag_dialog:false
     ~show_hidden:!S.show_hidden (D.uuid_ref ctx.block_uuid)
   |> Js.Promise.then_ (fun wire ->
-         let rows, hidden = D.split_display wire in
-         let rows = List.filter is_panel_row rows in
+         let raw_rows, hidden = D.split_display wire in
+         (* cljs: the title row's .ls-block carries data-db-collapsable
+            from the live entity (db-collapsable?) — refresh it here so
+            the fold arrow's hover gate sees properties added after the
+            first render *)
+         (match el_query page_inner ".ls-page-title .ls-block" with
+          | Some tb ->
+              el_set_attr tb "data-db-collapsable"
+                (if raw_rows <> [] || hidden <> [] then "true" else "false")
+          | None -> ());
+         let rows = List.filter is_panel_row raw_rows in
          let _left, _below, panel_rows = partition_rows rows in
          (* cljs show-class-properties-area? — a tag page still mounts
             .ls-properties-area to host the class-properties section *)
@@ -843,8 +852,8 @@ let mount_page_props page_inner (p : Model.page) uuid =
          us when a page converts to a tag *)
       match !Runtime.current_page with
       | Some live when live.Model.page_uuid = Some uuid ->
-          render_page_area ctx live ~attach_area ~attach_bidi ~detach
-            area bidi
+          render_page_area ctx live ~page_inner ~attach_area ~attach_bidi
+            ~detach area bidi
       | _ -> Js.Promise.resolve ()
     in
     ignore (refresh ());
@@ -857,9 +866,11 @@ let mount_page_props page_inner (p : Model.page) uuid =
 
 let mount_page_area page_inner =
   (* cljs db-page-title: title actions hide while the page title itself is
-     being edited (page-title-actions-cp only when edit-block ≠ page) *)
-  let editing_title =
-    el_query page_inner ".ls-page-title .editor-wrapper" <> None
+     being edited (page-title-actions-cp only when edit-block ≠ page).
+     Checked against the editing uuid, not DOM — the properties area lives
+     inside .ls-page-title, so its value editors must not count *)
+  let editing_title p =
+    Editor_state.editing_uuid () = p.Model.page_uuid
   in
   let with_page f =
     (* journals view mounts one .page-inner per journal — current_page is
@@ -896,13 +907,14 @@ let mount_page_area page_inner =
   in
   match el_query page_inner ".ls-page-title-actions" with
   | Some actions ->
-      set_style actions (if editing_title then "display: none" else "");
       with_page (fun p uuid ~title_el:_ ->
+          let hidden = editing_title p in
+          set_style actions (if hidden then "display: none" else "");
           if el_get_attr actions "data-actions-key" <> Some (actions_key p)
           then (
             let fresh = title_actions p in
             el_set_attr fresh "data-actions-key" (actions_key p);
-            set_style fresh (if editing_title then "display: none" else "");
+            set_style fresh (if hidden then "display: none" else "");
             el_insert_adjacent actions "beforebegin" fresh;
             el_remove actions);
           mount_page_props page_inner p uuid)

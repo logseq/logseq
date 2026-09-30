@@ -66,7 +66,18 @@ let breadcrumbs title : t list =
 (* click position payload -> Page_menu_set (context menu = page items
    only, so with_app_items = false) *)
 let open_menu name payload =
-  if name = "contextmenu" then
+  (* title-tag chips get their own context menu (.block-tag, cljs
+     block-tag popup) — only the bare title opens the page menu *)
+  let on_tag_chip =
+    Option.fold ~none:false
+      ~some:(fun p ->
+        (* chip anchors/children count interactive; the bare .block-tag
+           container only shows up via targetClass *)
+        Platform.payload_bool p "interactive"
+        || I18n.contains (Platform.payload_str p "targetClass") "block-tag")
+      payload
+  in
+  if name = "contextmenu" && not on_tag_chip then
     Option.iter
       (fun p ->
         Runtime.send
@@ -179,11 +190,26 @@ let title_tag_chips (page : Model.page) : t list =
                          | Some s -> s
                          | None -> ""
                        in
+                       let priv = Tree.private_tag_ident ident in
                        dom ~key:("pt-tag-" ^ string_of_int i)
                          ~style_class:
                            ("block-tag"
-                           ^ if Tree.private_tag_ident ident then " private-tag"
-                             else "")
+                           ^ if priv then " private-tag" else "")
+                         ~attrs:
+                           [ ( "data-tag-uuid"
+                             , Option.value
+                                 (List.nth_opt
+                                    page.Model.page_tag_uuids i)
+                                 ~default:"" )
+                           ; ( "data-tag-id"
+                             , Option.value
+                                 (Option.map string_of_int
+                                    (List.nth_opt
+                                       page.Model.page_tag_db_ids i))
+                                 ~default:"0" )
+                           ; ("data-tag-title", tag)
+                           ; ( "data-tag-priv"
+                             , if priv then "true" else "false" ) ]
                          [ dom ~key:("pti-" ^ string_of_int i)
                              ~style_class:"flex items-center"
                              [ dom ~key:("ph-" ^ string_of_int i) ~tag:"a"
@@ -289,6 +315,20 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
             ; S.expanded = S.String_set.remove uuid st.S.expanded
             })
   in
+  (* cljs collapsable? on a page-title row = db-collapsable? on the page
+     entity (any non-internal property keys, e.g. a page property) — the
+     fold arrow shows on hover when this or an already-collapsed title
+     holds. Live-read the attr too: the mounted properties area keeps
+     data-db-collapsable in sync with the page's live property rows *)
+  let collapsable_title () =
+    page.Model.page_db_collapsable || page.Model.page_is_tag
+    || title_collapsed
+    ||
+    (match Browser_ui.qs ".ls-page-title .ls-block" with
+     | Some tb ->
+         Browser_ui.get_attr tb "data-db-collapsable" = Some "true"
+     | None -> false)
+  in
   let body =
     (* cljs db-page-title: the page title is a full block row —
        .ls-block > .is-page-title-row > bullet control + nested
@@ -305,7 +345,8 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
               ; ("data-comment-item", "false")
               ; ("data-comments-area", "false"); ("level", "0")
               ; ("data-collapsed", "false")
-              ; ("data-db-collapsable", if page.page_is_tag then "true" else "false")
+              ; ( "data-db-collapsable"
+                , if page.Model.page_db_collapsable then "true" else "false" )
               ; ("data-block-format", "markdown") ]
             [ dom ~key:"pt-row"
                 ~style_class:
@@ -315,6 +356,25 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
                     , "margin-left: "
                       ^ if icon_el = None then "-30px" else "-36px" )
                   ]
+                ~events:"mouseenter mouseleave"
+                ~on_dom_event:(fun name _ ->
+                  (* cljs *control-show? atom: caret appears only while
+                     hovering the title row, and only for collapsable
+                     titles *)
+                  if collapsable_title () then
+                    match
+                      Browser_ui.qs ".ls-page-title .block-control > span"
+                    with
+                    | Some el ->
+                        if name = "mouseenter" then (
+                          Browser_ui.rm_class el "control-hide";
+                          Browser_ui.add_class el "control-show";
+                          Browser_ui.add_class el "cursor-pointer")
+                        else (
+                          Browser_ui.add_class el "control-hide";
+                          Browser_ui.rm_class el "control-show";
+                          Browser_ui.rm_class el "cursor-pointer")
+                    | None -> ())
                 [ dom ~key:"pt-ctrl"
                     ~style_class:
                       ("is-with-icon"
@@ -322,24 +382,6 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
                       ^ " bullet-hidden block-control-wrap flex flex-row \
                          items-center h-6")
                     ~attrs:[ ("data-has-children", "false") ]
-                    ~events:"mouseover mouseout"
-                    ~on_dom_event:(fun name _ ->
-                      (* cljs *control-show? atom: caret appears only while
-                         hovering, and only for collapsable titles *)
-                      if page.page_is_tag then
-                        match
-                          Browser_ui.qs ".ls-page-title .block-control > span"
-                        with
-                        | Some el ->
-                            if name = "mouseover" then (
-                              Browser_ui.rm_class el "control-hide";
-                              Browser_ui.add_class el "control-show";
-                              Browser_ui.add_class el "cursor-pointer")
-                            else (
-                              Browser_ui.add_class el "control-hide";
-                              Browser_ui.rm_class el "control-show";
-                              Browser_ui.rm_class el "cursor-pointer")
-                        | None -> ())
                     ([ (let cs =
                           dom ~key:"pt-cs" ~tag:"span"
                             ~style_class:"control-hide"
@@ -351,17 +393,13 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
                                 [ Ui_parts.rotating_arrow "pt-arw" ]
                             ]
                         in
-                        if page.page_is_tag then
-                          dom ~key:"pt-ca" ~tag:"a"
-                            ~style_class:"block-control"
-                            ~id:("control-" ^ uuid) ~events:"click"
-                            ~on_dom_event:(fun name _ ->
-                              if name = "click" then toggle_title_collapse ())
-                            [ cs ]
-                        else
-                          dom ~key:"pt-ca" ~tag:"a"
-                            ~style_class:"block-control"
-                            ~id:("control-" ^ uuid) [ cs ])
+                        dom ~key:"pt-ca" ~tag:"a"
+                          ~style_class:"block-control"
+                          ~id:("control-" ^ uuid) ~events:"click"
+                          ~on_dom_event:(fun name _ ->
+                            if name = "click" && collapsable_title () then
+                              toggle_title_collapse ())
+                          [ cs ])
                      ]
                     )
         ; dom ~key:"pt-col1" ~style_class:"flex flex-col w-full"

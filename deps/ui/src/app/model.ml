@@ -30,6 +30,7 @@ type block =
   ; block_code_lang : string option (* logseq.property.code/lang *)
   ; block_tag_uuids : string list (* aligned with block_tags *)
   ; block_tag_idents : string list (* resolved tag idents, same filtering *)
+  ; block_tag_db_ids : int list (* aligned with block_tags — chip ctx menu *)
   ; block_page_name : string option (* containing page, for ref rows *)
   ; block_reactions : (string * int) list (* emoji-id, count *)
   ; block_is_comments_area : bool
@@ -59,6 +60,9 @@ type block =
   ; block_is_query : bool
     (* db/id == parent's logseq.property/query ref — renders the query
        builder instead of plain content (cljs query-block? branch) *)
+  ; block_db_collapsable : bool
+    (* cljs db-collapsable?: entity carries property keys other than
+       internal created-* ones (logseq.property/query etc.) *)
   }
 
 type page =
@@ -80,9 +84,14 @@ type page =
     page_add_object : bool
   ; page_tags : string list
   ; page_tag_idents : string list (* aligned with page_tags *)
+  ; page_tag_uuids : string list (* aligned — chip ctx menu *)
+  ; page_tag_db_ids : int list (* aligned with page_tags *)
   ; page_blocks : block list
   ; page_linked_refs : block list (* linked references, for journal items *)
   ; page_parents : block list (* block-zoom breadcrumb chain, root first *)
+  ; page_db_collapsable : bool
+    (* cljs db-collapsable? on the page entity — drives the title-row
+       fold arrow + data-db-collapsable *)
   }
 
 type phase =
@@ -92,7 +101,7 @@ type phase =
 
 (* modal confirm intent — carried as data so it survives the reducer *)
 type confirm =
-  | Confirm_delete_page of string (* page uuid *)
+  | Confirm_delete_page of string * string * bool (* uuid, title, permanent? *)
   | Confirm_convert_tag_to_page of int (* class db/id *)
   | Confirm_delete_asset of string (* asset block uuid *)
 

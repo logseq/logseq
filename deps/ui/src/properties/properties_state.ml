@@ -49,6 +49,10 @@ let remove_overlay o =
   el_remove o.el;
   overlays := List.filter (fun x -> x != o) !overlays
 
+let remove_overlay_el el =
+  List.iter (fun o -> if o.el == el then el_remove o.el) !overlays;
+  overlays := List.filter (fun o -> o.el != el) !overlays
+
 let pop_overlay () =
   match !overlays with
   | top :: rest ->

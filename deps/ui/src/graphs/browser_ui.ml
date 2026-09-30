@@ -17,6 +17,12 @@ external remove : E.t -> unit = "remove" [@@mel.send]
 external set_attr : E.t -> string -> string -> unit = "setAttribute"
   [@@mel.send]
 
+external get_attr : E.t -> string -> string option = "getAttribute"
+  [@@mel.send] [@@mel.return nullable]
+
+let set_document_title : string -> unit =
+  [%mel.raw "function (t) { document.title = t }"]
+
 external remove_attr : E.t -> string -> unit = "removeAttribute"
   [@@mel.send]
 

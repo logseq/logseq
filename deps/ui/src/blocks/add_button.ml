@@ -38,39 +38,20 @@ let build_el ?puuid () =
   btn
 
 (* opacity matches cljs: hidden while a block on this page is being
-   edited or when the page already has children *)
-let refresh_opacity ?puuid btn =
+   edited or when the page already has children — counted from the DOM
+   (cljs child-uuids includes the unsaved blank block, which is not in
+   the page model) *)
+let refresh_opacity ?puuid ~has_children btn =
   let cls =
-    if Editor_state.ready () && Editor_state.editing () <> None then
+    if
+      (Editor_state.ready () && Editor_state.editing () <> None)
+      || has_children
+    then
       "ls-block block-add-button flex-1 flex-col rounded-sm cursor-text \
        transition-opacity ease-in duration-100 !py-0 opacity-0"
     else
-      let page_of uuid =
-        List.find_opt
-          (fun (p : Model.page) -> p.Model.page_uuid = Some uuid)
-          !Runtime.current_journals
-      in
-      let has_children =
-        match puuid with
-        | Some u -> (
-            match page_of u with
-            | Some p -> p.Model.page_blocks <> []
-            | None -> (
-                match !Runtime.current_page with
-                | Some p -> p.Model.page_blocks <> []
-                | None -> false))
-        | None -> (
-            match !Runtime.current_page with
-            | Some p -> p.Model.page_blocks <> []
-            | None -> false)
-      in
-      if has_children then
-        "ls-block block-add-button flex-1 flex-col rounded-sm \
-         cursor-text transition-opacity ease-in duration-100 !py-0 \
-         opacity-0"
-      else
-        "ls-block block-add-button flex-1 flex-col rounded-sm cursor-text \
-         transition-opacity ease-in duration-100 !py-0 opacity-50"
+      "ls-block block-add-button flex-1 flex-col rounded-sm cursor-text \
+       transition-opacity ease-in duration-100 !py-0 opacity-50"
   in
   (match el_get_attr btn "class" with
    | Some c when String.equal c cls -> ()
@@ -89,8 +70,13 @@ let ensure_all roots =
             | Some p -> p.Model.page_uuid
             | None -> None)
       in
+      let has_children =
+        match el_query parent ".ls-block:not(.block-add-button)" with
+        | Some _ -> true
+        | None -> false
+      in
       match el_query parent ".block-add-button" with
-      | Some existing -> refresh_opacity ?puuid existing
+      | Some existing -> refresh_opacity ?puuid ~has_children existing
       | None -> el_append_child parent (build_el ?puuid ()))
 
 let installed = ref false
