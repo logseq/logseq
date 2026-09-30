@@ -2876,27 +2876,27 @@
 
 (defn keydown-delete-handler
   [_e]
-  (let [^js input (state/get-input)
-        current-pos (cursor/pos input)
-        value (gobj/get input "value")
-        end? (= current-pos (count value))
-        current-block (state/get-edit-block)
-        selected-start (util/get-selection-start input)
-        selected-end (util/get-selection-end input)]
-    (when current-block
-      (cond
-        (not= selected-start selected-end)
-        (delete-and-update input selected-start selected-end)
+  (when-let [^js input (state/get-input)]
+    (let [current-pos (cursor/pos input)
+          value (gobj/get input "value")
+          end? (= current-pos (count value))
+          current-block (state/get-edit-block)
+          selected-start (util/get-selection-start input)
+          selected-end (util/get-selection-end input)]
+      (when current-block
+        (cond
+          (not= selected-start selected-end)
+          (delete-and-update input selected-start selected-end)
 
-        (and end? current-block)
-        (let [editor-state (get-state)
-              custom-query? (get-in editor-state [:config :custom-query?])]
-          (when-not custom-query?
-            (delete-concat current-block)))
+          (and end? current-block)
+          (let [editor-state (get-state)
+                custom-query? (get-in editor-state [:config :custom-query?])]
+            (when-not custom-query?
+              (delete-concat current-block)))
 
-        :else
-        (delete-and-update
-         input current-pos (util/safe-inc-current-pos-from-start (.-value input) current-pos))))))
+          :else
+          (delete-and-update
+           input current-pos (util/safe-inc-current-pos-from-start (.-value input) current-pos)))))))
 
 (defn delete-block-when-zero-pos!
   [^js e]
@@ -3491,7 +3491,7 @@
 
 (defn editor-delete
   [e]
-  (when (state/editing?)
+  (when (and (state/editing?) (state/get-input))
     (util/stop e)
     (keydown-delete-handler e)))
 
@@ -3929,7 +3929,7 @@
 
      (state/selection?)
      (do
-       (let [block-ids (map #(-> % (dom/attr "blockid") uuid) (get-selected-blocks))
+       (let [block-ids (distinct (keep util/selection-node-block-id (get-selected-blocks)))
              first-block-id (first block-ids)]
          (when first-block-id
            ;; If multiple blocks are selected, they may not have all the same collapsed state.
