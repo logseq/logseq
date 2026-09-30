@@ -435,21 +435,23 @@
   [repo search-db build-id]
   (let [started-at (common-util/time-ms)]
     (p/let [_ (js/Promise. (fn [resolve] (js/setTimeout resolve 0)))]
-      (search/start-fts-rowid-migration! search-db)
-      (p/loop [after 0
-               pause-ms 0]
-        (p/let [_ (js/Promise. (fn [resolve] (js/setTimeout resolve pause-ms)))
-                _ (<wait-for-search-index-idle! repo build-id)]
-          (when (= fts-id-keyed-search-db-version (search-index-version search-db))
-            (let [batch-started-at (common-util/time-ms)]
-              (if-let [after' (search/copy-fts-rowid-batch! search-db after search-index-build-batch-size)]
-                (p/recur after' (* fts-rowid-migration-pause-ratio
-                                   (- (common-util/time-ms) batch-started-at)))
-                (do
-                  (search/finish-fts-rowid-migration! search-db search-db-version)
-                  (log/info :search/fts-rowid-migration-done
-                            {:repo repo
-                             :ms (- (common-util/time-ms) started-at)}))))))))))
+      (ensure-active-search-index-build! repo build-id)
+      (when (= fts-id-keyed-search-db-version (search-index-version search-db))
+        (search/start-fts-rowid-migration! search-db)
+        (p/loop [after 0
+                 pause-ms 0]
+          (p/let [_ (js/Promise. (fn [resolve] (js/setTimeout resolve pause-ms)))
+                  _ (<wait-for-search-index-idle! repo build-id)]
+            (when (= fts-id-keyed-search-db-version (search-index-version search-db))
+              (let [batch-started-at (common-util/time-ms)]
+                (if-let [after' (search/copy-fts-rowid-batch! search-db after search-index-build-batch-size)]
+                  (p/recur after' (* fts-rowid-migration-pause-ratio
+                                     (- (common-util/time-ms) batch-started-at)))
+                  (do
+                    (search/finish-fts-rowid-migration! search-db search-db-version)
+                    (log/info :search/fts-rowid-migration-done
+                              {:repo repo
+                               :ms (- (common-util/time-ms) started-at)})))))))))))
 
 (defn- schedule-fts-rowid-migration!
   [repo search-db]
