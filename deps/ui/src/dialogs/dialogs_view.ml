@@ -58,6 +58,7 @@ let body_of name (ms : Model.t Signal.signal) : t =
   | "new-graph" | "add-graph" -> New_graph.body ms
   | "settings" -> Settings_page.modal_body ms
   | "plugins" -> Plugins_view.body ms
+  | "plugin-readme" -> Plugin_readme.body ms
   | "login" -> Login_view.body ms
   | "import" | "importer" -> Importer.body ms
   | "export" | "export-graph" -> Exporter.body ms
@@ -75,6 +76,7 @@ let body_of name (ms : Model.t Signal.signal) : t =
 let label_of = function
   | "settings" -> Some "app-settings"
   | "plugins" -> Some "plugins-dashboard"
+  | "plugin-readme" -> Some "plugin-readme"
   | _ -> None
 let dialog_view name (ms : Model.t Signal.signal) : t =
   let is_settings = name = "settings" in
@@ -93,6 +95,7 @@ let dialog_view name (ms : Model.t Signal.signal) : t =
          | "sync-server" | "publish-server" -> " lg:max-w-2xl"
          | "export-page" -> " w-auto md:max-w-4xl max-h-[80vh] overflow-y-auto"
          | "publish-page" -> " w-auto max-w-md"
+         | "plugin-readme" -> Plugin_readme.content_cls ()
          | _ -> "")
         ~attrs:
           ([ ("data-state", "open")

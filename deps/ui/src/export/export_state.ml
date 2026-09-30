@@ -6,6 +6,7 @@ type fmt =
   | Text
   | Opml
   | Html
+  | Png
   | Edn
 
 type t =
@@ -19,6 +20,9 @@ type t =
   ; newline_after_block : bool
   ; open_blocks_only : bool
   ; level_lte : int option
+  ; png : Webapi.Blob.t option
+  ; png_url : string option
+  ; png_transparent : bool
   }
 
 let get = Platform.local_storage_get
@@ -66,6 +70,9 @@ let defaults () =
   ; newline_after_block = nl
   ; open_blocks_only = ob
   ; level_lte = lvl
+  ; png = None
+  ; png_url = None
+  ; png_transparent = false
   }
 
 let persist st =
@@ -103,11 +110,17 @@ let open_ ctx =
     | None -> (None, None)
   in
   pending := None;
+  (match (Signal.get_state st).png_url with
+   | Some old -> Webapi.Url.revokeObjectURL old
+   | None -> ());
   Signal.update st (fun s ->
       { s with
         page_uuid = uuid
       ; page_db_id = db_id
       ; fmt = Text
       ; content = None
-      ; copied = false });
+      ; copied = false
+      ; png = None
+      ; png_url = None
+      ; png_transparent = false });
   Runtime.flush ()

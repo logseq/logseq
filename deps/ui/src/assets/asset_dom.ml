@@ -55,6 +55,11 @@ external lb_open : lightbox -> int -> unit = "loadAndOpen" [@@mel.send]
 external pswp_module : Js.Json.t Js.Undefined.t = "PhotoSwipe"
   [@@mel.scope "window"]
 
+(* cljs preview-images! keeps the live lightbox on
+   window.photoLightbox *)
+let set_photo_lightbox : lightbox -> unit =
+  [%mel.raw "function (lb) { window.photoLightbox = lb }"]
+
 let qs_all sel =
   let f : string -> Js.Json.t array =
     [%mel.raw
@@ -335,6 +340,7 @@ let open_lightbox clicked =
             ; "showHideAnimationType", B.str_to_json "fade" ]
         in
         let lb = new_lightbox opts in
+        set_photo_lightbox lb;
         lb_init lb;
         lb_open lb 0
   end
