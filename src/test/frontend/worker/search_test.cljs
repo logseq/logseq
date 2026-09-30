@@ -1,13 +1,17 @@
 (ns frontend.worker.search-test
-  (:require [cljs.test :refer [deftest is testing]]
+  (:require ["path" :as node-path]
+            [cljs.test :refer [async deftest is testing]]
             [clojure.string :as string]
             [datascript.core :as d]
+            [frontend.test.node-helper :as node-helper]
             [frontend.worker.handler.block-breadcrumb :as block-breadcrumb]
+            [frontend.worker.platform.node :as platform-node]
             [frontend.worker.search :as search]
             [frontend.worker.search-benchmark :as search-benchmark]
             [logseq.db :as ldb]
             [logseq.db.test.helper :as db-test]
-            [logseq.outliner.page :as outliner-page]))
+            [logseq.outliner.page :as outliner-page]
+            [promesa.core :as p]))
 
 (defn- sql-placeholder-count
   [sql]
@@ -1712,3 +1716,118 @@
     (is (some? error))
     (is (re-find #"Search upsert-blocks wrong data"
                  (or (ex-message error) (str error))))))
+
+(defn- <open-search-db
+  []
+  (let [dir (node-helper/create-tmp-dir "search-db")]
+    (#'platform-node/open-sqlite-db nil {:path (node-path/join dir "search.sqlite")})))
+
+(defn- query-rows
+  [db sql & bind]
+  (js->clj (.exec db #js {:sql sql :bind (to-array bind) :rowMode "array"})))
+
+(defn- fts-rows-out-of-step
+  "Ids of blocks rows whose FTS row, looked up by the blocks rowid, is missing
+  or holds other values"
+  [db]
+  (mapv first (query-rows db "SELECT b.id FROM blocks b LEFT JOIN blocks_fts f ON f.rowid = b.rowid
+                              WHERE f.rowid IS NULL OR f.id IS NOT b.id OR f.title IS NOT b.title OR f.page IS NOT b.page")))
+
+(defn- search-ids
+  [db q]
+  (with-redefs [search/combine-results (fn [_db results] results)
+                search/search-result->block-result (fn [_conn _q _code-class _option result]
+                                                     (assoc result :block/uuid (uuid (:id result))))]
+    (set (map :id (search/search-blocks (atom :large-db) db q {:limit 10 :enable-snippet? false})))))
+
+(defn- index-rows
+  [page id-titles]
+  (clj->js (map (fn [[id title]] {:id id :title title :page page}) id-titles)))
+
+(deftest fts-rows-keep-blocks-rowids-test
+  (async done
+    (let [page (str (random-uuid))
+          [a b c d] (repeatedly 4 #(str (random-uuid)))]
+      (-> (p/let [db (<open-search-db)]
+            (search/create-tables-and-triggers! db)
+            (search/upsert-blocks! db (index-rows page [[a "alpha apple"] [b "bravo banana"] [c "charlie cherry"]]))
+            (is (= #{a} (search-ids db "apple")))
+            (is (= #{b} (search-ids db "banana")))
+            (testing "an update and a delete find the FTS row by the blocks rowid"
+              (search/upsert-blocks! db (index-rows page [[a "alpha apricot"]]))
+              (search/delete-blocks! db [b])
+              (search/upsert-blocks! db (index-rows page [[d "delta date"]]))
+              (is (= [] (fts-rows-out-of-step db)))
+              (is (= [[3]] (query-rows db "SELECT count(*) FROM blocks_fts"))))
+            (testing "search results after the update and the delete"
+              (is (= #{} (search-ids db "apple")))
+              (is (= #{a} (search-ids db "apricot")))
+              (is (= #{} (search-ids db "banana")))
+              (is (= #{c} (search-ids db "cherry")))
+              (is (= #{d} (search-ids db "date"))))
+            (.close db))
+          (p/catch (fn [e] (is false (str e))))
+          (p/finally done)))))
+
+(def ^:private version-4-fts-triggers
+  "The triggers of search index version 4, which find FTS rows by id"
+  ["CREATE TRIGGER blocks_ad AFTER DELETE ON blocks BEGIN
+      DELETE from blocks_fts where id = old.id;
+    END;"
+   "CREATE TRIGGER blocks_ai AFTER INSERT ON blocks BEGIN
+      INSERT INTO blocks_fts (id, title, page) VALUES (new.id, new.title, new.page);
+    END;"
+   "CREATE TRIGGER blocks_au AFTER UPDATE ON blocks BEGIN
+      DELETE from blocks_fts where id = old.id;
+      INSERT INTO blocks_fts (id, title, page) VALUES (new.id, new.title, new.page);
+    END;"])
+
+(defn- create-version-4-index!
+  [db]
+  (.exec db "CREATE TABLE blocks (id TEXT NOT NULL PRIMARY KEY, title TEXT NOT NULL, page TEXT)")
+  (.exec db "CREATE VIRTUAL TABLE blocks_fts USING fts5(id, title, page, tokenize=\"trigram\")")
+  (doseq [trigger version-4-fts-triggers]
+    (.exec db trigger))
+  (.exec db "PRAGMA user_version = 4"))
+
+(deftest fts-rowid-migration-keeps-search-right-test
+  (async done
+    (let [page (str (random-uuid))
+          [a b c d e f g] (repeatedly 7 #(str (random-uuid)))
+          expected {"apricot" #{a} "banana" #{} "blueberry" #{b} "cherry" #{} "date" #{d}
+                    "elder" #{} "eggplant" #{e} "fig" #{} "grape" #{g}}
+          search-results (fn [db] (into {} (map (fn [q] [q (search-ids db q)]) (keys expected))))]
+      (-> (p/let [db (<open-search-db)]
+            (create-version-4-index! db)
+            (search/upsert-blocks! db (index-rows page [[a "alpha apple"] [b "bravo banana"] [c "charlie cherry"]
+                                                        [d "delta date"] [e "echo elder"] [f "foxtrot fig"]]))
+            (search/upsert-blocks! db (index-rows page [[a "alpha apricot"]]))
+            ;; the graph open path, which leaves an existing index as it is
+            (search/create-tables-and-triggers! db)
+            (is (= [a] (fts-rows-out-of-step db)) "version 4 moved the updated row to a new FTS rowid")
+            (search/start-fts-rowid-migration! db)
+            (is (= 3 (search/copy-fts-rowid-batch! db 0 3)))
+            (testing "edits while the index moves: before and after the copied rows"
+              (search/upsert-blocks! db (index-rows page [[b "bravo blueberry"] [e "echo eggplant"] [g "golf grape"]]))
+              (search/delete-blocks! db [c f])
+              (is (= expected (search-results db))))
+            (loop [after 3]
+              (when-let [after' (search/copy-fts-rowid-batch! db after 3)]
+                (recur after')))
+            (search/finish-fts-rowid-migration! db 5)
+            (is (= [] (fts-rows-out-of-step db)))
+            (is (= [[5]] (query-rows db "SELECT count(*) FROM blocks_fts")))
+            (is (= [[5]] (query-rows db "PRAGMA user_version")))
+            (is (= [["blocks_ad"] ["blocks_ai"] ["blocks_au"]]
+                   (query-rows db "SELECT name FROM sqlite_master WHERE type = 'trigger' ORDER BY name")))
+            (is (= [] (query-rows db "SELECT name FROM sqlite_master WHERE name LIKE 'blocks_fts_next%'")))
+            (is (= expected (search-results db)))
+            (testing "the rowid triggers after the move"
+              (search/upsert-blocks! db (index-rows page [[d "delta durian"]]))
+              (search/delete-blocks! db [a])
+              (is (= [] (fts-rows-out-of-step db)))
+              (is (= #{d} (search-ids db "durian")))
+              (is (= #{} (search-ids db "apricot"))))
+            (.close db))
+          (p/catch (fn [e] (is false (str e))))
+          (p/finally done)))))

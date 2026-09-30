@@ -1,5 +1,6 @@
 (ns frontend.worker.db-core-test
-  (:require [cljs.test :refer [async deftest is]]
+  (:require ["path" :as node-path]
+            [cljs.test :refer [async deftest is]]
             [clojure.string :as string]
             [datascript.core :as d]
             [datascript.impl.entity :as de]
@@ -19,6 +20,7 @@
             [frontend.worker.handler.search :as search-handler]
             [frontend.worker.pipeline :as worker-pipeline]
             [frontend.worker.platform :as platform]
+            [frontend.worker.platform.node :as platform-node]
             [frontend.worker.query-dsl :as worker-query-dsl]
             [frontend.worker.search :as search]
             [frontend.worker.shared-service :as shared-service]
@@ -1215,6 +1217,47 @@
           (reset! worker-state/*datascript-conns {test-repo conn})
           (p/let [result (build-index! test-repo false)]
             (is (= :started result))))))
+     (p/catch (fn [error]
+                (is false (str "unexpected error: " error))))
+     (p/finally done))))
+
+(deftest search-build-blocks-indice-in-worker-moves-version-four-index-to-rowid-keys-test
+  (async done
+    (->
+     (restoring-worker-state
+      (fn []
+        (let [build-index! (get @thread-api/*thread-apis :thread-api/search-build-blocks-indice-in-worker)
+              build-ids @#'search-handler/*search-index-build-ids
+              page (str (random-uuid))
+              blocks (mapv (fn [i] {:id (str (random-uuid)) :title (str "block " i) :page page}) (range 450))
+              rows (fn [db sql] (js->clj (.exec db #js {:sql sql :rowMode "array"})))
+              path (node-path/join (node-helper/create-tmp-dir "search-db") "search.sqlite")]
+          (platform/set-platform! (build-test-platform {:runtime :node}))
+          (p/let [db (#'platform-node/open-sqlite-db nil {:path path})]
+            ;; a version 4 index: FTS rows found by id, rowids drifted by updates
+            (.exec db "CREATE TABLE blocks (id TEXT NOT NULL PRIMARY KEY, title TEXT NOT NULL, page TEXT)")
+            (.exec db "CREATE VIRTUAL TABLE blocks_fts USING fts5(id, title, page, tokenize=\"trigram\")")
+            (.exec db "CREATE TRIGGER blocks_ai AFTER INSERT ON blocks BEGIN
+                         INSERT INTO blocks_fts (id, title, page) VALUES (new.id, new.title, new.page);
+                       END;")
+            (.exec db "CREATE TRIGGER blocks_au AFTER UPDATE ON blocks BEGIN
+                         DELETE from blocks_fts where id = old.id;
+                         INSERT INTO blocks_fts (id, title, page) VALUES (new.id, new.title, new.page);
+                       END;")
+            (search/upsert-blocks! db (clj->js blocks))
+            (search/upsert-blocks! db (clj->js (map #(assoc % :title "edited") (take 10 blocks))))
+            (.exec db "PRAGMA user_version = 4")
+            (reset! worker-state/*sqlite-conns {test-repo {:search db}})
+            ;; no datascript conn: the move reads the search db only
+            (p/let [result (build-index! test-repo false)
+                    _ (<wait-for-progress! build-ids #(nil? (get % test-repo)) 1000)]
+              (is (= 4 result) "the old index serves search while it moves, so the graph is ready at once")
+              (is (= [[search-handler/search-db-version]] (rows db "PRAGMA user_version")))
+              (is (= [[450]] (rows db "SELECT count(*) FROM blocks_fts")))
+              (is (= [] (rows db "SELECT b.id FROM blocks b LEFT JOIN blocks_fts f ON f.rowid = b.rowid
+                                  WHERE f.id IS NOT b.id OR f.title IS NOT b.title")))
+              (is (= [[10]] (rows db "SELECT count(*) FROM blocks_fts WHERE title MATCH 'edited'")))
+              (.close db))))))
      (p/catch (fn [error]
                 (is false (str "unexpected error: " error))))
      (p/finally done))))
