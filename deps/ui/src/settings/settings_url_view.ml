@@ -88,10 +88,10 @@ let url_editor_body ~key ~storage_key ~title ~desc ~placeholder
   let node =
     dom ~key ~style_class:("cp__settings-" ^ key ^ "-cnt")
       [ dom ~key:(key ^ "-h") ~tag:"h1"
-          ~style_class:"mb-2 text-2xl font-bold" ~text:title []
-      ; dom ~key:(key ^ "-b") ~style_class:"p-2"
+          ~style_class:"ls-dialog-title-lg" ~text:title []
+      ; dom ~key:(key ^ "-b") ~style_class:"ls-pad"
           [ dom ~key:(key ^ "-d") ~tag:"p"
-              ~style_class:"text-sm opacity-70 mb-4" ~text:desc []
+              ~style_class:"ls-desc ls-mb-sm" ~text:desc []
           ; dom ~key:(key ^ "-i") ~tag:"p"
               [ dom ~key:(key ^ "-il") ~tag:"label"
                   [ dom ~key:(key ^ "-is") ~tag:"strong" ~text:"URL" []
@@ -106,7 +106,7 @@ let url_editor_body ~key ~storage_key ~title ~desc ~placeholder
                   ]
               ]
           ; dom ~key:(key ^ "-btns") ~tag:"p"
-              ~style_class:"pt-2 flex gap-2"
+              ~style_class:"ls-form-actions"
               ([ dom ~key:(key ^ "-save") ~tag:"button"
                    ~style_class:
                      (Settings_page.btn_base ^ " "

@@ -13,7 +13,7 @@ let ghost_btn ?(extra = "") icon_name =
   D.h ~tag:"button"
     ~cls:
       (D.button_cls ~variant:"ghost" ~size:"sm"
-         ~cls:("text-muted-foreground !px-1" ^ extra) ())
+         ~cls:("ls-icon-btn" ^ extra) ())
     ~attrs:[ ("type", "button") ] ~children:[ D.icon icon_name ] ()
 
 let count_of inst =
@@ -51,12 +51,12 @@ let view_tab inst ~refresh (v : Wr.view_ent) : D.el =
   let is_current = v.Wr.vu = inst.V.view_uuid in
   let count = count_of inst in
   let children =
-    [ D.h ~tag:"span" ~cls:"inline-flex items-center ls-icon-color-wrap"
+    [ D.h ~tag:"span" ~cls:"ls-icon-color-wrap"
         ~children:[ D.icon (view_type_icon v) ] ()
     ; Editor_dom.create_text_node (V.display_title v) ]
     @ (if is_current && inst.V.feature <> "query-result" && count > 0
        then
-         [ D.h ~tag:"span" ~cls:"text-muted-foreground text-xs"
+         [ D.h ~tag:"span" ~cls:"ls-count"
              ~text:(string_of_int count) () ]
        else [])
   in
@@ -65,8 +65,8 @@ let view_tab inst ~refresh (v : Wr.view_ent) : D.el =
       ~cls:
         (D.button_cls ~variant:"text" ~size:"sm"
            ~cls:
-             ("text-sm px-0 py-0 h-6 "
-              ^ if is_current then "" else "text-muted-foreground")
+             ("ls-view-tab"
+              ^ if is_current then "" else " ls-dim")
            ())
       ~attrs:
         [ ("type", "button"); ("data-view-tab-id", "view-tab-" ^ v.Wr.vu) ]
@@ -106,10 +106,7 @@ let tabs_el inst ~refresh ~opacity : D.el * D.el =
     D.h ~tag:"button"
       ~cls:
         (D.button_cls ~variant:"text" ~size:"sm"
-           ~cls:
-             ("!px-1 -ml-1 text-muted-foreground hover:text-foreground \
-               transition-opacity ease-in duration-300 "
-              ^ opacity)
+           ~cls:("ls-add-view " ^ opacity)
            ())
       ~attrs:[ ("type", "button"); ("title", I.add_new_view) ]
       ~children:[ D.icon "plus" ] ()
@@ -131,18 +128,17 @@ let sorting_popup inst ~refresh anchor =
         | Some c ->
             [ P.MCustom
                 (D.h ~cls:
-                   "ls-view-order-setting flex flex-row gap-2 items-center \
-                    justify-between px-2"
+                   "ls-view-order-setting"
                    ~children:
-                     [ D.h ~cls:"flex flex-row gap-1 items-center"
+                     [ D.h ~cls:"ls-drag-row"
                          ~children:
                            [ D.h ~tag:"i" ~cls:"ti ti-grip-vertical" ()
                            ; D.h ~cls:
-                               "text-muted-foreground whitespace-nowrap"
+                               "ls-col-name"
                                ~text:(c.V.c_name ^ ":") ()
                            ]
                          ()
-                     ; D.h ~tag:"span" ~cls:"text-xs"
+                     ; D.h ~tag:"span" ~cls:"ls-xs"
                          ~text:
                            (if s.V.s_asc then I.ascending else I.descending)
                          ~on_click:(fun _ ->
@@ -218,10 +214,10 @@ let filter_value_phase inst ~refresh ~anchor (c : V.column) =
               (Wr.W.elems
                  (Option.value (W.get data "values") ~default:W.Nil))
       in
-      let content = D.h ~cls:"flex flex-col gap-1 text-sm" () in
+      let content = D.h ~cls:"ls-vf-col" () in
       let inner = D.h ~cls:"cp__select cp__select-main" () in
       let inp =
-        D.h ~tag:"input" ~cls:"cp__select-input w-full !p-1.5"
+        D.h ~tag:"input" ~cls:"cp__select-input"
           ~attrs:[ ("type", "text"); ("placeholder", c.V.c_name) ] ()
       in
       D.el_append_child inner (D.h ~cls:"input-wrap" ~children:[ inp ] ());
@@ -234,10 +230,10 @@ let filter_value_phase inst ~refresh ~anchor (c : V.column) =
           (fun it ->
             if Fuzzy.score q it.P.si_label > 0. then begin
               let a =
-                D.h ~tag:"a" ~cls:"flex justify-between menu-link"
+                D.h ~tag:"a" ~cls:"menu-link"
                   ~attrs:[ ("tabindex", "0") ]
                   ~children:
-                    [ D.h ~tag:"span" ~cls:"flex-1" ~text:it.P.si_label () ]
+                    [ D.h ~tag:"span" ~cls:"menu-item-label" ~text:it.P.si_label () ]
                   ()
               in
               D.el_add_listener a "click" (fun _ ->
@@ -263,10 +259,10 @@ let filter_value_phase inst ~refresh ~anchor (c : V.column) =
          let mk label op =
            let b =
              D.h ~tag:"button"
-               ~cls:"inline-flex justify-start text-left px-2 py-1 text-sm"
+               ~cls:"ls-op-btn"
                ~children:
                  [ D.h ~tag:"span"
-                     ~cls:"opacity-75 hover:opacity-100 font-normal text-sm"
+                     ~cls:"ls-op-label"
                      ~text:label () ]
                ()
            in
@@ -329,7 +325,7 @@ let filter_popup inst ~refresh anchor =
    is open) — e2e clicks it twice, so the button must not disappear *)
 let search_el inst ~refresh : D.el =
   let wrap = D.h ~cls:"view-action-search" () in
-  let inner = D.h ~cls:"flex flex-row items-center" () in
+  let inner = D.h ~cls:"ls-row" () in
   let btn = ghost_btn "search" in
   D.el_add_listener btn "click" (fun _ ->
       if not inst.V.search_open then begin
@@ -340,7 +336,7 @@ let search_el inst ~refresh : D.el =
   if inst.V.search_open then begin
     let inp =
       D.h ~tag:"input"
-        ~cls:"max-w-sm !h-7 !py-0 border-none bg-transparent text-sm"
+        ~cls:"ls-search-input"
         ~attrs:
           [ ("type", "text"); ("placeholder", I.type_to_search)
           ; ("data-1p-ignore", "")
@@ -363,7 +359,7 @@ let search_el inst ~refresh : D.el =
             refresh inst
         | _ -> ());
     let xbtn =
-      D.h ~tag:"button" ~cls:"!px-1 text-muted-foreground"
+      D.h ~tag:"button" ~cls:"ls-icon-btn"
         ~children:[ D.icon "x" ] ()
     in
     D.el_add_listener xbtn "click" (fun _ ->
@@ -486,7 +482,7 @@ and mk_group_sort inst ~refresh ident label =
 (* ---------- display type ---------- *)
 
 let display_type_el inst ~refresh : D.el =
-  let wrap = D.h ~cls:"view-action-type text-muted-foreground text-sm" () in
+  let wrap = D.h ~cls:"view-action-type ls-dim" () in
   let icon_name =
     match inst.V.display_type with
     | "list" -> "list"
@@ -494,15 +490,15 @@ let display_type_el inst ~refresh : D.el =
     | _ -> "table"
   in
   let inner =
-    D.h ~cls:"property-value-inner w-full"
+    D.h ~cls:"property-value-inner"
       ~children:
-        [ D.h ~cls:"cursor-pointer flex flex-1 jtrigger w-full"
+        [ D.h ~cls:"jtrigger"
             ~attrs:[ ("id", "trigger-" ^ Platform.random_uuid ()) ]
             ~children:
-              [ D.h ~cls:"cursor-pointer select-item"
+              [ D.h ~cls:"select-item"
                   ~children:
                     [ D.h ~tag:"span"
-                        ~cls:"inline-flex items-center ls-icon-color-wrap"
+                        ~cls:"ls-icon-color-wrap"
                         ~children:[ D.icon icon_name ] () ]
                   () ]
             () ]
@@ -544,7 +540,7 @@ let filter_value_label inst f =
 
 let filter_chip inst ~refresh idx (f : V.filter_clause) : D.el =
   let chip =
-    D.h ~cls:"flex flex-row items-center border rounded min-w-0 max-w-full" ()
+    D.h ~cls:"ls-vf-chip" ()
   in
   let prop_title =
     match List.find_opt (fun c -> c.V.c_id = f.V.c_prop) inst.V.columns with
@@ -552,13 +548,13 @@ let filter_chip inst ~refresh idx (f : V.filter_clause) : D.el =
     | None -> f.V.c_prop
   in
   D.el_append_child chip
-    (D.h ~tag:"button" ~cls:"!px-2 rounded-none border-r text-sm opacity-80"
+    (D.h ~tag:"button" ~cls:"ls-vf-chip-prop"
        ~attrs:[ ("disabled", "true") ]
-       ~children:[ D.h ~tag:"span" ~cls:"text-xs" ~text:prop_title () ] ());
+       ~children:[ D.h ~tag:"span" ~cls:"ls-xs" ~text:prop_title () ] ());
   let op_btn =
-    D.h ~tag:"button" ~cls:"!px-2 rounded-none border-r text-sm"
+    D.h ~tag:"button" ~cls:"ls-vf-chip-op"
       ~children:
-        [ D.h ~tag:"span" ~cls:"text-xs" ~text:(I.operator_text f.V.c_op) () ]
+        [ D.h ~tag:"span" ~cls:"ls-xs" ~text:(I.operator_text f.V.c_op) () ]
       ()
   in
   D.el_add_listener op_btn "click" (fun _ ->
@@ -593,8 +589,7 @@ let filter_chip inst ~refresh idx (f : V.filter_clause) : D.el =
   D.el_append_child chip op_btn;
   let val_el =
     D.h ~cls:
-      "ls-view-filter-value flex flex-row items-center gap-1 text-xs \
-       min-w-0 max-w-full overflow-hidden"
+      "ls-view-filter-value"
       ~children:
         [ D.h ~cls:"ls-view-filter-value-item"
             ~text:(filter_value_label inst f) () ]
@@ -602,11 +597,10 @@ let filter_chip inst ~refresh idx (f : V.filter_clause) : D.el =
   in
   D.el_append_child chip
     (D.h ~tag:"button"
-       ~cls:"!px-2 rounded-none border-r min-w-0 max-w-full overflow-hidden \
-             text-sm"
+       ~cls:"ls-vf-chip-val"
        ~children:[ val_el ] ());
   let x =
-    D.h ~tag:"button" ~cls:"!px-1 rounded-none text-muted-foreground"
+    D.h ~tag:"button" ~cls:"ls-vf-chip-x"
       ~children:[ D.icon "x" ] ()
   in
   D.el_add_listener x "click" (fun _ ->
@@ -623,12 +617,11 @@ let filters_row inst ~refresh : D.el option =
   | fs ->
       let row =
         D.h ~cls:
-          "filters-row flex flex-row items-center gap-4 justify-between \
-           flex-wrap py-2 min-w-0 max-w-full" ()
+          "filters-row" ()
       in
       let chips =
         D.h ~cls:
-          "flex flex-row items-center gap-2 flex-wrap min-w-0 max-w-full"
+          "ls-vf-chips"
           ()
       in
       List.iteri
@@ -638,7 +631,7 @@ let filters_row inst ~refresh : D.el option =
       (if List.length fs > 1 then
          let sel =
            D.h ~tag:"select"
-             ~cls:"opacity-75 hover:opacity-100 !px-2 !py-0 !h-6 text-sm" ()
+             ~cls:"ls-vf-logic" ()
          in
          List.iter
            (fun (v, l) ->
@@ -659,8 +652,7 @@ let filters_row inst ~refresh : D.el option =
 let render_head inst ~refresh : D.el =
   let head =
     D.h ~cls:
-      "ls-view-head flex flex-1 flex-nowrap items-center justify-between \
-       gap-1 overflow-hidden" ()
+      "ls-view-head" ()
   in
   (* cljs view-head fades actions/tabs to opacity-75, full on hover *)
   let fade_targets = ref [] in
@@ -668,33 +660,32 @@ let render_head inst ~refresh : D.el =
     List.iter
       (fun el ->
         if shown then begin
-          D.el_class_remove el "opacity-75";
-          D.el_class_add el "opacity-100"
+          D.el_class_remove el "ls-dim";
+          D.el_class_add el "ls-lit"
         end
         else begin
-          D.el_class_remove el "opacity-100";
-          D.el_class_add el "opacity-75"
+          D.el_class_remove el "ls-lit";
+          D.el_class_add el "ls-dim"
         end)
       !fade_targets
   in
   D.el_add_listener head "mouseover" (fun _ -> set_opacity true);
   D.el_add_listener head "mouseout" (fun _ ->
       if !P.open_popups = [] then set_opacity false);
-  let left = D.h ~cls:"flex flex-row items-center gap-2" () in
+  let left = D.h ~cls:"ls-view-head-left" () in
   (match inst.V.kind with
    | V.KQuery _ ->
        D.el_append_child left
-         (D.h ~cls:"font-medium opacity-50 text-sm"
+         (D.h ~cls:"ls-query-count"
             ~text:(I.live_query (count_of inst)) ())
    | _ ->
-       let tabs, add = tabs_el inst ~refresh ~opacity:"opacity-75" in
+       let tabs, add = tabs_el inst ~refresh ~opacity:"ls-dim" in
        fade_targets := add :: !fade_targets;
        D.el_append_child left tabs);
   let actions =
     D.h
       ~cls:
-        "view-actions flex items-center gap-1 transition-opacity ease-in \
-         duration-300 opacity-75"
+        "view-actions ls-dim"
       ()
   in
   fade_targets := actions :: !fade_targets;

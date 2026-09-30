@@ -29,7 +29,7 @@ let checkbox ~key ~id ~checked ~on_click =
     ~events:"click"
     ~on_dom_event:(fun n _ -> if n = "click" then on_click ())
     (if checked then
-       [ dom ~key:(key ^ "-ck") ~tag:"i" ~style_class:"ti ti-check h-4 w-4"
+       [ dom ~key:(key ^ "-ck") ~tag:"i" ~style_class:"ti ti-check ls-icon-sm"
            [] ]
      else [])
 
@@ -81,11 +81,10 @@ let body (_ms : Model.t Signal.signal) : t =
   let e2ee = Signal.state ctx.ui_scheduler true in
   let creating = Signal.state ctx.ui_scheduler false in
   let node =
-    dom ~key:"new-graph" ~style_class:"new-graph flex flex-col gap-4 p-1 pt-2"
+    dom ~key:"new-graph" ~style_class:"new-graph"
       [ dom ~key:"ng-h" ~tag:"h2"
           ~style_class:
-            "ui__dialog-title text-lg font-semibold leading-none \
-             tracking-tight" ~text:T.create_new_graph []
+            "ui__dialog-title" ~text:T.create_new_graph []
       ; dom ~key:"ng-in" ~tag:"input"
           ~attrs:
             [ ("placeholder", T.graph_name_placeholder)
@@ -106,9 +105,9 @@ let body (_ms : Model.t Signal.signal) : t =
             | _ -> ())
           []
       ; if Platform.rtc_test_mode () then
-          dom ~key:"ng-rtc" ~style_class:"flex flex-col"
+          dom ~key:"ng-rtc" ~style_class:"ls-ng-rtc"
             [ dom ~key:"ng-rtc-row"
-                ~style_class:"flex flex-row items-center gap-1"
+                ~style_class:"ls-ng-row"
                 [ dyn ~equal:Stdlib.( = )
                     (fun c ->
                       checkbox ~key:"rtc" ~id:"rtc-sync" ~checked:c
@@ -117,12 +116,12 @@ let body (_ms : Model.t Signal.signal) : t =
                           Runtime.flush ()))
                     (Signal.value cloud)
                 ; dom ~key:"rtc-lbl" ~tag:"label"
-                    ~style_class:"opacity-70 text-sm"
+                    ~style_class:"ls-ng-label"
                     ~attrs:[ ("for", "rtc-sync") ]
                     ~text:T.use_sync_label []
                 ; if_ ~test:(Signal.value cloud)
                     (dom ~key:"ng-e2ee-row"
-                       ~style_class:"flex flex-row items-center gap-1 ml-3"
+                       ~style_class:"ls-ng-row ls-ng-sub"
                        [ dyn ~equal:Stdlib.( = )
                            (fun c ->
                              checkbox ~key:"e2ee" ~id:"rtc-graph-e2ee"
@@ -133,7 +132,7 @@ let body (_ms : Model.t Signal.signal) : t =
                                  Runtime.flush ()))
                            (Signal.value e2ee)
                        ; dom ~key:"e2ee-lbl" ~tag:"label"
-                           ~style_class:"opacity-70 text-sm"
+                           ~style_class:"ls-ng-label"
                            ~attrs:[ ("for", "rtc-graph-e2ee") ]
                            ~text:T.encrypt_data_label []
                        ])

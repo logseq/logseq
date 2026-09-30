@@ -17,26 +17,22 @@ let body (_ms : Model.t Signal.signal) : t =
   in
   let node =
     dom ~key:"qa-root"
-      ~style_class:"ls-quick-add flex flex-1 flex-col w-full gap-4"
+      ~style_class:"ls-quick-add"
       [ dom ~key:"qa-head"
-          ~style_class:
-            "flex flex-row justify-between gap-4 items-center border-b pb-4"
-          [ dom ~key:"qa-t" ~style_class:"font-medium"
+          ~style_class:"ls-qa-head"
+          [ dom ~key:"qa-t" ~style_class:"ls-qa-title"
               ~text:(U.t "editor.quick-add/title") [] ]
-      ; dom ~key:"qa-c" ~style_class:"content block -ml-6"
+      ; dom ~key:"qa-c" ~style_class:"ls-qa-content"
           ~attrs:[ ("data-cid", "quick-add") ]
           [ dyn ~equal:(fun a b -> a == b)
               (fun blocks ->
                 dom ~key:"qa-list"
-                  ~style_class:"page-blocks-inner relative"
+                  ~style_class:"page-blocks-inner"
                   (List.map (Tree.block_row ~scope:"quick-add") blocks))
               blocks_sig ]
-      ; dom ~key:"qa-btns" ~style_class:"flex flex-row justify-end"
+      ; dom ~key:"qa-btns" ~style_class:"ls-qa-btns"
           [ dom ~key:"qa-add" ~tag:"button"
-              ~style_class:
-                "inline-flex items-center justify-center rounded-md \
-                 text-sm font-medium px-3 py-1.5 bg-primary \
-                 text-primary-foreground"
+              ~style_class:"ui__button ls-btn-primary"
               ~attrs:[ ("type", "button") ]
               ~events:"click"
               ~on_dom_event:(fun n _ ->

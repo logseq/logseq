@@ -12,18 +12,11 @@ let dom = Logseq_dom.dom
 let dyn = Logseq_dom.dyn
 let keyed = Logseq_dom.keyed
 
-let overlay_cls =
-  "ui__dialog-overlay fixed inset-0 z-50 bg-background/90 flex \
-   justify-center items-center"
+let overlay_cls = "ui__dialog-overlay"
 
-let content_cls =
-  "ui__dialog-content fixed left-[50%] top-[50%] z-50 grid w-full \
-   max-w-2xl lg:max-w-3xl gap-4 border sm:rounded-lg bg-background p-6 \
-   shadow-lg ui__dialog-zoom-in"
+let content_cls = "ui__dialog-content"
 
-let btn_style =
-  "inline-flex items-center justify-center rounded-md text-sm \
-   font-medium px-4 py-2"
+let btn_style = "ui__button ls-btn"
 
 let is_overlay_click payload =
   Option.fold ~none:false
@@ -42,16 +35,12 @@ let is_overlay_click payload =
 
 let close_btn =
   dom ~key:"dlg-close" ~tag:"button"
-    ~style_class:
-      "ui__dialog-close absolute right-4 top-4 rounded-sm opacity-70 \
-       ring-offset-background transition-opacity hover:opacity-100 \
-       focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 \
-       disabled:pointer-events-none"
+    ~style_class:"ui__dialog-close"
     ~attrs:[ ("type", "button") ]
     ~events:"click"
     ~on_dom_event:(fun name _ ->
       if name = "click" then Dialogs_state.close_top ())
-    [ Icons.raw ~cls:"h-4 w-4" "x" ]
+    [ Icons.raw ~cls:"ls-icon-sm" "x" ]
 
 let body_of name (ms : Model.t Signal.signal) : t =
   match name with
@@ -89,23 +78,11 @@ let dialog_view name (ms : Model.t Signal.signal) : t =
     ~on_dom_event:(fun n p ->
       if n = "click" && is_overlay_click p then Dialogs_state.close_top ())
     [ dom ~key:("dlg-c-" ^ name)
-        ~style_class:
-          (content_cls ^ " ls-dialog-" ^ name
-         ^
-         match name with
-         | "sync-server" | "publish-server" -> " lg:max-w-2xl"
-         | "export-page" -> " w-auto md:max-w-4xl max-h-[80vh] overflow-y-auto"
-         | "publish-page" -> " w-auto max-w-md"
-         | "plugin-readme" -> Plugin_readme.content_cls ()
-         | _ -> "")
+        ~style_class:(content_cls ^ " ls-dialog-" ^ name)
         ~attrs:
           ([ ("data-state", "open")
            ; ( "style"
-             , Printf.sprintf "z-index:%d;%s" z
-                 (if is_settings then
-                    "transform: translateX(-50%); width: min(1024px, \
-                     calc(100vw - 2rem)); max-width: calc(100vw - 2rem)"
-                  else "transform: translate(-50%, -50%)") )
+             , Printf.sprintf "z-index:%d" z )
            ]
           @
           match label_of name with
@@ -114,9 +91,7 @@ let dialog_view name (ms : Model.t Signal.signal) : t =
         (* cljs shui dialog/core: h2.ui__dialog-title (hidden when the
            dialog has no title) then .ui__dialog-main-content > body *)
         [ dom ~key:("dlg-t-" ^ name) ~tag:"h2"
-            ~style_class:
-              "ui__dialog-title text-lg font-semibold leading-none \
-               tracking-tight hidden"
+            ~style_class:"ui__dialog-title hidden"
             []
         ; dom ~key:("dlg-m-" ^ name) ~style_class:"ui__dialog-main-content"
             [ body_of name ms ]
@@ -134,9 +109,7 @@ let btn key label extra act =
 let confirm_view (c : Dialogs_state.confirm) =
   let z = Dialogs_state.z_index "confirm" in
   dom ~key:"cfrm-ov"
-    ~style_class:
-      "ui__alert-dialog-overlay fixed inset-0 z-50 bg-background/80 \
-       backdrop-blur-sm"
+    ~style_class:"ui__alert-dialog-overlay"
     ~attrs:[ ("style", Printf.sprintf "z-index:%d" z) ]
     ~events:"click"
     ~on_dom_event:(fun n payload ->
@@ -158,31 +131,19 @@ let confirm_view (c : Dialogs_state.confirm) =
     [ dom ~key:"cfrm"
         ~attrs:
           [ ("role", "alertdialog")
-          ; ( "style"
-            , Printf.sprintf
-                "position:fixed;left:50%%;top:50%%;transform:translate(-50%%,-50%%);z-index:%d"
-                z )
-          ]
-        ~style_class:
-          "ui__alert-dialog-content z-50 grid w-full max-w-lg gap-4 \
-           border bg-background p-6 shadow-lg sm:rounded-lg"
+          ; ("style", Printf.sprintf "z-index:%d" z) ]
+        ~style_class:"ui__alert-dialog-content"
         [ dom ~key:"cfrm-t" ~tag:"h2"
-            ~style_class:
-              "ui__alert-dialog-title text-lg font-semibold"
+            ~style_class:"ui__alert-dialog-title"
             ~text:c.title []
         ; dom ~key:"cfrm-d" ~tag:"div"
-            ~style_class:
-              "ui__alert-dialog-description text-sm \
-               text-muted-foreground"
+            ~style_class:"ui__alert-dialog-description"
             ~text:c.desc []
         ; dom ~key:"cfrm-f"
-            ~style_class:
-              "ui__alert-dialog-footer flex flex-col-reverse \
-               sm:flex-row sm:justify-end sm:space-x-2"
-            [ btn "cfrm-cancel" I18n.cancel "border"
+            ~style_class:"ui__alert-dialog-footer"
+            [ btn "cfrm-cancel" I18n.cancel "ls-btn-outline"
                 Dialogs_state.close_confirm
-            ; btn "cfrm-ok" I18n.confirm
-                "bg-primary text-primary-foreground"
+            ; btn "cfrm-ok" I18n.confirm "ls-btn-primary"
                 Dialogs_state.confirm
             ]
         ]
@@ -214,19 +175,17 @@ let prompt_view (p : Dialogs_state.prompt) =
             , Printf.sprintf "z-index:%d;transform: translate(-50%%, -50%%)"
                 z )
           ]
-        [ dom ~key:"prmt-box" ~style_class:"container"
+        [ dom ~key:"prmt-box" ~style_class:"ls-prompt-box"
             [ dom ~key:"prmt-h" ~tag:"h3" ~id:"modal-headline"
-                ~style_class:"leading-6 font-medium pb-2" ~text:p.title []
+                ~style_class:"ls-prompt-headline" ~text:p.title []
             ; dom ~key:"prmt-in" ~tag:"input"
-                ~style_class:
-                  "form-input block w-full sm:text-sm sm:leading-5 my-2 \
-                   mb-4"
+                ~style_class:"form-input ls-prompt-input"
                 ~attrs:
                   [ ("type", "text"); ("autocomplete", "off")
                   ; ("autofocus", "true") ]
                 ~events:"keydown"
                 ~on_dom_event:input_events []
-            ; btn "prmt-ok" I18n.submit "" (fun () -> submit ())
+            ; btn "prmt-ok" I18n.submit "ls-btn-primary" (fun () -> submit ())
             ]
         ; close_btn
         ]

@@ -42,7 +42,7 @@ let grid ~on_pick =
   let today = Properties_value.today_day () in
   let year = int_of_float (Js.Date.getFullYear now) in
   let month0 = int_of_float (Js.Date.getMonth now) in
-  let wrap = mk ~cls:"ui__calendar flex flex-row flex-wrap" "div" in
+  let wrap = mk ~cls:"ui__calendar" "div" in
   el_set_attr wrap "role" "grid";
   let lead = first_weekday ~year ~month0 in
   for _ = 1 to lead do

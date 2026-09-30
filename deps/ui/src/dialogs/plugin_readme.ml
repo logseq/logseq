@@ -38,13 +38,6 @@ type target =
 
 let pending : target option ref = ref None
 
-let remote () = match !pending with Some t -> t.repo <> "" | None -> false
-
-(* cljs content-props {:class "max-h-[86vh] overflow-auto"} applies to
-   the local-readme dialog only *)
-let content_cls () =
-  if remote () then "" else " max-h-[86vh] overflow-auto"
-
 (* -- readme fetch, mirroring resources/marketplace.html -- *)
 
 let endpoints url =
@@ -205,24 +198,22 @@ let body (_ms : Model.t Signal.signal) : t =
          [ (if t.repository = "" then Logseq_dom.nothing
             else
               dom ~key:"rd-repo"
-                ~style_class:"p-4 rounded-md bg-base-3"
+                ~style_class:"ls-readme-repo"
                 [ dom ~key:"rd-repo-s" ~tag:"strong"
                     [ dom ~key:"rd-repo-a" ~tag:"a"
-                        ~style_class:"flex items-center"
+                        ~style_class:"ls-readme-repo-link"
                         ~attrs:
                           [ ("href", t.repository); ("target", "_blank") ]
                         [ dom ~key:"rd-repo-i" ~tag:"span"
-                            ~style_class:"mr-1"
+                            ~style_class:"ls-readme-repo-icon"
                             [ Icons.icon ~size:25. "brand-github" ]
                         ; dom ~key:"rd-repo-t" ~tag:"span"
                             ~text:t.repository [] ]
                     ]
                 ])
          ; dom ~key:"rd-body"
-             ~style_class:"p-1 bg-transparent border-none ls-block"
-             ~attrs:
-               [ ("style", "min-height:60vw;max-width:900px")
-               ; ("id", "ls-plugin-readme-content") ]
+             ~style_class:"ls-readme-body ls-block"
+             ~attrs:[ ("id", "ls-plugin-readme-content") ]
              [] ]
    | None -> Logseq_dom.nothing)
     ctx parent

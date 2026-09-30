@@ -136,15 +136,15 @@ let logo_svg () =
 
 let file_input ~id ~label ~desc ~accept ?(extra_attrs = []) () =
   dom ~key:id ~tag:"label"
-    ~style_class:"action-input flex items-center mx-2 my-2"
+    ~style_class:"action-input"
     [ dom ~key:(id ^ "-ic") ~style_class:"as-flex-center"
         [ dom ~key:(id ^ "-ico") ~tag:"i" [ logo_svg () ] ]
     ; dom ~key:(id ^ "-t")
-        ~style_class:"flex flex-col"
+        ~style_class:"ls-imp-field"
         [ dom ~key:(id ^ "-s") ~tag:"strong" ~text:label []
         ; dom ~key:(id ^ "-d") ~tag:"small" ~text:desc [] ]
     ; dom ~key:(id ^ "-i") ~tag:"input"
-        ~style_class:"absolute hidden"
+        ~style_class:"ls-hidden-input"
         ~attrs:
           ([ ("id", id); ("type", "file"); ("accept", accept) ]
            @ extra_attrs)
@@ -173,19 +173,19 @@ let items () =
 
 let article () =
   dom ~key:"import" ~tag:"article"
-    ~style_class:"flex flex-col items-center importer py-16 px-8"
+    ~style_class:"importer"
     [ dom ~key:"imp-c" ~style_class:"c text-center"
         [ dom ~key:"imp-h" ~tag:"h1" ~text:T.import_title []
         ; dom ~key:"imp-d" ~tag:"h2" ~text:T.import_desc [] ]
-    ; dom ~key:"imp-l" ~style_class:"d md:flex flex-col" (items ()) ]
+    ; dom ~key:"imp-l" ~style_class:"d" (items ()) ]
 
 (* route view — cljs setups/setups-container :importer wraps the article in
    .cp__onboarding-setups > .inner-card with a title/subtitle header *)
 let view () : t =
-  dom ~key:"importer" ~style_class:"cp__onboarding-setups flex flex-1"
+  dom ~key:"importer" ~style_class:"cp__onboarding-setups"
     [ dom ~key:"imp-card"
-        ~style_class:"inner-card flex flex-col items-center"
-        [ dom ~key:"imp-th" ~tag:"h1" ~style_class:"text-xl"
+        ~style_class:"inner-card"
+        [ dom ~key:"imp-th" ~tag:"h1" ~style_class:"ls-imp-title"
             [ dom ~key:"imp-ts" ~tag:"span"
                 ~text:T.import_existing_notes [] ]
         ; dom ~key:"imp-td" ~tag:"h2" ~text:T.import_later []
