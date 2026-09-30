@@ -11,6 +11,7 @@
             [frontend.db.async :as db-async]
             [frontend.db.hooks :as db-hooks]
             [frontend.db.subs :as subs]
+            [frontend.handler.editor :as editor-handler]
             [frontend.modules.outliner.op :as outliner-op]
             [frontend.state :as state]
             [frontend.util :as util]
@@ -1469,3 +1470,45 @@
                        (set! outliner-op/delete-page! original-delete-page!)
                        (set! state/pub-event! original-pub-event!)
                        (done)))))))
+
+(deftest default-view-creation-error-does-not-throw
+  (is (nil? (#'views/handle-default-view-creation-error!
+             (ex-info "Page name can't include \"/\"."
+                      {:type :notification
+                       :payload {:message "Page name can't include \"/\"."}})))
+      "A refused title must not rethrow during render."))
+
+(deftest create-view-skips-current-block-save
+  (async done
+    (let [view-parent {:db/id 1
+                       :block/uuid #uuid "11111111-1111-1111-1111-111111111111"}
+          views-page {:db/id 99
+                      :block/uuid #uuid "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"}
+          created {:db/id 7
+                   :block/uuid #uuid "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"}
+          insert-opts (atom nil)]
+      (-> (p/with-redefs [state/get-current-repo (constantly "views-create-test")
+                          db-async/<get-block (fn [_repo lookup _opts]
+                                                (p/resolved
+                                                 (cond
+                                                   (= lookup "$$$views") views-page
+                                                   (= lookup (:block/uuid created)) created
+                                                   :else nil)))
+                          state/<invoke-db-worker (fn [_api _repo _selector _ident]
+                                                    (p/resolved {:db/id 20}))
+                          editor-handler/api-insert-new-block!
+                          (fn [_title opts]
+                            (reset! insert-opts opts)
+                            (p/resolved created))]
+            (#'views/create-view! view-parent :unlinked-references {:auto-triggered? true}))
+          (p/then
+           (fn [view]
+             (is (= created view))
+             (is (true? (:skip-save-current-block? @insert-opts))
+                 "Default Unlinked refs creation must not save the current editor")
+             (is (= :create-view (:outliner-op @insert-opts)))
+             (is (false? (:edit-block? @insert-opts)))
+             (done)))
+          (p/catch (fn [error]
+                     (is false (str error))
+                     (done)))))))

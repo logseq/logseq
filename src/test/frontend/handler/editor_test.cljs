@@ -1722,6 +1722,48 @@
                @calls)
             "Insert metadata and operations must use one transaction."))))
 
+(deftest create-view-insert-skips-pending-editor-save-test
+  (let [current-id #uuid "11111111-1111-1111-1111-111111111111"
+        next-id #uuid "22222222-2222-2222-2222-222222222222"
+        page-block {:db/id 1
+                    :block/uuid current-id
+                    :block/title "Slash Test"
+                    :block/page {:db/id 10}}
+        view-block {:block/uuid next-id
+                    :block/title "Unlinked references"}
+        calls (atom [])]
+    (with-redefs [state/editor-in-composition? (constantly false)
+                  state/get-editor-action (constantly nil)
+                  state/get-current-repo (constantly "test")
+                  state/get-editor-args (constantly [nil nil {}])
+                  state/get-edit-block (constantly (assoc page-block :block/title "Slash Test/x"))
+                  state/get-edit-input-id (constantly "edit-block-test")
+                  gdom/getElement (constantly #js {:value "Slash Test/x"})
+                  editor/wrap-parse-block identity
+                  frontend-outliner-op/save-block! (fn [& _]
+                                                     (swap! calls conj :save-block))
+                  frontend-outliner-op/insert-blocks! (fn [& _]
+                                                        (swap! calls conj :insert-blocks))
+                  db-transact/apply-outliner-ops (fn [_ ops opts]
+                                                   (swap! calls conj [:apply ops opts])
+                                                   :tx)]
+      (editor/outliner-insert-block!
+       {:edit-block? false}
+       page-block
+       view-block
+       {:sibling? true
+        :keep-uuid? true
+        :outliner-op :create-view
+        :skip-save-current-block? true})
+      (is (= [:insert-blocks
+              [:apply
+               []
+               {:outliner-op :insert-blocks
+                :source-outliner-op :create-view
+                :ui/page-id 10}]]
+             @calls)
+          "Auto view inserts must not carry a refused page-title save."))))
+
 (deftest split-current-block-keeps-rendered-title-in-sync-test
   (let [block {:block/title "Performance row 2"
                :block/raw-title "Performance row 2"}]
