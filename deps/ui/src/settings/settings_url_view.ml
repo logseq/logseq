@@ -3,6 +3,7 @@
    + config.cljs custom-url helpers. Storage is a plain string under
    "sync-server-url" / "publish-server-url" (removeItem clears). *)
 
+open Promise_ext
 open Lui_elements
 
 let dom = Logseq_dom.dom
@@ -141,8 +142,8 @@ let sync_body =
     ~cleared_msg:T.sync_cleared
     ~on_saved:(fun () ->
       ignore
-        (push_sync_config ()
-         |> Js.Promise.then_ (fun _ -> Js.Promise.resolve ())
+        ((let* _ = push_sync_config () in
+         Js.Promise.resolve ())
          |> Js.Promise.catch (fun _ ->
                 Toast.error (I18n.t "settings/update-worker-error");
                 Js.Promise.resolve ())))

@@ -3,6 +3,7 @@
    Command ids are stable strings emitted by Popups_state; labels stay
    purely presentational. *)
 
+open Promise_ext
 module W = Wire
 module S = String
 
@@ -42,38 +43,39 @@ let apply_soft ops =
    whose content matches, then set it by db/id. *)
 let set_closed_value uuid prop content =
   ignore
-    (Runtime.invoke2 "thread-api/get-property-closed-values"
-       (W.String (repo ())) (W.Keyword prop)
-     |> Js.Promise.then_ (fun w ->
-            let rows =
-              match w with
-              | W.Array xs | W.List xs -> xs
-              | _ -> []
-            in
-            let hit =
-              List.find_opt
-                (fun r ->
-                  let eq s =
-                    S.equal (S.lowercase_ascii s) (S.lowercase_ascii content)
-                  in
-                  (match W.get r "logseq.property/value" with
-                   | Some (W.String s) -> eq s
-                   | _ -> false)
-                  ||
-                  (match W.get r "block/title" with
-                   | Some (W.String s) -> eq s
-                   | _ -> false))
-                rows
-            in
-            (match hit with
-             | Some r -> (
-                 match W.map_get_int r "db/id" with
-                 | Some id ->
-                     apply_soft [ batch_set [ uuid ] prop (W.Int id) ]
-                 | None -> ())
-             | None ->
-                 Platform.console_error ("closed value not found", content));
-            Js.Promise.resolve ()))
+    (let* w =
+      Runtime.invoke2 "thread-api/get-property-closed-values"
+        (W.String (repo ())) (W.Keyword prop)
+    in
+    let rows =
+      match w with
+      | W.Array xs | W.List xs -> xs
+      | _ -> []
+    in
+    let hit =
+      List.find_opt
+        (fun r ->
+          let eq s =
+            S.equal (S.lowercase_ascii s) (S.lowercase_ascii content)
+          in
+          (match W.get r "logseq.property/value" with
+           | Some (W.String s) -> eq s
+           | _ -> false)
+          ||
+          (match W.get r "block/title" with
+           | Some (W.String s) -> eq s
+           | _ -> false))
+        rows
+    in
+    (match hit with
+     | Some r -> (
+         match W.map_get_int r "db/id" with
+         | Some id ->
+             apply_soft [ batch_set [ uuid ] prop (W.Int id) ]
+         | None -> ())
+     | None ->
+         Platform.console_error ("closed value not found", content));
+    Js.Promise.resolve ())
 ;;
 
 let current_block fallback =
@@ -140,34 +142,34 @@ let run ~command ~block ~value =
                 [ batch_remove [ uuid ] "logseq.property/heading" ])
       | "toggle-numbered-list" ->
           ignore
-            (Sdk_util.get_by_id (W.String uuid)
-             |> Js.Promise.then_ (fun w ->
-                    let cur =
-                      match Decode.order_list_type_of_wire w with
-                      | Some s -> s
-                      | None -> ""
-                    in
-                    (if cur = "number" then
-                       apply_soft
-                         [ batch_remove [ uuid ]
-                             "logseq.property/order-list-type" ]
-                     else
-                       apply_soft
-                         [ batch_set [ uuid ] "logseq.property/order-list-type"
-                             (W.String "number") ]);
-                    Js.Promise.resolve ()))
+            (let* w = Sdk_util.get_by_id (W.String uuid) in
+            let cur =
+              match Decode.order_list_type_of_wire w with
+              | Some s -> s
+              | None -> ""
+            in
+            (if cur = "number" then
+               apply_soft
+                 [ batch_remove [ uuid ]
+                     "logseq.property/order-list-type" ]
+             else
+               apply_soft
+                 [ batch_set [ uuid ] "logseq.property/order-list-type"
+                     (W.String "number") ]);
+            Js.Promise.resolve ())
       | "make-flashcard" ->
           ignore
-            (Runtime.invoke2 "thread-api/get-case-page" (W.String (repo ()))
-               (W.String "Card")
-             |> Js.Promise.then_ (fun w ->
-                    (match W.map_get_int w "db/id" with
-                     | Some dbid ->
-                         apply_soft
-                           [ Outliner_ops.set_block_property uuid "block/tags"
-                               (W.Int dbid) ]
-                     | None -> ());
-                    Js.Promise.resolve ()))
+            (let* w =
+              Runtime.invoke2 "thread-api/get-case-page" (W.String (repo ()))
+                (W.String "Card")
+            in
+            (match W.map_get_int w "db/id" with
+             | Some dbid ->
+                 apply_soft
+                   [ Outliner_ops.set_block_property uuid "block/tags"
+                       (W.Int dbid) ]
+             | None -> ());
+            Js.Promise.resolve ())
       | cmd when String.length cmd > 7 && String.sub cmd 0 7 = "status-" ->
           set_closed_value uuid "logseq.property/status"
             (String.sub cmd 7 (String.length cmd - 7))

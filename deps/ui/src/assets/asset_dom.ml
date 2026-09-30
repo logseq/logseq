@@ -4,6 +4,7 @@
    open-lightbox! and handler/editor/assets.cljs db-based-save-assets! /
    delete-asset-of-block!. *)
 
+open Promise_ext
 module E = Webapi.Dom.Element
 module S = Editor_state
 module W = Wire
@@ -133,21 +134,24 @@ let clear_slash_text () =
                      S.editing = Some { e with S.buffer = nv } })))
 
 let find_by_checksum checksum k =
-  Runtime.invoke2 "thread-api/q" (W.String (repo ()))
-    (W.Array
-       [ W.String
-           "[:find (pull ?b [:block/uuid :block/title]) . :in $ ?c \
-            :where [?b :logseq.property.asset/checksum ?c]]"
-       ; W.String checksum ])
-  |> Js.Promise.then_ (fun w ->
-         Js.Promise.resolve
-           ( match
-               ( W.map_get_uuid w "block/uuid"
-               , W.map_get_string w "block/title" )
-           with
-           | Some u, Some t -> Some (u, t)
-           | _ -> None ))
-  |> Js.Promise.then_ k
+  (let* w =
+    Runtime.invoke2 "thread-api/q" (W.String (repo ()))
+      (W.Array
+         [ W.String
+             "[:find (pull ?b [:block/uuid :block/title]) . :in $ ?c \
+              :where [?b :logseq.property.asset/checksum ?c]]"
+         ; W.String checksum ])
+  in
+  let* v =
+    Js.Promise.resolve
+      ( match
+          ( W.map_get_uuid w "block/uuid"
+          , W.map_get_string w "block/title" )
+      with
+      | Some u, Some t -> Some (u, t)
+      | _ -> None )
+  in
+  k v)
   |> Js.Promise.catch (fun _ -> k None)
 
 (* cljs new-asset-block — the block/tags ident resolves through
@@ -173,29 +177,28 @@ let asset_of_file ~idx ~edit_uuid ~empty_target f =
     Toast.error (I18n.tf "asset/invalid-ext-error" [ name ]);
     Js.Promise.resolve None)
   else
-    B.file_buffer f
-    |> Js.Promise.then_ (fun buf ->
-           let u8 = Js.Typed_array.Uint8Array.fromBuffer buf () in
-           A.sha256_hex u8
-           |> Js.Promise.then_ (fun checksum ->
-                  find_by_checksum checksum (function
-                    | Some (uuid, t) ->
-                        Toast.warning
-                          (I18n.asset_already_exists t uuid);
-                        Js.Promise.resolve None
-                    | None ->
-                        let block_id =
-                          match idx = 0, empty_target, edit_uuid with
-                          | true, true, Some u -> u
-                          | _ -> Platform.random_uuid ()
-                        in
-                        A.write_asset ~repo:(repo ())
-                          ~name:(block_id ^ "." ^ ext) ~u8
-                        |> Js.Promise.then_ (fun () ->
-                               Js.Promise.resolve
-                                 (Some
-                                    (asset_block_map ~block_id ~title ~ext
-                                       ~size ~checksum))))))
+    let* buf = B.file_buffer f in
+    let u8 = Js.Typed_array.Uint8Array.fromBuffer buf () in
+    let* checksum = A.sha256_hex u8 in
+    find_by_checksum checksum (function
+      | Some (uuid, t) ->
+          Toast.warning
+            (I18n.asset_already_exists t uuid);
+          Js.Promise.resolve None
+      | None ->
+          let block_id =
+            match idx = 0, empty_target, edit_uuid with
+            | true, true, Some u -> u
+            | _ -> Platform.random_uuid ()
+          in
+          let* () =
+            A.write_asset ~repo:(repo ())
+              ~name:(block_id ^ "." ^ ext) ~u8
+          in
+          Js.Promise.resolve
+            (Some
+               (asset_block_map ~block_id ~title ~ext
+                  ~size ~checksum)))
 
 let collect_files files =
   let edit = S.editing () in
@@ -208,10 +211,9 @@ let collect_files files =
   let rec go i acc =
     if i >= Array.length files then Js.Promise.resolve (List.rev acc)
     else
-      asset_of_file ~idx:i ~edit_uuid ~empty_target files.(i)
-      |> Js.Promise.then_ (function
-           | Some b -> go (i + 1) (b :: acc)
-           | None -> go (i + 1) acc)
+      let* v = asset_of_file ~idx:i ~edit_uuid ~empty_target files.(i) in
+      match v with Some b -> go (i + 1) (b :: acc)
+    | None -> go (i + 1) acc
   in
   (go 0 [], edit_uuid, empty_target)
 
@@ -253,36 +255,36 @@ let upload_files (files : Js.Json.t array) =
           | None -> []
         in
         ignore
-          (blocks_p
-           |> Js.Promise.then_ (fun blocks ->
-                  if blocks = [] then Js.Promise.resolve ()
-                  else
-                    let sibling = edit_uuid = Some t in
-                    Outliner_ops.apply_and_refresh
-                      ~opts:(Outliner_ops.op_opts "insert-blocks")
-                      ( save_ops
-                      @ [ Outliner_ops.op "insert-blocks"
-                            [ W.List blocks
-                            ; W.Uuid t
-                            ; W.Map
-                                [ W.Keyword "sibling?", W.Bool sibling
-                                ; W.Keyword "keep-uuid?", W.Bool true
-                                ; W.Keyword "bottom?", W.Bool true
-                                ; W.Keyword "replace-empty-target?",
-                                    W.Bool sibling
-                                ; W.Keyword "outliner-op",
-                                    W.Keyword "insert-blocks" ] ] ] )
-                      |> Js.Promise.then_ (fun () ->
-                             (* cljs db-based-save-assets! re-enters edit
-                                on the reused empty-target block so the
-                                buffer holds the new asset title — a later
-                                exit-edit then sees an unchanged buffer
-                                instead of wiping the title with "". The
-                                open textarea keeps its own value, so
-                                resync (state + DOM), not enter_edit *)
-                             if empty_target then
-                               ignore (Outliner_ops.resync_open_editor ());
-                             Js.Promise.resolve ())))
+          (let* blocks = blocks_p in
+          if blocks = [] then Js.Promise.resolve ()
+          else
+            let sibling = edit_uuid = Some t in
+            let* () =
+              Outliner_ops.apply_and_refresh
+                ~opts:(Outliner_ops.op_opts "insert-blocks")
+                ( save_ops
+                @ [ Outliner_ops.op "insert-blocks"
+                      [ W.List blocks
+                      ; W.Uuid t
+                      ; W.Map
+                          [ W.Keyword "sibling?", W.Bool sibling
+                          ; W.Keyword "keep-uuid?", W.Bool true
+                          ; W.Keyword "bottom?", W.Bool true
+                          ; W.Keyword "replace-empty-target?",
+                              W.Bool sibling
+                          ; W.Keyword "outliner-op",
+                              W.Keyword "insert-blocks" ] ] ] )
+            in
+            (* cljs db-based-save-assets! re-enters edit
+                        on the reused empty-target block so the
+                        buffer holds the new asset title — a later
+                        exit-edit then sees an unchanged buffer
+                        instead of wiping the title with "". The
+                        open textarea keeps its own value, so
+                        resync (state + DOM), not enter_edit *)
+            if empty_target then
+              ignore (Outliner_ops.resync_open_editor ());
+            Js.Promise.resolve ())
   end
 
 (* hidden <input type=file> inside every editor — cljs
@@ -491,18 +493,19 @@ let request_remote_download uuid ext =
   then begin
     Hashtbl.replace download_requested uuid ext;
     ignore
-      (Runtime.invoke2 "thread-api/db-sync-request-asset-download"
-         (W.String r) (W.String uuid)
-       |> Js.Promise.then_ (fun _ -> Js.Promise.resolve ())
+      ((let* _ =
+         Runtime.invoke2 "thread-api/db-sync-request-asset-download"
+           (W.String r) (W.String uuid)
+       in
+       Js.Promise.resolve ())
        |> Js.Promise.catch (fun _ -> Js.Promise.resolve ()))
   end
 
 let resolve_img uuid file ext st =
   ignore
-    (A.object_url ~repo:(repo ()) ~name:file ~mime:(mime_of_ext ext)
-     |> Js.Promise.then_ (fun _ ->
-            Runtime.signal_set st true;
-            Js.Promise.resolve ())
+    ((let* _ = A.object_url ~repo:(repo ()) ~name:file ~mime:(mime_of_ext ext) in
+     Runtime.signal_set st true;
+     Js.Promise.resolve ())
      |> Js.Promise.catch (fun _ ->
             request_remote_download uuid ext;
             Js.Promise.resolve ()))
@@ -675,10 +678,9 @@ let file_cell (w : W.t) : D.el =
    | Some url -> D.el_set_attr img "src" url
    | None ->
        ignore
-         (A.object_url ~repo:(repo ()) ~name:file ~mime:(mime_of_ext ext)
-          |> Js.Promise.then_ (fun url ->
-                 D.el_set_attr img "src" url;
-                 Js.Promise.resolve ())
+         ((let* url = A.object_url ~repo:(repo ()) ~name:file ~mime:(mime_of_ext ext) in
+          D.el_set_attr img "src" url;
+          Js.Promise.resolve ())
           |> Js.Promise.catch (fun _ -> Js.Promise.resolve ())));
   D.h ~cls:"block-content overflow-hidden"
     ~attrs:[ ("style", "max-height: 30px") ]

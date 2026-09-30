@@ -6,6 +6,7 @@
    secret that the browser app doesn't hold; the public-client flow is
    what the prod app uses. *)
 
+open Promise_ext
 open Lui_elements
 
 let dom = Logseq_dom.dom
@@ -92,30 +93,28 @@ let submit () =
         ~body:(Fetch.BodyInit.make (body_json user pass))
         ()
     in
-    Fetch.fetchWithInit cognito_url init
-    |> Js.Promise.then_ (fun resp ->
-           Fetch.Response.json resp)
-    |> Js.Promise.then_ (fun json ->
-           match tokens_of json with
-           | Some (id, acc, refresh) ->
-               store_tokens id acc refresh;
-               Dialogs_state.close_named "login";
-               Toast.success T.login_title;
-               Js.Promise.resolve ()
-           | None ->
-               let msg =
-                 match Js.Json.decodeObject json with
-                 | Some o -> (
-                     match dict_str o "message" with
-                     | Some m -> m
-                     | None -> (
-                         match dict_str o "__type" with
-                         | Some m -> m
-                         | None -> T.login_failed))
-                 | None -> T.login_failed
-               in
-               Toast.error msg;
-               Js.Promise.resolve ())
+    (let* resp = Fetch.fetchWithInit cognito_url init in
+    let* json = Fetch.Response.json resp in
+    match tokens_of json with
+    | Some (id, acc, refresh) ->
+        store_tokens id acc refresh;
+        Dialogs_state.close_named "login";
+        Toast.success T.login_title;
+        Js.Promise.resolve ()
+    | None ->
+        let msg =
+          match Js.Json.decodeObject json with
+          | Some o -> (
+              match dict_str o "message" with
+              | Some m -> m
+              | None -> (
+                  match dict_str o "__type" with
+                  | Some m -> m
+                  | None -> T.login_failed))
+          | None -> T.login_failed
+        in
+        Toast.error msg;
+        Js.Promise.resolve ())
     |> Js.Promise.catch (fun _ ->
            Toast.error T.login_failed;
            Js.Promise.resolve ())

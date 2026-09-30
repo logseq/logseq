@@ -8,6 +8,7 @@
    new_page_ref looks for); new tags carry db/ident user.class/<x>-<rand>
    + block/tags [logseq.class/Tag] so the map itself creates the class. *)
 
+open Promise_ext
 let is_name_end c =
   match c with
   | ' ' | '\t' | '\n' | '\r' | '#' | '[' | ']' | '(' | ')' | '{' | '}'
@@ -149,21 +150,22 @@ type resolved =
   ; entity : Wire.t }
 
 let resolve_names names tags =
-  names
-  |> List.map (fun name ->
-         Sdk_util.get_entity name
-         |> Js.Promise.then_ (fun w ->
-                Js.Promise.resolve
-                  (match Wire.map_get_uuid w "block/uuid" with
-                   | Some u ->
-                       { name; uuid = u; is_tag = List.mem name tags
-                       ; fresh = false; entity = w }
-                   | None ->
-                       { name; uuid = Platform.random_uuid ()
-                       ; is_tag = List.mem name tags; fresh = true
-                       ; entity = Wire.Nil })))
-  |> Array.of_list |> Js.Promise.all
-  |> Js.Promise.then_ (fun a -> Js.Promise.resolve (Array.to_list a))
+  let* a =
+    names
+    |> List.map (fun name ->
+           let* w = Sdk_util.get_entity name in
+           Js.Promise.resolve
+             (match Wire.map_get_uuid w "block/uuid" with
+              | Some u ->
+                  { name; uuid = u; is_tag = List.mem name tags
+                  ; fresh = false; entity = w }
+              | None ->
+                  { name; uuid = Platform.random_uuid ()
+                  ; is_tag = List.mem name tags; fresh = true
+                  ; entity = Wire.Nil }))
+    |> Array.of_list |> Js.Promise.all
+  in
+  Js.Promise.resolve (Array.to_list a)
 
 let replace_all (s : string) ~pat ~rep =
   let n = String.length s and m = String.length pat in
@@ -232,24 +234,23 @@ type parsed = { title : string; refs : Wire.t list; tags : Wire.t list }
 
 let parse title =
   let names, tags = scan_title title in
-  resolve_names names tags
-  |> Js.Promise.then_ (fun resolved ->
-         let ref_of r =
-           if r.fresh then
-             if r.is_tag then new_tag_map r.name r.uuid
-             else new_page_map r.name r.uuid
-           else existing_ref_map r.entity
-         in
-         let tag_of r =
-           if r.fresh then new_tag_map r.name r.uuid else uuid_lookup r.uuid
-         in
-         Js.Promise.resolve
-           { title = rewrite_title title resolved
-           ; refs = List.map ref_of resolved
-           ; tags = List.filter_map
-                      (fun r -> if r.is_tag then Some (tag_of r) else None)
-                      resolved
-           })
+  let* resolved = resolve_names names tags in
+  let ref_of r =
+    if r.fresh then
+      if r.is_tag then new_tag_map r.name r.uuid
+      else new_page_map r.name r.uuid
+    else existing_ref_map r.entity
+  in
+  let tag_of r =
+    if r.fresh then new_tag_map r.name r.uuid else uuid_lookup r.uuid
+  in
+  Js.Promise.resolve
+    { title = rewrite_title title resolved
+    ; refs = List.map ref_of resolved
+    ; tags = List.filter_map
+               (fun r -> if r.is_tag then Some (tag_of r) else None)
+               resolved
+    }
 
 (* block map kvs for block/refs + block/tags — omitted when empty so
    save-block merges do not clobber existing values *)

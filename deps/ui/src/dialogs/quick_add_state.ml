@@ -3,6 +3,7 @@
    "quick-add"). [latest] mirrors the signal so writes made before the
    dialog mounts (open flow fetches blocks first) still apply. *)
 
+open Promise_ext
 type t =
   { page_uuid : string option
   ; blocks : Model.block list
@@ -40,10 +41,11 @@ let reload () =
   match !Runtime.current_repo, !latest.page_uuid with
   | Some repo, Some puuid ->
       ignore
-        (Runtime.invoke3 "thread-api/get-page-blocks-tree"
-           (Wire.String repo) (Wire.Uuid puuid) Wire.Nil
-         |> Js.Promise.then_ (fun w ->
-                set (fun s ->
-                    { s with blocks = Decode.blocks_of_wire w });
-                Js.Promise.resolve ()))
+        (let* w =
+          Runtime.invoke3 "thread-api/get-page-blocks-tree"
+            (Wire.String repo) (Wire.Uuid puuid) Wire.Nil
+        in
+        set (fun s ->
+            { s with blocks = Decode.blocks_of_wire w });
+        Js.Promise.resolve ())
   | _ -> ()

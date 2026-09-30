@@ -7,6 +7,7 @@
    and installed .cp__plugins-installed cards with a
    button[role='switch'] enable toggle. *)
 
+open Promise_ext
 open Lui_elements
 
 let dom = Logseq_dom.dom
@@ -394,18 +395,16 @@ let body (_ms : Model.t Signal.signal) : t =
   let loading = Signal.state owner true in
   ignore (Plugin_host.dirty_signal owner);
   ignore
-    (Js.Promise.then_
-       (fun j ->
-         let xs =
-           match Js.Json.decodeArray j with
-           | Some a -> Array.to_list a
-           | None -> []
-         in
-         Signal.set pkgs xs;
-         Signal.set loading false;
-         Runtime.flush ();
-         Js.Promise.resolve Js.Json.null)
-       (Plugin_host.marketplace_pkgs owner));
+    (let* j = (Plugin_host.marketplace_pkgs owner) in
+    let xs =
+      match Js.Json.decodeArray j with
+      | Some a -> Array.to_list a
+      | None -> []
+    in
+    Signal.set pkgs xs;
+    Signal.set loading false;
+    Runtime.flush ();
+    Js.Promise.resolve Js.Json.null);
   let tab_btn id label ic active =
     dom ~key:("tab-" ^ id) ~tag:"button"
       ~style_class:

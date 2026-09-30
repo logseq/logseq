@@ -3,6 +3,7 @@
    git/current-repo + auth tokens, and the db-sync start/stop/ensure-keys
    endpoints. All real sync logic lives in the db-worker. *)
 
+open Promise_ext
 let trim_trailing_slashes s =
   let n = String.length s in
   let rec go i = if i > 0 && s.[i - 1] = '/' then go (i - 1) else i in
@@ -96,9 +97,11 @@ let stop () =
 
 (* cljs ensure-e2ee-rsa-key-for-cloud! *)
 let ensure_rsa_keys () =
-  Runtime.invoke1 "thread-api/db-sync-ensure-user-rsa-keys"
-    (Wire.Map [ (Wire.Keyword "ensure-server?", Wire.Bool true) ])
-  |> Js.Promise.then_ (fun _ -> Js.Promise.resolve true)
+  (let* _ =
+    Runtime.invoke1 "thread-api/db-sync-ensure-user-rsa-keys"
+      (Wire.Map [ (Wire.Keyword "ensure-server?", Wire.Bool true) ])
+  in
+  Js.Promise.resolve true)
   |> Js.Promise.catch (fun e ->
          Platform.console_error ("ensure-user-rsa-keys failed", e);
          Js.Promise.resolve false)
