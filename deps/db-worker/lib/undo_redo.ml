@@ -49,13 +49,17 @@ let take_pending_editor_info repo =
   Hashtbl.remove pending_editor_info repo;
   info
 
+(* List.drop is OCaml >= 5.3; this tree still builds on 5.1 *)
+let rec list_drop n l =
+  if n <= 0 then l else match l with [] -> [] | _ :: tl -> list_drop (n - 1) tl
+
 (* cljs conj-op — pushes op; a full stack drops its oldest half. The
    newest entries must stay: each undo meets the state the entry above
    it left. *)
 let conj_op col op =
   let result = col @ [ op ] in
   let n = List.length result in
-  if n >= !max_stack_length then List.drop (n - !max_stack_length / 2) result
+  if n >= !max_stack_length then list_drop (n - !max_stack_length / 2) result
   else result
 
 let push_undo_op repo op =
