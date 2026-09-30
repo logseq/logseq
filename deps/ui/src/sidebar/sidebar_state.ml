@@ -449,10 +449,6 @@ let block_item_of_uuid repo uuid : item option Js.Promise.t =
               (Wire.Int 8)
           in
           let crumbs = breadcrumb_titles parents in
-          (* a sidebar block is its container's root — it
-             expands there regardless of the db collapsed
-             datom *)
-          Editor_state.expand_root ~scope:"sidebar" uuid;
           Js.Promise.resolve
             (Some
                { key = "block-" ^ uuid
@@ -504,7 +500,17 @@ let has_item st key =
 let push_item st it =
   let items = Signal.get_state st.items in
   if has_item st it.key then ()
-  else Runtime.signal_set st.items (items @ [ it ])
+  else begin
+    (* a sidebar block is its container's root — cljs mounts it with
+       set-collapsed-block! false so its children show regardless of the
+       db collapsed datom. Once per mount: refresh_items re-adds via
+       signal_set and must not undo a user's collapse in this pane *)
+    (match it.kind, it.uuid with
+     | "block", Some u ->
+         Editor_state.expand_root ~scope:"sidebar" u
+     | _ -> ());
+    Runtime.signal_set st.items (items @ [ it ])
+  end
 
 let remove_item st key =
   Runtime.signal_set st.items
