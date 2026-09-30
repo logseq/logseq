@@ -27,11 +27,86 @@
         :else
         (recur (inc i))))))
 
+(defn- skip-ws
+  [s i]
+  (let [n (count s)]
+    (loop [i i]
+      (if (and (< i n)
+               (or (= \space (nth s i))
+                   (= \tab (nth s i))
+                   (= \newline (nth s i))
+                   (= \return (nth s i))))
+        (recur (inc i))
+        i))))
+
+(defn- unmatched-page-ref-close?
+  "True when `s` from `start` still contains a `]]` that is not paired with a
+  later `[[`. That leftover close belongs to the current page-ref."
+  [s start]
+  (let [n (count s)]
+    (loop [i start
+           open 0]
+      (cond
+        (>= i n)
+        false
+
+        (= \" (nth s i))
+        (if-let [end (quoted-string-end s i)]
+          (recur end open)
+          false)
+
+        (and (< (inc i) n)
+             (= \[ (nth s i))
+             (= \[ (nth s (inc i))))
+        (recur (+ i 2) (inc open))
+
+        (and (< (inc i) n)
+             (= \] (nth s i))
+             (= \] (nth s (inc i))))
+        (if (zero? open)
+          true
+          (recur (+ i 2) (dec open)))
+
+        :else
+        (recur (inc i) open)))))
+
+(defn- page-ref-terminator?
+  "True when the text after a candidate `]]` is the next DSL token or closer,
+  not more title text. A bare `]` is a terminator only inside an EDN vector so
+  `(tags [ [[foo]]])` keeps the vector close, while `(tags [[Project]]])`
+  can still treat a trailing `]` as part of the title. A following symbol such
+  as `tomorrow` is a terminator unless the remainder still has a dangling `]]`."
+  [s i vector-depth]
+  (let [i (skip-ws s i)
+        n (count s)]
+    (cond
+      (>= i n)
+      true
+
+      (contains? #{\) \, \( \# \"} (nth s i))
+      true
+
+      (and (= \[ (nth s i))
+           (< (inc i) n)
+           (= \[ (nth s (inc i))))
+      true
+
+      (and (= \] (nth s i))
+           (pos? vector-depth))
+      true
+
+      (and (= \] (nth s i))
+           (zero? vector-depth))
+      false
+
+      :else
+      (not (unmatched-page-ref-close? s i)))))
+
 (defn- page-ref-end
   "Exclusive end index of a `[[page-ref]]` starting at `start`, or nil when
-  unclosed. A closing `]]` is accepted only when the next character is not `]`,
-  so titles that end with `]` or `]]` keep those characters."
-  [s start]
+  unclosed. Chooses the first `]]` that is followed by a DSL terminator so
+  titles may contain `]]` or `[[...]]` before more text."
+  [s start vector-depth]
   (let [n (count s)]
     (loop [i (+ start 2)]
       (cond
@@ -40,8 +115,7 @@
 
         (and (= \] (nth s i))
              (= \] (nth s (inc i)))
-             (or (>= (+ i 2) n)
-                 (not= \] (nth s (+ i 2)))))
+             (page-ref-terminator? s (+ i 2) vector-depth))
         (+ i 2)
 
         :else
@@ -59,6 +133,7 @@
   (let [n (count s)]
     (loop [i 0
            last-copy 0
+           vector-depth 0
            parts (transient [])]
       (cond
         (>= i n)
@@ -68,21 +143,27 @@
 
         (= \" (nth s i))
         (if-let [end (quoted-string-end s i)]
-          (recur end end (conj! parts (subs s last-copy end)))
+          (recur end end vector-depth (conj! parts (subs s last-copy end)))
           (string/join (persistent! (conj! parts (subs s last-copy)))))
 
         (and (< (inc i) n)
              (= \[ (nth s i))
              (= \[ (nth s (inc i))))
-        (if-let [end (page-ref-end s i)]
-          (recur end end
+        (if-let [end (page-ref-end s i vector-depth)]
+          (recur end end vector-depth
                  (-> parts
                      (conj! (subs s last-copy i))
                      (conj! (quote-page-ref (subs s (+ i 2) (- end 2))))))
           (string/join (persistent! (conj! parts (subs s last-copy)))))
 
+        (= \[ (nth s i))
+        (recur (inc i) last-copy (inc vector-depth) parts)
+
+        (= \] (nth s i))
+        (recur (inc i) last-copy (max 0 (dec vector-depth)) parts)
+
         :else
-        (recur (inc i) last-copy parts)))))
+        (recur (inc i) last-copy vector-depth parts)))))
 
 (defn- replace-hash-in-quoted-strings
   [s]
