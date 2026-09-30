@@ -3924,7 +3924,7 @@
 
      (state/selection?)
      (do
-       (let [block-ids (map #(-> % (dom/attr "blockid") uuid) (get-selected-blocks))
+       (let [block-ids (distinct (keep util/selection-node-block-id (get-selected-blocks)))
              first-block-id (first block-ids)]
          (when first-block-id
            ;; If multiple blocks are selected, they may not have all the same collapsed state.

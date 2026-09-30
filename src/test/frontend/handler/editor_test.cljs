@@ -2592,6 +2592,57 @@
       (is (empty? @collapsed)
           "Comment editor collapse shortcut should not collapse synthetic draft blocks"))))
 
+(deftest toggle-collapse-does-not-throw-on-property-value-row-only-selection
+  (let [empty-row (mock-ls-block {:class-name "ls-block property-value-container"})
+        threw (atom nil)]
+    (with-redefs [util/stop (constantly nil)
+                  state/editing? (constantly false)
+                  state/selection? (constantly true)
+                  editor/get-selected-blocks (constantly [empty-row])]
+      (try
+        (editor/toggle-collapse! nil)
+        (catch :default e
+          (reset! threw e)))
+      (is (nil? @threw)
+          "A property-value row with no blockid must be skipped, not passed to uuid"))))
+
+(deftest toggle-collapse-skips-property-value-rows-without-blockid
+  (async done
+         (let [real-uuid #uuid "11111111-1111-1111-1111-111111111111"
+               real-block (mock-ls-block {:blockid (str real-uuid)})
+               empty-row (mock-ls-block {:class-name "ls-block property-value-container"})
+               collapsed (atom [])
+               expanded (atom [])
+               loaded (atom [])]
+           (-> (try
+                 (p/with-redefs [util/stop (constantly nil)
+                                 state/editing? (constantly false)
+                                 state/selection? (constantly true)
+                                 state/get-current-repo (constantly "test")
+                                 editor/get-selected-blocks (constantly [empty-row real-block])
+                                 db-async/<get-block
+                                 (fn [_repo block-id _opts]
+                                   (swap! loaded conj block-id)
+                                   (p/resolved {:block/uuid block-id
+                                                :block/collapsed? false}))
+                                 editor/collapse-block! (fn [block-id & _]
+                                                          (swap! collapsed conj block-id))
+                                 editor/expand-block! (fn [block-id & _]
+                                                        (swap! expanded conj block-id))]
+                   (editor/toggle-collapse! nil)
+                   (p/delay 20))
+                 (catch :default e
+                   (p/rejected e)))
+               (p/then (fn [_]
+                         (is (= [real-uuid] @loaded)
+                             "First real selected block decides collapse vs expand")
+                         (is (= [real-uuid] @collapsed)
+                             "Property rows without blockid are skipped; real selected blocks collapse")
+                         (is (empty? @expanded))))
+               (p/catch (fn [error]
+                          (is false (str error))))
+               (p/finally done)))))
+
 (defn- <expand-unselected-block-ids
   [blocks]
   (let [expanded (atom [])]
