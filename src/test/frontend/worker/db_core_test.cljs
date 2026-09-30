@@ -6,6 +6,7 @@
             [datascript.storage :as storage]
             [frontend.common.thread-api :as thread-api]
             [frontend.db.query-dsl :as query-dsl]
+            [frontend.test.node-helper :as node-helper]
             [frontend.worker-common.util :as worker-util]
             [frontend.worker.db-core :as db-core]
             [frontend.worker.db-listener :as db-listener]
@@ -1392,7 +1393,35 @@
        (is (= "/graph/search/vector"
               (vector-index-path test-repo pool)))))))
 
-;; ---- checkpoint-db! tests ----
+;; ---- sqlite WAL / checkpoint tests ----
+
+(deftest enable-sqlite-wal-mode-sets-exclusive-wal-and-synchronous-normal
+  (let [enable-sqlite-wal-mode! #'db-core/enable-sqlite-wal-mode!
+        sql-calls (atom [])
+        db #js {:exec (fn [sql]
+                        (swap! sql-calls conj sql)
+                        #js [])}]
+    (enable-sqlite-wal-mode! db)
+    (is (= ["PRAGMA locking_mode=exclusive"
+            "PRAGMA journal_mode=WAL"
+            "PRAGMA synchronous=NORMAL"]
+           @sql-calls))))
+
+(deftest enable-sqlite-wal-mode-sqlite-reports-wal-and-synchronous-normal
+  (let [Database (js/require "better-sqlite3")
+        node-path (js/require "path")
+        dir (node-helper/create-tmp-dir "wal-pragma")
+        db (new Database (.join node-path dir "graph.sqlite"))
+        pragma (fn [name]
+                 (aget (.get (.prepare db (str "PRAGMA " name))) name))]
+    (try
+      (#'db-core/enable-sqlite-wal-mode! db)
+      (is (= "exclusive" (pragma "locking_mode")))
+      (is (= "wal" (pragma "journal_mode")))
+      (is (= 1 (pragma "synchronous"))
+          "sqlite NORMAL is 1; FULL (the WAL default) is 2")
+      (finally
+        (.close db)))))
 
 (deftest checkpoint-db-executes-wal-checkpoint
   (let [checkpoint-db! #'db-core/checkpoint-db!
