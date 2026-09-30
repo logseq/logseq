@@ -293,8 +293,8 @@ let library_context () =
 (* cljs keydown-new-block: Enter on an empty last child outdents it
    instead of inserting a sibling (when no right sibling exists) *)
 let outdent_empty_last_child uuid e b =
-  let _ = b in
-  if String.trim e.S.buffer <> "" then false
+  let _ = (e, b) in
+  if String.trim (live_buffer uuid) <> "" then false
   else
     match S.find_parent uuid with
     | Some (Some parent, idx) ->
