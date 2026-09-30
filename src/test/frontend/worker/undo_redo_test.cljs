@@ -1504,6 +1504,9 @@
     (let [conn (worker-state/get-datascript-conn test-repo)
           {:keys [child-uuid]} (seed-page-parent-child!)
           property-id :user.property/undo-note]
+      ;; the inverse op is what this test checks; on a local graph undo
+      ;; replays the change's datoms instead
+      (mark-graph-synced! conn)
       (apply-ops! conn
                   [[:upsert-property [property-id
                                       {:logseq.property/type :default
@@ -1542,6 +1545,9 @@
     (let [conn (worker-state/get-datascript-conn test-repo)
           {:keys [child-uuid]} (seed-page-parent-child!)
           property-id :user.property/undo-status]
+      ;; the inverse op is what this test checks; on a local graph undo
+      ;; replays the change's datoms instead
+      (mark-graph-synced! conn)
       (apply-ops! conn
                   [[:upsert-property [property-id
                                       {:logseq.property/type :default
