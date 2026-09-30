@@ -694,6 +694,7 @@
           :search/re-index
           :graph/db-save
           :sidebar/open-today-page
+          :ui/toggle-contents
           :sidebar/clear
           :shell/run
           :publish/open-dialog
@@ -721,7 +722,6 @@
           :ui/toggle-left-sidebar
           :ui/toggle-help
           :ui/toggle-theme
-          :ui/toggle-contents
           :editor/copy-page-url
           :editor/set-tags
           :editor/add-property-deadline

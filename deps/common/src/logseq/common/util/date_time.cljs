@@ -100,6 +100,32 @@
     (-> (tf/parse yyyyMMdd-formatter (str day))
         (tc/to-long))))
 
+(defn journal-day-plus
+  "Returns the :block/journal-day integer `n` calendar days after `day`."
+  [day n]
+  (when day
+    (-> (tf/parse yyyyMMdd-formatter (str day))
+        (t/plus (t/days n))
+        (->> (tf/unparse yyyyMMdd-formatter))
+        parse-long)))
+
+(defn journal-day->local-ms
+  "Converts a journal's :block/journal-day integer into milliseconds at
+  local midnight of that calendar day. Inverse of `ms->journal-day`."
+  [day]
+  (when day
+    (.getTime (int->local-date day))))
+
+(defn journal-day-local-range-ms
+  "Local-calendar millisecond range from `day` through `day` + `future-days`.
+  Both ends are local midnight, inclusive. Date-only Scheduled and Deadline
+  values are stored as local midnight, so this range matches the journal day
+  in every timezone."
+  [day future-days]
+  (when (and day (int? future-days))
+    [(journal-day->local-ms day)
+     (journal-day->local-ms (journal-day-plus day future-days))]))
+
 (defn utc-ms->journal-day
   "Converts a milliseconds timestamp to the :block/journal-day of its UTC
   calendar day. The inverse of `journal-day->ms`, which gives UTC midnight."

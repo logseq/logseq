@@ -1,6 +1,6 @@
 (ns frontend.util.url-test
   (:require [cljs.test :refer [deftest is testing]]
-            [frontend.util.url]))
+            [frontend.util.url :as url-util]))
 
 (deftest web-page-url-requires-graph-id-test
   (let [page-url-f (some-> (resolve 'frontend.util.url/get-logseq-web-page-url) deref)]
@@ -19,6 +19,37 @@
     (when block-url-f
       (is (= "https://logseq.com/block/block-uuid?graph-id=remote-graph-uuid"
              (block-url-f "https://logseq.com" "remote-graph-uuid" "block-uuid"))))))
+
+(deftest entity-url-for-copy-prefers-web-url-then-desktop-url-test
+  (testing "synced graphs copy the canonical web URL"
+    (is (= "https://logseq.com/page/page-uuid?graph-id=remote-graph-uuid"
+           (url-util/entity-url-for-copy "https://logseq.com"
+                                         "remote-graph-uuid"
+                                         "logseq_db_work"
+                                         "page-uuid"
+                                         :page)))
+    (is (= "https://logseq.com/block/block-uuid?graph-id=remote-graph-uuid"
+           (url-util/entity-url-for-copy "https://logseq.com"
+                                         "remote-graph-uuid"
+                                         "logseq_db_work"
+                                         "block-uuid"
+                                         :block))))
+  (testing "local-only graphs copy a desktop protocol URL instead of throwing"
+    (is (= "logseq://graph/work?block-id=page-uuid"
+           (url-util/entity-url-for-copy "https://logseq.com"
+                                         nil
+                                         "logseq_db_work"
+                                         "page-uuid"
+                                         :page)))
+    (is (= "logseq://graph/work?block-id=block-uuid"
+           (url-util/entity-url-for-copy "https://logseq.com"
+                                         nil
+                                         "logseq_db_work"
+                                         "block-uuid"
+                                         :block))))
+  (testing "missing graph identity and repo yields no URL"
+    (is (nil? (url-util/entity-url-for-copy "https://logseq.com" nil nil "page-uuid" :page)))
+    (is (nil? (url-util/entity-url-for-copy "https://logseq.com" "" "" "page-uuid" :page)))))
 
 (deftest parse-web-url-target-reads-path-route-and-graph-id-test
   (let [parse-f (some-> (resolve 'frontend.util.url/parse-web-url-target) deref)]

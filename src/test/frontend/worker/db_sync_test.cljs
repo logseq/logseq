@@ -27,6 +27,7 @@
    [frontend.worker.sync.presence :as sync-presence]
    [frontend.worker.sync.temp-sqlite :as sync-temp-sqlite]
    [frontend.worker.sync.transport :as sync-transport]
+   [frontend.worker.sync.upload :as sync-upload]
    [frontend.worker.sync.util :as sync-util]
    [frontend.worker.undo-redo :as undo-redo]
    [logseq.common.config :as common-config]
@@ -321,6 +322,13 @@
      :child1 child1
      :child2 child2
      :child3 child3}))
+
+(defn- mark-graph-remote!
+  "Marks the graph of a setup map as one that syncs, as upload and download
+  do, and returns the map. The stored checksum is kept only on such a graph."
+  [{:keys [conn] :as setup}]
+  (d/transact! conn [(ldb/kv :logseq.kv/graph-remote? true)])
+  setup)
 
 (defn- setup-two-parents
   []
@@ -1808,7 +1816,7 @@
 (deftest pull-ok-does-not-anchor-remote-checksum-before-verify-test
   (testing "pull/ok compares the incrementally updated local checksum instead of anchoring the remote checksum"
     (async done
-           (let [{:keys [conn client-ops-conn parent]} (setup-parent-child)
+           (let [{:keys [conn client-ops-conn parent]} (mark-graph-remote! (setup-parent-child))
                  parent-id (:db/id parent)
                  remote-tx-data [[:db/add parent-id :block/title "remote-checksum-anchor"]]
                  local-checksum-after-remote (-> (d/with @conn remote-tx-data)
@@ -1969,7 +1977,7 @@
 
 (deftest tx-reject-db-transact-failed-keeps-checksum-aligned-test
   (testing "a rejected local rollback should update the stored checksum incrementally"
-    (let [{:keys [conn client-ops-conn child1]} (setup-parent-child)
+    (let [{:keys [conn client-ops-conn child1]} (mark-graph-remote! (setup-parent-child))
           child-uuid (:block/uuid child1)]
       (with-datascript-conns conn client-ops-conn
         (fn []
@@ -2059,7 +2067,7 @@
 
 (deftest tx-reject-db-transact-failed-rebase-keeps-checksum-aligned-test
   (testing "rollback plus rebase of later pending txs should keep the stored checksum aligned"
-    (let [{:keys [conn client-ops-conn parent-a a-child-1 b-child-1]} (setup-two-parents)
+    (let [{:keys [conn client-ops-conn parent-a a-child-1 b-child-1]} (mark-graph-remote! (setup-two-parents))
           deleted-uuid (:block/uuid a-child-1)]
       (with-datascript-conns conn client-ops-conn
         (fn []
@@ -2738,7 +2746,7 @@
 
 (deftest local-checksum-matches-recompute-after-post-pipeline-update-test
   (testing "stored checksum matches recompute when updated from post-pipeline tx report"
-    (let [{:keys [conn client-ops-conn parent]} (setup-parent-child)]
+    (let [{:keys [conn client-ops-conn parent]} (mark-graph-remote! (setup-parent-child))]
       (with-datascript-conns conn client-ops-conn
         (fn []
           (let [page-id (:db/id (:block/page parent))
@@ -2760,7 +2768,7 @@
 
 (deftest local-checksum-listener-updates-in-release-mode-test
   (testing "db-worker-node release keeps the stored checksum aligned incrementally"
-    (let [{:keys [conn client-ops-conn parent]} (setup-parent-child)]
+    (let [{:keys [conn client-ops-conn parent]} (mark-graph-remote! (setup-parent-child))]
       (with-datascript-conns conn client-ops-conn
         (fn []
           (client-op/update-local-checksum test-repo (sync-checksum/recompute-checksum @conn) (:max-tx @conn))
@@ -2772,7 +2780,7 @@
 
 (deftest local-checksum-heals-when-covered-commit-lags-test
   (testing "a checksum write lost to process death is recomputed on reopen"
-    (let [{:keys [conn client-ops-conn parent]} (setup-parent-child)]
+    (let [{:keys [conn client-ops-conn parent]} (mark-graph-remote! (setup-parent-child))]
       (with-datascript-conns conn client-ops-conn
         (fn []
           (client-op/update-local-checksum test-repo
@@ -2808,7 +2816,7 @@
   (testing "a transaction the worker pipeline extends spans several tx ids in 1
            stored tail entry; the graph reopened from storage keeps its :max-tx,
            so the stored checksum still covers it and the reopen does not recompute"
-    (let [{:keys [conn client-ops-conn parent]} (setup-parent-child)
+    (let [{:keys [conn client-ops-conn parent]} (mark-graph-remote! (setup-parent-child))
           storage (->InMemoryStorage (volatile! {}))
           ;; new index nodes: storing the test graph's own db would give
           ;; addresses to nodes other tests' graphs share
@@ -2839,9 +2847,138 @@
         (finally
           (reset! ldb/*transact-pipeline-fn pipeline-before))))))
 
+(defn- count-checksum-writes
+  "Runs f with client-op/update-local-checksum counted; returns the count."
+  [f]
+  (let [writes (atom 0)
+        update-local-checksum client-op/update-local-checksum]
+    (with-redefs [client-op/update-local-checksum
+                  (fn [& args]
+                    (swap! writes inc)
+                    (apply update-local-checksum args))]
+      (f))
+    @writes))
+
+(deftest local-graph-edit-writes-no-checksum-test
+  (testing "an edit on a graph that does not sync stores no checksum"
+    (let [{:keys [conn client-ops-conn parent]} (setup-parent-child)]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (db-listener/listen-db-changes! test-repo conn :handler-keys [:checksum-test])
+          (is (= 0 (count-checksum-writes
+                    #(d/transact! conn [[:db/add (:db/id parent) :block/title "local edit"]]))))
+          (is (nil? (client-op/get-local-checksum test-repo)))
+          (is (nil? (client-op/get-local-checksum-covered-tx test-repo))))))))
+
+(deftest remote-graph-edit-writes-checksum-test
+  (testing "an edit on a graph that syncs keeps the stored checksum current"
+    (let [{:keys [conn client-ops-conn parent]} (mark-graph-remote! (setup-parent-child))]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (client-op/update-local-checksum test-repo (sync-checksum/recompute-checksum @conn) (:max-tx @conn))
+          (db-listener/listen-db-changes! test-repo conn :handler-keys [:checksum-test])
+          (is (= 1 (count-checksum-writes
+                    #(d/transact! conn [[:db/add (:db/id parent) :block/title "remote edit"]]))))
+          (is (= (sync-checksum/recompute-checksum @conn)
+                 (client-op/get-local-checksum test-repo)))
+          (is (= (:max-tx @conn)
+                 (client-op/get-local-checksum-covered-tx test-repo))))))))
+
+(deftest local-graph-open-does-not-recompute-checksum-test
+  (testing "opening a graph that does not sync never recomputes its checksum, even when the stored one lags"
+    (let [{:keys [conn client-ops-conn parent]} (setup-parent-child)
+          recomputes (atom 0)
+          recompute-checksum sync-checksum/recompute-checksum]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          ;; stored by an app version that kept the checksum on every graph
+          (client-op/update-local-checksum test-repo (recompute-checksum @conn) (:max-tx @conn))
+          (d/transact! conn [[:db/add (:db/id parent) :block/title "edit after the last checksum write"]])
+          (let [stored (client-op/get-local-checksum test-repo)
+                covered-tx (client-op/get-local-checksum-covered-tx test-repo)]
+            (is (not= covered-tx (:max-tx @conn)))
+            (with-redefs [sync-checksum/recompute-checksum
+                          (fn [db]
+                            (swap! recomputes inc)
+                            (recompute-checksum db))]
+              (db-sync/reconcile-local-checksum! test-repo conn))
+            (is (= 0 @recomputes))
+            (is (= stored (client-op/get-local-checksum test-repo)))
+            (is (= covered-tx (client-op/get-local-checksum-covered-tx test-repo)))))))))
+
+(deftest graph-becoming-remote-starts-from-full-checksum-test
+  (testing "the transaction that makes a graph remote stores a full recompute, not an update of a stale checksum"
+    (let [{:keys [conn client-ops-conn parent child1]} (setup-parent-child)]
+      ;; The E2EE flag is already set, so the transaction below does not flip
+      ;; it; a flip recomputes the checksum on its own (update-checksum).
+      (d/transact! conn [(ldb/kv :logseq.kv/graph-rtc-e2ee? false)])
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          ;; stored by an app version that kept the checksum on every graph,
+          ;; then edits that did not update it
+          (client-op/update-local-checksum test-repo (sync-checksum/recompute-checksum @conn) (:max-tx @conn))
+          (d/transact! conn [[:db/add (:db/id parent) :block/title "edit while local"]])
+          (d/transact! conn [[:db/add (:db/id child1) :block/title "another edit while local"]])
+          (db-listener/listen-db-changes! test-repo conn :handler-keys [:checksum-test])
+          ;; the shape of upload's set-graph-sync-metadata! transaction
+          (ldb/transact! conn [(ldb/kv :logseq.kv/graph-uuid (random-uuid))
+                               (ldb/kv :logseq.kv/graph-remote? true)
+                               (ldb/kv :logseq.kv/graph-rtc-e2ee? false)]
+                         {:outliner-op :set-kvs})
+          (is (= (sync-checksum/recompute-checksum @conn)
+                 (client-op/get-local-checksum test-repo)))
+          (is (= (:max-tx @conn)
+                 (client-op/get-local-checksum-covered-tx test-repo))))))))
+
+(deftest upload-after-local-edits-stores-and-sends-full-checksum-test
+  (async done
+         (let [{:keys [conn client-ops-conn parent]} (setup-parent-child)
+               graph-id (str (random-uuid))
+               urls (atom [])]
+           (-> (with-datascript-conns
+                 conn
+                 client-ops-conn
+                 (fn []
+                   ;; stored by an app version that kept the checksum on every graph
+                   (client-op/update-local-checksum test-repo (sync-checksum/recompute-checksum @conn) (:max-tx @conn))
+                   (db-listener/listen-db-changes! test-repo conn :handler-keys [:checksum-test])
+                   (d/transact! conn [[:db/add (:db/id parent) :block/title "local edit before upload"]])
+                   (-> (p/with-redefs [sync-upload/http-base-url (constantly "https://sync.example.test")
+                                       sync-crypt/graph-e2ee? (constantly false)
+                                       sync-upload/list-remote-graphs! (fn [] (p/resolved []))
+                                       sync-crypt/<preflight-upload-e2ee! (fn [_repo _graph-e2ee?] (p/resolved nil))
+                                       sync-util/require-auth-token! (fn [_context] nil)
+                                       sync-util/fetch-json (fn [url _request _opts]
+                                                              (swap! urls conj url)
+                                                              (p/resolved
+                                                               (if (string/ends-with? url "/graphs")
+                                                                 {:graph-id graph-id :graph-e2ee? false}
+                                                                 {:ok true :count 1})))
+                                       sync-upload/<prepare-upload-temp-sqlite! (fn [& _] (p/resolved {:db :temp-db}))
+                                       sync-upload/count-kvs-rows (constantly 1)
+                                       sync-upload/fetch-kvs-rows (fn [_db last-addr _limit]
+                                                                    (if (neg? last-addr)
+                                                                      #js [#js [1 "content" nil]]
+                                                                      #js []))
+                                       sync-upload/<snapshot-upload-body (fn [rows] (p/resolved {:body rows :encoding nil}))
+                                       sync-temp-sqlite/cleanup-temp-sqlite! (fn [_temp] nil)
+                                       worker-util/post-message (fn [& _] nil)]
+                         (sync-upload/upload-graph! test-repo))
+                       (p/then (fn [_]
+                                 (let [recomputed (sync-checksum/recompute-checksum @conn)
+                                       finished-url (some #(when (string/includes? % "finished=true") %) @urls)]
+                                   (is (true? (:kv/value (d/entity @conn :logseq.kv/graph-remote?))))
+                                   (is (= recomputed (client-op/get-local-checksum test-repo)))
+                                   (is (= (:max-tx @conn) (client-op/get-local-checksum-covered-tx test-repo)))
+                                   (is (string/includes? (str finished-url)
+                                                         (str "checksum=" (js/encodeURIComponent recomputed)))))))
+                       (p/catch (fn [error]
+                                  (is nil (str error)))))))
+               (p/finally done)))))
+
 (deftest local-checksum-ignores-aborted-batch-transact-test
   (testing "an aborted batch transaction must not advance the stored checksum"
-    (let [{:keys [conn client-ops-conn parent]} (setup-parent-child)]
+    (let [{:keys [conn client-ops-conn parent]} (mark-graph-remote! (setup-parent-child))]
       (with-datascript-conns conn client-ops-conn
         (fn []
           (client-op/update-local-checksum test-repo (sync-checksum/recompute-checksum @conn) (:max-tx @conn))
@@ -2873,7 +3010,7 @@
 
 (deftest local-checksum-updates-for-final-batch-report-with-batch-flag-test
   (testing "a committed final batch tx report must update checksum even if the conn batch flag is still set"
-    (let [{:keys [conn client-ops-conn parent]} (setup-parent-child)]
+    (let [{:keys [conn client-ops-conn parent]} (mark-graph-remote! (setup-parent-child))]
       (with-datascript-conns conn client-ops-conn
         (fn []
           (client-op/update-local-checksum test-repo (sync-checksum/recompute-checksum @conn) (:max-tx @conn))
@@ -2893,7 +3030,7 @@
 
 (deftest local-checksum-updates-non-batch-report-with-stale-batch-flag-test
   (testing "a non-batch tx report must not be skipped because conn batch state is stale"
-    (let [{:keys [conn client-ops-conn parent]} (setup-parent-child)]
+    (let [{:keys [conn client-ops-conn parent]} (mark-graph-remote! (setup-parent-child))]
       (with-datascript-conns conn client-ops-conn
         (fn []
           (client-op/update-local-checksum test-repo (sync-checksum/recompute-checksum @conn) (:max-tx @conn))
@@ -2912,7 +3049,7 @@
 
 (deftest local-checksum-updates-ldb-non-batch-report-with-stale-batch-flag-test
   (testing "ldb/transact! must not tag non-batch reports from stale conn batch state"
-    (let [{:keys [conn client-ops-conn parent]} (setup-parent-child)]
+    (let [{:keys [conn client-ops-conn parent]} (mark-graph-remote! (setup-parent-child))]
       (with-datascript-conns conn client-ops-conn
         (fn []
           (client-op/update-local-checksum test-repo (sync-checksum/recompute-checksum @conn) (:max-tx @conn))
@@ -5646,7 +5783,7 @@
 
 (deftest local-checksum-stays-in-sync-after-undo-redo-sequence-test
   (testing "insert/delete/indent/outdent with undo-all/redo-all keeps cached checksum aligned"
-    (let [{:keys [conn client-ops-conn parent]} (setup-parent-child)
+    (let [{:keys [conn client-ops-conn parent]} (mark-graph-remote! (setup-parent-child))
           inserted-uuid (random-uuid)]
       (with-datascript-conns conn client-ops-conn
         (fn []
@@ -7277,7 +7414,7 @@
 (deftest apply-remote-txs-rechecks-local-txs-when-local-edit-races-without-local-batch-test
   (testing "remote apply without initial local changes must not batch a racing local tx into the remote checksum"
     (async done
-      (let [{:keys [conn client-ops-conn parent child1]} (setup-parent-child)
+      (let [{:keys [conn client-ops-conn parent child1]} (mark-graph-remote! (setup-parent-child))
             child1-uuid (:block/uuid child1)
             local-child-uuid (random-uuid)
             original-batch-transact! ldb/batch-transact!

@@ -15,6 +15,7 @@
    [frontend.worker.sync.util :as sync-util]
    [lambdaisland.glogi :as log]
    [logseq.common.util :as common-util]
+   [logseq.db :as ldb]
    [logseq.db-sync.checksum :as sync-checksum]
    [promesa.core :as p]
    [logseq.common.config :as common-config]))
@@ -49,10 +50,23 @@
     :latest-remote-checksum @*repo->latest-remote-checksum}
    repo))
 
+(defn- graph-remote?
+  "True when the graph syncs: upload and download set
+  `:logseq.kv/graph-remote?`, and nothing unsets it."
+  [db]
+  (true? (some-> db (ldb/get-key-value :logseq.kv/graph-remote?))))
+
 (defn update-local-sync-checksum!
-  [repo tx-report]
-  (when (worker-state/get-client-ops-conn repo)
-    (let [current-checksum (client-op/get-local-checksum repo)
+  "Keeps the stored checksum current on a graph that syncs. A graph that does
+  not sync keeps none: the checksum is only compared with the sync server's,
+  and the upload recomputes it before it sends the snapshot. The transaction
+  that makes a graph remote starts from a full recompute, since the stored
+  value may predate edits made while the graph was local."
+  [repo {:keys [db-before db-after] :as tx-report}]
+  (when (and (worker-state/get-client-ops-conn repo)
+             (graph-remote? db-after))
+    (let [current-checksum (when (graph-remote? db-before)
+                             (client-op/get-local-checksum repo))
           new-checksum (sync-checksum/update-checksum current-checksum tx-report)]
       (when (and (exists? js/process)
                  (= "1" (aget (.-env js/process) "LOGSEQ_CHECKSUM_ASSERT")))
@@ -81,9 +95,11 @@
   checksum is stored post-commit in the client-ops sqlite file, separate from
   the graph store, so process death between the two writes drops it. The stored
   covered commit is compared with the reopened db's :max-tx; a mismatch means
-  commits were missed and the checksum is recomputed."
+  commits were missed and the checksum is recomputed. A graph that does not
+  sync keeps no checksum, so nothing is healed on it."
   [repo conn]
-  (when (worker-state/get-client-ops-conn repo)
+  (when (and (worker-state/get-client-ops-conn repo)
+             (graph-remote? @conn))
     (let [checksum (client-op/get-local-checksum repo)
           covered-tx (client-op/get-local-checksum-covered-tx repo)
           current-tx (:max-tx @conn)]

@@ -252,15 +252,27 @@
       (fail-parse-double v-str)
       v-str)))
 
+(defn- resolve-update-cardinality
+  [property schema]
+  (let [new-type (or (:logseq.property/type schema) (:logseq.property/type property))]
+    (cond
+      (and new-type (not (contains? db-property-type/cardinality-property-types new-type)))
+      :db.cardinality/one
+
+      (contains? schema :db/cardinality)
+      (if (#{:many :db.cardinality/many} (:db/cardinality schema))
+        :db.cardinality/many
+        :db.cardinality/one)
+
+      :else
+      (or (:db/cardinality property) :db.cardinality/one))))
+
 (defn- update-datascript-schema
   "Updates property type and cardinality"
   [property schema]
   (let [new-type (:logseq.property/type schema)
-        cardinality (:db/cardinality schema)
         ident (:db/ident property)
-        cardinality (if (#{:many :db.cardinality/many} cardinality)
-                      :db.cardinality/many
-                      :db.cardinality/one)
+        cardinality (resolve-update-cardinality property schema)
         old-type (:logseq.property/type property)
         old-ref-type? (db-property-type/user-ref-property-types old-type)
         ref-type? (db-property-type/user-ref-property-types new-type)]
@@ -281,11 +293,33 @@
     (outliner-validate/validate-block-title @conn property-name property)
     (outliner-validate/validate-property-title property-name)))
 
+(defn- throw-disallowed-many-to-one!
+  []
+  (throw (ex-info "Disallowed many to one conversion"
+                  {:type :notification
+                   :payload {:message "This property can't change from multiple values to one value because it has existing data."
+                             :i18n-key :property.validation/many-to-one
+                             :type :warning}})))
+
+(defn- schema-for-update
+  "Drop an unsafe many→one cardinality restore when other schema fields are
+   being replayed. A cardinality-only many→one with data still throws."
+  [db db-ident property schema]
+  (let [many->one? (and (db-property/many? property)
+                        (contains? #{:one :db.cardinality/one} (:db/cardinality schema)))
+        has-values? (seq (d/datoms db :avet db-ident))]
+    (if (and many->one? has-values?)
+      (if (seq (dissoc schema :db/cardinality))
+        (dissoc schema :db/cardinality)
+        (throw-disallowed-many-to-one!))
+      schema)))
+
 (defn- update-property
   [conn db-ident property schema {:keys [property-name properties]}]
   (validate-property-name-update conn property property-name)
   (outliner-validate/validate-editing-built-in-property property schema)
-  (let [changed-property-attrs
+  (let [schema (schema-for-update @conn db-ident property schema)
+        changed-property-attrs
         ;; Only update property if something has changed as we are updating a timestamp
         (cond-> (->> (dissoc schema :db/cardinality)
                      (keep (fn [[k v]]
@@ -311,16 +345,7 @@
                         (when (seq properties)
                           (mapcat
                            (fn [[property-id v]]
-                             (build-property-value-tx-data conn property property-id v)) properties)))
-        many->one? (and (db-property/many? property)
-                        ;; For UI calls, :db/cardinality can have :one and :many values
-                        (contains? #{:one :db.cardinality/one} (:db/cardinality schema)))]
-    (when (and many->one? (seq (d/datoms @conn :avet db-ident)))
-      (throw (ex-info "Disallowed many to one conversion"
-                      {:type :notification
-                       :payload {:message "This property can't change from multiple values to one value because it has existing data."
-                                 :i18n-key :property.validation/many-to-one
-                                 :type :warning}})))
+                             (build-property-value-tx-data conn property property-id v)) properties)))]
     (when (and (contains? changed-property-attrs :logseq.property/type)
                (seq (d/datoms @conn :avet db-ident)))
       (throw (ex-info "Disallowed type change with existing data"
@@ -948,10 +973,13 @@
         (outliner-validate/validate-page-title-characters k-name {:node {:db/ident db-ident'}})
         (outliner-validate/validate-property-title k-name {:node {:db/ident db-ident'}})
         (let [db-id (:db/id properties)
+              page (when (integer? db-id)
+                     (d/entity db db-id))
+              _ (outliner-validate/validate-page-to-property-conversion page)
               opts' (cond-> {:title k-name
                              :properties properties}
                       (integer? db-id)
-                      (assoc :block-uuid (:block/uuid (d/entity db db-id))))
+                      (assoc :block-uuid (:block/uuid page)))
               tx-data (concat
                        [(sqlite-util/build-new-property db-ident' schema opts')]
                        ;; Convert page to property
@@ -960,6 +988,22 @@
           (ldb/transact! conn tx-data
                          {:outliner-op :upsert-property}))
         (d/entity @conn db-ident')))))
+
+(defn- node-value-target-id
+  "Resolves a :node property value to the id of the node it targets. Such
+   values can be hidden property value blocks whose :block/title is the
+   target's uuid. Only resolves value blocks created by property-ident
+   itself — a value block created for another property carries its own
+   content even when stored under this property."
+  [db value property-ident]
+  (let [entity (if (de/entity? value) value (d/entity db value))]
+    (if-let [target-uuid (and entity
+                              (= property-ident
+                                 (:db/ident (:logseq.property/created-from-property entity)))
+                              (some-> (:block/title entity) parse-uuid))]
+      (or (:db/id (d/entity db [:block/uuid target-uuid]))
+          (:db/id entity))
+      (:db/id entity))))
 
 (defn batch-delete-property-value!
   "batch delete value when a property has multiple values"
@@ -980,14 +1024,22 @@
              (doseq [block-eid block-eids]
                (when-let [block (d/entity @conn block-eid)]
                  (let [current-val (get block property-id)
-                       fv (first current-val)]
-                   (if (and (= 1 (count current-val))
-                            (or (= property-value fv)
-                                (= property-value (:db/id fv))))
+                       node? (= :node (:logseq.property/type property))
+                       match-id (some (fn [v]
+                                        (let [v-id (if (de/entity? v) (:db/id v) v)]
+                                          (when (or (= property-value v)
+                                                    (= property-value v-id)
+                                                    (and node?
+                                                         (= property-value
+                                                            (node-value-target-id @conn v property-id))))
+                                            v-id)))
+                                      (if (coll? current-val) current-val [current-val]))]
+                   (if (and match-id (= 1 (count current-val)))
                      (remove-block-property! conn (:db/id block) property-id)
-                     (ldb/transact! conn
-                                    [[:db/retract (:db/id block) property-id property-value]]
-                                    {:outliner-op :save-block}))))))))))))
+                     (when match-id
+                       (ldb/transact! conn
+                                      [[:db/retract (:db/id block) property-id match-id]]
+                                      {:outliner-op :save-block})))))))))))))
 
 (defn delete-property-value!
   "Delete value if a property has multiple values"

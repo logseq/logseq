@@ -5,6 +5,7 @@
             [logseq.db.frontend.property :as db-property]
             [logseq.db.test.helper :as db-test]
             [logseq.outliner.core :as outliner-core]
+            [logseq.outliner.page :as outliner-page]
             [logseq.outliner.property :as outliner-property]))
 
 (deftest upsert-property!
@@ -28,7 +29,8 @@
       (testing "and change its type from a ref to a non-ref type"
         (outliner-property/upsert-property! conn :user.property/num {:logseq.property/type :checkbox} {})
         (is (= :checkbox (:logseq.property/type (d/entity @conn :user.property/num))))
-        (is (= nil (:db/valueType (d/entity @conn :user.property/num)))))))
+        (is (= nil (:db/valueType (d/entity @conn :user.property/num))))
+        (is (not (db-property/many? (d/entity @conn :user.property/num)))))))
 
   (testing "Multiple properties that generate the same initial :db/ident"
     (let [conn (db-test/create-conn-with-blocks [])]
@@ -59,6 +61,106 @@
     (let [conn (db-test/create-conn-with-blocks {:properties {:empty-prop {:logseq.property/type :default}}})]
       (outliner-property/upsert-property! conn :user.property/empty-prop {:logseq.property/type :number} {})
       (is (= :number (:logseq.property/type (d/entity @conn :user.property/empty-prop)))))))
+
+(deftest upsert-property-converts-plain-page
+  (let [conn (db-test/create-conn)
+        [_ page-uuid] (outliner-page/create! conn "PlainPage" {})
+        page (d/entity @conn [:block/uuid page-uuid])
+        property (outliner-property/upsert-property!
+                  conn nil {:logseq.property/type :default}
+                  {:property-name "PlainPage"
+                   :properties {:db/id (:db/id page)}})
+        converted (d/entity @conn (:db/id page))]
+    (is (ldb/property? property))
+    (is (= (:db/id page) (:db/id converted)))
+    (is (ldb/property? converted))
+    (is (not (ldb/internal-page? converted)))))
+
+(deftest upsert-property-refuses-namespaced-page
+  (let [conn (db-test/create-conn)
+        [_ bar-uuid] (outliner-page/create! conn "Foo/Bar" {:split-namespace? true})
+        bar (d/entity @conn [:block/uuid bar-uuid])
+        foo (ldb/get-page @conn "foo")
+        convert-error (fn [page property-name]
+                        (try
+                          (outliner-property/upsert-property!
+                           conn nil {:logseq.property/type :default}
+                           {:property-name property-name
+                            :properties {:db/id (:db/id page)}})
+                          nil
+                          (catch :default e e)))]
+    (testing "Namespace child"
+      (let [err (convert-error bar "Bar")
+            bar' (d/entity @conn (:db/id bar))]
+        (is (= :notification (:type (ex-data err))))
+        (is (= :page.convert/page-to-property-namespaced
+               (get-in (ex-data err) [:payload :i18n-key])))
+        (is (ldb/internal-page? bar'))
+        (is (not (ldb/property? bar')))))
+
+    (testing "Namespace root"
+      (let [err (convert-error foo "Foo")
+            foo' (d/entity @conn (:db/id foo))]
+        (is (= :notification (:type (ex-data err))))
+        (is (= :page.convert/page-to-property-namespaced
+               (get-in (ex-data err) [:payload :i18n-key])))
+        (is (ldb/internal-page? foo'))
+        (is (not (ldb/property? foo')))))))
+
+(deftest upsert-property-type-change-to-non-cardinality-type-resets-many
+  (testing "changing an unused many property to checkbox or datetime restores :one"
+    (doseq [property-type [:checkbox :datetime]]
+      (let [conn (db-test/create-conn-with-blocks
+                  {:properties {:note {:logseq.property/type :default}}})]
+        (outliner-property/upsert-property! conn :user.property/note {:db/cardinality :many} {})
+        (outliner-property/upsert-property! conn :user.property/note {:logseq.property/type property-type} {})
+        (is (= property-type (:logseq.property/type (d/entity @conn :user.property/note))))
+        (is (not (db-property/many? (d/entity @conn :user.property/note)))))))
+  (testing "changing an unused many property to another cardinality type keeps :many"
+    (let [conn (db-test/create-conn-with-blocks
+                {:properties {:note {:logseq.property/type :default}}})]
+      (outliner-property/upsert-property! conn :user.property/note {:db/cardinality :many} {})
+      (outliner-property/upsert-property! conn :user.property/note {:logseq.property/type :number} {})
+      (is (= :number (:logseq.property/type (d/entity @conn :user.property/note))))
+      (is (db-property/many? (d/entity @conn :user.property/note))))))
+
+(deftest upsert-property-schema-restore-skips-many-to-one-when-other-fields-present
+  (testing "replaying a schema that includes :one plus type keeps :many when values exist"
+    (let [conn (db-test/create-conn-with-blocks
+                [{:page {:block/title "page1"}
+                  :blocks [{:block/title "b1" :build/properties {:note "text 1"}}]}])]
+      (outliner-property/upsert-property! conn :user.property/note {:db/cardinality :many} {})
+      (outliner-property/upsert-property! conn :user.property/note
+                                          {:logseq.property/type :default
+                                           :db/cardinality :one}
+                                          {})
+      (is (db-property/many? (d/entity @conn :user.property/note)))
+      (is (set? (:user.property/note (db-test/find-block-by-content @conn "b1")))))))
+
+(deftest upsert-property-omitted-cardinality-keeps-many-with-closed-values
+  (testing "omitting :db/cardinality does not convert many to one when choices exist"
+    (let [conn (db-test/create-conn-with-blocks
+                {:properties {:status {:logseq.property/type :default
+                                       :build/closed-values [{:value "active"}]}}
+                 :pages-and-blocks
+                 [{:page {:block/title "page1"}
+                   :blocks [{:block/title "b1" :build/properties {:status "active"}}]}]})]
+      (outliner-property/upsert-property! conn :user.property/status {:db/cardinality :many} {})
+      (is (db-property/many? (d/entity @conn :user.property/status)))
+      (outliner-property/upsert-property! conn :user.property/status {:logseq.property/type :default} {})
+      (is (db-property/many? (d/entity @conn :user.property/status)))
+      (is (set? (:user.property/status (db-test/find-block-by-content @conn "b1")))))))
+
+(deftest upsert-property-rejects-many-to-one-with-existing-data
+  (testing "Changing many to one is rejected when property has values"
+    (let [conn (db-test/create-conn-with-blocks
+                [{:page {:block/title "page1"}
+                  :blocks [{:block/title "b1" :build/properties {:note "text 1"}}]}])]
+      (outliner-property/upsert-property! conn :user.property/note {:db/cardinality :many} {})
+      (is (db-property/many? (d/entity @conn :user.property/note)))
+      (is (thrown-with-msg?
+           js/Error #"Disallowed many to one conversion"
+           (outliner-property/upsert-property! conn :user.property/note {:db/cardinality :one} {}))))))
 
 (deftest convert-property-input-string
   (testing "Convert property input string according to its schema type"
