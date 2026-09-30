@@ -505,6 +505,13 @@ let property_value_titles db (e : entity) (ident : string) : string list =
   in
   List.concat_map flatten (Ldb.values e ident)
 
+(* cljs set? on an entity attr value — materializes as a collection when
+   the attr is cardinality many *)
+let attr_is_set (e : entity) (a : attr) : bool =
+  match entity_attr e a with
+  | Some (Many_values _) | Some (Many_entities _) -> true
+  | _ -> false
+
 let inverse_op_named data op_name =
   match data_get "db-sync/inverse-outliner-ops" data with
   | Some (Wire.Array ops) | Some (Wire.List ops) ->
@@ -1796,6 +1803,9 @@ let embed_block (uuid_of : string -> string) (title : string)
 let undo_is_map () =
   match Undo_redo.undo test_repo with Wire.Map _ -> true | _ -> false
 
+let redo_is_map () =
+  match Undo_redo.redo test_repo with Wire.Map _ -> true | _ -> false
+
 (* cljs undo-move-down-of-blocks-at-different-levels-test *)
 let test_undo_move_down_of_blocks_at_different_levels () =
   with_worker_conns (fun () ->
@@ -2018,6 +2028,138 @@ let test_undo_delete_of_property_valued_on_itself_restores_property () =
             (Ldb.ref_ent property "user.property/undo-self-rating" = None)
       | None -> check "property restored 2" false)
 
+(* cljs undo-upsert-property-one-to-many-with-values-does-not-revert-cardinality-test *)
+let test_undo_upsert_property_one_to_many_with_values () =
+  with_worker_conns (fun () ->
+      Undo_redo.clear_history test_repo;
+      let conn = conn () in
+      let _p, _par, child_uuid = seed_page_parent_child () in
+      let property_id = "user.property/undo-note" in
+      ignore
+        (apply_ops_edn conn
+           (Printf.sprintf
+              "[[:upsert-property [:%s {:logseq.property/type :default :db/cardinality :one} {:property-name \"note\"}]]]"
+              property_id));
+      ignore
+        (apply_ops_edn conn
+           (Printf.sprintf "[[:set-block-property [%s :%s \"text 1\"]]]"
+              (uuid_lit child_uuid) property_id));
+      Undo_redo.clear_history test_repo;
+      ignore
+        (apply_ops_edn conn
+           (Printf.sprintf
+              "[[:upsert-property [:%s {:logseq.property/type :default :db/cardinality :many} {}]]]"
+              property_id));
+      let db = db_of conn in
+      check "cardinality many"
+        (match entity_of_ident db property_id with
+         | Some e ->
+             Ldb.value e "db/cardinality"
+             = Some (Keyword "db.cardinality/many")
+         | None -> false);
+      check "child value is a set"
+        (match ent_at_uuid db child_uuid with
+         | Some e -> attr_is_set e property_id
+         | None -> false);
+      (match latest_undo_history_data () with
+       | Some data ->
+           (match data_get "db-sync/inverse-outliner-ops" data with
+            | Some (Wire.Array (inv :: _)) | Some (Wire.List (inv :: _)) ->
+                check "inverse op is upsert-property"
+                  (match Outliner_op.op_of_entry inv with
+                   | Some ("upsert-property", _) -> true
+                   | _ -> false);
+                check "inverse schema omits :db/cardinality"
+                  (wire_get_in inv [ `I 1; `I 1; `K "db/cardinality" ]
+                  = None)
+            | _ -> check "inverse ops nonempty" false);
+           (match data_uuid "db-sync/tx-id" data with
+            | Some tx_id -> poison_history_tx_order tx_id
+            | None -> ())
+       | None -> Alcotest.fail "no undo history data");
+      check "undo map" (undo_is_map ());
+      let db = db_of conn in
+      check "cardinality still many after undo"
+        (match entity_of_ident db property_id with
+         | Some e ->
+             Ldb.value e "db/cardinality"
+             = Some (Keyword "db.cardinality/many")
+         | None -> false);
+      (match ent_at_uuid db child_uuid with
+       | Some e ->
+           check "value still a set" (attr_is_set e property_id);
+           check "value titles"
+             (property_value_titles db e property_id = [ "text 1" ])
+       | None -> check "child found" false);
+      check "redo map" (redo_is_map ());
+      check "cardinality many after redo"
+        (match entity_of_ident (db_of conn) property_id with
+         | Some e ->
+             Ldb.value e "db/cardinality"
+             = Some (Keyword "db.cardinality/many")
+         | None -> false))
+
+(* cljs undo-upsert-property-one-to-many-with-choices-does-not-revert-cardinality-test *)
+let test_undo_upsert_property_one_to_many_with_choices () =
+  with_worker_conns (fun () ->
+      Undo_redo.clear_history test_repo;
+      let conn = conn () in
+      let _p, _par, child_uuid = seed_page_parent_child () in
+      let property_id = "user.property/undo-status" in
+      ignore
+        (apply_ops_edn conn
+           (Printf.sprintf
+              "[[:upsert-property [:%s {:logseq.property/type :default :db/cardinality :one} {:property-name \"status\"}]]]"
+              property_id));
+      ignore
+        (apply_ops_edn conn
+           (Printf.sprintf
+              "[[:upsert-closed-value [:%s {:value \"active\"}]]]"
+              property_id));
+      ignore
+        (apply_ops_edn conn
+           (Printf.sprintf "[[:set-block-property [%s :%s \"active\"]]]"
+              (uuid_lit child_uuid) property_id));
+      Undo_redo.clear_history test_repo;
+      ignore
+        (apply_ops_edn conn
+           (Printf.sprintf
+              "[[:upsert-property [:%s {:logseq.property/type :default :db/cardinality :many} {}]]]"
+              property_id));
+      check "cardinality many"
+        (match entity_of_ident (db_of conn) property_id with
+         | Some e ->
+             Ldb.value e "db/cardinality"
+             = Some (Keyword "db.cardinality/many")
+         | None -> false);
+      (match latest_undo_history_data () with
+       | Some data ->
+           (match data_get "db-sync/inverse-outliner-ops" data with
+            | Some (Wire.Array (inv :: _)) | Some (Wire.List (inv :: _)) ->
+                check "inverse op is upsert-property"
+                  (match Outliner_op.op_of_entry inv with
+                   | Some ("upsert-property", _) -> true
+                   | _ -> false);
+                check "inverse schema omits :db/cardinality"
+                  (wire_get_in inv [ `I 1; `I 1; `K "db/cardinality" ]
+                  = None)
+            | _ -> check "inverse ops nonempty" false);
+           (match data_uuid "db-sync/tx-id" data with
+            | Some tx_id -> poison_history_tx_order tx_id
+            | None -> ())
+       | None -> Alcotest.fail "no undo history data");
+      check "undo map" (undo_is_map ());
+      check "cardinality still many after undo"
+        (match entity_of_ident (db_of conn) property_id with
+         | Some e ->
+             Ldb.value e "db/cardinality"
+             = Some (Keyword "db.cardinality/many")
+         | None -> false);
+      check "child value still a set"
+        (match ent_at_uuid (db_of conn) child_uuid with
+         | Some e -> attr_is_set e property_id
+         | None -> false))
+
 (* cljs undo-delete-of-tag-renamed-to-page-title-restores-tag-test *)
 let test_undo_delete_of_tag_renamed_to_page_title_restores_tag () =
   with_worker_conns (fun () ->
@@ -2197,6 +2339,12 @@ let cases =
   ; Alcotest.test_case
       "undo-delete-of-property-valued-on-itself-restores-property-test"
       `Quick test_undo_delete_of_property_valued_on_itself_restores_property
+  ; Alcotest.test_case
+      "undo-upsert-property-one-to-many-with-values-does-not-revert-cardinality-test"
+      `Quick test_undo_upsert_property_one_to_many_with_values
+  ; Alcotest.test_case
+      "undo-upsert-property-one-to-many-with-choices-does-not-revert-cardinality-test"
+      `Quick test_undo_upsert_property_one_to_many_with_choices
   ; Alcotest.test_case
       "undo-delete-of-tag-renamed-to-page-title-restores-tag-test" `Quick
       test_undo_delete_of_tag_renamed_to_page_title_restores_tag

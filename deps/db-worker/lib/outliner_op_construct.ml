@@ -286,6 +286,30 @@ let sanitize_upsert_property_schema db (schema : Wire.t) : Wire.t =
            entries)
   | _ -> Wire.Map []
 
+(* op-construct/inverse-upsert-property-schema *)
+let inverse_upsert_property_schema db_before db_after (property : entity)
+    : Wire.t =
+  let schema =
+    sanitize_upsert_property_schema db_before
+      (wire_map_of_block_map
+         (Db_property.get_property_schema (Block_map.of_entity property)))
+  in
+  let reverts_many_to_one =
+    (match Cljs_map.get schema "db/cardinality" with
+     | Some (Wire.Keyword ("one" | "db.cardinality/one")) -> true
+     | _ -> false)
+    &&
+    (match Ldb.ident_of property with
+     | Some ident ->
+         (* aevt: the attr's schema entry may already be retracted in db_after
+            (e.g. undo replaying delete-page), which would make the indexed
+            avet lookup raise for a non-indexed attribute *)
+         Seq.uncons (datoms db_after Aevt ~a:ident ()) |> Option.is_some
+     | None -> false)
+  in
+  if reverts_many_to_one then Cljs_map.dissoc schema "db/cardinality"
+  else schema
+
 (* attr of a block/refs item — plain map keys or stub-entity attrs *)
 let ref_entity_attr (db : db) (k : string) (w : Wire.t) : Wire.t option =
   match w with
@@ -1498,7 +1522,7 @@ let entity_to_save_op db_before (ent : entity) : Wire.t option =
   build_inverse_save_block db_before (wire_map_of_entity ent) Wire.Nil
 
 (* op-construct/build-inverse-delete-page *)
-let build_inverse_delete_page db_before (page_uuid : Wire.t)
+let build_inverse_delete_page db_before db_after (page_uuid : Wire.t)
     : Wire.t list option =
   match
     entity db_before
@@ -1551,9 +1575,7 @@ let build_inverse_delete_page db_before (page_uuid : Wire.t)
             Some
               (op_entry "upsert-property"
                  [ ident
-                 ; wire_map_of_block_map
-                     (Db_property.get_property_schema
-                        (Block_map.of_entity page))
+                 ; inverse_upsert_property_schema db_before db_after page
                  ; Wire.Map
                      [ ( kw "property-name"
                        , Option.value
@@ -1781,7 +1803,7 @@ let build_strict_inverse_outliner_ops db_before db_after tx_data
                                [ page_uuid; Wire.Map [] ] ]
                      | None -> None)
                 | "delete-page" ->
-                    build_inverse_delete_page db_before (arg args 0)
+                    build_inverse_delete_page db_before db_after (arg args 0)
                 | "upsert-property" ->
                     (match arg args 0 with
                      | Wire.Keyword ident when String.contains ident '/' ->
@@ -1790,11 +1812,8 @@ let build_strict_inverse_outliner_ops db_before db_after tx_data
                               Some
                                 [ op_entry "upsert-property"
                                     [ kw ident
-                                    ; sanitize_upsert_property_schema
-                                        db_before
-                                        (wire_map_of_block_map
-                                           (Db_property.get_property_schema
-                                              (Block_map.of_entity property)))
+                                    ; inverse_upsert_property_schema
+                                        db_before db_after property
                                     ; Wire.Map
                                         [ ( kw "property-name"
                                           , Option.value
