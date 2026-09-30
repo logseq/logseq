@@ -2446,7 +2446,8 @@ let ac_it ?group label =
 
 let mk_ac kind =
   { Popups_state.kind; x = 0.; y = 0.; flip = false; query = ""
-  ; tpos = 0; tlen = 0; items = []; chosen = 0; editor = Js.Json.null }
+  ; tpos = 0; tlen = 0; items = []; chosen = 0; editor = Js.Json.null
+  ; auuid = "" }
 
 let test_popups_state () =
   (* fuzzy_score: subsequence match, first*1000 + span *)
@@ -2700,6 +2701,18 @@ let test_ac_lifecycle () =
   check "enter consumed for slash" (press "Enter");
   check "escape closes" (press "Escape" && not (ac_open ()));
   check "enter free after escape" (not (press "Enter"));
+
+  (* a stale ac — the editing session moved on while the popup was open
+     (uuid captured at open no longer matches the live editing session —
+     here editing is simply gone) — must not keep swallowing Enter *)
+  reset ();
+  type_str "/";
+  check "ac open for stale test" (ac_open ());
+  Popups_state.set_ac t
+    (Some { (Option.get (ac ())) with Popups_state.auuid = "other" });
+  settle ();
+  check "enter free on stale ac" (not (press "Enter"));
+  check "stale ac closed" (not (ac_open ()));
 
   (* whole-buffer replacement keeps the popup (query = buffer); a
      delete keystroke that removes the trigger closes it *)

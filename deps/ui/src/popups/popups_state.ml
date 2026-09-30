@@ -93,6 +93,10 @@ type ac =
   ; items : ac_item list
   ; chosen : int
   ; editor : Dom_ext.element
+  ; auuid : string (* editing uuid the popup was opened on — a remount
+                      keeps it (the ac stays live); an editing-swap or
+                      exit means the ac is stale and must not swallow
+                      keys *)
   }
 
 type cm_picker = Picker_emoji | Picker_icon
@@ -171,13 +175,16 @@ let ac_open () =
   | Some t -> (get t).ac <> None
   | None -> false
 
-(* editor_keys' popup-key guard — an ac whose editor was remounted or
-   navigated away is stale and must not keep swallowing Enter/Tab/arrows *)
+(* editor_keys' popup-key guard — an ac outlives its textarea on
+   remount/navigation; it is stale once the editing block it opened on
+   is no longer the editing session (a remount keeps the uuid) and
+   must not keep swallowing Enter/Tab/arrows *)
 let ac_attached () =
   match !active with
   | Some t -> (
       match (get t).ac with
-      | Some ac -> Dom_ext.is_connected ac.editor
+      | Some ac ->
+        ac.auuid = "" || Editor_state.editing_uuid () = Some ac.auuid
       | None -> false)
   | None -> false
 
@@ -891,7 +898,8 @@ let open_ac t kind editor =
   let ac =
     { kind; x; y; flip; query = ""
     ; tpos; tlen
-    ; items = []; chosen = 0; editor }
+    ; items = []; chosen = 0; editor
+    ; auuid = Option.value (Editor_state.editing_uuid ()) ~default:"" }
   in
   (* cljs autopair: typing [[ inputs ]] immediately with the caret kept
      inside the brackets; insert_text consumes the ghost pair on choice *)
@@ -1418,11 +1426,13 @@ let ac_keydown t ev =
   match (get t).ac with
   | None -> false
   | Some ac ->
-      (* the ac outlives its textarea on remount/navigation — Enter/Tab
-         reach apply_chosen before the position check could close it,
-         eating the key forever; a detached editor means the popup is
-         dead, so close it and let the key through *)
-      if not (Dom_ext.is_connected ac.editor) then (
+      (* the ac outlives its textarea on remount — Enter/Tab reach
+         apply_chosen before the position check could close it, eating
+         the key forever; once the editing session it opened on is gone
+         the popup is dead, so close it and let the key through *)
+      if
+        ac.auuid <> "" && Editor_state.editing_uuid () <> Some ac.auuid
+      then (
         close_ac t;
         false)
       else (

@@ -73,7 +73,11 @@ and fire_reload () =
     editing_active && now -. !reload_last_fire_ms < edit_reload_min_ms
   in
   let popup_open =
-    Editor_dom.query_selector "#ui__ac, .ls-context-menu-content"
+    (* same overlay surfaces as editor_keys' outside-click routing: a
+       route reload remounts the tree under an open popup/dialog and the
+       pending click/type aimed at it misses *)
+    Editor_dom.query_selector
+      "#ui__ac, .cp__cmdk__modal, .ui__popover-content, .ls-context-menu-content, #date-time-picker, .ls-editor-link-form, .ls-property-dialog"
     <> None
   in
   let ui_active =
