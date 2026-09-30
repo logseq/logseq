@@ -133,9 +133,9 @@ let dom ?key ?(tag = "div") ?(attrs = []) ?(events = "")
     Lui_ui.extension_property context node "style-class"
       (StringValue style_class);
   (* callers hand typed signals (string, attr pairs); the wire_value
-     wrapper is derived here so every prop signal is owned once *)
+     wrapper is derived and owned here — the caller's signal keeps its
+     own lifetime (it may be shared across nodes) *)
   let bind prop encode s =
-    let s = own context s in
     Lui_ui.extension_property_signal context node prop
       (own context (Signal.map (fun v -> StringValue (encode v)) s))
   in
