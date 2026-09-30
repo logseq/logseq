@@ -9,11 +9,6 @@
             [logseq.db.test.helper :as db-test]
             [logseq.outliner.page :as outliner-page]))
 
-(defn- process-cpu-time-ms
-  []
-  (let [usage (.cpuUsage js/process)]
-    (/ (+ (.-user usage) (.-system usage)) 1000)))
-
 (defn- sql-placeholder-count
   [sql]
   (count (re-seq #"\?" sql)))
@@ -544,16 +539,26 @@
                    :title "Tag"}]
                  (mapv #(select-keys % [:id :page :title]) result))))))))
 
+;; A search result map that counts how often its fields are read
+(deftype ReadCountingResult [m reads]
+  ILookup
+  (-lookup [_ k]
+    (swap! reads inc)
+    (-lookup m k))
+  (-lookup [_ k not-found]
+    (swap! reads inc)
+    (-lookup m k not-found))
+
+  IAssociative
+  (-contains-key? [_ k]
+    (-contains-key? m k))
+  (-assoc [_ k v]
+    (-assoc m k v)))
+
 (deftest combine-results-large-result-benchmark
   (testing "large search result sets combine without quadratic scans and keep page boost ranking"
     (let [ids (mapv test-uuid-string (range 1 2501))
           page-id (ids 42)
-          keyword-results (map-indexed
-                           (fn [idx id]
-                             {:id id
-                              :title (str "Result " idx)
-                              :keyword-score (if (= id page-id) 0.5 1.0)})
-                           ids)
           blocks (into {}
                        (map-indexed
                         (fn [idx id]
@@ -561,20 +566,40 @@
                                :block/uuid (uuid id)
                                :block/title (str "Result " idx)
                                :page? (= id page-id)}])
-                        ids))]
+                        ids))
+          db-lookups (atom 0)
+          combine (fn [result-count]
+                    (let [reads (atom 0)
+                          keyword-results (map-indexed
+                                           (fn [idx id]
+                                             (->ReadCountingResult
+                                              {:id id
+                                               :title (str "Result " idx)
+                                               :keyword-score (if (= id page-id) 0.5 1.0)}
+                                              reads))
+                                           (take result-count ids))]
+                      (reset! db-lookups 0)
+                      {:result (doall (search/combine-results :db keyword-results))
+                       :reads @reads
+                       :db-lookups @db-lookups}))]
       (with-redefs [d/entity (fn [_db [_attr id]]
+                               (swap! db-lookups inc)
                                (get blocks (str id)))
                     d/pull-many (fn [_db _selector lookup-refs]
+                                  (swap! db-lookups inc)
                                   (mapv (fn [[_attr id]]
                                           (get blocks (str id)))
                                         lookup-refs))
                     ldb/hidden? (constantly false)
                     ldb/page? :page?]
-        (let [started (process-cpu-time-ms)
-              result (doall (search/combine-results :db keyword-results))
-              elapsed-ms (- (process-cpu-time-ms) started)]
-          (is (< elapsed-ms 200)
-              (str "combine-results should stay fast for large result sets, took " elapsed-ms "ms CPU"))
+        (let [small (combine (quot (count ids) 4))
+              {:keys [result reads db-lookups]} (combine (count ids))]
+          (is (< reads (* 8 (:reads small)))
+              (str "4 times the results should take about 4 times the reads of result fields, not 16; "
+                   (:reads small) " reads for " (quot (count ids) 4) " results, "
+                   reads " for " (count ids)))
+          (is (= (:db-lookups small) db-lookups)
+              "all results are pulled from the db in 1 batch, not looked up one by one")
           (is (= (count ids) (count result)))
           (is (= page-id (:id (first result)))
               "page boost should still rank matching pages ahead of equally relevant blocks"))))))
@@ -985,7 +1010,6 @@
     (is (not (contains? spurs-index :vector-title)))))
 
 (def ^:private sync-search-indice-performance-block-count 300)
-(def ^:private sync-search-indice-performance-max-ms 1000)
 
 (defn- run-sync-search-indice-new-blocks-case
   [include-vector-title?]
@@ -1003,28 +1027,24 @@
                                         :block/created-at now
                                         :block/updated-at now})
                                      (range sync-search-indice-performance-block-count)))
-        started (process-cpu-time-ms)
         blocks-to-add (:blocks-to-add
                        (search/sync-search-indice
                         tx-report
-                        {:include-vector-title? include-vector-title?}))
-        elapsed-ms (- (process-cpu-time-ms) started)]
-    {:blocks-to-add blocks-to-add
-     :elapsed-ms elapsed-ms}))
+                        {:include-vector-title? include-vector-title?}))]
+    {:blocks-to-add blocks-to-add}))
 
+;; The work per new block is counted by
+;; sync-search-indice-300-new-blocks-does-not-check-page-descendants (page checks)
+;; and build-blocks-indice-uses-block-index (sibling sorts for the vector title).
 (deftest sync-search-indice-300-new-blocks-performance-when-semantic-search-enabled
-  (let [{:keys [blocks-to-add elapsed-ms]} (run-sync-search-indice-new-blocks-case true)]
-    (println (str "sync-search-indice 300 new blocks with semantic search enabled took " elapsed-ms "ms CPU"))
+  (let [{:keys [blocks-to-add]} (run-sync-search-indice-new-blocks-case true)]
     (is (= sync-search-indice-performance-block-count (count blocks-to-add)))
-    (is (< elapsed-ms sync-search-indice-performance-max-ms))
     (is (every? :vector-title blocks-to-add))
     (is (every? #(= (:title %) (:vector-title %)) blocks-to-add))))
 
 (deftest sync-search-indice-300-new-blocks-performance-when-semantic-search-disabled
-  (let [{:keys [blocks-to-add elapsed-ms]} (run-sync-search-indice-new-blocks-case false)]
-    (println (str "sync-search-indice 300 new blocks with semantic search disabled took " elapsed-ms "ms CPU"))
+  (let [{:keys [blocks-to-add]} (run-sync-search-indice-new-blocks-case false)]
     (is (= sync-search-indice-performance-block-count (count blocks-to-add)))
-    (is (< elapsed-ms sync-search-indice-performance-max-ms))
     (is (not-any? #(contains? % :vector-title) blocks-to-add))))
 
 (deftest sync-search-indice-300-new-blocks-does-not-check-page-descendants
@@ -1034,7 +1054,8 @@
                               false)]
       (let [{:keys [blocks-to-add]} (run-sync-search-indice-new-blocks-case true)]
         (is (= sync-search-indice-performance-block-count (count blocks-to-add)))
-        (is (<= @page-checks (* 2 sync-search-indice-performance-block-count)))))))
+        (is (<= @page-checks sync-search-indice-performance-block-count)
+            "1 page check per new block; checking the new blocks for page descendants doubles it")))))
 
 (deftest sync-search-indice-removes-page-descendants-when-page-is-deleted
   (let [conn (db-test/create-conn-with-blocks
