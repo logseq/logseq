@@ -21,10 +21,23 @@ let current_client repo : Sync_state.client option =
 
 let status repo : Wire.t option = Sync_apply.sync_counts repo
 
+(* cljs graph-remote? — the stored checksum is kept only on a graph that
+   syncs, marked by upload/download via :logseq.kv/graph-remote? *)
+let graph_remote (db : db) : bool =
+  Ldb.get_key_value db "logseq.kv/graph-remote?" = Some (Bool true)
+
 (* update-local-sync-checksum! *)
 let update_local_sync_checksum repo (tx_report : tx_report) : unit =
-  if Sync_state.has_client_ops_conn repo then begin
-    let current_checksum = Sync_client_op.get_local_checksum repo in
+  if Sync_state.has_client_ops_conn repo && graph_remote tx_report.db_after
+  then begin
+    (* cljs reads the stored checksum only when the graph was already
+       remote, so a graph that just became remote anchors on a full
+       checksum instead of deltas on an empty base. *)
+    let current_checksum =
+      if graph_remote tx_report.db_before then
+        Sync_client_op.get_local_checksum repo
+      else None
+    in
     let new_checksum =
       Db_sync_checksum.update_checksum
         (Option.value current_checksum ~default:"")
@@ -66,7 +79,9 @@ let update_local_sync_checksum repo (tx_report : tx_report) : unit =
    covered commit is compared with the reopened db's :max-tx; a
    mismatch means commits were missed and the checksum is recomputed. *)
 let reconcile_local_checksum repo conn =
-  if Sync_state.has_client_ops_conn repo then begin
+  if Sync_state.has_client_ops_conn repo
+     && graph_remote (Datascript.db conn)
+  then begin
     let checksum = Sync_client_op.get_local_checksum repo in
     let covered_tx = Sync_client_op.get_local_checksum_covered_tx repo in
     let current_tx = (Datascript.db conn).max_tx in

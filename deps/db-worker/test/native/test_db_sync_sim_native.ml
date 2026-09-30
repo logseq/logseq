@@ -154,6 +154,19 @@ let create_conn () : conn =
   in
   conn_from_db db
 
+(* cljs create-remote-conn — a client graph that syncs, marked as upload
+   and download mark it. The stored checksum is kept only on such a
+   graph. *)
+let create_remote_conn () : conn =
+  let conn = create_conn () in
+  ignore
+    (Db_transact.transact conn
+       [ Wire.Map
+           [ Wire.Keyword "db/ident", Wire.Keyword "logseq.kv/graph-remote?"
+           ; Wire.Keyword "kv/value", Wire.Bool true ] ]
+       []);
+  conn
+
 (* ---------- sync wiring (cljs fixture binds apply-history-action) ---------- *)
 
 let apply_history_action_adapter repo tx_id_opt undo pairs =
@@ -2999,8 +3012,8 @@ let test_two_clients_offline_concurrent_undo_redo_merge_sim () =
   let rng = make_rng seed in
   let gen_uuid () = rng_uuid rng in
   let base_uuid = gen_uuid () in
-  let conn_a = create_conn ()
-  and conn_b = create_conn () in
+  let conn_a = create_remote_conn ()
+  and conn_b = create_remote_conn () in
   let ops_a = new_client_ops_db ()
   and ops_b = new_client_ops_db () in
   let client_a = make_client repo_a
@@ -3205,8 +3218,8 @@ let test_two_clients_offline_concurrent_undo_redo_merge_sim () =
 let test_two_clients_rebase_keeps_local_title_after_reverse_tx () =
   let base_uuid = "11111111-1111-1111-1111-111111111111" in
   let block_uuid = "22222222-2222-2222-2222-222222222222" in
-  let conn_a = create_conn ()
-  and conn_b = create_conn () in
+  let conn_a = create_remote_conn ()
+  and conn_b = create_remote_conn () in
   let ops_a = new_client_ops_db ()
   and ops_b = new_client_ops_db () in
   let client_a = make_client repo_a
@@ -3579,8 +3592,8 @@ let test_two_clients_offline_insert_delete_indent_undo_redo_checksum () =
   let rng = make_rng seed in
   let gen_uuid () = rng_uuid rng in
   let base_uuid = gen_uuid () in
-  let conn_a = create_conn ()
-  and conn_b = create_conn () in
+  let conn_a = create_remote_conn ()
+  and conn_b = create_remote_conn () in
   let ops_a = new_client_ops_db ()
   and ops_b = new_client_ops_db () in
   let client_a = make_client repo_a
@@ -3669,8 +3682,8 @@ let test_two_clients_empty_child_undo_redo_reconnect_checksum () =
   let root_uuid = "82222222-2222-2222-2222-222222222222" in
   let child_a_uuid = "83333333-3333-3333-3333-333333333333" in
   let child_b_uuid = "84444444-4444-4444-4444-444444444444" in
-  let conn_a = create_conn ()
-  and conn_b = create_conn () in
+  let conn_a = create_remote_conn ()
+  and conn_b = create_remote_conn () in
   let ops_a = new_client_ops_db ()
   and ops_b = new_client_ops_db () in
   let client_a = make_client repo_a
@@ -4532,9 +4545,9 @@ let test_three_clients_single_repo_sim () =
   let rng = make_rng seed in
   let gen_uuid () = rng_uuid rng in
   let base_uuid = gen_uuid () in
-  let conn_a = create_conn ()
-  and conn_b = create_conn ()
-  and conn_c = create_conn () in
+  let conn_a = create_remote_conn ()
+  and conn_b = create_remote_conn ()
+  and conn_c = create_remote_conn () in
   let ops_a = new_client_ops_db ()
   and ops_b = new_client_ops_db ()
   and ops_c = new_client_ops_db () in

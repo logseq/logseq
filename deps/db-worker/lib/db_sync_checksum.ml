@@ -15,13 +15,16 @@ let sub_step acc v = mask32 (acc - v)
 
 let hash_code (fnv, djb) code = (fnv_step fnv code, djb_step djb code)
 
-let digest_string state (value : string) =
-  let rec loop idx st =
+(* cljs digest-string — the 2 hashes live in loop locals so hashing a
+   string costs no pair per char *)
+let digest_string (fnv, djb) (value : string) =
+  let rec loop idx fnv djb =
     if idx < String.length value then
-      loop (idx + 1) (hash_code st (Char.code value.[idx]))
-    else st
+      let code = Char.code value.[idx] in
+      loop (idx + 1) (fnv_step fnv code) (djb_step djb code)
+    else (fnv, djb)
   in
-  loop 0 state
+  loop 0 fnv djb
 
 let unsigned_hex n = Printf.sprintf "%08x" n
 
@@ -140,7 +143,10 @@ let first_datom_v db eid attr : value option =
   | Some d -> Some d.v
   | None -> None
 
-let checksum_eligible_entity (db : db) (eid : entity_id) : bool =
+(* cljs checksum-eligible-entity? — callers that check eligibility on many
+   entities pass a per-db [tag_eids]; the two-arity form (cljs 2-arity,
+   WeakMap-cached per db) computes it. *)
+let checksum_eligible_entity ?tag_eids (db : db) (eid : entity_id) : bool =
   (* cljs checksum-eligible-entity? reads raw datoms, not entity attrs:
      entity lookups can surface property defaults. Tag membership is an
      eid set — only ref values can match. *)
@@ -148,7 +154,11 @@ let checksum_eligible_entity (db : db) (eid : entity_id) : bool =
   | Some (Uuid _) ->
       (match first_datom_v db eid "logseq.property/built-in?" with
        | Some Nil | Some (Bool false) | None ->
-           let tag_eids = page_tag_eids db in
+           let tag_eids =
+             match tag_eids with
+             | Some ids -> ids
+             | None -> page_tag_eids db
+           in
            List.exists
              (fun (d : datom) ->
                 match d.v with
@@ -219,9 +229,10 @@ let subtract_digest (sum_fnv, sum_djb) (fnv, djb) =
   (sub_step sum_fnv fnv, sub_step sum_djb djb)
 
 let db_checksum_tuples db e2ee : Tuple.t list =
+  let tag_eids = page_tag_eids db in
   List.of_seq (datoms db Avet ~a:"block/uuid" ())
   |> List.concat_map (fun (d : datom) ->
-         if checksum_eligible_entity db d.e then
+         if checksum_eligible_entity ~tag_eids db d.e then
            Tuple_set.elements (entity_checksum_tuples db d.e e2ee)
          else [])
 
@@ -251,11 +262,13 @@ let tx_item_eids db_before db_after = function
 let touched_base_eids db_before db_after (tx_data : tx_item list) : Int_set.t =
   let before_cache = Hashtbl.create 31 in
   let after_cache = Hashtbl.create 31 in
-  let cached_eligible cache db eid =
+  let before_tag_eids = page_tag_eids db_before in
+  let after_tag_eids = page_tag_eids db_after in
+  let cached_eligible cache tag_eids db eid =
     match Hashtbl.find_opt cache eid with
     | Some b -> b
     | None ->
-        let b = checksum_eligible_entity db eid in
+        let b = checksum_eligible_entity ~tag_eids db eid in
         Hashtbl.replace cache eid b;
         b
   in
@@ -267,8 +280,8 @@ let touched_base_eids db_before db_after (tx_data : tx_item list) : Int_set.t =
             if
               block_uuid_change
               || get_block_uuid db_before eid <> get_block_uuid db_after eid
-              || cached_eligible before_cache db_before eid
-              || cached_eligible after_cache db_after eid
+              || cached_eligible before_cache before_tag_eids db_before eid
+              || cached_eligible after_cache after_tag_eids db_after eid
             then Int_set.add eid eids
             else eids)
          result
@@ -332,18 +345,20 @@ let duplicate_block_uuid db_before db_after (uuids : Str_set.t) : bool =
     uuids
 
 let tuple_set_for_eids db eids e2ee : Tuple_set.t =
+  let tag_eids = page_tag_eids db in
   Int_set.fold
     (fun eid acc ->
-       if checksum_eligible_entity db eid then
+       if checksum_eligible_entity ~tag_eids db eid then
          Tuple_set.union acc (entity_checksum_tuples db eid e2ee)
        else acc)
     eids Tuple_set.empty
 
 let tuple_counts_for_eids db eids e2ee : int Tuple_map.t =
+  let tag_eids = page_tag_eids db in
   Int_set.fold
     (fun eid counts ->
        let datom_count = block_uuid_datom_count db eid in
-       if datom_count > 0 && checksum_eligible_entity db eid then
+       if datom_count > 0 && checksum_eligible_entity ~tag_eids db eid then
          Tuple_set.fold
            (fun tuple acc ->
               Tuple_map.update tuple
@@ -371,13 +386,15 @@ let net_tuple_delta db_before db_after e2ee (tx_data : tx_item list)
     let uuid_changed_eids =
       eids_with_changed_block_uuid db_before db_after base_eids
     in
+    let before_tag_eids = page_tag_eids db_before in
+    let after_tag_eids = page_tag_eids db_after in
     let dependent_eids =
       if Int_set.is_empty uuid_changed_eids then Int_set.empty
       else
         impacted_referrer_eids db_before db_after uuid_changed_eids
         |> Int_set.filter (fun eid ->
-               checksum_eligible_entity db_before eid
-               || checksum_eligible_entity db_after eid)
+               checksum_eligible_entity ~tag_eids:before_tag_eids db_before eid
+               || checksum_eligible_entity ~tag_eids:after_tag_eids db_after eid)
     in
     let effective_eids = Int_set.union base_eids dependent_eids in
     let touched_uuids =
@@ -393,8 +410,8 @@ let net_tuple_delta db_before db_after e2ee (tx_data : tx_item list)
                   (eids_by_block_uuid db_after u)))
           touched_uuids Int_set.empty
         |> Int_set.filter (fun eid ->
-               checksum_eligible_entity db_before eid
-               || checksum_eligible_entity db_after eid)
+               checksum_eligible_entity ~tag_eids:before_tag_eids db_before eid
+               || checksum_eligible_entity ~tag_eids:after_tag_eids db_after eid)
       in
       let touched_eids = Int_set.union effective_eids peer_eids in
       let before_counts = tuple_counts_for_eids db_before touched_eids e2ee in
@@ -491,10 +508,11 @@ let recompute_checksum_diagnostics db : Wire.t =
     in
     Wire.Map base
   in
+  let tag_eids = page_tag_eids db in
   let blocks =
     eids
     |> List.filter_map (fun eid ->
-           if checksum_eligible_entity db eid then Some (block_map eid)
+           if checksum_eligible_entity ~tag_eids db eid then Some (block_map eid)
            else None)
     |> List.sort (fun a b ->
            let uuid_of m =
