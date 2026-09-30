@@ -724,7 +724,7 @@ let recycled_chain db (entity_id : entity_id) : bool =
 type membership_child =
   { mc_id : entity_id
   ; mc_uuid : string
-  ; mc_order : string
+  ; mc_order : string option
   ; mc_collapsed : bool
   }
 
@@ -747,13 +747,27 @@ let membership_row db (parent_uuid : string) (parent_recycled : bool)
              Some
                { mc_id = child_id
                ; mc_uuid = u
-               ; mc_order = o
+               ; mc_order = Some o
                ; mc_collapsed =
                    (match List.assoc_opt "block/collapsed?" attrs with
                     | Some (Bool b) -> b
                     | _ -> false)
                }
-         | _ ->
+         | None ->
+             (* :block/order is {:optional true} for pages in normal-page, so
+                a parented page may legitimately have none. Sort those first,
+                matching ldb/sort-by-order, rather than failing the whole
+                membership read. *)
+             Some
+               { mc_id = child_id
+               ; mc_uuid = u
+               ; mc_order = None
+               ; mc_collapsed =
+                   (match List.assoc_opt "block/collapsed?" attrs with
+                    | Some (Bool b) -> b
+                    | _ -> false)
+               }
+         | Some _ ->
              fail_render_read "Invalid direct-child order"
                [ (kw "parent-uuid", Wire.Uuid parent_uuid)
                ; (kw "block-uuid", Wire.Uuid u)
@@ -792,13 +806,17 @@ let parent_membership db (parent_uuid : string) (parent_id : entity_id)
   , List.of_seq (datoms db Avet ~a:"block/parent" ~v:(Ref parent_id) ())
     |> List.filter_map (fun (d : datom) ->
            membership_row db parent_uuid parent_recycled d.e)
-    |> List.stable_sort (fun a b -> String.compare a.mc_order b.mc_order)
+    |> List.stable_sort (fun a b ->
+           Db_order.compare_order a.mc_order b.mc_order)
   )
+
+let order_wire (o : string option) : Wire.t =
+  match o with Some s -> Wire.String s | None -> Wire.Nil
 
 let items_wire (rows : membership_child list) : Wire.t =
   Wire.Array
     (List.map
-       (fun r -> Wire.Array [ Wire.Uuid r.mc_uuid; Wire.String r.mc_order ])
+       (fun r -> Wire.Array [ Wire.Uuid r.mc_uuid; order_wire r.mc_order ])
        rows)
 
 let direct_children_membership db (parent_uuid : string) : Wire.t =
