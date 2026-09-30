@@ -1762,7 +1762,21 @@ let build_closed_value_block ~block_uuid ~block_type ~value ~property_ident
         else property_ref);
        "block/parent", property_ref ]
      @ (if property_value_content_type block_type property_ident
-        then [ "logseq.property/value", Str value ]
+        then
+          [ "logseq.property/value",
+            (if block_type = "number"
+             then
+               (* cljs :build/closed-values {:value <number>} — stored as
+                  a numeric :logseq.property/value, not a title string *)
+               match int_of_string_opt value with
+               | Some n -> Int64 n
+               | None ->
+                   (match float_of_string_opt value with
+                    | Some f -> Flt f
+                    | None ->
+                        invalid_arg
+                          ("number closed value must be numeric: " ^ value))
+             else Str value) ]
         else [ "block/title", Str value ])
      @ (match db_ident with Some i -> [ "db/ident", Kw i ] | None -> [])
      @ (match icon with

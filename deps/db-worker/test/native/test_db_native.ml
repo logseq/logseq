@@ -2168,6 +2168,184 @@ let test_batch_set_property_3 () =
          (contents = [ "Step 1"; "Step 2"; "Step 3" ])
    | None -> check "batch-set-property! id vector persisted" false)
 
+(* batch-set-property-stores-explicit-literal-numbers — cljs
+   property_test: literal integers including 0, negatives, and
+   coincidental entity ids store as numbers under {:entity-id? false};
+   {:entity-id? true} keeps the integer as the ref itself. *)
+let test_batch_set_property_stores_explicit_literal_numbers () =
+  let conn =
+    Db_test_util.create_conn_with_blocks
+      ~properties:
+        [ "rating", Db_test_util.{ default_property with p_type = "number" } ]
+      ~pages_and_blocks:
+        [ { Db_test_util.page =
+              Db_test_util.{ default_page with pg_title = Some "page1" };
+            Db_test_util.blocks =
+              [ Db_test_util.{ default_block with b_title = Some "b1" };
+                Db_test_util.{ default_block with b_title = Some "b2" } ] } ]
+      ()
+  in
+  let find t = Db_test_util.find_block_by_content (db_of conn) t in
+  let uuid t =
+    match find t with Some b -> uuid_of b | None -> failwith (t ^ " missing")
+  in
+  let rating_id t =
+    match find t with
+    | Some b ->
+        (match prop_value_ents b "user.property/rating" with
+         | [ pv ] -> pv.id
+         | _ -> -1)
+    | None -> -1
+  in
+  let rating_content t =
+    match find t with
+    | Some b ->
+        (match prop_value_ents b "user.property/rating" with
+         | [ pv ] -> prop_value_content pv
+         | _ -> "MISSING")
+    | None -> "MISSING"
+  in
+  Outliner_property.batch_set_property conn [ Wire.Uuid (uuid "b1") ]
+    "user.property/rating" (Wire.Int 0) ~entity_id_opt:(Some false) ();
+  check "literal 0" (rating_content "b1" = "0");
+  Outliner_property.batch_set_property conn [ Wire.Uuid (uuid "b1") ]
+    "user.property/rating" (Wire.Int (-3)) ~entity_id_opt:(Some false) ();
+  check "literal -3" (rating_content "b1" = "-3");
+  Outliner_property.batch_set_property conn [ Wire.Uuid (uuid "b1") ]
+    "user.property/rating" (Wire.Int 2) ~entity_id_opt:(Some false) ();
+  let value_block_id = rating_id "b1" in
+  check "value block id resolved" (value_block_id > 0);
+  Outliner_property.batch_set_property conn [ Wire.Uuid (uuid "b2") ]
+    "user.property/rating" (Wire.Int value_block_id)
+    ~entity_id_opt:(Some false) ();
+  check "coincidental eid stored as number"
+    (rating_content "b2" = Printf.sprintf "%d" value_block_id);
+  check "not a ref to the other value block"
+    (rating_id "b2" <> value_block_id);
+  check "content is not 2" (rating_content "b2" <> "2");
+  Outliner_property.batch_set_property conn [ Wire.Uuid (uuid "b2") ]
+    "user.property/rating" (Wire.Int value_block_id)
+    ~entity_id_opt:(Some true) ();
+  check "entity-id? true stores the eid as ref"
+    (rating_id "b2" = value_block_id);
+  check "ref reads back as 2" (rating_content "b2" = "2")
+
+(* number-closed-choices-preserve-implicit-entity-ids — cljs
+   property_test: with no :entity-id? option a number closed value's
+   eid still resolves to that choice (auto ref resolution). *)
+let test_number_closed_choices_preserve_implicit_entity_ids () =
+  let first_uuid = "00000000-0000-4000-9000-00000000f001" in
+  let second_uuid = "00000000-0000-4000-9000-00000000f002" in
+  let conn =
+    Db_test_util.create_conn_with_blocks
+      ~properties:
+        [ "rating"
+          , Db_test_util.{ default_property with
+              p_type = "number"
+            ; p_closed_values =
+                [ { Db_test_util.cv_value = "1"
+                  ; cv_uuid = Some first_uuid
+                  ; cv_ident = None
+                  ; cv_icon = None
+                  ; cv_properties = [] }
+                ; { Db_test_util.cv_value = "2"
+                  ; cv_uuid = Some second_uuid
+                  ; cv_ident = None
+                  ; cv_icon = None
+                  ; cv_properties = [] } ] } ]
+      ~pages_and_blocks:
+        [ { Db_test_util.page =
+              Db_test_util.{ default_page with pg_title = Some "page1" };
+            Db_test_util.blocks =
+              [ Db_test_util.{ default_block with b_title = Some "b1" } ] } ]
+      ()
+  in
+  let db = db_of conn in
+  let block_id =
+    match Db_test_util.find_block_by_content db "b1" with
+    | Some b -> b.id
+    | None -> failwith "b1 missing"
+  in
+  let choice_id u =
+    match Datascript.entity db (Lookup_ref ("block/uuid", Uuid u)) with
+    | Some e -> e.id
+    | None -> failwith "choice missing"
+  in
+  let first_id = choice_id first_uuid and second_id = choice_id second_uuid in
+  let rating_id () =
+    match Ldb.ent_of_id (db_of conn) block_id with
+    | Some b ->
+        (match prop_value_ents b "user.property/rating" with
+         | [ pv ] -> pv.id
+         | _ -> -1)
+    | None -> -1
+  in
+  let rating_content () =
+    match Ldb.ent_of_id (db_of conn) block_id with
+    | Some b ->
+        (match prop_value_ents b "user.property/rating" with
+         | [ pv ] -> prop_value_content pv
+         | _ -> "MISSING")
+    | None -> "MISSING"
+  in
+  Outliner_property.batch_set_property conn [ Wire.Int block_id ]
+    "user.property/rating" (Wire.Int first_id) ();
+  check "batch-set keeps implicit eid" (rating_id () = first_id);
+  Outliner_property.set_block_property conn (Wire.Int block_id)
+    "user.property/rating" (Wire.Int second_id);
+  check "set-block-property keeps implicit eid" (rating_id () = second_id);
+  check "content is 2" (rating_content () = "2")
+
+(* batch-set-many-numbers-preserves-literal-mode — cljs property_test:
+   :entity-id? false applies per element of a many number property. *)
+let test_batch_set_many_numbers_preserves_literal_mode () =
+  let conn =
+    Db_test_util.create_conn_with_blocks
+      ~properties:
+        [ "ratings"
+          , Db_test_util.{ default_property with
+              p_type = "number"; p_cardinality_many = true } ]
+      ~pages_and_blocks:
+        [ { Db_test_util.page =
+              Db_test_util.{ default_page with pg_title = Some "page1" };
+            Db_test_util.blocks =
+              [ Db_test_util.{ default_block with b_title = Some "b1" };
+                Db_test_util.{ default_block with b_title = Some "b2" } ] } ]
+      ()
+  in
+  let find t = Db_test_util.find_block_by_content (db_of conn) t in
+  let uuid t =
+    match find t with Some b -> uuid_of b | None -> failwith (t ^ " missing")
+  in
+  (* seed b1.ratings = {2} *)
+  Outliner_property.batch_set_property conn [ Wire.Uuid (uuid "b1") ]
+    "user.property/ratings" (Wire.Int 2) ~entity_id_opt:(Some false) ();
+  let value_id =
+    match find "b1" with
+    | Some b ->
+        (match prop_value_ents b "user.property/ratings" with
+         | [ pv ] -> pv.id
+         | _ -> failwith "b1 rating missing")
+    | None -> failwith "b1 missing"
+  in
+  let b2_uuid = uuid "b2" in
+  Outliner_property.batch_set_property conn [ Wire.Uuid b2_uuid ]
+    "user.property/ratings"
+    (Wire.Array [ Wire.Int 0; Wire.Int (-3); Wire.Int value_id ])
+    ~entity_id_opt:(Some false) ();
+  (match ent_uuid (db_of conn) b2_uuid with
+   | Some b ->
+       let contents =
+         List.sort compare
+           (List.map prop_value_content
+              (prop_value_ents b "user.property/ratings"))
+       in
+       check "many literals preserved"
+         (contents
+          = List.sort compare
+              [ "0"; "-3"; Printf.sprintf "%d" value_id ])
+   | None -> check "many literals preserved" false)
+
 (* batch-set-property "Invalid many values throw and don't partially persist" *)
 let test_batch_set_property_4 () =
   let conn =
@@ -3577,6 +3755,9 @@ let endpoint_cases : unit Alcotest.test_case list =
     Alcotest.test_case "status-property-setting-classes" `Quick test_status_property_setting_classes;
     Alcotest.test_case "task-child-class-does-not-add-parent-task-tag" `Quick test_task_child_class_does_not_add_parent_task_tag;
     Alcotest.test_case "batch-set-property-rejects-private-built-in-entity" `Quick test_batch_set_property_rejects_private_built_in_entity;
+    Alcotest.test_case "batch-set-property-stores-explicit-literal-numbers" `Quick test_batch_set_property_stores_explicit_literal_numbers;
+    Alcotest.test_case "number-closed-choices-preserve-implicit-entity-ids" `Quick test_number_closed_choices_preserve_implicit_entity_ids;
+    Alcotest.test_case "batch-set-many-numbers-preserves-literal-mode" `Quick test_batch_set_many_numbers_preserves_literal_mode;
     Alcotest.test_case "batch-remove-property" `Quick test_batch_remove_property;
     Alcotest.test_case "batch-remove-property-rejects-private-built-in-entity" `Quick test_batch_remove_property_rejects_private_built_in_entity;
     Alcotest.test_case "add-existing-values-to-closed-values" `Quick test_add_existing_values_to_closed_values;
