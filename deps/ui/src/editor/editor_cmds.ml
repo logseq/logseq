@@ -33,6 +33,11 @@ let batch_remove uuids prop =
 
 let apply ops = ignore (Outliner_ops.apply_and_refresh ops)
 
+(* cosmetic property writes: while an editor is open the apply's
+   sync-db-changes broadcast already arms the debounced reload *)
+let apply_soft ops =
+  ignore (Outliner_ops.apply_and_refresh_deferred ops)
+
 (* cljs batch-set-property-closed-value!: find the closed-value entity
    whose content matches, then set it by db/id. *)
 let set_closed_value uuid prop content =
@@ -64,7 +69,7 @@ let set_closed_value uuid prop content =
              | Some r -> (
                  match W.map_get_int r "db/id" with
                  | Some id ->
-                     apply [ batch_set [ uuid ] prop (W.Int id) ]
+                     apply_soft [ batch_set [ uuid ] prop (W.Int id) ]
                  | None -> ())
              | None ->
                  Platform.console_error ("closed value not found", content));
@@ -111,24 +116,28 @@ let run ~command ~block ~value =
       | "set-color" -> (
           match value with
           | Some c when c <> "" ->
-              apply
+              apply_soft
                 [ batch_set [ uuid ] "logseq.property/background-color"
                     (W.String c) ]
           | _ ->
-              apply
+              apply_soft
                 [ batch_remove [ uuid ] "logseq.property/background-color" ])
       | "set-heading" -> (
           match value with
           | Some "auto" ->
-              apply
+              apply_soft
                 [ batch_set [ uuid ] "logseq.property/heading" (W.Bool true) ]
           | Some v ->
               (try
-                 apply
+                 apply_soft
                    [ batch_set [ uuid ] "logseq.property/heading"
                        (W.Int (int_of_string v)) ]
-               with _ -> apply [ batch_remove [ uuid ] "logseq.property/heading" ])
-          | None -> apply [ batch_remove [ uuid ] "logseq.property/heading" ])
+               with _ ->
+                 apply_soft
+                   [ batch_remove [ uuid ] "logseq.property/heading" ])
+          | None ->
+              apply_soft
+                [ batch_remove [ uuid ] "logseq.property/heading" ])
       | "toggle-numbered-list" ->
           ignore
             (Sdk_util.get_by_id (W.String uuid)
@@ -139,11 +148,11 @@ let run ~command ~block ~value =
                       | None -> ""
                     in
                     (if cur = "number" then
-                       apply
+                       apply_soft
                          [ batch_remove [ uuid ]
                              "logseq.property/order-list-type" ]
                      else
-                       apply
+                       apply_soft
                          [ batch_set [ uuid ] "logseq.property/order-list-type"
                              (W.String "number") ]);
                     Js.Promise.resolve ()))
@@ -154,7 +163,7 @@ let run ~command ~block ~value =
              |> Js.Promise.then_ (fun w ->
                     (match W.map_get_int w "db/id" with
                      | Some dbid ->
-                         apply
+                         apply_soft
                            [ Outliner_ops.set_block_property uuid "block/tags"
                                (W.Int dbid) ]
                      | None -> ());
@@ -163,20 +172,20 @@ let run ~command ~block ~value =
           set_closed_value uuid "logseq.property/status"
             (String.sub cmd 7 (String.length cmd - 7))
       | "priority-none" ->
-          apply [ batch_remove [ uuid ] "logseq.property/priority" ]
+          apply_soft [ batch_remove [ uuid ] "logseq.property/priority" ]
       | cmd when String.length cmd > 9 && String.sub cmd 0 9 = "priority-" ->
           set_closed_value uuid "logseq.property/priority"
             (String.sub cmd 9 (String.length cmd - 9))
       | cmd when String.length cmd > 8 && String.sub cmd 0 8 = "heading-" -> (
           match String.sub cmd 8 (String.length cmd - 8) with
           | "normal" | "clear" ->
-              apply [ batch_remove [ uuid ] "logseq.property/heading" ]
+              apply_soft [ batch_remove [ uuid ] "logseq.property/heading" ]
           | "auto" ->
-              apply
+              apply_soft
                 [ batch_set [ uuid ] "logseq.property/heading" (W.Bool true) ]
           | n -> (
               try
-                apply
+                apply_soft
                   [ batch_set [ uuid ] "logseq.property/heading"
                       (W.Int (int_of_string n)) ]
               with _ -> ()))
@@ -186,7 +195,7 @@ let run ~command ~block ~value =
           let title =
             match b with Some x -> x.Model.block_title | None -> ""
           in
-          apply
+          apply_soft
             [ Outliner_ops.save_block uuid ("> " ^ title) ]
       | "cycle-todo" | "deadline" | "scheduled" | "date-picker"
       | "add-comment" | "copy-export-as" | "set-icon" | "add-reaction" ->

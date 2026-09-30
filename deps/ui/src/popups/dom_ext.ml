@@ -70,6 +70,8 @@ external set_value : element -> string -> unit = "value" [@@mel.set]
 external selection_start : element -> int = "selectionStart" [@@mel.get]
 
 external selection_end : element -> int = "selectionEnd" [@@mel.get]
+
+external is_connected : element -> bool = "isConnected" [@@mel.get]
 external set_text_content : element -> string -> unit = "textContent"
   [@@mel.set]
 external set_selection_range : element -> int -> int -> unit
@@ -235,6 +237,8 @@ let build_mock_text input el =
       (split_graphemes v);
     set_mock_value el v)
 ;;
+
+external inner_height : float = "innerHeight" [@@mel.scope "window"]
 
 (* cljs cursor.cljs get-caret-pos -> editor.cljs popup pos:
    left = mirror-span offsetLeft + input.left - 20

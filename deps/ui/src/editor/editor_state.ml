@@ -46,12 +46,19 @@ let st : t Signal.state option ref = ref None
 
 (* focus request consumed after the next DOM flush — ops remount the page
    subtree, so the textarea must be re-focused once it exists again *)
-let pending_focus : (string * int) option ref = ref None
+let pending_focus : (string * int * float) option ref = ref None
 
 (* editing keys that arrive while a structure op's textarea is still
    remounting (keydown landed on <body>): queued here and replayed by
    apply_focus once the refreshed model and DOM exist *)
 let pending_focus_actions : (unit -> unit) list ref = ref []
+
+(* wall-clock of the last editing-textarea key/input event; worker_events
+   defers a sync reload only while the editor is being actively typed in,
+   so an idle-but-editing page does not starve remote updates *)
+let last_edit_input_ms : float ref = ref 0.0
+
+let note_input () = last_edit_input_ms := Platform.date_now_ms ()
 
 (* structured block clipboard (titles + hierarchy), set by copy/cut *)
 let clipboard : Model.block list ref = ref []

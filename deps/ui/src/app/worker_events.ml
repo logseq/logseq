@@ -14,26 +14,67 @@
    flush/reload, so coalesce: dedupe identical rtc states and debounce route
    reloads — otherwise the reconcile churn starves the editor during typing. *)
 let last_rtc : Model.rtc option ref = ref None
-let reload_scheduled = ref false
+let reload_pending = ref false
+let reload_first_ms = ref 0.0
+let reload_last_ms = ref 0.0
 
 (* Boot_graph_ready clears Model.rtc; the dedup ref must clear too or an
    unchanged rebroadcast would be dropped and the indicator stay hidden *)
 let reset_rtc () = last_rtc := None
 
-(* A full route reload tears down the editing textarea mid-keystroke;
-   while a block is being edited, keep coalescing instead — the next
-   broadcast wave (or the end of editing) lands the reload anyway. *)
+(* A full route reload tears into the editing textarea mid-keystroke, so
+   defer while the editor is actively receiving input — but only while
+   input is recent: a block left in edit mode (e.g. by the RTC fixture's
+   fresh page) must not starve remote updates forever.
+
+   During an RTC merge flood broadcasts arrive faster than the debounce —
+   a fixed-interval throttle still pays a full worker-RPC + route render
+   per interval and starves the UI thread (keystroke acks cost ~1s).
+   Trailing debounce instead: re-arm while requests keep landing, with a
+   max wait so a continuous flood can't postpone the refresh forever. *)
+let edit_input_idle_ms = 750.0
+let reload_debounce_ms = 400.0
+let reload_max_wait_ms = 2000.0
+
+(* each full-route reload pays a worker fetch plus ~280ms of whole-tree
+   rebuild+flush; while an editor is open during an RTC flood that cost
+   starves keystroke dispatch, so reloads are capped to a much slower
+   cadence — a block left in edit mode still refreshes eventually *)
+let edit_reload_min_ms = 8000.0
+let reload_last_fire_ms = ref 0.0
+
 let rec schedule_reload () =
-  if !reload_scheduled then ()
+  reload_last_ms := Platform.date_now_ms ();
+  if !reload_first_ms = 0.0 then reload_first_ms := !reload_last_ms;
+  if not !reload_pending then (
+    reload_pending := true;
+    Editor_dom.set_timeout fire_reload 150)
+
+and fire_reload () =
+  let now = Platform.date_now_ms () in
+  let editing_active =
+    Editor_state.ready () && Editor_state.editing () <> None
+  in
+  let typing_active =
+    editing_active
+    && now -. !Editor_state.last_edit_input_ms < edit_input_idle_ms
+  in
+  let flood_active =
+    now -. !reload_last_ms < reload_debounce_ms
+    && now -. !reload_first_ms < reload_max_wait_ms
+  in
+  let edit_throttled =
+    editing_active && now -. !reload_last_fire_ms < edit_reload_min_ms
+  in
+  if typing_active || flood_active || edit_throttled then
+    Editor_dom.set_timeout fire_reload 150
   else (
-    reload_scheduled := true;
-    Editor_dom.set_timeout
-      (fun () ->
-         reload_scheduled := false;
-         if Editor_state.ready () && Editor_state.editing () <> None then
-           schedule_reload ()
-         else Router.reload ())
-      150)
+    reload_pending := false;
+    reload_first_ms := 0.0;
+    reload_last_fire_ms := now;
+    Router.reload ();
+    Views_mount.refresh_query_insts ();
+    Runtime.run_sync_subs ())
 
 let dispatch kind payload =
   match kind with
@@ -45,9 +86,9 @@ let dispatch kind payload =
       | None -> ())
   | "sync-db-changes" ->
       Render_inline.invalidate_pull_caches ();
-      schedule_reload ();
-      Views_mount.refresh_query_insts ();
-      Runtime.run_sync_subs ()
+      (* query-instances/sync-subs run inside fire_reload so they coalesce
+         with the debounced reload instead of paying per-broadcast *)
+      schedule_reload ()
   | "rtc-sync-state" -> (
       let rtc = Decode.rtc_of_wire payload in
       match !last_rtc with
