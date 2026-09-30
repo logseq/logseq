@@ -106,6 +106,35 @@
           (is (= [cached-ref-uuid]
                  (map :block/uuid (:block/refs result)))))))))
 
+(deftest wrap-parse-block-missing-uuid-page-ref-test
+  (testing "[[<uuid-with-no-entity>]] is parsed as a new-page ref with a generated uuid"
+    (with-redefs [state/get-state (constantly [])]
+      (let [missing "00000000-0000-4000-8000-000000000001"
+            result (db-editor-handler/wrap-parse-block
+                    {:block/uuid #uuid "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+                     :block/title (str "UUID host [[" missing "]]")})
+            ref (some #(when (map? %) %) (:block/refs result))]
+        (is (some? ref) "parser must emit a page ref")
+        (is (= missing (:block/title ref)))
+        (is (uuid? (:block/uuid ref)))
+        (is (not= (parse-uuid missing) (:block/uuid ref))
+            "parser mints a generated uuid, not the typed uuid")
+        (is (some (fn [r]
+                    (and (vector? r)
+                         (= :block/uuid (first r))
+                         (= (parse-uuid missing) (second r))))
+                  (:block/refs result))
+            "parser also emits a typed-uuid lookup ref")
+        (is (= (str "UUID host [[" (:block/uuid ref) "]]")
+               (:block/title result)))
+        (is (or (= "page" (:block/type ref))
+                (contains? (set (map #(or (:db/ident %) %)
+                                     (if (sequential? (:block/tags ref))
+                                       (:block/tags ref)
+                                       [(:block/tags ref)])))
+                           :logseq.class/Page))
+            (str "ref must look like a new page: " (pr-str ref)))))))
+
 (deftest wrap-parse-block-preserves-cached-map-refs-without-renderer-db-test
   (let [block-uuid #uuid "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
         cached-ref-uuid #uuid "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"

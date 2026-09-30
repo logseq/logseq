@@ -177,6 +177,36 @@
     :block/title missing-uuid-title
     :block/uuid parsed-uuid}))
 
+(deftest resolve-page-refs-missing-uuid-id-ref-without-page-ref-map
+  (testing "[[uuid]] left in the title with no :block/refs is persisted as plain text"
+    (let [conn (db-test/create-conn-with-blocks
+                [{:page {:block/title "page1"} :blocks []}])
+          {:keys [block]}
+          (#'outliner-core/resolve-page-refs
+           @conn
+           {:block/title (str "UUID host " (page-ref/->page-ref missing-uuid-title))
+            :block/raw-title (str "UUID host " (page-ref/->page-ref missing-uuid-title))})]
+      (is (= (str "UUID host " missing-uuid-title) (:block/title block)))
+      (is (= (str "UUID host " missing-uuid-title) (:block/raw-title block))))))
+
+(deftest resolve-page-refs-drops-missing-uuid-lookup-ref
+  (testing "wrap-parse emits a page map plus [:block/uuid typed]; drop the missing lookup"
+    (let [conn (db-test/create-conn-with-blocks
+                [{:page {:block/title "page1"} :blocks []}])
+          parsed-uuid (random-uuid)
+          typed-uuid (parse-uuid missing-uuid-title)
+          {:keys [block page-txs]}
+          (#'outliner-core/resolve-page-refs
+           @conn
+           {:block/title (str "UUID host " (page-ref/->page-ref parsed-uuid))
+            :block/raw-title (str "UUID host " (page-ref/->page-ref parsed-uuid))
+            :block/refs [(missing-uuid-page-ref parsed-uuid)
+                         [:block/uuid typed-uuid]]})]
+      (is (empty? page-txs))
+      (is (empty? (:block/refs block)))
+      (is (= (str "UUID host " missing-uuid-title) (:block/title block)))
+      (is (= (str "UUID host " missing-uuid-title) (:block/raw-title block))))))
+
 (deftest resolve-page-refs-missing-uuid-title-does-not-emit-nil-uuid
   (testing "a [[uuid]] with no entity does not create a page or a :block/uuid nil ref"
     (let [conn (db-test/create-conn-with-blocks

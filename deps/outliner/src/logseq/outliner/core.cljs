@@ -12,6 +12,7 @@
             [logseq.db :as ldb]
             [logseq.db.common.order :as db-order]
             [logseq.db.frontend.class :as db-class]
+            [logseq.db.frontend.content :as db-content]
             [logseq.db.frontend.schema :as db-schema]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
             [logseq.outliner.datascript :as ds]
@@ -252,7 +253,20 @@
        (nil? (:db/ident ref))
        (or (contains? #{"page" "journal"} (:block/type ref))
            (seq (set/intersection (ref-tag-idents ref)
-                                  #{:logseq.class/Page :logseq.class/Journal})))))
+                                  #{:logseq.class/Page :logseq.class/Journal}))
+           ;; Frontend parse of [[<uuid>]] mints a generated uuid; the type/tag
+           ;; can be dropped on the worker payload. The title is the typed uuid.
+           (and (string? (:block/title ref))
+                (common-util/uuid-string? (:block/title ref))))))
+
+(defn- missing-uuid-lookup-ref?
+  "Parser extract-block-refs also emits [:block/uuid id] for [[<uuid>]].
+  Transacting that lookup when no entity exists fails the whole save."
+  [db ref]
+  (and (vector? ref)
+       (= :block/uuid (first ref))
+       (uuid? (second ref))
+       (nil? (d/entity db ref))))
 
 (defn- unresolved-page-ref-plain-title
   [ref]
@@ -271,9 +285,34 @@
         (not (string/blank? plain))
         (string/replace (page-ref/->page-ref plain) plain)))))
 
+(defn- rewrite-missing-uuid-id-refs
+  "[[uuid]] with no entity renders as an empty link. Persist the uuid as text."
+  [db title]
+  (if-not (string? title)
+    title
+    (reduce (fn [title uuid-str]
+              (if (d/entity db [:block/uuid (uuid uuid-str)])
+                title
+                (string/replace title (page-ref/->page-ref uuid-str) uuid-str)))
+            title
+            (map str (db-content/get-matched-ids title)))))
+
+(defn- rewrite-block-missing-uuid-id-refs
+  [db block]
+  (cond-> block
+    (string? (:block/title block))
+    (update :block/title #(rewrite-missing-uuid-id-refs db %))
+
+    (string? (:block/raw-title block))
+    (update :block/raw-title #(rewrite-missing-uuid-id-refs db %))))
+
 (defn- resolve-page-ref
   [db ref tag-names]
-  (if (new-page-ref? ref)
+  (cond
+    (missing-uuid-lookup-ref? db ref)
+    [nil nil]
+
+    (new-page-ref? ref)
     (let [class? (contains? tag-names (:block/name ref))]
       (if-let [page (and (not class?) (ldb/get-page db (:block/name ref)))]
         [(merge (select-keys page [:db/id :block/uuid :block/title :block/name :db/ident])
@@ -294,6 +333,8 @@
             ;; page-name->map/create return nil for a uuid-string title when no
             ;; entity has that uuid. Do not emit :block/uuid nil.
             [nil nil]))))
+
+    :else
     [ref nil]))
 
 (defn- resolve-refs-dedup
@@ -365,15 +406,17 @@
                                          replacements)
                                  dropped-refs))
           rewrite-title? (or (seq replacements) (seq dropped-refs))]
-      {:block (cond-> (assoc block :block/refs refs''
-                                   :block/tags tags')
-                (and rewrite-title? (string? (:block/title block)))
-                (update :block/title replace-refs)
+      {:block (rewrite-block-missing-uuid-id-refs
+               db
+               (cond-> (assoc block :block/refs refs''
+                                    :block/tags tags')
+                 (and rewrite-title? (string? (:block/title block)))
+                 (update :block/title replace-refs)
 
-                (and rewrite-title? (string? (:block/raw-title block)))
-                (update :block/raw-title replace-refs))
+                 (and rewrite-title? (string? (:block/raw-title block)))
+                 (update :block/raw-title replace-refs)))
        :page-txs page-txs})
-    {:block block}))
+    {:block (rewrite-block-missing-uuid-id-refs db block)}))
 
 (defn- remove-tags-when-title-changed
   [block new-content]

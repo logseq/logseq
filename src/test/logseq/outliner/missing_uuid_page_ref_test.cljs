@@ -2,6 +2,8 @@
   "Saving [[<uuid-with-no-entity>]] must not emit :block/uuid nil (db-test#1372)."
   (:require [cljs.test :refer [deftest is testing]]
             [datascript.core :as d]
+            [frontend.handler.db-based.editor :as db-editor-handler]
+            [frontend.state :as state]
             [logseq.common.util.page-ref :as page-ref]
             [logseq.db.test.helper :as db-test]
             [logseq.outliner.core :as outliner-core]
@@ -34,6 +36,28 @@
         (is (= missing-uuid-title (:block/title saved)))
         (is (empty? (map :block/uuid (:block/refs saved))))
         (is (nil? (d/entity @conn [:block/uuid (parse-uuid missing-uuid-title)])))))))
+
+(deftest wrap-parse-then-save-missing-uuid-page-ref
+  (testing "the editor parse payload for UUID host [[<uuid>]] persists the typed uuid"
+    (with-redefs [state/get-state (constantly [])]
+      (let [conn (db-test/create-conn-with-blocks
+                  [{:page {:block/title "page1"}
+                    :blocks [{:block/title "host"}]}])
+            host (db-test/find-block-by-content @conn "host")
+            parsed (db-editor-handler/wrap-parse-block
+                    {:block/uuid (:block/uuid host)
+                     :block/title (str "UUID host [[" missing-uuid-title "]]")})]
+        (is (some (fn [ref]
+                    (and (vector? ref)
+                         (= :block/uuid (first ref))
+                         (= (parse-uuid missing-uuid-title) (second ref))))
+                  (:block/refs parsed))
+            "parser also emits a typed-uuid lookup ref that must not be transacted")
+        (outliner-core/save-block! conn parsed)
+        (let [saved (d/entity @conn (:db/id host))]
+          (is (= (str "UUID host " missing-uuid-title) (:block/title saved)))
+          (is (empty? (map :block/uuid (:block/refs saved))))
+          (is (nil? (d/entity @conn [:block/uuid (parse-uuid missing-uuid-title)]))))))))
 
 (deftest apply-ops-missing-uuid-save-does-not-block-sibling-insert
   (testing "a refused/nil page create must not fail an unrelated insert in the same apply-ops batch"
