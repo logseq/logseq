@@ -177,7 +177,16 @@
       (is (= (quote-tags (str "Project" "]]" " Garden"))
              (query-dsl/pre-transform (wrap-tags (str "Project" "]]" " Garden")))))
       (is (= (str "(tags [ " (pr-str "[[foo]]") "])")
-             (query-dsl/pre-transform "(tags [ [[foo]]])"))))))
+             (query-dsl/pre-transform "(tags [ [[foo]]])")))
+      (is (= (str "(tags [ " (pr-str (str "[[" "foo]" "]]")) "])")
+             (query-dsl/pre-transform (str "(tags [ " (str "[[" "foo]" "]]") "])"))))
+      (is (= (str "(tags [ " (pr-str (str "[[" "foo" "]]" "]]")) "])")
+             (query-dsl/pre-transform (str "(tags [ " (str "[[" "foo" "]]" "]]") "])"))))
+      (is (= (str "(and (between " (pr-str "[[Dec 26th, 2020]]") " tomorrow) (tags "
+                  (pr-str (str "[[" "bar" "]]" "]]")) "))")
+             (query-dsl/pre-transform
+              (str "(and (between [[Dec 26th, 2020]] tomorrow) (tags "
+                   (str "[[" "bar" "]]" "]]") "))")))))))
 
 (defn- testable-content
   "Only test :block/title up to page-ref to make tests readable"
@@ -650,13 +659,17 @@
                 :backslash-tag {:block/title "Project\\"}
                 :nested-open-tag {:block/title (str "Project" "[[" "Gremlin Garden" "]]")}
                 :nested-close-tag {:block/title (str "Project" "]]")}
-                :mid-close-tag {:block/title (str "Project" "]]" " Garden")}}
+                :mid-close-tag {:block/title (str "Project" "]]" " Garden")}
+                :bracket-end-tag {:block/title "foo]"}
+                :double-bracket-end-tag {:block/title (str "foo" "]]")}}
       :pages-and-blocks
       [{:page {:block/title "page-quote" :build/tags [:quote-tag]}}
        {:page {:block/title "page-backslash" :build/tags [:backslash-tag]}}
        {:page {:block/title "page-nested-open" :build/tags [:nested-open-tag]}}
        {:page {:block/title "page-nested-close" :build/tags [:nested-close-tag]}}
-       {:page {:block/title "page-mid-close" :build/tags [:mid-close-tag]}}]})
+       {:page {:block/title "page-mid-close" :build/tags [:mid-close-tag]}}
+       {:page {:block/title "page-bracket-end" :build/tags [:bracket-end-tag]}}
+       {:page {:block/title "page-double-bracket-end" :build/tags [:double-bracket-end-tag]}}]})
 
     (is (= ["page-quote"]
            (map :block/name (dsl-query (wrap-tags "Project\""))))
@@ -680,7 +693,15 @@
 
     (is (= ["page-quote"]
            (map :block/name (dsl-query "(tags [ [[Project\"]]])")))
-        "A page ref at the end of a tags vector still parses")))
+        "A page ref at the end of a tags vector still parses")
+
+    (is (= ["page-bracket-end"]
+           (map :block/name (dsl-query (str "(tags [ " (page-ref "foo]") "])"))))
+        "A tag title ending with ] still matches inside a tags vector")
+
+    (is (= ["page-double-bracket-end"]
+           (map :block/name (dsl-query (str "(tags [ " (page-ref (str "foo" "]]")) "])"))))
+        "A tag title ending with ]] still matches inside a tags vector")))
 
 (deftest block-content-query
   (load-test-files [{:page {:block/title "page1"}
