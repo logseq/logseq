@@ -30,7 +30,7 @@
         (outliner-property/upsert-property! conn :user.property/num {:logseq.property/type :checkbox} {})
         (is (= :checkbox (:logseq.property/type (d/entity @conn :user.property/num))))
         (is (= nil (:db/valueType (d/entity @conn :user.property/num))))
-        (is (not (db-property/many? (d/entity @conn :user.property/num))))))))
+        (is (not (db-property/many? (d/entity @conn :user.property/num)))))))
 
   (testing "Multiple properties that generate the same initial :db/ident"
     (let [conn (db-test/create-conn-with-blocks [])]
@@ -115,7 +115,7 @@
         (outliner-property/upsert-property! conn :user.property/note {:db/cardinality :many} {})
         (outliner-property/upsert-property! conn :user.property/note {:logseq.property/type property-type} {})
         (is (= property-type (:logseq.property/type (d/entity @conn :user.property/note))))
-        (is (not (db-property/many? (d/entity @conn :user.property/note))))))))
+        (is (not (db-property/many? (d/entity @conn :user.property/note)))))))
   (testing "changing an unused many property to another cardinality type keeps :many"
     (let [conn (db-test/create-conn-with-blocks
                 {:properties {:note {:logseq.property/type :default}}})]
