@@ -18,11 +18,14 @@ let uuid_of_prefixed prefix id =
 let caret_span el =
   (D.el_selection_start el, D.el_selection_end el)
 
-(* while #ui__ac (autocomplete popup) is in the DOM the popup's own
-   document keydown handler owns these keys — the editor listener runs
-   first (it installs at module init), so without this guard Enter would
-   split the block AND pick the popup item *)
-let ac_popup_open () = D.get_element_by_id "ui__ac" <> None
+(* while #ui__ac (autocomplete popup) is live the popup's own document
+   keydown handler owns these keys — the editor listener runs first (it
+   installs at module init), so without this guard Enter would split the
+   block AND pick the popup item. Only a live ac counts: the popup
+   element can still be mounting/unmounting, and an ac whose editor
+   textarea was remounted is stale — swallowing Enter then would eat the
+   key with no visible item picked *)
+let ac_popup_open () = Popups_state.ac_attached ()
 
 let ac_owned_key = function
   | "Enter" | "Tab" | "Escape" | "ArrowUp" | "ArrowDown" -> true

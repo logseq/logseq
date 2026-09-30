@@ -171,6 +171,16 @@ let ac_open () =
   | Some t -> (get t).ac <> None
   | None -> false
 
+(* editor_keys' popup-key guard — an ac whose editor was remounted or
+   navigated away is stale and must not keep swallowing Enter/Tab/arrows *)
+let ac_attached () =
+  match !active with
+  | Some t -> (
+      match (get t).ac with
+      | Some ac -> Dom_ext.is_connected ac.editor
+      | None -> false)
+  | None -> false
+
 let set t v = Runtime.signal_set t.vs v
 let set_ac t ac = set t { (get t) with ac }
 let set_cm t cm = set t { (get t) with cm }
@@ -1407,16 +1417,26 @@ let ac_position_closed ac el =
 let ac_keydown t ev =
   match (get t).ac with
   | None -> false
-  | Some ac -> (
-      match Dom_ext.key_ ev with
-      | Some "ArrowDown" -> move_chosen t 1; true
-      | Some "ArrowUp" -> move_chosen t (-1); true
-      | Some ("Enter" | "Tab") -> apply_chosen t; true
-      | Some "Escape" -> close_ac t; true
-      | _ ->
-          (let el = Option.value (Dom_ext.target ev) ~default:ac.editor in
-           if ac_position_closed ac el then close_ac t);
-          false)
+  | Some ac ->
+      (* the ac outlives its textarea on remount/navigation — Enter/Tab
+         reach apply_chosen before the position check could close it,
+         eating the key forever; a detached editor means the popup is
+         dead, so close it and let the key through *)
+      if not (Dom_ext.is_connected ac.editor) then (
+        close_ac t;
+        false)
+      else (
+        match Dom_ext.key_ ev with
+        | Some "ArrowDown" -> move_chosen t 1; true
+        | Some "ArrowUp" -> move_chosen t (-1); true
+        | Some ("Enter" | "Tab") -> apply_chosen t; true
+        | Some "Escape" -> close_ac t; true
+        | _ ->
+            (let el =
+               Option.value (Dom_ext.target ev) ~default:ac.editor
+             in
+             if ac_position_closed ac el then close_ac t);
+            false)
 ;;
 
 let ac_mousemove t el =
