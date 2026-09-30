@@ -1,6 +1,8 @@
 (ns logseq.api.editor-test
   (:require [cljs.test :refer [async deftest is use-fixtures]]
+            [datascript.core :as d]
             [frontend.commands :as commands]
+            [frontend.db.conn :as conn]
             [frontend.extensions.pdf.assets :as pdf-assets]
             [frontend.handler.code :as code-handler]
             [frontend.handler.editor :as editor-handler]
@@ -15,6 +17,7 @@
             [logseq.api.db-based :as db-based-api]
             [logseq.api.editor :as api-editor]
             [logseq.api.test-helper :as api-test]
+            [logseq.outliner.property :as outliner-property]
             [promesa.core :as p]))
 
 (use-fixtures :each {:before api-test/start-plugin-api-db!
@@ -229,6 +232,30 @@
               (is (= 2 (property-written-value referenced-value)))
               (is (= value-block-id (:db/id (:plugin.property._test_plugin/rating referenced-owner))))
               (is (= value-block-id (property-written-value explicit-literal))))))
+        (p/catch (fn [error]
+                   (is false (str error))))
+        (p/finally done))))
+
+(deftest upsert-nil-number-keeps-empty-placeholder-over-default
+  (async done
+    (load-editor-page!)
+    (-> (api-test/with-plugin-api
+          (fn []
+            (p/let [alpha (test-helper/find-block-by-content "alpha")
+                    uuid' (str (:block/uuid alpha))
+                    _ (db-based-api/upsert-property "rating" #js {:type "number"} nil)
+                    db-conn (conn/get-db (state/get-current-repo) false)
+                    property (d/entity @db-conn :plugin.property._test_plugin/rating)
+                    _ (outliner-property/create-property-text-block!
+                       db-conn (:db/id property) :logseq.property/default-value "5" {})
+                    _ (api-editor/upsert_block_property uuid' "rating" 8 nil)
+                    set-value (api-editor/get_block_property uuid' "rating")
+                    _ (api-editor/upsert_block_property uuid' "rating" nil nil)
+                    after (test-helper/find-block-by-content "alpha")
+                    cleared (get after :plugin.property._test_plugin/rating)]
+              (is (= 8 (property-written-value set-value)))
+              (is (= :logseq.property/empty-placeholder (:db/ident cleared)))
+              (is (not= 5 (property-written-value cleared))))))
         (p/catch (fn [error]
                    (is false (str error))))
         (p/finally done))))

@@ -183,7 +183,7 @@
          (outliner-op/remove-block-property! block-id property-ident))
 
        (let [set-property! (fn [value]
-                             (if (= :number property-type)
+                             (if (and (= :number property-type) (some? value))
                                (outliner-op/batch-set-property! [block-id] property-ident value
                                                                 {:entity-id? (true? entity-id?)})
                                (outliner-op/set-block-property! block-id property-ident
