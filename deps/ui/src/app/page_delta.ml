@@ -185,6 +185,24 @@ let renumber (bs : Model.block list) : Model.block list =
   in
   go None None [] bs
 
+(* assign positional indices on every sibling list in the tree — canon
+   rows carry no index and only membership-patched lists pass through
+   [renumber] inside the splice, so property-only changes (e.g. 'number
+   children') would leave fresh indices unset *)
+let rec renumber_tree (bs : Model.block list) : Model.block list =
+  let bs = renumber bs in
+  map_share
+    (fun (b : Model.block) ->
+      let children' = renumber_tree b.Model.block_children in
+      let embed' = renumber_tree b.Model.block_embed_children in
+      let b =
+        if children' == b.Model.block_children then b
+        else { b with Model.block_children = children' }
+      in
+      if embed' == b.Model.block_embed_children then b
+      else { b with Model.block_embed_children = embed' })
+    bs
+
 type env =
   { p : parsed
   ; idx_nodes : (string, Model.block) Hashtbl.t
@@ -272,7 +290,6 @@ let rec splice_children env parent_key (cur : Model.block list)
                    | None ->
                        env.failed <- true;
                        None))
-        |> renumber
     | None -> cur
   in
   (* content update in place + recurse — map_share keeps list/node
@@ -416,7 +433,10 @@ let apply_to_page ?(strict = true) (h : helpers) (page : Model.page)
           | Some u when not (Hashtbl.mem idx_nodes u) -> Some u
           | _ -> None
         in
-        let top = splice_children env root_key page.Model.page_blocks 1 in
+        let top =
+          renumber_tree
+            (splice_children env root_key page.Model.page_blocks 1)
+        in
         let unconsumed =
           SMap.exists
             (fun k _ -> not (Hashtbl.mem env.consumed k))
