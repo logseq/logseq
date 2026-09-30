@@ -29,6 +29,11 @@ dependency cone, master SHAs):
     8edb86a2fa  fix(db-sync): heal stale local checksum on graph open via covered commit (#13415)
     8e11118390  fix: show property title instead of db-ident in query builder (#13420)
     b7558934aa  fix: isolate query render errors so editing /query with incomplete syntax doesn't crash (#13419)
+    1b58ccff8b  fix(outliner): dedupe repeated new-page refs in one insert
+    a802e6b03f  fix(outliner): dedupe class refs by title
+    3c17bf397e  fix(outliner): match class tags by title in ref remapping
+    2ef453b73a  refactor: extract ref dedup fold from resolve-page-refs
+    16c4ed1a04  refactor: share title-aware tag-ref matching between save and insert
     3fdabc0810  fix: show selected values in node property pickers (#13521)
     fdfd7758a3  fix: keep '++' repeat anchored to original date across month-end clamp
     82e2717796  fix: refuse renaming a page to a case variant of another page
