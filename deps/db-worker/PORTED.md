@@ -60,6 +60,12 @@ dependency cone, master SHAs):
     dd4c6439b9  perf(sync): hash checksum fields without vectors
     57a8caf564  perf(sync): check checksum eligibility on datoms
     354a428b0f  fix(sync): keep value replacements in one request
+    93c8379a7e  fix: restore deleted property schemas in undo history (#13532)
+    3b6c4573af  fix: show linked references on tag pages (#13440)
+    768f525916  fix: hide recycled nested pages from All Pages (#13492)
+    f632f9eb7a  fix: store plugin integer number properties as values (#13488)
+    792f86328b  perf(search): find FTS rows by rowid (#13475)
+    e8f044822a  fix(search): validate migration before creating temporary index (#13529)
 
 When diffs against the baseline reference these, the OCaml side already
 carries them (canonicalize-insert-ops, Library move restriction,
