@@ -2,6 +2,7 @@
    abstraction (boot mounting, hash routing, localStorage, globals the
    e2e contract requires). *)
 
+open Promise_ext
 module W = Webapi.Dom
 
 external document_ : W.Document.t = "document"
@@ -267,17 +268,16 @@ external crypto_digest :
 
 (* cljs decode-digest: bytes -> lowercase hex *)
 let sha256_hex (u8 : Js.Typed_array.Uint8Array.t) =
-  crypto_digest crypto_subtle "SHA-256" u8
-  |> Js.Promise.then_ (fun buf ->
-         let a = Js.Typed_array.Uint8Array.fromBuffer buf () in
-         let n = Js.Typed_array.Uint8Array.length a in
-         let b = Buffer.create (n * 2) in
-         for i = 0 to n - 1 do
-           Buffer.add_string b
-             (Printf.sprintf "%02x"
-                (Js.Typed_array.Uint8Array.unsafe_get a i))
-         done;
-         Js.Promise.resolve (Buffer.contents b))
+  let* buf = crypto_digest crypto_subtle "SHA-256" u8 in
+  let a = Js.Typed_array.Uint8Array.fromBuffer buf () in
+  let n = Js.Typed_array.Uint8Array.length a in
+  let b = Buffer.create (n * 2) in
+  for i = 0 to n - 1 do
+    Buffer.add_string b
+      (Printf.sprintf "%02x"
+         (Js.Typed_array.Uint8Array.unsafe_get a i))
+  done;
+  Js.Promise.resolve (Buffer.contents b)
 
 (* lightning-fs mkdir has no recursive flag — create each path segment,
    ignoring EEXIST-style rejections *)
@@ -285,16 +285,19 @@ let pfs_ensure_dir pfs path =
   let segs =
     List.filter (fun s -> s <> "") (String.split_on_char '/' path)
   in
-  List.fold_left
-    (fun acc seg ->
-      acc
-      |> Js.Promise.then_ (fun prefix ->
-             let p = prefix ^ "/" ^ seg in
-             pfs_mkdir pfs p
-             |> Js.Promise.catch (fun _ -> Js.Promise.resolve ())
-             |> Js.Promise.then_ (fun () -> Js.Promise.resolve p)))
-    (Js.Promise.resolve "") segs
-  |> Js.Promise.then_ (fun _ -> Js.Promise.resolve ())
+  let* _ =
+    List.fold_left
+      (fun acc seg ->
+        let* prefix = acc in
+        let p = prefix ^ "/" ^ seg in
+        let* () =
+          pfs_mkdir pfs p
+          |> Js.Promise.catch (fun _ -> Js.Promise.resolve ())
+        in
+        Js.Promise.resolve p)
+      (Js.Promise.resolve "") segs
+  in
+  Js.Promise.resolve ()
 
 (* asset_store.ml browser_path — pfs paths strip one logseq_db_ prefix *)
 let strip_db_prefix repo =

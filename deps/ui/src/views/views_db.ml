@@ -1,10 +1,9 @@
 (* Worker access for views — thread-api endpoints + outliner ops. *)
 
+open Promise_ext
 module W = Wire
 
 let repo = Runtime.repo
-
-let then_ f p = Js.Promise.then_ f p
 
 let catch_quiet (p : unit Js.Promise.t) =
   Js.Promise.catch
@@ -24,13 +23,15 @@ let catch_write (p : unit Js.Promise.t) =
 
 (* fetch several resources in one get-render-snapshots call *)
 let snapshots ?(f = fun _ -> ()) (resources : W.t list) =
-  Runtime.invoke2 "thread-api/get-render-snapshots" (W.String (repo ()))
-    (W.Map
-       [ (W.kw "blocks", W.Array [])
-       ; (W.kw "children", W.Array [])
-       ; (W.kw "resources", W.Array resources)
-       ])
-  |> then_ (fun w -> f w; Js.Promise.resolve ())
+  (let* w =
+    Runtime.invoke2 "thread-api/get-render-snapshots" (W.String (repo ()))
+      (W.Map
+         [ (W.kw "blocks", W.Array [])
+         ; (W.kw "children", W.Array [])
+         ; (W.kw "resources", W.Array resources)
+         ])
+  in
+  f w; Js.Promise.resolve ())
   |> catch_quiet
   |> ignore
 
@@ -56,70 +57,83 @@ let resource_views owner feature = res (key_views owner feature)
 let resource_query spec = res (key_query spec)
 
 let pull_many selector_edn ids f =
-  Runtime.invoke3 "thread-api/pull-many" (W.String (repo ()))
-    (W.String selector_edn)
-    (W.Array
-       (List.map (fun u -> W.Array [ W.kw "block/uuid"; W.Uuid u ]) ids))
-  |> then_ (fun w -> f (W.args_list w); Js.Promise.resolve ())
+  (let* w =
+    Runtime.invoke3 "thread-api/pull-many" (W.String (repo ()))
+      (W.String selector_edn)
+      (W.Array
+         (List.map (fun u -> W.Array [ W.kw "block/uuid"; W.Uuid u ]) ids))
+  in
+  f (W.args_list w); Js.Promise.resolve ())
   |> catch_quiet
   |> ignore
 
 let get_view_filter_data ?(opts = W.Map []) property f =
-  Runtime.invoke2 "thread-api/get-view-filter-data" (W.String (repo ()))
-    (W.Map
-       ((W.kw "property", property)
-        :: (match opts with W.Map kvs -> kvs | _ -> [])))
-  |> then_ (fun w -> f w; Js.Promise.resolve ())
+  (let* w =
+    Runtime.invoke2 "thread-api/get-view-filter-data" (W.String (repo ()))
+      (W.Map
+         ((W.kw "property", property)
+          :: (match opts with W.Map kvs -> kvs | _ -> [])))
+  in
+  f w; Js.Promise.resolve ())
   |> catch_quiet
   |> ignore
 
 let get_class_properties class_id f =
-  Runtime.invoke2 "thread-api/get-class-properties" (W.String (repo ()))
-    class_id
-  |> then_ (fun w -> f (W.args_list w); Js.Promise.resolve ())
+  (let* w =
+    Runtime.invoke2 "thread-api/get-class-properties" (W.String (repo ()))
+      class_id
+  in
+  f (W.args_list w); Js.Promise.resolve ())
   |> catch_quiet
   |> ignore
 
 let get_all_classes f =
-  Runtime.invoke2 "thread-api/get-all-classes" (W.String (repo ()))
-    (W.Map
-       [ (W.kw "except-root-class?", W.Bool true)
-       ; (W.kw "except-private-tags?", W.Bool false)
-       ])
-  |> then_ (fun w -> f (W.args_list w); Js.Promise.resolve ())
+  (let* w =
+    Runtime.invoke2 "thread-api/get-all-classes" (W.String (repo ()))
+      (W.Map
+         [ (W.kw "except-root-class?", W.Bool true)
+         ; (W.kw "except-private-tags?", W.Bool false)
+         ])
+  in
+  f (W.args_list w); Js.Promise.resolve ())
   |> catch_quiet
   |> ignore
 
 let get_all_properties f =
-  Runtime.invoke2 "thread-api/get-all-properties" (W.String (repo ()))
-    (W.Map
-       [ (W.kw "remove-built-in-property?", W.Bool false)
-       ; (W.kw "remove-non-queryable-built-in-property?", W.Bool true)
-       ])
-  |> then_ (fun w -> f (W.args_list w); Js.Promise.resolve ())
+  (let* w =
+    Runtime.invoke2 "thread-api/get-all-properties" (W.String (repo ()))
+      (W.Map
+         [ (W.kw "remove-built-in-property?", W.Bool false)
+         ; (W.kw "remove-non-queryable-built-in-property?", W.Bool true)
+         ])
+  in
+  f (W.args_list w); Js.Promise.resolve ())
   |> catch_quiet
   |> ignore
 
 let get_closed_values ident f =
-  Runtime.invoke2 "thread-api/get-property-closed-values"
-    (W.String (repo ()))
-    (W.Keyword ident)
-  |> then_ (fun w -> f (W.args_list w); Js.Promise.resolve ())
+  (let* w =
+    Runtime.invoke2 "thread-api/get-property-closed-values"
+      (W.String (repo ()))
+      (W.Keyword ident)
+  in
+  f (W.args_list w); Js.Promise.resolve ())
   |> catch_quiet
   |> ignore
 
 let get_property_values ident f =
-  Runtime.invoke2 "thread-api/get-property-values" (W.String (repo ()))
-    (W.Map [ (W.kw "property-ident", W.Keyword ident) ])
-  |> then_ (fun w -> f w; Js.Promise.resolve ())
+  (let* w =
+    Runtime.invoke2 "thread-api/get-property-values" (W.String (repo ()))
+      (W.Map [ (W.kw "property-ident", W.Keyword ident) ])
+  in
+  f w; Js.Promise.resolve ())
   |> catch_quiet
   |> ignore
 
 let get_all_page_titles f =
-  Runtime.invoke1 "thread-api/get-all-page-titles" (W.String (repo ()))
-  |> then_ (fun w ->
-         f (List.filter_map W.as_string (W.args_list w));
-         Js.Promise.resolve ())
+  (let* w = Runtime.invoke1 "thread-api/get-all-page-titles" (W.String (repo ())) in
+  f (List.filter_map W.as_string (W.args_list w));
+  Js.Promise.resolve ())
   |> catch_quiet
   |> ignore
 
@@ -137,39 +151,42 @@ let block_of_result (w : W.t) : W.t =
 
 let get_blocks uuids ?(metadata = false) ?(children = false)
     ?(include_property_block = false) f =
-  Runtime.invoke2 "thread-api/get-blocks" (W.String (repo ()))
-    (W.Array
-       (List.map
-          (fun u ->
-            W.Map
-              [ (W.kw "id", W.Uuid u)
-              ; ( W.kw "opts"
-                , W.Map
-                    ([ (W.kw "block-metadata?", W.Bool metadata)
-                     ; (W.kw "children?", W.Bool children)
-                     ; ( W.kw "include-property-block?"
-                       , W.Bool include_property_block )
-                     ]) )
-              ])
-          uuids))
-  |> then_ (fun w ->
-         f (List.map block_of_result (W.args_list w));
-         Js.Promise.resolve ())
+  (let* w =
+    Runtime.invoke2 "thread-api/get-blocks" (W.String (repo ()))
+      (W.Array
+         (List.map
+            (fun u ->
+              W.Map
+                [ (W.kw "id", W.Uuid u)
+                ; ( W.kw "opts"
+                  , W.Map
+                      ([ (W.kw "block-metadata?", W.Bool metadata)
+                       ; (W.kw "children?", W.Bool children)
+                       ; ( W.kw "include-property-block?"
+                         , W.Bool include_property_block )
+                       ]) )
+                ])
+            uuids))
+  in
+  f (List.map block_of_result (W.args_list w));
+  Js.Promise.resolve ())
   |> catch_quiet
   |> ignore
 
 let q query_edn f =
-  Runtime.invoke2 "thread-api/q" (W.String (repo ()))
-    (W.Array [ W.String query_edn ])
-  |> then_ (fun w -> f w; Js.Promise.resolve ())
+  (let* w =
+    Runtime.invoke2 "thread-api/q" (W.String (repo ()))
+      (W.Array [ W.String query_edn ])
+  in
+  f w; Js.Promise.resolve ())
   |> catch_quiet
   |> ignore
 
 (* -- write ops -- *)
 
 let apply_ops ops f =
-  Outliner_ops.apply ops
-  |> then_ (fun () -> f (); Js.Promise.resolve ())
+  (let* () = Outliner_ops.apply ops in
+  f (); Js.Promise.resolve ())
   |> ignore
 
 let set_view_property view_uuid ident v f =
@@ -185,9 +202,8 @@ let remove_view_property view_uuid ident f =
 
 let save_block_title uuid title f =
   let _ =
-    Outliner_ops.save_block_parsed uuid title
-    |> Js.Promise.then_ (fun op ->
-           Js.Promise.resolve (apply_ops [ op ] f))
+    (let* op = Outliner_ops.save_block_parsed uuid title in
+    Js.Promise.resolve (apply_ops [ op ] f))
   in
   ()
 
@@ -245,20 +261,22 @@ let insert_view_block ?(after = fun () -> ()) ~title ~uuid ~page_uuid
             , W.Keyword feature_type )
           ]
       in
-      Runtime.invoke3 "thread-api/apply-outliner-ops" (W.String (repo ()))
-        (W.Array
-           [ Outliner_ops.op "insert-blocks"
-               [ W.List [ block_map ]
-               ; W.Uuid target_uuid
-               ; W.Map
-                   [ (W.kw "sibling?", W.Bool sibling)
-                   ; (W.kw "keep-uuid?", W.Bool true)
-                   ; (W.kw "outliner-op", W.Keyword "insert-blocks")
-                   ]
-               ]
-           ])
-        (W.Map [])
-      |> then_ (fun _ -> after (); Js.Promise.resolve ())
+      (let* _ =
+        Runtime.invoke3 "thread-api/apply-outliner-ops" (W.String (repo ()))
+          (W.Array
+             [ Outliner_ops.op "insert-blocks"
+                 [ W.List [ block_map ]
+                 ; W.Uuid target_uuid
+                 ; W.Map
+                     [ (W.kw "sibling?", W.Bool sibling)
+                     ; (W.kw "keep-uuid?", W.Bool true)
+                     ; (W.kw "outliner-op", W.Keyword "insert-blocks")
+                     ]
+                 ]
+             ])
+          (W.Map [])
+      in
+      after (); Js.Promise.resolve ())
       |> catch_write
       |> ignore)
 
@@ -283,20 +301,22 @@ let insert_object_block ~uuid ~page_uuid ~title ~tags ~props f =
        ]
       @ tags_w @ props)
   in
-  Runtime.invoke3 "thread-api/apply-outliner-ops" (W.String (repo ()))
-    (W.Array
-       [ Outliner_ops.op "insert-blocks"
-           [ W.List [ block_map ]
-           ; W.Uuid page_uuid
-           ; W.Map
-               [ (W.kw "sibling?", W.Bool false)
-               ; (W.kw "keep-uuid?", W.Bool true)
-               ; (W.kw "outliner-op", W.Keyword "insert-blocks")
-               ]
-           ]
-       ])
-    (W.Map [])
-  |> then_ (fun w -> f w; Js.Promise.resolve ())
+  (let* w =
+    Runtime.invoke3 "thread-api/apply-outliner-ops" (W.String (repo ()))
+      (W.Array
+         [ Outliner_ops.op "insert-blocks"
+             [ W.List [ block_map ]
+             ; W.Uuid page_uuid
+             ; W.Map
+                 [ (W.kw "sibling?", W.Bool false)
+                 ; (W.kw "keep-uuid?", W.Bool true)
+                 ; (W.kw "outliner-op", W.Keyword "insert-blocks")
+                 ]
+             ]
+         ])
+      (W.Map [])
+  in
+  f w; Js.Promise.resolve ())
   |> catch_write
   |> ignore
 

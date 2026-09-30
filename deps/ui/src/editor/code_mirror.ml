@@ -11,13 +11,12 @@
    `module.exports = CodeMirror` main and a side-effect import for the
    modes/addons whose registration happens on require). *)
 
+open Promise_ext
 module D = Editor_dom
 module V = Views_dom
 module S = Editor_state
 module A = Editor_actions
 module Ops = Outliner_ops
-
-let ( let* ) p f = Js.Promise.then_ f p
 
 type cm_module
 type t

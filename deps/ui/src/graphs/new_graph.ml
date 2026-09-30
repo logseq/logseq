@@ -4,6 +4,7 @@
    create-or-open-db via Graph.create_graph; the sync path calls the
    worker db-sync endpoints like the cljs flow does. *)
 
+open Promise_ext
 open Lui_elements
 
 let dom = Logseq_dom.dom
@@ -53,22 +54,25 @@ let submit cloud e2ee creating =
     Signal.set creating true;
     Runtime.flush ();
     ignore
-      (Js.Promise.then_
-         (fun repo ->
-           Graphs_ops.remember_open repo;
-           Dialogs_state.close_named "new-graph";
-           ignore (Graphs_ops.navigate_journal repo);
-           Js.Promise.resolve ())
-         (if Signal.get_state cloud then
-            (* cljs: db-sync-ensure-user-rsa-keys runs before
+      (let* repo =
+        (if Signal.get_state cloud then
+           (* cljs: db-sync-ensure-user-rsa-keys runs before
+              create-remote-graph so the private key is available (the
+              worker may ui-request an e2ee password here) *)
+           let e2ee = Signal.get_state e2ee in
+           let* _ =
+             (if e2ee then Rtc_ops.ensure_rsa_keys ()
+              else Js.Promise.resolve true)
+           in
+           Graphs_ops.create_remote name e2ee
+         else Graph.create_graph name)
+      in
+      Graphs_ops.remember_open repo;
+      Dialogs_state.close_named "new-graph";
+      ignore (Graphs_ops.navigate_journal repo);
+      Js.Promise.resolve () (* cljs: db-sync-ensure-user-rsa-keys runs before
                create-remote-graph so the private key is available (the
-               worker may ui-request an e2ee password here) *)
-            let e2ee = Signal.get_state e2ee in
-            (if e2ee then Rtc_ops.ensure_rsa_keys ()
-             else Js.Promise.resolve true)
-            |> Js.Promise.then_ (fun _ ->
-                   Graphs_ops.create_remote name e2ee)
-          else Graph.create_graph name)))
+               worker may ui-request an e2ee password here) *)))
 
 let body (_ms : Model.t Signal.signal) : t =
  fun ctx parent ->

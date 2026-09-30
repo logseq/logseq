@@ -14,6 +14,7 @@
    "New option:" pseudo-item is appended while the input is non-empty
    and doesn't exactly match an item. *)
 
+open Promise_ext
 open Editor_dom
 open Properties_dom
 
@@ -244,13 +245,12 @@ let create ~placeholder ?(new_option = None) ?(on_escape = fun () -> ())
       (match cfg.on_search with
        | Some search ->
            let q = cfg.filter in
-           search q
-           |> Js.Promise.then_ (fun items ->
-                  (* stale guard — a later keystroke owns the list *)
-                  if cfg.filter = q then (
-                    cfg.searched <- Some items;
-                    rebuild_results cfg results_inner);
-                  Js.Promise.resolve ())
+           (let* items = search q in
+           (* stale guard — a later keystroke owns the list *)
+           if cfg.filter = q then (
+             cfg.searched <- Some items;
+             rebuild_results cfg results_inner);
+           Js.Promise.resolve ())
            |> ignore
        | None -> ());
       rebuild_results cfg results_inner)

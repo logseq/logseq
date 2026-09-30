@@ -5,6 +5,7 @@
    the lsp-updates channel, and exposes the plugin-facing host api fns
    that the lsplugin dispatch resolves on window.logseq.api. *)
 
+open Promise_ext
 open Sdk_util
 
 external window_ : Js.Json.t = "window"
@@ -275,22 +276,21 @@ let marketplace_pkgs owner =
   | Some p -> p
   | None ->
       let p =
-        fetch_ marketplace_url
-        |> Js.Promise.then_ (fun r -> resp_json r)
-        |> Js.Promise.then_ (fun j ->
-               let pkgs =
-                 match Js.Json.decodeArray (getf j "packages") with
-                 | Some xs -> Array.to_list xs
-                 | None -> []
-               in
-               (* web platform filter: web:true or effect not true *)
-               let web_ok p =
-                 jbool p "web" || not (jbool p "effect")
-               in
-               let pkgs = List.filter web_ok pkgs in
-               bump ();
-               Js.Promise.resolve
-                 (Sdk_convert.json_arr (Array.of_list pkgs)))
+        (let* r = fetch_ marketplace_url in
+        let* j = resp_json r in
+        let pkgs =
+          match Js.Json.decodeArray (getf j "packages") with
+          | Some xs -> Array.to_list xs
+          | None -> []
+        in
+        (* web platform filter: web:true or effect not true *)
+        let web_ok p =
+          jbool p "web" || not (jbool p "effect")
+        in
+        let pkgs = List.filter web_ok pkgs in
+        bump ();
+        Js.Promise.resolve
+          (Sdk_convert.json_arr (Array.of_list pkgs)))
       in
       marketplace := Some p;
       ignore (dirty_signal owner);
@@ -304,31 +304,30 @@ let install_marketplace pkg =
   if repo <> "" && Js.Dict.get installed (jstr pkg "id") = None then (
     let apis = getf window_ "apis" in
     ignore
-      (fetch_ (r2_entry_url repo "")
-      |> Js.Promise.then_ (fun r -> resp_json r)
-      |> Js.Promise.then_ (fun web_pkg ->
-             let version = jstr web_pkg "version" in
-             let payload =
-               jobj
-                 [ ("id", getf pkg "id")
-                 ; ("name", getf pkg "title")
-                 ; ("title", getf pkg "title")
-                 ; ("icon", getf pkg "icon")
-                 ; ("author", getf pkg "author")
-                 ; ("repo", jstr_ repo)
-                 ; ("dst", jstr_ repo)
-                 ; ("version", jstr_ version)
-                 ; ("webPkg", web_pkg)
-                 ]
-             in
-             let evt =
-               jobj
-                 [ ("status", jstr_ "completed")
-                 ; ("payload", payload)
-                 ]
-             in
-             ignore (meth apis "emit" [| jstr_ "lsp-updates"; evt |]);
-             Js.Promise.resolve Js.Json.null)))
+      (let* r = fetch_ (r2_entry_url repo "") in
+       let* web_pkg = resp_json r in
+      let version = jstr web_pkg "version" in
+      let payload =
+        jobj
+          [ ("id", getf pkg "id")
+          ; ("name", getf pkg "title")
+          ; ("title", getf pkg "title")
+          ; ("icon", getf pkg "icon")
+          ; ("author", getf pkg "author")
+          ; ("repo", jstr_ repo)
+          ; ("dst", jstr_ repo)
+          ; ("version", jstr_ version)
+          ; ("webPkg", web_pkg)
+          ]
+      in
+      let evt =
+        jobj
+          [ ("status", jstr_ "completed")
+          ; ("payload", payload)
+          ]
+      in
+      ignore (meth apis "emit" [| jstr_ "lsp-updates"; evt |]);
+      Js.Promise.resolve Js.Json.null))
 
 (* ---------- hooks / commands / themes registries ----------
    cljs :plugin/installed-hooks {hook {pid _}},
@@ -957,33 +956,32 @@ let unregister_plugin = core_unregister
    onlyCheck payload carries latest-version (no webPkg) *)
 let check_or_update id repo only_check =
   ignore
-    (fetch_ (r2_entry_url repo "")
-    |> Js.Promise.then_ (fun r -> resp_json r)
-    |> Js.Promise.then_ (fun web_pkg ->
-           let payload =
-             if only_check then
-               jobj
-                 [ ("id", jstr_ id)
-                 ; ("latest-version", getf web_pkg "version")
-                 ]
-             else
-               jobj
-                 [ ("id", jstr_ id)
-                 ; ("dst", jstr_ repo)
-                 ; ("version", getf web_pkg "version")
-                 ; ("webPkg", web_pkg)
-                 ]
-           in
-           ignore
-             (meth (getf window_ "apis") "emit"
-                [| jstr_ "lsp-updates"
-                 ; jobj
-                     [ ("status", jstr_ "completed")
-                     ; ("onlyCheck", Js.Json.boolean only_check)
-                     ; ("payload", payload)
-                     ]
-                |]);
-           Js.Promise.resolve Js.Json.null)
+    ((let* r = fetch_ (r2_entry_url repo "") in
+     let* web_pkg = resp_json r in
+     let payload =
+       if only_check then
+         jobj
+           [ ("id", jstr_ id)
+           ; ("latest-version", getf web_pkg "version")
+           ]
+       else
+         jobj
+           [ ("id", jstr_ id)
+           ; ("dst", jstr_ repo)
+           ; ("version", getf web_pkg "version")
+           ; ("webPkg", web_pkg)
+           ]
+     in
+     ignore
+       (meth (getf window_ "apis") "emit"
+          [| jstr_ "lsp-updates"
+           ; jobj
+               [ ("status", jstr_ "completed")
+               ; ("onlyCheck", Js.Json.boolean only_check)
+               ; ("payload", payload)
+               ]
+          |]);
+     Js.Promise.resolve Js.Json.null)
     |> Js.Promise.catch (fun _e -> Js.Promise.resolve Js.Json.null))
 
 let update_version id = Hashtbl.find_opt updates id
@@ -1264,19 +1262,18 @@ let check_is_db_graph _a _b _c _d = resolved (Js.Json.boolean true)
    preferredDateFormat = :journal/page-title-format from config.edn,
    default "MMM do, yyyy" (cljs state/default-date-formatter) *)
 let get_user_configs _a _b _c _d =
-  Sdk_config.read_config (repo ())
-  |> Js.Promise.then_ (fun cfg ->
-         let fmt =
-           match Wire.get cfg "journal/page-title-format" with
-           | Some (Wire.String s) -> s
-           | _ -> "MMM do, yyyy"
-         in
-         resolved
-           (jobj
-              [ ("preferredDateFormat", jstr_ fmt)
-              ; ("preferredStartOfWeek", Js.Json.number 0.)
-              ; ("currentGraph", jstr_ (repo ()))
-              ]))
+  let* cfg = Sdk_config.read_config (repo ()) in
+  let fmt =
+    match Wire.get cfg "journal/page-title-format" with
+    | Some (Wire.String s) -> s
+    | _ -> "MMM do, yyyy"
+  in
+  resolved
+    (jobj
+       [ ("preferredDateFormat", jstr_ fmt)
+       ; ("preferredStartOfWeek", Js.Json.number 0.)
+       ; ("currentGraph", jstr_ (repo ()))
+       ])
 
 (* LSPluginCore event wiring (cljs init-plugins! doto block). *)
 let core_listeners (core : Js.Json.t) =

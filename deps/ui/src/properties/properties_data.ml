@@ -5,6 +5,7 @@
    Property data intentionally lives outside Model (the worker owns it);
    we call thread-api endpoints directly, same as sdk_*. *)
 
+open Promise_ext
 module W = Wire
 
 let repo () = W.String (Runtime.repo ())
@@ -350,25 +351,26 @@ let entity_by_title title = invoke "get-case-page" [ repo (); W.String title ]
 (* get-blocks {:render-data? true} -> block wire carrying
    block.temp/positioned-properties *)
 let block_render_data uuid =
-  invoke "get-blocks"
-    [ repo ()
-    ; W.Array
-        [ W.Map
-            [ (W.String "id", W.Uuid uuid)
-            ; ( W.String "opts"
-              , W.Map [ (W.Keyword "render-data?", W.Bool true) ] )
-            ]
-        ]
-    ]
-  |> Js.Promise.then_ (fun w ->
-         Js.Promise.resolve
-           (match W.elems w with
-            | [ pair ] -> (
-                match getf pair "block" with
-                | Some res -> res
-                | None -> (
-                    match W.elems pair with [ _; res ] -> res | _ -> W.Nil))
-            | _ -> W.Nil))
+  let* w =
+    invoke "get-blocks"
+      [ repo ()
+      ; W.Array
+          [ W.Map
+              [ (W.String "id", W.Uuid uuid)
+              ; ( W.String "opts"
+                , W.Map [ (W.Keyword "render-data?", W.Bool true) ] )
+              ]
+          ]
+      ]
+  in
+  Js.Promise.resolve
+    (match W.elems w with
+     | [ pair ] -> (
+         match getf pair "block" with
+         | Some res -> res
+         | None -> (
+             match W.elems pair with [ _; res ] -> res | _ -> W.Nil))
+     | _ -> W.Nil)
 
 (* ---------- ops ---------- *)
 
@@ -463,15 +465,14 @@ let transact tx =
 (* property text values save through the same wrap-parse-block path as
    block titles so [[refs]]/#tags inside them materialize entities *)
 let save_block ~uuid ~title =
-  Title_refs.parse (String.trim title)
-  |> Js.Promise.then_ (fun p ->
-         apply "save-block"
-           [ W.Map
-               ([ (W.String "block/uuid", W.Uuid uuid)
-                ; (W.String "block/title", W.String p.Title_refs.title) ]
-               @ Title_refs.kvs_of_parsed p)
-           ; W.Map []
-           ])
+  let* p = Title_refs.parse (String.trim title) in
+  apply "save-block"
+    [ W.Map
+        ([ (W.String "block/uuid", W.Uuid uuid)
+         ; (W.String "block/title", W.String p.Title_refs.title) ]
+        @ Title_refs.kvs_of_parsed p)
+    ; W.Map []
+    ]
 
 let set_choice_scope ~choice_id ~class_id ~add =
   transact
@@ -514,5 +515,5 @@ let create_result_uuid res =
   | _ -> None
 
 let db_id_of_uuid uuid =
-  invoke "get-case-page" [ repo (); W.Uuid uuid ]
-  |> Js.Promise.then_ (fun w -> Js.Promise.resolve (geti w "db/id"))
+  let* w = invoke "get-case-page" [ repo (); W.Uuid uuid ] in
+  Js.Promise.resolve (geti w "db/id")

@@ -7,6 +7,7 @@
    click / Escape; they sit directly under .cp__overlays (not portaled)
    since positioning is computed in viewport coords. *)
 
+open Promise_ext
 open Lui_elements
 
 module S = Popups_state
@@ -800,19 +801,18 @@ let pv_open st (wrap : Dom_ext.element) =
       let r = Dom_ext.bounding_rect wrap in
       let x = Dom_ext.rect_left r and y = Dom_ext.rect_bottom r +. 8.0 in
       ignore
-        (S.fetch_preview (Router.repo ()) name
-         |> Js.Promise.then_ (fun (title, blocks) ->
-                (match !pv_pending with
-                 | Some el when el == wrap ->
-                     S.set_pv st
-                       (Some
-                          { S.pv_x = x
-                          ; S.pv_y = y
-                          ; S.pv_title = title
-                          ; S.pv_blocks = blocks
-                          })
-                 | _ -> ());
-                Js.Promise.resolve ()))
+        (let* (title, blocks) = S.fetch_preview (Router.repo ()) name in
+        (match !pv_pending with
+         | Some el when el == wrap ->
+             S.set_pv st
+               (Some
+                  { S.pv_x = x
+                  ; S.pv_y = y
+                  ; S.pv_title = title
+                  ; S.pv_blocks = blocks
+                  })
+         | _ -> ());
+        Js.Promise.resolve ())
 
 let pv_track st el =
   if Dom_ext.closest el ".ls-preview-popup" <> None then (

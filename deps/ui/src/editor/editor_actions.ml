@@ -2,6 +2,7 @@
    move, selection, clipboard, undo. All mutations flow through
    Outliner_ops (apply-outliner-ops) followed by a page refresh. *)
 
+open Promise_ext
 module S = Editor_state
 module D = Editor_dom
 module Ops = Outliner_ops
@@ -105,10 +106,9 @@ let with_focus_after uuid caret p =
   S.pending_focus := Some (uuid, caret, !S.last_edit_input_ms);
   focus_attempts := 0;
   ignore
-    (p
-    |> Js.Promise.then_ (fun () ->
-           D.set_timeout apply_focus 0;
-           Js.Promise.resolve ()))
+    (let* () = p in
+    D.set_timeout apply_focus 0;
+    Js.Promise.resolve ())
 
 (* persisted/worker truth; display_title layers committed-but-unrefreshed
    buffers on top so exit-edit paints the saved text on the first frame *)
@@ -125,18 +125,17 @@ let commit uuid buf =
   if buf <> model_title uuid then (
     S.override_title uuid (Ops.normalized_title uuid buf);
     ignore
-      (Ops.apply_and_refresh [ Ops.save_block uuid buf ]
-      |> Js.Promise.then_ (fun _ ->
-             (* the buffer is now persisted — advance base so the undo
+      (let* _ = Ops.apply_and_refresh [ Ops.save_block uuid buf ] in
+      (* the buffer is now persisted — advance base so the undo
                 resync gate treats it as clean and can restore reverted
                 titles instead of masking them with the pre-undo text *)
-             S.set_silent (fun st ->
-                 match st.S.editing with
-                 | Some e when e.S.uuid = uuid && e.S.buffer = buf ->
-                     { st with
-                       S.editing = Some { e with S.base = buf } }
-                 | _ -> st);
-             Js.Promise.resolve ())))
+      S.set_silent (fun st ->
+          match st.S.editing with
+          | Some e when e.S.uuid = uuid && e.S.buffer = buf ->
+              { st with
+                S.editing = Some { e with S.base = buf } }
+          | _ -> st);
+      Js.Promise.resolve ()))
 
 let save_if_dirty uuid = commit uuid (live_buffer uuid)
 
@@ -181,16 +180,15 @@ let enter_edit ?scope uuid caret =
           (* stored titles are id-ref form; the edit buffer shows page names
              (cljs id-ref->title-ref) *)
           ignore
-            (Ops.title_for_edit (String.trim (display_title uuid))
-             |> Js.Promise.then_ (fun buffer ->
-                    S.set (fun st ->
-                        { st with
-                          S.editing = Some { uuid; buffer; scope; base = buffer }
-                        ; selected = S.String_set.empty
-                        ; anchor = None
-                        });
-                    request_focus uuid caret;
-                    Js.Promise.resolve ()))
+            (let* buffer = Ops.title_for_edit (String.trim (display_title uuid)) in
+            S.set (fun st ->
+                { st with
+                  S.editing = Some { uuid; buffer; scope; base = buffer }
+                ; selected = S.String_set.empty
+                ; anchor = None
+                });
+            request_focus uuid caret;
+            Js.Promise.resolve ())
 
   | None -> ()
 
@@ -336,13 +334,14 @@ let split_at_cursor uuid =
           || b.Model.block_children = []
         in
         let p =
-          Js.Promise.all
-            [| Ops.block_map_parsed uuid before
-             ; Ops.block_map_parsed ~page:library new_uuid after |]
-          |> Js.Promise.then_ (fun a ->
-                 Ops.apply_and_refresh ~opts:(Ops.op_opts "insert-blocks")
-                   [ Ops.op "save-block" [ a.(0); Wire.Map [] ]
-                   ; Ops.insert_blocks [ a.(1) ] uuid ~sibling ])
+          (let* a =
+            Js.Promise.all
+              [| Ops.block_map_parsed uuid before
+               ; Ops.block_map_parsed ~page:library new_uuid after |]
+          in
+          Ops.apply_and_refresh ~opts:(Ops.op_opts "insert-blocks")
+            [ Ops.op "save-block" [ a.(0); Wire.Map [] ]
+            ; Ops.insert_blocks [ a.(1) ] uuid ~sibling ])
         in
         (* S.set (not silent): the old textarea must unmount before the
            next keypress, or keystrokes keep landing in the stale editor *)
@@ -366,13 +365,12 @@ let insert_sibling_after uuid =
         || b.Model.block_children = []
       in
       let p =
-        Ops.block_map_parsed uuid buf
-        |> Js.Promise.then_ (fun m ->
-               Ops.apply_and_refresh ~opts:(Ops.op_opts "insert-blocks")
-                 [ Ops.op "save-block" [ m; Wire.Map [] ]
-                 ; Ops.insert_blocks
-                     [ Ops.block_map ~title:"" ~page:library new_uuid ]
-                     uuid ~sibling ])
+        (let* m = Ops.block_map_parsed uuid buf in
+        Ops.apply_and_refresh ~opts:(Ops.op_opts "insert-blocks")
+          [ Ops.op "save-block" [ m; Wire.Map [] ]
+          ; Ops.insert_blocks
+              [ Ops.block_map ~title:"" ~page:library new_uuid ]
+              uuid ~sibling ])
       in
       (* S.set (not silent): the old textarea must unmount before the
          next keypress, or keystrokes keep landing in the stale editor *)
@@ -446,23 +444,22 @@ let merge_prev uuid =
                 ]
             in
             ignore
-              (Ops.title_for_edit (String.trim prev.Model.block_title)
-               |> Js.Promise.then_ (fun pbuf ->
-                      S.set (fun st ->
-                          { st with
-                            S.editing =
-                              Some
-                                { uuid = prev_uuid
-                                ; buffer = pbuf ^ buf
-                                ; scope = e.scope
-                                ; base = pbuf ^ buf
-                                }
-                          });
-                      with_focus_after prev_uuid
-                        (String.length pbuf)
-                        (Ops.apply_and_refresh
-                           ~opts:(Ops.op_opts "delete-blocks") ops);
-                      Js.Promise.resolve ()))))
+              (let* pbuf = Ops.title_for_edit (String.trim prev.Model.block_title) in
+              S.set (fun st ->
+                  { st with
+                    S.editing =
+                      Some
+                        { uuid = prev_uuid
+                        ; buffer = pbuf ^ buf
+                        ; scope = e.scope
+                        ; base = pbuf ^ buf
+                        }
+                  });
+              with_focus_after prev_uuid
+                (String.length pbuf)
+                (Ops.apply_and_refresh
+                   ~opts:(Ops.op_opts "delete-blocks") ops);
+              Js.Promise.resolve ())))
   | _ -> ()
 
 (* children of b except [except_uuid] -> move under target *)
@@ -505,43 +502,41 @@ let merge_next uuid =
               @ [ Ops.delete_blocks [ uuid ] ]
             in
             ignore
-              (Ops.title_for_edit (String.trim next.Model.block_title)
-               |> Js.Promise.then_ (fun nbuf ->
-                      S.set (fun st ->
-                          { st with
-                            S.editing =
-                              Some
-                                { uuid = next_uuid
-                                ; buffer = nbuf
-                                ; scope = e.scope
-                                ; base = nbuf
-                                }
-                          });
-                      with_focus_after next_uuid 0
-                        (Ops.apply_and_refresh
-                           ~opts:(Ops.op_opts "delete-blocks") ops);
-                      Js.Promise.resolve ())))          else (
+              (let* nbuf = Ops.title_for_edit (String.trim next.Model.block_title) in
+              S.set (fun st ->
+                  { st with
+                    S.editing =
+                      Some
+                        { uuid = next_uuid
+                        ; buffer = nbuf
+                        ; scope = e.scope
+                        ; base = nbuf
+                        }
+                  });
+              with_focus_after next_uuid 0
+                (Ops.apply_and_refresh
+                   ~opts:(Ops.op_opts "delete-blocks") ops);
+              Js.Promise.resolve ()))          else (
             let ops =
               move_children_ops next uuid @ [ Ops.delete_blocks [ next_uuid ] ]
 
             in
             ignore
-              (Ops.title_for_edit (String.trim next.Model.block_title)
-               |> Js.Promise.then_ (fun nbuf ->
-                      S.set (fun st ->
-                          { st with
-                            S.editing =
-                              Some
-                                { e with
-                                  S.buffer = buf ^ nbuf
-                                ; base = buf ^ nbuf
-                                }
-                          });
-                      with_focus_after uuid (String.length buf)
-                        (Ops.apply_parsed_and_refresh
-                           ~opts:(Ops.op_opts "delete-blocks") ~rest:ops
-                           [ (uuid, buf ^ nbuf) ]);
-                      Js.Promise.resolve ()))))  | _ -> ()
+              (let* nbuf = Ops.title_for_edit (String.trim next.Model.block_title) in
+              S.set (fun st ->
+                  { st with
+                    S.editing =
+                      Some
+                        { e with
+                          S.buffer = buf ^ nbuf
+                        ; base = buf ^ nbuf
+                        }
+                  });
+              with_focus_after uuid (String.length buf)
+                (Ops.apply_parsed_and_refresh
+                   ~opts:(Ops.op_opts "delete-blocks") ~rest:ops
+                   [ (uuid, buf ^ nbuf) ]);
+              Js.Promise.resolve ())))  | _ -> ()
 
 (* ---- selection ---- *)
 
@@ -770,23 +765,22 @@ let delete_selection () =
                (* stored titles are id-ref form — go through the same
                   title_for_edit rewrite as enter_edit *)
                ignore
-                 (Ops.title_for_edit (String.trim b.Model.block_title)
-                  |> Js.Promise.then_ (fun buffer ->
-                         S.set_silent (fun st ->
-                             { st with
-                               S.editing =
-                                 Some
-                                   { uuid = pu; buffer; scope = "main"
-                                   ; base = buffer
-                                   }
-                             ; selected = S.String_set.empty
-                             ; anchor = None
-                             });
-                         with_focus_after pu
-                           (String.length buffer)
-                           (Ops.apply_and_refresh
-                              [ Ops.delete_blocks uuids ]);
-                         Js.Promise.resolve ()))
+                 (let* buffer = Ops.title_for_edit (String.trim b.Model.block_title) in
+                 S.set_silent (fun st ->
+                     { st with
+                       S.editing =
+                         Some
+                           { uuid = pu; buffer; scope = "main"
+                           ; base = buffer
+                           }
+                     ; selected = S.String_set.empty
+                     ; anchor = None
+                     });
+                 with_focus_after pu
+                   (String.length buffer)
+                   (Ops.apply_and_refresh
+                      [ Ops.delete_blocks uuids ]);
+                 Js.Promise.resolve ())
            | None ->
                ignore (Ops.apply_and_refresh [ Ops.delete_blocks uuids ]))
        | None ->
@@ -1000,18 +994,18 @@ let paste_into_editor ev =
             && String.trim e.S.buffer = ""
           in
           ignore
-            (paste_trees trees e.uuid ~replace_empty
-            |> Js.Promise.then_ (fun resp ->
-                   (* replace-empty swaps the editing block's entity
+            (let* resp = paste_trees trees e.uuid ~replace_empty in
+            (* replace-empty swaps the editing block's entity
                       in place (same uuid, new title) — resync the live
                       textarea buffer first, else edit_last_inserted's
                       save_if_dirty reads the stale "" and commits it
                       over the pasted title *)
-                   (if replace_empty then Ops.resync_open_editor ()
-                    else Js.Promise.resolve ())
-                   |> Js.Promise.then_ (fun () ->
-                          edit_last_inserted resp;
-                          Js.Promise.resolve ())))
+            let* () =
+              (if replace_empty then Ops.resync_open_editor ()
+               else Js.Promise.resolve ())
+            in
+            edit_last_inserted resp;
+            Js.Promise.resolve ())
       | None -> ())
   | Some e, _ -> (
       (* external paste while editing (no stored trees, or the event
@@ -1034,12 +1028,13 @@ let paste_blocks ev =
           match selected_uuids () with
           | _ :: _ as sel ->
               ignore
-                (paste_trees trees
-                   (List.nth sel (List.length sel - 1))
-                   ~replace_empty:false
-                 |> Js.Promise.then_ (fun resp ->
-                        edit_last_inserted resp;
-                        Js.Promise.resolve ()))
+                (let* resp =
+                  paste_trees trees
+                    (List.nth sel (List.length sel - 1))
+                    ~replace_empty:false
+                in
+                edit_last_inserted resp;
+                Js.Promise.resolve ())
           | [] -> ())
       | [] -> (
           match D.ev_clipboard ev with
@@ -1320,10 +1315,11 @@ let append_block ?for_page ?(scope = "main") () =
 let quick_add_page_title = "Quick add"
 
 let fetch_qa_blocks repo puuid =
-  Runtime.invoke3 "thread-api/get-page-blocks-tree" (Wire.String repo)
-    (Wire.Uuid puuid) Wire.Nil
-  |> Js.Promise.then_ (fun w ->
-         Js.Promise.resolve (Decode.blocks_of_wire w))
+  let* w =
+    Runtime.invoke3 "thread-api/get-page-blocks-tree" (Wire.String repo)
+      (Wire.Uuid puuid) Wire.Nil
+  in
+  Js.Promise.resolve (Decode.blocks_of_wire w)
 
 (* dialog mounted + blocks loaded: open the last block for editing *)
 let quick_add_open_dialog puuid blocks =
@@ -1358,70 +1354,70 @@ let open_quick_add () =
   | None -> ()
   | Some repo ->
       ignore
-        (Runtime.invoke2 "thread-api/get-case-page" (Wire.String repo)
-           (Wire.String quick_add_page_title)
-         |> Js.Promise.then_ (fun page_w ->
-                match Decode.page_of_summary page_w with
-                | None -> Js.Promise.resolve ()
-                | Some page -> (
-                    match page.Model.page_uuid with
-                    | None -> Js.Promise.resolve ()
-                    | Some puuid ->
-                        fetch_qa_blocks repo puuid
-                        |> Js.Promise.then_ (fun blocks ->
-                               match blocks with
-                               | _ :: _ ->
-                                   quick_add_open_dialog puuid blocks;
-                                   Js.Promise.resolve ()
-                               | [] ->
-                                   let nu = Platform.random_uuid () in
-                                   Ops.apply
-                                     ~opts:(Ops.op_opts "insert-blocks")
-                                     [ Ops.insert_blocks
-                                         [ Ops.block_map ~title:"" nu ]
-                                         puuid ~sibling:false ]
-                                   |> Js.Promise.then_ (fun () ->
-                                          fetch_qa_blocks repo puuid
-                                          |> Js.Promise.then_ (fun blocks ->
-                                                 quick_add_open_dialog
-                                                   puuid blocks;
-                                                 Js.Promise.resolve ()))))))
+        (let* page_w =
+          Runtime.invoke2 "thread-api/get-case-page" (Wire.String repo)
+            (Wire.String quick_add_page_title)
+        in
+        match Decode.page_of_summary page_w with
+        | None -> Js.Promise.resolve ()
+        | Some page -> (
+            match page.Model.page_uuid with
+            | None -> Js.Promise.resolve ()
+            | Some puuid ->
+                (let* blocks = fetch_qa_blocks repo puuid in
+                match blocks with
+                | _ :: _ ->
+                    quick_add_open_dialog puuid blocks;
+                    Js.Promise.resolve ()
+                | [] ->
+                    let nu = Platform.random_uuid () in
+                    let* () =
+                      Ops.apply
+                        ~opts:(Ops.op_opts "insert-blocks")
+                        [ Ops.insert_blocks
+                            [ Ops.block_map ~title:"" nu ]
+                            puuid ~sibling:false ]
+                    in
+                    let* blocks = fetch_qa_blocks repo puuid in
+                    quick_add_open_dialog
+                      puuid blocks;
+                    Js.Promise.resolve ())))
 
 (* move every "Quick add" child to the end of today's journal *)
 let move_qa_blocks_to_today repo uuids =
   let day = Dates.today_journal_day () in
-  Runtime.invoke2 "thread-api/get-journal-page-by-day" (Wire.String repo)
-    (Wire.Int day)
-  |> Js.Promise.then_ (fun page_w ->
-         match Decode.page_of_summary page_w with
-         | Some p -> (
-             match p.Model.page_uuid with
-             | Some tuuid -> Js.Promise.resolve (Some tuuid)
-             | None -> Js.Promise.resolve None)
-         | None -> Js.Promise.resolve None)
-  |> Js.Promise.then_ (fun tuuid_opt ->
-         match tuuid_opt with
-         | None -> Js.Promise.resolve ()
-         | Some tuuid ->
-             fetch_qa_blocks repo tuuid
-             |> Js.Promise.then_ (fun today_blocks ->
-                    let last_uuid =
-                      match List.rev today_blocks with
-                      | b :: _ -> b.Model.block_uuid
-                      | [] -> None
-                    in
-                    let move_op =
-                      match last_uuid with
-                      | Some l -> Ops.move_blocks uuids l ~sibling:true
-                      | None -> Ops.move_blocks uuids tuuid ~sibling:false
-                    in
-                    Ops.apply_and_refresh [ move_op ]
-                    |> Js.Promise.then_ (fun () ->
-                           Dialogs_state.close_named "quick-add";
-                           Quick_add_state.reset ();
-                           Toast.success
-                             (I18n.t "journal/add-blocks-to-today-success");
-                           Js.Promise.resolve ())))
+  let* page_w =
+    Runtime.invoke2 "thread-api/get-journal-page-by-day" (Wire.String repo)
+      (Wire.Int day)
+  in
+  let* tuuid_opt =
+    match Decode.page_of_summary page_w with
+    | Some p -> (
+        match p.Model.page_uuid with
+        | Some tuuid -> Js.Promise.resolve (Some tuuid)
+        | None -> Js.Promise.resolve None)
+    | None -> Js.Promise.resolve None
+  in
+  match tuuid_opt with
+  | None -> Js.Promise.resolve ()
+  | Some tuuid ->
+      let* today_blocks = fetch_qa_blocks repo tuuid in
+      let last_uuid =
+        match List.rev today_blocks with
+        | b :: _ -> b.Model.block_uuid
+        | [] -> None
+      in
+      let move_op =
+        match last_uuid with
+        | Some l -> Ops.move_blocks uuids l ~sibling:true
+        | None -> Ops.move_blocks uuids tuuid ~sibling:false
+      in
+      let* () = Ops.apply_and_refresh [ move_op ] in
+      Dialogs_state.close_named "quick-add";
+      Quick_add_state.reset ();
+      Toast.success
+        (I18n.t "journal/add-blocks-to-today-success");
+      Js.Promise.resolve ()
 
 (* cljs quick-add-blocks!: save the live edit, then move everything *)
 let quick_add_blocks_to_today () =
@@ -1473,22 +1469,23 @@ let zoom_out () =
       | Some (Model.Block_zoom uuid) ->
           pending_zoom := Some edit_u;
           ignore
-            (Runtime.invoke2 "thread-api/get-block-parent"
-               (Wire.String
-                  (Option.value !Runtime.current_repo ~default:""))
-               (Wire.Uuid uuid)
-             |> Js.Promise.then_ (fun p ->
-                    (match Wire.map_get_uuid p "block/uuid" with
-                     | Some pu ->
-                         let seg =
-                           match Wire.map_get_string p "block/name" with
-                           | Some _ -> "page"
-                           | None -> "block"
-                         in
-                         Platform.set_location_hash
-                           (Runtime.nav_hash ("#/" ^ seg ^ "/" ^ pu))
-                     | None -> ());
-                    Js.Promise.resolve ()))
+            (let* p =
+              Runtime.invoke2 "thread-api/get-block-parent"
+                (Wire.String
+                   (Option.value !Runtime.current_repo ~default:""))
+                (Wire.Uuid uuid)
+            in
+            (match Wire.map_get_uuid p "block/uuid" with
+             | Some pu ->
+                 let seg =
+                   match Wire.map_get_string p "block/name" with
+                   | Some _ -> "page"
+                   | None -> "block"
+                 in
+                 Platform.set_location_hash
+                   (Runtime.nav_hash ("#/" ^ seg ^ "/" ^ pu))
+             | None -> ());
+            Js.Promise.resolve ())
       | _ -> ())
   | None -> Platform.history_back ()
 
@@ -1516,22 +1513,24 @@ let run_query_command ~advanced =
       in
       let _ = () in
       ignore
-        (Ops.apply_and_refresh
-           ([ Ops.op "create-property-text-block"
-                [ Wire.Uuid e.uuid
-                ; Wire.Keyword "logseq.property/query"
-                ; Wire.String buf
-                ; Wire.Map
-                    [ Ops.kw "set-block-property?" (Wire.Bool true)
-                    ; Ops.kw "new-block-id" (Wire.Uuid quuid)
-                    ]
-                ]
-            ; Ops.set_block_property e.uuid "block/tags"
-                (Wire.Keyword "logseq.class/Query")
-            ; Ops.save_block e.uuid ""
-            ]
-           @ extra)
-           |> Js.Promise.then_ (fun () -> Js.Promise.resolve ()))
+        (let* () =
+          Ops.apply_and_refresh
+            ([ Ops.op "create-property-text-block"
+                 [ Wire.Uuid e.uuid
+                 ; Wire.Keyword "logseq.property/query"
+                 ; Wire.String buf
+                 ; Wire.Map
+                     [ Ops.kw "set-block-property?" (Wire.Bool true)
+                     ; Ops.kw "new-block-id" (Wire.Uuid quuid)
+                     ]
+                 ]
+             ; Ops.set_block_property e.uuid "block/tags"
+                 (Wire.Keyword "logseq.class/Query")
+             ; Ops.save_block e.uuid ""
+             ]
+            @ extra)
+        in
+        Js.Promise.resolve ())
 
 (* -- upload asset (cljs handler/editor/assets.cljs
    db-based-save-assets!): write each file to pfs
@@ -1577,29 +1576,28 @@ let save_one_asset repo pfs target_uuid ~empty_target ~first
     | _ -> Platform.random_uuid ()
   in
   ignore
-    (Browser_ui.file_buffer f
-    |> Js.Promise.then_ (fun buf ->
-           let u8 = Js.Typed_array.Uint8Array.fromBuffer buf () in
-           Platform.sha256_hex u8
-           |> Js.Promise.then_ (fun checksum ->
-                  let dir =
-                    "/" ^ Platform.strip_db_prefix repo ^ "/assets"
-                  in
-                  Platform.pfs_ensure_dir pfs dir
-                  |> Js.Promise.then_ (fun () ->
-                         Platform.pfs_write_file pfs
-                           (dir ^ "/" ^ uuid ^ "." ^ ext)
-                           u8
-                         |> Js.Promise.then_ (fun () ->
-                                Ops.apply_and_refresh
-                                  [ Ops.insert_blocks ~bottom:true
-                                      ~replace_empty_target:true
-                                      [ asset_block_map ~uuid
-                                          ~title:(file_title name) ~ext
-                                          ~size ~checksum ]
-                                      target_uuid ~sibling:true ]
-                                |> Js.Promise.then_ (fun () ->
-                                       Js.Promise.resolve ()))))))
+    (let* buf = Browser_ui.file_buffer f in
+    let u8 = Js.Typed_array.Uint8Array.fromBuffer buf () in
+    let* checksum = Platform.sha256_hex u8 in
+    let dir =
+      "/" ^ Platform.strip_db_prefix repo ^ "/assets"
+    in
+    let* () = Platform.pfs_ensure_dir pfs dir in
+    let* () =
+      Platform.pfs_write_file pfs
+        (dir ^ "/" ^ uuid ^ "." ^ ext)
+        u8
+    in
+    let* () =
+      Ops.apply_and_refresh
+        [ Ops.insert_blocks ~bottom:true
+            ~replace_empty_target:true
+            [ asset_block_map ~uuid
+                ~title:(file_title name) ~ext
+                ~size ~checksum ]
+            target_uuid ~sibling:true ]
+    in
+    Js.Promise.resolve ())
 
 let save_uploaded_files (input : Editor_dom.el) =
   match (!Runtime.current_repo, S.editing ()) with
@@ -1617,13 +1615,12 @@ let save_uploaded_files (input : Editor_dom.el) =
             else Ops.apply [ Ops.save_block e.uuid buffer ]
           in
           ignore
-            (pre
-             |> Js.Promise.then_ (fun () ->
-                    Array.iteri
-                      (fun i f ->
-                        save_one_asset repo pfs e.uuid ~empty_target
-                          ~first:(i = 0) f)
-                      (Browser_ui.files_of input);
-                    Js.Promise.resolve ()))
+            (let* () = pre in
+            Array.iteri
+              (fun i f ->
+                save_one_asset repo pfs e.uuid ~empty_target
+                  ~first:(i = 0) f)
+              (Browser_ui.files_of input);
+            Js.Promise.resolve ())
       | None -> ())
   | _ -> ()

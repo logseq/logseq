@@ -2,6 +2,7 @@
    Mirrors the cljs renderer (components/block.cljs inline) — class names
    follow docs/e2e-contract.md exactly. *)
 
+open Promise_ext
 open Lui_elements
 module D = Render_dom
 module U = I18n
@@ -95,25 +96,26 @@ let uuid_meta_state context uuid ~fallback ?(miss = None) () =
           if !sync then Signal.set st meta
           else Runtime.signal_set st meta
       | None ->
-          Runtime.invoke3 "thread-api/pull" (Wire.String repo)
-            (Wire.String "[:block/title :block/name]")
-            (Wire.Array [ Wire.Keyword "block/uuid"; Wire.Uuid uuid ])
-          |> Js.Promise.then_ (fun w ->
-                 (match Wire.map_get_string w "block/title" with
-                  | Some t when String.trim t <> "" ->
-                      let is_page =
-                        match Wire.map_get_string w "block/name" with
-                        | Some n -> String.trim n <> ""
-                        | None -> false
-                      in
-                      let meta = (t, is_page) in
-                      Hashtbl.replace cache.c_uuid_meta uuid meta;
-                      Runtime.signal_set st meta
-                  | _ -> (
-                      match miss with
-                      | Some m -> Runtime.signal_set st m
-                      | None -> ()));
-                 Js.Promise.resolve ())
+          (let* w =
+            Runtime.invoke3 "thread-api/pull" (Wire.String repo)
+              (Wire.String "[:block/title :block/name]")
+              (Wire.Array [ Wire.Keyword "block/uuid"; Wire.Uuid uuid ])
+          in
+          (match Wire.map_get_string w "block/title" with
+           | Some t when String.trim t <> "" ->
+               let is_page =
+                 match Wire.map_get_string w "block/name" with
+                 | Some n -> String.trim n <> ""
+                 | None -> false
+               in
+               let meta = (t, is_page) in
+               Hashtbl.replace cache.c_uuid_meta uuid meta;
+               Runtime.signal_set st meta
+           | _ -> (
+               match miss with
+               | Some m -> Runtime.signal_set st m
+               | None -> ()));
+          Js.Promise.resolve ())
           |> ignore);
   sync := false;
   st
@@ -130,16 +132,17 @@ let name_uuid_state context name =
       | Some u ->
           if !sync then Signal.set st u else Runtime.signal_set st u
       | None ->
-          Runtime.invoke3 "thread-api/pull" (Wire.String repo)
-            (Wire.String "[:block/uuid]")
-            (Wire.Array [ Wire.Keyword "block/name"; Wire.String key ])
-          |> Js.Promise.then_ (fun w ->
-                 (match Wire.map_get_uuid w "block/uuid" with
-                  | Some u ->
-                      Hashtbl.replace cache.c_name_uuid key u;
-                      Runtime.signal_set st u
-                  | None -> ());
-                 Js.Promise.resolve ())
+          (let* w =
+            Runtime.invoke3 "thread-api/pull" (Wire.String repo)
+              (Wire.String "[:block/uuid]")
+              (Wire.Array [ Wire.Keyword "block/name"; Wire.String key ])
+          in
+          (match Wire.map_get_uuid w "block/uuid" with
+           | Some u ->
+               Hashtbl.replace cache.c_name_uuid key u;
+               Runtime.signal_set st u
+           | None -> ());
+          Js.Promise.resolve ())
           |> ignore);
   sync := false;
   st

@@ -20,6 +20,7 @@
    Editor_state's signal; each row derives its class/attrs/branch from it via
    style_class_signal, attrs_signal_v, dyn and if_. *)
 
+open Promise_ext
 open Lui_elements
 
 module S = Editor_state
@@ -613,13 +614,13 @@ let chain_embed_worker () =
 let fetch_embed_blocks name st =
   Render_state.with_repo (fun repo ->
       ignore
-        (Runtime.invoke3 "thread-api/get-page-blocks-tree"
-           (Wire.String repo) (Wire.String name) Wire.Nil
-         |> Js.Promise.then_ (fun w ->
-                Outliner_ops.resolve_block_tags (Decode.blocks_of_wire w)
-                |> Js.Promise.then_ (fun blocks ->
-                       Signal.set st blocks;
-                       Js.Promise.resolve ()))
+        ((let* w =
+           Runtime.invoke3 "thread-api/get-page-blocks-tree"
+             (Wire.String repo) (Wire.String name) Wire.Nil
+         in
+         let* blocks = Outliner_ops.resolve_block_tags (Decode.blocks_of_wire w) in
+         Signal.set st blocks;
+         Js.Promise.resolve ())
          |> Js.Promise.catch (fun e ->
                 Platform.console_error ("embed blocks fetch failed", e);
                 Js.Promise.resolve ())))
