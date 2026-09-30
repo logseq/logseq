@@ -104,6 +104,13 @@
              {}
              schema))
 
+(defn- property-attr-has-values?
+  [db property-ident]
+  (boolean
+   (when-let [attr (d/entity db property-ident)]
+     (and (:db/index attr)
+          (seq (d/datoms db :avet property-ident))))))
+
 (defn- inverse-upsert-property-schema
   "Restore the previous schema, except :db/cardinality when that would revert
    :many to :one while values exist."
@@ -112,7 +119,7 @@
                 db-before
                 (db-property/get-property-schema (into {} property)))]
     (if (and (contains? #{:one :db.cardinality/one} (:db/cardinality schema))
-             (seq (d/datoms db-after :avet (:db/ident property))))
+             (property-attr-has-values? db-after (:db/ident property)))
       (dissoc schema :db/cardinality)
       schema)))
 
