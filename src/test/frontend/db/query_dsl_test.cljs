@@ -188,7 +188,12 @@
               (str "(and (between [[Dec 26th, 2020]] tomorrow) (tags "
                    (str "[[" "bar" "]]" "]]") "))"))))
       (is (= (quote-tags (str "A" "]]" " B) C"))
-             (query-dsl/pre-transform (wrap-tags (str "A" "]]" " B) C"))))))))
+             (query-dsl/pre-transform (wrap-tags (str "A" "]]" " B) C")))))
+      (is (= (str "(and (between " (pr-str "[[Dec 26th, 2020]]") " tomorrow) "
+                  (pr-str (str "[[" "foo" "]]" "]]")) ")")
+             (query-dsl/pre-transform
+              (str "(and (between [[Dec 26th, 2020]] tomorrow) "
+                   (str "[[" "foo" "]]" "]]") ")")))))))
 
 (defn- testable-content
   "Only test :block/title up to page-ref to make tests readable"

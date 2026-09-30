@@ -40,13 +40,18 @@
         i))))
 
 (defn- next-form-start?
-  "True when text after a `)` is a sibling DSL list or the end of input,
-  not more page-title text."
+  "True when text after a `)` is a sibling DSL form or the end of input,
+  not more page-title text. A following `[[` is a page-ref argument, not
+  more of the current title."
   [s i]
   (let [i (skip-ws s i)
         n (count s)]
     (or (>= i n)
-        (= \( (nth s i)))))
+        (= \( (nth s i))
+        (= \# (nth s i))
+        (and (= \[ (nth s i))
+             (< (inc i) n)
+             (= \[ (nth s (inc i)))))))
 
 (defn- unmatched-page-ref-close?
   "True when `s` from `start` still contains a `]]` that is not paired with a
