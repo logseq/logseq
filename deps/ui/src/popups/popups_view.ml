@@ -377,13 +377,25 @@ let popover_transition_classes =
 (* cljs popup-normal-style: type metrics + scroll bounds; the cljs
    positioner sets --available-height on a wrapper — LUI positions the
    popup itself so the var is bound inline *)
-let popover_style ~x ~y =
-  Printf.sprintf
-    "position: fixed; left: %.0fpx; top: %.0fpx; z-index: 99999; \
-     font-size: 1rem; line-height: 1.5; max-height: var(--available-height); \
-     overflow: hidden auto; \
-     --ls-page-title-size: 1rem; --available-height: calc(100vh - %.0fpx)"
-    x y (y +. 8.)
+let popover_style ~x ~y ~flip =
+  if flip then
+    (* cljs Radix side=top: content bottom sits at the caret line, so the
+       box is lifted by its own height; available space above = y - 8 *)
+    Printf.sprintf
+      "position: fixed; left: %.0fpx; top: %.0fpx; \
+       transform: translateY(-100%%); z-index: 99999; \
+       font-size: 1rem; line-height: 1.5; \
+       max-height: var(--available-height); \
+       overflow: hidden auto; \
+       --ls-page-title-size: 1rem; --available-height: calc(%.0fpx - 8px)"
+      x y y
+  else
+    Printf.sprintf
+      "position: fixed; left: %.0fpx; top: %.0fpx; z-index: 99999; \
+       font-size: 1rem; line-height: 1.5; max-height: var(--available-height); \
+       overflow: hidden auto; \
+       --ls-page-title-size: 1rem; --available-height: calc(100vh - %.0fpx)"
+      x y (y +. 8.)
 ;;
 
 let ac_popover (st : S.t) : t =
@@ -403,9 +415,9 @@ let ac_popover (st : S.t) : t =
            match v.S.ac with
            | Some a ->
                attrs_v
-                 [ ("style", popover_style ~x:a.S.x ~y:a.S.y)
+                 [ ("style", popover_style ~x:a.S.x ~y:a.S.y ~flip:a.S.flip)
                  ; ("data-open", "")
-                 ; ("data-side", "bottom")
+                 ; ("data-side", if a.S.flip then "top" else "bottom")
                  ; ("data-align", "start")
                  ; ("tabindex", "-1")
                  ; ("data-base-ui-focusable", "")

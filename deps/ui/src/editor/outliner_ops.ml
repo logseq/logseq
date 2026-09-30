@@ -750,6 +750,17 @@ let rec apply ?(opts = Wire.Map []) ops : unit Js.Promise.t =
                  Toast.error (I18n.t "ui/save-changes-error");
                  Js.Promise.resolve ()))
 
+(* While an editor is open a per-op fetch+rebuild starves keystroke
+   dispatch under RTC traffic (~200-300ms of whole-page reconcile per
+   call). Every apply already produces a sync-db-changes broadcast that
+   arms the debounced route reload, so cosmetic callers (property writes)
+   defer to that instead of paying the refresh inline. Structural callers
+   keep [refresh_page]: follow-up steps (e.g. enter_edit on an inserted
+   block) must see the new model. *)
+let refresh_page_deferred () : unit Js.Promise.t =
+  if S.ready () && S.editing () <> None then Js.Promise.resolve ()
+  else refresh_page ()
+
 let apply_and_refresh ?opts ops =
   apply ?opts ops
   |> Js.Promise.then_ (fun () -> refresh_page ())
@@ -759,6 +770,10 @@ let apply_and_refresh ?opts ops =
          if Dialogs_state.ready () && Dialogs_state.is_open "quick-add" then
            Quick_add_state.reload ();
          Js.Promise.resolve ())
+
+let apply_and_refresh_deferred ?opts ops =
+  apply ?opts ops
+  |> Js.Promise.then_ (fun () -> refresh_page_deferred ())
 
 (* cljs wrap-parse-block on save: markdown headings normalize into
    logseq.property/heading, and [[page]]/#tag references resolve into

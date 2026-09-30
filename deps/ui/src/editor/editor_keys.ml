@@ -295,7 +295,7 @@ let on_pending_focus_key ev e caret =
          D.el_set_value el buf';
          D.el_set_selection_range el caret' caret'
      | None -> ());
-    S.pending_focus := Some (e.S.uuid, caret')
+    S.pending_focus := Some (e.S.uuid, caret', !S.last_edit_input_ms)
   in
   let insert s =
     patch
@@ -379,7 +379,7 @@ let on_keydown ev =
       | Some _ -> ()
       | None -> (
           match (S.editing (), !S.pending_focus) with
-          | Some e, Some (uuid, caret)
+          | Some e, Some (uuid, caret, _)
             when e.S.uuid = uuid
                  && not (targets_block_editor uuid target) ->
               on_pending_focus_key ev e caret
@@ -397,7 +397,8 @@ let on_keydown ev =
                 | Some el -> D.el_selection_start el
                 | None -> String.length e.S.buffer
               in
-              S.pending_focus := Some (e.S.uuid, caret);
+              S.pending_focus :=
+                Some (e.S.uuid, caret, !S.last_edit_input_ms);
               D.set_timeout A.apply_focus 0;
               on_pending_focus_key ev e caret
           | _ -> (
@@ -407,6 +408,7 @@ let on_keydown ev =
           | Some uuid, Some _ -> (
               match target with
               | Some el when D.el_tag el = "TEXTAREA" -> (
+                  S.note_input ();
                   if ac_popup_open () then
                     match D.ev_key ev with
                     | "Enter" | "Tab" | "Escape" | "ArrowUp"
@@ -455,6 +457,7 @@ let on_input ev =
         match uuid_of_prefixed "edit-block-" (D.el_id el) with
         | Some uuid ->
             let v = D.el_value el in
+            S.note_input ();
             A.sync_buffer uuid v;
             (* keep textContent in lockstep so innerText/:has-text see the
                buffer (textarea innerText follows textContent, not value) *)

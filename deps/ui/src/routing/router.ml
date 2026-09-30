@@ -195,6 +195,11 @@ let load_journals () =
    otherwise a slow stale load overwrites the page the user navigated to *)
 let stale (route : Model.route) = !Runtime.current_route <> Some route
 
+(* routes that already committed a route_page — a same-route reload can
+   race a mid-apply sync tx and read the page as missing; that transient
+   must not swap the live view for "Page not found" *)
+let loaded_route : Model.route option ref = ref None
+
 (* get-page-route-info resolves name/uuid/lookup-ref -> summary *)
 let load_page_ref for_route ref_v =
   incr Runtime.load_gen;
@@ -226,6 +231,7 @@ let load_page_ref for_route ref_v =
                              (* a fresh page snapshot is authoritative —
                                 drop pending committed-buffer title paints *)
                              Editor_state.clear_overrides ();
+                             loaded_route := Some for_route;
                              Runtime.send (Action.Page_loaded p'');
                              fetch_refs ~stale:is_stale p'';
                              Outliner_ops.fetch_unlinked_refs
@@ -249,11 +255,11 @@ let load_page_ref for_route ref_v =
              (* cljs keeps the :page route and paints inline
                 (t :page/not-found); only unknown route segments get
                 the full-screen 404 *)
-             if not (is_stale ()) then
-               Runtime.send Action.Page_load_failed;
+             if (not (is_stale ())) && !loaded_route <> Some for_route
+             then Runtime.send Action.Page_load_failed;
              Js.Promise.resolve ()))
   |> Js.Promise.catch (fun _ ->
-         if not (is_stale ()) then
+         if (not (is_stale ())) && !loaded_route <> Some for_route then
            Runtime.send Action.Page_load_failed;
          Js.Promise.resolve ())
 
@@ -283,6 +289,7 @@ let load_home () =
                                |> Js.Promise.then_ (fun p'' ->
                                       if not (stale (Model.Page name)) then (
                                         Editor_state.clear_overrides ();
+                                        loaded_route := Some (Model.Page name);
                                         Runtime.send (Action.Page_loaded p'');
                                         fetch_refs
                                           ~stale:(fun () ->
@@ -376,6 +383,8 @@ let load_block_zoom uuid =
                                           = Some (Model.Block_zoom uuid)
                                      then (
                                        Editor_state.clear_overrides ();
+                                       loaded_route
+                                       := Some (Model.Block_zoom uuid);
                                        Runtime.send
                                          (Action.Page_loaded
                                             { Model.page_title =
@@ -414,19 +423,30 @@ let load_block_zoom uuid =
                                       gen = !Runtime.load_gen
                                       && !Runtime.current_route
                                          = Some (Model.Block_zoom uuid)
-                                    then
-                                      Runtime.send Action.Page_load_failed;
+                                    then (
+                                      if
+                                        !loaded_route
+                                        <> Some (Model.Block_zoom uuid)
+                                      then
+                                        Runtime.send
+                                          Action.Page_load_failed);
                                     Js.Promise.resolve ())))
                 | _ ->
-                    if not (stale (Model.Block_zoom uuid)) then
-                      Runtime.send Action.Page_load_failed)
+                    if
+                      (not (stale (Model.Block_zoom uuid)))
+                      && !loaded_route <> Some (Model.Block_zoom uuid)
+                    then Runtime.send Action.Page_load_failed)
             | _ ->
-                if not (stale (Model.Block_zoom uuid)) then
-                  Runtime.send Action.Page_load_failed))
+                if
+                  (not (stale (Model.Block_zoom uuid)))
+                  && !loaded_route <> Some (Model.Block_zoom uuid)
+                then Runtime.send Action.Page_load_failed))
   |> Js.Promise.catch (fun e ->
          Platform.console_error ("load_block_zoom failed", e);
-         if not (stale (Model.Block_zoom uuid)) then
-           Runtime.send Action.Page_load_failed;
+         if
+           (not (stale (Model.Block_zoom uuid)))
+           && !loaded_route <> Some (Model.Block_zoom uuid)
+         then Runtime.send Action.Page_load_failed;
          Js.Promise.resolve ())
 
 let load_route (route : Model.route) =
@@ -475,6 +495,9 @@ let resolve () =
       (* cljs unmounts its modal stack on route change *)
       if Dialogs_state.ready () then Dialogs_state.close_all ();
       Runtime.send (Action.Navigate_to route);
+      (* the new route hasn't loaded yet — a lookup miss must be allowed
+         to render :page/not-found *)
+      loaded_route := None;
       (* cljs settings-effect cleanup: data-settings-tab only while the
          settings route/dialog is active *)
       if route <> Model.Settings then Settings_state.deactivate ();

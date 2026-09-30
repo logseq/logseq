@@ -102,6 +102,8 @@ let body_rm_class : string -> unit =
 external console_log : 'a -> unit = "log" [@@mel.scope "console"]
 external console_error : 'a -> unit = "error" [@@mel.scope "console"]
 
+external date_now_ms : unit -> float = "now" [@@mel.scope "Date"]
+
 external error_message :
   Js.Promise.error -> string Js.Nullable.t = "message" [@@mel.get]
 

@@ -63,7 +63,7 @@ let clear_range uuid from to_ = snd (replace_range uuid from to_ "")
 let prop_batch ~caret uuid ops =
   let buf = A.live_buffer uuid in
   A.with_focus_after uuid caret
-    (Ops.apply_and_refresh (Ops.save_block uuid buf :: ops))
+    (Ops.apply_and_refresh_deferred (Ops.save_block uuid buf :: ops))
 
 (* same, but drop edit mode first (cljs :editor/exit — code blocks leave
    the textarea while the view re-renders the code surface) *)

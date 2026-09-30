@@ -84,7 +84,9 @@ let empty_item = mk_item ~key:empty_key ~label:"" Noop
 type ac =
   { kind : ac_kind
   ; x : float
-  ; y : float
+  ; y : float (* caret bottom; the popup anchors its bottom edge here
+     when flipped *)
+  ; flip : bool (* render above the caret (cljs auto-side "top") *)
   ; query : string
   ; tpos : int (* query-trigger offset (the "/" "[[" "((" "#" start) *)
   ; tlen : int
@@ -869,10 +871,15 @@ let load_templates t =
 
 let open_ac t kind editor =
   let x, y = Dom_ext.caret_popup_pos editor in
+  (* cljs popup-core auto-side-fn: anchor-height defaults to 1 for the
+     caret popup, so flip to "top" when bottom space <= 280 and top
+     exceeds bottom by > 100 *)
+  let bh = Dom_ext.inner_height -. y -. 1. in
+  let flip = (not (bh > 280.)) && y -. bh > 100. in
   let tlen = trigger_len_of_kind kind in
   let tpos = Dom_ext.selection_start editor - tlen in
   let ac =
-    { kind; x; y; query = ""
+    { kind; x; y; flip; query = ""
     ; tpos; tlen
     ; items = []; chosen = 0; editor }
   in
@@ -935,7 +942,12 @@ let on_editor_input t el ev =
   overtype_skip el;  let pos = Dom_ext.selection_start el in
 
   match (get t).ac with
-  | Some ac ->
+  | Some ac0 ->
+      (* the event target is the live textarea — a reload may have
+         remounted the node since the ac opened, so always re-anchor
+         instead of writing to a detached element *)
+      let ac = { ac0 with editor = el } in
+      if ac.editor != ac0.editor then set_ac t (Some ac);
       let v = Dom_ext.value el in
       let trig_missing =
         ac.tpos + ac.tlen > S.length v
@@ -1379,10 +1391,13 @@ let apply_chosen t =
    skips the caret past the ghost bracket, so no input event reaches
    on_editor_input — check the same close condition on leftover keys:
    caret moved before the trigger, or the buffer shows a completed
-   closer in the query. *)
-let ac_position_closed ac =
-  let pos = Dom_ext.selection_start ac.editor in
-  let v = Dom_ext.value ac.editor in
+   closer in the query. Read the event's live target rather than
+   ac.editor — a reload can remount the textarea, leaving ac.editor
+   detached where selectionStart reads 0 and the position check
+   mis-closes an ac that is still valid *)
+let ac_position_closed ac el =
+  let pos = Dom_ext.selection_start el in
+  let v = Dom_ext.value el in
   let qend = pos - ac.tpos - ac.tlen in
   qend < 0 || qend > S.length v
   || query_closed ac (S.sub v (ac.tpos + ac.tlen) qend)
@@ -1399,7 +1414,8 @@ let ac_keydown t ev =
       | Some ("Enter" | "Tab") -> apply_chosen t; true
       | Some "Escape" -> close_ac t; true
       | _ ->
-          if ac_position_closed ac then close_ac t;
+          (let el = Option.value (Dom_ext.target ev) ~default:ac.editor in
+           if ac_position_closed ac el then close_ac t);
           false)
 ;;
 

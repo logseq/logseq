@@ -53,7 +53,7 @@ let run_pending_focus_actions () =
 let rec apply_focus () =
   match !S.pending_focus with
   | None -> S.pending_focus_actions := []
-  | Some (uuid, caret) -> (
+  | Some (uuid, caret, armed_ms) -> (
       if !(S.code_focus) ~caret uuid then (
         (* CodeMirror-backed code block: cm.focus() + setCursor landed *)
         S.pending_focus := None;
@@ -72,9 +72,14 @@ let rec apply_focus () =
           | Some ae when ae == el ->
               S.pending_focus := None;
               focus_attempts := 0;
-              let len = String.length (D.el_value el) in
-              let c = max 0 (min caret len) in
-              D.el_set_selection_range el c c;
+              (* a landing that ran late (remount during a remote-tx
+                 refresh) must not stomp the caret: if the user typed
+                 since this focus was requested, the stored caret is
+                 stale — keep where the DOM put it *)
+              if !S.last_edit_input_ms <= armed_ms then (
+                let len = String.length (D.el_value el) in
+                let c = max 0 (min caret len) in
+                D.el_set_selection_range el c c);
               run_pending_focus_actions ()
           | _ -> retry_focus ())
       | None -> retry_focus ())
@@ -88,7 +93,7 @@ and retry_focus () =
     focus_attempts := 0)
 
 let request_focus uuid caret =
-  S.pending_focus := Some (uuid, caret);
+  S.pending_focus := Some (uuid, caret, !S.last_edit_input_ms);
   (* pending_focus_actions intentionally kept: keys queued during the
      remount window belong to the next focus landing as well *)
   focus_attempts := 0;
@@ -97,7 +102,7 @@ let request_focus uuid caret =
 (* set pending focus, then run [p]; re-apply focus after the flush so a
    remounted textarea still ends up focused *)
 let with_focus_after uuid caret p =
-  S.pending_focus := Some (uuid, caret);
+  S.pending_focus := Some (uuid, caret, !S.last_edit_input_ms);
   focus_attempts := 0;
   ignore
     (p
@@ -1342,7 +1347,7 @@ let quick_add_open_dialog puuid blocks =
                       ; base = String.trim last.Model.block_title
                       }
                 });
-            S.pending_focus := Some (u, caret))
+            S.pending_focus := Some (u, caret, !S.last_edit_input_ms))
       | None -> ())
   | [] -> ()
 
