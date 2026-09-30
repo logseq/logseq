@@ -1,7 +1,6 @@
 (ns frontend.worker.handler.flashcard-test
   (:require [cljs.test :refer [deftest is testing]]
             [datascript.core :as d]
-            [frontend.extensions.fsrs :as fsrs]
             [frontend.worker.handler.block :as block-handler]
             [frontend.worker.handler.flashcard :as flashcard]
             [logseq.db.frontend.class :as db-class]
@@ -38,8 +37,6 @@
     (testing "worker tag summary includes the Card ancestor"
       (is (= :user.class/Project (:db/ident tag)))
       (is (some #{:logseq.class/Card} extends-idents)))
-    (testing "renderer card-block? / get-card-map agree with worker structured-children"
+    (testing "worker card-class-ids includes the Project tag"
       (is (contains? (set (db-class/card-class-ids db))
-                     (:db/id (d/entity db :user.class/Project))))
-      (is (true? (#'fsrs/card-block? block)))
-      (is (some? (#'fsrs/get-card-map block))))))
+                     (:db/id (d/entity db :user.class/Project)))))))

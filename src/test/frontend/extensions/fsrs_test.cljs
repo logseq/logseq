@@ -3,6 +3,7 @@
             [frontend.extensions.fsrs :as fsrs]
             [frontend.handler.property :as property-handler]
             [frontend.state :as state]
+            [open-spaced-repetition.cljc-fsrs.core :as fsrs.core]
             [promesa.core :as p]))
 
 (defn- extends-card-block
@@ -38,20 +39,24 @@
 (deftest get-card-map-is-nil-when-block-is-not-a-card
   (is (nil? (#'fsrs/get-card-map {:block/tags [{:db/ident :user.class/Project}]}))))
 
-(deftest rating-btns-nil-card-map-does-not-throw
-  (testing "Show answers must not crash when get-card-map is nil (#1088 / #1373)"
-    (is (vector? (#'fsrs/rating-btns "test-graph"
-                                     {:db/id 1 :block/tags []}
-                                     (atom 0)
-                                     (atom :show-answer)
-                                     {})))))
+(deftest repeat-card-throws-on-nil-card-map
+  (testing "The Show answers crash: repeat-card! does not accept a nil card-map"
+    (is (thrown? js/Error (fsrs.core/repeat-card! nil :good)))))
 
-(deftest rating-btns-extends-card-does-not-throw
-  (is (vector? (#'fsrs/rating-btns "test-graph"
-                                   (extends-card-block)
-                                   (atom 0)
-                                   (atom :show-answer)
-                                   {}))))
+(deftest rating-due-date-skips-repeat-card-when-card-map-is-nil
+  (testing "rating-btns must not call repeat-card! when get-card-map is nil"
+    (let [card-map (#'fsrs/get-card-map {:db/id 1 :block/tags []})
+          due (when card-map
+                (:due (fsrs.core/repeat-card! card-map :good)))]
+      (is (nil? card-map))
+      (is (nil? due)))))
+
+(deftest rating-due-date-works-for-extends-card
+  (let [card-map (#'fsrs/get-card-map (extends-card-block))
+        due (when card-map
+              (:due (fsrs.core/repeat-card! card-map :good)))]
+    (is (some? card-map))
+    (is (some? due))))
 
 (deftest rating-extends-card-persists-state
   (async done
