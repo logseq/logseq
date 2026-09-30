@@ -75,6 +75,7 @@ let main root =
   Editor_commands.install ();
   Views_mount.install ();
   Router.init ();
+  Rtc_flows.init ();
   ignore (Boot.run ())
 
 let () =
