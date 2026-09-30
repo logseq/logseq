@@ -1583,3 +1583,87 @@
         (let [copy (d/entity @conn [:block/uuid copy-uuid])]
           (is (= e-uuid (:block/uuid (:block/parent copy))))
           (is (= tmpl-uuid (:block/uuid (:logseq.property/used-template copy)))))))))
+
+(defn- related-ident
+  [conn]
+  (d/q '[:find ?ident . :where
+         [?p :block/title "related"]
+         [?p :db/ident ?ident]]
+       @conn))
+
+(defn- add-x-pointing-at-y!
+  "Adds top-level blocks x, y to the page page-id, x's \"related\" pointing
+  at y. Returns [x-uuid y-uuid]."
+  [conn page-id related]
+  (let [x-uuid (random-uuid)
+        y-uuid (random-uuid)]
+    (apply-ops! conn
+                [[:insert-blocks [[{:block/uuid x-uuid :block/title "x"}
+                                   {:block/uuid y-uuid :block/title "y"}]
+                                  page-id
+                                  {:sibling? false
+                                   :keep-uuid? true}]]]
+                (local-tx-meta {:client-id "test-client"}))
+    (apply-ops! conn
+                [[:set-block-property [x-uuid related
+                                       (:db/id (d/entity @conn [:block/uuid y-uuid]))]]]
+                (local-tx-meta {:client-id "test-client"}))
+    [x-uuid y-uuid]))
+
+(deftest undo-delete-of-today-page-with-blocks-referring-to-each-other-test
+  (testing "undoing a delete of today's page, where a block holds a node property value pointing at a later block, restores both"
+    (let [conn (worker-state/get-datascript-conn test-repo)
+          _ (seed-inner-ref-graph!)
+          related (related-ident conn)
+          today-day (date-time-util/ms->journal-day (js/Date.))
+          today-title (date-time-util/int->journal-title
+                       today-day
+                       (:logseq.property.journal/title-format
+                        (d/entity @conn :logseq.class/Journal)))
+          [_ today-page-uuid] (apply-ops! conn
+                                          [[:create-page [today-title
+                                                          {:today-journal? true
+                                                           :redirect? false
+                                                           :split-namespace? true
+                                                           :tags ()}]]]
+                                          (local-tx-meta {:client-id "test-client"}))
+          [x-uuid y-uuid] (add-x-pointing-at-y! conn
+                                                (:db/id (d/entity @conn [:block/uuid today-page-uuid]))
+                                                related)]
+      (worker-undo-redo/clear-history! test-repo)
+      (apply-ops! conn
+                  [[:delete-page [today-page-uuid {}]]]
+                  (local-tx-meta {:client-id "test-client"}))
+      (is (nil? (d/entity @conn [:block/uuid x-uuid])))
+      (let [[undo-result results] (undo-with-history-action-results!)]
+        (is (map? undo-result))
+        (is (= [true] (mapv :applied? results))))
+      (is (= #{y-uuid}
+             (set (map :block/uuid (get (d/entity @conn [:block/uuid x-uuid]) related))))))))
+
+(deftest undo-delete-of-tag-page-with-blocks-referring-to-each-other-test
+  (testing "undoing a delete of a tag page, where a block holds a node property value pointing at a later block, restores both"
+    (let [conn (worker-state/get-datascript-conn test-repo)
+          _ (seed-inner-ref-graph!)
+          related (related-ident conn)
+          [_ class-uuid] (apply-ops! conn
+                                     [[:create-page ["undo inner refs tag"
+                                                     {:class? true
+                                                      :redirect? false
+                                                      :split-namespace? true
+                                                      :tags ()}]]]
+                                     (local-tx-meta {:client-id "test-client"}))
+          [x-uuid y-uuid] (add-x-pointing-at-y! conn
+                                                (:db/id (d/entity @conn [:block/uuid class-uuid]))
+                                                related)]
+      (worker-undo-redo/clear-history! test-repo)
+      (apply-ops! conn
+                  [[:delete-page [class-uuid {}]]]
+                  (local-tx-meta {:client-id "test-client"}))
+      (is (nil? (d/entity @conn [:block/uuid class-uuid])))
+      (let [[undo-result results] (undo-with-history-action-results!)]
+        (is (map? undo-result))
+        (is (= [true] (mapv :applied? results))))
+      (is (some? (d/entity @conn [:block/uuid class-uuid])))
+      (is (= #{y-uuid}
+             (set (map :block/uuid (get (d/entity @conn [:block/uuid x-uuid]) related))))))))
