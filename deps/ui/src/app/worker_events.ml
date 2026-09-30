@@ -66,7 +66,11 @@ and fire_reload () =
   let edit_throttled =
     editing_active && now -. !reload_last_fire_ms < edit_reload_min_ms
   in
-  if typing_active || flood_active || edit_throttled then
+  let popup_open =
+    Editor_dom.query_selector "#ui__ac, .ls-context-menu-content"
+    <> None
+  in
+  if typing_active || flood_active || edit_throttled || popup_open then
     Editor_dom.set_timeout fire_reload 150
   else (
     reload_pending := false;
