@@ -96,6 +96,8 @@ type ac =
   ; items : ac_item list
   ; chosen : int
   ; editor : Dom_ext.element
+  ; auuid : string (* editing uuid the popup was opened on — a remount
+     swaps editing_uuid before the position check can run *)
   }
 
 type cm_picker = Picker_emoji | Picker_icon
@@ -175,6 +177,17 @@ let get t = Signal.get t.vs.Signal.state_signal
 let ac_open () =
   match !active with
   | Some t -> (get t).ac <> None
+  | None -> false
+
+(* popup bound to the block currently being edited (unanchored popups
+   like cmdk-spawned search count as attached too) *)
+let ac_attached () =
+  match !active with
+  | Some t -> (
+      match (get t).ac with
+      | Some ac ->
+        ac.auuid = "" || Editor_state.editing_uuid () = Some ac.auuid
+      | None -> false)
   | None -> false
 
 let set t v = Runtime.signal_set t.vs v
@@ -895,7 +908,8 @@ let open_ac t kind editor =
   let ac =
     { kind; x; y; cy; flip = None; query = ""
     ; tpos; tlen
-    ; items = []; chosen = 0; editor }
+    ; items = []; chosen = 0; editor
+    ; auuid = Option.value (Editor_state.editing_uuid ()) ~default:"" }
   in
   (* base-ui avoidCollisions: the popup mounts below the caret, then
      flips above when it overflows the viewport and there is more room
@@ -1448,15 +1462,50 @@ let apply_chosen t =
 ;;
 
 (* true if the keydown was consumed by the open popup *)
+(* cljs closes the mention/search popup on keyup once the caret is no
+   longer wrapped by its trigger pair (close-autocomplete-if-outside).
+   Our editor `]`/`)` autopair-overtype preventDefaults the keystroke and
+   skips the caret past the ghost bracket, so no input event reaches
+   on_editor_input — check the same close condition on leftover keys:
+   caret moved before the trigger, or the buffer shows a completed
+   closer in the query. Read the event's live target rather than
+   ac.editor — a reload can remount the textarea, leaving ac.editor
+   detached where selectionStart reads 0 and the position check
+   mis-closes an ac that is still valid *)
+let ac_position_closed ac el =
+  let pos = Dom_ext.selection_start el in
+  let v = Dom_ext.value el in
+  let qend = pos - ac.tpos - ac.tlen in
+  qend < 0 || qend > S.length v
+  || query_closed ac (S.sub v (ac.tpos + ac.tlen) qend)
+;;
+
+(* true if the keydown was consumed by the open popup *)
 let ac_keydown t ev =
-  if (get t).ac = None then false
-  else
-    match Dom_ext.key_ ev with
-    | Some "ArrowDown" -> move_chosen t 1; true
-    | Some "ArrowUp" -> move_chosen t (-1); true
-    | Some ("Enter" | "Tab") -> apply_chosen t; true
-    | Some "Escape" -> close_ac t; true
-    | _ -> false
+  match (get t).ac with
+  | None -> false
+  | Some ac ->
+      (* the ac outlives its textarea on remount — Enter/Tab reach
+         apply_chosen before the position check could close it, eating
+         the key forever; once the editing session it opened on is gone
+         the popup is dead, so close it and let the key through *)
+      if
+        ac.auuid <> "" && Editor_state.editing_uuid () <> Some ac.auuid
+      then (
+        close_ac t;
+        false)
+      else (
+        match Dom_ext.key_ ev with
+        | Some "ArrowDown" -> move_chosen t 1; true
+        | Some "ArrowUp" -> move_chosen t (-1); true
+        | Some ("Enter" | "Tab") -> apply_chosen t; true
+        | Some "Escape" -> close_ac t; true
+        | _ ->
+            (let el =
+               Option.value (Dom_ext.target ev) ~default:ac.editor
+             in
+             if ac_position_closed ac el then close_ac t);
+            false)
 ;;
 
 let ac_mousemove t el =

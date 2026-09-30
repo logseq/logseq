@@ -512,13 +512,18 @@ let test_render_libs_dom () =
        attr_eq "yt iframe referrer-policy" f "referrer-policy"
          "strict-origin-when-cross-origin"
    | [] -> check "youtube iframe node" false);
-  (match find_where (fun n -> has_tok n "CodeMirror-line") with
+  (* display-mode code block = .extensions__code > .code-editor >
+     textarea[data-lang] — CodeMirror mounts onto the textarea in the
+     browser and generates .CodeMirror-line nodes, so the patch tree
+     itself only carries the mount surface *)
+  (match
+     find_where
+       (fun n ->
+         n.M.kind = "extension:logseq-textarea"
+         && attr_val n "data-lang" = Some "clojure")
+   with
    | p :: _ -> check "code text" (M.string_prop p "text" = Some "(+ 1 2)")
-   | [] -> check "CodeMirror-line node" false);
-  check "code data-lang"
-    (find_where
-       (fun n -> attr_val n "data-lang" = Some "clojure" && has_tok n "CodeMirror")
-     <> [])
+   | [] -> check "code-editor textarea node" false)
 
 (* ---------------- async stage: worker-fed views ---------------- *)
 
