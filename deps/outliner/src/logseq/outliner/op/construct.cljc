@@ -841,6 +841,14 @@
      [[] []]
      (map-indexed vector plans))))
 
+(defn- restore-plans->ops
+  "An insert op per restore plan, then the :save-block ops that set the refs
+  between plans."
+  [db-before plans]
+  (let [[plans' save-ops] (defer-refs-to-later-plans db-before plans)]
+    (-> (mapv #(to-insert-op db-before %) plans')
+        (into save-ops))))
+
 (defn- build-inverse-delete-blocks
   [db-before ids]
   (let [{:keys [roots incomplete?]} (selected-block-roots db-before ids)
@@ -848,10 +856,7 @@
     (when (and (not incomplete?)
                (seq roots)
                (every? some? plans))
-      (let [[plans' save-ops] (defer-refs-to-later-plans db-before plans)]
-        (-> (mapv #(to-insert-op db-before %) plans')
-            (into save-ops)
-            seq)))))
+      (seq (restore-plans->ops db-before plans)))))
 
 (defn- move-root->restore-op
   [db-before root]
@@ -962,7 +967,7 @@
                             (db-property/get-property-schema (into {} page))
                             {:property-name (:block/title page)}]])
               restore-root-ops (when (every? some? root-plans)
-                                 (mapv #(to-insert-op db-before %) root-plans))]
+                                 (restore-plans->ops db-before root-plans))]
           ;; Put the page's blocks back before its attributes: a property
           ;; value of the page can be one of those blocks.
           (cond-> []
@@ -977,9 +982,7 @@
 
         today-page?
         (when (every? some? root-plans)
-          (->> root-plans
-               (mapv #(to-insert-op db-before %))
-               seq))
+          (seq (restore-plans->ops db-before root-plans)))
 
         :else
         ;; Soft-deleted pages are moved to Recycle with recycle metadata.
