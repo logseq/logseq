@@ -4,7 +4,7 @@
             [promesa.core :as p]))
 
 (def ^:private view-resource-kinds #{:view-data :views})
-(def ^:private flush-kind-order [:view-resources :resources :blocks :children])
+(def ^:private flush-kind-order [:view-resources :blocks :children :resources])
 (def ^:private limits {:view-resources 25 :resources 25 :blocks 1000 :children 25})
 (def ^:private slot-kind {:block :blocks :children :children :resource :resources})
 (def ^:private cancelled-error
@@ -56,9 +56,11 @@
                      entries)))))
 
 (defn- request-groups
-  "Flush view-data before other resources, then blocks, then children.
+  "Flush view-data first, then blocks, then children, then other resources.
   One mixed batch used to wait on open-block-tree or block-ref-count
-  before Tags/All Pages could paint their first window."
+  before Tags/All Pages could paint their first window. Blocks and children
+  leave before other resources so an open page's own blocks do not queue
+  behind its title decorations and linked references."
   [entries]
   (let [entries-by-kind (group-by entry-flush-kind entries)]
     (mapcat (fn [kind]
