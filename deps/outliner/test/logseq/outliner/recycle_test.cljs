@@ -142,6 +142,33 @@
              (:v (first (d/datoms @conn :eavt (:db/id block') :block/title)))))
       (is (not (contains? (set (map :db/id (:block/refs block'))) foo-id))))))
 
+(deftest gc-recycled-pages-rewrites-only-expired-page-refs
+  (let [conn (db-test/create-conn-with-blocks
+              [{:page {:block/title "Expired"}}
+               {:page {:block/title "Recent"}}
+               {:page {:block/title "Active"}}
+               {:page {:block/title "References"}
+                :blocks [{:block/title "see [[Expired]] [[Recent]] [[Active]]"}]}])
+        expired (ldb/get-page @conn "Expired")
+        recent (ldb/get-page @conn "Recent")
+        active (ldb/get-page @conn "Active")
+        ref-title (str "see " (page-ref/->page-ref (:block/uuid expired))
+                       " " (page-ref/->page-ref (:block/uuid recent))
+                       " " (page-ref/->page-ref (:block/uuid active)))
+        block (db-test/find-block-by-content @conn ref-title)
+        now-ms (* 31 24 3600 1000)]
+    (outliner-page/delete! conn (:block/uuid expired) {:now-ms 0})
+    (outliner-page/delete! conn (:block/uuid recent) {:now-ms now-ms})
+    (is (true? (recycle/gc! conn {:now-ms now-ms})))
+    (is (nil? (d/entity @conn (:db/id expired))))
+    (is (some? (d/entity @conn (:db/id recent))))
+    (let [block' (d/entity @conn (:db/id block))]
+      (is (= (str "see Expired " (page-ref/->page-ref (:block/uuid recent))
+                   " " (page-ref/->page-ref (:block/uuid active)))
+             (:v (first (d/datoms @conn :eavt (:db/id block') :block/title)))))
+      (is (= #{(:db/id recent) (:db/id active)}
+             (set (map :db/id (:block/refs block'))))))))
+
 (deftest restore-recycled-page-removes-recycle-parent
   (let [conn (db-test/create-conn-with-blocks
               [{:page {:block/title "page1"}

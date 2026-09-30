@@ -34,8 +34,7 @@
         id-ref->page #(db-content/content-id-ref->page % [page-entity])]
     (->> refs
          (keep (fn [ref]
-                 (when-let [raw-title (or (:block/raw-title ref)
-                                          (:block/title ref))]
+                 (when-let [raw-title (entity-plus/lookup-kv-then-entity ref :block/raw-title)]
                    (let [content' (id-ref->page raw-title)]
                      (when (not= raw-title content')
                        {:ref-id (:db/id ref)
@@ -123,9 +122,8 @@
             true)
 
           :else
-          ;; Soft-delete keeps page refs so Recycle restore is identity.
           (let [tx-data (outliner-recycle/recycle-page-tx-data @conn page {:deleted-by-uuid deleted-by-uuid
-                                                                          :now-ms now-ms})]
+                                                                      :now-ms now-ms})]
             (when (seq tx-data)
               (ldb/transact! conn tx-data tx-meta))
             true))))))
