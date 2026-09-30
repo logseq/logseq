@@ -697,7 +697,7 @@
                                               :ordered-list? ordered-list?
                                               :replace-empty-target? replace-empty-target?
                                               :outliner-op outliner-op
-                                              :skip-save-current-block? skip-save-current-block?})))
+                                              :skip-save-current-block? skip-save-current-block?}))
                    (when edit-existing-block?
                      (edit-block! last-block :max))
                    (when-let [id (:block/uuid new-block)]
