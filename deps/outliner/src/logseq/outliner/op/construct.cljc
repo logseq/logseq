@@ -104,6 +104,18 @@
              {}
              schema))
 
+(defn- inverse-upsert-property-schema
+  "Restore the previous schema, except :db/cardinality when that would revert
+   :many to :one while values exist."
+  [db-before db-after property]
+  (let [schema (sanitize-upsert-property-schema
+                db-before
+                (db-property/get-property-schema (into {} property)))]
+    (if (and (contains? #{:one :db.cardinality/one} (:db/cardinality schema))
+             (seq (d/datoms db-after :avet (:db/ident property))))
+      (dissoc schema :db/cardinality)
+      schema)))
+
 (defn- sanitize-block-refs
   [refs]
   (->> refs
@@ -797,6 +809,58 @@
         created-from-property
         (assoc :created-from-property created-from-property)))))
 
+(defn- split-block-refs
+  "Splits the ref values of the insert payload `block` into those pointing at a
+  block in `uuids` and the rest: [block without them, map of them]."
+  [db-before uuids block]
+  (let [in-uuids? (fn [v]
+                    (and (vector? v)
+                         (= :block/uuid (first v))
+                         (contains? uuids (second v))))]
+    (reduce-kv
+     (fn [[block' refs :as acc] k v]
+       (if (worker-ref-attr? db-before k)
+         (if (set? v)
+           (let [{in true out false} (group-by in-uuids? v)]
+             (if (seq in)
+               [(if (seq out) (assoc block' k (set out)) (dissoc block' k))
+                (assoc refs k (set in))]
+               acc))
+           (if (in-uuids? v)
+             [(dissoc block' k) (assoc refs k v)]
+             acc))
+         acc))
+     [block {}]
+     block)))
+
+(defn- defer-refs-to-later-plans
+  "Each restore plan is inserted by its own op, so a block that refers to a
+  block of a later plan (a node property value, a used template) fails to
+  insert: the later block doesn't exist yet. Takes those refs out of the
+  plans and returns [plans, :save-block ops that set them after all inserts]."
+  [db-before plans]
+  (let [plan-uuids (mapv #(set (keep :block/uuid (:blocks %))) plans)]
+    (reduce
+     (fn [[plans' save-ops] [i plan]]
+       (let [later-uuids (into #{} cat (subvec plan-uuids (inc i)))
+             splits (mapv #(split-block-refs db-before later-uuids %) (:blocks plan))]
+         [(conj plans' (assoc plan :blocks (mapv first splits)))
+          (into save-ops
+                (keep (fn [[block refs]]
+                        (when (seq refs)
+                          [:save-block [(assoc refs :block/uuid (:block/uuid block)) {}]])))
+                splits)]))
+     [[] []]
+     (map-indexed vector plans))))
+
+(defn- restore-plans->ops
+  "An insert op per restore plan, then the :save-block ops that set the refs
+  between plans."
+  [db-before plans]
+  (let [[plans' save-ops] (defer-refs-to-later-plans db-before plans)]
+    (-> (mapv #(to-insert-op db-before %) plans')
+        (into save-ops))))
+
 (defn- build-inverse-delete-blocks
   [db-before ids]
   (let [{:keys [roots incomplete?]} (selected-block-roots db-before ids)
@@ -804,9 +868,7 @@
     (when (and (not incomplete?)
                (seq roots)
                (every? some? plans))
-      (->> plans
-           (mapv #(to-insert-op db-before %))
-           seq))))
+      (seq (restore-plans->ops db-before plans)))))
 
 (defn- move-root->restore-op
   [db-before root]
@@ -892,7 +954,7 @@
   (build-inverse-save-block db-before (into {} ent) nil))
 
 (defn- build-inverse-delete-page
-  [db-before page-uuid]
+  [db-before db-after page-uuid]
   (when-let [page (d/entity db-before [:block/uuid page-uuid])]
     (let [class-or-property? (or (ldb/class? page)
                                  (ldb/property? page))
@@ -914,10 +976,10 @@
                                 (assoc :class-ident-namespace class-ident-namespace))]])
                           [:upsert-property
                            [(:db/ident page)
-                            (db-property/get-property-schema (into {} page))
+                            (inverse-upsert-property-schema db-before db-after page)
                             {:property-name (:block/title page)}]])
               restore-root-ops (when (every? some? root-plans)
-                                 (mapv #(to-insert-op db-before %) root-plans))]
+                                 (restore-plans->ops db-before root-plans))]
           ;; Put the page's blocks back before its attributes: a property
           ;; value of the page can be one of those blocks.
           (cond-> []
@@ -932,9 +994,7 @@
 
         today-page?
         (when (every? some? root-plans)
-          (->> root-plans
-               (mapv #(to-insert-op db-before %))
-               seq))
+          (seq (restore-plans->ops db-before root-plans)))
 
         :else
         ;; Soft-deleted pages are moved to Recycle with recycle metadata.
@@ -1036,7 +1096,7 @@
 
                           :delete-page
                           (let [[page-uuid _opts] args]
-                            (build-inverse-delete-page db-before page-uuid))
+                            (build-inverse-delete-page db-before db-after page-uuid))
 
                           :upsert-property
                           (let [[property-id _schema _opts] args]
@@ -1044,9 +1104,7 @@
                               (if-let [property (d/entity db-before property-id)]
                                 [:upsert-property
                                  [property-id
-                                  (sanitize-upsert-property-schema
-                                   db-before
-                                   (db-property/get-property-schema (into {} property)))
+                                  (inverse-upsert-property-schema db-before db-after property)
                                   {:property-name (:block/title property)}]]
                                 [:delete-page [(common-uuid/gen-uuid :db-ident-block-uuid property-id) {}]])))
 

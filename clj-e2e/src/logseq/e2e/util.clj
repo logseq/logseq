@@ -71,11 +71,25 @@
     (.pressSequentially input-node text
                         (.setDelay (Locator$PressSequentiallyOptions.) delay))))
 
+(defn- editor-left?
+  [timeout]
+  (try
+    (w/wait-for-not-visible editor-q {:timeout timeout})
+    true
+    (catch TimeoutError _e
+      false)))
+
 (defn exit-edit
   []
-  (dotimes [_ 2]
-    (when (get-editor)
-      (k/esc)))
+  ;; Escape saves the block before it leaves editing, so the editor can stay
+  ;; for a while after the key. An Escape pressed then reaches the page and
+  ;; clears the block selection the first one made. Press again only when
+  ;; the editor stays, e.g. the first Escape closed a popup.
+  (when (get-editor)
+    (k/esc)
+    (when-not (editor-left? 1000)
+      (when (get-editor)
+        (k/esc))))
   (assert/assert-non-editor-mode))
 
 (defn double-esc
