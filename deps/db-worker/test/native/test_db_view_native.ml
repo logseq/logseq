@@ -1,5 +1,7 @@
 (* 1:1 translations of deps/db/test/logseq/db/common/view_test.cljs —
-   all 42 deftests.
+   all 42 deftests — plus src/test/logseq/db/common/
+   view_small_set_sort_test.cljs (2 deftests, same instrumentation
+   seams).
 
    cljs with-redefs instrumentation maps to lib counters:
    - d/entity                        -> Ldb.entity_lookups (counted_entity)
@@ -755,6 +757,90 @@ let test_class_objects_small_set_sorts_eids () =
   check "data 21" (List.length (data_ids window) = 21);
   check "window = full" (data_ids full = data_ids window);
   check "elapsed < 50ms" (elapsed_ms < 50.)
+
+(* ---------- src/test/logseq/db/common/view_small_set_sort_test.cljs ---------- *)
+
+(* small-class-without-row-limit-does-not-scan-unrelated-sort-values-test *)
+let test_small_class_unlimited_no_index_scan () =
+  let unrelated_blocks =
+    List.init 1000
+      (fun i ->
+         { default_block with b_title = Some (Printf.sprintf "Unrelated %d" i) })
+  in
+  let conn =
+    create_conn_with_blocks
+      ~classes: [ ("Topic", { default_class with c_title = Some "Topic" }) ]
+      ~pages_and_blocks:
+        [ { page =
+              { default_page with
+                pg_title = Some "Tagged 1"
+              ; pg_tags = [ "Topic" ]
+              ; pg_extra = [ "block/updated-at", Int64 1 ] }
+          ; blocks = [] }
+        ; { page =
+              { default_page with
+                pg_title = Some "Tagged 2"
+              ; pg_tags = [ "Topic" ]
+              ; pg_extra = [ "block/updated-at", Int64 2 ] }
+          ; blocks = [] }
+        ; { page = { default_page with pg_title = Some "Unrelated" }
+          ; blocks = unrelated_blocks } ]
+      ()
+  in
+  let db = db_of conn in
+  let class_id = ident_eid db "user.class/Topic" in
+  let view_id = create_view_id conn ~view_for_id:class_id "class-objects" in
+  Db_view.index_scans_reset ();
+  let result =
+    Db_view.get_view_data db (Some view_id)
+      (opts [ "view-feature-type", kw "class-objects"
+            ; "view-for-id", Wire.Int class_id
+            ; "sorting", sorting [ ("block/updated-at", false) ] ])
+  in
+  check "count 2" (view_count result = 2);
+  check "titles Tagged 2, Tagged 1"
+    (result_titles db result = [ "Tagged 2"; "Tagged 1" ]);
+  let scanned =
+    Option.value ~default:0
+      (Hashtbl.find_opt Db_view.index_scans "block/updated-at")
+  in
+  check "scanned < 26" (scanned < 26)
+
+(* remaining-rows-keep-the-first-window-order-on-ties-test *)
+let test_remaining_rows_keep_first_window_order_on_ties () =
+  let pages =
+    List.init 25
+      (fun i ->
+         { page =
+             { default_page with
+               pg_title = Some (Printf.sprintf "Tagged %d" i)
+             ; pg_tags = [ "Topic" ]
+             ; pg_extra =
+                 [ ( "block/updated-at"
+                   , Int64 (if i < 5 then 100 - i else 50) ) ] }
+         ; blocks = [] })
+  in
+  let conn =
+    create_conn_with_blocks
+      ~classes: [ ("Topic", { default_class with c_title = Some "Topic" }) ]
+      ~pages_and_blocks: pages ()
+  in
+  let db = db_of conn in
+  let class_id = ident_eid db "user.class/Topic" in
+  let view_id = create_view_id conn ~view_for_id:class_id "class-objects" in
+  let option =
+    opts [ "view-feature-type", kw "class-objects"
+         ; "view-for-id", Wire.Int class_id
+         ; "sorting", sorting [ ("block/updated-at", false) ] ]
+  in
+  let window =
+    Db_view.get_view_data db (Some view_id)
+      (opt_add option [ "row-limit", Wire.Int 20 ])
+  in
+  let full = Db_view.get_view_data db (Some view_id) option in
+  check "count 25" (view_count window = 25 && view_count full = 25);
+  check "window = first 20 of full"
+    (data_ids window = subvec (data_ids full) 0 20)
 
 let test_all_pages_first_window_no_full_sort () =
   let pages =
@@ -1905,6 +1991,12 @@ let () =
         ; Alcotest.test_case
             "get-view-data-class-objects-small-set-sorts-the-eids-test" `Quick
             test_class_objects_small_set_sorts_eids
+        ; Alcotest.test_case
+            "small-class-without-row-limit-does-not-scan-unrelated-sort-values-test"
+            `Quick test_small_class_unlimited_no_index_scan
+        ; Alcotest.test_case
+            "remaining-rows-keep-the-first-window-order-on-ties-test" `Quick
+            test_remaining_rows_keep_first_window_order_on_ties
         ; Alcotest.test_case
             "get-view-data-all-pages-first-window-does-not-sort-every-page-test"
             `Quick test_all_pages_first_window_no_full_sort
