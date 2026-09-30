@@ -59,6 +59,7 @@
              choice-after))
     (w/click (loc/filter "div[role='menuitem']" :has-text "Set as default choice"))
 
+    (util/double-esc)
     (open-choices-pane property-name)
     (add-choice removable-choice)
     (w/click

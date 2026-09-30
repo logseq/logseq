@@ -551,7 +551,10 @@
                                         {:id :ls-choice-more-settings
                                          :as-dropdown? true
                                          :align "end"
-                                         :content-props {:class "ls-choice-more-settings"}})))}
+                                         :root-props {:modal false}
+                                         :content-props {:class "ls-choice-more-settings"
+                                                         :on-click (fn []
+                                                                     (shui/popup-hide! :ls-choice-more-settings))}})))}
        (shui/tabler-icon "dots" {:size 16}))]))
 
 (hsx/defc add-existing-values
