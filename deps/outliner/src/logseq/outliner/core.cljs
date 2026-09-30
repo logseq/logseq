@@ -313,6 +313,19 @@
   [refs page-txs]
   (into #{} (keep :block/uuid) (concat refs page-txs)))
 
+(defn- apply-resolved-page-ref-titles
+  [db block refs'' tags' replace-refs rewrite-title? keep-uuids]
+  (rewrite-block-missing-uuid-id-refs
+   db
+   (cond-> (assoc block :block/refs refs''
+                        :block/tags tags')
+     (and rewrite-title? (string? (:block/title block)))
+     (update :block/title replace-refs)
+
+     (and rewrite-title? (string? (:block/raw-title block)))
+     (update :block/raw-title replace-refs))
+   keep-uuids))
+
 (defn- resolve-page-ref
   [db ref tag-names]
   (cond
@@ -412,18 +425,10 @@
                                          title
                                          replacements)
                                  dropped-refs))
-          rewrite-title? (or (seq replacements) (seq dropped-refs))
-          keep-uuids (created-or-kept-uuids refs'' page-txs)]
-      {:block (rewrite-block-missing-uuid-id-refs
-               db
-               (cond-> (assoc block :block/refs refs''
-                                    :block/tags tags')
-                 (and rewrite-title? (string? (:block/title block)))
-                 (update :block/title replace-refs)
-
-                 (and rewrite-title? (string? (:block/raw-title block)))
-                 (update :block/raw-title replace-refs))
-               keep-uuids)
+          rewrite-title? (or (seq replacements) (seq dropped-refs))]
+      {:block (apply-resolved-page-ref-titles
+               db block refs'' tags' replace-refs rewrite-title?
+               (created-or-kept-uuids refs'' page-txs))
        :page-txs page-txs})
     {:block (rewrite-block-missing-uuid-id-refs db block #{})}))
 
