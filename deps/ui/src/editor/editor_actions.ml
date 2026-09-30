@@ -343,6 +343,9 @@ let split_at_cursor uuid =
             [ Ops.op "save-block" [ a.(0); Wire.Map [] ]
             ; Ops.insert_blocks [ a.(1) ] uuid ~sibling ])
         in
+        (* the exit-edit repaint lands before the worker delta — pin the
+           saved title so the row doesn't flash the pre-split text *)
+        S.override_title uuid (Ops.normalized_title uuid before);
         (* S.set (not silent): the old textarea must unmount before the
            next keypress, or keystrokes keep landing in the stale editor *)
         S.set (fun st ->
@@ -372,6 +375,9 @@ let insert_sibling_after uuid =
               [ Ops.block_map ~title:"" ~page:library new_uuid ]
               uuid ~sibling ])
       in
+      (* the exit-edit repaint lands before the worker delta — pin the
+         saved title so the row doesn't flash the stale title *)
+      S.override_title uuid (Ops.normalized_title uuid buf);
       (* S.set (not silent): the old textarea must unmount before the
          next keypress, or keystrokes keep landing in the stale editor *)
       S.set (fun st ->
@@ -437,14 +443,21 @@ let merge_prev uuid =
             with_focus_after uuid 0
               (Ops.apply_and_refresh ~opts:(Ops.op_opts "delete-blocks") ops))
           else (
+            (* title_for (override ?? model): prev's commit may still be
+               in flight — the debounced save's delta only lands with
+               this op, and the model title would drop typed text *)
+            let ptitle = S.title_for prev_uuid prev.Model.block_title in
             let ops =
               move_children_ops b prev_uuid
               @ [ Ops.delete_blocks [ uuid ]
-                ; Ops.save_block prev_uuid (prev.Model.block_title ^ buf)
+                ; Ops.save_block prev_uuid (ptitle ^ buf)
                 ]
             in
+            (* the merged-away row repaints before the delete lands — pin
+               its live buffer so it doesn't flash the stale title *)
+            S.override_title uuid (Ops.normalized_title uuid buf);
             ignore
-              (let* pbuf = Ops.title_for_edit (String.trim prev.Model.block_title) in
+              (let* pbuf = Ops.title_for_edit (String.trim ptitle) in
               S.set (fun st ->
                   { st with
                     S.editing =
@@ -501,8 +514,15 @@ let merge_next uuid =
                  else [])
               @ [ Ops.delete_blocks [ uuid ] ]
             in
+            (* the row repaints before the delete lands — pin its live
+               (empty) buffer so it doesn't flash the stale title *)
+            S.override_title uuid (Ops.normalized_title uuid buf);
             ignore
-              (let* nbuf = Ops.title_for_edit (String.trim next.Model.block_title) in
+              (let* nbuf =
+                 Ops.title_for_edit
+                   (String.trim
+                      (S.title_for next_uuid next.Model.block_title))
+               in
               S.set (fun st ->
                   { st with
                     S.editing =
@@ -522,7 +542,11 @@ let merge_next uuid =
 
             in
             ignore
-              (let* nbuf = Ops.title_for_edit (String.trim next.Model.block_title) in
+              (let* nbuf =
+                 Ops.title_for_edit
+                   (String.trim
+                      (S.title_for next_uuid next.Model.block_title))
+               in
               S.set (fun st ->
                   { st with
                     S.editing =
@@ -1501,6 +1525,9 @@ let run_query_command ~advanced =
   | None -> ()
   | Some e ->
       let buf = live_buffer e.uuid in
+      (* the query command empties this block's title in the same tx —
+         pin it so the exit-edit repaint doesn't flash the old title *)
+      S.override_title e.uuid "";
       S.set (fun st -> { st with S.editing = None });
       let quuid = Platform.random_uuid () in
       let extra =

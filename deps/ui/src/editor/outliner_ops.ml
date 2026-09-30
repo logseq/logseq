@@ -918,9 +918,6 @@ let apply_parsed ?opts ~rest pairs =
   in
   apply ?opts (Array.to_list a @ rest)
 
-let apply_parsed_and_refresh ?opts ~rest pairs =
-  let* () = apply_parsed ?opts ~rest pairs in
-  refresh_page ()
 (* same ops as [apply] but the promise carries the worker response
    — callers that act on inserted uuids need {:blocks [...]} (cljs
    insert-blocks! result) *)
@@ -983,10 +980,13 @@ let delta_helpers (page : Model.page) : Page_delta.helpers =
   }
 
 (* fold the queued deferred deltas then [delta] onto [page],
-   ~strict:false — op-side patches are absolute set-ops *)
+   ~strict:false — op-side patches are absolute set-ops.
+   Returns the merged page plus every uuid the folded deltas touched, so
+   the caller can drop only the title overrides the tx caught up to *)
 let apply_queued page delta =
   let h = delta_helpers page in
   let deltas = Page_delta.drain_deferred () @ [ delta ] in
+  let touched = List.concat_map Page_delta.delta_uuids deltas in
   let rec go page = function
     | [] -> Js.Promise.resolve (Some page)
     | d :: rest -> (
@@ -995,7 +995,8 @@ let apply_queued page delta =
         | Some page' -> go page' rest
         | None -> Js.Promise.resolve None)
   in
-  go page deltas
+  let* applied = go page deltas in
+  Js.Promise.resolve (applied, touched)
 
 let refresh_via_delta (resp : Wire.t option) : unit Js.Promise.t =
   match
@@ -1003,12 +1004,14 @@ let refresh_via_delta (resp : Wire.t option) : unit Js.Promise.t =
   with
   | Some delta, Some page -> (
       let route_at_start = !Runtime.current_route in
-      let* applied = apply_queued page delta in
+      let* applied, touched = apply_queued page delta in
       match applied with
       | Some page' when page_still_current route_at_start page ->
-          (* the spliced tree is authoritative — drop committed-buffer
-             title overrides like refresh_page does *)
-          S.clear_overrides ();
+          (* the spliced rows are authoritative for the uuids the tx
+             touched — drop their committed-buffer title overrides like
+             refresh_page does, but keep in-flight commits the tx
+             didn't cover *)
+          S.prune_overrides touched;
           Runtime.send (Action.Page_loaded page');
           (* the whole-tree fetch is skipped, but linked/unlinked refs
              still need their cheap refresh *)
@@ -1148,6 +1151,16 @@ let title_for_edit (title : string) : string Js.Promise.t =
             toks;
           Buffer.add_substring b title !cursor (n - !cursor);
           Js.Promise.resolve (Buffer.contents b))
+
+(* parse (uuid, title) pairs into save ops, prepend to rest, apply +
+   splice the response delta *)
+let apply_parsed_and_refresh ?opts ~rest pairs =
+  let* a =
+    Js.Promise.all
+      (Array.of_list (List.map (fun (u, t) -> save_block_parsed u t) pairs))
+  in
+  let* resp = apply_result ?opts (Array.to_list a @ rest) in
+  refresh_via_delta resp
 
 let apply_and_refresh_result ?opts ops =
   let* r = apply_result ?opts ops in
