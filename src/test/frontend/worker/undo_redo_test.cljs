@@ -1507,6 +1507,42 @@
       (is (map? (worker-undo-redo/redo test-repo)))
       (is (= :db.cardinality/many (:db/cardinality (d/entity @conn property-id)))))))
 
+(deftest undo-upsert-property-one-to-many-with-choices-does-not-revert-cardinality-test
+  (testing "undo of one-to-many with choices and a value keeps :many"
+    (worker-undo-redo/clear-history! test-repo)
+    (let [conn (worker-state/get-datascript-conn test-repo)
+          {:keys [child-uuid]} (seed-page-parent-child!)
+          property-id :user.property/undo-status]
+      (apply-ops! conn
+                  [[:upsert-property [property-id
+                                      {:logseq.property/type :default
+                                       :db/cardinality :one}
+                                      {:property-name "status"}]]]
+                  (local-tx-meta {:client-id "test-client"}))
+      (apply-ops! conn
+                  [[:upsert-closed-value [property-id {:value "active"}]]]
+                  (local-tx-meta {:client-id "test-client"}))
+      (apply-ops! conn
+                  [[:set-block-property [child-uuid property-id "active"]]]
+                  (local-tx-meta {:client-id "test-client"}))
+      (worker-undo-redo/clear-history! test-repo)
+      (apply-ops! conn
+                  [[:upsert-property [property-id
+                                      {:logseq.property/type :default
+                                       :db/cardinality :many}
+                                      {}]]]
+                  (local-tx-meta {:client-id "test-client"}))
+      (is (= :db.cardinality/many (:db/cardinality (d/entity @conn property-id))))
+      (let [history (latest-undo-history-data)
+            inverse-op (first (:db-sync/inverse-outliner-ops history))]
+        (is (= :upsert-property (first inverse-op)))
+        (is (nil? (get-in inverse-op [1 1 :db/cardinality])))
+        (when-let [undo-tx-id (:db-sync/tx-id history)]
+          (poison-history-tx-order! undo-tx-id)))
+      (is (map? (worker-undo-redo/undo test-repo)))
+      (is (= :db.cardinality/many (:db/cardinality (d/entity @conn property-id))))
+      (is (set? (get (d/entity @conn [:block/uuid child-uuid]) property-id))))))
+
 (defn- seed-inner-ref-graph!
   "Adds the node property \"related\" (cardinality many), page \"refs 1\" with
   blocks a, b (children b1, b2), c, page \"refs 2\" with blocks d and tmpl
