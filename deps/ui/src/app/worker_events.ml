@@ -13,6 +13,8 @@
    counts); "sync-db-changes" fires once per tx report. Both trigger a full
    flush/reload, so coalesce: dedupe identical rtc states and debounce route
    reloads — otherwise the reconcile churn starves the editor during typing. *)
+open Promise_ext
+
 let last_rtc : Model.rtc option ref = ref None
 let reload_pending = ref false
 let reload_first_ms = ref 0.0
@@ -32,6 +34,17 @@ let reset_rtc () = last_rtc := None
    per interval and starves the UI thread (keystroke acks cost ~1s).
    Trailing debounce instead: re-arm while requests keep landing, with a
    max wait so a continuous flood can't postpone the refresh forever. *)
+(* broadcast tx deltas stashed between schedule_reload and fire_reload —
+   fire_reload splices them into the route page (the cljs apply-delta!
+   path) instead of a whole-route worker refetch. A broadcast without a
+   parseable delta forces the old full reload *)
+let pending_deltas : Wire.t list ref = ref []
+let pending_unknown_delta = ref false
+
+let clear_pending_deltas () =
+  pending_deltas := [];
+  pending_unknown_delta := false
+
 let edit_input_idle_ms = 750.0
 let reload_debounce_ms = 400.0
 let reload_max_wait_ms = 2000.0
@@ -90,9 +103,61 @@ and fire_reload () =
     reload_pending := false;
     reload_first_ms := 0.0;
     reload_last_fire_ms := now;
-    Router.reload ();
+    Platform.perf_mark "reload:fire";
+    ignore (apply_pending ())
+    )
+
+(* splice the stashed tx deltas into the route page; fall back to the
+   full route reload when a broadcast carried no delta, the stash isn't
+   contiguous with the page's materialized rev, or there's no route
+   page to patch *)
+and apply_pending () : unit Js.Promise.t =
+  (* deferred op deltas are older revs — merge them first so the
+     strict broadcast splices build on the right basis *)
+  let deltas = Page_delta.drain_deferred () @ !pending_deltas in
+  let unknown = !pending_unknown_delta in
+  clear_pending_deltas ();
+  let finish () =
     Views_mount.refresh_query_insts ();
-    Runtime.run_sync_subs ())
+    Runtime.run_sync_subs ()
+  in
+  match (!Runtime.current_page, deltas, unknown) with
+  | Some page, _ :: _, false -> (
+      let rec fold (p : Model.page) = function
+        | [] -> Js.Promise.resolve (Some p)
+        | d :: rest -> (
+            let* applied =
+              Page_delta.apply_to_page ~strict:true
+                (Outliner_ops.delta_helpers p)
+                p d
+            in
+            match applied with
+            | Some p' -> fold p' rest
+            | None -> Js.Promise.resolve None)
+      in
+      let all_dup =
+        List.for_all Page_delta.delta_already_applied deltas
+      in
+      let* merged = fold page deltas in
+      (* a broadcast carrying only deltas we already spliced from our
+         own op response has nothing new to publish — skip the subs
+         refresh, it would just re-issue the sidebar/view fetches *)
+      if not all_dup then finish ();
+      match merged with
+      | Some p' ->
+          (* own_commit keeps the basis; identical-page sends are
+             deduped downstream *)
+          if p' != page then (
+            Runtime.send (Action.Page_loaded p');
+            !Runtime.refresh_page_side p');
+          Js.Promise.resolve ()
+      | None ->
+          Router.reload ();
+          Js.Promise.resolve ())
+  | _ ->
+      Router.reload ();
+      finish ();
+      Js.Promise.resolve ()
 
 let dispatch kind payload =
   match kind with
@@ -103,7 +168,17 @@ let dispatch kind payload =
           Runtime.flush ()
       | None -> ())
   | "sync-db-changes" ->
-      Render_inline.invalidate_pull_caches ();
+      Platform.perf_mark "worker:sync-db-changes";
+      (match Wire.get payload "delta" with
+       | Some delta ->
+           pending_deltas := !pending_deltas @ [ delta ];
+           (* only the touched entities' pull entries go stale — anchors
+              elsewhere keep their resolved titles *)
+           Render_inline.invalidate_pull_uuids
+             (Page_delta.delta_uuids delta)
+       | None ->
+           pending_unknown_delta := true;
+           Render_inline.invalidate_pull_caches ());
       (* cljs pipeline.cljs publish-plugin-hook! — fire plugin db
          hooks for the tx report before the UI reloads *)
       Plugin_host.fire_db_hooks payload;
@@ -156,6 +231,7 @@ let init () =
     (fun args ->
       ignore args;
       Js.Promise.resolve Wire.Nil);
+  Runtime.on_navigate := clear_pending_deltas;
   Editor_dom.document_add_listener "pointerdown"
     (fun _ -> last_ui_input_ms := Platform.date_now_ms ())
     true;

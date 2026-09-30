@@ -105,6 +105,19 @@ external console_error : 'a -> unit = "error" [@@mel.scope "console"]
 
 external date_now_ms : unit -> float = "now" [@@mel.scope "Date"]
 
+external perf_now : unit -> float = "now" [@@mel.scope "performance"]
+
+let perf_mark : string -> unit =
+  [%mel.raw
+    "function (n) { if (window.__navEvents) window.__navEvents.push([n, performance.now()]); }"]
+
+let perf_time (name : string) (f : unit -> 'a) : 'a =
+  let t0 = perf_now () in
+  let r = f () in
+  if perf_now () -. t0 > 1.0 then
+    perf_mark (name ^ ":" ^ string_of_float (perf_now () -. t0));
+  r
+
 external error_message :
   Js.Promise.error -> string Js.Nullable.t = "message" [@@mel.get]
 

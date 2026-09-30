@@ -718,7 +718,9 @@ let indent_or_outdent ~indent =
              (if indent then Model.indent_blocks else Model.outdent_blocks)
                page uuids
            with
-           | Some page' -> Runtime.send (Action.Page_loaded page')
+           | Some page' ->
+               Page_delta.mark_own_commit page';
+               Runtime.send (Action.Page_loaded page')
            | None -> ())
        | _ -> ());
       with_focus_after focus
@@ -733,6 +735,7 @@ let move_blocks_up_down up =
       (match !Runtime.current_page with
        | Some page ->
            let page' = Model.move_selected_top_blocks page uuids up in
+           Page_delta.mark_own_commit page';
            Runtime.send (Action.Page_loaded page')
        | None -> ());
       ignore (Ops.apply_and_refresh [ Ops.move_up_down uuids up ])

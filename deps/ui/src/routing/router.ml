@@ -151,6 +151,7 @@ let fetch_refs ~stale:(is_stale : unit -> bool) (p : Model.page) =
 
 
 let load_journals () =
+  Platform.perf_mark "nav:journals";
   (let* w =
     Runtime.invoke2 "thread-api/get-latest-journals" (Wire.String (repo ()))
       (Wire.Int 40)
@@ -197,6 +198,17 @@ let stale (route : Model.route) = !Runtime.current_route <> Some route
    must not swap the live view for "Page not found" *)
 let loaded_route : Model.route option ref = ref None
 
+(* route whose load is in flight — push_page_route resolves a route
+   twice (set_location_hash's synchronous "ls:navigate" dispatch, then
+   the hashchange event) and the second resolve used to refetch the
+   whole route while the first fetch was still running *)
+let loading_route : Model.route option ref = ref None
+
+let stale_page (p : Model.page) () =
+  match !Runtime.current_page with
+  | Some c -> c.Model.page_uuid <> p.Model.page_uuid
+  | None -> true
+
 (* get-page-route-info resolves name/uuid/lookup-ref -> summary *)
 let load_page_ref for_route ref_v =
   incr Runtime.load_gen;
@@ -206,6 +218,7 @@ let load_page_ref for_route ref_v =
     Runtime.invoke2 "thread-api/get-page-route-info"
       (Wire.String (repo ())) ref_v
   in
+  Platform.perf_mark "nav:route-info";
   (* cljs redirect-to-page!: an alias page's route resolves to
             its source page (self-alias guard: don't loop when the route
             already targets the source uuid) *)
@@ -222,7 +235,9 @@ let load_page_ref for_route ref_v =
   match Decode.page_of_summary info with
   | Some p ->
       let* p' = fetch_blocks p in
+      Platform.perf_mark "nav:blocks";
       let* p'' = Outliner_ops.resolve_page_tags (repo ()) p' in
+      Platform.perf_mark "nav:tags";
       if not (is_stale ()) then (
         (* a fresh page snapshot is authoritative —
            drop pending committed-buffer title paints *)
@@ -451,6 +466,7 @@ let load_block_zoom uuid =
          Js.Promise.resolve ())
 
 let load_route (route : Model.route) =
+  loading_route := Some route;
   (* the non-page refresh hook belongs to the route that assigned it —
      re-arm it per route so callers (page-icon writes, the refresh
      fallback) reload *this* view instead of whatever route last set it *)
@@ -481,13 +497,16 @@ let load_route (route : Model.route) =
       ()
 
 let resolve () =
+  Platform.perf_mark "router:resolve";
   let route = parse_hash () in
   match !Runtime.current_route with
   | Some r when r = route ->
       (* our own set_location_hash (or a repeat hashchange) for the route
          already shown — Navigate_to would blank route_page/current_page
-         while the same data refetches; just refresh in place *)
-      load_route route;
+         while the same data refetches; just refresh in place. A load
+         for this same route already in flight (the push's second
+         resolve) is skipped entirely — the dedupe clears on commit *)
+      if !loading_route <> Some route then load_route route;
       Option.iter jump_to_anchor (route_anchor ())
   | _ ->
       (* commit and close any in-progress edit before the route swaps
@@ -515,6 +534,7 @@ let resolve () =
 let reload_timer = ref 0
 
 let reload () =
+  Platform.perf_mark "router:reload";
   Editor_dom.clear_timeout !reload_timer;
   reload_timer :=
     Editor_dom.set_timeout_id
@@ -525,6 +545,15 @@ let reload () =
       30
 
 let init () =
+  Runtime.nav_load_done := (fun () -> loading_route := None);
+  (* the cheap side-fetches a delta-spliced refresh still needs — linked
+     refs plus the unlinked section's exists/list checks *)
+  Runtime.refresh_page_side :=
+    (fun p ->
+      let stale = stale_page p in
+      fetch_refs ~stale p;
+      Outliner_ops.fetch_unlinked_refs ~stale p;
+      Outliner_ops.fetch_unlinked_exists ~stale p);
   Platform.on_hash_change resolve;
   Platform.on_document_event "ls:navigate" (fun _ -> resolve ());
   Platform.add_document_listener "keydown" (fun ev ->
