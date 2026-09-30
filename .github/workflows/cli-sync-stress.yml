@@ -79,6 +79,16 @@ jobs:
         uses: ocaml/setup-ocaml@v3
         with:
           ocaml-compiler: ${{ env.OCAML_VERSION }}
+          dune-cache: true
+
+      - name: Restore opam switch cache
+        id: opam-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.opam
+          key: ${{ runner.os }}-opam-${{ env.OCAML_VERSION }}-${{ hashFiles('deps/db-worker/dune.lock/**', 'deps/db-worker/scripts/install-opam-deps.sh', 'deps/db-worker/*.opam', 'cli/*.opam') }}
+          restore-keys: |
+            ${{ runner.os }}-opam-${{ env.OCAML_VERSION }}-
 
       - name: Install CLI Linux runtime deps
         run: sudo apt-get update && sudo apt-get install -y libsecret-1-0
@@ -92,6 +102,13 @@ jobs:
         run: |
           sh scripts/install-opam-deps.sh
           pnpm install
+
+      - name: Save opam switch cache
+        uses: actions/cache/save@v4
+        if: steps.opam-cache.outputs.cache-hit != 'true'
+        with:
+          path: ~/.opam
+          key: ${{ steps.opam-cache.outputs.cache-primary-key }}
 
       - name: Fetch pnpm deps
         run: pnpm install --frozen-lockfile
