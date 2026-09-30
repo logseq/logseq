@@ -121,6 +121,7 @@ let dispatch kind payload =
           Asset_dom.retry_pending ();
           Runtime.send (Action.Rtc_state rtc);
           Runtime.flush ())
+  | "rtc-log" -> !Runtime.rtc_log_handler payload
   | "db-worker/ui-request" -> Ui_requests.handle payload
   | "asset-file-write-finish" -> (
       (* worker finished writing a downloaded asset to pfs — set src on

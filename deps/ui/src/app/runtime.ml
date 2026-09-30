@@ -54,6 +54,15 @@ let current_graph_uuid : string option ref = ref None
    Boot_graph_ready to fetch and remember the graph's uuid *)
 let on_graph_opened : (string -> unit) ref = ref (fun _ -> ())
 
+(* set by rtc_flows (avoids a Worker_events -> Rtc_flows -> Rtc_ops ->
+   Worker_events module cycle): the rtc-log broadcast feeds its
+   latest-entry projections *)
+let rtc_log_handler : (Wire.t -> unit) ref = ref (fun _ -> ())
+
+(* a second Boot_graph_ready subscriber for rtc_flows' graph-switch
+   sync trigger (on_graph_opened is already owned by graphs_ops) *)
+let rtc_graph_ready : (string -> unit) ref = ref (fun _ -> ())
+
 (* append ?graph-id=<uuid> to an in-app hash route when the uuid is known *)
 let nav_hash route =
   match !current_graph_uuid with
@@ -117,7 +126,8 @@ let track action =
   | Action.Boot_graph_ready repo ->
       current_repo := Some repo;
       current_graph_uuid := None;
-      !on_graph_opened repo
+      !on_graph_opened repo;
+      !rtc_graph_ready repo
   | Action.Page_loaded page ->
       current_page := Some page;
       (* cljs route.cljs update-page-title!: document.title follows the

@@ -143,7 +143,9 @@ let navigate_journal repo =
 
 (* cljs <rtc-create-graph-and-start-sync!: create-remote-graph ->
    <get-remote-graphs -> <rtc-start! (which pushes sync-app-state +
-   db-sync config) *)
+   db-sync config). Worker failures resolve as error transits — toast
+   the known ones and skip list/start like the cljs rejected chain
+   (the local graph itself was still created) *)
 let create_remote name e2ee =
   Graph.create_graph ~remote:true name
   |> Js.Promise.then_ (fun r ->
@@ -151,21 +153,33 @@ let create_remote name e2ee =
          Rtc_ops.set_sync_config ();
          Runtime.invoke3 "thread-api/db-sync-create-remote-graph"
            (Wire.String r) (Wire.Bool e2ee) (Wire.Bool true)
-         |> Js.Promise.then_ (fun _ -> list_remote_graphs ())
-         |> Js.Promise.then_ (fun _ ->
-                Rtc_ops.start r;
-                Js.Promise.resolve r))
+         |> Js.Promise.then_ (fun w ->
+                if Rtc_error.is_error w then begin
+                  Rtc_error.report_outcome "create-remote-graph" w;
+                  Js.Promise.resolve r
+                end
+                else
+                  list_remote_graphs ()
+                  |> Js.Promise.then_ (fun _ ->
+                         Rtc_ops.start r;
+                         Js.Promise.resolve r)))
 
 (* cljs :rtc/download-remote-graph -> <rtc-download-graph! ->
-   <get-remote-graphs -> :graph/switch -> <rtc-start! *)
+   <get-remote-graphs -> :graph/switch -> <rtc-start!. A failed
+   download (e.g. wrong e2ee password — toasted inside
+   Rtc_ops.download) aborts the chain; the cljs rejected promise did
+   the same *)
 let download_remote ~name ~uuid ~e2ee =
   let repo = Graph.full_graph_name name in
   Rtc_ops.download repo uuid e2ee
-  |> Js.Promise.then_ (fun _ -> list_remote_graphs ())
-  |> Js.Promise.then_ (fun _ -> navigate_journal repo)
-  |> Js.Promise.then_ (fun () ->
-         Rtc_ops.start repo;
-         Js.Promise.resolve ())
+  |> Js.Promise.then_ (fun ok ->
+         if not ok then Js.Promise.resolve ()
+         else
+           list_remote_graphs ()
+           |> Js.Promise.then_ (fun _ -> navigate_journal repo)
+           |> Js.Promise.then_ (fun () ->
+                  Rtc_ops.start repo;
+                  Js.Promise.resolve ()))
 
 let remember_open repo =
   Graphs_meta.touch repo;
