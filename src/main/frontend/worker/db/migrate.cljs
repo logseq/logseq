@@ -290,6 +290,8 @@
                   tx-data)
         r (ldb/transact! conn tx-data' {:db-migrate? true
                                         :skip-validate-db? true})]
+    (doseq [order (keep :block/order fixes)]
+      (db-order/reset-max-key! order))
     (println "DB schema migrated to" version)
     (assoc r :migrate-updates migrate-updates)))
 

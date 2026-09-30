@@ -193,4 +193,7 @@
   [conn]
   (let [tx-data (db-order/missing-internal-page-parent-order-tx @conn)]
     (when (seq tx-data)
-      (ldb/transact! conn tx-data {:logseq.graph-parser.exporter/imported-data? true}))))
+      (let [report (ldb/transact! conn tx-data {:logseq.graph-parser.exporter/imported-data? true})]
+        (doseq [order (keep :block/order tx-data)]
+          (db-order/reset-max-key! order))
+        report))))

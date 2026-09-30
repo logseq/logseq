@@ -296,7 +296,10 @@
   [conn]
   (let [tx-data (db-order/missing-internal-page-parent-order-tx @conn)]
     (when (seq tx-data)
-      (ldb/transact! conn tx-data {:fix-db? true}))))
+      (let [report (ldb/transact! conn tx-data {:fix-db? true})]
+        (doseq [order (keep :block/order tx-data)]
+          (db-order/reset-max-key! order))
+        report))))
 
 (defn validate-db
   [conn & {:keys [fix] :or {fix true}}]
