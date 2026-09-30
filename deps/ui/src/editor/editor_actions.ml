@@ -117,6 +117,10 @@ let request_focus uuid caret =
 let with_focus_after uuid caret p =
   S.pending_focus := Some (uuid, caret, !S.last_edit_input_ms);
   focus_attempts := 0;
+  (* start polling now — the refreshed row can mount before [p] fully
+     resolves (property-area and refs refetches trail the repaint), and
+     apply_focus is idempotent until the textarea exists *)
+  D.set_timeout apply_focus 0;
   ignore
     (let* () = p in
     D.set_timeout apply_focus 0;

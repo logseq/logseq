@@ -157,7 +157,7 @@ let rows_of (v : V.t) =
 (* One mounted list instance: deferred virtualizer attach once the list
    element exists, scope cleanup on unmount. *)
 let attach (ctx : Lui_ui.ui_context) st margin list_id scroll_parent_id
-    data key_of overscan estimate_size pin_key =
+    data versions key_of overscan estimate_size pin_key pin_sig data_sig =
   match get_by_id list_id, get_by_id scroll_parent_id with
   | Some list_el, Some scroll_el ->
       margin :=
@@ -166,8 +166,8 @@ let attach (ctx : Lui_ui.ui_context) st margin list_id scroll_parent_id
         +. scroll_top scroll_el;
       let index_of_key key =
         let rec idx i =
-          if i >= Array.length data then -1
-          else if key_of data.(i) = key then i
+          if i >= Array.length !data then -1
+          else if key_of !data.(i) = key then i
           else idx (i + 1)
         in
         idx 0
@@ -217,44 +217,106 @@ let attach (ctx : Lui_ui.ui_context) st margin list_id scroll_parent_id
         match dir, rows with
         | Some `Down, _ :: _ ->
             (match List.nth_opt rows (List.length rows - 1) with
-             | Some r when r.v_index < Array.length data ->
-                 Virtual_scroll.extend_drag (key_of data.(r.v_index))
+             | Some r when r.v_index < Array.length !data ->
+                 Virtual_scroll.extend_drag (key_of !data.(r.v_index))
              | _ -> ())
         | Some `Up, first :: _ ->
-            if first.v_index < Array.length data then
-              Virtual_scroll.extend_drag (key_of data.(first.v_index))
+            if first.v_index < Array.length !data then
+              Virtual_scroll.extend_drag (key_of !data.(first.v_index))
         | _ -> ()
       in
-      let v =
-        V.make
-          (V.options ~count:(Array.length data)
-             ~getScrollElement:(fun () -> Js.Nullable.return scroll_el)
-             ~estimateSize:estimate_size
-             ~scrollToFn:V.element_scroll
-             ~observeElementRect:V.observe_element_rect
-             ~observeElementOffset:V.observe_element_offset
-             ~onChange:(fun inst _sync -> publish inst)
-             ~getItemKey:(fun i -> key_of data.(i))
-             ~overscan ~scrollMargin:!margin
-             (* the default measurement is offsetHeight (integer) —
-                fractional row heights (headings, code blocks) get
-                truncated and the next row then overlaps the remainder; a
-                border-box rect keeps sub-pixel heights *)
-             ~measureElement:(fun el _entry _inst ->
-               rect_height (bounding_rect el))
-             ())
+      let options () =
+        V.options ~count:(Array.length !data)
+          ~getScrollElement:(fun () -> Js.Nullable.return scroll_el)
+          ~estimateSize:estimate_size ~scrollToFn:V.element_scroll
+          ~observeElementRect:V.observe_element_rect
+          ~observeElementOffset:V.observe_element_offset
+          ~onChange:(fun inst _sync -> publish inst)
+          ~getItemKey:(fun i -> key_of !data.(i))
+          ~overscan ~scrollMargin:!margin
+          (* the default measurement is offsetHeight (integer) —
+             fractional row heights (headings, code blocks) get
+             truncated and the next row then overlaps the remainder; a
+             border-box rect keeps sub-pixel heights *)
+          ~measureElement:(fun el _entry _inst ->
+            rect_height (bounding_rect el))
+          ()
       in
+      let v = V.make (options ()) in
       Hashtbl.replace instances list_id v;
       Hashtbl.replace key_scrollers list_id (fun key ->
           match index_of_key key with
           | -1 -> false
           | i ->
-              V.scroll_to_index v i
-                (V.scroll_to_options ~align:"auto" ());
+              let it = V.get_virtual_items v in
+              let rendered =
+                Array.exists
+                  (fun r -> V.item_index r = i)
+                  it
+              in
+              (* scrolling an already-rendered row is a no-op — skip it so
+                 focus retries don't churn the virtualizer mid-mount *)
+              if not rendered then
+                V.scroll_to_index v i
+                  (V.scroll_to_options ~align:"auto" ());
               true);
       let cleanup = V.did_mount v in
       V.will_update v;
       publish v;
+      (* the pin target can change without a virtualizer onChange
+         (editing moved to an off-window row — an insert below the
+         rendered edge) — republish so its row mounts immediately *)
+      let pin_sub =
+        match pin_sig () with
+        | Some s ->
+            (* only republish when the pin target itself changed —
+               keystrokes bump the same state signal but don't move the pin *)
+            let last_pin = ref (pin_key ()) in
+            Some
+              (Signal.subscribe ~emit_initial:false s
+                 (fun _ ->
+                   let k = pin_key () in
+                   if k <> !last_pin then (
+                     last_pin := k;
+                     publish v)))
+        | None -> None
+      in
+      (* spliced page snapshots push a fresh items array — swap it in
+         and republish so only the touched rows re-render instead of a
+         whole-list remount *)
+      let prev_items : (string, 'a) Hashtbl.t = Hashtbl.create 16 in
+      let data_sub =
+        match data_sig with
+        | Some s ->
+            Some
+              (Signal.subscribe ~emit_initial:false s (fun arr ->
+                   (* rows are keyed mounts — swap in the new items and
+                      bump the reload key only for uuids whose item
+                      actually changed, so untouched rows (and their
+                      DOM state) survive the splice *)
+                   let old = !data in
+                   data := arr;
+                   Hashtbl.reset prev_items;
+                   Array.iter
+                     (fun it -> Hashtbl.replace prev_items (key_of it) it)
+                     old;
+                   Array.iter
+                     (fun it ->
+                       let k = key_of it in
+                       match Hashtbl.find_opt prev_items k with
+                       | Some old_it when old_it == it || old_it = it ->
+                           ()
+                       | _ ->
+                           Hashtbl.replace versions k
+                             (1
+                              + Option.value
+                                  (Hashtbl.find_opt versions k)
+                                  ~default:0))
+                     arr;
+                   V.set_options v (options ());
+                   publish v))
+        | None -> None
+      in
       (* Batches that add nodes (row mounts, raw-text swaps) must
          measure in this microtask — a debounce starves under scroll
          churn and rows stay at estimate height, overlapping. Pure
@@ -281,8 +343,17 @@ let attach (ctx : Lui_ui.ui_context) st margin list_id scroll_parent_id
           Hashtbl.remove instances list_id;
           Hashtbl.remove key_scrollers list_id;
           disconnect obs;
+          Option.iter Signal.dispose_subscription pin_sub;
+          Option.iter Signal.dispose_subscription data_sub;
           cleanup ())
   | _ -> ()
+
+(* the keyed reconciler's identity for a row: the item key plus the
+   splice-bumped render version, so a changed item remounts its row
+   while untouched rows are adopted *)
+let row_version_key versions (r : vrow) =
+  Printf.sprintf "%s|%d" r.v_key
+    (Option.value (Hashtbl.find_opt versions r.v_key) ~default:0)
 
 let row_attrs margin (it : vrow) =
   [ ("data-index", string_of_int it.v_index)
@@ -295,11 +366,18 @@ let row_attrs margin (it : vrow) =
 let list ?(scroll_parent_id = "main-content-container") ?(overscan = 5)
     ?(estimate_size = fun _ -> 32.) ?(list_attrs = [])
     ?(list_class = "ls-virt-list") ?(pin_key = fun () -> None)
+    ?(pin_sig = fun () -> None)
+    ?(data_sig = fun (_ : Lui_ui.ui_context) -> None)
     ~key_of ~render (data : 'a array) : t =
  fun ctx parent ->
   let st = Signal.state ctx.ui_scheduler { v_rows = []; v_total = 0. } in
   let margin = ref 0. in
   let list_id = next_id () in
+  let data_sig = data_sig ctx in
+  let data = ref data in
+  (* bumped per uuid by the items-signal splice when a row's item
+     changes — folds into the reload key so only touched rows remount *)
+  let versions : (string, int) Hashtbl.t = Hashtbl.create 16 in
   let vstate_sig = st.Signal.state_signal in
   let spacer_attrs =
     Signal.map
@@ -312,22 +390,24 @@ let list ?(scroll_parent_id = "main-content-container") ?(overscan = 5)
   in
   let row_mount (row_sig : vrow Signal.signal) : t =
     let row = Signal.get row_sig in
-    D.dom ~key:("vr-" ^ row.v_key) ~style_class:"ls-virt-row"
+    D.dom ~key:("vr-" ^ row_version_key versions row)
+      ~style_class:"ls-virt-row"
       ~attrs:(reactive (fun it -> row_attrs !margin it) row_sig)
-      [ if row.v_index < Array.length data then render data.(row.v_index)
+      [ if row.v_index < Array.length !data then render !data.(row.v_index)
         else box ~key:("vrx-" ^ row.v_key) [] ]
   in
   set_timeout
     (fun () ->
-      attach ctx st margin list_id scroll_parent_id data key_of overscan
-        estimate_size pin_key)
+      attach ctx st margin list_id scroll_parent_id data versions key_of
+        overscan estimate_size pin_key pin_sig data_sig)
     0;
   D.dom ~key:("vl-" ^ list_id) ~id:list_id ~style_class:list_class
     ~attrs:list_attrs
     [ D.dom ~key:("vs-" ^ list_id) ~style_class:"ls-virt-spacer"
         ~attrs_signal:spacer_attrs
         [ keyed ~source:(Signal.map (fun s -> s.v_rows) vstate_sig)
-            ~key:(fun r -> r.v_key) ~cmp:String.compare ~mount:row_mount
+            ~key:(fun r -> row_version_key versions r) ~cmp:String.compare
+            ~mount:row_mount
         ]
     ]
     ctx parent

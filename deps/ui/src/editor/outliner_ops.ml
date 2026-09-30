@@ -1012,14 +1012,22 @@ let refresh_via_delta (resp : Wire.t option) : unit Js.Promise.t =
              refresh_page does, but keep in-flight commits the tx
              didn't cover *)
           S.prune_overrides touched;
+          (* push the spliced tree straight into the mounted virtual
+             list before Page_loaded — the items signal repaints only
+             the touched rows, and matching container fields then let
+             update.ml skip the data_gen bump (no page remount) *)
+          Runtime.set_page_items ~scope:"main" ~puuid:page'.Model.page_uuid
+            (Array.of_list page'.Model.page_blocks);
           Runtime.send (Action.Page_loaded page');
           (* the whole-tree fetch is skipped, but linked/unlinked refs
              still need their cheap refresh *)
           !Runtime.refresh_page_side page';
           (* property areas hold worker data outside the spliced model;
              the broadcast echo of this tx is deduped, so refresh them
-             here or their chips stay stale *)
-          let* () = !Runtime.refresh_property_areas () in
+             here or their chips stay stale. Fire-and-forget: awaiting
+             the get-display-properties roundtrip would add ~60ms to
+             every editing op before focus can land *)
+          ignore (!Runtime.refresh_property_areas ());
           Js.Promise.resolve ()
       | Some _ ->
           (* page moved on mid-splice — this page is gone *)
