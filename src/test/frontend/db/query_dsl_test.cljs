@@ -186,7 +186,9 @@
                   (pr-str (str "[[" "bar" "]]" "]]")) "))")
              (query-dsl/pre-transform
               (str "(and (between [[Dec 26th, 2020]] tomorrow) (tags "
-                   (str "[[" "bar" "]]" "]]") "))")))))))
+                   (str "[[" "bar" "]]" "]]") "))"))))
+      (is (= (quote-tags (str "A" "]]" " B) C"))
+             (query-dsl/pre-transform (wrap-tags (str "A" "]]" " B) C"))))))))
 
 (defn- testable-content
   "Only test :block/title up to page-ref to make tests readable"
@@ -661,7 +663,8 @@
                 :nested-close-tag {:block/title (str "Project" "]]")}
                 :mid-close-tag {:block/title (str "Project" "]]" " Garden")}
                 :bracket-end-tag {:block/title "foo]"}
-                :double-bracket-end-tag {:block/title (str "foo" "]]")}}
+                :double-bracket-end-tag {:block/title (str "foo" "]]")}
+                :paren-title-tag {:block/title (str "A" "]]" " B) C")}}
       :pages-and-blocks
       [{:page {:block/title "page-quote" :build/tags [:quote-tag]}}
        {:page {:block/title "page-backslash" :build/tags [:backslash-tag]}}
@@ -669,7 +672,8 @@
        {:page {:block/title "page-nested-close" :build/tags [:nested-close-tag]}}
        {:page {:block/title "page-mid-close" :build/tags [:mid-close-tag]}}
        {:page {:block/title "page-bracket-end" :build/tags [:bracket-end-tag]}}
-       {:page {:block/title "page-double-bracket-end" :build/tags [:double-bracket-end-tag]}}]})
+       {:page {:block/title "page-double-bracket-end" :build/tags [:double-bracket-end-tag]}}
+       {:page {:block/title "page-paren-title" :build/tags [:paren-title-tag]}}]})
 
     (is (= ["page-quote"]
            (map :block/name (dsl-query (wrap-tags "Project\""))))
@@ -701,7 +705,11 @@
 
     (is (= ["page-double-bracket-end"]
            (map :block/name (dsl-query (str "(tags [ " (page-ref (str "foo" "]]")) "])"))))
-        "A tag title ending with ]] still matches inside a tags vector")))
+        "A tag title ending with ]] still matches inside a tags vector")
+
+    (is (= ["page-paren-title"]
+           (map :block/name (dsl-query (wrap-tags (str "A" "]]" " B) C")))))
+        "A tag title with ]] then a paren still matches")))
 
 (deftest block-content-query
   (load-test-files [{:page {:block/title "page1"}

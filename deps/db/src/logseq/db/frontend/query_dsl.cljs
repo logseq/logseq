@@ -39,10 +39,19 @@
         (recur (inc i))
         i))))
 
+(defn- next-form-start?
+  "True when text after a `)` is a sibling DSL list or the end of input,
+  not more page-title text."
+  [s i]
+  (let [i (skip-ws s i)
+        n (count s)]
+    (or (>= i n)
+        (= \( (nth s i)))))
+
 (defn- unmatched-page-ref-close?
   "True when `s` from `start` still contains a `]]` that is not paired with a
-  later `[[` in the current list. Stop at a `)` that closes this form so a
-  later tag such as `[[bar]]]]` cannot steal an earlier date page-ref."
+  later `[[` in the current list. A `)` ends this form only when the next token
+  is a sibling list, so a title such as `A]] B) C` keeps its trailing `]]`."
   [s start]
   (let [n (count s)]
     (loop [i start
@@ -61,9 +70,15 @@
         (recur (inc i) open (inc paren))
 
         (= \) (nth s i))
-        (if (zero? paren)
+        (cond
+          (pos? paren)
+          (recur (inc i) open (dec paren))
+
+          (next-form-start? s (inc i))
           false
-          (recur (inc i) open (dec paren)))
+
+          :else
+          (recur (inc i) open paren))
 
         (and (< (inc i) n)
              (= \[ (nth s i))

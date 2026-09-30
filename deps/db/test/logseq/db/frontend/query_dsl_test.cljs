@@ -105,4 +105,10 @@
            (query-dsl/pre-transform
             "(and (between [[Dec 26th, 2020]] tomorrow) (tags [[bar]]]]))")))
     (is (= (list 'and (list 'between "[[Dec 26th, 2020]]" 'tomorrow) (list 'tags "[[bar]]]]"))
-           (read-query "(and (between [[Dec 26th, 2020]] tomorrow) (tags [[bar]]]]))")))))
+           (read-query "(and (between [[Dec 26th, 2020]] tomorrow) (tags [[bar]]]]))"))))
+
+  (testing "title can contain ]] then a paren then more text"
+    (is (= (quoted-tags-query "A]] B) C")
+           (query-dsl/pre-transform "(tags [[A]] B) C]])")))
+    (is (= '(tags "[[A]] B) C]]")
+           (read-query "(tags [[A]] B) C]])")))))
