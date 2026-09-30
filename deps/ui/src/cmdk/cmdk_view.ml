@@ -413,22 +413,10 @@ let shortcut_row key it =
 
 let item_row (_st : S.t) (item_sig : S.item Signal.signal) : t =
   Logseq_dom.dom ~key:"item-wrap"
-    ~attrs_signal_v:
-      (Signal.map
-         (fun it ->
-           Lui_protocol.StringValue (Logseq_dom.attrs_json (wrapper_attrs it)))
-         item_sig)
+    ~attrs:(reactive (fun it -> wrapper_attrs it) item_sig)
     [ Logseq_dom.dom ~key:"item"
-        ~style_class_signal:
-          (Signal.map
-             (fun it -> Lui_protocol.StringValue (row_class it))
-             item_sig)
-        ~attrs_signal_v:
-          (Signal.map
-             (fun it ->
-               Lui_protocol.StringValue
-                 (Logseq_dom.attrs_json (row_data_attrs it)))
-             item_sig)
+        ~style_class:(reactive (fun it -> row_class it) item_sig)
+        ~attrs:(reactive (fun it -> row_data_attrs it) item_sig)
         [ dyn
             ~equal:(fun (a : S.item) b -> a = b)
             (fun (it : S.item) -> item_header it it.S.iq)
@@ -563,11 +551,8 @@ let group_el (st : S.t) (group_sig : S.group Signal.signal) : t =
     Signal.map (fun (g : S.group) -> g.S.gitems) group_sig
   in
   Logseq_dom.dom ~key:"group"
-    ~style_class_signal:
-      (Signal.map
-         (fun (g : S.group) ->
-           Lui_protocol.StringValue (group_wrapper_class g))
-         group_sig)
+    ~style_class:
+      (reactive (fun (g : S.group) -> group_wrapper_class g) group_sig)
     [ dyn
         ~equal:(fun (a : S.group) (b : S.group) ->
           a.S.gtitle = b.S.gtitle && a.S.gtotal = b.S.gtotal
@@ -647,16 +632,14 @@ let input_row st : t =
     ~style_class:"cp__cmdk-input-row"
     [ Logseq_dom.dom ~key:"input" ~tag:"input"
         ~style_class:"cp__cmdk-search-input"
-        ~attrs_signal_v:
-          (Signal.map
+        ~attrs:
+          (reactive
              (fun (v : S.view) ->
-               Lui_protocol.StringValue
-                 (Logseq_dom.attrs_json
-                    [ ( "placeholder"
-                      , if v.S.move_mode then
-                          I18n.t "cmdk.input/move-blocks-placeholder"
-                        else I18n.t "cmdk.input/default-placeholder" )
-                    ; ("autocomplete", "off"); ("autocapitalize", "off") ]))
+               [ ( "placeholder"
+                 , if v.S.move_mode then
+                     I18n.t "cmdk.input/move-blocks-placeholder"
+                   else I18n.t "cmdk.input/default-placeholder" )
+               ; ("autocomplete", "off"); ("autocapitalize", "off") ])
              st.S.vs.Signal.state_signal)
         ~events:"input"
         ~on_dom_event:(fun name payload ->

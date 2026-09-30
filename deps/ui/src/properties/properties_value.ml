@@ -245,8 +245,7 @@ let edit_text_cell ?(steal = false) ctx row cell initial =
         ; ("style", "field-sizing: content; min-height: 1lh;") ]
   in
   let mt = mk ~cls:"mock-text" "div" in
-  el_set_attr mt "style"
-    "width:100%;height:100%;position:absolute;visibility:hidden;top:0;left:0";
+  el_set_attr mt "style" Ui_parts.mock_text_style;
   let uploader = mk ~cls:"image-uploader" "div" in
   let file_in =
     mk "input"
@@ -843,40 +842,10 @@ let node_cell ctx row =
    the editor — the tabindex=-1 wrapper would otherwise take focus and the
    textarea's blur handler would commit. cljs keeps the caret inside the
    editing block the same way. *)
-let guard_editing_focus container =
-  el_listen container "mousedown"
-    (fun ev ->
-      match
-        el_query container ".editor-wrapper textarea, .ls-number-input"
-      with
-      | Some _ -> prevent_default ev
-      | None -> ())
-    true
-
 (* cljs value cells fill the whole .ls-block row — a click anywhere on
    the container activates the cell. Forward clicks that miss every
    interactive descendant to the cell; while the inline editor is open
    do nothing (the mousedown guard already keeps the caret). *)
-let forward_container_click container =
-  el_listen container "click"
-    (fun ev ->
-      match ev_target ev with
-      | Some target -> (
-          match
-            el_closest target
-              ".jtrigger, .editor-wrapper, input, textarea, a, button"
-          with
-          | Some _ -> ()
-          | None -> (
-              match el_query container ".editor-wrapper" with
-              | Some _ -> ()
-              | None -> (
-                  match el_query container ".jtrigger" with
-                  | Some cell -> el_click cell
-                  | None -> ())))
-      | None -> ())
-    true
-
 (* cljs select-node for :logseq.property.class/extends — a multi-toggle
    picker inside .ui__dropdown-menu-content that stays open across picks.
    Options: extends-class-options minus self, the class's structured

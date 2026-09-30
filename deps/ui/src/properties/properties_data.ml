@@ -346,8 +346,6 @@ let entity ref_wire = invoke "entity" [ repo (); ref_wire ]
 
 let entity_by_uuid uuid = entity (uuid_ref uuid)
 
-let entity_by_title title = invoke "get-case-page" [ repo (); W.String title ]
-
 (* get-blocks {:render-data? true} -> block wire carrying
    block.temp/positioned-properties *)
 let block_render_data uuid =
@@ -497,9 +495,6 @@ let reorder_display_property ~block_id ~active_ident ~over_ident ~direction
           , W.List (List.map (fun i -> W.Keyword i) property_idents) )
         ]
     ]
-
-let convert_page_to_tag db_id =
-  invoke "convert-page-to-tag" [ repo (); W.Int db_id ]
 
 let create_page title =
   apply "create-page" [ W.String title; W.Map [] ]

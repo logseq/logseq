@@ -745,7 +745,6 @@ let on_model st (m : Model.t) =
 
 let close_menu st = Runtime.signal_set st.open_menu ""
 let open_nav_menu st = Runtime.signal_set st.open_menu "nav-edit"
-let open_dots_menu st = Runtime.signal_set st.open_menu "dots"
 (* anchor for the right-sidebar item actions menu — cljs popup-show!
    positions at the pointer (contextmenu) / trigger click *)
 let im_xy : (float * float) ref = ref (0., 0.)

@@ -134,9 +134,10 @@ let open_lang_dropdown anchor on_pick =
 
 let theme_item ~st mode label =
   dom ~key:("tm-" ^ mode) ~tag:"li"
-    ~style_class_signal:
-      (Logseq_dom.class_signal (Signal.value st) (fun active ->
-           if active = mode then "active" else ""))
+    ~style_class:
+      (reactive
+         (fun active -> if active = mode then "active" else "")
+         (Signal.value st))
     ~events:"click"
     ~on_dom_event:(fun n _ ->
       if n = "click" then (
@@ -181,8 +182,7 @@ let lang_trigger ~key ~h_cls ~st ~anchor_sel =
                 Runtime.flush ())
         | None -> ())
     [ dom ~key:(key ^ "v") ~tag:"span"
-        ~text_signal:
-          (Signal.map (fun l -> Lui_protocol.StringValue l) (Signal.value st))
+        ~text:(reactive (Signal.value st))
         []
     ; dom ~key:(key ^ "i") ~tag:"span"
         ~style_class:"ui__select-icon"

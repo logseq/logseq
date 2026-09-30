@@ -219,12 +219,9 @@ let confirm_view (c : Model.confirm) =
          content bubble here but target the dialog *)
       if
         name = "click"
-        && Option.fold ~none:false
-             ~some:(fun p ->
-               I18n.contains
-                 (Platform.payload_str p "targetClass")
-                 "ui__alert-dialog-overlay")
-             payload
+        && I18n.contains
+             (Platform.payload_str payload "targetClass")
+             "ui__alert-dialog-overlay"
       then close ())
     [ dom ~key:"alertdlg" ~tag:"div"
         ~attrs:[ ("role", "alertdialog") ]

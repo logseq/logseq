@@ -424,6 +424,9 @@ let eprintf fmt = fprintf Stdlib.stderr fmt
 
 let printf fmt = fprintf Stdlib.stdout fmt
 
+(* ignored-output variants kept for the Stdlib.Printf surface — the
+   vite printf.js shim re-exports them *)
 let ifprintf _ fmt = ksprintf (fun _ -> ()) fmt
 
 let ibprintf _ fmt = ksprintf (fun _ -> ()) fmt
+

@@ -163,16 +163,13 @@ let cards_body st =
 (* overlay-click dismissal matches dialogs_view: the payload carries the
    click target's class list *)
 let is_overlay_click payload =
-  Option.fold ~none:false
-    ~some:(fun p ->
-      let tc = Platform.payload_str p "targetClass" in
-      let needle = "ui__dialog-overlay" in
-      let ln = String.length needle and lt = String.length tc in
-      let rec go i =
-        i + ln <= lt && (String.sub tc i ln = needle || go (i + 1))
-      in
-      go 0)
-    payload
+  let tc = Platform.payload_str payload "targetClass" in
+  let needle = "ui__dialog-overlay" in
+  let ln = String.length needle and lt = String.length tc in
+  let rec go i =
+    i + ln <= lt && (String.sub tc i ln = needle || go (i + 1))
+  in
+  go 0
 
 (* cljs :modal/show-cards -> shui/dialog-open! {:id :srs :label
    :flashcards__cp} — the deck lives inside the standard dialog chrome

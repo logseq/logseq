@@ -593,11 +593,8 @@ let asset_container uuid (b : Model.block) : t =
          (* clicks on the action bar inside the container must not open the
             lightbox — cljs stops propagation on the trigger instead *)
          let on_img =
-           Option.fold ~none:false
-             ~some:(fun p ->
-               let s = Platform.payload_str p "targetId" in
-               String.length s >= 10 && String.sub s 0 10 = "asset-img-")
-             payload
+           let s = Platform.payload_str payload "targetId" in
+           String.length s >= 10 && String.sub s 0 10 = "asset-img-"
          in
          if name = "click" && on_img then
            match B.qs ("#asset-img-" ^ uuid) with
@@ -619,8 +616,9 @@ let resize_handle uuid side : t =
     ~events:"pointerdown"
     ~on_dom_event:(fun name payload ->
       match name, payload with
-      | "pointerdown", Some p ->
-          start_drag ~side ~uuid ~start_x:(Platform.payload_num p "clientX")
+      | "pointerdown", Some _ ->
+          start_drag ~side ~uuid
+            ~start_x:(Platform.payload_num payload "clientX")
       | _ -> ())
     []
 

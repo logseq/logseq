@@ -135,7 +135,7 @@ let field ~key ~name ~type_ ~placeholder ~autofocus =
       match n with
       | "keydown" -> (
           match
-            Platform.payload_str (Option.value p ~default:"{}") "key"
+            Platform.payload_str p "key"
           with
           | "Enter" -> submit ()
           | _ -> ())

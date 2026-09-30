@@ -219,20 +219,31 @@ let is_mac () =
 external json_parse : string -> Js.Json.t = "parse" [@@mel.scope "JSON"]
 external json_prop : Js.Json.t -> string -> Js.Json.t = "" [@@mel.get_index]
 
-(* string field from a JSON payload string (dom-event "payload") *)
+(* string field from a JSON payload (dom-event "payload", already an
+   option — None reads as the empty object so callers don't need
+   Option.value ~default:"{}") *)
 let payload_str json key =
-  match Js.Json.decodeString (json_prop (json_parse json) key) with
-  | Some s -> s
+  match Option.map json_parse json with
+  | Some json -> (
+      match Js.Json.decodeString (json_prop json key) with
+      | Some s -> s
+      | None -> "")
   | None -> ""
 
 let payload_bool json key =
-  match Js.Json.decodeBoolean (json_prop (json_parse json) key) with
-  | Some b -> b
+  match Option.map json_parse json with
+  | Some json -> (
+      match Js.Json.decodeBoolean (json_prop json key) with
+      | Some b -> b
+      | None -> false)
   | None -> false
 
 let payload_num json key =
-  match Js.Json.decodeNumber (json_prop (json_parse json) key) with
-  | Some n -> n
+  match Option.map json_parse json with
+  | Some json -> (
+      match Js.Json.decodeNumber (json_prop json key) with
+      | Some n -> n
+      | None -> 0.)
   | None -> 0.
 
 (* raw DOM event field, e.g. keydown "key" *)
@@ -240,9 +251,6 @@ let event_str ev key =
   match Js.Json.decodeString (json_prop ev key) with
   | Some s -> s
   | None -> ""
-
-let event_bool ev key =
-  Js.Json.decodeBoolean (json_prop ev key) = Some true
 
 let rtc_test_mode () =
   match query_param "rtc-test" with Some "true" -> true | _ -> false

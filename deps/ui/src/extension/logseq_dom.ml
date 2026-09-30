@@ -59,14 +59,6 @@ let register registry =
       Lui_extension.register_component registry (schema_of tag))
     tags
 
-let tag_of_identifier name =
-  let prefix = "logseq-" in
-  let plen = String.length prefix in
-  if String.length name > plen
-     && String.sub name 0 plen = prefix
-  then String.sub name plen (String.length name - plen)
-  else "div"
-
 let esc s =
   let b = Buffer.create (String.length s + 2) in
   String.iter
@@ -92,11 +84,6 @@ let string_of_wire = function StringValue s -> s | _ -> ""
    - attrs: (name, value) pairs emitted as one JSON "attrs" prop
    - events: space-separated DOM names ("keydown click input")
    - on_dom_event: (event_name, payload_json option) -> unit *)
-let class_signal (source : 'a Signal.signal) (f : 'a -> string) =
-  Signal.map (fun v -> StringValue (f v)) source
-
-let attrs_signal source (f : 'a -> (string * string) list) =
-  Signal.map (fun v -> StringValue (attrs_json (f v))) source
 
 (* A derived signal (Signal.map/cutoff over another signal) keeps its
    upstream subscription alive until the derived signal itself is disposed —
@@ -126,10 +113,10 @@ let keyed ~source ~key ~cmp ~mount : Lui_elements.t =
 
 let dom ?key ?(tag = "div") ?(attrs = []) ?(events = "")
     ?(style_class = "")
-    ?(style_class_signal : Lui_protocol.wire_value Signal.signal option)
-    ?(attrs_signal_v : Lui_protocol.wire_value Signal.signal option)
-    ?(text_signal : Lui_protocol.wire_value Signal.signal option)
-    ?(id_signal : Lui_protocol.wire_value Signal.signal option)
+    ?(style_class_signal : string Signal.signal option)
+    ?(attrs_signal : (string * string) list Signal.signal option)
+    ?(text_signal : string Signal.signal option)
+    ?(id_signal : string Signal.signal option)
     ?(id = "") ?(text = "") ?(html = "") ?on_dom_event
     (children : Lui_elements.t list) : Lui_elements.t =
  fun context parent ->
@@ -145,13 +132,17 @@ let dom ?key ?(tag = "div") ?(attrs = []) ?(events = "")
   if style_class <> "" then
     Lui_ui.extension_property context node "style-class"
       (StringValue style_class);
-  let bind prop s =
-    Lui_ui.extension_property_signal context node prop (own context s)
+  (* callers hand typed signals (string, attr pairs); the wire_value
+     wrapper is derived and owned here — the caller's signal keeps its
+     own lifetime (it may be shared across nodes) *)
+  let bind prop encode s =
+    Lui_ui.extension_property_signal context node prop
+      (own context (Signal.map (fun v -> StringValue (encode v)) s))
   in
-  Option.iter (bind "style-class") style_class_signal;
-  Option.iter (bind "attrs") attrs_signal_v;
-  Option.iter (bind "text") text_signal;
-  Option.iter (bind "accessibility-identifier") id_signal;
+  Option.iter (bind "style-class" Fun.id) style_class_signal;
+  Option.iter (bind "attrs" attrs_json) attrs_signal;
+  Option.iter (bind "text" Fun.id) text_signal;
+  Option.iter (bind "accessibility-identifier" Fun.id) id_signal;
   if id <> "" then
     Lui_ui.extension_property context node "accessibility-identifier"
       (StringValue id);
