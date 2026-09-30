@@ -51,25 +51,47 @@ let pop_popup el =
 let position_content ~anchor ~content ~align_end ~submenu =
   let r = D.el_rect anchor in
   let style = ref "position:fixed;z-index:50;" in
-  (if submenu then
+  (if submenu then begin
+     (* opens right of the item, top-aligned; radix shifts the panel up
+        when it would overflow the viewport bottom, and caps its height
+        at the viewport so every option stays inside *)
+     let h = D.rect_height (D.el_rect content) in
+     let top =
+       Float.max 8.
+         (Float.min (D.rect_top r -. 4.)
+            (D.window_inner_height -. 8. -. h))
+     in
      style := !style
-       ^ Printf.sprintf "left:%.0fpx;top:%.0fpx;"
-           (D.rect_left r +. D.rect_width r -. 4.)
-           (D.rect_top r -. 4.)
-   else if align_end then
-     style := !style
-       ^ Printf.sprintf "left:%.0fpx;top:%.0fpx;"
+       ^ Printf.sprintf
+           "left:%.0fpx;top:%.0fpx;max-height:%.0fpx;overflow-y:auto;"
+           (D.rect_left r +. D.rect_width r -. 4.) top
+           (D.window_inner_height -. 16.)
+   end
+   else begin
+     (* radix mounts below but flips when the list would overflow the
+        viewport and there is more room above; cap the height at the
+        space on the chosen side so every option stays inside the
+        viewport (radix's available-height behaviour) *)
+     let below = D.window_inner_height -. (D.rect_bottom r +. 4.) -. 8. in
+     let above = (D.rect_top r -. 4.) -. 8. in
+     let open_above = below < 280. && above > below in
+     let pos, avail =
+       if open_above then
+         ( Printf.sprintf "bottom:%.0fpx"
+             (D.window_inner_height -. (D.rect_top r -. 4.))
+         , above )
+       else (Printf.sprintf "top:%.0fpx" (D.rect_bottom r +. 4.), below)
+     in
+     let horiz =
+       if align_end then
+         Printf.sprintf "left:%.0fpx;transform:translateX(-100%%);"
            (D.rect_left r +. D.rect_width r)
-           (D.rect_bottom r +. 4.)
-       ^ "transform:translateX(-100%);"
-   else
-     let top = D.rect_bottom r +. 4. in
-     (* clamp to the space left below the anchor so long result lists
-        scroll instead of overflowing the viewport *)
-     let avail = D.window_inner_height -. top -. 8. in
+       else Printf.sprintf "left:%.0fpx;" (D.rect_left r)
+     in
      style := !style
-       ^ Printf.sprintf "left:%.0fpx;top:%.0fpx;max-height:%.0fpx;overflow-y:auto;"
-           (D.rect_left r) top (Float.max avail 120.));
+       ^ Printf.sprintf "%s%s;max-height:%.0fpx;overflow-y:auto;" horiz pos
+           (Float.max avail 120.)
+   end);
   D.el_set_attr content "style" !style
 
 (* -- menu -- *)
