@@ -319,56 +319,18 @@ let normalize_journal_uuids (conn : conn) : tx_report option =
   let tx = normalize_journal_uuids_tx (Conn.db conn) in
   if tx = [] then None else Some (transact_imported conn tx)
 
-(* missing-internal-page-parent-order-tx — imported internal pages under a
-   namespace parent that lack a string :block/order *)
-let missing_internal_page_parent_order_tx (db : db) : BM.t list =
-  let groups : (int, entity list) Hashtbl.t = Hashtbl.create 63 in
-  List.iter
-    (fun (d : datom) ->
-      match Ldb.ent_of_id db d.e with
-      | Some child ->
-        let key = match d.v with Ref p -> p | _ -> -1 in
-        Hashtbl.replace groups key
-          (child :: Option.value ~default:[] (Hashtbl.find_opt groups key))
-      | None -> ())
-    (List.of_seq (datoms db Avet ~a:"block/parent" ()));
-  Hashtbl.fold
-    (fun _parent children acc ->
-      let missing =
-        List.filter
-          (fun c ->
-            Entity_util.internal_page c
-            &&
-            match Ldb.value c "block/order" with
-            | Some (String _) -> false
-            | _ -> true)
-          children
-      in
-      if missing = [] then acc
-      else
-        let max_order =
-          match
-            List.rev
-              (List.sort compare
-                 (List.filter_map
-                    (fun c ->
-                      match Ldb.value c "block/order" with
-                      | Some (String s) -> Some s
-                      | _ -> None)
-                    children))
-          with
-          | [] -> None
-          | h :: _ -> Some h
-        in
-        let keys = Db_order.gen_n_keys (List.length missing) max_order None in
-        acc
-        @ List.map2
-            (fun (c : entity) order ->
-              [ ("db/id", Ref c.id); ("block/order", String order) ])
-            missing keys)
-    groups []
-
-(* ensure-imported-page-parent-orders! *)
+(* ensure-imported-page-parent-orders! — repair moved to
+   db-order/missing-internal-page-parent-order-tx upstream; after the
+   import transact each emitted :block/order resets the global max-key. *)
 let ensure_imported_page_parent_orders (conn : conn) : tx_report option =
-  let tx = missing_internal_page_parent_order_tx (Conn.db conn) in
-  if tx = [] then None else Some (transact_imported_maps conn tx)
+  let tx = Db_order.missing_internal_page_parent_order_tx (Conn.db conn) in
+  if tx = [] then None
+  else
+    let report = transact_imported_maps conn tx in
+    List.iter
+      (fun m ->
+        match List.assoc_opt "block/order" m with
+        | Some (String o) -> Db_order.reset_max_key (Some o)
+        | _ -> ())
+      tx;
+    Some report

@@ -351,3 +351,70 @@ let get_next_order (db : db) (property : entity option) (value_id : entity_id)
   match property with
   | Some property -> pick (closed_values property)
   | None -> pick (property_entities db)
+
+(* db-order/missing-internal-page-parent-order-tx — namespace import and
+   older graphs can set :block/parent without :block/order. Only repair
+   internal pages so class pages that share the same rewrite stay
+   unordered. Insertion boundary uses every direct child so repaired page
+   orders do not collide with content-block siblings. Missing children
+   are sorted by :block/uuid before keys are assigned so peers generate
+   the same orders. Pages that already have a string order are left
+   unchanged, so a second validate/migrate is a no-op.
+   Keys come from a local max-key atom so the repair does not move the
+   process-global one — the caller resets the global atom per emitted
+   order (cljs doseq over (keep :block/order tx-data)). *)
+let missing_internal_page_parent_order_tx (db : db) : (attr * value) list list
+    =
+  let groups : (entity_id, entity list) Hashtbl.t = Hashtbl.create 63 in
+  List.iter
+    (fun (d : datom) ->
+      match Ldb.ent_of_id db d.e, d.v with
+      | Some child, Ref p ->
+          Hashtbl.replace groups p
+            (child :: Option.value ~default:[] (Hashtbl.find_opt groups p))
+      | _ -> ())
+    (List.of_seq (datoms db Avet ~a:"block/parent" ()));
+  Hashtbl.fold
+    (fun _parent children acc ->
+      let missing =
+        children
+        |> List.filter (fun (c : entity) ->
+               Entity_util.internal_page c
+               &&
+               match Ldb.value c "block/order" with
+               | Some (String _) -> false
+               | _ -> true)
+        |> List.stable_sort (fun a b ->
+               (* cljs (sort-by (comp str :block/uuid)) *)
+               let uuid_of (c : entity) =
+                 match Ldb.value c "block/uuid" with
+                 | Some (Uuid u) -> u
+                 | _ -> ""
+               in
+               String.compare (uuid_of a) (uuid_of b))
+      in
+      if missing = [] then acc
+      else
+        let max_order =
+          match
+            List.rev
+              (List.sort String.compare
+                 (List.filter_map
+                    (fun (c : entity) ->
+                      match Ldb.value c "block/order" with
+                      | Some (String s) -> Some s
+                      | _ -> None)
+                    children))
+          with
+          | h :: _ -> Some h
+          | [] -> None
+        in
+        let keys =
+          gen_n_keys ~max_key_atom:(ref None) (List.length missing) max_order
+            None
+        in
+        List.fold_right
+          (fun (c, order) acc ->
+            ([ "db/id", Ref c.id; "block/order", String order ]) :: acc)
+          (List.combine missing keys) acc)
+    groups []

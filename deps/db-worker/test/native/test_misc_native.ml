@@ -753,6 +753,66 @@ let test_migrate_65_33_adds_gallery_view_properties () =
        [ "logseq.property.view/gallery-card-width"
        ; "logseq.property.view/gallery-card-height" ])
 
+(* (deftest migrate-65-34-advances-repaired-page-order-allocator ...)
+   src/test/frontend/worker/migrate_test.cljs. cljs asserts
+   (:migrate-updates report) = {:fix missing-internal-page-parent-order-tx};
+   migrate-updates is not carried into the OCaml migrate_result (documented
+   divergence), so that assertion is dropped like 65-30/-31's.
+   cljs with-redefs db-order/*max-key (atom "a0") -> save/set/restore of
+   Db_order.max_key. *)
+let test_migrate_65_34_advances_repaired_page_order_allocator () =
+  let conn = Db_test_util.create_conn () in
+  let parent_uuid = "33333333-3333-4333-8333-333333333333"
+  and sibling_uuid = "55555555-5555-4555-8555-555555555555"
+  and child_uuid = "44444444-4444-4444-8444-444444444444" in
+  ignore
+    (Datascript.transact_conn_string conn
+       (Printf.sprintf
+          "[{:db/ident :logseq.kv/schema-version
+            :kv/value {:major 65 :minor 33}}
+           {:db/id \"parent\" :block/uuid #uuid \"%s\" :block/title \"Country\"
+            :block/name \"country\" :block/tags :logseq.class/Page}
+           {:block/uuid #uuid \"%s\" :block/title \"Overview\"
+            :block/parent \"parent\" :block/page \"parent\" :block/order \"bzz\"}
+           {:block/uuid #uuid \"%s\" :block/title \"Australia\"
+            :block/name \"australia\" :block/tags :logseq.class/Page
+            :block/parent \"parent\"}]"
+          parent_uuid sibling_uuid child_uuid));
+  let prev_max_key = !Db_order.max_key in
+  Db_order.max_key := Some "a0";
+  Fun.protect
+    ~finally:(fun () -> Db_order.max_key := prev_max_key)
+    (fun () ->
+      ignore
+        (Db_migrate.migrate conn
+           ~target_version:{ sv_major = 65; sv_minor = Some 34 });
+      let db' = db_of conn in
+      check "65-34: schema-version 65.34"
+        (kv_version db' "logseq.kv/schema-version" = Some (65, 34));
+      let repaired_order =
+        match e_at_uuid db' child_uuid with
+        | Some e -> Ldb.value e "block/order"
+        | None -> None
+      in
+      check "65-34: missing order assigned"
+        (match repaired_order with Some (String _) -> true | _ -> false);
+      check "65-34: order beyond sibling bzz"
+        (match repaired_order with
+         | Some (String o) -> String.compare o "bzz" > 0
+         | _ -> false);
+      (* cljs (pos? (compare (db-order/gen-key) repaired-order)) — the
+         post-transact reset advanced the global max-key atom past the
+         repaired order. *)
+      (match repaired_order with
+       | Some (String o) ->
+           check "65-34: gen-key after repair sorts after repaired order"
+             (String.compare (Db_order.gen_key_from_max ()) o > 0)
+       | _ -> check "65-34: gen-key after repair" false);
+      check "65-34: second migrate nil"
+        (Db_migrate.migrate conn
+           ~target_version:{ sv_major = 65; sv_minor = Some 34 }
+         = None))
+
 let migrate_cases : unit Alcotest.test_case list =
   [ Alcotest.test_case "delete-property-cleans-property-usages" `Quick
       test_delete_property_cleans_property_usages
@@ -785,7 +845,10 @@ let migrate_cases : unit Alcotest.test_case list =
       "migrate-65-32-adds-root-extends-to-comment-classes" `Quick
       test_migrate_65_32_adds_root_extends_to_comment_classes
   ; Alcotest.test_case "migrate-65-33-adds-gallery-view-properties"
-      `Quick test_migrate_65_33_adds_gallery_view_properties ]
+      `Quick test_migrate_65_33_adds_gallery_view_properties
+  ; Alcotest.test_case
+      "migrate-65-34-advances-repaired-page-order-allocator" `Quick
+      test_migrate_65_34_advances_repaired_page_order_allocator ]
 
 (* ---------- plain_value_test.cljs ---------- *)
 
