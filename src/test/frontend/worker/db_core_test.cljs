@@ -1,11 +1,13 @@
 (ns frontend.worker.db-core-test
-  (:require [cljs.test :refer [async deftest is]]
+  (:require ["path" :as node-path]
+            [cljs.test :refer [async deftest is]]
             [clojure.string :as string]
             [datascript.core :as d]
             [datascript.impl.entity :as de]
             [datascript.storage :as storage]
             [frontend.common.thread-api :as thread-api]
             [frontend.db.query-dsl :as query-dsl]
+            [frontend.test.node-helper :as node-helper]
             [frontend.worker-common.util :as worker-util]
             [frontend.worker.db-core :as db-core]
             [frontend.worker.db-listener :as db-listener]
@@ -18,6 +20,7 @@
             [frontend.worker.handler.search :as search-handler]
             [frontend.worker.pipeline :as worker-pipeline]
             [frontend.worker.platform :as platform]
+            [frontend.worker.platform.node :as platform-node]
             [frontend.worker.query-dsl :as worker-query-dsl]
             [frontend.worker.search :as search]
             [frontend.worker.shared-service :as shared-service]
@@ -30,6 +33,7 @@
             [goog.object :as gobj]
             [logseq.common.config :as common-config]
             [logseq.common.log :as log]
+            [logseq.common.util.date-time :as date-time-util]
             [logseq.db :as ldb]
             [logseq.db.common.initial-data :as common-initial-data]
             [logseq.db.common.order :as db-order]
@@ -1217,6 +1221,115 @@
                 (is false (str "unexpected error: " error))))
      (p/finally done))))
 
+(deftest search-build-blocks-indice-in-worker-moves-version-four-index-to-rowid-keys-test
+  (async done
+    (->
+     (restoring-worker-state
+      (fn []
+        (let [build-index! (get @thread-api/*thread-apis :thread-api/search-build-blocks-indice-in-worker)
+              build-ids @#'search-handler/*search-index-build-ids
+              page (str (random-uuid))
+              blocks (mapv (fn [i] {:id (str (random-uuid)) :title (str "block " i) :page page}) (range 450))
+              rows (fn [db sql] (js->clj (.exec db #js {:sql sql :rowMode "array"})))
+              path (node-path/join (node-helper/create-tmp-dir "search-db") "search.sqlite")]
+          (platform/set-platform! (build-test-platform {:runtime :node}))
+          (p/let [db (#'platform-node/open-sqlite-db nil {:path path})]
+            ;; a version 4 index: FTS rows found by id, rowids drifted by updates
+            (.exec db "CREATE TABLE blocks (id TEXT NOT NULL PRIMARY KEY, title TEXT NOT NULL, page TEXT)")
+            (.exec db "CREATE VIRTUAL TABLE blocks_fts USING fts5(id, title, page, tokenize=\"trigram\")")
+            (.exec db "CREATE TRIGGER blocks_ai AFTER INSERT ON blocks BEGIN
+                         INSERT INTO blocks_fts (id, title, page) VALUES (new.id, new.title, new.page);
+                       END;")
+            (.exec db "CREATE TRIGGER blocks_au AFTER UPDATE ON blocks BEGIN
+                         DELETE from blocks_fts where id = old.id;
+                         INSERT INTO blocks_fts (id, title, page) VALUES (new.id, new.title, new.page);
+                       END;")
+            (search/upsert-blocks! db (clj->js blocks))
+            (search/upsert-blocks! db (clj->js (map #(assoc % :title "edited") (take 10 blocks))))
+            (.exec db "PRAGMA user_version = 4")
+            (reset! worker-state/*sqlite-conns {test-repo {:search db}})
+            ;; no datascript conn: the move reads the search db only
+            (p/let [result (build-index! test-repo false)
+                    _ (<wait-for-progress! build-ids #(nil? (get % test-repo)) 1000)]
+              (is (= 4 result) "the old index serves search while it moves, so the graph is ready at once")
+              (is (= [[search-handler/search-db-version]] (rows db "PRAGMA user_version")))
+              (is (= [[450]] (rows db "SELECT count(*) FROM blocks_fts")))
+              (is (= [] (rows db "SELECT b.id FROM blocks b LEFT JOIN blocks_fts f ON f.rowid = b.rowid
+                                  WHERE f.id IS NOT b.id OR f.title IS NOT b.title")))
+              (is (= [[10]] (rows db "SELECT count(*) FROM blocks_fts WHERE title MATCH 'edited'")))
+              (.close db))))))
+     (p/catch (fn [error]
+                (is false (str "unexpected error: " error))))
+     (p/finally done))))
+
+(deftest search-rowid-migration-truncated-before-start-test
+  (async done
+    (->
+     (restoring-worker-state
+      (fn []
+        (let [build-index! (get @thread-api/*thread-apis :thread-api/search-build-blocks-indice-in-worker)
+              truncate! (get @thread-api/*thread-apis :thread-api/search-truncate-tables)
+              build-ids @#'search-handler/*search-index-build-ids
+              block-id (str (random-uuid))
+              page-id (str (random-uuid))
+              rows (fn [db sql] (js->clj (.exec db #js {:sql sql :rowMode "array"})))
+              path (node-path/join (node-helper/create-tmp-dir "search-db") "search.sqlite")]
+          (platform/set-platform! (build-test-platform {:runtime :node}))
+          (p/let [db (#'platform-node/open-sqlite-db nil {:path path})]
+            (search/create-tables-and-triggers! db)
+            (.exec db "PRAGMA user_version = 4")
+            (reset! worker-state/*sqlite-conns {test-repo {:search db}})
+            (-> (p/let [result (build-index! test-repo false)
+                        _ (truncate! test-repo)
+                        _ (<wait-for-progress! build-ids #(nil? (get % test-repo)) 1000)]
+                  (is (= 4 result))
+                  (is (nil? (get @build-ids test-repo)))
+                  (is (= [[0]] (rows db "PRAGMA user_version")))
+                  (is (= [] (rows db "SELECT name FROM sqlite_master WHERE name GLOB 'blocks_fts_next*'")))
+                  (is (= [["blocks_ad"] ["blocks_ai"] ["blocks_au"]]
+                         (rows db "SELECT name FROM sqlite_master WHERE type = 'trigger' ORDER BY name")))
+                  (search/upsert-blocks! db #js [#js {:id block-id :title "after truncate" :page page-id}])
+                  (is (= [[block-id]] (rows db "SELECT id FROM blocks_fts WHERE title MATCH 'truncate'"))))
+                (p/finally (fn [] (.close db))))))))
+     (p/catch (fn [error]
+                (is false (str "unexpected error: " error))))
+     (p/finally done))))
+
+(deftest search-rowid-migration-superseded-before-start-test
+  (async done
+    (->
+     (restoring-worker-state
+      (fn []
+        (let [build-ids @#'search-handler/*search-index-build-ids
+              block-id (str (random-uuid))
+              page-id (str (random-uuid))
+              rows (fn [db sql] (js->clj (.exec db #js {:sql sql :rowMode "array"})))
+              path (node-path/join (node-helper/create-tmp-dir "search-db") "search.sqlite")]
+          (platform/set-platform! (build-test-platform {:runtime :node}))
+          (p/let [db (#'platform-node/open-sqlite-db nil {:path path})]
+            (search/create-tables-and-triggers! db)
+            (.exec db "PRAGMA user_version = 4")
+            (reset! worker-state/*sqlite-conns {test-repo {:search db}})
+            (swap! build-ids assoc test-repo "old-build")
+            (let [migration (#'search-handler/<migrate-fts-to-rowid! test-repo db "old-build")]
+              (swap! build-ids assoc test-repo "new-build")
+              (search/start-fts-rowid-migration! db)
+              (search/upsert-blocks! db #js [#js {:id block-id :title "new build" :page page-id}])
+              (-> migration
+                  (p/then (fn [_] (is false "the superseded migration must stop")))
+                  (p/catch (fn [error]
+                             (is (= :search/stale-index-build (:type (ex-data error))))))
+                  (p/then (fn [_]
+                            (is (= "new-build" (get @build-ids test-repo)))
+                            (is (= [[block-id]] (rows db "SELECT id FROM blocks_fts_next")))
+                            (is (= [[4]] (rows db "PRAGMA user_version")))))
+                  (p/finally (fn []
+                               (swap! build-ids dissoc test-repo)
+                               (.close db)))))))))
+     (p/catch (fn [error]
+                (is false (str "unexpected error: " error))))
+     (p/finally done))))
+
 (deftest vector-embedding-title-truncates-long-text-test
   (let [vector-embedding-title #'search-handler/vector-embedding-title
         long-title (apply str (repeat 6000 "x"))]
@@ -1391,7 +1504,35 @@
        (is (= "/graph/search/vector"
               (vector-index-path test-repo pool)))))))
 
-;; ---- checkpoint-db! tests ----
+;; ---- sqlite WAL / checkpoint tests ----
+
+(deftest enable-sqlite-wal-mode-sets-exclusive-wal-and-synchronous-normal
+  (let [enable-sqlite-wal-mode! #'db-core/enable-sqlite-wal-mode!
+        sql-calls (atom [])
+        db #js {:exec (fn [sql]
+                        (swap! sql-calls conj sql)
+                        #js [])}]
+    (enable-sqlite-wal-mode! db)
+    (is (= ["PRAGMA locking_mode=exclusive"
+            "PRAGMA journal_mode=WAL"
+            "PRAGMA synchronous=NORMAL"]
+           @sql-calls))))
+
+(deftest enable-sqlite-wal-mode-sqlite-reports-wal-and-synchronous-normal
+  (let [Database (js/require "better-sqlite3")
+        node-path (js/require "path")
+        dir (node-helper/create-tmp-dir "wal-pragma")
+        db (new Database (.join node-path dir "graph.sqlite"))
+        pragma (fn [name]
+                 (aget (.get (.prepare db (str "PRAGMA " name))) name))]
+    (try
+      (#'db-core/enable-sqlite-wal-mode! db)
+      (is (= "exclusive" (pragma "locking_mode")))
+      (is (= "wal" (pragma "journal_mode")))
+      (is (= 1 (pragma "synchronous"))
+          "sqlite NORMAL is 1; FULL (the WAL default) is 2")
+      (finally
+        (.close db)))))
 
 (deftest checkpoint-db-executes-wal-checkpoint
   (let [checkpoint-db! #'db-core/checkpoint-db!
@@ -3071,6 +3212,40 @@
          (is (= ["other page"]
                 (mapv :block/title page-b))))))))
 
+(deftest get-date-scheduled-or-deadlines-uses-local-calendar-day-bounds
+  (restoring-worker-state
+   (fn []
+     (let [get-date-scheduled-or-deadlines! (get @thread-api/*thread-apis :thread-api/get-date-scheduled-or-deadlines)
+           conn (d/create-conn db-schema/schema)
+           page-id -1
+           today 20260928
+           [start end] (date-time-util/journal-day-local-range-ms today 7)
+           today-no-time (.getTime (js/Date. 2026 8 28 0 0 0 0))
+           yesterday-21 (.getTime (js/Date. 2026 8 27 21 0 0 0))
+           plus6-21 (.getTime (js/Date. 2026 9 4 21 0 0 0))]
+       (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
+       (d/transact! conn [{:db/id page-id
+                           :block/title "Tasks"
+                           :block/uuid #uuid "33333333-3333-3333-3333-333333333333"}
+                          {:block/title "today no-time"
+                           :block/page page-id
+                           :logseq.property/scheduled today-no-time
+                           :logseq.property/status :logseq.property/status.todo}
+                          {:block/title "yesterday 21:00"
+                           :block/page page-id
+                           :logseq.property/deadline yesterday-21
+                           :logseq.property/status :logseq.property/status.todo}
+                          {:block/title "+6d 21:00"
+                           :block/page page-id
+                           :logseq.property/scheduled plus6-21
+                           :logseq.property/status :logseq.property/status.todo}])
+       (reset! worker-state/*datascript-conns {test-repo conn})
+       (let [result (get-date-scheduled-or-deadlines! test-repo start end)
+             titles (->> result vals (apply concat) (map :block/title) set)]
+         (is (contains? titles "today no-time"))
+         (is (not (contains? titles "yesterday 21:00")))
+         (is (contains? titles "+6d 21:00")))))))
+
 (deftest get-property-node-selector-data-prepares-worker-owned-db-data-test
   (restoring-worker-state
    (fn []
@@ -3263,6 +3438,7 @@
        (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
        (d/transact! conn [{:db/id first-block-tempid
                            :block/title "Object"
+                           :block/name "object"
                            :block/uuid first-block-id
                            :block/tags :logseq.class/Page}
                           {:db/id second-block-tempid

@@ -1241,7 +1241,7 @@
 
 (deftest journal-tag-template-applied-on-repeating-task-reschedule-test
   (testing "Journal pages created by repeating-task reschedule receive the Journal tag template"
-    (let [now (t/date-time 2026 9 20 12 0 0)
+    (let [now (t/local-date-time 2026 9 20 12 0 0)
           scheduled-ms (tc/to-long now)
           expected-next-day 20260926
           conn (db-test/create-conn-with-blocks
@@ -1441,8 +1441,8 @@
 (deftest clearing-past-deadline-removes-journal-linked-ref-test
   (let [past-day 20260923
         today-day 20260924
-        past-ms (date-time-util/journal-day->ms past-day)
-        today-ms (date-time-util/journal-day->ms today-day)
+        past-ms (.getTime (date-time-util/int->local-date past-day))
+        today-ms (.getTime (date-time-util/int->local-date today-day))
         conn (db-test/create-conn-with-blocks
               {:pages-and-blocks
                [{:page {:build/journal past-day}}
@@ -1493,3 +1493,66 @@
             (is (nil? (:logseq.property/deadline task')))
             (is (not (contains? (block-ref-ids task') (:db/id past-journal)))
                 "Fully removing Deadline retracts the past journal from :block/refs")))))))
+
+(defn- convert-page-to-property-error
+  [conn page property-name]
+  (try
+    (outliner-property/upsert-property!
+     conn nil {:logseq.property/type :default}
+     {:property-name property-name
+      :properties {:db/id (:db/id page)}})
+    nil
+    (catch :default e
+      e)))
+
+(deftest converting-namespaced-page-to-property-is-refused-before-write-test
+  (let [conn (db-test/create-conn)
+        [_ bar-uuid] (outliner-page/create! conn "Foo/Bar" {:split-namespace? true})
+        bar (d/entity @conn [:block/uuid bar-uuid])
+        foo (ldb/get-page @conn "foo")]
+    (is (some? (:block/parent bar)) "Namespace child has a parent")
+    (is (some? (:block/parent foo)) "Namespace root is parented under Library")
+    (with-transact-pipeline
+      (fn []
+        (testing "Namespace child Bar"
+          (let [err (silence-stderr
+                     #(convert-page-to-property-error conn bar "Bar"))
+                bar' (d/entity @conn (:db/id bar))]
+            (is (some? err))
+            (is (= :notification (:type (ex-data err)))
+                "Refuse with a notification instead of invalid-data")
+            (is (= :page.convert/page-to-property-namespaced
+                   (get-in (ex-data err) [:payload :i18n-key])))
+            (is (ldb/internal-page? bar'))
+            (is (not (ldb/property? bar')))
+            (is (some? (:block/name bar')))))
+
+        (testing "Namespace root Foo"
+          (let [err (silence-stderr
+                     #(convert-page-to-property-error conn foo "Foo"))
+                foo' (d/entity @conn (:db/id foo))]
+            (is (some? err))
+            (is (= :notification (:type (ex-data err))))
+            (is (= :page.convert/page-to-property-namespaced
+                   (get-in (ex-data err) [:payload :i18n-key])))
+            (is (ldb/internal-page? foo'))
+            (is (not (ldb/property? foo')))
+            (is (some? (:block/name foo')))))))))
+
+(deftest converting-plain-page-to-property-still-works-with-pipeline-test
+  (let [conn (db-test/create-conn)
+        [_ page-uuid] (outliner-page/create! conn "PlainPage" {})
+        page (d/entity @conn [:block/uuid page-uuid])]
+    (is (nil? (:block/parent page)))
+    (with-transact-pipeline
+      (fn []
+        (let [property (outliner-property/upsert-property!
+                        conn nil {:logseq.property/type :default}
+                        {:property-name "PlainPage"
+                         :properties {:db/id (:db/id page)}})
+              converted (d/entity @conn (:db/id page))]
+          (is (ldb/property? property))
+          (is (ldb/property? converted))
+          (is (not (ldb/internal-page? converted)))
+          (is (= (:db/id page) (:db/id converted)))
+          (is (some? (:block/name converted))))))))

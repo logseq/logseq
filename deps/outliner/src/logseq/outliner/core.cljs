@@ -176,6 +176,17 @@
   [db block]
   (outliner-pipeline/db-rebuild-block-refs db block))
 
+(defn- matching-ref-for-tag
+  "Class titles are case-sensitive while :block/name is not, so among same-name
+  refs prefer the one whose :block/title equals the tag's."
+  [tag candidates]
+  (or (some (fn [r]
+              (when (and (:block/title tag)
+                         (= (:block/title r) (:block/title tag)))
+                r))
+            candidates)
+      (first candidates)))
+
 (defn- fix-tag-ids
   "Fix or remove tags related when entered via `Escape`"
   [m db]
@@ -193,9 +204,10 @@
                    ;; Update :block/tag to reference ids from :block/refs
                    (map (fn [tag]
                           (if (contains? refs (:block/name tag))
-                            (let [matched-ref (first (filter (fn [r] (= (:block/name tag)
-                                                              (:block/name r)))
-                                                   (:block/refs m)))]
+                            (let [matched-ref (matching-ref-for-tag
+                                               tag
+                                               (filter #(= (:block/name tag) (:block/name %))
+                                                       (:block/refs m)))]
                               (cond-> (assoc tag :block/uuid (:block/uuid matched-ref))
                                 (:db/ident matched-ref)
                                 (assoc :db/ident (:db/ident matched-ref))))
@@ -263,19 +275,47 @@
            tx-data])))
     [ref nil]))
 
+(defn- resolve-refs-dedup
+  "Resolve new-page refs, deduping pages created during the pass: db doesn't
+  see them yet, so a repeated [[same name]] ref would otherwise create a
+  duplicate page. Class titles are case-sensitive (#Movie and #movie are
+  distinct classes), so class refs dedupe by :block/title instead."
+  [db refs tag-names]
+  (first
+   (reduce
+    (fn [[resolved seen] ref]
+      (let [new-page? (new-page-ref? ref)
+            dedup-key (if (contains? tag-names (:block/name ref))
+                        [:class (:block/title ref)]
+                        [:page (:block/name ref)])]
+        (if-let [seen-ref (and new-page? (get seen dedup-key))]
+          [(conj resolved [(merge seen-ref
+                                  (select-keys ref [:block.temp/original-page-name]))
+                            nil])
+           seen]
+          (let [[ref' tx-data :as resolved-ref] (resolve-page-ref db ref tag-names)]
+            [(conj resolved resolved-ref)
+             (if (and new-page? (seq tx-data))
+               (assoc seen dedup-key ref')
+               seen)]))))
+    [[] {}]
+    refs)))
+
 (defn- resolve-page-refs
   [db block]
   (if-let [refs (seq (:block/refs block))]
     (let [tag-names (into #{} (keep :block/name) (:block/tags block))
-          resolved-refs (mapv #(resolve-page-ref db % tag-names) refs)
+          resolved-refs (resolve-refs-dedup db refs tag-names)
           refs' (mapv first resolved-refs)
           page-txs (mapcat second resolved-refs)
-          tag-refs (into {} (keep (fn [ref]
-                                    (when (:db/ident ref)
-                                      [(:block/name ref) ref])))
-                         refs')
+          tag-refs (reduce (fn [m ref]
+                             (if (:db/ident ref)
+                               (update m (:block/name ref) (fnil conj []) ref)
+                               m))
+                           {}
+                           refs')
           tags' (mapv (fn [tag]
-                        (if-let [ref (get tag-refs (:block/name tag))]
+                        (if-let [ref (matching-ref-for-tag tag (get tag-refs (:block/name tag)))]
                           (merge (dissoc tag :block/type)
                                  (select-keys ref [:block/uuid :db/ident]))
                           tag))
@@ -620,16 +660,34 @@
 
 (defn- get-block-orders
   [blocks target-block sibling? keep-block-order?]
-  (if (and keep-block-order? (every? :block/order blocks))
-    (map :block/order blocks)
-    (let [target-order (:block/order target-block)
-          start-order (when sibling? target-order)
-          end-order (if sibling?
-                      (:block/order (ldb/get-right-sibling target-block))
-                      (let [first-child (ldb/get-down target-block)]
-                        (:block/order first-child)))
-          orders (db-order/gen-n-keys (count blocks) start-order end-order)]
-      orders)))
+  (let [target-order (:block/order target-block)
+        start-order (when sibling? target-order)
+        end-order (if sibling?
+                    (:block/order (ldb/get-right-sibling target-block))
+                    (let [first-child (ldb/get-down target-block)]
+                      (:block/order first-child)))
+        top-level? #(= 1 (:block/level %))
+        at-target? (fn [order]
+                     (and (or (nil? start-order) (pos? (compare order start-order)))
+                          (or (nil? end-order) (neg? (compare order end-order)))))]
+    (if (and keep-block-order? (every? :block/order blocks))
+      (let [top-level-blocks (filter top-level? blocks)]
+        (if (every? at-target? (map :block/order top-level-blocks))
+          (map :block/order blocks)
+          ;; The kept orders of the top-level blocks no longer fall next to the
+          ;; target, e.g. undo restoring deleted blocks after a sibling moved
+          ;; away and back got a new order: order them at the target and keep
+          ;; the orders of their children.
+          (let [top-level-orders (db-order/gen-n-keys (count top-level-blocks)
+                                                      start-order end-order)]
+            (first
+             (reduce (fn [[orders top-level-orders] block]
+                       (if (top-level? block)
+                         [(conj orders (first top-level-orders)) (rest top-level-orders)]
+                         [(conj orders (:block/order block)) top-level-orders]))
+                     [[] top-level-orders]
+                     blocks)))))
+      (db-order/gen-n-keys (count blocks) start-order end-order))))
 
 (defn- update-property-ref-when-paste
   [block uuids]
@@ -946,6 +1004,8 @@
                     copied trees cannot move existing blocks.
                     Undo restore keeps live uuids.
       `keep-block-order?`: whether to replace `:block/order` from the parameter `blocks`.
+                           A top-level block keeps its order only while that
+                           order falls at `target-block`.
       `outliner-op`: what's the current outliner operation.
       `created-from-property`: property ident/ref used to restore a deleted property
                                value as a property value instead of a child block.

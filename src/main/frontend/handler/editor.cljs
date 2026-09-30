@@ -1750,14 +1750,17 @@
   (or @*asset-uploading?
       (state/get-editor-action)))
 
-(defn in-shui-popup?
+(defn- focus-in-shui-popup?
   []
-  (or (some-> js/document.activeElement
-              (.closest ".ui__dropdown-menu-content, .ui__popover-content, .ui__context-menu-content")
-              (nil?)
-              (not))
-      (.querySelector js/document.body
-                      ".ui__dropdown-menu-content, .ui__popover-content, .ui__context-menu-content")))
+  (some-> js/document.activeElement
+          (.closest ".ui__dropdown-menu-content, .ui__popover-content, .ui__context-menu-content")))
+
+(defn- focus-in-shui-menu?
+  "True when Tab should leave a menu instead of indenting. The selection
+  action bar is a popover, so it is intentionally excluded."
+  []
+  (some-> js/document.activeElement
+          (.closest ".ui__dropdown-menu-content, .ui__dropdown-menu-sub-content, .ui__context-menu-content, .ui__context-menu-sub-content")))
 
 (defn get-current-input-char
   [input]
@@ -2868,27 +2871,27 @@
 
 (defn keydown-delete-handler
   [_e]
-  (let [^js input (state/get-input)
-        current-pos (cursor/pos input)
-        value (gobj/get input "value")
-        end? (= current-pos (count value))
-        current-block (state/get-edit-block)
-        selected-start (util/get-selection-start input)
-        selected-end (util/get-selection-end input)]
-    (when current-block
-      (cond
-        (not= selected-start selected-end)
-        (delete-and-update input selected-start selected-end)
+  (when-let [^js input (state/get-input)]
+    (let [current-pos (cursor/pos input)
+          value (gobj/get input "value")
+          end? (= current-pos (count value))
+          current-block (state/get-edit-block)
+          selected-start (util/get-selection-start input)
+          selected-end (util/get-selection-end input)]
+      (when current-block
+        (cond
+          (not= selected-start selected-end)
+          (delete-and-update input selected-start selected-end)
 
-        (and end? current-block)
-        (let [editor-state (get-state)
-              custom-query? (get-in editor-state [:config :custom-query?])]
-          (when-not custom-query?
-            (delete-concat current-block)))
+          (and end? current-block)
+          (let [editor-state (get-state)
+                custom-query? (get-in editor-state [:config :custom-query?])]
+            (when-not custom-query?
+              (delete-concat current-block)))
 
-        :else
-        (delete-and-update
-         input current-pos (util/safe-inc-current-pos-from-start (.-value input) current-pos))))))
+          :else
+          (delete-and-update
+           input current-pos (util/safe-inc-current-pos-from-start (.-value input) current-pos)))))))
 
 (defn delete-block-when-zero-pos!
   [^js e]
@@ -3031,22 +3034,23 @@
 (defn keydown-tab-handler
   [direction]
   (fn [e]
-    (cond
-      (pending-new-block?)
-      (do
-        (util/stop e)
-        (queue-pending-new-block-tab! (not= :left direction)))
+    (when-not (focus-in-shui-menu?)
+      (cond
+        (pending-new-block?)
+        (do
+          (util/stop e)
+          (queue-pending-new-block-tab! (not= :left direction)))
 
-      (state/editing?)
-      (when-not (state/get-editor-action)
-        (util/stop e)
-        (indent-outdent (not (= :left direction))))
+        (state/editing?)
+        (when-not (state/get-editor-action)
+          (util/stop e)
+          (indent-outdent (not (= :left direction))))
 
-      (state/selection?)
-      (do
-        (util/stop e)
-        (state/pub-event! [:editor/hide-action-bar])
-        (on-tab direction)))
+        (state/selection?)
+        (do
+          (util/stop e)
+          (state/pub-event! [:editor/hide-action-bar])
+          (on-tab direction))))
     nil))
 
 (defn- double-chars-typed?
@@ -3092,7 +3096,7 @@
         (contains? #{"ArrowLeft" "ArrowRight"} key)
         (state/clear-editor-action!)
 
-        (and (util/goog-event-is-composing? e true) ;; #3218
+        (and (util/native-event-is-composing? e) ;; #3218
              (not hashtag?) ;; #3283 @Rime
              (not (state/get-editor-show-page-search-hashtag?))) ;; #3283 @MacOS pinyin
         nil
@@ -3289,7 +3293,13 @@
                (util/goog-event-is-composing? e true)])
             comment-editor? (:comment-editor? (last (state/get-editor-args)))]
         (cond
-          (= value "``````") ; turn this block into a code block
+          ;; turn this block into a code block, but only when the released key
+          ;; can produce backticks: "`" for normal typing, Space/Dead/Process/
+          ;; Unidentified for dead-key and IME commits, where the released key
+          ;; is not the inserted char. This avoids converting an existing block
+          ;; that merely contains the text on an unrelated key release.
+          (and (contains? #{"```" "``````"} value)
+               (contains? #{"`" " " "Dead" "Process" "Unidentified"} k))
           (do
             (state/set-edit-content! (.-id input) "")
             (state/pub-event! [:editor/upsert-type-block {:block (assoc (state/get-edit-block) :block/title "")
@@ -3476,7 +3486,7 @@
 
 (defn editor-delete
   [e]
-  (when (state/editing?)
+  (when (and (state/editing?) (state/get-input))
     (util/stop e)
     (keydown-delete-handler e)))
 
@@ -3496,7 +3506,7 @@
     (state/pub-event! [:editor/hide-action-bar])
     (when (and (not (auto-complete?))
                (or (in-page-preview?)
-                   (not (in-shui-popup?)))
+                   (not (focus-in-shui-popup?)))
                (not (state/get-timestamp-block)))
       (util/stop e)
       (cond
@@ -3914,7 +3924,7 @@
 
      (state/selection?)
      (do
-       (let [block-ids (map #(-> % (dom/attr "blockid") uuid) (get-selected-blocks))
+       (let [block-ids (distinct (keep util/selection-node-block-id (get-selected-blocks)))
              first-block-id (first block-ids)]
          (when first-block-id
            ;; If multiple blocks are selected, they may not have all the same collapsed state.

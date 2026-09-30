@@ -153,5 +153,21 @@
     (is (some #{:editor/add-comment}
               (shortcut-config/get-category-shortcuts :shortcut.category/block-selection)))))
 
+(deftest test-toggle-contents-shortcut
+  (testing "toggle contents shortcut is configured with alt+shift+c"
+    (is (= ["alt+shift+c"] (dh/shortcut-binding :ui/toggle-contents))))
+  (testing "toggle contents stays active while editing, like open-today-page"
+    (is (contains? (get @shortcut-config/*config :shortcut.handler/global-prevent-default)
+                   :ui/toggle-contents))
+    (is (not (contains? (get @shortcut-config/*config :shortcut.handler/global-non-editing-only)
+                        :ui/toggle-contents)))
+    (is (= :shortcut.handler/global-prevent-default
+           (dh/get-group :ui/toggle-contents)))
+    (is (= :shortcut.handler/global-prevent-default
+           (dh/get-group :sidebar/open-today-page))))
+  (testing "toggle contents shortcut appears in the toggle category"
+    (is (some #{:ui/toggle-contents}
+              (shortcut-config/get-category-shortcuts :shortcut.category/toggle)))))
+
 (comment
   (cljs.test/run-tests))

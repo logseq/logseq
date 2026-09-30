@@ -196,7 +196,7 @@
                (let [{value-type :db/valueType
                       cardinality :db/cardinality} (render-attr-schema db a)
                      value (if (= :db.type/ref value-type)
-                             (block-breadcrumb/shallow-ref-identity db v)
+                             (block-breadcrumb/shallow-ref-identity db v a)
                              v)]
                  (if (= :db.cardinality/many cardinality)
                    (update result a (fnil conj []) value)
