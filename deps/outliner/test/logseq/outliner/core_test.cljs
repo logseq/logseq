@@ -207,7 +207,7 @@
            {:block/title (str "See " (page-ref/->page-ref stale-uuid))
             :block/raw-title (str "See " (page-ref/->page-ref stale-uuid))
             :block/refs [{:block/uuid stale-uuid
-                          :block/title missing-uuid-title}]})]
+                          :block/title "Deleted Block"}]})]
       (is (= (str "See " missing-uuid-title) (:block/title block)))
       (is (= (str "See " missing-uuid-title) (:block/raw-title block))))))
 
