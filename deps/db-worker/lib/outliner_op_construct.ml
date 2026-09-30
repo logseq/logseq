@@ -301,10 +301,13 @@ let inverse_upsert_property_schema db_before db_after (property : entity)
     &&
     (match Ldb.ident_of property with
      | Some ident ->
-         (* aevt: the attr's schema entry may already be retracted in db_after
-            (e.g. undo replaying delete-page), which would make the indexed
-            avet lookup raise for a non-indexed attribute *)
-         Seq.uncons (datoms db_after Aevt ~a:ident ()) |> Option.is_some
+         (* cljs: (some? (d/entity db-after ident)) guards the avet lookup,
+            which raises when the attr's schema entry was retracted;
+            aevt gives the same existence semantics without the index gate *)
+         (match entity db_after (Ident ident) with
+          | Some _ ->
+              Seq.uncons (datoms db_after Aevt ~a:ident ()) |> Option.is_some
+          | None -> false)
      | None -> false)
   in
   if reverts_many_to_one then Cljs_map.dissoc schema "db/cardinality"
