@@ -2353,6 +2353,133 @@ let ref_value_uuids db (e : entity) (a : attr) : string list =
        | _ -> None)
     (Ldb.values e a)
 
+(* cljs page-tree — the page titled page-title and its blocks, as nested
+   titles: a leaf is its title, a node is (title, children) *)
+type title_tree = T of string * title_tree list
+
+let page_tree db page_title : title_tree option =
+  let rec node (e : entity) : title_tree =
+    let children = Ldb.sort_by_order (Ldb.ref_ents e "block/_parent") in
+    T
+      ( Option.value (ent_title_of e) ~default:""
+      , List.map node children )
+  in
+  Option.map node (Db_test_util.find_page_by_title db page_title)
+
+(* cljs undo-delete-of-blocks-referring-to-each-other-test *)
+let test_undo_delete_of_blocks_referring_to_each_other () =
+  with_worker_conns (fun () ->
+      let conn = conn () in
+      let uuid_of = seed_inner_ref_graph () in
+      let related = related_ident conn in
+      let b1_id =
+        match ent_at_uuid (db_of conn) (uuid_of "b1") with
+        | Some e -> e.id
+        | None -> failwith "b1 missing"
+      in
+      ignore
+        (apply_ops_edn conn
+           (Printf.sprintf "[[:set-block-property [%s :%s %d]]]"
+              (uuid_lit (uuid_of "a")) related b1_id));
+      let a_uuid = uuid_of "a"
+      and b_uuid = uuid_of "b"
+      and b1_uuid = uuid_of "b1" in
+      ignore
+        (apply_ops_edn conn
+           (Printf.sprintf "[[:delete-blocks [[%s %s] {}]]]"
+              (uuid_lit a_uuid) (uuid_lit b_uuid)));
+      let trimmed = Some (T ("refs 1", [ T ("c", []) ]))
+      and restored =
+        Some
+          (T
+             ( "refs 1"
+             , [ T ("a", [])
+               ; T ("b", [ T ("b1", []); T ("b2", []) ])
+               ; T ("c", []) ] ))
+      in
+      let a_related () =
+        match ent_at_uuid (db_of conn) a_uuid with
+        | Some a -> ref_value_uuids (db_of conn) a related = [ b1_uuid ]
+        | None -> false
+      in
+      check "refs 1 trimmed" (page_tree (db_of conn) "refs 1" = trimmed);
+      let undo_result, results = undo_with_history_action_results () in
+      check "undo map"
+        (match undo_result with Wire.Map _ -> true | _ -> false);
+      check "applied" (all_applied results);
+      check "refs 1 restored" (page_tree (db_of conn) "refs 1" = restored);
+      check "a related -> b1" (a_related ());
+      check "redo map"
+        (match Undo_redo.redo test_repo with
+         | Wire.Map _ -> true
+         | _ -> false);
+      check "refs 1 trimmed again"
+        (page_tree (db_of conn) "refs 1" = trimmed);
+      check "undo map 2"
+        (match Undo_redo.undo test_repo with
+         | Wire.Map _ -> true
+         | _ -> false);
+      check "refs 1 restored again"
+        (page_tree (db_of conn) "refs 1" = restored);
+      check "a related -> b1 again" (a_related ()))
+
+(* cljs undo-delete-of-template-and-its-applied-copy-test *)
+let test_undo_delete_of_template_and_its_applied_copy () =
+  with_worker_conns (fun () ->
+      let conn = conn () in
+      let uuid_of = seed_inner_ref_graph () in
+      let tmpl_uuid = uuid_of "tmpl" and e_uuid = uuid_of "e" in
+      ignore
+        (apply_ops_edn conn
+           (Printf.sprintf "[[:apply-template [%s %s {:sibling? false}]]]"
+              (uuid_lit tmpl_uuid) (uuid_lit e_uuid)));
+      let tmpl_id =
+        match ent_at_uuid (db_of conn) tmpl_uuid with
+        | Some e -> e.id
+        | None -> failwith "tmpl missing"
+      in
+      let copy_uuid =
+        match
+          Seq.uncons
+            (datoms (db_of conn) Avet ~a:"logseq.property/used-template"
+               ~v:(Ref tmpl_id) ())
+        with
+        | Some (d, _) -> (
+            match Datascript.entity (db_of conn) (Entity_id d.e) with
+            | Some copy -> ent_uuid_of copy
+            | None -> failwith "copy missing")
+        | None -> failwith "no used-template datom"
+      in
+      ignore
+        (apply_ops_edn conn
+           (Printf.sprintf "[[:delete-blocks [[%s %s] {}]]]"
+              (uuid_lit copy_uuid) (uuid_lit tmpl_uuid)));
+      check "refs 2 trimmed"
+        (page_tree (db_of conn) "refs 2"
+         = Some (T ("refs 2", [ T ("d", []) ])));
+      let undo_result, results = undo_with_history_action_results () in
+      check "undo map"
+        (match undo_result with Wire.Map _ -> true | _ -> false);
+      check "applied" (all_applied results);
+      check "refs 2 restored"
+        (page_tree (db_of conn) "refs 2"
+         = Some
+             (T
+                ( "refs 2"
+                , [ T ("d", [])
+                  ; T ("tmpl", [ T ("tmpl child", []) ]) ] )));
+      match ent_at_uuid (db_of conn) copy_uuid with
+      | Some copy ->
+          check "copy parent is e"
+            (match Ldb.ref_ent copy "block/parent" with
+             | Some p -> ent_uuid_of p = e_uuid
+             | None -> false);
+          check "copy used-template is tmpl"
+            (match Ldb.ref_ent copy "logseq.property/used-template" with
+             | Some t -> ent_uuid_of t = tmpl_uuid
+             | None -> false)
+      | None -> check "copy restored" false)
+
 (* cljs undo-delete-of-today-page-with-blocks-referring-to-each-other-test *)
 let test_undo_delete_of_today_page_with_blocks_referring_to_each_other () =
   with_worker_conns (fun () ->
@@ -2573,4 +2700,10 @@ let cases =
       "undo-delete-of-tag-page-with-blocks-referring-to-each-other-test"
       `Quick
       test_undo_delete_of_tag_page_with_blocks_referring_to_each_other
+  ; Alcotest.test_case
+      "undo-delete-of-blocks-referring-to-each-other-test" `Quick
+      test_undo_delete_of_blocks_referring_to_each_other
+  ; Alcotest.test_case
+      "undo-delete-of-template-and-its-applied-copy-test" `Quick
+      test_undo_delete_of_template_and_its_applied_copy
   ]
