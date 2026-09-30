@@ -55,6 +55,13 @@
   animation: lui-fade-zoom-in 150ms ease-out;
 }
 
+/* cljs shui.css: dropdown menus inherit body text color, not popover-foreground */
+.ui__dropdown-menu-content,
+.ui__dropdown-menu-sub-content,
+.ui__context-menu-content {
+  color: inherit;
+}
+
 .ui__popover-content[data-side="bottom"],
 .ui__dropdown-menu-content[data-side="bottom"],
 .ui__dropdown-menu-sub-content[data-side="bottom"],
@@ -141,7 +148,6 @@
   position: relative;
   display: flex;
   align-items: center;
-  gap: 0.5rem;
   padding: 0.375rem 0.5rem;
   border-radius: 0.25rem;
   font-size: 0.875rem;
@@ -326,7 +332,7 @@
 .ui__dropdown-menu-sub-content .menu-links-wrapper,
 div[data-keep-selection].menu-links-wrapper {
   padding: 0;
-  border: none;
+  border-style: none;
   border-radius: 0;
   box-shadow: none;
   overflow: visible;
@@ -338,6 +344,7 @@ div[data-keep-selection].menu-links-wrapper {
   color: hsl(var(--popover-foreground) / 0.75);
   user-select: none;
   font-size: 0.875rem;
+  line-height: 1.25rem;
   padding: 0.375rem 0.5rem;
   transition: opacity 0.15s;
 }
@@ -603,6 +610,11 @@ div[data-keep-selection].menu-links-wrapper {
   width: 100%;
   height: 100%;
   border-radius: 0.5rem;
+  color: var(--lx-gray-12, var(--rx-gray-12));
+}
+
+.cp__cmdk .ui__icon {
+  font-size: 1rem;
 }
 
 .cp__cmdk > .hints {
@@ -633,11 +645,13 @@ div[data-keep-selection].menu-links-wrapper {
 .cp__cmdk-search-input {
   flex: 1;
   min-width: 16rem;
-  height: 3rem;
-  border: none;
+  min-height: 0;
+  border-style: none;
   outline: none;
   background: transparent;
-  font-size: 1rem;
+  font-size: 1.25rem;
+  line-height: 1.75rem;
+  padding: 0.75rem;
   color: var(--lx-gray-12, var(--ls-primary-text-color, inherit));
 }
 
@@ -663,6 +677,7 @@ div[data-keep-selection].menu-links-wrapper {
   min-height: 65dvh;
   max-height: 65dvh;
   padding-bottom: 3.5rem;
+  color: inherit;
 }
 
 .cp__cmdk-group {
@@ -789,16 +804,17 @@ div[data-keep-selection].menu-links-wrapper {
   flex-wrap: wrap;
   font-weight: 500;
   color: var(--lx-gray-12, var(--ls-primary-text-color, hsl(var(--foreground))));
-  /* cljs clamps to 2 lines */
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
   overflow: hidden;
 }
 
 [data-cmdk-item] .cp__cmdk-item-info {
+  display: inline;
   font-size: 0.75rem;
   color: var(--lx-gray-11, var(--ls-secondary-text-color, hsl(var(--muted-foreground))));
+}
+
+[data-cmdk-item] .cp__cmdk-item-info > div {
+  display: inline;
 }
 
 [data-cmdk-item] .breadcrumb.block-parents {
@@ -871,27 +887,54 @@ div[data-keep-selection].menu-links-wrapper {
   opacity: 0.45;
 }
 
+/* cljs shui.css: flat keycap label (no border/bg) */
 .shui-shortcut-key {
-  display: inline-flex;
+  display: flex;
   align-items: center;
   justify-content: center;
-  min-width: 1.25rem;
+  min-width: fit-content;
   height: 1.25rem;
-  padding: 0 0.25rem;
+  padding: 2px 4px;
+  font-family: 'Inter', sans-serif;
+  font-weight: 400;
+  font-size: 12px;
+  line-height: 16px;
+  text-align: center;
+  letter-spacing: -0.5px;
+  white-space: nowrap;
+  color: var(--lx-gray-12, var(--rx-gray-12));
+}
+
+/* combo: keys share one glowing container; separate: each key boxed */
+.shui-shortcut-combo.shui-shortcut-glow {
+  box-shadow: var(--kbd-glow-top) 0px 1px 0px 0px inset,
+    var(--kbd-glow-bottom) 0px -1px 0px 0px inset;
+}
+
+.shui-shortcut-combo .shui-shortcut-key {
+  flex-direction: column;
+  min-width: 20px;
+}
+
+.shui-shortcut-separate .shui-shortcut-key {
+  flex-direction: column;
   border-radius: 0.25rem;
-  border: 1px solid
-    var(--lx-gray-06, var(--ls-border-color, hsl(var(--border))));
-  background: var(--lx-gray-02,
-      var(--ls-secondary-background-color, hsl(var(--muted))));
-  font-family: inherit;
-  font-size: 0.6875rem;
-  line-height: 1;
-  color: var(--lx-gray-11, var(--ls-secondary-text-color, hsl(var(--muted-foreground))));
+  background-color: var(--lx-gray-06-alpha, var(--rx-gray-06-alpha));
+  border: 1px solid var(--lx-gray-06-alpha, var(--rx-gray-06-alpha));
+  min-width: 20px;
+}
+
+.shui-shortcut-separate.shui-shortcut-glow .shui-shortcut-key {
+  box-shadow: var(--kbd-glow-top) 0px 1px 0px 0px inset,
+    var(--kbd-glow-bottom) 0px -1px 0px 0px inset;
 }
 
 .shui-shortcut-separator {
   display: inline-block;
-  width: 0.25rem;
+  width: 1px;
+  align-self: stretch;
+  flex-shrink: 0;
+  background-color: var(--lx-gray-07-alpha, var(--rx-gray-07-alpha));
 }
 
 .shui-shortcut-compact span {
@@ -913,7 +956,9 @@ div[data-keep-selection].menu-links-wrapper {
   flex-direction: column;
   padding: 0.25rem 0.75rem;
   opacity: 0.7;
-  font-size: 0.875rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  line-height: 1rem;
 }
 
 .cp__cmdk-search-only .cp__cmdk-search-only-row {
@@ -932,7 +977,7 @@ div[data-keep-selection].menu-links-wrapper {
   display: inline-flex;
   align-items: center;
   padding: 0.25rem;
-  border: none;
+  border-style: none;
   background: none;
   color: inherit;
   cursor: pointer;
@@ -996,7 +1041,7 @@ div[data-keep-selection].menu-links-wrapper {
   font-size: 0.75rem;
   color: var(--lx-gray-11, var(--ls-secondary-text-color, hsl(var(--muted-foreground))));
   background: none;
-  border: none;
+  border-style: none;
   padding: 0;
   cursor: pointer;
   opacity: 0.4;
@@ -1004,6 +1049,26 @@ div[data-keep-selection].menu-links-wrapper {
 
 .cp__cmdk-hint:hover {
   opacity: 0.8;
+}
+
+/* cmdk hints render each key as a boxed separate keycap (cljs separate style) */
+.cp__cmdk-hints .shui-shortcut-combo {
+  gap: 4px;
+}
+
+.cp__cmdk-hints .shui-shortcut-combo .shui-shortcut-key {
+  flex-direction: column;
+  border-radius: 0.25rem;
+  background-color: var(--lx-gray-06-alpha, var(--rx-gray-06-alpha));
+  border: 1px solid var(--lx-gray-06-alpha, var(--rx-gray-06-alpha));
+  min-width: 20px;
+  box-shadow: var(--kbd-glow-top) 0px 1px 0px 0px inset,
+    var(--kbd-glow-bottom) 0px -1px 0px 0px inset;
+}
+
+.cp__cmdk-hints .shui-shortcut-separator {
+  background: none;
+  width: 0;
 }
 
 .cp__cmdk-hint-label {
@@ -1056,7 +1121,7 @@ div[data-keep-selection].menu-links-wrapper {
   font-size: 16px;
   outline: none;
   background: transparent;
-  border: none;
+  border-style: none;
   color: var(--ls-secondary-text-color);
 }
 
@@ -1072,7 +1137,7 @@ div[data-keep-selection].menu-links-wrapper {
   display: flex;
   justify-content: space-between;
   transition: none;
-  border: none;
+  border-style: none;
   background: none;
 }
 
@@ -1264,7 +1329,7 @@ div[data-keep-selection].menu-links-wrapper {
   align-items: center;
   justify-content: center;
   border-radius: 0.375rem;
-  border: none;
+  border-style: none;
   background: var(--lx-accent-09, hsl(var(--primary, var(--ls-link-text-color, #0f7b6c))));
   color: #fff;
   font-size: 0.875rem;
@@ -1304,7 +1369,7 @@ div[data-keep-selection].menu-links-wrapper {
   cursor: pointer;
   transition: opacity 0.15s;
   background: none;
-  border: none;
+  border-style: none;
   color: inherit;
 }
 
@@ -1406,7 +1471,7 @@ div[data-keep-selection].menu-links-wrapper {
 }
 
 .ui__button.ls-btn.ls-btn-primary {
-  border: none;
+  border-style: none;
 }
 
 /* prompt dialog (import password/text prompt) */
@@ -1455,7 +1520,7 @@ div[data-keep-selection].menu-links-wrapper {
   position: absolute;
   right: 0.25rem;
   top: 6px;
-  border: none;
+  border-style: none;
   background: none;
   cursor: pointer;
   color: inherit;
@@ -1526,7 +1591,7 @@ div[data-keep-selection].menu-links-wrapper {
 .ls-readme-body {
   padding: 0.25rem;
   background: transparent;
-  border: none;
+  border-style: none;
   min-height: 60vw;
   max-width: 900px;
 }
@@ -1685,6 +1750,7 @@ div[data-keep-selection].menu-links-wrapper {
   height: 100%;
   overflow: hidden;
   padding: 0.75rem;
+  position: relative;
   transition: opacity 0.25s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
@@ -1696,13 +1762,14 @@ div[data-keep-selection].menu-links-wrapper {
   opacity: 1;
 }
 
+/* cljs `.ui__toast-content.untitled`: close floats top-right, status icon
+   sits inline with the description row */
 .ui__toast-header {
-  display: flex;
-  width: 100%;
-  flex-shrink: 0;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
+  position: absolute;
+  top: 1.25rem;
+  left: 0.75rem;
+  right: 0.25rem;
+  z-index: 1;
 }
 
 .ui__toast-body {
@@ -1714,6 +1781,7 @@ div[data-keep-selection].menu-links-wrapper {
   gap: 0.75rem;
   overflow-y: auto;
   overscroll-behavior: contain;
+  padding-block: 0.5rem;
 }
 
 .ui__toast-text {
@@ -1721,9 +1789,14 @@ div[data-keep-selection].menu-links-wrapper {
   min-height: 0;
   min-width: 0;
   flex: 1;
-  flex-direction: column;
-  gap: 0.25rem;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 0.5rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
+
+
 
 .ui__toast-title {
   margin: 0;
@@ -1736,15 +1809,30 @@ div[data-keep-selection].menu-links-wrapper {
   margin: 0;
   min-height: 0;
   min-width: 0;
-  overflow-y: auto;
+  max-height: 100%;
+  max-width: 100%;
+  flex: 1;
+  overflow: auto;
   overscroll-behavior: contain;
+  user-select: text;
   font-size: 0.875rem;
   line-height: 1.25rem;
   opacity: 0.9;
+  color: var(--ls-primary-text-color);
+}
+
+/* status icon sits inside the (absolutely positioned) header; keep the
+   description row's icon slot as a flex spacer like the cljs layout */
+.ui__toast-text::before {
+  content: '';
+  width: 1.25rem;
+  flex-shrink: 0;
 }
 
 .ui__toast-close {
-  margin-left: auto;
+  position: absolute;
+  top: -1rem;
+  right: 0;
   display: flex;
   flex-shrink: 0;
   align-items: center;
@@ -1752,36 +1840,38 @@ div[data-keep-selection].menu-links-wrapper {
   width: 2rem;
   height: 2rem;
   border-radius: 0.375rem;
-  border: none;
+  min-height: auto;
   background: none;
-  color: hsl(var(--foreground, currentColor));
-  opacity: 0.5;
+  color: color-mix(in oklab, hsl(var(--foreground)) 50%, transparent);
   cursor: pointer;
   transition: color 0.15s;
 }
 
 .ui__toast-close:hover {
-  opacity: 1;
+  color: hsl(var(--foreground));
 }
 
 .ui__toast-status-icon {
   flex-shrink: 0;
+  font-size: 16px;
+  width: 1.25rem;
+  height: 1.25rem;
 }
 
 .ui__toast-status-icon.info {
-  color: var(--lx-blue-09, hsl(208 93% 48%));
+  color: var(--rx-blue-09-alpha, var(--lx-blue-09, hsl(208 93% 48%)));
 }
 
 .ui__toast-status-icon.success {
-  color: var(--lx-green-09, hsl(142 71% 45%));
+  color: var(--rx-green-09-alpha, var(--lx-green-09, hsl(142 71% 45%)));
 }
 
 .ui__toast-status-icon.warning {
-  color: var(--lx-yellow-10, hsl(45 93% 40%));
+  color: var(--rx-yellow-10-alpha, var(--lx-yellow-10, hsl(45 93% 40%)));
 }
 
 .ui__toast-status-icon.error {
-  color: var(--lx-red-10, hsl(359 82% 48%));
+  color: var(--rx-red-10-alpha, var(--lx-red-10, hsl(359 82% 48%)));
 }
 
 /* ---- calendar / date picker -------------------------------------------- */
@@ -1818,7 +1908,7 @@ div[data-keep-selection].menu-links-wrapper {
   width: 1.75rem;
   height: 1.75rem;
   border-radius: 9999px;
-  border: none;
+  border-style: none;
   background: none;
   font-size: 0.8125rem;
   cursor: pointer;
@@ -2166,7 +2256,7 @@ h1.cp__settings-category-title::first-letter {
   width: 100%;
   color: var(--lx-gray-12, var(--ls-primary-text-color, hsl(var(--foreground))));
   background: none;
-  border: none;
+  border-style: none;
   cursor: pointer;
   font-size: 0.875rem;
 }
@@ -2563,7 +2653,7 @@ select.form-select {
   padding: 0.25rem 0.75rem;
   border-radius: 0.375rem;
   font-size: 0.8125rem;
-  border: none;
+  border-style: none;
   background: none;
   color: inherit;
   cursor: pointer;
@@ -2712,7 +2802,7 @@ select.form-select {
   line-height: 1;
   padding-left: 2rem;
   outline: none;
-  border: none;
+  border-style: none;
   height: 2rem;
   background: var(--lx-gray-03, var(--ls-tertiary-background-color, hsl(var(--muted))));
 }
@@ -2747,7 +2837,7 @@ select.form-select {
   align-items: center;
   justify-content: center;
   border-radius: 9999px;
-  border: none;
+  border-style: none;
   background: none;
   width: 2.25rem;
   height: 2.25rem;
@@ -2805,7 +2895,7 @@ select.form-select {
   overflow: hidden;
   padding: 0;
   opacity: 0.9;
-  border: none;
+  border-style: none;
   background: none;
   cursor: pointer;
   border-radius: 9999px;
@@ -2852,7 +2942,7 @@ select.form-select {
   display: inline-flex;
   align-items: center;
   background: none;
-  border: none;
+  border-style: none;
   color: inherit;
   font-size: inherit;
   cursor: pointer;
@@ -2869,7 +2959,7 @@ select.form-select {
   max-width: 20rem;
   height: 1.75rem;
   padding: 0;
-  border: none;
+  border-style: none;
   background: transparent;
   font-size: 0.875rem;
   outline: none;
@@ -2914,7 +3004,7 @@ select.form-select {
 
 .ls-view-filter button {
   padding: 0 0.5rem;
-  border: none;
+  border-style: none;
   border-right: 1px solid
     var(--lx-gray-06, var(--ls-border-color, hsl(var(--border))));
   background: none;
@@ -3129,7 +3219,7 @@ select.form-select {
 .icon-link {
   display: flex;
   align-items: center;
-  border: none;
+  border-style: none;
   background: none;
   cursor: pointer;
   color: inherit;
@@ -3249,7 +3339,7 @@ select.form-select {
 .ui__button.as-solid {
   background: hsl(var(--primary) / 0.9);
   color: hsl(var(--primary-foreground));
-  border: none;
+  border-style: none;
 }
 
 .ui__button.as-solid:hover {
@@ -3259,7 +3349,7 @@ select.form-select {
 .ui__button.as-secondary {
   background: hsl(var(--secondary) / 0.7);
   color: hsl(var(--secondary-foreground));
-  border: none;
+  border-style: none;
 }
 
 .ui__button.as-secondary:hover {
@@ -3277,7 +3367,7 @@ select.form-select {
 
 .ui__button.as-text {
   background: none;
-  border: none;
+  border-style: none;
 }
 
 .ui__button.as-text:hover {
@@ -3381,7 +3471,7 @@ select.form-select {
   padding: 0.375rem 0.75rem;
   font-size: 0.875rem;
   background: none;
-  border: none;
+  border-style: none;
   cursor: pointer;
   color: inherit;
   border-radius: 0.375rem;
@@ -3398,7 +3488,7 @@ select.form-select {
   width: 2rem;
   height: 2rem;
   background: none;
-  border: none;
+  border-style: none;
   cursor: pointer;
   color: inherit;
   border-radius: 0.375rem;
@@ -3829,7 +3919,7 @@ select.form-select {
   padding: 0 0.25rem;
   color: hsl(var(--muted-foreground));
   background: none;
-  border: none;
+  border-style: none;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
@@ -3909,7 +3999,7 @@ select.form-select {
   padding: 0.25rem 0.5rem;
   font-size: 0.875rem;
   background: none;
-  border: none;
+  border-style: none;
   cursor: pointer;
   color: inherit;
 }
@@ -3928,7 +4018,7 @@ select.form-select {
   max-width: 24rem;
   height: 1.75rem;
   padding: 0;
-  border: none;
+  border-style: none;
   background: transparent;
   font-size: 0.875rem;
   color: inherit;
@@ -3955,7 +4045,7 @@ select.form-select {
 .ls-vf-chip-val,
 .ls-vf-chip-x {
   background: none;
-  border: none;
+  border-style: none;
   cursor: pointer;
   color: inherit;
   font-size: 0.875rem;
@@ -4077,7 +4167,7 @@ select.form-select {
 
 .ui__button.as-ghost {
   background: none;
-  border: none;
+  border-style: none;
 }
 
 .ui__button.as-ghost:hover {
@@ -4087,7 +4177,7 @@ select.form-select {
 .ui__button.as-destructive {
   background: hsl(var(--destructive, #d64545) / 0.9);
   color: #fff;
-  border: none;
+  border-style: none;
 }
 
 .ui__button.as-destructive:hover {
@@ -4096,7 +4186,7 @@ select.form-select {
 
 .ui__button.as-link {
   background: none;
-  border: none;
+  border-style: none;
   color: hsl(var(--primary));
   text-underline-offset: 4px;
 }
@@ -4144,7 +4234,7 @@ select.form-select {
 
 .ls-hm-hr {
   margin: 0.5rem 0;
-  border: none;
+  border-style: none;
   border-top: 1px solid hsl(var(--border));
 }
 
