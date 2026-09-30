@@ -505,6 +505,13 @@ let property_value_titles db (e : entity) (ident : string) : string list =
   in
   List.concat_map flatten (Ldb.values e ident)
 
+(* cljs set? on an entity attr value — materializes as a collection when
+   the attr is cardinality many *)
+let attr_is_set (e : entity) (a : attr) : bool =
+  match entity_attr e a with
+  | Some (Many_values _) | Some (Many_entities _) -> true
+  | _ -> false
+
 let inverse_op_named data op_name =
   match data_get "db-sync/inverse-outliner-ops" data with
   | Some (Wire.Array ops) | Some (Wire.List ops) ->
@@ -1796,6 +1803,9 @@ let embed_block (uuid_of : string -> string) (title : string)
 let undo_is_map () =
   match Undo_redo.undo test_repo with Wire.Map _ -> true | _ -> false
 
+let redo_is_map () =
+  match Undo_redo.redo test_repo with Wire.Map _ -> true | _ -> false
+
 (* cljs undo-move-down-of-blocks-at-different-levels-test *)
 let test_undo_move_down_of_blocks_at_different_levels () =
   with_worker_conns (fun () ->
@@ -2018,6 +2028,138 @@ let test_undo_delete_of_property_valued_on_itself_restores_property () =
             (Ldb.ref_ent property "user.property/undo-self-rating" = None)
       | None -> check "property restored 2" false)
 
+(* cljs undo-upsert-property-one-to-many-with-values-does-not-revert-cardinality-test *)
+let test_undo_upsert_property_one_to_many_with_values () =
+  with_worker_conns (fun () ->
+      Undo_redo.clear_history test_repo;
+      let conn = conn () in
+      let _p, _par, child_uuid = seed_page_parent_child () in
+      let property_id = "user.property/undo-note" in
+      ignore
+        (apply_ops_edn conn
+           (Printf.sprintf
+              "[[:upsert-property [:%s {:logseq.property/type :default :db/cardinality :one} {:property-name \"note\"}]]]"
+              property_id));
+      ignore
+        (apply_ops_edn conn
+           (Printf.sprintf "[[:set-block-property [%s :%s \"text 1\"]]]"
+              (uuid_lit child_uuid) property_id));
+      Undo_redo.clear_history test_repo;
+      ignore
+        (apply_ops_edn conn
+           (Printf.sprintf
+              "[[:upsert-property [:%s {:logseq.property/type :default :db/cardinality :many} {}]]]"
+              property_id));
+      let db = db_of conn in
+      check "cardinality many"
+        (match entity_of_ident db property_id with
+         | Some e ->
+             Ldb.value e "db/cardinality"
+             = Some (Keyword "db.cardinality/many")
+         | None -> false);
+      check "child value is a set"
+        (match ent_at_uuid db child_uuid with
+         | Some e -> attr_is_set e property_id
+         | None -> false);
+      (match latest_undo_history_data () with
+       | Some data ->
+           (match data_get "db-sync/inverse-outliner-ops" data with
+            | Some (Wire.Array (inv :: _)) | Some (Wire.List (inv :: _)) ->
+                check "inverse op is upsert-property"
+                  (match Outliner_op.op_of_entry inv with
+                   | Some ("upsert-property", _) -> true
+                   | _ -> false);
+                check "inverse schema omits :db/cardinality"
+                  (wire_get_in inv [ `I 1; `I 1; `K "db/cardinality" ]
+                  = None)
+            | _ -> check "inverse ops nonempty" false);
+           (match data_uuid "db-sync/tx-id" data with
+            | Some tx_id -> poison_history_tx_order tx_id
+            | None -> ())
+       | None -> Alcotest.fail "no undo history data");
+      check "undo map" (undo_is_map ());
+      let db = db_of conn in
+      check "cardinality still many after undo"
+        (match entity_of_ident db property_id with
+         | Some e ->
+             Ldb.value e "db/cardinality"
+             = Some (Keyword "db.cardinality/many")
+         | None -> false);
+      (match ent_at_uuid db child_uuid with
+       | Some e ->
+           check "value still a set" (attr_is_set e property_id);
+           check "value titles"
+             (property_value_titles db e property_id = [ "text 1" ])
+       | None -> check "child found" false);
+      check "redo map" (redo_is_map ());
+      check "cardinality many after redo"
+        (match entity_of_ident (db_of conn) property_id with
+         | Some e ->
+             Ldb.value e "db/cardinality"
+             = Some (Keyword "db.cardinality/many")
+         | None -> false))
+
+(* cljs undo-upsert-property-one-to-many-with-choices-does-not-revert-cardinality-test *)
+let test_undo_upsert_property_one_to_many_with_choices () =
+  with_worker_conns (fun () ->
+      Undo_redo.clear_history test_repo;
+      let conn = conn () in
+      let _p, _par, child_uuid = seed_page_parent_child () in
+      let property_id = "user.property/undo-status" in
+      ignore
+        (apply_ops_edn conn
+           (Printf.sprintf
+              "[[:upsert-property [:%s {:logseq.property/type :default :db/cardinality :one} {:property-name \"status\"}]]]"
+              property_id));
+      ignore
+        (apply_ops_edn conn
+           (Printf.sprintf
+              "[[:upsert-closed-value [:%s {:value \"active\"}]]]"
+              property_id));
+      ignore
+        (apply_ops_edn conn
+           (Printf.sprintf "[[:set-block-property [%s :%s \"active\"]]]"
+              (uuid_lit child_uuid) property_id));
+      Undo_redo.clear_history test_repo;
+      ignore
+        (apply_ops_edn conn
+           (Printf.sprintf
+              "[[:upsert-property [:%s {:logseq.property/type :default :db/cardinality :many} {}]]]"
+              property_id));
+      check "cardinality many"
+        (match entity_of_ident (db_of conn) property_id with
+         | Some e ->
+             Ldb.value e "db/cardinality"
+             = Some (Keyword "db.cardinality/many")
+         | None -> false);
+      (match latest_undo_history_data () with
+       | Some data ->
+           (match data_get "db-sync/inverse-outliner-ops" data with
+            | Some (Wire.Array (inv :: _)) | Some (Wire.List (inv :: _)) ->
+                check "inverse op is upsert-property"
+                  (match Outliner_op.op_of_entry inv with
+                   | Some ("upsert-property", _) -> true
+                   | _ -> false);
+                check "inverse schema omits :db/cardinality"
+                  (wire_get_in inv [ `I 1; `I 1; `K "db/cardinality" ]
+                  = None)
+            | _ -> check "inverse ops nonempty" false);
+           (match data_uuid "db-sync/tx-id" data with
+            | Some tx_id -> poison_history_tx_order tx_id
+            | None -> ())
+       | None -> Alcotest.fail "no undo history data");
+      check "undo map" (undo_is_map ());
+      check "cardinality still many after undo"
+        (match entity_of_ident (db_of conn) property_id with
+         | Some e ->
+             Ldb.value e "db/cardinality"
+             = Some (Keyword "db.cardinality/many")
+         | None -> false);
+      check "child value still a set"
+        (match ent_at_uuid (db_of conn) child_uuid with
+         | Some e -> attr_is_set e property_id
+         | None -> false))
+
 (* cljs undo-delete-of-tag-renamed-to-page-title-restores-tag-test *)
 let test_undo_delete_of_tag_renamed_to_page_title_restores_tag () =
   with_worker_conns (fun () ->
@@ -2095,6 +2237,379 @@ let test_replay_create_page_titled_like_property_creates_page () =
            entity_of_ident (db_of conn) "user.property/undo-replay-rating"
          with
          | Some e -> Ldb.is_property e
+         | None -> false))
+
+(* cljs seed-inner-ref-graph! — adds the node property "related"
+   (cardinality many), page "refs 1" with blocks a, b (children b1, b2),
+   c, page "refs 2" with blocks d and tmpl (tagged Template, child "tmpl
+   child"), and a journal with block e. Clears history and returns a fn
+   from a block title to its uuid. *)
+let seed_inner_ref_graph () : string -> string =
+  let conn = conn () in
+  let open Db_test_util in
+  let options =
+    { default_options with
+      properties =
+        [ ( "related"
+          , { default_property with
+              p_type = "node"; p_cardinality_many = true } ) ]
+    ; pages_and_blocks =
+        [ { page = { default_page with pg_title = Some "refs 1" }
+          ; blocks =
+              [ { default_block with b_title = Some "a" }
+              ; { default_block with
+                  b_title = Some "b"
+                ; b_children =
+                    [ { default_block with b_title = Some "b1" }
+                    ; { default_block with b_title = Some "b2" } ] }
+              ; { default_block with b_title = Some "c" } ] }
+        ; { page = { default_page with pg_title = Some "refs 2" }
+          ; blocks =
+              [ { default_block with b_title = Some "d" }
+              ; { default_block with
+                  b_title = Some "tmpl"
+                ; b_tags = [ "logseq.class/Template" ]
+                ; b_children =
+                    [ { default_block with b_title = Some "tmpl child" } ] }
+              ] }
+        ; { page = { default_page with pg_journal = Some 20260925 }
+          ; blocks = [ { default_block with b_title = Some "e" } ] } ] }
+  in
+  let init_tx, block_props_tx = Db_test_util.build_blocks_tx options in
+  Db_test_util.transact_maps conn init_tx;
+  if block_props_tx <> [] then
+    Db_test_util.transact_maps conn block_props_tx;
+  Undo_redo.clear_history test_repo;
+  fun title ->
+    match Db_test_util.find_block_by_content (db_of conn) title with
+    | Some e -> ent_uuid_of e
+    | None -> failwith ("seeded block missing: " ^ title)
+
+(* cljs related-ident *)
+let related_ident conn : string =
+  match Db_test_util.find_page_by_title (db_of conn) "related" with
+  | Some e -> (
+      match ent_ident e with
+      | Some i -> i
+      | None -> failwith "related has no ident")
+  | None -> failwith "related property missing"
+
+(* cljs add-x-pointing-at-y! — adds top-level blocks x, y to the page
+   page-id, x's "related" pointing at y. Returns (x-uuid, y-uuid) *)
+let add_x_pointing_at_y conn page_id related : string * string =
+  let x_uuid = Uuid_gen.uuid () and y_uuid = Uuid_gen.uuid () in
+  ignore
+    (apply_ops_edn conn
+       (Printf.sprintf
+          "[[:insert-blocks [[{:block/uuid %s :block/title \"x\"} {:block/uuid %s :block/title \"y\"}] %d {:sibling? false :keep-uuid? true}]]]"
+          (uuid_lit x_uuid) (uuid_lit y_uuid) page_id));
+  let y_id =
+    match ent_at_uuid (db_of conn) y_uuid with
+    | Some e -> e.id
+    | None -> failwith "y block missing"
+  in
+  ignore
+    (apply_ops_edn conn
+       (Printf.sprintf "[[:set-block-property [%s :%s %d]]]"
+          (uuid_lit x_uuid) related y_id));
+  (x_uuid, y_uuid)
+
+(* cljs undo-with-history-action-results! — undoes once and returns the
+   undo result and the results of the worker's history actions it ran *)
+let undo_with_history_action_results ()
+    : Wire.t * (string * Wire.t) list list =
+  let prev = !Undo_redo.apply_history_action in
+  let results = ref [] in
+  Undo_redo.apply_history_action :=
+    Some
+      (fun repo tx_id_opt undo pairs ->
+         let result =
+           apply_history_action_adapter repo tx_id_opt undo pairs
+         in
+         results := result :: !results;
+         result);
+  Fun.protect
+    ~finally:(fun () -> Undo_redo.apply_history_action := prev)
+    (fun () ->
+       let undo_result = Undo_redo.undo test_repo in
+       (undo_result, List.rev !results))
+
+let all_applied results : bool =
+  List.map
+    (fun r ->
+       match List.assoc_opt "applied?" r with
+       | Some (Wire.Bool b) -> b
+       | _ -> false)
+    results
+  = [ true ]
+
+(* uuids of the blocks a ref-typed attr points at *)
+let ref_value_uuids db (e : entity) (a : attr) : string list =
+  List.filter_map
+    (fun (v : value) ->
+       match v with
+       | Ref id ->
+           Option.map ent_uuid_of (Datascript.entity db (Entity_id id))
+       | _ -> None)
+    (Ldb.values e a)
+
+(* cljs page-tree — the page titled page-title and its blocks, as nested
+   titles: a leaf is its title, a node is (title, children) *)
+type title_tree = T of string * title_tree list
+
+let page_tree db page_title : title_tree option =
+  let rec node (e : entity) : title_tree =
+    let children = Ldb.sort_by_order (Ldb.ref_ents e "block/_parent") in
+    T
+      ( Option.value (ent_title_of e) ~default:""
+      , List.map node children )
+  in
+  Option.map node (Db_test_util.find_page_by_title db page_title)
+
+(* cljs undo-delete-of-blocks-referring-to-each-other-test *)
+let test_undo_delete_of_blocks_referring_to_each_other () =
+  with_worker_conns (fun () ->
+      let conn = conn () in
+      let uuid_of = seed_inner_ref_graph () in
+      let related = related_ident conn in
+      let b1_id =
+        match ent_at_uuid (db_of conn) (uuid_of "b1") with
+        | Some e -> e.id
+        | None -> failwith "b1 missing"
+      in
+      ignore
+        (apply_ops_edn conn
+           (Printf.sprintf "[[:set-block-property [%s :%s %d]]]"
+              (uuid_lit (uuid_of "a")) related b1_id));
+      let a_uuid = uuid_of "a"
+      and b_uuid = uuid_of "b"
+      and b1_uuid = uuid_of "b1" in
+      ignore
+        (apply_ops_edn conn
+           (Printf.sprintf "[[:delete-blocks [[%s %s] {}]]]"
+              (uuid_lit a_uuid) (uuid_lit b_uuid)));
+      let trimmed = Some (T ("refs 1", [ T ("c", []) ]))
+      and restored =
+        Some
+          (T
+             ( "refs 1"
+             , [ T ("a", [])
+               ; T ("b", [ T ("b1", []); T ("b2", []) ])
+               ; T ("c", []) ] ))
+      in
+      let a_related () =
+        match ent_at_uuid (db_of conn) a_uuid with
+        | Some a -> ref_value_uuids (db_of conn) a related = [ b1_uuid ]
+        | None -> false
+      in
+      check "refs 1 trimmed" (page_tree (db_of conn) "refs 1" = trimmed);
+      let undo_result, results = undo_with_history_action_results () in
+      check "undo map"
+        (match undo_result with Wire.Map _ -> true | _ -> false);
+      check "applied" (all_applied results);
+      check "refs 1 restored" (page_tree (db_of conn) "refs 1" = restored);
+      check "a related -> b1" (a_related ());
+      check "redo map"
+        (match Undo_redo.redo test_repo with
+         | Wire.Map _ -> true
+         | _ -> false);
+      check "refs 1 trimmed again"
+        (page_tree (db_of conn) "refs 1" = trimmed);
+      check "undo map 2"
+        (match Undo_redo.undo test_repo with
+         | Wire.Map _ -> true
+         | _ -> false);
+      check "refs 1 restored again"
+        (page_tree (db_of conn) "refs 1" = restored);
+      check "a related -> b1 again" (a_related ()))
+
+(* cljs undo-delete-of-template-and-its-applied-copy-test *)
+let test_undo_delete_of_template_and_its_applied_copy () =
+  with_worker_conns (fun () ->
+      let conn = conn () in
+      let uuid_of = seed_inner_ref_graph () in
+      let tmpl_uuid = uuid_of "tmpl" and e_uuid = uuid_of "e" in
+      ignore
+        (apply_ops_edn conn
+           (Printf.sprintf "[[:apply-template [%s %s {:sibling? false}]]]"
+              (uuid_lit tmpl_uuid) (uuid_lit e_uuid)));
+      let tmpl_id =
+        match ent_at_uuid (db_of conn) tmpl_uuid with
+        | Some e -> e.id
+        | None -> failwith "tmpl missing"
+      in
+      let copy_uuid =
+        match
+          Seq.uncons
+            (datoms (db_of conn) Avet ~a:"logseq.property/used-template"
+               ~v:(Ref tmpl_id) ())
+        with
+        | Some (d, _) -> (
+            match Datascript.entity (db_of conn) (Entity_id d.e) with
+            | Some copy -> ent_uuid_of copy
+            | None -> failwith "copy missing")
+        | None -> failwith "no used-template datom"
+      in
+      ignore
+        (apply_ops_edn conn
+           (Printf.sprintf "[[:delete-blocks [[%s %s] {}]]]"
+              (uuid_lit copy_uuid) (uuid_lit tmpl_uuid)));
+      check "refs 2 trimmed"
+        (page_tree (db_of conn) "refs 2"
+         = Some (T ("refs 2", [ T ("d", []) ])));
+      let undo_result, results = undo_with_history_action_results () in
+      check "undo map"
+        (match undo_result with Wire.Map _ -> true | _ -> false);
+      check "applied" (all_applied results);
+      check "refs 2 restored"
+        (page_tree (db_of conn) "refs 2"
+         = Some
+             (T
+                ( "refs 2"
+                , [ T ("d", [])
+                  ; T ("tmpl", [ T ("tmpl child", []) ]) ] )));
+      match ent_at_uuid (db_of conn) copy_uuid with
+      | Some copy ->
+          check "copy parent is e"
+            (match Ldb.ref_ent copy "block/parent" with
+             | Some p -> ent_uuid_of p = e_uuid
+             | None -> false);
+          check "copy used-template is tmpl"
+            (match Ldb.ref_ent copy "logseq.property/used-template" with
+             | Some t -> ent_uuid_of t = tmpl_uuid
+             | None -> false)
+      | None -> check "copy restored" false)
+
+(* cljs full-undo-stack-keeps-newest-entries-test *)
+let test_full_undo_stack_keeps_newest_entries () =
+  with_worker_conns (fun () ->
+      Undo_redo.clear_history test_repo;
+      let conn = conn () in
+      let _, _, child_uuid = seed_page_parent_child () in
+      let title () =
+        match ent_at_uuid (db_of conn) child_uuid with
+        | Some e -> Option.value (ent_title_of e) ~default:""
+        | None -> ""
+      in
+      let prev_max = !Undo_redo.max_stack_length in
+      Undo_redo.max_stack_length := 10;
+      Fun.protect
+        ~finally:(fun () -> Undo_redo.max_stack_length := prev_max)
+        (fun () ->
+           for i = 1 to 12 do
+             save_block_title conn child_uuid (Printf.sprintf "v%d" i)
+           done;
+           check "7 undo ops"
+             (List.length (stack_of Undo_redo.undo_ops test_repo) = 7);
+           let titles =
+             List.init 7 (fun _ ->
+                 ignore (Undo_redo.undo test_repo);
+                 title ())
+           in
+           check "undos step back"
+             (titles = [ "v11"; "v10"; "v9"; "v8"; "v7"; "v6"; "v5" ]);
+           check "empty stack"
+             (Undo_redo.undo test_repo
+              = Undo_redo.empty_stack_result ~undo:true)))
+
+(* cljs undo-delete-of-today-page-with-blocks-referring-to-each-other-test *)
+let test_undo_delete_of_today_page_with_blocks_referring_to_each_other () =
+  with_worker_conns (fun () ->
+      let conn = conn () in
+      let _uuid_of = seed_inner_ref_graph () in
+      let related = related_ident conn in
+      let today_day =
+        Date_time_util.ms_to_journal_day (Time.epoch_ms_to_int64 (Time.now ()))
+      in
+      let today_title =
+        let journal =
+          Option.get (entity_of_ident (db_of conn) "logseq.class/Journal")
+        in
+        let fmt =
+          Option.value
+            (Ldb.string_value journal "logseq.property.journal/title-format")
+            ~default:"MMM do, yyyy"
+        in
+        Date_time_util.int_to_journal_title today_day fmt
+      in
+      let today_page_uuid =
+        match
+          apply_ops_edn conn
+            (Printf.sprintf
+               "[[:create-page [%s {:today-journal? true :redirect? false :split-namespace? true :tags ()}]]]"
+               (qstr today_title))
+        with
+        | Wire.Array [ _; Wire.Uuid u ] -> u
+        | Wire.Array [ _; Wire.String u ] -> u
+        | _ -> (
+            match Db_test_util.find_page_by_title (db_of conn) today_title with
+            | Some e -> ent_uuid_of e
+            | None -> Alcotest.fail "today page create returned no uuid")
+      in
+      let today_page_id =
+        match ent_at_uuid (db_of conn) today_page_uuid with
+        | Some e -> e.id
+        | None -> failwith "today page missing"
+      in
+      let x_uuid, y_uuid =
+        add_x_pointing_at_y conn today_page_id related
+      in
+      Undo_redo.clear_history test_repo;
+      ignore
+        (apply_ops_edn conn
+           (Printf.sprintf "[[:delete-page [%s {}]]]"
+              (uuid_lit today_page_uuid)));
+      check "x deleted" (ent_at_uuid (db_of conn) x_uuid = None);
+      let undo_result, results = undo_with_history_action_results () in
+      check "undo map"
+        (match undo_result with Wire.Map _ -> true | _ -> false);
+      check "applied" (all_applied results);
+      check "x related -> y"
+        (match ent_at_uuid (db_of conn) x_uuid with
+         | Some x -> ref_value_uuids (db_of conn) x related = [ y_uuid ]
+         | None -> false))
+
+(* cljs undo-delete-of-tag-page-with-blocks-referring-to-each-other-test *)
+let test_undo_delete_of_tag_page_with_blocks_referring_to_each_other () =
+  with_worker_conns (fun () ->
+      let conn = conn () in
+      let _uuid_of = seed_inner_ref_graph () in
+      let related = related_ident conn in
+      let class_uuid =
+        match
+          apply_ops_edn conn
+            "[[:create-page [\"undo inner refs tag\" {:class? true :redirect? false :split-namespace? true :tags ()}]]]"
+        with
+        | Wire.Array [ _; Wire.Uuid u ] -> u
+        | Wire.Array [ _; Wire.String u ] -> u
+        | _ -> (
+            match
+              Db_test_util.find_page_by_title (db_of conn)
+                "undo inner refs tag"
+            with
+            | Some e -> ent_uuid_of e
+            | None -> Alcotest.fail "class create returned no uuid")
+      in
+      let class_id =
+        match ent_at_uuid (db_of conn) class_uuid with
+        | Some e -> e.id
+        | None -> failwith "class page missing"
+      in
+      let x_uuid, y_uuid = add_x_pointing_at_y conn class_id related in
+      Undo_redo.clear_history test_repo;
+      ignore
+        (apply_ops_edn conn
+           (Printf.sprintf "[[:delete-page [%s {}]]]" (uuid_lit class_uuid)));
+      check "class deleted" (ent_at_uuid (db_of conn) class_uuid = None);
+      let undo_result, results = undo_with_history_action_results () in
+      check "undo map"
+        (match undo_result with Wire.Map _ -> true | _ -> false);
+      check "applied" (all_applied results);
+      check "class restored"
+        (ent_at_uuid (db_of conn) class_uuid <> None);
+      check "x related -> y"
+        (match ent_at_uuid (db_of conn) x_uuid with
+         | Some x -> ref_value_uuids (db_of conn) x related = [ y_uuid ]
          | None -> false))
 
 let cases =
@@ -2198,9 +2713,32 @@ let cases =
       "undo-delete-of-property-valued-on-itself-restores-property-test"
       `Quick test_undo_delete_of_property_valued_on_itself_restores_property
   ; Alcotest.test_case
+      "undo-upsert-property-one-to-many-with-values-does-not-revert-cardinality-test"
+      `Quick test_undo_upsert_property_one_to_many_with_values
+  ; Alcotest.test_case
+      "undo-upsert-property-one-to-many-with-choices-does-not-revert-cardinality-test"
+      `Quick test_undo_upsert_property_one_to_many_with_choices
+  ; Alcotest.test_case
       "undo-delete-of-tag-renamed-to-page-title-restores-tag-test" `Quick
       test_undo_delete_of_tag_renamed_to_page_title_restores_tag
   ; Alcotest.test_case
       "replay-create-page-titled-like-property-creates-page-test" `Quick
       test_replay_create_page_titled_like_property_creates_page
+  ; Alcotest.test_case
+      "undo-delete-of-today-page-with-blocks-referring-to-each-other-test"
+      `Quick
+      test_undo_delete_of_today_page_with_blocks_referring_to_each_other
+  ; Alcotest.test_case
+      "undo-delete-of-tag-page-with-blocks-referring-to-each-other-test"
+      `Quick
+      test_undo_delete_of_tag_page_with_blocks_referring_to_each_other
+  ; Alcotest.test_case
+      "undo-delete-of-blocks-referring-to-each-other-test" `Quick
+      test_undo_delete_of_blocks_referring_to_each_other
+  ; Alcotest.test_case
+      "undo-delete-of-template-and-its-applied-copy-test" `Quick
+      test_undo_delete_of_template_and_its_applied_copy
+  ; Alcotest.test_case
+      "full-undo-stack-keeps-newest-entries-test" `Quick
+      test_full_undo_stack_keeps_newest_entries
   ]

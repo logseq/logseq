@@ -770,6 +770,35 @@ let convert_property_input_string (block_type : string option)
       Wire.Float (fail_parse_double s)
   | _ -> v
 
+(* resolve-update-cardinality *)
+let resolve_update_cardinality (property : entity) (schema : Wire.t) : string =
+  let new_type =
+    match Cljs_map.get schema "logseq.property/type" with
+    | Some (Wire.Keyword _ as t) -> t
+    | Some Wire.Nil | None ->
+        (match ent_property_type property with
+         | Some t -> Wire.Keyword t
+         | None -> Wire.Nil)
+    | Some w -> w
+  in
+  let force_one =
+    match new_type with
+    | Wire.Keyword t ->
+        not (List.mem t Db_property_type.cardinality_property_types)
+    | Wire.Nil -> false
+    | _ -> true
+  in
+  if force_one then "db.cardinality/one"
+  else
+    match Cljs_map.get schema "db/cardinality" with
+    | Some (Wire.Keyword ("many" | "db.cardinality/many")) ->
+        "db.cardinality/many"
+    | Some _ -> "db.cardinality/one"
+    | None ->
+        (match Ldb.value property "db/cardinality" with
+         | Some (Keyword c) -> c
+         | _ -> "db.cardinality/one")
+
 (* update-datascript-schema *)
 let update_datascript_schema (property : entity) (schema : Wire.t) : Wire.t list =
   let new_type =
@@ -778,12 +807,7 @@ let update_datascript_schema (property : entity) (schema : Wire.t) : Wire.t list
     | _ -> None
   in
   let ident = Ldb.ident_of property in
-  let cardinality =
-    match Cljs_map.get schema "db/cardinality" with
-    | Some (Wire.Keyword ("many" | "db.cardinality/many")) ->
-        "db.cardinality/many"
-    | _ -> "db.cardinality/one"
-  in
+  let cardinality = resolve_update_cardinality property schema in
   let old_type = ent_property_type property in
   let old_ref_type =
     match old_type with
@@ -826,6 +850,43 @@ let validate_property_name_update conn (property : entity)
       Outliner_validate.validate_property_title name
   | _ -> ()
 
+(* throw-disallowed-many-to-one! *)
+let throw_disallowed_many_to_one () : 'a =
+  raise
+    (Outliner_validate.Notification
+       (Wire.Map
+          [ (kw "type", kw "notification")
+          ; (kw "payload",
+             Wire.Map
+               [ (kw "message",
+                  Wire.String
+                    "This property can't change from multiple values to one \
+                     value because it has existing data.")
+               ; (kw "i18n-key", kw "property.validation/many-to-one")
+               ; (kw "type", kw "warning") ]) ]))
+
+(* schema-for-update — drop an unsafe many→one cardinality restore when other
+   schema fields are being replayed; a cardinality-only many→one with data
+   still throws *)
+let schema_for_update db (db_ident : string) (property : entity)
+    (schema : Wire.t) : Wire.t =
+  let many_to_one =
+    ent_many property
+    && (match Cljs_map.get schema "db/cardinality" with
+        | Some (Wire.Keyword ("one" | "db.cardinality/one")) -> true
+        | _ -> false)
+  in
+  let has_values =
+    Seq.uncons (datoms db Avet ~a:db_ident ()) |> Option.is_some
+  in
+  if many_to_one && has_values then begin
+    let schema' = Cljs_map.dissoc schema "db/cardinality" in
+    match schema' with
+    | Wire.Map (_ :: _) -> schema'
+    | _ -> throw_disallowed_many_to_one ()
+  end
+  else schema
+
 (* update-property *)
 let update_property conn (db_ident : string) (property : entity)
     (schema : Wire.t) ~(property_name : string option)
@@ -833,6 +894,7 @@ let update_property conn (db_ident : string) (property : entity)
   let db = Datascript.db conn in
   validate_property_name_update conn property property_name;
   Outliner_validate.validate_editing_built_in_property property schema;
+  let schema = schema_for_update db db_ident property schema in
   let ent_get (e : entity) (k : string) : Wire.t =
     match Ldb.value e k with
     | Some v -> Ds_wire.transit_of_value v
@@ -919,29 +981,6 @@ let update_property conn (db_ident : string) (property : entity)
            build_property_value_tx_data conn property property_id v)
         properties
   in
-  let many_to_one =
-    ent_many property
-    &&
-    (match Cljs_map.get schema "db/cardinality" with
-     | Some (Wire.Keyword ("one" | "db.cardinality/one")) -> true
-     | _ -> false)
-  in
-  if
-    many_to_one
-    && Seq.uncons (datoms db Avet ~a:db_ident ()) |> Option.is_some
-  then
-    raise
-      (Outliner_validate.Notification
-         (Wire.Map
-            [ (kw "type", kw "notification")
-            ; (kw "payload",
-               Wire.Map
-                 [ (kw "message",
-                    Wire.String
-                      "This property can't change from multiple values to one \
-                       value because it has existing data.")
-                 ; (kw "i18n-key", kw "property.validation/many-to-one")
-                 ; (kw "type", kw "warning") ]) ]));
   if
     List.exists (fun (k, _) -> k = "logseq.property/type") changed_property_attrs
     && Seq.uncons (datoms db Avet ~a:db_ident ()) |> Option.is_some
