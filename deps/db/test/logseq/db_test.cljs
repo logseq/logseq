@@ -380,6 +380,28 @@
       (is (= ["Alice"]
              (map :block/title (:entities (first results))))))))
 
+(deftest get-all-pages-excludes-nested-pages-under-recycled-parent
+  (let [conn (db-test/create-conn-with-blocks
+              {:pages-and-blocks
+               [{:page {:block/title "page1"}
+                 :blocks [{:block/title "page2"
+                           :block/name "page2"
+                           :build/tags [:logseq.class/Page]}]}
+                {:page {:block/title "keep"}}]})
+        page1 (db-test/find-page-by-title @conn "page1")
+        titles (fn [db]
+                 (->> (ldb/get-all-pages db)
+                      (map :block/title)
+                      set))]
+    (is (contains? (titles @conn) "page2"))
+    (d/transact! conn [{:db/id (:db/id page1)
+                        :logseq.property/deleted-at 1}])
+    (let [after (titles @conn)]
+      (is (contains? after "keep"))
+      (is (not (contains? after "page1")))
+      (is (not (contains? after "page2"))
+          "ldb/get-all-pages must hide nested pages under a recycled parent."))))
+
 (deftest get-bidirectional-properties-ignores-recycled-entities
   (let [conn (db-test/create-conn-with-blocks
               {:properties {:friend {:logseq.property/type :node
