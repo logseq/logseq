@@ -43,6 +43,12 @@ let reload_max_wait_ms = 2000.0
 let edit_reload_min_ms = 8000.0
 let reload_last_fire_ms = ref 0.0
 
+(* wall-clock of the last pointer/key event anywhere — a route reload
+   landing mid-interaction (menu pick, row click between typed ops)
+   remounts the element under the pointer and the click misses or hits
+   the wrong row *)
+let last_ui_input_ms = ref 0.0
+
 let rec schedule_reload () =
   reload_last_ms := Platform.date_now_ms ();
   if !reload_first_ms = 0.0 then reload_first_ms := !reload_last_ms;
@@ -70,8 +76,12 @@ and fire_reload () =
     Editor_dom.query_selector "#ui__ac, .ls-context-menu-content"
     <> None
   in
-  if typing_active || flood_active || edit_throttled || popup_open then
-    Editor_dom.set_timeout fire_reload 150
+  let ui_active =
+    editing_active && now -. !last_ui_input_ms < edit_input_idle_ms
+  in
+  if typing_active || flood_active || edit_throttled || popup_open
+     || ui_active
+  then Editor_dom.set_timeout fire_reload 150
   else (
     reload_pending := false;
     reload_first_ms := 0.0;
@@ -138,6 +148,12 @@ let init () =
     (fun args ->
       ignore args;
       Js.Promise.resolve Wire.Nil);
+  Editor_dom.document_add_listener "pointerdown"
+    (fun _ -> last_ui_input_ms := Platform.date_now_ms ())
+    true;
+  Editor_dom.document_add_listener "keydown"
+    (fun _ -> last_ui_input_ms := Platform.date_now_ms ())
+    true;
   Platform.on_document_event "ls:toast" (fun ev ->
       let d = detail_json ev in
       let text =
