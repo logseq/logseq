@@ -61,4 +61,28 @@
     (is (= (str "(and " (pr-str "[[foo\"]]") " " (pr-str "[[bar\\]]") ")")
            (query-dsl/pre-transform "(and [[foo\"]] [[bar\\]])")))
     (is (= (list 'and "[[foo\"]]" "[[bar\\]]")
-           (read-query "(and [[foo\"]] [[bar\\]])")))))
+           (read-query "(and [[foo\"]] [[bar\\]])"))))
+
+  (testing "]] in the middle of a page title"
+    (is (= (quoted-tags-query "Project]] Garden")
+           (query-dsl/pre-transform "(tags [[Project]] Garden]])")))
+    (is (= '(tags "[[Project]] Garden]]")
+           (read-query "(tags [[Project]] Garden]])"))))
+
+  (testing "nested [[...]] followed by more title text"
+    (is (= (quoted-tags-query "Project[[Gremlin]] extra")
+           (query-dsl/pre-transform "(tags [[Project[[Gremlin]] extra]])")))
+    (is (= '(tags "[[Project[[Gremlin]] extra]]")
+           (read-query "(tags [[Project[[Gremlin]] extra]])"))))
+
+  (testing "page ref immediately before a tags vector close"
+    (is (= (str "(tags [ " (pr-str "[[foo]]") "])")
+           (query-dsl/pre-transform "(tags [ [[foo]]])")))
+    (is (= '(tags ["[[foo]]"])
+           (read-query "(tags [ [[foo]]])"))))
+
+  (testing "page ref followed by another DSL symbol stays a single argument"
+    (is (= (str "(between " (pr-str "[[Dec 26th, 2020]]") " tomorrow)")
+           (query-dsl/pre-transform "(between [[Dec 26th, 2020]] tomorrow)")))
+    (is (= (list 'between "[[Dec 26th, 2020]]" 'tomorrow)
+           (read-query "(between [[Dec 26th, 2020]] tomorrow)")))))

@@ -173,7 +173,11 @@
       (is (= (quote-tags (str "Project" "[[" "Gremlin Garden" "]]"))
              (query-dsl/pre-transform (wrap-tags (str "Project" "[[" "Gremlin Garden" "]]")))))
       (is (= (quote-tags (str "Project" "]]"))
-             (query-dsl/pre-transform (wrap-tags (str "Project" "]]"))))))))
+             (query-dsl/pre-transform (wrap-tags (str "Project" "]]")))))
+      (is (= (quote-tags (str "Project" "]]" " Garden"))
+             (query-dsl/pre-transform (wrap-tags (str "Project" "]]" " Garden"))))
+      (is (= (str "(tags [ " (pr-str "[[foo]]") "])")
+             (query-dsl/pre-transform "(tags [ [[foo]]])"))))))
 
 (defn- testable-content
   "Only test :block/title up to page-ref to make tests readable"
@@ -645,12 +649,14 @@
      {:classes {:quote-tag {:block/title "Project\""}
                 :backslash-tag {:block/title "Project\\"}
                 :nested-open-tag {:block/title (str "Project" "[[" "Gremlin Garden" "]]")}
-                :nested-close-tag {:block/title (str "Project" "]]")}}
+                :nested-close-tag {:block/title (str "Project" "]]")}
+                :mid-close-tag {:block/title (str "Project" "]]" " Garden")}}
       :pages-and-blocks
       [{:page {:block/title "page-quote" :build/tags [:quote-tag]}}
        {:page {:block/title "page-backslash" :build/tags [:backslash-tag]}}
        {:page {:block/title "page-nested-open" :build/tags [:nested-open-tag]}}
-       {:page {:block/title "page-nested-close" :build/tags [:nested-close-tag]}}]})
+       {:page {:block/title "page-nested-close" :build/tags [:nested-close-tag]}}
+       {:page {:block/title "page-mid-close" :build/tags [:mid-close-tag]}}]})
 
     (is (= ["page-quote"]
            (map :block/name (dsl-query (wrap-tags "Project\""))))
@@ -666,7 +672,15 @@
 
     (is (= ["page-nested-close"]
            (map :block/name (dsl-query (wrap-tags (str "Project" "]]")))))
-        "Query still matches after a tag title gains ]]")))
+        "Query still matches after a tag title gains ]]")
+
+    (is (= ["page-mid-close"]
+           (map :block/name (dsl-query (wrap-tags (str "Project" "]]" " Garden")))))
+        "Query still matches after a tag title gains ]] in the middle")
+
+    (is (= ["page-quote"]
+           (map :block/name (dsl-query "(tags [ [[Project\"]]])")))
+        "A page ref at the end of a tags vector still parses"))))
 
 (deftest block-content-query
   (load-test-files [{:page {:block/title "page1"}
