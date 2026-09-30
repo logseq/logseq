@@ -258,17 +258,32 @@ and select_content_cls =
 (* portaled type dropdown under the trigger (cljs shui select-content *
    auto-opens via :default-open in the new-property flow) *)
 and open_type_menu d name trigger =
-  let l, _t, _r, b, _w = el_rect trigger in
+  let l, t, _r, b, _w = el_rect trigger in
+  (* radix mounts below but flips when the list would overflow the
+     viewport and there is more room above; cap the height at the space
+     on the chosen side so every option stays inside the viewport
+     (radix's available-height behaviour) *)
+  let below = window_inner_height -. (b +. 4.) -. 8. in
+  let above = (t -. 4.) -. 8. in
+  let open_above = below < 280. && above > below in
+  let pos, avail =
+    if open_above then
+      ( Printf.sprintf "bottom:%.0fpx" (window_inner_height -. (t -. 4.))
+      , above )
+    else (Printf.sprintf "top:%.0fpx" (b +. 4.), below)
+  in
   let content =
     mk ~cls:select_content_cls "div"
       ~attrs:
         [ ("role", "presentation"); ("tabindex", "-1"); ("data-open", "")
-        ; ("data-side", "none"); ("data-align", "center")
+        ; ("data-side", if open_above then "top" else "bottom")
+        ; ("data-align", "center")
         ; ("data-state", "open")
         ; ( "style"
           , Printf.sprintf
-              "position:fixed;left:%.0fpx;top:%.0fpx;z-index:99999;\
-               overflow:hidden auto" l (b +. 4.) ) ]
+              "position:fixed;left:%.0fpx;%s;z-index:99999;\
+               max-height:%.0fpx;overflow:hidden auto" l pos
+              (Float.max avail 120.) ) ]
   in
   let listbox =
     mk ~cls:"p-1" "div"
