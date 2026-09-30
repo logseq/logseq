@@ -213,14 +213,22 @@
                     value-block-id (:db/id (:plugin.property._test_plugin/rating two-owner))
                     _ (api-editor/upsert_block_property uuid-b "rating" value-block-id nil)
                     coincidental-value (api-editor/get_block_property uuid-b "rating")
-                    bravo-after (test-helper/find-block-by-content "bravo")]
+                    bravo-after (test-helper/find-block-by-content "bravo")
+                    _ (api-editor/upsert_block_property uuid-b "rating" value-block-id #js {:entityId true})
+                    referenced-value (api-editor/get_block_property uuid-b "rating")
+                    referenced-owner (test-helper/find-block-by-content "bravo")
+                    _ (api-editor/upsert_block_property uuid-b "rating" value-block-id #js {:entityId false})
+                    explicit-literal (api-editor/get_block_property uuid-b "rating")]
               (is (= 0 (property-written-value zero-value)))
               (is (= -3 (property-written-value negative-value)))
               (is (some? value-block-id))
               (is (= value-block-id (property-written-value coincidental-value)))
               (is (= value-block-id
                      (property-written-value (get bravo-after :plugin.property._test_plugin/rating))))
-              (is (not= 2 (property-written-value coincidental-value))))))
+              (is (not= 2 (property-written-value coincidental-value)))
+              (is (= 2 (property-written-value referenced-value)))
+              (is (= value-block-id (:db/id (:plugin.property._test_plugin/rating referenced-owner))))
+              (is (= value-block-id (property-written-value explicit-literal))))))
         (p/catch (fn [error]
                    (is false (str error))))
         (p/finally done))))

@@ -131,7 +131,7 @@
     :else :default))
 
 (defn- set-block-properties!
-  [plugin block-id properties {:keys [page-id reset-property-values]}]
+  [plugin block-id properties {:keys [page-id reset-property-values entity-id?]}]
   (ui-outliner-tx/transact!
    {:outliner-op :set-block-properties
     :ui/page-id page-id}
@@ -183,14 +183,17 @@
          (outliner-op/remove-block-property! block-id property-ident))
 
        (let [set-property! (fn [value]
-                             (outliner-op/set-block-property! block-id property-ident
-                                                              (convert-json-and-string property-type value)))
+                             (if (= :number property-type)
+                               (outliner-op/batch-set-property! [block-id] property-ident value
+                                                                {:entity-id? (true? entity-id?)})
+                               (outliner-op/set-block-property! block-id property-ident
+                                                                (convert-json-and-string property-type value))))
              values (if (sequential? value') value' [value'])]
          (doseq [value values]
            (set-property! value)))))))
 
 (defn db-based-save-block-properties!
-  [block properties & {:keys [page-id plugin schema reset-property-values]}]
+  [block properties & {:keys [page-id plugin schema reset-property-values entity-id?]}]
   (when-let [block-id (and (seq properties) (:block/uuid block))]
     (let [properties (mapv (fn [[k v]]
                              (let [ident (get-db-ident-from-property-name k plugin)]
@@ -205,7 +208,8 @@
                                properties
                                (or property-results []))]
         (set-block-properties! plugin block-id properties {:page-id page-id
-                                                           :reset-property-values reset-property-values})))))
+                                                           :reset-property-values reset-property-values
+                                                           :entity-id? entity-id?})))))
 
 (defn <sync-children-blocks!
   [block]

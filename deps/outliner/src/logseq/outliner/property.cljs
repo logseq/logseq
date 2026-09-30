@@ -482,7 +482,7 @@
 (defn- convert-ref-property-value
   "Converts a ref property's value whether it's an integer or a string. Creates
    a property ref value for a string value if necessary"
-  [conn property-id v property-type block-id]
+  [conn property-id v property-type {:keys [block-id entity-id?]}]
   (let [number-property? (= property-type :number)]
     (cond
       (and (qualified-keyword? v) (not= :keyword property-type))
@@ -493,8 +493,10 @@
            (not number-property?))
       v
 
-      ;; :number integers are values, not entity ids. Use batch-set {:entity-id? true} for refs.
-      (and (integer? v) (not number-property?))
+      (and (integer? v)
+           (or (not number-property?)
+               (and (not (false? entity-id?))
+                    (= property-id (:db/ident (:logseq.property/created-from-property (d/entity @conn v)))))))
       v
 
       (= property-type :page)
@@ -519,11 +521,11 @@
         (find-or-create-property-value conn property-id v' block-id)))))
 
 (defn- convert-ref-property-values
-  [conn property-id value property-type {:keys [many? block-id]}]
+  [conn property-id value property-type {:keys [many?] :as options}]
   (if-not (and many? (or (sequential? value) (set? value)))
-    (convert-ref-property-value conn property-id value property-type block-id)
+    (convert-ref-property-value conn property-id value property-type options)
     (try
-      (mapv #(convert-ref-property-value conn property-id % property-type block-id) value)
+      (mapv #(convert-ref-property-value conn property-id % property-type options) value)
       (catch :default e
         (throw (ex-info "Failed to convert many property values"
                         (merge
@@ -729,7 +731,9 @@
 (defn ^:large-vars/cleanup-todo batch-set-property!
   "Sets properties for multiple blocks. Automatically handles property value refs.
    Does no validation of property values. For :many properties, passing a collection
-   replaces existing values in one call, while passing a scalar preserves add-single-value behavior."
+   replaces existing values in one call, while passing a scalar preserves add-single-value behavior.
+   For numbers, :entity-id? true forces a ref, false forces a literal for :number
+   properties, and omission preserves automatic value/ref resolution."
   ([conn block-ids property-id v]
    (batch-set-property! conn block-ids property-id v {}))
   ([conn block-ids property-id v options]
@@ -758,7 +762,8 @@
                 (and ref? (not entity-id?))
                 (if default-url-not-closed?
                   (normalize-and-validate-default-url-property-values conn property v many?)
-                  (convert-ref-property-values conn property-id v property-type {:many? many?}))
+                  (convert-ref-property-values conn property-id v property-type
+                                               {:many? many? :entity-id? (:entity-id? options)}))
 
                 :else
                 v)
@@ -866,7 +871,7 @@
                 (normalize-extends-value @conn v)
 
                 ref?
-                (convert-ref-property-value conn property-id v property-type block-eid)
+                (convert-ref-property-value conn property-id v property-type {:block-id block-eid})
 
                 :else
                 v)]
