@@ -565,7 +565,7 @@ let render_block_ref_count db key _runtime =
   let block = entity_by_uuid db "block-uuid" block_uuid in
   ( Watch_keys [ wk1 "refs" (Wire.Uuid block_uuid) ]
   , Wire.Int
-      (if Ldb.is_property block || Ldb.is_class block then 0
+      (if Ldb.is_property block then 0
        else Db_view.get_block_refs_count db block.id) )
 
 (* unlinked-reference-exists? — needs full-text search (Render_deps hook). *)

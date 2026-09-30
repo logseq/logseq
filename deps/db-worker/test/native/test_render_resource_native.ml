@@ -1572,6 +1572,30 @@ let test_block_ref_count_authoritative_zero () =
     [ wkey [ kw "refs"; wu (u "journal-child-b") ] ]
     (Wire.Int 0) (call_resource db resource_key)
 
+(* block-ref-count-resource-counts-class-page-link-refs-test: a tag page
+   with [[tag]] page-link refs reports a positive :block-ref-count so
+   Linked References can mount; tagged #tag instances do not count. *)
+let test_block_ref_count_counts_class_page_link_refs () =
+  let conn, u = render_resource_fixture () in
+  let db = db_of conn in
+  let class_id = entity_id db (u "class-page") in
+  let page_link_id = entity_id db (u "resource-block") in
+  let page_id = entity_id db (u "page") in
+  let tagged_uuid = next_uuid () in
+  tx conn
+    (Printf.sprintf
+       "[{:block/uuid \"%s\" :block/tx-id 20 :block/title \"Rumba #dance\" :block/page %d :block/parent %d :block/order \"z0\" :block/tags %d :block/refs %d}
+         [:db/add %d :block/refs %d]]"
+       tagged_uuid page_id page_id class_id class_id page_link_id
+       class_id);
+  let db = db_of conn in
+  let resource_key =
+    wkey [ kw "block-ref-count"; wu (u "class-page") ]
+  in
+  assert_resource_envelope db resource_key
+    [ wkey [ kw "refs"; wu (u "class-page") ] ]
+    (Wire.Int 1) (call_resource db resource_key)
+
 (* block-ref-count-resource-skips-class-incoming-refs-test *)
 let test_block_ref_count_skips_class_incoming_refs () =
   let conn, u = render_resource_fixture () in
@@ -3425,6 +3449,8 @@ let cases : unit Alcotest.test_case list =
       test_block_ref_count_uses_target_reference_key
   ; Alcotest.test_case "block-ref-count-resource-has-an-authoritative-zero-test" `Quick
       test_block_ref_count_authoritative_zero
+  ; Alcotest.test_case "block-ref-count-resource-counts-class-page-link-refs-test" `Quick
+      test_block_ref_count_counts_class_page_link_refs
   ; Alcotest.test_case "block-ref-count-resource-skips-class-incoming-refs-test" `Quick
       test_block_ref_count_skips_class_incoming_refs
   ; Alcotest.test_case "block-ref-count-resource-skips-property-incoming-refs-test" `Quick
