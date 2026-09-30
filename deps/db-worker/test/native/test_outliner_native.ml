@@ -4791,6 +4791,57 @@ let test_derive_upsert_property_update_schema_restore_inverse () =
             classes)
    | [] -> check "inverse nonempty" false)
 
+(* (deftest derive-history-outliner-ops-upsert-property-omits-many-to-one-with-values-test) *)
+let test_derive_upsert_property_omits_many_to_one_with_values () =
+  let conn =
+    create_conn_with_blocks
+      ~pages_and_blocks:
+        [ { page = { default_page with pg_title = Some "page1" }
+          ; blocks =
+              [ { default_block with
+                    b_title = Some "b1"
+                ; b_properties = [ "note", Str "text 1" ] } ] } ]
+      ()
+  in
+  let db = db_of conn in
+  let property_id = "user.property/note" in
+  let before_property =
+    Option.get (Datascript.entity db (Ident property_id))
+  in
+  (* cljs (-> (db-property/get-property-schema (into {} before-property))
+       (dissoc :db/cardinality)) *)
+  let expected_schema =
+    Cljs_map.dissoc
+      (wire_of_block_map
+         (Db_property.get_property_schema
+            (Block_map.of_entity before_property)))
+      "db/cardinality"
+  in
+  let meta =
+    tx_meta "upsert-property"
+      [ wop "upsert-property"
+          [ wkw property_id
+          ; wmap
+              [ wkw "logseq.property/type", wkw "default"
+              ; wkw "db/cardinality", wkw "many" ]
+          ; wmap [] ] ]
+  in
+  let _forward, inverse = derive_ops db db [] meta in
+  check "before-property is cardinality one"
+    (Ldb.value before_property "db/cardinality"
+    = Some (Keyword "db.cardinality/one"));
+  check "upsert-property inverse restores schema sans cardinality"
+    (wire_list_equal inverse
+       [ wop "upsert-property"
+           [ wkw property_id
+           ; expected_schema
+           ; wmap [ wkw "property-name", Wire.String "note" ] ] ]);
+  (match inverse with
+   | entry :: _ ->
+       check "inverse schema omits :db/cardinality"
+         (wget "db/cardinality" (op_arg entry 1) = Wire.Nil)
+   | [] -> check "inverse nonempty" false)
+
 (* (deftest derive-history-outliner-ops-delete-blocks-inverse-avoids-self-target-test)
    Equivalent real-path coverage: cljs stubs ldb/get-left-sibling to return
    the deleted root; here the child is genuinely the parent's only child,
@@ -5477,6 +5528,7 @@ let op_construct_cases : unit Alcotest.test_case list =
     Alcotest.test_case "derive-history-outliner-ops-handles-replace-empty-target-insert-inverse" `Quick test_derive_replace_empty_target_insert_inverse;
     Alcotest.test_case "derive-history-outliner-ops-builds-upsert-property-inverse-delete-page" `Quick test_derive_upsert_property_inverse_delete_page;
     Alcotest.test_case "derive-history-outliner-ops-upsert-property-update-builds-schema-restore-inverse" `Quick test_derive_upsert_property_update_schema_restore_inverse;
+    Alcotest.test_case "derive-history-outliner-ops-upsert-property-omits-many-to-one-with-values" `Quick test_derive_upsert_property_omits_many_to_one_with_values;
     Alcotest.test_case "derive-history-outliner-ops-delete-blocks-inverse-avoids-self-target" `Quick test_derive_delete_blocks_inverse_avoids_self_target;
     Alcotest.test_case "compound-history-inverses-run-in-reverse-dependency-order" `Quick test_compound_history_inverses_reverse_dependency_order;
     Alcotest.test_case "derive-history-outliner-ops-delete-blocks-with-stale-id-keeps-id" `Quick test_derive_delete_blocks_stale_id_keeps_id;

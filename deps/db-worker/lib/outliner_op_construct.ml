@@ -286,6 +286,30 @@ let sanitize_upsert_property_schema db (schema : Wire.t) : Wire.t =
            entries)
   | _ -> Wire.Map []
 
+(* op-construct/inverse-upsert-property-schema *)
+let inverse_upsert_property_schema db_before db_after (property : entity)
+    : Wire.t =
+  let schema =
+    sanitize_upsert_property_schema db_before
+      (wire_map_of_block_map
+         (Db_property.get_property_schema (Block_map.of_entity property)))
+  in
+  let reverts_many_to_one =
+    (match Cljs_map.get schema "db/cardinality" with
+     | Some (Wire.Keyword ("one" | "db.cardinality/one")) -> true
+     | _ -> false)
+    &&
+    (match Ldb.ident_of property with
+     | Some ident ->
+         (* aevt: the attr's schema entry may already be retracted in db_after
+            (e.g. undo replaying delete-page), which would make the indexed
+            avet lookup raise for a non-indexed attribute *)
+         Seq.uncons (datoms db_after Aevt ~a:ident ()) |> Option.is_some
+     | None -> false)
+  in
+  if reverts_many_to_one then Cljs_map.dissoc schema "db/cardinality"
+  else schema
+
 (* attr of a block/refs item — plain map keys or stub-entity attrs *)
 let ref_entity_attr (db : db) (k : string) (w : Wire.t) : Wire.t option =
   match w with
@@ -1360,12 +1384,115 @@ let delete_root_to_restore_plan db_before (root : entity) : Wire.t option =
                | None -> [])))
   | _ -> None
 
+(* op-construct/split-block-refs — splits the ref values of the insert
+   payload [block] into those pointing at a block in [uuids] and the
+   rest: (block without them, map of them) *)
+let split_block_refs db_before (uuids : string list) (block : Wire.t)
+    : Wire.t * (string * Wire.t) list =
+  let in_uuids (v : Wire.t) : bool =
+    match v with
+    | Wire.Array [ Wire.Keyword "block/uuid"; Wire.Uuid u ] -> List.mem u uuids
+    | _ -> false
+  in
+  match block with
+  | Wire.Map kvs ->
+      List.fold_left
+        (fun (block', refs) (k, v) ->
+           match k with
+           | Wire.Keyword attr when ref_attr db_before attr -> (
+               match v with
+               | Wire.Set vs ->
+                   let ins, outs = List.partition in_uuids vs in
+                   if ins = [] then (block', refs)
+                   else
+                     ( (if outs = [] then Cljs_map.dissoc block' attr
+                        else Cljs_map.assoc block' attr (Wire.Set outs))
+                     , (attr, Wire.Set ins) :: refs )
+               | _ ->
+                   if in_uuids v then
+                     (Cljs_map.dissoc block' attr, (attr, v) :: refs)
+                   else (block', refs))
+           | _ -> (block', refs))
+        (block, []) kvs
+  | _ -> (block, [])
+
+(* op-construct/defer-refs-to-later-plans — each restore plan is inserted
+   by its own op, so a block that refers to a block of a later plan (a
+   node property value, a used template) fails to insert: the later
+   block doesn't exist yet. Takes those refs out of the plans and
+   returns (plans, :save-block ops that set them after all inserts) *)
+let defer_refs_to_later_plans db_before (plans : Wire.t list)
+    : Wire.t list * Wire.t list =
+  let plan_uuids =
+    List.map
+      (fun plan ->
+         match mget "blocks" plan with
+         | Some (Wire.Array blocks) ->
+             List.filter_map
+               (fun b ->
+                  match mget "block/uuid" b with
+                  | Some (Wire.Uuid u) -> Some u
+                  | _ -> None)
+               blocks
+         | _ -> [])
+      plans
+  in
+  let _, plans', save_ops =
+    List.fold_left
+      (fun (i, plans', save_ops) plan ->
+         let later_uuids =
+           plan_uuids
+           |> List.mapi (fun j xs -> (j, xs))
+           |> List.filter (fun (j, _) -> j > i)
+           |> List.concat_map snd
+         in
+         let blocks =
+           match mget "blocks" plan with
+           | Some (Wire.Array bs) -> bs
+           | _ -> []
+         in
+         let splits =
+           List.map (split_block_refs db_before later_uuids) blocks
+         in
+         let plan' =
+           Cljs_map.assoc plan "blocks" (Wire.Array (List.map fst splits))
+         in
+         let save_ops' =
+           save_ops
+           @ List.filter_map
+               (fun (block, refs) ->
+                  if refs = [] then None
+                  else
+                    let uuid =
+                      match mget "block/uuid" block with
+                      | Some u -> u
+                      | None -> Wire.Nil
+                    in
+                    let refs_map =
+                      Wire.Map
+                        ((kw "block/uuid", uuid)
+                         :: List.map (fun (a, v) -> (kw a, v)) refs)
+                    in
+                    Some (op_entry "save-block" [ refs_map; Wire.Map [] ]))
+               splits
+         in
+         (i + 1, plans' @ [ plan' ], save_ops'))
+      (0, [], []) plans
+  in
+  (plans', save_ops)
+
+(* op-construct/restore-plans->ops — an insert op per restore plan, then
+   the :save-block ops that set the refs between plans *)
+let restore_plans_to_ops db_before (plans : Wire.t list) : Wire.t list =
+  let plans', save_ops = defer_refs_to_later_plans db_before plans in
+  List.map (to_insert_op db_before) plans' @ save_ops
+
 (* op-construct/build-inverse-delete-blocks — vec of restore insert ops *)
 let build_inverse_delete_blocks db_before (ids : Wire.t) : Wire.t list option =
   let roots, incomplete = selected_block_roots db_before ids in
   let plans = List.map (delete_root_to_restore_plan db_before) roots in
   if (not incomplete) && roots <> [] && List.for_all Option.is_some plans then
-    match List.map (to_insert_op db_before) (List.filter_map Fun.id plans) with
+    match restore_plans_to_ops db_before (List.filter_map Fun.id plans) with
     | [] -> None
     | ops -> Some ops
   else None
@@ -1498,7 +1625,7 @@ let entity_to_save_op db_before (ent : entity) : Wire.t option =
   build_inverse_save_block db_before (wire_map_of_entity ent) Wire.Nil
 
 (* op-construct/build-inverse-delete-page *)
-let build_inverse_delete_page db_before (page_uuid : Wire.t)
+let build_inverse_delete_page db_before db_after (page_uuid : Wire.t)
     : Wire.t list option =
   match
     entity db_before
@@ -1551,9 +1678,7 @@ let build_inverse_delete_page db_before (page_uuid : Wire.t)
             Some
               (op_entry "upsert-property"
                  [ ident
-                 ; wire_map_of_block_map
-                     (Db_property.get_property_schema
-                        (Block_map.of_entity page))
+                 ; inverse_upsert_property_schema db_before db_after page
                  ; Wire.Map
                      [ ( kw "property-name"
                        , Option.value
@@ -1562,7 +1687,7 @@ let build_inverse_delete_page db_before (page_uuid : Wire.t)
         in
         let restore_root_ops =
           if List.for_all Option.is_some root_plans then
-            List.map (to_insert_op db_before) (List.filter_map Fun.id root_plans)
+            restore_plans_to_ops db_before (List.filter_map Fun.id root_plans)
           else []
         in
         (* Put the page's blocks back before its attributes: a property
@@ -1578,7 +1703,7 @@ let build_inverse_delete_page db_before (page_uuid : Wire.t)
       else if today_page then begin
         if List.for_all Option.is_some root_plans then
           match
-            List.map (to_insert_op db_before) (List.filter_map Fun.id root_plans)
+            restore_plans_to_ops db_before (List.filter_map Fun.id root_plans)
           with
           | [] -> None
           | ops -> Some ops
@@ -1781,7 +1906,7 @@ let build_strict_inverse_outliner_ops db_before db_after tx_data
                                [ page_uuid; Wire.Map [] ] ]
                      | None -> None)
                 | "delete-page" ->
-                    build_inverse_delete_page db_before (arg args 0)
+                    build_inverse_delete_page db_before db_after (arg args 0)
                 | "upsert-property" ->
                     (match arg args 0 with
                      | Wire.Keyword ident when String.contains ident '/' ->
@@ -1790,11 +1915,8 @@ let build_strict_inverse_outliner_ops db_before db_after tx_data
                               Some
                                 [ op_entry "upsert-property"
                                     [ kw ident
-                                    ; sanitize_upsert_property_schema
-                                        db_before
-                                        (wire_map_of_block_map
-                                           (Db_property.get_property_schema
-                                              (Block_map.of_entity property)))
+                                    ; inverse_upsert_property_schema
+                                        db_before db_after property
                                     ; Wire.Map
                                         [ ( kw "property-name"
                                           , Option.value

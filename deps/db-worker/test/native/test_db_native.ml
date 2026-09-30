@@ -1303,6 +1303,17 @@ let test_private_create_page_tag_test () =
 
 (* ---------- deps/outliner/test/logseq/outliner/property_test.cljs ---------- *)
 
+(* cljs db-property/many? *)
+let prop_is_many (e : entity) : bool =
+  Ldb.value e "db/cardinality" = Some (Keyword "db.cardinality/many")
+
+(* cljs set? on an entity attr value — materializes as a collection when
+   the attr is cardinality many *)
+let attr_is_set (e : entity) (a : attr) : bool =
+  match entity_attr e a with
+  | Some (Many_values _) | Some (Many_entities _) -> true
+  | _ -> false
+
 (* (deftest upsert-property! "Creates a property" ...) *)
 let test_upsert_property () =
   let conn = Db_test_util.create_conn_with_blocks () in
@@ -1364,7 +1375,9 @@ let test_upsert_property_2 () =
        check "upsert-property! type->checkbox"
          (Ldb.value e "logseq.property/type" = Some (Keyword "checkbox"));
        check "upsert-property! checkbox drops db/valueType"
-         (Ldb.value e "db/valueType" = None)
+         (Ldb.value e "db/valueType" = None);
+       check "upsert-property! checkbox resets many"
+         (not (prop_is_many e))
    | None -> check "upsert-property! type->checkbox" false)
 
 (* (deftest upsert-property! "Multiple properties that generate the same
@@ -1434,6 +1447,169 @@ let test_upsert_property_rejects_type_change_with_existing_data_2 () =
        check "upsert-property type change allowed with no values"
          (Ldb.value e "logseq.property/type" = Some (Keyword "number"))
    | None -> check "upsert-property type change allowed with no values" false)
+
+(* (deftest upsert-property-type-change-to-non-cardinality-type-resets-many ...) *)
+let test_upsert_property_type_change_to_non_cardinality_type_resets_many () =
+  (* testing "changing an unused many property to checkbox or datetime
+     restores :one" *)
+  List.iter
+    (fun property_type ->
+       let conn =
+         Db_test_util.create_conn_with_blocks
+           ~properties:
+             [ "note"
+               , Db_test_util.{ default_property with p_type = "default" } ]
+           ()
+       in
+       ignore
+         (Outliner_property.upsert_property conn
+            (Some "user.property/note")
+            (Wire.Map [ kw "db/cardinality", kw "many" ])
+            ~property_name:None ~properties:[]);
+       ignore
+         (Outliner_property.upsert_property conn
+            (Some "user.property/note")
+            (Wire.Map [ kw "logseq.property/type", kw property_type ])
+            ~property_name:None ~properties:[]);
+       match ent_ident (db_of conn) "user.property/note" with
+       | Some e ->
+           check ("upsert-property! type->" ^ property_type)
+             (Ldb.value e "logseq.property/type"
+             = Some (Keyword property_type));
+           check ("upsert-property! " ^ property_type ^ " resets many")
+             (not (prop_is_many e))
+       | None -> check ("upsert-property! type->" ^ property_type) false)
+    [ "checkbox"; "datetime" ];
+  (* testing "changing an unused many property to another cardinality type
+     keeps :many" *)
+  let conn =
+    Db_test_util.create_conn_with_blocks
+      ~properties:
+        [ "note", Db_test_util.{ default_property with p_type = "default" } ]
+      ()
+  in
+  ignore
+    (Outliner_property.upsert_property conn (Some "user.property/note")
+       (Wire.Map [ kw "db/cardinality", kw "many" ])
+       ~property_name:None ~properties:[]);
+  ignore
+    (Outliner_property.upsert_property conn (Some "user.property/note")
+       (Wire.Map [ kw "logseq.property/type", kw "number" ])
+       ~property_name:None ~properties:[]);
+  (match ent_ident (db_of conn) "user.property/note" with
+   | Some e ->
+       check "upsert-property! type->number"
+         (Ldb.value e "logseq.property/type" = Some (Keyword "number"));
+       check "upsert-property! type->number keeps many" (prop_is_many e)
+   | None -> check "upsert-property! type->number" false)
+
+(* (deftest upsert-property-schema-restore-skips-many-to-one-when-other-fields-present ...) *)
+let test_upsert_property_schema_restore_skips_many_to_one () =
+  (* testing "replaying a schema that includes :one plus type keeps :many
+     when values exist" *)
+  let conn =
+    Db_test_util.create_conn_with_blocks
+      ~pages_and_blocks:
+        [ { Db_test_util.page =
+              Db_test_util.{ default_page with pg_title = Some "page1" }
+          ; Db_test_util.blocks =
+              [ Db_test_util.{ default_block with b_title = Some "b1"
+                               ; b_properties =
+                                   [ "note", Db_test_util.Str "text 1" ] } ] } ]
+      ()
+  in
+  ignore
+    (Outliner_property.upsert_property conn (Some "user.property/note")
+       (Wire.Map [ kw "db/cardinality", kw "many" ])
+       ~property_name:None ~properties:[]);
+  ignore
+    (Outliner_property.upsert_property conn (Some "user.property/note")
+       (Wire.Map
+          [ kw "logseq.property/type", kw "default"
+          ; kw "db/cardinality", kw "one" ])
+       ~property_name:None ~properties:[]);
+  (match ent_ident (db_of conn) "user.property/note" with
+   | Some e -> check "schema replay keeps many" (prop_is_many e)
+   | None -> check "schema replay keeps many" false);
+  check "b1 note value is a set"
+    (attr_is_set
+       (Option.get
+          (Db_test_util.find_block_by_content (db_of conn) "b1"))
+       "user.property/note")
+
+(* (deftest upsert-property-omitted-cardinality-keeps-many-with-closed-values ...) *)
+let test_upsert_property_omitted_cardinality_keeps_many_with_closed_values () =
+  (* testing "omitting :db/cardinality does not convert many to one when
+     choices exist" *)
+  let conn =
+    Db_test_util.create_conn_with_blocks
+      ~properties:
+        [ "status"
+          , Db_test_util.{ default_property with
+              p_type = "default"
+            ; p_closed_values =
+                [ { Db_test_util.cv_value = "active"
+                  ; cv_uuid = None
+                  ; cv_ident = None
+                  ; cv_icon = None
+                  ; cv_properties = [] } ] } ]
+      ~pages_and_blocks:
+        [ { Db_test_util.page =
+              Db_test_util.{ default_page with pg_title = Some "page1" }
+          ; Db_test_util.blocks =
+              [ Db_test_util.{ default_block with b_title = Some "b1"
+                               ; b_properties =
+                                   [ "status", Db_test_util.Str "active" ] } ] } ]
+      ()
+  in
+  ignore
+    (Outliner_property.upsert_property conn (Some "user.property/status")
+       (Wire.Map [ kw "db/cardinality", kw "many" ])
+       ~property_name:None ~properties:[]);
+  (match ent_ident (db_of conn) "user.property/status" with
+   | Some e -> check "status many" (prop_is_many e)
+   | None -> check "status many" false);
+  ignore
+    (Outliner_property.upsert_property conn (Some "user.property/status")
+       (Wire.Map [ kw "logseq.property/type", kw "default" ])
+       ~property_name:None ~properties:[]);
+  (match ent_ident (db_of conn) "user.property/status" with
+   | Some e -> check "omitted cardinality keeps many" (prop_is_many e)
+   | None -> check "omitted cardinality keeps many" false);
+  check "b1 status value is a set"
+    (attr_is_set
+       (Option.get
+          (Db_test_util.find_block_by_content (db_of conn) "b1"))
+       "user.property/status")
+
+(* (deftest upsert-property-rejects-many-to-one-with-existing-data ...) *)
+let test_upsert_property_rejects_many_to_one_with_existing_data () =
+  (* testing "Changing many to one is rejected when property has values" *)
+  let conn =
+    Db_test_util.create_conn_with_blocks
+      ~pages_and_blocks:
+        [ { Db_test_util.page =
+              Db_test_util.{ default_page with pg_title = Some "page1" }
+          ; Db_test_util.blocks =
+              [ Db_test_util.{ default_block with b_title = Some "b1"
+                               ; b_properties =
+                                   [ "note", Db_test_util.Str "text 1" ] } ] } ]
+      ()
+  in
+  ignore
+    (Outliner_property.upsert_property conn (Some "user.property/note")
+       (Wire.Map [ kw "db/cardinality", kw "many" ])
+       ~property_name:None ~properties:[]);
+  (match ent_ident (db_of conn) "user.property/note" with
+   | Some e -> check "note many" (prop_is_many e)
+   | None -> check "note many" false);
+  throws_with
+    "upsert-property rejects many-to-one with existing data"
+    "multiple values to one value"
+    (fun () ->
+       Outliner_property.upsert_property conn (Some "user.property/note")
+         (Wire.Map [ kw "db/cardinality", kw "one" ])
+         ~property_name:None ~properties:[])
 
 (* (deftest convert-property-input-string ...)
    cljs calls the private fn with a bare property map; the OCaml fn takes an
@@ -3346,6 +3522,10 @@ let endpoint_cases : unit Alcotest.test_case list =
     Alcotest.test_case "upsert-property-3" `Quick test_upsert_property_3;
     Alcotest.test_case "upsert-property-rejects-type-change-with-existing-data" `Quick test_upsert_property_rejects_type_change_with_existing_data;
     Alcotest.test_case "upsert-property-rejects-type-change-with-existing-data-2" `Quick test_upsert_property_rejects_type_change_with_existing_data_2;
+    Alcotest.test_case "upsert-property-type-change-to-non-cardinality-type-resets-many" `Quick test_upsert_property_type_change_to_non_cardinality_type_resets_many;
+    Alcotest.test_case "upsert-property-schema-restore-skips-many-to-one-when-other-fields-present" `Quick test_upsert_property_schema_restore_skips_many_to_one;
+    Alcotest.test_case "upsert-property-omitted-cardinality-keeps-many-with-closed-values" `Quick test_upsert_property_omitted_cardinality_keeps_many_with_closed_values;
+    Alcotest.test_case "upsert-property-rejects-many-to-one-with-existing-data" `Quick test_upsert_property_rejects_many_to_one_with_existing_data;
     Alcotest.test_case "convert-property-input-string" `Quick test_convert_property_input_string;
     Alcotest.test_case "create-property-text-block" `Quick test_create_property_text_block;
     Alcotest.test_case "create-property-text-block-2" `Quick test_create_property_text_block_2;
