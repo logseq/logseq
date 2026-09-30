@@ -2239,6 +2239,220 @@ let test_replay_create_page_titled_like_property_creates_page () =
          | Some e -> Ldb.is_property e
          | None -> false))
 
+(* cljs seed-inner-ref-graph! — adds the node property "related"
+   (cardinality many), page "refs 1" with blocks a, b (children b1, b2),
+   c, page "refs 2" with blocks d and tmpl (tagged Template, child "tmpl
+   child"), and a journal with block e. Clears history and returns a fn
+   from a block title to its uuid. *)
+let seed_inner_ref_graph () : string -> string =
+  let conn = conn () in
+  let open Db_test_util in
+  let options =
+    { default_options with
+      properties =
+        [ ( "related"
+          , { default_property with
+              p_type = "node"; p_cardinality_many = true } ) ]
+    ; pages_and_blocks =
+        [ { page = { default_page with pg_title = Some "refs 1" }
+          ; blocks =
+              [ { default_block with b_title = Some "a" }
+              ; { default_block with
+                  b_title = Some "b"
+                ; b_children =
+                    [ { default_block with b_title = Some "b1" }
+                    ; { default_block with b_title = Some "b2" } ] }
+              ; { default_block with b_title = Some "c" } ] }
+        ; { page = { default_page with pg_title = Some "refs 2" }
+          ; blocks =
+              [ { default_block with b_title = Some "d" }
+              ; { default_block with
+                  b_title = Some "tmpl"
+                ; b_tags = [ "logseq.class/Template" ]
+                ; b_children =
+                    [ { default_block with b_title = Some "tmpl child" } ] }
+              ] }
+        ; { page = { default_page with pg_journal = Some 20260925 }
+          ; blocks = [ { default_block with b_title = Some "e" } ] } ] }
+  in
+  let init_tx, block_props_tx = Db_test_util.build_blocks_tx options in
+  Db_test_util.transact_maps conn init_tx;
+  if block_props_tx <> [] then
+    Db_test_util.transact_maps conn block_props_tx;
+  Undo_redo.clear_history test_repo;
+  fun title ->
+    match Db_test_util.find_block_by_content (db_of conn) title with
+    | Some e -> ent_uuid_of e
+    | None -> failwith ("seeded block missing: " ^ title)
+
+(* cljs related-ident *)
+let related_ident conn : string =
+  match Db_test_util.find_page_by_title (db_of conn) "related" with
+  | Some e -> (
+      match ent_ident e with
+      | Some i -> i
+      | None -> failwith "related has no ident")
+  | None -> failwith "related property missing"
+
+(* cljs add-x-pointing-at-y! — adds top-level blocks x, y to the page
+   page-id, x's "related" pointing at y. Returns (x-uuid, y-uuid) *)
+let add_x_pointing_at_y conn page_id related : string * string =
+  let x_uuid = Uuid_gen.uuid () and y_uuid = Uuid_gen.uuid () in
+  ignore
+    (apply_ops_edn conn
+       (Printf.sprintf
+          "[[:insert-blocks [[{:block/uuid %s :block/title \"x\"} {:block/uuid %s :block/title \"y\"}] %d {:sibling? false :keep-uuid? true}]]]"
+          (uuid_lit x_uuid) (uuid_lit y_uuid) page_id));
+  let y_id =
+    match ent_at_uuid (db_of conn) y_uuid with
+    | Some e -> e.id
+    | None -> failwith "y block missing"
+  in
+  ignore
+    (apply_ops_edn conn
+       (Printf.sprintf "[[:set-block-property [%s :%s %d]]]"
+          (uuid_lit x_uuid) related y_id));
+  (x_uuid, y_uuid)
+
+(* cljs undo-with-history-action-results! — undoes once and returns the
+   undo result and the results of the worker's history actions it ran *)
+let undo_with_history_action_results ()
+    : Wire.t * (string * Wire.t) list list =
+  let prev = !Undo_redo.apply_history_action in
+  let results = ref [] in
+  Undo_redo.apply_history_action :=
+    Some
+      (fun repo tx_id_opt undo pairs ->
+         let result =
+           apply_history_action_adapter repo tx_id_opt undo pairs
+         in
+         results := result :: !results;
+         result);
+  Fun.protect
+    ~finally:(fun () -> Undo_redo.apply_history_action := prev)
+    (fun () ->
+       let undo_result = Undo_redo.undo test_repo in
+       (undo_result, List.rev !results))
+
+let all_applied results : bool =
+  List.map
+    (fun r ->
+       match List.assoc_opt "applied?" r with
+       | Some (Wire.Bool b) -> b
+       | _ -> false)
+    results
+  = [ true ]
+
+(* uuids of the blocks a ref-typed attr points at *)
+let ref_value_uuids db (e : entity) (a : attr) : string list =
+  List.filter_map
+    (fun (v : value) ->
+       match v with
+       | Ref id ->
+           Option.map ent_uuid_of (Datascript.entity db (Entity_id id))
+       | _ -> None)
+    (Ldb.values e a)
+
+(* cljs undo-delete-of-today-page-with-blocks-referring-to-each-other-test *)
+let test_undo_delete_of_today_page_with_blocks_referring_to_each_other () =
+  with_worker_conns (fun () ->
+      let conn = conn () in
+      let _uuid_of = seed_inner_ref_graph () in
+      let related = related_ident conn in
+      let today_day =
+        Date_time_util.ms_to_journal_day (Time.epoch_ms_to_int64 (Time.now ()))
+      in
+      let today_title =
+        let journal =
+          Option.get (entity_of_ident (db_of conn) "logseq.class/Journal")
+        in
+        let fmt =
+          Option.value
+            (Ldb.string_value journal "logseq.property.journal/title-format")
+            ~default:"MMM do, yyyy"
+        in
+        Date_time_util.int_to_journal_title today_day fmt
+      in
+      let today_page_uuid =
+        match
+          apply_ops_edn conn
+            (Printf.sprintf
+               "[[:create-page [%s {:today-journal? true :redirect? false :split-namespace? true :tags ()}]]]"
+               (qstr today_title))
+        with
+        | Wire.Array [ _; Wire.Uuid u ] -> u
+        | Wire.Array [ _; Wire.String u ] -> u
+        | _ -> (
+            match Db_test_util.find_page_by_title (db_of conn) today_title with
+            | Some e -> ent_uuid_of e
+            | None -> Alcotest.fail "today page create returned no uuid")
+      in
+      let today_page_id =
+        match ent_at_uuid (db_of conn) today_page_uuid with
+        | Some e -> e.id
+        | None -> failwith "today page missing"
+      in
+      let x_uuid, y_uuid =
+        add_x_pointing_at_y conn today_page_id related
+      in
+      Undo_redo.clear_history test_repo;
+      ignore
+        (apply_ops_edn conn
+           (Printf.sprintf "[[:delete-page [%s {}]]]"
+              (uuid_lit today_page_uuid)));
+      check "x deleted" (ent_at_uuid (db_of conn) x_uuid = None);
+      let undo_result, results = undo_with_history_action_results () in
+      check "undo map"
+        (match undo_result with Wire.Map _ -> true | _ -> false);
+      check "applied" (all_applied results);
+      check "x related -> y"
+        (match ent_at_uuid (db_of conn) x_uuid with
+         | Some x -> ref_value_uuids (db_of conn) x related = [ y_uuid ]
+         | None -> false))
+
+(* cljs undo-delete-of-tag-page-with-blocks-referring-to-each-other-test *)
+let test_undo_delete_of_tag_page_with_blocks_referring_to_each_other () =
+  with_worker_conns (fun () ->
+      let conn = conn () in
+      let _uuid_of = seed_inner_ref_graph () in
+      let related = related_ident conn in
+      let class_uuid =
+        match
+          apply_ops_edn conn
+            "[[:create-page [\"undo inner refs tag\" {:class? true :redirect? false :split-namespace? true :tags ()}]]]"
+        with
+        | Wire.Array [ _; Wire.Uuid u ] -> u
+        | Wire.Array [ _; Wire.String u ] -> u
+        | _ -> (
+            match
+              Db_test_util.find_page_by_title (db_of conn)
+                "undo inner refs tag"
+            with
+            | Some e -> ent_uuid_of e
+            | None -> Alcotest.fail "class create returned no uuid")
+      in
+      let class_id =
+        match ent_at_uuid (db_of conn) class_uuid with
+        | Some e -> e.id
+        | None -> failwith "class page missing"
+      in
+      let x_uuid, y_uuid = add_x_pointing_at_y conn class_id related in
+      Undo_redo.clear_history test_repo;
+      ignore
+        (apply_ops_edn conn
+           (Printf.sprintf "[[:delete-page [%s {}]]]" (uuid_lit class_uuid)));
+      check "class deleted" (ent_at_uuid (db_of conn) class_uuid = None);
+      let undo_result, results = undo_with_history_action_results () in
+      check "undo map"
+        (match undo_result with Wire.Map _ -> true | _ -> false);
+      check "applied" (all_applied results);
+      check "class restored"
+        (ent_at_uuid (db_of conn) class_uuid <> None);
+      check "x related -> y"
+        (match ent_at_uuid (db_of conn) x_uuid with
+         | Some x -> ref_value_uuids (db_of conn) x related = [ y_uuid ]
+         | None -> false))
+
 let cases =
   [ Alcotest.test_case "worker-ui-state-roundtrip-test" `Quick
       test_worker_ui_state_roundtrip
@@ -2351,4 +2565,12 @@ let cases =
   ; Alcotest.test_case
       "replay-create-page-titled-like-property-creates-page-test" `Quick
       test_replay_create_page_titled_like_property_creates_page
+  ; Alcotest.test_case
+      "undo-delete-of-today-page-with-blocks-referring-to-each-other-test"
+      `Quick
+      test_undo_delete_of_today_page_with_blocks_referring_to_each_other
+  ; Alcotest.test_case
+      "undo-delete-of-tag-page-with-blocks-referring-to-each-other-test"
+      `Quick
+      test_undo_delete_of_tag_page_with_blocks_referring_to_each_other
   ]
