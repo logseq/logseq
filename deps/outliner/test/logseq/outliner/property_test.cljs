@@ -241,7 +241,7 @@
           property-value (:user.property/num (db-test/find-block-by-content @conn "b1"))
           _ (assert (:db/id property-value))
           block-uuid (:block/uuid (db-test/find-block-by-content @conn "b2"))
-          _ (outliner-property/batch-set-property! conn [block-uuid] :user.property/num (:db/id property-value) {:entity-id? true})]
+          _ (outliner-property/set-block-property! conn [:block/uuid block-uuid] :user.property/num (:db/id property-value))]
       (is (= (:db/id property-value)
              (:db/id (:user.property/num (db-test/find-block-by-content @conn "b2")))))
       (let [empty-placeholder-id (:db/id (d/entity @conn :logseq.property/empty-placeholder))]
@@ -257,11 +257,11 @@
           property-value (:user.property/num (db-test/find-block-by-content @conn "b1"))
           _ (assert (:db/id property-value))
           block-uuid (:block/uuid (db-test/find-block-by-content @conn "b2"))
-          _ (outliner-property/batch-set-property! conn [block-uuid] :user.property/num (:db/id property-value) {:entity-id? true})]
+          _ (outliner-property/set-block-property! conn [:block/uuid block-uuid] :user.property/num (:db/id property-value))]
       (is (= (:db/id property-value)
              (:db/id (:user.property/num (db-test/find-block-by-content @conn "b2"))))))))
 
-(deftest set-block-property-stores-integer-numbers-as-values
+(deftest batch-set-property-stores-explicit-literal-numbers
   (testing "Literal integers including 0, negatives, and coincidental entity ids store as numbers"
     (let [conn (db-test/create-conn-with-blocks
                 [{:page {:block/title "page1"}
@@ -270,17 +270,17 @@
           _ (outliner-property/upsert-property! conn nil {:logseq.property/type :number} {:property-name "rating"})
           b1-uuid (:block/uuid (db-test/find-block-by-content @conn "b1"))
           b2-uuid (:block/uuid (db-test/find-block-by-content @conn "b2"))]
-      (outliner-property/set-block-property! conn [:block/uuid b1-uuid] :user.property/rating 0)
+      (outliner-property/batch-set-property! conn [b1-uuid] :user.property/rating 0 {:entity-id? false})
       (is (= 0 (db-property/property-value-content
                 (:user.property/rating (db-test/find-block-by-content @conn "b1")))))
 
-      (outliner-property/set-block-property! conn [:block/uuid b1-uuid] :user.property/rating -3)
+      (outliner-property/batch-set-property! conn [b1-uuid] :user.property/rating -3 {:entity-id? false})
       (is (= -3 (db-property/property-value-content
                  (:user.property/rating (db-test/find-block-by-content @conn "b1")))))
 
-      (outliner-property/set-block-property! conn [:block/uuid b1-uuid] :user.property/rating 2)
+      (outliner-property/batch-set-property! conn [b1-uuid] :user.property/rating 2 {:entity-id? false})
       (let [value-block-id (:db/id (:user.property/rating (db-test/find-block-by-content @conn "b1")))]
-        (outliner-property/set-block-property! conn [:block/uuid b2-uuid] :user.property/rating value-block-id)
+        (outliner-property/batch-set-property! conn [b2-uuid] :user.property/rating value-block-id {:entity-id? false})
         (is (= value-block-id
                (db-property/property-value-content
                 (:user.property/rating (db-test/find-block-by-content @conn "b2"))))
@@ -290,7 +290,40 @@
             "Does not reuse the other block's value entity")
         (is (not= 2
                   (db-property/property-value-content
-                   (:user.property/rating (db-test/find-block-by-content @conn "b2")))))))))
+                   (:user.property/rating (db-test/find-block-by-content @conn "b2")))))
+        (outliner-property/batch-set-property! conn [b2-uuid] :user.property/rating value-block-id {:entity-id? true})
+        (is (= value-block-id (:db/id (:user.property/rating (db-test/find-block-by-content @conn "b2")))))
+        (is (= 2 (db-property/property-value-content
+                  (:user.property/rating (db-test/find-block-by-content @conn "b2")))))))))
+
+(deftest number-closed-choices-preserve-implicit-entity-ids
+  (let [first-choice (random-uuid)
+        second-choice (random-uuid)
+        conn (db-test/create-conn-with-blocks
+              {:properties {:rating {:logseq.property/type :number
+                                     :build/closed-values [{:uuid first-choice :value 1}
+                                                           {:uuid second-choice :value 2}]}}
+               :pages-and-blocks [{:page {:block/title "page1"}
+                                   :blocks [{:block/title "b1"}]}]})
+        block-id (:db/id (db-test/find-block-by-content @conn "b1"))
+        first-id (:db/id (d/entity @conn [:block/uuid first-choice]))
+        second-id (:db/id (d/entity @conn [:block/uuid second-choice]))]
+    (outliner-property/batch-set-property! conn [block-id] :user.property/rating first-id)
+    (is (= first-id (:db/id (:user.property/rating (d/entity @conn block-id)))))
+    (outliner-property/set-block-property! conn block-id :user.property/rating second-id)
+    (is (= second-id (:db/id (:user.property/rating (d/entity @conn block-id)))))
+    (is (= 2 (db-property/property-value-content (:user.property/rating (d/entity @conn block-id)))))))
+
+(deftest batch-set-many-numbers-preserves-literal-mode
+  (let [conn (db-test/create-conn-with-blocks
+              [{:page {:block/title "page1"}
+                :blocks [{:block/title "b1" :build/properties {:ratings #{2}}}
+                         {:block/title "b2"}]}])
+        value-id (:db/id (first (:user.property/ratings (db-test/find-block-by-content @conn "b1"))))
+        block-id (:db/id (db-test/find-block-by-content @conn "b2"))]
+    (outliner-property/batch-set-property! conn [block-id] :user.property/ratings [0 -3 value-id] {:entity-id? false})
+    (is (= #{0 -3 value-id}
+           (set (map db-property/property-value-content (:user.property/ratings (d/entity @conn block-id))))))))
 
 (deftest set-block-property-with-non-ref-values
   (testing "Setting :default with same property value reuses existing entity"
