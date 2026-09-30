@@ -17,6 +17,6 @@ opam pin add -y -n melange-transit-melange git+https://github.com/logseq/melange
 opam pin add -y -n melange-transit-native git+https://github.com/logseq/melange-transit.git#main
 opam pin add -y -n rrbvec git+https://github.com/logseq/rrbvec.git#main
 opam pin add -y -n angstrom git+https://github.com/logseq/angstrom#fork
-opam pin add -y -n xmlm git+https://github.com/logseq/xmlm#eb469d536e98c98f2754c0ff8813c92b3a17fe9f
+opam pin add -y -n xmlm git+https://github.com/logseq/xmlm#master
 opam pin add -y -n mldoc git+https://github.com/logseq/mldoc#master
 opam install . --deps-only --with-test --yes
