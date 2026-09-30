@@ -5,6 +5,7 @@
             [frontend.worker.db.migrate :as db-migrate]
             [frontend.worker.pipeline :as worker-pipeline]
             [logseq.db :as ldb]
+            [logseq.db.common.order :as db-order]
             [logseq.db.frontend.schema :as db-schema]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]))
 
@@ -372,6 +373,39 @@
       (is (= #{(:db/id (d/entity migration-db [:block/uuid target-uuid]))}
              (ref-ids (:logseq.property.comments/blocks
                        (d/entity migration-db [:block/uuid comments-area-uuid]))))))))
+
+(deftest migrate-65-34-advances-repaired-page-order-allocator
+  (let [conn (d/create-conn db-schema/schema)
+        child-uuid (random-uuid)]
+    (d/transact! conn (sqlite-create-graph/build-db-initial-data ""))
+    (d/transact! conn [{:db/ident :logseq.kv/schema-version
+                        :kv/value {:major 65 :minor 33}}
+                       {:db/id "parent"
+                        :block/uuid (random-uuid)
+                        :block/title "Country"
+                        :block/name "country"
+                        :block/tags :logseq.class/Page}
+                       {:block/uuid (random-uuid)
+                        :block/title "Overview"
+                        :block/parent "parent"
+                        :block/page "parent"
+                        :block/order "bzz"}
+                       {:block/uuid child-uuid
+                        :block/title "Australia"
+                        :block/name "australia"
+                        :block/tags :logseq.class/Page
+                        :block/parent "parent"}])
+    (with-redefs [db-order/*max-key (atom "a0")]
+      (let [result (db-migrate/migrate conn :target-version {:major 65 :minor 34})
+            migration-report (first (:upgrade-result-coll result))
+            repaired-order (:block/order (d/entity @conn [:block/uuid child-uuid]))]
+        (is (= {:major 65 :minor 34}
+               (:kv/value (d/entity @conn :logseq.kv/schema-version))))
+        (is (= {:fix db-order/missing-internal-page-parent-order-tx}
+               (:migrate-updates migration-report)))
+        (is (pos? (compare repaired-order "bzz")))
+        (is (pos? (compare (db-order/gen-key) repaired-order)))
+        (is (nil? (db-migrate/migrate conn :target-version {:major 65 :minor 34})))))))
 
 (deftest migrate-65-33-adds-gallery-view-properties
   (let [conn (d/create-conn db-schema/schema)
