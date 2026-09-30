@@ -254,6 +254,23 @@
            (seq (set/intersection (ref-tag-idents ref)
                                   #{:logseq.class/Page :logseq.class/Journal})))))
 
+(defn- unresolved-page-ref-plain-title
+  [ref]
+  (or (:block.temp/original-page-name ref)
+      (:block/title ref)))
+
+(defn- rewrite-unresolved-page-ref-title
+  "Turn [[<generated-or-uuid>]] into the typed title as plain text."
+  [title ref]
+  (if-not (string? title)
+    title
+    (let [plain (str (unresolved-page-ref-plain-title ref))]
+      (cond-> title
+        (:block/uuid ref)
+        (string/replace (page-ref/->page-ref (:block/uuid ref)) plain)
+        (not (string/blank? plain))
+        (string/replace (page-ref/->page-ref plain) plain)))))
+
 (defn- resolve-page-ref
   [db ref tag-names]
   (if (new-page-ref? ref)
@@ -268,11 +285,15 @@
                                                                   :journal? (or (= "journal" (:block/type ref))
                                                                                 (contains? (ref-tag-idents ref)
                                                                                            :logseq.class/Journal))})]
-          [(cond-> (assoc (select-keys ref [:block/title :block/name :block.temp/original-page-name])
-                          :block/uuid page-uuid)
-             class? (assoc :db/ident (or (some :db/ident tx-data)
-                                         (:db/ident (d/entity db [:block/uuid page-uuid])))))
-           tx-data])))
+          (if page-uuid
+            [(cond-> (assoc (select-keys ref [:block/title :block/name :block.temp/original-page-name])
+                            :block/uuid page-uuid)
+               class? (assoc :db/ident (or (some :db/ident tx-data)
+                                           (:db/ident (d/entity db [:block/uuid page-uuid])))))
+             tx-data]
+            ;; page-name->map/create return nil for a uuid-string title when no
+            ;; entity has that uuid. Do not emit :block/uuid nil.
+            [nil nil]))))
     [ref nil]))
 
 (defn- resolve-refs-dedup
@@ -308,35 +329,48 @@
           resolved-refs (resolve-refs-dedup db refs tag-names)
           refs' (mapv first resolved-refs)
           page-txs (mapcat second resolved-refs)
+          dropped-refs (keep (fn [[ref ref']]
+                               (when (and (map? ref) (nil? ref'))
+                                 ref))
+                             (map vector refs refs'))
+          dropped-names (into #{} (keep :block/name) dropped-refs)
+          refs'' (filterv some? refs')
           tag-refs (reduce (fn [m ref]
                              (if (:db/ident ref)
                                (update m (:block/name ref) (fnil conj []) ref)
                                m))
                            {}
-                           refs')
-          tags' (mapv (fn [tag]
-                        (if-let [ref (matching-ref-for-tag tag (get tag-refs (:block/name tag)))]
-                          (merge (dissoc tag :block/type)
-                                 (select-keys ref [:block/uuid :db/ident]))
-                          tag))
-                      (:block/tags block))
+                           refs'')
+          tags' (->> (:block/tags block)
+                     (map (fn [tag]
+                            (if-let [ref (matching-ref-for-tag tag (get tag-refs (:block/name tag)))]
+                              (merge (dissoc tag :block/type)
+                                     (select-keys ref [:block/uuid :db/ident]))
+                              tag)))
+                     (remove (fn [tag]
+                               (contains? dropped-names (:block/name tag))))
+                     vec)
           replacements (keep (fn [[ref ref']]
-                               (when (not= (:block/uuid ref) (:block/uuid ref'))
+                               (when (and ref' (not= (:block/uuid ref) (:block/uuid ref')))
                                  [(:block/uuid ref) (:block/uuid ref')]))
                              (map vector refs refs'))
           replace-refs (fn [title]
-                         (reduce (fn [title [old-uuid new-uuid]]
-                                   (string/replace title
-                                                   (page-ref/->page-ref old-uuid)
-                                                   (page-ref/->page-ref new-uuid)))
-                                 title
-                                 replacements))]
-      {:block (cond-> (assoc block :block/refs refs'
-                                     :block/tags tags')
-                (and (seq replacements) (string? (:block/title block)))
+                         (reduce (fn [title ref]
+                                   (rewrite-unresolved-page-ref-title title ref))
+                                 (reduce (fn [title [old-uuid new-uuid]]
+                                           (string/replace title
+                                                           (page-ref/->page-ref old-uuid)
+                                                           (page-ref/->page-ref new-uuid)))
+                                         title
+                                         replacements)
+                                 dropped-refs))
+          rewrite-title? (or (seq replacements) (seq dropped-refs))]
+      {:block (cond-> (assoc block :block/refs refs''
+                                   :block/tags tags')
+                (and rewrite-title? (string? (:block/title block)))
                 (update :block/title replace-refs)
 
-                (and (seq replacements) (string? (:block/raw-title block)))
+                (and rewrite-title? (string? (:block/raw-title block)))
                 (update :block/raw-title replace-refs))
        :page-txs page-txs})
     {:block block}))

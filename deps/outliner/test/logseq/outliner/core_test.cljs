@@ -9,6 +9,7 @@
             [logseq.common.config :as common-config]
             [logseq.common.util :as common-util]
             [logseq.common.util.date-time :as date-time-util]
+            [logseq.common.util.page-ref :as page-ref]
             [logseq.common.uuid :as common-uuid]
             [logseq.graph-parser.block :as gp-block]))
 
@@ -162,6 +163,124 @@
     (is (= [existing-uuid] (page-uuids-named @conn "Esc Dup")))
     (is (= existing-uuid
            (:block/uuid (first (:block/refs (first (:blocks result)))))))))
+
+(def ^:private missing-uuid-title "00000000-0000-4000-8000-000000000001")
+
+(defn- missing-uuid-page-ref
+  "Page ref the editor emits for [[<uuid>]] when no entity has that uuid.
+  Frontend parse has no db, so page-name->map still mints a generated :block/uuid."
+  ([]
+   (missing-uuid-page-ref (random-uuid)))
+  ([parsed-uuid]
+   {:block/type "page"
+    :block/name missing-uuid-title
+    :block/title missing-uuid-title
+    :block/uuid parsed-uuid}))
+
+(deftest resolve-page-refs-missing-uuid-title-does-not-emit-nil-uuid
+  (testing "a [[uuid]] with no entity does not create a page or a :block/uuid nil ref"
+    (let [conn (db-test/create-conn-with-blocks
+                [{:page {:block/title "page1"} :blocks []}])
+          parsed-uuid (random-uuid)
+          ref (missing-uuid-page-ref parsed-uuid)
+          _ (is (nil? (outliner-page/create @conn missing-uuid-title {:uuid parsed-uuid}))
+                "create refuses a uuid-string title when no page has that uuid")
+          {:keys [block page-txs]}
+          (#'outliner-core/resolve-page-refs
+           @conn
+           {:block/title (page-ref/->page-ref parsed-uuid)
+            :block/raw-title (page-ref/->page-ref parsed-uuid)
+            :block/refs [ref]})]
+      (is (empty? page-txs))
+      (is (empty? (:block/refs block)))
+      (is (not-any? #(contains? % :block/uuid) (filter map? (:block/refs block)))
+          "Dropped refs must not keep a nil :block/uuid")
+      (is (= missing-uuid-title (:block/title block)))
+      (is (= missing-uuid-title (:block/raw-title block)))
+      (is (nil? (d/entity @conn [:block/uuid (parse-uuid missing-uuid-title)])))
+      (is (empty? (page-uuids-named @conn missing-uuid-title)))))
+
+  (testing "a missing-uuid ref next to a real page ref only drops the unresolved one"
+    (let [conn (db-test/create-conn-with-blocks
+                [{:page {:block/title "page1"} :blocks []}])
+          [_ existing-uuid] (outliner-page/create! conn "Real Page" {})
+          parsed-uuid (random-uuid)
+          missing-ref (missing-uuid-page-ref parsed-uuid)
+          real-ref {:block/type "page"
+                    :block/name "real page"
+                    :block/title "Real Page"
+                    :block/uuid (random-uuid)}
+          {:keys [block]}
+          (#'outliner-core/resolve-page-refs
+           @conn
+           {:block/title (str (page-ref/->page-ref parsed-uuid)
+                              " and "
+                              (page-ref/->page-ref (:block/uuid real-ref)))
+            :block/refs [missing-ref real-ref]})]
+      (is (= [existing-uuid] (mapv :block/uuid (:block/refs block))))
+      (is (= (str missing-uuid-title " and " (page-ref/->page-ref existing-uuid))
+             (:block/title block))))))
+
+(deftest insert-blocks-missing-uuid-page-ref-does-not-throw
+  (testing "inserting [[<uuid-with-no-entity>]] persists plain text instead of rejecting the tx"
+    (let [conn (db-test/create-conn-with-blocks
+                [{:page {:block/title "page1"}
+                  :blocks [{:block/title "host"}]}])
+          host (db-test/find-block-by-content @conn "host")
+          parsed-uuid (random-uuid)
+          result (outliner-core/insert-blocks
+                  @conn
+                  [{:block/uuid (random-uuid)
+                    :block/title (page-ref/->page-ref parsed-uuid)
+                    :block/raw-title (page-ref/->page-ref parsed-uuid)
+                    :block/refs [(missing-uuid-page-ref parsed-uuid)]}]
+                  host
+                  {:sibling? true
+                   :keep-uuid? true})]
+      (is (not-any? (fn [tx]
+                      (when (map? tx)
+                        (some #(nil? (:block/uuid %)) (:block/refs tx))))
+                    (:tx-data result))
+          "tx-data must not nest a :block/uuid nil page ref")
+      (d/transact! conn (:tx-data result))
+      (let [saved (first (:blocks result))]
+        (is (= missing-uuid-title (:block/title saved)))
+        (is (empty? (map :block/uuid (:block/refs saved))))
+        (is (= missing-uuid-title
+               (:block/title (d/entity @conn [:block/uuid (:block/uuid saved)]))))
+        (is (nil? (d/entity @conn [:block/uuid (parse-uuid missing-uuid-title)])))
+        (is (empty? (page-uuids-named @conn missing-uuid-title)))))))
+
+(deftest apply-ops-missing-uuid-save-does-not-block-sibling-insert
+  (testing "a refused/nil page create must not fail an unrelated insert in the same apply-ops batch"
+    (let [conn (db-test/create-conn-with-blocks
+                [{:page {:block/title "page1"}
+                  :blocks [{:block/title "host"}]}])
+          host (db-test/find-block-by-content @conn "host")
+          parsed-uuid (random-uuid)
+          inserted-uuid (random-uuid)
+          missing-ref-uuid (random-uuid)]
+      (outliner-op/apply-ops!
+       conn
+       [[:insert-blocks [[{:block/uuid missing-ref-uuid
+                           :block/title (page-ref/->page-ref parsed-uuid)
+                           :block/raw-title (page-ref/->page-ref parsed-uuid)
+                           :block/refs [(missing-uuid-page-ref parsed-uuid)]}]
+                         (:block/uuid host)
+                         {:sibling? true
+                          :keep-uuid? true}]]
+        [:insert-blocks [[{:block/uuid inserted-uuid
+                           :block/title "sibling insert"}]
+                         (:block/uuid host)
+                         {:sibling? true
+                          :keep-uuid? true}]]]
+       {})
+      (let [linked (d/entity @conn [:block/uuid missing-ref-uuid])
+            inserted (d/entity @conn [:block/uuid inserted-uuid])]
+        (is (= missing-uuid-title (:block/title linked)))
+        (is (empty? (map :block/uuid (:block/refs linked))))
+        (is (= "sibling insert" (:block/title inserted)))
+        (is (some? inserted))))))
 
 (deftest insert-blocks-resolves-journal-class-tagged-refs
   (let [conn (db-test/create-conn-with-blocks
