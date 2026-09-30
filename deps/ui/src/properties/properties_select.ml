@@ -113,7 +113,7 @@ let repaint_chosen cfg =
         match node_list_item links i with
         | Some el ->
             el_set_class el
-              ("flex justify-between menu-link"
+              ("menu-link"
               ^ (if i = cfg.chosen then " chosen" else ""))
         | None -> ()
       done
@@ -123,27 +123,27 @@ let item_el idx cfg it =
   let a =
     mk "a"
       ~cls:
-        ("flex justify-between menu-link"
+        ("menu-link"
         ^ (if idx = cfg.chosen then " chosen" else ""))
       ~attrs:
         [ ("id", "ac-" ^ string_of_int idx); ("tabindex", "0") ]
   in
   (* cljs item DOM: a > span.flex-1 > div.flex-row.justify-between.w-full
      > div.flex-row.gap-1 > span[title=":ident"] > icon + strong *)
-  let inner1 = mk ~cls:"flex-1" "span" in
+  let inner1 = mk ~cls:"menu-item-label" "span" in
   let inner2 =
-    mk ~cls:("flex flex-row justify-between w-full"
+    mk ~cls:("select-item-row"
              ^ (if idx = cfg.chosen then " chosen" else "")) "div"
   in
-  let inner3 = mk ~cls:"flex flex-row gap-1 items-center" "div" in
+  let inner3 = mk ~cls:"select-item-left" "div" in
   let label_span =
-    mk ~cls:"flex gap-1 items-center" "span"
+    mk ~cls:"select-item-left" "span"
       ~attrs:(if it.it_tip = "" then [] else [ ("title", ":" ^ it.it_tip) ])
   in
   (* e2e targets `span` + exact text; a leaf span keeps the deepest
      getByText match a span *)
   let strong =
-    mk ~cls:"font-normal" (if it.it_strong then "strong" else "span")
+    mk ~cls:"ls-normal" (if it.it_strong then "strong" else "span")
   in
   el_set_text strong
     (if it.it_new then I18n.t1 "select/new-option-label" it.it_title
@@ -151,8 +151,8 @@ let item_el idx cfg it =
   (* cljs property select renders a leading type icon (letter-t /
      puzzle) inside .pt-1 as a ui/icon svg *)
   if it.it_icon <> "" then (
-    let ic = mk ~cls:"pt-1" "span" in
-    el_append_child ic (ui_icon_el ~cls:"opacity-40" it.it_icon);
+    let ic = mk ~cls:"ls-pt" "span" in
+    el_append_child ic (ui_icon_el ~cls:"ls-icon-dim" it.it_icon);
     el_append_child label_span ic);
   el_append_child label_span strong;
   el_append_child inner3 label_span;
@@ -176,7 +176,7 @@ let rebuild_results cfg results_inner =
     vis;
   (* cljs adds the py-1 class only when there are results *)
   match cfg.results_py with
-  | Some py -> el_set_class py (if vis = [] then "" else "py-1")
+  | Some py -> el_set_class py (if vis = [] then "" else "ls-py")
   | None -> ()
 
 let pick cfg =
@@ -219,12 +219,12 @@ let create ~placeholder ?(new_option = None) ?(on_escape = fun () -> ())
   let root = mk ~cls:"cp__select cp__select-main" "div" in
   let input_wrap = mk ~cls:"input-wrap" "div" in
   let input =
-    mk ~cls:"cp__select-input w-full !p-1.5" "input"
+    mk ~cls:"cp__select-input" "input"
       ~attrs:[ ("placeholder", placeholder) ]
   in
   el_set_attr input "type" "text";
   el_append_child input_wrap input;
-  let py = mk ~cls:"py-1" "div" in
+  let py = mk ~cls:"ls-py" "div" in
   let results_wrap = mk ~cls:"item-results-wrap" "div" in
   let results =
     mk ~cls:"cp__select-results" "div" ~attrs:[ ("id", "ui__ac") ]

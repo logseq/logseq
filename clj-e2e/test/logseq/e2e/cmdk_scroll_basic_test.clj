@@ -11,9 +11,9 @@
 (use-fixtures :once fixtures/open-page)
 (use-fixtures :each fixtures/new-logseq-page fixtures/validate-graph)
 
-(def ^:private scroll-container ".cp__cmdk .overflow-y-auto")
+(def ^:private scroll-container ".cp__cmdk .cp__cmdk-scroller")
 (def ^:private kbd-highlight (str scroll-container " [data-kb-highlighted]"))
-(def ^:private mouse-item (str scroll-container " .transition-colors.cursor-pointer"))
+(def ^:private mouse-item (str scroll-container " [data-hoverable]"))
 
 (defn- setup-search
   "Creates `n` pages with `prefix` and `suffix`, opens cmdk and types the `prefix`."
@@ -33,7 +33,7 @@
    (str "(() => {
            const c = document.querySelector('" scroll-container "');
            if (!c) return;
-           const items = c.querySelectorAll('.transition-colors');
+           const items = c.querySelectorAll('[data-cmdk-item]');
            const target = items[2] || items[0] || c;
            const rect = target.getBoundingClientRect();
            const evt = new MouseEvent('mousemove', {

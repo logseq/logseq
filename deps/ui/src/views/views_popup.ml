@@ -138,10 +138,7 @@ let focused_idx items =
 let rec menu_items_el ?(cls_prefix = "") (items : menu_item list) : D.el =
   let content =
     D.h
-      ~cls:
-        (cls_prefix
-         ^ "ui__dropdown-menu-content z-50 min-w-[8rem] rounded-md border \
-            bg-popover p-1 text-popover-foreground shadow-md")
+      ~cls:(cls_prefix ^ "ui__dropdown-menu-content")
       ~attrs:[ ("role", "menu"); ("tabindex", "-1") ] ()
   in
   List.iter
@@ -149,7 +146,7 @@ let rec menu_items_el ?(cls_prefix = "") (items : menu_item list) : D.el =
       match it with
       | MSep ->
           D.el_append_child content
-            (D.h ~cls:"ui__dropdown-menu-separator -mx-1 my-1 h-px bg-muted"
+            (D.h ~cls:"ui__dropdown-menu-separator"
                ~attrs:[ ("role", "separator") ] ())
       | MCustom el -> D.el_append_child content el
       | MItem (label, on) ->
@@ -158,7 +155,7 @@ let rec menu_items_el ?(cls_prefix = "") (items : menu_item list) : D.el =
               ~attrs:[ ("role", "menuitem"); ("tabindex", "-1") ] ()
           in
           D.el_append_child el
-            (D.h ~tag:"span" ~cls:"flex-1" ~text:label ());
+            (D.h ~tag:"span" ~cls:"menu-item-label" ~text:label ());
           D.el_add_listener el "click" (fun _ ->
               close_all ();
               on ());
@@ -167,7 +164,7 @@ let rec menu_items_el ?(cls_prefix = "") (items : menu_item list) : D.el =
           let el =
             D.h
               ~cls:
-                (item_cls "ui__dropdown-menu-checkbox-item" ^ " capitalize")
+                (item_cls "ui__dropdown-menu-checkbox-item")
               ~attrs:
                 [ ("role", "menuitemcheckbox")
                 ; ("aria-checked", string_of_bool checked)
@@ -176,19 +173,16 @@ let rec menu_items_el ?(cls_prefix = "") (items : menu_item list) : D.el =
               ()
           in
           let ind =
-            D.h ~tag:"span"
-              ~cls:
-                "absolute left-2 flex h-3.5 w-3.5 items-center \
-                 justify-center" ()
+            D.h ~tag:"span" ~cls:"ui__dropdown-menu-item-indicator" ()
           in
           (if checked then
              let c = D.icon "check" in
              Editor_dom.el_set_class c
-               "ui__icon ti ls-icon-check h-4 w-4";
+               "ui__icon ti ls-icon-check";
              D.el_append_child ind c);
           D.el_append_child el ind;
           D.el_append_child el
-            (D.h ~tag:"span" ~cls:"flex-1" ~text:label ());
+            (D.h ~tag:"span" ~cls:"menu-item-label" ~text:label ());
           D.el_add_listener el "click" (fun ev ->
               Editor_dom.stop_propagation ev;
               on (not checked);
@@ -212,16 +206,16 @@ let rec menu_items_el ?(cls_prefix = "") (items : menu_item list) : D.el =
               ()
           in
           D.el_append_child el
-            (D.h ~tag:"span" ~cls:"flex-1" ~text:label ());
+            (D.h ~tag:"span" ~cls:"menu-item-label" ~text:label ());
           (* cljs renders the raw tabler svg for submenu chevrons *)
           (match Editor_dom.tabler_svg_el "chevron-right" with
            | Some svg ->
                Editor_dom.el_set_attr svg "class"
-                 "h-4 ml-auto tabler-icon tabler-icon-chevron-right w-4";
+                 "ls-menu-chevron tabler-icon tabler-icon-chevron-right";
                D.el_append_child el svg
            | None ->
                D.el_append_child el
-                 (D.h ~tag:"i" ~cls:"ti ti-chevron-right ml-auto h-4 w-4"
+                 (D.h ~tag:"i" ~cls:"ti ti-chevron-right ls-menu-chevron"
                     ()));
           let sub_open = ref false in
           let open_sub () =
@@ -229,10 +223,7 @@ let rec menu_items_el ?(cls_prefix = "") (items : menu_item list) : D.el =
               sub_open := true;
               let sc = menu_items_el ~cls_prefix sub in
               Editor_dom.el_set_class sc
-                (cls_prefix
-                 ^ "ui__dropdown-menu-sub-content z-50 min-w-[8rem] \
-                    rounded-md border bg-popover p-1 \
-                    text-popover-foreground shadow-lg");
+                (cls_prefix ^ "ui__dropdown-menu-sub-content");
               D.el_append_child document_body sc;
               position_content ~anchor:el ~content:sc ~align_end:false
                 ~submenu:true;
@@ -296,11 +287,11 @@ type select_item = { si_label : string; si_value : string; si_extra : Wire.t opt
 (* renders the item label row; multiple mode adds a checkbox box *)
 let select_item_row it chosen multiple sel_set =
   let row =
-    D.h ~cls:("flex flex-row justify-between w-full" ^ if chosen then " chosen" else "")
+    D.h ~cls:("select-item-row" ^ if chosen then " chosen" else "")
       ()
   in
   let left =
-    D.h ~cls:"flex flex-row items-center gap-1" ()
+    D.h ~cls:"select-item-left" ()
   in
   (if multiple then
      let cb =
@@ -325,7 +316,7 @@ let show_select ~anchor ~items ~placeholder ?(multiple = false)
   let input_wrap = D.h ~cls:"input-wrap" () in
   let input =
     D.h ~tag:"input"
-      ~cls:"cp__select-input w-full !p-1.5"
+      ~cls:"cp__select-input"
       ~attrs:[ ("type", "text"); ("placeholder", placeholder) ] ()
   in
   D.el_append_child input_wrap input;
@@ -337,7 +328,7 @@ let show_select ~anchor ~items ~placeholder ?(multiple = false)
   in
   let item_results = D.h ~cls:"item-results-wrap" ~children:[ results ] () in
   D.el_append_child results_wrap item_results;
-  let apply_wrap = D.h ~cls:"p-4" () in
+  let apply_wrap = D.h ~cls:"cp__select-apply" () in
   let filtered () =
     List.filter (fun it -> Fuzzy.score !query it.si_label > 0.) items
   in
@@ -348,7 +339,7 @@ let show_select ~anchor ~items ~placeholder ?(multiple = false)
      | [] ->
          if not multiple then
            D.el_append_child results
-             (D.h ~cls:"px-2 py-1 opacity-50 text-sm"
+             (D.h ~cls:"ls-ac-empty"
                 ~text:I.no_matched_result ())
      | _ ->
          let ac_inner =
@@ -361,13 +352,13 @@ let show_select ~anchor ~items ~placeholder ?(multiple = false)
              let a =
                D.h ~tag:"a"
                  ~cls:
-                   ("flex justify-between menu-link"
+                   ("menu-link"
                     ^ if i = !chosen_idx then " chosen" else "")
                  ~attrs:[ ("id", "ac-" ^ string_of_int i); ("tabindex", "0") ]
                  ()
              in
              D.el_append_child a
-               (D.h ~tag:"span" ~cls:"flex-1"
+               (D.h ~tag:"span"
                   ~children:
                     [ select_item_row it (i = !chosen_idx) multiple
                         !sel_values ]
@@ -394,7 +385,7 @@ let show_select ~anchor ~items ~placeholder ?(multiple = false)
        D.clear apply_wrap;
        let btn =
          D.h ~tag:"button"
-           ~cls:"ui__button inline-flex items-center justify-center text-sm"
+           ~cls:"ui__button ls-btn-outline"
            ~text:I.apply ()
        in
        D.el_add_listener btn "click" (fun _ ->
@@ -470,47 +461,39 @@ let show_select ~anchor ~items ~placeholder ?(multiple = false)
 let show_dialog ~headline ~body:(body : D.el list) ~on_confirm
     ?(confirm_label = I.yes) () =
   let overlay =
-    D.h ~cls:
-      "fixed inset-0 z-50 bg-black/80 backdrop-blur-sm" ()
+    D.h ~cls:"ui__alert-dialog-overlay" ()
   in
   let content =
-    D.h ~cls:
-      "ui__dialog-content fixed left-[50%] top-[50%] z-50 grid w-full \
-       max-w-2xl lg:max-w-3xl gap-4 border sm:rounded-lg bg-background \
-       p-6 shadow-lg"
+    D.h ~cls:"ui__dialog-content"
       ~attrs:
-        [ ("role", "dialog"); ("aria-modal", "true")
-        ; ("style", "transform:translate(-50%,-50%)")
-        ]
+        [ ("role", "dialog"); ("aria-modal", "true") ]
       ()
   in
   let head =
-    D.h ~cls:"sm:flex items-center"
+    D.h ~cls:"ls-dialog-head"
       ~children:
-        [ D.h ~cls:
-            "mx-auto flex-shrink-0 flex items-center justify-center h-12 \
-             w-12 rounded-full bg-error sm:mx-0 sm:h-10 sm:w-10"
-            ~children:[ D.h ~tag:"span" ~cls:"text-error text-xl"
+        [ D.h ~cls:"ls-dialog-head-icon"
+            ~children:[ D.h ~tag:"span" ~cls:"ls-dialog-error"
                           ~children:[ D.icon "alert-triangle" ] () ]
             ()
-        ; D.h ~cls:"mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left"
+        ; D.h ~cls:"ls-dialog-head-text"
             ~children:
-              [ D.h ~tag:"h3" ~cls:"text-lg leading-6 font-medium"
+              [ D.h ~tag:"h3" ~cls:"ls-dialog-headline"
                   ~attrs:[ ("id", "modal-headline") ] ~text:headline () ]
             ()
         ]
       ()
   in
   let btns =
-    D.h ~cls:"pt-6 flex justify-end gap-4"
+    D.h ~cls:"ls-dialog-footer"
       ~children:
-        [ D.h ~tag:"button" ~cls:"ui__button border px-4 py-1 rounded"
+        [ D.h ~tag:"button" ~cls:"ui__button ls-btn-outline"
             ~text:I.cancel
             ~on_click:(fun _ ->
               pop_popup overlay;
               D.el_remove overlay)
             ()
-        ; D.h ~tag:"button" ~cls:"ui__button px-4 py-1 rounded"
+        ; D.h ~tag:"button" ~cls:"ui__button ls-btn-primary"
             ~text:confirm_label
             ~on_click:(fun _ ->
               pop_popup overlay;

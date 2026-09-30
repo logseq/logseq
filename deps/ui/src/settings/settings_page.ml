@@ -18,7 +18,7 @@ let icon ~key:_ name = Icons.icon name
 
 (* svg/info *)
 let info_icon ~key ~title =
-  dom ~key ~tag:"span" ~style_class:"flex px-2"
+  dom ~key ~tag:"span" ~style_class:"ls-info-icon"
     ~attrs:[ ("title", title); ("data-base-ui-tooltip-trigger", "") ]
     [ dom ~key:(key ^ "s") ~tag:"svg"
         ~attrs:
@@ -66,17 +66,11 @@ let print_key k =
 let kbd_seq ~key ~binding keys =
   dom ~key ~tag:"span" ~style_class:"keyboard-shortcut"
     [ dom ~key:(key ^ "w") ~tag:"span"
-        ~attrs:
-          [ ( "style"
-            , "display: inline-flex; align-items: center; white-space: \
-               nowrap;" )
-          ]
+        ~style_class:"shui-shortcut-wrap"
         [ dom ~key:(key ^ "b") ~tag:"div"
             ~style_class:"shui-shortcut-glow shui-shortcut-separate"
             ~attrs:
-              [ ("data-shortcut-binding", binding); ("aria-hidden", "true")
-              ; ("style", "white-space: nowrap; gap: 4px;")
-              ]
+              [ ("data-shortcut-binding", binding); ("aria-hidden", "true") ]
             (List.mapi
                (fun i k ->
                  dom ~key:(key ^ "-" ^ string_of_int i) ~tag:"kbd"
@@ -87,31 +81,17 @@ let kbd_seq ~key ~binding keys =
         ]
     ]
 
-let btn_base =
-  "ui__button inline-flex cursor-pointer items-center justify-center \
-   whitespace-nowrap rounded-md text-sm gap-1 font-medium \
-   ring-offset-background transition-colors focus-visible:outline-none \
-   focus-visible:ring-2 focus-visible:ring-ring \
-   focus-visible:ring-offset-2 disabled:pointer-events-none \
-   disabled:opacity-50 select-none"
+let btn_base = "ui__button"
 
 let variant_cls = function
-  | `Solid ->
-      "bg-primary/90 hover:bg-primary/100 active:opacity-90 \
-       text-primary-foreground hover:text-primary-foreground as-solid"
-  | `Secondary ->
-      "bg-secondary/70 text-secondary-foreground hover:bg-secondary/100 \
-       active:opacity-80 as-secondary"
-  | `Outline ->
-      "border bg-background hover:bg-accent hover:text-accent-foreground \
-       active:opacity-80 as-outline"
-  | `Text ->
-      "hover:bg-secondary/70 hover:text-secondary-foreground \
-       active:opacity-80 as-text"
+  | `Solid -> "as-solid"
+  | `Secondary -> "as-secondary"
+  | `Outline -> "as-outline"
+  | `Text -> "as-text"
 
 let size_cls = function
-  | `Default -> "h-10 px-4 py-2"
-  | `Sm -> "h-7 rounded px-3 py-1"
+  | `Default -> ""
+  | `Sm -> "ls-btn-sm"
 
 (* ui/toggle -> shui Switch size sm *)
 let hidden_checkbox ~key ~on =
@@ -126,24 +106,14 @@ let hidden_checkbox ~key ~on =
 let switch_el ~key ~on ~on_toggle =
   let chk = if on then "checked" else "unchecked" in
   dom ~key ~tag:"span"
-    ~style_class:
-      ("ui__switch peer inline-flex shrink-0 cursor-pointer items-center \
-        rounded-full border-2 border-transparent transition-colors \
-        focus-visible:outline-none focus-visible:ring-2 \
-        focus-visible:ring-ring focus-visible:ring-offset-2 \
-        disabled:cursor-not-allowed disabled:opacity-50 \
-        data-[checked]:justify-end data-[checked]:bg-primary \
-        data-[unchecked]:justify-start data-[unchecked]:bg-input \
-        pr-[1px] pl-[1px] h-4.5 w-8")
+    ~style_class:"ui__switch"
     ~attrs:
       [ ("role", "switch")
       ; ("aria-checked", string_of_bool on); ("data-" ^ chk, "") ]
     ~events:"click"
     ~on_dom_event:(fun n _ -> if n = "click" then on_toggle ())
     [ dom ~key:(key ^ "-th") ~tag:"span"
-        ~style_class:
-          "pointer-events-none block rounded-full bg-background \
-           shadow-lg ring-0 transition-transform h-3 w-3"
+        ~style_class:"ui__switch-thumb"
         ~attrs:[ ("data-" ^ chk, "") ]
         []
     ]
@@ -152,13 +122,7 @@ let switch_el ~key ~on ~on_toggle =
 let checkbox_el ~key ~on ~on_change =
   let chk = if on then "checked" else "unchecked" in
   dom ~key ~tag:"button"
-    ~style_class:
-      "ui__checkbox peer h-4 w-4 shrink-0 cursor-pointer rounded-sm \
-       border border-primary ring-offset-background \
-       focus-visible:outline-none focus-visible:ring-2 \
-       focus-visible:ring-ring focus-visible:ring-offset-2 \
-       disabled:cursor-not-allowed disabled:opacity-50 \
-       data-[checked]:bg-primary data-[checked]:text-primary-foreground"
+    ~style_class:"ui__checkbox"
     ~attrs:
       [ ("type", "button"); ("role", "checkbox")
       ; ("aria-checked", string_of_bool on); ("data-" ^ chk, "")
@@ -168,7 +132,7 @@ let checkbox_el ~key ~on ~on_change =
     (if on then
        [ dom ~key:(key ^ "-in") ~tag:"span"
            [ dom ~key:(key ^ "-ck") ~tag:"svg"
-               ~style_class:"h-4 w-4"
+               ~style_class:"ls-icon-sm"
                ~attrs:
                  [ ("viewBox", "0 0 24 24"); ("fill", "none")
                  ; ("stroke", "currentColor"); ("stroke-width", "2")
@@ -182,7 +146,7 @@ let checkbox_el ~key ~on ~on_change =
 
 let label_el ~key ~for_ ~text ?text_signal children =
   dom ~key ~tag:"label"
-    ~style_class:"block text-sm font-medium leading-5 opacity-70"
+    ~style_class:"ls-label"
     ~attrs:[ ("for", for_) ]
     ~text ?text_signal children
 
@@ -193,12 +157,11 @@ let txt ~key s = text ~key ~value:s []
 let toggle_row ~key ~for_ ~label ?(label_extra = []) ?(detail = []) ~on
     ~on_toggle () =
   dom ~key
-    ~style_class:"it sm:grid sm:grid-cols-3 sm:gap-4 sm:items-center"
+    ~style_class:"it"
     [ label_el ~key:(key ^ "-l") ~for_ ~text:label label_extra
     ; dom ~key:(key ^ "-c")
-        ~style_class:"rounded-md sm:max-w-tss sm:col-span-2"
-        [ dom ~key:(key ^ "-i") ~style_class:"rounded-md"
-            ~attrs:[ ("style", "display: flex; gap: 1rem; align-items: center") ]
+        ~style_class:"ls-it-value"
+        [ dom ~key:(key ^ "-i") ~style_class:"ls-switch-wrap"
             (switch_el ~key:(key ^ "-sw") ~on ~on_toggle
              :: hidden_checkbox ~key:(key ^ "-sc") ~on
              :: detail)
@@ -208,15 +171,14 @@ let toggle_row ~key ~for_ ~label ?(label_extra = []) ?(detail = []) ~on
 (* show-brackets/wide-mode variant: label | switch | shortcut kbd *)
 let shortcut_toggle_row ~key ~for_ ~label ~binding ~on ~on_toggle () =
   dom ~key
-    ~style_class:"it sm:grid sm:grid-cols-3 sm:gap-4 sm:items-center"
+    ~style_class:"it"
     [ label_el ~key:(key ^ "-l") ~for_ ~text:label []
     ; dom ~key:(key ^ "-c")
-        [ dom ~key:(key ^ "-i") ~style_class:"rounded-md sm:max-w-xs"
+        [ dom ~key:(key ^ "-i") ~style_class:"ls-switch-wrap ls-switch-narrow"
             [ switch_el ~key:(key ^ "-sw") ~on ~on_toggle
             ; hidden_checkbox ~key:(key ^ "-sc") ~on ]
         ]
-    ; dom ~key:(key ^ "-k")
-        ~attrs:[ ("style", "text-align: right") ]
+    ; dom ~key:(key ^ "-k") ~style_class:"ls-kbd-cell"
         [ kbd_seq ~key:(key ^ "-ks") ~binding
             (String.split_on_char ' ' binding) ]
     ]
@@ -224,25 +186,23 @@ let shortcut_toggle_row ~key ~for_ ~label ~binding ~on ~on_toggle () =
 (* cljs row-with-button-action *)
 let action_row ~key ~for_ ~label ?description ~actions ?(desc = [])
     ?(stretch = false) () =
-  dom ~key ~style_class:"sm:items-start it sm:grid sm:grid-cols-3 sm:gap-4"
-    [ dom ~key:(key ^ "-lc") ~style_class:"flex flex-col"
+  dom ~key ~style_class:"it ls-it-top"
+    [ dom ~key:(key ^ "-lc") ~style_class:"ls-it-label-col"
         ([ label_el ~key:(key ^ "-l") ~for_ ~text:label [] ]
         @
         match description with
         | Some d ->
-            [ dom ~key:(key ^ "-d") ~style_class:"text-xs text-gray-10"
+            [ dom ~key:(key ^ "-d") ~style_class:"ls-it-desc"
                 ~text:d []
             ]
         | None -> [])
     ; dom ~key:(key ^ "-rc")
-        ~style_class:"mt-1 sm:mt-0 sm:col-span-2 flex items-center"
-        ~attrs:
-          [ ("style", "display: flex; gap: 0.5rem; align-items: center") ]
+        ~style_class:"ls-it-actions"
         ([ dom ~key:(key ^ "-a")
              ~attrs:(if stretch then [ ("style", "width: 100%") ] else [])
              actions ]
         (* cljs renders the desc cell unconditionally *)
-        @ [ dom ~key:(key ^ "-desc") ~style_class:"text-sm flex" desc ])
+        @ [ dom ~key:(key ^ "-desc") ~style_class:"ls-it-side" desc ])
     ]
 
 (* ---- general pane ---- *)
@@ -254,18 +214,16 @@ let version_row () =
     ~actions:
       [ dom ~key:"ver-a" ~tag:"span"
           ~style_class:"cp__settings-app-updater"
-          [ dom ~key:"ver-c" ~style_class:"ctls flex items-center"
+          [ dom ~key:"ver-c" ~style_class:"ctls"
               [ dom ~key:"ver-i"
-                  ~style_class:
-                    "mt-1 sm:mt-0 sm:col-span-2 flex gap-4 items-center \
-                     flex-wrap"
+                  ~style_class:"ls-ver-wrap"
                   [ dom ~key:"ver-b" []
-                  ; dom ~key:"ver-v" ~style_class:"text-sm cursor"
+                  ; dom ~key:"ver-v" ~style_class:"ls-ver-text"
                       ~attrs:
                         [ ("title", T.revision_title revision) ]
                       ~text:version []
                   ; dom ~key:"ver-cl" ~tag:"a"
-                      ~style_class:"text-sm fade-link underline inline"
+                      ~style_class:"fade-link"
                       ~attrs:
                         [ ("target", "_blank")
                         ; ( "href"
@@ -286,7 +244,7 @@ let language_row ctx =
   action_row ~key:"lang" ~for_:"preferred_language"
     ~label:T.language_label
     ~actions:
-      [ V.lang_trigger ~key:"lang-sel" ~h_cls:"w-64 h-8" ~st:lang_label
+      [ V.lang_trigger ~key:"lang-sel" ~h_cls:"ls-select-md" ~st:lang_label
           ~anchor_sel:"#settings-lang-trigger"
       ; dom ~key:"lang-sel-i" ~tag:"input"
           ~attrs:
@@ -299,8 +257,8 @@ let language_row ctx =
 let theme_row ctx =
   let mode = Signal.state ctx.Lui_ui.ui_scheduler (V.current_mode ()) in
   dom ~key:"theme"
-    ~style_class:"sm:items-start it sm:grid sm:grid-cols-3 sm:gap-4"
-    [ dom ~key:"theme-lc" ~style_class:"flex flex-col"
+    ~style_class:"it ls-it-top"
+    [ dom ~key:"theme-lc" ~style_class:"ls-it-label-col"
         [ label_el ~key:"theme-l" ~for_:"toggle_theme" ~text:""
             ~text_signal:
               (Signal.map
@@ -319,11 +277,9 @@ let theme_row ctx =
             []
         ]
     ; dom ~key:"theme-rc"
-        ~style_class:"mt-1 sm:mt-0 sm:col-span-2 flex items-center"
-        ~attrs:
-          [ ("style", "display: flex; gap: 0.5rem; align-items: center") ]
+        ~style_class:"ls-it-actions"
         [ dom ~key:"theme-a" [ V.theme_modes_ul ~st:mode ]
-        ; dom ~key:"theme-desc" ~style_class:"flex text-sm"
+        ; dom ~key:"theme-desc" ~style_class:"ls-it-side"
             [ kbd_seq ~key:"theme-k" ~binding:"t t" [ "t"; "t" ] ]
         ]
     ]
@@ -331,15 +287,16 @@ let theme_row ctx =
 let font_button ~key ~label ~active ~on_click =
   dom ~key ~tag:"button"
     ~style_class:
-      (btn_base ^ " " ^ variant_cls `Secondary ^ " " ^ size_cls `Default
-     ^ " cursor-pointer"
-     ^ if active then " !border-primary border-[2px]" else "")
-    ~attrs:[ ("type", "button") ]
+      (btn_base ^ " " ^ variant_cls `Secondary ^ " ls-font-btn"
+     ^ if active then " ls-active" else "")
+    ~attrs:
+      [ ("type", "button")
+      ; ("aria-pressed", string_of_bool active) ]
     ~events:"click"
     ~on_dom_event:(fun n _ -> if n = "click" then on_click ())
     [ dom ~key:(key ^ "-s") ~tag:"span"
         ~style_class:
-          ("ls-font-" ^ String.lowercase_ascii label ^ " flex flex-col")
+          ("ls-font ls-font-" ^ String.lowercase_ascii label)
         [ dom ~key:(key ^ "-ag") ~tag:"strong" ~text:"Ag" []
         ; dom ~key:(key ^ "-sm") ~tag:"small" ~text:label []
         ]
@@ -351,19 +308,19 @@ let editor_font_row () =
     font_button ~key:("font-" ^ t) ~label ~active:(font.S.ftype = t)
       ~on_click:(fun () -> S.set_editor_font_type t)
   in
-  dom ~key:"font" ~style_class:"it sm:grid sm:grid-cols-3 sm:gap-4"
+  dom ~key:"font" ~style_class:"it"
     [ label_el ~key:"font-l" ~for_:"font_family" ~text:T.editor_font []
-    ; dom ~key:"font-r" ~style_class:"flex flex-col col-span-2"
-        [ dom ~key:"font-btns" ~style_class:"flex gap-2"
+    ; dom ~key:"font-r" ~style_class:"ls-it-value-col"
+        [ dom ~key:"font-btns" ~style_class:"ls-row-gap"
             [ fb "default" "Default"; fb "serif" "Serif"; fb "mono" "Mono" ]
-        ; dom ~key:"font-g" ~style_class:"pt-3"
+        ; dom ~key:"font-g" ~style_class:"ls-font-global"
             [ dom ~key:"font-gl" ~tag:"label"
-                ~style_class:"w-full flex items-center cursor-pointer"
+                ~style_class:"ls-check-row"
                 [ checkbox_el ~key:"font-gc" ~on:font.S.fglobal
                     ~on_change:(fun b -> S.set_editor_font_global b)
                 ; hidden_checkbox ~key:"font-gi" ~on:font.S.fglobal
                 ; dom ~key:"font-gt" ~tag:"span"
-                    ~style_class:"pl-1 text-sm opacity-70"
+                    ~style_class:"ls-check-label"
                     ~text:T.editor_font_global []
                 ]
             ]
@@ -395,13 +352,10 @@ let color_label = function
 let accent_swatch ~key ~modal ~current color =
   let active = color = current and none = color = "none" in
   let outline = if active then "07" else "06" in
-  dom ~key ~style_class:"flex items-center"
+  dom ~key ~style_class:"ls-swatch-cell"
     [ dom ~key:(key ^ "-b") ~tag:"button"
         ~style_class:
-          (btn_base ^ " " ^ variant_cls `Text
-         ^ " py-2 w-5 h-5 px-1 !rounded-full flex justify-center items-center \
-            transition ease-in duration-100 hover:cursor-pointer \
-            hover:opacity-100")
+          (btn_base ^ " " ^ variant_cls `Text ^ " ls-swatch")
         ~attrs:
           ([ ("type", "button"); ("title", color_label color)
            ; ( "style"
@@ -419,9 +373,9 @@ let accent_swatch ~key ~modal ~current color =
         ~on_dom_event:(fun n _ -> if n = "click" then S.set_accent color)
         [ dom ~key:(key ^ "-s") ~tag:"strong"
             ~style_class:
-              (if none then "h-0.5 w-full bg-red-700"
+              (if none then "ls-swatch-none"
                else
-                 "w-2 h-2 !rounded-full transition ease-in duration-100")
+                 "ls-swatch-dot")
             ~attrs:
               [ ( "style"
                 , Printf.sprintf
@@ -452,11 +406,11 @@ let accent_row ~modal =
         ~desc:
           (if modal then []
            else
-             [ dom ~key:"acc-sp" ~tag:"span" ~style_class:"pl-6"
+             [ dom ~key:"acc-sp" ~tag:"span" ~style_class:"ls-kbd-side"
                  [ kbd_seq ~key:"acc-k" ~binding:"c c" [ "c"; "c" ] ]
              ])
         ()
-    ; dom ~key:"acc-n" ~style_class:"text-sm opacity-50 mt-1"
+    ; dom ~key:"acc-n" ~style_class:"ls-desc"
         ~text:T.accent_color_alert []
     ]
 
@@ -514,8 +468,8 @@ let date_format_row () =
                   sm:grid-cols-3 sm:gap-4 sm:items-center"
     [ label_el ~key:"dfmt-l" ~for_:"custom_date_format"
         ~text:T.custom_date_format []
-    ; dom ~key:"dfmt-r" ~style_class:"mt-1 sm:mt-0 sm:col-span-2"
-        [ dom ~key:"dfmt-w" ~style_class:"max-w-lg rounded-md"
+    ; dom ~key:"dfmt-r" ~style_class:"ls-it-value"
+        [ dom ~key:"dfmt-w" ~style_class:"ls-select-wrap"
             [ dom ~key:"dfmt-s" ~tag:"select"
                 ~style_class:"form-select is-small"
                 ~attrs:[ ("value", current) ]
@@ -646,13 +600,13 @@ let keymap_controls () =
                 ; keymap_pill ~key:"km-pd" ~title:T.keymap_disabled
                     ~count:"4" ~active:false
                 ]
-            ; dom ~key:"km-sec" ~style_class:"flex items-center gap-2"
+            ; dom ~key:"km-sec" ~style_class:"ls-toolbar-gap"
                 [ dom ~key:"km-fold" ~tag:"button"
-                    ~style_class:"flex items-center icon-link"
+                    ~style_class:"icon-link"
                     ~attrs:[ ("aria-label", T.keymap_toggle_categories) ]
                     [ icon ~key:"km-foldi" "fold" ]
                 ; dom ~key:"km-rf" ~tag:"button"
-                    ~style_class:"flex items-center icon-link"
+                    ~style_class:"icon-link"
                     ~attrs:[ ("aria-label", T.keymap_refresh_all) ]
                     [ icon ~key:"km-rfi" "refresh" ]
                 ]
@@ -663,22 +617,13 @@ let keymap_controls () =
 let keymap_binding ~key (b : Keymap_data.binding) =
   let open Keymap_data in
   let cls = "shui-shortcut-" ^ b.kind ^ " shui-shortcut-glow" in
-  let sep =
-    if b.kind = "combo" then "white-space: nowrap;"
-    else "white-space: nowrap; gap: 4px;"
-  in
-  dom ~key ~tag:"span" ~attrs:[ ("style", "display: contents;") ]
+  dom ~key ~tag:"span" ~style_class:"ls-dc"
     [ dom ~key:(key ^ "w") ~tag:"span"
-        ~attrs:
-          [ ( "style"
-            , "display: inline-flex; align-items: center; white-space: \
-               nowrap;" )
-          ]
+        ~style_class:"shui-shortcut-wrap"
         [ dom ~key:(key ^ "d") ~tag:"div" ~style_class:cls
             ~attrs:
               ((if b.data = "" then []
-                else [ ("data-shortcut-binding", b.data) ])
-               @ [ ("style", sep) ])
+                else [ ("data-shortcut-binding", b.data) ]))
             (List.concat
              @@ List.mapi
                   (fun i k ->
@@ -725,22 +670,22 @@ let command_key_of (title : string) : string =
   "command." ^ s
 
 let keymap_th ~key label =
-  dom ~key ~tag:"li" ~style_class:"flex justify-between th"
+  dom ~key ~tag:"li" ~style_class:"th"
     ~attrs:[ ("role", "button") ]
-    [ dom ~key:(key ^ "s") ~tag:"strong" ~style_class:"font-semibold"
+    [ dom ~key:(key ^ "s") ~tag:"strong" ~style_class:"ls-th-strong"
         ~text:(I18n.t (keymap_category label)) []
-    ; dom ~key:(key ^ "i") ~tag:"i" ~style_class:"flex items-center"
+    ; dom ~key:(key ^ "i") ~tag:"i" ~style_class:"ls-row"
         [ icon ~key:(key ^ "c") "chevron-down" ]
     ]
 
 let keymap_row ~key (r : Keymap_data.row) =
   let open Keymap_data in
   dom ~key ~tag:"li"
-    ~style_class:"shortcut-row flex items-start justify-between text-sm"
+    ~style_class:"shortcut-row"
     ~attrs:[ ("role", "button") ]
     [ dom ~key:(key ^ "l") ~tag:"span" ~style_class:"label-wrap"
         [ dom ~key:(key ^ "lt") ~tag:"span" ~attrs:[ ("title", r.title) ]
-            [ dom ~key:(key ^ "lx") ~tag:"span" ~style_class:"px-1"
+            [ dom ~key:(key ^ "lx") ~tag:"span" ~style_class:"ls-kbd-label"
                 ~text:(I18n.t (command_key_of r.title)) []
             ]
         ]
@@ -761,7 +706,7 @@ let keymap_pane () =
     ~attrs:[ ("style", "--shortcut-header-h: 85px;") ]
     [ keymap_controls ()
     ; dom ~key:"km-art" ~tag:"article"
-        [ dom ~key:"km-ul" ~tag:"ul" ~style_class:"list-none m-0 py-3"
+        [ dom ~key:"km-ul" ~tag:"ul" ~style_class:"ls-plain-list"
             (List.mapi
                (fun i it ->
                  let k = "km-i" ^ string_of_int i in
@@ -777,12 +722,12 @@ let keymap_pane () =
 let url_button ~key ~label ~on_open =
   dom ~key ~tag:"button"
     ~style_class:
-      (btn_base ^ " " ^ variant_cls `Solid ^ " " ^ size_cls `Sm ^ " text-sm")
+      (btn_base ^ " " ^ variant_cls `Solid ^ " ls-btn-sm")
     ~attrs:[ ("type", "button") ]
     ~events:"click"
     ~on_dom_event:(fun n _ -> if n = "click" then on_open ())
-    [ dom ~key:(key ^ "-s") ~tag:"span" ~style_class:"flex items-center"
-        [ dom ~key:(key ^ "-t") ~tag:"span" ~style_class:"pr-1"
+    [ dom ~key:(key ^ "-s") ~tag:"span" ~style_class:"ls-row"
+        [ dom ~key:(key ^ "-t") ~tag:"span" ~style_class:"ls-btn-label"
             ~text:label []
         ; icon ~key:(key ^ "-e") "edit"
         ]
@@ -801,7 +746,7 @@ let advanced_pane () =
         ~label:T.usage_diagnostics
         ~detail:
           [ dom ~key:"usage-d" ~tag:"span"
-              ~style_class:"text-sm opacity-50" ~text:T.usage_diagnostics_desc
+              ~style_class:"ls-desc" ~text:T.usage_diagnostics_desc
               []
           ]
         ~on:(not (S.instrument_disabled ()))
@@ -810,7 +755,7 @@ let advanced_pane () =
         ~label:T.developer_mode
         ~detail:
           [ dom ~key:"devm-d" ~tag:"div"
-              ~style_class:"text-sm opacity-50" ~text:T.developer_mode_desc
+              ~style_class:"ls-desc" ~text:T.developer_mode_desc
               []
           ]
         ~on:(S.developer_mode ()) ~on_toggle:S.toggle_developer_mode ()
@@ -853,15 +798,14 @@ let home_page_row () =
     | _ -> ""
   in
   dom ~key:"homep"
-    ~style_class:"it sm:grid sm:grid-cols-3 sm:gap-4 sm:items-center"
+    ~style_class:"it"
     [ label_el ~key:"homep-l" ~for_:"default page"
         ~text:T.home_default_page []
-    ; dom ~key:"homep-r" ~style_class:"mt-1 sm:mt-0 sm:col-span-2"
-        [ dom ~key:"homep-w" ~style_class:"max-w-lg rounded-md sm:max-w-xs"
+    ; dom ~key:"homep-r" ~style_class:"ls-it-value"
+        [ dom ~key:"homep-w" ~style_class:"ls-select-wrap"
             [ dom ~key:"homep-in" ~tag:"input" ~id:"home-default-page"
                 ~style_class:
-                  "form-input is-small transition duration-150 \
-                   ease-in-out"
+                  "form-input is-small"
                 ~attrs:[ ("value", current) ]
                 ~events:"blur keypress"
                 ~on_dom_event:(fun n p ->
@@ -881,12 +825,12 @@ let home_page_row () =
     ]
 
 let features_pane () =
-  dom ~key:"pane-features" ~style_class:"panel-wrap is-features mb-8"
+  dom ~key:"pane-features" ~style_class:"panel-wrap is-features ls-mb"
     [ home_page_row ()
     ; action_row ~key:"plugs" ~for_:"plugin_system"
         ~label:T.plugins_label
         ~actions:
-          [ dom ~key:"plugs-a" ~style_class:"flex items-center gap-2"
+          [ dom ~key:"plugs-a" ~style_class:"ls-toolbar-gap"
               [ switch_el ~key:"plugs-sw" ~on:(S.plugin_system ())
                   ~on_toggle:S.toggle_plugin_system
               ; hidden_checkbox ~key:"plugs-sc" ~on:(S.plugin_system ())
@@ -935,7 +879,7 @@ let nav_item ~key (id, label, icn) =
     ~events:"click"
     ~on_dom_event:(fun n _ -> if n = "click" then S.set_tab id)
     [ dom ~key:(key ^ "-b") ~tag:"button"
-        ~style_class:"flex items-center settings-menu-link"
+        ~style_class:"settings-menu-link"
         ~attrs:[ ("type", "button") ]
         [ icon ~key:(key ^ "-i") icn
         ; dom ~key:(key ^ "-t") ~tag:"strong" ~text:label []
@@ -974,8 +918,7 @@ let inner ~modal : t =
     dom ~key:"settings" ~id:"settings" ~style_class:"cp__settings-main"
       [ dom ~key:"settings-inner" ~style_class:"cp__settings-inner"
           [ dom ~key:"settings-aside" ~tag:"aside"
-              ~style_class:"md:w-64"
-              ~attrs:[ ("style", "min-width: 10rem") ]
+              ~style_class:"settings-aside"
               [ dom ~key:"aside-h" ~tag:"header"
                   ~style_class:"cp__settings-header"
                   [ dom ~key:"aside-ht" ~tag:"h1"
@@ -1037,17 +980,14 @@ let appearance_body (x, y) : t =
       [ (* cljs shui popup-show! dismisses on outside click — the
            transparent backdrop does the hit-testing *)
         dom ~key:"appearance-backdrop" ~tag:"div"
-          ~style_class:"fixed inset-0 z-40"
+          ~style_class:"ls-popup-backdrop"
           ~events:"click"
           ~on_dom_event:(fun name _ ->
             if name = "click" then
               Runtime.send (Action.Appearance_set None))
           []
       ; dom ~key:"appearance-wrap" ~tag:"div"
-          ~style_class:
-            "ui__dropdown-menu-content z-50 min-w-[8rem] rounded-md \
-             border bg-popover p-1 text-popover-foreground shadow-md \
-             outline-none"
+          ~style_class:"ui__dropdown-menu-content appearance-popup"
           ~attrs:
             [ ( "style"
               , Printf.sprintf "position:fixed;right:%.0fpx;top:%.0fpx"
