@@ -143,7 +143,7 @@
       (is (true? (:ok pos))
           (str "More settings menu must anchor next to the trigger on first open: " pos)))))
 
-(deftest available-choices-list-is-scrollable-test)
+(deftest available-choices-list-is-scrollable-test
   (let [property-name "many-choices-scroll"
         choices (mapv #(str "Choice " %) (range 1 16))]
     (add-text-property property-name)
