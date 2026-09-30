@@ -83,7 +83,24 @@ type vstate = { v_rows : vrow list; v_total : float }
    drive scroll_to_index/scroll_to_key (e.g. editor scroll-to-block) *)
 let instances : (string, V.t) Hashtbl.t = Hashtbl.create 8
 
+(* item-key -> scroll-into-view closures, one per mounted list — lets a
+   caller scroll to a row it only knows by key (e.g. a block uuid that
+   fell outside the rendered window) without tracking list ids *)
+let key_scrollers : (string, string -> bool) Hashtbl.t = Hashtbl.create 8
+
 let instance_of list_id = Hashtbl.find_opt instances list_id
+
+(* scrolls the row whose item key is [key] into view in whichever mounted
+   list owns it; no-op when no mounted list has that item *)
+let scroll_to_key key =
+  ignore
+    (Hashtbl.fold
+       (fun _ f acc -> if f key then true else acc)
+       key_scrollers false)
+
+(* editor_actions pulls the editing row back into view through this hook
+   (a direct reference would close a module cycle via Block_selection) *)
+let () = Editor_state.scroll_key_into_view := scroll_to_key
 
 let scroll_to_index list_id index ?align () =
   match instance_of list_id with
@@ -140,16 +157,49 @@ let rows_of (v : V.t) =
 (* One mounted list instance: deferred virtualizer attach once the list
    element exists, scope cleanup on unmount. *)
 let attach (ctx : Lui_ui.ui_context) st margin list_id scroll_parent_id
-    data key_of overscan estimate_size =
+    data key_of overscan estimate_size pin_key =
   match get_by_id list_id, get_by_id scroll_parent_id with
   | Some list_el, Some scroll_el ->
       margin :=
         rect_top (bounding_rect list_el)
         -. rect_top (bounding_rect scroll_el)
         +. scroll_top scroll_el;
+      let index_of_key key =
+        let rec idx i =
+          if i >= Array.length data then -1
+          else if key_of data.(i) = key then i
+          else idx (i + 1)
+        in
+        idx 0
+      in
       let last_scroll = ref (scroll_top scroll_el) in
       let publish v =
         let rows = rows_of v in
+        let rows =
+          match pin_key () with
+          | Some key
+            when not (List.exists (fun r -> r.v_key = key) rows) -> (
+              (* keep the pinned row mounted even when it is off-window
+                 (e.g. the focused editor's block after a scroll jump or
+                 an insert just below the rendered edge) *)
+              match index_of_key key with
+              | -1 -> rows
+              | i when i >= Array.length (V.measurements_cache v) ->
+                  rows
+              | i ->
+                  let r =
+                    { v_index = i; v_key = key
+                    ; v_start =
+                        V.item_start (V.measurements_cache v).(i) }
+                  in
+                  let rec insert = function
+                    | x :: rest when x.v_start <= r.v_start ->
+                        x :: insert rest
+                    | l -> r :: l
+                  in
+                  insert rows)
+          | _ -> rows
+        in
         Signal.set st { v_rows = rows; v_total = V.get_total_size v };
         Runtime.flush ();
         (* cljs virtuoso items-rendered: while a block-range drag is in
@@ -195,6 +245,13 @@ let attach (ctx : Lui_ui.ui_context) st margin list_id scroll_parent_id
              ())
       in
       Hashtbl.replace instances list_id v;
+      Hashtbl.replace key_scrollers list_id (fun key ->
+          match index_of_key key with
+          | -1 -> false
+          | i ->
+              V.scroll_to_index v i
+                (V.scroll_to_options ~align:"auto" ());
+              true);
       let cleanup = V.did_mount v in
       V.will_update v;
       publish v;
@@ -222,6 +279,7 @@ let attach (ctx : Lui_ui.ui_context) st margin list_id scroll_parent_id
       Signal.on_dispose ctx.ui_scope (fun () ->
           if !measure_timer >= 0 then clear_timeout !measure_timer;
           Hashtbl.remove instances list_id;
+          Hashtbl.remove key_scrollers list_id;
           disconnect obs;
           cleanup ())
   | _ -> ()
@@ -236,7 +294,8 @@ let row_attrs margin (it : vrow) =
 
 let list ?(scroll_parent_id = "main-content-container") ?(overscan = 5)
     ?(estimate_size = fun _ -> 32.) ?(list_attrs = [])
-    ?(list_class = "ls-virt-list") ~key_of ~render (data : 'a array) : t =
+    ?(list_class = "ls-virt-list") ?(pin_key = fun () -> None)
+    ~key_of ~render (data : 'a array) : t =
  fun ctx parent ->
   let st = Signal.state ctx.ui_scheduler { v_rows = []; v_total = 0. } in
   let margin = ref 0. in
@@ -261,7 +320,7 @@ let list ?(scroll_parent_id = "main-content-container") ?(overscan = 5)
   set_timeout
     (fun () ->
       attach ctx st margin list_id scroll_parent_id data key_of overscan
-        estimate_size)
+        estimate_size pin_key)
     0;
   D.dom ~key:("vl-" ^ list_id) ~id:list_id ~style_class:list_class
     ~attrs:list_attrs

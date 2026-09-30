@@ -546,6 +546,11 @@ let blocks_inner ?puuid ?(virtualize = false) ?(library = false)
             [ ("data-level", "0"); ("data-virtuoso-scroller", "true") ]
           [ Virt_list.list ~key_of:Tree.block_key
               ~estimate_size:(fun _ -> 32.)
+              ~pin_key:(fun () ->
+                match S.editing () with
+                | Some e when e.S.scope = scope ->
+                    Some (S.top_level_uuid e.S.uuid)
+                | _ -> None)
               ~render:(Tree.block_row ~library ~scope) items ] ]
     else
       [ dom ~key:"blw" ~style_class:"blocks-list-wrap"

@@ -63,6 +63,11 @@ external will_update : t -> unit = "_willUpdate" [@@mel.send]
 external get_virtual_items : t -> item array = "getVirtualItems"
   [@@mel.send]
 
+(* one VirtualItem slot per index (estimate-filled until measured) —
+   lets callers read the offset of an item that isn't rendered *)
+external measurements_cache : t -> item array = "measurementsCache"
+  [@@mel.get]
+
 external get_total_size : t -> float = "getTotalSize" [@@mel.send]
 
 external is_scrolling : t -> bool = "isScrolling" [@@mel.get]
