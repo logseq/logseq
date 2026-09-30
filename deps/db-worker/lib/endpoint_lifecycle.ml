@@ -376,12 +376,9 @@ let create_or_open_db args =
            let finish () : Wire.t Db_worker_effect.t =
              Graph_store.create_kvs_table db;
              let storage = Graph_store.storage db in
+             (* cljs get-storage-conn always uses db-schema/schema *)
              let conn =
-               match Datascript.restore_conn storage with
-               | Some conn -> conn
-               | None ->
-                   (* cljs get-storage-conn always uses db-schema/schema *)
-                   Datascript.create_conn ~schema:(Db_schema.schema ()) ~storage ()
+               Common_sqlite.get_storage_conn storage (Db_schema.schema ())
              in
              (* cljs <create-or-open-db!: the datascript conn is registered
                 before the initial transact so sync bookkeeping (local-tx
