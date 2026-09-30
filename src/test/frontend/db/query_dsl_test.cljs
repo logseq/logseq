@@ -175,7 +175,7 @@
       (is (= (quote-tags (str "Project" "]]"))
              (query-dsl/pre-transform (wrap-tags (str "Project" "]]")))))
       (is (= (quote-tags (str "Project" "]]" " Garden"))
-             (query-dsl/pre-transform (wrap-tags (str "Project" "]]" " Garden"))))
+             (query-dsl/pre-transform (wrap-tags (str "Project" "]]" " Garden")))))
       (is (= (str "(tags [ " (pr-str "[[foo]]") "])")
              (query-dsl/pre-transform "(tags [ [[foo]]])"))))))
 
@@ -680,7 +680,7 @@
 
     (is (= ["page-quote"]
            (map :block/name (dsl-query "(tags [ [[Project\"]]])")))
-        "A page ref at the end of a tags vector still parses"))))
+        "A page ref at the end of a tags vector still parses")))
 
 (deftest block-content-query
   (load-test-files [{:page {:block/title "page1"}
