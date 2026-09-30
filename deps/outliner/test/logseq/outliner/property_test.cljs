@@ -106,6 +106,20 @@
         (is (ldb/internal-page? foo'))
         (is (not (ldb/property? foo')))))))
 
+(deftest upsert-property-omitted-cardinality-keeps-many-with-closed-values
+  (testing "omitting :db/cardinality does not convert many to one when choices exist"
+    (let [conn (db-test/create-conn-with-blocks
+                {:properties {:status {:logseq.property/type :default
+                                       :build/closed-values [{:value "active"}]}}
+                 :pages-and-blocks
+                 [{:page {:block/title "page1"}
+                   :blocks [{:block/title "b1" :build/properties {:status "active"}}]}]})]
+      (outliner-property/upsert-property! conn :user.property/status {:db/cardinality :many} {})
+      (is (db-property/many? (d/entity @conn :user.property/status)))
+      (outliner-property/upsert-property! conn :user.property/status {:logseq.property/type :default} {})
+      (is (db-property/many? (d/entity @conn :user.property/status)))
+      (is (set? (:user.property/status (db-test/find-block-by-content @conn "b1")))))))
+
 (deftest upsert-property-rejects-many-to-one-with-existing-data
   (testing "Changing many to one is rejected when property has values"
     (let [conn (db-test/create-conn-with-blocks
