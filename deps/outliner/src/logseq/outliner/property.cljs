@@ -252,16 +252,27 @@
       (fail-parse-double v-str)
       v-str)))
 
+(defn- resolve-update-cardinality
+  [property schema]
+  (let [new-type (or (:logseq.property/type schema) (:logseq.property/type property))]
+    (cond
+      (and new-type (not (contains? db-property-type/cardinality-property-types new-type)))
+      :db.cardinality/one
+
+      (contains? schema :db/cardinality)
+      (if (#{:many :db.cardinality/many} (:db/cardinality schema))
+        :db.cardinality/many
+        :db.cardinality/one)
+
+      :else
+      (or (:db/cardinality property) :db.cardinality/one))))
+
 (defn- update-datascript-schema
   "Updates property type and cardinality"
   [property schema]
   (let [new-type (:logseq.property/type schema)
         ident (:db/ident property)
-        cardinality (if (contains? schema :db/cardinality)
-                      (if (#{:many :db.cardinality/many} (:db/cardinality schema))
-                        :db.cardinality/many
-                        :db.cardinality/one)
-                      (or (:db/cardinality property) :db.cardinality/one))
+        cardinality (resolve-update-cardinality property schema)
         old-type (:logseq.property/type property)
         old-ref-type? (db-property-type/user-ref-property-types old-type)
         ref-type? (db-property-type/user-ref-property-types new-type)]
@@ -282,11 +293,33 @@
     (outliner-validate/validate-block-title @conn property-name property)
     (outliner-validate/validate-property-title property-name)))
 
+(defn- throw-disallowed-many-to-one!
+  []
+  (throw (ex-info "Disallowed many to one conversion"
+                  {:type :notification
+                   :payload {:message "This property can't change from multiple values to one value because it has existing data."
+                             :i18n-key :property.validation/many-to-one
+                             :type :warning}})))
+
+(defn- schema-for-update
+  "Drop an unsafe many→one cardinality restore when other schema fields are
+   being replayed. A cardinality-only many→one with data still throws."
+  [db db-ident property schema]
+  (let [many->one? (and (db-property/many? property)
+                        (contains? #{:one :db.cardinality/one} (:db/cardinality schema)))
+        has-values? (seq (d/datoms db :avet db-ident))]
+    (if (and many->one? has-values?)
+      (if (seq (dissoc schema :db/cardinality))
+        (dissoc schema :db/cardinality)
+        (throw-disallowed-many-to-one!))
+      schema)))
+
 (defn- update-property
   [conn db-ident property schema {:keys [property-name properties]}]
   (validate-property-name-update conn property property-name)
   (outliner-validate/validate-editing-built-in-property property schema)
-  (let [changed-property-attrs
+  (let [schema (schema-for-update @conn db-ident property schema)
+        changed-property-attrs
         ;; Only update property if something has changed as we are updating a timestamp
         (cond-> (->> (dissoc schema :db/cardinality)
                      (keep (fn [[k v]]
@@ -312,16 +345,7 @@
                         (when (seq properties)
                           (mapcat
                            (fn [[property-id v]]
-                             (build-property-value-tx-data conn property property-id v)) properties)))
-        many->one? (and (db-property/many? property)
-                        ;; For UI calls, :db/cardinality can have :one and :many values
-                        (contains? #{:one :db.cardinality/one} (:db/cardinality schema)))]
-    (when (and many->one? (seq (d/datoms @conn :avet db-ident)))
-      (throw (ex-info "Disallowed many to one conversion"
-                      {:type :notification
-                       :payload {:message "This property can't change from multiple values to one value because it has existing data."
-                                 :i18n-key :property.validation/many-to-one
-                                 :type :warning}})))
+                             (build-property-value-tx-data conn property property-id v)) properties)))]
     (when (and (contains? changed-property-attrs :logseq.property/type)
                (seq (d/datoms @conn :avet db-ident)))
       (throw (ex-info "Disallowed type change with existing data"

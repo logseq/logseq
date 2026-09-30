@@ -954,7 +954,7 @@
   (build-inverse-save-block db-before (into {} ent) nil))
 
 (defn- build-inverse-delete-page
-  [db-before page-uuid]
+  [db-before db-after page-uuid]
   (when-let [page (d/entity db-before [:block/uuid page-uuid])]
     (let [class-or-property? (or (ldb/class? page)
                                  (ldb/property? page))
@@ -976,7 +976,7 @@
                                 (assoc :class-ident-namespace class-ident-namespace))]])
                           [:upsert-property
                            [(:db/ident page)
-                            (db-property/get-property-schema (into {} page))
+                            (inverse-upsert-property-schema db-before db-after page)
                             {:property-name (:block/title page)}]])
               restore-root-ops (when (every? some? root-plans)
                                  (restore-plans->ops db-before root-plans))]
@@ -1096,7 +1096,7 @@
 
                           :delete-page
                           (let [[page-uuid _opts] args]
-                            (build-inverse-delete-page db-before page-uuid))
+                            (build-inverse-delete-page db-before db-after page-uuid))
 
                           :upsert-property
                           (let [[property-id _schema _opts] args]
