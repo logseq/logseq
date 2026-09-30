@@ -90,7 +90,8 @@ let items_wire (rows : Endpoint_block.membership_child list) : Wire.t =
   Wire.Array
     (List.map
        (fun (r : Endpoint_block.membership_child) ->
-         Wire.Array [ Wire.Uuid r.mc_uuid; Wire.String r.mc_order ])
+         Wire.Array
+           [ Wire.Uuid r.mc_uuid; Endpoint_block.order_wire r.mc_order ])
        rows)
 
 (* {uuid -> {:parent-tx-id :items}} -> {[:children uuid] {:tx-id :items}} *)

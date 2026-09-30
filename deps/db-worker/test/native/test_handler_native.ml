@@ -1277,6 +1277,55 @@ let test_direct_children_membership_defaults_missing_tx_id () =
       ignore
         (Endpoint_block.direct_children_membership db (fresh_uuid ())))
 
+(* (deftest direct-children-membership-allows-missing-child-order-test ...)
+   src/test/frontend/worker/handler/block_test.cljs *)
+let test_direct_children_membership_allows_missing_child_order () =
+  let conn = create_conn () in
+  let p_uuid = fresh_uuid () in
+  let ordered_uuid = fresh_uuid () in
+  let orderless_uuid = fresh_uuid () in
+  ignore
+    (Datascript.transact_conn_string conn
+       (Printf.sprintf
+          "[{:db/id -1 :block/uuid #uuid \"%s\" :block/tx-id 11 :block/title \
+           \"Parent\" :block/name \"parent\" :block/tags :logseq.class/Page}\n\
+          {:block/uuid #uuid \"%s\" :block/tx-id 11 :block/title \"Ordered \
+           child\" :block/page -1 :block/parent -1 :block/order \"a0\"}\n\
+          {:db/id -2 :block/uuid #uuid \"%s\" :block/tx-id 11 :block/title \
+           \"Child page without order\" :block/name \"child page without \
+           order\" :block/tags :logseq.class/Page :block/parent -1}]"
+          p_uuid ordered_uuid orderless_uuid));
+  let db = db_of conn in
+  let resp = Endpoint_block.direct_children_membership db p_uuid in
+  match wg resp "items" with
+  | Some items ->
+      check "orderless child does not remove siblings"
+        (List.length (wseq items) = 2);
+      check "nil order sorts first"
+        (wseq items
+         = [ Wire.Array [ Wire.Uuid orderless_uuid; Wire.Nil ]
+           ; Wire.Array [ Wire.Uuid ordered_uuid; Wire.String "a0" ] ])
+  | None -> check "items present" false
+
+(* (deftest direct-children-membership-rejects-non-string-child-order-test ...)
+   src/test/frontend/worker/handler/block_test.cljs *)
+let test_direct_children_membership_rejects_non_string_child_order () =
+  let conn = create_conn () in
+  let p_uuid = fresh_uuid () in
+  let child_uuid = fresh_uuid () in
+  ignore
+    (Datascript.transact_conn_string conn
+       (Printf.sprintf
+          "[{:db/id -1 :block/uuid #uuid \"%s\" :block/title \"Parent\" \
+           :block/name \"parent\" :block/tags :logseq.class/Page}\n\
+          {:block/uuid #uuid \"%s\" :block/title \"Broken child\" \
+           :block/page -1 :block/parent -1 :block/order 42}]"
+          p_uuid child_uuid));
+  let db = db_of conn in
+  throws_any "non-string order throws"
+    (fun () ->
+      ignore (Endpoint_block.direct_children_membership db p_uuid))
+
 (* (deftest canonical-block-snapshots-are-transit-safe-pure-results-test ...) *)
 let test_canonical_block_snapshots_are_transit_safe () =
   let conn = canonical_block_fixture () in
@@ -1995,6 +2044,12 @@ let block_cases =
   ; Alcotest.test_case
       "direct-children-membership-defaults-missing-parent-transaction-id-test"
       `Quick test_direct_children_membership_defaults_missing_tx_id
+  ; Alcotest.test_case
+      "direct-children-membership-allows-missing-child-order-test" `Quick
+      test_direct_children_membership_allows_missing_child_order
+  ; Alcotest.test_case
+      "direct-children-membership-rejects-non-string-child-order-test" `Quick
+      test_direct_children_membership_rejects_non_string_child_order
   ; Alcotest.test_case
       "canonical-block-snapshots-are-transit-safe-pure-results-test" `Quick
       test_canonical_block_snapshots_are_transit_safe
