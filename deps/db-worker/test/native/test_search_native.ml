@@ -1999,6 +1999,168 @@ let test_upsert_blocks_throws_on_invalid_input () =
         (re_find "Search upsert-blocks wrong data" (Printexc.to_string e))
   | None -> ()
 
+(* ---------- fts rowid triggers + rowid migration ---------- *)
+
+(* cljs query-rows rowMode array *)
+
+let search_ids sdb q : string list =
+  List.sort_uniq String.compare
+    (List.map
+       (fun (r : Search_index.result) -> r.Search_index.id)
+       (Search_index.search_blocks_aux sdb
+          ~sql:"select id, page, title, rank from blocks_fts where title match ? limit ?"
+          ~q ~input:(Search_index.get_match_input q) ~page:None ~limit:10))
+
+(* cljs fts-rows-out-of-step: ids of blocks rows whose FTS row, looked
+   up by the blocks rowid, is missing or holds other values. *)
+let fts_rows_out_of_step (db : Sqlite.db) : string list =
+  List.filter_map
+    (function [| Sqlite.Text id |] -> Some id | _ -> None)
+    (Sqlite.query db
+       ~sql:"SELECT b.id FROM blocks b LEFT JOIN blocks_fts f ON f.rowid = b.rowid WHERE f.rowid IS NULL OR f.id IS NOT b.id OR f.title IS NOT b.title OR f.page IS NOT b.page"
+       ~bind:[||])
+
+let index_items page id_titles : Search_index.index_item list =
+  List.map
+    (fun (id, title) -> Search_index.mk_index_item ~id ~page ~title ())
+    id_titles
+
+let test_fts_rows_keep_blocks_rowids () =
+  let sdb = Sqlite.open_db ~path:":memory:" in
+  Search_index.create_tables_and_triggers sdb;
+  let page = test_uuid_string 99 in
+  let a, b, c, d =
+    ( test_uuid_string 1, test_uuid_string 2, test_uuid_string 3
+    , test_uuid_string 4 )
+  in
+  Search_index.upsert_blocks sdb
+    (index_items page
+       [ (a, "alpha apple"); (b, "bravo banana"); (c, "charlie cherry") ]);
+  check_list "apple -> a" [ a ] (search_ids sdb "apple") Fun.id;
+  check_list "banana -> b" [ b ] (search_ids sdb "banana") Fun.id;
+  (* an update and a delete find the FTS row by the blocks rowid *)
+  Search_index.upsert_blocks sdb (index_items page [ (a, "alpha apricot") ]);
+  Search_index.delete_blocks sdb [ b ];
+  Search_index.upsert_blocks sdb (index_items page [ (d, "delta date") ]);
+  check "fts rows in step" (fts_rows_out_of_step sdb = []);
+  check "3 fts rows"
+    (match
+       Sqlite.query sdb ~sql:"SELECT count(*) FROM blocks_fts" ~bind:[||]
+     with
+     | [ [| Sqlite.Integer n |] ] -> n = 3L
+     | _ -> false);
+  check_list "apple gone" [] (search_ids sdb "apple") Fun.id;
+  check_list "apricot -> a" [ a ] (search_ids sdb "apricot") Fun.id;
+  check_list "banana gone" [] (search_ids sdb "banana") Fun.id;
+  check_list "cherry -> c" [ c ] (search_ids sdb "cherry") Fun.id;
+  check_list "date -> d" [ d ] (search_ids sdb "date") Fun.id;
+  Sqlite.close sdb
+
+(* cljs version-4-fts-triggers: the triggers of search index version 4,
+   which find FTS rows by id. *)
+let version_4_fts_triggers =
+  [ "CREATE TRIGGER blocks_ad AFTER DELETE ON blocks BEGIN
+      DELETE from blocks_fts where id = old.id;
+    END;"
+  ; "CREATE TRIGGER blocks_ai AFTER INSERT ON blocks BEGIN
+      INSERT INTO blocks_fts (id, title, page) VALUES (new.id, new.title, new.page);
+    END;"
+  ; "CREATE TRIGGER blocks_au AFTER UPDATE ON blocks BEGIN
+      DELETE from blocks_fts where id = old.id;
+      INSERT INTO blocks_fts (id, title, page) VALUES (new.id, new.title, new.page);
+    END;" ]
+
+let create_version_4_index (db : Sqlite.db) =
+  Sqlite.exec db
+    ~sql:"CREATE TABLE blocks (id TEXT NOT NULL PRIMARY KEY, title TEXT NOT NULL, page TEXT)"
+    ~bind:[||];
+  Sqlite.exec db
+    ~sql:"CREATE VIRTUAL TABLE blocks_fts USING fts5(id, title, page, tokenize=\"trigram\")"
+    ~bind:[||];
+  List.iter (fun sql -> Sqlite.exec db ~sql ~bind:[||]) version_4_fts_triggers;
+  Sqlite.exec db ~sql:"PRAGMA user_version = 4" ~bind:[||]
+
+let test_fts_rowid_migration_keeps_search_right () =
+  let sdb = Sqlite.open_db ~path:":memory:" in
+  create_version_4_index sdb;
+  let page = test_uuid_string 99 in
+  let a, b, c, d, e, f, g =
+    ( test_uuid_string 1, test_uuid_string 2, test_uuid_string 3
+    , test_uuid_string 4, test_uuid_string 5, test_uuid_string 6
+    , test_uuid_string 7 )
+  in
+  let expected =
+    [ ("apricot", [ a ]); ("banana", []); ("blueberry", [ b ])
+    ; ("cherry", []); ("date", [ d ]); ("elder", []); ("eggplant", [ e ])
+    ; ("fig", []); ("grape", [ g ]) ]
+  in
+  let check_expected () =
+    List.iter
+      (fun (q, ids) ->
+         check_list (Printf.sprintf "%s -> %s" q (String.concat "," ids))
+           ids (search_ids sdb q) Fun.id)
+      expected
+  in
+  Search_index.upsert_blocks sdb
+    (index_items page
+       [ (a, "alpha apple"); (b, "bravo banana"); (c, "charlie cherry")
+       ; (d, "delta date"); (e, "echo elder"); (f, "foxtrot fig") ]);
+  Search_index.upsert_blocks sdb (index_items page [ (a, "alpha apricot") ]);
+  (* the graph open path, which leaves an existing index as it is *)
+  Search_index.create_tables_and_triggers sdb;
+  check_list "version 4 moved the updated row to a new FTS rowid" [ a ]
+    (fts_rows_out_of_step sdb) Fun.id;
+  Search_index.start_fts_rowid_migration sdb;
+  check "first batch returns rowid 3"
+    (Search_index.copy_fts_rowid_batch sdb ~after:0L ~limit:3 = Some 3L);
+  (* edits while the index moves: before and after the copied rows *)
+  Search_index.upsert_blocks sdb
+    (index_items page
+       [ (b, "bravo blueberry"); (e, "echo eggplant"); (g, "golf grape") ]);
+  Search_index.delete_blocks sdb [ c; f ];
+  check_expected ();
+  let rec drain after =
+    match
+      Search_index.copy_fts_rowid_batch sdb ~after ~limit:3
+    with
+    | Some after' -> drain after'
+    | None -> ()
+  in
+  drain 3L;
+  Search_index.finish_fts_rowid_migration sdb 5;
+  check "fts rows in step after move" (fts_rows_out_of_step sdb = []);
+  check "5 fts rows"
+    (match
+       Sqlite.query sdb ~sql:"SELECT count(*) FROM blocks_fts" ~bind:[||]
+     with
+     | [ [| Sqlite.Integer n |] ] -> n = 5L
+     | _ -> false);
+  check "user_version 5"
+    (match Sqlite.query sdb ~sql:"PRAGMA user_version" ~bind:[||] with
+     | [ [| Sqlite.Integer n |] ] -> n = 5L
+     | _ -> false);
+  check_list "triggers" [ "blocks_ad"; "blocks_ai"; "blocks_au" ]
+    (List.filter_map
+       (function [| Sqlite.Text n |] -> Some n | _ -> None)
+       (Sqlite.query sdb
+          ~sql:"SELECT name FROM sqlite_master WHERE type = 'trigger' ORDER BY name"
+          ~bind:[||]))
+    Fun.id;
+  check "no blocks_fts_next objects"
+    (Sqlite.query sdb
+       ~sql:"SELECT name FROM sqlite_master WHERE name LIKE 'blocks_fts_next%'"
+       ~bind:[||]
+    = []);
+  check_expected ();
+  (* the rowid triggers after the move *)
+  Search_index.upsert_blocks sdb (index_items page [ (d, "delta durian") ]);
+  Search_index.delete_blocks sdb [ a ];
+  check "fts rows in step after post-move edits"
+    (fts_rows_out_of_step sdb = []);
+  check_list "durian -> d" [ d ] (search_ids sdb "durian") Fun.id;
+  check_list "apricot gone" [] (search_ids sdb "apricot") Fun.id;
+  Sqlite.close sdb
+
 (* ---------- fuzzy-search (frontend.common.search-fuzzy) ---------- *)
 
 let test_fuzzy_search_umlauts () =
@@ -2098,6 +2260,8 @@ let () =
   test_search_result_includes_block_unique_title ();
   test_upsert_blocks_batched_single_statement ();
   test_upsert_blocks_throws_on_invalid_input ();
+  test_fts_rows_keep_blocks_rowids ();
+  test_fts_rowid_migration_keeps_search_right ();
   test_fuzzy_search_umlauts ();
   test_fuzzy_search_multi ();
   Printf.printf "\n%d failures\n%!" !failures;

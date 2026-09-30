@@ -25,7 +25,12 @@ module E = Db_worker_effect
 
 (* ---- constants (cljs defs at top of handler/search.cljs) ---- *)
 
-let search_db_version = 4
+let search_db_version = 5
+
+(* fts-id-keyed-search-db-version — the last version whose blocks_fts
+   rows have rowids unrelated to their blocks rows. Such an index moves
+   to rowid keys in place instead of a rebuild from the graph. *)
+let fts_id_keyed_search_db_version = 4
 
 let search_index_build_batch_size = 200
 
@@ -398,6 +403,76 @@ let schedule_vector_index_rebuild repo build_id
                else E.pure ())
           |> E.map (fun _ -> clear_vector_index_rebuild repo build_id))
 
+(* fts-rowid-migration-pause-ratio — the move waits this many times as
+   long as its last batch took before the next one, so it takes at most
+   a third of the worker's time. *)
+let fts_rowid_migration_pause_ratio = 2.
+
+(* <migrate-fts-to-rowid! — moves an index of
+   fts_id_keyed_search_db_version to rowid-keyed FTS rows, copied from
+   its own blocks table in paced batches. Queries keep reading the old
+   blocks_fts, which its triggers keep complete, until the last step
+   swaps the tables in 1 transaction. Stops when another build takes
+   over or the index is truncated. *)
+let lt_migrate_fts_to_rowid repo search_db build_id : unit E.t =
+  let started_at = Time.epoch_ms_to_float (Time.now ()) in
+  E.bind (E.sleep 0.) (fun () ->
+      ensure_active_search_index_build repo build_id;
+      if search_index_version search_db = fts_id_keyed_search_db_version then begin
+        Search_index.start_fts_rowid_migration search_db;
+        let rec loop (after : int64) (pause_ms : float) : unit E.t =
+          E.bind (E.sleep pause_ms) (fun () ->
+              E.bind (wait_for_search_index_idle repo build_id) (fun () ->
+                  if search_index_version search_db
+                     = fts_id_keyed_search_db_version
+                  then begin
+                    let batch_started_at =
+                      Time.epoch_ms_to_float (Time.now ())
+                    in
+                    match
+                      Search_index.copy_fts_rowid_batch search_db ~after
+                        ~limit:search_index_build_batch_size
+                    with
+                    | Some after' ->
+                        loop after'
+                          (fts_rowid_migration_pause_ratio
+                          *. (Time.epoch_ms_to_float (Time.now ())
+                              -. batch_started_at))
+                    | None ->
+                        Search_index.finish_fts_rowid_migration search_db
+                          search_db_version;
+                        Worker_log.info "search/fts-rowid-migration-done"
+                          [ ("repo", repo)
+                          ; ( "ms"
+                            , Printf.sprintf "%.0f"
+                                (Time.epoch_ms_to_float (Time.now ())
+                                 -. started_at) ) ];
+                        E.pure ()
+                  end
+                  else E.pure ()))
+        in
+        loop 0L 0.
+      end
+      else E.pure ())
+
+(* schedule-fts-rowid-migration! *)
+let schedule_fts_rowid_migration repo search_db : unit =
+  if Worker_state.search_index_build_id repo = None then
+    let build_id = start_search_index_build repo in
+    E.async (fun () ->
+        E.finally
+          (E.catch
+             (lt_migrate_fts_to_rowid repo search_db build_id)
+             (fun exn ->
+                (match exn with
+                 | Stale_index_build _ -> ()
+                 | _ ->
+                     Worker_log.error "search/fts-rowid-migration-failed"
+                       [ ("repo", repo)
+                       ; ("error", Printexc.to_string exn) ]);
+                E.pure ()))
+          (fun () -> E.pure (clear_search_index_build repo build_id)))
+
 (* ---- <build-blocks-index! ---- *)
 
 let lt_build_blocks_index repo search_db (conn : conn) build_id : unit E.t =
@@ -676,6 +751,11 @@ let search_build_blocks_indice_in_worker args : Wire.t E.t =
           let version = search_index_version search_db in
           if version = search_db_version && not force then
             E.pure (Wire.Int version)
+          else if version = fts_id_keyed_search_db_version && not force then begin
+            (* The index is complete, so search keeps working while it moves *)
+            schedule_fts_rowid_migration repo search_db;
+            E.pure (Wire.Int version)
+          end
           else
             match Worker_state.datascript_conn repo with
             | None -> E.pure Wire.nil
