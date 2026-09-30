@@ -246,8 +246,11 @@
                     _ (db-based-api/upsert-property "rating" #js {:type "number"} nil)
                     db-conn (conn/get-db (state/get-current-repo) false)
                     property (d/entity @db-conn :plugin.property._test_plugin/rating)
-                    _ (outliner-property/create-property-text-block!
-                       db-conn (:db/id property) :logseq.property/default-value "5" {})
+                    default-uuid (outliner-property/create-property-text-block!
+                                  db-conn nil :plugin.property._test_plugin/rating "5" {:set-block-property? false})
+                    _ (outliner-property/set-block-property!
+                       db-conn (:db/id property) :logseq.property/default-value
+                       (:db/id (d/entity @db-conn [:block/uuid default-uuid])))
                     _ (api-editor/upsert_block_property uuid' "rating" 8 nil)
                     set-value (api-editor/get_block_property uuid' "rating")
                     _ (api-editor/upsert_block_property uuid' "rating" nil nil)
