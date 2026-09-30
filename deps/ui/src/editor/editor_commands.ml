@@ -585,7 +585,13 @@ let toggle_children_list uuid caret =
                         (W.map_get_uuid k "block/uuid"))
                     kids
                 in
-                if ops <> [] then prop_batch ~caret uuid ops;
+                (* ordering children is a user command, not an RTC-flood
+                   cosmetic write — refresh inline so the numbered bullets
+                   repaint now (the deferred path waits ~8s while editing) *)
+                if ops <> [] then
+                  A.with_focus_after uuid caret
+                    (Ops.apply_and_refresh
+                       (Ops.save_block uuid (A.live_buffer uuid) :: ops));
                 Js.Promise.resolve ()))
 
 let run_editor_cmd uuid command from to_ =
