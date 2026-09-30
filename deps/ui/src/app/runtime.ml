@@ -119,6 +119,37 @@ let on_navigate : (unit -> unit) ref = ref (fun () -> ())
    refresh them without a routing -> outliner_ops cycle *)
 let refresh_page_side : (Model.page -> unit) ref = ref (fun _ -> ())
 
+(* items signals for mounted virtual lists — a spliced block array is
+   pushed straight into the list so the page dyn need not remount it *)
+let page_items : (string, Model.block array Signal.state) Hashtbl.t =
+  Hashtbl.create 8
+
+let items_key ~scope ~puuid =
+  scope ^ "|" ^ Option.value puuid ~default:""
+
+let page_items_sig_key scheduler k items =
+  match Hashtbl.find_opt page_items k with
+  | Some s -> s
+  | None ->
+      let s = Signal.state scheduler items in
+      Hashtbl.replace page_items k s;
+      s
+
+let page_items_sig scheduler ~scope ~puuid items =
+  page_items_sig_key scheduler (items_key ~scope ~puuid) items
+
+let has_page_items ~scope ~puuid =
+  Hashtbl.mem page_items (items_key ~scope ~puuid)
+
+let set_page_items ~scope ~puuid items =
+  match Hashtbl.find_opt page_items (items_key ~scope ~puuid) with
+  | Some s -> Signal.set s items
+  | None -> ()
+
+let clear_page_items () =
+  Hashtbl.iter (fun _ s -> Signal.dispose_signal (Signal.value s)) page_items;
+  Hashtbl.reset page_items
+
 (* Router clears its loading_route dedupe when a route load commits or
    fails (avoids a Runtime -> Router cycle) *)
 let nav_load_done : (unit -> unit) ref = ref (fun () -> ())
@@ -164,6 +195,7 @@ let track action =
       current_journals := js
   | Action.Navigate_to r ->
       Page_delta.reset ();
+      clear_page_items ();
       !on_navigate ();
       current_page := None;
       current_journals := [];

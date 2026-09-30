@@ -70,6 +70,8 @@ external measurements_cache : t -> item array = "measurementsCache"
 
 external get_total_size : t -> float = "getTotalSize" [@@mel.send]
 
+external set_options : t -> options -> unit = "setOptions" [@@mel.send]
+
 external is_scrolling : t -> bool = "isScrolling" [@@mel.get]
 
 (* Registers [el] (whose [data-index] attr must be its item index) for
