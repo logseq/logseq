@@ -104,6 +104,18 @@
              {}
              schema))
 
+(defn- inverse-upsert-property-schema
+  "Restore the previous schema, except :db/cardinality when that would revert
+   :many to :one while values exist."
+  [db-before db-after property]
+  (let [schema (sanitize-upsert-property-schema
+                db-before
+                (db-property/get-property-schema (into {} property)))]
+    (if (and (contains? #{:one :db.cardinality/one} (:db/cardinality schema))
+             (seq (d/datoms db-after :avet (:db/ident property))))
+      (dissoc schema :db/cardinality)
+      schema)))
+
 (defn- sanitize-block-refs
   [refs]
   (->> refs
@@ -1092,9 +1104,7 @@
                               (if-let [property (d/entity db-before property-id)]
                                 [:upsert-property
                                  [property-id
-                                  (sanitize-upsert-property-schema
-                                   db-before
-                                   (db-property/get-property-schema (into {} property)))
+                                  (inverse-upsert-property-schema db-before db-after property)
                                   {:property-name (:block/title property)}]]
                                 [:delete-page [(common-uuid/gen-uuid :db-ident-block-uuid property-id) {}]])))
 

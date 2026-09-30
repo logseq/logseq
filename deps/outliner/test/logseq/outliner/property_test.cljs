@@ -106,6 +106,17 @@
         (is (ldb/internal-page? foo'))
         (is (not (ldb/property? foo')))))))
 
+(deftest upsert-property-rejects-many-to-one-with-existing-data
+  (testing "Changing many to one is rejected when property has values"
+    (let [conn (db-test/create-conn-with-blocks
+                [{:page {:block/title "page1"}
+                  :blocks [{:block/title "b1" :build/properties {:note "text 1"}}]}])]
+      (outliner-property/upsert-property! conn :user.property/note {:db/cardinality :many} {})
+      (is (db-property/many? (d/entity @conn :user.property/note)))
+      (is (thrown-with-msg?
+           js/Error #"Disallowed many to one conversion"
+           (outliner-property/upsert-property! conn :user.property/note {:db/cardinality :one} {}))))))
+
 (deftest convert-property-input-string
   (testing "Convert property input string according to its schema type"
     (let [test-uuid (random-uuid)]
