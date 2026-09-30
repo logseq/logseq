@@ -41,6 +41,7 @@
     "frontend.handler.history-test"
     "frontend.handler.paste-test"
     "frontend.handler.route-test"
+    "frontend.persist-db-test"
     "frontend.rfx-test"})
 
 (def serial-test-namespaces
