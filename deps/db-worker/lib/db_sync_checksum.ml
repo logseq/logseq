@@ -15,13 +15,16 @@ let sub_step acc v = mask32 (acc - v)
 
 let hash_code (fnv, djb) code = (fnv_step fnv code, djb_step djb code)
 
-let digest_string state (value : string) =
-  let rec loop idx st =
+(* cljs digest-string — the 2 hashes live in loop locals so hashing a
+   string costs no pair per char *)
+let digest_string (fnv, djb) (value : string) =
+  let rec loop idx fnv djb =
     if idx < String.length value then
-      loop (idx + 1) (hash_code st (Char.code value.[idx]))
-    else st
+      let code = Char.code value.[idx] in
+      loop (idx + 1) (fnv_step fnv code) (djb_step djb code)
+    else (fnv, djb)
   in
-  loop 0 state
+  loop 0 fnv djb
 
 let unsigned_hex n = Printf.sprintf "%08x" n
 
