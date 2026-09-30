@@ -46,6 +46,9 @@ external handlers_set : W.Element.t -> handler_tbl -> unit = "__lsHandlers"
 
 external set_value : W.Element.t -> string -> unit = "value" [@@mel.set]
 
+external set_inner_html : W.Element.t -> string -> unit = "innerHTML"
+  [@@mel.set]
+
 external get_value : W.Element.t -> string = "value" [@@mel.get]
 
 external create_element_ns : string -> string -> W.Element.t
@@ -299,6 +302,7 @@ let set_property el prop value =
           W.Element.setTextContent el s)
       else set_text el s
   | "style-class", StringValue s -> set_class el s
+  | "html", StringValue s -> set_inner_html el s
   | "accessibility-identifier", StringValue s ->
       W.Element.setAttribute "id" s el
   | _ -> ()
@@ -314,6 +318,7 @@ let remove_property el prop =
       end
       else clear_text el
   | "style-class" -> set_class el ""
+  | "html" -> set_inner_html el ""
   | "accessibility-identifier" -> W.Element.removeAttribute "id" el
   | _ -> ()
 

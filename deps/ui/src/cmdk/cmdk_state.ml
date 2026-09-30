@@ -204,7 +204,9 @@ let record_invoke (c : Commands_data.cmd) =
 let command_table () : Commands_data.cmd list =
   let counts = invoke_counts () in
   let n c = Option.value (Hashtbl.find_opt counts c.Commands_data.id) ~default:0 in
-  Commands_data.table
+  (* cljs commands.cljs plugin-commands-table merges palette-registered
+     plugin simple commands into the same table *)
+  Commands_data.table @ Plugin_host.palette_commands ()
   |> List.filter (fun c -> (not c.Commands_data.dev) || dev_mode ())
   |> List.stable_sort (fun a b -> compare a.Commands_data.id b.Commands_data.id)
   |> List.stable_sort (fun a b -> compare (n a) (n b))
@@ -1049,6 +1051,12 @@ let rec run_item st it =
    context the open palette lacks; they degrade to close+no-op like
    cljs does when the context is missing *)
 and run_command st repo (cid : string) =
+  if String.length cid > 7 && String.sub cid 0 7 = "plugin." then (
+    (* plugin simple command — cljs handle-exec →
+       LSPluginCore.hookEditor(eventKey, payload) *)
+    close st;
+    Plugin_host.exec_palette_command cid)
+  else
   let nav hash route =
     (* navigation intent, same as goto_page: commit and close any
        in-progress edit — go/journals etc. can target the current route,

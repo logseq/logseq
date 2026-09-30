@@ -130,7 +130,7 @@ let dom ?key ?(tag = "div") ?(attrs = []) ?(events = "")
     ?(attrs_signal_v : Lui_protocol.wire_value Signal.signal option)
     ?(text_signal : Lui_protocol.wire_value Signal.signal option)
     ?(id_signal : Lui_protocol.wire_value Signal.signal option)
-    ?(id = "") ?(text = "") ?on_dom_event
+    ?(id = "") ?(text = "") ?(html = "") ?on_dom_event
     (children : Lui_elements.t list) : Lui_elements.t =
  fun context parent ->
   let node = Lui_ui.extension context (identifier tag) in
@@ -138,6 +138,8 @@ let dom ?key ?(tag = "div") ?(attrs = []) ?(events = "")
   if attrs <> [] then
     Lui_ui.extension_property context node "attrs"
       (StringValue (attrs_json attrs));
+  if html <> "" then
+    Lui_ui.extension_property context node "html" (StringValue html);
   if events <> "" then
     Lui_ui.extension_property context node "events" (StringValue events);
   if style_class <> "" then

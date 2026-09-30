@@ -502,6 +502,8 @@ let resolve () =
       (* cljs unmounts its modal stack on route change *)
       if Dialogs_state.ready () then Dialogs_state.close_all ();
       Runtime.send (Action.Navigate_to route);
+      (* cljs events.cljs router/route-changed → plugin route hook *)
+      Plugin_host.fire_route_changed route;
       (* the new route hasn't loaded yet — a lookup miss must be allowed
          to render :page/not-found *)
       loaded_route := None;

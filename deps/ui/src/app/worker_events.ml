@@ -104,6 +104,9 @@ let dispatch kind payload =
       | None -> ())
   | "sync-db-changes" ->
       Render_inline.invalidate_pull_caches ();
+      (* cljs pipeline.cljs publish-plugin-hook! — fire plugin db
+         hooks for the tx report before the UI reloads *)
+      Plugin_host.fire_db_hooks payload;
       (* query-instances/sync-subs run inside fire_reload so they coalesce
          with the debounced reload instead of paying per-broadcast *)
       schedule_reload ()

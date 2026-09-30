@@ -175,7 +175,7 @@ let known name =
   List.mem name
     [ "new-graph"; "add-graph"; "settings"; "login"; "import"; "importer"
     ; "export"; "export-graph"; "export-page"; "publish-page"; "plugins"
-    ; "plugin-readme" ]
+    ; "plugin-readme"; "plugin-settings" ]
 
 let init () =
   if !init_done then ()
