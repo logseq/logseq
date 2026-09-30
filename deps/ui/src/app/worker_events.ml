@@ -145,6 +145,12 @@ and apply_pending () : unit Js.Promise.t =
       if not all_dup then finish ();
       match merged with
       | Some p' ->
+          (* the spliced rows are authoritative for the uuids these txs
+             touched — drop only those title overrides, keep in-flight
+             commits *)
+          if not all_dup then
+            Editor_state.prune_overrides
+              (List.concat_map Page_delta.delta_uuids deltas);
           (* own_commit keeps the basis; identical-page sends are
              deduped downstream *)
           if p' != page then (

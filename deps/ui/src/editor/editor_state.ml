@@ -260,6 +260,24 @@ let title_for uuid fallback =
 
 let clear_overrides () = Hashtbl.reset display_overrides
 
+(* drop overrides the model has caught up to: [touched] uuids whose canon
+   row a delta splice just landed (its stored form wins over our
+   normalized paint), blocks that vanished, and rows whose stored title
+   already equals the override. Untouched overrides stay — their commits
+   are still in flight *)
+let prune_overrides touched =
+  let dead u t =
+    List.mem u touched
+    ||
+    match find u with
+    | Some b -> b.Model.block_title = t
+    | None -> true
+  in
+  Hashtbl.fold
+    (fun u t acc -> if dead u t then u :: acc else acc)
+    display_overrides []
+  |> List.iter (fun u -> Hashtbl.remove display_overrides u)
+
 (* CodeMirror buffer/focus providers for code-fence blocks, wired by
    Code_mirror.install — refs so Editor_actions needs no CM module dep *)
 let code_buffer_of : (string -> string option) ref = ref (fun _ -> None)
