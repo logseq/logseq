@@ -11,10 +11,11 @@ open Lui_elements
 let dom = Logseq_dom.dom
 module T = I18n
 
-let cognito_url = "https://cognito-idp.us-east-1.amazonaws.com/"
-let client_id = "69cs1lgme7p8kbgld8n5kseii6"
-let oauth_token_url =
-  "https://logseq-prod.auth.us-east-1.amazoncognito.com/oauth2/token"
+(* Cognito constants live in Rtc_ops (they're sync config the worker
+   needs too) *)
+let cognito_url = Rtc_ops.cognito_url
+let client_id = Rtc_ops.client_id
+let oauth_token_url = Rtc_ops.oauth_token_url
 
 let field_value name =
   match Browser_ui.qs (".cp__user-login input[name=" ^ name ^ "]") with
@@ -75,7 +76,9 @@ let store_tokens id acc refresh =
           ; (Wire.kw "auth/refresh-token", Wire.String refresh)
           ; (Wire.kw "auth/oauth-client-id", Wire.String client_id)
           ; (Wire.kw "auth/oauth-token-url", Wire.String oauth_token_url)
-          ]))
+          ]));
+  (* cljs flows/current-login-user watch -> trigger-start-rtc [:login] *)
+  Rtc_flows.notify_login ()
 
 let submit () =
   let user = field_value "username" and pass = field_value "password" in

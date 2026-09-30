@@ -238,6 +238,12 @@ external navigator_on_line : bool = "navigator.onLine"
 (* util/network-online? *)
 let online () = navigator_on_line
 
+external visibility_state : string = "visibilityState"
+  [@@mel.scope "document"]
+
+(* cljs flows/document-visibility-state *)
+let document_visible () = visibility_state = "visible"
+
 external random_uuid : unit -> string = "randomUUID"
   [@@mel.scope "crypto"]
 
