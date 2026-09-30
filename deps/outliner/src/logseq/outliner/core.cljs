@@ -310,8 +310,10 @@
     (update :block/raw-title #(rewrite-missing-uuid-id-refs db % keep-uuids))))
 
 (defn- created-or-kept-uuids
-  [refs page-txs]
-  (into #{} (keep :block/uuid) (concat refs page-txs)))
+  "UUIDs created in this save. Existing entities are checked against db.
+  Do not keep UUIDs from leftover map refs to deleted blocks."
+  [page-txs]
+  (into #{} (keep :block/uuid) page-txs))
 
 (defn- apply-resolved-page-ref-titles
   [db block refs'' tags' replace-refs rewrite-title? keep-uuids]
@@ -428,7 +430,7 @@
           rewrite-title? (or (seq replacements) (seq dropped-refs))]
       {:block (apply-resolved-page-ref-titles
                db block refs'' tags' replace-refs rewrite-title?
-               (created-or-kept-uuids refs'' page-txs))
+               (created-or-kept-uuids page-txs))
        :page-txs page-txs})
     {:block (rewrite-block-missing-uuid-id-refs db block #{})}))
 

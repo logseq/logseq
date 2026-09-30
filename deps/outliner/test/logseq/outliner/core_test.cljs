@@ -196,6 +196,21 @@
       (is (= (str "See " (page-ref/->page-ref parsed-uuid)) (:block/title block)))
       (is (= (str "See " (page-ref/->page-ref parsed-uuid)) (:block/raw-title block))))))
 
+(deftest resolve-page-refs-stale-map-ref-rewrites-missing-uuid
+  (testing "a leftover map ref to a deleted block does not keep an empty [[uuid]] link"
+    (let [conn (db-test/create-conn-with-blocks
+                [{:page {:block/title "page1"} :blocks []}])
+          stale-uuid (parse-uuid missing-uuid-title)
+          {:keys [block]}
+          (#'outliner-core/resolve-page-refs
+           @conn
+           {:block/title (str "See " (page-ref/->page-ref stale-uuid))
+            :block/raw-title (str "See " (page-ref/->page-ref stale-uuid))
+            :block/refs [{:block/uuid stale-uuid
+                          :block/title missing-uuid-title}]})]
+      (is (= (str "See " missing-uuid-title) (:block/title block)))
+      (is (= (str "See " missing-uuid-title) (:block/raw-title block))))))
+
 (deftest resolve-page-refs-missing-uuid-id-ref-without-page-ref-map
   (testing "[[uuid]] left in the title with no :block/refs is persisted as plain text"
     (let [conn (db-test/create-conn-with-blocks
