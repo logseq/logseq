@@ -975,6 +975,11 @@ let delta_helpers (page : Model.page) : Page_delta.helpers =
             merge_collapsed !collapsed S.String_set.empty;
             Js.Promise.resolve bs')
   ; merge_collapsed
+  ; refresh_page_fields =
+      (fun p ->
+        match !Runtime.current_repo with
+        | Some repo -> resolve_page_tags repo p
+        | None -> Js.Promise.resolve p)
   }
 
 (* fold the queued deferred deltas then [delta] onto [page],
