@@ -2480,6 +2480,38 @@ let test_undo_delete_of_template_and_its_applied_copy () =
              | None -> false)
       | None -> check "copy restored" false)
 
+(* cljs full-undo-stack-keeps-newest-entries-test *)
+let test_full_undo_stack_keeps_newest_entries () =
+  with_worker_conns (fun () ->
+      Undo_redo.clear_history test_repo;
+      let conn = conn () in
+      let _, _, child_uuid = seed_page_parent_child () in
+      let title () =
+        match ent_at_uuid (db_of conn) child_uuid with
+        | Some e -> Option.value (ent_title_of e) ~default:""
+        | None -> ""
+      in
+      let prev_max = !Undo_redo.max_stack_length in
+      Undo_redo.max_stack_length := 10;
+      Fun.protect
+        ~finally:(fun () -> Undo_redo.max_stack_length := prev_max)
+        (fun () ->
+           for i = 1 to 12 do
+             save_block_title conn child_uuid (Printf.sprintf "v%d" i)
+           done;
+           check "7 undo ops"
+             (List.length (stack_of Undo_redo.undo_ops test_repo) = 7);
+           let titles =
+             List.init 7 (fun _ ->
+                 ignore (Undo_redo.undo test_repo);
+                 title ())
+           in
+           check "undos step back"
+             (titles = [ "v11"; "v10"; "v9"; "v8"; "v7"; "v6"; "v5" ]);
+           check "empty stack"
+             (Undo_redo.undo test_repo
+              = Undo_redo.empty_stack_result ~undo:true)))
+
 (* cljs undo-delete-of-today-page-with-blocks-referring-to-each-other-test *)
 let test_undo_delete_of_today_page_with_blocks_referring_to_each_other () =
   with_worker_conns (fun () ->
@@ -2706,4 +2738,7 @@ let cases =
   ; Alcotest.test_case
       "undo-delete-of-template-and-its-applied-copy-test" `Quick
       test_undo_delete_of_template_and_its_applied_copy
+  ; Alcotest.test_case
+      "full-undo-stack-keeps-newest-entries-test" `Quick
+      test_full_undo_stack_keeps_newest_entries
   ]

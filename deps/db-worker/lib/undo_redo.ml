@@ -14,7 +14,8 @@ type undo_item =
 
 type undo_op = undo_item list
 
-let max_stack_length = 250
+(* cljs max-stack-length — a cljs def the tests rebind, so a ref here *)
+let max_stack_length = ref 250
 
 let undo_ops : (string, undo_op list) Hashtbl.t = Hashtbl.create 8
 
@@ -48,10 +49,13 @@ let take_pending_editor_info repo =
   Hashtbl.remove pending_editor_info repo;
   info
 
+(* cljs conj-op — pushes op; a full stack drops its oldest half. The
+   newest entries must stay: each undo meets the state the entry above
+   it left. *)
 let conj_op col op =
   let result = col @ [ op ] in
-  if List.length result >= max_stack_length then
-    List.filteri (fun i _ -> i < max_stack_length / 2) result
+  let n = List.length result in
+  if n >= !max_stack_length then List.drop (n - !max_stack_length / 2) result
   else result
 
 let push_undo_op repo op =
