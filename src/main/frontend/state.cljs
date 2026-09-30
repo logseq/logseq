@@ -1059,6 +1059,15 @@ should be done through this fn in order to get global config and config defaults
   []
   (set-state! :editor/action nil))
 
+(defn clear-editor-action-if-switching-block!
+  "Slash commands and other editor popups belong to the current edit block.
+   Entering edit on a different block closes them. Re-editing the same block
+   keeps the current action."
+  [new-block]
+  (when (not= (:block/uuid new-block)
+              (:block/uuid (get-edit-block)))
+    (clear-editor-action!)))
+
 (defn get-edit-pos
   []
   (when-let [input (get-input)]
@@ -1827,6 +1836,9 @@ should be done through this fn in order to get global config and config defaults
 (defn set-editing!
   [edit-input-id content block cursor-range & {:keys [move-cursor? container-id property-block direction event pos]
                                                :or {move-cursor? true}}]
+  ;; Click-to-edit uses pointerdown -> set-editing!, not editor-on-hide.
+  ;; Close slash/commands when the edit target changes; same-block re-edit keeps them.
+  (clear-editor-action-if-switching-block! block)
   (when-not (exists? js/process)
     (when (and edit-input-id block
                (or

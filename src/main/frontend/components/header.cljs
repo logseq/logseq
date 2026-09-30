@@ -7,7 +7,7 @@
             [dommy.core :as d]
             [electron.ipc :as ipc]
             [frontend.components.avatar :as avatar]
-            [frontend.components.block :as component-block]
+            [frontend.components.block.breadcrumb :as block-breadcrumb]
             [frontend.components.block.breadcrumb-model :as breadcrumb-model]
             [frontend.components.email :as email-component]
             [frontend.components.export :as export]
@@ -490,7 +490,7 @@
                (:block/parent page-with-breadcrumb))
       [:div.ls-block-breadcrumb
        [:div.text-sm
-        (component-block/breadcrumb {}
+        (block-breadcrumb/breadcrumb {}
                                     (state/get-current-repo)
                                     (:block/uuid page-with-breadcrumb)
                                     {:header? true

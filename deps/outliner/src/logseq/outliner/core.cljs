@@ -114,15 +114,43 @@
         (let [tx (mapv (fn [page] [:db/retractEntity (:db/id page)]) orphaned-pages)]
           (swap! txs-state (fn [state] (vec (concat state tx)))))))))
 
+(defn- page-updated-at-tx
+  [db page-eid]
+  (when-let [page (when page-eid (d/entity db page-eid))]
+    (cond-> {:db/id page-eid
+             :block/updated-at (common-util/time-ms)}
+      (not (:block/created-at page))
+      (assoc :block/created-at (common-util/time-ms)))))
+
+(defn- container-page-eid
+  "Page-like entities (pages, tags, properties) are contained via :block/parent;
+   ordinary blocks via :block/page."
+  [block]
+  (if (ldb/page? block)
+    (let [parent (:block/parent block)]
+      (when (and parent (ldb/page? parent))
+        (:db/id parent)))
+    (:db/id (:block/page block))))
+
+(defn- live-insert-source-page-eids
+  "Identity-preserving inserts can reparent a live block. Stamp the pages that
+  lose those blocks, excluding the destination page."
+  [db blocks dest-page-eid]
+  (into []
+        (comp
+         (keep (fn [block]
+                 (when-let [uuid' (:block/uuid block)]
+                   (when-let [live (d/entity db [:block/uuid uuid'])]
+                     (container-page-eid live)))))
+         (remove #{dest-page-eid})
+         (distinct))
+        blocks))
+
 (defn- update-page-when-save-block
-  [txs-state block-entity]
+  [db txs-state block-entity]
   (when-let [e (:block/page block-entity)]
-    (let [m' (cond-> {:db/id (:db/id e)
-                      :block/updated-at (common-util/time-ms)}
-               (not (:block/created-at e))
-               (assoc :block/created-at (common-util/time-ms)))
-          txs [m']]
-      (swap! txs-state into txs))))
+    (when-let [m' (page-updated-at-tx db (:db/id e))]
+      (swap! txs-state conj m'))))
 
 (defn- remove-orphaned-refs-when-save
   [db txs-state block-entity m]
@@ -148,6 +176,17 @@
   [db block]
   (outliner-pipeline/db-rebuild-block-refs db block))
 
+(defn- matching-ref-for-tag
+  "Class titles are case-sensitive while :block/name is not, so among same-name
+  refs prefer the one whose :block/title equals the tag's."
+  [tag candidates]
+  (or (some (fn [r]
+              (when (and (:block/title tag)
+                         (= (:block/title r) (:block/title tag)))
+                r))
+            candidates)
+      (first candidates)))
+
 (defn- fix-tag-ids
   "Fix or remove tags related when entered via `Escape`"
   [m db]
@@ -165,9 +204,10 @@
                    ;; Update :block/tag to reference ids from :block/refs
                    (map (fn [tag]
                           (if (contains? refs (:block/name tag))
-                            (let [matched-ref (first (filter (fn [r] (= (:block/name tag)
-                                                              (:block/name r)))
-                                                   (:block/refs m)))]
+                            (let [matched-ref (matching-ref-for-tag
+                                               tag
+                                               (filter #(= (:block/name tag) (:block/name %))
+                                                       (:block/refs m)))]
                               (cond-> (assoc tag :block/uuid (:block/uuid matched-ref))
                                 (:db/ident matched-ref)
                                 (assoc :db/ident (:db/ident matched-ref))))
@@ -235,19 +275,47 @@
            tx-data])))
     [ref nil]))
 
+(defn- resolve-refs-dedup
+  "Resolve new-page refs, deduping pages created during the pass: db doesn't
+  see them yet, so a repeated [[same name]] ref would otherwise create a
+  duplicate page. Class titles are case-sensitive (#Movie and #movie are
+  distinct classes), so class refs dedupe by :block/title instead."
+  [db refs tag-names]
+  (first
+   (reduce
+    (fn [[resolved seen] ref]
+      (let [new-page? (new-page-ref? ref)
+            dedup-key (if (contains? tag-names (:block/name ref))
+                        [:class (:block/title ref)]
+                        [:page (:block/name ref)])]
+        (if-let [seen-ref (and new-page? (get seen dedup-key))]
+          [(conj resolved [(merge seen-ref
+                                  (select-keys ref [:block.temp/original-page-name]))
+                            nil])
+           seen]
+          (let [[ref' tx-data :as resolved-ref] (resolve-page-ref db ref tag-names)]
+            [(conj resolved resolved-ref)
+             (if (and new-page? (seq tx-data))
+               (assoc seen dedup-key ref')
+               seen)]))))
+    [[] {}]
+    refs)))
+
 (defn- resolve-page-refs
   [db block]
   (if-let [refs (seq (:block/refs block))]
     (let [tag-names (into #{} (keep :block/name) (:block/tags block))
-          resolved-refs (mapv #(resolve-page-ref db % tag-names) refs)
+          resolved-refs (resolve-refs-dedup db refs tag-names)
           refs' (mapv first resolved-refs)
           page-txs (mapcat second resolved-refs)
-          tag-refs (into {} (keep (fn [ref]
-                                    (when (:db/ident ref)
-                                      [(:block/name ref) ref])))
-                         refs')
+          tag-refs (reduce (fn [m ref]
+                             (if (:db/ident ref)
+                               (update m (:block/name ref) (fnil conj []) ref)
+                               m))
+                           {}
+                           refs')
           tags' (mapv (fn [tag]
-                        (if-let [ref (get tag-refs (:block/name tag))]
+                        (if-let [ref (matching-ref-for-tag tag (get tag-refs (:block/name tag)))]
                           (merge (dissoc tag :block/type)
                                  (select-keys ref [:block/uuid :db/ident]))
                           tag))
@@ -425,7 +493,7 @@
 
         ;; Update block's page attributes
         (when-not collapse-or-expand?
-          (update-page-when-save-block *txs-state block-entity))
+          (update-page-when-save-block db *txs-state block-entity))
         ;; Remove orphaned refs from block
         (when (and (:block/title m) (not= (:block/title m) (:block/title block-entity)))
           (remove-orphaned-refs-when-save db *txs-state block-entity m)))
@@ -592,16 +660,34 @@
 
 (defn- get-block-orders
   [blocks target-block sibling? keep-block-order?]
-  (if (and keep-block-order? (every? :block/order blocks))
-    (map :block/order blocks)
-    (let [target-order (:block/order target-block)
-          start-order (when sibling? target-order)
-          end-order (if sibling?
-                      (:block/order (ldb/get-right-sibling target-block))
-                      (let [first-child (ldb/get-down target-block)]
-                        (:block/order first-child)))
-          orders (db-order/gen-n-keys (count blocks) start-order end-order)]
-      orders)))
+  (let [target-order (:block/order target-block)
+        start-order (when sibling? target-order)
+        end-order (if sibling?
+                    (:block/order (ldb/get-right-sibling target-block))
+                    (let [first-child (ldb/get-down target-block)]
+                      (:block/order first-child)))
+        top-level? #(= 1 (:block/level %))
+        at-target? (fn [order]
+                     (and (or (nil? start-order) (pos? (compare order start-order)))
+                          (or (nil? end-order) (neg? (compare order end-order)))))]
+    (if (and keep-block-order? (every? :block/order blocks))
+      (let [top-level-blocks (filter top-level? blocks)]
+        (if (every? at-target? (map :block/order top-level-blocks))
+          (map :block/order blocks)
+          ;; The kept orders of the top-level blocks no longer fall next to the
+          ;; target, e.g. undo restoring deleted blocks after a sibling moved
+          ;; away and back got a new order: order them at the target and keep
+          ;; the orders of their children.
+          (let [top-level-orders (db-order/gen-n-keys (count top-level-blocks)
+                                                      start-order end-order)]
+            (first
+             (reduce (fn [[orders top-level-orders] block]
+                       (if (top-level? block)
+                         [(conj orders (first top-level-orders)) (rest top-level-orders)]
+                         [(conj orders (:block/order block)) top-level-orders]))
+                     [[] top-level-orders]
+                     blocks)))))
+      (db-order/gen-n-keys (count blocks) start-order end-order))))
 
 (defn- update-property-ref-when-paste
   [block uuids]
@@ -632,6 +718,27 @@
 
    ;; target-block is a page itself
    (:db/id target-block)))
+
+(defn- build-insert-block-tx
+  [db block result* {:keys [uuid' parent order target-page outliner-op]}]
+  (let [page? (or (ldb/page? block) (:block/name block))
+        ;; :block/name is not unique, so pasting a copied page entity
+        ;; would create a duplicate page; link to the existing page instead
+        existing-page (when (and (= :paste outliner-op)
+                                 (:block/name block))
+                        (ldb/get-page db (:block/name block)))]
+    (if existing-page
+      {:block/uuid uuid'
+       :block/parent parent
+       :block/order order
+       :block/page target-page
+       :block/title ""
+       :block/created-at (:block/created-at block)
+       :block/updated-at (:block/updated-at block)
+       :block/link (:db/id existing-page)}
+      (cond-> result*
+        (not page?) (assoc :block/page target-page)
+        page? (dissoc :block/page)))))
 
 (defn- build-insert-blocks-tx
   [db target-block blocks uuids get-new-id {:keys [sibling? outliner-op replace-empty-target? insert-template? keep-block-order?]}]
@@ -675,10 +782,12 @@
                 result* (if (:block.temp/use-old-db-id? result*)
                           result*
                           (dissoc result* :db/id))
-                page? (or (ldb/page? block) (:block/name block))
-                result (cond-> result*
-                         (not page?) (assoc :block/page target-page)
-                         page? (dissoc :block/page))
+                result (build-insert-block-tx db block result*
+                                              {:uuid' uuid'
+                                               :parent parent
+                                               :order order
+                                               :target-page target-page
+                                               :outliner-op outliner-op})
                 db' (if (seq page-txs)
                       (:db-after (d/with db page-txs))
                       db)]
@@ -844,6 +953,31 @@
       (default-value-block? target-block)
       (and sibling? (default-value-block? (:block/parent target-block)))))
 
+(defn- insert-history-blocks
+  [blocks page-txs id->new-uuid]
+  (let [pages (reduce (fn [pages tx]
+                       (if (and (map? tx) (:block/uuid tx))
+                         (update pages (:block/uuid tx) merge (dissoc tx :db/id))
+                         pages))
+                     {} page-txs)]
+    (mapv (fn [block]
+            (cond-> block
+              (seq (:block/refs block))
+              (update :block/refs
+                      (fn [refs]
+                        (mapv (fn [ref]
+                                (if-let [page (get pages (:block/uuid ref))]
+                                  (merge page ref)
+                                  ref))
+                              refs)))))
+          (walk/prewalk (fn [value]
+                          (if (de/entity? value)
+                            (if-let [uuid' (get id->new-uuid (:db/id value))]
+                              [:block/uuid uuid']
+                              (:db/id value))
+                            value))
+                        blocks))))
+
 (defn- resolve-created-from-property
   [db created-from-property]
   (cond
@@ -870,6 +1004,8 @@
                     copied trees cannot move existing blocks.
                     Undo restore keeps live uuids.
       `keep-block-order?`: whether to replace `:block/order` from the parameter `blocks`.
+                           A top-level block keeps its order only while that
+                           order falls at `target-block`.
       `outliner-op`: what's the current outliner operation.
       `created-from-property`: property ident/ref used to restore a deleted property
                                value as a property value instead of a child block.
@@ -975,10 +1111,15 @@
                                                       (:db/ident (d/entity db (:db/id restore-from-property)))
                                                       [:block/uuid new-id]]]))
                                                 top-level-blocks)))
+                 dest-page-eid (get-target-block-page target-block sibling?)
+                 page-updated-txs (keep #(page-updated-at-tx db %)
+                                        (cons dest-page-eid
+                                              (live-insert-source-page-eids db blocks' dest-page-eid)))
                  full-tx (common-util/concat-without-nil page-txs
                                                          (if (and keep-uuid? replace-empty-target?) (rest uuids-tx) uuids-tx)
                                                          tx
-                                                         property-values-tx)
+                                                         property-values-tx
+                                                         page-updated-txs)
                 ;; Replace entities with eid because Datascript doesn't support entity transaction
                  full-tx' (walk/prewalk
                            (fn [f]
@@ -993,7 +1134,10 @@
                                f))
                            full-tx)]
              {:tx-data full-tx'
-              :blocks  tx})))))))
+              :blocks tx
+              :tx-meta {:outliner-ops [[:insert-blocks [(insert-history-blocks tx page-txs id->new-uuid)
+                                                       (:block/uuid target-block)
+                                                       (assoc insert-opts :keep-uuid? true)]]]}})))))))
 
 (defn- sort-non-consecutive-blocks
   [db blocks]
@@ -1119,7 +1263,16 @@
           :else
           (doseq [id block-ids]
             (let [node (d/entity db id)]
-              (otree/-del node txs-state db))))))
+              (otree/-del node txs-state db))))
+      (let [deleted-ids (into deleted-block-ids (map :db/id) orphaned-comments-areas)]
+        (swap! txs-state into
+               ;; Never stamp an entity being retracted: the :block/updated-at
+               ;; add would resurrect it.
+               (into [] (comp (keep container-page-eid)
+                              (remove deleted-ids)
+                              (distinct)
+                              (keep #(page-updated-at-tx db %)))
+                     top-level-blocks)))))
     {:tx-data @txs-state}))
 
 (defn- move-to-original-position?
@@ -1131,22 +1284,45 @@
            (= (:db/id (ldb/get-left-sibling block)) (:db/id target-block))
            (= (:db/id (ldb/get-first-child db (:db/id target-block))) (:db/id block))))))
 
+(defn- move-block-property-tx
+  [block target-block sibling? block-from-property restore-from-property]
+  (let [retract-property-tx (when block-from-property
+                              [[:db/retract (:db/id (:block/parent block)) (:db/ident block-from-property) (:db/id block)]
+                               [:db/retract (:db/id block) :logseq.property/created-from-property]])
+        add-property-tx (when restore-from-property
+                          (let [owner-id (if sibling?
+                                           (:db/id (:block/parent target-block))
+                                           (:db/id target-block))]
+                            [[:db/add (:db/id block) :logseq.property/created-from-property (:db/id restore-from-property)]
+                             [:db/add owner-id (:db/ident restore-from-property) (:db/id block)]]))]
+    (concat retract-property-tx add-property-tx)))
+
 (defn- move-block
   [db block target-block sibling? {:keys [created-from-property]}]
   (let [target-block (d/entity db (:db/id target-block))
         block (d/entity db (:db/id block))
         target-without-parent? (and sibling? (nil? (:block/parent target-block)))
-        move-page-as-block-child? (and (not sibling?)
-                                       (not (ldb/page? target-block))
-                                       (ldb/page? block))]
-    (if (or target-without-parent? move-page-as-block-child?)
+        target-from-property (when sibling?
+                               (:logseq.property/created-from-property target-block))
+        explicit-restore-from-property (resolve-created-from-property db created-from-property)
+        restore-from-property (or target-from-property explicit-restore-from-property)
+        new-parent (if sibling? (:block/parent target-block) target-block)
+        ;; The Library page only holds normal pages; blocks, classes,
+        ;; properties and other page types can't be moved into it.
+        move-disallowed? (if (ldb/library? new-parent)
+                           (not (ldb/internal-page? block))
+                           (and (ldb/page? block)
+                                (not (ldb/page? new-parent))))]
+    (if (or target-without-parent? move-disallowed?)
       (throw (ex-info "not-allowed-move-block-page"
-                      {:reason (if target-without-parent?
-                                 :move-to-target-without-parent
-                                 :move-page-to-be-child-of-block)}))
+                      {:reason (cond
+                                 target-without-parent? :move-to-target-without-parent
+                                 (ldb/library? new-parent) :move-to-library
+                                 :else :move-page-to-be-child-of-block)}))
       (let [first-block-page (:db/id (:block/page block))
             target-page (get-target-block-page target-block sibling?)
             not-same-page? (not= first-block-page target-page)
+            page-after-move? (ldb/page? block)
             block-order (if sibling?
                           (db-order/gen-key (:block/order target-block)
                                             (:block/order (ldb/get-right-sibling target-block)))
@@ -1159,31 +1335,21 @@
                                        (:db/id (:block/parent target-block))
                                        (:db/id target-block))
                        :block/order block-order}
-                       (not (ldb/page? block))
+                       (not page-after-move?)
                        (assoc :block/page target-page))]
-            children-page-tx (when (and not-same-page? (not (ldb/page? block)))
+            children-page-tx (when (and not-same-page? (not page-after-move?))
                                (let [children-ids (ldb/get-block-full-children-ids db (:db/id block))]
                                  (keep (fn [id]
                                          (let [child (d/entity db id)]
                                            (when-not (ldb/page? child)
                                              {:block/uuid (:block/uuid child)
                                               :block/page target-page}))) children-ids)))
-            target-from-property (when sibling?
-                                   (:logseq.property/created-from-property target-block))
             block-from-property (:logseq.property/created-from-property block)
-            restore-from-property (or target-from-property
-                                      (resolve-created-from-property db created-from-property))
-            property-tx (let [retract-property-tx (when block-from-property
-                                                    [[:db/retract (:db/id (:block/parent block)) (:db/ident block-from-property) (:db/id block)]
-                                                     [:db/retract (:db/id block) :logseq.property/created-from-property]])
-                              add-property-tx (when restore-from-property
-                                                (let [owner-id (if sibling?
-                                                                 (:db/id (:block/parent target-block))
-                                                                 (:db/id target-block))]
-                                                  [[:db/add (:db/id block) :logseq.property/created-from-property (:db/id restore-from-property)]
-                                                   [:db/add owner-id (:db/ident restore-from-property) (:db/id block)]]))]
-                          (concat retract-property-tx add-property-tx))]
-        (common-util/concat-without-nil tx-data children-page-tx property-tx)))))
+            property-tx (move-block-property-tx block target-block sibling?
+                                               block-from-property restore-from-property)
+            page-updated-txs (keep #(page-updated-at-tx db %)
+                                   (distinct [(container-page-eid block) target-page]))]
+        (common-util/concat-without-nil tx-data children-page-tx property-tx page-updated-txs)))))
 
 (defn- transact-move-blocks!
   [conn blocks target-block sibling? opts outliner-op top-level-blocks]

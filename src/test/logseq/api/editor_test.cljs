@@ -1,9 +1,12 @@
 (ns logseq.api.editor-test
   (:require [cljs.test :refer [async deftest is use-fixtures]]
+            [datascript.core :as d]
             [frontend.commands :as commands]
+            [frontend.db.conn :as conn]
             [frontend.extensions.pdf.assets :as pdf-assets]
             [frontend.handler.code :as code-handler]
             [frontend.handler.editor :as editor-handler]
+            [frontend.handler.editor.format :as editor-format]
             [frontend.handler.export :as export-handler]
             [frontend.state :as state]
             [frontend.test.helper :as test-helper]
@@ -14,6 +17,7 @@
             [logseq.api.db-based :as db-based-api]
             [logseq.api.editor :as api-editor]
             [logseq.api.test-helper :as api-test]
+            [logseq.outliner.property :as outliner-property]
             [promesa.core :as p]))
 
 (use-fixtures :each {:before api-test/start-plugin-api-db!
@@ -182,6 +186,83 @@
                    (is false (str error))))
         (p/finally done))))
 
+(defn- property-written-value
+  [value]
+  (or (when (map? value)
+        (or (:logseq.property/value value)
+            (:block/title value)
+            (:value value)))
+      (when (and (object? value) (not (coll? value)))
+        (or (aget value "value")
+            (aget value ":logseq.property/value")))
+      (:logseq.property/value value)
+      value))
+
+(deftest upsert-block-property-stores-integer-numbers-as-values
+  (async done
+    (load-editor-page!)
+    (-> (api-test/with-plugin-api
+          (fn []
+            (p/let [alpha (test-helper/find-block-by-content "alpha")
+                    bravo (test-helper/find-block-by-content "bravo")
+                    uuid-a (str (:block/uuid alpha))
+                    uuid-b (str (:block/uuid bravo))
+                    _ (api-editor/upsert_block_property uuid-a "rating" 0 nil)
+                    zero-value (api-editor/get_block_property uuid-a "rating")
+                    _ (api-editor/upsert_block_property uuid-a "rating" -3 nil)
+                    negative-value (api-editor/get_block_property uuid-a "rating")
+                    _ (api-editor/upsert_block_property uuid-a "rating" 2 nil)
+                    two-owner (test-helper/find-block-by-content "alpha")
+                    value-block-id (:db/id (:plugin.property._test_plugin/rating two-owner))
+                    _ (api-editor/upsert_block_property uuid-b "rating" value-block-id nil)
+                    coincidental-value (api-editor/get_block_property uuid-b "rating")
+                    bravo-after (test-helper/find-block-by-content "bravo")
+                    _ (api-editor/upsert_block_property uuid-b "rating" value-block-id #js {:entityId true})
+                    referenced-value (api-editor/get_block_property uuid-b "rating")
+                    referenced-owner (test-helper/find-block-by-content "bravo")
+                    _ (api-editor/upsert_block_property uuid-b "rating" value-block-id #js {:entityId false})
+                    explicit-literal (api-editor/get_block_property uuid-b "rating")]
+              (is (= 0 (property-written-value zero-value)))
+              (is (= -3 (property-written-value negative-value)))
+              (is (some? value-block-id))
+              (is (= value-block-id (property-written-value coincidental-value)))
+              (is (= value-block-id
+                     (property-written-value (get bravo-after :plugin.property._test_plugin/rating))))
+              (is (not= 2 (property-written-value coincidental-value)))
+              (is (= 2 (property-written-value referenced-value)))
+              (is (= value-block-id (:db/id (:plugin.property._test_plugin/rating referenced-owner))))
+              (is (= value-block-id (property-written-value explicit-literal))))))
+        (p/catch (fn [error]
+                   (is false (str error))))
+        (p/finally done))))
+
+(deftest upsert-nil-number-keeps-empty-placeholder-over-default
+  (async done
+    (load-editor-page!)
+    (-> (api-test/with-plugin-api
+          (fn []
+            (p/let [alpha (test-helper/find-block-by-content "alpha")
+                    uuid' (str (:block/uuid alpha))
+                    _ (db-based-api/upsert-property "rating" #js {:type "number"} nil)
+                    db-conn (conn/get-db (state/get-current-repo) false)
+                    property (d/entity @db-conn :plugin.property._test_plugin/rating)
+                    default-uuid (outliner-property/create-property-text-block!
+                                  db-conn nil :plugin.property._test_plugin/rating "5" {:set-block-property? false})
+                    _ (outliner-property/set-block-property!
+                       db-conn (:db/id property) :logseq.property/default-value
+                       (:db/id (d/entity @db-conn [:block/uuid default-uuid])))
+                    _ (api-editor/upsert_block_property uuid' "rating" 8 nil)
+                    set-value (api-editor/get_block_property uuid' "rating")
+                    _ (api-editor/upsert_block_property uuid' "rating" nil nil)
+                    after (test-helper/find-block-by-content "alpha")
+                    cleared (get after :plugin.property._test_plugin/rating)]
+              (is (= 8 (property-written-value set-value)))
+              (is (= :logseq.property/empty-placeholder (:db/ident cleared)))
+              (is (not= 5 (property-written-value cleared))))))
+        (p/catch (fn [error]
+                   (is false (str error))))
+        (p/finally done))))
+
 (deftest editing-and-selection-state
   (let [block {:block/uuid #uuid "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
                :block/title "editing"}]
@@ -300,7 +381,7 @@
             (fn []
               (p/let [alpha (test-helper/find-block-by-content "alpha")
                       uuid' (str (:block/uuid alpha))
-                      _ (p/with-redefs [editor-handler/open-block-in-sidebar!
+                      _ (p/with-redefs [editor-format/open-block-in-sidebar!
                                         (fn [_block-id]
                                           (state/update-state! :sidebar/blocks
                                                                (fn [blocks]

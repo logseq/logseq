@@ -619,7 +619,19 @@
                       _ (<init-worker! proxy)
                       _ (let [method-kw :thread-api/create-or-open-db
                               method-str (normalize-method-str method-kw)]
-                          (<invoke! proxy method-str method-kw [repo (startup-db-opts opts)]))]
+                          (p/let [db-exists? (if (= :cli owner-source)
+                                               ;; The CLI never sends
+                                               ;; create-or-open-db, so a
+                                               ;; cli-owned worker must open
+                                               ;; the graph itself.
+                                               true
+                                               ((get-in platform [:storage :db-exists?]) repo))]
+                            ;; A not-yet-created graph is initialized by the
+                            ;; first create-or-open-db call's opts (e.g. import
+                            ;; datoms), so only eagerly open a graph that
+                            ;; already exists on disk.
+                            (when (or db-exists? (:create-empty-db? opts))
+                              (<invoke! proxy method-str method-kw [repo (startup-db-opts opts)]))))]
                 (start-http-server! {:proxy proxy
                                      :repo repo
                                      :host host

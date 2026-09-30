@@ -1,7 +1,7 @@
 (ns ^:no-doc frontend.handler.editor.lifecycle
   (:require [dommy.core :as dom]
             [frontend.db.async :as db-async]
-            [frontend.handler.editor :as editor-handler]
+            [frontend.handler.editor.format :as editor-format]
             [frontend.state :as state]
             [frontend.util :as util]
             [goog.dom :as gdom]
@@ -32,7 +32,7 @@
       (state/set-state! :editor/container-id container-id))
 
     (when content
-      (editor-handler/restore-cursor-pos! id content))
+      (editor-format/restore-cursor-pos! id content))
 
     (when-let [element (gdom/getElement id)]
       ;; TODO: check whether editor is visible, do less work

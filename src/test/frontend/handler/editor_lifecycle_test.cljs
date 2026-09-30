@@ -1,7 +1,7 @@
 (ns frontend.handler.editor-lifecycle-test
   (:require [cljs.test :refer [async deftest is]]
             [dommy.core :as dom]
-            [frontend.handler.editor :as editor-handler]
+            [frontend.handler.editor.format :as editor-format]
             [frontend.handler.editor.lifecycle :as lifecycle]
             [frontend.state :as state]
             [frontend.util :as util]
@@ -31,7 +31,7 @@
                               :thread-api/undo-redo-record-editor-info
                               (p/resolved :recorded)))
                           dom/attr (fn [& _] nil)
-                          editor-handler/restore-cursor-pos! (fn [& _] nil)
+                          editor-format/restore-cursor-pos! (fn [& _] nil)
                           util/rec-get-node (fn [& _] nil)
                           util/scroll-editor-cursor (fn [& _] nil)
                           gdom/getElement (fn [& _] nil)]

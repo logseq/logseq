@@ -47,7 +47,13 @@
           @conn
           "Card"
           (d/entity @conn :user.class/Class1)))
-        "Disallow duplicate class names even if it's built-in")))
+        "Disallow duplicate class names even if it's built-in")
+    (is (nil?
+         (outliner-validate/validate-unique-by-name-and-tags
+          @conn
+          "class1"
+          (d/entity @conn :user.class/Class2)))
+        "Allow a class to use a case variant of another class name")))
 
 (deftest validate-block-title-unique-for-namespaced-pages
   (let [conn (db-test/create-conn-with-blocks
@@ -63,7 +69,10 @@
                 {:page {:block/title "n2"
                         :block/parent [:block/uuid #uuid "3aa1e950-5a9b-4efc-81d4-b6d89a504591"]}}
                 {:page {:block/title "n3"
-                        :block/parent [:block/uuid #uuid "3aa1e950-5a9b-4efc-81d4-b6d89a504591"]}}]
+                        :block/parent [:block/uuid #uuid "3aa1e950-5a9b-4efc-81d4-b6d89a504591"]}}
+                {:page {:block/title "other"
+                        :block/parent [:block/uuid #uuid "d246c71a-3e71-42f0-928f-afe607ee5ce0"]}}
+                {:page {:block/title "Foo"}}]
                :build-existing-tx? true})]
 
     (is (thrown-with-msg?
@@ -80,12 +89,43 @@
           @conn
           "n4"
           (db-test/find-page-by-title @conn "n3")))
-        "Allow namespace child if unique")))
+        "Allow namespace child if unique")
+
+    (is (thrown-with-msg?
+         js/Error
+         #"Duplicate page"
+         (outliner-validate/validate-unique-by-name-and-tags
+          @conn
+          "N2"
+          (db-test/find-page-by-title @conn "n3")))
+        "Disallow renaming a namespace child to a case variant of a sibling")
+
+    (is (nil?
+         (outliner-validate/validate-unique-by-name-and-tags
+          @conn
+          "Other"
+          (db-test/find-page-by-title @conn "n3")))
+        "Allow a namespace child to share a case-insensitive name with a different-parent page")
+
+    (is (nil?
+         (outliner-validate/validate-unique-by-name-and-tags
+          @conn
+          "foo"
+          (db-test/find-page-by-title @conn "n3")))
+        "Allow a namespace child to share a case-insensitive name with a top-level page")
+
+    (is (nil?
+         (outliner-validate/validate-unique-by-name-and-tags
+          @conn
+          "N2"
+          (db-test/find-page-by-title @conn "Foo")))
+        "Allow a top-level page to share a case-insensitive name with a namespaced page")))
 
 (deftest validate-block-title-unique-for-pages
   (let [conn (db-test/create-conn-with-blocks
               [{:page {:block/title "page1"}}
                {:page {:block/title "another page"}}
+               {:page {:block/title "Foo"}}
                {:page {:block/title "Apple" :build/tags [:Company]}}
                {:page {:block/title "Another Company" :build/tags [:Company]}}
                {:page {:block/title "Banana" :build/tags [:Fruit]}}])]
@@ -119,7 +159,57 @@
           @conn
           "Apple"
           (db-test/find-page-by-title @conn "Fruit")))
-        "Allow class to have same name as a page")))
+        "Allow class to have same name as a page")
+
+    (try
+      (outliner-validate/validate-unique-by-name-and-tags
+       @conn
+       "foo"
+       (db-test/find-page-by-title @conn "another page"))
+      (is false "expected a duplicate-name notification")
+      (catch :default e
+        (is (re-find #"Duplicate page" (ex-message e))
+            "Disallow renaming to a case variant of another top-level page")
+        (is (= :page.validation/duplicate-name (get-in (ex-data e) [:payload :i18n-key])))
+        (is (= "Another page named \"foo\" already exists."
+               (get-in (ex-data e) [:payload :message])))))
+
+    (is (nil?
+         (outliner-validate/validate-unique-by-name-and-tags
+          @conn
+          "PAGE1"
+          (db-test/find-page-by-title @conn "page1")))
+        "Allow renaming a page to a case variant of its own title")
+
+    (is (thrown-with-msg?
+         js/Error
+         #"Duplicate page"
+         (outliner-validate/validate-unique-by-name-and-tags
+          @conn
+          "apple"
+          (db-test/find-page-by-title @conn "Another Company")))
+        "Disallow renaming to a case variant of another page with the same tag")
+
+    (is (nil?
+         (outliner-validate/validate-unique-by-name-and-tags
+          @conn
+          "apple"
+          (db-test/find-page-by-title @conn "Banana")))
+        "Allow a case variant of the same name for a different tag")))
+
+(deftest validate-block-title-unique-checks-all-candidates
+  (let [conn (db-test/create-conn-with-blocks
+              [{:page {:block/title "Foo" :build/tags [:Company]}}
+               {:page {:block/title "foo" :build/tags [:Fruit]}}
+               {:page {:block/title "Bar" :build/tags [:Fruit]}}])]
+    (is (thrown-with-msg?
+         js/Error
+         #"Duplicate page"
+         (outliner-validate/validate-unique-by-name-and-tags
+          @conn
+          "FOO"
+          (db-test/find-page-by-title @conn "Bar")))
+        "Disallow rename when any candidate collides, even if an exempt candidate is checked first")))
 
 (deftest validate-extends-property
   (let [conn (db-test/create-conn-with-blocks
@@ -306,3 +396,28 @@
                 child (d/entity @conn child-id)]
             (is (nil? (#'outliner-validate/validate-extends-property-have-correct-type parent [child]))
                 (str "Parent and child page is valid: " (pr-str (:block/title parent)) " " (pr-str (:block/title child))))))))))
+
+(deftest validate-page-to-property-conversion
+  (testing "Plain pages can convert"
+    (is (nil? (outliner-validate/validate-page-to-property-conversion
+               {:block/title "Plain"
+                :block/tags [{:db/ident :logseq.class/Page}]}))))
+
+  (testing "Namespaced pages are refused"
+    (let [err (try
+                (outliner-validate/validate-page-to-property-conversion
+                 {:block/title "Bar"
+                  :block/parent {:db/id 1}
+                  :block/tags [{:db/ident :logseq.class/Page}]})
+                nil
+                (catch :default e e))]
+      (is (= :notification (:type (ex-data err))))
+      (is (= :page.convert/page-to-property-namespaced
+             (get-in (ex-data err) [:payload :i18n-key])))))
+
+  (testing "Non-pages are ignored"
+    (is (nil? (outliner-validate/validate-page-to-property-conversion
+               {:block/title "Bar"
+                :block/parent {:db/id 1}
+                :block/tags [{:db/ident :logseq.class/Tag}]})))
+    (is (nil? (outliner-validate/validate-page-to-property-conversion nil)))))

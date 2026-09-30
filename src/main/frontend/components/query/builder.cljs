@@ -88,9 +88,35 @@
         (seq closed-values)
         (assoc :property/closed-values closed-values)))))
 
-(defn- closed-filter-choices
-  [property-ident]
-  (mapv :block/title (db-pu/get-closed-property-values property-ident)))
+(defn- closed-value-choice-items
+  [closed-values]
+  (keep (fn [value]
+          (when-let [label (or (db-property/closed-value-content value)
+                               (:block/title value))]
+            {:value (str label)}))
+        closed-values))
+
+(hsx/defc closed-values-multi-select
+  [*tree opts loc property-ident clause-head]
+  (let [[values set-values!] (hooks/use-state nil)
+        repo (state/get-current-repo)]
+    (hooks/use-effect!
+     (fn []
+       (p/let [closed (db-async/<get-property-closed-values repo property-ident)]
+         (set-values! (closed-value-choice-items closed))))
+     [property-ident])
+    (select values
+            (constantly nil)
+            {:multiple-choices? true
+             ;; Need the existing choices later to improve the UX
+             :selected-choices #{}
+             :extract-chosen-fn :value
+             :prompt-key :select/default-select-multiple
+             :close-modal? false
+             :loading? (nil? values)
+             :on-apply (fn [choices]
+                         (when (seq choices)
+                           (append-tree! *tree opts loc (vec (cons clause-head choices)))))})))
 
 (defn- property-value-choice-items
   [closed-values used-values]
@@ -105,10 +131,15 @@
             :value label})
          used-values)))
 
+(hsx/defc loaded-property-title
+  [ident fallback]
+  (let [title (db-hooks/use-resource [:entity-title ident])]
+    (or title fallback)))
+
 (defn- property-title
   [ident]
   (or (:block/title (built-in-property ident))
-      (name ident)))
+      [loaded-property-title ident (name ident)]))
 
 (hsx/defc datepicker
   [id placeholder {:keys [on-select]}]
@@ -270,29 +301,10 @@
        (tags repo *tree opts loc)
 
        "task"
-       (select (closed-filter-choices :logseq.property/status)
-               (constantly nil)
-               {:multiple-choices? true
-                ;; Need the existing choices later to improve the UX
-                :selected-choices #{}
-                :extract-chosen-fn :value
-                :prompt-key :select/default-select-multiple
-                :close-modal? false
-                :on-apply (fn [choices]
-                            (when (seq choices)
-                              (append-tree! *tree opts loc (vec (cons :task choices)))))})
+       (closed-values-multi-select *tree opts loc :logseq.property/status :task)
 
        "priority"
-       (select (closed-filter-choices :logseq.property/priority)
-               (constantly nil)
-               {:multiple-choices? true
-                :selected-choices #{}
-                :extract-chosen-fn :value
-                :prompt-key :select/default-select-multiple
-                :close-modal? false
-                :on-apply (fn [choices]
-                            (when (seq choices)
-                              (append-tree! *tree opts loc (vec (cons :priority choices)))))})
+       (closed-values-multi-select *tree opts loc :logseq.property/priority :priority)
 
        "page"
        (page-search (fn [{:keys [value]}]
@@ -472,16 +484,16 @@
                         (symbol? end))
                   (name end)
                   (second end))]
-        (str (cond
-               (= k :block/created-at)
-               (t :query.builder/created-label)
-               (= k :block/updated-at)
-               (t :query.builder/updated-label)
-               :else
-               (property-title k))
-             " " start
-             (when end
-               (str " ~ " end))))
+        [:span (cond
+                 (= k :block/created-at)
+                 (t :query.builder/created-label)
+                 (= k :block/updated-at)
+                 (t :query.builder/updated-label)
+                 :else
+                 (property-title k))
+               " " start
+               (when end
+                 (str " ~ " end))])
 
       ;; between journal start end
       (= (keyword f) :between)

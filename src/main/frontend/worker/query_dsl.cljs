@@ -414,7 +414,7 @@
                   (first (rest e))
                   (rest e))]
     (when (seq markers)
-      (let [markers' (set (map (comp common-util/capitalize-all name) markers))]
+      (let [markers' (set (map (comp string/lower-case name) markers))]
         {:query (list 'task '?b (set markers'))
          :rules [:task]}))))
 
@@ -424,7 +424,7 @@
                      (first (rest e))
                      (rest e))]
     (when (seq priorities)
-      (let [priorities (set (map (comp string/capitalize name) priorities))]
+      (let [priorities (set (map (comp string/lower-case name) priorities))]
         {:query (list 'priority '?b priorities)
          :rules [:priority]}))))
 
