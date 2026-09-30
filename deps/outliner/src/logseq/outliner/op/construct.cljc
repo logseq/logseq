@@ -112,6 +112,7 @@
                 db-before
                 (db-property/get-property-schema (into {} property)))]
     (if (and (contains? #{:one :db.cardinality/one} (:db/cardinality schema))
+             (some? (d/entity db-after (:db/ident property)))
              (seq (d/datoms db-after :avet (:db/ident property))))
       (dissoc schema :db/cardinality)
       schema)))

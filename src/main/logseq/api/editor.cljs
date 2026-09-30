@@ -458,7 +458,7 @@
            (p/let [opts (bean/->clj options)
                    block (<get-block id {:children? false})
                    value (bean/->clj value)
-                   opts (cond-> opts
+                   opts (cond-> (assoc opts :entity-id? (true? (:entityId opts)))
                           (boolean? (:reset opts))
                           (assoc :reset-property-values (:reset opts)))]
              (when block
