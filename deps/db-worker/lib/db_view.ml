@@ -1868,9 +1868,16 @@ let sort_eids_from_avet db (match_ : entity_id -> bool) (sorting : sorting_item 
            (match leftover with
             | None -> Some matched
             | Some ids ->
+                (* Eids with no value on the sort attr tie on nil in
+                   sort_eids_by_sorting; keep its eid tie-break order here. *)
                 let seen = Hashtbl.create 31 in
                 List.iter (fun i -> Hashtbl.replace seen i ()) matched;
-                Some (matched @ List.filter (fun i -> not (Hashtbl.mem seen i)) ids)))
+                let rest =
+                  ids
+                  |> List.filter (fun i -> not (Hashtbl.mem seen i))
+                  |> List.sort (fun a b -> if s_asc then compare a b else compare b a)
+                in
+                Some (matched @ rest)))
   | _ -> None
 
 (* view/sort-eids-by-sorting *)
@@ -1898,7 +1905,13 @@ let sort_eids_by_sorting db (eids : entity_id list) (sorting : sorting_item list
   List.stable_sort
     (fun a b ->
        let rec loop = function
-         | [] -> 0
+         | [] ->
+             (* Break ties by eid in the direction of the first sort, the
+                order an AVET walk ([a v e], reversed when descending)
+                gives, so a window read from the index and a list sorted
+                here agree on equal values. *)
+             let asc0, _ = List.hd schemas in
+             if asc0 then compare a b else compare b a
          | ((asc, _), vm) :: rest ->
              let c =
                compare_sort_values (Hashtbl.find_opt vm a) (Hashtbl.find_opt vm b) asc
@@ -1908,14 +1921,27 @@ let sort_eids_by_sorting db (eids : entity_id list) (sorting : sorting_item list
        loop (List.combine schemas value_maps))
     eids
 
+(* view/unlimited-eid-sort-max — without a row limit, sets up to this
+   size sort their own eids. The AVET walk would copy the whole index of
+   the sort attribute (79034 updated-at datoms took 132-165ms), while
+   sorting reads one value per eid (a 40k All Pages window spent ~2s,
+   about 50us per eid). *)
+let unlimited_eid_sort_max = 1000
+
 (* view/take-sorted-eids *)
 let take_sorted_eids db (eids : entity_id list) (sorting : sorting_item list)
     (row_limit : int option) (row_offset : int option) : entity_id list =
   let wanted = Hashtbl.create 31 in
   List.iter (fun e -> Hashtbl.replace wanted e ()) eids;
   let match_ e = Hashtbl.mem wanted e in
+  (* 21 Tags spent 165ms copying 79034 updated-at datoms. The leftover
+     set already fits the window, so sort those eids directly. A request
+     without a row limit (a table's remaining rows) does the same for a
+     small set. *)
   let use_eid_sort =
-    match row_limit with Some l -> List.length eids <= l | None -> false
+    match row_limit with
+    | Some l -> List.length eids <= l
+    | None -> List.length eids <= unlimited_eid_sort_max
   in
   let avet =
     if use_eid_sort then None

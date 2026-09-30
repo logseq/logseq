@@ -511,10 +511,26 @@ let setup_two_parents () :
   (conn, ops, find "parent a", find "parent b", find "a child 1",
    find "b child 1")
 
+(* cljs mark-graph-remote! — marks the graph of a setup as one that syncs,
+   as upload and download mark it, and returns it. The stored checksum is
+   kept only on such a graph. *)
+let mark_graph_remote conn =
+  ignore
+    (Db_transact.transact conn
+       [ Wire.Map
+           [ Wire.Keyword "db/ident", Wire.Keyword "logseq.kv/graph-remote?"
+           ; Wire.Keyword "kv/value", Wire.Bool true ] ]
+       [ "outliner-op", Keyword "set-kvs" ])
+
 let wire_list (w : Wire.t) : Wire.t list =
   match w with
   | Wire.Array xs | Wire.List xs | Wire.Set xs -> xs
   | _ -> []
+
+let contains_sub s sub =
+  let n = String.length s and m = String.length sub in
+  let rec go i = i + m <= n && (String.sub s i m = sub || go (i + 1)) in
+  go 0
 
 (* cljs block-id->uuid *)
 let block_id_to_uuid (db : db) (v : Wire.t) : Wire.t =
@@ -2014,6 +2030,7 @@ let test_pull_ok_out_of_order_stale_response_is_ignored () =
 let test_pull_ok_does_not_anchor_remote_checksum_before_verify () =
   preserve_state (fun () ->
       let conn, ops, parent, _c1, _c2, _c3 = setup_parent_child () in
+      mark_graph_remote conn;
       let parent_id = parent.id in
       let remote_tx_data =
         [ Add (Entity_id parent_id, "block/title",
@@ -2268,6 +2285,7 @@ let test_tx_reject_db_transact_failed_rolls_back_rejected_local_delete () =
 let test_tx_reject_db_transact_failed_keeps_checksum_aligned () =
   preserve_state (fun () ->
       let conn, ops, _p, child1, _c2, _c3 = setup_parent_child () in
+      mark_graph_remote conn;
       let child_uuid = ent_block_uuid child1 in
       with_datascript_conns conn (Some ops) (fun () ->
           Sync_client_op.update_local_checksum test_repo
@@ -2398,6 +2416,7 @@ let test_tx_reject_db_transact_failed_rebase_keeps_checksum_aligned () =
       let conn, ops, parent_a, _parent_b, a_child_1, b_child_1 =
         setup_two_parents ()
       in
+      mark_graph_remote conn;
       let deleted_uuid = ent_block_uuid a_child_1 in
       with_datascript_conns conn (Some ops) (fun () ->
           Sync_client_op.update_local_checksum test_repo
@@ -3326,6 +3345,7 @@ let test_replace_attr_retract_with_retract_entity_preserves_input_order () =
 let test_local_checksum_matches_recompute_after_post_pipeline_update () =
   preserve_state (fun () ->
       let conn, ops, parent, _c1, _c2, _c3 = setup_parent_child () in
+      mark_graph_remote conn;
       with_datascript_conns conn (Some ops) (fun () ->
           let page_id =
             match Ldb.value parent "block/page" with
@@ -3360,6 +3380,7 @@ let test_local_checksum_matches_recompute_after_post_pipeline_update () =
 let test_local_checksum_listener_updates_in_release_mode () =
   preserve_state (fun () ->
       let conn, ops, parent, _c1, _c2, _c3 = setup_parent_child () in
+      mark_graph_remote conn;
       with_datascript_conns conn (Some ops) (fun () ->
           Sync_client_op.update_local_checksum test_repo
             (Db_sync_checksum.recompute_checksum (Datascript.db conn))
@@ -3382,6 +3403,7 @@ let test_local_checksum_listener_updates_in_release_mode () =
 let test_local_checksum_heals_when_covered_commit_lags () =
   preserve_state (fun () ->
       let conn, ops, parent, _c1, _c2, _c3 = setup_parent_child () in
+      mark_graph_remote conn;
       with_datascript_conns conn (Some ops) (fun () ->
           Sync_client_op.update_local_checksum test_repo
             (Db_sync_checksum.recompute_checksum (Datascript.db conn))
@@ -3415,10 +3437,216 @@ let test_local_checksum_untouched_when_covered_commit_current () =
           check "checksum untouched"
             (Sync_client_op.get_local_checksum test_repo = Some "stale")))
 
+(* cljs local-graph-edit-writes-no-checksum-test — an edit on a graph that
+   does not sync stores no checksum. cljs counts
+   client-op/update-local-checksum calls via with-redefs; the untouched
+   metas assert the same. *)
+let test_local_graph_edit_writes_no_checksum () =
+  preserve_state (fun () ->
+      let conn, ops, parent, _c1, _c2, _c3 = setup_parent_child () in
+      with_datascript_conns conn (Some ops) (fun () ->
+          Db_listener.listen_db_changes ~handler_keys:[ "checksum-test" ]
+            test_repo conn;
+          ignore
+            (Db_transact.transact conn
+               [ db_add (Wire.Int parent.id) "block/title"
+                   (Wire.String "local edit") ]
+               []);
+          check "no stored checksum on a local graph"
+            (Sync_client_op.get_local_checksum test_repo = None);
+          check "no covered commit on a local graph"
+            (Sync_client_op.get_local_checksum_covered_tx test_repo = None)))
+
+(* cljs remote-graph-edit-writes-checksum-test — an edit on a graph that
+   syncs keeps the stored checksum current. *)
+let test_remote_graph_edit_writes_checksum () =
+  preserve_state (fun () ->
+      let conn, ops, parent, _c1, _c2, _c3 = setup_parent_child () in
+      mark_graph_remote conn;
+      with_datascript_conns conn (Some ops) (fun () ->
+          Sync_client_op.update_local_checksum test_repo
+            (Db_sync_checksum.recompute_checksum (Datascript.db conn))
+            (Datascript.db conn).max_tx;
+          Db_listener.listen_db_changes ~handler_keys:[ "checksum-test" ]
+            test_repo conn;
+          ignore
+            (Db_transact.transact conn
+               [ db_add (Wire.Int parent.id) "block/title"
+                   (Wire.String "remote edit") ]
+               []);
+          check "stored checksum stays current on a remote graph"
+            (Sync_client_op.get_local_checksum test_repo
+             = Some
+                 (Db_sync_checksum.recompute_checksum (Datascript.db conn)));
+          check "covered commit is the latest commit"
+            (Sync_client_op.get_local_checksum_covered_tx test_repo
+             = Some (Datascript.db conn).max_tx)))
+
+(* cljs local-graph-open-does-not-recompute-checksum-test — opening a
+   graph that does not sync never recomputes its checksum, even when the
+   stored one lags. cljs counts recompute-checksum calls via with-redefs;
+   the unchanged metas assert the same. *)
+let test_local_graph_open_does_not_recompute_checksum () =
+  preserve_state (fun () ->
+      let conn, ops, parent, _c1, _c2, _c3 = setup_parent_child () in
+      with_datascript_conns conn (Some ops) (fun () ->
+          (* stored by an app version that kept the checksum on every
+             graph *)
+          Sync_client_op.update_local_checksum test_repo
+            (Db_sync_checksum.recompute_checksum (Datascript.db conn))
+            (Datascript.db conn).max_tx;
+          ignore
+            (Db_transact.transact conn
+               [ db_add (Wire.Int parent.id) "block/title"
+                   (Wire.String "edit after the last checksum write") ]
+               []);
+          let stored = Sync_client_op.get_local_checksum test_repo in
+          let covered_tx =
+            Sync_client_op.get_local_checksum_covered_tx test_repo
+          in
+          check "stored covered commit lags"
+            (covered_tx <> Some (Datascript.db conn).max_tx);
+          Sync_client.reconcile_local_checksum test_repo conn;
+          check "checksum left stale on a local graph"
+            (Sync_client_op.get_local_checksum test_repo = stored);
+          check "covered commit left stale on a local graph"
+            (Sync_client_op.get_local_checksum_covered_tx test_repo
+             = covered_tx)))
+
+(* cljs graph-becoming-remote-starts-from-full-checksum-test — the
+   transaction that makes a graph remote stores a full recompute, not an
+   update of a stale checksum. *)
+let test_graph_becoming_remote_starts_from_full_checksum () =
+  preserve_state (fun () ->
+      let conn, ops, parent, child1, _c2, _c3 = setup_parent_child () in
+      (* The E2EE flag is already set, so the transaction below does not
+         flip it; a flip recomputes the checksum on its own
+         (update-checksum). *)
+      ignore
+        (Db_transact.transact conn
+           [ Wire.Map
+               [ Wire.Keyword "db/ident"
+               , Wire.Keyword "logseq.kv/graph-rtc-e2ee?"
+               ; Wire.Keyword "kv/value", Wire.Bool false ] ]
+           []);
+      with_datascript_conns conn (Some ops) (fun () ->
+          (* stored by an app version that kept the checksum on every
+             graph, then edits that did not update it *)
+          Sync_client_op.update_local_checksum test_repo
+            (Db_sync_checksum.recompute_checksum (Datascript.db conn))
+            (Datascript.db conn).max_tx;
+          ignore
+            (Db_transact.transact conn
+               [ db_add (Wire.Int parent.id) "block/title"
+                   (Wire.String "edit while local") ]
+               []);
+          ignore
+            (Db_transact.transact conn
+               [ db_add (Wire.Int child1.id) "block/title"
+                   (Wire.String "another edit while local") ]
+               []);
+          Db_listener.listen_db_changes ~handler_keys:[ "checksum-test" ]
+            test_repo conn;
+          (* the shape of upload's set-graph-sync-metadata! transaction *)
+          ignore
+            (Db_transact.transact conn
+               [ Wire.Map
+                   [ Wire.Keyword "db/ident"
+                   , Wire.Keyword "logseq.kv/graph-uuid"
+                   ; Wire.Keyword "kv/value"
+                   , Wire.Uuid (fresh_uuid ()) ]
+               ; Wire.Map
+                   [ Wire.Keyword "db/ident"
+                   , Wire.Keyword "logseq.kv/graph-remote?"
+                   ; Wire.Keyword "kv/value", Wire.Bool true ]
+               ; Wire.Map
+                   [ Wire.Keyword "db/ident"
+                   , Wire.Keyword "logseq.kv/graph-rtc-e2ee?"
+                   ; Wire.Keyword "kv/value", Wire.Bool false ] ]
+               [ "outliner-op", Keyword "set-kvs" ]);
+          check "graph becoming remote stores a full checksum"
+            (Sync_client_op.get_local_checksum test_repo
+             = Some
+                 (Db_sync_checksum.recompute_checksum (Datascript.db conn)));
+          check "covered commit is the latest commit"
+            (Sync_client_op.get_local_checksum_covered_tx test_repo
+             = Some (Datascript.db conn).max_tx)))
+
+(* cljs upload-after-local-edits-stores-and-sends-full-checksum-test —
+   upload stores and sends a full checksum computed on upload, not the
+   stale stored one left by local edits. cljs stubs the temp-sqlite +
+   network fns; the native port runs the real temp-sqlite path and stubs
+   the http layer via Sync_deps.fetch_json. *)
+let test_upload_after_local_edits_stores_and_sends_full_checksum () =
+  preserve_state (fun () ->
+      let conn, ops, parent, _c1, _c2, _c3 = setup_parent_child () in
+      let graph_id = fresh_uuid () in
+      let urls = ref [] in
+      with_datascript_conns conn (Some ops) (fun () ->
+          (* stored by an app version that kept the checksum on every
+             graph *)
+          Sync_client_op.update_local_checksum test_repo
+            (Db_sync_checksum.recompute_checksum (Datascript.db conn))
+            (Datascript.db conn).max_tx;
+          Db_listener.listen_db_changes ~handler_keys:[ "checksum-test" ]
+            test_repo conn;
+          ignore
+            (Db_transact.transact conn
+               [ db_add (Wire.Int parent.id) "block/title"
+                   (Wire.String "local edit before upload")
+               ; Wire.Map
+                   [ Wire.Keyword "db/ident"
+                   , Wire.Keyword "logseq.kv/graph-rtc-e2ee?"
+                   ; Wire.Keyword "kv/value", Wire.Bool false ] ]
+               []);
+          Worker_state.set_db_sync_config
+            (wire_map
+               [ "http-base", Wire.String "https://sync.example.test" ]);
+          Sync_util.auth_token_fn := (fun () -> Some "token");
+          Sync_deps.preflight_upload_e2ee :=
+            Some (fun _repo _e2ee -> Db_worker_effect.pure ());
+          Sync_deps.fetch_json :=
+            Some
+              (fun url ?(meth = "GET") ?headers:_ ?body:_ ?response_schema:_
+                   ?error_schema:_ () ->
+                 urls := url :: !urls;
+                 Db_worker_effect.pure
+                   (if Sync_transport.ends_with url "/graphs" then
+                      if meth = "GET" then
+                        wire_map [ "graphs", Wire.Array [] ]
+                      else
+                        wire_map
+                          [ "graph-id", Wire.String graph_id
+                          ; "graph-e2ee?", Wire.Bool false ]
+                    else wire_map [ "ok", Wire.Bool true; "count", Wire.Int 1 ]));
+          ignore (await_task (Sync_upload.upload_graph test_repo));
+          let recomputed =
+            Db_sync_checksum.recompute_checksum (Datascript.db conn)
+          in
+          check "upload marked the graph remote"
+            (Ldb.get_key_value (Datascript.db conn) "logseq.kv/graph-remote?"
+             = Some (Bool true));
+          check "upload stores a full checksum"
+            (Sync_client_op.get_local_checksum test_repo
+             = Some recomputed);
+          check "covered commit is the latest commit"
+            (Sync_client_op.get_local_checksum_covered_tx test_repo
+             = Some (Datascript.db conn).max_tx);
+          let finished_url =
+            List.find_opt
+              (fun u -> contains_sub u "finished=true")
+              !urls
+          in
+          check "finished upload sends the full checksum"
+            (match finished_url with
+             | Some u -> contains_sub u ("checksum=" ^ recomputed)
+             | None -> false)))
+
 (* cljs local-checksum-ignores-aborted-batch-transact-test *)
 let test_local_checksum_ignores_aborted_batch_transact () =
   preserve_state (fun () ->
       let conn, ops, parent, _c1, _c2, _c3 = setup_parent_child () in
+      mark_graph_remote conn;
       with_datascript_conns conn (Some ops) (fun () ->
           Sync_client_op.update_local_checksum test_repo
             (Db_sync_checksum.recompute_checksum (Datascript.db conn))
@@ -3472,6 +3700,7 @@ let test_local_checksum_ignores_aborted_batch_transact () =
 let test_local_checksum_updates_for_final_batch_report_with_batch_flag () =
   preserve_state (fun () ->
       let conn, ops, parent, _c1, _c2, _c3 = setup_parent_child () in
+      mark_graph_remote conn;
       with_datascript_conns conn (Some ops) (fun () ->
           Sync_client_op.update_local_checksum test_repo
             (Db_sync_checksum.recompute_checksum (Datascript.db conn))
@@ -3501,6 +3730,7 @@ let test_local_checksum_updates_for_final_batch_report_with_batch_flag () =
 let test_local_checksum_updates_non_batch_report_with_stale_batch_flag () =
   preserve_state (fun () ->
       let conn, ops, parent, _c1, _c2, _c3 = setup_parent_child () in
+      mark_graph_remote conn;
       with_datascript_conns conn (Some ops) (fun () ->
           Sync_client_op.update_local_checksum test_repo
             (Db_sync_checksum.recompute_checksum (Datascript.db conn))
@@ -3532,6 +3762,7 @@ let test_local_checksum_updates_ldb_non_batch_report_with_stale_batch_flag
     () =
   preserve_state (fun () ->
       let conn, ops, parent, _c1, _c2, _c3 = setup_parent_child () in
+      mark_graph_remote conn;
       with_datascript_conns conn (Some ops) (fun () ->
           Sync_client_op.update_local_checksum test_repo
             (Db_sync_checksum.recompute_checksum (Datascript.db conn))
@@ -7895,6 +8126,7 @@ let test_local_checksum_stays_in_sync_after_undo_redo () =
   preserve_state (fun () ->
       wire_no_e2ee ();
       let conn, ops, parent, _c1, _c2, _c3 = setup_parent_child () in
+      mark_graph_remote conn;
       let inserted_uuid = fresh_uuid () in
       with_datascript_conns conn (Some ops) (fun () ->
           Sync_client_op.update_local_checksum test_repo
@@ -10514,6 +10746,7 @@ let test_rechecks_local_edit_races_without_local_batch () =
   preserve_state (fun () ->
       wire_no_e2ee ();
       let conn, ops, parent, child1, _c2, _c3 = setup_parent_child () in
+      mark_graph_remote conn;
       let child_uuid = ent_block_uuid child1 in
       with_datascript_conns conn (Some ops) (fun () ->
           Sync_client_op.update_local_checksum test_repo
@@ -13430,6 +13663,20 @@ let () =
         ; Alcotest.test_case
             "local-checksum-untouched-when-covered-commit-current"
             `Quick test_local_checksum_untouched_when_covered_commit_current
+        ; Alcotest.test_case "local-graph-edit-writes-no-checksum"
+            `Quick test_local_graph_edit_writes_no_checksum
+        ; Alcotest.test_case "remote-graph-edit-writes-checksum"
+            `Quick test_remote_graph_edit_writes_checksum
+        ; Alcotest.test_case
+            "local-graph-open-does-not-recompute-checksum"
+            `Quick test_local_graph_open_does_not_recompute_checksum
+        ; Alcotest.test_case
+            "graph-becoming-remote-starts-from-full-checksum"
+            `Quick test_graph_becoming_remote_starts_from_full_checksum
+        ; Alcotest.test_case
+            "upload-after-local-edits-stores-and-sends-full-checksum"
+            `Quick
+            test_upload_after_local_edits_stores_and_sends_full_checksum
         ; Alcotest.test_case
             "local-checksum-ignores-aborted-batch-transact"
             `Quick test_local_checksum_ignores_aborted_batch_transact
