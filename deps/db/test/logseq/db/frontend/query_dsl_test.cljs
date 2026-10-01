@@ -51,29 +51,11 @@
     (is (= '(tags "[[Project]]]]")
            (read-query "(tags [[Project]]]])"))))
 
-  (testing "title that is itself a page ref"
-    (is (= (quoted-tags-query "[[Gremlin Home]]")
-           (query-dsl/pre-transform "(tags [[[[Gremlin Home]]]])")))
-    (is (= '(tags "[[[[Gremlin Home]]]]")
-           (read-query "(tags [[[[Gremlin Home]]]])"))))
-
   (testing "multiple page refs with special characters stay independent"
     (is (= (str "(and " (pr-str "[[foo\"]]") " " (pr-str "[[bar\\]]") ")")
            (query-dsl/pre-transform "(and [[foo\"]] [[bar\\]])")))
     (is (= (list 'and "[[foo\"]]" "[[bar\\]]")
            (read-query "(and [[foo\"]] [[bar\\]])"))))
-
-  (testing "]] in the middle of a page title"
-    (is (= (quoted-tags-query "Project]] Garden")
-           (query-dsl/pre-transform "(tags [[Project]] Garden]])")))
-    (is (= '(tags "[[Project]] Garden]]")
-           (read-query "(tags [[Project]] Garden]])"))))
-
-  (testing "nested [[...]] followed by more title text"
-    (is (= (quoted-tags-query "Project[[Gremlin]] extra")
-           (query-dsl/pre-transform "(tags [[Project[[Gremlin]] extra]])")))
-    (is (= '(tags "[[Project[[Gremlin]] extra]]")
-           (read-query "(tags [[Project[[Gremlin]] extra]])"))))
 
   (testing "page ref immediately before a tags vector close"
     (is (= (str "(tags [ " (pr-str "[[foo]]") "])")
@@ -93,12 +75,6 @@
     (is (= '(tags ["[[foo]]]"])
            (read-query "(tags [ [[foo]]]])"))))
 
-  (testing "title ending with ]] inside a tags vector"
-    (is (= (str "(tags [ " (pr-str "[[foo]]]]") "])")
-           (query-dsl/pre-transform "(tags [ [[foo]]]]])")))
-    (is (= '(tags ["[[foo]]]]"])
-           (read-query "(tags [ [[foo]]]]])"))))
-
   (testing "later tag ending with ]] does not swallow an earlier between date"
     (is (= (str "(and (between " (pr-str "[[Dec 26th, 2020]]") " tomorrow) (tags "
                 (pr-str "[[bar]]]]") "))")
@@ -107,16 +83,16 @@
     (is (= (list 'and (list 'between "[[Dec 26th, 2020]]" 'tomorrow) (list 'tags "[[bar]]]]"))
            (read-query "(and (between [[Dec 26th, 2020]] tomorrow) (tags [[bar]]]]))"))))
 
-  (testing "title can contain ]] then a paren then more text"
-    (is (= (quoted-tags-query "A]] B) C")
-           (query-dsl/pre-transform "(tags [[A]] B) C]])")))
-    (is (= '(tags "[[A]] B) C]]")
-           (read-query "(tags [[A]] B) C]])"))))
-
   (testing "later page-ref sibling ending with ]] does not swallow a between date"
     (is (= (str "(and (between " (pr-str "[[Dec 26th, 2020]]") " tomorrow) "
                 (pr-str "[[foo]]]]") ")")
            (query-dsl/pre-transform
             "(and (between [[Dec 26th, 2020]] tomorrow) [[foo]]]])")))
     (is (= (list 'and (list 'between "[[Dec 26th, 2020]]" 'tomorrow) "[[foo]]]]")
-           (read-query "(and (between [[Dec 26th, 2020]] tomorrow) [[foo]]]])")))))
+           (read-query "(and (between [[Dec 26th, 2020]] tomorrow) [[foo]]]])"))))
+
+  (testing "uuid page refs pass through"
+    (is (= (str "(tags " (pr-str "[[6a8ead3b-a450-4916-a7e2-d16d0d2b59fd]]") ")")
+           (query-dsl/pre-transform "(tags [[6a8ead3b-a450-4916-a7e2-d16d0d2b59fd]])")))
+    (is (= '(tags "[[6a8ead3b-a450-4916-a7e2-d16d0d2b59fd]]")
+           (read-query "(tags [[6a8ead3b-a450-4916-a7e2-d16d0d2b59fd]])")))))

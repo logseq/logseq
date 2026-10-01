@@ -17,8 +17,8 @@
                 (d/entity db cards-id))
         query (when cards
                 (when-let [query (:logseq.property/query cards)]
-                  (when-not (string/blank? (:block/title query))
-                    (:block/title query))))
+                  (when-not (string/blank? (:block/raw-title query))
+                    (:block/raw-title query))))
         result (query-dsl/parse query db {})
         card-tag-id (:db/id (d/entity db :logseq.class/Card))
         card-tag-children-ids (db-class/get-structured-children db card-tag-id)

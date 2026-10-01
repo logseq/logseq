@@ -157,7 +157,7 @@
        (if (:custom-query? config)
          ;; Don't display recursive results when query blocks are a query result
          [:code (if dsl-query?
-                  (t :query/results-for (pr-str query))
+                  (t :query/results-for (pr-str (or (:query-display q) query)))
                   (t :query/advanced-results))]
          (when-not (and built-in-query? (empty? result))
            [:div.custom-query (get config :attr {})
