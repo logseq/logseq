@@ -4216,7 +4216,7 @@
   "Log a failed default-view insert without throwing during render.
    The page has no error boundary around this view."
   [error]
-  (log/error :default-view-creation-failed error)
+  (log/warn :default-view-creation-failed error)
   nil)
 
 (hsx/defc missing-view
