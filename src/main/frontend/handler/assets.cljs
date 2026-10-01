@@ -196,24 +196,22 @@
   native path, absolute paths pass through, and `./`/`../`/bare relative
   paths resolve against the graph dir.
 
-  Percent-encoded native paths (for example `/path%20spaces/a.png` from a
-  stripped file:// link) are decoded once here so later assets:// encoding
-  does not turn %20 into %2520."
+  Percent-encoded native paths and URL pathnames (for example
+  `/path%20spaces/a.png` from a stripped file:// link, or `URL.pathname`
+  after unwrap) are decoded once here so later assets:// encoding does not
+  turn %20 into %2520."
   [file-path repo-dir]
-  (let [file-url? (path/is-file-url? file-path)
-        absolute-path (cond
-                        (string/starts-with? file-path "~")
-                        (path/path-join (get-in (state/get-state) [:system/info :home-dir])
-                                        (string/replace-first file-path #"^~[/\\]*" ""))
+  (decode-percent-encoded-file-path
+   (cond
+     (string/starts-with? file-path "~")
+     (path/path-join (get-in (state/get-state) [:system/info :home-dir])
+                     (string/replace-first file-path #"^~[/\\]*" ""))
 
-                        (path/absolute? file-path)
-                        (path/file-url-or-path->path file-path)
+     (path/absolute? file-path)
+     (path/file-url-or-path->path file-path)
 
-                        :else
-                        (path/path-join repo-dir file-path))]
-    (if file-url?
-      absolute-path
-      (decode-percent-encoded-file-path absolute-path))))
+     :else
+     (path/path-join repo-dir file-path))))
 
 (defn file-path->assets-url
   "Resolve a local filesystem path to an Electron assets:// URL.
