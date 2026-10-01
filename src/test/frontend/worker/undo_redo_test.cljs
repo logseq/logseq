@@ -1,5 +1,7 @@
 (ns frontend.worker.undo-redo-test
-  (:require [cljs.test :refer [deftest is testing use-fixtures]]
+  (:require [cljs-time.coerce :as tc]
+            [cljs-time.core :as t]
+            [cljs.test :refer [deftest is testing use-fixtures]]
             [datascript.core :as d]
             [frontend.worker.a-test-env]
             [frontend.worker.pipeline :as worker-pipeline]
@@ -1851,3 +1853,57 @@
       (is (some? (d/entity @conn [:block/uuid class-uuid])))
       (is (= #{y-uuid}
              (set (map :block/uuid (get (d/entity @conn [:block/uuid x-uuid]) related))))))))
+
+(deftest redo-repeating-deadline-does-not-advance-extra-interval-test
+  (testing "redo of completing a daily repeating Deadline restores the original next date, not +2"
+    (worker-undo-redo/clear-history! test-repo)
+    (let [conn (worker-state/get-datascript-conn test-repo)
+          prev-pipeline @ldb/*transact-pipeline-fn
+          deadline-oct-10 (tc/to-long (t/date-time 2026 10 10))
+          deadline-oct-11 (tc/to-long (t/date-time 2026 10 11))
+          task-uuid (random-uuid)
+          deadline (fn []
+                     (:logseq.property/deadline (d/entity @conn [:block/uuid task-uuid])))
+          status (fn []
+                   (some-> (d/entity @conn [:block/uuid task-uuid])
+                           :logseq.property/status
+                           :db/ident))]
+      (ldb/register-transact-pipeline-fn! worker-pipeline/transact-pipeline)
+      (try
+        (sqlite-build/create-blocks
+         conn
+         [{:page {:block/title "redo repeat"}
+           :blocks [{:block/title "QA redo day"
+                     :block/uuid task-uuid
+                     :build/tags [:logseq.class/Task]
+                     :build/properties
+                     {:logseq.property/status :logseq.property/status.todo
+                      :logseq.property/deadline deadline-oct-10
+                      :logseq.property.repeat/repeated? true
+                      :logseq.property.repeat/recur-frequency 1
+                      :logseq.property.repeat/recur-unit :logseq.property.repeat/recur-unit.day}}]}])
+        (d/transact! conn
+                     [[:db/add [:block/uuid task-uuid]
+                       :logseq.property.repeat/repeat-type
+                       :logseq.property.repeat/repeat-type.plus]])
+        (worker-undo-redo/clear-history! test-repo)
+        (apply-ops! conn
+                    [[:set-block-property [task-uuid
+                                           :logseq.property/status
+                                           :logseq.property/status.done]]]
+                    (local-tx-meta {:client-id "test-client"}))
+        (is (= deadline-oct-11 (deadline)))
+        (is (= :logseq.property/status.todo (status)))
+        (is (map? (worker-undo-redo/undo test-repo)))
+        (is (= deadline-oct-10 (deadline)))
+        (is (= :logseq.property/status.todo (status)))
+        (is (map? (worker-undo-redo/redo test-repo)))
+        (is (= deadline-oct-11 (deadline)))
+        (is (= :logseq.property/status.todo (status)))
+        (is (map? (worker-undo-redo/undo test-repo)))
+        (is (= deadline-oct-10 (deadline)))
+        (is (map? (worker-undo-redo/redo test-repo)))
+        (is (= deadline-oct-11 (deadline)))
+        (is (= :logseq.property/status.todo (status)))
+        (finally
+          (reset! ldb/*transact-pipeline-fn prev-pipeline))))))
