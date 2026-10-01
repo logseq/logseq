@@ -1,9 +1,10 @@
 (* cljs wrap-parse-block (frontend.handler.db-based.editor) reduced to a
    textual scan — mldoc is not linked into deps/ui. Extracts [[page]],
-   #tag and #[[page]] from a title: every ref lands in block/refs, only
-   #[[..]]-refs in block/tags (a bare #name renders as a tag link and
-   creates the tag-class entity but never tags the block), and the
-   stored title is rewritten to [[uuid]] / #[[uuid]] form
+   #tag and #[[page]] from a title: every ref lands in block/refs,
+   #[[..]]-refs and bare #tags land in block/tags as well (a bare #name
+   is the same inline tag, verified against the cljs reference — the
+   block is tagged and the stored title becomes `#name` -> `#[[uuid]]`),
+   and the stored title is rewritten to [[uuid]] / #[[uuid]] form
    (cljs title-ref->id-ref) so outliner_core.resolve_page_refs can swap
    minted uuids for resolved ones. New pages carry block/tags
    [logseq.class/Page] (what new_page_ref looks for); new tags carry
@@ -28,10 +29,12 @@ let find_close (s : string) i =
   go i
 
 (* returns (ordered deduped ref names, tag names, hash names).
-   `#name` lands in `hash`: cljs creates the tag-class entity and a
-   block/refs entry, but a bare hashtag never joins block/tags and the
-   title keeps the literal `#name` — only a confirmed autocomplete pick
-   or `#[[name]]` tags the block. *)
+   `#name` lands in `hash` and `tags`: a bare hashtag creates the
+   tag-class entity, joins block/refs AND block/tags, and the stored
+   title is rewritten to `#[[uuid]]` — identical to `#[[name]]`
+   (verified against the cljs reference: appending `x with #tag`
+   yields one Tag-class entity, a tagged block, and a `#[[uuid]]`
+   title). *)
 let scan_title (title : string) =
   let n = String.length title in
   let dedupe xs =
@@ -48,7 +51,10 @@ let scan_title (title : string) =
             (if name = "" then refs else name :: refs)
             tags hash
       | None -> go n refs tags hash
-    else if title.[i] = '#' && i + 1 < n then
+    else if title.[i] = '#' && i + 1 < n
+            && (i = 0
+                || (title.[i - 1] <> '#' && is_name_end title.[i - 1]))
+    then
       if i + 2 < n && title.[i + 1] = '[' && title.[i + 2] = '[' then
         match find_close title (i + 3) with
         | Some j ->
@@ -66,7 +72,7 @@ let scan_title (title : string) =
         let name = String.sub title (i + 1) (!j - i - 1) in
         go (max (i + 1) !j)
           (if name = "" then refs else name :: refs)
-          tags
+          (if name = "" then tags else name :: tags)
           (if name = "" then hash else name :: hash)
     else go (i + 1) refs tags hash
   in
@@ -167,8 +173,15 @@ let resolve_names names tags hash =
            Js.Promise.resolve
              (match Wire.map_get_uuid w "block/uuid" with
               | Some u ->
-                  { name; uuid = u; is_tag; is_hash
-                  ; fresh = false; entity = w }
+                  (* a hashtag refers to the tag-class entity — a
+                     same-named non-class entity (e.g. a page) does not
+                     satisfy it; mint the class instead *)
+                  if is_hash && Wire.get w "db/ident" = None then
+                    { name; uuid = Platform.random_uuid (); is_tag
+                    ; is_hash; fresh = true; entity = Wire.Nil }
+                  else
+                    { name; uuid = u; is_tag; is_hash
+                    ; fresh = false; entity = w }
               | None ->
                   { name; uuid = Platform.random_uuid ()
                   ; is_tag; is_hash; fresh = true
@@ -218,15 +231,17 @@ let rewrite_title title resolved =
           ~rep:("[[" ^ r.uuid ^ "]]"))
       title resolved
   in
-  (* #[[name]] -> #[[uuid]] via the pass above; a bare #name keeps its
-     literal form — only confirmed `#[[..]]` tags rewrite to id-ref *)
+  (* #[[name]] -> #[[uuid]] via the pass above; a bare #name at a
+     boundary rewrites to #[[uuid]] the same way (cljs
+     title-ref->id-ref stores id-refs for inline tags) *)
   let tagged = List.filter (fun r -> r.is_tag) resolved in
   let n = String.length title in
   let buf = Buffer.create n in
   let rec go i =
     if i < n then
       if title.[i] = '#' && i + 1 < n && title.[i + 1] <> '['
-         && (i = 0 || title.[i - 1] <> '#')
+         && (i = 0
+             || (title.[i - 1] <> '#' && is_name_end title.[i - 1]))
       then
         match tag_name_at title (i + 1) tagged with
         | Some r ->

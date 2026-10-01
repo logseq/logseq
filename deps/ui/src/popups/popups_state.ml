@@ -1342,10 +1342,10 @@ let apply_template t ac uuid =
       let buf = Dom_ext.value ac.editor in
       close_ac t;
       ignore
-        (Outliner_ops.apply_and_refresh
+        (let* sop = Outliner_ops.save_block_parsed buuid buf in
+         Outliner_ops.apply_and_refresh
            ~opts:(Outliner_ops.op_opts "apply-template")
-           [ Outliner_ops.save_block buuid buf
-           ; Outliner_ops.apply_template uuid buuid ])
+           [ sop; Outliner_ops.apply_template uuid buuid ])
 (* cljs run-query-command! / advanced-query-steps: save the current
    block, tag it logseq.class/Query, create the hidden
    logseq.property/query value block and copy the current title into it
@@ -1362,9 +1362,10 @@ let run_query t ac ~advanced =
       Editor_actions.exit_edit ~select:false;
       let repo_v = repo () in
       ignore
-        (let* _ =
+        (let* sop = Outliner_ops.save_block_parsed buuid title in
+        let* _ =
            Outliner_ops.apply
-             [ Outliner_ops.save_block buuid title
+             [ sop
              ; Outliner_ops.op "create-property-text-block"
                  [ Wire.Uuid buuid
                  ; Wire.Keyword "logseq.property/query"

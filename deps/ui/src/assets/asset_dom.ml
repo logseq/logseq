@@ -245,17 +245,20 @@ let upload_files (files : Js.Json.t array) =
            (has-unsaved-edit? -> save-block-aux!) — the worker only honors
            replace-empty-target? when the stored target title is blank, so
            an uncommitted title would silently remap the block uuid *)
-        let save_ops =
-          match S.editing () with
-          | Some e -> (
-              match S.find e.S.uuid with
-              | Some b when b.Model.block_title <> e.S.buffer ->
-                  [ Outliner_ops.save_block e.S.uuid e.S.buffer ]
-              | _ -> [])
-          | None -> []
-        in
         ignore
-          (let* blocks = blocks_p in
+          (let* save_ops =
+             match S.editing () with
+             | Some e -> (
+                 match S.find e.S.uuid with
+                 | Some b when b.Model.block_title <> e.S.buffer ->
+                     let* o =
+                       Outliner_ops.save_block_parsed e.S.uuid e.S.buffer
+                     in
+                     Js.Promise.resolve [ o ]
+                 | _ -> Js.Promise.resolve [])
+             | None -> Js.Promise.resolve []
+           in
+          let* blocks = blocks_p in
           if blocks = [] then Js.Promise.resolve ()
           else
             let sibling = edit_uuid = Some t in
