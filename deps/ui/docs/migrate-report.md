@@ -2330,6 +2330,88 @@ help-menu "Keyboard shortcuts" item, and the sidebar help/shortcut
 bodies compile in but can't be exercised interactively until the
 renderer batch bug is fixed on the base branch.
 
+## SCI-eval + paste (branch `devin/lui-sci`)
+
+### Custom-query `:view` / `:result-transform`
+
+`:result-transform` was already wired (`result-transform-edn` in the
+`[:query spec]`, evaluated worker-side by `Edn_eval`); the gap was the
+keyword form. cljs resolves a keyword `:result-transform`/`:view` via
+config.edn `:query/result-transforms` / `:query/views`; the OCaml side
+now does the same — `views_query.spec_of` takes the repo's config.edn
+(`Sdk_config.read_config`, fetched only when a spec value is a
+`W.Keyword`) and a keyword that resolves to nothing is a `Missing query
+result transform` error, matching cljs's empty-result behavior.
+
+`:view` is new end to end: the resolved EDN string goes over the wire as
+`view-edn`; `render_resource.query_result_rows` evaluates
+`(view-fn rows)` worker-side on the post-transform cells through the
+same `Edn_eval`/`apply_result_transform` engine, normalizes entity cells
+to uuids, and returns `{:rows [...] :view <edn>}`. `views_view` renders
+the hiccup EDN to LUI elements (`hiccup_els`: `:div.cls` namespaced
+tags, kw/int/float/map attrs, entities hydrated to block titles via the
+query instance's `blocks` map, which `load_view_data` and the query run
+both fill from the view's uuid set).
+
+### Src-block cljs eval
+
+`Edn_eval.eval_code` is a minimal `sci/eval-string`: every top-level
+form evaluates, last wins, `~bindings` are visible as free vars.
+`thread-api/eval-string [repo code block-uuid]` binds `'block` to the
+block entity and returns the result's wire form (`Wire.Nil` on eval
+errors, cljs try/catch parity).
+
+In `render.ml`, `title_block` intercepts raw `#+BEGIN_SRC` titles whose
+language is `clojure` and whose header options contain `:results` (the
+only place the option survives — fence `:results` is dropped on save,
+as cljs documents) and renders a `.results.mt-1 > pre.code` div under
+`.extensions__code`, filled from the eval response via the usual
+`Signal.state` + dyn pattern. `code_block` gained an `~extra` slot for
+it; the `title` signature is untouched.
+
+### `{{function}}` — documented gap
+
+cljs feeds `{{function}}` the enclosing custom-query's `:query-result`
+through component config. The OCaml `{{function}}` macro renders inline
+with no query context — a faithful port needs query-inst → sibling-block
+wiring disproportionate to the feature. Left unported deliberately.
+
+### Rich-text paste (handler.paste.cljs)
+
+- `deps/ui/src/editor/html_to_md.ml` is a `hiccup->doc-inner` port over
+  live DOM (DOMParser output is already entity-decoded, so the cljs
+  html-decode pass is unnecessary): same denied/block/newline tag sets,
+  same emphasis table incl. `style`-derived markers (`font-weight` ≥600
+  / `bold`, `font-style: italic`, `text-decoration` underline /
+  line-through, `background-color: yellow`), `- ` lists with per-level
+  tab indent, `| a | b |` tables, fenced `pre`, `> ` quotes, `\n\n`
+  block wrapping, `<!--StartFragment-->`-style comment skipping, and
+  trailing-dash cleanup. Documented divergences: linked images emit
+  `#+BEGIN_EXPORT html` + `outerHTML` (cljs embeds the hiccup repr);
+  `aside`/`center`/`figure`/`figcaption`/`fieldset`/`footer`/`header`
+  degrade to block wrappers instead of throwing (the paste can't crash
+  on page chrome); `thead`'s separator counts the header row's real
+  cells (cljs counts the last td's vector length — 2 — a bug).
+- `thread-api/paste-extract-blocks [repo text target-uuid]` runs
+  `Gp_mldoc.to_edn_format` + `Gp_block.extract_blocks` +
+  `with_parent_and_order` on the editing block's page and applies the
+  cljs per-block tail (`block/tags` dropped, heading titles lose `#`s,
+  `title_ref_to_id_ref` over the extracted refs), returning the flat
+  preorder maps `insert-blocks` consumes.
+- `editor_actions` follows `paste-copied-text`'s branch order: html
+  conversion wins over `text/plain`; a bare pasted url wraps into
+  `{{video}}`/`{{twitter}}` (video detection is a host check against
+  cljs's domain set — the full path regexes pin ids the macro doesn't
+  need); `markdown-blocks?` text extracts into blocks
+  (`outliner-op :paste`, `outliner-real-op :paste-text`, `keep-uuid?`);
+  blank-line text goes through `paste-segmented-text` (one `- ` block
+  per paragraph) into the same path; anything else splices at the
+  cursor. The non-editing path got the same block/segmented branching,
+  inserting after the last selected block or at page end.
+- Documented gaps (cljs features not ported): link-over-selection and
+  `html-link-format!`, `(())` block-ref paste, file/image paste,
+  `web application/logseq` system-clipboard blocks, `revert-cut-txs`.
+
 
 ## Bundle / production build (devin/lui-prodbuild)
 
