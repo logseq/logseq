@@ -726,11 +726,7 @@ let apply_ops (conn : conn) (ops : Wire.t) (opts : Wire.t) : Wire.t =
         collected := !collected @ [ r.tx_data ])
   in
   let tx_data =
-    Fun.protect
-      ~finally:(fun () ->
-        unlisten temp key;
-        Db_tx.release_flags temp)
-      (fun () ->
+    Db_tx.with_temp_conn_cleanup temp key (fun () ->
         List.iter
           (fun entry ->
             match op_of_entry entry with

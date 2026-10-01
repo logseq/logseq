@@ -1129,11 +1129,7 @@ let batch_transact_with_temp_conn_impl (conn : conn) (tx_meta : tx_meta)
          | Some listen -> listen report
          | None -> ())
   in
-  Fun.protect
-    ~finally:(fun () ->
-      Datascript.unlisten temp_conn listener_id;
-      Db_tx.release_flags temp_conn)
-    (fun () ->
+  Db_tx.with_temp_conn_cleanup temp_conn listener_id (fun () ->
       f temp_conn;
       match before_commit with
       | Some bc -> bc ()

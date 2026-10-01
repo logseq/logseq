@@ -441,3 +441,22 @@ let () =
       shared_check (match outcome, task_outcome with
           | Some (Error first), Some (Error second) -> first = second
           | _ -> false))
+
+
+let () =
+  List.iter (fun (name, run) ->
+      Fest.test ("temporary batch preserves exception: " ^ name) (fun () ->
+          let conn = Datascript.conn_from_db (Datascript.empty_db ()) in
+          let original = Failure ("batch-sentinel-" ^ name) in
+          let captured = ref None in
+          let fail temp = captured := Some temp; raise original in
+          let raised = try run conn fail; None with exn -> Some exn in
+          Fest.expect |> Fest.equal (match raised with Some exn -> exn == original | None -> false) true;
+          Fest.expect |> Fest.equal
+            (match !captured with
+             | Some temp -> not (List.exists (fun (candidate, _) -> candidate == temp) !Db_tx.conn_flags_list)
+             | None -> false) true;
+          Db_tx.release_flags conn))
+    [ "db-tx", (fun conn f -> ignore (Db_tx.batch_transact_with_temp_conn conn f))
+    ; "db-transact", (fun conn f -> ignore (Db_transact.batch_transact_with_temp_conn conn [] f))
+    ; "sync-apply", (fun conn f -> ignore (Sync_apply.batch_transact_with_temp_conn_impl conn [] f ())) ]

@@ -60,6 +60,17 @@ let flags_of (conn : conn) : conn_flags =
 let release_flags (conn : conn) : unit =
   conn_flags_list := List.filter (fun (c, _) -> c != conn) !conn_flags_list
 
+(* Match on the callback result rather than using Fun.protect: Melange
+   cannot restore raw backtraces, and must preserve the original exception. *)
+let with_temp_conn_cleanup conn key f =
+  let cleanup () =
+    unlisten conn key;
+    release_flags conn
+  in
+  match f () with
+  | result -> cleanup (); result
+  | exception exn -> cleanup (); raise exn
+
 (* ---- ldb/transact! tx-data normalization ---- *)
 
 let strip_attrs =
@@ -345,11 +356,7 @@ let batch_transact_with_temp_conn ?(tx_meta : tx_meta = [])
         | None -> ())
   in
   let tx_data =
-    Fun.protect
-      ~finally:(fun () ->
-        unlisten temp key;
-        release_flags temp)
-      (fun () ->
+    with_temp_conn_cleanup temp key (fun () ->
         f temp;
         (match before_commit with
          | Some g -> g ()

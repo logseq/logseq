@@ -721,10 +721,7 @@ let batch_transact_with_temp_conn (conn : conn) (tx_meta : tx_meta)
     listen temp_conn "temp-conn-batch-tx"
       (fun report -> collected := !collected @ report.tx_data)
   in
-  Fun.protect
-    ~finally:(fun () ->
-      unlisten temp_conn listener_id;
-      Db_tx.release_flags temp_conn)
+  Db_tx.with_temp_conn_cleanup temp_conn listener_id
     (fun () -> f temp_conn);
   (match !collected with
    | [] -> None
