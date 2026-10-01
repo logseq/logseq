@@ -83,15 +83,29 @@ let open_search_db repo : Sqlite.db =
         ~path:"search/db.sqlite"
     else Sqlite.open_db ~path:(search_db_path repo)
   in
+  Worker_state.set_sqlite_conn_of repo Worker_state.Search db;
   (* cljs get-dbs runs enable-sqlite-wal-mode! on the search conn before
      any statement executes on it. The OPFS SAH pool has no shared-memory
      support, so a WAL-mode db file raises SQLITE_CANTOPEN on its first
      access unless locking_mode=exclusive is set first. *)
-  Sqlite.exec db ~sql:"pragma locking_mode=exclusive" ~bind:[||];
-  Sqlite.exec db ~sql:"pragma journal_mode=WAL" ~bind:[||];
-  Sqlite.exec db ~sql:"pragma synchronous=NORMAL" ~bind:[||];
-  Search_index.create_tables_and_triggers db;
-  db
+  try
+    Sqlite.exec db ~sql:"pragma locking_mode=exclusive" ~bind:[||];
+    Sqlite.exec db ~sql:"pragma journal_mode=WAL" ~bind:[||];
+    Sqlite.exec db ~sql:"pragma synchronous=NORMAL" ~bind:[||];
+    Search_index.create_tables_and_triggers db;
+    db
+  with exn ->
+    let error =
+      try
+        Sqlite.close db;
+        Worker_state.drop_sqlite_conn_of repo Worker_state.Search;
+        exn
+      with close_exn ->
+        Failure
+          (Printf.sprintf "Search initialization failed: %s; close failed: %s"
+             (Printexc.to_string exn) (Printexc.to_string close_exn))
+    in
+    raise error
 
 let get_search_db repo : Sqlite.db option =
   match Worker_state.sqlite_conn_of repo Worker_state.Search with
@@ -102,7 +116,6 @@ let get_search_db repo : Sqlite.db option =
       | None -> None
       | Some _ ->
           let db = open_search_db repo in
-          Worker_state.set_sqlite_conn_of repo Worker_state.Search db;
           Some db)
 
 let search_index_version (db : Sqlite.db) : int =

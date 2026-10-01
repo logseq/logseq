@@ -304,44 +304,32 @@ let handle_migrate_result_local_txs repo (result : Db_migrate.migrate_result) =
        | None -> ())
     result.Db_migrate.upgrade_reports
 
-let create_or_open_db args =
+(* A registered conn is also needed by initialization's sync bookkeeping.
+   Only Ready admits the open fast path; Opening callers share its outcome. *)
+type open_state =
+  | Opening of Wire.t Db_worker_effect.t * Wire.t Db_worker_effect.resolver
+  | Ready
+  | Failed
+
+let open_states : (string, open_state) Hashtbl.t = Hashtbl.create 7
+
+let initialize_db ~ensure_open args =
   match args with
   | Wire.String repo :: opts_rest ->
       let opts = match opts_rest with t :: _ -> t | [] -> Wire.Nil in
       let creating_remote_graph = opt_bool "creating-remote-graph?" false opts in
-      let current =
-        match Worker_state.state_get "git/current-repo" with
-        | Some (Wire.String r) -> Some r
-        | _ -> None
-      in
-      (match current with
-       | Some c when Graph_dir.same_repo c repo -> ()
-       | _ -> Worker_state.reset_deleted_blocks ());
-      (* cljs <create-or-open-db!: seed local-tx for a freshly created
-         remote graph (client-ops conn may already be open). *)
-      (if creating_remote_graph && Sync_state.has_client_ops_conn repo
-         && Sync_client_op.get_local_tx repo = None
-       then Sync_client_op.update_local_tx repo 0);
-      (match Worker_state.datascript_conn repo with
-       | Some conn ->
-           Db_worker_effect.pure
-             (Wire.Map
-                [
-                  ( Wire.Keyword "schema",
-                    Ds_wire.transit_of_schema
-                      (Datascript.schema (Datascript.db conn)) );
-                ])
-       | None ->
            if opt_bool "close-other-db?" true opts then
              Worker_state.close_other_sqlite_conns repo;
            Db_worker_effect.bind
              (Sqlite.prepare_pool ~name:(Graph_dir.pool_name repo))
              (fun () ->
+           ensure_open ();
            let ensure_dir =
              if Sqlite.pooled_runtime () then Db_worker_effect.pure ()
              else File_sys.mkdir_p (db_dir repo)
            in
            Db_worker_effect.bind ensure_dir (fun () ->
+           ensure_open ();
            let db, created_sqlite =
              match Worker_state.sqlite_conn repo with
              | Some db -> (db, false)
@@ -352,6 +340,7 @@ let create_or_open_db args =
                        (if Sqlite.pooled_runtime () then "/db.sqlite"
                         else db_path repo)
                  in
+                 Worker_state.set_sqlite_conn repo db;
                  (* cljs enable-sqlite-wal-mode! + the graph db's
                     wal_autocheckpoint=0 *)
                  Sqlite.exec db ~sql:"pragma locking_mode=exclusive" ~bind:[||];
@@ -361,7 +350,6 @@ let create_or_open_db args =
                     per-commit fsyncs are skipped — matches the cljs
                     sql.js in-memory durability envelope. *)
                  Sqlite.exec db ~sql:"pragma synchronous=NORMAL" ~bind:[||];
-                 Worker_state.set_sqlite_conn repo db;
                  (db, true)
            in
            (* cljs get-dbs opens the client-ops sqlite beside the graph
@@ -512,13 +500,12 @@ let create_or_open_db args =
                   ~dimension:(Embedding.dimension ())
               else Db_worker_effect.pure None)
              (fun vector_index ->
+                ensure_open ();
                 (match vector_index with
                  | Some index -> Worker_state.set_vector_index repo index
                  | None -> ());
-                finish ()))))
+                finish ())))
   | _ -> invalid_arg "create-or-open-db expects (repo opts)"
-
-let () = Dispatcher.register "thread-api/create-or-open-db" create_or_open_db
 
 (* close-db-aux!: checkpoint + close every sqlite conn, close import
    state, clear the client-ops cleanup timer, drop all per-repo state.
@@ -527,6 +514,12 @@ let () = Dispatcher.register "thread-api/create-or-open-db" create_or_open_db
    On browser the cljs wal-checkpoint timer has no counterpart here;
    the OPFS pool pause/drop applies only on the pooled runtime. *)
 let close_db_aux repo =
+  let opening_resolver =
+    match Hashtbl.find_opt open_states repo with
+    | Some (Opening (_, resolver)) -> Some resolver
+    | Some Ready | Some Failed | None -> None
+  in
+  Hashtbl.replace open_states repo Failed;
   let errors = ref [] in
   let attempt f = try f () with e -> errors := e :: !errors in
   let conns =
@@ -558,10 +551,14 @@ let close_db_aux repo =
   attempt (fun () ->
       Db_worker_effect.async (fun () ->
           Sync_download.close_import_state_for_repo repo));
+  (match Worker_state.datascript_conn repo with
+   | Some conn ->
+       attempt (fun () -> Datascript.unlisten conn "listen-db-changes!")
+   | None -> ());
   (match Hashtbl.find_opt client_ops_cleanup_timers repo with
    | Some timer ->
-       Timers.clear timer;
-       Hashtbl.remove client_ops_cleanup_timers repo
+       Hashtbl.remove client_ops_cleanup_timers repo;
+       attempt (fun () -> Timers.clear timer)
    | None -> ());
   List.iter
     (fun (kind, _) -> Worker_state.drop_sqlite_conn_of repo kind) conns;
@@ -579,6 +576,11 @@ let close_db_aux repo =
     attempt (fun () -> Sqlite.pause_vfs ~repo);
     Sqlite.drop_pool ~repo
   end;
+  Hashtbl.remove open_states repo;
+  (match opening_resolver with
+   | Some resolver ->
+       Db_worker_effect.reject resolver (Failure "Graph open cancelled by close")
+   | None -> ());
   (match !errors with
    | [] -> ()
    | es ->
@@ -588,6 +590,78 @@ let close_db_aux repo =
                (List.map Printexc.to_string (List.rev es)))))
 
 let () = Worker_state.close_graph_resources_fn := close_db_aux
+
+let schema_result conn =
+  Wire.Map
+    [ Wire.Keyword "schema",
+      Ds_wire.transit_of_schema (Datascript.schema (Datascript.db conn)) ]
+
+let create_or_open_db args =
+  match args with
+  | Wire.String repo :: opts_rest ->
+      let opts = match opts_rest with t :: _ -> t | [] -> Wire.Nil in
+      let creating_remote_graph = opt_bool "creating-remote-graph?" false opts in
+      let current =
+        match Worker_state.state_get "git/current-repo" with
+        | Some (Wire.String r) -> Some r
+        | _ -> None
+      in
+      (match current with
+       | Some c when Graph_dir.same_repo c repo -> ()
+       | _ -> Worker_state.reset_deleted_blocks ());
+      (* cljs <create-or-open-db!: seed local-tx for a freshly created
+         remote graph (client-ops conn may already be open). *)
+      (if creating_remote_graph && Sync_state.has_client_ops_conn repo
+         && Sync_client_op.get_local_tx repo = None
+       then Sync_client_op.update_local_tx repo 0);
+      (match Hashtbl.find_opt open_states repo, Worker_state.datascript_conn repo with
+       | Some (Opening (task, _)), _ -> task
+       | Some Ready, Some conn -> Db_worker_effect.pure (schema_result conn)
+       | Some Failed, _ ->
+           Db_worker_effect.error (Failure "Graph resources are closing")
+       | (Some Ready | None), _ ->
+           let task, resolver = Db_worker_effect.wait () in
+           Hashtbl.replace open_states repo (Opening (task, resolver));
+           let owns_open () =
+             match Hashtbl.find_opt open_states repo with
+             | Some (Opening (current, _)) -> current == task
+             | Some Ready | Some Failed | None -> false
+           in
+           let ensure_open () =
+             if not (owns_open ()) then failwith "Graph open cancelled by close"
+           in
+           let initialization =
+             Db_worker_effect.bind (Db_worker_effect.pure ()) (fun () ->
+                 if opt_bool "close-other-db?" true opts then
+                   Hashtbl.fold
+                     (fun other _ acc ->
+                        if Graph_dir.same_repo repo other then acc else other :: acc)
+                     open_states []
+                   |> List.iter close_db_aux;
+                 initialize_db ~ensure_open args)
+           in
+           Db_worker_effect.on_any initialization
+             (fun value ->
+                if owns_open () then begin
+                  Hashtbl.replace open_states repo Ready;
+                  Db_worker_effect.wakeup resolver value
+                end)
+             (fun exn ->
+                if owns_open () then begin
+                  Hashtbl.replace open_states repo Failed;
+                  let error =
+                    try close_db_aux repo; exn
+                    with cleanup_exn ->
+                      Failure
+                        (Printf.sprintf "Graph initialization failed: %s; cleanup failed: %s"
+                           (Printexc.to_string exn) (Printexc.to_string cleanup_exn))
+                  in
+                  Db_worker_effect.reject resolver error
+                end);
+           task)
+  | _ -> invalid_arg "create-or-open-db expects (repo opts)"
+
+let () = Dispatcher.register "thread-api/create-or-open-db" create_or_open_db
 
 (* cljs sync-crypt/cancel-ui-requests! {:reason <r> :repo repo} *)
 let cancel_ui_requests reason repo =

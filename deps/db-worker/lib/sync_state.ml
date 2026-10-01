@@ -160,20 +160,33 @@ let client_ops_conn repo : Sqlite.db =
       if not (Sqlite.pooled_runtime ()) then
         ignore (File_sys.mkdir_p (Filename.dirname path));
       let db = Sqlite.open_db_pool ~name:(Graph_dir.pool_name repo) ~path in
+      Hashtbl.replace client_ops_conns repo db;
       (* cljs enable-sqlite-wal-mode! runs on every db get-dbs opens;
          synchronous=NORMAL skips per-commit fsyncs — WAL checkpoints
          still fsync, matching cljs sql.js's in-memory durability. *)
-      Sqlite.exec db ~sql:"pragma locking_mode=exclusive" ~bind:[||];
-      Sqlite.exec db ~sql:"pragma journal_mode=WAL" ~bind:[||];
-      Sqlite.exec db ~sql:"pragma synchronous=NORMAL" ~bind:[||];
-      Hashtbl.replace client_ops_conns repo db;
-      db
+      (try
+         Sqlite.exec db ~sql:"pragma locking_mode=exclusive" ~bind:[||];
+         Sqlite.exec db ~sql:"pragma journal_mode=WAL" ~bind:[||];
+         Sqlite.exec db ~sql:"pragma synchronous=NORMAL" ~bind:[||];
+         db
+       with exn ->
+         let error =
+           try
+             Sqlite.close db;
+             Hashtbl.remove client_ops_conns repo;
+             exn
+           with close_exn ->
+             Failure
+               (Printf.sprintf "Client ops initialization failed: %s; close failed: %s"
+                  (Printexc.to_string exn) (Printexc.to_string close_exn))
+         in
+         raise error)
 
 let has_client_ops_conn repo = Hashtbl.mem client_ops_conns repo
 
 let close_client_ops_conn repo =
   match Hashtbl.find_opt client_ops_conns repo with
-  | Some db -> Sqlite.close db; Hashtbl.remove client_ops_conns repo
+  | Some db -> Hashtbl.remove client_ops_conns repo; Sqlite.close db
   | None -> ()
 
 (* cljs get-client-ops-conn returns the open conn (if any) without
