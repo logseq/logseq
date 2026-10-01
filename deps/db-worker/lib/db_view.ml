@@ -2010,19 +2010,26 @@ let get_exclude_page_ids db : entity_id list =
              (List.of_seq (datoms db Avet ~a:"block/tags" ~v:(Ref tag_id) ())))
         prop_tag_eids )
 
-(* view/count-all-page-ids *)
-let count_all_page_ids db (exclude_ids : entity_id list) : int =
-  let excluded = Hashtbl.create 31 in
-  List.iter (fun id -> Hashtbl.replace excluded id ()) exclude_ids;
-  Seq.fold_left
-    (fun n (d : datom) -> if Hashtbl.mem excluded d.e then n else n + 1)
-    0
-    (datoms db Avet ~a:"block/name" ())
-
-(* view/all-pages-eid? *)
-let all_pages_eid db (exclude_ids : (entity_id, unit) Hashtbl.t) (eid : entity_id) : bool =
-  (not (Hashtbl.mem exclude_ids eid))
-  && Option.is_some (indexed_attr_value db eid "block/name")
+(* Visible page eids — one block/name index walk. cljs checks
+   (:block/name (d/entity db eid)) per candidate eid, which is cheap on
+   its all-in-memory indexes; for storage-backed indexes each check is a
+   separate seek, so the set is built once here. Same result:
+   all-pages-eid? = not excluded && has block/name. *)
+let page_eids_tbl db (excluded : (entity_id, unit) Hashtbl.t) :
+    int * (entity_id, unit) Hashtbl.t =
+  let pages = Hashtbl.create 1024 in
+  let count =
+    Seq.fold_left
+      (fun n (d : datom) ->
+         if Hashtbl.mem excluded d.e then n
+         else begin
+           Hashtbl.replace pages d.e ();
+           n + 1
+         end)
+      0
+      (datoms db Avet ~a:"block/name" ())
+  in
+  (count, pages)
 
 (* view/get-all-page-ids *)
 let get_all_page_ids db : entity_id list =
@@ -2037,14 +2044,13 @@ let first_window_feature_row_data db (feat_type : string) (class_id : entity_id 
     (int * entity_id list) option =
   match feat_type with
   | "all-pages" ->
-      let exclude_ids = get_exclude_page_ids db in
-      let excluded = exclude_tbl exclude_ids in
+      let _, pages = page_eids_tbl db (exclude_tbl (get_exclude_page_ids db)) in
       (match
          sort_eids_from_avet db
-           (fun e -> all_pages_eid db excluded e)
+           (fun e -> Hashtbl.mem pages e)
            sorting row_limit None row_offset
        with
-       | Some data -> Some (count_all_page_ids db exclude_ids, data)
+       | Some data -> Some (Hashtbl.length pages, data)
        | None -> None)
   | "class-objects" ->
       (match class_id with
