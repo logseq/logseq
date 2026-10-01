@@ -37,7 +37,8 @@ type conn_flags =
 (* Flags are looked up by physical identity (==): a structural Hashtbl on
    conn is unsound because conn's contents mutate as the db changes,
    changing its hash and losing the flags between calls. Few conns exist
-   (live + temp), so an assoc list suffices. *)
+   (live + temp), so an assoc list suffices. Entries must be released when
+   a temp batch finishes or a graph closes. *)
 let conn_flags_list : (conn * conn_flags) list ref = ref []
 
 (* cljs *batch-tx-report?* — a dynamic var bound only while the
@@ -54,6 +55,10 @@ let flags_of (conn : conn) : conn_flags =
     let f = { batch_tx = false; skip_store = false; skip_validate = false } in
     conn_flags_list := (conn, f) :: !conn_flags_list;
     f
+
+(* Remove only this physical conn; nested batches keep their outer flags. *)
+let release_flags (conn : conn) : unit =
+  conn_flags_list := List.filter (fun (c, _) -> c != conn) !conn_flags_list
 
 (* ---- ldb/transact! tx-data normalization ---- *)
 
@@ -339,21 +344,23 @@ let batch_transact_with_temp_conn ?(tx_meta : tx_meta = [])
         | Some l -> l r
         | None -> ())
   in
-  (try
-     f temp;
-     (match before_commit with
-      | Some g -> g ()
-      | None -> ());
-     let tx_data = List.concat !collected in
-     unlisten temp key;
-     if tx_data = [] then None
-     else
-       Some
-         (transact ~tx_meta conn
-            (List.map (fun d -> Raw_datom d) tx_data))
-   with e ->
-     unlisten temp key;
-     raise e)
+  let tx_data =
+    Fun.protect
+      ~finally:(fun () ->
+        unlisten temp key;
+        release_flags temp)
+      (fun () ->
+        f temp;
+        (match before_commit with
+         | Some g -> g ()
+         | None -> ());
+        List.concat !collected)
+  in
+  if tx_data = [] then None
+  else
+    Some
+      (transact ~tx_meta conn
+         (List.map (fun d -> Raw_datom d) tx_data))
 
 (* ldb/batch-transact! — batch on the real conn: inner transacts run
    with :skip-store?/:batch-tx-report? tx-meta, then the aggregated

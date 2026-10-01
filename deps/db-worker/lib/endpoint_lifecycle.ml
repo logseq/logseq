@@ -566,6 +566,9 @@ let close_db_aux repo =
   List.iter
     (fun (kind, _) -> Worker_state.drop_sqlite_conn_of repo kind) conns;
   Worker_state.drop_vector_index repo;
+  (match Worker_state.datascript_conn repo with
+   | Some conn -> Db_tx.release_flags conn
+   | None -> ());
   Worker_state.drop_datascript_conn repo;
   Worker_state.drop_pending_local_tx_count repo;
   Endpoint_search.clear_search_index_builds repo;

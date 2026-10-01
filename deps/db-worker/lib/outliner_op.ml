@@ -725,78 +725,80 @@ let apply_ops (conn : conn) (ops : Wire.t) (opts : Wire.t) : Wire.t =
     listen temp "temp-conn-batch-tx" (fun (r : tx_report) ->
         collected := !collected @ [ r.tx_data ])
   in
-  (try
-     List.iter
-       (fun entry ->
-         match op_of_entry entry with
-         | Some (op, args) -> (
-             let result = apply_op temp opts' op args in
-             (match result with
-              | Some v -> result_ref := v
-              | None -> ());
-             (* cljs rewrites the op entry from the result's
-                :tx-meta :outliner-ops before conj *)
-             let op_entry' =
-               match op with
-               | "insert-blocks" ->
-                   Option.map
-                     (fun result ->
-                       Wire.Array
-                         [ Wire.Keyword "insert-blocks"
-                         ; (match insert_history_args result with
-                            | Some args3 -> Wire.Array args3
-                            | None ->
-                                Wire.Array [ Wire.Nil; Wire.Nil; Wire.Nil ]) ])
-                     result
-               | "apply-template" ->
-                   Option.map
-                     (fun result ->
-                       let blocks, target_id, insert_opts =
-                         match insert_history_args result with
-                         | Some (b :: t :: o :: _) -> (b, t, o)
-                         | _ -> (Wire.Nil, Wire.Nil, Wire.Nil)
-                       in
-                       Wire.Array
-                         [ Wire.Keyword "apply-template"
-                         ; Wire.Array
-                             [ (match args with a :: _ -> a | [] -> Wire.Nil)
-                             ; target_id
-                             ; Cljs_map.assoc insert_opts "template-blocks"
-                                 blocks ] ])
-                     result
-               | _ -> Some entry
+  let tx_data =
+    Fun.protect
+      ~finally:(fun () ->
+        unlisten temp key;
+        Db_tx.release_flags temp)
+      (fun () ->
+        List.iter
+          (fun entry ->
+            match op_of_entry entry with
+            | Some (op, args) -> (
+                let result = apply_op temp opts' op args in
+                (match result with
+                 | Some v -> result_ref := v
+                 | None -> ());
+                (* cljs rewrites the op entry from the result's
+                   :tx-meta :outliner-ops before conj *)
+                let op_entry' =
+                  match op with
+                  | "insert-blocks" ->
+                      Option.map
+                        (fun result ->
+                          Wire.Array
+                            [ Wire.Keyword "insert-blocks"
+                            ; (match insert_history_args result with
+                               | Some args3 -> Wire.Array args3
+                               | None ->
+                                   Wire.Array [ Wire.Nil; Wire.Nil; Wire.Nil ]) ])
+                        result
+                  | "apply-template" ->
+                      Option.map
+                        (fun result ->
+                          let blocks, target_id, insert_opts =
+                            match insert_history_args result with
+                            | Some (b :: t :: o :: _) -> (b, t, o)
+                            | _ -> (Wire.Nil, Wire.Nil, Wire.Nil)
+                          in
+                          Wire.Array
+                            [ Wire.Keyword "apply-template"
+                            ; Wire.Array
+                                [ (match args with a :: _ -> a | [] -> Wire.Nil)
+                                ; target_id
+                                ; Cljs_map.assoc insert_opts "template-blocks"
+                                    blocks ] ])
+                        result
+                  | _ -> Some entry
+                in
+                match op_entry' with
+                | Some e when List.mem op semantic_outliner_op_names ->
+                    semantic_ops := !semantic_ops @ [ e ]
+                | _ -> ())
+            | None -> ())
+          raw_entries;
+        (match Cljs_map.get opts' "additional-tx" with
+         | Some (Wire.Array txs) | Some (Wire.List txs) when txs <> [] ->
+             let tx_ops =
+               List.filter_map
+                 (fun w ->
+                   Outliner_core.tx_op_of_value (Conn.db temp)
+                     (Ds_wire.value_of_transit w))
+                 txs
              in
-             match op_entry' with
-             | Some e when List.mem op semantic_outliner_op_names ->
-                 semantic_ops := !semantic_ops @ [ e ]
-             | _ -> ())
-         | None -> ())
-       raw_entries;
-     (match Cljs_map.get opts' "additional-tx" with
-      | Some (Wire.Array txs) | Some (Wire.List txs) when txs <> [] ->
-          let tx_ops =
-            List.filter_map
-              (fun w ->
-                Outliner_core.tx_op_of_value (Conn.db temp)
-                  (Ds_wire.value_of_transit w))
-              txs
-          in
-          ignore (Db_tx.transact temp tx_ops)
-      | _ -> ());
-     let tx_data = List.concat !collected in
-     unlisten temp key;
-     if tx_data <> [] then
-       ignore
-         (Db_tx.transact
-            ~tx_meta:
-              (Outliner_tx_meta.tx_meta_put tx_meta "outliner-ops"
-                 (Vector
-                    (List.map Ds_wire.value_of_transit !semantic_ops)))
-            conn
-            (List.map (fun d -> Raw_datom d) tx_data))
-   with e ->
-     unlisten temp key;
-     raise e);
+             ignore (Db_tx.transact temp tx_ops)
+         | _ -> ());
+        List.concat !collected)
+  in
+  if tx_data <> [] then
+    ignore
+      (Db_tx.transact
+         ~tx_meta:
+           (Outliner_tx_meta.tx_meta_put tx_meta "outliner-ops"
+              (Vector
+                 (List.map Ds_wire.value_of_transit !semantic_ops)))
+         conn
+         (List.map (fun d -> Raw_datom d) tx_data));
   !result_ref
 
 (* ---------- Sync_deps hook wiring ----------
