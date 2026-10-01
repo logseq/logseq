@@ -348,7 +348,9 @@
                     (property-handler/set-block-property! asset-id
                                                           :logseq.property.asset/align
                                                           align)))]
-            (when asset-block
+            ;; Inline ![](../img.png) images have no asset entity: still offer
+            ;; Copy/Show file in folder on Electron; Align and Delete need one.
+            (when (or asset-block (and (util/electron?) (seq image-src)))
               ;; Only stop propagation here: the container's pointerdown
               ;; handler calls preventDefault, which suppresses the mousedown
               ;; the menu trigger opens on, so the menu never opened.
@@ -363,32 +365,33 @@
                    :class "h-6 w-6"}
                   (shui/tabler-icon "dots-vertical")))
                 (shui/dropdown-menu-content
-                 (shui/dropdown-menu-sub
-                  (shui/dropdown-menu-sub-trigger
-                   [:span.flex.items-center.gap-1
-                    (ui/icon "layout-align-left") (t :asset/align)])
-                  (shui/dropdown-menu-sub-content
-                   (shui/dropdown-menu-item
-                    {:on-click #(handle-set-align! :left)}
-                    [:span.flex.items-center.gap-2
-                     (ui/icon "layout-align-left")
-                     (t :asset/align-left)
-                     (when (or (nil? asset-align) (= asset-align :left))
-                       (ui/icon "check"))])
-                   (shui/dropdown-menu-item
-                    {:on-click #(handle-set-align! :center)}
-                    [:span.flex.items-center.gap-2
-                     (ui/icon "layout-align-center")
-                     (t :asset/align-center)
-                     (when (= asset-align :center)
-                       (ui/icon "check"))])
-                   (shui/dropdown-menu-item
-                    {:on-click #(handle-set-align! :right)}
-                    [:span.flex.items-center.gap-2
-                     (ui/icon "layout-align-right")
-                     (t :asset/align-right)
-                     (when (= asset-align :right)
-                       (ui/icon "check"))])))
+                 (when asset-block
+                   (shui/dropdown-menu-sub
+                    (shui/dropdown-menu-sub-trigger
+                     [:span.flex.items-center.gap-1
+                      (ui/icon "layout-align-left") (t :asset/align)])
+                    (shui/dropdown-menu-sub-content
+                     (shui/dropdown-menu-item
+                      {:on-click #(handle-set-align! :left)}
+                      [:span.flex.items-center.gap-2
+                       (ui/icon "layout-align-left")
+                       (t :asset/align-left)
+                       (when (or (nil? asset-align) (= asset-align :left))
+                         (ui/icon "check"))])
+                     (shui/dropdown-menu-item
+                      {:on-click #(handle-set-align! :center)}
+                      [:span.flex.items-center.gap-2
+                       (ui/icon "layout-align-center")
+                       (t :asset/align-center)
+                       (when (= asset-align :center)
+                         (ui/icon "check"))])
+                     (shui/dropdown-menu-item
+                      {:on-click #(handle-set-align! :right)}
+                      [:span.flex.items-center.gap-2
+                       (ui/icon "layout-align-right")
+                       (t :asset/align-right)
+                       (when (= asset-align :right)
+                         (ui/icon "check"))]))))
 
                  (shui/dropdown-menu-item
                   {:on-click handle-copy!}
@@ -409,7 +412,7 @@
                       [:span.flex.items-center.gap-1
                        (ui/icon "folder-pin") (t (if remote-src? :asset/open-in-browser :asset/show-file-in-folder))])))
 
-                 (when-not config/publishing?
+                 (when (and asset-block (not config/publishing?))
                    [:<>
                     (shui/dropdown-menu-separator)
                     (shui/dropdown-menu-item
