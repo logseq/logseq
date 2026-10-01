@@ -2060,6 +2060,14 @@ let get_all_page_ids db : entity_id list =
     (fun (d : datom) -> if Hashtbl.mem excluded d.e then None else Some d.e)
     (List.of_seq (datoms db Avet ~a:"block/name" ()))
 
+(* The full sorted page list is a pure function of (db, sorting): on
+   storage-backed indexes computing it costs one sort-value seek per page,
+   so keep the last computed list per db snapshot — same shape as the
+   exclude-ids memo above. *)
+let all_pages_sorted_memo :
+    (Datascript.db * sorting_item list * entity_id list) option ref =
+  ref None
+
 (* view/first-window-feature-row-data *)
 let first_window_feature_row_data db (feat_type : string) (class_id : entity_id option)
     (sorting : sorting_item list) (row_limit : int option) (row_offset : int option) :
@@ -2067,16 +2075,16 @@ let first_window_feature_row_data db (feat_type : string) (class_id : entity_id 
   match feat_type with
   | "all-pages" ->
       let count, pages = page_eids_tbl db (exclude_tbl (get_exclude_page_ids db)) in
+      (* A window the page set can't fill makes the sort-attr walk scan
+         the whole index for nothing (on storage-backed indexes that
+         means decoding every datom of the sort attr); fall back to
+         sorting the page eids directly, as take_sorted_eids does. *)
+      let use_avet =
+        match row_limit with
+        | Some l -> l < count
+        | None -> count > unlimited_eid_sort_max
+      in
       let data =
-        (* A window the page set can't fill makes the sort-attr walk scan
-           the whole index for nothing (on storage-backed indexes that
-           means decoding every datom of the sort attr); fall back to
-           sorting the page eids directly, as take_sorted_eids does. *)
-        let use_avet =
-          match row_limit with
-          | Some l -> l < count
-          | None -> count > unlimited_eid_sort_max
-        in
         match
           (if use_avet then
              sort_eids_from_avet db
@@ -2086,8 +2094,18 @@ let first_window_feature_row_data db (feat_type : string) (class_id : entity_id 
         with
         | Some d -> d
         | None ->
-            let eids = Hashtbl.fold (fun e () acc -> e :: acc) pages [] in
-            let sorted = sort_eids_by_sorting db eids sorting in
+            let sorted =
+              match !all_pages_sorted_memo with
+              | Some (cached_db, cached_sorting, eids)
+                when cached_db == db && cached_sorting = sorting -> eids
+              | _ ->
+                  let eids =
+                    Hashtbl.fold (fun e () acc -> e :: acc) pages []
+                    |> fun eids -> sort_eids_by_sorting db eids sorting
+                  in
+                  all_pages_sorted_memo := Some (db, sorting, eids);
+                  eids
+            in
             (match row_limit, row_offset with
              | Some l, _ ->
                  sorted
