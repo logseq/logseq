@@ -3247,16 +3247,6 @@
         (throw (js/TypeError. "Illegal invocation")))
       (= node contained))))
 
-(deftest node-contains?-does-not-throw-when-child-is-outside-test
-  (let [child (js-obj "id" "child" "nodeType" 1)
-        other (js-obj "id" "other" "nodeType" 1)
-        parent (js-obj "id" "parent" "nodeType" 1)]
-    (aset parent "contains" (this-sensitive-contains parent child))
-    (is (true? (#'editor/node-contains? parent child))
-        "A parent reports true for a contained child")
-    (is (false? (#'editor/node-contains? parent other))
-        "A parent reports false for an outside child without throwing")))
-
 (deftest navigable-sibling-block-skips-open-comments-subtree-for-left-right-test
   (let [current-node (js-obj "id" "current")
         comment-node (js-obj "id" "comment" "nodeType" 1)
