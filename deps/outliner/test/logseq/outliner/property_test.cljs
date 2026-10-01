@@ -216,6 +216,19 @@
            (outliner-property/create-property-text-block! conn (:db/id block) :user.property/num "Not a number" {}))
           "Wrong value isn't transacted")))
 
+  (testing "Query property value stores [[uuid]] refs"
+    (let [conn (db-test/create-conn-with-blocks
+                [{:page {:block/title "page1"}
+                  :blocks [{:block/title "b1 [[Foo]]"}
+                           {:block/title "b2"}]}])
+          block (db-test/find-block-by-content @conn "b2")
+          _ (outliner-property/create-property-text-block! conn (:db/id block) :logseq.property/query "(tags [[Foo]])" {})
+          query-value (:logseq.property/query (db-test/find-block-by-content @conn "b2"))
+          foo-uuid (:block/uuid (ldb/get-page @conn "Foo"))]
+      (is (= (str "(tags [[" foo-uuid "]])")
+             (db-property/property-value-content query-value))
+          "[[title]] refs in a query property are stored as [[uuid]]")))
+
   (testing "Create new :many :number property values"
     (let [conn (db-test/create-conn-with-blocks
                 [{:page {:block/title "page1"}

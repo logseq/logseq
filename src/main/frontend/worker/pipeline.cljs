@@ -15,6 +15,7 @@
             [logseq.db.common.entity-plus :as entity-plus]
             [logseq.db.common.order :as db-order]
             [logseq.db.frontend.class :as db-class]
+            [logseq.db.frontend.content :as db-content]
             [logseq.db.frontend.property.build :as db-property-build]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
             [logseq.db.sqlite.export :as sqlite-export]
@@ -388,6 +389,14 @@
                (let [query-entity (:logseq.property/query block)]
                  (when-not (and query-entity (:block/uuid query-entity))
                    (let [query-text (if (string? query-entity) query-entity "")
+                         ref-pages (when (string/includes? query-text "[[")
+                                     (->> (re-seq page-ref/page-ref-re query-text)
+                                          (map second)
+                                          distinct
+                                          (keep #(ldb/get-page db-after %))))
+                         query-text (if (seq ref-pages)
+                                      (db-content/title-ref->id-ref query-text ref-pages {:replace-tag? false})
+                                      query-text)
                          value-block (db-property-build/build-property-value-block
                                       block
                                       query-property

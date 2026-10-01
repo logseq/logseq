@@ -39,73 +39,47 @@
         (recur (inc i))
         i))))
 
-(defn- next-form-start?
-  "True when text after a `)` is a sibling DSL form or the end of input,
-  not more page-title text. A following `[[` is a page-ref argument, not
-  more of the current title."
-  [s i]
-  (let [i (skip-ws s i)
-        n (count s)]
-    (or (>= i n)
-        (= \( (nth s i))
-        (= \# (nth s i))
-        (and (= \[ (nth s i))
-             (< (inc i) n)
-             (= \[ (nth s (inc i)))))))
-
 (defn- unmatched-page-ref-close?
   "True when `s` from `start` still contains a `]]` that is not paired with a
-  later `[[` in the current list. A `)` ends this form only when the next token
-  is a sibling list, so a title such as `A]] B) C` keeps its trailing `]]`."
+  later `[[` before the current form's `)`."
   [s start]
   (let [n (count s)]
     (loop [i start
-           open 0
-           paren 0]
+           open 0]
       (cond
         (>= i n)
         false
 
         (= \" (nth s i))
         (if-let [end (quoted-string-end s i)]
-          (recur end open paren)
+          (recur end open)
           false)
 
-        (= \( (nth s i))
-        (recur (inc i) open (inc paren))
-
         (= \) (nth s i))
-        (cond
-          (pos? paren)
-          (recur (inc i) open (dec paren))
-
-          (next-form-start? s (inc i))
-          false
-
-          :else
-          (recur (inc i) open paren))
+        false
 
         (and (< (inc i) n)
              (= \[ (nth s i))
              (= \[ (nth s (inc i))))
-        (recur (+ i 2) (inc open) paren)
+        (recur (+ i 2) (inc open))
 
         (and (< (inc i) n)
              (= \] (nth s i))
              (= \] (nth s (inc i))))
         (if (zero? open)
           true
-          (recur (+ i 2) (dec open) paren))
+          (recur (+ i 2) (dec open)))
 
         :else
-        (recur (inc i) open paren)))))
+        (recur (inc i) open)))))
 
 (defn- page-ref-terminator?
   "True when the text after a candidate `]]` is the next DSL token or closer,
   not more title text. A lone `]` is a terminator only inside an EDN vector so
   `(tags [ [[foo]]])` keeps the vector close, while `(tags [ [[foo]]]])` can
   keep a title that ends with `]`. A following symbol such as `tomorrow` is a
-  terminator unless the current form still has a dangling `]]`."
+  terminator unless the current form still has a dangling `]]`. Titles that
+  contain `)` are not supported: a `)` always ends the form."
   [s i vector-depth]
   (let [i (skip-ws s i)
         n (count s)]
