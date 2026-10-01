@@ -1987,8 +1987,18 @@ let with_descendant_eids db (eids : entity_id list) : entity_id list =
   loop eids;
   Hashtbl.fold (fun k () acc -> k :: acc) seen []
 
+(* cljs caches get-exclude-page-ids per immutable db value in a WeakMap
+   (exclude-page-ids-cache): hidden/deleted/built-in/property-page ids only
+   change with the snapshot. A single-slot memo keyed on db identity gives
+   the same reuse semantics here — repeated scans would otherwise re-seek
+   and re-decode storage-backed index nodes on every request. The visible
+   page-eid set is cached the same way for the same reason. *)
+let exclude_page_ids_memo : (Datascript.db * entity_id list) option ref = ref None
+
+let page_eids_memo : (Datascript.db * (int * (entity_id, unit) Hashtbl.t)) option ref = ref None
+
 (* view/get-exclude-page-ids — shared by the entity and eid paths *)
-let get_exclude_page_ids db : entity_id list =
+let get_exclude_page_ids_uncached db : entity_id list =
   let prop_tag_eids =
     match Db_class.ident_eid db "logseq.class/Property" with
     | Some tag_id -> [ tag_id ]
@@ -2010,26 +2020,38 @@ let get_exclude_page_ids db : entity_id list =
              (List.of_seq (datoms db Avet ~a:"block/tags" ~v:(Ref tag_id) ())))
         prop_tag_eids )
 
+let get_exclude_page_ids db : entity_id list =
+  match !exclude_page_ids_memo with
+  | Some (cached_db, ids) when cached_db == db -> ids
+  | _ ->
+      let ids = get_exclude_page_ids_uncached db in
+      exclude_page_ids_memo := Some (db, ids);
+      ids
+
 (* Visible page eids — one block/name index walk. cljs checks
    (:block/name (d/entity db eid)) per candidate eid, which is cheap on
    its all-in-memory indexes; for storage-backed indexes each check is a
-   separate seek, so the set is built once here. Same result:
-   all-pages-eid? = not excluded && has block/name. *)
+   separate seek, so the set is built once here and memoized per db
+   snapshot. Same result: all-pages-eid? = not excluded && has block/name. *)
 let page_eids_tbl db (excluded : (entity_id, unit) Hashtbl.t) :
     int * (entity_id, unit) Hashtbl.t =
-  let pages = Hashtbl.create 1024 in
-  let count =
-    Seq.fold_left
-      (fun n (d : datom) ->
-         if Hashtbl.mem excluded d.e then n
-         else begin
-           Hashtbl.replace pages d.e ();
-           n + 1
-         end)
-      0
-      (datoms db Avet ~a:"block/name" ())
-  in
-  (count, pages)
+  match !page_eids_memo with
+  | Some (cached_db, memo) when cached_db == db -> memo
+  | _ ->
+      let pages = Hashtbl.create 1024 in
+      let count =
+        Seq.fold_left
+          (fun n (d : datom) ->
+             if Hashtbl.mem excluded d.e then n
+             else begin
+               Hashtbl.replace pages d.e ();
+               n + 1
+             end)
+          0
+          (datoms db Avet ~a:"block/name" ())
+      in
+      page_eids_memo := Some (db, (count, pages));
+      (count, pages)
 
 (* view/get-all-page-ids *)
 let get_all_page_ids db : entity_id list =
