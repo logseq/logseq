@@ -176,29 +176,53 @@
               css
               (map vector rel-paths blob-urls)))))
 
+(defn- decode-percent-encoded-file-path
+  "Decode a native path that still contains %XX escapes.
+
+  Markdown file links can keep %20 after the file:// scheme is stripped.
+  Those must become real spaces before assets:// encoding, otherwise % is
+  encoded again and the URL contains %2520."
+  [file-path]
+  (if (and (string? file-path)
+           (re-find #"(?i)%[0-9a-f]{2}" file-path))
+    (let [escaped (string/replace file-path #"%(?![0-9a-fA-F]{2})" "%25")]
+      (common-util/safe-decode-uri-component escaped))
+    file-path))
+
 (defn- local-file-path->absolute-path
   "Resolve a filesystem path to an absolute native path.
 
   `~` expands to the user home, `file://`/`assets://` URLs unwrap to their
   native path, absolute paths pass through, and `./`/`../`/bare relative
-  paths resolve against the graph dir."
+  paths resolve against the graph dir.
+
+  Percent-encoded native paths (for example `/path%20spaces/a.png` from a
+  stripped file:// link) are decoded once here so later assets:// encoding
+  does not turn %20 into %2520."
   [file-path repo-dir]
-  (cond
-    (string/starts-with? file-path "~")
-    (path/path-join (get-in (state/get-state) [:system/info :home-dir])
-                    (string/replace-first file-path #"^~[/\\]*" ""))
+  (let [file-url? (path/is-file-url? file-path)
+        absolute-path (cond
+                        (string/starts-with? file-path "~")
+                        (path/path-join (get-in (state/get-state) [:system/info :home-dir])
+                                        (string/replace-first file-path #"^~[/\\]*" ""))
 
-    (path/absolute? file-path)
-    (path/file-url-or-path->path file-path)
+                        (path/absolute? file-path)
+                        (path/file-url-or-path->path file-path)
 
-    :else
-    (path/path-join repo-dir file-path)))
+                        :else
+                        (path/path-join repo-dir file-path))]
+    (if file-url?
+      absolute-path
+      (decode-percent-encoded-file-path absolute-path))))
 
 (defn file-path->assets-url
   "Resolve a local filesystem path to an Electron assets:// URL.
 
   `~/`, `file://`, absolute paths are used as-is; `./`/`../`/bare relative
-  paths resolve against the current graph dir."
+  paths resolve against the current graph dir.
+
+  Incoming %20 (or other %XX) in a native path is decoded before the URL is
+  encoded, so assets:// contains a single %20 rather than %2520."
   [file-path]
   (path/prepend-protocol "assets:"
                          (protect-windows-drive-in-assets-path
