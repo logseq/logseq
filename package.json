@@ -47,9 +47,9 @@
     "ws": "^8.20.0"
   },
   "scripts": {
-    "watch": "run-p gulp:watch ui:dune-watch ui:vite-watch app:serve",
+    "watch": "run-p gulp:watch ui:dune-watch ui:vite-watch app:serve css:watch",
     "electron-watch": "run-p gulp:watch ui:dune-watch ui:vite-watch app:serve electron:dune-watch electron:vite-watch",
-    "release": "run-s gulp:build ui:build db-worker:build",
+    "release": "run-s gulp:build css:build ui:build db-worker:build",
     "dev-electron-app": "gulp electron",
     "release-electron": "run-s gulp:build && gulp electronMaker",
     "release-electron:unsigned": "run-s gulp:build && gulp electronMakerUnsigned",
