@@ -11,7 +11,6 @@ let win32 = String.equal process_platform "win32"
 let linux = String.equal process_platform "linux"
 let prod =
   match Js.Dict.get process_env "NODE_ENV" with
-  match Js.Dict.get (process_env ()) "NODE_ENV" with
   | Some "production" -> true
   | _ -> false
 let dev = not prod
