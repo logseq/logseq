@@ -677,19 +677,24 @@
                     (util/starts-with? href "http")
                     href
 
-                    (or (util/starts-with? href "/") (util/starts-with? href "~"))
-                    href
-
                     config/publishing?
                     (subs href 1)
 
                     (= "Embed_data" (first url))
                     href
 
+                    (assets-handler/check-alias-path? href)
+                    (assets-handler/normalize-asset-resource-url href)
+
+                    ;; Local file paths (`/x.png`, `~/x.png`, `file://`) and
+                    ;; graph-relative paths (`../x.png`, `./x.png`, `x.png`)
+                    ;; resolve to assets:// URLs; the raw path resolves
+                    ;; against the app origin and 404s otherwise.
+                    (util/electron?)
+                    (assets-handler/file-path->assets-url href)
+
                     :else
-                    (if (assets-handler/check-alias-path? href)
-                      (assets-handler/normalize-asset-resource-url href)
-                      href))]
+                    href)]
          [:div.as-plain-image-link
           (resizable-image config title href metadata full_text false)])))))
 
