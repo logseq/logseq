@@ -603,6 +603,11 @@ let distinct_by_label (maps : Wire.t list) : Wire.t list =
        end)
     maps
 
+let exclude_tbl (exclude_ids : entity_id list) =
+  let tbl = Hashtbl.create (List.length exclude_ids) in
+  List.iter (fun id -> Hashtbl.replace tbl id ()) exclude_ids;
+  tbl
+
 type view_entities =
   | Entities of entity list
   | Linked of linked_reference_result
@@ -634,9 +639,10 @@ let get_entities_for_all_pages db (index_attr : attr) : entity list =
                (List.of_seq (datoms db Avet ~a:"block/tags" ~v:(Ref tag_id) ())))
           prop_tag_eids )
   in
+  let excluded = exclude_tbl exclude_ids in
   List.of_seq (datoms db Avet ~a:index_attr ())
   |> List.filter_map (fun (d : datom) ->
-         if List.mem d.e exclude_ids then None
+         if Hashtbl.mem excluded d.e then None
          else
            match Ldb.ent_of_id db d.e with
            | Some e when not (Ldb.hidden e) -> Some e
@@ -2014,15 +2020,15 @@ let count_all_page_ids db (exclude_ids : entity_id list) : int =
     (datoms db Avet ~a:"block/name" ())
 
 (* view/all-pages-eid? *)
-let all_pages_eid db (exclude_ids : entity_id list) (eid : entity_id) : bool =
-  (not (List.mem eid exclude_ids))
+let all_pages_eid db (exclude_ids : (entity_id, unit) Hashtbl.t) (eid : entity_id) : bool =
+  (not (Hashtbl.mem exclude_ids eid))
   && Option.is_some (indexed_attr_value db eid "block/name")
 
 (* view/get-all-page-ids *)
 let get_all_page_ids db : entity_id list =
-  let exclude_ids = get_exclude_page_ids db in
+  let excluded = exclude_tbl (get_exclude_page_ids db) in
   List.filter_map
-    (fun (d : datom) -> if List.mem d.e exclude_ids then None else Some d.e)
+    (fun (d : datom) -> if Hashtbl.mem excluded d.e then None else Some d.e)
     (List.of_seq (datoms db Avet ~a:"block/name" ()))
 
 (* view/first-window-feature-row-data *)
@@ -2032,9 +2038,10 @@ let first_window_feature_row_data db (feat_type : string) (class_id : entity_id 
   match feat_type with
   | "all-pages" ->
       let exclude_ids = get_exclude_page_ids db in
+      let excluded = exclude_tbl exclude_ids in
       (match
          sort_eids_from_avet db
-           (fun e -> all_pages_eid db exclude_ids e)
+           (fun e -> all_pages_eid db excluded e)
            sorting row_limit None row_offset
        with
        | Some data -> Some (count_all_page_ids db exclude_ids, data)
