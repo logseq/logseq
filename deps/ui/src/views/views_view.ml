@@ -33,6 +33,75 @@ let title_of_uuid inst u =
       Wr.prop_text (Option.value (W.get b "block/title") ~default:W.Nil)
   | None -> u
 
+(* ---------- :view hiccup wire -> els ---------- *)
+
+(* :div.foo -> ("div", "foo"); namespaced :ui/x -> "x" *)
+let hiccup_tag k =
+  let base =
+    match String.rindex_opt k '/' with
+    | Some i -> String.sub k (i + 1) (String.length k - i - 1)
+    | None -> k
+  in
+  match String.index_opt base '.' with
+  | Some i ->
+      ( String.sub base 0 i
+      , String.sub base (i + 1) (String.length base - i - 1)
+        |> String.map (fun c -> if c = '.' then ' ' else c) )
+  | None -> (base, "")
+
+let rec hiccup_attr_value = function
+  | W.String s -> s
+  | W.Keyword k -> k
+  | W.Int n -> string_of_int n
+  | W.Int64 n -> Int64.to_string n
+  | W.Float f -> Printf.sprintf "%g" f
+  | W.Bool b -> string_of_bool b
+  | W.Array xs | W.List xs | W.Set xs ->
+      String.concat " " (List.map hiccup_attr_value xs)
+  | W.Map kvs ->
+      String.concat " "
+        (List.map
+           (fun (k, v) ->
+             let kn =
+               match k with W.Keyword s -> s | _ -> Edn.to_string k
+             in
+             kn ^ ": " ^ hiccup_attr_value v ^ ";")
+           kvs)
+  | w -> Edn.to_string w
+
+(* [:tag {attrs} children...] -> element; bare uuid -> hydrated title;
+   other scalars -> edn text *)
+let rec hiccup_els inst (w : W.t) : D.el list =
+  match w with
+  | W.Array (W.Keyword tag_k :: rest) | W.List (W.Keyword tag_k :: rest) ->
+      let tag, shorthand_cls = hiccup_tag tag_k in
+      let attrs, children =
+        match rest with
+        | W.Map kvs :: tl ->
+            ( List.filter_map
+                (fun (k, v) ->
+                  match k with
+                  | W.Keyword name -> Some (name, hiccup_attr_value v)
+                  | _ -> None)
+                kvs
+            , tl )
+        | _ -> ([], rest)
+      in
+      let attrs =
+        if shorthand_cls = "" then attrs
+        else
+          ("class", shorthand_cls)
+          :: List.filter (fun (k, _) -> k <> "class") attrs
+      in
+      [ D.h ~tag ~attrs
+          ~children:(List.concat_map (hiccup_els inst) children)
+          () ]
+  | W.Array xs | W.List xs | W.Set xs ->
+      List.concat_map (hiccup_els inst) xs
+  | W.String s -> [ Editor_dom.create_text_node s ]
+  | W.Uuid u -> [ Editor_dom.create_text_node (title_of_uuid inst u) ]
+  | w -> [ Editor_dom.create_text_node (Edn.to_string w) ]
+
 (* ---------- render ---------- *)
 
 let rec render inst =
@@ -81,6 +150,11 @@ and render_query inst =
     | _ -> false
   in
   if is_dsl_blank then ()
+  else if inst.V.query_view <> W.Nil then begin
+    (* :view fn output replaces the default table (cljs custom-query) *)
+    List.iter (D.el_append_child inst.V.container)
+      (hiccup_els inst inst.V.query_view)
+  end
   else if inst.V.query_scalar_rows <> [] then begin
     let ul = D.h ~tag:"ul" () in
     List.iter
@@ -197,7 +271,13 @@ let load_view_data inst =
            | Wr.VFlat { qprops; _ } -> inst.V.query_idents <- qprops
            | _ -> ());
           inst.V.loading <- false;
-          load_blocks inst (row_uuids_of d) (fun () ->
+          let uuids =
+            row_uuids_of d
+            @ (match inst.V.query_view with
+               | W.Nil -> []
+               | v -> Views_query.collect_uuids v [])
+          in
+          load_blocks inst uuids (fun () ->
               load_props inst (fun () -> build_columns inst)))
     [ Db.resource_view_data inst.V.view_uuid ctx ]
 

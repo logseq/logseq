@@ -2,10 +2,11 @@
    move, selection, clipboard, undo. All mutations flow through
    Outliner_ops (apply-outliner-ops) followed by a page refresh. *)
 
-open Promise_ext
 module S = Editor_state
 module D = Editor_dom
 module Ops = Outliner_ops
+
+let ( let* ) p f = Js.Promise.then_ f p
 
 (* ---- buffer + focus ---- *)
 
@@ -1045,6 +1046,141 @@ let copy_selection_text () =
         (String.concat "\n"
            (List.map (fun b -> b.Model.block_title) blocks))
 
+(* ---- external paste (handler.paste.cljs/paste-copied-text) ----
+
+   text/html runs through the html->markdown port (Html_to_md, the DOM
+   equivalent of extensions/html-parser); the resulting text wins over
+   plain text. A bare pasted url wraps into {{video}}/{{twitter}}.
+   Block-structured text extracts into blocks worker-side; text split
+   by blank lines becomes one block per paragraph; anything else is a
+   plain text insert. *)
+
+let ltrim s =
+  let n = String.length s in
+  let rec go i =
+    if i < n && (s.[i] = ' ' || s.[i] = '\t' || s.[i] = '\r') then
+      go (i + 1)
+    else i
+  in
+  String.sub s (go 0) (n - go 0)
+
+let starts_with s prefix =
+  let lp = String.length prefix in
+  String.length s >= lp && String.sub s 0 lp = prefix
+
+let is_url s =
+  let t = String.trim s in
+  starts_with t "http://" || starts_with t "https://"
+
+(* extensions/video.cljs's host set — the regexes also pin the path
+   shape, but for macro-wrapping a url the host check is what matters *)
+let is_video_url url =
+  let s = String.lowercase_ascii (String.trim url) in
+  let host =
+    let s =
+      if starts_with s "http://" then String.sub s 7 (String.length s - 7)
+      else if starts_with s "https://" then
+        String.sub s 8 (String.length s - 8)
+      else s
+    in
+    match String.index_opt s '/' with
+    | Some i -> String.sub s 0 i
+    | None -> s
+  in
+  let host =
+    List.fold_left
+      (fun h p -> if starts_with h p then String.sub h (String.length p) (String.length h - String.length p) else h)
+      host [ "www."; "m."; "player." ]
+  in
+  List.mem host
+    [ "youtube.com"; "youtu.be"; "y2u.be"; "youtube-nocookie.com"
+    ; "bilibili.com"; "vimeo.com" ]
+
+let wrap_macro_url url =
+  if is_video_url url then Some ("{{video " ^ url ^ "}}")
+  else if starts_with url "https://twitter.com" || starts_with url "https://x.com"
+  then Some ("{{twitter " ^ url ^ "}}")
+  else None
+
+(* cljs markdown-blocks?: "(^|\n)\s*(?:[-+*]|#+)\s+", a ``` fence line,
+   or a $$ line makes the clipboard block-structured *)
+let markdown_blocks text =
+  let marker t =
+    match String.length t with
+    | 0 -> false
+    | n -> (
+        match t.[0] with
+        | '-' | '+' | '*' -> n >= 2 && (t.[1] = ' ' || t.[1] = '\t')
+        | '#' ->
+            let hashes i = i < n && t.[i] = '#' in
+            let rec count i = if hashes i then count (i + 1) else i in
+            let h = count 0 in
+            h >= 1 && h < n && (t.[h] = ' ' || t.[h] = '\t')
+        | _ -> false)
+  in
+  String.split_on_char '\n' text
+  |> List.exists (fun l ->
+      let t = ltrim l in
+      marker t || starts_with t "```" || t = "$$")
+
+let contains_sub hay needle =
+  let n = String.length hay and m = String.length needle in
+  if m = 0 then true
+  else
+    let rec go i = i + m <= n && (String.sub hay i m = needle || go (i + 1)) in
+    go 0
+
+(* "(?:\r?\n){2,}" — a blank-line run separates pasted paragraphs *)
+let has_paragraph_break text = contains_sub text "\n\n"
+
+(* paste-segmented-text — one "- " block per paragraph *)
+let segmented_markdown text =
+  let acc, last =
+    List.fold_left
+      (fun (acc, cur) l ->
+        if String.trim l = "" then
+          (match cur with
+           | [] -> (acc, [])
+           | _ -> (List.rev cur :: acc, []))
+        else (acc, l :: cur))
+      ([], [])
+      (String.split_on_char '\n' text)
+  in
+  let paragraphs =
+    List.rev (match last with [] -> acc | _ -> List.rev last :: acc)
+  in
+  paragraphs
+  |> List.filter_map (fun p ->
+      let p = String.trim (String.concat "\n" p) in
+      if p = "" then None
+      else
+        let t = ltrim p in
+        if
+          starts_with t "-" && String.length t >= 2
+          && (t.[1] = ' ' || t.[1] = '\t')
+        then Some p
+        else Some ("- " ^ p))
+  |> String.concat "\n"
+
+(* the paste payload: html-converted markdown when it yields text, else
+   a macro-wrapped url, else the plain text *)
+let paste_source_text ~text ~html =
+  (* cljs string/replace "\r\n" "\n" for Windows clipboards *)
+  let text = String.concat "" (String.split_on_char '\r' text) in
+  let html_md =
+    match String.trim html with
+    | "" -> None
+    | _ -> (try Html_to_md.convert html with _ -> None)
+  in
+  match html_md with
+  | Some s when String.trim s <> "" -> s
+  | _ -> (
+      if is_url text then
+        match wrap_macro_url text with
+        | Some m -> m
+        | None -> text
+      else text)
+
 (* cljs edit-last-block-after-inserted! — after a paste, editing moves to
    the last inserted block so sequential pastes append in order *)
 let edit_last_inserted resp =
@@ -1055,6 +1191,44 @@ let edit_last_inserted resp =
 let paste_trees trees target_uuid ~replace_empty =
   Ops.apply_and_refresh_result ~opts:(Ops.op_opts "paste")
     [ Ops.paste_trees trees target_uuid ~replace_empty ]
+
+(* thread-api/paste-extract-blocks + insert-blocks — the worker turns
+   markdown clipboard text into preorder block maps which insert-blocks
+   places after [uuid] (cljs keep-uuid? + :outliner-real-op
+   :paste-text under :outliner-op :paste) *)
+let paste_markdown_blocks uuid text ~replace_empty ~sibling =
+  let* w =
+    Runtime.invoke3 "thread-api/paste-extract-blocks"
+      (Wire.String (Runtime.repo ()))
+      (Wire.String text)
+      (Wire.String uuid)
+  in
+  match w with
+  | Wire.Array (_ :: _ as maps) -> (
+      let* resp =
+        Ops.apply_and_refresh_result ~opts:(Ops.op_opts "paste")
+          [ Ops.op "insert-blocks"
+              [ Wire.Array maps
+              ; Wire.Uuid uuid
+              ; Wire.Map
+                  [ Ops.kw "sibling?" (Wire.Bool sibling)
+                  ; Ops.kw "keep-uuid?" (Wire.Bool true)
+                  ; Ops.kw "replace-empty-target?"
+                      (Wire.Bool replace_empty)
+                  ; Ops.kw "outliner-op" (Wire.Keyword "paste")
+                  ; Ops.kw "outliner-real-op"
+                      (Wire.Keyword "paste-text") ] ] ]
+      in
+      (* replace-empty swaps the editing block's entity in place — resync
+         the live buffer first so edit_last_inserted's save_if_dirty
+         can't commit the stale "" over the pasted title *)
+      let* () =
+        if replace_empty then Ops.resync_open_editor ()
+        else Js.Promise.resolve ()
+      in
+      edit_last_inserted resp;
+      Js.Promise.resolve ())
+  | _ -> Js.Promise.resolve ()
 
 let paste_lines lines =
   let library = library_context () in
@@ -1108,14 +1282,17 @@ let splice_clipboard_text uuid el text =
   Ops.schedule_save uuid v'
 
 (* in-editor paste: when the event text matches what our copy/cut wrote,
-   paste the stored trees (cljs internal paste); otherwise splice the
-   plain text at the cursor. text/html is ignored — the plain text
-   carries the same content without running any markup *)
+   paste the stored trees (cljs internal paste); otherwise the external
+   branch — html→markdown wins over plain text, block-shaped text
+   extracts into blocks, blank-line text into one block per paragraph,
+   and anything else splices at the cursor *)
 let paste_into_editor ev =
-  let clip_text =
+  let clip_text, clip_html =
     match D.ev_clipboard ev with
-    | Some clip -> D.clipboard_get_text clip "text/plain"
-    | None -> ""
+    | Some clip ->
+        ( D.clipboard_get_text clip "text/plain"
+        , D.clipboard_get_text clip "text/html" )
+    | None -> ("", "")
   in
   match (S.editing (), !(S.clipboard)) with
   | Some e, (_ :: _ as trees) when clip_text = !(S.clipboard_text) -> (
@@ -1142,15 +1319,78 @@ let paste_into_editor ev =
       | None -> ())
   | Some e, _ -> (
       (* external paste while editing (no stored trees, or the event
-         text differs from what our copy wrote): splice the plain text
-         into the live textarea at the cursor *)
+         text differs from what our copy wrote) *)
       match D.textarea_of e.uuid with
       | Some el ->
-          if clip_text <> "" then (
+          let text = paste_source_text ~text:clip_text ~html:clip_html in
+          if String.trim text <> "" then (
             D.prevent_default ev;
-            splice_clipboard_text e.uuid el clip_text)
+            let text =
+              if markdown_blocks text then text
+              else if has_paragraph_break text then
+                segmented_markdown text
+              else text
+            in
+            if markdown_blocks text then
+              let replace_empty =
+                String.trim e.S.buffer = ""
+                &&
+                match S.find e.uuid with
+                | Some b -> String.trim b.Model.block_title = ""
+                | None -> false
+              in
+              ignore
+                (paste_markdown_blocks e.uuid text ~replace_empty
+                   ~sibling:true)
+            else splice_clipboard_text e.uuid el text)
       | None -> ())
   | None, _ -> ()
+
+(* text or html → the extracted-block paste path when the clipboard is
+   block-shaped, else the flat per-line insert *)
+let paste_external ev ~text ~html =
+  let text = paste_source_text ~text ~html in
+  if markdown_blocks text || has_paragraph_break text then (
+    let text =
+      if markdown_blocks text then text else segmented_markdown text
+    in
+    D.prevent_default ev;
+    match selected_uuids () with
+    | _ :: _ as sel ->
+        ignore
+          (paste_markdown_blocks
+             (List.nth sel (List.length sel - 1))
+             text ~replace_empty:false ~sibling:true)
+    | [] -> (
+        (* nothing selected: append at page end *)
+        match !Runtime.current_page with
+        | Some p -> (
+            match List.rev (S.page_blocks ()) with
+            | last :: _ -> (
+                match last.Model.block_uuid with
+                | Some u ->
+                    ignore
+                      (paste_markdown_blocks u text ~replace_empty:false
+                         ~sibling:true)
+                | None -> ())
+            | [] -> (
+                match p.Model.page_uuid with
+                | Some pu ->
+                    ignore
+                      (paste_markdown_blocks pu text ~replace_empty:false
+                         ~sibling:false)
+                | None -> ()))
+        | None -> ()))
+  else
+    let lines =
+      String.split_on_char '\n' text
+      |> List.filter (fun l -> String.trim l <> "")
+    in
+    match lines with
+    | [] -> ()
+    | _ ->
+        D.prevent_default ev;
+        paste_lines lines
 
 let paste_blocks ev =
   match S.editing () with
@@ -1171,17 +1411,10 @@ let paste_blocks ev =
           | [] -> ())
       | [] -> (
           match D.ev_clipboard ev with
-          | Some clip -> (
-              let text = D.clipboard_get_text clip "text/plain" in
-              let lines =
-                String.split_on_char '\n' text
-                |> List.filter (fun l -> String.trim l <> "")
-              in
-              match lines with
-              | [] -> ()
-              | _ ->
-                  D.prevent_default ev;
-                  paste_lines lines)
+          | Some clip ->
+              paste_external ev
+                ~text:(D.clipboard_get_text clip "text/plain")
+                ~html:(D.clipboard_get_text clip "text/html")
           | None -> ()))
 
 (* ---- misc ---- *)

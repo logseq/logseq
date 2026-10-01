@@ -1208,4 +1208,106 @@ let parse_block args : Wire.t Db_worker_effect.t =
             (Block_map.to_transit (wrap_parse_block (Datascript.db conn) bm)))
   | _ -> Db_worker_effect.pure Wire.Nil
 
+(* ---------------------------------------------------------------
+   paste-extract-blocks — cljs handler.paste.cljs/paste-text-parseable.
+   The clipboard's markdown (the UI converts text/html first) becomes
+   the flat preorder block maps outliner insert-blocks consumes under
+   :outliner-op :paste / :outliner-real-op :paste-text. Extraction runs
+   worker-side where the datascript conn lives so [[page]] refs land in
+   :block/refs and titles rewrite to [[uuid]].
+   --------------------------------------------------------------- *)
+
+(* per-block tail of paste-text-parseable: no tags on pasted blocks,
+   a heading block's title loses its #s, and [[name]] refs rewrite to
+   [[uuid]] against the extracted refs *)
+let paste_block_of (bm : Block_map.t) : Block_map.t =
+  let bm = Block_map.dissoc bm [ "block/tags" ] in
+  let refs =
+    match Block_map.attr_value bm "block/refs" with
+    | Some v -> Clj_value.coll_items v
+    | None -> []
+  in
+  let bm =
+    match Block_map.string_attr bm "block/title" with
+    | Some t -> (
+        let t =
+          match Block_map.attr_value bm "logseq.property/heading" with
+          | Some v when Clj_value.truthy v ->
+              Common_util.clear_markdown_heading t
+          | _ -> t
+        in
+        Block_map.put bm "block/title"
+          (String (Db_content.title_ref_to_id_ref t refs)))
+    | None -> bm
+  in
+  bm
+
+(* :thread-api/paste-extract-blocks [repo text target-block-uuid] *)
+let paste_extract_blocks args : Wire.t Db_worker_effect.t =
+  let repo =
+    match arg args 0 with
+    | Some (Wire.String s) -> s
+    | _ -> ""
+  in
+  let text =
+    match arg args 1 with
+    | Some (Wire.String s) -> s
+    | _ -> ""
+  in
+  let target_uuid =
+    match arg args 2 with
+    | Some (Wire.String s) -> s
+    | _ -> ""
+  in
+  match Worker_state.datascript_conn repo with
+  | None -> Db_worker_effect.pure (Wire.Array [])
+  | Some conn -> (
+      let db = Datascript.db conn in
+      (* cljs db-async/<get-block-page-info on the editing block *)
+      let page = Option.bind
+          (entity db (Lookup_ref ("block/uuid", Uuid target_uuid)))
+          (fun e -> Ldb.ref_ent e "block/page")
+      in
+      let page_id =
+        match page with
+        | Some p -> Int64 (Int64.of_int p.id)
+        | None -> Nil
+      in
+      let page_name =
+        Option.bind page (fun p -> Ldb.string_value p "block/name")
+      in
+      let ast =
+        match Gp_mldoc.to_edn_format ~content:text ~format:"markdown" with
+        | Vector xs -> xs
+        | List xs -> xs
+        | _ -> []
+      in
+      if ast = [] then Db_worker_effect.pure (Wire.Array [])
+      else
+        let opts : Gp_block.extract_options =
+          { user_config = []
+          ; block_pattern = "-"
+          ; date_formatter = Some (Ldb.journal_title_format db)
+          ; db
+          ; db_graph_mode = true
+          ; export_to_db_graph_flag = false
+          ; remove_properties = false
+          ; remove_logbook = false
+          ; remove_deadline_scheduled = false
+          ; page_name
+          ; filename_format = None
+          ; resolve_uuid_fn = (fun _ _ _ _ -> None)
+          ; skip_journal = false
+          }
+        in
+        let blocks = Gp_block.extract_blocks ast text "markdown" opts in
+        let blocks = Gp_block.with_parent_and_order page_id blocks in
+        Db_worker_effect.pure
+          (Wire.Array
+             (List.map
+                (fun bm -> Block_map.to_transit (paste_block_of bm))
+                blocks)))
+
 let () = Dispatcher.register "thread-api/parse-block" parse_block
+let () =
+  Dispatcher.register "thread-api/paste-extract-blocks" paste_extract_blocks

@@ -50,9 +50,30 @@ let common_pairs inst block_uuid =
   ]
   @ page_title
 
-let spec_of inst block_uuid = function
+(* cljs custom-query*: a keyword :view/:result-transform resolves through
+   config.edn :query/views / :query/result-transforms; a literal form is
+   used as-is. cfg is the repo config map (empty when not needed). *)
+let edn_spec_value cfg section (v : W.t) : W.t option =
+  match v with
+  | W.Keyword k -> (
+      match W.get cfg section with
+      | Some m -> (
+          match W.get m k with Some resolved -> Some resolved | None -> None)
+      | None -> None)
+  | _ -> Some v
+
+let needs_config = function
+  | QDatalog m -> (
+      (match W.get m "view" with Some (W.Keyword _) -> true | _ -> false)
+      ||
+      match W.get m "result-transform" with
+      | Some (W.Keyword _) -> true
+      | _ -> false)
+  | _ -> false
+
+let spec_of inst cfg block_uuid = function
   | QDsl s ->
-      Some
+      Ok
         (W.Map
            ([ (W.kw "kind", W.Keyword "dsl"); (W.kw "query", W.String s) ]
            @ common_pairs inst block_uuid))
@@ -73,17 +94,38 @@ let spec_of inst block_uuid = function
             | Some v -> pairs @ [ (W.kw "rules", v) ]
             | None -> pairs
           in
-          let pairs =
+          (* keyword transform that config.edn cannot resolve is an error
+             in cljs ("Missing query result transform") *)
+          let rt =
             match W.get m "result-transform" with
             | Some v ->
-                pairs
-                @ [ (W.kw "result-transform-edn", W.String (Edn.to_string v))
-                  ]
-            | None -> pairs
+                Option.map
+                  (fun resolved ->
+                    ( W.kw "result-transform-edn"
+                    , W.String (Edn.to_string resolved) ))
+                  (edn_spec_value cfg "query/result-transforms" v)
+            | None -> None
           in
-          Some (W.Map pairs)
-      | _ -> None)
-  | QBlank -> None
+          (match W.get m "result-transform", rt with
+           | Some _, None -> Error "Missing query result transform"
+           | _ ->
+               let pairs =
+                 match rt with Some p -> pairs @ [ p ] | None -> pairs
+               in
+               let pairs =
+                 match W.get m "view" with
+                 | Some v -> (
+                     match edn_spec_value cfg "query/views" v with
+                     | Some resolved ->
+                         pairs
+                         @ [ ( W.kw "view-edn"
+                             , W.String (Edn.to_string resolved) ) ]
+                     | None -> pairs)
+                 | None -> pairs
+               in
+               Ok (W.Map pairs))
+      | _ -> Error "invalid query")
+  | QBlank -> Error "invalid query"
 
 (* -- run the query resource, decode rows into inst -- *)
 
@@ -94,7 +136,8 @@ let decode_result inst (v : W.t) =
         Some
           (Option.value (W.map_get_string e "message") ~default:"query error");
       inst.V.query_rows <- [];
-      inst.V.query_scalar_rows <- []
+      inst.V.query_scalar_rows <- [];
+      inst.V.query_view <- W.Nil
   | None -> (
       inst.V.query_error <- None;
       let items =
@@ -108,7 +151,17 @@ let decode_result inst (v : W.t) =
         inst.V.query_scalar_rows <- [])
       else (
         inst.V.query_rows <- [];
-        inst.V.query_scalar_rows <- items))
+        inst.V.query_scalar_rows <- items);
+      (* :view fn result — hiccup wire; Nil means render the default table *)
+      inst.V.query_view <- Option.value (W.get v "view") ~default:W.Nil)
+
+(* uuids inside the :view hiccup hydrate to titles via inst.blocks *)
+let rec collect_uuids w acc =
+  match w with
+  | W.Uuid u -> u :: acc
+  | W.Array xs | W.List xs | W.Set xs -> List.fold_left (fun a x -> collect_uuids x a) acc xs
+  | W.Map kvs -> List.fold_left (fun a (k, v) -> collect_uuids v (collect_uuids k a)) acc kvs
+  | _ -> acc
 
 let run inst (f : unit -> unit) =
   match inst.V.kind with
@@ -124,21 +177,42 @@ let run inst (f : unit -> unit) =
        | QBlank ->
            inst.V.query_rows <- [];
            inst.V.query_scalar_rows <- [];
+           inst.V.query_view <- W.Nil;
            f ()
-       | src_kind -> (
-           match spec_of inst block_uuid src_kind with
-           | None ->
-               inst.V.query_error <- Some "invalid query";
-               f ()
-           | Some spec ->
-               let key = Db.key_query spec in
-               Db.snapshots
-                 ~f:(fun snap ->
-                   (match Wr.snapshot_slot_value snap key with
-                    | Some v -> decode_result inst v
-                    | None -> inst.V.query_error <- Some "query failed");
-                   f ())
-                 [ Db.resource_query spec ]))
+       | src_kind ->
+           let run_with_cfg cfg =
+             match spec_of inst cfg block_uuid src_kind with
+             | Error msg ->
+                 inst.V.query_error <- Some msg;
+                 f ()
+             | Ok spec ->
+                 let key = Db.key_query spec in
+                 Db.snapshots
+                   ~f:(fun snap ->
+                     (match Wr.snapshot_slot_value snap key with
+                      | Some v -> decode_result inst v
+                      | None -> inst.V.query_error <- Some "query failed");
+                     (match inst.V.query_view with
+                      | W.Nil -> f ()
+                      | view ->
+                          let uuids = collect_uuids view [] in
+                          Db.get_blocks uuids ~metadata:true (fun ents ->
+                              List.iter
+                                (fun b ->
+                                  match W.map_get_uuid b "block/uuid" with
+                                  | Some u -> Hashtbl.replace inst.V.blocks u b
+                                  | None -> ())
+                                ents;
+                              f ())))
+                   [ Db.resource_query spec ]
+           in
+           if needs_config src_kind then
+             Sdk_config.read_config (Runtime.repo ())
+             |> Js.Promise.then_ (fun cfg ->
+                    run_with_cfg cfg;
+                    Js.Promise.resolve ())
+             |> ignore
+           else run_with_cfg (W.Map []))
   | _ -> f ()
 
 (* the hidden value block created by create-property-text-block for

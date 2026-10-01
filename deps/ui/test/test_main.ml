@@ -2287,8 +2287,10 @@ let test_views_query () =
      with _ -> true);
   (* spec_of *)
   let inst = mk_view_inst "query-result" in
-  (match Views_query.spec_of inst "b1" (Views_query.QDsl "(task)") with
-   | Some spec ->
+  (match
+     Views_query.spec_of inst (Wire.Map []) "b1" (Views_query.QDsl "(task)")
+   with
+   | Ok spec ->
        check "spec dsl kind"
          (Wire.get spec "kind" = Some (Wire.Keyword "dsl"));
        check "spec dsl query"
@@ -2297,32 +2299,35 @@ let test_views_query () =
          (Wire.get spec "current-block-uuid" = Some (Wire.Uuid "b1"));
        check "spec removes children"
          (Wire.get spec "remove-block-children?" = Some (Wire.Bool true))
-   | None -> check "spec dsl" false);
-  check "spec blank none"
-    (Views_query.spec_of inst "b1" Views_query.QBlank = None);
+   | Error _ -> check "spec dsl" false);
+  check "spec blank error"
+    (Result.is_error
+       (Views_query.spec_of inst (Wire.Map []) "b1" Views_query.QBlank));
   (match
-     Views_query.spec_of inst "b1"
+     Views_query.spec_of inst (Wire.Map []) "b1"
        (Views_query.QDatalog
           (Edn.parse
              "{:query [:find ?e :where [?e :block/title ?t]] :inputs [:today]}"))
    with
-   | Some spec ->
+   | Ok spec ->
        check "spec datalog kind"
          (Wire.get spec "kind" = Some (Wire.Keyword "datalog"));
        check "spec datalog inputs" (Wire.get spec "inputs" <> None)
-   | None -> check "spec datalog" false);
+   | Error _ -> check "spec datalog" false);
   check "spec datalog missing query"
-    (Views_query.spec_of inst "b1"
-       (Views_query.QDatalog (wmap [ "x", Wire.Int 1 ]))
-     = None);
+    (Result.is_error
+       (Views_query.spec_of inst (Wire.Map []) "b1"
+          (Views_query.QDatalog (wmap [ "x", Wire.Int 1 ]))));
   (* current page title lands in the spec *)
   let saved_page = !Runtime.current_page in
   Runtime.current_page := Some (page []);
-  (match Views_query.spec_of inst "b1" (Views_query.QDsl "x") with
-   | Some spec ->
+  (match
+     Views_query.spec_of inst (Wire.Map []) "b1" (Views_query.QDsl "x")
+   with
+   | Ok spec ->
        check "spec page title"
          (Wire.get spec "current-page-title" = Some (Wire.String "p"))
-   | None -> check "spec page title" false);
+   | Error _ -> check "spec page title" false);
   Runtime.current_page := saved_page;
   (* decode_result *)
   Views_query.decode_result inst

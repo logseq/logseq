@@ -64,6 +64,7 @@ type inst =
   ; mutable query_idents : string list (* property idents from view-data *)
   ; mutable is_advanced : bool (* datalog query source *)
   ; mutable query_scalar_rows : W.t list (* non-block query rows *)
+  ; mutable query_view : W.t (* hiccup wire produced by :view fn, Nil none *)
   ; mutable qsrc : string (* query source text (value block title) *)
   ; mutable query_block_uuid : string
         (* logseq.property/query value block uuid — query writes target it *)
@@ -110,6 +111,7 @@ let make ~kind ~feature ~owner ~container : inst =
     ; query_idents = []
     ; is_advanced = false
     ; query_scalar_rows = []
+    ; query_view = W.Nil
     ; qsrc = ""
     ; query_block_uuid = ""
     ; query_editor_open = false

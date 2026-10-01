@@ -168,8 +168,9 @@ let code_block_actions ~self lang =
    .extensions__code > .extensions__code-lang? + .code-editor > textarea
    + calc-results?). Code_mirror mounts the real CodeMirror on the
    textarea via the document mutation scan (vendored codemirror@5) —
-   DOM structure matches cljs so both display and edit look identical. *)
-let code_block ?(self = "") lang code =
+   DOM structure matches cljs so both display and edit look identical.
+   ~extra appends inside .extensions__code (the src-eval .results div). *)
+let code_block ?(self = "") ?(extra = []) lang code =
   let lang =
     (* cljs src-cp aliases the fence's stored lang to clojure *)
     match lang with
@@ -184,33 +185,84 @@ let code_block ?(self = "") lang code =
         ; D.el ~key:"ec" ~tag:"div"
             ~style_class:"extensions__code flex flex-1"
             ~attrs:(if calc then [ ("data-lang", "calc") ] else [])
-            [ (if lang <> "" && not calc then
+            ([ (if lang <> "" && not calc then
                  D.el ~key:"lang" ~tag:"div"
                    ~style_class:"extensions__code-lang"
                    ~text:(String.lowercase_ascii lang) []
                else Logseq_dom.fragment [])
-            ; D.el ~key:"ce" ~tag:"div"
-                ~style_class:"code-editor flex flex-1 flex-row w-full"
-                [ D.el ~key:"ta" ~tag:"textarea"
-                    ~id:("edit-block-" ^ self)
-                    ~attrs:
-                      (if lang <> "" then [ ("data-lang", lang) ]
-                       else [])
-                    ~text:code []
-                ; (if not calc then Logseq_dom.fragment []
-                   else
-                     match calc_results_el code with
-                     | Some el -> el
-                     | None ->
-                         (* cljs mounts .extensions__code-calc for calc
-                            blocks even when empty —
-                            Code_mirror.update_calc fills it on change *)
-                         D.el ~key:"calc" ~tag:"div"
-                           ~style_class:"extensions__code-calc pr-2" [])
-                ]
-            ]
+             ; D.el ~key:"ce" ~tag:"div"
+                 ~style_class:"code-editor flex flex-1 flex-row w-full"
+                 [ D.el ~key:"ta" ~tag:"textarea"
+                     ~id:("edit-block-" ^ self)
+                     ~attrs:
+                       (if lang <> "" then [ ("data-lang", lang) ]
+                        else [])
+                     ~text:code []
+                 ; (if not calc then Logseq_dom.fragment []
+                    else
+                      match calc_results_el code with
+                      | Some el -> el
+                      | None ->
+                          (* cljs mounts .extensions__code-calc for calc
+                             blocks even when empty —
+                             Code_mirror.update_calc fills it on change *)
+                          D.el ~key:"calc" ~tag:"div"
+                            ~style_class:"extensions__code-calc pr-2" [])
+                 ]
+             ]
+            @ extra)
         ]
     ]
+
+let has_sub hay needle =
+  let n = String.length hay and m = String.length needle in
+  let rec go i =
+    i + m <= n && (String.sub hay i m = needle || go (i + 1))
+  in
+  go 0
+
+(* "#+BEGIN_SRC clojure :results" — cljs src-cp evals the body through
+   sci/eval-string ('block bound) only for clojure language + :results
+   option. Options only survive on raw #+BEGIN_SRC titles (saved
+   display-type=code blocks drop the fence header). *)
+let src_eval_parts s =
+  match src_block s with
+  | Some (hdr, code) -> (
+      match String.index_opt hdr ' ' with
+      | None -> None
+      | Some i ->
+          let lang = String.sub hdr 0 i in
+          let opts = String.sub hdr (i + 1) (String.length hdr - i - 1) in
+          if String.lowercase_ascii lang = "clojure"
+             && has_sub opts ":results"
+          then Some (lang, code)
+          else None)
+  | None -> None
+
+(* async eval-string -> div > code "Results" + .results.mt-1 > pre.code;
+   stays empty until the worker answers (cljs mounts the shell and fills
+   the value when sci resolves) *)
+let src_eval_el ~(code : string) ~(uuid : string) : t =
+ fun context parent ->
+  let st = Signal.state context.Lui_ui.ui_scheduler "" in
+  Render_state.with_repo (fun repo ->
+      Runtime.invoke3 "thread-api/eval-string" (Wire.String repo)
+        (Wire.String code) (Wire.String uuid)
+      |> Js.Promise.then_ (fun w ->
+             (match w with
+              | Wire.String s -> Runtime.signal_set st s
+              | Wire.Nil -> ()
+              | w -> Runtime.signal_set st (Edn.to_string w));
+             Js.Promise.resolve ())
+      |> ignore);
+  Logseq_dom.dyn ~equal:(fun a b -> (a : string) = b)
+    (fun s ->
+      D.el ~tag:"div"
+        [ D.el ~tag:"code" ~text:(I18n.t "view/results") []
+        ; D.el ~tag:"div" ~style_class:"results mt-1"
+            [ D.el ~tag:"pre" ~style_class:"code" ~text:s [] ] ])
+    (Signal.value st)
+    context parent
 
 (* {{query ...}} whole-title -> the query shell:
    .custom-query-results + .ls-query-setting shell; the queries area
@@ -317,8 +369,15 @@ let title_block ?(self = "") ?resolved ?(annot = false)
   | Some "math" ->
       [ D.el ~tag:"div" ~style_class:"math-block"
           [ Render_inline.katex_el ~block:true ~display:true s ] ]
-  | _ ->
-      title ?heading
-        ~is_query:(List.mem "logseq.class/Query" b.Model.block_tag_idents)
-        ~self ~wrap_attrs ~prefix (Option.value resolved ~default:s)
+  | _ -> (
+      match src_eval_parts s with
+      | Some (lang, code) ->
+          [ code_block ~self lang code
+              ~extra:
+                [ src_eval_el ~code
+                    ~uuid:(Option.value b.Model.block_uuid ~default:"") ] ]
+      | None ->
+          title ?heading
+            ~is_query:(List.mem "logseq.class/Query" b.Model.block_tag_idents)
+            ~self ~wrap_attrs ~prefix (Option.value resolved ~default:s))
 
