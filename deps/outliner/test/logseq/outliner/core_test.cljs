@@ -313,6 +313,40 @@
                (:v (first (d/datoms @conn :eavt (:db/id saved-a) :block/title)))))
         (is (= [b-uuid] (map :block/uuid (:block/refs saved-a))))))))
 
+(deftest insert-blocks-remint-drops-stale-db-id-on-ref
+  (testing "reminted B does not keep a leftover :db/id that would retarget another entity"
+    (let [conn (db-test/create-conn-with-blocks
+                [{:page {:block/title "page1"}
+                  :blocks [{:block/title ""}
+                           {:block/title "bystander"}]}])
+          host (db-test/find-block-by-content @conn "")
+          bystander (db-test/find-block-by-content @conn "bystander")
+          bystander-uuid (:block/uuid bystander)
+          b-uuid (random-uuid)
+          a-uuid (random-uuid)
+          result (outliner-core/insert-blocks
+                  @conn
+                  [{:block/uuid b-uuid
+                    :block/title "B"}
+                   {:block/uuid a-uuid
+                    :block/title (str "See " (page-ref/->page-ref b-uuid))
+                    :block/raw-title (str "See " (page-ref/->page-ref b-uuid))
+                    :block/refs [{:db/id (:db/id bystander)
+                                  :block/uuid b-uuid
+                                  :block/title "B"}]}]
+                  host
+                  {:sibling? false
+                   :replace-empty-target? true
+                   :keep-uuid? true})]
+      (d/transact! conn (:tx-data result))
+      (let [copied-b (first (:blocks result))
+            copied-a (second (:blocks result))]
+        (is (= bystander-uuid (:block/uuid (d/entity @conn (:db/id bystander))))
+            "bystander uuid must not be overwritten")
+        (is (= (:block/uuid host) (:block/uuid copied-b)))
+        (is (not-any? :db/id (:block/refs copied-a)))
+        (is (= [(:block/uuid copied-b)] (map :block/uuid (:block/refs copied-a))))))))
+
 (deftest insert-blocks-reminted-self-ref-does-not-throw
   (testing "replace-empty-target remints A; [[A]] and [:block/uuid A] map to the target uuid"
     (let [conn (db-test/create-conn-with-blocks

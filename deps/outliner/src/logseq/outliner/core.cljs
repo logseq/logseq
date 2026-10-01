@@ -846,7 +846,10 @@
     [:block/uuid (get uuids (second ref))]
 
     (and (map? ref) (contains? uuids (:block/uuid ref)))
-    (assoc ref :block/uuid (get uuids (:block/uuid ref)))
+    (let [new-uuid (get uuids (:block/uuid ref))]
+      (cond-> (assoc ref :block/uuid new-uuid)
+        (not= new-uuid (:block/uuid ref))
+        (dissoc :db/id :db/ident)))
 
     :else
     ref))
