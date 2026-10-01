@@ -4213,9 +4213,11 @@
                  (notify!))))]]))
 
 (defn- handle-default-view-creation-error!
-  "Log a failed default-view insert without throwing during render.
+  "Log a failed default-view insert without throwing during render
+   and re-arm *started? so a later effect run can retry.
    The page has no error boundary around this view."
-  [error]
+  [*started? error]
+  (set! (.-current *started?) false)
   (log/warn :default-view-creation-failed error)
   nil)
 
@@ -4231,10 +4233,12 @@
              (p/then (fn [view]
                        (when-not view
                          (handle-default-view-creation-error!
+                          *started?
                           (ex-info "Default view creation returned no view"
                                    {:view-parent-uuid view-parent-uuid
                                     :view-feature-type view-feature-type})))))
-             (p/catch handle-default-view-creation-error!)))
+             (p/catch (fn [error]
+                        (handle-default-view-creation-error! *started? error)))))
        js/undefined)
      [view-parent view-parent-uuid view-feature-type])
     nil))
