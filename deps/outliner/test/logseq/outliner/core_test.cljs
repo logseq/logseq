@@ -285,6 +285,34 @@
       (is (= (str missing-uuid-title " and " (page-ref/->page-ref existing-uuid))
              (:block/title block))))))
 
+(deftest insert-blocks-keeps-same-batch-block-id-ref
+  (testing "A [[B uuid]] link stays a link when A and B are inserted together"
+    (let [conn (db-test/create-conn-with-blocks
+                [{:page {:block/title "page1"}
+                  :blocks [{:block/title "host"}]}])
+          host (db-test/find-block-by-content @conn "host")
+          b-uuid (random-uuid)
+          a-uuid (random-uuid)
+          result (outliner-core/insert-blocks
+                  @conn
+                  [{:block/uuid a-uuid
+                    :block/title (str "See " (page-ref/->page-ref b-uuid))
+                    :block/raw-title (str "See " (page-ref/->page-ref b-uuid))
+                    :block/refs [{:block/uuid b-uuid
+                                  :block/title "B"}]}
+                   {:block/uuid b-uuid
+                    :block/title "B"}]
+                  host
+                  {:sibling? true
+                   :keep-uuid? true})]
+      (d/transact! conn (:tx-data result))
+      (let [saved-a (d/entity @conn [:block/uuid a-uuid])
+            saved-b (d/entity @conn [:block/uuid b-uuid])]
+        (is (= "B" (:block/title saved-b)))
+        (is (= (str "See " (page-ref/->page-ref b-uuid))
+               (:v (first (d/datoms @conn :eavt (:db/id saved-a) :block/title)))))
+        (is (= [b-uuid] (map :block/uuid (:block/refs saved-a))))))))
+
 (deftest insert-blocks-missing-uuid-page-ref-does-not-throw
   (testing "inserting [[<uuid-with-no-entity>]] persists plain text instead of rejecting the tx"
     (let [conn (db-test/create-conn-with-blocks

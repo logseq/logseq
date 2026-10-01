@@ -261,11 +261,13 @@
 
 (defn- missing-uuid-lookup-ref?
   "Parser extract-block-refs also emits [:block/uuid id] for [[<uuid>]].
-  Transacting that lookup when no entity exists fails the whole save."
-  [db ref]
+  Transacting that lookup when no entity exists fails the whole save.
+  keep-uuids are in-flight inserts not yet in db."
+  [db ref keep-uuids]
   (and (vector? ref)
        (= :block/uuid (first ref))
        (uuid? (second ref))
+       (not (contains? keep-uuids (second ref)))
        (nil? (d/entity db ref))))
 
 (defn- unresolved-page-ref-plain-title
@@ -310,10 +312,11 @@
     (update :block/raw-title #(rewrite-missing-uuid-id-refs db % keep-uuids))))
 
 (defn- created-or-kept-uuids
-  "UUIDs created in this save. Existing entities are checked against db.
-  Do not keep UUIDs from leftover map refs to deleted blocks."
-  [page-txs]
-  (into #{} (keep :block/uuid) page-txs))
+  "UUIDs created in this save or already queued in the same insert.
+  Existing entities are checked against db. Do not keep leftover map
+  refs to deleted blocks."
+  [page-txs incoming-uuids]
+  (into (or incoming-uuids #{}) (keep :block/uuid) page-txs))
 
 (defn- apply-resolved-page-ref-titles
   [db block refs'' tags' replace-refs rewrite-title? keep-uuids]
@@ -329,9 +332,9 @@
    keep-uuids))
 
 (defn- resolve-page-ref
-  [db ref tag-names]
+  [db ref tag-names keep-uuids]
   (cond
-    (missing-uuid-lookup-ref? db ref)
+    (missing-uuid-lookup-ref? db ref keep-uuids)
     [nil nil]
 
     (new-page-ref? ref)
@@ -364,7 +367,7 @@
   see them yet, so a repeated [[same name]] ref would otherwise create a
   duplicate page. Class titles are case-sensitive (#Movie and #movie are
   distinct classes), so class refs dedupe by :block/title instead."
-  [db refs tag-names]
+  [db refs tag-names keep-uuids]
   (first
    (reduce
     (fn [[resolved seen] ref]
@@ -377,7 +380,7 @@
                                   (select-keys ref [:block.temp/original-page-name]))
                             nil])
            seen]
-          (let [[ref' tx-data :as resolved-ref] (resolve-page-ref db ref tag-names)]
+          (let [[ref' tx-data :as resolved-ref] (resolve-page-ref db ref tag-names keep-uuids)]
             [(conj resolved resolved-ref)
              (if (and new-page? (seq tx-data))
                (assoc seen dedup-key ref')
@@ -386,10 +389,13 @@
     refs)))
 
 (defn- resolve-page-refs
-  [db block]
+  ([db block]
+   (resolve-page-refs db block #{}))
+  ([db block incoming-uuids]
   (if-let [refs (seq (:block/refs block))]
     (let [tag-names (into #{} (keep :block/name) (:block/tags block))
-          resolved-refs (resolve-refs-dedup db refs tag-names)
+          keep-uuids (or incoming-uuids #{})
+          resolved-refs (resolve-refs-dedup db refs tag-names keep-uuids)
           refs' (mapv first resolved-refs)
           page-txs (mapcat second resolved-refs)
           dropped-refs (keep (fn [[ref ref']]
@@ -430,9 +436,9 @@
           rewrite-title? (or (seq replacements) (seq dropped-refs))]
       {:block (apply-resolved-page-ref-titles
                db block refs'' tags' replace-refs rewrite-title?
-               (created-or-kept-uuids page-txs))
+               (created-or-kept-uuids page-txs keep-uuids))
        :page-txs page-txs})
-    {:block (rewrite-block-missing-uuid-id-refs db block #{})}))
+    {:block (rewrite-block-missing-uuid-id-refs db block (or incoming-uuids #{}))})))
 
 (defn- remove-tags-when-title-changed
   [block new-content]
@@ -845,7 +851,7 @@
       (if-let [{:block/keys [parent] :as block} (first blocks)]
         (if-let [uuid' (get uuids (:block/uuid block))]
           (let [{:keys [block page-txs]}
-                (resolve-page-refs db (remove-disallowed-inline-classes db block))
+                (resolve-page-refs db (remove-disallowed-inline-classes db block) (into block-ids (vals uuids)))
                 top-level? (= (:block/level block) 1)
                 parent (compute-block-parent block parent target-block top-level? sibling? get-new-id outliner-op replace-empty-target? idx)
                 order (nth orders idx)
