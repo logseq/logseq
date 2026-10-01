@@ -12,7 +12,7 @@ pom.xml.asc
 .hg/
 .nbb/
 
-node_modules/
+node_modules
 static/**
 tmp
 cljs-test-runner-out
@@ -100,7 +100,7 @@ deps/db-sync/data
 /.agent-shell/
 
 clj-e2e/.clj-kondo/imports
-/cli/_build/
+_build/
 /cli/_opam
 /cli/compile_commands.json
 /cli/.eglot-root
