@@ -181,6 +181,7 @@ let control_wrap ~scope ~library uuid (b : Model.block) : t =
     [ dom ~key:("ctrl-" ^ uuid) ~tag:"a" ~style_class:"block-control"
         ~id:("control-" ^ uuid)
         [ dom ~key:("ctrlspan-" ^ uuid) ~tag:"span"
+            ~id:("ctrlspan-" ^ scope ^ "-" ^ uuid)
             ~style_class_signal:
               (Logseq_dom.class_signal (collapsed_sig ~scope b)
                  (fun c -> if c then "control-show" else "control-hide"))
@@ -218,6 +219,34 @@ let control_wrap ~scope ~library uuid (b : Model.block) : t =
             ]
         ]
     ]
+
+(* cljs *control-show? (block-mouse-over/-leave on the main container):
+   the fold caret shows only while hovering a collapsable-or-collapsed
+   block. cljs collapsable? = children | db-collapsable | (title-collapse
+   config && block-with-title?) — the first two cover it here. *)
+let arrow_hover ~scope ~uuid ~(b : Model.block) name _payload =
+  let collapsable =
+    S.children_of b <> [] || b.Model.block_db_collapsable
+  in
+  let collapsed =
+    effective_collapsed_st ~scope uuid b.Model.block_default_collapsed
+      (S.value ())
+  in
+  if not (collapsable || collapsed) then ()
+  else
+    match Browser_ui.qs ("#ctrlspan-" ^ scope ^ "-" ^ uuid) with
+    | None -> ()
+    | Some el -> (
+        match name with
+        | "mouseenter" ->
+            Browser_ui.rm_class el "control-hide";
+            Browser_ui.add_class el "control-show";
+            Browser_ui.add_class el "cursor-pointer"
+        | "mouseleave" ->
+            Browser_ui.add_class el "control-hide";
+            Browser_ui.rm_class el "control-show";
+            Browser_ui.rm_class el "cursor-pointer"
+        | _ -> ())
 
 (* -- content vs editor -- *)
 
@@ -433,6 +462,8 @@ and row_el ~depth ~editable scope ~(library : bool) (b : Model.block) : t =
           (match b.block_heading with
            | Some lvl -> [ ("data-has-heading", string_of_int lvl) ]
            | None -> [])
+        ~events:"mouseenter mouseleave"
+        ~on_dom_event:(arrow_hover ~scope ~uuid ~b)
         [ control_wrap ~scope ~library uuid b
         ; dom ~key:("col-" ^ key) ~style_class:"flex flex-col w-full"
             [ dom ~key:("col2-" ^ key) ~style_class:"flex flex-col w-full"
@@ -528,6 +559,8 @@ and block_row_static ?(depth = 0) ?(library = false) (b : Model.block) : t =
     [ dom ~key:("main-" ^ key)
         ~style_class:"block-main-container flex flex-row gap-1"
         ~attrs:(heading_attrs b)
+        ~events:"mouseenter mouseleave"
+        ~on_dom_event:(arrow_hover ~scope:"ref" ~uuid ~b)
         [ control_wrap ~scope:"ref" ~library uuid b
         ; dom ~key:("col-" ^ key) ~style_class:"flex flex-col w-full"
             [ dom ~key:("col2-" ^ key) ~style_class:"flex flex-col w-full"

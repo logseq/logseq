@@ -523,14 +523,15 @@ let test_block_parse () =
          && Wire.map_get_string m "block/type" = Some "page"
          && tags2 = [])
    | _ -> check "page ref rewritten" false);
-  (* #tag -> #[[uuid]] + ref AND tag entries *)
+  (* #tag -> literal title + ref entry only (bare #x is a hash ref,
+     never a block tag) *)
   let t3, refs3, tags3 = Block_parse.parse_title "x #Baz" in
   (match (refs3, tags3) with
-   | [ r ], [ tg ] ->
-       let u = Wire.map_get_uuid r "block/uuid" in
+   | [ r ], [] ->
        check "tag ref rewritten"
-         (t3 = "x #[[" ^ Option.value u ~default:"" ^ "]]"
-         && Wire.map_get_uuid tg "block/uuid" = u)
+         (t3 = "x #Baz"
+         && Wire.map_get_string r "block/title" = Some "Baz"
+         && Wire.map_get_uuid r "block/uuid" <> None)
    | _ -> check "tag ref rewritten" false)
 
 let test_block_parse2 () =
@@ -563,21 +564,24 @@ let test_block_parse2 () =
   (* title_fields drops empty collections *)
   eqi "title_fields plain" 1
     (List.length (Block_parse.title_fields "plain"));
-  eqi "title_fields with refs" 3
+  eqi "title_fields with refs" 2
     (List.length (Block_parse.title_fields "a [[p]] #t"))
 
 (* ---- Title_refs ---- *)
 
 let test_title_refs () =
-  let refs, tags =
+  let refs, tags, hash =
     Title_refs.scan_title "a [[X]] b #y c [[X]] #[[Z]] d #y"
   in
   (* dedup keeps the LAST occurrence: order is right-to-left *)
   eq "scan_title refs deduped" [ "y"; "Z"; "X" ] refs
     (String.concat ",");
-  eq "scan_title tags deduped" [ "y"; "Z" ] tags
+  (* only #[[Z]] tags the block; a bare #y is a hash ref *)
+  eq "scan_title tags deduped" [ "Z" ] tags
     (String.concat ",");
-  check "scan_title empty" (Title_refs.scan_title "plain" = ([], []));
+  eq "scan_title hash deduped" [ "y" ] hash
+    (String.concat ",");
+  check "scan_title empty" (Title_refs.scan_title "plain" = ([], [], []));
   eqs "normalize ident" "HelloWorld!"
     (Title_refs.normalize_ident_name_part "Hello World!");
   eqs "normalize digit prefix" "NUM-3abc"
@@ -592,11 +596,11 @@ let test_title_refs () =
     (Title_refs.replace_all "aaa" ~pat:"aa" ~rep:"Y");
   let resolved =
     [ { Title_refs.name = "X"; uuid = "u1"; is_tag = false
-      ; fresh = true; entity = Wire.Nil }
+      ; is_hash = false; fresh = true; entity = Wire.Nil }
     ; { Title_refs.name = "y"; uuid = "u2"; is_tag = true
-      ; fresh = true; entity = Wire.Nil }
+      ; is_hash = true; fresh = true; entity = Wire.Nil }
     ; { Title_refs.name = "foobar"; uuid = "u3"; is_tag = true
-      ; fresh = true; entity = Wire.Nil } ]
+      ; is_hash = true; fresh = true; entity = Wire.Nil } ]
   in
   eqs "rewrite page + bare tag" "a [[u1]] #[[u2]]"
     (Title_refs.rewrite_title "a [[X]] #y" resolved);
@@ -608,7 +612,7 @@ let test_title_refs () =
   check "tag_name_at no boundary"
     (Title_refs.tag_name_at "#yz!" 1
        [ { Title_refs.name = "y"; uuid = "u"; is_tag = true
-         ; fresh = true; entity = Wire.Nil } ]
+         ; is_hash = true; fresh = true; entity = Wire.Nil } ]
      = None)
 
 let test_title_refs2 () =
@@ -3107,28 +3111,28 @@ let test_block_parse3 () =
   (* an unclosed [[ stays literal text, no refs *)
   let t', refs, _ = Block_parse.parse_title "see [[unclosed" in
   check "unclosed page literal" (t' = "see [[unclosed" && refs = []);
-  (* a '#' mid-word still opens a tag — no boundary requirement *)
-  let t2, _, tags2 = Block_parse.parse_title "a#b" in
+  (* a '#' mid-word still opens a hash ref — no boundary
+     requirement; the title stays literal and nothing lands in tags *)
+  let t2, refs2, tags2 = Block_parse.parse_title "a#b" in
   check "mid-word tag"
-    (List.length tags2 = 1
-    && String.length t2 > 4 && String.sub t2 0 4 = "a#[[")
+    (t2 = "a#b" && List.length refs2 = 1 && List.length tags2 = 0)
 
 (* ---- title_refs edges ---- *)
 
 let test_title_refs3 () =
   (* scan_title trims [[ name ]] and drops empties *)
   check "scan trims + drops empty"
-    (Title_refs.scan_title "[[ P ]] [[ ]] x" = ([ "P" ], []));
+    (Title_refs.scan_title "[[ P ]] [[ ]] x" = ([ "P" ], [], []));
   check "scan hash at end"
-    (Title_refs.scan_title "x #" = ([], []));
+    (Title_refs.scan_title "x #" = ([], [], []));
   check "scan unclosed ignored"
-    (Title_refs.scan_title "a [[oops" = ([], []));
+    (Title_refs.scan_title "a [[oops" = ([], [], []));
   (* tag_name_at picks the longest matching name *)
   let resolved =
-    [ { Title_refs.name = "y"; uuid = "u1"; is_tag = true; fresh = true
-      ; entity = Wire.Nil }
+    [ { Title_refs.name = "y"; uuid = "u1"; is_tag = true
+      ; is_hash = true; fresh = true; entity = Wire.Nil }
     ; { Title_refs.name = "yard"; uuid = "u2"; is_tag = true
-      ; fresh = true; entity = Wire.Nil } ]
+      ; is_hash = true; fresh = true; entity = Wire.Nil } ]
   in
   check "tag_name_at longest match"
     (Title_refs.tag_name_at "#yard" 1 resolved
@@ -3140,7 +3144,7 @@ let test_title_refs3 () =
   eqs "rewrite ## untouched" "##h"
     (Title_refs.rewrite_title "##h"
        [ { Title_refs.name = "h"; uuid = "u"; is_tag = true
-         ; fresh = true; entity = Wire.Nil } ]);
+         ; is_hash = true; fresh = true; entity = Wire.Nil } ]);
   (* tag at end of string counts as a boundary *)
   eqs "rewrite tag at eos" "see #[[u1]]"
     (Title_refs.rewrite_title "see #y" resolved)

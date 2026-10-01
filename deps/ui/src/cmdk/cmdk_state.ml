@@ -88,6 +88,13 @@ let make scheduler : t =
 
 let get st = Signal.get st.vs.state_signal
 
+(* whether the palette is open — chrome like the selection action-bar
+   hides while it is up *)
+let open_signal () =
+  match !latest_vs with
+  | Some vs -> Some (Signal.map (fun v -> v.open_) vs)
+  | None -> None
+
 (* View-derived flags are baked into every item and group at publish
    time so keyed rows never subscribe the view signal themselves: a row
    removed mid-flush would otherwise re-mount its branch and emit DOM
@@ -261,11 +268,11 @@ let create_items q =
       ; header = None; iicon = "new-page"; isc = ""; ibadge = No_badge
       ; act = Create_page q; ihl = false; imouse = false; iq = "" } ]
 
-(* cljs state/get-current-page equivalent — only the :page route counts
-   (the journals/home route has no current page) *)
+(* cljs state/get-current-page equivalent — the :page route counts, and a
+   block zoom is still a :page route there (path param = block uuid) *)
 let current_page_uuid () =
   match !(Runtime.current_route) with
-  | Some (Model.Page _) ->
+  | Some (Model.Page _) | Some (Model.Block_zoom _) ->
       Option.bind !(Runtime.current_page) (fun p -> p.Model.page_uuid)
   | _ -> None
 
@@ -515,7 +522,8 @@ let group_order v q rows total =
     let items = filter_items () in
     { gid = G_filters; gtitle = I18n.t "cmdk.group/filters"
     ; gitems = items; gtotal = List.length items
-    ; glimit = 99; gexpanded = false; gfilter_active = false }
+    ; glimit = 5; gexpanded = List.mem G_filters v.expanded
+    ; gfilter_active = false }
   in
   let recents_g () =
     { gid = G_recently_updated
@@ -696,6 +704,85 @@ let on_input st q =
 
 external js_random : unit -> float = "random" [@@mel.scope "Math"]
 
+(* cljs components/cmdk/state.cljs: the global palette's last query and
+   filter persist per repo in localStorage "ls-cmdk-last-search" and are
+   restored on the next default-context open *)
+let last_search_key = "ls-cmdk-last-search"
+
+let filter_name = function
+  | G_nodes -> Some "nodes"
+  | G_commands -> Some "commands"
+  | G_files -> Some "files"
+  | G_themes -> Some "themes"
+  | G_codes -> Some "codes"
+  | G_current_page -> Some "current-page"
+  | _ -> None
+
+let filter_of_name = function
+  | "nodes" -> Some G_nodes
+  | "commands" -> Some G_commands
+  | "files" -> Some G_files
+  | "themes" -> Some G_themes
+  | "codes" -> Some G_codes
+  | "current-page" -> Some G_current_page
+  | _ -> None
+
+let save_last_search (v : view) =
+  let repo =
+    Option.value !(Runtime.current_repo) ~default:"__no-repo__"
+  in
+  let entry =
+    Js.Json.object_
+      (Js.Dict.fromList
+         [ ("query", Js.Json.string v.input)
+         ; ( "filter-group"
+           , (match Option.bind v.filter filter_name with
+              | Some s -> Js.Json.string s
+              | None -> Js.Json.null) )
+         ; ("updated-at", Js.Json.number (Js.Date.now ())) ])
+  in
+  let map =
+    match Platform.local_storage_get last_search_key with
+    | Some s -> (
+        try
+          match Js.Json.decodeObject (Platform.json_parse s) with
+          | Some o -> o
+          | None -> Js.Dict.empty ()
+        with _ -> Js.Dict.empty ())
+    | None -> Js.Dict.empty ()
+  in
+  Js.Dict.set map repo entry;
+  Platform.local_storage_set last_search_key
+    (Js.Json.stringify (Js.Json.object_ map))
+
+let load_last_search () : (string * group_id option) option =
+  let repo =
+    Option.value !(Runtime.current_repo) ~default:"__no-repo__"
+  in
+  match Platform.local_storage_get last_search_key with
+  | None -> None
+  | Some s -> (
+      try
+        match Js.Json.decodeObject (Platform.json_parse s) with
+        | Some o -> (
+            match Option.bind (Js.Dict.get o repo) Js.Json.decodeObject with
+            | Some eo ->
+                let q =
+                  Option.bind (Js.Dict.get eo "query")
+                    Js.Json.decodeString
+                  |> Option.value ~default:""
+                in
+                let fg =
+                  Option.bind
+                    (Option.bind (Js.Dict.get eo "filter-group")
+                       Js.Json.decodeString)
+                    filter_of_name
+                in
+                Some (q, fg)
+            | None -> None)
+        | None -> None
+      with _ -> None)
+
 let open_palette ?(move = false) st =
   st.gen := !(st.gen) + 1;
   (* publish the reset view before opening: the mount reads derived signals
@@ -705,29 +792,42 @@ let open_palette ?(move = false) st =
      mid-stabilize and emits create+drop ops for the same extension nodes
      in one batch, which the store/dom replay cannot survive *)
   let tip = if js_random () < 0.5 then 0 else 1 in
+  let saved = if move then None else load_last_search () in
   set_in st (fun v ->
-          { v with groups = []; hl = -1; input = ""; move_mode = move
+          { v with groups = []; hl = -1
+          ; input = (match saved with Some (q, _) -> q | None -> "")
+          ; move_mode = move
           ; mouse = false
           (* cljs move-selected-blocks opens via go-to-search! :nodes,
              which pins the nodes filter — keeps recents/filters out *)
-          ; filter = (if move then Some G_nodes else None)
+          ; filter =
+              (if move then Some G_nodes
+               else match saved with Some (_, g) -> g | None -> None)
           ; tip });
   set_in st (fun v -> { v with open_ = true });
+  let q = (get st).input in
   (* prime synchronously so commands show before the search lands *)
-  apply_results st "" move [] [] 0;
+  apply_results st q move [] [] 0;
   refresh st;
   (match !(Runtime.current_repo) with
    | Some repo -> load_recents st repo
    | None -> ());
   let rec focus_input tries =
     match Dom_ext.doc_query_selector ".cp__cmdk-search-input" with
-    | Some el -> Dom_ext.focus el
+    | Some el ->
+        Dom_ext.focus el;
+        if q <> "" then Dom_ext.set_value el q
     | None ->
         if tries > 0 then Dom_ext.set_timeout (fun () -> focus_input (tries - 1)) 20
   in
   Dom_ext.set_timeout (fun () -> focus_input 20) 0
 
-let close st = set_in st (fun v -> { v with open_ = false })
+let close st =
+  let v = get st in
+  (* cljs persist-cmdk-query-state! runs on unmount and every committed
+     action; move mode is outside the default context *)
+  if not v.move_mode then save_last_search v;
+  set_in st (fun v -> { v with open_ = false })
 
 let clear_filter st =
   set_in st (fun v -> { v with filter = None });
