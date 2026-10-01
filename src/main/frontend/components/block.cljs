@@ -288,7 +288,7 @@
                   ;; file via IPC and copy the blob directly.
                   (if (and (util/electron?)
                            (seq image-src)
-                           (not (string/starts-with? image-src "http")))
+                           (not (string/starts-with? (string/lower-case image-src) "http")))
                     (let [ext (some-> (util/get-file-ext image-src) string/lower-case)
                           ;; Should support all exts in common-config/img-formats
                           ext->mime {"png" "image/png"
@@ -395,7 +395,7 @@
                   [:span.flex.items-center.gap-1
                    (ui/icon "copy") (t :asset/copy)])
                  (when (util/electron?)
-                   (let [remote-src? (and image-src (string/starts-with? image-src "http"))]
+                   (let [remote-src? (and image-src (string/starts-with? (string/lower-case image-src) "http"))]
                      (shui/dropdown-menu-item
                       {:on-click (fn [e]
                                    (util/stop e)
