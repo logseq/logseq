@@ -98,7 +98,9 @@ let hidden_checkbox ~key ~on =
   dom ~key ~tag:"input"
     ~attrs:
       ([ ("type", "checkbox")
-       ; ("style", "clip-path: inset(50%); overflow: hidden;") ]
+       ; ( "style"
+         , "position: fixed; top: 0; left: 0; width: 1px; height: 1px; \
+            clip-path: inset(50%); overflow: hidden;" ) ]
       @ if on then [ ("checked", "") ] else [])
     []
 
@@ -248,7 +250,9 @@ let language_row ctx =
           ~anchor_sel:"#settings-lang-trigger"
       ; dom ~key:"lang-sel-i" ~tag:"input"
           ~attrs:
-            [ ("style", "clip-path: inset(50%); overflow: hidden;")
+            [ ( "style"
+              , "position: fixed; top: 0; left: 0; width: 1px; height: 1px; \
+                 clip-path: inset(50%); overflow: hidden;" )
             ; ("value", V.current_lang ()) ]
           []
       ]
@@ -944,8 +948,11 @@ let view (_m : Model.t) : t = inner ~modal:false
 let modal_body (_ms : Model.t Signal.signal) : t =
   fun ctx parent ->
     let node =
+      (* cljs general() calls (accent-color-row false) in the settings
+         dialog too — modal=true is only for the compact appearance
+         popup (autofocus, as-modal-picker grid, no shortcut chips) *)
       dom ~key:"settings-modal" ~style_class:"settings-modal"
-        [ inner ~modal:true ]
+        [ inner ~modal:false ]
     in
     node ctx parent
 

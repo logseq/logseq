@@ -19,8 +19,14 @@ let route_path () =
   | None -> h
 
 let parse_path (p : string) : Model.route =
+  (* hashes are "#/page/x" style — strip the leading "/" *)
+  let p =
+    if String.length p > 0 && String.get p 0 = '/' then
+      String.sub p 1 (String.length p - 1)
+    else p
+  in
   match p with
-  | "" | "/" -> Model.Home
+  | "" -> Model.Home
   | p -> (
       match String.index_opt p '/' with
       | Some i -> (
@@ -33,6 +39,7 @@ let parse_path (p : string) : Model.route =
           | "all-pages" -> Model.All_pages
           | "graphs" -> Model.All_graphs
           | "import" -> Model.Import
+          | "settings" -> Model.Settings
           | _ -> Model.Not_found p)
       | None -> (
           match p with
@@ -499,7 +506,7 @@ let load_route (route : Model.route) =
 let resolve () =
   Platform.perf_mark "router:resolve";
   let route = parse_hash () in
-  match !Runtime.current_route with
+  (match !Runtime.current_route with
   | Some r when r = route ->
       (* our own set_location_hash (or a repeat hashchange) for the route
          already shown — Navigate_to would blank route_page/current_page
@@ -525,7 +532,13 @@ let resolve () =
       if route <> Model.Settings then Settings_state.deactivate ();
       load_route route;
       Option.iter jump_to_anchor (route_anchor ());
-      Runtime.flush ()
+      Runtime.flush ());
+  (* cljs "#/settings" surfaces as the settings dialog stacked over the
+     kept route page — open it after commit (and again when the hash is
+     re-triggered while already on the route) *)
+  if route = Model.Settings && Dialogs_state.ready () then
+    Dialogs_state.open_ "settings"
+
 (* worker sync-db-changes broadcast: reload the current route's data
    without Navigate_to (keeps route_page until the fresh one lands, so
    the page does not blank). Broadcasts can arrive in bursts (one per
