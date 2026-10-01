@@ -9,6 +9,7 @@
     "vite": "^8.0.10"
   },
   "scripts": {
-    "build": "dune build js_api && vite build --mode node && vite build --mode browser"
+    "check:schema-version": "node scripts/check-schema-version.cjs",
+    "build": "node scripts/check-schema-version.cjs && dune build js_api && vite build --mode node && vite build --mode browser"
   }
 }

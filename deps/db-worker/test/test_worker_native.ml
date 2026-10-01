@@ -338,6 +338,18 @@ let () =
   let res = await (Worker_core.invoke "thread-api/create-or-open-db" schema_args) in
   check "create-or-open-db ok" (not (string_contains res "error"));
 
+  let version_at ident =
+    let conn = Option.get (Worker_state.datascript_conn repo) in
+    match Datascript.entity (Datascript.db conn) (Datascript.Ident ident) with
+    | Some e -> Option.map Db_schema.parse_schema_version (Ldb.value e "kv/value")
+    | None -> None
+  in
+  let current_version = Db_schema.version in
+  check "new graph schema includes page-order repair"
+    (version_at "logseq.kv/schema-version" = Some current_version);
+  check "new graph initial schema includes page-order repair"
+    (version_at "logseq.kv/graph-initial-schema-version" = Some current_version);
+
   let tx_args =
     Transit_codec.to_string
       (Wire.Array
@@ -393,6 +405,55 @@ let () =
   check "reopen ok" (not (string_contains res2 "error"));
   let q_res2 = await (Worker_core.invoke "thread-api/q" q_args) in
   check "data survives reopen" (q_res2 = q_res || string_contains q_res2 "[[");
+
+  (* Persist a pre-65.34 graph, then exercise the default migration on open. *)
+  let conn = Option.get (Worker_state.datascript_conn repo) in
+  ignore (Datascript.transact_conn_string conn
+    "[[:db/add [:db/ident :logseq.kv/schema-version] :kv/value {:major 65 :minor 33}]
+      [:db/add [:db/ident :logseq.kv/graph-initial-schema-version] :kv/value {:major 65 :minor 33}]
+      {:db/id \"parent\" :block/name \"country\" :block/title \"Country\"
+       :block/uuid #uuid \"33333333-3333-4333-8333-333333333333\"
+       :block/tags :logseq.class/Page}
+      {:block/name \"overview\" :block/title \"Overview\"
+       :block/uuid #uuid \"55555555-5555-4555-8555-555555555555\"
+       :block/parent \"parent\" :block/page \"parent\" :block/order \"bzz\"
+       :block/tags :logseq.class/Page}
+      {:block/name \"australia\" :block/title \"Australia\"
+       :block/uuid #uuid \"44444444-4444-4444-8444-444444444444\"
+       :block/parent \"parent\" :block/tags :logseq.class/Page}]");
+  let close () =
+    ignore (await (Worker_core.invoke "thread-api/close-db"
+      (Transit_codec.to_string (Wire.Array [ Wire.String repo ]))))
+  in
+  let order_at uuid =
+    let conn = Option.get (Worker_state.datascript_conn repo) in
+    match Datascript.entity (Datascript.db conn)
+      (Datascript.Lookup_ref ("block/uuid", Datascript.Uuid uuid)) with
+    | Some e -> Ldb.value e "block/order"
+    | None -> None
+  in
+  close ();
+  ignore (await (Worker_core.invoke "thread-api/create-or-open-db" schema_args));
+  check "old graph default open migrates to 65.34"
+    (version_at "logseq.kv/schema-version" = Some current_version);
+  check "old graph initial version is preserved"
+    (version_at "logseq.kv/graph-initial-schema-version"
+     = Some (Db_schema.parse_schema_version (Datascript.String "65.33")));
+  let repaired_order = order_at "44444444-4444-4444-8444-444444444444" in
+  check "old graph missing order repaired beyond sibling"
+    (match repaired_order with
+     | Some (Datascript.String o) -> String.compare o "bzz" > 0
+     | _ -> false);
+  check "old graph sibling order preserved"
+    (order_at "55555555-5555-4555-8555-555555555555"
+     = Some (Datascript.String "bzz"));
+  close ();
+  ignore (await (Worker_core.invoke "thread-api/create-or-open-db" schema_args));
+  check "repaired schema survives reopen"
+    (version_at "logseq.kv/schema-version" = Some current_version);
+  check "repaired order survives reopen"
+    (order_at "44444444-4444-4444-8444-444444444444" = repaired_order);
+  close ();
 
   let list_res = await (Worker_core.invoke "thread-api/list-db" "[]") in
   check "list-db has repo" (string_contains list_res repo);

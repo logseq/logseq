@@ -365,7 +365,8 @@ let test_migrate_65_25_adds_repeat_type_property () =
   ignore (Db_migrate.migrate conn);
   let db' = db_of conn in
   check "65-25b: schema-version bumped to latest"
-    (kv_version db' "logseq.kv/schema-version" = Some (65, 33));
+    (kv_version db' "logseq.kv/schema-version"
+     = Some (Db_schema.version.sv_major, Option.get Db_schema.version.sv_minor));
   match entity db' (Ident "logseq.property.repeat/repeat-type") with
   | None -> check "65-25b: repeat-type property created" false
   | Some property ->
@@ -760,7 +761,7 @@ let test_migrate_65_33_adds_gallery_view_properties () =
    divergence), so that assertion is dropped like 65-30/-31's.
    cljs with-redefs db-order/*max-key (atom "a0") -> save/set/restore of
    Db_order.max_key. *)
-let test_migrate_65_34_advances_repaired_page_order_allocator () =
+let migrate_65_34_advances_repaired_page_order_allocator ?target_version () =
   let conn = Db_test_util.create_conn () in
   let parent_uuid = "33333333-3333-4333-8333-333333333333"
   and sibling_uuid = "55555555-5555-4555-8555-555555555555"
@@ -784,8 +785,7 @@ let test_migrate_65_34_advances_repaired_page_order_allocator () =
     ~finally:(fun () -> Db_order.max_key := prev_max_key)
     (fun () ->
       ignore
-        (Db_migrate.migrate conn
-           ~target_version:{ sv_major = 65; sv_minor = Some 34 });
+        (Db_migrate.migrate ?target_version conn);
       let db' = db_of conn in
       check "65-34: schema-version 65.34"
         (kv_version db' "logseq.kv/schema-version" = Some (65, 34));
@@ -809,12 +809,20 @@ let test_migrate_65_34_advances_repaired_page_order_allocator () =
              (String.compare (Db_order.gen_key_from_max ()) o > 0)
        | _ -> check "65-34: gen-key after repair" false);
       check "65-34: second migrate nil"
-        (Db_migrate.migrate conn
-           ~target_version:{ sv_major = 65; sv_minor = Some 34 }
+        (Db_migrate.migrate ?target_version conn
          = None))
 
+let test_migrate_65_34_advances_repaired_page_order_allocator () =
+  migrate_65_34_advances_repaired_page_order_allocator
+    ~target_version:{ sv_major = 65; sv_minor = Some 34 } ()
+
+let test_default_migrate_repairs_page_order () =
+  migrate_65_34_advances_repaired_page_order_allocator ()
+
 let migrate_cases : unit Alcotest.test_case list =
-  [ Alcotest.test_case "delete-property-cleans-property-usages" `Quick
+  [ Alcotest.test_case "default-migrate-repairs-page-order" `Quick
+      test_default_migrate_repairs_page_order
+  ; Alcotest.test_case "delete-property-cleans-property-usages" `Quick
       test_delete_property_cleans_property_usages
   ; Alcotest.test_case "ensure-built-in-data-exists!" `Quick
       test_ensure_built_in_data_exists

@@ -131,7 +131,7 @@ let db_non_ref_attributes =
 (* db-schema/version *)
 type schema_version = { sv_major : int; sv_minor : int option }
 
-let version = { sv_major = 65; sv_minor = Some 33 }
+let version = { sv_major = 65; sv_minor = Some 34 }
 
 (* db-schema/parse-schema-version — accepts int, "10.1", [10 1],
    {:major 10 :minor 1} *)
