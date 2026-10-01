@@ -140,7 +140,9 @@
   [page option document-mode?]
   (merge {:id (str (:block/uuid page))
           :db/id (:db/id page)
-          :current-page-title (:block/title page)
+          :current-page-title (if (entity/page? page)
+                                (:block/title page)
+                                (get-in page [:block/page :block/title]))
           :block? (not (entity/page? page))
           :editor-box editor/box
           :document/mode? document-mode?
