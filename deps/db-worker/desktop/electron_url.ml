@@ -200,7 +200,14 @@ let local_url_handler (win : Browser_window.t) (parsed_url : url)
                     [| payload |]
                 in
                 if open_new_window then
-                  Electron_state.once_graph_ready := Some redirect_f
+                  (* cljs redirect-f (fn [win' graph-name']): fires on the
+                     :graphReady ipc of the new window; redirects only
+                     when the reported graph matches. *)
+                  Electron_state.once_graph_ready :=
+                    Some
+                      (fun win' graph_name' ->
+                        if String.equal graph_name graph_name' then
+                          redirect win')
                 else
                   (match window_on_graph with
                    | Some w ->

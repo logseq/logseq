@@ -48,7 +48,9 @@ external delete_property : Js.Json.t Js.Dict.t -> string -> bool
    strip x-frame-options / CSP headers on incoming responses so embedded
    pages can be framed. *)
 let disable_x_frame_options (win : Browser_window.t) : unit =
-  let session = Web_contents.session (Browser_window.web_contents win) in
+  let session =
+    Electron_bindings.web_contents_session (Browser_window.web_contents win)
+  in
   Web_request.on_headers_received (Session.web_request session)
     (fun [@u] details callback ->
       let headers = details##responseHeaders in
