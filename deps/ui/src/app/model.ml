@@ -197,6 +197,71 @@ let initial =
   ; data_gen = 0
   }
 
+let empty_block ~uuid ~title ~is_page : block =
+  { block_uuid = Some uuid
+  ; block_db_id = None
+  ; block_title = title
+  ; block_level = 0
+  ; block_tag_ids = []
+  ; block_tags = []
+  ; block_display_type = None
+  ; block_order_list = None
+  ; block_order_index = None
+  ; block_order = None
+  ; block_code_lang = None
+  ; block_tag_uuids = []
+  ; block_tag_idents = []
+  ; block_tag_db_ids = []
+  ; block_page_name = None
+  ; block_reactions = []
+  ; block_is_comments_area = false
+  ; block_is_comment = false
+  ; block_comment_targets = 0
+  ; block_icon = None
+  ; block_tag_icons = []
+  ; block_children = []
+  ; block_link = None
+  ; block_embed_children = []
+  ; block_is_page = is_page
+  ; block_heading = None
+  ; block_default_collapsed = false
+  ; block_asset_type = None
+  ; block_asset_url = None
+  ; block_asset_width = None
+  ; block_asset_height = None
+  ; block_asset_resize = None
+  ; block_asset_align = None
+  ; block_is_query = false
+  ; block_db_collapsable = false
+  }
+
+(* optimistic Enter: retitle the split block and insert the new block as
+   its next sibling (or first child when the op expands into children).
+   The worker delta stays authoritative — it lands ~100ms later with the
+   same uuid and splices the real record over this placeholder *)
+let split_insert (page : page) ~uuid ~before ~(new_block : block) ~sibling
+    : page option =
+  let changed = ref false in
+  let rec go (blocks : block list) : block list =
+    List.concat_map
+      (fun b ->
+        let children = go b.block_children in
+        if b.block_uuid = Some uuid then (
+          changed := true;
+          if sibling then
+            [ { b with block_title = before; block_children = children }
+            ; new_block ]
+          else
+            [ { b with
+                block_title = before
+              ; block_children = new_block :: children
+              } ])
+        else [ { b with block_children = children } ])
+      blocks
+  in
+  let blocks' = go page.page_blocks in
+  if !changed then Some { page with page_blocks = blocks' } else None
+
 (* optimistic indent: move the selected run under its previous sibling so
    the reparent repaints synchronously (the async worker refresh then
    reconciles an identical structure instead of remounting the editing

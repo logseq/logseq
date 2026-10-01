@@ -154,6 +154,7 @@ and apply_pending () : unit Js.Promise.t =
           (* own_commit keeps the basis; identical-page sends are
              deduped downstream *)
           if p' != page then (
+            Runtime.push_page_items p';
             Runtime.send (Action.Page_loaded p');
             !Runtime.refresh_page_side p');
           Js.Promise.resolve ()

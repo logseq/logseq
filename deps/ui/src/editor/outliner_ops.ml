@@ -1016,8 +1016,7 @@ let refresh_via_delta (resp : Wire.t option) : unit Js.Promise.t =
              list before Page_loaded — the items signal repaints only
              the touched rows, and matching container fields then let
              update.ml skip the data_gen bump (no page remount) *)
-          Runtime.set_page_items ~scope:"main" ~puuid:page'.Model.page_uuid
-            (Array.of_list page'.Model.page_blocks);
+          Runtime.push_page_items page';
           Runtime.send (Action.Page_loaded page');
           (* the whole-tree fetch is skipped, but linked/unlinked refs
              still need their cheap refresh *)
