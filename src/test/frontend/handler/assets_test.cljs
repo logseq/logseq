@@ -102,6 +102,30 @@
     (is (= "assets:///C/logseq__colon/Users/charlie/graph/assets/test.png"
            (assets/normalize-asset-resource-url "C:/Users/charlie/graph/assets/test.png")))))
 
+(deftest file-path->assets-url-does-not-double-encode-percent-spaces-test
+  (with-redefs [util/electron? (constantly true)
+                config/get-repo-dir (constantly "/workspace/graph")]
+    (let [expected "assets:///workspace/shared/logseq-qa/fixtures/path%20spaces/qa%20image.png"]
+      (testing "percent-encoded absolute path encodes %20 once"
+        (is (= expected
+               (assets/file-path->assets-url
+                "/workspace/shared/logseq-qa/fixtures/path%20spaces/qa%20image.png"))))
+      (testing "literal-space absolute path encodes %20 once"
+        (is (= expected
+               (assets/file-path->assets-url
+                "/workspace/shared/logseq-qa/fixtures/path spaces/qa image.png"))))
+      (testing "percent-encoded file URL encodes %20 once"
+        (is (= expected
+               (assets/file-path->assets-url
+                "file:///workspace/shared/logseq-qa/fixtures/path%20spaces/qa%20image.png"))))
+      (testing "literal-space file URL encodes %20 once"
+        (is (= expected
+               (assets/file-path->assets-url
+                "file:///workspace/shared/logseq-qa/fixtures/path spaces/qa image.png"))))
+      (testing "already-encoded assets URL is not encoded again"
+        (is (= expected
+               (assets/file-path->assets-url expected)))))))
+
 (deftest make-asset-url-electron-test
   (async done
     (with-redefs [util/electron? (constantly true)
