@@ -559,7 +559,7 @@
         template-db (or (:db-after template-result) db-after)
         insert-templates-tx (when-not (or (rtc-tx-or-download-graph? tx-meta)
                                           (:undo? tx-meta)
-                                          (:redo? tx-meta))
+                                          (:db-sync/replayed-tx-data? tx-meta))
                               (insert-tag-templates
                                (cond-> (assoc tx-report :db-after template-db)
                                  template-result
