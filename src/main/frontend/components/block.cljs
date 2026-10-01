@@ -286,9 +286,13 @@
                 (fn [_e]
                   ;; Electron renderer cannot fetch file:// URLs; read the
                   ;; file via IPC and copy the blob directly.
+                  ;; image-src is a filesystem path only when it has no URL
+                  ;; scheme (a Windows drive letter like C: is not a scheme)
+                  ;; and is not protocol-relative; data:/blob:/http(s) take
+                  ;; the renderer fetch path instead.
                   (if (and (util/electron?)
                            (seq image-src)
-                           (not (string/starts-with? (string/lower-case image-src) "http")))
+                           (not (re-find #"(?i)^([a-z][a-z0-9+.-]+:|//)" image-src)))
                     (let [ext (some-> (util/get-file-ext image-src) string/lower-case)
                           ;; Should support all exts in common-config/img-formats
                           ext->mime {"png" "image/png"
@@ -398,8 +402,13 @@
                   [:span.flex.items-center.gap-1
                    (ui/icon "copy") (t :asset/copy)])
                  (when (util/electron?)
-                   (let [remote-src? (and image-src (string/starts-with? (string/lower-case image-src) "http"))]
-                     (shui/dropdown-menu-item
+                   ;; http(s) opens in browser; a bare filesystem path
+                   ;; reveals in folder; anything else (data:, blob:, //)
+                   ;; supports neither action.
+                   (let [remote-src? (and image-src (re-find #"(?i)^https?:" image-src))
+                         file-src? (and image-src (not (re-find #"(?i)^([a-z][a-z0-9+.-]+:|//)" image-src)))]
+                     (when (or remote-src? file-src?)
+                       (shui/dropdown-menu-item
                       {:on-click (fn [e]
                                    (util/stop e)
                                    (if remote-src?
