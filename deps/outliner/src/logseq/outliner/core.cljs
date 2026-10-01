@@ -779,7 +779,8 @@
   [db target-block blocks uuids get-new-id {:keys [sibling? outliner-op replace-empty-target? insert-template? keep-block-order?]}]
   (let [block-ids (set (map :block/uuid blocks))
         target-page (get-target-block-page target-block sibling?)
-        orders (get-block-orders blocks target-block sibling? keep-block-order?)]
+        orders (get-block-orders blocks target-block sibling? keep-block-order?)
+        batch-uuids (set (vals uuids))]
     (loop [db db
            idx 0
            blocks blocks
@@ -787,7 +788,7 @@
       (if-let [{:block/keys [parent] :as block} (first blocks)]
         (if-let [uuid' (get uuids (:block/uuid block))]
           (let [{:keys [block page-txs]}
-                (resolve-page-refs db (remove-disallowed-inline-classes db block) {:batch-uuids (set (vals uuids))})
+                (resolve-page-refs db (remove-disallowed-inline-classes db block) {:batch-uuids batch-uuids})
                 top-level? (= (:block/level block) 1)
                 parent (compute-block-parent block parent target-block top-level? sibling? get-new-id outliner-op replace-empty-target? idx)
                 order (nth orders idx)
@@ -822,11 +823,9 @@
                                                :parent parent
                                                :order order
                                                :target-page target-page
-                                               :outliner-op outliner-op})
-                db' (if (seq page-txs)
-                      (:db-after (d/with db page-txs))
-                      db)]
-            (recur db' (inc idx) (rest blocks)
+                                               :outliner-op outliner-op})]
+            (recur (if (seq page-txs) (:db-after (d/with db page-txs)) db)
+                   (inc idx) (rest blocks)
                    (conj entries [(update-property-ref-when-paste result uuids) page-txs])))
           (recur db (inc idx) (rest blocks) (conj entries nil)))
         entries))))
