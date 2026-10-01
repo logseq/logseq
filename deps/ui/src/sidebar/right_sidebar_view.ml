@@ -533,10 +533,10 @@ let markdown_syntax_table () =
         (raw ~key:"m-math-l" (t "help/inline-math-example-prefix" ^ " $E = mc^2$"))
         (dom ~tag:"span"
            ~text:(t "help/inline-math-example-prefix" ^ " ")
-           [ Render_inline.katex_el "E = mc^2" ])
+           [ Render_inline.katex_el ~block:false ~display:false "E = mc^2" ])
     ; row ~key:"m-latex" (raw ~key:"m-latex-l" "$$E = mc^2$$")
         (dom ~tag:"div" ~style_class:"latex"
-           [ Render_inline.katex_el "E = mc^2" ])
+           [ Render_inline.katex_el ~block:true ~display:true "E = mc^2" ])
     ; row ~key:"m-code"
         (raw ~key:"m-code-l" ("`" ^ t "format/code" ^ "`"))
         (dom ~tag:"code" ~text:(t "format/code") [])

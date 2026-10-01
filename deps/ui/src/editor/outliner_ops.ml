@@ -983,20 +983,40 @@ let delta_helpers (page : Model.page) : Page_delta.helpers =
    ~strict:false — op-side patches are absolute set-ops.
    Returns the merged page plus every uuid the folded deltas touched, so
    the caller can drop only the title overrides the tx caught up to *)
-let apply_queued page delta =
-  let h = delta_helpers page in
+let apply_queued _page delta =
   let deltas = Page_delta.drain_deferred () @ [ delta ] in
   let touched = List.concat_map Page_delta.delta_uuids deltas in
-  let rec go page = function
-    | [] -> Js.Promise.resolve (Some page)
-    | d :: rest -> (
-        let* applied = Page_delta.apply_to_page ~strict:false h page d in
-        match applied with
-        | Some page' -> go page' rest
-        | None -> Js.Promise.resolve None)
-  in
-  let* applied = go page deltas in
-  Js.Promise.resolve (applied, touched)
+  (* fold and publish inside the apply queue so a racing arm can't
+     interleave between our splice and our publish — canon rows replace
+     block fields wholesale, so a stale arm publishing last would blank
+     rows the newer model already advanced *)
+  Page_delta.with_apply_queue (fun () ->
+      match !Runtime.current_page with
+      | Some base -> (
+          let h = delta_helpers base in
+          let rec go page = function
+            | [] -> Js.Promise.resolve (Some page)
+            | d :: rest -> (
+                let* applied =
+                  Page_delta.apply_to_page ~strict:false h page d
+                in
+                match applied with
+                | Some page' -> go page' rest
+                | None -> Js.Promise.resolve None)
+          in
+          let* a = go base deltas in
+          (match a with
+           | Some p'
+             when p' != base
+                  &&
+                  (match !Runtime.current_page with
+                   | Some c -> c == base
+                   | None -> false) ->
+               Runtime.push_page_items p';
+               Runtime.send (Action.Page_loaded p')
+           | _ -> ());
+          Js.Promise.resolve (a, touched))
+      | None -> Js.Promise.resolve (None, touched))
 
 let refresh_via_delta (resp : Wire.t option) : unit Js.Promise.t =
   match
@@ -1006,18 +1026,12 @@ let refresh_via_delta (resp : Wire.t option) : unit Js.Promise.t =
       let route_at_start = !Runtime.current_route in
       let* applied, touched = apply_queued page delta in
       match applied with
-      | Some page' when page_still_current route_at_start page ->
+      | Some page' when page_still_current route_at_start page' ->
           (* the spliced rows are authoritative for the uuids the tx
              touched — drop their committed-buffer title overrides like
              refresh_page does, but keep in-flight commits the tx
              didn't cover *)
           S.prune_overrides touched;
-          (* push the spliced tree straight into the mounted virtual
-             list before Page_loaded — the items signal repaints only
-             the touched rows, and matching container fields then let
-             update.ml skip the data_gen bump (no page remount) *)
-          Runtime.push_page_items page';
-          Runtime.send (Action.Page_loaded page');
           (* the whole-tree fetch is skipped, but linked/unlinked refs
              still need their cheap refresh *)
           !Runtime.refresh_page_side page';

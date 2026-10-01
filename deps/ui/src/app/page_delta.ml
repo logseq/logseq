@@ -114,6 +114,22 @@ let reset () =
 
 let already_applied rev = ISet.mem rev !applied
 
+(* canon rows replace a block's fields wholesale, so two apply arms (the
+   op-response drain and the broadcast fold) running concurrently can let
+   an older rev's apply finish last and publish its stale canon over a
+   newer title. The already-applied check happens before async enrichment,
+   so it cannot dedupe that race — serialize every apply instead. *)
+let apply_queue : unit Js.Promise.t ref = ref (Js.Promise.resolve ())
+
+let with_apply_queue (f : unit -> 'a Js.Promise.t) : 'a Js.Promise.t =
+  let p =
+    let* () = !apply_queue in
+    f ()
+  in
+  apply_queue :=
+    Js.Promise.then_ (fun _ -> Js.Promise.resolve ()) p;
+  p
+
 let note_applied rev =
   applied := ISet.add rev !applied;
   (* bound the set — a long session of ops would otherwise grow it *)
@@ -407,6 +423,8 @@ let apply_to_page ?(strict = true) (h : helpers) (page : Model.page)
           h.resolve (List.map snd decoded)
         in
         let* filled = h.fill_embeds filled in
+        if already_applied p.rev then Js.Promise.resolve (Some page)
+        else
         let canon_nodes = Hashtbl.create (List.length filled) in
         List.iter2
           (fun (u, _) n -> Hashtbl.replace canon_nodes u n)

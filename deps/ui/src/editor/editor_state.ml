@@ -260,7 +260,8 @@ let find uuid =
    a stale paint between the two shows a blank/reverted title *)
 let display_overrides : (string, string) Hashtbl.t = Hashtbl.create 8
 
-let override_title uuid title = Hashtbl.replace display_overrides uuid title
+let override_title uuid title =
+  Hashtbl.replace display_overrides uuid title
 
 let title_for uuid fallback =
   Option.value (Hashtbl.find_opt display_overrides uuid) ~default:fallback
@@ -283,7 +284,7 @@ let prune_overrides touched =
   Hashtbl.fold
     (fun u t acc -> if dead u t then u :: acc else acc)
     display_overrides []
-  |> List.iter (fun u -> Hashtbl.remove display_overrides u)
+  |> List.iter (Hashtbl.remove display_overrides)
 
 (* CodeMirror buffer/focus providers for code-fence blocks, wired by
    Code_mirror.install — refs so Editor_actions needs no CM module dep *)

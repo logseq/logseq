@@ -122,41 +122,57 @@ and apply_pending () : unit Js.Promise.t =
     Runtime.run_sync_subs ()
   in
   match (!Runtime.current_page, deltas, unknown) with
-  | Some page, _ :: _, false -> (
-      let rec fold (p : Model.page) = function
-        | [] -> Js.Promise.resolve (Some p)
-        | d :: rest -> (
-            let* applied =
-              Page_delta.apply_to_page ~strict:true
-                (Outliner_ops.delta_helpers p)
-                p d
-            in
-            match applied with
-            | Some p' -> fold p' rest
-            | None -> Js.Promise.resolve None)
-      in
+  | Some _, _ :: _, false -> (
       let all_dup =
         List.for_all Page_delta.delta_already_applied deltas
       in
-      let* merged = fold page deltas in
+      (* fold and publish inside the apply queue so a racing arm can't
+         interleave between our splice and our publish — canon rows
+         replace block fields wholesale, so a stale arm publishing last
+         would blank rows the newer model already advanced *)
+      let* merged =
+        Page_delta.with_apply_queue (fun () ->
+            match !Runtime.current_page with
+            | Some base -> (
+                let rec fold (p : Model.page) = function
+                  | [] -> Js.Promise.resolve (Some p)
+                  | d :: rest -> (
+                      let* applied =
+                        Page_delta.apply_to_page ~strict:true
+                          (Outliner_ops.delta_helpers p)
+                          p d
+                      in
+                      match applied with
+                      | Some p' -> fold p' rest
+                      | None -> Js.Promise.resolve None)
+                in
+                let* m = fold base deltas in
+                (match m with
+                 | Some p'
+                   when p' != base
+                        &&
+                        (match !Runtime.current_page with
+                         | Some c -> c == base
+                         | None -> false) ->
+                     Runtime.push_page_items p';
+                     Runtime.send (Action.Page_loaded p');
+                     !Runtime.refresh_page_side p'
+                 | _ -> ());
+                Js.Promise.resolve m)
+            | None -> Js.Promise.resolve None)
+      in
       (* a broadcast carrying only deltas we already spliced from our
          own op response has nothing new to publish — skip the subs
          refresh, it would just re-issue the sidebar/view fetches *)
       if not all_dup then finish ();
       match merged with
-      | Some p' ->
+      | Some _ ->
           (* the spliced rows are authoritative for the uuids these txs
              touched — drop only those title overrides, keep in-flight
              commits *)
           if not all_dup then
             Editor_state.prune_overrides
               (List.concat_map Page_delta.delta_uuids deltas);
-          (* own_commit keeps the basis; identical-page sends are
-             deduped downstream *)
-          if p' != page then (
-            Runtime.push_page_items p';
-            Runtime.send (Action.Page_loaded p');
-            !Runtime.refresh_page_side p');
           Js.Promise.resolve ()
       | None ->
           Router.reload ();
