@@ -44,14 +44,11 @@
   (testing "no tags"
     (is (false? (#'fsrs/card-block? {:block/tags []})))))
 
-(deftest get-card-map-treats-extends-card-as-card
-  (let [card-map (#'fsrs/get-card-map (extends-card-block))]
-    (is (some? card-map)
-        "A #Project block whose tag extends Card must get a card-map, matching the worker.")
-    (is (some? (:due card-map)))))
-
-(deftest get-card-map-is-nil-when-block-is-not-a-card
-  (is (nil? (#'fsrs/get-card-map {:block/tags [{:db/ident :user.class/Project}]}))))
+(deftest get-card-map-returns-map-only-for-cards
+  (is (some? (#'fsrs/get-card-map (extends-card-block)))
+      "A #Project block whose tag extends Card must get a card-map, matching the worker.")
+  (is (nil? (#'fsrs/get-card-map {:block/tags [{:db/ident :user.class/Project}]}))
+      "rating-btns relies on nil to skip due-date computation for non-cards"))
 
 (deftest rating-extends-card-persists-state
   (async done
