@@ -251,6 +251,17 @@
     (is (= [t1] (map :db/id (:logseq.property/choice-classes p1)))
         "Scoped tag ids must survive flattening so other tags do not see this choice")))
 
+(deftest set-hide-toggles-on-property-entity
+  (let [conn (db-test/create-conn-with-blocks
+              {:properties {:keywords {:logseq.property/type :default}}})
+        prop-eid (:db/id (d/entity @conn :user.property/keywords))]
+    (outliner-property/set-block-property! conn prop-eid :logseq.property/hide? true)
+    (is (true? (:logseq.property/hide? (d/entity @conn prop-eid))))
+    (outliner-property/set-block-property! conn prop-eid :logseq.property/hide-empty-value true)
+    (is (true? (:logseq.property/hide-empty-value (d/entity @conn prop-eid))))
+    (outliner-property/set-block-property! conn prop-eid :logseq.property/hide? false)
+    (is (false? (:logseq.property/hide? (d/entity @conn prop-eid))))))
+
 (deftest pull-default-value-property-rejects-virtual-closed-values-attr
   (let [conn (d/create-conn db-schema/schema)
         _ (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
