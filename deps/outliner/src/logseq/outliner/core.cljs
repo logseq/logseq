@@ -301,6 +301,26 @@
     [[] {}]
     refs)))
 
+(defn- broken-page-map?
+  "A uuid-named page ref that matches no entity resolves to a nil :block/uuid
+  because no page is created for it; the typed [[uuid]] renders as a broken ref."
+  [ref']
+  (and (map? ref')
+       (nil? (:block/uuid ref'))
+       (nil? (:db/id ref'))
+       (nil? (:db/ident ref'))
+       (common-util/uuid-string? (or (:block/name ref') ""))))
+
+(defn- missing-uuid-ref?
+  "A [:block/uuid id] lookup whose entity doesn't exist and isn't created by
+  this transaction would fail the transaction, so it's dropped."
+  [db created-uuids [_ref ref' _tx-data]]
+  (and (vector? ref')
+       (= :block/uuid (first ref'))
+       (uuid? (second ref'))
+       (not (d/entity db [:block/uuid (second ref')]))
+       (not (contains? created-uuids (second ref')))))
+
 (defn- resolve-page-refs
   ([db block]
    (resolve-page-refs db block nil))
@@ -309,29 +329,14 @@
      (let [tag-names (into #{} (keep :block/name) (:block/tags block))
            resolved-refs (resolve-refs-dedup db refs tag-names)
            pairs (mapv (fn [ref [ref' tx-data]] [ref ref' tx-data]) refs resolved-refs)
-           ;; A uuid-named page ref that matches no entity resolves to a nil
-           ;; :block/uuid because no page is created for it. Drop the ref and
-           ;; restore the typed [[uuid]] in the title so it renders as a broken
-           ;; ref instead of failing the transaction.
-           broken-page-map? (fn [[_ref ref' _tx-data]]
-                              (and (map? ref')
-                                   (nil? (:block/uuid ref'))
-                                   (nil? (:db/id ref'))
-                                   (nil? (:db/ident ref'))
-                                   (common-util/uuid-string? (or (:block/name ref') ""))))
-           ;; A [:block/uuid id] lookup whose entity doesn't exist and isn't
-           ;; created by this transaction would fail the transaction, so drop it.
            created-uuids (into batch-uuids
                                (keep (fn [[_ref ref' _tx-data]] (:block/uuid ref')))
                                pairs)
-           missing-uuid-ref? (fn [[_ref ref' _tx-data]]
-                               (and (vector? ref')
-                                    (= :block/uuid (first ref'))
-                                    (uuid? (second ref'))
-                                    (not (d/entity db [:block/uuid (second ref')]))
-                                    (not (contains? created-uuids (second ref')))))
-           resolved-pairs (into [] (remove (some-fn broken-page-map? missing-uuid-ref?)) pairs)
-           broken-pairs (filterv broken-page-map? pairs)
+           drop-pair? (fn [pair]
+                        (or (broken-page-map? (second pair))
+                            (missing-uuid-ref? db created-uuids pair)))
+           resolved-pairs (into [] (remove drop-pair?) pairs)
+           broken-pairs (filterv (comp broken-page-map? second) pairs)
            refs' (mapv second resolved-pairs)
            page-txs (mapcat #(nth % 2) resolved-pairs)
            tag-refs (reduce (fn [m ref]
@@ -782,8 +787,7 @@
       (if-let [{:block/keys [parent] :as block} (first blocks)]
         (if-let [uuid' (get uuids (:block/uuid block))]
           (let [{:keys [block page-txs]}
-                (resolve-page-refs db (remove-disallowed-inline-classes db block)
-                                   {:batch-uuids (set (vals uuids))})
+                (resolve-page-refs db (remove-disallowed-inline-classes db block) {:batch-uuids (set (vals uuids))})
                 top-level? (= (:block/level block) 1)
                 parent (compute-block-parent block parent target-block top-level? sibling? get-new-id outliner-op replace-empty-target? idx)
                 order (nth orders idx)
