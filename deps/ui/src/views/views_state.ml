@@ -1,6 +1,7 @@
 (* Per-instance view state. A `view` is mounted inside a DOM container;
    its data lives here and re-renders on sync-db-changes / user actions. *)
 
+open Promise_ext
 module W = Wire
 module Sset = Set.Make (String)
 
@@ -271,11 +272,12 @@ let persist_filters inst =
 
 (* property ident -> :db/id via thread-api/pull [:db/id] ident *)
 let resolve_property_id ident f =
-  Runtime.invoke3 "thread-api/pull" (W.String (Views_db.repo ()))
-    (W.String "[:db/id]") (W.Keyword ident)
-  |> Views_db.then_ (fun w ->
-         f (W.map_get_int w "db/id");
-         Js.Promise.resolve ())
+  (let* w =
+     Runtime.invoke3 "thread-api/pull" (W.String (Views_db.repo ()))
+       (W.String "[:db/id]") (W.Keyword ident)
+   in
+   f (W.map_get_int w "db/id");
+   Js.Promise.resolve ())
   |> Views_db.catch_quiet
   |> ignore
 

@@ -12,6 +12,7 @@
      the consumer clears before running the command.
    The editor area wires the listeners; see e2e-contract.md. *)
 
+open Promise_ext
 module S = String
 module U = I18n
 
@@ -28,6 +29,7 @@ type item_action =
   | Tag_create of string (* "New tag" row — always creates a class *)
   | Template_apply of string (* template block uuid — apply-template op *)
   | Run_query of bool (* cljs editor/run-query-command; arg = advanced? *)
+  | Plugin_slash of string * string (* plugin pid + trigger tag *)
   | Noop (* "No matched commands" row — applies to nothing *)
 
 (* cljs commands-map item doc: title attr text, label echo, formatted
@@ -85,12 +87,18 @@ type ac =
   { kind : ac_kind
   ; x : float
   ; y : float
+  ; cy : float (* caret line top — flip-above anchor *)
+  ; flip : (float * float) option
+    (* Some (top, avail-h) once the popup measured too tall for the
+       space below the caret — base-ui avoidCollisions flips it above *)
   ; query : string
   ; tpos : int (* query-trigger offset (the "/" "[[" "((" "#" start) *)
   ; tlen : int
   ; items : ac_item list
   ; chosen : int
   ; editor : Dom_ext.element
+  ; auuid : string (* editing uuid the popup was opened on — a remount
+     swaps editing_uuid before the position check can run *)
   }
 
 type cm_picker = Picker_emoji | Picker_icon
@@ -114,11 +122,14 @@ and cm_sub =
 type cm =
   { cx : float
   ; cy : float
-  ; block_id : string
+  ; block_id : string (* owner block/page entity of the menu target *)
   ; multi : bool
   ; entries : cm_item list
   ; sub_open : int (* index into entries, -1 = none *)
   ; sub_xy : float * float
+  ; tag : (string * int * bool) option
+    (* Some (uuid, db/id, private?) => block-tag chip menu, not the
+       block context menu *)
   }
 
 type pv =
@@ -169,6 +180,17 @@ let ac_open () =
   | Some t -> (get t).ac <> None
   | None -> false
 
+(* popup bound to the block currently being edited (unanchored popups
+   like cmdk-spawned search count as attached too) *)
+let ac_attached () =
+  match !active with
+  | Some t -> (
+      match (get t).ac with
+      | Some ac ->
+        ac.auuid = "" || Editor_state.editing_uuid () = Some ac.auuid
+      | None -> false)
+  | None -> false
+
 let set t v = Runtime.signal_set t.vs v
 let set_ac t ac = set t { (get t) with ac }
 let set_cm t cm = set t { (get t) with cm }
@@ -181,19 +203,21 @@ let close_pv t = set_pv t None
    uuid/name ref as sidebar_state.fetch_blocks *)
 
 let fetch_preview repo name : (string * Model.block list) Js.Promise.t =
-  Runtime.invoke2 "thread-api/get-page-route-info" (Wire.String repo)
-    (Wire.page_ref name)
-  |> Js.Promise.then_ (fun info ->
-         let title =
-           match Decode.page_of_summary info with
-           | Some p -> p.Model.page_title
-           | None -> name
-         in
-         Runtime.invoke3 "thread-api/get-page-blocks-tree"
-           (Wire.String repo) (Wire.page_ref name) Wire.Nil
-         |> Js.Promise.then_ (fun w ->
-                Js.Promise.resolve
-                  (title, Decode.blocks_of_wire w)))
+  let* info =
+    Runtime.invoke2 "thread-api/get-page-route-info" (Wire.String repo)
+      (Wire.page_ref name)
+  in
+  let title =
+    match Decode.page_of_summary info with
+    | Some p -> p.Model.page_title
+    | None -> name
+  in
+  let* w =
+    Runtime.invoke3 "thread-api/get-page-blocks-tree"
+      (Wire.String repo) (Wire.page_ref name) Wire.Nil
+  in
+  Js.Promise.resolve
+    (title, Decode.blocks_of_wire w)
 
 let ac_class_of_kind = function
   | Slash -> "cp__commands-slash"
@@ -360,7 +384,20 @@ let slash_items ~has_heading : ac_item list =  List.concat
           , Emit ("{{tweet }}", 2)
         ; "command.editor/add-property", "cube-plus", Desc_none
           , cmd "add-property"
-        ; "editor.slash/cloze", "brackets-contain", Desc_none, Emit ("{{cloze }}", 2) ]    ]
+        ; "editor.slash/cloze", "brackets-contain", Desc_none, Emit ("{{cloze }}", 2) ]
+    ; (match Plugin_host.slash_cmd_tags () with
+       | [] -> []
+       | xs ->
+           (* cljs get-plugins-slash-commands — one "PLUGINS" group,
+              puzzle icon *)
+           let g = Some (U.t "editor.slash/group-plugins") in
+           List.map
+             (fun (pid, tag) ->
+               mk_item ~key:("plugin." ^ pid ^ "/" ^ tag) ~label:tag
+                 ~icon:"puzzle" ?group:g ~desc:Desc_none
+                 (Plugin_slash (pid, tag)))
+             xs)
+    ]
 ;;
 
 (* cljs editor.cljs keeps a fallback item for slash *)
@@ -623,26 +660,27 @@ let run_block_search t ac =
   incr t.gen;
   let gen = !(t.gen) in
   ignore
-    (Runtime.invoke3 "thread-api/search-blocks"
-       (Wire.String (repo ()))
-       (Wire.String ac.query)
-       (Cmdk_state.search_opts false 20)
-     |> Js.Promise.then_ (fun w ->
-            let rows =
-              match w with
-              | Wire.Array xs | Wire.List xs -> xs
-              | _ -> []
-            in
-            (match (get t).ac with
-             | Some a
-               when gen = !(t.gen) && a.kind = Block_ref && a.query = ac.query ->
-                 set_ac t
-                   (Some
-                      { a with
-                        items = renumber (take 20 (List.mapi block_item_of_row rows))
-                      ; chosen = 0 })
-             | _ -> ());
-            Js.Promise.resolve ())
+    ((let* w =
+       Runtime.invoke3 "thread-api/search-blocks"
+         (Wire.String (repo ()))
+         (Wire.String ac.query)
+         (Cmdk_state.search_opts false 20)
+     in
+     let rows =
+       match w with
+       | Wire.Array xs | Wire.List xs -> xs
+       | _ -> []
+     in
+     (match (get t).ac with
+      | Some a
+        when gen = !(t.gen) && a.kind = Block_ref && a.query = ac.query ->
+          set_ac t
+            (Some
+               { a with
+                 items = renumber (take 20 (List.mapi block_item_of_row rows))
+               ; chosen = 0 })
+      | _ -> ());
+     Js.Promise.resolve ())
      |> Js.Promise.catch (fun e ->
             Platform.console_error ("popups block search failed", e);
             Js.Promise.resolve ()))
@@ -656,58 +694,59 @@ let run_node_search t ac =
   incr t.gen;
   let gen = !(t.gen) in
   ignore
-    (Runtime.invoke3 "thread-api/search-blocks"
-       (Wire.String (repo ()))
-       (Wire.String ac.query)
-       (Cmdk_state.search_opts false 20)
-     |> Js.Promise.then_ (fun w ->
-            let rows =
-              match w with
-              | Wire.Map _ -> (
-                  match Wire.get w "items" with
-                  | Some (Wire.Array xs) | Some (Wire.List xs) -> xs
-                  | _ -> [])
-              | Wire.Array xs | Wire.List xs -> xs
-              | _ -> []
-            in
-            (match (get t).ac with
-             | Some a
-               when gen = !(t.gen) && a.kind = Page_ref
-                    && a.query = ac.query ->
-                 let pages, blocks =
-                   List.partition
-                     (fun w ->
-                       match Wire.get w "page?" with
-                       | Some (Wire.Bool b) -> b
-                       | _ -> false)
-                     rows
-                 in
-                 let matched =
-                   take 20
-                     (List.mapi page_item_of_row (pages @ blocks))
-                 in
-                 let items =
-                   match
-                     List.filter
-                       (fun it -> S.sub it.ai_key 0 4 = "new:")
-                       (page_items_for t a.kind a.query)
-                   with
-                   | [] -> matched
-                   | new_items ->
-                       let first_starts =
-                         match matched with
-                         | m :: _ -> starts_with_ci m.ai_label a.query
-                         | [] -> false
-                       in
-                       if first_starts then
-                         (match matched with
-                          | m :: rest -> m :: new_items @ rest
-                          | [] -> new_items)
-                       else new_items @ matched
-                 in
-                 set_ac t (Some { a with items = renumber items; chosen = 0 })
-             | _ -> ());
-            Js.Promise.resolve ())
+    ((let* w =
+       Runtime.invoke3 "thread-api/search-blocks"
+         (Wire.String (repo ()))
+         (Wire.String ac.query)
+         (Cmdk_state.search_opts false 20)
+     in
+     let rows =
+       match w with
+       | Wire.Map _ -> (
+           match Wire.get w "items" with
+           | Some (Wire.Array xs) | Some (Wire.List xs) -> xs
+           | _ -> [])
+       | Wire.Array xs | Wire.List xs -> xs
+       | _ -> []
+     in
+     (match (get t).ac with
+      | Some a
+        when gen = !(t.gen) && a.kind = Page_ref
+             && a.query = ac.query ->
+          let pages, blocks =
+            List.partition
+              (fun w ->
+                match Wire.get w "page?" with
+                | Some (Wire.Bool b) -> b
+                | _ -> false)
+              rows
+          in
+          let matched =
+            take 20
+              (List.mapi page_item_of_row (pages @ blocks))
+          in
+          let items =
+            match
+              List.filter
+                (fun it -> S.sub it.ai_key 0 4 = "new:")
+                (page_items_for t a.kind a.query)
+            with
+            | [] -> matched
+            | new_items ->
+                let first_starts =
+                  match matched with
+                  | m :: _ -> starts_with_ci m.ai_label a.query
+                  | [] -> false
+                in
+                if first_starts then
+                  (match matched with
+                   | m :: rest -> m :: new_items @ rest
+                   | [] -> new_items)
+                else new_items @ matched
+          in
+          set_ac t (Some { a with items = renumber items; chosen = 0 })
+      | _ -> ());
+     Js.Promise.resolve ())
      |> Js.Promise.catch (fun e ->
             Platform.console_error ("popups node search failed", e);
             Js.Promise.resolve ()))
@@ -715,26 +754,27 @@ let run_node_search t ac =
 
 let load_titles t =
   ignore
-    (Runtime.invoke1 "thread-api/get-all-page-titles"
-       (Wire.String (repo ()))
-     |> Js.Promise.then_ (fun w ->
-            let rows =
-              match w with
-              | Wire.Array xs | Wire.List xs -> xs
-              | _ -> []
-            in
-            t.titles :=
-              List.filter_map
-                (fun row ->
-                  match row with
-                  | Wire.String s -> Some s
-                  | _ -> Cmdk_state.str_field row "block/title")
-                rows;
-            (match (get t).ac with
-             | Some ({ kind = Page_ref | Page_embed | Tag_search | Embed_ref; _ } as ac) ->
-                 set_ac t (Some (refresh_items t ac))
-             | _ -> ());
-            Js.Promise.resolve ())
+    ((let* w =
+       Runtime.invoke1 "thread-api/get-all-page-titles"
+         (Wire.String (repo ()))
+     in
+     let rows =
+       match w with
+       | Wire.Array xs | Wire.List xs -> xs
+       | _ -> []
+     in
+     t.titles :=
+       List.filter_map
+         (fun row ->
+           match row with
+           | Wire.String s -> Some s
+           | _ -> Cmdk_state.str_field row "block/title")
+         rows;
+     (match (get t).ac with
+      | Some ({ kind = Page_ref | Page_embed | Tag_search | Embed_ref; _ } as ac) ->
+          set_ac t (Some (refresh_items t ac))
+      | _ -> ());
+     Js.Promise.resolve ())
      |> Js.Promise.catch (fun e ->
             Platform.console_error ("popups titles failed", e);
             Js.Promise.resolve ()))
@@ -786,50 +826,53 @@ let load_tag_titles t _editor =
           @ extra))
   in
   ignore
-    (Runtime.invoke2 "thread-api/get-all-classes"
-       (Wire.String (repo ()))
-       (wopts [ ("except-private-tags?", Wire.Bool true) ])
-     |> Js.Promise.then_ (fun w ->
-            let rows =
-              match w with
-              | Wire.Array xs | Wire.List xs -> xs
-              | _ -> []
-            in
-            t.tag_titles := class_titles_of rows;
-            (* the full class list (private tags included) feeds only
-               tag_exact_titles; Page is conjoined to the candidates just
-               when editing a non-page block *)
-            Runtime.invoke2 "thread-api/get-all-classes"
-              (Wire.String (repo ()))
-              (wopts [ ("except-private-tags?", Wire.Bool false) ])
-            |> Js.Promise.then_ (fun w2 ->
-                   let rows2 =
-                     match w2 with
-                     | Wire.Array xs | Wire.List xs -> xs
-                     | _ -> []
-                   in
-                   t.tag_exact_titles :=
-                     List.map fst (class_titles_of rows2);
-                   (if editing_block then
-                      let page_class =
-                        List.filter
-                          (fun r ->
-                            (* entity_map_wire emits db/ident as a keyword
-                               value, not a string *)
-                            Wire.get r "db/ident"
-                            = Some (Wire.Keyword "logseq.class/Page"))
-                          rows2
-                      in
-                      t.tag_titles :=
-                        !(t.tag_titles)
-                        @ class_titles_of page_class);
-                   Js.Promise.resolve ()))
-     |> Js.Promise.then_ (fun () ->
-            (match (get t).ac with
-             | Some ({ kind = Tag_search; _ } as ac) ->
-                 set_ac t (Some (refresh_items t ac))
-             | _ -> ());
-            Js.Promise.resolve ())
+    ((let* w =
+       Runtime.invoke2 "thread-api/get-all-classes"
+         (Wire.String (repo ()))
+         (wopts [ ("except-private-tags?", Wire.Bool true) ])
+     in
+     let rows =
+       match w with
+       | Wire.Array xs | Wire.List xs -> xs
+       | _ -> []
+     in
+     let* () =
+       t.tag_titles := class_titles_of rows;
+       (* the full class list (private tags included) feeds only
+          tag_exact_titles; Page is conjoined to the candidates just
+          when editing a non-page block *)
+       let* w2 =
+         Runtime.invoke2 "thread-api/get-all-classes"
+           (Wire.String (repo ()))
+           (wopts [ ("except-private-tags?", Wire.Bool false) ])
+       in
+       let rows2 =
+         match w2 with
+         | Wire.Array xs | Wire.List xs -> xs
+         | _ -> []
+       in
+       t.tag_exact_titles :=
+         List.map fst (class_titles_of rows2);
+       (if editing_block then
+          let page_class =
+            List.filter
+              (fun r ->
+                (* entity_map_wire emits db/ident as a keyword
+                   value, not a string *)
+                Wire.get r "db/ident"
+                = Some (Wire.Keyword "logseq.class/Page"))
+              rows2
+          in
+          t.tag_titles :=
+            !(t.tag_titles)
+            @ class_titles_of page_class);
+       Js.Promise.resolve ()
+     in
+     (match (get t).ac with
+      | Some ({ kind = Tag_search; _ } as ac) ->
+          set_ac t (Some (refresh_items t ac))
+      | _ -> ());
+     Js.Promise.resolve ())
      |> Js.Promise.catch (fun e ->
             Platform.console_error ("popups classes failed", e);            Js.Promise.resolve ()))
 ;;
@@ -838,44 +881,90 @@ let load_tag_titles t _editor =
    search/template-search = get-tag-objects + fuzzy) *)
 let load_templates t =
   ignore
-    (Runtime.invoke2 "thread-api/q" (Wire.String (repo ()))
-       (Wire.Array
-          [ Wire.String
-              "[:find ?u ?ti :where [?b :block/tags ?t] \
-               [?t :db/ident :logseq.class/Template] \
-               [?b :block/uuid ?u] [?b :block/title ?ti]]"
-          ])
-     |> Js.Promise.then_ (fun w ->
-            let rows = Wire.elems w in
-            t.templates :=
-              List.filter_map
-                (fun row ->
-                  match Wire.elems row with
-                  | [ u; ti ] -> (
-                      match (u, Wire.as_string ti) with
-                      | Wire.Uuid u, Some ti -> Some (u, ti)
-                      | Wire.String u, Some ti -> Some (u, ti)
-                      | _ -> None)
-                  | _ -> None)
-                rows;
-            (match (get t).ac with
-             | Some ({ kind = Template_search; _ } as ac) ->
-                 set_ac t (Some (refresh_items t ac))
-             | _ -> ());
-            Js.Promise.resolve ()))
+    (let* w =
+      Runtime.invoke2 "thread-api/q" (Wire.String (repo ()))
+        (Wire.Array
+           [ Wire.String
+               "[:find ?u ?ti :where [?b :block/tags ?t] \
+                [?t :db/ident :logseq.class/Template] \
+                [?b :block/uuid ?u] [?b :block/title ?ti]]"
+           ])
+    in
+    let rows = Wire.elems w in
+    t.templates :=
+      List.filter_map
+        (fun row ->
+          match Wire.elems row with
+          | [ u; ti ] -> (
+              match (u, Wire.as_string ti) with
+              | Wire.Uuid u, Some ti -> Some (u, ti)
+              | Wire.String u, Some ti -> Some (u, ti)
+              | _ -> None)
+          | _ -> None)
+        rows;
+    (match (get t).ac with
+     | Some ({ kind = Template_search; _ } as ac) ->
+         set_ac t (Some (refresh_items t ac))
+     | _ -> ());
+    Js.Promise.resolve ())
 ;;
 
 (* ---- open / update ---- *)
 
 let open_ac t kind editor =
-  let x, y = Dom_ext.caret_popup_pos editor in
+  let x, y, cy = Dom_ext.caret_popup_pos editor in
   let tlen = trigger_len_of_kind kind in
   let tpos = Dom_ext.selection_start editor - tlen in
   let ac =
-    { kind; x; y; query = ""
+    { kind; x; y; cy; flip = None; query = ""
     ; tpos; tlen
-    ; items = []; chosen = 0; editor }
+    ; items = []; chosen = 0; editor
+    ; auuid = Option.value (Editor_state.editing_uuid ()) ~default:"" }
   in
+  (* base-ui avoidCollisions: the popup mounts below the caret, then
+     flips above when it overflows the viewport and there is more room
+     above — measure once mounted and record (top, avail). Items can
+     resolve after the mount, so retry while the popup is up (~480ms).
+     The popover's --available-height clamp already bounds the rendered
+     rect, so lift it briefly to learn the real height (CSS caps such
+     as the commands list's own max-height still apply — matching what
+     the popup can actually render on either side) *)
+  let rec measure tries =
+    match (get t).ac with
+    | Some a when a.flip = None && a.kind = kind -> (
+        match Dom_ext.doc_query_selector "#ui__ac-inner" with
+        | Some inner -> (
+            match Dom_ext.closest inner ".ui__popover-content" with
+            | Some pop ->
+                (* --available-height propagates to #ui__ac-inner's own
+                   max-height; lift it to read the real rendered height
+                   (the list's own CSS max still applies) *)
+                Dom_ext.style_set_property pop "--available-height" "2000px";
+                let h = Dom_ext.rect_height (Dom_ext.bounding_rect pop) in
+                let below = Dom_ext.window_inner_height -. a.y -. 8. in
+                let above = a.cy -. 8. in
+                if h > below && above > below then (
+                  (* avail is the constraint, h the measured render —
+                     the inner's own max-height subtracts chrome from
+                     avail, so pass the whole space and place the top
+                     so the bottom edge lands just above the caret *)
+                  let avail = above -. 4. in
+                  let h_eff = Float.min h avail in
+                  let top' = Float.max 4.0 (a.cy -. 8. -. h_eff) in
+                  set_ac t (Some { a with flip = Some (top', avail) }))
+                else (
+                  Dom_ext.style_set_property pop "--available-height"
+                    (Printf.sprintf "calc(100vh - %.0fpx)" (a.y +. 8.));
+                  retry tries)
+            | None -> retry tries)
+        | None -> retry tries)
+    | None -> retry tries
+    | _ -> ()
+  and retry tries =
+    if tries > 0 then
+      Dom_ext.set_timeout (fun () -> measure (tries - 1)) 16
+  in
+  measure 30;
   (* cljs autopair: typing [[ inputs ]] immediately with the caret kept
      inside the brackets; insert_text consumes the ghost pair on choice *)
   (match kind with
@@ -1171,51 +1260,55 @@ let apply_tag t ac ~create title =
         emit ac.editor ac.tpos "";
         close_ac t;
         ignore
-          (Runtime.invoke3 "thread-api/apply-outliner-ops"
-             (Wire.String repo_v)
-             (Wire.Array [ Outliner_ops.create_class title ])
-             (Wire.Map [])
-           |> Js.Promise.then_ (fun _ ->
-                  Runtime.invoke2 "thread-api/get-case-page"
-                    (Wire.String repo_v) (Wire.String title))
-           |> Js.Promise.then_ (fun e ->
-                  (match Wire.map_get_int e "db/id" with
-                   | Some dbid -> save_and_tag dbid
-                   | None -> ());
-                  Js.Promise.resolve ()))
+          (let* _ =
+             Runtime.invoke3 "thread-api/apply-outliner-ops"
+               (Wire.String repo_v)
+               (Wire.Array [ Outliner_ops.create_class title ])
+               (Wire.Map [])
+           in
+           let* e =
+            Runtime.invoke2 "thread-api/get-case-page"
+              (Wire.String repo_v) (Wire.String title)
+          in
+          (match Wire.map_get_int e "db/id" with
+           | Some dbid -> save_and_tag dbid
+           | None -> ());
+          Js.Promise.resolve ())
       in
       if create then create_and_tag ()
       else
         ignore
-          (Runtime.invoke2 "thread-api/get-case-page" (Wire.String repo_v)
-             (Wire.String title)
-           |> Js.Promise.then_ (fun w ->
-                  match w with
-                  | Wire.Map _ -> (
-                      match Wire.map_get_int w "db/id" with
-                      | None -> Js.Promise.resolve ()
-                      | Some dbid ->
-                          (match Wire.get w "db/ident" with
-                           | Some _ ->
-                               emit ac.editor ac.tpos "";
-                               close_ac t;
-                               save_and_tag dbid;
-                               Js.Promise.resolve ()
-                           | None ->
-                               (* cljs tag-on-chosen-handler: a plain page
-                                  chosen in the hashtag search is converted
-                                  to a class, then attached via block/tags *)
-                               emit ac.editor ac.tpos "";
-                               close_ac t;
-                               Runtime.invoke2
-                                 "thread-api/convert-page-to-tag"
-                                 (Wire.String repo_v) (Wire.Int dbid)
-                               |> Js.Promise.then_ (fun _ ->
-                                      save_and_tag dbid;
-                                      Js.Promise.resolve ())))
-                  | _ ->
-                      create_and_tag ();
-                      Js.Promise.resolve ()))
+          (let* w =
+            Runtime.invoke2 "thread-api/get-case-page" (Wire.String repo_v)
+              (Wire.String title)
+          in
+          match w with
+          | Wire.Map _ -> (
+              match Wire.map_get_int w "db/id" with
+              | None -> Js.Promise.resolve ()
+              | Some dbid ->
+                  (match Wire.get w "db/ident" with
+                   | Some _ ->
+                       emit ac.editor ac.tpos "";
+                       close_ac t;
+                       save_and_tag dbid;
+                       Js.Promise.resolve ()
+                   | None ->
+                       (* cljs tag-on-chosen-handler: a plain page
+                          chosen in the hashtag search is converted
+                          to a class, then attached via block/tags *)
+                       emit ac.editor ac.tpos "";
+                       close_ac t;
+                       let* _ =
+                         Runtime.invoke2
+                           "thread-api/convert-page-to-tag"
+                           (Wire.String repo_v) (Wire.Int dbid)
+                       in
+                       save_and_tag dbid;
+                       Js.Promise.resolve ()))
+          | _ ->
+              create_and_tag ();
+              Js.Promise.resolve ())
 
 let apply_template t ac uuid =
   match Editor_state.editing_uuid () with
@@ -1244,62 +1337,64 @@ let run_query t ac ~advanced =
       Editor_actions.exit_edit ~select:false;
       let repo_v = repo () in
       ignore
-        (Outliner_ops.apply
-           [ Outliner_ops.save_block buuid title
-           ; Outliner_ops.op "create-property-text-block"
-               [ Wire.Uuid buuid
-               ; Wire.Keyword "logseq.property/query"
-               ; Wire.String ""
-               ; Wire.Map
-                   [ (Wire.Keyword "set-block-property?", Wire.Bool true) ] ]
-           ]
-        |> Js.Promise.then_ (fun _ ->
-               Runtime.invoke2 "thread-api/get-blocks" (Wire.String repo_v)
-                 (Wire.Array
-                    [ Wire.Map
-                        [ (Wire.Keyword "id", Wire.Uuid buuid)
-                        ; ( Wire.Keyword "opts"
-                          , Wire.Map
-                              [ (Wire.Keyword "children?", Wire.Bool true)
-                              ; ( Wire.Keyword "include-property-block?"
-                                , Wire.Bool true ) ] ) ]
-                    ]))
-        |> Js.Promise.then_ (fun w ->
-               let quuid =
-                 match Wire.args_list w with
-                 | res :: _ -> (
-                     let b =
-                       match Wire.get res "block" with
-                       | Some b -> b
-                       | None -> res
-                     in
-                     match Wire.get b "logseq.property/query" with
-                     | Some v -> (
-                         match Wire.map_get_uuid v "block/uuid" with
-                         | Some u -> u
-                         | None -> (
-                             match Wire.as_uuid v with
-                             | Some u -> u
-                             | None -> ""))
-                     | None -> "")
-                 | [] -> ""
-               in
-               if quuid = "" then Js.Promise.resolve ()
-               else
-                 let rest =
-                   [ Outliner_ops.set_block_property buuid "block/tags"
-                       (Wire.Keyword "logseq.class/Query") ]
-                   @ if advanced then
-                       [ Outliner_ops.set_block_property quuid
-                           "logseq.property.node/display-type"
-                           (Wire.Keyword "code")
-                       ; Outliner_ops.set_block_property quuid
-                           "logseq.property.code/lang"
-                           (Wire.String "clojure") ]
-                     else []
-                 in
-                 Outliner_ops.apply_parsed ~rest
-                   [ (quuid, title); (buuid, "") ]))
+        (let* _ =
+           Outliner_ops.apply
+             [ Outliner_ops.save_block buuid title
+             ; Outliner_ops.op "create-property-text-block"
+                 [ Wire.Uuid buuid
+                 ; Wire.Keyword "logseq.property/query"
+                 ; Wire.String ""
+                 ; Wire.Map
+                     [ (Wire.Keyword "set-block-property?", Wire.Bool true) ] ]
+             ]
+         in
+         let* w =
+          Runtime.invoke2 "thread-api/get-blocks" (Wire.String repo_v)
+            (Wire.Array
+               [ Wire.Map
+                   [ (Wire.Keyword "id", Wire.Uuid buuid)
+                   ; ( Wire.Keyword "opts"
+                     , Wire.Map
+                         [ (Wire.Keyword "children?", Wire.Bool true)
+                         ; ( Wire.Keyword "include-property-block?"
+                           , Wire.Bool true ) ] ) ]
+               ])
+        in
+        let quuid =
+          match Wire.args_list w with
+          | res :: _ -> (
+              let b =
+                match Wire.get res "block" with
+                | Some b -> b
+                | None -> res
+              in
+              match Wire.get b "logseq.property/query" with
+              | Some v -> (
+                  match Wire.map_get_uuid v "block/uuid" with
+                  | Some u -> u
+                  | None -> (
+                      match Wire.as_uuid v with
+                      | Some u -> u
+                      | None -> ""))
+              | None -> "")
+          | [] -> ""
+        in
+        if quuid = "" then Js.Promise.resolve ()
+        else
+          let rest =
+            [ Outliner_ops.set_block_property buuid "block/tags"
+                (Wire.Keyword "logseq.class/Query") ]
+            @ if advanced then
+                [ Outliner_ops.set_block_property quuid
+                    "logseq.property.node/display-type"
+                    (Wire.Keyword "code")
+                ; Outliner_ops.set_block_property quuid
+                    "logseq.property.code/lang"
+                    (Wire.String "clojure") ]
+              else []
+          in
+          Outliner_ops.apply_parsed ~rest
+            [ (quuid, title); (buuid, "") ])
 
 let apply_item t ac it =
   match it.ai_act with
@@ -1323,7 +1418,16 @@ let apply_item t ac it =
       (* cljs strips the "/cmd" trigger text like an Emit "" insert *)
       emit ac.editor ac.tpos "";
       emit_cmd ~pos:ac.tpos c [];
-      close_ac t  | Run_query advanced -> run_query t ac ~advanced
+      close_ac t  | Plugin_slash (pid, tag) ->
+      (* cljs handle-steps — strip the "/tag" trigger like an Emit ""
+         insert, then run each step (editor/input inserts text;
+         editor/hook fires the plugin's event) *)
+      emit ac.editor ac.tpos "";
+      close_ac t;
+      Plugin_host.exec_slash_command
+        ~insert:(fun text -> insert_text ac text 0)
+        pid tag
+  | Run_query advanced -> run_query t ac ~advanced
 
   | Tag_apply title -> apply_tag t ac ~create:false title
   | Tag_create title -> apply_tag t ac ~create:true title
@@ -1374,15 +1478,50 @@ let apply_chosen t =
 ;;
 
 (* true if the keydown was consumed by the open popup *)
+(* cljs closes the mention/search popup on keyup once the caret is no
+   longer wrapped by its trigger pair (close-autocomplete-if-outside).
+   Our editor `]`/`)` autopair-overtype preventDefaults the keystroke and
+   skips the caret past the ghost bracket, so no input event reaches
+   on_editor_input — check the same close condition on leftover keys:
+   caret moved before the trigger, or the buffer shows a completed
+   closer in the query. Read the event's live target rather than
+   ac.editor — a reload can remount the textarea, leaving ac.editor
+   detached where selectionStart reads 0 and the position check
+   mis-closes an ac that is still valid *)
+let ac_position_closed ac el =
+  let pos = Dom_ext.selection_start el in
+  let v = Dom_ext.value el in
+  let qend = pos - ac.tpos - ac.tlen in
+  qend < 0 || qend > S.length v
+  || query_closed ac (S.sub v (ac.tpos + ac.tlen) qend)
+;;
+
+(* true if the keydown was consumed by the open popup *)
 let ac_keydown t ev =
-  if (get t).ac = None then false
-  else
-    match Dom_ext.key_ ev with
-    | Some "ArrowDown" -> move_chosen t 1; true
-    | Some "ArrowUp" -> move_chosen t (-1); true
-    | Some ("Enter" | "Tab") -> apply_chosen t; true
-    | Some "Escape" -> close_ac t; true
-    | _ -> false
+  match (get t).ac with
+  | None -> false
+  | Some ac ->
+      (* the ac outlives its textarea on remount — Enter/Tab reach
+         apply_chosen before the position check could close it, eating
+         the key forever; once the editing session it opened on is gone
+         the popup is dead, so close it and let the key through *)
+      if
+        ac.auuid <> "" && Editor_state.editing_uuid () <> Some ac.auuid
+      then (
+        close_ac t;
+        false)
+      else (
+        match Dom_ext.key_ ev with
+        | Some "ArrowDown" -> move_chosen t 1; true
+        | Some "ArrowUp" -> move_chosen t (-1); true
+        | Some ("Enter" | "Tab") -> apply_chosen t; true
+        | Some "Escape" -> close_ac t; true
+        | _ ->
+            (let el =
+               Option.value (Dom_ext.target ev) ~default:ac.editor
+             in
+             if ac_position_closed ac el then close_ac t);
+            false)
 ;;
 
 let ac_mousemove t el =
@@ -1469,7 +1608,32 @@ let open_cm t ~x ~y ~block_id ~multi =
   set_cm t
     (Some
        { cx = x; cy = y; block_id; multi; entries; sub_open = -1
-       ; sub_xy = (0., 0.) })
+       ; sub_xy = (0., 0.); tag = None })
+;;
+
+(* cljs block-tag popup (block.cljs): Go to #tag (mod+click) / Open in
+   sidebar (shift+click) / Remove tag — the last hidden for private
+   class idents *)
+let tag_entries ~title ~priv =
+  [ Ci_item
+      ( "Go to #" ^ title
+      , Some ("mod+click", [ "\u{2318}"; "Click" ])
+      , "go-to-tag" )
+  ; Ci_item
+      ( U.t "sidebar.right/open"
+      , Some ("shift+click", [ "\u{21e7}"; "Click" ])
+      , "open-tag-sidebar" ) ]
+  @ if priv then []
+    else [ Ci_item (U.t "block/remove-tag", None, "remove-tag") ]
+
+let open_cm_tag t ~x ~y ~block_id ~tag_uuid ~tag_id ~tag_title ~priv =
+  close_ac t;
+  set_cm t
+    (Some
+       { cx = x; cy = y; block_id; multi = false
+       ; entries = tag_entries ~title:tag_title ~priv
+       ; sub_open = -1; sub_xy = (0., 0.)
+       ; tag = Some (tag_uuid, tag_id, priv) })
 ;;
 
 let open_cm_sub t ~index ~x ~y =
@@ -1498,7 +1662,26 @@ let cm_sub_at t index =
 let run_cm_item t label =
   match (get t).cm with
   | Some cm ->
-      emit_cmd label [ "block", Js.Json.string cm.block_id ];
+      (match cm.tag with
+       | Some (tuuid, tid, _) -> (
+           match label with
+           | "go-to-tag" ->
+               Platform.set_location_hash
+                 (Runtime.nav_hash ("#/page/" ^ tuuid))
+           | "open-tag-sidebar" ->
+               Platform.dispatch "ls:open-right-sidebar"
+                 (Js.Json.object_
+                    (Js.Dict.fromList
+                       [ ("uuid", Js.Json.string tuuid) ]))
+           | "remove-tag" ->
+               ignore
+                 (Outliner_ops.apply_and_refresh
+                    [ Outliner_ops.op "delete-property-value"
+                        [ Wire.Uuid cm.block_id
+                        ; Wire.Keyword "block/tags"
+                        ; Wire.Int tid ] ])
+           | _ -> ())
+       | None -> emit_cmd label [ "block", Js.Json.string cm.block_id ]);
       close_cm t
   | None -> ()
 ;;

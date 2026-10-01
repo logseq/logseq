@@ -6,15 +6,17 @@
    secret that the browser app doesn't hold; the public-client flow is
    what the prod app uses. *)
 
+open Promise_ext
 open Lui_elements
 
 let dom = Logseq_dom.dom
 module T = I18n
 
-let cognito_url = "https://cognito-idp.us-east-1.amazonaws.com/"
-let client_id = "69cs1lgme7p8kbgld8n5kseii6"
-let oauth_token_url =
-  "https://logseq-prod.auth.us-east-1.amazoncognito.com/oauth2/token"
+(* Cognito constants live in Rtc_ops (they're sync config the worker
+   needs too) *)
+let cognito_url = Rtc_ops.cognito_url
+let client_id = Rtc_ops.client_id
+let oauth_token_url = Rtc_ops.oauth_token_url
 
 let field_value name =
   match Browser_ui.qs (".cp__user-login input[name=" ^ name ^ "]") with
@@ -75,7 +77,9 @@ let store_tokens id acc refresh =
           ; (Wire.kw "auth/refresh-token", Wire.String refresh)
           ; (Wire.kw "auth/oauth-client-id", Wire.String client_id)
           ; (Wire.kw "auth/oauth-token-url", Wire.String oauth_token_url)
-          ]))
+          ]));
+  (* cljs flows/current-login-user watch -> trigger-start-rtc [:login] *)
+  Rtc_flows.notify_login ()
 
 let submit () =
   let user = field_value "username" and pass = field_value "password" in
@@ -92,30 +96,28 @@ let submit () =
         ~body:(Fetch.BodyInit.make (body_json user pass))
         ()
     in
-    Fetch.fetchWithInit cognito_url init
-    |> Js.Promise.then_ (fun resp ->
-           Fetch.Response.json resp)
-    |> Js.Promise.then_ (fun json ->
-           match tokens_of json with
-           | Some (id, acc, refresh) ->
-               store_tokens id acc refresh;
-               Dialogs_state.close_named "login";
-               Toast.success T.login_title;
-               Js.Promise.resolve ()
-           | None ->
-               let msg =
-                 match Js.Json.decodeObject json with
-                 | Some o -> (
-                     match dict_str o "message" with
-                     | Some m -> m
-                     | None -> (
-                         match dict_str o "__type" with
-                         | Some m -> m
-                         | None -> T.login_failed))
-                 | None -> T.login_failed
-               in
-               Toast.error msg;
-               Js.Promise.resolve ())
+    (let* resp = Fetch.fetchWithInit cognito_url init in
+    let* json = Fetch.Response.json resp in
+    match tokens_of json with
+    | Some (id, acc, refresh) ->
+        store_tokens id acc refresh;
+        Dialogs_state.close_named "login";
+        Toast.success T.login_title;
+        Js.Promise.resolve ()
+    | None ->
+        let msg =
+          match Js.Json.decodeObject json with
+          | Some o -> (
+              match dict_str o "message" with
+              | Some m -> m
+              | None -> (
+                  match dict_str o "__type" with
+                  | Some m -> m
+                  | None -> T.login_failed))
+          | None -> T.login_failed
+        in
+        Toast.error msg;
+        Js.Promise.resolve ())
     |> Js.Promise.catch (fun _ ->
            Toast.error T.login_failed;
            Js.Promise.resolve ())
@@ -123,8 +125,7 @@ let submit () =
 
 let field ~key ~name ~type_ ~placeholder ~autofocus =
   dom ~key ~tag:"input"
-    ~style_class:
-      "form-input block w-full sm:text-sm sm:leading-5 my-2"
+    ~style_class:"form-input ls-login-input"
     ~attrs:
       ([ ("name", name); ("type", type_); ("placeholder", placeholder)
        ; ("autocomplete", "off") ]
@@ -134,7 +135,7 @@ let field ~key ~name ~type_ ~placeholder ~autofocus =
       match n with
       | "keydown" -> (
           match
-            Platform.payload_str (Option.value p ~default:"{}") "key"
+            Platform.payload_str p "key"
           with
           | "Enter" -> submit ()
           | _ -> ())
@@ -149,17 +150,13 @@ let body (_ms : Model.t Signal.signal) : t =
       ~events:"submit"
       ~on_dom_event:(fun n _ -> if n = "submit" then submit ())
       [ dom ~key:"lg-t" ~tag:"h2"
-          ~style_class:
-            "ui__dialog-title text-lg font-semibold leading-none \
-             tracking-tight" ~text:T.login_title []
+          ~style_class:"ui__dialog-title" ~text:T.login_title []
       ; field ~key:"lg-u" ~name:"username" ~type_:"text"
           ~placeholder:T.login_username ~autofocus:true
       ; field ~key:"lg-p" ~name:"password" ~type_:"password"
           ~placeholder:T.login_password ~autofocus:false
       ; dom ~key:"lg-s" ~tag:"button" ~text:T.submit
-          ~style_class:
-            "inline-flex items-center justify-center rounded-md text-sm \
-             font-medium bg-primary text-primary-foreground px-4 py-2"
+          ~style_class:"ui__button ls-btn-primary"
           ~attrs:[ ("type", "submit") ]
           ~events:"click"
           ~on_dom_event:(fun n _ -> if n = "click" then submit ())

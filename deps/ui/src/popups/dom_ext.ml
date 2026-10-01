@@ -70,6 +70,8 @@ external set_value : element -> string -> unit = "value" [@@mel.set]
 external selection_start : element -> int = "selectionStart" [@@mel.get]
 
 external selection_end : element -> int = "selectionEnd" [@@mel.get]
+
+external is_connected : element -> bool = "isConnected" [@@mel.get]
 external set_text_content : element -> string -> unit = "textContent"
   [@@mel.set]
 external set_selection_range : element -> int -> int -> unit
@@ -132,6 +134,7 @@ let graphemes_pos s from_index =
 ;;
 
 external bounding_rect : element -> rect = "getBoundingClientRect" [@@mel.send]
+external window_inner_height : float = "innerHeight" [@@mel.scope "window"]
 external rect_left : rect -> float = "left" [@@mel.get]
 external rect_top : rect -> float = "top" [@@mel.get]
 external rect_right : rect -> float = "right" [@@mel.get]
@@ -143,6 +146,11 @@ external set_scroll_top : element -> float -> unit = "scrollTop" [@@mel.set]
 external offset_top : element -> float = "offsetTop" [@@mel.get]
 external offset_height : element -> float = "offsetHeight" [@@mel.get]
 external client_height : element -> float = "clientHeight" [@@mel.get]
+external scroll_height : element -> float = "scrollHeight" [@@mel.get]
+external parent_element : element -> element option = "parentElement"
+  [@@mel.get] [@@mel.return nullable]
+external previous_sibling : element -> element option
+  = "previousElementSibling" [@@mel.get] [@@mel.return nullable]
 
 external active_element : element option = "document.activeElement"
   [@@mel.return nullable]
@@ -179,6 +187,9 @@ external computed_style : element -> Js.Json.t = "getComputedStyle"
 external style_line_height : Js.Json.t -> string = "lineHeight"
   [@@mel.get]
 
+external style_set_property : element -> string -> string -> unit
+  = "setProperty" [@@mel.scope "style"] [@@mel.send]
+
 (* parse a dom-event payload JSON string, read a string field *)
 let payload_string payload key =
   match
@@ -195,19 +206,30 @@ let is_text_input el =
   let t = String.lowercase_ascii (tag_name el) in
   t = "input" || t = "textarea"
 
-(* smooth scroll-nudge like cljs scroll-to-highlight: scrolls scroller so
-   the row sits inside with 32px padding *)
+(* cljs ui.cljs auto-complete-keep-visible-scroll-top: scroll exactly
+   enough to keep the row inside the viewport (no padding); when the row
+   starts a group, the .ui__ac-group-name above it counts toward its top
+   so arrowing back reveals the label *)
 let scroll_row_into_view ~scroller ~row =
-  let s_top = rect_top (bounding_rect scroller) in
-  let s_bottom = rect_bottom (bounding_rect scroller) in
-  let r_top = rect_top (bounding_rect row) in
-  let r_bottom = rect_bottom (bounding_rect row) in
-  let pad = 32.0 in
   let st = scroll_top scroller in
-  if r_bottom > s_bottom -. pad then
-    set_scroll_top scroller (st +. r_bottom -. s_bottom +. pad)
-  else if r_top < s_top +. pad then
-    set_scroll_top scroller (st -. (s_top +. pad -. r_top))
+  let vh = client_height scroller in
+  let s_top = rect_top (bounding_rect scroller) in
+  let heading =
+    match Option.bind (parent_element row) previous_sibling with
+    | Some el when matches el ".ui__ac-group-name" -> Some el
+    | _ -> None
+  in
+  let item_top =
+    st
+    +. (rect_top
+          (bounding_rect (match heading with Some h -> h | None -> row))
+       -. s_top)
+  in
+  let item_bottom = st +. (rect_bottom (bounding_rect row) -. s_top) in
+  if item_top < st then
+    set_scroll_top scroller (Float.max 0.0 item_top)
+  else if item_bottom > st +. vh then
+    set_scroll_top scroller (Float.max 0.0 (item_bottom -. vh))
 
 (* the .mock-text mirror sibling of `input` inside .editor-inner *)
 let mock_text_el input =
@@ -236,9 +258,12 @@ let build_mock_text input el =
     set_mock_value el v)
 ;;
 
+external inner_height : float = "innerHeight" [@@mel.scope "window"]
+
 (* cljs cursor.cljs get-caret-pos -> editor.cljs popup pos:
    left = mirror-span offsetLeft + input.left - 20
-   top  = mirror-span offsetTop  + input.top  + (lineHeight - 4 | 20) *)
+   top  = mirror-span offsetTop  + input.top  + (lineHeight - 4 | 20)
+   also returns the caret line top so flip-above math can anchor on it *)
 let caret_popup_pos el =
   let r = bounding_rect el in
   let lh =
@@ -255,4 +280,5 @@ let caret_popup_pos el =
          | None -> (0., 0.))
     | None -> (0., 0.)
   in
-  (l +. rect_left r -. 20., t +. rect_top r +. lh)
+  ( l +. rect_left r -. 20., t +. rect_top r +. lh
+  , t +. rect_top r )

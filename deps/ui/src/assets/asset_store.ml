@@ -3,6 +3,7 @@
    memory-fs + deps/db-worker/runtime/melange/asset_store.ml:
    /<graph-sans-logseq_db_>/assets/<name>. *)
 
+open Promise_ext
 type pfs
 
 external window_pfs : pfs Js.Undefined.t = "pfs" [@@mel.scope "window"]
@@ -61,20 +62,20 @@ let unit_promise () = Js.Promise.resolve ()
 let rec ensure_dir p dir =
   if dir = "" || dir = "/" || dir = "." then unit_promise ()
   else
-    pfs_stat p dir
-    |> Js.Promise.then_ (fun _ -> unit_promise ())
+    (let* _ = pfs_stat p dir in
+    unit_promise ())
     |> Js.Promise.catch (fun _ ->
            let parent = Filename.dirname dir in
-           ensure_dir p parent
-           |> Js.Promise.then_ (fun () -> pfs_mkdir p dir))
+           let* () = ensure_dir p parent in
+           pfs_mkdir p dir)
 
 let write_asset ~repo ~name ~u8 =
   match Js.Undefined.toOption window_pfs with
   | None ->
       Js.Promise.reject (Failure "window.pfs is not available")
   | Some p ->
-      ensure_dir p (assets_dir repo)
-      |> Js.Promise.then_ (fun () -> pfs_write p (asset_path repo name) u8)
+      let* () = ensure_dir p (assets_dir repo) in
+      pfs_write p (asset_path repo name) u8
 
 let read_asset ~repo ~name =
   match Js.Undefined.toOption window_pfs with
@@ -110,16 +111,15 @@ let delete_asset ~repo ~name =
              Js.Promise.resolve ())
 
 let sha256_hex (u8 : Js.Typed_array.Uint8Array.t) : string Js.Promise.t =
-  subtle_digest crypto_subtle "SHA-256" (u8_buffer u8)
-  |> Js.Promise.then_ (fun dig ->
-         let d = Js.Typed_array.Uint8Array.fromBuffer dig () in
-         let n = Js.Typed_array.Uint8Array.length d in
-         let b = Buffer.create (n * 2) in
-         for i = 0 to n - 1 do
-           Printf.bprintf b "%02x"
-             (Js.Typed_array.Uint8Array.unsafe_get d i)
-         done;
-         Js.Promise.resolve (Buffer.contents b))
+  let* dig = subtle_digest crypto_subtle "SHA-256" (u8_buffer u8) in
+  let d = Js.Typed_array.Uint8Array.fromBuffer dig () in
+  let n = Js.Typed_array.Uint8Array.length d in
+  let b = Buffer.create (n * 2) in
+  for i = 0 to n - 1 do
+    Printf.bprintf b "%02x"
+      (Js.Typed_array.Uint8Array.unsafe_get d i)
+  done;
+  Js.Promise.resolve (Buffer.contents b)
 
 (* resolved object URL for assets/<uuid>.<ext>; extension drives the Blob
    MIME so <img> can decode it *)
@@ -128,14 +128,13 @@ let object_url ~repo ~name ~mime : string Js.Promise.t =
   match Hashtbl.find_opt url_cache k with
   | Some url -> Js.Promise.resolve url
   | None ->
-      read_asset ~repo ~name
-      |> Js.Promise.then_ (fun u8 ->
-             let blob =
-               Browser_ui.make_blob
-                 [| Browser_ui.u8_to_json u8 |]
-                 (Browser_ui.json_props
-                    [ ("type", Browser_ui.str_to_json mime) ])
-             in
-             let url = make_url blob in
-             Hashtbl.replace url_cache k url;
-             Js.Promise.resolve url)
+      let* u8 = read_asset ~repo ~name in
+      let blob =
+        Browser_ui.make_blob
+          [| Browser_ui.u8_to_json u8 |]
+          (Browser_ui.json_props
+             [ ("type", Browser_ui.str_to_json mime) ])
+      in
+      let url = make_url blob in
+      Hashtbl.replace url_cache k url;
+      Js.Promise.resolve url

@@ -28,6 +28,7 @@ let block ?(children = []) uuid title : Model.block =
   ; block_tags = []
   ; block_tag_uuids = []
   ; block_tag_idents = []
+  ; block_tag_db_ids = []
   ; block_children = children
   ; block_page_name = None
   ; block_reactions = []
@@ -48,7 +49,9 @@ let block ?(children = []) uuid title : Model.block =
   ; block_display_type = None
   ; block_order_list = None
   ; block_order_index = None
+  ; block_order = None
   ; block_code_lang = None
+  ; block_db_collapsable = false
   ; block_icon = None
   ; block_tag_icons = []
   ; block_ls_type = None
@@ -63,6 +66,7 @@ let block ?(children = []) uuid title : Model.block =
 let page blocks : Model.page =
   { Model.page_title = "p"
   ; page_uuid = Some "p"
+  ; page_db_collapsable = false
   ; page_db_id = None
   ; page_is_tag = false
   ; page_is_property = false
@@ -74,6 +78,8 @@ let page blocks : Model.page =
   ; page_add_object = false
   ; page_tags = []
   ; page_tag_idents = []
+  ; page_tag_uuids = []
+  ; page_tag_db_ids = []
   ; page_blocks = blocks
   ; page_linked_refs = []
   ; page_parents = []

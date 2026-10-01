@@ -6,6 +6,7 @@
    "Page deleted {ts}"/"Block deleted {ts}" + Restore/Delete buttons.
    Restore/delete go through apply-outliner-ops like the cljs flow. *)
 
+open Promise_ext
 module T = I18n
 module B = Browser_ui
 
@@ -65,12 +66,10 @@ let outliner_op op uuid =
 
 let rec restore uuid title host =
   ignore
-    (Js.Promise.then_
-       (fun _ ->
-         Toast.success (T.restored title);
-         refresh host;
-         Js.Promise.resolve ())
-       (outliner_op "restore-recycled" uuid))
+    (let* _ = (outliner_op "restore-recycled" uuid) in
+    Toast.success (T.restored title);
+    refresh host;
+    Js.Promise.resolve ())
 
 and delete_forever uuid title is_page host =
   let msg =
@@ -79,12 +78,10 @@ and delete_forever uuid title is_page host =
   in
   if B.confirm msg then
     ignore
-      (Js.Promise.then_
-         (fun _ ->
-           Toast.success title;
-           refresh host;
-           Js.Promise.resolve ())
-         (outliner_op "recycle-delete-permanently" uuid))
+      (let* _ = (outliner_op "recycle-delete-permanently" uuid) in
+      Toast.success title;
+      refresh host;
+      Js.Promise.resolve ())
 
 and ghost_btn label on_click =
   let b = B.create "button" in
@@ -124,11 +121,9 @@ and refresh (host : B.E.t) =
   incr refresh_seq;
   let my = !refresh_seq in
   ignore
-    (Js.Promise.then_
-       (fun w ->
-         if !refresh_seq = my then render_roots host (roots_of w);
-         Js.Promise.resolve ())
-       (snapshots ()))
+    (let* w = (snapshots ()) in
+    if !refresh_seq = my then render_roots host (roots_of w);
+    Js.Promise.resolve ())
 
 (* cljs groups roots under the deleted page's title — page roots group
    under their own title, blocks under their original page's *)

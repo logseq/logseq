@@ -425,6 +425,15 @@ Contracts discovered while making `logseq.e2e.commands-basic-test` green
   trigger while the popup stays open — the whole buffer becomes the query.
   Only a `delete*` inputType that removes the trigger closes it.
   `on_editor_input` re-anchors `tpos/tlen/rpos` to 0 in that case.
+- **ac close-on-caret-leave lives on the keyup path, not input** (cljs
+  `close-autocomplete-if-outside`/`wrapped-by?`). The `]`/`)`
+  autopair-overtype handler `preventDefault`s the keydown and skips the
+  caret over the ghost bracket, so no `input` event reaches
+  `on_editor_input` and its `query_closed` check never runs — without the
+  equivalent check in `ac_keydown` a completed `[[page]]` keeps the popup
+  open and swallows Enter. `ac_keydown` closes the ac when the caret left
+  the trigger range or the buffer already contains the closer
+  (`]]`/`))`/`/` query end).
 - **`#` autocomplete lists classes only** (cljs `get-matched-classes`,
   `thread-api/get-all-classes` with `except-root-class?`), never page
   titles — otherwise properties like `logseq.property/template-applied-to`
@@ -1921,6 +1930,211 @@ Ports `src/main/frontend/extensions/pdf*` into `deps/ui/src/extension/pdf*.ml` +
 - Password-protected PDFs prompt via the shared `Dialogs_state.prompt` (title + desc row), matching the cljs `.container > h3#modal-headline` shape.
 
 
+
+## Vendored render libs (katex/mhchem, highlight.js, youtube timestamps)
+
+`Render_libs` (`src/render/render_libs.ml`) owns all post-mount wiring
+to the vendored bundles. It installs once per app, lazily on first use:
+a sync `register_doc_scan` that walks touched roots for `.latex` /
+`.latex-inline` shells and `pre.CodeMirror-line` code lines, plus a
+document click listener for `a.youtube-timestamp` seeks.
+
+KaTeX (`render_inline.katex_el`, `render.ml` math display-type):
+cljs `extensions/latex.cljs` renders a lazily-loaded
+`katex.render(tex, el, {displayMode, throwOnError:false, strict:false})`
+into a holder element (`span.latex-inline` / `div.latex`, class
+`initial`, `span.opacity-0` raw-tex child, random uuid id). OCaml emits
+the identical shell; the scan then calls `window.katex.render` on the
+shell element itself (matching cljs, which renders into the holder —
+`.opacity-0` is replaced). Implicit cljs behaviors reproduced:
+
+- Lazy script loading in cljs order — `./js/katex.min.js` first, then
+  `./js/mhchem.min.js`; mhchem failure still renders (cljs
+  `p/finally`), katex-script failure marks the state `Failed` and every
+  pending/later shell degrades to the `span.katex` raw-tex fallback.
+- `displayMode` comes from the block context (`$$..$$` inline and math
+  display-type blocks are display; `$..$` is not) and is tracked per
+  element id in `pending_display` until the render happens — the scan
+  alone cannot recover it from the DOM, so element ids are registered
+  at build time.
+- Elements already rendered are detected by the absence of `.opacity-0`
+  (katex replaces the holder), so re-scans are no-ops — no double
+  render.
+- Not reproduced (documented deltas): no `ui/loading` spinner while
+  katex loads (shell paints immediately; scan re-runs after load
+  completes); the `Failed` path uses the raw `span.katex` fallback
+  rather than cljs's spinner-then-error path.
+
+highlight.js: cljs only calls hljs for html-export/shortcut-help — the
+in-app editor is CodeMirror. The OCaml render emits static
+`pre.CodeMirror-line` lines inside `.CodeMirror[data-lang=...]`; the
+scan highlights each pre via a raw-JS wrapper (`hljs_highlight`)
+because stock `hljs.highlightElement` cannot be used: it ignores
+`data-lang` (reads `language-*` classes) and refuses elements with
+children. The wrapper mirrors `highlightElement`'s end state —
+`innerHTML` from `hljs.highlight` (declared `data-lang` via
+`getLanguage`, else `no-highlight`) or `highlightAuto`, sets
+`data-highlighted="yes"`, adds `hljs` + `language-<lang>` classes —
+and skips `[contenteditable]` pres (live editor lines), already
+`data-highlighted` elements, empty text, and elements with child
+elements. Code blocks get their `data-lang` on the `.CodeMirror`
+container, resolved via `closest('.CodeMirror')`.
+
+Video timestamps (`{{youtube-timestamp}}`, `render_inline.timestamp_el`):
+cljs `video/youtube.cljs` renders `a.youtube-timestamp` >
+`span.youtube-timestamp-icon` (clock svg, `h-5 w-5`,
+`fill="currentColor"`, viewBox `0 0 20 20`, single `path` with
+`clip-rule`/`fill-rule` evenodd) + `span.youtube-timestamp-label`
+(`seconds->display`: `h:m:s` 2-padded, hour dropped iff `00`, so
+`18→"00:18"`, `83→"01:23"`, `3723→"01:02:03"`). `parse_timestamp`
+accepts bare digits (`^\d+$` → seconds) or
+`h?:m:ss` (`m`/`s` ≤2 digits, ≤59); anything else renders *nothing*
+(cljs returns nil — OCaml emits `D.txt ""`). Click → `util/stop` +
+seek the **last youtube iframe that precedes the anchor** in document
+order (`compareDocumentPosition & FOLLOWING`); cljs registers a
+`YT.Player` and calls `seekTo` — OCaml posts the equivalent
+`{event:"command", func:"seekTo", args:[sec,true]}` postMessage to the
+iframe's `contentWindow` (requires `enablejsapi=1` on the embed src,
+which cljs already sets), because LUI elements have no YT API lifecycle.
+
+`{{youtube}}`/`{{video}}` embeds: id = first `[\w-]+` run after
+`youtu.be/|y2u.be/` hosts or `/shorts/|/embed/|/v/|watch?v=` paths,
+or a bare 11-char trimmed arg; `start` = `t=` digits preceded by
+`?`/`&`. iframe attrs match cljs: `id="youtube-player-<id>"`,
+`allow-full-screen`, `allow="accelerometer; autoplay; clipboard-write;
+encrypted-media; gyroscope; picture-in-picture; web-share"`,
+`referrer-policy="strict-origin-when-cross-origin"`,
+`referer="https://logseq.com"`, `frame-border="0"`, src
+`https://www.youtube.com/embed/<id>?enablejsapi=1[&start=N]`.
+Deltas vs cljs: shell stays `.embed-block > iframe` (e2e contract)
+instead of `.video-embed-shell/.video-embed-frame`; no `origin=` param;
+`w=` width args ignored.
+
+## Vendored-lib surface ports: marked / PhotoSwipe / html2canvas
+
+**Plugin README (marked + DOMPurify).** cljs `plugins.open-readme!`
+branches on `(:repo item)`: repo plugins get `iframe.lsp-frame-readme`
+→ `marketplace.html?repo=…` (unchanged — that page still runs
+`DOMPurify.sanitize(marked.parse(content))` over the GitHub-raw
+readme). Local plugins route through `load_plugin_readme`, which is a
+`nil_fn` stub on web — the cljs read path **never renders local README
+content**. deps/ui therefore fetches the readme itself
+(`Plugin_readme.endpoints`: `github.com/o/r[/…]` →
+`raw.githubusercontent.com/o/r/{master,main}/{README.md,readme.md}`;
+other hosts → `<url>/{README.md,readme.md}`), renders it through the
+new `sdk/markdown.ml` (`marked.parse` → `DOMPurify.sanitize` with the
+cljs `security.cljs` opts `ADD_TAGS:["iframe"], ADD_ATTR:["is"],
+ALLOW_UNKNOWN_PROTOCOLS:true`, resolving both purify module shapes),
+and substitutes it for the cljs mldoc render — a deliberate web
+deviation since mldoc output was unreachable on web anyway. cljs
+`parse-user-md-content` rewrites relative `![](…)` image links
+against the readme dir — preserved. Anchor clicks inside
+`.cp__plugins-details` go through `data-capture-click`
+(`dom_adapter`): click inside `a[href]` → `preventDefault` +
+`window.open`, standing in for `apis.openExternal`. Blank body →
+`:plugin/readme-empty-warning` toast, dialog suppressed (cljs shows
+the toast and still opens an empty dialog — suppressed because the
+empty panel is dead UI). `resources/index.html` gained the missing
+`<script defer src="./js/purify.js">` tag (the gulp task already
+copied the file).
+
+**PhotoSwipe lightbox.** cljs `preview-images!` constructs the
+lightbox with `{dataSource, pswpModule: window.PhotoSwipe,
+showHideAnimationType: "fade"}`, stores it on `window.photoLightbox`,
+then `init` + `loadAndOpen 0`. `asset_dom.open_lightbox` now sets
+`window.photoLightbox` identically (the only contract piece that was
+missing; open/close behavior was already in place). cljs sorts images
+by `(juxt #(.-x %) #(.-y %))` before rotating the clicked one to the
+front — a **no-op** (HTMLImageElement has no `.x`/`.y` props, every
+sort key is `undefined`, so DOM order is preserved); the OCaml port
+keeps DOM order and rotates only.
+
+**Export page as PNG (html2canvas).** cljs
+`export/export_to_png.cljs` is registered under a
+`when-not (seq? top-level-uuids)` guard — `(seq? (map …))` is always
+truthy or `()` which `seq?` also accepts, so the PNG tab never
+actually appears for a page with content. deps/ui shows the PNG tab
+unconditionally and documents this as porting a dead cljs path.
+`Export_page.export_png` targets `#main-content-container` with the
+cljs option set (`backgroundColor` from
+`--ls-primary-background-color` else `"transparent"`,
+`allowTaint/useCORS`, `x/y/scrollX/scrollY: 0`, `scale: 1`,
+`windowHeight = scrollHeight`), `canvas.toBlob … "image/png"` →
+object URL into `img#export-preview`. Copy uses
+`navigator.clipboard.write` with a `ClipboardItem` (`"image/png"`);
+save is an anchor-download `logseq_<t/now>.png`. The "Transparent
+background" toggle drives the `backgroundColor` override.
+
+## Ac popup edge cases (parity: `devin/lui-parity2`)
+
+- **`menu-link` class order is dynamic-first**: cljs builds the class
+  list with `(when chosen? "chosen")` first, so a chosen row is
+  `"chosen flex justify-between menu-link"` and a non-chosen row keeps
+  the leading join space (`" flex justify-between menu-link"`).
+- **Keep-visible scrolling** (`handler/ui.cljs`
+  `auto-complete-keep-visible-scroll-top`): arrow-key navigation
+  scrolls `#ui__ac-inner` only enough to reveal the row (no padding);
+  on a group-start row the `.ui__ac-group-name` heading above it counts
+  toward the row's top.
+- **Popup collision flip** (base-ui `avoidCollisions`): an ac popup
+  mounts below the caret; when its rendered height exceeds the space
+  below and more room exists above, it flips to `data-side="top"`,
+  anchored so its bottom edge sits just above the caret. To measure
+  the real rendered height the `--available-height` clamp (propagated
+  to `#ui__ac-inner`'s own `max-height`) is lifted briefly; the
+  list's own CSS cap still applies (`min(avail-60, 460px)` flipped for
+  commands, `min(avail-20, 480px)` below / for search popups).
+  `caret_popup_pos` therefore also returns the caret line top as the
+  flip anchor.
+- **Context-menu icon/emoji picker is a `Properties_state` overlay**:
+  `Icon_picker.open_picker_with_opts` pushes a body-level overlay on
+  the `overlays` stack (not a `.ui__dropdown-menu-sub-content`); the
+  returned root el is tracked in `cm_picker_el` and removed via
+  `Properties_state.remove_overlay_el` on every close path
+  (hover-away, Escape, outside click, submenu switch).
+- **Hover highlight mirrors base-ui `data-highlighted`**: moving over
+  a `[role=menuitem]` inside `.ls-context-menu-content` /
+  `.ui__dropdown-menu-sub-content` sets `data-highlighted` (→
+  `bg-muted`), cleared on the previously hovered row.
+
+## Page-menu dialogs (parity: `devin/lui-parity2`)
+
+- **`shui/dialog-confirm!` contract (delete page)**: title is a
+  `flex gap-2 items-center` row with a `span.relative` tabler
+  `alert-triangle` icon + the confirm title text; body is
+  `p.opacity-60` containing `- <page title>` (not a description
+  sentence). `Model.Confirm_delete_page` therefore carries
+  `(uuid, title, permanent?)` — `permanent` swaps the title text to
+  the `:page.delete/permanent-confirm-title` wording for class
+  entities, property entities, and today's journal.
+- **`shui/button` default variant is filled primary**
+  (`bg-primary text-primary-foreground hover:bg-primary/90`) —
+  e.g. the publish-page submit. `btn_base` alone renders ghost-like;
+  append the primary classes for a default-variant button.
+
+## Tag chips & node-value "New option" (parity: `devin/lui-parity2`)
+
+- **`.block-tag` chips carry `data-tag-uuid` / `data-tag-id` /
+  `data-tag-title` / `data-tag-priv`** so the document contextmenu
+  handler can open the cljs tag menu (`Go to #<title>` `⌘ Click`,
+  `Open in sidebar` `⇧ Click`, `Remove tag` — the last hidden for
+  private/built-in tags). The `data-ref` attr stays lowercase; the
+  menu label needs original case, hence `data-tag-title`.
+  `Remove tag` uses `delete-property-value` on `block/tags`, which
+  validates + retracts by `Wire.Int` db/id — uuid args fail, so
+  `resolve_block_tags`/`resolve_page_tags` must ship aligned
+  uuid+dbid per visible tag. `tags_wire` only carries
+  `{ident,title}`; decode-only chips (e.g. refs listing) fall back
+  to `""`/`0` and the menu simply doesn't open.
+- **create-page op returns `[title, uuid]`** — never `db/id`. Any
+  "New option" write must resolve the uuid back to a db/id
+  (`get-case-page` by uuid) before `set-block-property`; a bare
+  `geti res "db/id"` silently no-ops.
+- **`block/tags` schema type is `class`, not `node`**: cljs
+  `<create-page-if-not-exists!` creates a *class* for `block/tags`
+  (and `class`-type properties generally create classes). Writing a
+  plain page as a tag value fails validation ("should be a Class").
+
 ## i18n: runtime dict loading + literal consolidation
 
 `src/core/i18n.ml` was a stopgap table of English literals behind a
@@ -2004,3 +2218,374 @@ scope stays frozen-at-init — same effective contract as before.
   `MelangeError: Invalid_argument` in `apply_pending_batch`, documented
   above). Reproduced identically on an `origin/devin/lui-ui-rewrite`
   bundle — not introduced by this change.
+
+
+## Bundle / production build (devin/lui-prodbuild)
+
+`deps/ui/vite.config.mjs` now has two build modes (vite 8 defaults
+`env.mode` to `"production"` for every `vite build`, so the flag is
+detected on `process.argv`, not `ConfigEnv.mode`):
+
+- `vite build` (`npm run build`): dev bundle — `minify:false`, inline
+  sourcemap, `logseq_dev=true` (cljs `config/dev?` equivalent).
+- `vite build --mode production` (`npm run build:production`):
+  minified (built-in oxc minifier — no new dep), `sourcemap:"hidden"`
+  (emits `main.js.map` without a `sourceMappingURL` comment — cljs
+  release emitted the map and the deploy pipeline stripped it before
+  shipping), `logseq_dev=false`.
+
+Sizes:
+
+| build | main.js bytes | gzip |
+|---|---:|---:|
+| dev | 3,113,199 | 599,115 |
+| production | 1,977,328 | 467,023 |
+| `js/icon-data.js` (both modes) | 1,778,026 | 331,469 |
+| `js/emoji-data.js` (both modes) | 432,757 | 83,099 |
+
+(Baseline before this branch: dev 8,546,822 / gzip 1,204,745, prod
+4,974,916 / gzip 988,477 — the icon split is responsible for most of
+the delta; minification and tree-shaking account for the rest.)
+
+vs cljs release (`clojure -M:cljs release app`, master): `main.js`
+16,113,696 / gzip 4,008,217 with tabler icon data inlined, plus lazy
+`code-editor.js` 1,012,649 / gzip 316,163. The LUI prod surface
+(main.js + icon-data.js + emoji-data.js) is 4,188,111 / gzip 881,591
+total — ~4.6x smaller gzipped; main.js alone is ~8.6x smaller
+(467,023 vs 4,008,217). Note the cljs bundle carries the complete
+legacy frontend; the LUI rewrite does not yet implement the full
+feature set.
+
+### ESM emit → tree-shaking works
+
+`js_app/dune` emitted `(module_systems commonjs)`, which rolldown can
+only shake coarsely. Switching to `(module_systems esm)` lets it drop
+dead modules and unused exports — 186 emitted modules fell out of the
+bundle entirely (182 unused `melange-webapi`/lui/dep bindings plus 4
+of our own emitted-but-unreachable modules). No `[%mel.raw]` `require`
+/`module.exports` interop exists in `src/`, so the switch was clean.
+`test/dune` keeps `commonjs` — the node test harness `require()`s its
+emitted modules directly. OCaml-side dead code is otherwise invisible
+to warning 32: without `.mli` files every structure binding is
+exported, so nothing can ever be flagged unused.
+
+### Data tables → embedded JSON
+
+`keymap_data.ml`, `icon_picker_names.ml` and `commands_data.ml` were
+re-encoded from OCaml list/record literals to a single embedded JSON
+string each, decoded once at module init (same wire shape decoded into
+the same public types — call sites unchanged). The emitted JS dropped
+~630KB (445→19KB, 318→244KB, 138→8KB), but most of the old emit was
+melange pretty-printing whitespace the minifier already removed: prod
+main.js gained only ~14KB, while the unminified dev bundle dropped
+~290KB. Kept because JSON.parse at init is also cheaper than building
+~6.4k cons cells. Lesson vs the icon split: icon data was real
+megabytes; small tables gain little once minified.
+
+### Icon data split (`resources/js/icon-data.js`)
+
+`icon_tabler_data.ml` used to embed all 6,146 tabler icons as a giant
+`match` returning OCaml list literals — 6.8MB of emitted JS, >50% of
+the production bundle. cljs carried the same icon set more compactly:
+`@tabler/icons-react` factories ≈1.78MB minified / 333KB gzip
+(`resources/mobile/js/tabler-icons-react.min.js`).
+
+Now `deps/ui/scripts/gen-icon-data.mjs` (`npm run gen:icon-data`,
+reads `node_modules/@tabler/icons/tabler-nodes-{outline,filled}.json`)
+emits `resources/js/icon-data.js` — `globalThis.__tablerChildren` in
+the same `[[tag, {attr: v}]]` shape. `resources/index.html` loads it
+as a `<script defer>` before `main.js`, and `Icon_tabler_data` is a
+thin binding that decodes entries to the same
+`(tag * (string * string) list) list` the renderers already consumed —
+call sites (`icons.ml`, `editor_dom.ml`) are unchanged. Benefits:
+`main.js` drops ~2.2MB, the icon table parses as a plain JS object
+literal (no cons-cell construction), and it caches independently of
+app code. If `__tablerChildren` is absent (e.g. test environments)
+`tabler_children` returns `[]` and icons degrade to font glyphs, same
+as an unknown icon name before.
+
+The `@emoji-mart/data` native set followed the same pattern as
+`icon-data.js`: `scripts/gen-emoji-data.mjs` emits
+`resources/js/emoji-data.js` (`globalThis.__emojiData`) and
+`emoji_mart.ml` reads the four dataset keys off `window` (fail-fast if
+the script is absent). That removed another ~430KB of real data from
+main.js.
+
+### Printf → mini interpreter (`src/core/sprintf.ml`)
+
+`camlinternalFormat.js` (~215KB emitted) is the stdlib printf/format
+interpreter pulled in by `melange/printf.js`; dep modules (lui,
+melange-edn, melange-transit) and stdlib `printexc.js` all import it,
+so it could not be shaken. `src/core/sprintf.ml` is a ~300-line port
+of `make_printf`'s format-GADT walk covering the directives used here
+(%s %S %c %C %d %i %u %x %X %o %b %f %e %g %F %Ld %% plus literal and
+argument padding/precision; semantics byte-verified against Stdlib
+Printf across the codebase's format strings). `vite.config.mjs`
+aliases every `printf.js` specifier to `shims/printf.js`, a re-export
+of the emitted `src/core/sprintf.js`, so all callers — ours, stdlib
+printexc, and deps — use the mini interpreter and camlinternalFormat
+drops out entirely. Exotic directives (%%_ignored, %a/%t/%r/%{ %%(
+scanf sets) raise `Invalid_argument` at the first sprintf call.
+
+Remaining bundle weight is `icon_picker_names.js` (~244KB) plus
+melange runtime and npm deps (transit-js, dnd-kit, lui); the build is
+intentionally a single IIFE (`codeSplitting:false`).
+
+Verified: `bb test -n logseq.e2e.tag-basic-test -p 3007` (3 tests) and
+`bb test -n logseq.e2e.commands-basic-test -p 3007` (31 tests / 204
+assertions) both pass against the minified bundle + external icon
+data.
+
+
+## Code-block editor (branch `devin/lui-codemirror`)
+
+Real CodeMirror 5 replaces the fake `pre.CodeMirror-line` path for
+code-fence blocks (`display-type=code`, or ` ```lang ` fences in
+`src_block`). Pure OCaml FFI — no hand-written JS.
+
+### FFI shape (deps/ui/src/editor/code_mirror.ml)
+
+- `external cm : cm_module = "codemirror" [@@mel.module]` binds
+  `require("codemirror")` — the CJS `module.exports = CodeMirror`
+  object itself. A bare `= ""` external is *wrong here*: melange
+  infers the val name and emits `require("codemirror").cm`
+  (undefined). Same fix applied to all addon/mode imports:
+  `= "path" [@@mel.module]` (module-object binding, harmless to
+  reference, and it avoids the ppx `fragile` alert entirely — no
+  `[@@@alert]` needed).
+- Side-effect imports: closebrackets, matchbrackets, show-hint,
+  active-line, `mode/meta`, and all 121 vendored modes
+  (`codemirror/mode/*/*`). Sanitized OCaml names
+  (`asn.1`→`asn_1`, `haskell-literate`→`haskell_literate`, …). The
+  `_imports` list keeps references so bundlers don't drop the
+  requires; the values are module objects, not members.
+
+### Mount lifecycle
+
+- `Editor_dom.register_doc_scan ~sync:true` scans
+  `.code-editor textarea` on every added DOM root and at startup
+  (`scan [document_element]`). `~sync` runs in the observer microtask
+  so the editor exists before paint and before `set_timeout 0`
+  focus attempts (`apply_focus`/`retry_focus` cover stragglers).
+- **The scan must skip textareas already inside `.CodeMirror`** —
+  CM's own hidden input textarea also matches `.code-editor
+  textarea`, and mounting on it nests a second `.CodeMirror`
+  recursively until the renderer OOM-crashes. Guard:
+  `D.el_closest el ".CodeMirror" = None`.
+- `bound` = nextElementSibling has `.CodeMirror`; `instances` map
+  pruned when a wrapper disconnects (`prune`).
+- CM mounts in **display and edit mode alike** (cljs renders CM as
+  the code surface always). `tree.ml content_or_editor` therefore
+  keeps `content_wrapper` for `display_type=code` even while editing
+  — the dyn never swaps the subtree, so the mounted CM survives
+  edit-state flips.
+
+### Options / DOM parity (cljs extensions/code.cljs render!)
+
+theme `lsradix light|dark` (html.dark → dark), autoCloseBrackets,
+lineNumbers, matchBrackets for lisp-like (scheme|lisp|clojure|edn),
+styleActiveLine, tabIndex −1, extraKeys Esc + Shift-Enter,
+`viewportMargin Infinity` for calc. Mode via `findModeByName →
+findModeByExtension → .mime → raw lang`; lang normalized
+`edn|clj|cljc|cljs|clojurescript → clojure` (cljs src-cp).
+
+### Events
+
+- `change` → `sync_buffer` (silent, keeps `editing.buffer` + textarea
+  textContent) + `Ops.schedule_save` (400 ms debounce →
+  `apply_parsed` → worker tx) + `update_calc`.
+- `blur` → `blur_commit` when this uuid is the editing block.
+- `focus` → `enter_edit` whenever the focused CM is not the current
+  edit block — including when nothing was editing (cljs
+  edit-block! parity). The click-placed caret survives because
+  `focus_block` short-circuits when `hasFocus()`.
+- Wrapper `keydown`: Cmd/Ctrl+[ ] swallowed (history nav), arrows at
+  document start/end move to the neighbor block
+  (`A.arrow_nav`). Wrapper `pointerdown`: stopPropagation + clear the
+  block-range selection. `editor_keys` document-capture pointerdown
+  additionally skips `.ui-fenced-code-editor` targets (CM's
+  stopPropagation can't reach capture listeners).
+- `Esc`: commits via `A.exit_edit ~select:true`. **Divergence**: cljs
+  drops into a raw-textarea mode on Esc before the second Esc fully
+  exits; we exit in one step (simpler, matches `exit-edit` helper).
+- `Shift-Enter`: `insert_sibling_after`.
+- `update_calc` clears `.extensions__code-calc` and re-appends
+  `.extensions__code-calc-output-line` rows from
+  `Render_calc.results`. For that to exist on a *fresh* calc block,
+  render.ml now emits the `.extensions__code-calc.pr-2` container
+  for `lang=calc` even when empty (cljs always mounts it).
+
+### State coupling (no module cycle)
+
+`Editor_state` exposes `code_buffer_of` / `code_focus` refs that
+`Code_mirror.install` wires: `live_buffer` consults the CM doc before
+the textarea fallback; `apply_focus` tries `code_focus` (has_focus →
+keep caret, else `cm.focus()` + `setCursor`) before the textarea
+match and runs `run_pending_focus_actions` on success. `sync_titles`
+(≈ cljs `sync-editor-code!`) is subscribed to `S.signal ()` *lazily*
+from the scan — `S.state` throws `failwith "editor state not
+mounted"` until the first block row mounts the state, and an eager
+subscribe in `install` crashed boot ("Failure(editor state not
+mounted)").
+
+### Actions bar
+
+`.code-block-actions` = `.select-language` button (label =
+lower-cased lang or `editor/code-language-placeholder` + chevron) +
+copy button (`navigator.clipboard.writeText` → "Copied!" toast, via
+`let*` promise bind). The picker renders `.ls-code-lang-picker`
+menu rows under `.cp__overlays` at the button's fixed rect; a
+document mousedown outside `.ls-code-lang-picker,
+.code-block-actions` closes it. Picking a mode calls
+`setOption("mode", …)` + `set_block_property
+logseq.property.code/lang`. `window.CodeMirror` is exported for
+extensions/dev helpers.
+
+### Verification
+
+- `virtualized-late-editor-and-code-editor-test` 4/4,
+  `commands-basic-test/code-block-test` 2/2,
+  `commands-basic-test/calculator-test` 3/3 — all green on port 3013.
+- Manual probe: `/code` → `.CodeMirror` (cm-s-lsradix cm-s-light)
+  mounts, click on `pre.CodeMirror-line` focuses the hidden textarea,
+  `fill "*:focus"` writes the doc, Esc exits, `.extensions__code`
+  shows the code, block content persists across reload.
+
+## Plugins runtime (branch `devin/lui-plugins-runtime`)
+
+cljs surface: `src/main/frontend/plugins*` (~3.9k lines) drives the
+vendored `resources/js/lsplugin.core.js` (LSPluginCore). The core owns
+the sandboxed iframe loader, `provider:ui` / `provider:theme` /
+`settings:schema` / `settings:update` handlers, injected-UI helpers, and
+the `api:call` proxy that resolves `window.logseq.api[method]` /
+`window.logseq.sdk.<tag>`. None of that needed re-implementation — the
+port fills the host-side gaps the cljs layer supplied: listeners,
+registries, file/storage shims, hook firing, and the settings view.
+
+### `LSPluginCore.hostMounted()`
+
+Plugins' `ready`/provideUI handshake waits on `_hostMountedActor`; cljs
+calls it after page mount. `Plugin_host.setup` (invoked from
+`Sdk_api.install` after `Lui_app.mount`) now ends with
+`LSPluginCore.hostMounted()`.
+
+### Core listeners (`core_listeners`)
+
+`registered`/`reloaded` track the instance; `unregistered` +
+`beforereload` + `disabled` now run `clear_plugin_resources`
+(hooks/simple-commands/slash/global-keybindings/ui-items/themes,
+mirroring cljs `clear-commands!` + `unregister-plugin-themes`);
+`unlink-plugin` drops storage like before. New listeners:
+`themes-changed` (flatten `pid -> themes[]` into `installed_themes`
+with `:pid` injected — cljs `mapcat assoc :pid`), `theme-selected`
+(mode → `data-theme` + `ui/theme`/`ui/custom-theme` localStorage, then
+`hookApp("theme-changed")`), `settings-changed` (bump only — the core's
+settings EE already persisted via `save_plugin_user_settings`), `error`
+(`IllegalPluginPackageError` → `ls:toast` with
+`plugin.package-config/parse-error`). `reset-custom-theme` is not wired
+(no custom-theme UI exists to trigger it).
+
+### Hook registry + firing
+
+`install_plugin_hook`/`uninstall_plugin_hook` record `hook -> {pid}`.
+`should_exec_plugin_hook` returns a **raw boolean**, not a Promise —
+`invokeHostExportedApi` returns call results synchronously and a Promise
+is always truthy; the `%identity` `as_promise` cast keeps the api-fn
+shape while the core's `_hook` compat path reads the bool.
+
+`LSPluginCore._hook` dispatches `hookApp`/`hookEditor`/`hookDb` via
+`%mel.raw` shims (no handwritten JS files). `hook_db` fires on the
+worker `sync-db-changes` broadcast (`worker_events.ml`) with cljs
+payload `{blocks, deletedBlockUuids, txData, txMeta}` plus per-block
+`block:<uuid>` for installed block hooks, gated on the same
+`<= 1000` blocks. `hook_app "route-changed"` fires from `Router.resolve`
+on every committed navigation with `{template, path, parameters}` —
+`parameters` is `{}` (cljs only fills it for a couple of named routes;
+nothing plugin-visible depends on it on web).
+
+### Command registries
+
+`register_plugin_simple_command` stores `{cmd, event, palette}` keyed by
+normalized key (`':' -> '-'`, leading digit -> `_N`). Palette-registered
+commands flow into `Cmdk_state.command_table` as `plugin.<pid>/<key>`
+`Commands_data.cmd` entries; `run_command` short-circuits on the
+`plugin.` prefix and calls `exec_palette_command` (→ `hookEditor` with
+cmd + `{pid, args?, uuid, format}` from `Editor_state.editing_uuid`).
+
+`register_plugin_slash_command` stores `(pid, tag) -> steps`. The "/"
+menu appends a `PLUGINS` group (`editor.slash/group-plugins`, puzzle
+icon) built from `Plugin_host.slash_cmd_tags`; choosing one strips the
+trigger text then runs steps — `editor/input` inserts via the same
+buffer splice as `Emit`, `editor/hook` fires `hookEditor(event,
+payload+{uuid,format})` (cljs `handle-steps`).
+
+`register_global_keybinding_cmd` is recorded (so
+`clear_plugin_resources` can drop it) but no host keybinding dispatcher
+exists on web — the cljs dispatch lives in shortcut handlers not yet
+ported.
+
+`invoke_external_plugin_cmd`: `models` → `caller.callUserModelAsync`,
+`commands` → `exec_simple_command` with args (cljs
+`call-plugin-user-model!`/`call-plugin-user-command!`).
+`__install_plugin` requires `{repo, id}` and delegates to
+`install_marketplace` (cljs delegates to
+`install-marketplace-plugin!`).
+
+### File/storage api (localStorage, not idb/filesystem)
+
+cljs stores plugin files under `LSPUserDotRoot/` in idb; on web there is
+no filesystem, so each file is a localStorage entry keyed
+`LSPUserDotRoot/<sub>/<file>`. `dotdir_norm` normalizes `sub/file` and
+rejects `..` escapes (cljs `"<action> file denied"`). Implementations:
+`write/read/unlink/list/exist_dotdir_file`, `write_user_tmp_file`
+(`tmp/`), `read/write/unlink/exist/clear/list_plugin_storage_file`
+(`storages/<basename pid>/`). `read_plugin_storage_file` rejects with
+"file not existed" like cljs. `list_dotdir_files` enumerates
+`localStorage` keys via `length`/`key(i)` externals.
+
+Electron-only surfaces stay nil/false stubs: `load_plugin_readme`,
+`load_plugin_config`, `save_plugin_package_json`,
+`register/unregister_search_service(s)`, `install/update_plugin_themes`
+(the core handles theme install internally; cljs's host fns were
+electron file ops), `validate_external_plugins` (false — no external
+plugin list on web), `write_assetsdir_file`, main-ui
+`show/hide/toggle/set_inline_style/set_attrs` (plugins own no main UI
+surface yet).
+
+### Install / update lifecycle
+
+`on_lsp_update` now handles all three cljs shapes: `onlyCheck`
+completed → `updates[pid] = latest-version` (drives the "Update 👉 v"
+button); completed for an installed pid → `pl.reload()` + refresh saved
+manifest `version`/`webPkg`; completed for a new pid →
+`LSPluginCore.register`. `check_or_update id repo only_check` fetches
+the r2 entry and re-emits `lsp-updates` like cljs
+`check-or-update-marketplace-plugin!`. Card `.updates-actions` renders
+`.btn` (Update 👉 `<ver>` | Check update). `unregister_plugin` =
+`LSPluginCore.unregister` (cljs `unregister-plugin`); uninstall runs
+through `Dialogs_state.ask` with `plugin/delete-alert`.
+
+### Settings surface
+
+New `plugin-settings` dialog (`dialogs_state.known` + `body_of`). Card
+menu "Open settings" sets `open_settings_pid` and opens it; the body
+mirrors cljs `.cp__plugins-settings.cp__settings-main >
+.cp__settings-inner.no-aside > article > .panel-wrap[data-id]` (web
+always has `nav? = false`). Rows render `desc-item.as-{input,toggle,
+enum,object,button}` + `heading-item` + `p.text-red-500` not-handled,
+descriptions via `Markdown.markdown_to_html` (marked + DOMPurify,
+sanitize options identical to cljs `security/sanitize-html`) into a new
+`"html"` extension property on the DOM adapter. Writes go through
+`pl.settings.set(k,v)` — the core's settings EE persists via
+`save_plugin_user_settings` and emits `settings-changed` (bump
+re-renders). Inputs commit on `change` (not per-keystroke like cljs's
+debounced `defaultValue` — avoids clobbering the buffer mid-edit).
+Code mode is a plain `<textarea>` + Reset/Save (no CodeMirror
+lazy-editor); Save parses and assigns `pl.settings.settings` like cljs.
+
+### Inert-by-design
+
+Menu keeps `View logs` / `Report plugin` `<li>`s for DOM parity but they
+are un-wired (no plugin-logs view or report modal exists on web yet).
+`plugins.edn`, fs ops, ipc, unpacked-plugin reload, assetsdir writes are
+Electron-only and out of scope.

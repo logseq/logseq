@@ -2,6 +2,7 @@
    spawn worker -> init -> list-db -> open or create Demo graph ->
    ensure today journal -> load route page -> mark ready. *)
 
+open Promise_ext
 let demo_graph = "Demo"
 
 (* storage values are edn-ish strings: "\"en\"" -> "en" *)
@@ -99,14 +100,15 @@ let pick_graph repos =
 
 let ensure_today_journal repo =
   let day = Dates.today_journal_day () in
-  Runtime.invoke2 "thread-api/get-journal-page-by-day" (Wire.String repo)
-    (Wire.Int day)
-  |> Js.Promise.then_ (fun page ->
-         match page with
-         | Wire.Map _ -> Js.Promise.resolve ()
-         | _ ->
-             Graph.create_today_journal repo
-             |> Js.Promise.then_ (fun _ -> Js.Promise.resolve ()))
+  let* page =
+    Runtime.invoke2 "thread-api/get-journal-page-by-day" (Wire.String repo)
+      (Wire.Int day)
+  in
+  match page with
+  | Wire.Map _ -> Js.Promise.resolve ()
+  | _ ->
+      let* _ = Graph.create_today_journal repo in
+      Js.Promise.resolve ()
 
 let run () =
   apply_storage_env ();
@@ -120,28 +122,27 @@ let run () =
   w.on_message <- Worker_events.dispatch;
   Worker_events.init ();
   Runtime.worker := Some w;
-  Graph.init_worker ()
-  |> Js.Promise.then_ (fun () ->
-         Graph.list_graphs ())
-  |> Js.Promise.then_ (fun repos ->
-         Runtime.send (Action.Repos_loaded repos);
-         pick_graph repos)
-  |> Js.Promise.then_ (fun repo ->
-         Graph.open_graph repo
-         |> Js.Promise.then_ (fun _ ->
-                Graphs_meta.touch repo;
-                Js.Promise.resolve repo))
-  |> Js.Promise.then_ (fun repo ->
-         ensure_today_journal repo
-         |> Js.Promise.then_ (fun () ->
-            Graph.build_search_index repo;
-            Js.Promise.resolve repo))
-  |> Js.Promise.then_ (fun repo ->
-         Runtime.send (Action.Boot_graph_ready repo);
-         Graph.build_search_index repo;
-         (* initial route resolution (deep link or home) *)
-         Router.resolve ();
-         Js.Promise.resolve ())
+  (let* () = Graph.init_worker () in
+  let* repos = Graph.list_graphs () in
+  let* repo =
+    Runtime.send (Action.Repos_loaded repos);
+    pick_graph repos
+  in
+  let* _ = Graph.open_graph repo in
+  let* repo =
+    Graphs_meta.touch repo;
+    Js.Promise.resolve repo
+  in
+  let* () = ensure_today_journal repo in
+  let* repo =
+    Graph.build_search_index repo;
+    Js.Promise.resolve repo
+  in
+  Runtime.send (Action.Boot_graph_ready repo);
+  Graph.build_search_index repo;
+  (* initial route resolution (deep link or home) *)
+  Router.resolve ();
+  Js.Promise.resolve ())
   |> Js.Promise.catch (fun err ->
          Platform.console_error ("boot failed", err);
          Toast.error (I18n.t "graph/load-error");

@@ -10,6 +10,7 @@
    (pills). Rows are rebuilt by refresh(), invoked on mount and on every
    sync-db-changes broadcast. *)
 
+open Promise_ext
 open Editor_dom
 open Properties_dom
 module D = Properties_data
@@ -324,49 +325,48 @@ let render_area ?(left_host = None) ~host (ctx : V.ctx) ~owner_is_tag
     | Some _ -> D.block_render_data ctx.block_uuid
     | None -> Js.Promise.resolve W.Nil
   in
-  Js.Promise.all2 (display, block_w)
-  |> Js.Promise.then_ (fun (wire, block_w) ->
-         let rows, hidden = D.split_display wire in
-         let left_rows, below_rows, panel_rows =
-           match left_host with
-           | Some _ ->
-               ( positioned_rows block_w "block-left"
-               , positioned_rows block_w "block-below"
-               , rows )
-           | None -> partition_rows rows
-         in
-         let has_content =
-           left_rows <> [] || below_rows <> [] || panel_rows <> []
-           || hidden <> []
-         in
-         if has_content && not (el_is_connected area_el) then
-           el_append_child host area_el;
-         if not has_content then (
-           if el_is_connected area_el then el_remove area_el;
-           remove_all host ":scope > .positioned-properties.block-below")
-         else (
-           el_clear area_el;
-           let panel = mk ~cls:"properties-panel" "div" in
-           el_append_child area_el panel;
-           (match left_host with
-            | Some lh ->
-                render_left ctx ~owner_is_tag ~owner_title lh left_rows
-            | None -> ());
-           let panel_rows =
-             match left_host with
-             | Some _ -> panel_rows
-             | None -> left_rows @ panel_rows
-           in
-           render_panel ctx ~owner_is_tag ~owner_title ~page_area
-             ~show_hidden:!S.show_hidden
-             ~can_toggle:(can_toggle_hidden ctx ~below_rows:[])
-             panel panel_rows hidden;
-           (* pills render next to the area inside the indent container *)
-           remove_all host ":scope > .positioned-properties.block-below";
-           if below_rows <> [] then
-             render_pills ctx ~owner_is_tag ~owner_title host below_rows);
+  (let* (wire, block_w) = Js.Promise.all2 (display, block_w) in
+  let rows, hidden = D.split_display wire in
+  let left_rows, below_rows, panel_rows =
+    match left_host with
+    | Some _ ->
+        ( positioned_rows block_w "block-left"
+        , positioned_rows block_w "block-below"
+        , rows )
+    | None -> partition_rows rows
+  in
+  let has_content =
+    left_rows <> [] || below_rows <> [] || panel_rows <> []
+    || hidden <> []
+  in
+  if has_content && not (el_is_connected area_el) then
+    el_append_child host area_el;
+  if not has_content then (
+    if el_is_connected area_el then el_remove area_el;
+    remove_all host ":scope > .positioned-properties.block-below")
+  else (
+    el_clear area_el;
+    let panel = mk ~cls:"properties-panel" "div" in
+    el_append_child area_el panel;
+    (match left_host with
+     | Some lh ->
+         render_left ctx ~owner_is_tag ~owner_title lh left_rows
+     | None -> ());
+    let panel_rows =
+      match left_host with
+      | Some _ -> panel_rows
+      | None -> left_rows @ panel_rows
+    in
+    render_panel ctx ~owner_is_tag ~owner_title ~page_area
+      ~show_hidden:!S.show_hidden
+      ~can_toggle:(can_toggle_hidden ctx ~below_rows:[])
+      panel panel_rows hidden;
+    (* pills render next to the area inside the indent container *)
+    remove_all host ":scope > .positioned-properties.block-below";
+    if below_rows <> [] then
+      render_pills ctx ~owner_is_tag ~owner_title host below_rows);
 
-         Js.Promise.resolve ())
+  Js.Promise.resolve ())
   |> (fun p ->
       Js.Promise.catch
         (fun e ->
@@ -382,49 +382,48 @@ let render_area ?(left_host = None) ~host (ctx : V.ctx) ~owner_is_tag
    property maps (position already resolved worker-side like cljs
    :block.temp/positioned-properties), the display-properties rows for
    the panel, and the block's own attrs for values *)
-let render_block_area ~ind ~left_host ctx ~owner_is_tag ~owner_title area_el =
-  D.block_render_data ctx.block_uuid
-  |> Js.Promise.then_ (fun block_wire ->
-         match block_wire with
-         | W.Map _ ->
-             let left_rows =
-               D.positioned_rows block_wire "block-left"
-             in
-             let below_rows =
-               D.positioned_rows block_wire "block-below"
-             in
-             let display =
-               Option.value ~default:W.Nil
-                 (W.get block_wire "block.temp/display-properties")
-             in
-             let rows, hidden = D.split_display display in
-             let has_content =
-               left_rows <> [] || below_rows <> [] || rows <> []
-               || hidden <> []
-             in
-             if has_content && not (el_is_connected area_el) then
-               el_append_child ind area_el;
-             if not has_content then (
-               if el_is_connected area_el then el_remove area_el;
-               remove_all ind ":scope > .positioned-properties.block-below")
-             else (
-               el_clear area_el;
-               let panel = mk ~cls:"properties-panel" "div" in
-               el_append_child area_el panel;
-               (match left_host with
-                | Some host ->
-                    render_left ctx ~owner_is_tag ~owner_title host
-                      left_rows
-                | None -> ());
-               render_panel ctx ~owner_is_tag ~owner_title ~page_area:false
-                 ~show_hidden:!S.show_hidden
-                 ~can_toggle:(can_toggle_hidden ctx ~below_rows)
-                 panel rows hidden;
-               remove_all ind ":scope > .positioned-properties.block-below";
-               if below_rows <> [] then
-                 render_pills ctx ~owner_is_tag ~owner_title ind below_rows);
-             Js.Promise.resolve ()
-         | _ -> Js.Promise.resolve ())
+let render_block_area ~ind ~left_host (ctx : V.ctx) ~owner_is_tag ~owner_title area_el =
+  let* block_wire = D.block_render_data ctx.block_uuid in
+  match block_wire with
+  | W.Map _ ->
+      let left_rows =
+        D.positioned_rows block_wire "block-left"
+      in
+      let below_rows =
+        D.positioned_rows block_wire "block-below"
+      in
+      let display =
+        Option.value ~default:W.Nil
+          (W.get block_wire "block.temp/display-properties")
+      in
+      let rows, hidden = D.split_display display in
+      let has_content =
+        left_rows <> [] || below_rows <> [] || rows <> []
+        || hidden <> []
+      in
+      if has_content && not (el_is_connected area_el) then
+        el_append_child ind area_el;
+      if not has_content then (
+        if el_is_connected area_el then el_remove area_el;
+        remove_all ind ":scope > .positioned-properties.block-below")
+      else (
+        el_clear area_el;
+        let panel = mk ~cls:"properties-panel" "div" in
+        el_append_child area_el panel;
+        (match left_host with
+         | Some host ->
+             render_left ctx ~owner_is_tag ~owner_title host
+               left_rows
+         | None -> ());
+        render_panel ctx ~owner_is_tag ~owner_title ~page_area:false
+          ~show_hidden:!S.show_hidden
+          ~can_toggle:(can_toggle_hidden ctx ~below_rows)
+          panel rows hidden;
+        remove_all ind ":scope > .positioned-properties.block-below";
+        if below_rows <> [] then
+          render_pills ctx ~owner_is_tag ~owner_title ind below_rows);
+      Js.Promise.resolve ()
+  | _ -> Js.Promise.resolve ()
 
 (* ---------- block mounts ---------- *)
 
@@ -589,8 +588,8 @@ let title_actions (p : Model.page) =
                          | None -> [])) ]
           in
           let p =
-            Outliner_ops.apply [ op ]
-            |> Js.Promise.then_ (fun _ -> !Runtime.reload_current_view ())
+            (let* _ = Outliner_ops.apply [ op ] in
+            !Runtime.reload_current_view ())
           in
           ignore p));
   if p.Model.page_is_tag then
@@ -658,22 +657,21 @@ let render_class_section (ctx : V.ctx) ~owner_title host =
   let col = mk ~cls:"gap-1 flex flex-col" "div" in
   el_append_child section col;
   el_append_child host section;
-  D.class_properties (D.uuid_ref ctx.block_uuid)
-  |> Js.Promise.then_ (fun w ->
-         let props = W.elems w in
-         List.iter
-           (fun p ->
-             match class_schema_row p with
-             | Some row ->
-                 el_append_child col
-                   (row_el ctx ~owner_is_tag:true ~owner_title row)
-             | None -> ())
-           props;
-         let add_wrap = mk ~cls:"ml-5" "div" in
-         el_append_child add_wrap
-           (new_property_btn ctx ~for_class:true ~owner_title);
-         el_append_child col add_wrap;
-         Js.Promise.resolve ())
+  let* w = D.class_properties (D.uuid_ref ctx.block_uuid) in
+  let props = W.elems w in
+  List.iter
+    (fun p ->
+      match class_schema_row p with
+      | Some row ->
+          el_append_child col
+            (row_el ctx ~owner_is_tag:true ~owner_title row)
+      | None -> ())
+    props;
+  let add_wrap = mk ~cls:"ml-5" "div" in
+  el_append_child add_wrap
+    (new_property_btn ctx ~for_class:true ~owner_title);
+  el_append_child col add_wrap;
+  Js.Promise.resolve ()
 
 (* a clear+rebuild detaches every node it replaces; a click that
    resolved .property-k just before the swap lands on whatever sits at
@@ -695,67 +693,77 @@ let replace_if_changed host cand =
 (* Page surface: attach .ls-properties-area only when there are rows to
    show (cljs show-properties-area?); attach .ls-bidirectional-properties
    only when bidirectional groups exist. *)
-let rec render_page_area ctx (p : Model.page) ~attach_area ~attach_bidi
-    ~detach area bidi =
-  D.display_props ~page_title:true ~tag_dialog:false
-    ~show_hidden:!S.show_hidden (D.uuid_ref ctx.block_uuid)
-  |> Js.Promise.then_ (fun wire ->
-         let rows, hidden = D.split_display wire in
-         let rows = List.filter is_panel_row rows in
-         let _left, _below, panel_rows = partition_rows rows in
-         (* cljs show-class-properties-area? — a tag page still mounts
-            .ls-properties-area to host the class-properties section *)
-         if
-           (not p.Model.page_is_tag)
-           && panel_rows = []
-           && hidden = []
-         then
-           detach ()
-         else (
-           attach_area ();
-           let cand = mk "div" in
-           let panel = mk ~cls:"properties-panel" "div" in
-           el_append_child cand panel;
-           render_panel ctx ~owner_is_tag:p.Model.page_is_tag
-             ~owner_title:p.Model.page_title ~page_area:true
-             ~show_hidden:!S.show_hidden
-             ~can_toggle:(can_toggle_hidden ctx ~below_rows:[])
-             panel panel_rows hidden;
-           (* cljs renders new-property at page level only for non-class
-              pages — the class section hosts its own *)
-           (if p.Model.page_is_tag then
-              render_class_section ctx ~owner_title:p.Model.page_title
-                cand
-            else (
-              el_append_child cand
-                (new_property_btn ctx ~for_class:false
-                   ~owner_title:p.Model.page_title);
-              Js.Promise.resolve ()))
-           |> Js.Promise.then_ (fun () ->
-                  replace_if_changed area cand;
-                  Js.Promise.resolve ())
-           |> ignore);
-         fill_bidirectional_page p ~attach_bidi bidi;
-         Js.Promise.resolve ())
+let rec render_page_area (ctx : V.ctx) (p : Model.page) ~page_inner ~attach_area
+    ~attach_bidi ~detach area bidi =
+  let* wire =
+    D.display_props ~page_title:true ~tag_dialog:false
+      ~show_hidden:!S.show_hidden (D.uuid_ref ctx.block_uuid)
+  in
+  let raw_rows, hidden = D.split_display wire in
+  (* cljs: the title row's .ls-block carries data-db-collapsable
+     from the live entity (db-collapsable?) — refresh it here so
+     the fold arrow's hover gate sees properties added after the
+     first render *)
+  (match el_query page_inner ".ls-page-title .ls-block" with
+   | Some tb ->
+       el_set_attr tb "data-db-collapsable"
+         (if raw_rows <> [] || hidden <> [] then "true" else "false")
+   | None -> ());
+  let rows = List.filter is_panel_row raw_rows in
+  let _left, _below, panel_rows = partition_rows rows in
+  (* cljs show-class-properties-area? — a tag page still mounts
+     .ls-properties-area to host the class-properties section *)
+  if
+    (not p.Model.page_is_tag)
+    && panel_rows = []
+    && hidden = []
+  then
+    detach ()
+  else (
+    attach_area ();
+    let cand = mk "div" in
+    let panel = mk ~cls:"properties-panel" "div" in
+    el_append_child cand panel;
+    render_panel ctx ~owner_is_tag:p.Model.page_is_tag
+      ~owner_title:p.Model.page_title ~page_area:true
+      ~show_hidden:!S.show_hidden
+      ~can_toggle:(can_toggle_hidden ctx ~below_rows:[])
+      panel panel_rows hidden;
+    (* cljs renders new-property at page level only for non-class
+       pages — the class section hosts its own *)
+    (let* () =
+      (if p.Model.page_is_tag then
+         render_class_section ctx ~owner_title:p.Model.page_title
+           cand
+       else (
+         el_append_child cand
+           (new_property_btn ctx ~for_class:false
+              ~owner_title:p.Model.page_title);
+         Js.Promise.resolve ()))
+    in
+    replace_if_changed area cand;
+    Js.Promise.resolve ())
+    |> ignore);
+  fill_bidirectional_page p ~attach_bidi bidi;
+  Js.Promise.resolve ()
 
 and fill_bidirectional_page (p : Model.page) ~attach_bidi bidi =
   match p.Model.page_db_id with
   | None -> ()
   | Some id ->
-      D.bidirectional id
-      |> Js.Promise.then_ (fun w ->
-             let groups =
-               match w with
-               | W.List xs | W.Array xs -> xs
-               | _ -> []
-             in
-             if groups = [] then begin
-               if el_is_connected bidi then el_remove bidi
-             end else (
-               attach_bidi ();
-               el_clear bidi;
-               render_bidi_groups bidi w);
-             Js.Promise.resolve ())
+      (let* w = D.bidirectional id in
+      let groups =
+        match w with
+        | W.List xs | W.Array xs -> xs
+        | _ -> []
+      in
+      if groups = [] then begin
+        if el_is_connected bidi then el_remove bidi
+      end else (
+        attach_bidi ();
+        el_clear bidi;
+        render_bidi_groups bidi w);
+      Js.Promise.resolve ())
       |> ignore
 
 (* idempotent mount — cljs db-properties-cp sits in a plain div inside
@@ -843,8 +851,8 @@ let mount_page_props page_inner (p : Model.page) uuid =
          us when a page converts to a tag *)
       match !Runtime.current_page with
       | Some live when live.Model.page_uuid = Some uuid ->
-          render_page_area ctx live ~attach_area ~attach_bidi ~detach
-            area bidi
+          render_page_area ctx live ~page_inner ~attach_area ~attach_bidi
+            ~detach area bidi
       | _ -> Js.Promise.resolve ()
     in
     ignore (refresh ());
@@ -857,9 +865,11 @@ let mount_page_props page_inner (p : Model.page) uuid =
 
 let mount_page_area page_inner =
   (* cljs db-page-title: title actions hide while the page title itself is
-     being edited (page-title-actions-cp only when edit-block ≠ page) *)
-  let editing_title =
-    el_query page_inner ".ls-page-title .editor-wrapper" <> None
+     being edited (page-title-actions-cp only when edit-block ≠ page).
+     Checked against the editing uuid, not DOM — the properties area lives
+     inside .ls-page-title, so its value editors must not count *)
+  let editing_title p =
+    Editor_state.editing_uuid () = p.Model.page_uuid
   in
   let with_page f =
     (* journals view mounts one .page-inner per journal — current_page is
@@ -896,13 +906,14 @@ let mount_page_area page_inner =
   in
   match el_query page_inner ".ls-page-title-actions" with
   | Some actions ->
-      set_style actions (if editing_title then "display: none" else "");
       with_page (fun p uuid ~title_el:_ ->
+          let hidden = editing_title p in
+          set_style actions (if hidden then "display: none" else "");
           if el_get_attr actions "data-actions-key" <> Some (actions_key p)
           then (
             let fresh = title_actions p in
             el_set_attr fresh "data-actions-key" (actions_key p);
-            set_style fresh (if editing_title then "display: none" else "");
+            set_style fresh (if hidden then "display: none" else "");
             el_insert_adjacent actions "beforebegin" fresh;
             el_remove actions);
           mount_page_props page_inner p uuid)
@@ -960,68 +971,68 @@ let mount_sidebar_area (area : el) =
           }
         and refresh () = render ()
         and render () =
-          D.display_props ~page_title:false ~tag_dialog:false ~sidebar:true
-            ~show_hidden:!S.show_hidden (D.uuid_ref uuid)
-          |> Js.Promise.then_ (fun wire ->
-                 let rows, hidden = D.split_display wire in
-                 let rows = List.filter is_panel_row rows in
-                 let _l, below_rows, panel_rows = partition_rows rows in
-                 el_clear area;
-                 let before_hr el =
-                   match el_query host "hr" with
-                   | Some hr -> el_insert_adjacent hr "beforebegin" el
-                   | None -> el_insert_adjacent host "beforeend" el
-                 in
-                 if (not is_tag) && panel_rows = [] && hidden = [] then (
-                   (* cljs: (and empty-full empty-hidden (not class?)) →
-                      just [new-property], no .ls-properties-area *)
-                   el_remove area;
-                   if el_query host ".ls-new-property" = None then
-                     before_hr
-                       (new_property_btn ctx ~for_class:false
-                          ~owner_title:title))
-                 else (
-                   if not (el_is_connected area) then begin
-                     match el_query host ".ls-new-property" with
-                     | Some btn -> el_insert_adjacent btn "afterend" area
-                     | None -> before_hr area
-                   end;
-                   let panel = mk ~cls:"properties-panel" "div" in
-                   el_append_child area panel;
-                   render_panel ctx ~owner_is_tag:is_tag
-                     ~owner_title:title ~page_area:true
-                     ~show_hidden:!S.show_hidden
-                     ~can_toggle:(can_toggle_hidden ctx ~below_rows)
-                     panel panel_rows hidden;
-                   if is_tag then
-                     ignore
-                       (render_class_section ctx ~owner_title:title
-                          area)
-                   else
-                     el_append_child area
-                       (new_property_btn ctx ~for_class:false
-                          ~owner_title:title));
-                 (* bidirectional area renders for page targets too *)
-                 (match db_id with
-                  | Some id ->
-                      D.bidirectional id
-                      |> Js.Promise.then_ (fun w ->
-                             let groups =
-                               match w with
-                               | W.List xs | W.Array xs -> xs
-                               | _ -> []
-                             in
-                             if groups = [] then begin
-                               if el_is_connected bidi then el_remove bidi
-                             end else (
-                               if not (el_is_connected bidi) then
-                                 el_insert_adjacent area "afterend" bidi;
-                               el_clear bidi;
-                               render_bidi_groups bidi w);
-                             Js.Promise.resolve ())
-                      |> ignore
-                  | None -> ());
-                 Js.Promise.resolve ())
+          let* wire =
+            D.display_props ~page_title:false ~tag_dialog:false ~sidebar:true
+              ~show_hidden:!S.show_hidden (D.uuid_ref uuid)
+          in
+          let rows, hidden = D.split_display wire in
+          let rows = List.filter is_panel_row rows in
+          let _l, below_rows, panel_rows = partition_rows rows in
+          el_clear area;
+          let before_hr el =
+            match el_query host "hr" with
+            | Some hr -> el_insert_adjacent hr "beforebegin" el
+            | None -> el_insert_adjacent host "beforeend" el
+          in
+          if (not is_tag) && panel_rows = [] && hidden = [] then (
+            (* cljs: (and empty-full empty-hidden (not class?)) →
+               just [new-property], no .ls-properties-area *)
+            el_remove area;
+            if el_query host ".ls-new-property" = None then
+              before_hr
+                (new_property_btn ctx ~for_class:false
+                   ~owner_title:title))
+          else (
+            if not (el_is_connected area) then begin
+              match el_query host ".ls-new-property" with
+              | Some btn -> el_insert_adjacent btn "afterend" area
+              | None -> before_hr area
+            end;
+            let panel = mk ~cls:"properties-panel" "div" in
+            el_append_child area panel;
+            render_panel ctx ~owner_is_tag:is_tag
+              ~owner_title:title ~page_area:true
+              ~show_hidden:!S.show_hidden
+              ~can_toggle:(can_toggle_hidden ctx ~below_rows)
+              panel panel_rows hidden;
+            if is_tag then
+              ignore
+                (render_class_section ctx ~owner_title:title
+                   area)
+            else
+              el_append_child area
+                (new_property_btn ctx ~for_class:false
+                   ~owner_title:title));
+          (* bidirectional area renders for page targets too *)
+          (match db_id with
+           | Some id ->
+               (let* w = D.bidirectional id in
+               let groups =
+                 match w with
+                 | W.List xs | W.Array xs -> xs
+                 | _ -> []
+               in
+               if groups = [] then begin
+                 if el_is_connected bidi then el_remove bidi
+               end else (
+                 if not (el_is_connected bidi) then
+                   el_insert_adjacent area "afterend" bidi;
+                 el_clear bidi;
+                 render_bidi_groups bidi w);
+               Js.Promise.resolve ())
+               |> ignore
+           | None -> ());
+          Js.Promise.resolve ()
         in
         ignore (refresh ());
         S.register_area area (fun () ->

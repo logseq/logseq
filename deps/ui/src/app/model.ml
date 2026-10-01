@@ -27,9 +27,13 @@ type block =
   ; block_display_type : string option (* logseq.property.node/display-type *)
   ; block_order_list : string option (* logseq.property/order-list-type *)
   ; block_order_index : int option (* 1-based position among list siblings *)
+  ; block_order : string option
+    (* :block/order fractional key — child-list membership patches from
+       worker deltas sort on it (cljs patch-items sort-by (str order)) *)
   ; block_code_lang : string option (* logseq.property.code/lang *)
   ; block_tag_uuids : string list (* aligned with block_tags *)
   ; block_tag_idents : string list (* resolved tag idents, same filtering *)
+  ; block_tag_db_ids : int list (* aligned with block_tags — chip ctx menu *)
   ; block_page_name : string option (* containing page, for ref rows *)
   ; block_reactions : (string * int) list (* emoji-id, count *)
   ; block_is_comments_area : bool
@@ -67,6 +71,9 @@ type block =
   ; block_hl : hl option (* logseq.property.pdf/hl-value *)
   ; block_asset_ref : int option (* logseq.property/asset ref db/id *)
   ; block_hl_image : int option (* logseq.property.pdf/hl-image ref db/id *)
+  ; block_db_collapsable : bool
+    (* cljs db-collapsable?: entity carries property keys other than
+       internal created-* ones (logseq.property/query etc.) *)
   }
 
 (* pdf hl record — logseq.property.pdf/hl-value map. Scaled positions
@@ -123,9 +130,14 @@ type page =
     page_add_object : bool
   ; page_tags : string list
   ; page_tag_idents : string list (* aligned with page_tags *)
+  ; page_tag_uuids : string list (* aligned — chip ctx menu *)
+  ; page_tag_db_ids : int list (* aligned with page_tags *)
   ; page_blocks : block list
   ; page_linked_refs : block list (* linked references, for journal items *)
   ; page_parents : block list (* block-zoom breadcrumb chain, root first *)
+  ; page_db_collapsable : bool
+    (* cljs db-collapsable? on the page entity — drives the title-row
+       fold arrow + data-db-collapsable *)
   }
 
 type phase =
@@ -135,7 +147,7 @@ type phase =
 
 (* modal confirm intent — carried as data so it survives the reducer *)
 type confirm =
-  | Confirm_delete_page of string (* page uuid *)
+  | Confirm_delete_page of string * string * bool (* uuid, title, permanent? *)
   | Confirm_convert_tag_to_page of int (* class db/id *)
   | Confirm_delete_asset of string (* asset block uuid *)
 
@@ -288,7 +300,15 @@ let outdent_blocks (page : page) (uuids : string list) : page option =
     List.concat_map
       (fun b ->
         let children = go b.block_children in
-        let inside = List.filter is_sel children in
+        (* only direct selected children lift out — a selected block the
+           recursive call already pulled up from deeper has outdented
+           once and must keep its new position *)
+        let direct c =
+          List.exists
+            (fun (o : block) -> o.block_uuid = c.block_uuid && is_sel o)
+            b.block_children
+        in
+        let inside = List.filter direct children in
         match inside with
         | [] -> [ { b with block_children = children } ]
         | _ ->
@@ -297,14 +317,14 @@ let outdent_blocks (page : page) (uuids : string list) : page option =
                children before the first selected stay with the parent *)
             let prefix, after =
               let rec split acc = function
-                | c :: tl when not (is_sel c) -> split (c :: acc) tl
+                | c :: tl when not (direct c) -> split (c :: acc) tl
                 | rest -> List.rev acc, rest
               in
               split [] children
             in
             let selected, suffix =
               let rec take acc = function
-                | c :: tl when is_sel c -> take (c :: acc) tl
+                | c :: tl when direct c -> take (c :: acc) tl
                 | rest -> List.rev acc, rest
               in
               take [] after

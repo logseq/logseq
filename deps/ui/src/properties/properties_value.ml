@@ -15,6 +15,7 @@
    set-block-property for scalars and refs, remove-block-property /
    delete-property-value to clear. *)
 
+open Promise_ext
 open Editor_dom
 open Properties_dom
 module D = Properties_data
@@ -137,18 +138,125 @@ let commit_or_cancel ctx row value =
    dialog commits, refresh re-renders) must not hijack focus or commit
    the outliner — the value row mounts asynchronously, and the user may
    already be typing elsewhere by the time it lands. *)
+(* cljs collapse-arrow svg inside .control-hide > .rotating-arrow *)
+let arrow_svg_el () =
+  let svg = svg_ns_el "svg" in
+  List.iter
+    (fun (k, v) -> el_set_attr svg k v)
+    [ ("aria-hidden", "true"); ("version", "1.1"); ("viewBox", "0 0 192 512")
+    ; ("fill", "currentColor"); ("display", "inline-block")
+    ; ("class", "h-4 w-4"); ("style", "margin-left: 2px") ];
+  let p = svg_ns_el "path" in
+  List.iter
+    (fun (k, v) -> el_set_attr p k v)
+    [ ( "d"
+      , "M0 384.662V127.338c0-17.818 21.543-26.741 34.142-14.142l128.662 \
+         128.662c7.81 7.81 7.81 20.474 0 28.284L34.142 \
+         398.804C21.543 411.404 0 402.48 0 384.662z" )
+    ; ("fill-rule", "evenodd") ];
+  el_append_child svg p;
+  svg
+
+(* cljs mounts the property-value editor as a whole .ls-block skeleton
+   (components/property.cljs property-value renders an inline block
+   editor): .ls-block.is-blank > .block-main-container >
+   .block-control-wrap (arrow + bullet) + .block-main-content >
+   .block-content-or-editor-wrap > .block-row > .editor-wrapper *)
+let block_editor_frame u cell wrap =
+  let blk =
+    mk ~cls:"is-blank ls-block swipe-item" "div"
+      ~attrs:
+        [ ("data-block-title", ""); ("haschild", "false")
+        ; ("data-comment-item", "false"); ("data-comments-area", "false")
+        ; ("level", "0"); ("blockid", u); ("data-collapsed", "false")
+        ; ("id", "ls-block-" ^ u); ("containerid", "4")
+        ; ("data-db-collapsable", "false")
+        ; ("data-block-format", "markdown") ]
+  in
+  let main = mk ~cls:"block-main-container flex flex-row gap-1" "div" in
+  let ctrl =
+    mk ~cls:"block-control-wrap flex flex-row items-center h-6" "div"
+      ~attrs:[ ("data-has-children", "false") ]
+  in
+  let ctrl_a =
+    mk ~cls:"block-control" "a" ~attrs:[ ("id", "control-" ^ u) ]
+  in
+  let hide = mk ~cls:"control-hide" "span" in
+  let arrow = mk ~cls:"rotating-arrow not-collapsed" "span" in
+  el_append_child arrow (arrow_svg_el ());
+  el_append_child hide arrow;
+  el_append_child ctrl_a hide;
+  el_append_child ctrl ctrl_a;
+  let blw = mk ~cls:"bullet-link-wrap" "a" in
+  let dot =
+    mk ~cls:"bullet-container cursor" "span"
+      ~attrs:
+        [ ("id", "dot-" ^ u); ("blockid", u); ("draggable", "true") ]
+  in
+  el_append_child dot (mk ~cls:"bullet" "span" ~attrs:[ ("blockid", u) ]);
+  el_append_child blw dot;
+  el_append_child ctrl blw;
+  el_append_child main ctrl;
+  let col1 = mk ~cls:"flex flex-col w-full" "div" in
+  let col2 = mk ~cls:"flex flex-col w-full" "div" in
+  let bmc = mk ~cls:"block-main-content flex flex-row gap-2" "div" in
+  let col3 = mk ~cls:"flex flex-col w-full" "div" in
+  let boew = mk ~cls:"block-content-or-editor-wrap" "div" in
+  let boei = mk ~cls:"block-content-or-editor-inner" "div" in
+  let brow =
+    mk ~cls:"block-row flex flex-1 flex-row gap-1 items-center" "div"
+  in
+  el_append_child brow wrap;
+  let right =
+    mk ~cls:"ls-block-right"
+      "div"
+  in
+  el_append_child right (mk ~cls:"ls-hover-lit" "div");
+  el_append_child brow right;
+  el_append_child boei brow;
+  el_append_child boew boei;
+  el_append_child col3 boew;
+  el_append_child bmc col3;
+  el_append_child col2 bmc;
+  el_append_child col1 col2;
+  el_append_child main col1;
+  el_append_child blk main;
+  el_append_child blk (mk ~cls:"ls-block-content-indent" "div");
+  el_append_child cell blk
+
 let edit_text_cell ?(steal = false) ctx row cell initial =
   el_clear cell;
-  let wrap = mk ~cls:"editor-wrapper" "div" in
-  let inner = mk ~cls:"editor-inner flex flex-1 block-editor" "div" in
-  let ta = mk "textarea" in
+  let u = ctx.block_uuid in
+  (* the editor edits the value block, so its edit-block ids must resolve
+     to the value block's uuid — carrying the owner's makes document-level
+     editor dispatch (on_input's schedule_save, exit_edit's live_buffer)
+     commit this buffer onto the owner's title *)
+  let vu = Option.value ~default:u (D.ref_uuid (D.row_value row)) in
+  let wrap =
+    mk ~cls:"editor-wrapper" "div"
+      ~attrs:[ ("id", "editor-edit-block-" ^ vu) ]
+  in
+  let inner = mk ~cls:"editor-inner block-editor" "div" in
+  let ta =
+    mk ~cls:"uniline-block normal-block" "textarea"
+      ~attrs:
+        [ ("autocapitalize", "off"); ("autocorrect", "false")
+        ; ("data-testid", "block editor"); ("id", "edit-block-" ^ vu)
+        ; ("style", "field-sizing: content; min-height: 1lh;") ]
+  in
   let mt = mk ~cls:"mock-text" "div" in
-  el_set_attr mt "style"
-    "width:100%;height:100%;position:absolute;visibility:hidden;top:0;left:0";
+  el_set_attr mt "style" Ui_parts.mock_text_style;
+  let uploader = mk ~cls:"image-uploader" "div" in
+  let file_in =
+    mk "input"
+      ~attrs:[ ("id", "upload-file"); ("hidden", ""); ("type", "file") ]
+  in
+  el_append_child uploader file_in;
   el_append_child inner ta;
   el_append_child inner mt;
+  el_append_child inner uploader;
   el_append_child wrap inner;
-  el_append_child cell wrap;
+  block_editor_frame vu cell wrap;
   el_set_value ta initial;
   (* single editing surface: commit the property editor still open
      elsewhere before this one registers — the previous commit's row
@@ -221,7 +329,7 @@ let edit_text_cell ?(steal = false) ctx row cell initial =
 let text_cell ctx row =
   let value = D.row_value row in
   let cell =
-    mk ~cls:"property-block-container content w-full jtrigger" "div"
+    mk ~cls:"property-block-container content jtrigger" "div"
       ~attrs:[ ("tabindex", "-1") ]
   in
   if not (D.value_empty_p value) then
@@ -242,7 +350,7 @@ let text_cell ctx row =
 
 let number_cell ctx row =
   let value = D.row_value row in
-  let cell = mk ~cls:"ls-number flex flex-1 jtrigger" "div" in
+  let cell = mk ~cls:"ls-number jtrigger" "div" in
   if not (D.value_empty_p value) then
     el_set_text cell (D.value_display value);
   on_click cell (fun _ ->
@@ -294,12 +402,11 @@ let today_day () =
   + int_of_float (Js.Date.getDate d)
 
 let set_date ctx ident day =
-  D.journal_page_by_day day
-  |> Js.Promise.then_ (fun w ->
-         (match D.geti w "db/id" with
-          | Some id -> set_scalar ctx ~ident ~value:(W.Int id)
-          | None -> ());
-         Js.Promise.resolve ())
+  (let* w = D.journal_page_by_day day in
+  (match D.geti w "db/id" with
+   | Some id -> set_scalar ctx ~ident ~value:(W.Int id)
+   | None -> ());
+  Js.Promise.resolve ())
   |> ignore
 
 let commit_date_input ctx ident ~is_datetime input =
@@ -318,7 +425,7 @@ let date_picker ctx row anchor =
   let ident = D.row_ident row |> Option.value ~default:"" in
   let is_datetime = D.row_type row = "datetime" in
   let picker =
-    mk ~cls:"ls-property-date-picker flex flex-row gap-2" "div"
+    mk ~cls:"ls-property-date-picker" "div"
   in
   let input =
     mk "input"
@@ -374,7 +481,7 @@ let datetime_content cell ms =
          (Js.Date.utc ~year:(float y) ~month:(float (m - 1))
             ~date:(float d) ()))
   in
-  let wrap = mk ~cls:"ls-datetime flex flex-row gap-1 items-center" "div" in
+  let wrap = mk ~cls:"ls-datetime" "div" in
   let inner = mk ~cls:"inline-flex" "span" in
   let a =
     mk ~cls:"page-ref" "a"
@@ -402,7 +509,7 @@ let ms_of_datetime_value (v : W.t) : float option =
 
 let date_cell ctx row =
   let value = D.row_value row in
-  let cell = mk ~cls:"jtrigger flex flex-1" "div" in
+  let cell = mk ~cls:"jtrigger" "div" in
   if not (D.value_empty_p value) then
     (match D.row_type row = "datetime", ms_of_datetime_value value with
      | true, Some ms -> datetime_content cell ms
@@ -415,16 +522,17 @@ let date_cell ctx row =
 (* db/ids of the owner block's tags — the bare entity endpoint omits
    block/tags, so pull it explicitly like sidebar_state/pull_entity *)
 let block_tag_ids ctx f =
-  Runtime.invoke3 "thread-api/pull" (D.repo ())
-    (W.String "[:block/uuid {:block/tags [:db/id]}]")
-    (W.Array [ W.Keyword "block/uuid"; W.Uuid ctx.block_uuid ])
-  |> Js.Promise.then_ (fun w ->
-         let tags =
-           match D.getf w "block/tags" with
-           | Some xs -> List.filter_map D.entity_id_of (W.elems xs)
-           | None -> []
-         in
-         f tags |> Js.Promise.resolve)
+  (let* w =
+    Runtime.invoke3 "thread-api/pull" (D.repo ())
+      (W.String "[:block/uuid {:block/tags [:db/id]}]")
+      (W.Array [ W.Keyword "block/uuid"; W.Uuid ctx.block_uuid ])
+  in
+  let tags =
+    match D.getf w "block/tags" with
+    | Some xs -> List.filter_map D.entity_id_of (W.elems xs)
+    | None -> []
+  in
+  f tags |> Js.Promise.resolve)
   |> ignore
 
 (* choice db/ids excluded by any of the owner's tags *)
@@ -433,17 +541,18 @@ let gather_exclusions tag_ids f =
   let rec go = function
     | [] -> f !acc
     | id :: rest ->
-        Runtime.invoke3 "thread-api/pull" (D.repo ())
-          (W.String "[:db/id {:logseq.property/choice-exclusions [:db/id]}]")
-          (W.Int id)
-        |> Js.Promise.then_ (fun ent ->
-               (match D.getf (D.untag ent) "logseq.property/choice-exclusions" with
-                | Some xs ->
-                    acc :=
-                      !acc @ List.filter_map D.entity_id_of (W.elems xs)
-                | None -> ());
-               go rest;
-               Js.Promise.resolve ())
+        (let* ent =
+          Runtime.invoke3 "thread-api/pull" (D.repo ())
+            (W.String "[:db/id {:logseq.property/choice-exclusions [:db/id]}]")
+            (W.Int id)
+        in
+        (match D.getf (D.untag ent) "logseq.property/choice-exclusions" with
+         | Some xs ->
+             acc :=
+               !acc @ List.filter_map D.entity_id_of (W.elems xs)
+         | None -> ());
+        go rest;
+        Js.Promise.resolve ())
         |> ignore
   in
   go tag_ids
@@ -480,12 +589,11 @@ let node_items_source ~block ~prop ~on_pick =
   let initial =
     (match D.entity_id_of prop with
      | Some property_id ->
-         D.node_selector_data ~property_id ~block
-         |> Js.Promise.then_ (fun w ->
-                Js.Promise.resolve
-                  (match D.getf w "initial-choices" with
-                   | Some v -> items_of v
-                   | None -> []))
+         let* w = D.node_selector_data ~property_id ~block in
+         Js.Promise.resolve
+           (match D.getf w "initial-choices" with
+            | Some v -> items_of v
+            | None -> [])
      | None -> Js.Promise.resolve [])
   in
   let sub_of needle hay =
@@ -500,8 +608,8 @@ let node_items_source ~block ~prop ~on_pick =
     if q' = "" then initial
     else
       let searched =
-        D.search_blocks q
-        |> Js.Promise.then_ (fun w -> Js.Promise.resolve (items_of w))
+        (let* w = D.search_blocks q in
+        Js.Promise.resolve (items_of w))
       in
       (* cljs re-adds the built-in Page class for block/tags — block-search
          filters built-ins out *)
@@ -510,15 +618,15 @@ let node_items_source ~block ~prop ~on_pick =
         && sub_of (String.lowercase_ascii q') "page"
       in
       if is_tags then
-        searched
-        |> Js.Promise.then_ (fun items ->
-               D.entity
-                 (W.List [ W.Keyword "db/ident"; W.Keyword "logseq.class/Page" ])
-               |> Js.Promise.then_ (fun e ->
-                      Js.Promise.resolve
-                        (match to_item e with
-                         | Some it -> items @ [ it ]
-                         | None -> items)))
+        let* items = searched in
+        let* e =
+          D.entity
+            (W.List [ W.Keyword "db/ident"; W.Keyword "logseq.class/Page" ])
+        in
+        Js.Promise.resolve
+          (match to_item e with
+           | Some it -> items @ [ it ]
+           | None -> items)
       else searched
   in
   (initial, on_search)
@@ -538,30 +646,28 @@ let open_select_popup _row items ~placeholder anchor
 let open_node_select_popup ~placeholder anchor ~block ~prop ~on_pick
     ~on_new =
   let initial, on_search = node_items_source ~block ~prop ~on_pick in
-  initial
-  |> Js.Promise.then_ (fun items ->
-         let sel, input =
-           Properties_select.create ~placeholder ~new_option:on_new
-             ~on_search:(Some on_search)
-             ~on_escape:(fun () -> S.pop_overlay ())
-             items
-         in
-         let wrap = mk ~cls:"property-select" "div" in
-         el_append_child wrap sel;
-         ignore (Properties_popup.open_anchored anchor wrap);
-         el_focus input;
-         Js.Promise.resolve ())
+  (let* items = initial in
+  let sel, input =
+    Properties_select.create ~placeholder ~new_option:on_new
+      ~on_search:(Some on_search)
+      ~on_escape:(fun () -> S.pop_overlay ())
+      items
+  in
+  let wrap = mk ~cls:"property-select" "div" in
+  el_append_child wrap sel;
+  ignore (Properties_popup.open_anchored anchor wrap);
+  el_focus input;
+  Js.Promise.resolve ())
   |> ignore
 
 let new_choice ctx row text =
   let ident = D.row_ident row |> Option.value ~default:"" in
-  D.upsert_closed_value ~ident ~value:text ()
-  |> Js.Promise.then_ (fun res ->
-         (match D.geti res "db/id" with
-          | Some id -> set_scalar ctx ~ident ~value:(W.Int id)
-          | None -> ());
-         S.pop_overlay ();
-         Js.Promise.resolve ())
+  (let* res = D.upsert_closed_value ~ident ~value:text () in
+  (match D.geti res "db/id" with
+   | Some id -> set_scalar ctx ~ident ~value:(W.Int id)
+   | None -> ());
+  S.pop_overlay ();
+  Js.Promise.resolve ())
   |> ignore
 
 (* icon id for a closed-choice value — the value's own
@@ -586,18 +692,18 @@ let closed_value_icon_id value =
 
 let closed_value_cell ctx row anchor =
   let value = D.row_value row in
-  let cell = mk ~cls:"jtrigger flex flex-1 w-full" "div" in
+  let cell = mk ~cls:"jtrigger" "div" in
   (* cljs select-item: an empty closed value renders .select-item >
      .empty-btn with the line-dashed icon — keeps the jtrigger
      visible/clickable *)
   (match closed_value_icon_id value with
    | Some id ->
-       let item = mk ~cls:"select-item cursor-pointer" "div" in
+       let item = mk ~cls:"select-item" "div" in
        el_append_child item (Views_dom.icon id);
        el_append_child cell item
    | None ->
        if D.value_empty_p value then (
-         let item = mk ~cls:"select-item cursor-pointer" "div" in
+         let item = mk ~cls:"select-item" "div" in
          let btn = mk ~cls:"empty-btn" "button" ~attrs:[ ("type", "button") ] in
          el_append_child btn (Views_dom.icon "line-dashed");
          el_append_child item btn;
@@ -644,7 +750,7 @@ let node_cell ctx row =
      .select-item.cursor-pointer > a.page-ref.relative[data-uuid][data-ref]
      — refs render as clickable links, not bare text *)
   let wrap =
-    mk ~cls:"w-full property-value-inner"
+    mk ~cls:"property-value-inner"
       ~attrs:[ ("data-type", D.row_type row) ]
       "div"
   in
@@ -659,7 +765,7 @@ let node_cell ctx row =
   el_set_attr cell "tabindex" "0";
   List.iter
     (fun r ->
-      let item = mk ~cls:"select-item cursor-pointer" "div" in
+      let item = mk ~cls:"select-item" "div" in
       let t = D.ref_title r in
       let a =
         mk "a" ~cls:"page-ref relative"
@@ -695,16 +801,29 @@ let node_cell ctx row =
         S.pop_overlay ())
       ~on_new:(Some (new_node ctx row))
   and new_node ctx row text =
-    D.create_page text
-    |> Js.Promise.then_ (fun res ->
-           (match D.geti res "db/id" with
-            | Some id ->
-                let ident = D.row_ident row |> Option.value ~default:"" in
-                set_scalar ctx ~ident ~value:(W.Int id)
-            | None -> ());
-           S.pop_overlay ();
-           Js.Promise.resolve ())
-    |> ignore
+    ignore
+      (let* res =
+         (* cljs <create-page-if-not-exists!: class-type and block/tags
+            values are classes *)
+         if D.row_type row = "class" || D.row_ident row = Some "block/tags"
+         then D.create_class text
+         else D.create_page text
+       in
+       let* () =
+         match D.create_result_uuid res with
+         | Some uuid -> (
+             let* id = D.db_id_of_uuid uuid in
+             match id with
+             | Some id ->
+                 let ident =
+                   D.row_ident row |> Option.value ~default:"" in
+                 set_scalar ctx ~ident ~value:(W.Int id);
+                 Js.Promise.resolve ()
+             | None -> Js.Promise.resolve ())
+         | None -> Js.Promise.resolve ()
+       in
+       S.pop_overlay ();
+       Js.Promise.resolve ())
   in
   on_click cell (fun _ -> open_values ());
   el_listen cell "keydown"
@@ -723,40 +842,10 @@ let node_cell ctx row =
    the editor — the tabindex=-1 wrapper would otherwise take focus and the
    textarea's blur handler would commit. cljs keeps the caret inside the
    editing block the same way. *)
-let guard_editing_focus container =
-  el_listen container "mousedown"
-    (fun ev ->
-      match
-        el_query container ".editor-wrapper textarea, .ls-number-input"
-      with
-      | Some _ -> prevent_default ev
-      | None -> ())
-    true
-
 (* cljs value cells fill the whole .ls-block row — a click anywhere on
    the container activates the cell. Forward clicks that miss every
    interactive descendant to the cell; while the inline editor is open
    do nothing (the mousedown guard already keeps the caret). *)
-let forward_container_click container =
-  el_listen container "click"
-    (fun ev ->
-      match ev_target ev with
-      | Some target -> (
-          match
-            el_closest target
-              ".jtrigger, .editor-wrapper, input, textarea, a, button"
-          with
-          | Some _ -> ()
-          | None -> (
-              match el_query container ".editor-wrapper" with
-              | Some _ -> ()
-              | None -> (
-                  match el_query container ".jtrigger" with
-                  | Some cell -> el_click cell
-                  | None -> ())))
-      | None -> ())
-    true
-
 (* cljs select-node for :logseq.property.class/extends — a multi-toggle
    picker inside .ui__dropdown-menu-content that stays open across picks.
    Options: extends-class-options minus self, the class's structured
@@ -769,95 +858,94 @@ let open_extends_menu ctx ~ident row anchor =
   | None -> ()
   | Some property_id ->
       ignore
-        (D.node_selector_data ~property_id ~block:(D.uuid_ref ctx.block_uuid)
-        |> Js.Promise.then_ (fun data ->
-               let selected =
-                 ref
-                   (List.filter_map D.entity_id_of
-                      (D.value_elems (D.row_value row)))
-               in
-               let ids_of m id =
-                 match D.int_map_get m id with
-                 | Some w -> List.filter_map D.entity_id_of (W.elems w)
-                 | None -> []
-               in
-               let children =
-                 match
-                   ( ctx.block_id
-                   , D.getf data "structured-children-by-class-id" )
-                 with
-                 | Some id, Some m -> (
-                     match D.int_map_get m id with
-                     | Some w ->
-                         List.filter_map (fun v -> W.as_int v) (W.elems w)
-                     | None -> [])
-                 | _ -> []
-               and grandparents =
-                 match D.getf data "extends-by-class-id" with
-                 | Some m ->
-                     List.concat_map (fun pid -> ids_of m pid) !selected
-                 | None -> []
-               in
-               let excluded =
-                 (match ctx.block_id with Some id -> [ id ] | None -> [])
-                 @ children @ grandparents
-               in
-               let options =
-                 (match D.getf data "extends-class-options" with
-                  | Some w -> W.elems w
-                  | None -> [])
-                 |> List.filter (fun o ->
-                        match D.entity_id_of o with
-                        | Some id -> not (List.mem id excluded)
-                        | None -> false)
-               in
-               let menu = mk ~cls:"ui__dropdown-menu" "div" in
-               let rec rebuild () =
-                 el_clear menu;
-                 List.iter
-                   (fun o ->
-                     match D.entity_id_of o with
-                     | None -> ()
-                     | Some id ->
-                         let a =
-                           mk ~cls:"flex justify-between menu-link" "a"
-                             ~attrs:[ ("tabindex", "0") ]
-                         in
+        (let* data = D.node_selector_data ~property_id ~block:(D.uuid_ref ctx.block_uuid) in
+        let selected =
+          ref
+            (List.filter_map D.entity_id_of
+               (D.value_elems (D.row_value row)))
+        in
+        let ids_of m id =
+          match D.int_map_get m id with
+          | Some w -> List.filter_map D.entity_id_of (W.elems w)
+          | None -> []
+        in
+        let children =
+          match
+            ( ctx.block_id
+            , D.getf data "structured-children-by-class-id" )
+          with
+          | Some id, Some m -> (
+              match D.int_map_get m id with
+              | Some w ->
+                  List.filter_map (fun v -> W.as_int v) (W.elems w)
+              | None -> [])
+          | _ -> []
+        and grandparents =
+          match D.getf data "extends-by-class-id" with
+          | Some m ->
+              List.concat_map (fun pid -> ids_of m pid) !selected
+          | None -> []
+        in
+        let excluded =
+          (match ctx.block_id with Some id -> [ id ] | None -> [])
+          @ children @ grandparents
+        in
+        let options =
+          (match D.getf data "extends-class-options" with
+           | Some w -> W.elems w
+           | None -> [])
+          |> List.filter (fun o ->
+                 match D.entity_id_of o with
+                 | Some id -> not (List.mem id excluded)
+                 | None -> false)
+        in
+        let menu = mk ~cls:"ui__dropdown-menu" "div" in
+        let rec rebuild () =
+          el_clear menu;
+          List.iter
+            (fun o ->
+              match D.entity_id_of o with
+              | None -> ()
+              | Some id ->
+                  let a =
+                    mk ~cls:"menu-link" "a"
+                      ~attrs:[ ("tabindex", "0") ]
+                  in
+                  ignore
+                    (child_text "span" "flex-1" (D.ref_title o) a);
+                  (if List.mem id !selected then
+                     ignore
+                       (el_append_child a
+                          (mk ~cls:"ui__icon ti ti-check" "i")));
+                  on_click a (fun _ ->
+                      (if List.mem id !selected then (
+                         selected :=
+                           List.filter (fun x -> x <> id) !selected;
                          ignore
-                           (child_text "span" "flex-1" (D.ref_title o) a);
-                         (if List.mem id !selected then
-                            ignore
-                              (el_append_child a
-                                 (mk ~cls:"ui__icon ti ti-check" "i")));
-                         on_click a (fun _ ->
-                             (if List.mem id !selected then (
-                                selected :=
-                                  List.filter (fun x -> x <> id) !selected;
-                                ignore
-                                  (D.delete_property_value
-                                     ~block_uuid:ctx.block_uuid ~ident
-                                     ~value:(W.Int id)))
-                              else (
-                                selected := id :: !selected;
-                                ignore
-                                  (D.set_block_property
-                                     ~block_uuid:ctx.block_uuid ~ident
-                                     ~value:(W.Int id))));
-                             rebuild ();
-                             S.refresh_all ());
-                         el_append_child menu a)
-                   options
-               in
-               rebuild ();
-               ignore
-                 (Properties_popup.open_anchored
-                    ~cls:"ui__dropdown-menu-content" anchor menu);
-               Js.Promise.resolve ()))
+                           (D.delete_property_value
+                              ~block_uuid:ctx.block_uuid ~ident
+                              ~value:(W.Int id)))
+                       else (
+                         selected := id :: !selected;
+                         ignore
+                           (D.set_block_property
+                              ~block_uuid:ctx.block_uuid ~ident
+                              ~value:(W.Int id))));
+                      rebuild ();
+                      S.refresh_all ());
+                  el_append_child menu a)
+            options
+        in
+        rebuild ();
+        ignore
+          (Properties_popup.open_anchored
+             ~cls:"ui__dropdown-menu-content" anchor menu);
+        Js.Promise.resolve ())
 
 let extends_cell ctx row =
   let value = D.row_value row in
   let ident = D.row_ident row |> Option.value ~default:"" in
-  let cell = mk ~cls:"jtrigger flex flex-1 multi-values" "div" in
+  let cell = mk ~cls:"jtrigger multi-values" "div" in
   el_set_attr cell "tabindex" "0";
   (* cljs property-block-value -> page-cp: page entities render as
      a.relative.tag / a.relative.page-ref, not .block-title-wrap *)
@@ -887,7 +975,7 @@ let extends_cell ctx row =
 
 let editing_cell ctx row inner =
   let cell =
-    mk ~cls:"property-block-container content w-full" "div"
+    mk ~cls:"property-block-container content" "div"
       ~attrs:[ ("tabindex", "-1") ]
   in
   (* keep the inline editor focused when the click lands on the cell
@@ -907,7 +995,7 @@ let editing_cell ctx row inner =
 
 let render ctx row =
   let inner =
-    mk ~cls:"property-value property-value-panel-inner flex flex-1" "div"
+    mk ~cls:"property-value property-value-panel-inner" "div"
   in
   let ident = D.row_ident row |> Option.value ~default:"" in
   (* cljs keeps a single editing surface: while a block is open in the

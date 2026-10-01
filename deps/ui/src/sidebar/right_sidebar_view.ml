@@ -203,9 +203,7 @@ let item_header st idx (it : Sidebar_state.item) =
       (* cljs on-pointer-up: middle click removes the sidebar item *)
       if
         name = "pointerup"
-        && (match payload with
-            | Some pl -> Platform.payload_num pl "which" = 2.
-            | None -> false)
+        && (Platform.payload_num payload "which" = 2.)
       then Sidebar_state.remove_item st it.key)
     [ dom ~key:("hdr-" ^ it.key) ~tag:"button"
         ~style_class:"flex flex-row px-2 items-center w-full overflow-hidden"
@@ -238,14 +236,8 @@ let item_header st idx (it : Sidebar_state.item) =
             ~on_dom_event:(fun name payload ->
               if name = "click" then
                 Sidebar_state.open_item_menu st it.key
-                  ~x:
-                    (match payload with
-                     | Some pl -> Platform.payload_num pl "clientX"
-                     | None -> 0.)
-                  ~y:
-                    (match payload with
-                     | Some pl -> Platform.payload_num pl "clientY"
-                     | None -> 0.))
+                  ~x:(Platform.payload_num payload "clientX")
+                  ~y:(Platform.payload_num payload "clientY"))
             [ Icons.icon "dots" ]
         ; dom ~key:("close-" ^ it.key) ~tag:"button"
             ~style_class:"px-2 py-2 h-8 w-8 text-muted-foreground"

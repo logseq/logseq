@@ -196,7 +196,7 @@ let prefix_el (b : Model.block) : t =
      ~events:"pointerdown"
      ~on_dom_event:(fun name payload ->
        match name, payload with
-       | "pointerdown", Some p ->
+       | "pointerdown", (Some _ as p) ->
            let blank =
              Platform.payload_str p "targetClass"
              |> String.split_on_char ' '

@@ -13,27 +13,157 @@
    counts); "sync-db-changes" fires once per tx report. Both trigger a full
    flush/reload, so coalesce: dedupe identical rtc states and debounce route
    reloads — otherwise the reconcile churn starves the editor during typing. *)
+open Promise_ext
+
 let last_rtc : Model.rtc option ref = ref None
-let reload_scheduled = ref false
+let reload_pending = ref false
+let reload_first_ms = ref 0.0
+let reload_last_ms = ref 0.0
 
 (* Boot_graph_ready clears Model.rtc; the dedup ref must clear too or an
    unchanged rebroadcast would be dropped and the indicator stay hidden *)
 let reset_rtc () = last_rtc := None
 
-(* A full route reload tears down the editing textarea mid-keystroke;
-   while a block is being edited, keep coalescing instead — the next
-   broadcast wave (or the end of editing) lands the reload anyway. *)
+(* A full route reload tears into the editing textarea mid-keystroke, so
+   defer while the editor is actively receiving input — but only while
+   input is recent: a block left in edit mode (e.g. by the RTC fixture's
+   fresh page) must not starve remote updates forever.
+
+   During an RTC merge flood broadcasts arrive faster than the debounce —
+   a fixed-interval throttle still pays a full worker-RPC + route render
+   per interval and starves the UI thread (keystroke acks cost ~1s).
+   Trailing debounce instead: re-arm while requests keep landing, with a
+   max wait so a continuous flood can't postpone the refresh forever. *)
+(* broadcast tx deltas stashed between schedule_reload and fire_reload —
+   fire_reload splices them into the route page (the cljs apply-delta!
+   path) instead of a whole-route worker refetch. A broadcast without a
+   parseable delta forces the old full reload *)
+let pending_deltas : Wire.t list ref = ref []
+let pending_unknown_delta = ref false
+
+let clear_pending_deltas () =
+  pending_deltas := [];
+  pending_unknown_delta := false
+
+let edit_input_idle_ms = 750.0
+let reload_debounce_ms = 400.0
+let reload_max_wait_ms = 2000.0
+
+(* each full-route reload pays a worker fetch plus ~280ms of whole-tree
+   rebuild+flush; while an editor is open during an RTC flood that cost
+   starves keystroke dispatch, so reloads are capped to a much slower
+   cadence — a block left in edit mode still refreshes eventually *)
+let edit_reload_min_ms = 8000.0
+let reload_last_fire_ms = ref 0.0
+
+(* wall-clock of the last pointer/key event anywhere — a route reload
+   landing mid-interaction (menu pick, row click between typed ops)
+   remounts the element under the pointer and the click misses or hits
+   the wrong row *)
+let last_ui_input_ms = ref 0.0
+
 let rec schedule_reload () =
-  if !reload_scheduled then ()
+  reload_last_ms := Platform.date_now_ms ();
+  if !reload_first_ms = 0.0 then reload_first_ms := !reload_last_ms;
+  if not !reload_pending then (
+    reload_pending := true;
+    Editor_dom.set_timeout fire_reload 150)
+
+and fire_reload () =
+  let now = Platform.date_now_ms () in
+  let editing_active =
+    Editor_state.ready () && Editor_state.editing () <> None
+  in
+  let typing_active =
+    editing_active
+    && now -. !Editor_state.last_edit_input_ms < edit_input_idle_ms
+  in
+  let flood_active =
+    now -. !reload_last_ms < reload_debounce_ms
+    && now -. !reload_first_ms < reload_max_wait_ms
+  in
+  let edit_throttled =
+    editing_active && now -. !reload_last_fire_ms < edit_reload_min_ms
+  in
+  let popup_open =
+    (* same overlay surfaces as editor_keys' outside-click routing: a
+       route reload remounts the tree under an open popup/dialog and the
+       pending click/type aimed at it misses *)
+    Editor_dom.query_selector
+      "#ui__ac, .cp__cmdk__modal, .ui__popover-content, .ls-context-menu-content, #date-time-picker, .ls-editor-link-form, .ls-property-dialog"
+    <> None
+  in
+  let ui_active =
+    editing_active && now -. !last_ui_input_ms < edit_input_idle_ms
+  in
+  if typing_active || flood_active || edit_throttled || popup_open
+     || ui_active
+  then Editor_dom.set_timeout fire_reload 150
   else (
-    reload_scheduled := true;
-    Editor_dom.set_timeout
-      (fun () ->
-         reload_scheduled := false;
-         if Editor_state.ready () && Editor_state.editing () <> None then
-           schedule_reload ()
-         else Router.reload ())
-      150)
+    reload_pending := false;
+    reload_first_ms := 0.0;
+    reload_last_fire_ms := now;
+    Platform.perf_mark "reload:fire";
+    ignore (apply_pending ())
+    )
+
+(* splice the stashed tx deltas into the route page; fall back to the
+   full route reload when a broadcast carried no delta, the stash isn't
+   contiguous with the page's materialized rev, or there's no route
+   page to patch *)
+and apply_pending () : unit Js.Promise.t =
+  (* deferred op deltas are older revs — merge them first so the
+     strict broadcast splices build on the right basis *)
+  let deltas = Page_delta.drain_deferred () @ !pending_deltas in
+  let unknown = !pending_unknown_delta in
+  clear_pending_deltas ();
+  let finish () =
+    Views_mount.refresh_query_insts ();
+    Runtime.run_sync_subs ()
+  in
+  match (!Runtime.current_page, deltas, unknown) with
+  | Some page, _ :: _, false -> (
+      let rec fold (p : Model.page) = function
+        | [] -> Js.Promise.resolve (Some p)
+        | d :: rest -> (
+            let* applied =
+              Page_delta.apply_to_page ~strict:true
+                (Outliner_ops.delta_helpers p)
+                p d
+            in
+            match applied with
+            | Some p' -> fold p' rest
+            | None -> Js.Promise.resolve None)
+      in
+      let all_dup =
+        List.for_all Page_delta.delta_already_applied deltas
+      in
+      let* merged = fold page deltas in
+      (* a broadcast carrying only deltas we already spliced from our
+         own op response has nothing new to publish — skip the subs
+         refresh, it would just re-issue the sidebar/view fetches *)
+      if not all_dup then finish ();
+      match merged with
+      | Some p' ->
+          (* the spliced rows are authoritative for the uuids these txs
+             touched — drop only those title overrides, keep in-flight
+             commits *)
+          if not all_dup then
+            Editor_state.prune_overrides
+              (List.concat_map Page_delta.delta_uuids deltas);
+          (* own_commit keeps the basis; identical-page sends are
+             deduped downstream *)
+          if p' != page then (
+            Runtime.send (Action.Page_loaded p');
+            !Runtime.refresh_page_side p');
+          Js.Promise.resolve ()
+      | None ->
+          Router.reload ();
+          Js.Promise.resolve ())
+  | _ ->
+      Router.reload ();
+      finish ();
+      Js.Promise.resolve ()
 
 let dispatch kind payload =
   match kind with
@@ -44,10 +174,23 @@ let dispatch kind payload =
           Runtime.flush ()
       | None -> ())
   | "sync-db-changes" ->
-      Render_inline.invalidate_pull_caches ();
-      schedule_reload ();
-      Views_mount.refresh_query_insts ();
-      Runtime.run_sync_subs ()
+      Platform.perf_mark "worker:sync-db-changes";
+      (match Wire.get payload "delta" with
+       | Some delta ->
+           pending_deltas := !pending_deltas @ [ delta ];
+           (* only the touched entities' pull entries go stale — anchors
+              elsewhere keep their resolved titles *)
+           Render_inline.invalidate_pull_uuids
+             (Page_delta.delta_uuids delta)
+       | None ->
+           pending_unknown_delta := true;
+           Render_inline.invalidate_pull_caches ());
+      (* cljs pipeline.cljs publish-plugin-hook! — fire plugin db
+         hooks for the tx report before the UI reloads *)
+      Plugin_host.fire_db_hooks payload;
+      (* query-instances/sync-subs run inside fire_reload so they coalesce
+         with the debounced reload instead of paying per-broadcast *)
+      schedule_reload ()
   | "rtc-sync-state" -> (
       let rtc = Decode.rtc_of_wire payload in
       match !last_rtc with
@@ -59,6 +202,7 @@ let dispatch kind payload =
           Asset_dom.retry_pending ();
           Runtime.send (Action.Rtc_state rtc);
           Runtime.flush ())
+  | "rtc-log" -> !Runtime.rtc_log_handler payload
   | "db-worker/ui-request" -> Ui_requests.handle payload
   | "asset-file-write-finish" -> (
       (* worker finished writing a downloaded asset to pfs — set src on
@@ -93,6 +237,13 @@ let init () =
     (fun args ->
       ignore args;
       Js.Promise.resolve Wire.Nil);
+  Runtime.on_navigate := clear_pending_deltas;
+  Editor_dom.document_add_listener "pointerdown"
+    (fun _ -> last_ui_input_ms := Platform.date_now_ms ())
+    true;
+  Editor_dom.document_add_listener "keydown"
+    (fun _ -> last_ui_input_ms := Platform.date_now_ms ())
+    true;
   Platform.on_document_event "ls:toast" (fun ev ->
       let d = detail_json ev in
       let text =

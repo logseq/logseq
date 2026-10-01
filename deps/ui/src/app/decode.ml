@@ -126,6 +126,47 @@ let count_refs (w : Wire.t) (k : string) : int =
       List.length xs
   | _ -> 0
 
+(* cljs editor-handler/db-collapsable?: the entity's property keys minus
+   internal db-attribute and created-* properties, or a query ref. On the
+   wire the entity carries every logseq.property/* and user.property/*
+   key it holds (text values live on child blocks, not keys), so the
+   same predicate reads directly off the map keys. *)
+let db_collapsable_of_wire (w : Wire.t) : bool =
+  let property_key (k : string) =
+    let pref p =
+      String.length k >= String.length p
+      && String.sub k 0 (String.length p) = p
+    in
+    (pref "logseq.property/" || pref "user.property/")
+    && k <> "logseq.property/created-by-ref"
+    && k <> "logseq.property/created-from-property"
+  in
+  match w with
+  | Wire.Map kvs ->
+      List.exists
+        (fun (k, _) -> match k with Wire.String s | Wire.Keyword s | Wire.Symbol s -> property_key s | _ -> false)
+        kvs
+  | _ -> false
+
+(* cljs :block/children accessor (entity-plus) excludes property-created
+   and closed-value children — applies to the page's top-level list too *)
+let renderable_child (c : Wire.t) : bool =
+  Wire.get c "logseq.property/created-from-property" = None
+  && Wire.get c "block/closed-value-property" = None
+
+(* worker str_of_value for :block/order — the fractional keys are
+   strings but the wire may carry another scalar *)
+let order_str_of_wire (w : Wire.t) : string option =
+  match w with
+  | Wire.String s -> Some s
+  | Wire.Int n -> Some (string_of_int n)
+  | Wire.Int64 n -> Some (Int64.to_string n)
+  | Wire.Float f -> Some (string_of_float f)
+  | Wire.Uuid s -> Some s
+  | Wire.Keyword s -> Some s
+  | Wire.Bool b -> Some (string_of_bool b)
+  | _ -> None
+
 (* logseq.property/icon is a {type, id} map on the entity itself; block
    icons use the Model.icon record (page icons use the tuple form below) *)
 let block_icon_of_wire (w : Wire.t) : Model.icon option =
@@ -252,16 +293,10 @@ let rec block_of_wire ?(order_index = 1) ?(parent_query_id = None)
     | None -> None
   in
   let children =
-    (* cljs :block/children accessor (entity-plus) excludes
-       property-created and closed-value children *)
-    let renderable c =
-      Wire.get c "logseq.property/created-from-property" = None
-      && Wire.get c "block/closed-value-property" = None
-    in
     match Wire.get w "block/children" with
     | Some (Wire.List xs) | Some (Wire.Array xs) ->
         assign_order_indices ~parent_query_id:query_ref_id []
-          (List.filter renderable xs)
+          (List.filter renderable_child xs)
     | _ -> []
   in
   (* a pulled [:block/link ...] ref arrives as a {:db/id n} stub *)
@@ -334,8 +369,11 @@ let rec block_of_wire ?(order_index = 1) ?(parent_query_id = None)
   ; block_order_list = order_list
   ; block_order_index =
       (match order_list with Some _ -> Some order_index | None -> None)
+  ; block_order =
+      Option.bind (Wire.get w "block/order") order_str_of_wire
   ; block_code_lang = prop_label w "logseq.property.code/lang"
   ; block_tag_uuids = []
+  ; block_tag_db_ids = []
   ; block_page_name =
       (match Wire.get w "block/page" with
        | Some (Wire.Map _ as p) -> (
@@ -393,6 +431,7 @@ let rec block_of_wire ?(order_index = 1) ?(parent_query_id = None)
       (match Wire.get w "logseq.property.pdf/hl-image" with
        | Some m -> Wire.map_get_int m "db/id"
        | None -> None)
+  ; block_db_collapsable = db_collapsable_of_wire w
   }
 
 (* number = 1 + the run of consecutive same-type ordered-list siblings
@@ -417,7 +456,8 @@ and assign_order_indices ?(parent_query_id = None) acc ws =
 
 let blocks_of_wire (w : Wire.t) : Model.block list =
   match w with
-  | Wire.Array xs | Wire.List xs -> assign_order_indices [] xs
+  | Wire.Array xs | Wire.List xs ->
+      assign_order_indices [] (List.filter renderable_child xs)
   | _ -> []
 
 (* cljs block-default-collapsed?: page-typed children render collapsed on
@@ -590,9 +630,12 @@ let page_of_summary (w : Wire.t) : Model.page option =
              | _ -> false)
         ; page_tags = page_tag_titles w
         ; page_tag_idents = page_tag_idents w
+        ; page_tag_uuids = []
+        ; page_tag_db_ids = []
         ; page_blocks = []
         ; page_linked_refs = []
         ; page_parents = []
+        ; page_db_collapsable = db_collapsable_of_wire w
         }
   | _ -> None
 

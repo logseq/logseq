@@ -18,6 +18,9 @@ external json_of : 'a -> Js.Json.t = "%identity"
 
 external arr_of : Js.Json.t array -> Js.Json.t = "%identity"
 external arr_len : Js.Json.t -> int = "length" [@@mel.get]
+
+external define_prop : Js.Json.t -> string -> Js.Json.t -> unit =
+  "defineProperty" [@@mel.scope "Object"]
 external arr_at : Js.Json.t -> int -> 'a = "" [@@mel.get_index]
 external arr_push : Js.Json.t -> 'a -> unit = "push" [@@mel.send]
 external arr_splice : Js.Json.t -> int -> int -> unit = "splice" [@@mel.send]
@@ -288,13 +291,29 @@ and install_fields el r =
     ; ("clientWidth", json_of 0.)
     ; ("offsetHeight", json_of 0.)
     ; ("offsetWidth", json_of 0.)
-    ; ("children", r.kids)
     ; ("childNodes", r.kids)
     ; ("dataset", json_of (Js.Dict.empty ()))
     ; ("style", style_obj ())
     ; ("classList", class_list el)
     ; ("files", arr_of [||])
     ];
+  (* real DOM `children` is element-only and live; `childNodes` stays the
+     full kid list. Patch apply indexes `children`, so the distinction
+     matters for text-node children (raw-text swaps) *)
+  let desc = Js.Json.object_ (Js.Dict.empty ()) in
+  set_field desc "enumerable" true;
+  set_field desc "get"
+    (fun () ->
+      let n = arr_len r.kids in
+      let rec go i acc =
+        if i = n then Array.of_list (List.rev acc)
+        else
+          let c : Js.Json.t = arr_at r.kids i in
+          go (i + 1) (if (get_field c "nodeType" : int) = 1 then c :: acc
+                      else acc)
+      in
+      with_item_fn (arr_of (go 0 [])));
+  define_prop el "children" desc;
   install_methods el r
 
 and style_obj () =
@@ -577,6 +596,7 @@ let make_window doc =
   set_field w "sessionStorage" (get_field global "sessionStorage");
   set_field w "matchMedia" (match_media ());
   set_field w "getComputedStyle" (fun _el -> computed_style ());
+  set_field w "parseFloat" (get_field global "parseFloat");
   set_field w "open" (fun _url -> Js.null);
   set_field w "close" (fun () -> ());
   set_field w "scrollTo" (fun _x _y -> ());

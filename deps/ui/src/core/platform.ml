@@ -2,6 +2,7 @@
    abstraction (boot mounting, hash routing, localStorage, globals the
    e2e contract requires). *)
 
+open Promise_ext
 module W = Webapi.Dom
 
 external document_ : W.Document.t = "document"
@@ -101,6 +102,21 @@ let body_rm_class : string -> unit =
 
 external console_log : 'a -> unit = "log" [@@mel.scope "console"]
 external console_error : 'a -> unit = "error" [@@mel.scope "console"]
+
+external date_now_ms : unit -> float = "now" [@@mel.scope "Date"]
+
+external perf_now : unit -> float = "now" [@@mel.scope "performance"]
+
+let perf_mark : string -> unit =
+  [%mel.raw
+    "function (n) { if (window.__navEvents) window.__navEvents.push([n, performance.now()]); }"]
+
+let perf_time (name : string) (f : unit -> 'a) : 'a =
+  let t0 = perf_now () in
+  let r = f () in
+  if perf_now () -. t0 > 1.0 then
+    perf_mark (name ^ ":" ^ string_of_float (perf_now () -. t0));
+  r
 
 external error_message :
   Js.Promise.error -> string Js.Nullable.t = "message" [@@mel.get]
@@ -203,20 +219,31 @@ let is_mac () =
 external json_parse : string -> Js.Json.t = "parse" [@@mel.scope "JSON"]
 external json_prop : Js.Json.t -> string -> Js.Json.t = "" [@@mel.get_index]
 
-(* string field from a JSON payload string (dom-event "payload") *)
+(* string field from a JSON payload (dom-event "payload", already an
+   option — None reads as the empty object so callers don't need
+   Option.value ~default:"{}") *)
 let payload_str json key =
-  match Js.Json.decodeString (json_prop (json_parse json) key) with
-  | Some s -> s
+  match Option.map json_parse json with
+  | Some json -> (
+      match Js.Json.decodeString (json_prop json key) with
+      | Some s -> s
+      | None -> "")
   | None -> ""
 
 let payload_bool json key =
-  match Js.Json.decodeBoolean (json_prop (json_parse json) key) with
-  | Some b -> b
+  match Option.map json_parse json with
+  | Some json -> (
+      match Js.Json.decodeBoolean (json_prop json key) with
+      | Some b -> b
+      | None -> false)
   | None -> false
 
 let payload_num json key =
-  match Js.Json.decodeNumber (json_prop (json_parse json) key) with
-  | Some n -> n
+  match Option.map json_parse json with
+  | Some json -> (
+      match Js.Json.decodeNumber (json_prop json key) with
+      | Some n -> n
+      | None -> 0.)
   | None -> 0.
 
 (* raw DOM event field, e.g. keydown "key" *)
@@ -225,9 +252,6 @@ let event_str ev key =
   | Some s -> s
   | None -> ""
 
-let event_bool ev key =
-  Js.Json.decodeBoolean (json_prop ev key) = Some true
-
 let rtc_test_mode () =
   match query_param "rtc-test" with Some "true" -> true | _ -> false
 
@@ -235,6 +259,12 @@ external navigator_on_line : bool = "navigator.onLine"
 
 (* util/network-online? *)
 let online () = navigator_on_line
+
+external visibility_state : string = "visibilityState"
+  [@@mel.scope "document"]
+
+(* cljs flows/document-visibility-state *)
+let document_visible () = visibility_state = "visible"
 
 external random_uuid : unit -> string = "randomUUID"
   [@@mel.scope "crypto"]
@@ -265,17 +295,16 @@ external crypto_digest :
 
 (* cljs decode-digest: bytes -> lowercase hex *)
 let sha256_hex (u8 : Js.Typed_array.Uint8Array.t) =
-  crypto_digest crypto_subtle "SHA-256" u8
-  |> Js.Promise.then_ (fun buf ->
-         let a = Js.Typed_array.Uint8Array.fromBuffer buf () in
-         let n = Js.Typed_array.Uint8Array.length a in
-         let b = Buffer.create (n * 2) in
-         for i = 0 to n - 1 do
-           Buffer.add_string b
-             (Printf.sprintf "%02x"
-                (Js.Typed_array.Uint8Array.unsafe_get a i))
-         done;
-         Js.Promise.resolve (Buffer.contents b))
+  let* buf = crypto_digest crypto_subtle "SHA-256" u8 in
+  let a = Js.Typed_array.Uint8Array.fromBuffer buf () in
+  let n = Js.Typed_array.Uint8Array.length a in
+  let b = Buffer.create (n * 2) in
+  for i = 0 to n - 1 do
+    Buffer.add_string b
+      (Printf.sprintf "%02x"
+         (Js.Typed_array.Uint8Array.unsafe_get a i))
+  done;
+  Js.Promise.resolve (Buffer.contents b)
 
 (* lightning-fs mkdir has no recursive flag — create each path segment,
    ignoring EEXIST-style rejections *)
@@ -283,16 +312,19 @@ let pfs_ensure_dir pfs path =
   let segs =
     List.filter (fun s -> s <> "") (String.split_on_char '/' path)
   in
-  List.fold_left
-    (fun acc seg ->
-      acc
-      |> Js.Promise.then_ (fun prefix ->
-             let p = prefix ^ "/" ^ seg in
-             pfs_mkdir pfs p
-             |> Js.Promise.catch (fun _ -> Js.Promise.resolve ())
-             |> Js.Promise.then_ (fun () -> Js.Promise.resolve p)))
-    (Js.Promise.resolve "") segs
-  |> Js.Promise.then_ (fun _ -> Js.Promise.resolve ())
+  let* _ =
+    List.fold_left
+      (fun acc seg ->
+        let* prefix = acc in
+        let p = prefix ^ "/" ^ seg in
+        let* () =
+          pfs_mkdir pfs p
+          |> Js.Promise.catch (fun _ -> Js.Promise.resolve ())
+        in
+        Js.Promise.resolve p)
+      (Js.Promise.resolve "") segs
+  in
+  Js.Promise.resolve ()
 
 (* asset_store.ml browser_path — pfs paths strip one logseq_db_ prefix *)
 let strip_db_prefix repo =

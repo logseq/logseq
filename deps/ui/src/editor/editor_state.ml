@@ -46,12 +46,19 @@ let st : t Signal.state option ref = ref None
 
 (* focus request consumed after the next DOM flush — ops remount the page
    subtree, so the textarea must be re-focused once it exists again *)
-let pending_focus : (string * int) option ref = ref None
+let pending_focus : (string * int * float) option ref = ref None
 
 (* editing keys that arrive while a structure op's textarea is still
    remounting (keydown landed on <body>): queued here and replayed by
    apply_focus once the refreshed model and DOM exist *)
 let pending_focus_actions : (unit -> unit) list ref = ref []
+
+(* wall-clock of the last editing-textarea key/input event; worker_events
+   defers a sync reload only while the editor is being actively typed in,
+   so an idle-but-editing page does not starve remote updates *)
+let last_edit_input_ms : float ref = ref 0.0
+
+let note_input () = last_edit_input_ms := Platform.date_now_ms ()
 
 (* structured block clipboard (titles + hierarchy), set by copy/cut *)
 let clipboard : Model.block list ref = ref []
@@ -252,6 +259,31 @@ let title_for uuid fallback =
   Option.value (Hashtbl.find_opt display_overrides uuid) ~default:fallback
 
 let clear_overrides () = Hashtbl.reset display_overrides
+
+(* drop overrides the model has caught up to: [touched] uuids whose canon
+   row a delta splice just landed (its stored form wins over our
+   normalized paint), blocks that vanished, and rows whose stored title
+   already equals the override. Untouched overrides stay — their commits
+   are still in flight *)
+let prune_overrides touched =
+  let dead u t =
+    List.mem u touched
+    ||
+    match find u with
+    | Some b -> b.Model.block_title = t
+    | None -> true
+  in
+  Hashtbl.fold
+    (fun u t acc -> if dead u t then u :: acc else acc)
+    display_overrides []
+  |> List.iter (fun u -> Hashtbl.remove display_overrides u)
+
+(* CodeMirror buffer/focus providers for code-fence blocks, wired by
+   Code_mirror.install — refs so Editor_actions needs no CM module dep *)
+let code_buffer_of : (string -> string option) ref = ref (fun _ -> None)
+
+let code_focus : (caret:int -> string -> bool) ref =
+  ref (fun ~caret:_ _ -> false)
 
 (* returns (parent, index) of uuid among its siblings *)
 let rec find_parent_in blocks uuid =

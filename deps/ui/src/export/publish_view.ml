@@ -3,6 +3,7 @@
    {publish-api-base}/pages). cljs also uploads page assets and custom
    publish assets before posting — not ported (migrate-report). *)
 
+open Promise_ext
 open Lui_elements
 
 let dom = Logseq_dom.dom
@@ -38,7 +39,6 @@ let pending : (string * int option) option ref = ref None
 
 let arm uuid db_id = pending := Some (uuid, db_id)
 
-let sv s = Lui_protocol.StringValue s
 
 let btn_base =
   "ui__button inline-flex cursor-pointer items-center justify-center \
@@ -119,49 +119,48 @@ let post_payload ~(st : pst) payload ~graph_uuid ~page_uuid ~block_count
     W.Map items
   in
   let body = Transit.to_string body_wire in
-  Asset_store.sha256_hex (B.binary_to_u8 body)
-  |> Js.Promise.then_ (fun content_hash ->
-         let meta =
-           meta_json ~graph_uuid ~page_uuid ~block_count ~schema_version
-             ~content_hash ~content_len:(String.length body)
-         in
-         let publish_body =
-           W.Map
-             (map_items body_wire
-             @ [ ( W.kw "meta"
-                 , W.Map
-                     [ (W.kw "graph", W.String graph_uuid)
-                     ; (W.kw "page_uuid", W.String page_uuid)
-                     ; (W.kw "block_count", W.Int block_count)
-                     ; (W.kw "schema_version", W.String schema_version)
-                     ; (W.kw "format", W.Keyword "transit")
-                     ; (W.kw "compression", W.Keyword "none")
-                     ; (W.kw "content_hash", W.String content_hash)
-                     ; (W.kw "content_length"
-                       , W.Int (String.length body))
-                     ; (W.kw "owner_sub", W.Nil)
-                     ; (W.kw "owner_username", W.Nil)
-                     ; (W.kw "created_at", W.Int (B.now_ms () |> int_of_float)) ] ) ])
-         in
-         let headers =
-           [| ("content-type", "application/transit+json")
-            ; ("x-publish-meta", meta) |]
-           |> (fun a ->
-           match Platform.local_storage_get "id-token" with
-           | Some t ->
-               Array.append a [| ("authorization", "Bearer " ^ t) |]
-           | None -> a)
-         in
-         let init =
-           Fetch.RequestInit.make ~method_:Post
-             ~headers:(Fetch.HeadersInit.makeWithArray headers)
-             ~body:
-               (Fetch.BodyInit.make
-                  (Transit.to_string publish_body))
-             ()
-         in
-         Fetch.fetchWithInit "https://logseq.io/pages" init
-         |> Js.Promise.then_ (fun _resp -> Js.Promise.resolve ()))
+  let* content_hash = Asset_store.sha256_hex (B.binary_to_u8 body) in
+  let meta =
+    meta_json ~graph_uuid ~page_uuid ~block_count ~schema_version
+      ~content_hash ~content_len:(String.length body)
+  in
+  let publish_body =
+    W.Map
+      (map_items body_wire
+      @ [ ( W.kw "meta"
+          , W.Map
+              [ (W.kw "graph", W.String graph_uuid)
+              ; (W.kw "page_uuid", W.String page_uuid)
+              ; (W.kw "block_count", W.Int block_count)
+              ; (W.kw "schema_version", W.String schema_version)
+              ; (W.kw "format", W.Keyword "transit")
+              ; (W.kw "compression", W.Keyword "none")
+              ; (W.kw "content_hash", W.String content_hash)
+              ; (W.kw "content_length"
+                , W.Int (String.length body))
+              ; (W.kw "owner_sub", W.Nil)
+              ; (W.kw "owner_username", W.Nil)
+              ; (W.kw "created_at", W.Int (B.now_ms () |> int_of_float)) ] ) ])
+  in
+  let headers =
+    [| ("content-type", "application/transit+json")
+     ; ("x-publish-meta", meta) |]
+    |> (fun a ->
+    match Platform.local_storage_get "id-token" with
+    | Some t ->
+        Array.append a [| ("authorization", "Bearer " ^ t) |]
+    | None -> a)
+  in
+  let init =
+    Fetch.RequestInit.make ~method_:Post
+      ~headers:(Fetch.HeadersInit.makeWithArray headers)
+      ~body:
+        (Fetch.BodyInit.make
+           (Transit.to_string publish_body))
+      ()
+  in
+  let* _resp = Fetch.fetchWithInit "https://logseq.io/pages" init in
+  Js.Promise.resolve ()
 
 let submit ctx =
   let st = st ctx in
@@ -170,52 +169,55 @@ let submit ctx =
   else begin
     Signal.update st (fun s -> { s with publishing = true });
     Runtime.flush ();
-    (match cur.page_uuid, cur.page_db_id with
-     | None, None -> Js.Promise.resolve ()
-     | _ ->
-         let eid =
-           match cur.page_uuid with
-           | Some u -> W.List [ W.Keyword "block/uuid"; W.Uuid u ]
-           | None -> W.Int (Option.get cur.page_db_id)
-         in
-         let repo =
-           match !Runtime.current_repo with
-           | Some r -> r
-           | None -> "logseq_db_Demo"
-         in
-         Runtime.invoke "thread-api/build-publish-page-payload"
-           [ W.String repo; eid ]
-         |> Js.Promise.then_ (fun payload ->
-                match payload with
-                | W.Nil ->
-                    Toast.error (I18n.t "publish/page-not-found-error");
-                    Js.Promise.resolve ()
-                | _ ->
-                    let page_uuid =
-                      match get_str payload "page-uuid" with
-                      | "" -> Option.value ~default:"" cur.page_uuid
-                      | s -> s
-                    in
-                    let schema_version =
-                      get_str payload "schema-version"
-                    in
-                    let block_count = get_int payload "block-count" in
-                    let graph_uuid = get_str payload "graph-uuid" in
-                    let finish_graph_uuid g =
-                      post_payload ~st:cur payload ~graph_uuid:g ~page_uuid
-                        ~block_count ~schema_version
-                    in
-                    if graph_uuid <> "" then finish_graph_uuid graph_uuid
-                    else
-                      Runtime.invoke1 "thread-api/get-graph-uuid"
-                        (W.String repo)
-                      |> Js.Promise.then_ (fun w ->
-                             finish_graph_uuid (Option.value ~default:"" (W.as_string w)))))
-    |> Js.Promise.then_ (fun _ ->
-           Signal.update st (fun s -> { s with publishing = false });
-           Runtime.flush ();
-           Dialogs_state.close_top ();
-           Js.Promise.resolve ())
+    (let* _ =
+      (match cur.page_uuid, cur.page_db_id with
+       | None, None -> Js.Promise.resolve ()
+       | _ ->
+           let eid =
+             match cur.page_uuid with
+             | Some u -> W.List [ W.Keyword "block/uuid"; W.Uuid u ]
+             | None -> W.Int (Option.get cur.page_db_id)
+           in
+           let repo =
+             match !Runtime.current_repo with
+             | Some r -> r
+             | None -> "logseq_db_Demo"
+           in
+           (let* payload =
+             Runtime.invoke "thread-api/build-publish-page-payload"
+               [ W.String repo; eid ]
+           in
+           match payload with
+           | W.Nil ->
+               Toast.error (I18n.t "publish/page-not-found-error");
+               Js.Promise.resolve ()
+           | _ ->
+               let page_uuid =
+                 match get_str payload "page-uuid" with
+                 | "" -> Option.value ~default:"" cur.page_uuid
+                 | s -> s
+               in
+               let schema_version =
+                 get_str payload "schema-version"
+               in
+               let block_count = get_int payload "block-count" in
+               let graph_uuid = get_str payload "graph-uuid" in
+               let finish_graph_uuid g =
+                 post_payload ~st:cur payload ~graph_uuid:g ~page_uuid
+                   ~block_count ~schema_version
+               in
+               if graph_uuid <> "" then finish_graph_uuid graph_uuid
+               else
+                 let* w =
+                   Runtime.invoke1 "thread-api/get-graph-uuid"
+                     (W.String repo)
+                 in
+                 finish_graph_uuid (Option.value ~default:"" (W.as_string w))))
+    in
+    Signal.update st (fun s -> { s with publishing = false });
+    Runtime.flush ();
+    Dialogs_state.close_top ();
+    Js.Promise.resolve ())
     |> Js.Promise.catch (fun _ ->
            Toast.error (I18n.t "publish/publish-error");
            Signal.update st (fun s -> { s with publishing = false });
@@ -240,21 +242,22 @@ let toggle_pw ctx =
   let st_sig = Signal.value (st ctx) in
   dom ~key:"pub-pw-wrap" ~style_class:"ls-toggle-password-input relative"
     [ dom ~key:"pub-pw" ~tag:"input" ~style_class:input_cls
-        ~attrs_signal_v:
-          (Logseq_dom.attrs_signal st_sig (fun (s : pst) ->
+        ~attrs:
+          (reactive
+             (fun (s : pst) ->
                [ ("type", if s.visible then "text" else "password")
-               ; ("placeholder", I18n.t "publish/password-optional-placeholder") ]))
+               ; ("placeholder", I18n.t "publish/password-optional-placeholder") ])
+             st_sig)
         ~events:"input"
         ~on_dom_event:(fun n payload ->
           if n = "input" then
             match payload with
-            | Some p ->
+            | Some _ ->
                 Signal.update (st ctx) (fun s ->
                     { s with
-                      password = Platform.payload_str p "value" })
+                      password = Platform.payload_str payload "value" })
             | None -> ())
-        ~text_signal:
-          (Signal.map (fun (s : pst) -> sv s.password) st_sig)
+        ~text:(reactive (fun (s : pst) -> s.password) st_sig)
         []
     ; if_
         ~test:
@@ -305,20 +308,23 @@ let body (_ms : Model.t Signal.signal) : t =
       ; toggle_pw ctx
       ; dom ~key:"pub-btns" ~style_class:"flex justify-end gap-2"
           [ ghost_btn ()
-          ; dom ~key:"pub-submit" ~tag:"button" ~style_class:btn_base
-              ~attrs_signal_v:
-                (Logseq_dom.attrs_signal
-                   (Signal.value st)
+          ; dom ~key:"pub-submit" ~tag:"button"
+              ~style_class:
+                (btn_base
+               ^ " bg-primary text-primary-foreground hover:bg-primary/90")
+              ~attrs:
+                (reactive
                    (fun (s : pst) ->
                      [ ("type", "submit"); ("autofocus", "") ]
-                     @ if s.publishing then [ ("disabled", "") ] else []))
+                     @ if s.publishing then [ ("disabled", "") ] else [])
+                   (Signal.value st))
               ~events:"click"
               ~on_dom_event:(fun n _ ->
                 if n = "click" then submit ctx)
-              ~text_signal:
-                (Signal.map
+              ~text:
+                (reactive
                    (fun (s : pst) ->
-                     sv (if s.publishing then "Publishing..." else "Publish"))
+                     if s.publishing then "Publishing..." else "Publish")
                    (Signal.value st))
               [] ] ]
       ctx parent

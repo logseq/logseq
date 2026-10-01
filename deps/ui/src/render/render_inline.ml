@@ -2,6 +2,7 @@
    Mirrors the cljs renderer (components/block.cljs inline) — class names
    follow docs/e2e-contract.md exactly. *)
 
+open Promise_ext
 open Lui_elements
 module D = Render_dom
 module U = I18n
@@ -48,10 +49,7 @@ let page_link ~(tag : bool) ?label ?uuid_sig name =
       (* cljs sets :data-uuid on the anchor once the page entity resolves;
          attrs apply is replace-semantic so emit the whole set *)
       D.el ~tag:"a" ~style_class:cls ~attrs:base
-        ~attrs_signal_v:
-          (D.text_of_class_signal u_sig (fun u ->
-               if u = "" then Logseq_dom.attrs_json base
-               else Logseq_dom.attrs_json (("data-uuid", u) :: base)))
+        ~attrs_signal:(Signal.map (fun u -> if u = "" then base else ("data-uuid", u) :: base) u_sig)
         [ D.el ~tag:"span" [ D.txt text ] ]
 
 (* ---- pull memoization ----
@@ -82,6 +80,64 @@ let repo_cache repo =
 
 let invalidate_pull_caches () = Hashtbl.reset pull_caches
 
+(* drop only the entities a tx touched — a broadcast used to reset every
+   repo cache, so each op re-pulled every [[ref]]/anchor title on the
+   page (the N+1 pull storm in the profile) *)
+let invalidate_pull_uuids (uuids : string list) =
+  match uuids with
+  | [] -> ()
+  | _ ->
+      Hashtbl.iter
+        (fun _repo (c : pull_cache) ->
+          List.iter (Hashtbl.remove c.c_uuid_meta) uuids;
+          (* name entries store the resolved uuid — remove ones whose
+             target entity changed *)
+          let names =
+            Hashtbl.fold
+              (fun name u acc ->
+                if List.mem u uuids then name :: acc else acc)
+              c.c_name_uuid []
+          in
+          List.iter (Hashtbl.remove c.c_name_uuid) names)
+        pull_caches
+
+(* batch-fill both caches from a get-blocks response — a page's [[ref]]
+   anchors then mount on hits instead of paying a thread-api/pull each *)
+let prime_pull_caches repo (w : Wire.t) =
+  let cache = repo_cache repo in
+  List.iter
+    (fun pair ->
+      let uuid =
+        match Wire.block_of_pair pair with
+        | Some blk -> (
+            match Wire.map_get_uuid blk "block/uuid" with
+            | Some uuid ->
+                let title =
+                  Option.value
+                    (Wire.map_get_string blk "block/title")
+                    ~default:""
+                in
+                let is_page =
+                  match Wire.map_get_string blk "block/name" with
+                  | Some n -> String.trim n <> ""
+                  | None -> false
+                in
+                Hashtbl.replace cache.c_uuid_meta uuid (title, is_page);
+                Some uuid
+            | None -> None)
+        | None -> None
+      in
+      (* name-ref requests echo a plain-string id — seed name->uuid off
+         it; a miss records "" so unresolvable [[names]] stop re-pulling
+         on every mount *)
+      (match Wire.get pair "id" with
+       | Some (Wire.String s) when not (Wire.is_uuid_string s) ->
+           Hashtbl.replace cache.c_name_uuid
+             (String.lowercase_ascii s)
+             (Option.value uuid ~default:"")
+       | _ -> ()))
+    (Wire.elems w)
+
 (* resolved-meta signal behind [c_uuid_meta]: initialized synchronously
    on a cache hit (plain set — the mount's own flush publishes it), the
    pull fills + publishes on a miss *)
@@ -95,25 +151,26 @@ let uuid_meta_state context uuid ~fallback ?(miss = None) () =
           if !sync then Signal.set st meta
           else Runtime.signal_set st meta
       | None ->
-          Runtime.invoke3 "thread-api/pull" (Wire.String repo)
-            (Wire.String "[:block/title :block/name]")
-            (Wire.Array [ Wire.Keyword "block/uuid"; Wire.Uuid uuid ])
-          |> Js.Promise.then_ (fun w ->
-                 (match Wire.map_get_string w "block/title" with
-                  | Some t when String.trim t <> "" ->
-                      let is_page =
-                        match Wire.map_get_string w "block/name" with
-                        | Some n -> String.trim n <> ""
-                        | None -> false
-                      in
-                      let meta = (t, is_page) in
-                      Hashtbl.replace cache.c_uuid_meta uuid meta;
-                      Runtime.signal_set st meta
-                  | _ -> (
-                      match miss with
-                      | Some m -> Runtime.signal_set st m
-                      | None -> ()));
-                 Js.Promise.resolve ())
+          (let* w =
+            Runtime.invoke3 "thread-api/pull" (Wire.String repo)
+              (Wire.String "[:block/title :block/name]")
+              (Wire.Array [ Wire.Keyword "block/uuid"; Wire.Uuid uuid ])
+          in
+          (match Wire.map_get_string w "block/title" with
+           | Some t when String.trim t <> "" ->
+               let is_page =
+                 match Wire.map_get_string w "block/name" with
+                 | Some n -> String.trim n <> ""
+                 | None -> false
+               in
+               let meta = (t, is_page) in
+               Hashtbl.replace cache.c_uuid_meta uuid meta;
+               Runtime.signal_set st meta
+           | _ -> (
+               match miss with
+               | Some m -> Runtime.signal_set st m
+               | None -> ()));
+          Js.Promise.resolve ())
           |> ignore);
   sync := false;
   st
@@ -130,16 +187,17 @@ let name_uuid_state context name =
       | Some u ->
           if !sync then Signal.set st u else Runtime.signal_set st u
       | None ->
-          Runtime.invoke3 "thread-api/pull" (Wire.String repo)
-            (Wire.String "[:block/uuid]")
-            (Wire.Array [ Wire.Keyword "block/name"; Wire.String key ])
-          |> Js.Promise.then_ (fun w ->
-                 (match Wire.map_get_uuid w "block/uuid" with
-                  | Some u ->
-                      Hashtbl.replace cache.c_name_uuid key u;
-                      Runtime.signal_set st u
-                  | None -> ());
-                 Js.Promise.resolve ())
+          (let* w =
+            Runtime.invoke3 "thread-api/pull" (Wire.String repo)
+              (Wire.String "[:block/uuid]")
+              (Wire.Array [ Wire.Keyword "block/name"; Wire.String key ])
+          in
+          (match Wire.map_get_uuid w "block/uuid" with
+           | Some u ->
+               Hashtbl.replace cache.c_name_uuid key u;
+               Runtime.signal_set st u
+           | None -> ());
+          Js.Promise.resolve ())
           |> ignore);
   sync := false;
   st
@@ -157,7 +215,7 @@ let block_ref_anchor uuid : t =
   let title_sig = Signal.map fst (Signal.value st) in
   D.el ~tag:"a" ~style_class:"relative page-ref"
     ~attrs:[ ("data-ref", uuid); ("tabindex", "0") ]
-    ~text_signal:(D.text_of_class_signal title_sig Fun.id)
+    ~text:(reactive title_sig)
     [] context parent
 
 let block_ref uuid =
@@ -178,9 +236,66 @@ let image_el ~src ~alt =
 
 let code_span s = D.el ~tag:"code" [ D.txt s ]
 
-(* TODO(render): real katex — needs a JS hook the dom adapter does not
-   expose yet; emits span.katex with raw tex so .katex selectors match. *)
-let katex_el tex = D.el ~tag:"span" ~style_class:"katex" ~text:tex []
+(* cljs extensions/latex: span.latex-inline (inline) / div.latex (block)
+   with class "initial", a generated id, and a span.opacity-0 child
+   holding the raw tex; the Render_libs doc-scan lazy-loads katex.min.js +
+   mhchem.min.js and calls katex.render into the element. *)
+let katex_el ~block ~display tex : t =
+ fun context parent ->
+  Render_libs.ensure ();
+  let id = "ls-katex-" ^ Platform.random_uuid () in
+  Render_libs.katex_register_pending id display;
+  D.el
+    ~tag:(if block then "div" else "span")
+    ~style_class:(if block then "latex initial" else "latex-inline initial")
+    ~id
+    [ D.el ~tag:"span" ~style_class:"opacity-0" ~text:tex [] ]
+    context parent
+
+(* cljs extensions/video/youtube parse-timestamp:
+   ^(?:(\d+):)?([0-5]?\d):([0-5]?\d)$ or ^\d+$ (plain seconds) *)
+let parse_timestamp s : int option =
+  let digits s =
+    s <> "" && String.for_all (fun c -> c >= '0' && c <= '9') s
+  in
+  let m_or_s v = String.length v <= 2 && digits v && int_of_string v <= 59 in
+  if digits s then int_of_string_opt s
+  else
+    match String.split_on_char ':' s with
+    | [ m; sec ] when m_or_s m && m_or_s sec ->
+        Some ((int_of_string m * 60) + int_of_string sec)
+    | [ h; m; sec ] when digits h && m_or_s m && m_or_s sec ->
+        Some ((int_of_string h * 3600) + (int_of_string m * 60) + int_of_string sec)
+    | _ -> None
+
+(* cljs seconds->display: pad [h;m;s] to 2 digits, drop hours iff "00" *)
+let seconds_display seconds =
+  let pad v = if v < 10 then "0" ^ string_of_int v else string_of_int v in
+  let h = pad (seconds / 3600)
+  and m = pad (seconds / 60 mod 60)
+  and s = pad (seconds mod 60) in
+  if h = "00" then m ^ ":" ^ s else h ^ ":" ^ m ^ ":" ^ s
+
+(* cljs youtube/timestamp: a.youtube-timestamp with the clock icon +
+   seconds->display label; the click handler lives in Render_libs *)
+let timestamp_el seconds : t =
+ fun context parent ->
+  Render_libs.ensure ();
+  D.el ~tag:"a" ~style_class:"youtube-timestamp"
+    [ D.el ~tag:"span" ~style_class:"youtube-timestamp-icon"
+        [ D.el ~tag:"svg" ~style_class:"h-5 w-5"
+            ~attrs:[ ("fill", "currentColor"); ("viewBox", "0 0 20 20") ]
+            [ D.el ~tag:"path"
+                ~attrs:
+                  [ ("clip-rule", "evenodd"); ("fill-rule", "evenodd")
+                  ; ( "d"
+                    , "M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" )
+                  ]
+                [] ] ]
+    ; D.el ~tag:"span" ~style_class:"youtube-timestamp-label"
+        ~text:(seconds_display seconds)
+        [] ]
+    context parent
 
 let emph tag children = D.el ~tag children
 
@@ -233,14 +348,14 @@ let cloze_el answer cue : t =
     Runtime.signal_set open_ (not (Signal.get_state open_))
   in
   D.el ~tag:"span"
-    ~style_class_signal:
-      (D.text_of_class_signal sig_ (fun o ->
-           if o then "cloze cloze-revealed" else "cloze"))
-    ~attrs_signal_v:
-      (D.text_of_class_signal sig_ (fun o ->
-           Logseq_dom.attrs_json
-             [ ("role", "button"); ("tabindex", "0")
-             ; ("aria-pressed", string_of_bool o) ]))
+    ~style_class:
+      (reactive (fun o -> if o then "cloze cloze-revealed" else "cloze") sig_)
+    ~attrs:
+      (reactive
+         (fun o ->
+           [ ("role", "button"); ("tabindex", "0")
+           ; ("aria-pressed", string_of_bool o) ])
+         sig_)
     ~events:"click keydown" ~on_dom_event:toggle
     [ dyn ~equal:(fun a b -> (a : bool) = b)
         (fun o -> if o then revealed else hidden)
@@ -256,24 +371,76 @@ let macro_args body =
       (String.lowercase_ascii (String.sub body 0 i)
       , String.trim (String.sub body (i + 1) (String.length body - i - 1)))
 
-let youtube_embed_src url =
-  let id =
-    match find_sub url 0 "youtu.be/" with
-    | j when j >= 0 ->
-        let k = j + 9 in
-        let e = find_sub url k "?" in
-        let e = if e < 0 then String.length url else e in
-        String.sub url k (e - k)
-    | _ -> (
-        match find_sub url 0 "v=" with
-        | j when j >= 0 ->
-            let k = j + 2 in
-            let e = find_sub url k "&" in
-            let e = if e < 0 then String.length url else e in
-            String.sub url k (e - k)
-        | _ -> url)
+(* cljs extensions/video youtube-regex: the id is the first [\w-]+ after
+   youtu.be/|y2u.be/, /shorts/|/embed/|/v/, or ?v=/&v=; a bare 11-char
+   arg is itself an id (provider hint :youtube). *)
+let youtube_id url =
+  let id_after marker =
+    match find_sub url 0 marker with
+    | j when j >= 0 -> (
+        let k = j + String.length marker in
+        let n = String.length url in
+        let rec stop i =
+          if i < n then
+            match url.[i] with
+            | 'a' .. 'z' | 'A' .. 'Z' | '0' .. '9' | '_' | '-' -> stop (i + 1)
+            | _ -> i
+          else i
+        in
+        match stop k - k with
+        | len when len > 0 -> Some (String.sub url k len)
+        | _ -> None)
+    | _ -> None
   in
-  "https://www.youtube.com/embed/" ^ id
+  match
+    List.find_map id_after
+      [ "youtu.be/"; "y2u.be/"; "/shorts/"; "/embed/"; "/v/"; "v=" ]
+  with
+  | Some id -> Some id
+  | None ->
+      let u = String.trim url in
+      if String.length u = 11 then Some u else None
+
+(* cljs video-start: [?&]t=(\d+) *)
+let youtube_start url =
+  match find_sub url 0 "t=" with
+  | j when j > 0 && (url.[j - 1] = '?' || url.[j - 1] = '&') -> (
+      let k = j + 2 in
+      let n = String.length url in
+      let rec stop i =
+        if i < n && url.[i] >= '0' && url.[i] <= '9' then stop (i + 1)
+        else i
+      in
+      match stop k - k with
+      | len when len > 0 -> Some (String.sub url k len)
+      | _ -> None)
+  | _ -> None
+
+let first_arg args =
+  match String.index_opt args ' ' with
+  | Some i -> String.sub args 0 i
+  | None -> args
+
+(* cljs youtube-video iframe + attrs; enablejsapi=1 is required for the
+   timestamp seek postMessage. The shell stays .embed-block (e2e contract
+   waits on it); cljs wraps in .video-embed-shell/.video-embed-frame. *)
+let youtube_iframe id start =
+  let src =
+    "https://www.youtube.com/embed/" ^ id ^ "?enablejsapi=1"
+    ^ (match start with Some s -> "&start=" ^ s | None -> "")
+  in
+  D.el ~tag:"div" ~style_class:"embed-block"
+    [ D.el ~tag:"iframe"
+        ~attrs:
+          [ ("id", "youtube-player-" ^ id)
+          ; ("allow-full-screen", "allowfullscreen")
+          ; ( "allow"
+            , "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" )
+          ; ("referrer-policy", "strict-origin-when-cross-origin")
+          ; ("referer", "https://logseq.com")
+          ; ("frame-border", "0")
+          ; ("src", src) ]
+        [] ]
 
 let embed_iframe src =
   (* iframes are plugin-loaded in cljs; emit the shell + src so the
@@ -375,10 +542,9 @@ and page_ref ?(tag = false) ~refs ~self name =
     else
       D.el ~tag:"span" ~style_class:"page-reference"
         ~attrs:[ ("data-ref", name) ]
-        ~attrs_signal_v:
-          (D.text_of_class_signal uuid_sig (fun u ->
-               Logseq_dom.attrs_json
-                 [ ("data-ref", if u = "" then name else u) ]))
+        ~attrs:
+          (reactive (fun u -> [ ("data-ref", if u = "" then name else u) ])
+             uuid_sig)
         [ bracket "[["
         ; preview_link (page_link ~tag:false ~uuid_sig name)
         ; bracket "]]" ]
@@ -397,13 +563,12 @@ and resolved_ref ~refs ~self uuid : t =
   in
   D.el ~tag:"a" ~style_class:"relative page-ref"
     ~attrs:[ ("data-uuid", uuid); ("tabindex", "0"); ("draggable", "true") ]
-    ~attrs_signal_v:
-      (D.text_of_class_signal
-         (Signal.map fst (Signal.value st))
+    ~attrs:
+      (reactive
          (fun n ->
-           Logseq_dom.attrs_json
-             [ ("data-uuid", uuid); ("tabindex", "0"); ("draggable", "true")
-             ; ("data-ref", String.lowercase_ascii n) ]))
+           [ ("data-uuid", uuid); ("tabindex", "0"); ("draggable", "true")
+           ; ("data-ref", String.lowercase_ascii n) ])
+         (Signal.map fst (Signal.value st)))
     [ dyn
         ~equal:(fun (a : string * bool) b -> a = b)
         (fun (title, is_page) ->
@@ -420,14 +585,13 @@ and resolved_tag_ref ~refs ~self uuid : t =
   let title_sig = Signal.map fst (Signal.value st) in
   D.el ~tag:"a" ~style_class:"relative tag"
     ~attrs:[ ("data-uuid", uuid); ("tabindex", "0") ]
-    ~attrs_signal_v:
-      (D.text_of_class_signal title_sig (fun n ->
-           Logseq_dom.attrs_json
-             [ ("data-uuid", uuid); ("tabindex", "0")
-             ; ("data-ref", String.lowercase_ascii n) ]))
-    [ D.el ~tag:"span"
-        ~text_signal:(D.text_of_class_signal title_sig (fun n -> "#" ^ n))
-        [] ]
+    ~attrs:
+      (reactive
+         (fun n ->
+           [ ("data-uuid", uuid); ("tabindex", "0")
+           ; ("data-ref", String.lowercase_ascii n) ])
+         title_sig)
+    [ D.el ~tag:"span" ~text:(reactive (fun n -> "#" ^ n) title_sig) [] ]
     context parent
 
 and macro_el ~refs:_refs ~self:_self body =
@@ -452,8 +616,16 @@ and macro_el ~refs:_refs ~self:_self body =
       (* cljs: {{embed}} is deprecated — renders a warning, not an embed *)
       D.el ~tag:"div" ~style_class:"warning"
         ~text:(U.t "block.macro/embed-deprecated") []
-  | "youtube" | "video" ->
-      embed_iframe (youtube_embed_src args)
+  | "youtube" | "video" -> (
+      let url = first_arg args in
+      match youtube_id url with
+      | Some id -> youtube_iframe id (youtube_start url)
+      | None -> embed_iframe url)
+  | "youtube-timestamp" -> (
+      (* cljs: parse failure renders nothing *)
+      match parse_timestamp (first_arg args) with
+      | Some seconds -> timestamp_el seconds
+      | None -> D.txt "")
   | "vimeo" | "bilibili" | "tweet" | "twitter" | "renderer" ->
       embed_iframe args
   | _ -> D.txt ("{{" ^ body ^ "}}")
@@ -598,12 +770,18 @@ and try_math s i =
   if starts_at s i "$$" then
     match find_sub s (i + 2) "$$" with
     | j when j > i + 2 ->
-        Some (katex_el (String.sub s (i + 2) (j - i - 2)), j + 2 - i)
+        Some
+          (katex_el ~block:false ~display:true
+             (String.sub s (i + 2) (j - i - 2))
+          , j + 2 - i)
     | _ -> None
   else
     match find_sub s (i + 1) "$" with
     | j when j > i + 1 ->
-        Some (katex_el (String.sub s (i + 1) (j - i - 1)), j + 1 - i)
+        Some
+          (katex_el ~block:false ~display:false
+             (String.sub s (i + 1) (j - i - 1))
+          , j + 1 - i)
     | _ -> None
 
 (* {{macro ...}} *)

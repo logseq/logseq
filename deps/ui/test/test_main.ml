@@ -294,10 +294,11 @@ let test_update_popups () =
     (m5.page_menu = Some (3., 4., false) && m5.appearance = None);
   let m6 =
     Update.update m5
-      (Action.Confirm_set (Some (Model.Confirm_delete_page "u")))
+      (Action.Confirm_set
+         (Some (Model.Confirm_delete_page ("u", "T", false))))
   in
   check "confirm clears both popups"
-    (m6.confirm = Some (Model.Confirm_delete_page "u")
+    (m6.confirm = Some (Model.Confirm_delete_page ("u", "T", false))
     && m6.page_menu = None && m6.appearance = None);
   let m7 = Update.update m6 Action.Dismiss_all in
   check "dismiss_all clears confirm too" (m7.confirm = None)
@@ -1604,9 +1605,9 @@ let test_model_outdent () =
   (match Model.outdent_blocks pd [ "y" ] with
    | Some p' -> (
        match p'.Model.page_blocks with
-       | [ pr; yr ] -> (
+       | [ pr ] -> (
            match pr.Model.block_children with
-           | [ m' ] ->
+           | [ m'; yr ] ->
                check "outdent deep"
                  (uus m'.Model.block_children = [ "x" ]
                  && yr.Model.block_uuid = Some "y")
@@ -2445,8 +2446,9 @@ let ac_it ?group label =
   Popups_state.mk_item ~key:label ~label ?group Popups_state.Noop
 
 let mk_ac kind =
-  { Popups_state.kind; x = 0.; y = 0.; query = ""; tpos = 0; tlen = 0
-  ; items = []; chosen = 0; editor = Js.Json.null }
+  { Popups_state.kind; x = 0.; y = 0.; cy = 0.; flip = None; query = ""
+  ; tpos = 0; tlen = 0
+  ; items = []; chosen = 0; editor = Js.Json.null; auuid = "" }
 
 let test_popups_state () =
   (* fuzzy_score: subsequence match, first*1000 + span *)
@@ -2993,7 +2995,7 @@ let test_update3 () =
   (* Navigate_to resets confirm alongside other page-local state *)
   let dirty =
     { Model.initial with
-      Model.confirm = Some (Model.Confirm_delete_page "u") }
+      Model.confirm = Some (Model.Confirm_delete_page ("u", "T", false)) }
   in
   check "navigate clears confirm"
     ((Update.update dirty (Action.Navigate_to Model.All_pages))

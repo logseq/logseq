@@ -34,17 +34,17 @@ let opts_box st =
        (Signal.value st.Cards_state.opts_open))
 
 let selector_row st =
-  dom ~key:"sel-row" ~style_class:"flex flex-row items-center gap-2"
+  dom ~key:"sel-row" ~style_class:"ls-row ls-gap"
     [ dom ~key:"combo"
         ~attrs:[ ("role", "combobox") ]
         ~events:"click"
         ~on_dom_event:(fun name _ ->
           if name = "click" then Cards_state.toggle_opts st)
-        ~style_class:"!px-2 !py-0 !h-8 w-64 relative"
+        ~style_class:"ls-cards-select"
         [ opts_box st ]
     ; dom ~key:"add" ~tag:"button" ~id:"ls-cards-add"
         ~attrs:[ ("title", t_ "flashcard/add-cards-query-tooltip") ]
-        ~style_class:"!px-1 text-muted-foreground"
+        ~style_class:"ls-icon-btn"
         ~events:"click"
         ~on_dom_event:(fun name _ ->
           if name = "click" then Cards_state.add_cards_block st)
@@ -54,7 +54,7 @@ let selector_row st =
           let n = List.length cards in
           let cur = if n = 0 then 0 else min (pos + 1) n in
           dom ~key:"prog" ~tag:"span"
-            ~style_class:"text-sm opacity-50 whitespace-nowrap"
+            ~style_class:"ls-desc ls-nowrap"
             [ text ~key:"t" ~value:(Printf.sprintf "%d/%d" cur n) [] ])
         (Signal.map2 (fun a b -> (a, b)) (Signal.value st.Cards_state.pos)
            (Signal.value st.Cards_state.cards))
@@ -101,9 +101,9 @@ let rating_btn st rating label =
     [ text ~key:"t" ~value:label [] ]
 
 let rating_buttons st =
-  dom ~key:"ratings" ~style_class:"flex justify-center"
+  dom ~key:"ratings" ~style_class:"ls-center"
     [ dom ~key:"row"
-        ~style_class:"flex flex-row items-center gap-8 flex-wrap"
+        ~style_class:"ls-ratings"
         [ rating_btn st "again" (t_ "flashcard.rating/again")
         ; rating_btn st "hard" (t_ "flashcard.rating/hard")
         ; rating_btn st "good" (t_ "flashcard.rating/good")
@@ -115,15 +115,15 @@ let card_view st _pos phase title =
   let cloze = has_cloze title in
   let np = next_phase cloze phase in
   dom ~key:"card-cur"
-    ~style_class:"ls-card content flex flex-col overflow-hidden"
+    ~style_class:"ls-card content"
     [ dom ~key:"scroll"
         ~style_class:
-          "ls-card-scroll flex-1 min-h-0 overflow-y-auto overflow-x-hidden"
+          "ls-card-scroll"
         [ text ~key:"t" ~value:title [] ]
-    ; dom ~key:"actions" ~style_class:"mt-8 pb-2 shrink-0"
+    ; dom ~key:"actions" ~style_class:"ls-card-actions"
         [ (if np = "show-cloze" || np = "show-answer" then
              dom ~key:"answers" ~tag:"button" ~id:"card-answers"
-               ~style_class:"!px-2 !py-1"
+               ~style_class:"ls-btn-pad"
                ~events:"click"
                ~on_dom_event:(fun n _ ->
                  if n = "click" then advance_phase st cloze)
@@ -143,14 +143,14 @@ let cards_body st =
     (fun (cards, pos, phase) ->
       match List.nth_opt cards pos with
       | None ->
-          dom ~key:"empty" ~style_class:"ls-card content ml-2"
-            [ dom ~key:"h" ~tag:"h2" ~style_class:"font-medium"
+          dom ~key:"empty" ~style_class:"ls-card content ls-ml"
+            [ dom ~key:"h" ~tag:"h2" ~style_class:"ls-strong"
                 [ text ~key:"t"
                     ~value:
                       (t_ "flashcard.review/finished")
                     [] ] ]
       | Some title ->
-          dom ~key:"cards" ~style_class:"flex flex-col flex-1 min-h-0"
+          dom ~key:"cards" ~style_class:"ls-cards-col"
             [ card_view st pos phase title ])
     (Signal.map2
        (fun (a, b) c -> (a, b, c))
@@ -163,16 +163,13 @@ let cards_body st =
 (* overlay-click dismissal matches dialogs_view: the payload carries the
    click target's class list *)
 let is_overlay_click payload =
-  Option.fold ~none:false
-    ~some:(fun p ->
-      let tc = Platform.payload_str p "targetClass" in
-      let needle = "ui__dialog-overlay" in
-      let ln = String.length needle and lt = String.length tc in
-      let rec go i =
-        i + ln <= lt && (String.sub tc i ln = needle || go (i + 1))
-      in
-      go 0)
-    payload
+  let tc = Platform.payload_str payload "targetClass" in
+  let needle = "ui__dialog-overlay" in
+  let ln = String.length needle and lt = String.length tc in
+  let rec go i =
+    i + ln <= lt && (String.sub tc i ln = needle || go (i + 1))
+  in
+  go 0
 
 (* cljs :modal/show-cards -> shui/dialog-open! {:id :srs :label
    :flashcards__cp} — the deck lives inside the standard dialog chrome
@@ -196,7 +193,7 @@ let modal st =
           ; ("label", "flashcards__cp")
           ; ("style", "transform: translate(-50%, -50%)") ]
         [ dom ~key:"cards-modal" ~id:"cards-modal"
-            ~style_class:"flex flex-col gap-8 flex-1 min-h-0"
+            ~style_class:"ls-cards-stack"
             [ selector_row st; cards_body st ] ]
     ]
 

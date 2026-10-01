@@ -134,9 +134,10 @@ let open_lang_dropdown anchor on_pick =
 
 let theme_item ~st mode label =
   dom ~key:("tm-" ^ mode) ~tag:"li"
-    ~style_class_signal:
-      (Logseq_dom.class_signal (Signal.value st) (fun active ->
-           if active = mode then "active" else ""))
+    ~style_class:
+      (reactive
+         (fun active -> if active = mode then "active" else "")
+         (Signal.value st))
     ~events:"click"
     ~on_dom_event:(fun n _ ->
       if n = "click" then (
@@ -167,14 +168,7 @@ let theme_modes_ul ~st =
 let lang_trigger ~key ~h_cls ~st ~anchor_sel =
   dom ~key ~tag:"button"
     ~style_class:
-      ("ui__select-trigger flex "
-     ^ "items-center justify-between rounded-md border border-input \
-        bg-background px-3 py-2 text-sm ring-offset-background \
-        placeholder:text-muted-foreground focus:outline-none \
-        focus:ring-2 focus:ring-ring focus:ring-offset-2 \
-        disabled:cursor-not-allowed disabled:opacity-50 \
-        [&>span]:line-clamp-1 "
-     ^ h_cls)
+      ("ui__select-trigger " ^ h_cls)
     ~attrs:
       [ ("type", "button"); ("role", "combobox")
       ; ("aria-expanded", "false") ]
@@ -188,13 +182,12 @@ let lang_trigger ~key ~h_cls ~st ~anchor_sel =
                 Runtime.flush ())
         | None -> ())
     [ dom ~key:(key ^ "v") ~tag:"span"
-        ~text_signal:
-          (Signal.map (fun l -> Lui_protocol.StringValue l) (Signal.value st))
+        ~text:(reactive (Signal.value st))
         []
     ; dom ~key:(key ^ "i") ~tag:"span"
-        ~style_class:"ui__select-icon shrink-0 text-muted-foreground"
+        ~style_class:"ui__select-icon"
         [ dom ~key:(key ^ "svg") ~tag:"svg"
-            ~style_class:"h-4 w-4 tabler-icon tabler-icon-chevron-down"
+            ~style_class:"ls-icon-sm tabler-icon tabler-icon-chevron-down"
             ~attrs:
               [ ("viewBox", "0 0 24 24"); ("fill", "none")
               ; ("stroke", "currentColor"); ("stroke-width", "2")
@@ -214,18 +207,17 @@ let body (_ms : Model.t Signal.signal) : t =
     Signal.state ctx.ui_scheduler (lang_label_for (current_lang ()))
   in
   let node =
-    dom ~key:"settings" ~style_class:"cp__settings flex flex-col gap-4"
+    dom ~key:"settings" ~style_class:"cp__settings"
       [ dom ~key:"st-h" ~tag:"h2"
           ~style_class:
-            "ui__dialog-title text-lg font-semibold leading-none \
-             tracking-tight" ~text:T.settings_title []
-      ; dom ~key:"st-theme" ~style_class:"flex flex-col gap-2"
+            "ui__dialog-title" ~text:T.settings_title []
+      ; dom ~key:"st-theme" ~style_class:"ls-settings-col"
           [ dom ~key:"st-tl" ~tag:"strong" ~text:T.theme_label []
           ; theme_modes_ul ~st:mode
           ]
-      ; dom ~key:"st-lang" ~style_class:"flex flex-col gap-2"
+      ; dom ~key:"st-lang" ~style_class:"ls-settings-col"
           [ dom ~key:"st-ll" ~tag:"strong" ~text:T.language_label []
-          ; lang_trigger ~key:"st-ls" ~h_cls:"h-10 w-64" ~st:lang_label
+          ; lang_trigger ~key:"st-ls" ~h_cls:"ls-select-lg" ~st:lang_label
               ~anchor_sel:".ui__select-trigger"
           ]
       ]

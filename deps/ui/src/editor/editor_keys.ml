@@ -18,11 +18,14 @@ let uuid_of_prefixed prefix id =
 let caret_span el =
   (D.el_selection_start el, D.el_selection_end el)
 
-(* while #ui__ac (autocomplete popup) is in the DOM the popup's own
-   document keydown handler owns these keys — the editor listener runs
-   first (it installs at module init), so without this guard Enter would
-   split the block AND pick the popup item *)
-let ac_popup_open () = D.get_element_by_id "ui__ac" <> None
+(* while #ui__ac (autocomplete popup) is live the popup's own document
+   keydown handler owns these keys — the editor listener runs first (it
+   installs at module init), so without this guard Enter would split the
+   block AND pick the popup item. Only a live ac counts: the popup
+   element can still be mounting/unmounting, and an ac whose editor
+   textarea was remounted is stale — swallowing Enter then would eat the
+   key with no visible item picked *)
+let ac_popup_open () = Popups_state.ac_attached ()
 
 let ac_owned_key = function
   | "Enter" | "Tab" | "Escape" | "ArrowUp" | "ArrowDown" -> true
@@ -295,7 +298,7 @@ let on_pending_focus_key ev e caret =
          D.el_set_value el buf';
          D.el_set_selection_range el caret' caret'
      | None -> ());
-    S.pending_focus := Some (e.S.uuid, caret')
+    S.pending_focus := Some (e.S.uuid, caret', !S.last_edit_input_ms)
   in
   let insert s =
     patch
@@ -372,11 +375,20 @@ let on_keydown ev =
     if Editor_commands.popup_key ev then ()
     else
       let target = D.ev_target ev in
-      match D.closest_sel "pre.CodeMirror-line" target with
-      | Some el -> Editor_commands.code_pre_key el ev
+      (* CodeMirror surfaces (fenced-code editor, query source editor)
+         own their keys — Esc/arrows/Tab go through the editor's own
+         listeners, never the block-editor dispatch *)
+      match D.closest_sel ".CodeMirror" target with
+      | Some _ -> ()
       | None -> (
+          (* property value textareas own their key handling
+             (properties_value.ml) — the block-editor dispatch below must
+             leave their keys alone *)
+          match D.closest_sel ".property-value-container" target with
+          | Some _ -> ()
+          | None -> (
           match (S.editing (), !S.pending_focus) with
-          | Some e, Some (uuid, caret)
+          | Some e, Some (uuid, caret, _)
             when e.S.uuid = uuid
                  && not (targets_block_editor uuid target) ->
               on_pending_focus_key ev e caret
@@ -394,7 +406,8 @@ let on_keydown ev =
                 | Some el -> D.el_selection_start el
                 | None -> String.length e.S.buffer
               in
-              S.pending_focus := Some (e.S.uuid, caret);
+              S.pending_focus :=
+                Some (e.S.uuid, caret, !S.last_edit_input_ms);
               D.set_timeout A.apply_focus 0;
               on_pending_focus_key ev e caret
           | _ -> (
@@ -404,6 +417,7 @@ let on_keydown ev =
           | Some uuid, Some _ -> (
               match target with
               | Some el when D.el_tag el = "TEXTAREA" -> (
+                  S.note_input ();
                   if ac_popup_open () then
                     match D.ev_key ev with
                     | "Enter" | "Tab" | "Escape" | "ArrowUp"
@@ -434,7 +448,7 @@ let on_keydown ev =
               in
               if stale_block_editor then on_normal_key ev
               else if D.is_editable_target target then ()
-              else on_normal_key ev))
+              else on_normal_key ev)))
   end
 
 (* -- input: keep the editing buffer in sync (silently) -- *)
@@ -448,24 +462,45 @@ let on_input ev =
            keydown/blur handlers commit the rename; still keep textContent
            in lockstep so :has-text sees the typed value *)
         D.el_set_text_content el (D.el_value el)
+    | Some el
+      when D.closest_sel ".property-value-container" (D.ev_target ev)
+           <> None ->
+        (* property value textareas own their buffer and commit path —
+           keep textContent in lockstep for :has-text but never sync the
+           block buffer or schedule a block save *)
+        D.el_set_text_content el (D.el_value el)
     | Some el -> (
         match uuid_of_prefixed "edit-block-" (D.el_id el) with
         | Some uuid ->
             let v = D.el_value el in
-            A.sync_buffer uuid v;
-            (* keep textContent in lockstep so innerText/:has-text see the
-               buffer (textarea innerText follows textContent, not value) *)
-            D.el_set_text_content el v;
-            D.autosize_textarea el;
-            Outliner_ops.schedule_save uuid v
+            S.note_input ();
+            let already_ordered =
+              match S.find uuid with
+              | Some b -> b.Model.block_order_list <> None
+              | None -> false
+            in
+            if v = "1. " && not already_ordered then (
+              (* cljs input autopattern: a whole buffer of "1. " converts
+                 the block to an ordered-list item and clears the typed
+                 prefix — the buffer must be emptied before prop_batch
+                 reads it for the bundled save *)
+              A.sync_buffer uuid "";
+              D.el_set_value el "";
+              D.el_set_text_content el "";
+              D.autosize_textarea el;
+              Editor_commands.toggle_own_list uuid 0)
+            else (
+              A.sync_buffer uuid v;
+              (* keep textContent in lockstep so innerText/:has-text see the
+                 buffer (textarea innerText follows textContent, not value) *)
+              D.el_set_text_content el v;
+              D.autosize_textarea el;
+              Outliner_ops.schedule_save uuid v)
         | None ->
             (* non-block editors (e.g. a comment textarea) still need
                textContent synced for :has-text *)
             D.el_set_text_content el (D.el_value el))
-    | None -> (
-        match D.closest_sel "pre.CodeMirror-line" (D.ev_target ev) with
-        | Some el -> Editor_commands.code_pre_input el
-        | None -> ())
+    | None -> ()
 
 (* -- clipboard events -- *)
 
@@ -530,14 +565,20 @@ let on_click ev =
                     | None -> ())
                 | None -> (
                     (* capture listener fires before the query shell's own
-                       handlers; clicks inside .custom-query-results are the
-                       view's controls, not an edit request *)
+                       handlers; interactive targets inside the view (the
+                       .ls-query-setting and add-filter buttons, result
+                       links, .query-table cells, the .view-action-type
+                       display-type select — a div trigger, not a button)
+                       are the view's controls, not an edit request —
+                       elsewhere in .block-content the click opens the
+                       title editor like cljs *)
                     match
                       D.closest_sel
                         "button, a, input, audio, video, details, summary, \
                          sup.fn, [contenteditable=true], .cloze, \
                          .cloze-revealed, .query-table, .image-resize, \
-                         .custom-query-results, .cp__query-builder"
+                         .view-action-type, .ui-fenced-code-editor, \
+                         .page-reference"
                         target
                     with
                     | Some _ -> ()
@@ -672,7 +713,7 @@ let on_editor_insert ev =
 let on_mousedown ev =
   if S.ready () && S.editing () <> None then
     match
-      D.closest_sel ".editor-wrapper, .extensions__code"
+      D.closest_sel ".editor-wrapper, .ui-fenced-code-editor"
         (D.ev_target ev)
     with
     | Some _ -> ()
@@ -746,7 +787,15 @@ let install_once () =
     Block_dnd.install ();
     (* pointer-driven range selection (cljs block/selection.cljs) *)
     D.document_add_listener "pointerdown"
-      (fun ev -> if S.ready () then Block_selection.pointerdown ev)
+      (fun ev ->
+        if
+          S.ready ()
+          (* capture-phase listener fires before the CM wrapper's
+             stopPropagation — fenced-code clicks must not start a
+             block range selection (cljs clears selection instead) *)
+          && D.closest_sel ".ui-fenced-code-editor" (D.ev_target ev)
+             = None
+        then Block_selection.pointerdown ev)
       true;
     D.document_add_listener "pointerup"
       (fun _ev -> Block_selection.pointerup ())

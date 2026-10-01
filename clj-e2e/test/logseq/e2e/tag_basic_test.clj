@@ -44,11 +44,11 @@
       (assert/assert-is-visible
        (loc/filter "div[data-testid='page title'] .block-tag" :has-text tag-name))
       (util/exit-edit)
-      (is (= page-name (page/get-page-name)))
+      (page/wait-page-name page-name)
       (w/click "div[data-testid='page title'] .block-title-wrap")
       (k/enter)
       (assert/assert-is-hidden util/editor-q)
-      (is (= page-name (page/get-page-name))))))
+      (page/wait-page-name page-name))))
 
 (deftest page-tag-conversion-persists-and-removes-tag-from-objects-test
   (let [tag-name "page-tag-conversion"

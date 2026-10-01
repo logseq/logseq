@@ -2,6 +2,7 @@
    loads [:views]/[:view-data] snapshots, renders head + filters + body,
    and implements view CRUD / object creation / export. *)
 
+open Promise_ext
 module D = Views_dom
 module V = Views_state
 module Wr = Views_wire
@@ -341,14 +342,12 @@ let export_edn inst =
     |> String.concat "\n"
   in
   ignore
-    (Db.then_
-       (fun () ->
-         Runtime.send
-           (A.Toast_push
-              { M.toast_id = 0; toast_key = None; toast_text = I.copied_view_nodes
-              ; toast_kind = "success" });
-         Js.Promise.resolve ())
-       (D.clipboard_write s))
+    (let* () = D.clipboard_write s in
+     Runtime.send
+       (A.Toast_push
+          { M.toast_id = 0; toast_key = None; toast_text = I.copied_view_nodes
+          ; toast_kind = "success" });
+     Js.Promise.resolve ())
 
 let add_new_object inst =
   match inst.V.kind with

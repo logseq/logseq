@@ -2,6 +2,7 @@
    theme, selection. Side effects go through Actions or the documented
    cross-area CustomEvents. *)
 
+open Promise_ext
 open Sdk_util
 
 let detail_obj pairs =
@@ -126,12 +127,13 @@ let get_selected_blocks _a _b _c _d =
   match uuids with
   | [] -> resolved (Sdk_convert.json_arr [||])
   | _ ->
-      Js.Promise.all
-        (Array.of_list (List.map get_entity uuids))
-      |> Js.Promise.then_ (fun entities ->
-             Js.Promise.resolve
-               (Sdk_convert.json_arr
-                  (Array.map Sdk_convert.json_of_wire entities)))
+      let* entities =
+        Js.Promise.all
+          (Array.of_list (List.map get_entity uuids))
+      in
+      Js.Promise.resolve
+        (Sdk_convert.json_arr
+           (Array.map Sdk_convert.json_of_wire entities))
 
 let get_current_graph _a _b _c _d =
   resolved (Js.Json.string (repo ()))

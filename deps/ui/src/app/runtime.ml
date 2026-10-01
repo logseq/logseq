@@ -54,6 +54,15 @@ let current_graph_uuid : string option ref = ref None
    Boot_graph_ready to fetch and remember the graph's uuid *)
 let on_graph_opened : (string -> unit) ref = ref (fun _ -> ())
 
+(* set by rtc_flows (avoids a Worker_events -> Rtc_flows -> Rtc_ops ->
+   Worker_events module cycle): the rtc-log broadcast feeds its
+   latest-entry projections *)
+let rtc_log_handler : (Wire.t -> unit) ref = ref (fun _ -> ())
+
+(* a second Boot_graph_ready subscriber for rtc_flows' graph-switch
+   sync trigger (on_graph_opened is already owned by graphs_ops) *)
+let rtc_graph_ready : (string -> unit) ref = ref (fun _ -> ())
+
 (* append ?graph-id=<uuid> to an in-app hash route when the uuid is known *)
 let nav_hash route =
   match !current_graph_uuid with
@@ -101,6 +110,19 @@ let remote_graph_gone : (unit -> unit) ref = ref (fun () -> ())
    appends a downloaded graph to the local list *)
 let add_repo : (string -> unit) ref = ref (fun _ -> ())
 
+(* Worker_events clears its stashed broadcast deltas on every route
+   change (avoids a Runtime -> Worker_events cycle) *)
+let on_navigate : (unit -> unit) ref = ref (fun () -> ())
+
+(* the cheap side-fetches a page load also runs (linked refs, unlinked
+   refs/exists) — Router registers it so the delta-splice path can
+   refresh them without a routing -> outliner_ops cycle *)
+let refresh_page_side : (Model.page -> unit) ref = ref (fun _ -> ())
+
+(* Router clears its loading_route dedupe when a route load commits or
+   fails (avoids a Runtime -> Router cycle) *)
+let nav_load_done : (unit -> unit) ref = ref (fun () -> ())
+
 (* one-shot (page_uuid, callback) armed before a hash navigation — runs
    when that page's Page_loaded lands; consumed by fire or load failure *)
 let after_page_load : (string * (unit -> unit)) option ref = ref None
@@ -117,18 +139,32 @@ let track action =
   | Action.Boot_graph_ready repo ->
       current_repo := Some repo;
       current_graph_uuid := None;
-      !on_graph_opened repo
+      !on_graph_opened repo;
+      !rtc_graph_ready repo
   | Action.Page_loaded page ->
+      !nav_load_done ();
+      (* a fresh full-fetch replaces the tree at an unknown rev — the
+         delta basis only survives splices applied through Page_delta *)
+      if not (Page_delta.is_own_commit page) then Page_delta.reset ();
       current_page := Some page;
+      (* cljs route.cljs update-page-title!: document.title follows the
+         loaded page's title *)
+      Browser_ui.set_document_title page.Model.page_title;
       sync_hash_graph_id ();
       (match !after_page_load, page.Model.page_uuid with
        | Some (want, f), Some u when u = want ->
            after_page_load := None;
            f ()
        | _ -> ())
-  | Action.Page_load_failed -> after_page_load := None
-  | Action.Journals_loaded js -> current_journals := js
+  | Action.Page_load_failed ->
+      !nav_load_done ();
+      after_page_load := None
+  | Action.Journals_loaded js ->
+      !nav_load_done ();
+      current_journals := js
   | Action.Navigate_to r ->
+      Page_delta.reset ();
+      !on_navigate ();
       current_page := None;
       current_journals := [];
       current_route := Some r;
@@ -137,13 +173,35 @@ let track action =
          write raw hashes, so re-append it here after the hash settles *)
       (match r with
        | Model.All_graphs | Model.Import | Model.Not_found _ -> ()
-       | _ -> sync_hash_graph_id ())
+       | _ -> sync_hash_graph_id ());
+      (* cljs route.cljs static-title for non-page routes (page routes
+         get their title when Page_loaded lands) *)
+      (match r with
+       | Model.Home -> Browser_ui.set_document_title "Logseq"
+       | Model.Journals ->
+           Browser_ui.set_document_title (I18n.t "nav/all-journals")
+       | Model.All_pages ->
+           Browser_ui.set_document_title (I18n.t "nav.all-pages/title")
+       | Model.All_graphs ->
+           Browser_ui.set_document_title (I18n.t "mobile.tab/graphs")
+       | Model.Settings ->
+           Browser_ui.set_document_title (I18n.t "nav/settings")
+       | Model.Import ->
+           Browser_ui.set_document_title (I18n.t "import/title")
+       | Model.Library | Model.Not_found _ ->
+           Browser_ui.set_document_title "Logseq"
+       | Model.Page _ | Model.Block_zoom _ -> ())
   | Action.Unlinked_toggle_open -> unlinked_open := not !unlinked_open
   | _ -> ()
 
 let flush () = !app_flush ()
 
 let send action =
+  (match action with
+   | Action.Navigate_to _ -> Platform.perf_mark "action:navigate"
+   | Action.Page_loaded _ -> Platform.perf_mark "action:page-loaded"
+   | Action.Boot_graph_ready _ -> Platform.perf_mark "action:boot-ready"
+   | _ -> ());
   track action;
   ignore (!app_send action);
   flush ()
@@ -159,7 +217,16 @@ let worker_or_fail () =
   | Some w -> w
   | None -> failwith "db-worker not started"
 
-let invoke name args = Worker_client.invoke (worker_or_fail ()) name args
+let invoke name args =
+  Platform.perf_mark ("invoke:" ^ name);
+  let p = Worker_client.invoke (worker_or_fail ()) name args in
+  ignore
+    (Js.Promise.then_
+       (fun r ->
+         Platform.perf_mark ("done:" ^ name);
+         Js.Promise.resolve r)
+       p);
+  p
 let invoke1 name a = invoke name [ a ]
 let invoke2 name a b = invoke name [ a; b ]
 let invoke3 name a b c = invoke name [ a; b; c ]
