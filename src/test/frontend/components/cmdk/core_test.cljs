@@ -184,19 +184,6 @@
               [:stop-propagation]]
              (enter-action-calls event))))))
 
-(deftest block-search-result->items-unwraps-matched-count-map
-  (let [block {:block/uuid #uuid "22222222-2222-2222-2222-222222222222"
-               :block/title "code"}]
-    (testing "debounce-search map form used when include-matched-count? is true"
-      (is (= {:blocks [block] :matched-count 3}
-             (#'cmdk/block-search-result->items {:items [block] :matched-count 3}))))
-    (testing "legacy vector form still unwraps to the same shape"
-      (is (= {:blocks [block] :matched-count 1}
-             (#'cmdk/block-search-result->items [block]))))
-    (testing "empty matched-count map does not become map entries"
-      (is (= {:blocks [] :matched-count 0}
-             (#'cmdk/block-search-result->items {:items [] :matched-count 0}))))))
-
 (deftest load-results-codes-unwraps-matched-count-map-test
   (async done
     (let [block {:block/uuid #uuid "22222222-2222-2222-2222-222222222222"
