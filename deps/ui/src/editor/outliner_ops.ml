@@ -26,6 +26,14 @@ let page_name_sanity_lc (s : string) : string =
   (if !j >= !i then String.sub s !i (!j - !i + 1) else "")
   |> String.lowercase_ascii
 
+(* parsed title kvs — the (name, uuid) pairs the parse mints prime the
+   render pull caches so a remounted [[uuid]] anchor paints its title
+   immediately instead of waiting on a worker pull *)
+let title_kvs t =
+  let kvs, metas = Block_parse.title_fields t in
+  Render_inline.prime_ref_metas metas;
+  List.map (fun (k, v) -> (Wire.String k, v)) kvs
+
 (* ~page:true page-ifies the new block (cljs outliner-insert-block!
    library branch): tags #{logseq.class/Page} + block/name; the worker's
    insert tx then dissocs block/page so the block lives only under
@@ -34,10 +42,7 @@ let block_map ?title ?(page = false) ?link uuid =
   Wire.Map
     ([ str "block/uuid" (Wire.Uuid uuid) ]
     @ (match title with
-      | Some t ->
-          List.map
-            (fun (k, v) -> (Wire.String k, v))
-            (Block_parse.title_fields t)
+      | Some t -> title_kvs t
       | None -> [])
     @
     (if page then
@@ -96,10 +101,7 @@ let saved_block_map uuid title =
   let fields t =
     match dt with
     | Some _ -> [ str "block/title" (Wire.String t) ]
-    | None ->
-        List.map
-          (fun (k, v) -> (Wire.String k, v))
-          (Block_parse.title_fields t)
+    | None -> title_kvs t
   in
   match markdown_heading_level title with
   | Some lvl when dt <> Some "code" && dt <> Some "math" ->
@@ -168,9 +170,7 @@ let paste_block_maps (trees : Model.block list) =
         let m =
           Wire.Map
             (str "block/uuid" (Wire.Uuid u)
-             :: List.map
-                  (fun (k, v) -> (Wire.String k, v))
-                  (Block_parse.title_fields (String.trim b.Model.block_title))
+             :: title_kvs (String.trim b.Model.block_title)
             @ [ str "block/level" (Wire.Int level) ]
             @ parent_kv)
         in

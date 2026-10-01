@@ -101,6 +101,37 @@ let invalidate_pull_uuids (uuids : string list) =
           List.iter (Hashtbl.remove c.c_name_uuid) names)
         pull_caches
 
+(* uuids minted by a local title save (the [[name]] -> [[uuid]] rewrite):
+   the save's own broadcast invalidates c_uuid_meta before the anchor's
+   pull resolves, so the just-committed title is kept here — the pull
+   still runs and replaces it with the committed form *)
+let minted_meta : (string, string * bool) Hashtbl.t = Hashtbl.create 32
+
+let prime_ref_metas (metas : (string * string) list) =
+  List.iter
+    (fun (name, u) -> Hashtbl.replace minted_meta u (name, true))
+    metas;
+  match !Runtime.current_repo with
+  | None -> ()
+  | Some repo ->
+      let cache = repo_cache repo in
+      List.iter
+        (fun (name, u) ->
+          Hashtbl.replace cache.c_uuid_meta u (name, true);
+          Hashtbl.replace cache.c_name_uuid
+            (String.lowercase_ascii name) u)
+        metas
+
+(* same priming for an entity already pulled elsewhere (a resolved
+   [[name]] -> uuid lookup) — caches only, no minted entry *)
+let prime_pull_meta ~name ~uuid ~title ~is_page =
+  match !Runtime.current_repo with
+  | None -> ()
+  | Some repo ->
+      let cache = repo_cache repo in
+      Hashtbl.replace cache.c_name_uuid (String.lowercase_ascii name) uuid;
+      Hashtbl.replace cache.c_uuid_meta uuid (title, is_page)
+
 (* batch-fill both caches from a get-blocks response — a page's [[ref]]
    anchors then mount on hits instead of paying a thread-api/pull each *)
 let prime_pull_caches repo (w : Wire.t) =
@@ -151,6 +182,12 @@ let uuid_meta_state context uuid ~fallback ?(miss = None) () =
           if !sync then Signal.set st meta
           else Runtime.signal_set st meta
       | None ->
+          let minted = Hashtbl.find_opt minted_meta uuid in
+          (match minted with
+           | Some m ->
+               if !sync then Signal.set st m
+               else Runtime.signal_set st m
+           | None -> ());
           (let* w =
             Runtime.invoke3 "thread-api/pull" (Wire.String repo)
               (Wire.String "[:block/title :block/name]")
@@ -165,11 +202,14 @@ let uuid_meta_state context uuid ~fallback ?(miss = None) () =
                in
                let meta = (t, is_page) in
                Hashtbl.replace cache.c_uuid_meta uuid meta;
+               Hashtbl.remove minted_meta uuid;
                Runtime.signal_set st meta
            | _ -> (
-               match miss with
-               | Some m -> Runtime.signal_set st m
-               | None -> ()));
+               (* keep the minted title when the pull can't confirm —
+                  a deleted entity falls back to the caller's miss *)
+               match miss, minted with
+               | Some m, None -> Runtime.signal_set st m
+               | _ -> ()));
           Js.Promise.resolve ())
           |> ignore);
   sync := false;

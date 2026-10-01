@@ -89,11 +89,17 @@ let block_ref_at s i =
     Some (S.sub s (i + 2) 36, i + 40)
   else None
 
-let parse_title (title : string) : string * Wire.t list * Wire.t list =
+let parse_title (title : string) :
+    string * Wire.t list * Wire.t list * (string * string) list =
   let n = S.length title in
   let buf = Buffer.create n in
   let refs = ref [] in
   let tags = ref [] in
+  (* name -> uuid for page/tag entities this title mints — the caller
+     primes the render pull caches with them so a remount that resolves
+     the rewritten [[uuid]] form before the worker pull returns still
+     paints the title on the first frame *)
+  let created : (string * string) list ref = ref [] in
   let seen : (string, string) Hashtbl.t = Hashtbl.create 8 in
   let seen_tag : (string, string) Hashtbl.t = Hashtbl.create 8 in
   let ref_map name u =
@@ -130,6 +136,7 @@ let parse_title (title : string) : string * Wire.t list * Wire.t list =
                   let u = Platform.random_uuid () in
                   Hashtbl.replace seen (lc name) u;
                   refs := ref_map name u :: !refs;
+                  created := (name, u) :: !created;
                   u
             in
             Buffer.add_string buf ("[[" ^ u ^ "]]");
@@ -155,6 +162,7 @@ let parse_title (title : string) : string * Wire.t list * Wire.t list =
                   Hashtbl.replace seen_tag (lc name) u;
                   refs := ref_map name u :: !refs;
                   tags := tag_map name u :: !tags;
+                  created := (name, u) :: !created;
                   u
             in
             Buffer.add_string buf ("#[[" ^ u ^ "]]");
@@ -173,12 +181,15 @@ let parse_title (title : string) : string * Wire.t list * Wire.t list =
               go (i + 1))
   in
   go 0;
-  (Buffer.contents buf, List.rev !refs, List.rev !tags)
+  (Buffer.contents buf, List.rev !refs, List.rev !tags, List.rev !created)
 
-(* (block/title, block/refs, block/tags) kvs for a raw title — drop the
-   collection fields when empty so existing callers keep their shape *)
-let title_fields (title : string) : (string * Wire.t) list =
-  let title', refs, tags = parse_title title in
-  [ ("block/title", Wire.String title') ]
-  @ (match refs with [] -> [] | rs -> [ ("block/refs", Wire.List rs) ])
-  @ match tags with [] -> [] | ts -> [ ("block/tags", Wire.List ts) ]
+(* (block/title, block/refs, block/tags) kvs for a raw title plus the
+   (name, uuid) pairs it mints — drop the collection fields when empty so
+   existing callers keep their shape *)
+let title_fields (title : string) :
+    (string * Wire.t) list * (string * string) list =
+  let title', refs, tags, created = parse_title title in
+  ( [ ("block/title", Wire.String title') ]
+    @ (match refs with [] -> [] | rs -> [ ("block/refs", Wire.List rs) ])
+    @ (match tags with [] -> [] | ts -> [ ("block/tags", Wire.List ts) ])
+  , created )

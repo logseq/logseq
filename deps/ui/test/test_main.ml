@@ -509,10 +509,10 @@ let test_block_parse () =
     (Block_parse.block_ref_at ("((" ^ uu ^ "))") 0 = Some (uu, 40));
   check "block_ref_at short" (Block_parse.block_ref_at "((abc))" 0 = None);
   (* plain title: no refs, title untouched *)
-  let t', refs, tags = Block_parse.parse_title "plain text" in
+  let t', refs, tags, _ = Block_parse.parse_title "plain text" in
   check "plain title" (t' = "plain text" && refs = [] && tags = []);
   (* [[page]] -> [[uuid]] + ref map *)
-  let t2, refs2, tags2 = Block_parse.parse_title "see [[Foo Bar]]" in
+  let t2, refs2, tags2, _ = Block_parse.parse_title "see [[Foo Bar]]" in
   (match refs2 with
    | [ m ] ->
        let u = Wire.map_get_uuid m "block/uuid" in
@@ -524,7 +524,7 @@ let test_block_parse () =
          && tags2 = [])
    | _ -> check "page ref rewritten" false);
   (* #tag -> #[[uuid]] + ref AND tag entries *)
-  let t3, refs3, tags3 = Block_parse.parse_title "x #Baz" in
+  let t3, refs3, tags3, _ = Block_parse.parse_title "x #Baz" in
   (match (refs3, tags3) with
    | [ r ], [ tg ] ->
        let u = Wire.map_get_uuid r "block/uuid" in
@@ -536,17 +536,17 @@ let test_block_parse () =
 let test_block_parse2 () =
   let uu = "01234567-89ab-cdef-0123-456789abcdef" in
   (* already id-ref form: title kept, lookup ref emitted *)
-  let t', refs, _ = Block_parse.parse_title ("see [[" ^ uu ^ "]]") in
+  let t', refs, _, _ = Block_parse.parse_title ("see [[" ^ uu ^ "]]") in
   check "uuid ref passthrough"
     (t' = "see [[" ^ uu ^ "]]"
     && refs = [ Wire.Array [ Wire.kw "block/uuid"; Wire.Uuid uu ] ]);
   (* ((uuid)) block ref *)
-  let t2, refs2, _ = Block_parse.parse_title ("see ((" ^ uu ^ "))") in
+  let t2, refs2, _, _ = Block_parse.parse_title ("see ((" ^ uu ^ "))") in
   check "block ref passthrough"
     (t2 = "see ((" ^ uu ^ "))"
     && refs2 = [ Wire.Array [ Wire.kw "block/uuid"; Wire.Uuid uu ] ]);
   (* same page twice: one ref map, both occurrences share the uuid *)
-  let t3, refs3, _ = Block_parse.parse_title "[[X]] and [[X]]" in
+  let t3, refs3, _, _ = Block_parse.parse_title "[[X]] and [[X]]" in
   (match refs3 with
    | [ m ] -> (
        match Wire.map_get_uuid m "block/uuid" with
@@ -556,15 +556,15 @@ let test_block_parse2 () =
        | None -> check "dedup shares uuid" false)
    | _ -> check "dedup shares uuid" false);
   (* #[[name]] tag form *)
-  let t4, refs4, tags4 = Block_parse.parse_title "#[[Two Words]]" in
+  let t4, refs4, tags4, _ = Block_parse.parse_title "#[[Two Words]]" in
   check "#[[x]] tag"
     (List.length refs4 = 1 && List.length tags4 = 1
     && String.sub t4 0 3 = "#[[");
   (* title_fields drops empty collections *)
   eqi "title_fields plain" 1
-    (List.length (Block_parse.title_fields "plain"));
+    (List.length (fst (Block_parse.title_fields "plain")));
   eqi "title_fields with refs" 3
-    (List.length (Block_parse.title_fields "a [[p]] #t"))
+    (List.length (fst (Block_parse.title_fields "a [[p]] #t")))
 
 (* ---- Title_refs ---- *)
 
@@ -3105,10 +3105,10 @@ let test_block_parse3 () =
   check "tag empty name"
     (Block_parse.scan_tok "#[x" 0 = None);
   (* an unclosed [[ stays literal text, no refs *)
-  let t', refs, _ = Block_parse.parse_title "see [[unclosed" in
+  let t', refs, _, _ = Block_parse.parse_title "see [[unclosed" in
   check "unclosed page literal" (t' = "see [[unclosed" && refs = []);
   (* a '#' mid-word still opens a tag — no boundary requirement *)
-  let t2, _, tags2 = Block_parse.parse_title "a#b" in
+  let t2, _, tags2, _ = Block_parse.parse_title "a#b" in
   check "mid-word tag"
     (List.length tags2 = 1
     && String.length t2 > 4 && String.sub t2 0 4 = "a#[[")

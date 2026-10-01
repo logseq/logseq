@@ -235,6 +235,20 @@ type parsed = { title : string; refs : Wire.t list; tags : Wire.t list }
 let parse title =
   let names, tags = scan_title title in
   let* resolved = resolve_names names tags in
+  (* seed the render pull caches with the resolved metas: a remounted
+     [[uuid]] anchor then paints its title immediately instead of
+     waiting on a worker pull *)
+  List.iter
+    (fun r ->
+      if r.fresh then Render_inline.prime_ref_metas [ (r.name, r.uuid) ]
+      else
+        match Wire.map_get_string r.entity "block/title" with
+        | Some t ->
+            Render_inline.prime_pull_meta ~name:r.name ~uuid:r.uuid
+              ~title:t
+              ~is_page:(Wire.map_get_string r.entity "block/name" <> None)
+        | None -> ())
+    resolved;
   let ref_of r =
     if r.fresh then
       if r.is_tag then new_tag_map r.name r.uuid
