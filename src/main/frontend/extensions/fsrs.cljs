@@ -628,16 +628,13 @@
   :XXX-state-cards, cards' state is XXX"
     []
     (p/let [repo (state/get-current-repo)
-            card-ids (state/<invoke-db-worker :thread-api/get-card-class-ids repo)
+            ;; Retention stats only cover cards that have been scheduled at
+            ;; least once, which is exactly the blocks carrying fsrs state.
             all-card-blocks
             (db-async/<q repo {:transact-db? false}
-                         '[:find [(pull ?b [* {:block/tags [:db/ident]}]) ...]
-                           :in $ [?t ...]
+                         '[:find [(pull ?b [*]) ...]
                            :where
-                           [?b :block/tags ?t]
-                           [?b :block/uuid]]
-                         card-ids)
-            ;; The query already established card membership via ?t
+                           [?b :logseq.property.fsrs/state]])
             all-cards (map block->card-map all-card-blocks)
             [today-stat
              recent-7-days-stat

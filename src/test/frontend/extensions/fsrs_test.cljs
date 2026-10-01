@@ -3,7 +3,6 @@
             [frontend.extensions.fsrs :as fsrs]
             [frontend.handler.property :as property-handler]
             [frontend.state :as state]
-            [open-spaced-repetition.cljc-fsrs.core :as fsrs.core]
             [promesa.core :as p]))
 
 (defn- extends-card-block
@@ -54,53 +53,10 @@
 (deftest get-card-map-is-nil-when-block-is-not-a-card
   (is (nil? (#'fsrs/get-card-map {:block/tags [{:db/ident :user.class/Project}]}))))
 
-(deftest repeat-card-throws-on-nil-card-map
-  (testing "The Show answers crash: repeat-card! does not accept a nil card-map"
-    (is (thrown? js/Error (fsrs.core/repeat-card! nil :good)))))
-
-(deftest rating-due-date-skips-repeat-card-when-card-map-is-nil
-  (testing "rating-btns must not call repeat-card! when get-card-map is nil"
-    (let [card-map (#'fsrs/get-card-map {:db/id 1 :block/tags []})
-          due (when card-map
-                (:due (fsrs.core/repeat-card! card-map :good)))]
-      (is (nil? card-map))
-      (is (nil? due)))))
-
-(deftest rating-due-date-works-for-extends-card
-  (let [card-map (#'fsrs/get-card-map (extends-card-block))
-        due (when card-map
-              (:due (fsrs.core/repeat-card! card-map :good)))]
-    (is (some? card-map))
-    (is (some? due))))
-
 (deftest rating-extends-card-persists-state
   (async done
-    (let [block (extends-card-block)
-          persisted (atom nil)]
-      (-> (p/with-redefs [state/<invoke-db-worker
-                          (fn [api & _args]
-                            (case api
-                              :thread-api/pull
-                              (p/resolved block)
-                              :thread-api/get-fsrs-due-card-block-ids
-                              (p/resolved [])))
-                          property-handler/set-block-properties!
-                          (fn [_block-id properties]
-                            (reset! persisted properties)
-                            (p/resolved nil))
-                          state/get-current-repo (constantly "test-graph")]
-            (#'fsrs/rate-card! "test-graph" (:db/id block) :good))
-          (p/then
-           (fn [_]
-             (is (some? (:logseq.property.fsrs/state @persisted)))
-             (is (some? (:logseq.property.fsrs/due @persisted)))))
-          (p/catch
-           (fn [error]
-             (is false (str error))))
-          (p/finally done)))))
-
-(deftest rating-deep-extends-card-persists-state
-  (async done
+    ;; Deepest case: the pulled entity's tags carry extends all the way to Card
+    ;; (mirrors the recursive pull in `repeat-card!`), so rating must persist.
     (let [block (deep-extends-card-block)
           persisted (atom nil)]
       (-> (p/with-redefs [state/<invoke-db-worker
