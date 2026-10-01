@@ -1441,8 +1441,18 @@ let apply_item t ac it =
   | Emit (text, back) -> insert_text ac text back; close_ac t
   | Emit_exit text -> emit ~exit:true ac.editor ac.tpos text; close_ac t
   | Editor_cmd c ->
-      (* cljs strips the "/cmd" trigger text like an Emit "" insert *)
-      emit ac.editor ac.tpos "";
+      (match c with
+       | "date-picker" ->
+           (* cljs :editor/show-date-picker keeps the typed trigger
+              text — the calendar's commit replaces it *)
+           ()
+       | "link" | "image-link" ->
+           (* cljs [:editor/input "/link"] — the buffer holds the literal
+              command text while the form is open *)
+           emit ac.editor ac.tpos ("/" ^ c)
+       | _ ->
+           (* cljs strips the "/cmd" trigger text like an Emit "" insert *)
+           emit ac.editor ac.tpos "");
       emit_cmd ~pos:ac.tpos c [];
       close_ac t  | Plugin_slash (pid, tag) ->
       (* cljs handle-steps — strip the "/tag" trigger like an Emit ""

@@ -28,6 +28,7 @@ external code_ : event -> string option = "code"
    whole-value fill (wally `fill` in e2e), as opposed to typing *)
 external input_type : event -> string = "inputType" [@@mel.get]
 
+external button : event -> int = "button" [@@mel.get]
 external meta_key : event -> bool = "metaKey" [@@mel.get]
 external ctrl_key : event -> bool = "ctrlKey" [@@mel.get]
 external shift_key : event -> bool = "shiftKey" [@@mel.get]
@@ -135,6 +136,7 @@ let graphemes_pos s from_index =
 
 external bounding_rect : element -> rect = "getBoundingClientRect" [@@mel.send]
 external window_inner_height : float = "innerHeight" [@@mel.scope "window"]
+external window_inner_width : float = "innerWidth" [@@mel.scope "window"]
 external rect_left : rect -> float = "left" [@@mel.get]
 external rect_top : rect -> float = "top" [@@mel.get]
 external rect_right : rect -> float = "right" [@@mel.get]

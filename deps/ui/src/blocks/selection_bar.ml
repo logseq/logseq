@@ -75,7 +75,9 @@ let install_listeners () =
       true;
     D.add_document_listener "mouseup"
       (fun e ->
-        let tgt = D.target e in
+        (* cljs show-selection-action-bar-for-pointer!: only a primary-
+           button release can raise the bar *)
+        let tgt = if D.button e = 0 then D.target e else None in
         D.set_timeout
           (fun () ->
             match tgt with

@@ -68,12 +68,12 @@ let breadcrumbs title : t list =
    only, so with_app_items = false) *)
 let open_menu name payload =
   (* title-tag chips get their own context menu (.block-tag, cljs
-     block-tag popup) — only the bare title opens the page menu *)
+     block-tag popup) — only the bare title opens the page menu. Refs
+     and other anchors inside the title still open the page menu *)
   let on_tag_chip =
-    (* chip anchors/children count interactive; the bare .block-tag
-       container only shows up via targetClass *)
-    Platform.payload_bool payload "interactive"
-    || I18n.contains (Platform.payload_str payload "targetClass") "block-tag"
+    (* the bare .block-tag container only shows up via targetClass; ref
+       anchors inside the title still open the page menu *)
+    I18n.contains (Platform.payload_str payload "targetClass") "block-tag"
   in
   if name = "contextmenu" && not on_tag_chip && Option.is_some payload then (
     Runtime.send
@@ -154,7 +154,10 @@ let title_editor (page : Model.page) : t =
               with
               | "Enter" | "Escape" ->
                   commit
-                    (Platform.payload_str payload "value")
+                    (Platform.payload_str payload "value");
+                  (* cljs: exiting the title editor selects the title
+                     block, same as leaving any block edit *)
+                  Editor_actions.select_single uuid
               | _ -> ())
           | _ -> ())
         []
@@ -246,6 +249,8 @@ let title_content (page : Model.page) : t =
                  the document-level listener); starting title edit would
                  replace the clicked node mid-dispatch *)
               if page.page_uuid <> None && not shift && not interactive then (
+                (* cljs edit entry clears any block selection *)
+                if S.ready () then Editor_actions.clear_selection ();
                 Runtime.send Action.Title_edit_start;
                 Runtime.flush ();
                 (* autofocus doesn't re-fire on remount — focus explicitly
@@ -275,6 +280,11 @@ let title_content (page : Model.page) : t =
     ]
 
 let page_title_el (m : Model.t) (page : Model.page) : t =
+ fun ctx parent ->
+  (* title rows also render in the journals list before any block row
+     mounts the editor state — the .ls-block class signal needs it *)
+  S.ensure ctx;
+  (
   (* cljs page-icon: custom :logseq.property/icon -> first tag icon ->
      class "hash" -> property "letter-p"; rendered as the icon-picker
      button inside .block-main-content *)
@@ -327,7 +337,12 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
        .block-content-wrapper(.ls-page-title-actions + content|editor) +
        .ls-block-right(.block-tags). Tags render while editing too. *)
     [ dom ~key:"pt-inner" ~style_class:"w-full relative"
-        [ dom ~key:"pt-block" ~style_class:"ls-block"
+        [ dom ~key:"pt-block"
+            ~style_class_signal:
+              (Logseq_dom.class_signal (S.signal ()) (fun (st : S.t) ->
+                   if S.String_set.mem uuid st.S.selected then
+                     "selected ls-block"
+                   else "ls-block"))
             ~id:("ls-block-" ^ uuid)
             ~attrs:
               [ ("blockid", uuid); ("containerid", uuid)
@@ -512,6 +527,8 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
                 || target = "page-title-text")
             && not interactive
           then (
+            (* cljs edit entry clears any block selection *)
+            if S.ready () then Editor_actions.clear_selection ();
             Runtime.send Action.Title_edit_start;
             Runtime.flush ();
             (* autofocus doesn't re-fire on remount — focus explicitly so
@@ -524,6 +541,7 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
             | None -> ())
       | _ -> open_menu name payload)
     body
+    ) ctx parent
 
 let blocks_inner ?puuid ?(virtualize = false) ?(library = false)
     ?(scope = "main") ?(container = true) (blocks : Model.block list) : t =
@@ -1211,12 +1229,7 @@ let page_view_of_model (m : Model.t) : t =
   | Model.Ready, Model.Not_found n -> not_found_view n
   | Model.Ready, (Model.All_graphs | Model.All_pages) ->
       box ~key:"graphs-view" [] (* graphs area renders via its own view *)
-  | Model.Ready, Model.Settings -> (
-      (* "#/settings" mounts the settings dialog; the previous route
-         page stays rendered underneath (cljs modal-over-page) *)
-      match m.route_page with
-      | Some page -> page_view m page
-      | None -> journals_view m m.journals)
+  | Model.Ready, Model.Settings -> Settings_page.view m
   | Model.Ready, Model.Import -> Importer.view ()
   | Model.Ready, _ -> (
       match m.route_page, m.page_missing with
