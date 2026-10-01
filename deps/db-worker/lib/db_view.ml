@@ -2044,14 +2044,37 @@ let first_window_feature_row_data db (feat_type : string) (class_id : entity_id 
     (int * entity_id list) option =
   match feat_type with
   | "all-pages" ->
-      let _, pages = page_eids_tbl db (exclude_tbl (get_exclude_page_ids db)) in
-      (match
-         sort_eids_from_avet db
-           (fun e -> Hashtbl.mem pages e)
-           sorting row_limit None row_offset
-       with
-       | Some data -> Some (Hashtbl.length pages, data)
-       | None -> None)
+      let count, pages = page_eids_tbl db (exclude_tbl (get_exclude_page_ids db)) in
+      let data =
+        (* A window the page set can't fill makes the sort-attr walk scan
+           the whole index for nothing (on storage-backed indexes that
+           means decoding every datom of the sort attr); fall back to
+           sorting the page eids directly, as take_sorted_eids does. *)
+        let use_avet =
+          match row_limit with
+          | Some l -> l < count
+          | None -> count > unlimited_eid_sort_max
+        in
+        match
+          (if use_avet then
+             sort_eids_from_avet db
+               (fun e -> Hashtbl.mem pages e)
+               sorting row_limit None row_offset
+           else None)
+        with
+        | Some d -> d
+        | None ->
+            let eids = Hashtbl.fold (fun e () acc -> e :: acc) pages [] in
+            let sorted = sort_eids_by_sorting db eids sorting in
+            (match row_limit, row_offset with
+             | Some l, _ ->
+                 sorted
+                 |> list_drop (Option.value ~default:0 row_offset)
+                 |> list_take l
+             | None, Some o when o > 0 -> list_drop o sorted
+             | None, _ -> sorted)
+      in
+      Some (count, data)
   | "class-objects" ->
       (match class_id with
        | Some cid ->

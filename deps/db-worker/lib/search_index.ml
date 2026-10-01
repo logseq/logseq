@@ -1537,7 +1537,7 @@ let get_all_blocks (db : db) : entity list =
   datoms db Avet ~a:"block/uuid" ()
   |> Seq.filter_map (fun (d : datom) ->
          match d.v with
-         | Uuid u -> entity db (Lookup_ref ("block/uuid", Uuid u))
+         | Uuid _ -> Ldb.ent_of_id db d.e
          | _ -> None)
   |> List.of_seq
   |> List.filter (fun e -> not (hidden_entity (Ev.of_entity e)))

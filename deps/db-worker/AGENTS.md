@@ -25,6 +25,14 @@ JavaScript via Melange (browser + Node) and native OCaml.
   the specific spec issue, suggested changes, and rationale.
 
 - Avoid O(n²) `List` patterns such as `List.concat` and repeated `List.append` on large sequences; when the project already depends on the `rrbvec` package, use `Rrbvec` vectors instead.
+- Keep index access cheap. Never walk a whole index (`datoms db Eavt ()`
+  or an unbounded `Avet ~a` slice) or materialize entities where a
+  bounded seek suffices — prefer `~e`/`~a`/`~v`-constrained datoms
+  queries and datom-level checks over `entity`/`ent_of_id` inside loops.
+  Full scans belong only to inherently whole-db operations (export,
+  publish, checksum, validate). ClojureScript datascript keeps every
+  index in memory so a per-eid `entity` call looks free there; on
+  storage-backed indexes each materialization is a real seek.
 
 ## Layout
 
