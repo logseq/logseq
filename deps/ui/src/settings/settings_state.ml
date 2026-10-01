@@ -3,6 +3,7 @@
    plus localStorage-backed prefs. Storage keys use cljs storage.cljs
    `(name key)` semantics (namespace stripped). *)
 
+open Promise_ext
 type t =
   { tab : string
   ; config : Wire.t
@@ -69,47 +70,46 @@ let pull repo q lookup =
     lookup
 
 let pull_journal repo =
-  pull repo "[:block/uuid :logseq.property.journal/title-format]"
-    (Wire.Keyword "logseq.class/Journal")
-  |> Js.Promise.then_ (fun w ->
-         Js.Promise.resolve
-           (match w with
-            | Wire.Map _ -> (
-                match Wire.map_get_uuid w "block/uuid" with
-                | Some u ->
-                    let fmt =
-                      match
-                        Wire.get w "logseq.property.journal/title-format"
-                      with
-                      | Some (Wire.String s) -> Some s
-                      | _ -> None
-                    in
-                    Some (u, fmt)
-                | None -> None)
-            | _ -> None))
+  let* w =
+    pull repo "[:block/uuid :logseq.property.journal/title-format]"
+      (Wire.Keyword "logseq.class/Journal")
+  in
+  Js.Promise.resolve
+    (match w with
+     | Wire.Map _ -> (
+         match Wire.map_get_uuid w "block/uuid" with
+         | Some u ->
+             let fmt =
+               match
+                 Wire.get w "logseq.property.journal/title-format"
+               with
+               | Some (Wire.String s) -> Some s
+               | _ -> None
+             in
+             Some (u, fmt)
+         | None -> None)
+     | _ -> None)
 
 let load () =
   let r = repo () in
   let cfg_p = Sdk_config.read_config r in
   let jour_p = pull_journal r in
   ignore
-    (cfg_p
-     |> Js.Promise.then_ (fun cfg ->
-            jour_p
-            |> Js.Promise.then_ (fun journal ->
-                   let uuid, fmt =
-                     match journal with
-                     | Some (u, f) ->
-                         (Some u, Option.value f ~default:"MMM do, yyyy")
-                     | None -> (None, "MMM do, yyyy")
-                   in
-                   Runtime.signal_set (state ())
-                     { (value ()) with
-                       config = cfg
-                     ; journal_uuid = uuid
-                     ; date_format = fmt
-                     };
-                   Js.Promise.resolve ())))
+    (let* cfg = cfg_p in
+    let* journal = jour_p in
+    let uuid, fmt =
+      match journal with
+      | Some (u, f) ->
+          (Some u, Option.value f ~default:"MMM do, yyyy")
+      | None -> (None, "MMM do, yyyy")
+    in
+    Runtime.signal_set (state ())
+      { (value ()) with
+        config = cfg
+      ; journal_uuid = uuid
+      ; date_format = fmt
+      };
+    Js.Promise.resolve ())
 
 (* cljs settings-effect: body[data-settings-tab] + config refresh.
    Uses Signal.set (no flush) — called during mount, the pending render
@@ -182,26 +182,30 @@ let set_home_page name k =
   if String.trim name = "" then write None
   else
     ignore
-      (pull (repo ()) "[:db/id]"
-         (Wire.Array
-            [ Wire.Keyword "block/name"; Wire.String (page_name_lc name) ])
-       |> Js.Promise.then_ (fun w ->
-              Js.Promise.resolve
-                (match w with
-                | Wire.Map _ -> write (Some name)
-                | _ -> k Home_missing)))
+      (let* w =
+        pull (repo ()) "[:db/id]"
+          (Wire.Array
+             [ Wire.Keyword "block/name"; Wire.String (page_name_lc name) ])
+      in
+      Js.Promise.resolve
+        (match w with
+        | Wire.Map _ -> write (Some name)
+        | _ -> k Home_missing))
 
 (* ---- storage-backed prefs ---- *)
 
+(* cljs storage/get reads values with reader/read-string and storage/set
+   writes pr-str, so cljs-written booleans appear quoted ("true"/"false");
+   accept both quoted and raw forms. *)
 let storage_bool key ~default =
   match Platform.local_storage_get key with
-  | Some "true" -> true
-  | Some "false" -> false
+  | Some "true" | Some "\"true\"" -> true
+  | Some "false" | Some "\"false\"" -> false
   | Some _ -> default
   | None -> default
 
 let storage_set_bool key b =
-  Platform.local_storage_set key (if b then "true" else "false")
+  Platform.local_storage_set key (if b then "\"true\"" else "\"false\"")
 
 (* cljs ui-handler/toggle-wide-mode!: storage + ls-wide-mode on
    main#app-container-wrapper *)

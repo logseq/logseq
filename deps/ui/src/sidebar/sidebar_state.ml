@@ -16,6 +16,7 @@
    - refresh: subscribes to the "sync-db-changes" broadcast via
      Runtime.on_sync and re-fetches sidebar data + the current route. *)
 
+open Promise_ext
 let t = I18n.t
 
 let default_navs = [ "flashcards"; "all-pages"; "graph-view" ]
@@ -196,10 +197,9 @@ let pages_of_wire w =
 
 let then_keep p k =
   ignore
-    (p
-     |> Js.Promise.then_ (fun w ->
-            k w;
-            Js.Promise.resolve ())
+    ((let* w = p in
+     k w;
+     Js.Promise.resolve ())
      |> Js.Promise.catch (fun e ->
             Platform.console_error ("sidebar loader failed", e);
             Js.Promise.resolve ()))
@@ -234,14 +234,15 @@ let load_recents repo st =
 
 let load_nav_tag_titles repo st =
   let pull_cls cls =
-    Runtime.invoke3 "thread-api/pull" (Wire.String repo)
-      (Wire.String "[:block/uuid :block/title :block/name]")
-      (Wire.Keyword cls)
-    |> Js.Promise.then_ (fun w ->
-           Js.Promise.resolve
-             (match Wire.map_get_string w "block/title" with
-              | Some _ as t -> t
-              | None -> Wire.map_get_string w "block/name"))
+    let* w =
+      Runtime.invoke3 "thread-api/pull" (Wire.String repo)
+        (Wire.String "[:block/uuid :block/title :block/name]")
+        (Wire.Keyword cls)
+    in
+    Js.Promise.resolve
+      (match Wire.map_get_string w "block/title" with
+       | Some _ as t -> t
+       | None -> Wire.map_get_string w "block/name")
   in
   then_keep
     (Js.Promise.all2
@@ -292,28 +293,29 @@ let push_page_route target =
 let navigate_to_page target =
   let go () = push_page_route target in
   ignore
-    (Runtime.invoke2 "thread-api/get-page-route-info"
-       (Wire.String (Runtime.repo ())) (route_ref target)
-     |> Js.Promise.then_ (fun info ->
-            let flag k =
-              Option.value
-                (Option.bind (Wire.get info k) Wire.as_bool)
-                ~default:false
-            in
-            let blocked =
-              (* cljs gates this on (not config/dev?) — our bundle is
-                 the dev build — and exempts the Recycle page *)
-              (not Platform.dev_build)
-              && Wire.map_get_string info "block/title" <> Some "Recycle"
-              && ((flag "hidden?" && not (flag "property?"))
-                  || (flag "built-in?" && flag "private-built-in?"))
-            in
-            if blocked then Toast.warning I18n.cannot_go_to_internal_page
-            else
-              (match Wire.map_get_uuid info "alias-source-uuid" with
-               | Some src -> push_page_route src
-               | None -> go ());
-            Js.Promise.resolve ())
+    ((let* info =
+       Runtime.invoke2 "thread-api/get-page-route-info"
+         (Wire.String (Runtime.repo ())) (route_ref target)
+     in
+     let flag k =
+       Option.value
+         (Option.bind (Wire.get info k) Wire.as_bool)
+         ~default:false
+     in
+     let blocked =
+       (* cljs gates this on (not config/dev?) — our bundle is
+          the dev build — and exempts the Recycle page *)
+       (not Platform.dev_build)
+       && Wire.map_get_string info "block/title" <> Some "Recycle"
+       && ((flag "hidden?" && not (flag "property?"))
+           || (flag "built-in?" && flag "private-built-in?"))
+     in
+     if blocked then Toast.warning I18n.cannot_go_to_internal_page
+     else
+       (match Wire.map_get_uuid info "alias-source-uuid" with
+        | Some src -> push_page_route src
+        | None -> go ());
+     Js.Promise.resolve ())
      |> Js.Promise.catch (fun _ ->
             (* cljs treats a nil route-info as navigable *)
             go ();
@@ -322,9 +324,8 @@ let navigate_to_page target =
 (* sidebar items only need decoded + tag-resolved blocks — ~plain skips
    the collapse/embed/view shaping that would touch editor state *)
 let fetch_blocks (p : Model.page) =
-  Outliner_ops.fetch_page_blocks ~plain:true (Runtime.repo ()) p
-  |> Js.Promise.then_ (fun blocks ->
-         Js.Promise.resolve { p with Model.page_blocks = blocks })
+  let* blocks = Outliner_ops.fetch_page_blocks ~plain:true (Runtime.repo ()) p in
+  Js.Promise.resolve { p with Model.page_blocks = blocks }
 let open_dialog name =
   let o = Js.Dict.empty () in
   Js.Dict.set o "name" (Js.Json.string name);
@@ -361,21 +362,20 @@ let item_of_page (p : Model.page) =
   }
 
 let page_item_of_ref repo (target : string) : item option Js.Promise.t =
-  Runtime.invoke2 "thread-api/get-page-route-info" (Wire.String repo)
-    (Wire.page_ref target)
-  |> Js.Promise.then_ (fun info ->
-         match Decode.page_of_summary info with
-         | None -> Js.Promise.resolve None
-         | Some p ->
-             fetch_blocks p
-             |> Js.Promise.then_ (fun p' ->
-                    Router.fetch_refs_blocks p'
-                    |> Js.Promise.then_ (fun refs ->
-                           Js.Promise.resolve
-                             (Some
-                                (item_of_page
-                                   { p' with
-                                     Model.page_linked_refs = refs })))))
+  let* info =
+    Runtime.invoke2 "thread-api/get-page-route-info" (Wire.String repo)
+      (Wire.page_ref target)
+  in
+  match Decode.page_of_summary info with
+  | None -> Js.Promise.resolve None
+  | Some p ->
+      let* p' = fetch_blocks p in
+      let* refs = Router.fetch_refs_blocks p' in
+      Js.Promise.resolve
+        (Some
+           (item_of_page
+              { p' with
+                Model.page_linked_refs = refs }))
 
 (* pull of the entity; a "page" is tagged logseq.class/* — blocks have a
    :block/page ref back to their page. *)
@@ -415,71 +415,68 @@ let breadcrumb_titles w =
     (Wire.elems w)
 
 let block_item_of_uuid repo uuid : item option Js.Promise.t =
-  Runtime.invoke2 "thread-api/get-blocks" (Wire.String repo)
-    (Wire.Array
-       [ Wire.Map
-           [ (Wire.String "id", Wire.Uuid uuid)
-           ; ( Wire.String "opts"
-             , Wire.Map
-                 [ (Wire.Keyword "children?", Wire.Bool true)
-                 ; (* a container's root always renders its children,
-                      even when collapsed in the page — fetch them *)
-                   ( Wire.Keyword "include-collapsed-children?"
-                   , Wire.Bool true )
-                 ] )
-           ]
-       ])
-  |> Js.Promise.then_ (fun w ->
-         match Wire.elems w with
-         | [ pair ] -> (
-             match block_of_pair pair with
-             | Wire.Map _ as blk ->
-                 let b =
-                   (* the pair's flat `children` carry the full maps;
-                      splice them into block/children before decoding *)
-                   match Decode.nest_get_blocks pair with
-                   | Some w -> Decode.block_of_wire w
-                   | None -> Decode.block_of_wire blk
-                 in
-                 Runtime.invoke3 "thread-api/get-block-parents"
-                   (Wire.String repo)
-                   (Wire.Array [ Wire.Keyword "block/uuid"; Wire.Uuid uuid ])
-                   (Wire.Int 8)
-                 |> Js.Promise.then_ (fun parents ->
-                        let crumbs = breadcrumb_titles parents in
-                        (* a sidebar block is its container's root — it
-                           expands there regardless of the db collapsed
-                           datom *)
-                        Editor_state.expand_root ~scope:"sidebar" uuid;
-                        Js.Promise.resolve
-                          (Some
-                             { key = "block-" ^ uuid
-                             ; kind = "block"
-                             ; uuid = Some uuid
-                             ; title = b.Model.block_title
-                             ; icon = None
-                             ; breadcrumb = crumbs
-                             ; blocks = [ b ]
-                             ; linked_refs = []
-                             ; page = None
-                             ; props_collapsed = true
-                             ; collapsed = false
-                             ; page_ref = List.nth_opt crumbs 0
-                             }))
-             | _ -> Js.Promise.resolve None)
-         | _ -> Js.Promise.resolve None)
+  let* w =
+    Runtime.invoke2 "thread-api/get-blocks" (Wire.String repo)
+      (Wire.Array
+         [ Wire.Map
+             [ (Wire.String "id", Wire.Uuid uuid)
+             ; ( Wire.String "opts"
+               , Wire.Map
+                   [ (Wire.Keyword "children?", Wire.Bool true)
+                   ; (* a container's root always renders its children,
+                        even when collapsed in the page — fetch them *)
+                     ( Wire.Keyword "include-collapsed-children?"
+                     , Wire.Bool true )
+                   ] )
+             ]
+         ])
+  in
+  match Wire.elems w with
+  | [ pair ] -> (
+      match block_of_pair pair with
+      | Wire.Map _ as blk ->
+          let b =
+            (* the pair's flat `children` carry the full maps;
+               splice them into block/children before decoding *)
+            match Decode.nest_get_blocks pair with
+            | Some w -> Decode.block_of_wire w
+            | None -> Decode.block_of_wire blk
+          in
+          let* parents =
+            Runtime.invoke3 "thread-api/get-block-parents"
+              (Wire.String repo)
+              (Wire.Array [ Wire.Keyword "block/uuid"; Wire.Uuid uuid ])
+              (Wire.Int 8)
+          in
+          let crumbs = breadcrumb_titles parents in
+          Js.Promise.resolve
+            (Some
+               { key = "block-" ^ uuid
+               ; kind = "block"
+               ; uuid = Some uuid
+               ; title = b.Model.block_title
+               ; icon = None
+               ; breadcrumb = crumbs
+               ; blocks = [ b ]
+               ; linked_refs = []
+               ; page = None
+               ; props_collapsed = true
+               ; collapsed = false
+               ; page_ref = List.nth_opt crumbs 0
+               })
+      | _ -> Js.Promise.resolve None)
+  | _ -> Js.Promise.resolve None
 
 (* cljs :contents item renders the built-in "Contents" page's own blocks
    (<build-sidebar-item> pulls the entity named "Contents"), and
    sidebar-action-block-lookup resolves :contents -> "Contents" so
    "Open as page" navigates to that page. *)
 let contents_item repo : item option Js.Promise.t =
-  page_item_of_ref repo "Contents"
-  |> Js.Promise.then_ (function
-         | Some it ->
-             Js.Promise.resolve
-               (Some { it with key = "contents"; kind = "contents" })
-         | None -> Js.Promise.resolve None)
+  let* v = page_item_of_ref repo "Contents" in
+  match v with Some it ->
+    Js.Promise.resolve
+      (Some { it with key = "contents"; kind = "contents" })
+| None -> Js.Promise.resolve None
 
 let static_item key kind title =
   Some
@@ -503,7 +500,17 @@ let has_item st key =
 let push_item st it =
   let items = Signal.get_state st.items in
   if has_item st it.key then ()
-  else Runtime.signal_set st.items (items @ [ it ])
+  else begin
+    (* a sidebar block is its container's root — cljs mounts it with
+       set-collapsed-block! false so its children show regardless of the
+       db collapsed datom. Once per mount: refresh_items re-adds via
+       signal_set and must not undo a user's collapse in this pane *)
+    (match it.kind, it.uuid with
+     | "block", Some u ->
+         Editor_state.expand_root ~scope:"sidebar" u
+     | _ -> ());
+    Runtime.signal_set st.items (items @ [ it ])
+  end
 
 let remove_item st key =
   Runtime.signal_set st.items
@@ -559,26 +566,23 @@ let clear_items st =
 
 let add_promise st p =
   ignore
-    (Js.Promise.then_
-       (function
-         | Some it ->
-             push_item st it;
-             Js.Promise.resolve ()
-         | None -> Js.Promise.resolve ())
-       p)
+    (let* v = p in
+    match v with Some it ->
+      push_item st it;
+      Js.Promise.resolve ()
+  | None -> Js.Promise.resolve ())
 
 let open_ref st target =
   let repo = Runtime.repo () in
   if repo = "" then ()
   else
     let p =
-      page_item_of_ref repo target
-      |> Js.Promise.then_ (function
-             | Some it -> Js.Promise.resolve (Some it)
-             | None ->
-                 if Wire.is_uuid_string target then
-                   block_item_of_uuid repo target
-                 else Js.Promise.resolve None)
+      (let* v = page_item_of_ref repo target in
+      match v with Some it -> Js.Promise.resolve (Some it)
+    | None ->
+        if Wire.is_uuid_string target then
+          block_item_of_uuid repo target
+        else Js.Promise.resolve None)
     in
     ensure_right_open ();
     add_promise st p
@@ -588,17 +592,16 @@ let open_uuid st uuid =
   if repo = "" then ()
   else
     let p =
-      pull_entity repo uuid
-      |> Js.Promise.then_ (fun ent ->
-             match ent with
-             | Wire.Map _ ->
-                 if is_page_entity ent then
-                   page_item_of_ref repo uuid
-                 else block_item_of_uuid repo uuid
-             | _ ->
-                 if Wire.is_uuid_string uuid then
-                   block_item_of_uuid repo uuid
-                 else Js.Promise.resolve None)
+      (let* ent = pull_entity repo uuid in
+      match ent with
+      | Wire.Map _ ->
+          if is_page_entity ent then
+            page_item_of_ref repo uuid
+          else block_item_of_uuid repo uuid
+      | _ ->
+          if Wire.is_uuid_string uuid then
+            block_item_of_uuid repo uuid
+          else Js.Promise.resolve None)
     in
     ensure_right_open ();
     add_promise st p
@@ -624,26 +627,22 @@ let ensure_contents st =
 let refresh_item repo (it : item) : item Js.Promise.t =
   let fallback = Js.Promise.resolve it in
   match it.kind with
-  | "contents" -> (
-      contents_item repo
-      |> Js.Promise.then_ (function
-             | Some it' -> Js.Promise.resolve it'
-             | None -> fallback))
+  | "contents" -> (let* v = contents_item repo in
+                  match v with Some it' -> Js.Promise.resolve it'
+                | None -> fallback)
   | "page" -> (
       match it.page_ref with
       | Some r ->
-          page_item_of_ref repo r
-          |> Js.Promise.then_ (function
-                 | Some it' -> Js.Promise.resolve it'
-                 | None -> fallback)
+          (let* v = page_item_of_ref repo r in
+          match v with Some it' -> Js.Promise.resolve it'
+        | None -> fallback)
       | None -> fallback)
   | "block" -> (
       match it.uuid with
       | Some u ->
-          block_item_of_uuid repo u
-          |> Js.Promise.then_ (function
-                 | Some it' -> Js.Promise.resolve { it' with key = it.key }
-                 | None -> fallback)
+          (let* v = block_item_of_uuid repo u in
+          match v with Some it' -> Js.Promise.resolve { it' with key = it.key }
+        | None -> fallback)
       | None -> fallback)
   | _ -> fallback
 
@@ -651,10 +650,9 @@ let refresh_items repo st =
   let items = Signal.get_state st.items in
   if items <> [] then
     ignore
-      (Js.Promise.all (Array.of_list (List.map (refresh_item repo) items))
-       |> Js.Promise.then_ (fun arr ->
-              Runtime.signal_set st.items (Array.to_list arr);
-              Js.Promise.resolve ())
+      ((let* arr = Js.Promise.all (Array.of_list (List.map (refresh_item repo) items)) in
+       Runtime.signal_set st.items (Array.to_list arr);
+       Js.Promise.resolve ())
        |> Js.Promise.catch (fun e ->
               Platform.console_error ("sidebar refresh failed", e);
               Js.Promise.resolve ()))
@@ -747,7 +745,6 @@ let on_model st (m : Model.t) =
 
 let close_menu st = Runtime.signal_set st.open_menu ""
 let open_nav_menu st = Runtime.signal_set st.open_menu "nav-edit"
-let open_dots_menu st = Runtime.signal_set st.open_menu "dots"
 (* anchor for the right-sidebar item actions menu — cljs popup-show!
    positions at the pointer (contextmenu) / trigger click *)
 let im_xy : (float * float) ref = ref (0., 0.)
@@ -799,7 +796,15 @@ let on_doc_click st ev =
     with
     | Some _ -> ()
     | None -> close_menu st);
-  match click_target "a.page-ref" ev with
+  match
+    (match click_target "a.page-ref" ev with
+     | Some _ as r -> r
+     | None ->
+         (* the anchor inside .page-reference mounts empty (lazy title
+            pull) — a click on the bracket shell still has data-ref on the
+            wrapper *)
+         click_target ".page-reference" ev)
+  with
   | Some el -> (
       match
         (* uuid refs ([[uuid]]/((uuid))) carry data-uuid; data-ref holds the

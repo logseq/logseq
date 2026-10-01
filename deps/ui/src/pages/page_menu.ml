@@ -10,7 +10,7 @@ let item key label on_click = Menu_item.el ~key ~label ~on_click ()
 (* cljs dropdown-menu-item renders its :icon before the title *)
 let icon_item key label icon_name on_click =
   Menu_item.el ~key ~label
-    ~before:[ Icons.icon ~size:15. ~cls:"mr-2" icon_name ]
+    ~before:[ Icons.icon ~size:15. ~cls:"ls-menu-item-icon" icon_name ]
     ~on_click ()
 
 let separator key = Menu_item.separator ~key
@@ -27,8 +27,19 @@ let page_items (p : Model.page) =
       [ item "del" I18n.delete_page (fun () ->
             match p.page_uuid with
             | Some u ->
+                (* cljs: permanent wording for class/property entities
+                   and today's journal *)
+                let permanent =
+                  p.page_is_tag || p.page_is_property
+                  || (match p.page_journal_day with
+                      | Some d -> d = Dates.today_journal_day ()
+                      | None -> false)
+                in
                 Runtime.send
-                  (Action.Confirm_set (Some (Model.Confirm_delete_page u)));
+                  (Action.Confirm_set
+                     (Some
+                        (Model.Confirm_delete_page
+                           (u, p.page_title, permanent))));
                 Runtime.flush ()
             | None -> ()) ]
   in
@@ -140,19 +151,25 @@ let view (x, y, with_app_items) (p : Model.page option) =
     if with_app_items then
       (* toolbar dots menu: x is the trigger's right edge -> anchor
          the menu's right edge to it like the cljs dropdown *)
-      Printf.sprintf "position:fixed;right:%.0fpx;top:%.0fpx"
+      Printf.sprintf
+        "position:fixed;right:%.0fpx;top:%.0fpx;--available-height:\
+         calc(100vh - %.0fpx)"
         (Float.max 8. (inner_width -. x))
-        y
+        y (y +. 8.)
     else
-      Printf.sprintf "position:fixed;left:%.0fpx;top:%.0fpx"
+      Printf.sprintf
+        "position:fixed;left:%.0fpx;top:%.0fpx;--available-height:\
+         calc(100vh - %.0fpx)"
         (Float.min x (inner_width -. 250.))
-        y
+        y (y +. 8.)
   in
   dom ~key:"page-menu" ~tag:"div"
+    (* toolbar dots menu is w-64 (cljs header.cljs); the page
+       right-click keeps the context-menu look *)
     ~style_class:
-      "ui__dropdown-menu-content z-50 min-w-[8rem] rounded-md border \
-       bg-popover p-1 text-popover-foreground shadow-md"
-    ~attrs:[ ("style", style) ]
+      (if with_app_items then "ui__dropdown-menu-content ls-dots-menu"
+       else "ui__dropdown-menu-content ls-context-menu-content")
+    ~attrs:[ ("style", style); ("role", "menu") ]
     (* cljs header.cljs toolbar-dots-menu = page items + hr + app
        items; a page right-click shows page items only *)
     (match p, with_app_items with
@@ -168,19 +185,26 @@ let btn key label cls act =
 
 (* div[role='alertdialog'] — Confirm / Cancel *)
 let confirm_view (c : Model.confirm) =
-  let title, desc, act =
+  let icon_opt, title, desc, desc_cls, act =
     match c with
-    | Model.Confirm_delete_page u ->
-        ( I18n.delete_page_title
-        , I18n.delete_page_desc
+    | Model.Confirm_delete_page (u, page_title, permanent) ->
+        ( Some (Icons.icon ~size:20. "alert-triangle")
+        , (if permanent then I18n.delete_page_permanent_desc
+           else I18n.delete_page_desc)
+        , "- " ^ page_title
+        , "ui__alert-dialog-description"
         , fun () -> ignore (Page_ops.delete u) )
     | Model.Confirm_convert_tag_to_page id ->
-        ( I18n.convert_tag_to_page
+        ( None
+        , I18n.convert_tag_to_page
         , I18n.convert_tag_to_page_desc
+        , "ui__alert-dialog-description"
         , fun () -> ignore (Page_ops.convert_tag_to_page id) )
     | Model.Confirm_delete_asset u ->
-        ( I18n.asset_confirm_delete
+        ( None
+        , I18n.asset_confirm_delete
         , ""
+        , "ui__alert-dialog-description"
         , fun () -> Asset_dom.delete_asset u )
   in
   let close () =
@@ -188,49 +212,37 @@ let confirm_view (c : Model.confirm) =
     Runtime.flush ()
   in
   dom ~key:"alertdlg-overlay" ~tag:"div"
-    ~style_class:
-      "ui__alert-dialog-overlay fixed inset-0 z-50 bg-background/80 \
-       backdrop-blur-sm"
+    ~style_class:"ui__alert-dialog-overlay"
     ~events:"click"
     ~on_dom_event:(fun name payload ->
       (* only the backdrop itself dismisses — clicks inside the
          content bubble here but target the dialog *)
       if
         name = "click"
-        && Option.fold ~none:false
-             ~some:(fun p ->
-               I18n.contains
-                 (Platform.payload_str p "targetClass")
-                 "ui__alert-dialog-overlay")
-             payload
+        && I18n.contains
+             (Platform.payload_str payload "targetClass")
+             "ui__alert-dialog-overlay"
       then close ())
     [ dom ~key:"alertdlg" ~tag:"div"
-        ~attrs:
-          [ ("role", "alertdialog")
-          ; ( "style"
-            , "position:fixed;left:50%;top:50%;transform:translate(-50%,-50%)" )
-          ]
-        ~style_class:
-          "ui__alert-dialog-content z-50 grid w-full max-w-lg gap-4 \
-           border bg-background p-6 shadow-lg sm:rounded-lg"
+        ~attrs:[ ("role", "alertdialog") ]
+        ~style_class:"ui__alert-dialog-content"
         [ dom ~key:"adlg-t" ~tag:"h2"
-            ~style_class:"ui__alert-dialog-title text-lg font-semibold"
-            ~text:title []
+            ~style_class:"ui__alert-dialog-title"
+            [ (match icon_opt with
+               | Some i ->
+                   (* cljs dialog-confirm title: flex gap-2 items-center
+                      > icon + text *)
+                   dom ~key:"adlg-tw" ~style_class:"ls-alert-title"
+                     [ i; dom ~key:"adlg-tx" ~text:title [] ]
+               | None -> dom ~key:"adlg-tx" ~text:title []) ]
         ; dom ~key:"adlg-d" ~tag:"div"
-            ~style_class:
-              "ui__alert-dialog-description text-sm \
-               text-muted-foreground" ~text:desc []
+            ~style_class:desc_cls ~text:desc []
         ; dom ~key:"adlg-f" ~tag:"div"
-            ~style_class:
-              "ui__alert-dialog-footer flex flex-col-reverse \
-               sm:flex-row sm:justify-end sm:space-x-2"
+            ~style_class:"ui__alert-dialog-footer"
             [ btn "adlg-cancel" I18n.cancel
-                "inline-flex items-center justify-center rounded-md \
-                 text-sm font-medium border px-4 py-2" close
+                "ui__button ls-btn-outline" close
             ; btn "adlg-confirm" I18n.confirm
-                "inline-flex items-center justify-center rounded-md \
-                 text-sm font-medium bg-primary text-primary-foreground \
-                 px-4 py-2" (fun () ->
+                "ui__button ls-btn-primary" (fun () ->
                   close ();
                   act ())
             ]

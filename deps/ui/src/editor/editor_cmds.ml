@@ -3,6 +3,7 @@
    Command ids are stable strings emitted by Popups_state; labels stay
    purely presentational. *)
 
+open Promise_ext
 module W = Wire
 module S = String
 
@@ -33,42 +34,48 @@ let batch_remove uuids prop =
 
 let apply ops = ignore (Outliner_ops.apply_and_refresh ops)
 
+(* cosmetic property writes: while an editor is open the apply's
+   sync-db-changes broadcast already arms the debounced reload *)
+let apply_soft ops =
+  ignore (Outliner_ops.apply_and_refresh_deferred ops)
+
 (* cljs batch-set-property-closed-value!: find the closed-value entity
    whose content matches, then set it by db/id. *)
 let set_closed_value uuid prop content =
   ignore
-    (Runtime.invoke2 "thread-api/get-property-closed-values"
-       (W.String (repo ())) (W.Keyword prop)
-     |> Js.Promise.then_ (fun w ->
-            let rows =
-              match w with
-              | W.Array xs | W.List xs -> xs
-              | _ -> []
-            in
-            let hit =
-              List.find_opt
-                (fun r ->
-                  let eq s =
-                    S.equal (S.lowercase_ascii s) (S.lowercase_ascii content)
-                  in
-                  (match W.get r "logseq.property/value" with
-                   | Some (W.String s) -> eq s
-                   | _ -> false)
-                  ||
-                  (match W.get r "block/title" with
-                   | Some (W.String s) -> eq s
-                   | _ -> false))
-                rows
-            in
-            (match hit with
-             | Some r -> (
-                 match W.map_get_int r "db/id" with
-                 | Some id ->
-                     apply [ batch_set [ uuid ] prop (W.Int id) ]
-                 | None -> ())
-             | None ->
-                 Platform.console_error ("closed value not found", content));
-            Js.Promise.resolve ()))
+    (let* w =
+      Runtime.invoke2 "thread-api/get-property-closed-values"
+        (W.String (repo ())) (W.Keyword prop)
+    in
+    let rows =
+      match w with
+      | W.Array xs | W.List xs -> xs
+      | _ -> []
+    in
+    let hit =
+      List.find_opt
+        (fun r ->
+          let eq s =
+            S.equal (S.lowercase_ascii s) (S.lowercase_ascii content)
+          in
+          (match W.get r "logseq.property/value" with
+           | Some (W.String s) -> eq s
+           | _ -> false)
+          ||
+          (match W.get r "block/title" with
+           | Some (W.String s) -> eq s
+           | _ -> false))
+        rows
+    in
+    (match hit with
+     | Some r -> (
+         match W.map_get_int r "db/id" with
+         | Some id ->
+             apply_soft [ batch_set [ uuid ] prop (W.Int id) ]
+         | None -> ())
+     | None ->
+         Platform.console_error ("closed value not found", content));
+    Js.Promise.resolve ())
 ;;
 
 let current_block fallback =
@@ -111,72 +118,76 @@ let run ~command ~block ~value =
       | "set-color" -> (
           match value with
           | Some c when c <> "" ->
-              apply
+              apply_soft
                 [ batch_set [ uuid ] "logseq.property/background-color"
                     (W.String c) ]
           | _ ->
-              apply
+              apply_soft
                 [ batch_remove [ uuid ] "logseq.property/background-color" ])
       | "set-heading" -> (
           match value with
           | Some "auto" ->
-              apply
+              apply_soft
                 [ batch_set [ uuid ] "logseq.property/heading" (W.Bool true) ]
           | Some v ->
               (try
-                 apply
+                 apply_soft
                    [ batch_set [ uuid ] "logseq.property/heading"
                        (W.Int (int_of_string v)) ]
-               with _ -> apply [ batch_remove [ uuid ] "logseq.property/heading" ])
-          | None -> apply [ batch_remove [ uuid ] "logseq.property/heading" ])
+               with _ ->
+                 apply_soft
+                   [ batch_remove [ uuid ] "logseq.property/heading" ])
+          | None ->
+              apply_soft
+                [ batch_remove [ uuid ] "logseq.property/heading" ])
       | "toggle-numbered-list" ->
           ignore
-            (Sdk_util.get_by_id (W.String uuid)
-             |> Js.Promise.then_ (fun w ->
-                    let cur =
-                      match Decode.order_list_type_of_wire w with
-                      | Some s -> s
-                      | None -> ""
-                    in
-                    (if cur = "number" then
-                       apply
-                         [ batch_remove [ uuid ]
-                             "logseq.property/order-list-type" ]
-                     else
-                       apply
-                         [ batch_set [ uuid ] "logseq.property/order-list-type"
-                             (W.String "number") ]);
-                    Js.Promise.resolve ()))
+            (let* w = Sdk_util.get_by_id (W.String uuid) in
+            let cur =
+              match Decode.order_list_type_of_wire w with
+              | Some s -> s
+              | None -> ""
+            in
+            (if cur = "number" then
+               apply_soft
+                 [ batch_remove [ uuid ]
+                     "logseq.property/order-list-type" ]
+             else
+               apply_soft
+                 [ batch_set [ uuid ] "logseq.property/order-list-type"
+                     (W.String "number") ]);
+            Js.Promise.resolve ())
       | "make-flashcard" ->
           ignore
-            (Runtime.invoke2 "thread-api/get-case-page" (W.String (repo ()))
-               (W.String "Card")
-             |> Js.Promise.then_ (fun w ->
-                    (match W.map_get_int w "db/id" with
-                     | Some dbid ->
-                         apply
-                           [ Outliner_ops.set_block_property uuid "block/tags"
-                               (W.Int dbid) ]
-                     | None -> ());
-                    Js.Promise.resolve ()))
+            (let* w =
+              Runtime.invoke2 "thread-api/get-case-page" (W.String (repo ()))
+                (W.String "Card")
+            in
+            (match W.map_get_int w "db/id" with
+             | Some dbid ->
+                 apply_soft
+                   [ Outliner_ops.set_block_property uuid "block/tags"
+                       (W.Int dbid) ]
+             | None -> ());
+            Js.Promise.resolve ())
       | cmd when String.length cmd > 7 && String.sub cmd 0 7 = "status-" ->
           set_closed_value uuid "logseq.property/status"
             (String.sub cmd 7 (String.length cmd - 7))
       | "priority-none" ->
-          apply [ batch_remove [ uuid ] "logseq.property/priority" ]
+          apply_soft [ batch_remove [ uuid ] "logseq.property/priority" ]
       | cmd when String.length cmd > 9 && String.sub cmd 0 9 = "priority-" ->
           set_closed_value uuid "logseq.property/priority"
             (String.sub cmd 9 (String.length cmd - 9))
       | cmd when String.length cmd > 8 && String.sub cmd 0 8 = "heading-" -> (
           match String.sub cmd 8 (String.length cmd - 8) with
           | "normal" | "clear" ->
-              apply [ batch_remove [ uuid ] "logseq.property/heading" ]
+              apply_soft [ batch_remove [ uuid ] "logseq.property/heading" ]
           | "auto" ->
-              apply
+              apply_soft
                 [ batch_set [ uuid ] "logseq.property/heading" (W.Bool true) ]
           | n -> (
               try
-                apply
+                apply_soft
                   [ batch_set [ uuid ] "logseq.property/heading"
                       (W.Int (int_of_string n)) ]
               with _ -> ()))
@@ -186,7 +197,7 @@ let run ~command ~block ~value =
           let title =
             match b with Some x -> x.Model.block_title | None -> ""
           in
-          apply
+          apply_soft
             [ Outliner_ops.save_block uuid ("> " ^ title) ]
       | "cycle-todo" | "deadline" | "scheduled" | "date-picker"
       | "add-comment" | "copy-export-as" | "set-icon" | "add-reaction" ->

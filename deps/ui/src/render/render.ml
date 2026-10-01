@@ -272,8 +272,6 @@ let query_shell =
         ~attrs:[ ("type", "button"); ("title", I18n.t "block/set-query") ] []
     ]
 
-let heading_tag lvl = "h" ^ string_of_int (max 1 (min lvl 6))
-
 (* content for a (possibly quoted) body — headings nest inside quote *)
 let content ?(heading : int option) ?(self = "") s =
   match heading with
@@ -345,7 +343,7 @@ let title_block ?(self = "") ?resolved (b : Model.block) : t list =
       [ code_block ~self lang s ]
   | Some "math" ->
       [ D.el ~tag:"div" ~style_class:"math-block"
-          [ Render_inline.katex_el s ] ]
+          [ Render_inline.katex_el ~block:true ~display:true s ] ]
   | _ -> (
       match src_eval_parts s with
       | Some (lang, code) ->

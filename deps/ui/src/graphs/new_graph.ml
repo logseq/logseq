@@ -4,6 +4,7 @@
    create-or-open-db via Graph.create_graph; the sync path calls the
    worker db-sync endpoints like the cljs flow does. *)
 
+open Promise_ext
 open Lui_elements
 
 let dom = Logseq_dom.dom
@@ -18,19 +19,21 @@ let checkbox_cls checked =
 
 let checkbox ~key ~id ~checked ~on_click =
   dom ~key ~tag:"button" ~id
-    ~style_class:(checkbox_cls checked)
+    ~style_class:(reactive checkbox_cls checked)
     ~attrs:
-      [ ("role", "checkbox")
-      ; ("type", "button")
-      ; ("aria-checked", string_of_bool checked)
-      ; ("data-state", if checked then "checked" else "unchecked")
-      ]
+      (reactive
+         (fun c ->
+           [ ("role", "checkbox")
+           ; ("type", "button")
+           ; ("aria-checked", string_of_bool c)
+           ; ("data-state", if c then "checked" else "unchecked")
+           ])
+         checked)
     ~events:"click"
     ~on_dom_event:(fun n _ -> if n = "click" then on_click ())
-    (if checked then
-       [ dom ~key:(key ^ "-ck") ~tag:"i" ~style_class:"ti ti-check h-4 w-4"
-           [] ]
-     else [])
+    [ if_ ~test:checked
+        (dom ~key:(key ^ "-ck") ~tag:"i" ~style_class:"ti ti-check ls-icon-sm"
+           []) ]
 
 let name_input () =
   match Browser_ui.qs ".new-graph input" with
@@ -53,22 +56,25 @@ let submit cloud e2ee creating =
     Signal.set creating true;
     Runtime.flush ();
     ignore
-      (Js.Promise.then_
-         (fun repo ->
-           Graphs_ops.remember_open repo;
-           Dialogs_state.close_named "new-graph";
-           ignore (Graphs_ops.navigate_journal repo);
-           Js.Promise.resolve ())
-         (if Signal.get_state cloud then
-            (* cljs: db-sync-ensure-user-rsa-keys runs before
+      (let* repo =
+        (if Signal.get_state cloud then
+           (* cljs: db-sync-ensure-user-rsa-keys runs before
+              create-remote-graph so the private key is available (the
+              worker may ui-request an e2ee password here) *)
+           let e2ee = Signal.get_state e2ee in
+           let* _ =
+             (if e2ee then Rtc_ops.ensure_rsa_keys ()
+              else Js.Promise.resolve true)
+           in
+           Graphs_ops.create_remote name e2ee
+         else Graph.create_graph name)
+      in
+      Graphs_ops.remember_open repo;
+      Dialogs_state.close_named "new-graph";
+      ignore (Graphs_ops.navigate_journal repo);
+      Js.Promise.resolve () (* cljs: db-sync-ensure-user-rsa-keys runs before
                create-remote-graph so the private key is available (the
-               worker may ui-request an e2ee password here) *)
-            let e2ee = Signal.get_state e2ee in
-            (if e2ee then Rtc_ops.ensure_rsa_keys ()
-             else Js.Promise.resolve true)
-            |> Js.Promise.then_ (fun _ ->
-                   Graphs_ops.create_remote name e2ee)
-          else Graph.create_graph name)))
+               worker may ui-request an e2ee password here) *)))
 
 let body (_ms : Model.t Signal.signal) : t =
  fun ctx parent ->
@@ -77,11 +83,10 @@ let body (_ms : Model.t Signal.signal) : t =
   let e2ee = Signal.state ctx.ui_scheduler true in
   let creating = Signal.state ctx.ui_scheduler false in
   let node =
-    dom ~key:"new-graph" ~style_class:"new-graph flex flex-col gap-4 p-1 pt-2"
+    dom ~key:"new-graph" ~style_class:"new-graph"
       [ dom ~key:"ng-h" ~tag:"h2"
           ~style_class:
-            "ui__dialog-title text-lg font-semibold leading-none \
-             tracking-tight" ~text:T.create_new_graph []
+            "ui__dialog-title" ~text:T.create_new_graph []
       ; dom ~key:"ng-in" ~tag:"input"
           ~attrs:
             [ ("placeholder", T.graph_name_placeholder)
@@ -93,8 +98,7 @@ let body (_ms : Model.t Signal.signal) : t =
             match n with
             | "keydown" -> (
                 match
-                  Platform.payload_str
-                    (Option.value p ~default:"{}")
+                  Platform.payload_str p
                     "key"
                 with
                 | "Enter" -> submit cloud e2ee creating
@@ -102,34 +106,29 @@ let body (_ms : Model.t Signal.signal) : t =
             | _ -> ())
           []
       ; if Platform.rtc_test_mode () then
-          dom ~key:"ng-rtc" ~style_class:"flex flex-col"
+          dom ~key:"ng-rtc" ~style_class:"ls-ng-rtc"
             [ dom ~key:"ng-rtc-row"
-                ~style_class:"flex flex-row items-center gap-1"
-                [ dyn ~equal:Stdlib.( = )
-                    (fun c ->
-                      checkbox ~key:"rtc" ~id:"rtc-sync" ~checked:c
-                        ~on_click:(fun () ->
-                          Signal.set cloud (not (Signal.get_state cloud));
-                          Runtime.flush ()))
-                    (Signal.value cloud)
+                ~style_class:"ls-ng-row"
+                [ checkbox ~key:"rtc" ~id:"rtc-sync"
+                    ~checked:(Signal.value cloud)
+                    ~on_click:(fun () ->
+                      Signal.set cloud (not (Signal.get_state cloud));
+                      Runtime.flush ())
                 ; dom ~key:"rtc-lbl" ~tag:"label"
-                    ~style_class:"opacity-70 text-sm"
+                    ~style_class:"ls-ng-label"
                     ~attrs:[ ("for", "rtc-sync") ]
                     ~text:T.use_sync_label []
                 ; if_ ~test:(Signal.value cloud)
                     (dom ~key:"ng-e2ee-row"
-                       ~style_class:"flex flex-row items-center gap-1 ml-3"
-                       [ dyn ~equal:Stdlib.( = )
-                           (fun c ->
-                             checkbox ~key:"e2ee" ~id:"rtc-graph-e2ee"
-                               ~checked:c
-                               ~on_click:(fun () ->
-                                 Signal.set e2ee
-                                   (not (Signal.get_state e2ee));
-                                 Runtime.flush ()))
-                           (Signal.value e2ee)
+                       ~style_class:"ls-ng-row ls-ng-sub"
+                       [ checkbox ~key:"e2ee" ~id:"rtc-graph-e2ee"
+                           ~checked:(Signal.value e2ee)
+                           ~on_click:(fun () ->
+                             Signal.set e2ee
+                               (not (Signal.get_state e2ee));
+                             Runtime.flush ())
                        ; dom ~key:"e2ee-lbl" ~tag:"label"
-                           ~style_class:"opacity-70 text-sm"
+                           ~style_class:"ls-ng-label"
                            ~attrs:[ ("for", "rtc-graph-e2ee") ]
                            ~text:T.encrypt_data_label []
                        ])
@@ -140,9 +139,10 @@ let body (_ms : Model.t Signal.signal) : t =
           ~style_class:
             "inline-flex items-center justify-center rounded-md text-sm \
              font-medium bg-primary text-primary-foreground px-4 py-2"
-          ~attrs_signal_v:
-            (Logseq_dom.attrs_signal (Signal.value creating) (fun c ->
-                 if c then [ ("disabled", "true") ] else []))
+          ~attrs:
+            (reactive
+               (fun c -> if c then [ ("disabled", "true") ] else [])
+               (Signal.value creating))
           ~on_dom_event:(fun n _ ->
             if n = "click" then submit cloud e2ee creating)
           []

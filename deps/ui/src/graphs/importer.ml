@@ -3,6 +3,7 @@
    generic prompt dialog (#modal-headline + .form-input + Submit) then
    runs the matching thread-api import endpoint. *)
 
+open Promise_ext
 open Lui_elements
 
 let dom = Logseq_dom.dom
@@ -30,68 +31,65 @@ let ask_name_and_run label run =
         Dialogs_state.close_prompt ();
         let repo = Graph.full_graph_name name in
         ignore
-          (Js.Promise.then_
-             (fun ok ->
-                if ok then finish_import repo label;
-                Js.Promise.resolve ())
-             (Js.Promise.catch
-                (fun _e ->
-                   Toast.error T.import_failed;
-                   Js.Promise.resolve false)
-                (run repo)))))
+          (let* ok =
+            (Js.Promise.catch
+               (fun _e ->
+                  Toast.error T.import_failed;
+                  Js.Promise.resolve false)
+               (run repo))
+          in
+          if ok then finish_import repo label;
+          Js.Promise.resolve ())))
   ()
 
 let import_sqlite_db repo file =
-  file |> B.file_buffer
-  |> Js.Promise.then_ (fun buf ->
-         Js.Promise.then_
-           (fun _ -> Js.Promise.resolve true)
-           (Runtime.invoke2 "thread-api/import-db-binary"
-              (Wire.String repo)
-              (Wire.Binary (B.u8_of_buffer buf))))
+  let* buf = file |> B.file_buffer in
+  let* _ =
+    (Runtime.invoke2 "thread-api/import-db-binary"
+       (Wire.String repo)
+       (Wire.Binary (B.u8_of_buffer buf)))
+  in
+  Js.Promise.resolve true
 
 let import_edn repo file =
-  file |> B.file_text
-  |> Js.Promise.then_ (fun text ->
-         match (try Some (Edn.parse text) with _ -> None) with
-         | None ->
-             Toast.warning T.import_invalid_edn;
-             Js.Promise.resolve false
-         | Some w ->
-             Js.Promise.then_
-               (fun _ -> Js.Promise.resolve true)
-               (Runtime.invoke2 "thread-api/import-edn"
-                  (Wire.String repo) w))
+  let* text = file |> B.file_text in
+  match (try Some (Edn.parse text) with _ -> None) with
+  | None ->
+      Toast.warning T.import_invalid_edn;
+      Js.Promise.resolve false
+  | Some w ->
+      let* _ =
+        (Runtime.invoke2 "thread-api/import-edn"
+           (Wire.String repo) w)
+      in
+      Js.Promise.resolve true
 
 let file_item f =
-  f |> B.file_text
-  |> Js.Promise.then_ (fun text ->
-         Js.Promise.resolve
-           (Wire.Map
-              [ (Wire.kw "path", Wire.String (B.file_name f))
-              ; (Wire.kw "content", Wire.String text)
-              ]))
+  let* text = f |> B.file_text in
+  Js.Promise.resolve
+    (Wire.Map
+       [ (Wire.kw "path", Wire.String (B.file_name f))
+       ; (Wire.kw "content", Wire.String text)
+       ])
 
 let import_file_graph repo files =
   match files with
   | config :: rest ->
-      Js.Promise.all (Array.of_list (List.map file_item rest))
-      |> Js.Promise.then_ (fun files_w ->
-             Js.Promise.then_
-               (fun _ -> Js.Promise.resolve true)
-               (Js.Promise.then_
-                  (fun cfg ->
-                     Runtime.invoke "thread-api/import-file-graph"
-                       [ Wire.String repo
-                       ; Wire.Map
-                           [ ( Wire.kw "path"
-                             , Wire.String "logseq/config.edn" )
-                           ; (Wire.kw "content", Wire.String cfg)
-                           ]
-                       ; Wire.Array (Array.to_list files_w)
-                       ; Wire.Map []
-                       ])
-                  (B.file_text config)))
+      let* files_w = Js.Promise.all (Array.of_list (List.map file_item rest)) in
+      let* cfg = (B.file_text config) in
+        let* _ =
+        Runtime.invoke "thread-api/import-file-graph"
+          [ Wire.String repo
+          ; Wire.Map
+              [ ( Wire.kw "path"
+                , Wire.String "logseq/config.edn" )
+              ; (Wire.kw "content", Wire.String cfg)
+              ]
+          ; Wire.Array (Array.to_list files_w)
+          ; Wire.Map []
+          ]
+      in
+      Js.Promise.resolve true
   | [] -> Js.Promise.resolve false
 
 let run_files kind files =
@@ -138,15 +136,15 @@ let logo_svg () =
 
 let file_input ~id ~label ~desc ~accept ?(extra_attrs = []) () =
   dom ~key:id ~tag:"label"
-    ~style_class:"action-input flex items-center mx-2 my-2"
+    ~style_class:"action-input"
     [ dom ~key:(id ^ "-ic") ~style_class:"as-flex-center"
         [ dom ~key:(id ^ "-ico") ~tag:"i" [ logo_svg () ] ]
     ; dom ~key:(id ^ "-t")
-        ~style_class:"flex flex-col"
+        ~style_class:"ls-imp-field"
         [ dom ~key:(id ^ "-s") ~tag:"strong" ~text:label []
         ; dom ~key:(id ^ "-d") ~tag:"small" ~text:desc [] ]
     ; dom ~key:(id ^ "-i") ~tag:"input"
-        ~style_class:"absolute hidden"
+        ~style_class:"ls-hidden-input"
         ~attrs:
           ([ ("id", id); ("type", "file"); ("accept", accept) ]
            @ extra_attrs)
@@ -175,19 +173,19 @@ let items () =
 
 let article () =
   dom ~key:"import" ~tag:"article"
-    ~style_class:"flex flex-col items-center importer py-16 px-8"
+    ~style_class:"importer"
     [ dom ~key:"imp-c" ~style_class:"c text-center"
         [ dom ~key:"imp-h" ~tag:"h1" ~text:T.import_title []
         ; dom ~key:"imp-d" ~tag:"h2" ~text:T.import_desc [] ]
-    ; dom ~key:"imp-l" ~style_class:"d md:flex flex-col" (items ()) ]
+    ; dom ~key:"imp-l" ~style_class:"d" (items ()) ]
 
 (* route view — cljs setups/setups-container :importer wraps the article in
    .cp__onboarding-setups > .inner-card with a title/subtitle header *)
 let view () : t =
-  dom ~key:"importer" ~style_class:"cp__onboarding-setups flex flex-1"
+  dom ~key:"importer" ~style_class:"cp__onboarding-setups"
     [ dom ~key:"imp-card"
-        ~style_class:"inner-card flex flex-col items-center"
-        [ dom ~key:"imp-th" ~tag:"h1" ~style_class:"text-xl"
+        ~style_class:"inner-card"
+        [ dom ~key:"imp-th" ~tag:"h1" ~style_class:"ls-imp-title"
             [ dom ~key:"imp-ts" ~tag:"span"
                 ~text:T.import_existing_notes [] ]
         ; dom ~key:"imp-td" ~tag:"h2" ~text:T.import_later []

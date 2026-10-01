@@ -11,13 +11,12 @@
    `module.exports = CodeMirror` main and a side-effect import for the
    modes/addons whose registration happens on require). *)
 
+open Promise_ext
 module D = Editor_dom
 module V = Views_dom
 module S = Editor_state
 module A = Editor_actions
 module Ops = Outliner_ops
-
-let ( let* ) p f = Js.Promise.then_ f p
 
 type cm_module
 type t
@@ -267,11 +266,11 @@ let cm_mode lang =
 
 let lisp_like mode = List.mem mode [ "scheme"; "lisp"; "clojure"; "edn" ]
 
-(* theme ("lsradix <light|dark>") follows the root .dark class the same
+(* theme ("solarized <light|dark>") follows the root .dark class the same
    way cljs theme-name does via the ui/theme subscription *)
 let theme_name () =
-  if V.el_class_contains D.document_element "dark" then "lsradix dark"
-  else "lsradix light"
+  if V.el_class_contains D.document_element "dark" then "solarized dark"
+  else "solarized light"
 
 (* -- instances keyed by block uuid -- *)
 

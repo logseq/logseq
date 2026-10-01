@@ -375,7 +375,8 @@ let test_page_menu () =
 
 let test_confirm () =
   send
-    (Action.Confirm_set (Some (Model.Confirm_delete_page "puuid")));
+    (Action.Confirm_set
+       (Some (Model.Confirm_delete_page ("puuid", "P Title", false))));
   check "alertdialog layer"
     (find_where (fun n -> attr_val n "role" = Some "alertdialog") <> []);
   has "text:\"Confirm\"";
@@ -452,6 +453,77 @@ let test_views_table () =
   in
   check "views inst created" (inst.Views_state.id >= 0);
   views_container := Some container_j
+
+(* vendored-libs markup: katex shell (cljs latex.latex-inline/.latex +
+   .opacity-0 holder), youtube-timestamp link, youtube embed iframe
+   attrs, code block shell. The katex/hljs calls themselves happen at
+   the DOM level via Render_libs' doc-scan and are not visible here. *)
+let test_render_libs_dom () =
+  send
+    (Action.Page_loaded
+       (page
+          [ { (block "bm" "x^2") with
+              Model.block_display_type = Some "math" }
+          ; block "bi" "inline $x^2$ math"
+          ; block "bt" "at {{youtube-timestamp 1:23}} mark"
+          ; block "by" "{{youtube https://youtu.be/7xTGNNLPyMI?t=30}}"
+          ; { (block "bc" "(+ 1 2)") with
+              Model.block_display_type = Some "code"
+            ; block_code_lang = Some "clojure" }
+          ]));
+  check "math-block shell"
+    (find_where (fun n -> has_tok n "math-block") <> []);
+  (match find_where (fun n -> has_tok n "latex") with
+   | l :: _ ->
+       check_tok "math latex initial" l "initial";
+       check "math latex id"
+         (match M.string_prop l "accessibility-identifier" with
+          | Some i ->
+              String.length i > 9 && String.sub i 0 9 = "ls-katex-"
+          | None -> false);
+       check "math opacity holder"
+         (subtree_contains l (fun c -> has_tok c "opacity-0"))
+   | [] -> check "math latex node" false);
+  (match find_where (fun n -> has_tok n "latex-inline") with
+   | l :: _ ->
+       check_tok "inline latex initial" l "initial";
+       check "inline opacity holder"
+         (subtree_contains l (fun c -> has_tok c "opacity-0"))
+   | [] -> check "inline latex node" false);
+  (match find_where (fun n -> has_tok n "youtube-timestamp") with
+   | a :: _ ->
+       check "ts icon"
+         (subtree_contains a (fun c -> has_tok c "youtube-timestamp-icon"));
+       check "ts label"
+         (subtree_contains a (fun c ->
+              has_tok c "youtube-timestamp-label"
+              && M.string_prop c "text" = Some "01:23"));
+       check "ts clock svg"
+         (subtree_contains a (fun c -> c.M.kind = "extension:logseq-svg"))
+   | [] -> check "youtube-timestamp node" false);
+  (match
+     find_where (fun n -> attr_val n "id" = Some "youtube-player-7xTGNNLPyMI")
+   with
+   | f :: _ ->
+       attr_eq "yt iframe src" f "src"
+         "https://www.youtube.com/embed/7xTGNNLPyMI?enablejsapi=1&start=30";
+       attr_eq "yt iframe allow-full-screen" f "allow-full-screen"
+         "allowfullscreen";
+       attr_eq "yt iframe referrer-policy" f "referrer-policy"
+         "strict-origin-when-cross-origin"
+   | [] -> check "youtube iframe node" false);
+  (* display-mode code block = .extensions__code > .code-editor >
+     textarea[data-lang] — CodeMirror mounts onto the textarea in the
+     browser and generates .CodeMirror-line nodes, so the patch tree
+     itself only carries the mount surface *)
+  (match
+     find_where
+       (fun n ->
+         n.M.kind = "extension:logseq-textarea"
+         && attr_val n "data-lang" = Some "clojure")
+   with
+   | p :: _ -> check "code text" (M.string_prop p "text" = Some "(+ 1 2)")
+   | [] -> check "code-editor textarea node" false)
 
 (* ---------------- async stage: worker-fed views ---------------- *)
 
@@ -608,6 +680,7 @@ let run ~finish =
   test_appearance ();
   test_not_found ();
   test_views_table ();
+  test_render_libs_dom ();
   (* worker-fed assertions must run after promise microtasks drain --
      the views chain is ~2 ticks per invoke: snapshots -> get-blocks ->
      snapshots(view-data) -> get-blocks -> get-all-properties -> render *)

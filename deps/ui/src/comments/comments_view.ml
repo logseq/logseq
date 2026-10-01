@@ -16,6 +16,7 @@
    Draft lives in localStorage "comments-<area-uuid>-draft"; Esc exits the
    box to the placeholder, Enter (no shift) or .ls-comment-submit saves. *)
 
+open Promise_ext
 open Lui_elements
 module D = struct include Editor_dom include Properties_dom end
 module E = Editor_dom
@@ -68,9 +69,11 @@ let delete_comment cuuid =
   | None -> ()
   | Some repo ->
       ignore
-        (Runtime.invoke2 "thread-api/delete-comment" (Wire.String repo)
-           (Wire.Uuid cuuid)
-        |> Js.Promise.then_ (fun _ -> Ops.refresh_page ()))
+        (let* _ =
+          Runtime.invoke2 "thread-api/delete-comment" (Wire.String repo)
+            (Wire.Uuid cuuid)
+        in
+        Ops.refresh_page ())
 
 let toggle_reaction uuid emoji_id =
   ignore
@@ -138,9 +141,9 @@ let comment_body st (c : Model.block) : t =
             ~attrs:[ ("aria-label", I.t "block.comments/placeholder") ]
             ~text:c.Model.block_title ~events:"keydown"
             ~on_dom_event:(fun _ payload ->
-              let key = Platform.payload_str (Option.value payload ~default:"{}") "key" in
-              let shift = Platform.payload_bool (Option.value payload ~default:"{}") "shiftKey" in
-              let v = Platform.payload_str (Option.value payload ~default:"{}") "value" in
+              let key = Platform.payload_str payload "key" in
+              let shift = Platform.payload_bool payload "shiftKey" in
+              let v = Platform.payload_str payload "value" in
               match key with
               | "Escape" ->
                   Signal.set st
@@ -182,11 +185,11 @@ let add_box st (area_uuid : string) : t =
           ~on_dom_event:(fun name payload ->
             match name with
             | "input" ->
-                save_draft area_uuid (Platform.payload_str (Option.value payload ~default:"{}") "value")
+                save_draft area_uuid (Platform.payload_str payload "value")
             | "keydown" -> (
-                let key = Platform.payload_str (Option.value payload ~default:"{}") "key" in
-                let shift = Platform.payload_bool (Option.value payload ~default:"{}") "shiftKey" in
-                let v = Platform.payload_str (Option.value payload ~default:"{}") "value" in
+                let key = Platform.payload_str payload "key" in
+                let shift = Platform.payload_bool payload "shiftKey" in
+                let v = Platform.payload_str payload "value" in
                 match key with
                 | "Escape" ->
                     save_draft area_uuid v;

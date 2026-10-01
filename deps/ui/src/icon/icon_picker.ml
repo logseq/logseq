@@ -31,34 +31,16 @@ let icon_el ?(size = 18.) ?(cls = "") (ty, id) : E.el =
   | _ -> D.ui_icon_el ~size ~cls id
 
 (* cljs ui__button base + variant/size classes (shui/button) *)
-let btn_base =
-  "ui__button inline-flex cursor-pointer items-center justify-center \
-   whitespace-nowrap rounded-md text-sm gap-1 font-medium \
-   ring-offset-background transition-colors focus-visible:outline-none \
-   focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 \
-   disabled:pointer-events-none disabled:opacity-50 select-none"
+let btn_base = "ui__button"
 
-let btn_ghost_sm =
-  btn_base
-  ^ " hover:bg-secondary/70 hover:text-secondary-foreground \
-      active:opacity-80 as-ghost rounded h-7 px-3 py-1"
+let btn_ghost_sm = btn_base ^ " as-ghost ls-ep-btn"
 
-let btn_outline_sm =
-  btn_base
-  ^ " border bg-background hover:bg-accent hover:text-accent-foreground \
-      active:opacity-80 as-outline rounded h-7 px-3 py-1"
+let btn_outline_sm = btn_base ^ " as-outline ls-ep-btn"
 
-(* cljs util/classnames joins [{:active a} "tab-item"] with "," *)
 let tab_item_cls active =
-  btn_ghost_sm ^ " " ^ if active then "active,tab-item" else ",tab-item"
+  btn_ghost_sm ^ " tab-item" ^ if active then " active" else ""
 
-let ui_input_cls =
-  "ui__input flex h-10 w-full rounded-md border border-input bg-background \
-   px-3 py-2 text-sm ring-offset-background file:border-0 \
-   file:bg-transparent file:text-sm file:font-medium \
-   placeholder:text-muted-foreground focus-visible:outline-none \
-   focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 \
-   disabled:cursor-not-allowed disabled:opacity-50"
+let ui_input_cls = "ui__input ls-ep-input"
 
 external el_style : E.el -> Js.Json.t = "style" [@@mel.get]
 
@@ -224,7 +206,7 @@ let item_btn (p : picker) (it : item) : E.el =
   match it with
   | Emoji_item (id, name) ->
       let b =
-        D.mk ~cls:"text-2xl w-9 h-9 transition-opacity"
+        D.mk ~cls:"ls-emoji-preview"
           ~attrs:[ ("title", name); ("tabindex", "0") ]
           "button"
       in
@@ -233,7 +215,7 @@ let item_btn (p : picker) (it : item) : E.el =
       b
   | Tabler_item (display, kebab) ->
       let b =
-        D.mk ~cls:"w-9 h-9 transition-opacity"
+        D.mk ~cls:"ls-emoji-cell"
           ~attrs:[ ("title", icon_id display); ("tabindex", "0") ]
           "button"
       in
@@ -271,9 +253,9 @@ let pane_section ?(virtual_list = false) ?(searching = false) label
         ^ if searching then " searching-result" else "")
       "div"
   in
-  let hd = D.mk ~cls:"hd px-1 pb-1 leading-none" "div" in
+  let hd = D.mk ~cls:"hd" "div" in
   let strong =
-    D.mk ~cls:"text-xs font-medium text-gray-07 dark:opacity-80" "strong"
+    D.mk ~cls:"ls-ep-section-title" "strong"
   in
   D.el_append_child strong (D.create_text_node label);
   D.el_append_child hd strong;
@@ -317,10 +299,10 @@ let render_tab (p : picker) =
   clear_pane p;
   match p.pane, p.tab with
   | Some pane, _ ->
-      let wrap = D.mk ~cls:"flex flex-1 flex-col gap-1" "div" in
+      let wrap = D.mk ~cls:"ls-ep-col" "div" in
       (match p.tab with
        | Tab_all ->
-           let inner = D.mk ~cls:"all-pane pb-10" "div" in
+           let inner = D.mk ~cls:"all-pane" "div" in
            let used = used_section_items p in
            (if used <> [] then
               D.el_append_child inner
@@ -340,7 +322,7 @@ let render_tab (p : picker) =
        | Tab_emoji ->
            (* cljs emojis-cp renders its own flex-1 flex-col gap-1 div
               inside the outer one *)
-           let inner = D.mk ~cls:"flex flex-1 flex-col gap-1" "div" in
+           let inner = D.mk ~cls:"ls-ep-col" "div" in
            let used =
              used_items ()
              |> List.filter (fun (t, _, _) -> t = "emoji")
@@ -373,7 +355,7 @@ let render_search (p : picker) =
       p.gen <- p.gen + 1;
       let gen = p.gen in
       let wrap =
-        D.mk ~cls:"flex flex-1 flex-col gap-1 search-result" "div"
+        D.mk ~cls:"ls-ep-col search-result" "div"
       in
       D.el_append_child pane wrap;
       let icons =
@@ -459,14 +441,14 @@ let preset_colors =
   ; Some "#f2be00"; Some "#e47a00"; Some "#f38e81"; Some "#fb434c"; None ]
 
 let presets_popover (p : picker) (anchor_btn : E.el) : E.el =
-  let pop = D.mk ~cls:"color-picker-presets p-2" "div" in
+  let pop = D.mk ~cls:"color-picker-presets" "div" in
   List.iter
     (fun c ->
       let style, child =
         match c with
         | Some c -> ("background-color:" ^ c, None)
         | None ->
-            ("", Some (icon_el ~cls:"scale-75 opacity-70"
+            ("", Some (icon_el ~cls:"ls-icon-mini"
                          ("tabler-icon", "minus")))
       in
       let b =
@@ -504,7 +486,7 @@ let view (p : picker) : E.el =
       | "ArrowLeft" | "ArrowRight" -> D.stop_propagation ev
       | _ -> ())
     true;
-  let hd = D.mk ~cls:"hd bg-popover" "div" in
+  let hd = D.mk ~cls:"hd" "div" in
   let si = D.mk ~cls:"search-input" "div" in
   D.el_append_child si (icon_el ~size:16. ("tabler-icon", "search"));
   let input =
@@ -545,7 +527,7 @@ let view (p : picker) : E.el =
   D.el_append_child bd pane;
   D.el_append_child root bd;
   let ft = D.mk ~cls:"ft" "div" in
-  let tabs_row = D.mk ~cls:"flex flex-1 flex-row items-center gap-2" "div" in
+  let tabs_row = D.mk ~cls:"ls-ep-tabs" "div" in
   List.iter
     (fun (t, label) ->
       let b =
@@ -615,7 +597,7 @@ let view (p : picker) : E.el =
 type picker_opts = { emoji_only : bool; sub : bool }
 
 let open_picker_with_opts ~(anchor : E.el) ~(del : bool)
-    ~(opts : picker_opts) ~(on_chosen : choice -> unit) : unit =
+    ~(opts : picker_opts) ~(on_chosen : choice -> unit) : E.el =
   let emoji_only = opts.emoji_only in
   Emoji_mart.install ();
   let p =
@@ -634,11 +616,11 @@ let open_picker_with_opts ~(anchor : E.el) ~(del : bool)
                flex-wrap gap-1" "div"
   in
   let lpa =
-    D.mk ~cls:"ls-property-add flex flex-1 flex-row gap-1 items-center"
+    D.mk ~cls:"ls-property-add ls-pa-row"
       "div"
   in
-  let row = D.mk ~cls:"flex flex-row" "div" in
-  let pvi = D.mk ~cls:"property-value-inner w-full" "div" in
+  let row = D.mk ~cls:"ls-ep-row" "div" in
+  let pvi = D.mk ~cls:"property-value-inner" "div" in
   D.el_append_child dlg lpi;
   D.el_append_child lpi lpa;
   D.el_append_child lpa row;
@@ -649,27 +631,30 @@ let open_picker_with_opts ~(anchor : E.el) ~(del : bool)
     if opts.sub then Properties_popup.open_anchored_right
     else Properties_popup.open_anchored
   in
-  ignore
-    (open_popup
-       ~cls:
-         "ui__popover-content ls-icon-picker rounded-md border bg-popover \
-          text-popover-foreground shadow-md outline-none outline-none \
-          animate-in fade-in-0 zoom-in-95 \
-          data-[side=bottom]:slide-in-from-top-2 \
-          data-[side=left]:slide-in-from-right-2 \
-          data-[side=right]:slide-in-from-left-2 \
-          data-[side=top]:slide-in-from-bottom-2 focus:outline-none \
-          focus-visible:outline-none z-50"
-       anchor dlg);
-  match p.input with
-  | Some i -> D.el_focus i
-  | None -> ()
+  let pop =
+    open_popup
+      ~cls:
+        "ui__popover-content ls-icon-picker rounded-md border bg-popover \
+         text-popover-foreground shadow-md outline-none outline-none \
+         animate-in fade-in-0 zoom-in-95 \
+         data-[side=bottom]:slide-in-from-top-2 \
+         data-[side=left]:slide-in-from-right-2 \
+         data-[side=right]:slide-in-from-left-2 \
+         data-[side=top]:slide-in-from-bottom-2 focus:outline-none \
+         focus-visible:outline-none z-50"
+      anchor dlg
+  in
+  (match p.input with
+   | Some i -> D.el_focus i
+   | None -> ());
+  pop
 ;;
 
 let open_picker ~(anchor : E.el) ~(del : bool)
     ~(on_chosen : choice -> unit) : unit =
-  open_picker_with_opts ~anchor ~del
-    ~opts:{ emoji_only = false; sub = false }
-    ~on_chosen
+  ignore
+    (open_picker_with_opts ~anchor ~del
+       ~opts:{ emoji_only = false; sub = false }
+       ~on_chosen)
 ;;
 

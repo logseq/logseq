@@ -18,4 +18,4 @@
  (libraries lui lui.web.dom melange-webapi melange.dom
    melange-transit-melange melange-fetch)
  (preprocess
-  (pps melange.ppx)))
+  (pps melange.ppx lui.ppx)))

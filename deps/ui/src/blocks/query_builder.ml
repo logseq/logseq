@@ -9,6 +9,7 @@
    Asset_dom / Views_builder) — the document-level handler in editor_keys
    only has to keep .cp__query-builder out of the enter_edit path. *)
 
+open Promise_ext
 module D = Properties_dom
 module S = Properties_state
 module I18n = I18n
@@ -51,32 +52,31 @@ let open_select ~anchor ~placeholder items =
    title *)
 let open_class_picker ~anchor value_uuid =
   ignore
-    (Properties_data.all_classes ()
-    |> Js.Promise.then_ (fun w ->
-           let classes =
-             match w with W.Array xs | W.List xs -> xs | _ -> []
-           in
-           let items =
-             List.filter_map
-               (fun c ->
-                 match
-                   ( W.map_get_string c "block/title"
-                   , W.map_get_uuid c "block/uuid" )
-                 with
-                 | Some title, Some u ->
-                     Some
-                       (Properties_select.item ~tip:u title
-                          (fun () ->
-                            S.pop_overlay ();
-                            save_dsl value_uuid
-                              ("(tags [[" ^ u ^ "]])")))
-                 | _ -> None)
-               classes
-           in
-           (* replace the filter select with the class picker *)
-           S.pop_overlay ();
-           open_select ~anchor ~placeholder:(I18n.t "query.builder/add-filter-or-operator-placeholder") items;
-           Js.Promise.resolve ()))
+    (let* w = Properties_data.all_classes () in
+    let classes =
+      match w with W.Array xs | W.List xs -> xs | _ -> []
+    in
+    let items =
+      List.filter_map
+        (fun c ->
+          match
+            ( W.map_get_string c "block/title"
+            , W.map_get_uuid c "block/uuid" )
+          with
+          | Some title, Some u ->
+              Some
+                (Properties_select.item ~tip:u title
+                   (fun () ->
+                     S.pop_overlay ();
+                     save_dsl value_uuid
+                       ("(tags [[" ^ u ^ "]])")))
+          | _ -> None)
+        classes
+    in
+    (* replace the filter select with the class picker *)
+    S.pop_overlay ();
+    open_select ~anchor ~placeholder:(I18n.t "query.builder/add-filter-or-operator-placeholder") items;
+    Js.Promise.resolve ())
 
 let open_filter_picker ~anchor value_uuid =
   let items =

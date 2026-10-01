@@ -2,6 +2,7 @@
    delete, and ls-graphs-metadata bookkeeping. Mirrors
    components/repo.cljs repos-cp + repo/remove-repo!. *)
 
+open Promise_ext
 module T = I18n
 
 (* last known repo list (logseq_db_* names) for the all-graphs view +
@@ -42,30 +43,29 @@ let remote_graphs : (string * string * bool) list ref = ref []
 
 let list_remote_graphs () =
   Rtc_ops.sync_app_state !Runtime.current_repo;
-  Runtime.invoke "thread-api/db-sync-list-remote-graphs" []
-  |> Js.Promise.then_ (fun w ->
-         let entries =
-           match w with
-           | Wire.Array xs | Wire.List xs -> xs
-           | _ -> []
-         in
-         remote_graphs :=
-           List.filter_map
-             (fun g ->
-               match
-                 ( Wire.map_get_string g "graph-name"
-                 , Wire.map_get_string g "graph-id" )
-               with
-               | Some name, Some id ->
-                   let e2ee =
-                     match Wire.get g "graph-e2ee?" with
-                     | Some (Wire.Bool b) -> b
-                     | _ -> false
-                   in
-                   Some (name, id, e2ee)
-               | _ -> None)
-             entries;
-         Js.Promise.resolve !remote_graphs)
+  (let* w = Runtime.invoke "thread-api/db-sync-list-remote-graphs" [] in
+  let entries =
+    match w with
+    | Wire.Array xs | Wire.List xs -> xs
+    | _ -> []
+  in
+  remote_graphs :=
+    List.filter_map
+      (fun g ->
+        match
+          ( Wire.map_get_string g "graph-name"
+          , Wire.map_get_string g "graph-id" )
+        with
+        | Some name, Some id ->
+            let e2ee =
+              match Wire.get g "graph-e2ee?" with
+              | Some (Wire.Bool b) -> b
+              | _ -> false
+            in
+            Some (name, id, e2ee)
+        | _ -> None)
+      entries;
+  Js.Promise.resolve !remote_graphs)
   |> Js.Promise.catch (fun e ->
          (* logged out / offline: keep the previous list *)
          Platform.console_error ("list-remote-graphs failed", e);
@@ -89,19 +89,17 @@ let () =
   Runtime.remote_graph_gone :=
     (fun () ->
       ignore
-        (list_remote_graphs ()
-         |> Js.Promise.then_ (fun _ ->
-                !on_repos_changed ();
-                Js.Promise.resolve ())))
+        (let* _ = list_remote_graphs () in
+        !on_repos_changed ();
+        Js.Promise.resolve ()))
 
 let refresh () =
-  Graph.list_graphs ()
-  |> Js.Promise.then_ (fun rs ->
-         repos := rs;
-         Runtime.send (Action.Repos_loaded rs);
-         Runtime.flush ();
-         !on_repos_changed ();
-         Js.Promise.resolve rs)
+  let* rs = Graph.list_graphs () in
+  repos := rs;
+  Runtime.send (Action.Repos_loaded rs);
+  Runtime.flush ();
+  !on_repos_changed ();
+  Js.Promise.resolve rs
 
 (* cljs state/add-repo! — the worker broadcasts add-repo when a remote
    graph download finishes; the local list must include it without
@@ -126,46 +124,58 @@ let navigate_journal repo =
   incr nav_req;
   let seq = !nav_req in
   Graphs_meta.touch repo;
-  Graph.open_graph repo
-  |> Js.Promise.then_ (fun _ -> Boot.ensure_today_journal repo)
-  |> Js.Promise.then_ (fun () ->
-         if !nav_req = seq then begin
-           Worker_events.reset_rtc ();
-           Runtime.send (Action.Boot_graph_ready repo);
-           Runtime.current_repo := Some repo;
-           Graph.build_search_index repo;
-           Platform.set_location_hash (Runtime.nav_hash "#/");
-           Router.resolve ()
-         end;
-         Js.Promise.resolve ())
+  let* _ = Graph.open_graph repo in
+  let* () = Boot.ensure_today_journal repo in
+  if !nav_req = seq then begin
+    Worker_events.reset_rtc ();
+    Runtime.send (Action.Boot_graph_ready repo);
+    Runtime.current_repo := Some repo;
+    Graph.build_search_index repo;
+    Platform.set_location_hash (Runtime.nav_hash "#/");
+    Router.resolve ()
+  end;
+  Js.Promise.resolve ()
 
 (* -- create -- *)
 
 (* cljs <rtc-create-graph-and-start-sync!: create-remote-graph ->
    <get-remote-graphs -> <rtc-start! (which pushes sync-app-state +
-   db-sync config) *)
+   db-sync config). Worker failures resolve as error transits — toast
+   the known ones and skip list/start like the cljs rejected chain
+   (the local graph itself was still created) *)
 let create_remote name e2ee =
-  Graph.create_graph ~remote:true name
-  |> Js.Promise.then_ (fun r ->
-         Rtc_ops.sync_app_state (Some r);
-         Rtc_ops.set_sync_config ();
-         Runtime.invoke3 "thread-api/db-sync-create-remote-graph"
-           (Wire.String r) (Wire.Bool e2ee) (Wire.Bool true)
-         |> Js.Promise.then_ (fun _ -> list_remote_graphs ())
-         |> Js.Promise.then_ (fun _ ->
-                Rtc_ops.start r;
-                Js.Promise.resolve r))
+  let* r = Graph.create_graph ~remote:true name in
+  Rtc_ops.sync_app_state (Some r);
+  Rtc_ops.set_sync_config ();
+  let* w =
+    Runtime.invoke3 "thread-api/db-sync-create-remote-graph"
+      (Wire.String r) (Wire.Bool e2ee) (Wire.Bool true)
+  in
+  if Rtc_error.is_error w then begin
+    Rtc_error.report_outcome "create-remote-graph" w;
+    Js.Promise.resolve r
+  end
+  else begin
+    let* _ = list_remote_graphs () in
+    Rtc_ops.start r;
+    Js.Promise.resolve r
+  end
 
 (* cljs :rtc/download-remote-graph -> <rtc-download-graph! ->
-   <get-remote-graphs -> :graph/switch -> <rtc-start! *)
+   <get-remote-graphs -> :graph/switch -> <rtc-start!. A failed
+   download (e.g. wrong e2ee password — toasted inside
+   Rtc_ops.download) aborts the chain; the cljs rejected promise did
+   the same *)
 let download_remote ~name ~uuid ~e2ee =
   let repo = Graph.full_graph_name name in
-  Rtc_ops.download repo uuid e2ee
-  |> Js.Promise.then_ (fun _ -> list_remote_graphs ())
-  |> Js.Promise.then_ (fun _ -> navigate_journal repo)
-  |> Js.Promise.then_ (fun () ->
-         Rtc_ops.start repo;
-         Js.Promise.resolve ())
+  let* ok = Rtc_ops.download repo uuid e2ee in
+  if not ok then Js.Promise.resolve ()
+  else begin
+    let* _ = list_remote_graphs () in
+    let* () = navigate_journal repo in
+    Rtc_ops.start repo;
+    Js.Promise.resolve ()
+  end
 
 let remember_open repo =
   Graphs_meta.touch repo;
@@ -187,8 +197,8 @@ let delete_remote_http uuid =
                [| ("Authorization", "Bearer " ^ token) |])
           ()
       in
-      Fetch.fetchWithInit ("https://api.logseq.io/graphs/" ^ uuid) init
-      |> Js.Promise.then_ (fun _ -> Js.Promise.resolve true)
+      (let* _ = Fetch.fetchWithInit ("https://api.logseq.io/graphs/" ^ uuid) init in
+      Js.Promise.resolve true)
       |> Js.Promise.catch (fun e ->
              Platform.console_error ("remote graph delete failed", e);
              Js.Promise.resolve false)
@@ -208,29 +218,30 @@ let delete_graph repo ~remote =
        delete-graph! invoke resolves; removing on entry keeps the remote
        row non-local for the whole window *)
     drop_from_repos ();
-    Runtime.invoke1 "thread-api/unsafe-unlink-db" (Wire.String repo)
-    |> Js.Promise.then_ (fun _w -> Js.Promise.resolve true)
-    |> Js.Promise.catch (fun e ->
-           Platform.console_error ("unlink-db failed " ^ repo, e);
-           repos := repo :: !repos;
-           Runtime.send (Action.Repos_loaded !repos);
-           !on_repos_changed ();
-           Js.Promise.resolve false)
-    |> Js.Promise.then_ (fun ok ->
-           if not ok then Js.Promise.resolve ()
-           else
-             match !Runtime.current_repo = Some repo, !repos with
-             | true, next :: _ ->
-                 Toast.success (T.removed_redirecting repo next);
-                 navigate_journal next
-             | true, [] ->
-                 Toast.success (T.removed repo);
-                 Runtime.current_repo := None;
-                 Router.resolve ();
-                 Js.Promise.resolve ()
-             | false, _ ->
-                 Toast.success (T.removed repo);
-                 Js.Promise.resolve ())
+    let* ok =
+      (let* _w = Runtime.invoke1 "thread-api/unsafe-unlink-db" (Wire.String repo) in
+      Js.Promise.resolve true)
+      |> Js.Promise.catch (fun e ->
+             Platform.console_error ("unlink-db failed " ^ repo, e);
+             repos := repo :: !repos;
+             Runtime.send (Action.Repos_loaded !repos);
+             !on_repos_changed ();
+             Js.Promise.resolve false)
+    in
+    if not ok then Js.Promise.resolve ()
+    else
+      match !Runtime.current_repo = Some repo, !repos with
+      | true, next :: _ ->
+          Toast.success (T.removed_redirecting repo next);
+          navigate_journal next
+      | true, [] ->
+          Toast.success (T.removed repo);
+          Runtime.current_repo := None;
+          Router.resolve ();
+          Js.Promise.resolve ()
+      | false, _ ->
+          Toast.success (T.removed repo);
+          Js.Promise.resolve ()
   in
   if remote then
     match
@@ -239,12 +250,11 @@ let delete_graph repo ~remote =
         !remote_graphs
     with
     | Some (_, uuid, _) ->
-        delete_remote_http uuid
-        |> Js.Promise.then_ (fun remote_ok ->
-             if remote_ok then finish ()
-             else (
-               Toast.error (I18n.t "graph/delete-remote-server-error");
-               Js.Promise.resolve ()))
+        let* remote_ok = delete_remote_http uuid in
+        if remote_ok then finish ()
+        else (
+          Toast.error (I18n.t "graph/delete-remote-server-error");
+          Js.Promise.resolve ())
     | None -> finish ()
   else finish ()
 
@@ -264,16 +274,15 @@ let ask_delete ~remote repo =
 let () =
   Runtime.on_graph_opened := fun repo ->
     ignore
-      (Runtime.invoke1 "thread-api/get-graph-uuid" (Wire.String repo)
-       |> Js.Promise.then_ (fun w ->
-              (* cljs graph_tab/set-tab-graph! — sessionStorage keys so a
+      (let* w = Runtime.invoke1 "thread-api/get-graph-uuid" (Wire.String repo) in
+      (* cljs graph_tab/set-tab-graph! — sessionStorage keys so a
                  reload reopens this tab's graph *)
-              Platform.session_storage_set "ls-tab-repo" repo;
-              (match Wire.as_uuid w with
-               | Some uuid ->
-                   Platform.session_storage_set "ls-tab-graph-id" uuid;
-                   Runtime.current_graph_uuid := Some uuid;
-                   Graphs_meta.remember_uuid repo uuid;
-                   Runtime.sync_hash_graph_id ()
-               | None -> ());
-              Js.Promise.resolve ()))
+      Platform.session_storage_set "ls-tab-repo" repo;
+      (match Wire.as_uuid w with
+       | Some uuid ->
+           Platform.session_storage_set "ls-tab-graph-id" uuid;
+           Runtime.current_graph_uuid := Some uuid;
+           Graphs_meta.remember_uuid repo uuid;
+           Runtime.sync_hash_graph_id ()
+       | None -> ());
+      Js.Promise.resolve ())

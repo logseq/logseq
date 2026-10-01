@@ -4,6 +4,7 @@
    value, available choices, cardinality, ui-position, hide toggles,
    delete-from-node. *)
 
+open Promise_ext
 open Editor_dom
 open Properties_dom
 module D = Properties_data
@@ -29,7 +30,7 @@ let menuitem ?(cls = "") ?icon label act =
   in
   (match icon with
    | Some name ->
-       let inner = mk ~cls:"flex flex-row items-center gap-1" "div" in
+       let inner = mk ~cls:"menu-item-icon-row" "div" in
        let s = mk ~cls:("ui__icon ti ls-icon-" ^ name) "span" in
        (match tabler_svg_el ~size:15. name with
         | Some svg -> el_append_child s svg
@@ -69,44 +70,37 @@ let menu_root_class =
 let alertdialog ~title ~desc ~confirm_label on_confirm =
   let overlay =
     mk ~cls:
-      "ui__alert-dialog-overlay fixed inset-0 z-50 bg-background/80 \
-       backdrop-blur-sm" "div"
+      "ui__alert-dialog-overlay" "div"
   in
   let dlg =
     mk "div"
       ~cls:
-        "ui__alert-dialog-content z-50 grid w-full max-w-lg gap-4 \
-         border bg-background p-6 shadow-lg sm:rounded-lg"
+        "ui__alert-dialog-content"
       ~attrs:
         [ ("role", "alertdialog")
-        ; ( "style"
-          , "position:fixed;left:50%;top:50%;transform:translate(-50%,-50%)" )
-        ]
+        ; ("style", "position:fixed;left:50%;top:50%;transform:translate(-50%,-50%)") ]
   in
   ignore
-    (child_text "h2" "ui__alert-dialog-title text-lg font-semibold" title
+    (child_text "h2" "ui__alert-dialog-title" title
        dlg);
   ignore
     (child_text "div"
-       "ui__alert-dialog-description text-sm text-muted-foreground" desc
+       "ui__alert-dialog-description" desc
        dlg);
   let footer =
     mk ~cls:
-      "ui__alert-dialog-footer flex flex-col-reverse sm:flex-row \
-       sm:justify-end sm:space-x-2" "div"
+      "ui__alert-dialog-footer" "div"
   in
   let cancel_btn =
     mk "button"
       ~cls:
-        "inline-flex items-center justify-center rounded-md text-sm \
-         font-medium border px-4 py-2"
+        "ui__button ls-btn-outline"
   in
   el_set_text cancel_btn (I18n.t "ui/cancel");
   let confirm_btn =
     mk "button"
       ~cls:
-        "inline-flex items-center justify-center rounded-md text-sm \
-         font-medium bg-primary text-primary-foreground px-4 py-2"
+        "ui__button ls-btn-primary"
   in
   el_set_text confirm_btn confirm_label;
   el_append_child footer cancel_btn;
@@ -123,7 +117,7 @@ let alertdialog ~title ~desc ~confirm_label on_confirm =
 let name_pane m =
   let pane = mk ~cls:"ls-property-name-edit-pane" "div" in
   let input_wrap =
-    mk ~cls:"input-wrap flex flex-row gap-2 items-center" "div"
+    mk ~cls:"input-wrap ls-prop-input-wrap" "div"
   in
   let input =
     mk "input"
@@ -339,12 +333,13 @@ let choice_li m choice rebuild =
       let form, input =
         base_edit_form ~title_v:title ~desc_v:"" (fun v _d ->
             ignore
-              (D.upsert_closed_value ~ident:(prop_ident m)
-                 ?choice_id:(D.entity_uuid_of choice) ~value:v ()
-               |> Js.Promise.then_ (fun _ ->
-                      rebuild ();
-                      S.refresh_all ();
-                      Js.Promise.resolve ())))
+              (let* _ =
+                D.upsert_closed_value ~ident:(prop_ident m)
+                  ?choice_id:(D.entity_uuid_of choice) ~value:v ()
+              in
+              rebuild ();
+              S.refresh_all ();
+              Js.Promise.resolve ()))
       in
       ignore
         (Properties_popup.open_anchored ~cls:"ui__popover-content" li
@@ -360,40 +355,40 @@ let choices_pane m =
   (* refetch on every build — the row's closed-values snapshot is stale
      after add/edit/delete *)
   let rec build () =
-    D.closed_values (W.Keyword (prop_ident m))
-    |> Js.Promise.then_ (fun w ->
-           el_clear pane;
-           let ul = mk ~cls:"choices-list" "ul" in
-           (* must overflow-scroll: e2e asserts scrollHeight > clientHeight *)
-           set_style ul "max-height:240px;overflow-y:auto";
-           List.iter (fun c -> el_append_child ul (choice_li m c build))
-             (W.elems w);
-           el_append_child pane ul;
-           el_append_child pane
-             (menuitem (I18n.t "property/add-choice") (fun () ->
-                  let form, input =
-                    base_edit_form ~title_v:"" ~desc_v:"" (fun v _d ->
-                        (* creating a choice while the owner is a tag scopes
-                           it to that class (cljs ->closed-choice-scope-opts) *)
-                        let scoped =
-                          match m.owner_is_tag, m.owner_id with
-                          | true, Some id -> Some id
-                          | _ -> None
-                        in
-                        ignore
-                          (D.upsert_closed_value ~ident:(prop_ident m)
-                             ~value:v ?scoped_class_id:scoped ()
-                          |> Js.Promise.then_ (fun _ ->
-                                 build ();
-                                 S.refresh_all ();
-                                 Js.Promise.resolve ()));
-                        S.refresh_all ())
-                  in
-                  ignore
-                    (Properties_popup.open_anchored
-                       ~cls:"ui__popover-content" ul form);
-                  el_focus input));
-           Js.Promise.resolve ())
+    (let* w = D.closed_values (W.Keyword (prop_ident m)) in
+    el_clear pane;
+    let ul = mk ~cls:"choices-list" "ul" in
+    (* must overflow-scroll: e2e asserts scrollHeight > clientHeight *)
+    set_style ul "max-height:240px;overflow-y:auto";
+    List.iter (fun c -> el_append_child ul (choice_li m c build))
+      (W.elems w);
+    el_append_child pane ul;
+    el_append_child pane
+      (menuitem (I18n.t "property/add-choice") (fun () ->
+           let form, input =
+             base_edit_form ~title_v:"" ~desc_v:"" (fun v _d ->
+                 (* creating a choice while the owner is a tag scopes
+                    it to that class (cljs ->closed-choice-scope-opts) *)
+                 let scoped =
+                   match m.owner_is_tag, m.owner_id with
+                   | true, Some id -> Some id
+                   | _ -> None
+                 in
+                 ignore
+                   (let* _ =
+                     D.upsert_closed_value ~ident:(prop_ident m)
+                       ~value:v ?scoped_class_id:scoped ()
+                   in
+                   build ();
+                   S.refresh_all ();
+                   Js.Promise.resolve ());
+                 S.refresh_all ())
+           in
+           ignore
+             (Properties_popup.open_anchored
+                ~cls:"ui__popover-content" ul form);
+           el_focus input));
+    Js.Promise.resolve ())
     |> ignore
   in
   build ();
@@ -408,7 +403,7 @@ let default_value_pane m =
         el_clear pane;
         let wrap = mk ~cls:"editor-wrapper" "div" in
         let inner =
-          mk ~cls:"editor-inner flex flex-1 block-editor" "div"
+          mk ~cls:"editor-inner block-editor" "div"
         in
         let ta = mk "textarea" in
         let mt = mk ~cls:"mock-text" "div" in
@@ -482,7 +477,7 @@ let menu_body ~with_title ~more_options m =
   let body = mk "div" in
   m.content <- Some body;
   (if with_title then begin
-     let h3 = mk ~cls:"font-medium px-2 py-1" "h3" in
+     let h3 = mk ~cls:"ls-menu-h3" "h3" in
      el_set_text h3 (I18n.t "ui/configure");
      el_append_child body h3
    end);
@@ -535,7 +530,7 @@ let menu_body ~with_title ~more_options m =
           | None -> ());
          S.close_overlays ()));
   el_append_child body
-    (menuitem ~cls:"del opacity-60"
+    (menuitem ~cls:"del"
        (I18n.t
           (if m.owner_is_tag then "property/delete-from-tag"
            else "property/delete-from-node"))

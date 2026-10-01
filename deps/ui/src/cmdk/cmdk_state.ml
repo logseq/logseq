@@ -3,6 +3,7 @@
    groups create -> nodes -> commands, flat data-item-index,
    keyboard/mouse highlight, debounced search-blocks. *)
 
+open Promise_ext
 type group_id =
   | G_create
   | G_current_page
@@ -204,7 +205,9 @@ let record_invoke (c : Commands_data.cmd) =
 let command_table () : Commands_data.cmd list =
   let counts = invoke_counts () in
   let n c = Option.value (Hashtbl.find_opt counts c.Commands_data.id) ~default:0 in
-  Commands_data.table
+  (* cljs commands.cljs plugin-commands-table merges palette-registered
+     plugin simple commands into the same table *)
+  Commands_data.table @ Plugin_host.palette_commands ()
   |> List.filter (fun c -> (not c.Commands_data.dev) || dev_mode ())
   |> List.stable_sort (fun a b -> compare a.Commands_data.id b.Commands_data.id)
   |> List.stable_sort (fun a b -> compare (n a) (n b))
@@ -328,6 +331,32 @@ let badge_of w is_page uuid =
            if is_page then Text_badge else Header_badge
        | _ -> No_badge)
 
+(* cljs icon-component/get-node-icon: the entity's own
+   logseq.property/icon, then class -> hash, property -> letter-p, a
+   first-tag icon, page -> file, else the generic block point *)
+let node_icon_of w is_page =
+  let tags =
+    match Wire.get w "block/tags" with
+    | Some (Wire.List xs) | Some (Wire.Array xs) -> xs
+    | _ -> []
+  in
+  let has_tag ident =
+    List.exists (fun t -> str_field t "db/ident" = Some ident) tags
+  in
+  match str_field w "logseq.property/icon" with
+  | Some ic when ic <> "" -> ic
+  | _ ->
+      if has_tag "logseq.class/Tag" then "hash"
+      else if has_tag "logseq.class/Property" then "letter-p"
+      else
+        (match
+           List.find_map
+             (fun t -> str_field t "logseq.property/icon")
+             tags
+         with
+         | Some ic when ic <> "" -> ic
+         | _ -> if is_page then "file" else "point-filled")
+
 let item_of_row w i : item =
   let uuid =
     match Wire.map_get_uuid w "block/uuid" with
@@ -350,7 +379,7 @@ let item_of_row w i : item =
   { ikey = "node-" ^ uuid ^ "-" ^ string_of_int i; idx = -1
   ; gid = G_nodes; ititle = title; info = None
   ; header = (if is_page then None else breadcrumb_of w)
-  ; iicon = (if is_page then "file" else "point-filled")
+  ; iicon = node_icon_of w is_page
   ; isc = ""; ibadge = badge_of w is_page uuid
   ; act = (if is_page then Open_page uuid else Open_block uuid)
   ; ihl = false; imouse = false; iq = "" }
@@ -378,24 +407,25 @@ let current_page_limit expanded =
 (* include-matched-count? returns {items, matched-count}; fall back to
    a bare array if the shape differs *)
 let run_search repo q move_mode nodes_limit =
-  Runtime.invoke3 "thread-api/search-blocks" (Wire.String repo)
-    (Wire.String q) (search_opts move_mode nodes_limit)
-  |> Js.Promise.then_ (fun w ->
-         let rows, total =
-           match w with
-           | Wire.Array xs | Wire.List xs -> (xs, List.length xs)
-           | Wire.Map _ ->
-               let items =
-                 match Wire.get w "items" with
-                 | Some (Wire.Array xs) | Some (Wire.List xs) -> xs
-                 | _ -> []
-               in
-               ( items
-               , Option.value (Wire.map_get_int w "matched-count")
-                   ~default:(List.length items) )
-           | _ -> ([], 0)
-         in
-         Js.Promise.resolve (List.mapi (fun i w -> item_of_row w i) rows, total))
+  let* w =
+    Runtime.invoke3 "thread-api/search-blocks" (Wire.String repo)
+      (Wire.String q) (search_opts move_mode nodes_limit)
+  in
+  let rows, total =
+    match w with
+    | Wire.Array xs | Wire.List xs -> (xs, List.length xs)
+    | Wire.Map _ ->
+        let items =
+          match Wire.get w "items" with
+          | Some (Wire.Array xs) | Some (Wire.List xs) -> xs
+          | _ -> []
+        in
+        ( items
+        , Option.value (Wire.map_get_int w "matched-count")
+            ~default:(List.length items) )
+    | _ -> ([], 0)
+  in
+  Js.Promise.resolve (List.mapi (fun i w -> item_of_row w i) rows, total)
 
 
 
@@ -455,10 +485,17 @@ let group_order v q rows total =
     in
     { gid = G_current_page
     ; gtitle = I18n.t "cmdk.group/current-page"
-    ; gitems = items; gtotal = max total (List.length items)
+      (* cljs laziness: current-page results load only via the filter row
+         or group expansion — a normal search leaves the group empty so it
+         renders nothing *)
+    ; gitems =
+        (if v.filter = Some G_current_page
+            || List.mem G_current_page v.expanded
+         then items else [])
+    ; gtotal = max total (List.length items)
     ; glimit = current_page_limit v.expanded
     ; gexpanded = List.mem G_current_page v.expanded
-    ; gfilter_active = false }
+    ; gfilter_active = v.filter = Some G_current_page }
   in
   let commands_g () =
     let items = commands_items q in
@@ -492,6 +529,11 @@ let group_order v q rows total =
     ; glimit = 5; gexpanded = List.mem G_recently_updated v.expanded
     ; gfilter_active = false }
   in
+  (* cljs emits the "Search only current page" row only on page
+     routes — no page, no group *)
+  let cp () =
+    if current_page_uuid () <> None then [ current_page_g () ] else []
+  in
   let starts_slash =
     String.length q > 0 && String.get q 0 = '/'
   in
@@ -503,7 +545,7 @@ let group_order v q rows total =
   | Some gid ->
       let only =
         match gid with
-        | G_nodes -> [ nodes_g () ]
+        | G_nodes -> cp () @ [ nodes_g () ]
         | G_current_page -> [ current_page_g () ]
         | G_commands -> [ commands_g () ]
         | G_files -> [ files_g () ]
@@ -512,15 +554,21 @@ let group_order v q rows total =
       (* cljs filtered order puts the Create row after the group *)
       only @ Option.to_list (create_g ())
   | None ->
-      if starts_slash then [ filters_g (); nodes_g () ]
+      (* cljs group order: create?, current-page, nodes,
+         recently-updated, commands, files, filters — slash-prefixed
+         queries reorder to filters, current-page, nodes *)
+      if starts_slash then filters_g () :: cp () @ [ nodes_g () ]
       else if has_slash then
         Option.to_list (create_g ())
-        @ [ nodes_g (); files_g (); filters_g () ]
+        @ cp () @ [ nodes_g (); files_g (); filters_g () ]
       else if String.trim q = "" then
-        (* cljs :default on blank input runs :initial + :filters only *)
-        [ recents_g (); filters_g () ]
+        (* cljs :default on blank input runs :initial + :filters; the
+           current-page group is emitted too but stays empty without
+           search rows and gets filtered below *)
+        cp () @ [ recents_g (); filters_g () ]
       else
         Option.to_list (create_g ())
+        @ cp ()
         @ [ nodes_g (); recents_g (); commands_g (); files_g ()
           ; filters_g () ]
 
@@ -567,14 +615,15 @@ let refresh ?(clear = true) st =
   | None -> ()
   | Some repo ->
       ignore
-        (run_search repo v.input v.move_mode
-           (match v.filter with
-            | Some G_current_page -> current_page_limit v.expanded
-            | _ -> nodes_limit v.move_mode v.expanded)
-         |> Js.Promise.then_ (fun (rows, total) ->
-                if gen = !(st.gen) then
-                  apply_results st v.input v.move_mode v.expanded rows total;
-                Js.Promise.resolve ())
+        ((let* (rows, total) =
+           run_search repo v.input v.move_mode
+             (match v.filter with
+              | Some G_current_page -> current_page_limit v.expanded
+              | _ -> nodes_limit v.move_mode v.expanded)
+         in
+         if gen = !(st.gen) then
+           apply_results st v.input v.move_mode v.expanded rows total;
+         Js.Promise.resolve ())
          |> Js.Promise.catch (fun e ->
                 Platform.console_error
                   ( "cmdk search failed"
@@ -624,17 +673,16 @@ let load_recents st repo =
          (Sidebar_state.recent_ids_of_storage repo))
   in
   ignore
-    (Runtime.invoke2 "thread-api/get-recent-pages" (Wire.String repo) ids
-     |> Js.Promise.then_ (fun w ->
-            let items =
-              match w with
-              | Wire.Array xs | Wire.List xs ->
-                  List.filter_map recents_item_of_wire xs
-              | _ -> []
-            in
-            set_in st (fun v -> { v with recents = items });
-            refresh st;
-            Js.Promise.resolve ())
+    ((let* w = Runtime.invoke2 "thread-api/get-recent-pages" (Wire.String repo) ids in
+     let items =
+       match w with
+       | Wire.Array xs | Wire.List xs ->
+           List.filter_map recents_item_of_wire xs
+       | _ -> []
+     in
+     set_in st (fun v -> { v with recents = items });
+     refresh st;
+     Js.Promise.resolve ())
      |> Js.Promise.catch (fun _ -> Js.Promise.resolve ()))
 
 let on_input st q =
@@ -715,7 +763,7 @@ let move_hl st dir =
       else ((v.hl + dir) mod n + n) mod n
     in
     set_in st (fun v -> { v with hl = i; mouse = false });
-    (match Dom_ext.doc_query_selector ".cp__cmdk .overflow-y-auto" with
+    (match Dom_ext.doc_query_selector ".cp__cmdk .cp__cmdk-scroller" with
      | Some scroller -> (
          match
            Dom_ext.query_selector scroller
@@ -758,17 +806,18 @@ let goto_page _repo uuid =
     (Runtime.nav_hash ("#/page/" ^ uuid))
 let goto_today_journal repo =
   let day = Dates.today_journal_day () in
-  Runtime.invoke2 "thread-api/get-journal-page-by-day" (Wire.String repo)
-    (Wire.Int day)
-  |> Js.Promise.then_ (fun page_w ->
-         match Decode.page_of_summary page_w with
-         | None -> Js.Promise.resolve ()
-         | Some page -> (
-             match page.Model.page_uuid with
-             | Some uuid ->
-                 goto_page repo uuid;
-                 Js.Promise.resolve ()
-             | None -> Js.Promise.resolve ()))
+  let* page_w =
+    Runtime.invoke2 "thread-api/get-journal-page-by-day" (Wire.String repo)
+      (Wire.Int day)
+  in
+  match Decode.page_of_summary page_w with
+  | None -> Js.Promise.resolve ()
+  | Some page -> (
+      match page.Model.page_uuid with
+      | Some uuid ->
+          goto_page repo uuid;
+          Js.Promise.resolve ()
+      | None -> Js.Promise.resolve ())
 
 (* worker create-page/create-class ops return the new entity's uuid as
    [:op-name uuid] *)
@@ -787,12 +836,13 @@ let apply_create op label on_ok =
          waits on .editor-visible and must not see the stale one) *)
       Editor_actions.exit_edit ~select:false;
       ignore
-        (Runtime.invoke3 "thread-api/apply-outliner-ops" (Wire.String repo)
-           (Wire.Array [ op ]) (Wire.Map [])
-         |> Js.Promise.then_ (fun w ->
-                (match created_uuid w with Some uuid -> on_ok repo uuid
-                 | None -> ());
-                Js.Promise.resolve ())
+        ((let* w =
+           Runtime.invoke3 "thread-api/apply-outliner-ops" (Wire.String repo)
+             (Wire.Array [ op ]) (Wire.Map [])
+         in
+         (match created_uuid w with Some uuid -> on_ok repo uuid
+          | None -> ());
+         Js.Promise.resolve ())
          |> Js.Promise.catch (fun e ->
                 Platform.console_error (label, Platform.error_inner e);
                 Js.Promise.resolve ()))
@@ -820,11 +870,12 @@ let create_tag title =
 
 let validate_graph repo =
   ignore
-    (Runtime.invoke2 "thread-api/validate-db" (Wire.String repo)
-       (Wire.Map [])
-     |> Js.Promise.then_ (fun _ ->
-            toast "Your graph is valid" "success";
-            Js.Promise.resolve ())
+    ((let* _ =
+       Runtime.invoke2 "thread-api/validate-db" (Wire.String repo)
+         (Wire.Map [])
+     in
+     toast "Your graph is valid" "success";
+     Js.Promise.resolve ())
      |> Js.Promise.catch (fun e ->
             toast "Validation failed" "error";
             Platform.console_error ("validate-db failed", e);
@@ -901,10 +952,12 @@ let run_add_comment repo st =
   match repo, uuids with
   | Some repo, _ :: _ ->
       ignore
-        (Runtime.invoke2 "thread-api/ensure-comments-area-for-blocks"
-           (Wire.String repo)
-           (Wire.Array (List.map (fun u -> Wire.Uuid u) uuids))
-        |> Js.Promise.then_ (fun _ -> Outliner_ops.refresh_page ()))
+        (let* _ =
+          Runtime.invoke2 "thread-api/ensure-comments-area-for-blocks"
+            (Wire.String repo)
+            (Wire.Array (List.map (fun u -> Wire.Uuid u) uuids))
+        in
+        Outliner_ops.refresh_page ())
   | _ -> ()
 
 let with_sidebar f () =
@@ -1021,15 +1074,16 @@ let rec run_item st it =
        Option.iter
          (fun repo ->
            ignore
-             (Runtime.invoke2 "thread-api/get-block-page-info"
-                (Wire.String repo)
-                (Wire.Array [ Wire.Keyword "block/uuid"; Wire.Uuid uuid ])
-              |> Js.Promise.then_ (fun w ->
-                     match Wire.map_get_uuid w "block/uuid" with
-                     | Some puuid ->
-                         goto_page repo puuid;
-                         Js.Promise.resolve ()
-                     | None -> Js.Promise.resolve ())))
+             (let* w =
+               Runtime.invoke2 "thread-api/get-block-page-info"
+                 (Wire.String repo)
+                 (Wire.Array [ Wire.Keyword "block/uuid"; Wire.Uuid uuid ])
+             in
+             match Wire.map_get_uuid w "block/uuid" with
+             | Some puuid ->
+                 goto_page repo puuid;
+                 Js.Promise.resolve ()
+             | None -> Js.Promise.resolve ()))
          repo
    | Set_filter gid ->
        set_in st (fun v ->
@@ -1049,6 +1103,12 @@ let rec run_item st it =
    context the open palette lacks; they degrade to close+no-op like
    cljs does when the context is missing *)
 and run_command st repo (cid : string) =
+  if String.length cid > 7 && String.sub cid 0 7 = "plugin." then (
+    (* plugin simple command — cljs handle-exec →
+       LSPluginCore.hookEditor(eventKey, payload) *)
+    close st;
+    Plugin_host.exec_palette_command cid)
+  else
   let nav hash route =
     (* navigation intent, same as goto_page: commit and close any
        in-progress edit — go/journals etc. can target the current route,
@@ -1067,17 +1127,18 @@ and run_command st repo (cid : string) =
     match repo with
     | Some repo ->
         ignore
-          (Runtime.invoke2 "thread-api/get-journal-page-by-day"
-             (Wire.String repo) (Wire.Int day)
-           |> Js.Promise.then_ (fun w ->
-                  match Decode.page_of_summary w with
-                  | Some p -> (
-                      match p.Model.page_uuid with
-                      | Some u ->
-                          goto_page repo u;
-                          Js.Promise.resolve ()
-                      | None -> Js.Promise.resolve ())
-                  | None -> Js.Promise.resolve ()))
+          (let* w =
+            Runtime.invoke2 "thread-api/get-journal-page-by-day"
+              (Wire.String repo) (Wire.Int day)
+          in
+          match Decode.page_of_summary w with
+          | Some p -> (
+              match p.Model.page_uuid with
+              | Some u ->
+                  goto_page repo u;
+                  Js.Promise.resolve ()
+              | None -> Js.Promise.resolve ())
+          | None -> Js.Promise.resolve ())
     | None -> ()
   in
   let rel_journal delta = (* today's journal +/- delta days *)

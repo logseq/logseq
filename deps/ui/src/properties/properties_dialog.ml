@@ -13,6 +13,7 @@
    For tag (class) pages an existing property is added via
    class-add-property instead of taking a value. *)
 
+open Promise_ext
 open Editor_dom
 open Properties_dom
 module D = Properties_data
@@ -40,6 +41,7 @@ type dlg =
   ; mutable phase : phase
   ; mutable body : Editor_dom.el option
   ; mutable pending_type : string option
+  ; mutable select_overlay : Editor_dom.el option
   }
 
 (* ---------- helpers ---------- *)
@@ -78,6 +80,13 @@ let is_many prop =
 (* close this dialog (top overlay) *)
 let close () = S.pop_overlay ()
 
+(* close the dialog plus any select dropdown it opened above itself *)
+let close_dlg d =
+  (match d.select_overlay with
+   | Some el -> S.remove_overlay_el el; d.select_overlay <- None
+   | None -> ());
+  S.pop_overlay ()
+
 (* after "Text"/"URL" is chosen the cljs flow creates the empty value
    block and lands the caret in it — refresh as soon as the write lands
    so the pending editor mounts before the user's next click; entering
@@ -86,11 +95,12 @@ let add_empty_text_block d prop =
   let ident = ident_of prop in
   !(Editor_state.close_block_editor) ();
   V.set_pending_edit ~block_uuid:d.target.uuid ~ident;
-  D.create_property_text_block ~block_uuid:d.target.uuid ~ident
-    ~title:"" ~new_block_id:(Platform.random_uuid ()) ()
-  |> Js.Promise.then_ (fun _ ->
-         S.refresh_now ();
-         Js.Promise.resolve ())
+  (let* _ =
+    D.create_property_text_block ~block_uuid:d.target.uuid ~ident
+      ~title:"" ~new_block_id:(Platform.random_uuid ()) ()
+  in
+  S.refresh_now ();
+  Js.Promise.resolve ())
   |> ignore;
   S.refresh_all ()
 
@@ -101,10 +111,10 @@ let rec property_chosen d prop =
       (D.class_add_property ~class_uuid:d.target.uuid
          ~ident:(ident_of prop));
     S.refresh_all ();
-    close ())
+    close_dlg d)
   else if is_checkbox prop then (
     write_prop_value d prop (Some (W.Bool false));
-    close ())
+    close_dlg d)
   else (
     d.phase <- Value_edit prop;
     render d)
@@ -134,35 +144,34 @@ and pick_value d prop id =
     match d.target.uuids with [] -> [ d.target.uuid ] | us -> us
   in
   if is_many prop then
-    D.entity_by_uuid d.target.uuid
-    |> Js.Promise.then_ (fun ent ->
-           let cur_ids, cur_idents = value_ids ent ident in
-           D.entity (W.Int id)
-           |> Js.Promise.then_ (fun picked ->
-                  let picked_ident = D.getk (D.untag picked) "db/ident" in
-                  let hit =
-                    List.mem id cur_ids
-                    || (match picked_ident with
-                        | Some i -> List.mem i cur_idents
-                        | None -> false)
-                  in
-                  (match hit, uuids with
-                   | true, _ :: _ :: _ ->
-                       D.batch_delete_property_value ~block_uuids:uuids
-                         ~ident ~value:(W.Int id)
-                   | true, _ ->
-                       D.delete_property_value ~block_uuid:d.target.uuid
-                         ~ident ~value:(W.Int id)
-                   | false, _ :: _ :: _ ->
-                       D.batch_set_property ~block_uuids:uuids ~ident
-                         ~value:(W.Int id)
-                   | false, _ ->
-                       D.set_block_property ~block_uuid:d.target.uuid ~ident
-                         ~value:(W.Int id))
-                  |> Js.Promise.then_ (fun _ ->
-                         S.refresh_all ();
-                         render d;
-                         Js.Promise.resolve ())))
+    (let* ent = D.entity_by_uuid d.target.uuid in
+    let cur_ids, cur_idents = value_ids ent ident in
+    let* picked = D.entity (W.Int id) in
+    let picked_ident = D.getk (D.untag picked) "db/ident" in
+    let hit =
+      List.mem id cur_ids
+      || (match picked_ident with
+          | Some i -> List.mem i cur_idents
+          | None -> false)
+    in
+    let* _ =
+      (match hit, uuids with
+       | true, _ :: _ :: _ ->
+           D.batch_delete_property_value ~block_uuids:uuids
+             ~ident ~value:(W.Int id)
+       | true, _ ->
+           D.delete_property_value ~block_uuid:d.target.uuid
+             ~ident ~value:(W.Int id)
+       | false, _ :: _ :: _ ->
+           D.batch_set_property ~block_uuids:uuids ~ident
+             ~value:(W.Int id)
+       | false, _ ->
+           D.set_block_property ~block_uuid:d.target.uuid ~ident
+             ~value:(W.Int id))
+    in
+    S.refresh_all ();
+    render d;
+    Js.Promise.resolve ())
     |> ignore
   else (
     (match uuids with
@@ -179,6 +188,11 @@ and render (d : dlg) =
   match d.body with
   | None -> ()
   | Some body -> (
+      (* a select dropdown portaled above the dialog is torn down with
+         the phase that opened it *)
+      (match d.select_overlay with
+       | Some el -> S.remove_overlay_el el; d.select_overlay <- None
+       | None -> ());
       el_clear body;
       match d.phase with
       | Prop_select -> render_prop_select d body
@@ -188,73 +202,176 @@ and render (d : dlg) =
 
 and render_prop_select d body =
   let wrap =
-    mk ~cls:"ls-property-add flex flex-row items-center property-key" "div"
+    mk ~cls:"ls-property-add property-key" "div"
       ~attrs:[ ("data-keep-selection", "true") ]
   in
   let key_wrap = mk ~cls:"ls-property-key" "div" in
   el_append_child wrap key_wrap;
   el_append_child body wrap;
-  D.all_properties (D.uuid_ref d.target.uuid)
-  |> Js.Promise.then_ (fun w ->
-         let props = W.elems w in
-         let items =
-           List.filter_map
-             (fun p ->
-               match title_of p with
-               | "" -> None
-               | t ->
-                   Some
-                     (Sel.item ~tip:(ident_of p) ~icon:"letter-t"
-                        ~strong:true t
-                        (fun () -> property_chosen d p)))
-             props
-         in
-         let sel, input =
-           Sel.create ~placeholder:(I18n.t "property/add-or-change")
-             ~new_option:
-               (Some (fun name ->
-                    (* no client-side name validation: invalid names go
-                       through type-select and the worker rejects the
-                       upsert with a notification toast *)
-                    d.phase <- Type_select name;
-                    render d))
-             ~on_escape:close items
-         in
-         el_append_child key_wrap sel;
-         el_focus input;
-         Js.Promise.resolve ())
-  |> ignore
-
-and type_item d name ty =
-  Sel.item (I18n.t ("property/type-" ^ ty)) (fun () ->
-      on_type_chosen d name ty)
-
-and render_type_select d body name =
-  let wrap =
-    mk ~cls:"ls-property-add flex flex-row items-center gap-1" "div"
-  in
-  let key = mk ~cls:"property-key flex flex-row items-center" "div" in
-  el_set_text key name;
-  el_append_child wrap key;
-  (* cljs renders the select-trigger's placeholder value as visible text;
-     e2e asserts get-by-text "Select a property type" *)
-  ignore
-    (child_text "span" "text-sm text-muted-foreground select-placeholder"
-       (I18n.t "property/select-type-placeholder") wrap);
-  el_append_child body wrap;
+  (let* w = D.all_properties (D.uuid_ref d.target.uuid) in
+  let props = W.elems w in
   let items =
-    List.map
-      (fun ty -> type_item d name ty)
-      (* cljs db-property-type/user-built-in-property-types order *)
-      [ "default"; "number"; "date"; "datetime"; "checkbox"; "url"
-      ; "node"; "asset" ]
+    List.filter_map
+      (fun p ->
+        match title_of p with
+        | "" -> None
+        | t ->
+            Some
+              (Sel.item ~tip:(ident_of p) ~icon:"letter-t"
+                 ~strong:true t
+                 (fun () -> property_chosen d p)))
+      props
   in
-  let sel, _input =
-    Sel.create
-      ~placeholder:(I18n.t "property/select-type-placeholder")
+  let sel, input =
+    Sel.create ~placeholder:(I18n.t "property/add-or-change")
+      ~new_option:
+        (Some (fun name ->
+             (* no client-side name validation: invalid names go
+                through type-select and the worker rejects the
+                upsert with a notification toast *)
+             d.phase <- Type_select name;
+             render d))
       ~on_escape:close items
   in
-  el_append_child wrap sel
+  el_append_child key_wrap sel;
+  el_focus input;
+  Js.Promise.resolve ())
+  |> ignore
+
+and select_trigger_cls =
+  "ui__select-trigger flex w-full items-center justify-between \
+   rounded-md border border-input bg-background text-sm \
+   ring-offset-background placeholder:text-muted-foreground \
+   focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 \
+   disabled:cursor-not-allowed disabled:opacity-50 [&>span]:line-clamp-1 \
+   !px-2 !py-0 !h-8"
+
+and select_content_cls =
+  "ui__select-content relative z-[99999] min-w-[8rem] overflow-hidden \
+   rounded-md border bg-popover text-popover-foreground shadow-md \
+   animate-in fade-in-0 zoom-in-95 \
+   data-[side=bottom]:slide-in-from-top-2 \
+   data-[side=left]:slide-in-from-right-2 \
+   data-[side=right]:slide-in-from-left-2 \
+   data-[side=top]:slide-in-from-bottom-2"
+
+(* portaled type dropdown under the trigger (cljs shui select-content *
+   auto-opens via :default-open in the new-property flow) *)
+and open_type_menu d name trigger =
+  let l, t, _r, b, _w = el_rect trigger in
+  (* radix mounts below but flips when the list would overflow the
+     viewport and there is more room above; cap the height at the space
+     on the chosen side so every option stays inside the viewport
+     (radix's available-height behaviour) *)
+  let below = window_inner_height -. (b +. 4.) -. 8. in
+  let above = (t -. 4.) -. 8. in
+  let open_above = below < 280. && above > below in
+  let pos, avail =
+    if open_above then
+      ( Printf.sprintf "bottom:%.0fpx" (window_inner_height -. (t -. 4.))
+      , above )
+    else (Printf.sprintf "top:%.0fpx" (b +. 4.), below)
+  in
+  let content =
+    mk ~cls:select_content_cls "div"
+      ~attrs:
+        [ ("role", "presentation"); ("tabindex", "-1"); ("data-open", "")
+        ; ("data-side", if open_above then "top" else "bottom")
+        ; ("data-align", "center")
+        ; ("data-state", "open")
+        ; ( "style"
+          , Printf.sprintf
+              "position:fixed;left:%.0fpx;%s;z-index:99999;\
+               max-height:%.0fpx;overflow:hidden auto" l pos
+              (Float.max avail 120.) ) ]
+  in
+  let listbox =
+    mk ~cls:"ls-p1" "div"
+      ~attrs:
+        [ ("role", "listbox")
+        ; ( "style"
+          , "position:relative;max-height:100%;overflow:hidden auto;\
+             flex:1 1 auto;min-height:0" ) ]
+  in
+  let group = mk "div" ~attrs:[ ("role", "group") ] in
+  el_append_child listbox group;
+  el_append_child content listbox;
+  List.iteri
+    (fun i ty ->
+      let opt =
+        mk
+          ~cls:
+            "ui__select-item flex w-full cursor-default select-none \
+             items-center gap-2 rounded-sm px-2 py-1.5 text-sm \
+             outline-none data-[highlighted]:bg-muted \
+             data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
+          "div"
+          ~attrs:
+            [ ("role", "option"); ("aria-selected", "false")
+            ; ("tabindex", if i = 0 then "0" else "-1") ]
+      in
+      if i = 0 then el_set_attr opt "data-highlighted" "";
+      el_append_child opt
+        (mk ~cls:"ls-check-cell" "span");
+      let lbl = mk "div" in
+      ignore (child_text "span" "" (I18n.t ("property/type-" ^ ty)) lbl);
+      el_append_child opt lbl;
+      el_append_child group opt;
+      on_click opt (fun _ -> on_type_chosen d name ty))
+    (* cljs db-property-type/user-built-in-property-types order *)
+    [ "default"; "number"; "date"; "datetime"; "checkbox"; "url"; "node"
+    ; "asset" ];
+  d.select_overlay <- Some content;
+  S.push_overlay content ~on_escape:(fun () -> d.select_overlay <- None)
+
+and render_type_select d body name =
+  (* cljs DOM contract (property.cljs property-type-select):
+     .ls-property-add > .property-key > bullet + name, then
+     .flex.flex-row > .flex.items-center > button.ui__select-trigger *)
+  let wrap =
+    mk ~cls:"ls-property-add ls-pa-row" "div"
+  in
+  let key =
+    mk ~cls:"property-key" "div"
+  in
+  let bullet = mk ~cls:"bullet-container" "span" in
+  el_append_child bullet (mk ~cls:"bullet" "span");
+  el_append_child key bullet;
+  let label = mk "div" in
+  el_set_text label name;
+  el_append_child key label;
+  el_append_child wrap key;
+  let row = mk ~cls:"ls-pd-row" "div" in
+  let cell = mk ~cls:"ls-row" "div" in
+  el_append_child row cell;
+  el_append_child wrap row;
+  el_append_child body wrap;
+  let trigger =
+    mk ~cls:select_trigger_cls "button"
+      ~attrs:
+        [ ("type", "button"); ("tabindex", "0"); ("role", "combobox")
+        ; ("aria-expanded", "true"); ("aria-haspopup", "listbox")
+        ; ("data-popup-open", ""); ("data-pressed", "")
+        ; ("data-placeholder", ""); ("data-popup-side", "bottom") ]
+  in
+  let ph =
+    child_text "span" "" (I18n.t "property/select-type-placeholder")
+      trigger
+  in
+  el_set_attr ph "data-placeholder" "";
+  let icon =
+    mk ~cls:"ui__select-icon" "span"
+      ~attrs:[ ("data-popup-open", ""); ("aria-hidden", "true") ]
+  in
+  (match tabler_svg_el ~size:24. "chevron-down" with
+   | Some svg ->
+       el_set_attr svg "class"
+         "tabler-icon tabler-icon-chevron-down ls-icon-sm";
+       el_append_child icon svg
+   | None -> ());
+  el_append_child trigger icon;
+  el_append_child cell trigger;
+  open_type_menu d name trigger
 
 and valid_property_name s =
   not (String.length s > 0
@@ -267,94 +384,94 @@ and on_type_chosen d name ty =
   if not (valid_property_name name) then
     S.toast_error (I18n.t "property/invalid-name-error")
   else
-  D.upsert_property
-    ~schema:(W.Map [ (W.Keyword "logseq.property/type", W.Keyword ty) ])
-    ~property_name:name ()
-  |> (fun p ->
-      Js.Promise.catch
-        (fun _ ->
-          (* normalize rejection to Nil — the W.Nil arm owns the single
-             "failed to create" toast *)
-          Js.Promise.resolve W.Nil)
-        p)
-  |> Js.Promise.then_ (fun res ->
-         (match D.untag res with
-          | W.Nil ->
-              S.toast_error (I18n.t "property/create-error")
-          | W.Map _ as m ->
-              let prop = m in
-              if d.target.is_tag then (
-                (* on a class page the new property is added as schema *)
-                (match ident_of prop with
-                 | "" -> ()
-                 | ident ->
-                     ignore
-                       (D.class_add_property ~class_uuid:d.target.uuid
-                          ~ident));
-                S.refresh_all ();
-                close ())
-              else (
-                match ty with
-                | "checkbox" ->
-                    write_prop_value d prop (Some (W.Bool false));
-                    close ()
-                | "default" | "url" ->
-                    add_empty_text_block d prop;
-                    close ()
-                | "node" ->
-                    d.phase <- Node_tags prop;
-                    render d
-                | _ ->
-                    d.phase <- Value_edit prop;
-                    render d)
-          | _ -> S.toast_error (I18n.t "property/create-error"));
-         Js.Promise.resolve ())
+  (let* res =
+    D.upsert_property
+      ~schema:(W.Map [ (W.Keyword "logseq.property/type", W.Keyword ty) ])
+      ~property_name:name ()
+    |> (fun p ->
+        Js.Promise.catch
+          (fun _ ->
+            (* normalize rejection to Nil — the W.Nil arm owns the single
+               "failed to create" toast *)
+            Js.Promise.resolve W.Nil)
+          p)
+  in
+  (match D.untag res with
+   | W.Nil ->
+       S.toast_error (I18n.t "property/create-error")
+   | W.Map _ as m ->
+       let prop = m in
+       if d.target.is_tag then (
+         (* on a class page the new property is added as schema *)
+         (match ident_of prop with
+          | "" -> ()
+          | ident ->
+              ignore
+                (D.class_add_property ~class_uuid:d.target.uuid
+                   ~ident));
+         S.refresh_all ();
+         close_dlg d)
+       else (
+         match ty with
+         | "checkbox" ->
+             write_prop_value d prop (Some (W.Bool false));
+             close_dlg d
+         | "default" | "url" ->
+             add_empty_text_block d prop;
+             close_dlg d
+         | "node" ->
+             d.phase <- Node_tags prop;
+             render d
+         | _ ->
+             d.phase <- Value_edit prop;
+             render d)
+   | _ -> S.toast_error (I18n.t "property/create-error"));
+  Js.Promise.resolve ())
   |> ignore
 
 and render_node_tags d body prop =
-  let wrap = mk ~cls:"flex flex-1 col-span-3" "div" in
+  let wrap = mk ~cls:"ls-span3" "div" in
   el_append_child body wrap;
-  D.all_classes ()
-  |> Js.Promise.then_ (fun w ->
-         let items =
-           Sel.item (I18n.t "property/skip-choosing-tag") (fun () ->
-               d.phase <- Value_edit prop;
-               render d)
-           :: List.filter_map
-                (fun c ->
-                  match title_of c with
-                  | "" -> None
-                  | t -> (
-                      match D.entity_id_of c with
-                      | Some id ->
-                          Some
-                            (Sel.item t (fun () ->
-                                 (match ident_of prop with
-                                  | "" -> ()
-                                  | _ ->
-                                      ignore
-                                        (D.set_block_property
-                                           ~block_uuid:
-                                             (match
-                                                D.entity_uuid_of prop
-                                              with
-                                             | Some u -> u
-                                             | None -> d.target.uuid)
-                                           ~ident:
-                                             "logseq.property/classes"
-                                           ~value:(W.Int id)));
-                                 d.phase <- Value_edit prop;
-                                 render d))
-                      | None -> None))
-                (W.elems w)
-         in
-         let sel, input =
-           Sel.create ~placeholder:(I18n.t "property/choose-tags")
-             ~on_escape:close items
-         in
-         el_append_child wrap sel;
-         el_focus input;
-         Js.Promise.resolve ())
+  (let* w = D.all_classes () in
+  let items =
+    Sel.item (I18n.t "property/skip-choosing-tag") (fun () ->
+        d.phase <- Value_edit prop;
+        render d)
+    :: List.filter_map
+         (fun c ->
+           match title_of c with
+           | "" -> None
+           | t -> (
+               match D.entity_id_of c with
+               | Some id ->
+                   Some
+                     (Sel.item t (fun () ->
+                          (match ident_of prop with
+                           | "" -> ()
+                           | _ ->
+                               ignore
+                                 (D.set_block_property
+                                    ~block_uuid:
+                                      (match
+                                         D.entity_uuid_of prop
+                                       with
+                                      | Some u -> u
+                                      | None -> d.target.uuid)
+                                    ~ident:
+                                      "logseq.property/classes"
+                                    ~value:(W.Int id)));
+                          d.phase <- Value_edit prop;
+                          render d))
+               | None -> None))
+         (W.elems w)
+  in
+  let sel, input =
+    Sel.create ~placeholder:(I18n.t "property/choose-tags")
+      ~on_escape:close items
+  in
+  el_append_child wrap sel;
+  el_focus input;
+  Js.Promise.resolve ())
   |> ignore
 
 and value_items d prop wire_values =
@@ -388,13 +505,13 @@ and value_items d prop wire_values =
           wire_values
 
 and render_value_edit d body prop =
-  let wrap = mk ~cls:"flex flex-1 property-select" "div" in
+  let wrap = mk ~cls:"property-select" "div" in
   el_append_child body wrap;
   let ty = type_of prop in
   if ty = "date" || ty = "datetime" then (
     (* inline date picker in the dialog *)
     let picker =
-      mk ~cls:"ls-property-date-picker flex flex-row gap-2" "div"
+      mk ~cls:"ls-property-date-picker" "div"
     in
     let input =
       mk "input"
@@ -420,7 +537,7 @@ and render_value_edit d body prop =
               }
             in
             V.commit_date_input ctx (ident_of prop) ~is_datetime:(ty = "datetime") input;
-            close ()
+            close_dlg d
         | "Escape" -> prevent_default ev; stop_propagation ev; close ()
         | _ -> ())
       true)
@@ -434,53 +551,65 @@ and render_value_edit d body prop =
         in
         (initial, Some on_search))
       else
-        ( D.property_values ~property_ident:(ident_of prop)
-            ~block:(D.uuid_ref d.target.uuid)
-          |> Js.Promise.then_ (fun w ->
-                 Js.Promise.resolve (value_items d prop (W.elems w)))
+        ( (let* w =
+            D.property_values ~property_ident:(ident_of prop)
+              ~block:(D.uuid_ref d.target.uuid)
+          in
+          Js.Promise.resolve (value_items d prop (W.elems w)))
         , None )
     in
-    fetch
-    |> Js.Promise.then_ (fun items ->
-           let on_new =
-             if ty = "number" then
-               Some
-                 (fun text ->
-                   match Float.of_string_opt (String.trim text) with
-                   | Some n ->
-                       write_prop_value d prop (Some (W.Float n));
-                       close ()
-                   | None -> ())
-             else if ty = "node" then
-               Some
-                 (fun text ->
-                   D.create_page text
-                   |> Js.Promise.then_ (fun res ->
-                          (match D.geti res "db/id" with
-                           | Some id ->
-                               write_prop_value d prop (Some (W.Int id))
-                           | None -> ());
-                          close ();
-                          Js.Promise.resolve ())
-                   |> ignore)
-             else
-               Some
-                 (fun text ->
-                   (* text value -> create value block *)
-                   D.create_property_text_block ~block_uuid:d.target.uuid
-                     ~ident:(ident_of prop) ~title:text
-                     ~new_block_id:(Platform.random_uuid ()) ()
-                   |> ignore;
-                   S.refresh_all ();
-                   close ())
-           in
-           let sel, input =
-             Sel.create ~placeholder ~new_option:on_new ~on_escape:close
-               ~on_search items
-           in
-           el_append_child wrap sel;
-           el_focus input;
-           Js.Promise.resolve ())
+    (let* items = fetch in
+    let on_new =
+      if ty = "number" then
+        Some
+          (fun text ->
+            match Float.of_string_opt (String.trim text) with
+            | Some n ->
+                write_prop_value d prop (Some (W.Float n));
+                close_dlg d
+            | None -> ())
+      else if ty = "node" || ty = "class" then
+        Some
+          (fun text ->
+            ignore
+              (let* res =
+                 (* cljs <create-page-if-not-exists!: class-type
+                    and block/tags values are classes *)
+                 if ty = "class" || ident_of prop = "block/tags"
+                 then D.create_class text
+                 else D.create_page text
+               in
+               let* () =
+                 match D.create_result_uuid res with
+                 | Some uuid -> (
+                     let* id = D.db_id_of_uuid uuid in
+                     match id with
+                     | Some id ->
+                         write_prop_value d prop (Some (W.Int id));
+                         Js.Promise.resolve ()
+                     | None -> Js.Promise.resolve ())
+                 | None -> Js.Promise.resolve ()
+               in
+               close_dlg d;
+               Js.Promise.resolve ()))
+      else
+        Some
+          (fun text ->
+            (* text value -> create value block *)
+            D.create_property_text_block ~block_uuid:d.target.uuid
+              ~ident:(ident_of prop) ~title:text
+              ~new_block_id:(Platform.random_uuid ()) ()
+            |> ignore;
+            S.refresh_all ();
+            close_dlg d)
+    in
+    let sel, input =
+      Sel.create ~placeholder ~new_option:on_new ~on_escape:close
+        ~on_search items
+    in
+    el_append_child wrap sel;
+    el_focus input;
+    Js.Promise.resolve ())
     |> ignore)
 
 (* ---------- open ---------- *)
@@ -488,16 +617,24 @@ and render_value_edit d body prop =
 (* cljs pops the input under the invoking control (popup-show! on the
    click target); callers without an anchor get the centered fallback *)
 let open_dialog ?anchor target =
-  let d = { target; phase = Prop_select; body = None; pending_type = None } in
+  let d =
+    { target; phase = Prop_select; body = None; pending_type = None
+    ; select_overlay = None
+    }
+  in
+  (* cljs popup body styles: base-ui sets font metrics and the page
+     title size var on the popover content *)
+  let body_style =
+    "font-size:1rem;line-height:1.5;--ls-page-title-size:1rem"
+  in
   let style =
     match anchor with
     | Some (x, y) ->
-        Printf.sprintf
-          "position:fixed;left:%.0fpx;top:%.0fpx;z-index:9999;min-width:320px"
-          x y
+        Printf.sprintf "position:fixed;left:%.0fpx;top:%.0fpx;z-index:9999;%s"
+          x y body_style
     | None ->
         "position:fixed;left:50%;top:30%;transform:translateX(-50%);\
-         z-index:9999;min-width:320px"
+         z-index:9999;" ^ body_style
   in
   (* cljs popup chrome: ui__popover-content card > .ls-property-dialog *)
   let root =
@@ -512,7 +649,10 @@ let open_dialog ?anchor target =
          data-[side=top]:slide-in-from-bottom-2 \
          focus:outline-none focus-visible:outline-none z-50"
       "div"
-      ~attrs:[ ("role", "dialog"); ("style", style) ]
+      ~attrs:
+        [ ("role", "dialog"); ("style", style); ("data-open", "")
+        ; ("data-side", "bottom"); ("data-align", "start")
+        ; ("data-base-ui-focusable", "") ]
   in
   let dlg = mk ~cls:"ls-property-dialog" "div" in
   el_append_child root dlg;
@@ -554,8 +694,27 @@ let current_target () : target option =
                   }
           | None -> None))
 
-(* open the dialog for a specific block uuid (slash command path) *)
+(* open the dialog for a specific block uuid (slash command path). cljs
+   anchors the popover on the editing textarea (#edit-block-<uuid>)
+   with align:start — bottom-left corner, 4px left *)
 let open_for_block ?anchor uuid =
+  let anchor =
+    match anchor with
+    | Some _ -> anchor
+    | None -> (
+        match get_element_by_id ("edit-block-" ^ uuid) with
+        | Some ta ->
+            let l, _t, _r, b, _w = el_rect ta in
+            Some (l -. 4., b)
+        | None -> (
+            (* no live editor: cljs anchors on the block element itself
+               (selection path) — bottom-left of .ls-block *)
+            match get_element_by_id ("ls-block-" ^ uuid) with
+            | Some blk ->
+                let l, _t, _r, b, _w = el_rect blk in
+                Some (l, b)
+            | None -> None))
+  in
   open_dialog ?anchor
     { uuid; uuids = []; db_id = None; is_tag = false; title = "" }
 

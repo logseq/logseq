@@ -53,19 +53,22 @@ let main root =
   Runtime.app_send :=
     (fun action ->
       let changed = Lui_app.send app action in
-      ignore (Lui_app.flush app);
-      Virtual_scroll.sync ();
+      Platform.perf_time "flush" (fun () ->
+          ignore (Lui_app.flush app);
+          Virtual_scroll.sync ());
       changed);
   Runtime.app_flush :=
     (fun () ->
-      ignore (Lui_app.flush app);
-      Virtual_scroll.sync ());
+      Platform.perf_time "flush" (fun () ->
+          ignore (Lui_app.flush app);
+          Virtual_scroll.sync ()));
   ignore
     (Lui_web.set_event_handler renderer (fun event ->
-         ignore (Lui_app.dispatch_event app event);
-         let flushed = Lui_app.flush app in
-         Virtual_scroll.sync ();
-         flushed));
+         Platform.perf_time "event" (fun () ->
+             ignore (Lui_app.dispatch_event app event);
+             let flushed = Lui_app.flush app in
+             Virtual_scroll.sync ();
+             flushed)));
   ignore (Lui_app.start app);
   ignore (Lui_app.flush app);
   Lui_web.mount renderer (Lui_app.root_node app) root;
@@ -75,6 +78,7 @@ let main root =
   Editor_commands.install ();
   Views_mount.install ();
   Router.init ();
+  Rtc_flows.init ();
   ignore (Boot.run ())
 
 let () =

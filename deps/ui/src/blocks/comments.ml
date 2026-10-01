@@ -7,6 +7,7 @@
    .editor-wrapper textarea so the delegated key/input/save machinery in
    Editor_keys/Editor_actions applies unchanged. *)
 
+open Promise_ext
 open Lui_elements
 
 module S = Editor_state
@@ -47,16 +48,16 @@ let ensure_for uuids =
   | None -> ()
   | Some repo ->
       ignore
-        (Runtime.invoke2 "thread-api/ensure-comments-area-for-blocks"
-           (W.String repo)
-           (W.List (List.map (fun u -> W.String u) uuids))
-         |> Js.Promise.then_ (fun area ->
-                Outliner_ops.refresh_page ()
-                |> Js.Promise.then_ (fun () ->
-                       (match W.map_get_uuid area "block/uuid" with
-                        | Some u -> reveal u
-                        | None -> ());
-                       Js.Promise.resolve ())))
+        (let* area =
+          Runtime.invoke2 "thread-api/ensure-comments-area-for-blocks"
+            (W.String repo)
+            (W.List (List.map (fun u -> W.String u) uuids))
+        in
+        let* () = Outliner_ops.refresh_page () in
+        (match W.map_get_uuid area "block/uuid" with
+         | Some u -> reveal u
+         | None -> ());
+        Js.Promise.resolve ())
 
 (* cljs add-comment-to-current-context!: an editing blank block becomes
    the comments area itself; otherwise ensure an area for the editing
@@ -118,9 +119,11 @@ let delete uuid =
   match !(Runtime.current_repo) with
   | Some repo ->
       ignore
-        (Runtime.invoke2 "thread-api/delete-comment" (W.String repo)
-           (W.String uuid)
-         |> Js.Promise.then_ (fun _ -> Outliner_ops.refresh_page ()))
+        (let* _ =
+          Runtime.invoke2 "thread-api/delete-comment" (W.String repo)
+            (W.String uuid)
+        in
+        Outliner_ops.refresh_page ())
   | None -> ()
 
 (* ---- view ---- *)
@@ -141,14 +144,11 @@ let title_editor_el uuid : t =
     | Some e when e.S.uuid = uuid -> e.S.buffer
     | _ -> ""
   in
-  dom ~key:("ctew-" ^ uuid) ~style_class:"editor-wrapper flex flex-1 w-full"
+  Ui_parts.editor_wrapper ~key:("ctew-" ^ uuid)
     ~id:("editor-edit-block-" ^ uuid)
-    [ dom ~key:("ctei-" ^ uuid)
-        ~style_class:"editor-inner flex flex-1 block-editor"
+    [ Ui_parts.editor_inner ~key:("ctei-" ^ uuid)
         [ dom ~key:("ctet-" ^ uuid) ~tag:"textarea"
-            ~id:("edit-block-" ^ uuid) ~text:buffer []
-        ]
-    ]
+            ~id:("edit-block-" ^ uuid) ~text:buffer [] ] ]
 
 (* cljs comments-area-title-view: the label swaps for the block editor
    while the area's title is being edited *)
