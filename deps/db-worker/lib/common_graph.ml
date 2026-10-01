@@ -43,7 +43,10 @@ let readdir (root_dir : string) : string list E.t =
                           if is_dir then
                             E.bind (walk fpath acc) (fun acc' ->
                                 step acc' rest)
-                          else step (fpath :: acc) rest))
+                          else
+                            step
+                              (Common_path.path_normalize fpath :: acc)
+                              rest))
         in
         step acc names)
   in

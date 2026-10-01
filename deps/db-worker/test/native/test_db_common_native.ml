@@ -865,7 +865,8 @@ let fresh_graphs_dir () =
   incr graphs_dir_seq;
   let dir =
     Filename.concat (Filename.get_temp_dir_name ())
-      (Printf.sprintf "logseq-initial-data-%d-%d" (Unix.getpid ())
+      (Printf.sprintf "logseq-initial-data-%d-%d-%d" (Unix.getpid ())
+         (int_of_float (Unix.gettimeofday ()))
          !graphs_dir_seq)
   in
   Unix.mkdir dir 0o755;

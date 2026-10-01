@@ -257,10 +257,12 @@ let data_dir () =
   | None -> "."
 
 let repo_mirror_dir repo =
-  Filename.concat (data_dir ())
-    (match Graph_dir.repo_to_encoded_graph_dir_name repo with
-     | Some d -> d ^ "/mirror/markdown"
-     | None -> "mirror/markdown")
+  (* /-joined like the cljs paths — Filename.concat emits \ on win32 *)
+  Common_path.path_join (data_dir ())
+    [ (match Graph_dir.repo_to_encoded_graph_dir_name repo with
+       | Some d -> d
+       | None -> "")
+    ; "mirror/markdown" ]
 
 let mirror_path repo relative_path =
   repo_mirror_dir repo ^ "/" ^ relative_path

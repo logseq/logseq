@@ -41,7 +41,8 @@ depends: [
   "x509"
   "uucp"
   "eio"
-  "eio_posix"
+  "eio_posix" {os != "win32"}
+  "eio_windows" {os = "win32"}
   "httpun"
   "httpun-ws"
   "tls-eio"

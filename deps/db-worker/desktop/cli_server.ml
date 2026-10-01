@@ -539,12 +539,10 @@ let discover_servers_task (config : config) : server list E.t =
 (* ensure-server-started-once! *)
 let ensure_server_started_once (config : config) (repo : string) : server E.t =
   let owner = requester_owner_source config in
-  (* electron runs the native OCaml daemon binary; cli and Windows keep
-     spawning the node db-worker-node.js bundle. *)
+  (* electron runs the native OCaml daemon binary; cli keeps spawning
+     the node db-worker-node.js bundle. *)
   let binary =
-    if
-      String.equal owner "electron"
-      && not (String.equal Electron_bindings.process_platform "win32")
+    if String.equal owner "electron"
     then Some (db_worker_binary_path ())
     else None
   in
