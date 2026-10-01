@@ -673,9 +673,17 @@
      [:span.warning full_text]
      (if (common-config/local-relative-asset? href)
        (asset-link config title href metadata full_text)
-       (let [href (cond
-                    (util/starts-with? href "http")
+       (let [local-path? (or (util/starts-with? href "/") (util/starts-with? href "~"))
+             href (cond
+                    (util/starts-with? (string/lower-case href) "http")
                     href
+
+                    ;; Absolute and ~ home paths stay root-relative outside
+                    ;; Electron; Electron resolves them to assets:// URLs.
+                    local-path?
+                    (if (util/electron?)
+                      (assets-handler/file-path->assets-url href)
+                      href)
 
                     config/publishing?
                     (subs href 1)
@@ -686,10 +694,9 @@
                     (assets-handler/check-alias-path? href)
                     (assets-handler/normalize-asset-resource-url href)
 
-                    ;; Local file paths (`/x.png`, `~/x.png`, `file://`) and
-                    ;; graph-relative paths (`../x.png`, `./x.png`, `x.png`)
-                    ;; resolve to assets:// URLs; the raw path resolves
-                    ;; against the app origin and 404s otherwise.
+                    ;; Graph-relative paths (`../x.png`, `./x.png`, `x.png`)
+                    ;; and file:// URLs resolve to assets:// URLs; the raw
+                    ;; path resolves against the app origin and 404s.
                     (util/electron?)
                     (assets-handler/file-path->assets-url href)
 
