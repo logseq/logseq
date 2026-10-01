@@ -2199,6 +2199,98 @@ scope stays frozen-at-init — same effective contract as before.
   above). Reproduced identically on an `origin/devin/lui-ui-rewrite`
   bundle — not introduced by this change.
 
+## Misc surfaces audit + ports (branch `devin/lui-misc-surfaces`)
+
+Cleanup-audit sweep over the small cljs surfaces that had no ported
+equivalent. Verdicts and port decisions below.
+
+### Scheduled/deadline datepicker — already ported (no work needed)
+
+- Slash commands `"scheduled"`/`"deadline"` in
+  `editor_commands.ml` open the inline `#date-time-picker` calendar
+  (`Cal_prop "logseq.property/scheduled"`/`"deadline"`); Enter/day-click
+  commits `Ops.set_block_property` with `W.Float (getTime)` through
+  `prop_batch`, and the popup stays open after commit (cljs
+  `:editor/new-property` behavior).
+- The property-area editor (`.ls-property-date-picker`,
+  `input[type=date|datetime-local]` popover) is already ported in
+  `properties/properties_value.ml`.
+- Port decision kept: cljs `/scheduled` `/deadline` dispatch
+  `:editor/new-property` (opens the *property* editor), while the port
+  opens the inline block calendar popup directly — the write path is
+  the same `logseq.property/*` + epoch-millis value.
+
+### Shortcut help panel — ported
+
+- Help menu "Keyboard shortcuts" (`chrome.ml` `hm-shortcuts`) now opens
+  the `"shortcut-settings"` right-sidebar item (cljs
+  `sidebar-add-block! "shortcut-settings" :shortcut-settings`) instead
+  of just closing the menu.
+- `sidebar_state.open_sticky_item` gained the `"shortcut-settings"`
+  case (`static_item` + `help.shortcuts/label` title) and now calls
+  `ensure_right_open` for every sticky kind — cljs
+  `sidebar-add-block!` opens the sidebar as a side effect, which the
+  topbar path previously got for free.
+- `right_sidebar_view.ml` `item_body` dispatches on kind:
+  `"shortcut-settings"` → `shortcut_page_body` (cljs
+  `right_sidebar.cljs :shortcut-settings` →
+  `shortcut-help/shortcut-page {:show-title? false}`):
+  `.contents.flex-col.flex.ml-3 > .cp__shortcut-page.px-2.-mt-2` with
+  `trigger-table` (6 rows; search cell is the shui
+  `separate`-style `kbd.shui-shortcut-key` chips via
+  `Cmdk_view.separate_el ["mod"; "k"]`), `markdown-syntax` (10 rows,
+  raw markup left / rendered right; KaTeX + hljs don't ship in the
+  Melange bundle so math/latex keep `Render_inline.katex_el` raw-tex
+  stubs and `pre.code` keeps the unhighlighted `code#help-highlight`),
+  then `Settings_page.keymap_pane` (the ported
+  `shortcut-keymap-x`).
+- `?` key (`shift+/`, cljs `:ui/toggle-help`,
+  `global-non-editing-only`) now sends `Action.Help_toggle` from
+  `on_normal_key` — the help menu popup already existed.
+- Help-menu entries still just `close` (documented):
+  `hm-handbook` (cljs `handbooks/toggle-handbooks` — the handbook
+  extension system isn't ported) and `hm-bug` (cljs pushes a
+  `:bug-report` route that doesn't exist in the Melange Router).
+
+### Onboarding — right-sidebar help body ported; first-run pages N/A
+
+- The web's only reachable onboarding surface is the `:help` sidebar
+  item (cljs `onboarding/help`): `item_body` now renders
+  `help_docs_body` — `.help.cp__sidebar-help-docs` with the five
+  `p.mt-4.mb-1 > b` + `ul > li > a[target=_blank]` groups, matching
+  `components/onboarding.cljs` links and the icon'd
+  "Keyboard shortcuts"/forum rows.
+- cljs first-run/onboarding *pages* (`components/onboarding/setups`)
+  are only reached from the onboarding route/dialog flow, which the
+  web app doesn't mount; the `#/import` flow (the one first-run path
+  that does exist) was already ported (`Importer.view` renders
+  `.cp__onboarding-setups > .inner-card`). No additional port needed.
+
+### find-in-page — SKIP (Electron-only, verified)
+
+- `modules/shortcut/config.cljs` `:go/electron-find-in-page` binding is
+  `mod+f` **with `:inactive (not (util/electron?))`**, and
+  `handler/search.cljs` `open-find-in-page!`/`electron-find-in-page!`
+  guard `(when (util/electron?))` — the actual search is
+  `(ipc/ipc "find-in-page" ...)` → Electron `webContents.findInPage`.
+  `components/container.cljs` mounts `(find-in-page/search)` only
+  inside `(when (util/electron?))`. There is no web implementation to
+  port; the browser's own find covers this on web.
+
+### Runtime verification note (this branch)
+
+`bb test -p 3015` still can't reach the editor: the base branch's
+update-flush bug (`MelangeError: Invalid_argument`/`Js_exn.Error` in
+`apply_pending_batch`/`apply_batch`, `static/js/main.js`) fires on the
+first state-changing DOM event — the e2e fixture's `new-logseq-page`
+dies on it, and so does any manual interaction. Reproduced identically
+on an unmodified `origin/devin/lui-ui-rewrite` build (same worktree,
+changes stashed): clicking a block or the `?` help button throws the
+same exception and no UI updates. So the ported `?` toggle, the
+help-menu "Keyboard shortcuts" item, and the sidebar help/shortcut
+bodies compile in but can't be exercised interactively until the
+renderer batch bug is fixed on the base branch.
+
 
 ## Bundle / production build (devin/lui-prodbuild)
 

@@ -214,6 +214,11 @@ let on_normal_key ev =
               A.enter_edit u 0
           | _ -> ()))
   | "Escape" -> A.clear_selection ()
+  | "?" ->
+      (* cljs shift+/ (:ui/toggle-help, global-non-editing-only) toggles
+         the help menu popup *)
+      D.prevent_default ev;
+      Runtime.send Action.Help_toggle
   | _ -> (
       match shortcut_key ev with
       | "a" when mods ev && shift ->

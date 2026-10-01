@@ -609,7 +609,10 @@ let open_uuid st uuid =
 let open_sticky_item st kind =
   let repo = Runtime.repo () in
   if repo = "" then ()
-  else
+  else begin
+    (* cljs sidebar-add-block! also opens the sidebar — the topbar path
+       already implies open, the help-menu path does not *)
+    ensure_right_open ();
     match kind with
     | "contents" when not (has_item st "contents") ->
         add_promise st (contents_item repo)
@@ -637,7 +640,15 @@ let open_sticky_item st kind =
         match static_item kind kind label with
         | Some it -> push_item st it
         | None -> ())
+    | "shortcut-settings" when not (has_item st "shortcut-settings") ->
+        (match
+           static_item "shortcut-settings" "shortcut-settings"
+             (t "help.shortcuts/label")
+         with
+         | Some it -> push_item st it
+         | None -> ())
     | _ -> ()
+  end
 
 let ensure_contents st =
   let repo = Runtime.repo () in

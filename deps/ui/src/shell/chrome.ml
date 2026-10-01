@@ -392,7 +392,15 @@ let help_menu_popup : t =
   Logseq_dom.dom ~key:"help-menu" ~style_class:"cp__sidebar-help-menu-popup"
     [ Logseq_dom.dom ~key:"hm-wrap" ~style_class:"list-wrap"
         [ help_item "hm-handbook" (I18n.help_handbook) "book-2" close
-        ; help_item "hm-shortcuts" (I18n.help_shortcuts) "command" close
+        ; help_item "hm-shortcuts" (I18n.help_shortcuts) "command"
+            (fun () ->
+              (* cljs help-menu-items: sidebar-add-block! "shortcut-settings"
+                 opens the shortcut page as a right-sidebar item *)
+              (match Sidebar_state.current () with
+               | Some st ->
+                   Sidebar_state.open_sticky_item st "shortcut-settings"
+               | None -> ());
+              close ())
         ; help_item "hm-docs" (I18n.help_docs) "help" (fun () ->
             open_url "https://docs.logseq.com/"; close ())
         ; Logseq_dom.dom ~key:"hm-hr1" ~tag:"hr" ~style_class:"ls-hm-hr" []
