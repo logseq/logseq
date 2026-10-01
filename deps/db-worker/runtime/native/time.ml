@@ -157,10 +157,13 @@ let epoch_tz_offset_minutes () =
   match !epoch_tz_offset_minutes with
   | Some off -> off
   | None ->
-      (* mktime reads tm fields as local civil, so at the epoch its
-         value is the negated UTC offset. *)
-      let secs, _ = Unix.mktime (Unix.gmtime 0.) in
-      let off = int_of_float (-.secs /. 60.) in
+      (* mktime reads tm fields as local civil, so its value at an
+         instant is instant-minus-offset. Probe after the epoch: east
+         of UTC a probe at 0 maps to a negative local value, which
+         win32 mktime rejects. *)
+      let probe = 172800. in
+      let secs, _ = Unix.mktime (Unix.gmtime probe) in
+      let off = int_of_float ((probe -. secs) /. 60.) in
       epoch_tz_offset_minutes := Some off;
       off
 
