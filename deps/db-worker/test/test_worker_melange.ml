@@ -243,3 +243,201 @@ let () =
                (Worker_core.invoke "thread-api/close-db"
                   (Transit_codec.to_string (Wire.Array [ Wire.String repo ]))))
       |> Js.Promise.then_ (fun _ -> Js.Promise.resolve ()))
+
+(* Shared_service failure contracts use the real Melange effect scheduler.
+   Request tests send their responses through Node's BroadcastChannel API. *)
+module Shared_effect = Db_worker_effect
+
+let shared_observe task =
+  let outcome = ref None in
+  Shared_effect.on_any task
+    (fun value -> outcome := Some (Ok value))
+    (fun exn -> outcome := Some (Error exn));
+  outcome
+
+let shared_await task =
+  match !(shared_observe task) with
+  | Some (Ok value) -> value
+  | Some (Error exn) -> raise exn
+  | None -> failwith "shared-service task still pending"
+
+let shared_check condition = Fest.expect |> Fest.equal condition true
+
+let shared_create handler =
+  shared_await
+    (Shared_service.create_service ~service_name:"failure-contract"
+       ~target:(fun _ _ -> Shared_effect.pure Wire.Nil)
+       ~on_become_master_handler:handler ~broadcast_data_types:[] ())
+
+let shared_master handler ready =
+  let channel = Broadcast_channel.create (Uuid_gen.uuid ()) in
+  let task =
+    try
+      Shared_service.on_become_master ~master_client_id:"test-master"
+        ~service_name:"failure-contract" ~common_channel:channel
+        ~target:(fun _ _ -> Shared_effect.pure Wire.Nil)
+        ~on_become_master_handler:handler ~status_ready:ready ()
+    with exn -> Broadcast_channel.close channel; raise exn
+  in
+  Broadcast_channel.close channel;
+  task
+
+let () =
+  List.iter
+    (fun (name, start) ->
+       Fest.test ("shared-service " ^ name ^ " ready success is synchronous") (fun () ->
+           let calls = ref 0 in
+           let ready = start (fun _ -> incr calls; Shared_effect.pure ()) in
+           shared_check (!calls = 1);
+           shared_check (!(shared_observe ready) = Some (Ok ())));
+       Fest.test ("shared-service " ^ name ^ " ready rejects effect failure") (fun () ->
+           let failure = Failure "initialization failed" in
+           let ready = start (fun _ -> Shared_effect.error failure) in
+           shared_check (!(shared_observe ready) = Some (Error failure)));
+       Fest.test ("shared-service " ^ name ^ " ready rejects synchronous throw") (fun () ->
+           let failure = Failure "initialization threw" in
+           let ready = start (fun _ -> raise failure) in
+           shared_check (!(shared_observe ready) = Some (Error failure)));
+       Fest.test ("shared-service " ^ name ^ " deferred ready success") (fun () ->
+           let init, resolver = Shared_effect.wait () in
+           let ready = start (fun _ -> init) in
+           let outcome = shared_observe ready in
+           shared_check (!outcome = None);
+           Shared_effect.wakeup resolver ();
+           shared_check (!outcome = Some (Ok ())));
+       Fest.test ("shared-service " ^ name ^ " deferred ready failure reaches all observers") (fun () ->
+           let init, resolver = Shared_effect.wait () in
+           let ready = start (fun _ -> init) in
+           let first = shared_observe ready in
+           let second = shared_observe ready in
+           let failure = Failure "deferred initialization failed" in
+           shared_check (!first = None && !second = None);
+           Shared_effect.reject resolver failure;
+           shared_check (!first = Some (Error failure) && !second = Some (Error failure));
+           Shared_effect.wakeup resolver ();
+           shared_check (!first = Some (Error failure))))
+    [ "node", (fun handler -> (shared_create handler).Shared_service.status_ready)
+    ; "browser master", (fun handler ->
+          let ready, resolver = Shared_effect.wait () in
+          ignore (shared_master handler resolver);
+          ready)
+    ];
+  Fest.test "shared-service new service after failed initialization" (fun () ->
+      let failure = Failure "first initialization failed" in
+      let first = shared_create (fun _ -> Shared_effect.error failure) in
+      let second = shared_create (fun _ -> Shared_effect.pure ()) in
+      shared_check (!(shared_observe first.status_ready) = Some (Error failure));
+      shared_check (!(shared_observe second.status_ready) = Some (Ok ())));
+  Fest.test "shared-service proxy returns synchronous target throw as effect failure" (fun () ->
+      let failure = Failure "target threw" in
+      let service = shared_await
+          (Shared_service.create_service ~service_name:"proxy-failure"
+             ~target:(fun _ _ -> raise failure)
+             ~on_become_master_handler:(fun _ -> Shared_effect.pure ())
+             ~broadcast_data_types:[] ()) in
+      shared_check (!(shared_observe (service.proxy [])) = Some (Error failure)))
+
+let shared_request id =
+  Wire.Map
+    [ Wire.String "type", Wire.String "request"
+    ; Wire.String "id", Wire.Int id
+    ; Wire.String "method", Wire.String "remoteInvoke"
+    ; Wire.String "args", Wire.Array [Wire.String "thread-api/failure-probe"] ]
+
+let shared_request_test name target expected =
+  Fest.Promise.test ("shared-service response " ^ name) (fun () ->
+      let channel_name = Uuid_gen.uuid () in
+      let sender = Broadcast_channel.create channel_name in
+      let receiver = Broadcast_channel.create channel_name in
+      let received, resolver = Shared_effect.wait () in
+      let messages = ref [] in
+      let listener = Broadcast_channel.add_message_listener receiver (fun response ->
+          messages := response :: !messages;
+          if List.length !messages = 2 then Shared_effect.wakeup resolver ()) in
+      let close () =
+        Broadcast_channel.remove_message_listener receiver listener;
+        Broadcast_channel.close receiver;
+        Broadcast_channel.close sender;
+        Shared_effect.pure () in
+      let calls = ref 0 in
+      let handler = Shared_service.create_on_request_handler sender (fun method_name args ->
+          incr calls;
+          shared_check (method_name = "remoteInvoke");
+          shared_check (args = [Wire.String "thread-api/failure-probe"]);
+          target ()) in
+      let test =
+        try
+          (* Repeated requests each receive a response, even with the same id. *)
+          handler (shared_request 7);
+          shared_check (!calls = 1);
+          handler (shared_request 7);
+          shared_check (!calls = 2);
+          Shared_effect.bind (Shared_effect.timeout received 1000.) (fun () ->
+              List.iter (fun response ->
+                  shared_check (Option.bind (Wire.get "id" response) Wire.as_int = Some 7);
+                  shared_check (Wire.get "type" response = Some (Wire.String "response"));
+                  shared_check (Wire.get "method-key" response = Some (Wire.String "thread-api/failure-probe"));
+                  let result, error = expected in
+                  shared_check (Wire.get "result" response = Some result);
+                  shared_check (Wire.get "error" response = Some error)) !messages;
+              Shared_effect.pure ())
+        with exn -> Shared_effect.error exn in
+      promise_of_task (Shared_effect.finally test close))
+
+let () =
+  let result = Wire.String "ok" in
+  let failure = Failure "endpoint failed" in
+  let error = Shared_service.error_to_wire failure in
+  shared_request_test "synchronous success" (fun () -> Shared_effect.pure result)
+    (result, Wire.Nil);
+  shared_request_test "synchronous throw" (fun () -> raise failure)
+    (Wire.Nil, error);
+  shared_request_test "already rejected effect" (fun () -> Shared_effect.error failure)
+    (Wire.Nil, error);
+  shared_request_test "deferred success" (fun () ->
+      let task, resolver = Shared_effect.wait () in
+      ignore (Js.Global.setTimeout ~f:(fun () -> Shared_effect.wakeup resolver result) 0
+                : Js.Global.timeoutId);
+      task) (result, Wire.Nil);
+  shared_request_test "deferred failure" (fun () ->
+      let task, resolver = Shared_effect.wait () in
+      ignore (Js.Global.setTimeout ~f:(fun () -> Shared_effect.reject resolver failure) 0
+                : Js.Global.timeoutId);
+      task) (Wire.Nil, error);
+  Fest.test "shared-service replay rejects synchronous endpoint throws and continues" (fun () ->
+      let rejected = ref [] in
+      let resolved = ref [] in
+      let failure = Failure "replayed endpoint threw" in
+      let entry args =
+        { Shared_service.method_name = "remoteInvoke"; args
+        ; resolve_fn = (fun value -> resolved := value :: !resolved)
+        ; reject_fn = (fun value -> rejected := value :: !rejected) } in
+      Shared_service.requests_in_flight :=
+        [ 1, entry [Wire.String "fail"]; 2, entry [Wire.String "ok"] ];
+      let run () =
+           Shared_service.re_requests_in_flight_on_master (fun _ args ->
+               if args = [Wire.String "fail"] then raise failure
+               else Shared_effect.pure (Wire.String "ok"));
+           shared_check (!rejected = [Shared_service.error_to_wire failure]);
+           shared_check (!resolved = [Wire.String "ok"]);
+           Shared_service.re_requests_in_flight_on_master (fun _ _ -> failwith "request replayed twice")
+      in
+      try run (); Shared_service.clear_old_service ()
+      with exn -> Shared_service.clear_old_service (); raise exn)
+
+
+let () =
+  Fest.test "shared-service slave registration failure rejects ready" (fun () ->
+      let common = Broadcast_channel.create (Uuid_gen.uuid ()) in
+      Broadcast_channel.close common;
+      let ready, resolver = Shared_effect.wait () in
+      let initialization = Shared_effect.bind (Shared_effect.pure ()) (fun () ->
+          Shared_service.on_become_slave ~slave_client_id:"failed-slave"
+            ~service_name:"registration-failure" ~common_channel:common
+            ~broadcast_data_types:[] ~status_ready:resolver ()) in
+      let outcome = !(shared_observe ready) in
+      let task_outcome = !(shared_observe initialization) in
+      Shared_service.clear_old_service ();
+      shared_check (match outcome, task_outcome with
+          | Some (Error first), Some (Error second) -> first = second
+          | _ -> false))
