@@ -132,6 +132,7 @@
  :block/open-block-references "Відкрити посилання на блок"
  :block/practice "Практика"
  :block/practice-cards "Практикувати картки"
+ :block/ref-not-exist "Цей блок не існує."
  :block/remove-tag "Видалити тег"
  :block/remove-this-tag "Видалити цей тег"
  :block/render-error "Помилка відображення блоку:"

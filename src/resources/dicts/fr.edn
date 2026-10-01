@@ -93,6 +93,7 @@
  :block/open-block-references "Ouvrir les références du bloc"
  :block/practice "Pratiquer"
  :block/practice-cards "Pratiquer les cartes"
+ :block/ref-not-exist "Ce bloc n'existe pas."
  :block/remove-tag "Retirer le tag"
  :block/remove-this-tag "Retirer ce tag"
  :block/render-error "Erreur de rendu du bloc :"

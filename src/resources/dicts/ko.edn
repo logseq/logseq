@@ -93,6 +93,7 @@
  :block/open-block-references "블록 참조 열기"
  :block/practice "연습"
  :block/practice-cards "카드 연습"
+ :block/ref-not-exist "이 블록은 존재하지 않습니다."
  :block/remove-tag "태그 제거"
  :block/remove-this-tag "이 태그 제거"
  :block/render-error "블록 렌더링 오류:"

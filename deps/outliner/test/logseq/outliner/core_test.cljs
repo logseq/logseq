@@ -208,6 +208,84 @@
         (is (= canonical-uuid
                (:block/uuid (first (:block/refs (first (:blocks result)))))))))))
 
+(deftest insert-blocks-missing-uuid-refs-become-broken
+  ;; Both ref shapes produced for a uuid with no entity — a generated page map
+  ;; and a [:block/uuid id] lookup — are dropped, and the title keeps the uuid
+  ;; the user typed so it renders as a broken ref.
+  (let [conn (db-test/create-conn-with-blocks
+              [{:page {:block/title "page1"}
+                :blocks [{:block/title "host"}]}])
+        missing-uuid (random-uuid)
+        missing-uuid-2 (random-uuid)
+        gen-uuid (random-uuid)
+        ;; mirrors the frontend parse of [[<uuid>]] when the entity doesn't exist
+        parsed-ref {:block/type "page"
+                    :block/name (str missing-uuid)
+                    :block/title (str missing-uuid)
+                    :block/uuid gen-uuid}
+        host (db-test/find-block-by-content @conn "host")
+        result (outliner-core/insert-blocks
+                @conn
+                [{:block/uuid (random-uuid)
+                  :block/title (str "a [[" gen-uuid "]] b ((" missing-uuid-2 "))")
+                  :block/raw-title (str "a [[" gen-uuid "]] b ((" missing-uuid-2 "))")
+                  :block/refs [parsed-ref
+                               [:block/uuid missing-uuid]
+                               [:block/uuid missing-uuid-2]]}]
+                host
+                {:sibling? true
+                 :keep-uuid? true})]
+    (d/transact! conn (:tx-data result))
+    (let [inserted (first (:blocks result))]
+      (is (= (str "a [[" missing-uuid "]] b ((" missing-uuid-2 "))")
+             (:block/title inserted)
+             (:block/raw-title inserted)))
+      (is (empty? (:block/refs inserted)))
+      (is (nil? (d/entity @conn [:block/uuid missing-uuid])))
+      (is (nil? (d/entity @conn [:block/uuid missing-uuid-2]))))))
+
+(deftest insert-blocks-preserves-valid-refs
+  ;; A db/id ref, [:block/uuid] lookups to an entity created by this batch or
+  ;; by a page-ref in the same block, and a uuid-named ref resolving to an
+  ;; existing entity must all survive ref resolution.
+  (let [conn (db-test/create-conn-with-blocks
+              [{:page {:block/title "page1"}
+                :blocks [{:block/title "host"}
+                         {:block/title "linked"}]}])
+        linked (db-test/find-block-by-content @conn "linked")
+        linked-uuid (:block/uuid linked)
+        host (db-test/find-block-by-content @conn "host")
+        sibling-uuid (random-uuid)
+        page-uuid (random-uuid)
+        gen-uuid (random-uuid)
+        result (outliner-core/insert-blocks
+                @conn
+                [{:block/uuid sibling-uuid
+                  :block/title "sibling"}
+                 {:block/uuid (random-uuid)
+                  :block/title (str "[[" gen-uuid "]]")
+                  :block/raw-title (str "[[" gen-uuid "]]")
+                  :block/refs [{:db/id (:db/id linked)}
+                               [:block/uuid sibling-uuid]
+                               {:block/type "page"
+                                :block/name (str linked-uuid)
+                                :block/title (str linked-uuid)
+                                :block/uuid gen-uuid}
+                               {:block/type "page"
+                                :block/name "newpage"
+                                :block/title "newpage"
+                                :block/uuid page-uuid}
+                               [:block/uuid page-uuid]]}]
+                host
+                {:sibling? true
+                 :keep-uuid? true})]
+    (d/transact! conn (:tx-data result))
+    (let [inserted (second (:blocks result))
+          inserted-entity (d/entity @conn [:block/uuid (:block/uuid inserted)])]
+      (is (= (str "[[" linked-uuid "]]") (:block/title inserted)))
+      (is (= #{linked-uuid sibling-uuid page-uuid}
+             (set (map :block/uuid (:block/refs inserted-entity))))))))
+
 (deftest test-delete-block-with-default-property
   (testing "Delete block with default property hard retracts the block subtree"
     (let [conn (db-test/create-conn-with-blocks
