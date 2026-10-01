@@ -163,7 +163,10 @@ let load_state () =
             Db_worker_effect.pure []))
 
 let store_state kvs =
-  File_sys.write_text (kv_path ()) (Transit_codec.to_string (Wire.Map kvs))
+  (* Node filesystem effects settle synchronously, so each read/modify/write
+     completes before another operation starts. Replace the file atomically
+     so a failed write cannot truncate the previous typed values. *)
+  File_sys.write_text_atomic (kv_path ()) (Transit_codec.to_string (Wire.Map kvs))
 
 let u8_of_string s =
   let n = String.length s in
