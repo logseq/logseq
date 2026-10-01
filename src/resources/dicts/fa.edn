@@ -93,6 +93,7 @@
  :block/open-block-references "باز کردن مراجع بلوک"
  :block/practice "تمرین"
  :block/practice-cards "تمرین کارت‌ها"
+ :block/ref-not-exist "این بلوک وجود ندارد."
  :block/remove-tag "حذف برچسب"
  :block/remove-this-tag "حذف این برچسب"
  :block/render-error "خطای رندر بلوک:"

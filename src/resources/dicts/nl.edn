@@ -93,6 +93,7 @@
  :block/open-block-references "Blokreferenties openen"
  :block/practice "Oefenen"
  :block/practice-cards "Kaarten oefenen"
+ :block/ref-not-exist "Dit blok bestaat niet."
  :block/remove-tag "Tag verwijderen"
  :block/remove-this-tag "Deze tag verwijderen"
  :block/render-error "Blok-renderfout:"

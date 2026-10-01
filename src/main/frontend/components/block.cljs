@@ -1325,10 +1325,23 @@
            (when (and brackets? (not blank-title?))
              [:span.text-gray-500.bracket page-ref/right-brackets])])))))
 
+(hsx/defc broken-page-reference
+  "Render a [[uuid]] ref whose entity doesn't exist."
+  [_config uuid-or-title]
+  [:a.page-ref.broken
+   {:title (t :block/ref-not-exist)
+    :on-click (fn [e]
+                (util/stop e)
+                (notification/show! (t :block/ref-not-exist) :warning))}
+   (str "[[" uuid-or-title "]]")])
+
 (hsx/defc subscribed-page-reference
   [config uuid-or-title label page-uuid fallback-block]
-  (let [block (db-hooks/use-block page-uuid)]
-    (page-reference-content config uuid-or-title label (or block fallback-block))))
+  (let [{:keys [status value error]} (db-hooks/use-block-projection-snapshot page-uuid identity)]
+    (case status
+      :error (throw error)
+      :missing (broken-page-reference config uuid-or-title)
+      (page-reference-content config uuid-or-title label (or value fallback-block)))))
 
 (defn referenced-block
   [block uuid-or-title]

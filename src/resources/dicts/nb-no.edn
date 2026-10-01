@@ -93,6 +93,7 @@
  :block/open-block-references "Åpne blokkreferanser"
  :block/practice "Øv"
  :block/practice-cards "Øv på kort"
+ :block/ref-not-exist "Denne blokken finnes ikke."
  :block/remove-tag "Fjern tagg"
  :block/remove-this-tag "Fjern denne taggen"
  :block/render-error "Feil ved blokkgjengivelse:"
