@@ -300,21 +300,35 @@ let attach (ctx : Lui_ui.ui_context) st margin list_id scroll_parent_id
                    Array.iter
                      (fun it -> Hashtbl.replace prev_items (key_of it) it)
                      old;
-                   Array.iter
-                     (fun it ->
+                   let dirty = ref (Array.length old <> Array.length arr) in
+                   Array.iteri
+                     (fun i it ->
                        let k = key_of it in
-                       match Hashtbl.find_opt prev_items k with
-                       | Some old_it when old_it == it || old_it = it ->
-                           ()
-                       | _ ->
-                           Hashtbl.replace versions k
-                             (1
-                              + Option.value
-                                  (Hashtbl.find_opt versions k)
-                                  ~default:0))
+                       let unchanged_at i = key_of old.(i) = k in
+                       let unchanged =
+                         i < Array.length old && unchanged_at i
+                         &&
+                         match Hashtbl.find_opt prev_items k with
+                         | Some old_it -> old_it == it || old_it = it
+                         | None -> false
+                       in
+                       if not unchanged then begin
+                         dirty := true;
+                         match Hashtbl.find_opt prev_items k with
+                         | Some old_it when old_it == it || old_it = it ->
+                             ()
+                         | _ ->
+                             Hashtbl.replace versions k
+                               (1
+                                + Option.value
+                                    (Hashtbl.find_opt versions k)
+                                    ~default:0)
+                       end)
                      arr;
-                   V.set_options v (options ());
-                   publish v))
+                   if !dirty then begin
+                     V.set_options v (options ());
+                     publish v
+                   end))
         | None -> None
       in
       (* Batches that add nodes (row mounts, raw-text swaps) must
