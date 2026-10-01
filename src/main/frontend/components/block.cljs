@@ -286,13 +286,14 @@
                 (fn [_e]
                   ;; Electron renderer cannot fetch file:// URLs; read the
                   ;; file via IPC and copy the blob directly.
-                  ;; image-src is a filesystem path only when it has no URL
-                  ;; scheme (a Windows drive letter like C: is not a scheme)
-                  ;; and is not protocol-relative; data:/blob:/http(s) take
-                  ;; the renderer fetch path instead.
+                  ;; image-src is a filesystem path when it has no URL
+                  ;; scheme (a Windows drive like C: is not one) and src is
+                  ;; not a protocol-relative URL — an assets:// UNC path
+                  ;; normalizes to //server/share but is still a file.
                   (if (and (util/electron?)
                            (seq image-src)
-                           (not (re-find #"(?i)^([a-z][a-z0-9+.-]+:|//)" image-src)))
+                           (not (re-find #"(?i)^[a-z][a-z0-9+.-]+:" image-src))
+                           (not (util/starts-with? src "//")))
                     (let [ext (some-> (util/get-file-ext image-src) string/lower-case)
                           ;; Should support all exts in common-config/img-formats
                           ext->mime {"png" "image/png"
@@ -402,11 +403,14 @@
                   [:span.flex.items-center.gap-1
                    (ui/icon "copy") (t :asset/copy)])
                  (when (util/electron?)
-                   ;; http(s) opens in browser; a bare filesystem path
-                   ;; reveals in folder; anything else (data:, blob:, //)
-                   ;; supports neither action.
+                   ;; http(s) opens in browser; a filesystem path reveals in
+                   ;; folder; anything else (data:, blob:, // src) supports
+                   ;; neither. src is checked for // since assets:// UNC
+                   ;; paths normalize to //server/share but are still files.
                    (let [remote-src? (and image-src (re-find #"(?i)^https?:" image-src))
-                         file-src? (and image-src (not (re-find #"(?i)^([a-z][a-z0-9+.-]+:|//)" image-src)))]
+                         file-src? (and image-src
+                                        (not (re-find #"(?i)^[a-z][a-z0-9+.-]+:" image-src))
+                                        (not (util/starts-with? src "//")))]
                      (when (or remote-src? file-src?)
                        (shui/dropdown-menu-item
                       {:on-click (fn [e]
