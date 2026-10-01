@@ -41,7 +41,7 @@ let store db addr_payloads =
          let addresses =
            match payload with
            | Storage_node (Persistent_sorted_set.Branch (_, children)) ->
-               Sqlite.Text (Storage_codec.encode_addresses children)
+               Sqlite.Text (Storage_codec.encode_addresses (Array.to_list children))
            | _ -> Sqlite.Null
          in
          [| Sqlite.Integer (Int64.of_string addr); Sqlite.Text content; addresses |])
@@ -93,7 +93,8 @@ let restore db addr =
                   | Some json ->
                       (match Storage_codec.decode_addresses json with
                        | [] -> payload
-                       | children -> Storage_node (Persistent_sorted_set.Branch (keys, children)))
+                       | children ->
+                           Storage_node (Persistent_sorted_set.Branch (keys, Array.of_list children)))
                   | None -> payload)
              | other -> other
            in
