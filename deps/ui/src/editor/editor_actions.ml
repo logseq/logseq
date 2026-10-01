@@ -156,7 +156,8 @@ let commit uuid buf =
   if buf <> model_title uuid then (
     S.override_title uuid (Ops.normalized_title uuid buf);
     ignore
-      (let* _ = Ops.apply_and_refresh [ Ops.save_block uuid buf ] in
+      (let* sop = Ops.save_block_parsed uuid buf in
+      let* _ = Ops.apply_and_refresh [ sop ] in
       (* the buffer is now persisted — advance base so the undo
                 resync gate treats it as clean and can restore reverted
                 titles instead of masking them with the pre-undo text *)
@@ -283,7 +284,9 @@ let flush_edit () =
       let buf = live_buffer e.uuid in
       S.set (fun st -> { st with S.editing = None });
       if buf <> model_title e.uuid then
-        ignore (Ops.apply [ Ops.save_block e.uuid buf ])
+        ignore
+          (let* sop = Ops.save_block_parsed e.uuid buf in
+           Ops.apply [ sop ])
 
 (* property value cells open their own inline editor — entering one
    exits block editing just like a click into another block *)
@@ -472,14 +475,16 @@ let merge_prev uuid =
             with_focus_after uuid 0
               (Ops.apply_and_refresh ~opts:(Ops.op_opts "delete-blocks") ops))
           else (
-            let ops =
-              move_children_ops b prev_uuid
-              @ [ Ops.delete_blocks [ uuid ]
-                ; Ops.save_block prev_uuid (prev.Model.block_title ^ buf)
-                ]
-            in
             ignore
-              (let* pbuf = Ops.title_for_edit (String.trim prev.Model.block_title) in
+              (let* sop =
+                 Ops.save_block_parsed prev_uuid
+                   (prev.Model.block_title ^ buf)
+               in
+              let ops =
+                move_children_ops b prev_uuid
+                @ [ Ops.delete_blocks [ uuid ]; sop ]
+              in
+              let* pbuf = Ops.title_for_edit (String.trim prev.Model.block_title) in
               S.set (fun st ->
                   { st with
                     S.editing =
@@ -1577,7 +1582,8 @@ let run_query_command ~advanced =
       in
       let _ = () in
       ignore
-        (let* () =
+        (let* sop = Ops.save_block_parsed e.uuid "" in
+        let* () =
           Ops.apply_and_refresh
             ([ Ops.op "create-property-text-block"
                  [ Wire.Uuid e.uuid
@@ -1590,7 +1596,7 @@ let run_query_command ~advanced =
                  ]
              ; Ops.set_block_property e.uuid "block/tags"
                  (Wire.Keyword "logseq.class/Query")
-             ; Ops.save_block e.uuid ""
+             ; sop
              ]
             @ extra)
         in
@@ -1676,7 +1682,9 @@ let save_uploaded_files (input : Editor_dom.el) =
              it is still being edited *)
           let pre =
             if empty_target then Js.Promise.resolve ()
-            else Ops.apply [ Ops.save_block e.uuid buffer ]
+            else
+              let* sop = Ops.save_block_parsed e.uuid buffer in
+              Ops.apply [ sop ]
           in
           ignore
             (let* () = pre in

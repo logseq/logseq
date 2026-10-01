@@ -85,31 +85,46 @@ let markdown_heading_level s =
 let strip_markdown_heading s lvl =
   String.trim (String.sub (String.trim s) lvl (String.length (String.trim s) - lvl))
 
-(* The block map sent in a save-block op — shared by editor saves and
-   sdk updateBlock. *)
-let saved_block_map uuid title =
+(* cljs wrap-parse-block on save: markdown headings normalize into
+   logseq.property/heading, and [[page]]/#tag references resolve into
+   block/refs + block/tags with the stored title rewritten to
+   [[uuid]] id-ref form — async since Title_refs resolves entities.
+   Sync text-only parsing must never run here: a #tag ref emitted as a
+   bare {name,title,fresh-uuid} map upserts nothing, minting a partial
+   duplicate entity that fails tx validation *)
+let block_map_parsed ?(page = false) uuid title =
   let dt =
     match S.find uuid with
     | Some b -> b.Model.block_display_type
     | None -> None
   in
-  let fields t =
-    match dt with
-    | Some _ -> [ str "block/title" (Wire.String t) ]
-    | None ->
-        List.map
-          (fun (k, v) -> (Wire.String k, v))
-          (Block_parse.title_fields t)
+  let title, heading =
+    match markdown_heading_level title with
+    | Some lvl when dt <> Some "code" && dt <> Some "math" ->
+        (strip_markdown_heading title lvl, Some lvl)
+    | _ -> (String.trim title, None)
   in
-  match markdown_heading_level title with
-  | Some lvl when dt <> Some "code" && dt <> Some "math" ->
-      Wire.Map
-        ([ str "block/uuid" (Wire.Uuid uuid) ]
-        @ fields (strip_markdown_heading title lvl)
-        @ [ str "logseq.property/heading" (Wire.Int lvl) ])
-  | _ ->
-      Wire.Map
-        ([ str "block/uuid" (Wire.Uuid uuid) ] @ fields (String.trim title))
+  let* p = Title_refs.parse title in
+  Js.Promise.resolve
+    (Wire.Map
+       ([ str "block/uuid" (Wire.Uuid uuid)
+        ; str "block/title" (Wire.String p.Title_refs.title) ]
+       @ (match heading with
+          | Some lvl -> [ str "logseq.property/heading" (Wire.Int lvl) ]
+          | None -> [])
+       @ Title_refs.kvs_of_parsed p
+       @
+       if page then
+         [ ( Wire.String "block/tags"
+           , Wire.Set [ Wire.Keyword "logseq.class/Page" ] )
+         ; ( Wire.String "block/name"
+           , Wire.String (page_name_sanity_lc p.Title_refs.title) )
+         ]
+       else []))
+
+let save_block_parsed uuid title =
+  let* bm = block_map_parsed uuid title in
+  Js.Promise.resolve (op "save-block" [ bm; Wire.Map [] ])
 
 (* the block/title form saved_block_map persists — commit-title overrides
    paint this so the post-edit DOM already shows the normalized text
@@ -124,12 +139,6 @@ let normalized_title uuid title =
   | Some lvl when dt <> Some "code" && dt <> Some "math" ->
       strip_markdown_heading title lvl
   | _ -> String.trim title
-
-(* cljs save-block-aux! trims the value before persisting *)
-let save_block uuid title =
-  (* cljs save-block-aux! runs wrap-parse-block: title -> parsed
-     refs/tags + id-ref rewrite *)
-  op "save-block" [ saved_block_map uuid title; Wire.Map [] ]
 
 let insert_blocks ?(bottom = false) ?(replace_empty_target = false)
     blocks target_uuid ~sibling =
@@ -810,7 +819,8 @@ let rec apply ?(opts = Wire.Map []) ops : unit Js.Promise.t =
   match !pending_save with
   | Some (uuid, title) ->
       pending_save := None;
-      let* () = apply [ save_block uuid title ] in
+      let* sop = save_block_parsed uuid title in
+      let* () = apply [ sop ] in
       apply ~opts ops
   | None -> (
       Editor_dom.clear_timeout !save_timer;
@@ -872,44 +882,6 @@ let page_still_current (route : Model.route option) (page : Model.page) =
   | Some c -> c == page
   | None -> false
 
-(* cljs wrap-parse-block on save: markdown headings normalize into
-   logseq.property/heading, and [[page]]/#tag references resolve into
-   block/refs + block/tags with the stored title rewritten to
-   [[uuid]] id-ref form — async since Title_refs resolves entities *)
-let block_map_parsed ?(page = false) uuid title =
-  let dt =
-    match S.find uuid with
-    | Some b -> b.Model.block_display_type
-    | None -> None
-  in
-  let title, heading =
-    match markdown_heading_level title with
-    | Some lvl when dt <> Some "code" && dt <> Some "math" ->
-        (strip_markdown_heading title lvl, Some lvl)
-    | _ -> (String.trim title, None)
-  in
-  let* p = Title_refs.parse title in
-  Js.Promise.resolve
-    (Wire.Map
-       ([ str "block/uuid" (Wire.Uuid uuid)
-        ; str "block/title" (Wire.String p.Title_refs.title) ]
-       @ (match heading with
-          | Some lvl -> [ str "logseq.property/heading" (Wire.Int lvl) ]
-          | None -> [])
-       @ Title_refs.kvs_of_parsed p
-       @
-       if page then
-         [ ( Wire.String "block/tags"
-           , Wire.Set [ Wire.Keyword "logseq.class/Page" ] )
-         ; ( Wire.String "block/name"
-           , Wire.String (page_name_sanity_lc p.Title_refs.title) )
-         ]
-       else []))
-
-let save_block_parsed uuid title =
-  let* bm = block_map_parsed uuid title in
-  Js.Promise.resolve (op "save-block" [ bm; Wire.Map [] ])
-
 (* parse (uuid, title) pairs into save ops, prepend to rest, apply *)
 let apply_parsed ?opts ~rest pairs =
   let* a =
@@ -929,7 +901,8 @@ let rec apply_result ?(opts = Wire.Map []) ops : Wire.t option Js.Promise.t
   match !pending_save with
   | Some (uuid, title) ->
       pending_save := None;
-      let* () = apply [ save_block uuid title ] in
+      let* sop = save_block_parsed uuid title in
+      let* () = apply [ sop ] in
       apply_result ~opts ops
   | None -> (
       Editor_dom.clear_timeout !save_timer;

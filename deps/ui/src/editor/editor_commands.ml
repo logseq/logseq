@@ -64,7 +64,8 @@ let clear_range uuid from to_ = snd (replace_range uuid from to_ "")
 let prop_batch ~caret uuid ops =
   let buf = A.live_buffer uuid in
   A.with_focus_after uuid caret
-    (Ops.apply_and_refresh_deferred (Ops.save_block uuid buf :: ops))
+    (let* sop = Ops.save_block_parsed uuid buf in
+     Ops.apply_and_refresh_deferred (sop :: ops))
 
 (* same, but drop edit mode first (cljs :editor/exit — code blocks leave
    the textarea while the view re-renders the code surface), then focus
@@ -74,7 +75,8 @@ let exit_to_props uuid ops =
   let buf = A.live_buffer uuid in
   S.set (fun st -> { st with S.editing = None });
   A.with_focus_after uuid 0
-    (Ops.apply_and_refresh (Ops.save_block uuid buf :: ops))
+    (let* sop = Ops.save_block_parsed uuid buf in
+     Ops.apply_and_refresh (sop :: ops))
 
 (* ---------- calendar ---------- *)
 
@@ -683,8 +685,10 @@ let toggle_children_list uuid caret =
            repaint now (the deferred path waits ~8s while editing) *)
         if ops <> [] then
           A.with_focus_after uuid caret
-            (Ops.apply_and_refresh
-               (Ops.save_block uuid (A.live_buffer uuid) :: ops));
+            (let* sop =
+               Ops.save_block_parsed uuid (A.live_buffer uuid)
+             in
+             Ops.apply_and_refresh (sop :: ops));
         Js.Promise.resolve ())
 
 let run_editor_cmd uuid command from to_ =

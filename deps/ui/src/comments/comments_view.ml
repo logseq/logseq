@@ -62,7 +62,9 @@ let submit_comment area_uuid (text : string) =
          [ Ops.insert_blocks [ block ] area_uuid ~sibling:false ]))
 
 let save_comment cuuid (text : string) =
-  ignore (Ops.apply_and_refresh [ Ops.save_block cuuid (String.trim text) ])
+  ignore
+    (let* sop = Ops.save_block_parsed cuuid (String.trim text) in
+     Ops.apply_and_refresh [ sop ])
 
 let delete_comment cuuid =
   match !Runtime.current_repo with
