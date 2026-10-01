@@ -27,7 +27,6 @@
   x509
   eio
   eio.unix
-  eio_posix
   httpun
   httpun-ws
   tls-eio
@@ -35,4 +34,7 @@
   domain-name
   bigstringaf
   faraday
-  cstruct))
+  cstruct
+  (select eio_run.ml from
+   (eio_windows -> eio_run.eio_windows.ml)
+   (eio_posix -> eio_run.eio_posix.ml))))

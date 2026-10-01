@@ -23,12 +23,31 @@ type pid_status =
   | No_permission
   | Error
 
-let kill0 pid =
-  try Unix.kill pid 0; Alive
-  with
-  | Unix.Unix_error (Unix.ESRCH, _, _) -> Not_found
-  | Unix.Unix_error (Unix.EPERM, _, _) -> No_permission
+(* win32unix has no signal-0 probe; tasklist is the stdlib-free way to
+   ask whether a pid is alive. CSV+NH prints one quoted row per match,
+   or an INFO line when nothing matches. *)
+let kill0_win32 pid =
+  (* win32 open_process_args_in space-joins args without quoting, so a
+     filter with spaces only survives via the open_process_in cmdline *)
+  let ic =
+    Unix.open_process_in
+      (Printf.sprintf "tasklist /FI \"PID eq %d\" /FO CSV /NH" pid)
+  in
+  let out = In_channel.input_all ic in
+  match Unix.close_process_in ic with
+  | Unix.WEXITED 0 ->
+      if String.length out > 0 && out.[0] = '"' then Alive else Not_found
   | _ -> Error
+
+let kill0 pid =
+  if Sys.os_type = "Win32"
+  then kill0_win32 pid
+  else
+    try Unix.kill pid 0; Alive
+    with
+    | Unix.Unix_error (Unix.ESRCH, _, _) -> Not_found
+    | Unix.Unix_error (Unix.EPERM, _, _) -> No_permission
+    | _ -> Error
 
 let on_signal name f =
   let sig_num =

@@ -88,7 +88,11 @@ let connect_timeout_s = 30.
 
 let connect ~url ~on_event =
   let task, resolver = Db_worker_effect.wait () in
-  let pipe_r, pipe_w = Unix.pipe ~cloexec:true () in
+  (* A socketpair rather than a pipe: the read end is imported as an
+     eio socket stream, and win32unix pipe fds are not sockets. *)
+  let pipe_r, pipe_w =
+    Unix.socketpair ~cloexec:true Unix.PF_UNIX Unix.SOCK_STREAM 0
+  in
   let ws =
     { state = 0
     ; wsd = None
@@ -127,7 +131,7 @@ let connect ~url ~on_event =
   in
   let run () =
     try
-      Eio_posix.run (fun env ->
+      Eio_run.run (fun env ->
         Eio.Switch.run (fun sw ->
           let clock = Eio.Stdenv.clock env in
           let setup_done_p, setup_done_u = Eio.Promise.create () in

@@ -2,7 +2,7 @@
 
    The daemon already multiplexes work across OS threads (one thread per
    inbound HTTP connection), so each outbound request/connection runs its
-   own [Eio_posix.run] loop on its own thread — no shared scheduler, no
+   own [Eio_run.run] loop on its own thread — no shared scheduler, no
    cross-domain promise juggling. *)
 
 module type RUNTIME = sig

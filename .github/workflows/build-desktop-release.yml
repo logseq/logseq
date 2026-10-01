@@ -267,6 +267,8 @@ jobs:
             runs-on: macos-15-intel
           - name: macos-arm64
             runs-on: macos-14
+          - name: windows-x64
+            runs-on: windows-latest
     runs-on: ${{ matrix.runs-on }}
     steps:
       - name: Check out Git repository
@@ -290,11 +292,31 @@ jobs:
         shell: bash
         run: opam exec -- dune build bin/main.exe
 
+      # The daemon loads libsqlite3-0.dll at runtime; it must sit beside
+      # main.exe in the packaged resources dir (Windows DLL search order
+      # checks the exe directory first). install-opam-deps.sh swaps in the
+      # upstream full-featured DLL (JSON1 + FTS5) at the same path.
+      - name: Stage windows db-worker-bin
+        if: matrix.name == 'windows-x64'
+        shell: bash
+        run: |
+          mkdir -p deps/db-worker/dist-bin
+          cp deps/db-worker/_build/default/bin/main.exe deps/db-worker/dist-bin/
+          cp "$(opam var root)/.cygwin/root/usr/x86_64-w64-mingw32/sys-root/mingw/bin/libsqlite3-0.dll" deps/db-worker/dist-bin/
+
       - name: Upload native db-worker binary
+        if: matrix.name != 'windows-x64'
         uses: actions/upload-artifact@v4
         with:
           name: db-worker-bin-${{ matrix.name }}
           path: deps/db-worker/_build/default/bin/main.exe
+
+      - name: Upload native db-worker binary (windows)
+        if: matrix.name == 'windows-x64'
+        uses: actions/upload-artifact@v4
+        with:
+          name: db-worker-bin-${{ matrix.name }}
+          path: deps/db-worker/dist-bin/
 
   build-linux-x64:
     runs-on: ubuntu-22.04
@@ -437,7 +459,7 @@ jobs:
 
   build-windows-x64:
     runs-on: windows-latest
-    needs: [ compile-cljs ]
+    needs: [ compile-cljs, build-db-worker-native ]
     steps:
       - name: Download The Static Asset
         uses: actions/download-artifact@v4
@@ -445,8 +467,11 @@ jobs:
           name: static
           path: .
 
-      - name: Create empty db-worker-bin dir (Windows uses the JS daemon)
-        run: New-Item -ItemType Directory -Force static\db-worker-bin | Out-Null
+      - name: Download native db-worker-node binary
+        uses: actions/download-artifact@v4
+        with:
+          name: db-worker-bin-windows-x64
+          path: static/db-worker-bin
 
       - name: Retrieve tag version
         id: ref
@@ -518,7 +543,7 @@ jobs:
 
   build-windows-arm64:
     runs-on: windows-latest
-    needs: [ compile-cljs ]
+    needs: [ compile-cljs, build-db-worker-native ]
     steps:
       - name: Download The Static Asset
         uses: actions/download-artifact@v4
@@ -526,8 +551,15 @@ jobs:
           name: static
           path: .
 
-      - name: Create empty db-worker-bin dir (Windows uses the JS daemon)
-        run: New-Item -ItemType Directory -Force static\db-worker-bin | Out-Null
+      # Upstream OCaml has no Windows ARM64 native toolchain yet (dra27's
+      # windows-on-arm64 is unmerged), so the arm64 package ships the x64
+      # binary — Windows ARM64 runs it under emulation, and the daemon is a
+      # spawned process independent of the Electron host's architecture.
+      - name: Download native db-worker-node binary (x64, runs under emulation)
+        uses: actions/download-artifact@v4
+        with:
+          name: db-worker-bin-windows-x64
+          path: static/db-worker-bin
 
       - name: Retrieve tag version
         id: ref

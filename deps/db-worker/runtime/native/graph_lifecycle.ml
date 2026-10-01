@@ -266,7 +266,11 @@ let signal_process (pid : int) (signal : int) : unit =
   if pid = Node_process.pid () then fail "Cannot stop the calling process";
   if not (pid_exists pid) then ()
   else
-    try Unix.kill pid signal
+    try
+      (* win32unix supports only sigkill (TerminateProcess); the
+         graceful stage is the HTTP /v1/shutdown probe. *)
+      if Sys.os_type <> "Win32" || signal = Sys.sigkill
+      then Unix.kill pid signal
     with Unix.Unix_error (Unix.ESRCH, _, _) -> ()
 
 let sigterm = Sys.sigterm

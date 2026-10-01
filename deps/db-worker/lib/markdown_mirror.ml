@@ -254,10 +254,12 @@ let page_relative_path repo db (page : entity) ~(opts : opts) : string option =
 let data_dir = Root_dir.worker_db_dir
 
 let repo_mirror_dir repo =
-  Filename.concat (data_dir ())
-    (match Graph_dir.repo_to_encoded_graph_dir_name repo with
-     | Some d -> d ^ "/mirror/markdown"
-     | None -> "mirror/markdown")
+  (* /-joined like the cljs paths — Filename.concat emits \ on win32 *)
+  Common_path.path_join (data_dir ())
+    [ (match Graph_dir.repo_to_encoded_graph_dir_name repo with
+       | Some d -> d
+       | None -> "")
+    ; "mirror/markdown" ]
 
 let mirror_path repo relative_path =
   repo_mirror_dir repo ^ "/" ^ relative_path

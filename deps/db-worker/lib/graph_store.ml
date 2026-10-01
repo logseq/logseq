@@ -95,6 +95,7 @@ let restore db addr =
                        | [] -> payload
                        | children ->
                            Storage_node (Persistent_sorted_set.Branch (keys, Array.of_list children)))
+                       | children -> Storage_node (Persistent_sorted_set.Branch (keys, children)))
                   | None -> payload)
              | other -> other
            in
