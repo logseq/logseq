@@ -1644,28 +1644,35 @@
   (when @*auto-save-timeout
     (js/clearTimeout @*auto-save-timeout)))
 
+(defn- editor-input-value
+  [input-id]
+  (when-let [elem (and input-id (gdom/getElement input-id))]
+    (gobj/get elem "value")))
+
 (defn- current-editor-value
   [input-id current-block edit-block]
   (if (= (:block/uuid current-block) (:block/uuid edit-block))
     (:block/title current-block)
-    (when-let [elem (and input-id (gdom/getElement input-id))]
-      (gobj/get elem "value"))))
+    (editor-input-value input-id)))
 
 (defn save-current-block!
   ([]
    (save-current-block! {}))
-  ([{:keys [current-block] :as opts}]
+  ([{:keys [current-block flush-input?] :as opts}]
    (clear-block-auto-save-timeout!)
    ;; non English input method
    (when-not (or (state/editor-in-composition?)
-                 (state/get-editor-action))
+                 (and (not flush-input?)
+                      (state/get-editor-action)))
      (when (state/get-current-repo)
        (try
          (let [input-id (state/get-edit-input-id)
                block (state/get-edit-block)
-               value (current-editor-value input-id current-block block)]
+               value (if flush-input?
+                       (editor-input-value input-id)
+                       (current-editor-value input-id current-block block))]
            (when value
-             (save-block-aux! block value opts)))
+             (save-block-aux! block value (dissoc opts :flush-input?))))
          (catch :default error
            (js/console.error error)
            (log/error :save-block-failed error)))))))
