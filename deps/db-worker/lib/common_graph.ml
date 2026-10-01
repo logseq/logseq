@@ -24,6 +24,15 @@ let ignored_path (dir : string) (path : string) : bool =
       || Regexp.test (Regexp.compile "/\\.[^.]+") rpath
       || Regexp.test (Regexp.compile "^\\.[^.]+") rpath
 
+(* cljs fix-win-path!: separator rewrite is needed only where
+   Filename.concat emits '\'; elsewhere the raw path is returned so
+   names normalization would change (decomposed Unicode, literal '\')
+   still resolve on disk. *)
+let fix_win_path (path : string) : string =
+  if Filename.dir_sep = "\\" then
+    String.map (fun c -> if c = '\\' then '/' else c) path
+  else path
+
 (* readdir — tree-seq over File_sys.readdir, filtering symbolic links and
    entries whose name starts with '.'. *)
 let readdir (root_dir : string) : string list E.t =
@@ -44,9 +53,7 @@ let readdir (root_dir : string) : string list E.t =
                             E.bind (walk fpath acc) (fun acc' ->
                                 step acc' rest)
                           else
-                            step
-                              (Common_path.path_normalize fpath :: acc)
-                              rest))
+                            step (fix_win_path fpath :: acc) rest))
         in
         step acc names)
   in
