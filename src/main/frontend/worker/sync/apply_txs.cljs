@@ -919,7 +919,11 @@
                                                               (:forward-outliner-ops action))
                               :db-sync/inverse-outliner-ops (if undo?
                                                               (:forward-outliner-ops action)
-                                                              (:inverse-outliner-ops action))})]
+                                                              (:inverse-outliner-ops action))}
+                       ;; Replayed recorded tx-data already contains the transact
+                       ;; pipeline's effects for the original tx.
+                       (not (seq ops))
+                       (assoc :db-sync/replayed-tx-data? true))]
           ;; (prn :debug :undo? undo? :ops)
           ;; (cljs.pprint/pprint ops')
           ;; (cljs.pprint/pprint (select-keys action [:tx-id :outliner-op :forward-outliner-ops :inverse-outliner-ops]))
@@ -1628,14 +1632,18 @@
     {:tx-id (:tx-id local-tx)
      :status :kept}
     (let [{:keys [forward-ops inverse-ops]} (rebase-history-ops local-tx rebase-db-before)
-          tx-meta {:outliner-op :rebase
-                   :original-outliner-op (:outliner-op local-tx)
-                   :db-sync/rebased-local? true
-                   ;; Keep stable tx-id across rebases so one logical pending op
-                   ;; doesn't fan out into duplicated pending rows.
-                   :db-sync/tx-id (:tx-id local-tx)
-                   :db-sync/forward-outliner-ops forward-ops
-                   :db-sync/inverse-outliner-ops inverse-ops}
+          tx-meta (cond-> {:outliner-op :rebase
+                           :original-outliner-op (:outliner-op local-tx)
+                           :db-sync/rebased-local? true
+                           ;; Keep stable tx-id across rebases so one logical pending op
+                           ;; doesn't fan out into duplicated pending rows.
+                           :db-sync/tx-id (:tx-id local-tx)
+                           :db-sync/forward-outliner-ops forward-ops
+                           :db-sync/inverse-outliner-ops inverse-ops}
+                    ;; Replayed recorded tx-data already contains the transact
+                    ;; pipeline's effects for the original tx.
+                    (not (seq forward-ops))
+                    (assoc :db-sync/replayed-tx-data? true))
           forward-ops' (if (seq forward-ops)
                          forward-ops
                          (let [tx-data (-> (:tx local-tx) normalize-tx-data-for-rebase)]
