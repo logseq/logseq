@@ -395,6 +395,43 @@ let () =
   check "unregistered endpoint rejects"
     (string_contains err "not found thread-api");
 
+  (* A failed first open must not make the next open skip initialization. *)
+  let _retry_dir = setup () in
+  let retry_repo = "logseq_db_failed-open-retry" in
+  let open_retry opts =
+    Worker_core.invoke "thread-api/create-or-open-db"
+      (Transit_codec.to_string (Wire.Array [Wire.String retry_repo; opts]))
+    |> await
+  in
+  let invalid_opts = Wire.kw_map ["datoms", Wire.Int 42] in
+  for attempt = 1 to 2 do
+    let failed =
+      try
+        match Transit_codec.of_string (open_retry invalid_opts) with
+        | Wire.Tagged (("error" | "js/Error"), _) -> true
+        | _ -> false
+      with _ -> true
+    in
+    check (Printf.sprintf "invalid open rejects attempt %d" attempt) failed;
+    check "failed open drops graph connection"
+      (Worker_state.datascript_conn retry_repo = None);
+    check "failed open drops SQLite connection"
+      (Worker_state.sqlite_conn retry_repo = None)
+  done;
+  check "retry open succeeds"
+    (not (string_contains (open_retry Wire.Nil) "error"));
+  let initialized =
+    Worker_core.invoke "thread-api/q"
+      (Transit_codec.to_string
+         (Wire.Array [Wire.String retry_repo;
+                      Wire.Array [Wire.String
+                        "[:find ?v . :where [?e :db/ident :logseq.kv/db-type] [?e :kv/value ?v]]"]]))
+    |> await |> Transit_codec.of_string
+  in
+  check "retry creates graph initial data" (initialized = Wire.String "db");
+  ignore (await (Worker_core.invoke "thread-api/close-db"
+                   (Transit_codec.to_string (Wire.Array [Wire.String retry_repo]))));
+
   (* --- lifecycle end-to-end --- *)
   let _dir = setup () in
   let args = Wire.Array [ Wire.String repo; Wire.Map [ (Wire.Keyword "schema", Wire.Map [ (Wire.Keyword "block/name", Wire.Map [ (Wire.Keyword "db/unique", Wire.Keyword "db.unique/identity") ]) ]) ] ] in
