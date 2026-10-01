@@ -551,10 +551,6 @@ let close_db_aux repo =
   attempt (fun () ->
       Db_worker_effect.async (fun () ->
           Sync_download.close_import_state_for_repo repo));
-  (match Worker_state.datascript_conn repo with
-   | Some conn ->
-       attempt (fun () -> Datascript.unlisten conn "listen-db-changes!")
-   | None -> ());
   (match Hashtbl.find_opt client_ops_cleanup_timers repo with
    | Some timer ->
        Hashtbl.remove client_ops_cleanup_timers repo;
@@ -563,10 +559,7 @@ let close_db_aux repo =
   List.iter
     (fun (kind, _) -> Worker_state.drop_sqlite_conn_of repo kind) conns;
   Worker_state.drop_vector_index repo;
-  (match Worker_state.datascript_conn repo with
-   | Some conn -> Db_tx.release_flags conn
-   | None -> ());
-  Worker_state.drop_datascript_conn repo;
+  attempt (fun () -> Worker_state.drop_datascript_conn repo);
   Worker_state.drop_pending_local_tx_count repo;
   Endpoint_search.clear_search_index_builds repo;
   List.iter (fun (_, db) -> attempt (fun () -> Sqlite.close db)) conns;
