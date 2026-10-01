@@ -2,6 +2,7 @@
   (:require [cljs.test :refer [deftest is testing use-fixtures]]
             [datascript.core :as d]
             [frontend.worker.a-test-env]
+            [frontend.worker.pipeline :as worker-pipeline]
             [frontend.worker.sync.apply-txs :as sync-apply]
             [frontend.worker.state :as worker-state]
             [frontend.worker.sync :as db-sync]
@@ -1067,6 +1068,57 @@
             (is (not= ::worker-undo-redo/empty-undo-stack
                       (worker-undo-redo/undo test-repo)))
             (is (nil? (find-inserted-a-id)))))))))
+
+(deftest redo-tag-template-auto-insert-does-not-duplicate-test
+  (testing "redo of tag-driven template auto-insert restores children without duplicating"
+    (worker-undo-redo/clear-history! test-repo)
+    (let [conn (worker-state/get-datascript-conn test-repo)
+          prev-pipeline @ldb/*transact-pipeline-fn
+          template-root-uuid (random-uuid)
+          template-child-uuid (random-uuid)
+          target-uuid (random-uuid)]
+      (ldb/register-transact-pipeline-fn! worker-pipeline/transact-pipeline)
+      (try
+        (sqlite-build/create-blocks
+         conn
+         {:classes {:AutoTag {}}
+          :pages-and-blocks
+          [{:page {:block/title "page 1"}
+            :blocks [{:block/title "tpl"
+                      :block/uuid template-root-uuid
+                      :build/tags [:logseq.class/Template]
+                      :build/children [{:block/title "auto-child"
+                                        :block/uuid template-child-uuid}]}
+                     {:block/title "target"
+                      :block/uuid target-uuid}]}]})
+        (let [tag-id (d/q '[:find ?e .
+                            :where
+                            [?e :block/title "AutoTag"]
+                            [?e :block/tags :logseq.class/Tag]]
+                          @conn)
+              template-id (:db/id (d/entity @conn [:block/uuid template-root-uuid]))
+              target-id (:db/id (d/entity @conn [:block/uuid target-uuid]))]
+          (ldb/transact! conn
+                         [[:db/add template-id :logseq.property/template-applied-to tag-id]]
+                         (local-tx-meta {:client-id "test-client"}))
+          (worker-undo-redo/clear-history! test-repo)
+          (apply-ops! conn
+                      [[:set-block-property [target-uuid :block/tags "AutoTag"]]]
+                      (local-tx-meta {:client-id "test-client"}))
+          (let [inserted-children-count
+                (fn []
+                  (->> (:block/_parent (d/entity @conn target-id))
+                       (filter #(= "auto-child" (:block/title %)))
+                       count))]
+            (is (= 1 (inserted-children-count)))
+            (is (not= ::worker-undo-redo/empty-undo-stack
+                      (worker-undo-redo/undo test-repo)))
+            (is (zero? (inserted-children-count)))
+            (is (not= ::worker-undo-redo/empty-redo-stack
+                      (worker-undo-redo/redo test-repo)))
+            (is (= 1 (inserted-children-count)))))
+        (finally
+          (reset! ldb/*transact-pipeline-fn prev-pipeline))))))
 
 (deftest undo-history-records-forward-ops-for-save-block-test
   (testing "worker save-block history keeps semantic forward ops for redo replay"

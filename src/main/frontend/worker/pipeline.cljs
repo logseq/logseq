@@ -557,7 +557,9 @@
         template-result (when (seq before-template-tx-data)
                           (d/with db-after before-template-tx-data))
         template-db (or (:db-after template-result) db-after)
-        insert-templates-tx (when-not (rtc-tx-or-download-graph? tx-meta)
+        insert-templates-tx (when-not (or (rtc-tx-or-download-graph? tx-meta)
+                                          (:undo? tx-meta)
+                                          (:redo? tx-meta))
                               (insert-tag-templates
                                (cond-> (assoc tx-report :db-after template-db)
                                  template-result
