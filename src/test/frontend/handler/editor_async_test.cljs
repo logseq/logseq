@@ -668,17 +668,18 @@
         (is (not= (:db/id comments-area') (:db/id (:block/parent target')))
             "The target block must not become a child of the comments area")))))
 
-(deftest-async db-based-save-assets-appends-to-today-page-without-editor
-  (let [today-page {:block/uuid (random-uuid)
-                    :block/title "today"}
+(deftest-async db-based-save-assets-appends-to-asset-page-without-editor
+  (let [asset-page {:block/uuid (random-uuid)
+                    :block/title "Asset"}
         inserted (atom nil)]
     (-> (p/with-redefs [assets-handler/ensure-assets-dir! (fn [_repo]
                                                             (p/resolved ["/repo" "assets"]))
                         assets-handler/get-file-checksum (constantly "checksum")
                         db-async/<get-asset-with-checksum (fn [& _] (p/resolved nil))
-                        db-async/<get-today-journal-title (fn [& _] (p/resolved "today"))
-                        db-async/<get-journal-page-by-day (fn [& _] (p/resolved today-page))
-                        state/<invoke-db-worker (fn [& _] (p/resolved nil))
+                        state/<invoke-db-worker (fn [api & _]
+                                                  (p/resolved
+                                                   (when (= api :thread-api/pull)
+                                                     asset-page)))
                         state/get-edit-block (constantly nil)
                         state/get-edit-content (constantly "")
                         frontend-outliner-op/insert-blocks! (fn [blocks target opts]
@@ -695,7 +696,7 @@
                                                  :title "image"}]))
         (p/then
          (fn [_]
-           (is (= today-page (:target @inserted)))
+           (is (= asset-page (:target @inserted)))
            (is (= {:keep-uuid? true
                    :bottom? true
                    :sibling? false
