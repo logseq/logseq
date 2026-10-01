@@ -119,6 +119,9 @@ jobs:
         working-directory: deps/db-worker
         run: |
           node scripts/check-schema-version.cjs
+          node --test scripts/secret-kv-regression.cjs scripts/service-retry-regression.cjs
+          node scripts/graph-storage-recovery.cjs
+          node test/endpoint_lifecycle_probe.cjs
           opam exec -- dune runtest
 
       - name: Build test asset
