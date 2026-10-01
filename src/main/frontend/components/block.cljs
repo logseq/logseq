@@ -1341,11 +1341,11 @@
 
 (hsx/defc subscribed-page-reference
   [config uuid-or-title label page-uuid fallback-block]
-  (let [{:keys [status value]} (db-hooks/use-block-projection-snapshot page-uuid identity)
-        block (or value fallback-block)]
-    (if (and (nil? block) (= :missing status))
-      (broken-page-reference config uuid-or-title)
-      (page-reference-content config uuid-or-title label block))))
+  (let [{:keys [status value error]} (db-hooks/use-block-projection-snapshot page-uuid identity)]
+    (case status
+      :error (throw error)
+      :missing (broken-page-reference config uuid-or-title)
+      (page-reference-content config uuid-or-title label (or value fallback-block)))))
 
 (defn referenced-block
   [block uuid-or-title]
