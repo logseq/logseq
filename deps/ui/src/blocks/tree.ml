@@ -115,22 +115,30 @@ let node_icon ~(library : bool) (b : Model.block) : Model.icon option =
     else if cls "Page" || cls "Journal" then "file"
     else ""
   in
+  (* cljs icon.cljs get-node-icon: pdf asset blocks get the "book"
+     tabler icon ahead of any tag icon *)
   let icon =
     match b.block_icon with
     | Some _ -> b.block_icon
     | None -> (
-        match b.block_tag_icons with
-        | i :: _ -> Some i
-        | [] -> (
-            match default_id with
-            | "" -> None
-            | id ->
-                Some { Model.icon_kind = "tabler-icon"; icon_id = id }))
+        match b.block_asset_type with
+        | Some "pdf" ->
+            Some { Model.icon_kind = "tabler-icon"; icon_id = "book" }
+        | _ -> (
+            match b.block_tag_icons with
+            | i :: _ -> Some i
+            | [] -> (
+                match default_id with
+                | "" -> None
+                | id ->
+                    Some
+                      { Model.icon_kind = "tabler-icon"; icon_id = id })))
   in
   match icon with
   | Some i
     when b.block_icon <> None
          || b.block_tag_icons <> []
+         || b.block_asset_type = Some "pdf"
          || (default_id <> "" && not library) ->
       Some i
   | _ -> None
@@ -266,17 +274,20 @@ let content_el uuid (b : Model.block) : t =
   dom ~key:("content-" ^ uuid) ~style_class:"block-content inline"
     ~id:("block-content-" ^ uuid)
     ~attrs:
-      [ ("blockid", uuid); ("containerid", uuid)
-      ; ( "data-type"
-        , Option.value b.Model.block_display_type ~default:"default" )
-      ; ("style", "width:100%") ]
+      ([ ("blockid", uuid); ("containerid", uuid); ("style", "width:100%")
+       ; ("data-type",
+          Option.value b.Model.block_ls_type ~default:"default") ]
+       @
+       match b.Model.block_hl_color with
+       | Some c -> [ ("data-hl-color", c) ]
+       | None -> [])
     [ dom ~key:("bci-" ^ uuid)
         ~style_class:"block-content-inner flex flex-row justify-between"
         [ dom ~key:("bh-" ^ uuid) ~style_class:"block-head-wrap"
             (if b.Model.block_is_query then [ Query_builder.block_el uuid b ]
              else
                [ dom ~key:("bt-" ^ uuid) ~style_class:"inline w-full"
-                   (Render.title_block ~self:uuid
+                   (Render.title_block ~self:uuid ~annot:true
                       ~resolved:(S.title_for uuid b.block_title)
                       b)
                ])

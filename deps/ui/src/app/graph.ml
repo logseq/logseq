@@ -45,6 +45,9 @@ let list_graphs () =
   Js.Promise.resolve (Decode.repos_of_list_db w)
 
 let open_graph repo =
+  (* cljs theme.cljs effect [current-repo]: pdf viewer resets when the
+     repo changes *)
+  Pdf_state.set_current None;
   Runtime.invoke2 "thread-api/create-or-open-db" (Wire.String repo)
     (Wire.Map [])
 

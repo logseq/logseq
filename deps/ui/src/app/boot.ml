@@ -114,6 +114,8 @@ let run () =
   apply_storage_env ();
   (* emoji-mart: registers <em-emoji> + SearchIndex *)
   Emoji_mart.install ();
+  (* pdf: Pdf_state.open_request -> mount/teardown the viewer portal *)
+  Pdf.install ();
   let w = Worker_client.create () in
   Worker_client.notify_worker_failure :=
     (fun () -> Toast.error (I18n.t "storage/db-worker-crashed-error"));

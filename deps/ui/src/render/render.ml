@@ -23,12 +23,21 @@ module D = Render_dom
    text↔children transition remounts: LUI applies the textContent write
    before the child removal within a batch, which would detach the
    tracked child early. *)
-let wrap ?(cls = "block-title-wrap") ?(tag = "span") ?(self = "") s : t =
-  match Render_inline.plain_text s with
-  | Some text -> D.el ~key:("btw-t-" ^ tag) ~tag ~style_class:cls ~text []
-  | None ->
-      D.el ~key:("btw-c-" ^ tag) ~tag ~style_class:cls
-        (Render_inline.parse ~self s)
+let wrap ?(cls = "block-title-wrap") ?(tag = "span") ?(self = "")
+    ?(wrap_attrs = []) ?(prefix : t option = None) s : t =
+  match Render_inline.plain_text s, prefix with
+  | Some text, None ->
+      D.el ~key:("btw-t-" ^ tag) ~tag ~style_class:cls ~attrs:wrap_attrs
+        ~text []
+  | Some text, Some p ->
+      (* annotation blocks carry plain hl text — prefix-link sibling +
+         raw text node (cljs puts the title children after .prefix-link) *)
+      D.el ~key:("btw-a-" ^ tag) ~tag ~style_class:cls ~attrs:wrap_attrs
+        [ p; D.txt text ]
+  | None, _ ->
+      D.el ~key:("btw-c-" ^ tag) ~tag ~style_class:cls ~attrs:wrap_attrs
+        ((match prefix with Some p -> [ p ] | None -> [])
+         @ Render_inline.parse ~self s)
 
 (* #..###### markdown heading at title start *)
 let heading_level s =
@@ -221,16 +230,18 @@ let query_shell =
     ]
 
 (* content for a (possibly quoted) body — headings nest inside quote *)
-let content ?(heading : int option) ?(self = "") s =
+let content ?(heading : int option) ?(self = "") ?(wrap_attrs = [])
+    ?(prefix : t option = None) s =
   match heading with
   | Some lvl when lvl >= 1 && lvl <= 6 ->
       wrap ~tag:("h" ^ string_of_int lvl)
-        ~cls:"block-title-wrap as-heading" ~self s
+        ~cls:"block-title-wrap as-heading" ~self ~wrap_attrs ~prefix s
   | _ -> (
       match heading_level s with
       | Some (lvl, rest) ->
           wrap ~tag:("h" ^ string_of_int lvl)
-            ~cls:"block-title-wrap as-heading" ~self rest
+            ~cls:"block-title-wrap as-heading" ~self ~wrap_attrs ~prefix
+            rest
       | None ->
           (* empty title: a <br> gives the inline wrap a line box, so
              .block-content keeps its clickable area (cljs does the same
@@ -238,7 +249,7 @@ let content ?(heading : int option) ?(self = "") s =
           if s = "" then
             D.el ~key:"btw-empty" ~tag:"span" ~style_class:"block-title-wrap"
               [ D.el ~key:"btw-br" ~tag:"br" [] ]
-          else wrap ~self s)
+          else wrap ~self ~wrap_attrs ~prefix s)
 
 
 (* @@html:<fragment> whole-title — parsed into real elements so the e2e
@@ -254,7 +265,7 @@ let html_body s =
    query blocks render the .custom-query-results shell instead of
    inline content (cljs query view). *)
 let title ?heading ?(is_query = false) ?(self = "")
-    (s : string) : t list =
+    ?(wrap_attrs = []) ?(prefix : t option = None) (s : string) : t list =
   match html_body s with
   | Some frag -> Render_html.els_of_string frag
 
@@ -275,16 +286,30 @@ let title ?heading ?(is_query = false) ?(self = "")
                     [ D.el ~key:"rc-typed-list" ~tag:"span"
                         ~style_class:"typed-list"
                         [ D.el ~tag:"label" ~text:num [] ]
-                    ; content ?heading ~self rest ]
-                | None -> [ content ?heading ~self s ])))
+                    ; content ?heading ~self ~wrap_attrs ~prefix rest ]
+                | None ->
+                    [ content ?heading ~self ~wrap_attrs ~prefix s ])))
 
 (* display-type/heading aware variant — the block model carries
    logseq.property.node/display-type + logseq.property/heading.
    ~resolved: the caller's ref-resolved title (uuid refs rendered to page
    titles); code/math surfaces keep the raw block_title. *)
-let title_block ?(self = "") ?resolved (b : Model.block) : t list =
+let title_block ?(self = "") ?resolved ?(annot = false)
+    (b : Model.block) : t list =
   let s = b.Model.block_title in
   let heading = b.Model.block_heading in
+  (* cljs block-title: Pdf-annotation ref blocks prepend .prefix-link
+     (.hl-page "P<n>" + optional .hl-area) and stamp data-hl-type on
+     .block-title-wrap *)
+  let annot = annot && b.Model.block_ls_type = Some "annotation" in
+  let prefix =
+    if annot then Some (Pdf_annotation.prefix_el b) else None
+  in
+  let wrap_attrs =
+    match b.Model.block_hl_type with
+    | Some ty when annot -> [ ("data-hl-type", ty) ]
+    | _ -> []
+  in
   match b.Model.block_display_type with
   | Some "code" ->
       let lang = Option.value b.Model.block_code_lang ~default:"" in
@@ -295,5 +320,5 @@ let title_block ?(self = "") ?resolved (b : Model.block) : t list =
   | _ ->
       title ?heading
         ~is_query:(List.mem "logseq.class/Query" b.Model.block_tag_idents)
-        ~self (Option.value resolved ~default:s)
+        ~self ~wrap_attrs ~prefix (Option.value resolved ~default:s)
 

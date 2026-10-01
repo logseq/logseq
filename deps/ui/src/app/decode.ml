@@ -187,6 +187,88 @@ let block_icon_of_wire (w : Wire.t) : Model.icon option =
       | None -> None)
   | _ -> None
 
+(* ---------- pdf hl-value (logseq.property.pdf/hl-value map prop) ---------- *)
+
+let num_of = function
+  | Wire.Int n -> Some (float_of_int n)
+  | Wire.Int64 n -> Some (Int64.to_float n)
+  | Wire.Float f -> Some f
+  | _ -> None
+
+(* scaled rects and the vw rects derived from them share the record —
+   wire keys are always {x1,y1,x2,y2,width,height}; vw rects carry
+   left/top/width/height into the same slots *)
+let hl_rect_of_wire (w : Wire.t) : Model.hl_rect option =
+  match
+    ( num_of (Option.value (Wire.get w "x1") ~default:Wire.Nil)
+    , num_of (Option.value (Wire.get w "y1") ~default:Wire.Nil)
+    , num_of (Option.value (Wire.get w "x2") ~default:Wire.Nil)
+    , num_of (Option.value (Wire.get w "y2") ~default:Wire.Nil)
+    , num_of (Option.value (Wire.get w "width") ~default:Wire.Nil)
+    , num_of (Option.value (Wire.get w "height") ~default:Wire.Nil) )
+  with
+  | Some x1, Some y1, Some x2, Some y2, Some wd, Some ht ->
+      Some
+        { Model.hl_x1 = x1; hl_y1 = y1; hl_x2 = x2; hl_y2 = y2
+        ; hl_w = wd; hl_h = ht }
+  | _ -> None
+
+let hl_of_wire (v : Wire.t option) : Model.hl option =
+  match v with
+  | Some (Wire.Map _ as m) ->
+      let pos =
+        match Wire.get m "position" with
+        | Some p -> (
+            match hl_rect_of_wire (Option.value (Wire.get p "bounding")
+                                     ~default:Wire.Nil)
+            with
+            | Some b ->
+                Some
+                  ( b
+                  , List.filter_map hl_rect_of_wire
+                      (Wire.elems
+                         (Option.value (Wire.get p "rects")
+                            ~default:(Wire.Array [])))
+                  , Wire.map_get_int p "page" )
+            | None -> None)
+        | None -> None
+      in
+      let content = Wire.get m "content" in
+      (match pos with
+       | Some (bounding, rects, pos_page) ->
+           Some
+             { Model.hl_id = Wire.map_get_uuid m "id"
+             ; hl_page =
+                 (match Wire.map_get_int m "page" with
+                  | Some n -> n
+                  | None -> Option.value pos_page ~default:1)
+             ; hl_bounding = bounding
+             ; hl_rects = rects
+             ; hl_text =
+                 Option.value
+                   (Option.bind content (fun c ->
+                        Wire.map_get_string c "text"))
+                   ~default:""
+             ; hl_image =
+                 (match
+                    Option.bind content (fun c -> Wire.get c "image")
+                  with
+                  | Some (Wire.Int n) -> Some (Int64.of_int n)
+                  | Some (Wire.Int64 n) -> Some n
+                  | Some (Wire.Float f) -> Some (Int64.of_float f)
+                  | _ -> None)
+             ; hl_color =
+                 (match Wire.get m "properties" with
+                  | Some p -> (
+                      match Wire.get p "color" with
+                      | Some (Wire.Keyword s) | Some (Wire.String s) ->
+                          Some s
+                      | _ -> None)
+                  | None -> None)
+             }
+       | None -> None)
+  | _ -> None
+
 let rec block_of_wire ?(order_index = 1) ?(parent_query_id = None)
     (w : Wire.t) : Model.block =
   let uuid = Wire.map_get_uuid w "block/uuid" in
@@ -273,6 +355,10 @@ let rec block_of_wire ?(order_index = 1) ?(parent_query_id = None)
         | _ -> None)
     | _ -> None
   in
+  let hl = hl_of_wire (Wire.get w "logseq.property.pdf/hl-value") in
+  let hl_color =
+    match hl with Some h -> h.Model.hl_color | None -> None
+  in
   { block_uuid = uuid
   ; block_db_id = db_id
   ; block_title = title
@@ -333,6 +419,19 @@ let rec block_of_wire ?(order_index = 1) ?(parent_query_id = None)
        | Some p, Some id -> p = id
        | _ -> false)
   ; block_db_collapsable = db_collapsable_of_wire w
+  ; block_ls_type = prop_label w "logseq.property/ls-type"
+  ; block_hl_type = prop_label w "logseq.property.pdf/hl-type"
+  ; block_hl_page = num_prop "logseq.property.pdf/hl-page"
+  ; block_hl_color = hl_color
+  ; block_hl = hl
+  ; block_asset_ref =
+      (match Wire.get w "logseq.property/asset" with
+       | Some m -> Wire.map_get_int m "db/id"
+       | None -> None)
+  ; block_hl_image =
+      (match Wire.get w "logseq.property.pdf/hl-image" with
+       | Some m -> Wire.map_get_int m "db/id"
+       | None -> None)
   }
 
 (* number = 1 + the run of consecutive same-type ordered-list siblings

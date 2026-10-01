@@ -491,7 +491,10 @@ let shell (ms : Model.t Signal.signal) : t =
     ~style_class:
       (reactive
          (fun (m : Model.t) ->
-           "theme-container-inner ls-hl-colored"
+           "theme-container-inner"
+           (* cljs ls-hl-colored mirrors the ls-pdf-hl-block-is-colored
+              storage flag *)
+           ^ (if Pdf_state.hl_colored () then " ls-hl-colored" else "")
            ^ if m.left_sidebar_open then " ls-left-sidebar-open" else ""
            ^ if m.right_sidebar_open then " ls-right-sidebar-open" else "")
          ms)
@@ -506,6 +509,11 @@ let shell (ms : Model.t Signal.signal) : t =
             [ header ms; main_content ms ]
         ; right_sidebar ms
         ; Logseq_dom.dom ~key:"asc" ~id:"app-single-container" []
+        ; (* cljs theme.cljs default-embed-playground sibling — the pdf
+             viewer portals .extensions__pdf-container into
+             #app-single-container imperatively *)
+          Logseq_dom.dom ~key:"pdf-pg"
+            ~style_class:"extensions__pdf-playground" []
         ]
     ; overlays ms
     ; export_anchors

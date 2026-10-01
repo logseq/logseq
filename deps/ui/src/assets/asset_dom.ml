@@ -306,6 +306,22 @@ let upload_input key : t =
 
 (* ---------- lightbox ---------- *)
 
+(* lightbox/preview-images! — shared by asset imgs and pdf .hl-area imgs *)
+let preview_images items =
+  match Js.Undefined.toOption pswp_module with
+  | None -> ()
+  | Some m ->
+      let opts =
+        B.json_props
+          [ "dataSource", Js.Json.array items
+          ; "pswpModule", m
+          ; "showHideAnimationType", B.str_to_json "fade" ]
+      in
+      let lb = new_lightbox opts in
+      set_photo_lightbox lb;
+      lb_init lb;
+      lb_open lb 0
+
 let open_lightbox clicked =
   let imgs = qs_all ".asset-container img" in
   let n = Array.length imgs in
@@ -332,19 +348,7 @@ let open_lightbox clicked =
             ; "w", B.str_to_json (Printf.sprintf "%.0f" (nat_w img))
             ; "h", B.str_to_json (Printf.sprintf "%.0f" (nat_h img)) ])
     in
-    match Js.Undefined.toOption pswp_module with
-    | None -> ()
-    | Some m ->
-        let opts =
-          B.json_props
-            [ "dataSource", Js.Json.array items
-            ; "pswpModule", m
-            ; "showHideAnimationType", B.str_to_json "fade" ]
-        in
-        let lb = new_lightbox opts in
-        set_photo_lightbox lb;
-        lb_init lb;
-        lb_open lb 0
+    preview_images items
   end
 
 (* ---------- resize ---------- *)
@@ -640,12 +644,57 @@ let file_block uuid (b : Model.block) : t =
         ~attrs:[ ("href", "#"); ("download", file); ("title", file) ]
         ~text:file [] ]
 
+(* cljs asset-link pdf branch — a.asset-ref.is-pdf; data-url resolves to
+   the blob object URL async (attrs signal so the patch lands in place) *)
+let pdf_url_sigs : (string, string Signal.state) Hashtbl.t =
+  Hashtbl.create 8
+
+let pdf_url_sig uuid file context =
+  match Hashtbl.find_opt pdf_url_sigs uuid with
+  | Some st -> st
+  | None ->
+      let st = Signal.state context.Lui_ui.ui_scheduler "" in
+      Hashtbl.replace pdf_url_sigs uuid st;
+      ignore
+        ((let ( let* ) p f = Js.Promise.then_ f p in
+          let* url =
+            Asset_store.object_url ~repo:(repo ()) ~name:file
+              ~mime:"application/pdf"
+          in
+          Runtime.signal_set st url;
+          Js.Promise.resolve ())
+         |> Js.Promise.catch (fun _ -> Js.Promise.resolve ()));
+      st
+
+let pdf_block uuid (b : Model.block) : t =
+ fun context parent ->
+  let file = uuid ^ ".pdf" in
+  let href = "../assets/" ^ file in
+  let st = pdf_url_sig uuid file context in
+  (dom ~key:("pdf-" ^ uuid) ~tag:"a" ~style_class:"asset-ref is-pdf"
+     ~attrs_signal:
+       (Signal.map
+          (fun url ->
+            [ ("data-href", href); ("data-url", url)
+            ; ("draggable", "true") ])
+          st.Signal.state_signal)
+     ~events:"click"
+     ~on_dom_event:(fun name _ ->
+       if name = "click" then
+         let url = Signal.get st.Signal.state_signal in
+         Pdf_assets.open_pdf_file ~original_path:href
+           ~href:(if url = "" then href else url)
+           ~b)
+     ~text:b.Model.block_title [])
+    context parent
+
 (* whole asset branch — .asset-block-wrap replaces .block-content inside
    .block-content-wrapper (cljs block.cljs asset render path) *)
 let block_view uuid (b : Model.block) : t =
   let body =
     match b.Model.block_asset_type with
     | Some ext when is_image ext -> image_block uuid b
+    | Some "pdf" -> pdf_block uuid b
     | _ -> file_block uuid b
   in
   dom ~key:("abw-" ^ uuid)

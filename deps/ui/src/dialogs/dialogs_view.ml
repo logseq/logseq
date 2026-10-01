@@ -170,9 +170,20 @@ let prompt_view (p : Dialogs_state.prompt) =
                 z )
           ]
         [ dom ~key:"prmt-box" ~style_class:"ls-prompt-box"
-            [ dom ~key:"prmt-h" ~tag:"h3" ~id:"modal-headline"
-                ~style_class:"ls-prompt-headline" ~text:p.title []
-            ; dom ~key:"prmt-in" ~tag:"input"
+            ((if p.desc = "" then
+                [ dom ~key:"prmt-h" ~tag:"h3" ~id:"modal-headline"
+                    ~style_class:"ls-prompt-headline" ~text:p.title [] ]
+              else
+                (* cljs pdf-password-input: title line + desc headline *)
+                [ dom ~key:"prmt-t" ~style_class:"text-lg mb-4"
+                    ~text:p.title []
+                ; dom ~key:"prmt-h" ~tag:"h3" ~id:"modal-headline"
+                    ~style_class:
+                      "sm:flex sm:items-start mt-3 text-center sm:mt-0 \
+                       sm:text-left leading-6 font-medium"
+                    ~text:p.desc [] ])
+            @
+            [ dom ~key:"prmt-in" ~tag:"input"
                 ~style_class:"form-input ls-prompt-input"
                 ~attrs:
                   [ ("type", "text"); ("autocomplete", "off")
@@ -180,7 +191,7 @@ let prompt_view (p : Dialogs_state.prompt) =
                 ~events:"keydown"
                 ~on_dom_event:input_events []
             ; btn "prmt-ok" I18n.submit "ls-btn-primary" (fun () -> submit ())
-            ]
+            ])
         ; close_btn
         ]
     ]
