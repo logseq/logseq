@@ -85,32 +85,9 @@ external ev_button : ev -> int = "button" [@@mel.get]
 external ev_stop_immediate : ev -> unit = "stopImmediatePropagation"
   [@@mel.send]
 
-external new_event_opts : string -> Js.Json.t -> ev = "Event" [@@mel.new]
-
 external el_dispatch : el -> ev -> unit = "dispatchEvent" [@@mel.send]
 
-let dispatch_bubble el name =
-  el_dispatch el
-    (new_event_opts name
-       (Js.Json.object_
-          (Js.Dict.fromList
-             [ ("bubbles", Js.Json.boolean true)
-             ; ("cancelable", Js.Json.boolean true)
-             ])))
-
 external now_ms : unit -> float = "now" [@@mel.scope "Date"]
-
-let children_list el =
-  let nl = el_children el in
-  let n = Editor_dom.node_list_length nl in
-  let rec loop i acc =
-    if i >= n then List.rev acc
-    else
-      match Editor_dom.node_list_item nl i with
-      | Some c -> loop (i + 1) (c :: acc)
-      | None -> loop (i + 1) acc
-  in
-  loop 0 []
 
 let append_all parent els =
   List.iter (fun c -> Editor_dom.el_append_child parent c) els
@@ -358,14 +335,6 @@ let query_inside (root : el) sel = Editor_dom.el_query root sel
 (* subtree query via :scope — querySelectorAll on element *)
 external el_query_all : el -> string -> Editor_dom.node_list
   = "querySelectorAll" [@@mel.send]
-
-let for_each_inside root sel f =
-  let nl = el_query_all root sel in
-  for i = 0 to Editor_dom.node_list_length nl - 1 do
-    match Editor_dom.node_list_item nl i with
-    | Some el -> f el
-    | None -> ()
-  done
 
 let focus_end el = Editor_dom.el_focus el
 

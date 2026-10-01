@@ -39,9 +39,6 @@ let initial =
   ; expanded_ui = String_set.empty
   }
 
-let scope_of (st : t) =
-  match st.editing with Some e -> e.scope | None -> "main"
-
 let st : t Signal.state option ref = ref None
 
 (* focus request consumed after the next DOM flush — ops remount the page
@@ -126,15 +123,9 @@ let read () =
 
 let editing () = (read ()).editing
 
-let is_editing_in uuid scope =
-  match editing () with
-  | Some e -> e.uuid = uuid && e.scope = scope
-  | None -> false
-
 let editing_uuid () =
   match editing () with Some e -> Some e.uuid | None -> None
 
-let is_editing uuid = editing_uuid () = Some uuid
 let selected () = (read ()).selected
 let is_selected uuid = String_set.mem uuid (selected ())
 let collapsed () = (read ()).collapsed

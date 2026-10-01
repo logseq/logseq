@@ -32,8 +32,6 @@ let getk m key =
 (* unwrap datascript/Entity tagged maps *)
 let untag = function W.Tagged (_, inner) -> inner | w -> w
 
-let key_eq k v = match v with W.Keyword s -> s = k | _ -> false
-
 (* ---------- entity helpers ---------- *)
 
 let entity_id_of w = geti (untag w) "db/id"
@@ -373,7 +371,6 @@ let block_render_data uuid =
 (* ---------- ops ---------- *)
 
 let apply = Sdk_util.apply_op
-let apply_many = Sdk_util.apply_ops
 
 let set_block_property ~block_uuid ~ident ~value =
   apply "set-block-property"

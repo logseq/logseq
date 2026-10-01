@@ -211,9 +211,6 @@ let decode_view_data (v : W.t) : view_data =
             })
   | _ -> VEmpty
 
-(* block entity map helpers for table cells *)
-let prop_of_block blk ident = W.get blk ident
-
 let rec prop_text v =
   match v with
   | W.String s -> s
