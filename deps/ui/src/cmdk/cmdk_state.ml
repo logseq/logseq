@@ -687,10 +687,11 @@ let load_recents st repo =
 
 let on_input st q =
   set_in st (fun v -> upsert_create { v with input = q });
-  let gen = (incr st.gen; !(st.gen)) in
-  Dom_ext.set_timeout
-    (fun () -> if gen = !(st.gen) then refresh ~clear:false st)
-    100
+  (* search fires on the keystroke itself — a debounce delays the last
+     keystroke's results past the worker roundtrip it should overlap.
+     gen-stamped responses keep stale answers from overwriting newer
+     input *)
+  refresh ~clear:false st
 
 (* -- open/close ------------------------------------------------------ *)
 
