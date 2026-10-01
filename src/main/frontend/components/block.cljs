@@ -419,7 +419,7 @@
                                                      (ipc/ipc "openFileInFolder" image-src)
                                                      (notification/show! (t :asset/missing-file image-src) :warning)))))))}
                       [:span.flex.items-center.gap-1
-                       (ui/icon "folder-pin") (t (if remote-src? :asset/open-in-browser :asset/show-file-in-folder))])))
+                       (ui/icon "folder-pin") (t (if remote-src? :asset/open-in-browser :asset/show-file-in-folder))]))))
 
                  (when (and asset-block (not config/publishing?))
                    [:<>
