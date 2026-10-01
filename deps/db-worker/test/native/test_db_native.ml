@@ -818,6 +818,99 @@ let test_batch_transact_ () =
             [ Retract
                 (Ident "logseq.class/Task", "block/tags",
                  Some (Ref prop_eid)) ])))
+(* Finished batches and closed graphs must not keep their connections alive. *)
+let check_connections_released run =
+  let conns = Weak.create 100 in
+  for i = 0 to 99 do
+    run (fun conn -> Weak.set conns i (Some conn))
+  done;
+  Gc.full_major ();
+  Gc.full_major ();
+  let retained = ref 0 in
+  for i = 0 to 99 do
+    if Weak.check conns i then incr retained
+  done;
+  Alcotest.(check int) "connections retained after completion" 0 !retained
+
+exception Batch_lifetime_failure
+
+let lifetime_tx = [ Add (Temp_id "lifetime", "test/value", String "value") ]
+
+let test_temp_batch_connection_lifetime mode () =
+  let conn = create_conn () in
+  if mode = "commit-failure" then
+    ignore (listen conn "lifetime-commit-failure" (fun _ -> raise Batch_lifetime_failure));
+  check_connections_released (fun remember ->
+      let run () =
+        Db_tx.batch_transact_with_temp_conn conn
+          ?listen_db:(if mode = "listener-failure" then
+                        Some (fun _ -> raise Batch_lifetime_failure)
+                      else None)
+          ?before_commit:(if mode = "before-commit-failure" then
+                            Some (fun () -> raise Batch_lifetime_failure)
+                          else None)
+          (fun temp ->
+             remember temp;
+             if mode = "body-failure" then raise Batch_lifetime_failure;
+             if mode = "nested" then begin
+               (try
+                  ignore (Db_tx.batch_transact temp (fun _ -> ()));
+                  check "temp batch rejects nested real batch" false
+                with Db_tx.Batch_tx_nested -> ());
+               ignore (Db_tx.batch_transact_with_temp_conn temp (fun inner ->
+                   ignore (Db_tx.transact inner lifetime_tx)))
+             end else if mode <> "empty" then
+               ignore (Db_tx.transact temp lifetime_tx))
+      in
+      try ignore (run ()) with Batch_lifetime_failure -> ())
+
+let test_wire_temp_batch_connection_lifetime fail () =
+  let conn = create_conn () in
+  check_connections_released (fun remember ->
+      try
+        ignore (Db_transact.batch_transact_with_temp_conn conn [] (fun temp ->
+            remember temp;
+            if fail then raise Batch_lifetime_failure;
+            ignore (Db_tx.transact temp lifetime_tx)))
+      with Batch_lifetime_failure -> ())
+
+let test_sync_temp_batch_connection_lifetime mode () =
+  let conn = create_conn () in
+  check_connections_released (fun remember ->
+      try
+        ignore (Sync_apply.batch_transact_with_temp_conn_impl conn []
+                  ?before_commit:(if mode = "before-commit-failure" then
+                                    Some (fun () -> raise Batch_lifetime_failure)
+                                  else None)
+                  (fun temp ->
+                     remember temp;
+                     if mode = "body-failure" then raise Batch_lifetime_failure;
+                     ignore (Db_tx.transact temp lifetime_tx)) ())
+      with Batch_lifetime_failure -> ())
+
+let test_closed_graph_connection_lifetime () =
+  let repo = "test/flags-connection-lifetime" in
+  check_connections_released (fun remember ->
+      let conn = create_conn () in
+      remember conn;
+      Worker_state.set_datascript_conn repo conn;
+      ignore (Db_tx.transact conn lifetime_tx);
+      Endpoint_lifecycle.close_db_aux repo)
+
+let connection_lifetime_cases =
+  List.map (fun mode -> Alcotest.test_case ("typed-temp-" ^ mode) `Quick
+                         (test_temp_batch_connection_lifetime mode))
+    [ "empty"; "success"; "body-failure"; "listener-failure";
+      "before-commit-failure"; "commit-failure"; "nested" ]
+  @ [ Alcotest.test_case "wire-temp-success" `Quick
+        (test_wire_temp_batch_connection_lifetime false)
+    ; Alcotest.test_case "wire-temp-failure" `Quick
+        (test_wire_temp_batch_connection_lifetime true) ]
+  @ List.map (fun mode -> Alcotest.test_case ("sync-temp-" ^ mode) `Quick
+                           (test_sync_temp_batch_connection_lifetime mode))
+      [ "success"; "body-failure"; "before-commit-failure" ]
+  @ [ Alcotest.test_case "closed-graph" `Quick test_closed_graph_connection_lifetime ]
+
 (* (deftest batch-transact-with-temp-conn-before-commit-can-abort-live-commit-test
    ...) — before-commit runs after the temp work and before the live conn
    is modified; throwing aborts the commit *)
@@ -3828,7 +3921,8 @@ let db_test_cases : unit Alcotest.test_case list =
 
 let () =
   Alcotest.run "db-worker"
-    [ "db_test", db_test_cases
+    [ "connection-lifetime", connection_lifetime_cases
+    ; "db_test", db_test_cases
     ; "endpoint", endpoint_cases
     ; "common", Test_db_common_native.cases
     ; "frontend", Test_db_frontend_native.cases
