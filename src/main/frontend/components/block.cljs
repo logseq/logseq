@@ -1326,18 +1326,14 @@
              [:span.text-gray-500.bracket page-ref/right-brackets])])))))
 
 (hsx/defc broken-page-reference
-  "Render a [[uuid]] or ((uuid)) ref whose entity doesn't exist."
-  [{:keys [block-ref-link?] :as _config} uuid-or-title]
-  (let [uuid-str (str uuid-or-title)
-        ref-text (if block-ref-link?
-                   (str "((" uuid-str "))")
-                   (str "[[" uuid-str "]]"))]
-    [:a.page-ref.broken
-     {:title (t :block/ref-not-exist)
-      :on-click (fn [e]
-                  (util/stop e)
-                  (notification/show! (t :block/ref-not-exist) :warning))}
-     ref-text]))
+  "Render a [[uuid]] ref whose entity doesn't exist."
+  [_config uuid-or-title]
+  [:a.page-ref.broken
+   {:title (t :block/ref-not-exist)
+    :on-click (fn [e]
+                (util/stop e)
+                (notification/show! (t :block/ref-not-exist) :warning))}
+   (str "[[" uuid-or-title "]]")])
 
 (hsx/defc subscribed-page-reference
   [config uuid-or-title label page-uuid fallback-block]
@@ -1422,7 +1418,7 @@
         self-reference? (when (set? (:ref-set config))
                          (contains? (:ref-set config) block-id))]
     (when-not self-reference?
-      (page-reference (assoc config :block-ref-link? true) block-id label))))
+      (page-reference config block-id label))))
 
 (defn- render-macro
   [config name arguments macro-content format]
