@@ -209,6 +209,29 @@ let graph_close_recovery_tests () =
        Sys.remove path)
     [ "healthy"; "fenced"; "direct-drop" ]
 
+let service_retry_tests () =
+  let repo = "test/service-ready-retry" in
+  let open_args opts =
+    Transit_codec.to_string (Wire.Array [ Wire.String repo; opts ]) in
+  let failed =
+    try
+      ignore (await (Worker_core.remote_invoke "thread-api/create-or-open-db"
+        (open_args (Wire.kw_map [ "datoms", Wire.Int 42 ]))));
+      false
+    with _ -> true
+  in
+  check "remote open reports initialization failure" failed;
+  let retried =
+    try
+      await (Worker_core.remote_invoke "thread-api/create-or-open-db"
+        (open_args (Wire.kw_map [])))
+      |> fun result -> string_contains result "schema"
+    with _ -> false
+  in
+  check "same graph remote open can retry failed readiness" retried;
+  ignore (await (Worker_core.invoke "thread-api/close-db"
+    (Transit_codec.to_string (Wire.Array [ Wire.String repo ]))))
+
 let repo = "test/graph"
 
 let setup () =
@@ -381,6 +404,7 @@ let () =
   Worker_core.init ();
   graph_store_durability_tests ();
   graph_close_recovery_tests ();
+  service_retry_tests ();
   check "registered q" (Dispatcher.registered "thread-api/q");
   check "not registered" (not (Dispatcher.registered "thread-api/nope"));
   (* cljs (throw (ex-info "not found thread-api: ...")) — a synchronous
