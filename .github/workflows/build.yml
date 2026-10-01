@@ -117,7 +117,9 @@ jobs:
 
       - name: Run db-worker OCaml tests
         working-directory: deps/db-worker
-        run: opam exec -- dune runtest
+        run: |
+          node scripts/check-schema-version.cjs
+          opam exec -- dune runtest
 
       - name: Build test asset
         run: pnpm cljs:test
