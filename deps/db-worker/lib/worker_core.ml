@@ -203,15 +203,34 @@ let init_service (graph : string option) (start_opts : Wire.t)
                ()
            in
            service_cell := Some (g, Pending service_effect);
-           E.map
-             (fun service ->
+           E.catch
+             (E.map
+                (fun service ->
+                   (match !service_cell with
+                    | Some (g', Pending p')
+                      when g' = g && p' == service_effect ->
+                        service_cell := Some (g, Ready service);
+                        E.on_any service.status_ready (fun () -> ())
+                          (fun _ ->
+                             (* Only this generation may retire its channels.
+                                A late failure must not evict a newer service. *)
+                             match !service_cell with
+                             | Some (g', Ready current)
+                               when g' = g && current == service ->
+                                 service_cell := None;
+                                 Shared_service.clear_old_service ()
+                             | _ -> ())
+                    | _ -> ());
+                   Some service)
+                service_effect)
+             (fun exn ->
                 (match !service_cell with
                  | Some (g', Pending p')
                    when g' = g && p' == service_effect ->
-                     service_cell := Some (g, Ready service)
+                     service_cell := None;
+                     Shared_service.clear_old_service ()
                  | _ -> ());
-                Some service)
-             service_effect)
+                E.error exn))
 
 (* cljs platform/post-message! — self.postMessage of a transit
    [type-kw data] pair; deliberately bypasses the extra_poster
