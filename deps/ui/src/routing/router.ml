@@ -532,12 +532,7 @@ let resolve () =
       if route <> Model.Settings then Settings_state.deactivate ();
       load_route route;
       Option.iter jump_to_anchor (route_anchor ());
-      Runtime.flush ());
-  (* cljs "#/settings" surfaces as the settings dialog stacked over the
-     kept route page — open it after commit (and again when the hash is
-     re-triggered while already on the route) *)
-  if route = Model.Settings && Dialogs_state.ready () then
-    Dialogs_state.open_ "settings"
+      Runtime.flush ())
 
 (* worker sync-db-changes broadcast: reload the current route's data
    without Navigate_to (keeps route_page until the fresh one lands, so

@@ -160,7 +160,9 @@ let view (x, y, with_app_items) (p : Model.page option) =
       Printf.sprintf
         "position:fixed;left:%.0fpx;top:%.0fpx;--available-height:\
          calc(100vh - %.0fpx)"
-        (Float.min x (inner_width -. 250.))
+        (* cljs anchors a 1px point at the click; the 280px
+           ls-context-menu-content centers on it *)
+        (Float.max 8. (Float.min (x -. 140.) (inner_width -. 288.)))
         y (y +. 8.)
   in
   dom ~key:"page-menu" ~tag:"div"

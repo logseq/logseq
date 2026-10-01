@@ -594,6 +594,10 @@ let get_match_input (q : string) : string =
         || not (List.exists (Ns_util.str_contains match_input) [ "AND"; "OR"; "NOT" ])
         || Ns_util.str_contains q "/")
   then fts_phrase_input match_input
+  else if Regexp.test non_word_re q then
+    (* non-word input that also carries boolean words (e.g. "[[x]] and y"
+       -> "[[x]] AND y") still can't form a valid fts5 expression *)
+    fts_phrase_input match_input
   else if q <> match_input then
     str_replace_literal match_input ~pattern:"," ~replacement:""
   else match_input

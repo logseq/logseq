@@ -56,12 +56,7 @@ let update (model : t) (action : Action.t) : t =
   | Navigate_to route ->
       { model with
         route
-      ; route_page =
-          (* "#/settings" keeps the underlying page mounted behind the
-             settings dialog (cljs route-page under the modal) *)
-          (match route with
-           | Model.Settings -> model.route_page
-           | _ -> None)
+      ; route_page = None
       ; page_missing = false
       ; page_refs = []
       ; unlinked_refs = []

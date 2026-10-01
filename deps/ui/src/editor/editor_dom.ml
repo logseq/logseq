@@ -17,6 +17,8 @@ type observe_opts
    (Dom_ext.element) — same runtime value, different abstract view *)
 external el_of_json : Js.Json.t -> el = "%identity"
 
+external json_of_el : el -> Js.Json.t = "%identity"
+
 external document_add_listener :
   string -> (ev -> unit) -> bool -> unit = "addEventListener"
   [@@mel.scope "document"]

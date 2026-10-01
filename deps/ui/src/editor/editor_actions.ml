@@ -599,16 +599,28 @@ let index_of lst u =
   in
   go 0 lst
 
+(* the page-title row is a selectable .ls-block that sits above every
+   block without being part of the flat list — a selection anchored on
+   it extends down into the blocks *)
+let anchor_is_page_title anchor =
+  match
+    D.query_selector (".ls-page-title .ls-block[blockid='" ^ anchor ^ "']")
+  with
+  | Some _ -> true
+  | None -> false
+
 (* range anchor..head (inclusive) in visible order; [] when either
    endpoint isn't a visible block (e.g. a journal row's page uuid from a
    co-mounted virt list extending on the same scroller) *)
 let range_between anchor head =
   let uuids = flat_uuids () in
   let ia = index_of uuids anchor and ih = index_of uuids head in
-  if ia < 0 || ih < 0 then []
-  else
+  if ia >= 0 && ih >= 0 then
     let lo, hi = (min ia ih, max ia ih) in
     List.filteri (fun i _ -> i >= lo && i <= hi) uuids
+  else if ia < 0 && ih >= 0 && anchor_is_page_title anchor then
+    anchor :: List.filteri (fun i _ -> i <= ih) uuids
+  else []
 
 (* extend selection one visible step from the current head *)
 let extend_selection up =
@@ -625,7 +637,19 @@ let extend_selection up =
         | _ -> None
       in
       match head with
-      | None -> ()
+      | None -> (
+          (* only the title row selected: ArrowDown enters the block
+             list from the top *)
+          match (up, uuids) with
+          | false, first :: _ when anchor_is_page_title anchor ->
+              let range = range_between anchor first in
+              S.set (fun st ->
+                  { st with
+                    S.selected = S.String_set.of_list range
+                  ; anchor = Some anchor
+                  ; action_bar = true
+                  })
+          | _ -> ())
       | Some h -> (
           let nbr =
             (if up

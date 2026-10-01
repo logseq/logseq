@@ -664,7 +664,12 @@ let cm_popover (st : S.t) : t =
                    , Printf.sprintf
                        "position: fixed; left: %.0fpx; top: %.0fpx; \
                         z-index: 999; --available-height: calc(100vh - %.0fpx)"
-                       m.S.cx m.S.cy (m.S.cy +. 8.) )
+                       (* cljs anchors a 1px point at the click and the
+                          base-ui dropdown centers the 280px content on it *)
+                       (Float.max 8.
+                          (Float.min (m.S.cx -. 140.)
+                             (Dom_ext.window_inner_width -. 288.)))
+                       m.S.cy (m.S.cy +. 8.) )
                  ; ("role", "menu") ]
            | None -> attrs_v [])
          st.S.vs.Signal.state_signal)

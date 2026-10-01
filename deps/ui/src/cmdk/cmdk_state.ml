@@ -112,7 +112,7 @@ let decorate (v : view) : view =
                   { it with
                     ihl = v.hl = it.idx
                   ; imouse = v.mouse
-                  ; iq = v.input })
+                  ; iq = (if g.gid = G_create then "" else v.input) })
                 g.gitems })
         v.groups }
 
@@ -665,10 +665,8 @@ let recents_item_of_wire w =
             { ikey = "recent-" ^ uuid; idx = -1; gid = G_recently_updated
             ; ititle = p.page_title; info = None; header = None
             ; iicon = "file"; isc = ""
-            ; ibadge =
-                (match current_page_uuid () with
-                 | Some cur when cur = uuid -> Text_badge
-                 | _ -> No_badge)
+            ; ibadge = No_badge (* cljs recent-page-items never sets
+                                 :current-page? *)
             ; act = Open_page uuid
             ; ihl = false; imouse = false; iq = "" }
       | None -> None)
