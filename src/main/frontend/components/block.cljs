@@ -395,14 +395,19 @@
                   [:span.flex.items-center.gap-1
                    (ui/icon "copy") (t :asset/copy)])
                  (when (util/electron?)
-                   (shui/dropdown-menu-item
-                    {:on-click (fn [e]
-                                 (util/stop e)
-                                 (if local?
-                                   (ipc/ipc "openFileInFolder" image-src)
-                                   (js/window.apis.openExternal image-src)))}
-                    [:span.flex.items-center.gap-1
-                     (ui/icon "folder-pin") (t (if local? :asset/show-file-in-folder :asset/open-in-browser))]))
+                   (let [remote-src? (and image-src (string/starts-with? image-src "http"))]
+                     (shui/dropdown-menu-item
+                      {:on-click (fn [e]
+                                   (util/stop e)
+                                   (if remote-src?
+                                     (js/window.apis.openExternal image-src)
+                                     (-> (fs/file-exists? image-src)
+                                         (p/then (fn [exists?]
+                                                   (if exists?
+                                                     (ipc/ipc "openFileInFolder" image-src)
+                                                     (notification/show! (t :asset/missing-file image-src) :warning)))))))}
+                      [:span.flex.items-center.gap-1
+                       (ui/icon "folder-pin") (t (if remote-src? :asset/open-in-browser :asset/show-file-in-folder))])))
 
                  (when-not config/publishing?
                    [:<>

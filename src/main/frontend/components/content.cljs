@@ -13,6 +13,7 @@
             [frontend.db.hooks :as db-hooks]
             [frontend.db.async :as db-async]
             [frontend.extensions.fsrs :as fsrs]
+            [frontend.fs :as fs]
             [frontend.handler.common.developer :as dev-common-handler]
             [frontend.handler.comments :as comments-handler]
             [frontend.handler.editor :as editor-handler]
@@ -31,6 +32,7 @@
             [frontend.util.url :as url-util]
             [goog.dom :as gdom]
             [goog.object :as gobj]
+            [logseq.common.config :as common-config]
             [logseq.common.path :as path]
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
@@ -311,9 +313,20 @@
             {:key "Show asset in folder"
              :on-click (fn [_e]
                          (let [assets-dir (config/get-current-repo-assets-root)
-                               ext (name (:logseq.property.asset/type block))
-                               file-path (path/path-join assets-dir (str (:block/uuid block) "." ext))]
-                           (ipc/ipc "openFileInFolder" file-path)))}
+                               repo-dir (config/get-repo-dir (state/get-current-repo))
+                               ext (:logseq.property.asset/type block)
+                               ext-url (:logseq.property.asset/external-url block)
+                               local-ext-url? (and (not (string/blank? ext-url))
+                                                   (common-config/local-relative-asset? ext-url))
+                               file-path (if local-ext-url?
+                                           ;; Plugin-sourced asset stored under assets/storages/<plugin-id>/...
+                                           (path/path-join repo-dir (string/replace ext-url #"^[./]+" ""))
+                                           (path/path-join assets-dir (str (:block/uuid block) (when ext (str "." (name ext))))))]
+                           (-> (fs/file-exists? file-path)
+                               (p/then (fn [exists?]
+                                         (if exists?
+                                           (ipc/ipc "openFileInFolder" file-path)
+                                           (notification/show! (t :asset/missing-file file-path) :warning)))))))}
             (t :asset/show-file-in-folder)))
 
          (shui/dropdown-menu-item
