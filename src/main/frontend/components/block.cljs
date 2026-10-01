@@ -286,7 +286,9 @@
                 (fn [_e]
                   ;; Electron renderer cannot fetch file:// URLs; read the
                   ;; file via IPC and copy the blob directly.
-                  (if (util/electron?)
+                  (if (and (util/electron?)
+                           (seq image-src)
+                           (not (string/starts-with? image-src "http")))
                     (let [ext (some-> (util/get-file-ext image-src) string/lower-case)
                           ;; Should support all exts in common-config/img-formats
                           ext->mime {"png" "image/png"
@@ -306,11 +308,13 @@
                               (util/copy-image-blob-to-clipboard blob))
                             (p/then #(notification/show! (t :notification/copied) :success))
                             (p/catch (fn [error]
-                                       (js/console.error error))))))
+                                       (js/console.error error)
+                                       (notification/show! (t :asset/missing-file image-src) :warning))))))
                     (-> (util/copy-image-to-clipboard src')
                         (p/then #(notification/show! (t :notification/copied) :success))
                         (p/catch (fn [error]
-                                   (js/console.error error))))))
+                                   (js/console.error error)
+                                   (notification/show! (t :asset/missing-file image-src) :warning))))))
                 handle-delete!
                 (fn [_e]
                   (when-let [block-id (get-blockid)]
