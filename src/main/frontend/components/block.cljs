@@ -678,6 +678,10 @@
                     (util/starts-with? (string/lower-case href) "http")
                     href
 
+                    ;; Protocol-relative URL (//host/path)
+                    (util/starts-with? href "//")
+                    href
+
                     ;; Absolute and ~ home paths stay root-relative outside
                     ;; Electron; Electron resolves them to assets:// URLs.
                     local-path?
