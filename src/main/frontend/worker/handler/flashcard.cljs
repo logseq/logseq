@@ -48,3 +48,8 @@
   [repo cards-id]
   (when-let [conn (worker-state/get-datascript-conn repo)]
     (fsrs-card-block-ids @conn cards-id false)))
+
+(def-thread-api :thread-api/get-card-class-ids
+  [repo]
+  (when-let [conn (worker-state/get-datascript-conn repo)]
+    (db-class/card-class-ids @conn)))

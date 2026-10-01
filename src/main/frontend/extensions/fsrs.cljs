@@ -82,21 +82,26 @@
   [block]
   (boolean (some tag-or-extends-card? (:block/tags block))))
 
-(defn- get-card-map
-  "Return nil if block is not #Card and does not have a tag that extends Card.
+(defn- block->card-map
+  "fsrs card-map for a block already known to be a card.
   Return default card-map if `:logseq.property.fsrs/state` or `:logseq.property.fsrs/due` is nil"
   [block-entity]
+  (let [fsrs-state (:logseq.property.fsrs/state block-entity)
+        fsrs-due (:logseq.property.fsrs/due block-entity)
+        return-default-card-map? (not (and fsrs-state fsrs-due))]
+    (if return-default-card-map?
+      (if-let [block-created-at (some-> (:block/created-at block-entity) (js/Date.) tick/instant)]
+        (assoc (fsrs.core/new-card!)
+               :last-repeat block-created-at
+               :due block-created-at)
+        (fsrs.core/new-card!))
+      (property-fsrs-state->fsrs-card-map (assoc fsrs-state :due fsrs-due)))))
+
+(defn- get-card-map
+  "Return nil if block is not #Card and does not have a tag that extends Card."
+  [block-entity]
   (when (card-block? block-entity)
-    (let [fsrs-state (:logseq.property.fsrs/state block-entity)
-          fsrs-due (:logseq.property.fsrs/due block-entity)
-          return-default-card-map? (not (and fsrs-state fsrs-due))]
-      (if return-default-card-map?
-        (if-let [block-created-at (some-> (:block/created-at block-entity) (js/Date.) tick/instant)]
-          (assoc (fsrs.core/new-card!)
-                 :last-repeat block-created-at
-                 :due block-created-at)
-          (fsrs.core/new-card!))
-        (property-fsrs-state->fsrs-card-map (assoc fsrs-state :due fsrs-due))))))
+    (block->card-map block-entity)))
 
 (defn- repeat-card!
   [repo block-id rating]
@@ -104,9 +109,7 @@
     (p/let [block-entity (state/<invoke-db-worker :thread-api/pull
                                                   repo
                                                   '[* {:block/tags [:db/ident
-                                                                    {:logseq.property.class/extends
-                                                                     [:db/ident
-                                                                      {:logseq.property.class/extends [:db/ident]}]}]}]
+                                                                    {:logseq.property.class/extends ...}]}]
                                                   eid)]
     (when-let [card-map (get-card-map block-entity)]
       (let [next-card-map (fsrs.core/repeat-card! card-map rating)
@@ -625,13 +628,17 @@
   :XXX-state-cards, cards' state is XXX"
     []
     (p/let [repo (state/get-current-repo)
+            card-ids (state/<invoke-db-worker :thread-api/get-card-class-ids repo)
             all-card-blocks
             (db-async/<q repo {:transact-db? false}
                          '[:find [(pull ?b [* {:block/tags [:db/ident]}]) ...]
+                           :in $ [?t ...]
                            :where
-                           [?b :block/tags :logseq.class/Card]
-                           [?b :block/uuid]])
-            all-cards (map get-card-map all-card-blocks)
+                           [?b :block/tags ?t]
+                           [?b :block/uuid]]
+                         card-ids)
+            ;; The query already established card membership via ?t
+            all-cards (map block->card-map all-card-blocks)
             [today-stat
              recent-7-days-stat
              recent-30-days-stat]

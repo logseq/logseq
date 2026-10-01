@@ -9,8 +9,12 @@
 (defn- project-extends-card-conn
   []
   (db-test/create-conn-with-blocks
-   {:classes {:Project {:block/title "Project"
-                        :build/class-extends [:logseq.class/Card]}}
+   {:classes {:Work {:block/title "Work"
+                     :build/class-extends [:logseq.class/Card]}
+              :Milestone {:block/title "Milestone"
+                          :build/class-extends [:Work]}
+              :Project {:block/title "Project"
+                        :build/class-extends [:Milestone]}}
     :pages-and-blocks
     [{:page {:block/title "page"}
       :blocks [{:block/title "project card"

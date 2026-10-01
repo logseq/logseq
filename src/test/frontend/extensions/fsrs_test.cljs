@@ -14,6 +14,21 @@
                  :logseq.property.class/extends [{:db/ident :logseq.class/Card}]}]
    :block/created-at (js/Date.now)})
 
+(defn- deep-extends-card-block
+  "A #Project card three extends edges below Card: Project -> Milestone -> Work -> Card.
+  Mirrors the nested maps produced by the recursive pull in `repeat-card!`."
+  []
+  {:db/id 8
+   :block/uuid (random-uuid)
+   :block/tags [{:db/ident :user.class/Project
+                 :logseq.property.class/extends
+                 [{:db/ident :user.class/Milestone
+                   :logseq.property.class/extends
+                   [{:db/ident :user.class/Work
+                     :logseq.property.class/extends
+                     [{:db/ident :logseq.class/Card}]}]}]}]
+   :block/created-at (js/Date.now)})
+
 (deftest card-block?-matches-worker-structured-children
   (testing "direct Card tag"
     (is (true? (#'fsrs/card-block? {:block/tags [{:db/ident :logseq.class/Card}]}))))
@@ -78,6 +93,33 @@
           (p/then
            (fn [_]
              (is (some? (:logseq.property.fsrs/state @persisted)))
+             (is (some? (:logseq.property.fsrs/due @persisted)))))
+          (p/catch
+           (fn [error]
+             (is false (str error))))
+          (p/finally done)))))
+
+(deftest rating-deep-extends-card-persists-state
+  (async done
+    (let [block (deep-extends-card-block)
+          persisted (atom nil)]
+      (-> (p/with-redefs [state/<invoke-db-worker
+                          (fn [api & _args]
+                            (case api
+                              :thread-api/pull
+                              (p/resolved block)
+                              :thread-api/get-fsrs-due-card-block-ids
+                              (p/resolved [])))
+                          property-handler/set-block-properties!
+                          (fn [_block-id properties]
+                            (reset! persisted properties)
+                            (p/resolved nil))
+                          state/get-current-repo (constantly "test-graph")]
+            (#'fsrs/rate-card! "test-graph" (:db/id block) :good))
+          (p/then
+           (fn [_]
+             (is (some? (:logseq.property.fsrs/state @persisted))
+                 "Rating a card three extends edges below Card must persist.")
              (is (some? (:logseq.property.fsrs/due @persisted)))))
           (p/catch
            (fn [error]
