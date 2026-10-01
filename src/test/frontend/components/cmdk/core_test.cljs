@@ -1,12 +1,16 @@
 (ns frontend.components.cmdk.core-test
   (:require
    [cljs.test :refer [async deftest is testing]]
+   [frontend.components.block.breadcrumb :as block-breadcrumb]
    [frontend.components.cmdk.core :as cmdk]
+   [frontend.components.icon :as icon-component]
    [frontend.db.async :as db-async]
    [frontend.handler.db-based.recent :as db-recent-handler]
    [frontend.handler.editor.format :as editor-format]
+   [frontend.search :as search]
    [frontend.state :as state]
    [frontend.util :as util]
+   [frontend.util.page :as page-util]
    [goog.object :as gobj]
    [logseq.shui.ui :as shui]
    [promesa.core :as p]))
@@ -179,3 +183,42 @@
               [:action :default]
               [:stop-propagation]]
              (enter-action-calls event))))))
+
+(deftest load-results-codes-unwraps-matched-count-map-test
+  (async done
+    (let [block {:block/uuid #uuid "22222222-2222-2222-2222-222222222222"
+                 :block/title "code snippet"}
+          results (atom {:codes {:status :success :items nil}})
+          state {::cmdk/input (atom "x")
+                 ::cmdk/results results}
+          search-opts (atom nil)
+          breadcrumb-ids (atom [])]
+      (-> (p/with-redefs [state/get-current-repo (constantly "repo")
+                          state/get-current-page (constantly nil)
+                          page-util/get-current-page-uuid (constantly nil)
+                          search/block-search
+                          (fn [_repo _input opts]
+                            (reset! search-opts opts)
+                            (p/resolved {:items [block] :matched-count 1}))
+                          icon-component/get-node-icon-cp (fn [_ _] "code")
+                          block-breadcrumb/breadcrumb
+                          (fn [_opts _repo id _breadcrumb-opts]
+                            (swap! breadcrumb-ids conj id)
+                            [:breadcrumb id])]
+            (cmdk/load-results :codes state)
+            (p/delay 40))
+          (p/then
+           (fn []
+             (is (true? (:code-only? @search-opts)))
+             (is (true? (:include-matched-count? @search-opts)))
+             (let [items (get-in @results [:codes :items])]
+               (is (= :success (get-in @results [:codes :status])))
+               (is (= 1 (count items)))
+               (is (= block (:source-block (first items))))
+               (is (= [#uuid "22222222-2222-2222-2222-222222222222"]
+                      @breadcrumb-ids)
+                   "Code search must unwrap :items so breadcrumbs get a real block uuid, not nil."))))
+          (p/catch
+           (fn [error]
+             (is false (str error))))
+          (p/finally done)))))
