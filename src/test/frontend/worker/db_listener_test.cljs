@@ -81,7 +81,6 @@
 
 (deftest db-listener-skips-search-sync-for-imported-data-test
   (doseq [tx-meta [{:logseq.graph-parser.exporter/imported-data? true}
-                   {:logseq.db.sqlite.export/imported-data? true}
                    {:from-disk? true}]]
     (let [calls (atom 0)]
       (with-redefs [search/sync-search-indice
@@ -93,6 +92,56 @@
          {:repo "repo"}
          {:tx-meta tx-meta :tx-data [:tx]}))
       (is (zero? @calls) (str tx-meta)))))
+
+(deftest db-listener-syncs-search-for-partial-edn-imported-data-test
+  (async done
+         (let [conn (db-test/create-conn)
+               page-uuid (random-uuid)
+               copper-uuid (random-uuid)
+               otter-uuid (random-uuid)
+               report (d/transact! conn
+                                   [{:block/uuid page-uuid
+                                     :block/title "QA-EDN-New"
+                                     :block/name "qa-edn-new"
+                                     :block/tags :logseq.class/Page}
+                                    {:block/uuid copper-uuid
+                                     :block/title "new copper"
+                                     :block/page [:block/uuid page-uuid]
+                                     :block/parent [:block/uuid page-uuid]
+                                     :block/order "a0"}
+                                    {:block/uuid otter-uuid
+                                     :block/title "new otter"
+                                     :block/page [:block/uuid page-uuid]
+                                     :block/parent [:block/uuid page-uuid]
+                                     :block/order "a1"}])
+               tx-report (assoc report :tx-meta {:logseq.db.sqlite.export/imported-data? true})
+               titles (set (map :title (:blocks-to-add (search/sync-search-indice tx-report))))
+               calls (atom [])]
+           (is (false? (#'db-listener/skip-search-sync? (:tx-meta tx-report)))
+               "Partial EDN import must not skip incremental search sync.")
+           (is (contains? titles "QA-EDN-New"))
+           (is (contains? titles "new copper"))
+           (is (contains? titles "new otter"))
+           (-> (p/with-redefs
+                 [search/sync-search-indice
+                  (fn [report & args]
+                    (swap! calls conj (into [report] args))
+                    {})]
+                 ((get-method db-listener/listen-db-changes :search)
+                  :search
+                  {:repo "repo"}
+                  tx-report)
+                 (p/delay 0))
+               (p/then
+                (fn [_]
+                  (is (= 1 (count @calls)))
+                  (is (= {:logseq.db.sqlite.export/imported-data? true}
+                         (:tx-meta (ffirst @calls))))
+                  (done)))
+               (p/catch
+                (fn [error]
+                  (is false (str error))
+                  (done)))))))
 
 (deftest db-listener-persists-local-tx-before-broadcasting-ui-refresh-test
   (let [conn (db-test/create-conn)
