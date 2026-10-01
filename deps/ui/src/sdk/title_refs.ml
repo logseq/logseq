@@ -1,12 +1,14 @@
 (* cljs wrap-parse-block (frontend.handler.db-based.editor) reduced to a
    textual scan — mldoc is not linked into deps/ui. Extracts [[page]],
    #tag and #[[page]] from a title: every ref lands in block/refs, only
-   #-refs in block/tags, and the stored title is rewritten to
-   [[uuid]] / #[[uuid]] form (cljs title-ref->id-ref) so
-   outliner_core.resolve_page_refs can swap minted uuids for resolved
-   ones. New pages carry block/tags [logseq.class/Page] (what
-   new_page_ref looks for); new tags carry db/ident user.class/<x>-<rand>
-   + block/tags [logseq.class/Tag] so the map itself creates the class. *)
+   #[[..]]-refs in block/tags (a bare #name renders as a tag link and
+   creates the tag-class entity but never tags the block), and the
+   stored title is rewritten to [[uuid]] / #[[uuid]] form
+   (cljs title-ref->id-ref) so outliner_core.resolve_page_refs can swap
+   minted uuids for resolved ones. New pages carry block/tags
+   [logseq.class/Page] (what new_page_ref looks for); new tags carry
+   db/ident user.class/<x>-<rand> + block/tags [logseq.class/Tag] so the
+   map itself creates the class. *)
 
 open Promise_ext
 let is_name_end c =
@@ -25,23 +27,27 @@ let find_close (s : string) i =
   in
   go i
 
-(* returns (ordered deduped ref names, ordered deduped tag names) *)
+(* returns (ordered deduped ref names, tag names, hash names).
+   `#name` lands in `hash`: cljs creates the tag-class entity and a
+   block/refs entry, but a bare hashtag never joins block/tags and the
+   title keeps the literal `#name` — only a confirmed autocomplete pick
+   or `#[[name]]` tags the block. *)
 let scan_title (title : string) =
   let n = String.length title in
   let dedupe xs =
     List.rev (List.fold_left (fun a x -> if List.mem x a then a else x :: a)
                 [] xs)
   in
-  let rec go i refs tags =
-    if i >= n then (refs, tags)
+  let rec go i refs tags hash =
+    if i >= n then (refs, tags, hash)
     else if i + 1 < n && title.[i] = '[' && title.[i + 1] = '[' then
       match find_close title (i + 2) with
       | Some j ->
           let name = String.trim (String.sub title (i + 2) (j - i - 2)) in
           go (j + 2)
             (if name = "" then refs else name :: refs)
-            tags
-      | None -> go n refs tags
+            tags hash
+      | None -> go n refs tags hash
     else if title.[i] = '#' && i + 1 < n then
       if i + 2 < n && title.[i + 1] = '[' && title.[i + 2] = '[' then
         match find_close title (i + 3) with
@@ -50,7 +56,8 @@ let scan_title (title : string) =
             go (j + 2)
               (if name = "" then refs else name :: refs)
               (if name = "" then tags else name :: tags)
-        | None -> go n refs tags
+              hash
+        | None -> go n refs tags hash
       else
         let j = ref (i + 1) in
         while !j < n && not (is_name_end title.[!j]) do
@@ -59,11 +66,12 @@ let scan_title (title : string) =
         let name = String.sub title (i + 1) (!j - i - 1) in
         go (max (i + 1) !j)
           (if name = "" then refs else name :: refs)
-          (if name = "" then tags else name :: tags)
-    else go (i + 1) refs tags
+          tags
+          (if name = "" then hash else name :: hash)
+    else go (i + 1) refs tags hash
   in
-  let refs, tags = go 0 [] [] in
-  (dedupe refs, dedupe tags)
+  let refs, tags, hash = go 0 [] [] [] in
+  (dedupe refs, dedupe tags, dedupe hash)
 
 let lc name = String.lowercase_ascii (String.trim name)
 
@@ -146,22 +154,24 @@ let new_tag_map name uuid =
     ]
 
 type resolved =
-  { name : string; uuid : string; is_tag : bool; fresh : bool
-  ; entity : Wire.t }
+  { name : string; uuid : string; is_tag : bool; is_hash : bool
+  ; fresh : bool; entity : Wire.t }
 
-let resolve_names names tags =
+let resolve_names names tags hash =
   let* a =
     names
     |> List.map (fun name ->
            let* w = Sdk_util.get_entity name in
+           let is_tag = List.mem name tags in
+           let is_hash = is_tag || List.mem name hash in
            Js.Promise.resolve
              (match Wire.map_get_uuid w "block/uuid" with
               | Some u ->
-                  { name; uuid = u; is_tag = List.mem name tags
+                  { name; uuid = u; is_tag; is_hash
                   ; fresh = false; entity = w }
               | None ->
                   { name; uuid = Platform.random_uuid ()
-                  ; is_tag = List.mem name tags; fresh = true
+                  ; is_tag; is_hash; fresh = true
                   ; entity = Wire.Nil }))
     |> Array.of_list |> Js.Promise.all
   in
@@ -208,7 +218,9 @@ let rewrite_title title resolved =
           ~rep:("[[" ^ r.uuid ^ "]]"))
       title resolved
   in
-  (* bare #name -> #[[uuid]]; #[[..]] is skipped ('[' follows '#') *)
+  (* #[[name]] -> #[[uuid]] via the pass above; a bare #name keeps its
+     literal form — only confirmed `#[[..]]` tags rewrite to id-ref *)
+  let tagged = List.filter (fun r -> r.is_tag) resolved in
   let n = String.length title in
   let buf = Buffer.create n in
   let rec go i =
@@ -216,7 +228,7 @@ let rewrite_title title resolved =
       if title.[i] = '#' && i + 1 < n && title.[i + 1] <> '['
          && (i = 0 || title.[i - 1] <> '#')
       then
-        match tag_name_at title (i + 1) resolved with
+        match tag_name_at title (i + 1) tagged with
         | Some r ->
             Buffer.add_string buf ("#[[" ^ r.uuid ^ "]]");
             go (i + 1 + String.length r.name)
@@ -233,8 +245,8 @@ let rewrite_title title resolved =
 type parsed = { title : string; refs : Wire.t list; tags : Wire.t list }
 
 let parse title =
-  let names, tags = scan_title title in
-  let* resolved = resolve_names names tags in
+  let names, tags, hash = scan_title title in
+  let* resolved = resolve_names names tags hash in
   (* seed the render pull caches with the resolved metas: a remounted
      [[uuid]] anchor then paints its title immediately instead of
      waiting on a worker pull *)
@@ -251,7 +263,7 @@ let parse title =
     resolved;
   let ref_of r =
     if r.fresh then
-      if r.is_tag then new_tag_map r.name r.uuid
+      if r.is_hash then new_tag_map r.name r.uuid
       else new_page_map r.name r.uuid
     else existing_ref_map r.entity
   in

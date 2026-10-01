@@ -238,7 +238,13 @@ let init () =
     (fun args ->
       ignore args;
       Js.Promise.resolve Wire.Nil);
-  Runtime.on_navigate := clear_pending_deltas;
+  Runtime.on_navigate := (fun () ->
+      clear_pending_deltas ();
+      (* a route change abandons the old page's selection/editor state —
+         leaving `selected` behind keeps the selection action bar visible
+         on the freshly loaded page *)
+      Editor_actions.cancel_pending_focus ();
+      if Editor_state.ready () then Editor_actions.clear_selection ());
   Editor_dom.document_add_listener "pointerdown"
     (fun _ -> last_ui_input_ms := Platform.date_now_ms ())
     true;

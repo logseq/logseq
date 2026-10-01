@@ -44,5 +44,6 @@ let extend_to uuid =
                 List.fold_left
                   (fun s u -> S.String_set.add u s)
                   st.S.selected range
+            ; action_bar = false
             })
   | None -> ()

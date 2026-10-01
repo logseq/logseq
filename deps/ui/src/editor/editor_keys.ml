@@ -285,9 +285,7 @@ let on_pending_focus_key ev e caret =
      outpace e.buffer while a refresh rewrites it — clamp before any
      String.sub *)
   let caret = max 0 (min caret len) in
-  let queue f =
-    S.pending_focus_actions := f :: !S.pending_focus_actions
-  in
+  let queue f = S.pending_focus_actions := f :: !S.pending_focus_actions in
   let patch buf' caret' =
     S.set_silent (fun st ->
         { st with S.editing = Some { e with S.buffer = buf' } });
@@ -305,7 +303,7 @@ let on_pending_focus_key ev e caret =
       (String.sub buf 0 caret ^ s ^ String.sub buf caret (len - caret))
       (caret + String.length s)
   in
-  match D.ev_key ev with
+  (match D.ev_key ev with
   | "Backspace" ->
       D.prevent_default ev;
       if caret = 0 then queue (fun () -> A.merge_prev e.S.uuid)
@@ -368,7 +366,12 @@ let on_pending_focus_key ev e caret =
          && not (mods ev || D.ev_alt ev) ->
       D.prevent_default ev;
       insert key
-  | _ -> D.prevent_default ev
+  | _ -> D.prevent_default ev);
+  (* run the op this key just queued right away (and any already queued):
+     ops read S.editing/model state, not the landed textarea, and
+     deferring them to the next focus landing delays their outliner ops
+     past same-task readers *)
+  A.drain_pending_focus_actions 0
 
 let on_keydown ev =
   if S.ready () then begin

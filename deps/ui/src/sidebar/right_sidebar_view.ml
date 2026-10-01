@@ -31,17 +31,36 @@ let topbar_btn key label on_click =
         ~text:label [] ]
 
 let topbar st =
+  (* cljs right_sidebar.cljs topbar: Contents / Page graph / Help, then
+     dev-sidebar-items (rtc, undo-redo, profiler) in developer-mode *)
+  let dev_items =
+    if Settings_state.developer_mode () then
+      [ topbar_btn "rtc" "(Dev) RTC" (fun n _ ->
+            if n = "click" then Sidebar_state.open_sticky_item st "rtc")
+      ; topbar_btn "undo-redo" "(Dev) Undo/Redo" (fun n _ ->
+            if n = "click" then
+              Sidebar_state.open_sticky_item st "undo-redo")
+      ; topbar_btn "profiler" "(Dev) Profiler" (fun n _ ->
+            if n = "click" then
+              Sidebar_state.open_sticky_item st "profiler")
+      ]
+    else []
+  in
   dom ~key:"rs-topbar"
     ~style_class:
       "cp__right-sidebar-topbar flex flex-row justify-between items-center"
     [ dom ~key:"rs-settings"
         ~style_class:"cp__right-sidebar-settings hide-scrollbar gap-1"
-        [ topbar_btn "contents" (t "page/contents") (fun n _ ->
-              if n = "click" then
-                Sidebar_state.open_sticky_item st "contents")
-        ; topbar_btn "help" (t "nav/help") (fun n _ ->
-              if n = "click" then Sidebar_state.open_sticky_item st "help")
-        ]
+        ([ topbar_btn "contents" (t "page/contents") (fun n _ ->
+               if n = "click" then
+                 Sidebar_state.open_sticky_item st "contents")
+         ; topbar_btn "page-graph" (t "graph.page/title") (fun n _ ->
+               if n = "click" then
+                 Sidebar_state.open_sticky_item st "page-graph")
+         ; topbar_btn "help" (t "nav/help") (fun n _ ->
+               if n = "click" then Sidebar_state.open_sticky_item st "help")
+         ]
+        @ dev_items)
     ]
 
 (* ---------- item menus ---------- *)
@@ -185,6 +204,19 @@ let item_title (it : Sidebar_state.item) =
   | [], "help" ->
       dom ~key:"pt-help" ~style_class:"flex items-center"
         [ Icons.icon ~cls:"text-md mr-2" "help"
+        ; dom ~tag:"span" ~text:it.title [] ]
+  | [], kind
+    when kind = "page-graph" || kind = "rtc" || kind = "undo-redo"
+         || kind = "profiler" ->
+      (* cljs build-sidebar-item: icon + title in .flex.items-center *)
+      let ic =
+        match kind with
+        | "page-graph" -> "hierarchy"
+        | "undo-redo" -> "rotate-clockwise"
+        | _ -> "cloud"
+      in
+      dom ~key:("pt-" ^ kind) ~style_class:"flex items-center"
+        [ Icons.icon ~cls:"text-md mr-2" ic
         ; dom ~tag:"span" ~text:it.title [] ]
   | [], _ -> dom ~key:"pt-plain" ~style_class:"flex items-center" ~text:it.title []
   | crumbs, _ -> breadcrumb crumbs

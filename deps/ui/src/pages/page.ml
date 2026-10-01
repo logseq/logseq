@@ -1120,9 +1120,15 @@ let page_view (m : Model.t) (page : Model.page) : t =
         ((match m.route with
           | Model.Block_zoom _ -> zoom_breadcrumbs page
           | _ -> breadcrumbs page.page_title)
-        @ [ dom ~key:"page-title-row"
-              ~style_class:"flex flex-row space-between"
-              [ page_title_el m page ] ]
+        @ (match m.route with
+           (* cljs page.cljs: db-page-title renders only when the target is
+              a page entity — a zoomed block is breadcrumb + tree only *)
+           | Model.Block_zoom _ -> []
+           | _ ->
+               [ dom ~key:"page-title-row"
+                   ~style_class:"flex flex-row space-between"
+                   [ page_title_el m page ]
+               ])
         @ (if page.page_is_library then [ library_add_pages_button ]
            else [])
         @ [ blocks_inner ?puuid:page.page_uuid ~virtualize:true
@@ -1150,6 +1156,7 @@ let page_view (m : Model.t) (page : Model.page) : t =
                dom ~key:"urefs" ~style_class:"fade-in delay"
                  [ unlinked_references_view m ])
           ])
+    ; Selection_bar.view ()
     ]
 
 let empty_state () : t =
@@ -1188,13 +1195,15 @@ let library_view (m : Model.t) (page : Model.page) : t =
              dom ~key:"urefs" ~style_class:"fade-in delay"
                [ unlinked_references_view m ])
         ]
+    ; Selection_bar.view ()
     ]
 
 let page_view_of_model (m : Model.t) : t =
   match m.phase, m.route with
   | Model.Ready, (Model.Journals | Model.Home) ->
       (* cljs container.cljs: journals render inside a plain route-root div *)
-      dom ~key:"journals-root" [ journals_view m m.journals ]
+      dom ~key:"journals-root"
+        [ journals_view m m.journals; Selection_bar.view () ]
   | Model.Ready, Model.Library -> (
       match m.route_page with
       | Some p -> library_view m p

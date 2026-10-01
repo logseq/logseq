@@ -617,6 +617,26 @@ let open_sticky_item st kind =
         (match static_item "help" "help" (t "nav/help") with
          | Some it -> push_item st it
          | None -> ())
+    | "page-graph" when not (has_item st "page-graph") -> (
+        (* cljs sidebar-add-block! :page-graph requires a current page *)
+        match !Runtime.current_page with
+        | Some _ -> (
+            match static_item "page-graph" "page-graph" "graph.page/title"
+            with
+            | Some it -> push_item st it
+            | None -> ())
+        | None -> ())
+    | (("rtc" | "undo-redo" | "profiler") as kind)
+      when not (has_item st kind) -> (
+        let label =
+          match kind with
+          | "rtc" -> "(Dev) RTC"
+          | "undo-redo" -> "(Dev) Undo/Redo"
+          | _ -> "(Dev) Profiler"
+        in
+        match static_item kind kind label with
+        | Some it -> push_item st it
+        | None -> ())
     | _ -> ()
 
 let ensure_contents st =

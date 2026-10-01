@@ -175,6 +175,19 @@ let make scheduler : t =
   t
 
 let get t = Signal.get t.vs.Signal.state_signal
+
+(* signal of whether any popover layer (autocomplete / context menu /
+   picker popup) is open — drives chrome that must hide while one is up
+   (the selection action-bar, like cljs's popup layering) *)
+let popup_signal () =
+  match !active with
+  | Some t ->
+      Some
+        (Signal.map
+           (fun v -> v.ac <> None || v.cm <> None || v.pv <> None)
+           t.vs.Signal.state_signal)
+  | None -> None
+
 let ac_open () =
   match !active with
   | Some t -> (get t).ac <> None
@@ -1602,7 +1615,9 @@ let dev_entries () =
 
 let open_cm t ~x ~y ~block_id ~multi =
   let entries =
-    (if multi then multi_entries () else block_entries ()) @ dev_entries ()
+    (* cljs adds Developer tools only to the single-block menu *)
+    if multi then multi_entries ()
+    else block_entries () @ dev_entries ()
   in
   close_ac t;
   set_cm t
