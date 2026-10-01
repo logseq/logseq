@@ -1911,6 +1911,26 @@ list. `Cmdk_state.refresh ?clear` therefore skips the synchronous
 leaving prior groups rendered until the async response replaces them;
 every other caller uses the default `~clear:true`.
 
+## PDF annotations/highlights (parity: `devin/lui-pdf`)
+
+Ports `src/main/frontend/extensions/pdf*` into `deps/ui/src/extension/pdf*.ml` + `src/render/pdf_annotation.ml`, FFI-only against the vendored `pdf.mjs`/`pdf_viewer3.mjs` window globals (`pdfjsLib`, `pdfjsViewer`, `interact`) — no handwritten JS beyond `%mel.raw` shims.
+
+- Mount: `.extensions__pdf-playground` sibling in the shell; the container `#pdf-layout-container_<identity>` portals into `#app-single-container`; `is-pdf-active` + `ls-hl-colored` on `body`, `data-theme`/`ls-pdf-viewer-theme` on the container.
+- `.pdf` asset blocks render `a.asset-ref.is-pdf{data-href,data-url,draggable}`; click → `Pdf_state.set_current` → open hook → inflate → `getDocument` → `PDFViewer` boot (EventBus/LinkService/FindController, `textLayerMode:2`, `annotationMode:2`, `removePageBorders`) → `textlayerrendered` renders the hls layer.
+- Highlights: `textlayerrendered`/`pagesinit` build `.extensions__pdf-hls-layer` per page with `.extensions__pdf-hls-region`s (text) and `.extensions__pdf-hls-area-region` (area, interact.js resizable), ctx menu `ul.extensions__pdf-hls-ctx-menu` (ref/copy/link/del + 5 colors), `⌘drag`/area-mode box-select crop → png persisted as an Asset block under the today journal page.
+- Toolbar: `.extensions__pdf-toolbar > .inner > .r.flex.buttons` — pager input, area/hl toggles, settings gear, zoom out/in/auto, outline (Contents|Highlights tabs), find (PDFFindController), annotations page, close. Finder overlay `extensions__pdf-finder-wrap`, settings `extensions__pdf-settings`, docinfo `ui__dialog-overlay`.
+- Annotation ref blocks: `.prefix-link > .hl-page > strong.forbid-edit "P<n>"` prefix; `.block-title-wrap[data-hl-type]`; `.block-content[data-type][data-hl-color]`; area display `.hl-area > .asset-container > span.asset-action-bar + img.w-full`; `((uuid))` ref copy via ctx menu.
+
+### Gaps / deviations (web scope)
+
+- **dragstart `dataTransfer.setData`** goes through a `%mel.raw` shim (`dt_set_data`); the dom-event bridge does not expose the dataTransfer payload.
+- **System/external window** button renders (cljs shows it on web) but is a no-op — Electron-only path.
+- **`fix-selection-text-breakline`**, PDF outline nesting beyond level-2, and pdf.js worker error states (corrupt file) are approximated, not pixel-identical to cljs.
+- **file-graph `.hls__*.edn` persistence**, zotero `file://` assets, mobile/Electron branches, and plugin hook menu items are intentionally not ported.
+- Password-protected PDFs prompt via the shared `Dialogs_state.prompt` (title + desc row), matching the cljs `.container > h3#modal-headline` shape.
+
+
+
 ## Vendored render libs (katex/mhchem, highlight.js, youtube timestamps)
 
 `Render_libs` (`src/render/render_libs.ml`) owns all post-mount wiring

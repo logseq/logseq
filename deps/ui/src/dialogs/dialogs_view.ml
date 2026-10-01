@@ -178,9 +178,7 @@ let prompt_view (p : Dialogs_state.prompt) =
                 [ dom ~key:"prmt-t" ~style_class:"text-lg mb-4"
                     ~text:p.title []
                 ; dom ~key:"prmt-h" ~tag:"h3" ~id:"modal-headline"
-                    ~style_class:
-                      "sm:flex sm:items-start mt-3 text-center sm:mt-0 \
-                       sm:text-left leading-6 font-medium"
+                    ~style_class:"ls-prompt-headline"
                     ~text:p.desc [] ])
             @
             [ dom ~key:"prmt-in" ~tag:"input"
