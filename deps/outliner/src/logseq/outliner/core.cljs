@@ -314,15 +314,22 @@
            ;; restore the typed [[uuid]] in the title so it renders as a broken
            ;; ref instead of failing the transaction.
            broken-page-map? (fn [[_ref ref' _tx-data]]
-                              (and (map? ref') (nil? (:block/uuid ref'))))
+                              (and (map? ref')
+                                   (nil? (:block/uuid ref'))
+                                   (nil? (:db/id ref'))
+                                   (nil? (:db/ident ref'))
+                                   (common-util/uuid-string? (or (:block/name ref') ""))))
            ;; A [:block/uuid id] lookup whose entity doesn't exist and isn't
-           ;; created by this batch would fail the transaction, so drop it.
+           ;; created by this transaction would fail the transaction, so drop it.
+           created-uuids (into batch-uuids
+                               (keep (fn [[_ref ref' _tx-data]] (:block/uuid ref')))
+                               pairs)
            missing-uuid-ref? (fn [[_ref ref' _tx-data]]
                                (and (vector? ref')
                                     (= :block/uuid (first ref'))
                                     (uuid? (second ref'))
                                     (not (d/entity db [:block/uuid (second ref')]))
-                                    (not (contains? batch-uuids (second ref')))))
+                                    (not (contains? created-uuids (second ref')))))
            resolved-pairs (into [] (remove (some-fn broken-page-map? missing-uuid-ref?)) pairs)
            broken-pairs (filterv broken-page-map? pairs)
            refs' (mapv second resolved-pairs)

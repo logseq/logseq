@@ -258,6 +258,54 @@
       (is (= (str "((" missing-uuid "))") (:block/title inserted)))
       (is (empty? (:block/refs inserted))))))
 
+(deftest insert-blocks-keeps-db-id-ref
+  ;; A ref that identifies an entity by :db/id resolves to itself; it must not
+  ;; be mistaken for the nil-uuid page map produced by a missing [[uuid]].
+  (let [conn (db-test/create-conn-with-blocks
+              [{:page {:block/title "page1"}
+                :blocks [{:block/title "host"}
+                         {:block/title "linked"}]}])
+        linked (db-test/find-block-by-content @conn "linked")
+        host (db-test/find-block-by-content @conn "host")
+        result (outliner-core/insert-blocks
+                @conn
+                [{:block/uuid (random-uuid)
+                  :block/title "ref"
+                  :block/refs [{:db/id (:db/id linked)}]}]
+                host
+                {:sibling? true
+                 :keep-uuid? true})]
+    (d/transact! conn (:tx-data result))
+    (let [inserted (first (:blocks result))
+          inserted-entity (d/entity @conn [:block/uuid (:block/uuid inserted)])]
+      (is (= (:db/id linked)
+             (:db/id (first (:block/refs inserted-entity))))))))
+
+(deftest insert-blocks-keeps-uuid-ref-to-page-created-in-same-block
+  ;; A [:block/uuid id] lookup whose entity is created by another ref in the
+  ;; same transaction stays: dropping it would silently lose a valid ref.
+  (let [conn (db-test/create-conn-with-blocks
+              [{:page {:block/title "page1"}
+                :blocks [{:block/title "host"}]}])
+        page-uuid (random-uuid)
+        page-ref {:block/type "page"
+                  :block/name "newpage"
+                  :block/title "newpage"
+                  :block/uuid page-uuid}
+        host (db-test/find-block-by-content @conn "host")
+        result (outliner-core/insert-blocks
+                @conn
+                [{:block/uuid (random-uuid)
+                  :block/title "refs"
+                  :block/refs [page-ref [:block/uuid page-uuid]]}]
+                host
+                {:sibling? true
+                 :keep-uuid? true})]
+    (d/transact! conn (:tx-data result))
+    (let [inserted (first (:blocks result))]
+      (is (= page-uuid
+             (:block/uuid (first (:block/refs (d/entity @conn [:block/uuid (:block/uuid inserted)])))))))))
+
 (deftest insert-blocks-keeps-uuid-ref-to-existing-entity
   (let [conn (db-test/create-conn-with-blocks
               [{:page {:block/title "page1"}
