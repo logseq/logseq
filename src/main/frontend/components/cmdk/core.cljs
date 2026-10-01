@@ -1431,6 +1431,8 @@
          (reset! (::highlighted-item state) nil)
          (reset! (::focus-source state) :keyboard)
          (reset! (::results state) default-results)
+         ;; Results were just wiped, so any memoized refresh key is stale.
+         (reset! (::last-refresh-key state) nil)
          (when-let [input-ref @(::input-ref state)]
            (set! (.-value input-ref) input))
          (refresh-results! state)))
