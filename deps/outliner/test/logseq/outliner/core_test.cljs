@@ -313,6 +313,30 @@
                (:v (first (d/datoms @conn :eavt (:db/id saved-a) :block/title)))))
         (is (= [b-uuid] (map :block/uuid (:block/refs saved-a))))))))
 
+(deftest insert-blocks-reminted-self-ref-does-not-throw
+  (testing "replace-empty-target remints A; [[A]] and [:block/uuid A] map to the target uuid"
+    (let [conn (db-test/create-conn-with-blocks
+                [{:page {:block/title "page1"}
+                  :blocks [{:block/title ""}]}])
+          host (db-test/find-block-by-content @conn "")
+          a-uuid (random-uuid)
+          result (outliner-core/insert-blocks
+                  @conn
+                  [{:block/uuid a-uuid
+                    :block/title (page-ref/->page-ref a-uuid)
+                    :block/raw-title (page-ref/->page-ref a-uuid)
+                    :block/refs [[:block/uuid a-uuid]]}]
+                  host
+                  {:sibling? false
+                   :replace-empty-target? true
+                   :keep-uuid? true})]
+      (d/transact! conn (:tx-data result))
+      (let [saved (d/entity @conn [:block/uuid (:block/uuid host)])]
+        (is (some? saved))
+        (is (= (page-ref/->page-ref (:block/uuid host))
+               (:v (first (d/datoms @conn :eavt (:db/id saved) :block/title)))))
+        (is (= [(:block/uuid host)] (map :block/uuid (:block/refs saved))))))))
+
 (deftest insert-blocks-missing-uuid-page-ref-does-not-throw
   (testing "inserting [[<uuid-with-no-entity>]] persists plain text instead of rejecting the tx"
     (let [conn (db-test/create-conn-with-blocks

@@ -839,6 +839,42 @@
         (not page?) (assoc :block/page target-page)
         page? (dissoc :block/page)))))
 
+(defn- rewrite-insert-uuid-ref
+  [ref uuids]
+  (cond
+    (and (vector? ref) (= :block/uuid (first ref)) (contains? uuids (second ref)))
+    [:block/uuid (get uuids (second ref))]
+
+    (and (map? ref) (contains? uuids (:block/uuid ref)))
+    (assoc ref :block/uuid (get uuids (:block/uuid ref)))
+
+    :else
+    ref))
+
+(defn- rewrite-insert-uuid-title
+  [title uuids]
+  (if-not (string? title)
+    title
+    (reduce (fn [title [old new]]
+              (if (or (nil? old) (= old new))
+                title
+                (string/replace title (page-ref/->page-ref old) (page-ref/->page-ref new))))
+            title
+            uuids)))
+
+(defn- rewrite-block-insert-uuids
+  "Point title/refs at the UUIDs this insert will actually create."
+  [block uuids]
+  (cond-> block
+    (string? (:block/title block))
+    (update :block/title rewrite-insert-uuid-title uuids)
+
+    (string? (:block/raw-title block))
+    (update :block/raw-title rewrite-insert-uuid-title uuids)
+
+    (seq (:block/refs block))
+    (update :block/refs (fn [refs] (mapv #(rewrite-insert-uuid-ref % uuids) refs)))))
+
 (defn- build-insert-blocks-tx
   [db target-block blocks uuids get-new-id {:keys [sibling? outliner-op replace-empty-target? insert-template? keep-block-order?]}]
   (let [block-ids (set (map :block/uuid blocks))
@@ -851,7 +887,7 @@
       (if-let [{:block/keys [parent] :as block} (first blocks)]
         (if-let [uuid' (get uuids (:block/uuid block))]
           (let [{:keys [block page-txs]}
-                (resolve-page-refs db (remove-disallowed-inline-classes db block) (into block-ids (vals uuids)))
+                (resolve-page-refs db (remove-disallowed-inline-classes db (rewrite-block-insert-uuids block uuids)) (set (vals uuids)))
                 top-level? (= (:block/level block) 1)
                 parent (compute-block-parent block parent target-block top-level? sibling? get-new-id outliner-op replace-empty-target? idx)
                 order (nth orders idx)
