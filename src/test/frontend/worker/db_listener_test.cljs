@@ -117,7 +117,7 @@
                tx-report (assoc report :tx-meta {:logseq.db.sqlite.export/imported-data? true})
                titles (set (map :title (:blocks-to-add (search/sync-search-indice tx-report))))
                calls (atom [])]
-           (is (false? (#'db-listener/skip-search-sync? (:tx-meta tx-report)))
+           (is (not (#'db-listener/skip-search-sync? (:tx-meta tx-report)))
                "Partial EDN import must not skip incremental search sync.")
            (is (contains? titles "QA-EDN-New"))
            (is (contains? titles "new copper"))
