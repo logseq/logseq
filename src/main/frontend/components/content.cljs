@@ -316,11 +316,19 @@
                                repo-dir (config/get-repo-dir (state/get-current-repo))
                                ext (:logseq.property.asset/type block)
                                ext-url (:logseq.property.asset/external-url block)
-                               local-ext-url? (and (not (string/blank? ext-url))
-                                                   (common-config/local-relative-asset? ext-url))
-                               file-path (if local-ext-url?
+                               file-path (cond
                                            ;; Plugin-sourced asset stored under assets/storages/<plugin-id>/...
+                                           (and (not (string/blank? ext-url))
+                                                (common-config/local-relative-asset? ext-url))
                                            (path/path-join repo-dir (string/replace ext-url #"^[./]+" ""))
+
+                                           ;; External file outside the graph:
+                                           ;; absolute path or file:///assets:// URL
+                                           (and (not (string/blank? ext-url))
+                                                (path/absolute? ext-url))
+                                           (path/file-url-or-path->path ext-url)
+
+                                           :else
                                            (path/path-join assets-dir (str (:block/uuid block) (when ext (str "." (name ext))))))]
                            (-> (fs/file-exists? file-path)
                                (p/then (fn [exists?]
