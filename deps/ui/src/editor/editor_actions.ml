@@ -359,6 +359,24 @@ let split_at_cursor uuid =
             [ Ops.op "save-block" [ a.(0); Wire.Map [] ]
             ; Ops.insert_blocks [ a.(1) ] uuid ~sibling ])
         in
+        (* optimistic insert: mount the new row and retitle the split
+           block synchronously — the worker delta splices the real
+           record over the placeholder when it lands *)
+        (match !Runtime.current_page with
+         | Some page -> (
+             match
+               Model.split_insert page ~uuid ~before
+                 ~new_block:
+                   (Model.empty_block ~uuid:new_uuid ~title:after
+                      ~is_page:library)
+                 ~sibling
+             with
+             | Some page' ->
+                 Page_delta.mark_own_commit page';
+                 Runtime.push_page_items page';
+                 Runtime.send (Action.Page_loaded page')
+             | None -> ())
+         | None -> ());
         (* the exit-edit repaint lands before the worker delta — pin the
            saved title so the row doesn't flash the pre-split text *)
         S.override_title uuid (Ops.normalized_title uuid before);
@@ -391,6 +409,21 @@ let insert_sibling_after uuid =
               [ Ops.block_map ~title:"" ~page:library new_uuid ]
               uuid ~sibling ])
       in
+      (match !Runtime.current_page with
+       | Some page -> (
+           match
+             Model.split_insert page ~uuid ~before:buf
+               ~new_block:
+                 (Model.empty_block ~uuid:new_uuid ~title:""
+                    ~is_page:library)
+               ~sibling
+           with
+           | Some page' ->
+               Page_delta.mark_own_commit page';
+               Runtime.push_page_items page';
+               Runtime.send (Action.Page_loaded page')
+           | None -> ())
+       | None -> ());
       (* the exit-edit repaint lands before the worker delta — pin the
          saved title so the row doesn't flash the stale title *)
       S.override_title uuid (Ops.normalized_title uuid buf);
@@ -760,6 +793,7 @@ let indent_or_outdent ~indent =
            with
            | Some page' ->
                Page_delta.mark_own_commit page';
+               Runtime.push_page_items page';
                Runtime.send (Action.Page_loaded page')
            | None -> ())
        | _ -> ());
@@ -776,6 +810,7 @@ let move_blocks_up_down up =
        | Some page ->
            let page' = Model.move_selected_top_blocks page uuids up in
            Page_delta.mark_own_commit page';
+           Runtime.push_page_items page';
            Runtime.send (Action.Page_loaded page')
        | None -> ());
       ignore (Ops.apply_and_refresh [ Ops.move_up_down uuids up ])

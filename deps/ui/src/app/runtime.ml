@@ -146,6 +146,13 @@ let set_page_items ~scope ~puuid items =
   | Some s -> Signal.set s items
   | None -> ()
 
+(* every Page_loaded whose page_blocks came from a splice/delta/optimistic
+   reparent — not a fresh fetch — pushes its items first so the mounted
+   virtual list repaints even when update.ml skips the remount *)
+let push_page_items (page : Model.page) =
+  set_page_items ~scope:"main" ~puuid:page.Model.page_uuid
+    (Array.of_list page.Model.page_blocks)
+
 let clear_page_items () =
   Hashtbl.iter (fun _ s -> Signal.dispose_signal (Signal.value s)) page_items;
   Hashtbl.reset page_items
