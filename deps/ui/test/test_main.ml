@@ -1285,12 +1285,13 @@ let test_cmdk_rows () =
   Runtime.current_route := saved_route;
   Runtime.current_page := saved_page;
   (* search opts *)
-  let so = Cmdk_state.search_opts true 20 in
+  let so = Cmdk_state.search_opts ~dev:true true 20 in
   check "search_opts move-mode"
     (Wire.get so "page-only?" = Some (Wire.Bool true)
-    && Wire.get so "limit" = Some (Wire.Int 20));
+    && Wire.get so "limit" = Some (Wire.Int 20)
+    && Wire.get so "dev?" = Some (Wire.Bool true));
   check "search_opts normal"
-    (Wire.get (Cmdk_state.search_opts false 10) "page-only?" = None)
+    (Wire.get (Cmdk_state.search_opts ~dev:false false 10) "page-only?" = None)
 
 let test_cmdk_view () =
   (* hl matching uses idx — items only get real indices via renumber *)

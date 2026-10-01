@@ -177,14 +177,26 @@ let make scheduler : t =
 let get t = Signal.get t.vs.Signal.state_signal
 
 (* signal of whether any popover layer (autocomplete / context menu /
-   picker popup) is open — drives chrome that must hide while one is up
-   (the selection action-bar, like cljs's popup layering) *)
+   picker popup) is open — drives chrome that must hide while one is up *)
 let popup_signal () =
   match !active with
   | Some t ->
       Some
         (Signal.map
            (fun v -> v.ac <> None || v.cm <> None || v.pv <> None)
+           t.vs.Signal.state_signal)
+  | None -> None
+
+(* signal of whether a popover layer other than the context menu is open —
+   cljs keeps the selection action-bar rendered while the block context
+   menu that spawned from it is open, so the bar only hides under the
+   other layers *)
+let non_cm_popup_signal () =
+  match !active with
+  | Some t ->
+      Some
+        (Signal.map
+           (fun v -> v.ac <> None || v.pv <> None)
            t.vs.Signal.state_signal)
   | None -> None
 
@@ -677,7 +689,7 @@ let run_block_search t ac =
        Runtime.invoke3 "thread-api/search-blocks"
          (Wire.String (repo ()))
          (Wire.String ac.query)
-         (Cmdk_state.search_opts false 20)
+         (Cmdk_state.search_opts ~dev:false false 20)
      in
      let rows =
        match w with
@@ -711,7 +723,7 @@ let run_node_search t ac =
        Runtime.invoke3 "thread-api/search-blocks"
          (Wire.String (repo ()))
          (Wire.String ac.query)
-         (Cmdk_state.search_opts false 20)
+         (Cmdk_state.search_opts ~dev:false false 20)
      in
      let rows =
        match w with

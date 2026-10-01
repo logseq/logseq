@@ -582,10 +582,14 @@ div[data-keep-selection].menu-links-wrapper {
 
 /* ---- cmdk palette ----------------------------------------------------- */
 
-.ls-dialog-cmdk {
+/* two classes: the bare .ui__dialog-content max-width media query below
+   must not cap the palette (cljs mounts it as w-[90dvw] sm:max-w-4xl;
+   like every cljs dialog it stays vertically centered — top:50% +
+   translate(-50%,-50%) from the base rule) */
+.ui__dialog-content.ls-dialog-cmdk {
   padding: 0;
-  width: auto;
-  max-width: fit-content;
+  width: 90dvw;
+  max-width: 56rem;
   overflow: hidden;
 }
 
@@ -1432,18 +1436,23 @@ div[data-keep-selection].menu-links-wrapper {
   max-width: 1246px;
 }
 
-/* settings overlays are top-aligned, not centered
-   (cljs [data-align="top"]) */
-.ui__dialog-overlay[data-align="top"] {
-  align-items: flex-start;
+/* cljs marks the settings overlay data-align="top", but its dialog-content
+   still resolves to top:50% + translate(-50%,-50%): the tailwind top-[50%]
+   utility on cljs's dialog-content element beats shui.css's
+   [data-align=top] top-20 rule. LUI's dialog-content carries no utility
+   class, so restore the same effective centering here. */
+.ui__dialog-overlay[data-align="top"] .ui__dialog-content {
+  top: 50%;
 }
 
-.ui__dialog-overlay[data-align="top"] .ui__dialog-content {
-  top: 5vh;
-  transform: translateX(-50%);
+.ui__dialog-content[label="app-settings"] {
   width: min(1024px, calc(100vw - 2rem));
   max-width: calc(100vw - 2rem);
-  animation: lui-fade-in 150ms ease-out;
+}
+
+.ui__dialog-content[label="app-settings"] .settings-modal {
+  margin: -1.5rem;
+  border-radius: 0.75rem;
 }
 
 .ls-icon-sm {
@@ -2414,16 +2423,18 @@ h1.cp__settings-category-title::first-letter {
 .panel-wrap .it {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0 1.5rem;
+  gap: 1.5rem;
   align-items: start;
 }
 
-.panel-wrap .it:first-of-type {
+/* direct child like cljs .panel-wrap>.it:first-of-type — the accent
+   row's .it is nested in a wrapper div and must not get this padding */
+.panel-wrap > .it:first-of-type {
   padding-top: 14px;
 }
 
-.panel-wrap .it > label,
-.panel-wrap .it > .it-label {
+.panel-wrap .it label,
+.panel-wrap .it .it-label {
   min-height: 28px;
   line-height: 28px;
   display: flex;
@@ -2559,6 +2570,7 @@ h1.cp__settings-category-title::first-letter {
   padding-top: 0.375rem;
   text-align: center;
   font-size: 0.75rem;
+  line-height: 1rem;
   font-weight: 500;
 }
 
@@ -3518,7 +3530,15 @@ select.form-select {
   font-size: 0.875rem;
 }
 
-/* font picker buttons */
+/* font picker buttons — cljs shui/button secondary: text-sm, py-2 px-4,
+   strong text-sm/leading-5, small ~11px/leading-4 => 40px total */
+.ls-font-btn {
+  box-sizing: border-box;
+  height: 2.5rem;
+  font-size: 0.875rem;
+  padding: 0 1rem;
+}
+
 .ls-font-btn.ls-active {
   border: 2px solid hsl(var(--primary));
 }
@@ -3527,6 +3547,16 @@ select.form-select {
   display: flex;
   flex-direction: column;
   align-items: center;
+}
+
+.ls-font > strong {
+  font-size: 0.875rem;
+  line-height: 20px;
+}
+
+.ls-font > small {
+  font-size: 0.7rem;
+  line-height: 16px;
 }
 
 .ls-font-global {

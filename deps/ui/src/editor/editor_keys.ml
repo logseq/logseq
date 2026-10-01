@@ -213,7 +213,11 @@ let on_normal_key ev =
               D.prevent_default ev;
               A.enter_edit u 0
           | _ -> ()))
-  | "Escape" -> A.clear_selection ()
+  | "Escape" ->
+      (* cljs: first Escape closes the action-bar popover, the next one
+         clears the selection *)
+      if S.ready () && (S.value ()).S.action_bar then A.hide_action_bar ()
+      else A.clear_selection ()
   | "?" ->
       (* cljs shift+/ (:ui/toggle-help, global-non-editing-only) toggles
          the help menu popup *)
