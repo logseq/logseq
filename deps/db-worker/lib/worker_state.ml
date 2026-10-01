@@ -8,7 +8,18 @@ type db_kind =
 
 let sqlite_conns : (string * db_kind, Sqlite.db) Hashtbl.t = Hashtbl.create 7
 
-let datascript_conn repo = Hashtbl.find_opt datascript_conns repo
+let datascript_conn repo =
+  let conn = Hashtbl.find_opt datascript_conns repo in
+  (* Graph_store fences storage after a persistence failure. Check its
+     root before exposing conn.db, which DataScript installs before store.
+     Healthy Graph_store reads hit the committed root cache. *)
+  Option.iter
+    (fun conn ->
+       match Datascript.storage (Datascript.db conn) with
+       | Some storage -> ignore (storage.storage_restore "0")
+       | None -> ())
+    conn;
+  conn
 let set_datascript_conn repo conn = Hashtbl.replace datascript_conns repo conn
 let drop_datascript_conn repo = Hashtbl.remove datascript_conns repo
 
