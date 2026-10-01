@@ -312,13 +312,33 @@ let nlp_commit p input =
 
 (* the picker anchors under the editing textarea (cljs renders it
    inside the editing block) *)
-let cal_pos_style uuid =
+let cal_pos_style ?top uuid =
   match D.textarea_of uuid with
   | Some el ->
       let r = V.el_rect el in
       Printf.sprintf "position:fixed;left:%.0fpx;top:%.0fpx;z-index:900"
-        (V.rect_left r) (V.rect_bottom r +. 4.)
+        (V.rect_left r)
+        (Option.value top ~default:(V.rect_bottom r +. 4.))
   | None -> "position:fixed;top:96px;left:240px;z-index:900"
+
+(* base-ui avoidCollisions: once mounted, flip the picker above the
+   anchor when it overflows the viewport bottom and there is more room
+   above; otherwise clamp its top inside the viewport *)
+let cal_clamp_in_view uuid root =
+  match D.textarea_of uuid with
+  | Some el ->
+      let tr = V.el_rect el in
+      let h = V.rect_height (V.el_rect root) in
+      let vh = V.window_inner_height in
+      let below = vh -. V.rect_bottom tr -. 4. in
+      let above = V.rect_top tr -. 4. in
+      if h > below then (
+        let top =
+          if above > below then V.rect_top tr -. 4. -. h
+          else Float.max 4.0 (vh -. 4. -. h)
+        in
+        V.el_set_attr root "style" (cal_pos_style ~top uuid))
+  | None -> ()
 
 let open_cal kind uuid from =
   let today = Dates.date_now () in
@@ -403,6 +423,7 @@ let open_cal kind uuid from =
   D.el_append_child V.document_body root;
   active := Some p;
   rebuild_grid p;
+  cal_clamp_in_view uuid root;
   focus_day p
 
 (* ---------- link / image-link form ---------- *)
