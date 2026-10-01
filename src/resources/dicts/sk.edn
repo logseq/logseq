@@ -93,6 +93,7 @@
  :block/open-block-references "Otvoriť referencie bloku"
  :block/practice "Precvičovať"
  :block/practice-cards "Precvičovať kartičky"
+ :block/ref-not-exist "Tento blok neexistuje."
  :block/remove-tag "Odstrániť tag"
  :block/remove-this-tag "Odstrániť tento tag"
  :block/render-error "Chyba zobrazenia bloku:"

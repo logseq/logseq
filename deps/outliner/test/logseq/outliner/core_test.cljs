@@ -208,6 +208,84 @@
         (is (= canonical-uuid
                (:block/uuid (first (:block/refs (first (:blocks result)))))))))))
 
+(deftest insert-blocks-keeps-missing-uuid-ref-as-broken-ref
+  (let [conn (db-test/create-conn-with-blocks
+              [{:page {:block/title "page1"}
+                :blocks [{:block/title "host"}]}])
+        missing-uuid (random-uuid)
+        gen-uuid (random-uuid)
+        ;; mirrors the frontend parse of [[<uuid>]] when the entity doesn't exist
+        parsed-ref {:block/type "page"
+                    :block/name (str missing-uuid)
+                    :block/title (str missing-uuid)
+                    :block/uuid gen-uuid}
+        host (db-test/find-block-by-content @conn "host")
+        result (outliner-core/insert-blocks
+                @conn
+                [{:block/uuid (random-uuid)
+                  :block/title (str "[[" gen-uuid "]]")
+                  :block/raw-title (str "[[" gen-uuid "]]")
+                  :block/refs [parsed-ref [:block/uuid missing-uuid]]}]
+                host
+                {:sibling? true
+                 :keep-uuid? true})]
+    (d/transact! conn (:tx-data result))
+    (let [inserted (first (:blocks result))]
+      (is (= (str "[[" missing-uuid "]]")
+             (:block/title inserted)
+             (:block/raw-title inserted)))
+      (is (empty? (:block/refs inserted)))
+      (is (nil? (d/entity @conn [:block/uuid missing-uuid]))))))
+
+(deftest insert-blocks-drops-missing-block-ref-lookup
+  (let [conn (db-test/create-conn-with-blocks
+              [{:page {:block/title "page1"}
+                :blocks [{:block/title "host"}]}])
+        missing-uuid (random-uuid)
+        host (db-test/find-block-by-content @conn "host")
+        ;; mirrors the frontend parse of ((<uuid>)) when the block doesn't exist
+        result (outliner-core/insert-blocks
+                @conn
+                [{:block/uuid (random-uuid)
+                  :block/title (str "((" missing-uuid "))")
+                  :block/raw-title (str "((" missing-uuid "))")
+                  :block/refs [[:block/uuid missing-uuid]]}]
+                host
+                {:sibling? true
+                 :keep-uuid? true})]
+    (d/transact! conn (:tx-data result))
+    (let [inserted (first (:blocks result))]
+      (is (= (str "((" missing-uuid "))") (:block/title inserted)))
+      (is (empty? (:block/refs inserted))))))
+
+(deftest insert-blocks-keeps-uuid-ref-to-existing-entity
+  (let [conn (db-test/create-conn-with-blocks
+              [{:page {:block/title "page1"}
+                :blocks [{:block/title "host"}
+                         {:block/title "linked"}]}])
+        linked (db-test/find-block-by-content @conn "linked")
+        linked-uuid (:block/uuid linked)
+        gen-uuid (random-uuid)
+        parsed-ref {:block/type "page"
+                    :block/name (str linked-uuid)
+                    :block/title (str linked-uuid)
+                    :block/uuid gen-uuid}
+        host (db-test/find-block-by-content @conn "host")
+        result (outliner-core/insert-blocks
+                @conn
+                [{:block/uuid (random-uuid)
+                  :block/title (str "[[" gen-uuid "]]")
+                  :block/raw-title (str "[[" gen-uuid "]]")
+                  :block/refs [parsed-ref [:block/uuid linked-uuid]]}]
+                host
+                {:sibling? true
+                 :keep-uuid? true})]
+    (d/transact! conn (:tx-data result))
+    (let [inserted (first (:blocks result))]
+      (is (= (str "[[" linked-uuid "]]") (:block/title inserted)))
+      (is (= linked-uuid
+             (:block/uuid (first (:block/refs (d/entity @conn [:block/uuid (:block/uuid inserted)])))))))))
+
 (deftest test-delete-block-with-default-property
   (testing "Delete block with default property hard retracts the block subtree"
     (let [conn (db-test/create-conn-with-blocks

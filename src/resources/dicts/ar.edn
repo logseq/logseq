@@ -93,6 +93,7 @@
  :block/open-block-references "فتح مراجع الكتلة"
  :block/practice "تدريب"
  :block/practice-cards "تدريب البطاقات"
+ :block/ref-not-exist "هذه الكتلة غير موجودة."
  :block/remove-tag "إزالة الوسم"
  :block/remove-this-tag "إزالة هذا الوسم"
  :block/render-error "خطأ في عرض الكتلة:"

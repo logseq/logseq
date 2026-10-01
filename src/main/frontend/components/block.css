@@ -915,6 +915,18 @@ html.is-mobile .ls-block-content-indent {
 .page-ref {
   color: var(--lx-accent-11, var(--ls-link-text-color, hsl(var(--primary)/.8)));
 
+  &.broken {
+    color: var(--lx-red-11, var(--rx-red-11));
+    text-decoration: underline wavy var(--lx-red-11, var(--rx-red-11)) 1px;
+    text-underline-offset: 3px;
+    cursor: pointer;
+    opacity: 0.9;
+
+    &:hover {
+      color: var(--lx-red-12, var(--rx-red-12));
+    }
+  }
+
   &:hover {
     color: var(--lx-accent-11, var(--ls-link-text-color, hsl(var(--primary))));
   }

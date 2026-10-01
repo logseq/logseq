@@ -98,6 +98,7 @@
  :block/open-block-references "Mở tham chiếu khối"
  :block/practice "Ôn tập"
  :block/practice-cards "Thẻ ôn tập"
+ :block/ref-not-exist "Khối này không tồn tại."
  :block/remove-tag "Xoá thẻ"
  :block/remove-this-tag "Xoá thẻ này"
  :block/render-error "Lỗi hiển thị khối:"
