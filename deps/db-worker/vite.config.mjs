@@ -140,7 +140,6 @@ export default defineConfig(({ mode }) => {
   }
 
   if (mode === "node") {
-    const outDir = resolve(import.meta.dirname, "../../static");
     return {
       build: {
         lib: {

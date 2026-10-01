@@ -49,8 +49,6 @@
                    ;; :ignore-warnings true
                    }}
 
-
-
   :mobile {:target        :browser
            :module-loader true
 	           :js-options    {:ignore-asset-requires true}

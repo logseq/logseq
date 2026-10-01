@@ -30,8 +30,6 @@ frontend.modules.outliner.tree/filter-top-level-blocks
 frontend.db.model/get-all-classes
 ;; Initial loaded
 frontend.ui/_emoji-init-data
-;; Used by shadow.cljs
-frontend.worker.db-worker/init
 ;; defonce
 mobile.components.popup/native-sheet-listener
 mobile.bottom-tabs/add-tab-listeners!
