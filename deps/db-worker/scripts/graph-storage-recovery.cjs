@@ -11,7 +11,12 @@ const root = fs.mkdtempSync(path.join(os.tmpdir(), 'logseq-storage-recovery-'))
 process.env.LOGSEQ_WORKER_DB_DIR = root
 process.env.LOGSEQ_WORKER_KV_DIR = root
 process.env.CLI_E2E_TEST = '1'
-const worker = require(path.join(base, 'static/db-worker-ocaml.cjs'))
+const worker = require(
+  path.join(
+    base,
+    'deps/db-worker/_build/default/js_api/js_api/js_api/entry_worker.js'
+  )
+)
 const transit = require(path.join(base, 'node_modules/transit-js')),
   writer = transit.writer('json'),
   kw = transit.keyword
