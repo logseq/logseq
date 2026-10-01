@@ -146,6 +146,69 @@ let graph_store_durability_tests () =
   Sqlite.close sql;
   Sys.remove path
 
+let graph_close_recovery_tests () =
+  List.iter
+    (fun mode ->
+       let repo = "close-recovery-" ^ mode in
+       let path = Filename.temp_file "graph_close_recovery" ".sqlite" in
+       let weak = Weak.create 1 in
+       let run () =
+         let sql = Sqlite.open_db ~path in
+         Graph_store.create_kvs_table sql;
+         let storage = Graph_store.storage sql in
+         let conn = Common_sqlite.get_storage_conn storage [] in
+         Weak.set weak 0 (Some conn);
+         ignore (Db_tx.flags_of conn);
+         ignore (Datascript.transact_conn_string conn "[[:db/add 1 :probe/value 7]]");
+         Worker_state.set_datascript_conn repo conn;
+         Worker_state.set_sqlite_conn repo sql;
+         if mode <> "healthy" then begin
+           Sqlite.exec sql ~sql:"PRAGMA query_only=ON" ~bind:[||];
+           let failed =
+             try
+               ignore (Datascript.transact_conn_string conn "[[:db/add 1 :probe/value 8]]");
+               false
+             with _ -> true
+           in
+           check (mode ^ " storage write actually failed") failed;
+           Sqlite.exec sql ~sql:"PRAGMA query_only=OFF" ~bind:[||]
+         end;
+         let close () =
+           if mode = "direct-drop" then begin
+             Worker_state.drop_datascript_conn repo;
+             Worker_state.drop_sqlite_conn repo;
+             Sqlite.close sql
+           end else
+             ignore (await (Worker_core.invoke "thread-api/close-db"
+               (Transit_codec.to_string (Wire.Array [ Wire.String repo ]))))
+         in
+         let closed = try close (); true with _ -> false in
+         check (mode ^ " close completes") closed;
+         let dropped =
+           try Worker_state.datascript_conn repo = None with _ -> false in
+         check (mode ^ " close drops failed or healthy connection") dropped;
+         (* Dispose the failed RED fixture too, without hiding its checks. *)
+         if not closed then begin
+           Worker_state.drop_datascript_conn repo;
+           Worker_state.drop_sqlite_conn repo;
+           Sqlite.close sql
+         end;
+         let sql = Sqlite.open_db ~path in
+         let restored = Common_sqlite.get_storage_conn (Graph_store.storage sql) [] in
+         check (mode ^ " reopen restores durable value")
+           (Datascript.datoms (Datascript.db restored) Datascript.Eavt
+              ~e:1 ~a:"probe/value" ()
+            |> Seq.exists (fun d -> d.Datascript.v = Datascript.Int64 7L));
+         ignore (Datascript.transact_conn_string restored "[[:db/add 1 :probe/value 9]]");
+         Sqlite.close sql
+       in
+       run ();
+       Gc.full_major ();
+       Gc.full_major ();
+       check (mode ^ " closed connection can be collected") (not (Weak.check weak 0));
+       Sys.remove path)
+    [ "healthy"; "fenced"; "direct-drop" ]
+
 let repo = "test/graph"
 
 let setup () =
@@ -317,6 +380,7 @@ let () =
   (* --- dispatcher --- *)
   Worker_core.init ();
   graph_store_durability_tests ();
+  graph_close_recovery_tests ();
   check "registered q" (Dispatcher.registered "thread-api/q");
   check "not registered" (not (Dispatcher.registered "thread-api/nope"));
   (* cljs (throw (ex-info "not found thread-api: ...")) — a synchronous
