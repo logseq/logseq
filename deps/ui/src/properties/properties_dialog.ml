@@ -42,6 +42,9 @@ type dlg =
   ; mutable body : Editor_dom.el option
   ; mutable pending_type : string option
   ; mutable select_overlay : Editor_dom.el option
+  ; remove : bool (* cljs :editor/new-property remove-property? — the
+                     picker removes the chosen property instead of
+                     setting a value *)
   }
 
 (* ---------- helpers ---------- *)
@@ -106,7 +109,18 @@ let add_empty_text_block d prop =
 
 (* chosen an existing property from the select *)
 let rec property_chosen d prop =
-  if d.target.is_tag then (
+  if d.remove then (
+    let uuids =
+      match d.target.uuids with [] -> [ d.target.uuid ] | us -> us
+    in
+    List.iter
+      (fun u ->
+        ignore
+          (D.remove_block_property ~block_uuid:u ~ident:(ident_of prop)))
+      uuids;
+    S.refresh_all ();
+    close_dlg d)
+  else if d.target.is_tag then (
     ignore
       (D.class_add_property ~class_uuid:d.target.uuid
          ~ident:(ident_of prop));
@@ -616,10 +630,10 @@ and render_value_edit d body prop =
 
 (* cljs pops the input under the invoking control (popup-show! on the
    click target); callers without an anchor get the centered fallback *)
-let open_dialog ?anchor target =
+let open_dialog ?(remove = false) ?anchor target =
   let d =
     { target; phase = Prop_select; body = None; pending_type = None
-    ; select_overlay = None
+    ; select_overlay = None; remove
     }
   in
   (* cljs popup body styles: base-ui sets font metrics and the page

@@ -422,7 +422,11 @@ let wrapper_keydown uuid c ev =
 let wrapper_pointerdown _uuid ev =
   D.stop_propagation ev;
   if S.selection_active () then
-    S.set (fun st -> { st with S.selected = S.String_set.empty })
+    S.set (fun st ->
+        { st with
+          S.selected = S.String_set.empty
+        ; action_bar = false
+        })
 
 (* -- mount -- *)
 

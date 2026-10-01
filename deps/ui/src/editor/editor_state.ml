@@ -21,6 +21,7 @@ type t =
   { editing : editing option
   ; selected : String_set.t
   ; anchor : string option (* selection focus end for shift-arrow *)
+  ; action_bar : bool
   ; collapsed : String_set.t
   ; expanded : String_set.t
     (* cljs temp-collapsed? inverse: user-expanded overrides a
@@ -33,6 +34,7 @@ let initial =
   { editing = None
   ; selected = String_set.empty
   ; anchor = None
+  ; action_bar = false
   ; collapsed = String_set.empty
   ; expanded = String_set.empty
   ; collapsed_ui = String_set.empty

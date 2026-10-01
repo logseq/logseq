@@ -67,11 +67,13 @@ let prop_batch ~caret uuid ops =
     (Ops.apply_and_refresh_deferred (Ops.save_block uuid buf :: ops))
 
 (* same, but drop edit mode first (cljs :editor/exit — code blocks leave
-   the textarea while the view re-renders the code surface) *)
+   the textarea while the view re-renders the code surface), then focus
+   the mounted CodeMirror via the pending-focus machinery (code_focus
+   short-circuits the textarea path) *)
 let exit_to_props uuid ops =
   let buf = A.live_buffer uuid in
   S.set (fun st -> { st with S.editing = None });
-  ignore
+  A.with_focus_after uuid 0
     (Ops.apply_and_refresh (Ops.save_block uuid buf :: ops))
 
 (* ---------- calendar ---------- *)
@@ -148,55 +150,48 @@ let commit_cal p =
          scheduled/deadline so the user can keep adjusting *)
   | Link_form _ -> ()
 
-(* one td[role=gridcell] > button; data-focused moves with arrow keys,
-   data-selected/data-today pin the current date *)
-let cal_cell p d =
+(* one td[role=gridcell] > button.ui__calendar-day; the focused day
+   carries tabindex=0/data-selected, today carries data-today *)
+let rec cal_cell p d =
   let focused = d = p.cd in
   let is_today =
     p.cy * 10000 + p.cm * 100 + d = Dates.today_journal_day ()
   in
   let btn =
-    V.h ~tag:"button"
+    V.h ~tag:"button" ~cls:"ui__calendar-day"
       ~attrs:
-        [ ("type", "button")
-        ; ("aria-label", string_of_int d)
-        ; ("tabindex", if focused then "0" else "-1") ]
+        ([ ("type", "button")
+         ; ("aria-label", string_of_int d)
+         ; ("tabindex", if focused then "0" else "-1") ]
+         @ (if focused then [ ("data-selected", "true") ] else [])
+         @ if is_today then [ ("data-today", "true") ] else [])
       ~text:(string_of_int d) ()
   in
-  (* cljs nlp-calendar on-select: clicking a day commits that date *)
-  V.el_add_listener btn "click" (fun _ ->
-      p.cd <- d;
-      commit_cal p;
-      match p.kind with
-      | Cal_prop _ -> (
-          (* reflect the new selected/focused day while the popup stays
-             open *)
-          match V.el_parent btn with
-          | Some td ->
-              (match V.query_inside p.root "td[data-focused='true']" with
-               | Some old -> V.el_remove_attr old "data-focused"
-               | None -> ());
-              (match V.query_inside p.root "td[aria-selected='true']" with
-               | Some old -> V.el_remove_attr old "aria-selected"
-               | None -> ());
-              D.el_set_attr td "data-focused" "true";
-              D.el_set_attr td "data-selected" "true";
-              D.el_set_attr td "aria-selected" "true";
-              V.el_set_attr btn "tabindex" "0"
-          | None -> ())
-      | _ -> ());
-  V.h ~tag:"td"
+  V.el_add_listener btn "click" (fun _ -> pick_day p p.cy p.cm d);
+  V.h ~tag:"td" ~cls:"ui__calendar-cell"
     ~attrs:
       ([ ("role", "gridcell") ]
-       @ (if focused then [ ("data-focused", "true") ] else [])
-       @ if is_today
-         then
-           [ ("data-today", "true"); ("data-selected", "true")
-           ; ("aria-selected", "true") ]
-         else [])
+       @ (if focused
+          then [ ("data-focused", "true"); ("aria-selected", "true") ]
+          else [])
+       @ if is_today then [ ("data-today", "true") ] else [])
     ~children:[ btn ] ()
 
-let rebuild_grid p =
+(* dimmed prev/next-month day (cljs DayPicker showOutsideDays); y/m is
+   the neighboring month it belongs to *)
+and out_cell p y m d =
+  let btn =
+    V.h ~tag:"button" ~cls:"ui__calendar-day ls-cal-outside"
+      ~attrs:
+        [ ("type", "button"); ("aria-label", string_of_int d)
+        ; ("tabindex", "-1") ]
+      ~text:(string_of_int d) ()
+  in
+  V.el_add_listener btn "click" (fun _ -> pick_day p y m d);
+  V.h ~tag:"td" ~cls:"ui__calendar-cell" ~attrs:[ ("role", "gridcell") ]
+    ~children:[ btn ] ()
+
+and rebuild_grid p =
   match V.query_inside p.root ".ui__calendar tbody" with
   | None -> ()
   | Some tbody ->
@@ -208,31 +203,54 @@ let rebuild_grid p =
              (Js.Date.make ~year:(float_of_int p.cy)
                 ~month:(float_of_int (p.cm - 1)) ~date:1. ()))
       in
+      let py, pm =
+        if p.cm = 1 then (p.cy - 1, 12) else (p.cy, p.cm - 1)
+      in
+      let pdays = days_in_month py pm in
+      let ny, nm =
+        if p.cm = 12 then (p.cy + 1, 1) else (p.cy, p.cm + 1)
+      in
       let rows = (lead + days + 6) / 7 in
       for r = 0 to rows - 1 do
         let tr = Editor_dom.create_element "tr" in
         for c = 0 to 6 do
           let d = (r * 7) + c + 1 - lead in
           D.el_append_child tr
-            (if d < 1 || d > days
-             then V.h ~tag:"td" ~attrs:[ ("role", "gridcell") ] ()
+            (if d < 1 then out_cell p py pm (pdays + d)
+             else if d > days then out_cell p ny nm (d - days)
              else cal_cell p d)
         done;
         D.el_append_child tbody tr
       done
 
-let rebuild_cal p =
+and rebuild_cal p =
   (match V.query_inside p.root ".ls-date-month-select" with
    | Some sel ->
        V.el_set_text_content sel month_names.(p.cm - 1)
    | None -> ());
-  (match V.query_inside p.root ".ls-cal-caption" with
-   | Some c ->
-       V.el_set_text_content c
-         (month_names.(p.cm - 1) ^ " " ^ string_of_int p.cy)
+  (match V.query_inside p.root ".ls-date-year-input" with
+   | Some inp -> D.el_set_value inp (string_of_int p.cy)
    | None -> ());
   rebuild_grid p;
   focus_day p
+
+and nav_month p delta =
+  let m = p.cm + delta in
+  if m < 1 then (p.cm <- 12; p.cy <- p.cy - 1)
+  else if m > 12 then (p.cm <- 1; p.cy <- p.cy + 1)
+  else p.cm <- m;
+  rebuild_cal p
+
+(* click a calendar day: Cal_insert commits; scheduled/deadline keep the
+   popup open with the new day focused *)
+and pick_day p y m d =
+  p.cy <- y;
+  p.cm <- m;
+  p.cd <- d;
+  commit_cal p;
+  match p.kind with
+  | Cal_prop _ -> rebuild_cal p
+  | _ -> ()
 
 let close_menu p =
   match p.menu with
@@ -274,6 +292,34 @@ let cal_move p delta =
     if p.cm > 12 then (p.cm <- 1; p.cy <- p.cy + 1));
   rebuild_cal p
 
+(* cljs nld-parse covers natural language; here a plain JS Date parse
+   handles ISO / "Sep 30, 2026" style input, else the warning toast *)
+let parse_nlp_date s =
+  let d = Js.Date.fromString s in
+  if Float.is_nan (Js.Date.getTime d) then None else Some d
+
+let nlp_commit p input =
+  let v = String.trim (D.el_value input) in
+  if v <> "" then
+    match parse_nlp_date v with
+    | Some d ->
+        p.cy <- int_of_float (Js.Date.getFullYear d);
+        p.cm <- int_of_float (Js.Date.getMonth d) + 1;
+        p.cd <- int_of_float (Js.Date.getDate d);
+        commit_cal p
+    | None ->
+        Toast.warning (I18n.tf "date/invalid-date-warning" [ v ])
+
+(* the picker anchors under the editing textarea (cljs renders it
+   inside the editing block) *)
+let cal_pos_style uuid =
+  match D.textarea_of uuid with
+  | Some el ->
+      let r = V.el_rect el in
+      Printf.sprintf "position:fixed;left:%.0fpx;top:%.0fpx;z-index:900"
+        (V.rect_left r) (V.rect_bottom r +. 4.)
+  | None -> "position:fixed;top:96px;left:240px;z-index:900"
+
 let open_cal kind uuid from =
   let today = Dates.date_now () in
   let cy = int_of_float (Js.Date.getFullYear today)
@@ -285,21 +331,53 @@ let open_cal kind uuid from =
       ~attrs:[ ("type", "button") ]
       ~text:month_names.(cm - 1) ()
   in
-  let cap =
-    V.h ~cls:"ls-cal-caption"
-      ~text:(month_names.(cm - 1) ^ " " ^ string_of_int cy) ()
+  let year_inp =
+    V.h ~tag:"input" ~cls:"ls-date-year-input"
+      ~attrs:
+        [ ("type", "number"); ("min", "1"); ("max", "9999")
+        ; ("value", string_of_int cy) ]
+      ()
+  in
+  let nlp_inp =
+    V.h ~tag:"input" ~cls:"ls-date-nlp"
+      ~attrs:
+        [ ("type", "text")
+        ; ("placeholder", I18n.t "ui/date-natural-language-placeholder")
+        ; ("tabindex", "-1") ]
+      ()
   in
   let root =
     V.h ~cls:"ls-editor-date-picker"
       ~attrs:
-        [ ("id", "date-time-picker")
-        ; ("style", "position:fixed;top:96px;left:240px;z-index:900") ]
+        [ ("id", "date-time-picker"); ("style", cal_pos_style uuid) ]
       ~children:
-        [ V.h ~cls:"ui__calendar"
+        [ V.h ~cls:"ls-nlp-calendar"
             ~children:
-              [ V.h ~cls:"ls-cal-head" ~children:[ cap; sel ] ()
-              ; V.h ~tag:"table" ~attrs:[ ("role", "grid") ]
-                  ~children:[ tbody ] () ]
+              [ V.h ~cls:"ui__calendar"
+                  ~children:
+                    [ V.h ~cls:"ls-cal-head"
+                        ~children:
+                          [ V.h ~cls:"ls-cal-selects"
+                              ~children:[ sel; year_inp ] ()
+                          ; V.h ~cls:"ls-cal-nav"
+                              ~children:
+                                [ V.h ~tag:"button" ~cls:"ls-cal-nav-btn"
+                                    ~attrs:
+                                      [ ("type", "button")
+                                      ; ("aria-label", "Previous month") ]
+                                    ~children:[ V.icon "chevron-left" ] ()
+                                ; V.h ~tag:"button" ~cls:"ls-cal-nav-btn"
+                                    ~attrs:
+                                      [ ("type", "button")
+                                      ; ("aria-label", "Next month") ]
+                                    ~children:[ V.icon "chevron-right" ] ()
+                                ]
+                              () ]
+                        ()
+                    ; V.h ~tag:"table" ~attrs:[ ("role", "grid") ]
+                        ~children:[ tbody ] () ]
+                  ()
+              ; nlp_inp ]
             () ]
       ()
   in
@@ -308,6 +386,20 @@ let open_cal kind uuid from =
     ; link_url = None; link_label = None }
   in
   V.el_add_listener sel "click" (fun _ -> toggle_month_menu p);
+  V.el_add_listener year_inp "input" (fun _ ->
+      match int_of_string_opt (D.el_value year_inp) with
+      | Some y when y >= 1000 && y <= 9999 -> p.cy <- y; rebuild_cal p
+      | _ -> ());
+  V.el_add_listener nlp_inp "keydown" (fun ev ->
+      if D.ev_key ev = "Enter" then (
+        D.prevent_default ev;
+        nlp_commit p nlp_inp));
+  (match V.query_inside root "button[aria-label='Previous month']" with
+   | Some b -> V.el_add_listener b "click" (fun _ -> nav_month p (-1))
+   | None -> ());
+  (match V.query_inside root "button[aria-label='Next month']" with
+   | Some b -> V.el_add_listener b "click" (fun _ -> nav_month p 1)
+   | None -> ());
   D.el_append_child V.document_body root;
   active := Some p;
   rebuild_grid p;

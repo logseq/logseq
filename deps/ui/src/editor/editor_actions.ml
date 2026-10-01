@@ -51,15 +51,46 @@ let run_pending_focus_actions () =
   | f :: rest -> S.pending_focus_actions := List.rev rest; f ()
   | [] -> ()
 
+(* drain the queue at keypress cadence instead of waiting for DOM
+   landings: a queued op doesn't need the landed textarea — it reads
+   S.editing/model state — and deferring its outliner op until a landing
+   lets same-task readers (e2e asserts, plugin api calls) query the
+   worker before the op even reaches it. Chained ops still can't run
+   synchronously back-to-back (a replayed nav re-enters edit mode
+   asynchronously), so after popping one, schedule the next for the
+   first moment the editing uuid has moved — polling briefly so a
+   same-uuid op (indent) doesn't stall the rest of the queue *)
+let rec drain_pending_focus_actions attempts =
+  match !S.pending_focus_actions with
+  | [] -> ()
+  | _ -> (
+      let before = S.editing_uuid () in
+      run_pending_focus_actions ();
+      match !S.pending_focus_actions with
+      | [] -> ()
+      | _ ->
+          ignore
+            (let* () = Js.Promise.resolve () in
+             if S.editing_uuid () <> before then
+               drain_pending_focus_actions 0
+             else if attempts < 20 then
+               D.set_timeout
+                 (fun () -> drain_pending_focus_actions (attempts + 1))
+                 10;
+             Js.Promise.resolve ()))
+
 let rec apply_focus () =
+  (* a stale retry timer can fire after its arm was consumed or replaced;
+     queued keys belong to the next landing, not the void — replay them
+     against the live editing state instead of dropping the presses *)
   match !S.pending_focus with
-  | None -> S.pending_focus_actions := []
+  | None -> drain_pending_focus_actions 0
   | Some (uuid, caret, armed_ms) -> (
       if !(S.code_focus) ~caret uuid then (
         (* CodeMirror-backed code block: cm.focus() + setCursor landed *)
         S.pending_focus := None;
         focus_attempts := 0;
-        run_pending_focus_actions ())
+        drain_pending_focus_actions 0)
       else
       match D.textarea_of uuid with
       | Some el -> (
@@ -81,7 +112,7 @@ let rec apply_focus () =
                 let len = String.length (D.el_value el) in
                 let c = max 0 (min caret len) in
                 D.el_set_selection_range el c c);
-              run_pending_focus_actions ()
+              drain_pending_focus_actions 0
           | _ -> retry_focus ())
       | None -> retry_focus ())
 
@@ -90,8 +121,8 @@ and retry_focus () =
   if !focus_attempts < 50 then D.set_timeout apply_focus 40
   else (
     S.pending_focus := None;
-    S.pending_focus_actions := [];
-    focus_attempts := 0)
+    focus_attempts := 0;
+    drain_pending_focus_actions 0)
 
 let request_focus uuid caret =
   S.pending_focus := Some (uuid, caret, !S.last_edit_input_ms);
@@ -186,6 +217,7 @@ let enter_edit ?scope uuid caret =
                   S.editing = Some { uuid; buffer; scope; base = buffer }
                 ; selected = S.String_set.empty
                 ; anchor = None
+                ; action_bar = false
                 });
             request_focus uuid caret;
             Js.Promise.resolve ())
@@ -221,6 +253,9 @@ let exit_edit ~select =
           ; selected =
               (if select then S.String_set.singleton e.uuid else st.selected)
           ; anchor = (if select then Some e.uuid else st.anchor)
+            (* cljs: Escape selects the block but does not raise the
+               selection action bar — only a pointerup / shift-arrow does *)
+          ; action_bar = false
           });
       commit e.uuid buf
 
@@ -604,6 +639,7 @@ let extend_selection up =
                       { st with
                         S.selected = S.String_set.of_list range
                       ; anchor = Some anchor
+                      ; action_bar = true
                       }))))
 
 let select_single uuid =
@@ -611,6 +647,7 @@ let select_single uuid =
       { st with
         S.selected = S.String_set.singleton uuid
       ; anchor = Some uuid
+      ; action_bar = false
       })
 
 let select_all () =
@@ -621,17 +658,33 @@ let select_all () =
           { st with
             S.selected = S.String_set.of_list (flat_uuids ())
           ; anchor = Some first
+          ; action_bar = false
           })
 
 let clear_selection () =
   S.set (fun st ->
-      { st with S.selected = S.String_set.empty; anchor = None })
+      { st with
+        S.selected = S.String_set.empty
+      ; anchor = None
+      ; action_bar = false
+      })
+
+(* cljs editor-handler/show-action-bar!: pointer gestures and
+   shift+arrow selection raise the popover; bare selection changes
+   (Escape, mod+a, click-clear) leave it hidden *)
+let show_action_bar () =
+  S.set (fun st -> { st with S.action_bar = true })
+
+let hide_action_bar () =
+  S.set (fun st -> { st with S.action_bar = false })
 
 (* shift+arrow arriving during the pending-focus window replays here once
    focus lands: exit edit into selection, then extend one visible step *)
 let shift_arrow_select up =
   match S.editing () with
-  | Some _ -> exit_edit ~select:true
+  | Some _ ->
+      exit_edit ~select:true;
+      show_action_bar ()
   | None -> extend_selection up
 
 (* cljs editor/select-parent: with a selection, move it to the first
@@ -778,6 +831,7 @@ let delete_selection () =
                            }
                      ; selected = S.String_set.empty
                      ; anchor = None
+                     ; action_bar = false
                      });
                  with_focus_after pu
                    (String.length buffer)
@@ -791,6 +845,7 @@ let delete_selection () =
                { st with
                  S.selected = S.String_set.empty
                ; anchor = None
+               ; action_bar = false
                });
            ignore (Ops.apply_and_refresh [ Ops.delete_blocks uuids ]))
 
@@ -1451,7 +1506,13 @@ let pending_zoom : string option ref = ref None
 let zoom_container uuid = "zoom-" ^ uuid
 
 let zoom_to uuid =
-  pending_zoom := Some uuid;
+  (* cljs keeps the zoomed block in edit mode only when the zoom was
+     invoked while that block was being edited (zoom-in!'s editing?
+     branch); a plain bullet click never re-enters the editor *)
+  pending_zoom :=
+    (match S.editing () with
+     | Some e when e.uuid = uuid -> Some uuid
+     | _ -> None);
   (* the zoomed block is the zoom container's root — it expands there
      while its page-level collapse stays *)
   S.expand_root ~scope:(zoom_container uuid) uuid;

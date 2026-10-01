@@ -59,7 +59,7 @@ let scan_tok s i =
         incr j
       done;
       if !j + 1 < n then
-        Some (`Tag, S.sub s (i + 3) (!j - i - 3), !j + 2)
+        Some (`Tagref, S.sub s (i + 3) (!j - i - 3), !j + 2)
       else None)
     else if
       (* #name — skip heading markers (`# ` / `## `) and a bare '#' *)
@@ -135,7 +135,8 @@ let parse_title (title : string) : string * Wire.t list * Wire.t list =
             Buffer.add_string buf ("[[" ^ u ^ "]]");
             go e
           end
-      | Some (`Tag, name, e) ->
+      | Some (`Tagref, name, e) ->
+          (* #[[name]] inline tag — same ref/tag emission as before *)
           if uuid_shaped name then begin
             refs :=
               Wire.Array [ Wire.Keyword "block/uuid"; Wire.Uuid name ]
@@ -160,6 +161,20 @@ let parse_title (title : string) : string * Wire.t list * Wire.t list =
             Buffer.add_string buf ("#[[" ^ u ^ "]]");
             go e
           end
+      | Some (`Tag, name, e) ->
+          (* a bare `#name` refs the tag-class entity and stays literal
+             in the title: cljs renders it as a tag link but never tags
+             the block — only a confirmed autocomplete pick or `#[[..]]`
+             lands in block/tags. Eagerly tagging here leaked a stale
+             tag per save. *)
+          (match Hashtbl.find_opt seen_tag (lc name) with
+           | Some _ -> ()
+           | None ->
+               let u = Platform.random_uuid () in
+               Hashtbl.replace seen_tag (lc name) u;
+               refs := tag_map name u :: !refs);
+          Buffer.add_string buf (S.sub title i (e - i));
+          go e
       | None -> (
           match block_ref_at title i with
           | Some (u, e) ->
