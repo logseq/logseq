@@ -97,7 +97,7 @@ let graph_store_durability_tests () =
   let sql = Sqlite.open_db ~path in
   Graph_store.create_kvs_table sql;
   let storage = Graph_store.storage sql in
-  storage.storage_store [ "7654321", Storage_node (Persistent_sorted_set.Leaf []) ];
+  storage.storage_store [ "7654321", Storage_node (Persistent_sorted_set.Leaf [||]) ];
   check "pending node readable during batch" (storage.storage_restore "7654321" <> None);
   exec sql "create trigger fail_tail before insert on kvs when new.addr = 1 begin select raise(ABORT, 'injected-tail-write-failure'); end";
   check "pending batch propagates terminal failure"
@@ -125,7 +125,7 @@ let graph_store_durability_tests () =
   let tail_before = Graph_store.restore sql "1" in
   exec sql "create trigger fail_terminal before insert on kvs when new.addr = 1 begin select raise(ABORT, 'injected-terminal-failure'); end";
   let nodes = List.init 350 (fun i ->
-    string_of_int (8000000 + i), Storage_node (Persistent_sorted_set.Leaf [])) in
+    string_of_int (8000000 + i), Storage_node (Persistent_sorted_set.Leaf [||])) in
   check "second chunk failure propagates"
     (rejects (fun () -> storage.storage_store (nodes @ [ "1", Storage_tail [] ])));
   check "second chunk rolls back first chunk nodes" (Graph_store.restore sql "8000000" = None);
