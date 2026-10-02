@@ -255,25 +255,9 @@ let main_content (ms : Model.t Signal.signal) =
                        | Model.Journals | Model.Home ->
                            [ ("style", "margin-bottom: 0") ]
                        | _ ->
-                           [ ("class", "mx-auto pb-24")
-                           ; ("style", "margin-bottom: 120px") ])
-                     ms)
-                [ dyn
-                ~equal:(fun (a : Model.t) (b : Model.t) ->
-                  (* block-bearing fields compare by revision — a
-                     structural [=] walks both trees on every publish *)
-                  a.phase = b.phase
-                  && a.route = b.route
-                  && a.data_gen = b.data_gen
-                  && a.page_missing = b.page_missing
-                  && a.editing_title = b.editing_title
-                  && a.page_menu = b.page_menu
-                  && a.confirm = b.confirm
-                  && a.unlinked_open = b.unlinked_open
-                  && a.unlinked_search = b.unlinked_search
-                  && a.unlinked_query = b.unlinked_query)
-                (fun m -> Page.page_view_of_model m)
-                ms ]
+                            [ ("class", "mx-auto pb-24")
+                            ; ("style", "margin-bottom: 120px") ]))
+                 [ Page.region ms ]
             ]
         ]
     ]

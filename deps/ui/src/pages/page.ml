@@ -1137,42 +1137,178 @@ let library_add_pages_button : t =
             ~text:(I18n.t "library/add-existing-pages") [] ]
     ]
 
-let page_view (m : Model.t) (page : Model.page) : t =
-  let cls =
-    "flex-1 page relative cp__page-inner-wrap"
-    ^ (if page.page_journal_day <> None then " is-journals" else "")
-    ^ (if is_today_page m page then " is-today-page" else "")
-    ^ (if page.page_is_tag || page.page_is_property then " is-node-page"
-       else "")
+let empty_state () : t =
+  box ~key:"empty" ~style_class:"page"
+    [ box ~key:"empty-inner" ~style_class:"flex flex-col items-center"
+        [ text ~key:"empty-t" ~value:I18n.loading ~style_class:"" [] ]
+    ]
+
+(* --- stable page region --------------------------------------------
+
+   A route page mounts once per navigation. Later publishes — op deltas
+   spliced into the model, ref loads, flag changes — repaint through the
+   segments below instead of rebuilding the view: the block list is a
+   keyed collection so a one-block splice patches one row rather than
+   re-rendering the whole tree (~200ms flush on a 200-block page). *)
+
+(* region repaint key: page identity only — splices keep the same page *)
+let page_key (p : Model.page option) =
+  match p with
+  | Some p -> (p.page_uuid, p.page_db_id)
+  | None -> (None, None)
+
+let page_route (r : Model.route) =
+  match r with
+  | Model.Page _ | Model.Block_zoom _ | Model.Library -> true
+  | _ -> false
+
+let scope_of_route (r : Model.route) =
+  match r with Model.Block_zoom u -> "zoom-" ^ u | _ -> "main"
+
+let page_cls (m : Model.t) =
+  let base = "flex-1 page relative cp__page-inner-wrap" in
+  match m.route_page with
+  | Some page ->
+      base
+      ^ (if page.page_journal_day <> None then " is-journals" else "")
+      ^ (if is_today_page m page then " is-today-page" else "")
+      ^ (if page.page_is_tag || page.page_is_property then " is-node-page"
+         else "")
+  | None -> base
+
+let wrap_attrs_of (m : Model.t) =
+  match m.route_page with Some p -> page_wrap_attrs p | None -> []
+
+let blocks_sig_of (ms : Model.t Signal.signal) =
+  Signal.map
+    (fun (m : Model.t) ->
+      match m.route_page with
+      | Some p -> p.Model.page_blocks
+      | None -> [])
+    ms
+
+(* top-level block rows as a keyed collection: keyed republishes only
+   items whose record actually changed, so a delta splice remounts the
+   touched row instead of re-diffing every mounted block *)
+let blocks_area ~scope ~library ?puuid (ms : Model.t Signal.signal) : t =
+  let blocks_sig = blocks_sig_of ms in
+  let nonempty = Signal.map (fun bs -> bs <> []) blocks_sig in
+  let keyed_list =
+    dom ~key:"blw" ~style_class:"blocks-list-wrap"
+      ~attrs:[ ("data-level", "0") ]
+      [ Logseq_dom.keyed ~source:blocks_sig ~key:Tree.block_key
+          ~cmp:String.compare
+          ~mount:(Tree.block_row_sig ~library ~scope) ]
   in
-  dom ~key:"page" ~style_class:cls
-      ~attrs:(page_wrap_attrs page)
-    [ dom ~key:"page-inner"
-        ~style_class:"relative grid gap-4 sm:gap-8 page-inner mb-16"
-        ((match m.route with
-          | Model.Block_zoom _ -> zoom_breadcrumbs page
-          | _ -> breadcrumbs page.page_title)
-        @ (match m.route with
-           (* cljs page.cljs: db-page-title renders only when the target is
-              a page entity — a zoomed block is breadcrumb + tree only *)
-           | Model.Block_zoom _ -> []
-           | _ ->
-               [ dom ~key:"page-title-row"
-                   ~style_class:"flex flex-row space-between"
-                   [ page_title_el m page ]
-               ])
-        @ (if page.page_is_library then [ library_add_pages_button ]
-           else [])
-        @ [ blocks_inner ?puuid:page.page_uuid ~virtualize:true
-              ~library:page.page_is_library
-              ~scope:
-                (match m.route with
-                 | Model.Block_zoom u -> "zoom-" ^ u
-                 | _ -> "main")
-              page.page_blocks
-          ]
-    )
-    ; dom ~key:"refs-wrap" ~style_class:"flex flex-col gap-8 ml-1"
+  (* a virtualized list captures its data array at mount, so it can't
+     ride the keyed path — rebuild it on a new blocks spine; windowed
+     rendering stays active for big pages outside rtc-test *)
+  let virt_list =
+    dom ~key:"blw-virt" ~style_class:"blocks-list-wrap"
+      ~attrs:
+        [ ("data-level", "0"); ("data-virtuoso-scroller", "true") ]
+      [ Logseq_dom.dyn ~equal:(fun a b -> a == b)
+          (fun (bs : Model.block list) ->
+            Virt_list.list ~key_of:Tree.block_key
+              ~estimate_size:(fun _ -> 32.)
+              ~render:(Tree.block_row ~library ~scope)
+              (Array.of_list bs))
+          blocks_sig ]
+  in
+  (* if_/dyn branches must mount a node — the keyed/virt choice can't be
+     a dynamic child, so pick once per region mount; either renderer is
+     correct at any size, the threshold is only an optimization *)
+  let list_el =
+    if Virt_list.enabled ~virtualize:true
+         (List.length (Signal.get blocks_sig))
+    then virt_list
+    else keyed_list
+  in
+  (* cljs plain-block-list emits no .blocks-list-wrap on empty pages *)
+  dom ~key:"page-blocks" ~style_class:"mt-4 ls-page-blocks"
+    ~attrs:[ ("style", "margin-left: -20px") ]
+    [ dom ~key:"page-blocks-inner"
+        ~style_class:"page-blocks-inner relative"
+        ~attrs:
+          (("data-cid", scope)
+           :: (match puuid with
+               | Some u -> [ ("data-pu", u) ]
+               | None -> []))
+        [ dom ~key:"blc" ~style_class:"blocks-container flex-1"
+            ~attrs:
+              (match puuid with
+               | Some u -> [ ("containerid", u) ]
+               | None -> [])
+            [ Logseq_dom.if_ ~test:nonempty list_el ]
+        ]
+    ]
+
+let title_row (m : Model.t) (page : Model.page) : t =
+  dom ~key:"page-title-row" ~style_class:"flex flex-row space-between"
+    [ page_title_el m page ]
+
+(* dyn bodies mount a single node — display:contents keeps the segment
+   transparent to .page-inner's grid so its children lay out like the
+   direct rows the static build emitted *)
+let top_view (m : Model.t) : t =
+  match m.route_page with
+  | None -> Logseq_dom.nothing
+  | Some page ->
+      (match m.route with
+       | Model.Block_zoom _ ->
+           dom ~key:"ptz" ~attrs:[ ("style", "display:contents") ]
+             (zoom_breadcrumbs page)
+       | Model.Library ->
+           dom ~key:"ptl" ~attrs:[ ("style", "display:contents") ]
+             [ title_row m page; library_add_pages_button ]
+       | _ ->
+           dom ~key:"ptm" ~attrs:[ ("style", "display:contents") ]
+             (breadcrumbs page.page_title
+              @ [ title_row m page ]
+              @
+              if page.page_is_library then [ library_add_pages_button ]
+              else []))
+
+let top_key (p : Model.page option) =
+  match p with
+  | Some p ->
+      Some
+        ( p.page_uuid, p.page_title, p.page_icon, p.page_is_tag
+        , p.page_is_library, p.page_db_collapsable, p.page_parents
+        , p.page_journal_day )
+  | None -> None
+
+let top_eq (a : Model.t) (b : Model.t) =
+  a.route = b.route
+  && a.editing_title = b.editing_title
+  && top_key a.route_page = top_key b.route_page
+
+let ref_flags (p : Model.page option) =
+  match p with
+  | Some p ->
+      Some
+        ( p.page_journal_day, p.page_is_tag, p.page_is_property
+        , p.page_uuid )
+  | None -> None
+
+(* field identity, not structural [=]: page_refs/unlinked_refs carry
+   block trees — an O(tree) compare on every model publish would defeat
+   the point of the stable region *)
+let refs_eq (a : Model.t) (b : Model.t) =
+  a.page_refs == b.page_refs
+  && a.unlinked_refs == b.unlinked_refs
+  && a.unlinked_exists = b.unlinked_exists
+  && a.unlinked_open = b.unlinked_open
+  && a.unlinked_search = b.unlinked_search
+  && a.unlinked_query = b.unlinked_query
+  && a.route = b.route
+  && ref_flags a.route_page = ref_flags b.route_page
+
+let refs_wrap (m : Model.t) : t =
+  match m.route_page with
+  | None -> Logseq_dom.nothing
+  | Some page ->
+      dom ~key:"refs-wrap" ~style_class:"flex flex-col gap-8 ml-1"
         (* cljs page-inner: #today-queries div first on today's journal,
            then linked and unlinked refs .fade-in.delay sections *)
         ((if is_today_page m page then
@@ -1180,79 +1316,86 @@ let page_view (m : Model.t) (page : Model.page) : t =
           else [])
         @ [ dom ~key:"lrefs" ~style_class:"fade-in delay"
               [ references_view m.page_refs ]
-          ; (* cljs page.cljs when-not class-page?/property-page? — the
-               unlinked section is omitted entirely on node pages *)
+          ; (* cljs when-not class-page?/property-page? — the unlinked
+               section is omitted entirely on node pages *)
             (if page.page_is_tag || page.page_is_property
              then Logseq_dom.nothing
              else
                dom ~key:"urefs" ~style_class:"fade-in delay"
                  [ unlinked_references_view m ])
           ])
-    ; Selection_bar.view ()
-    ]
 
-let empty_state () : t =
-  box ~key:"empty" ~style_class:"page"
-    [ box ~key:"empty-inner" ~style_class:"flex flex-col items-center"
-        [ text ~key:"empty-t" ~value:I18n.loading ~style_class:"" [] ]
-    ]
-
-(* Library renders the ordinary page chrome plus the add-pages button; its
-   page_blocks were already filtered to nested pages at fetch time
-   (Decode.view_blocks), and block inserts on it are page-ified by
-   editor_actions. *)
-let library_view (m : Model.t) (page : Model.page) : t =
-  let cls =
-    "flex-1 page relative cp__page-inner-wrap"
-    ^ (if is_today_page m page then " is-today-page" else "")
-    ^ (if page.page_is_tag || page.page_is_property then " is-node-page"
-       else "")
+let page_view_ms (ms : Model.t Signal.signal) : t =
+ fun ctx parent ->
+  let m0 = Signal.get ms in
+  let scope = scope_of_route m0.route in
+  let library =
+    m0.route = Model.Library
+    ||
+    (match m0.route_page with
+     | Some p -> p.page_is_library
+     | None -> false)
   in
-  dom ~key:"page" ~style_class:cls
-      ~attrs:(page_wrap_attrs page)
+  let puuid =
+    match m0.route_page with
+    | Some p -> p.page_uuid
+    | None -> None
+  in
+  (dom ~key:"page" ~style_class_signal:(Logseq_dom.class_signal ms page_cls)
+      ~attrs_signal_v:(Logseq_dom.attrs_signal ms wrap_attrs_of)
     [ dom ~key:"page-inner"
         ~style_class:"relative grid gap-4 sm:gap-8 page-inner mb-16"
-        [ dom ~key:"page-title-row" ~style_class:"flex flex-row space-between"
-            [ page_title_el m page ]
-        ; library_add_pages_button
-        ; blocks_inner ?puuid:page.page_uuid ~virtualize:true ~library:true
-            page.page_blocks
+        [ Logseq_dom.dyn ~equal:top_eq top_view ms
+        ; blocks_area ~scope ~library ?puuid ms
         ]
-    ; dom ~key:"refs-wrap" ~style_class:"flex flex-col gap-8 ml-1"
-        [ dom ~key:"lrefs" ~style_class:"fade-in delay"
-            [ references_view m.page_refs ]
-        ; (if page.page_is_tag || page.page_is_property
-           then Logseq_dom.nothing
-           else
-             dom ~key:"urefs" ~style_class:"fade-in delay"
-               [ unlinked_references_view m ])
-        ]
+    ; Logseq_dom.dyn ~equal:refs_eq refs_wrap ms
     ; Selection_bar.view ()
-    ]
+    ])
+    ctx parent
 
-let page_view_of_model (m : Model.t) : t =
-  match m.phase, m.route with
-  | Model.Ready, (Model.Journals | Model.Home) ->
-      (* cljs container.cljs: journals render inside a plain route-root div *)
-      dom ~key:"journals-root"
-        [ journals_view m m.journals; Selection_bar.view () ]
-  | Model.Ready, Model.Library -> (
-      match m.route_page with
-      | Some p -> library_view m p
-      | None -> empty_state ())
-  | Model.Ready, Model.Not_found n -> not_found_view n
-  | Model.Ready, (Model.All_graphs | Model.All_pages) ->
-      box ~key:"graphs-view" [] (* graphs area renders via its own view *)
-  | Model.Ready, Model.Settings -> Settings_page.view m
-  | Model.Ready, Model.Import -> Importer.view ()
-  | Model.Ready, _ -> (
-      match m.route_page, m.page_missing with
-      | Some page, _ -> page_view m page
-      | None, true ->
-          (* cljs page-aux: missing page/block renders inline
-             (t :page/not-found) inside the content wrap *)
-          dom ~key:"pg-missing" ~style_class:"opacity-75"
-            [ text ~key:"pgm-t" ~value:(I18n.t "page/not-found")
-                ~style_class:"" [] ]
-      | None, false -> empty_state ())
-  | _ -> empty_state ()
+(* the route-root dynamic segment — page routes keep the region mounted
+   across data publishes (the keyed/dyn segments inside repaint
+   themselves); all other routes keep repaint-on-data semantics *)
+let region (ms : Model.t Signal.signal) : t =
+  Logseq_dom.dyn
+    ~equal:(fun (a : Model.t) (b : Model.t) ->
+      let shell =
+        a.phase = b.phase
+        && a.route = b.route
+        && a.page_missing = b.page_missing
+        && page_key a.route_page = page_key b.route_page
+      in
+      if page_route a.route && page_route b.route then shell
+      else
+        shell
+        && a.data_gen = b.data_gen
+        && a.editing_title = b.editing_title
+        && a.page_menu = b.page_menu
+        && a.confirm = b.confirm
+        && a.unlinked_open = b.unlinked_open
+        && a.unlinked_search = b.unlinked_search
+        && a.unlinked_query = b.unlinked_query)
+    (fun (m : Model.t) ->
+      match m.phase, m.route with
+      | Model.Ready, (Model.Journals | Model.Home) ->
+          (* cljs container.cljs: journals render inside a plain
+             route-root div *)
+          dom ~key:"journals-root"
+            [ journals_view m m.journals; Selection_bar.view () ]
+      | Model.Ready, Model.Not_found n -> not_found_view n
+      | Model.Ready, (Model.All_graphs | Model.All_pages) ->
+          box ~key:"graphs-view" [] (* renders via its own view *)
+      | Model.Ready, Model.Settings -> Settings_page.view m
+      | Model.Ready, Model.Import -> Importer.view ()
+      | Model.Ready, _ -> (
+          match m.route_page, m.page_missing with
+          | Some _, _ -> page_view_ms ms
+          | None, true ->
+              (* cljs page-aux: missing page/block renders inline
+                 (t :page/not-found) inside the content wrap *)
+              dom ~key:"pg-missing" ~style_class:"opacity-75"
+                [ text ~key:"pgm-t" ~value:(I18n.t "page/not-found")
+                    ~style_class:"" [] ]
+          | None, false -> empty_state ())
+      | _ -> empty_state ())
+    ms
