@@ -1,6 +1,8 @@
 (ns electron.mcp-compat-test
-  (:require [cljs.test :refer [deftest is]]
-            [electron.mcp-compat :as mcp-compat]))
+  (:require [clojure.string :as string]
+            [cljs.test :refer [async deftest is]]
+            [electron.mcp-compat :as mcp-compat]
+            [promesa.core :as p]))
 
 (defn- recording-api
   [calls result]
@@ -101,3 +103,58 @@
                 "Inbox" [{:uuid "page-1" :name "inbox"}])]
     (is (= false (:available result)))
     (is (= "page" (:kind (first (:held_by result)))))))
+
+(deftest list-orphan-tags-queries-unused-tag-entities
+  (let [calls (atom [])
+        tags #js [#js {"db/id" 17
+                       "db/ident" "plugin.tag/Unused"
+                       "block/uuid" "tag-1"
+                       "block/title" "Unused"}]
+        api (fn [method args]
+              (swap! calls conj [method args])
+              tags)
+        operation (mcp-compat/list-orphan-tags api #js {})]
+    (async done
+      (p/then operation
+              (fn [result]
+                (let [[method [query]] (first @calls)]
+                  (is (= [{:db/id 17
+                           :db/ident "plugin.tag/Unused"
+                           :block/uuid "tag-1"
+                           :block/title "Unused"}]
+                         result))
+                  (is (= "logseq.DB.datascriptQuery" method))
+                  (is (string/includes? query ":block/_tags)")))
+                (done))))))
+
+(deftest list-orphan-properties-validates-query-idents
+  (let [calls (atom [])
+     properties #js [#js {"ident" ":plugin.property/Unused"
+              "title" "Unused"
+              "logseq.property/type" "number"}
+            #js {"ident" ":plugin.property/Used"
+              "title" "Used"
+              "logseq.property/type" "string"}
+            #js {"ident" "unqualified"
+              "title" "Unsafe"}]
+        api (fn [method args]
+              (swap! calls conj [method args])
+              (if (= "logseq.DB.getAllProperties" method)
+                properties
+                (if (string/includes? (first args) ":plugin.property/Used")
+                  #js [#js {:uuid "holder-1"}]
+                  #js [])))]
+    (async done
+      (p/then (mcp-compat/list-orphan-properties api #js {})
+              (fn [result]
+                (is (= [{:ident ":plugin.property/Unused"
+                         :title "Unused"
+                         :type "number"}]
+                       result))
+                (is (= ["logseq.DB.getAllProperties"
+                        "logseq.DB.datascriptQuery"
+                        "logseq.DB.datascriptQuery"]
+                       (mapv first @calls)))
+                (is (not-any? #(string/includes? (first (second %)) "unqualified")
+                              (rest @calls)))
+                (done))))))

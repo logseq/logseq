@@ -379,6 +379,51 @@
         (first rows)
         rows))))
 
+(defn list-orphan-tags
+  [api-fn _args]
+  (let [query "[:find [(pull ?tag [:db/id :db/ident :block/uuid :block/title]) ...]
+                 :where
+                 [?tag :block/tags ?class]
+                 [?class :db/ident :logseq.class/Tag]
+                 [(missing? $ ?tag :block/_tags)]]"]
+    (p/let [result (api-fn "logseq.DB.datascriptQuery" [query])
+            tags (js->clj result :keywordize-keys true)]
+      (if (and (= 1 (count tags)) (vector? (first tags)))
+        (first tags)
+        tags))))
+
+(def ^:private query-ident-pattern
+  #"(?i):[a-z][\w.-]*/[\w.?!+-]+")
+
+(defn- query-ident
+  [value]
+  (when (and (string? value)
+             (re-matches query-ident-pattern (string/trim value)))
+    (string/trim value)))
+
+(defn list-orphan-properties
+  [api-fn _args]
+  (p/let [result (api-fn "logseq.DB.getAllProperties" [])
+          properties (js->clj result :keywordize-keys true)]
+    (reduce
+     (fn [orphans-p entry]
+       (if-let [ident (when (map? entry)
+                        (query-ident (or (:ident entry) (:db/ident entry))))]
+         (p/let [orphans orphans-p
+                 result (api-fn "logseq.DB.datascriptQuery"
+                                [(str "[:find [?holder ...] :where [?holder "
+                                      ident " _]]")])
+                 holders (js->clj result :keywordize-keys true)]
+           (if (seq holders)
+             orphans
+             (conj orphans
+                   {:ident ident
+                    :title (:title entry)
+                    :type (:logseq.property/type entry)})))
+         orphans-p))
+     (p/resolved [])
+     properties)))
+
     (defn get-property-ident
       [api-fn args]
       (let [title (aget args "title")

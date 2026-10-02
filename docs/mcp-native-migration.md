@@ -84,7 +84,12 @@ the same ambiguity contract, and `getTag` uses an exact UUID query constrained
 to the Tag class. `getPropertyIndent` now uses the Property class to resolve a
 single `:db/ident` without guessing, and `getBlock` uses an exact UUID query
 that rejects page entities. `getTagUsers` now queries all page and block
-holders for an exact tag UUID. Entry criteria still outstanding:
+holders for an exact tag UUID. `listOrphanTags` uses the Tag class and reverse
+`:block/_tags` relation to list unused tags. `listOrphanProperties` validates
+each property ident before sequentially checking whether it has any values.
+There are 22 registered tools so far: the six existing API-backed tools and
+16 compatibility data tools.
+Entry criteria still outstanding:
 
 1. Both baselines have valid, recorded results.
 2. Native schemas and domain handlers are designed from the tool map.

@@ -269,6 +269,16 @@
    {:fn mcp-compat/list-closed-values
     :config #js {:title "List Closed Values"
                  :description "List permitted values for closed properties."
+                 :inputSchema #js {}}}
+   :listOrphanTags
+   {:fn mcp-compat/list-orphan-tags
+    :config #js {:title "List Orphan Tags"
+                 :description "List tags that no page or block uses."
+                 :inputSchema #js {}}}
+   :listOrphanProperties
+   {:fn mcp-compat/list-orphan-properties
+    :config #js {:title "List Orphan Properties"
+                 :description "List properties with no values anywhere."
                  :inputSchema #js {}}}})
 
 (defn call-api-tool [tool-fn api-fn args]
