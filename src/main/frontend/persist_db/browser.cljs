@@ -192,13 +192,20 @@
   (reset! state/*db-worker-thread nil)
   (reset! state/*db-worker nil))
 
+(defn db-worker-script-url
+  "Relative worker URL so hosted HTML export works under a static root or subpath."
+  []
+  (if config/publishing?
+    "./static/js/db-worker.js"
+    "./js/db-worker.js"))
+
 (defn start-db-worker!
   []
   (when-not util/node-test?
     (p/do!
      (reload-app-if-old-db-worker-exists)
      (stop-db-worker!)
-     (let [worker-url (if config/publishing? "static/js/db-worker.js" "js/db-worker.js")
+     (let [worker-url (db-worker-script-url)
            worker (js/Worker.
                    (str worker-url
                         "?electron=" (util/electron?)

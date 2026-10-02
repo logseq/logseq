@@ -14,7 +14,6 @@ files:
   - "!js/publishing/*.map"
   - "!js/publishing/manifest.edn"
   - "!js/publishing/module-loader.*"
-  - "!js/sqlite3.wasm"
   - "!css/fonts/tabler-icons.eot"
   - "!css/fonts/tabler-icons.ttf"
   - "!css/fonts/tabler-icons.woff"
