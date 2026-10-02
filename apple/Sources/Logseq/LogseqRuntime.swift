@@ -34,6 +34,13 @@ private func luiOCamlRootNode() -> Int64
 
 nonisolated(unsafe) private var activeRuntime: LogseqRuntime?
 
+extension LogseqRuntime {
+  /// Cmd+Q / window-close terminate: NSApplication does not run SwiftUI
+  /// onDisappear, so the delegate stops the runtime here — this also
+  /// SIGTERMs the spawned db-worker daemon so it releases the repo lock.
+  @MainActor static func terminateActive() { activeRuntime?.stop() }
+}
+
 /// OCaml only invokes the patch callback from entries the host runs on the main
 /// actor, so `assumeIsolated` holds by construction.
 private let receivePatch: PatchCallback = { source in
