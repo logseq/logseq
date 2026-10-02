@@ -35,19 +35,19 @@
   "dependencies": {
     "@cfworker/json-schema": "^4.1.1",
     "@cloudflare/codemode": "^0.4.2",
-    "@modelcontextprotocol/sdk": "^1.29.0",
-    "@sentry/cloudflare": "^10.45.0",
-    "@sentry/node": "^10.45.0",
-    "better-sqlite3": "^12.8.0",
-    "mldoc": "^1.5.9",
-    "shadow-cljs": "^3.4.4",
+    "@modelcontextprotocol/sdk": "^1.31.0",
+    "@sentry/cloudflare": "^11.2.0",
+    "@sentry/node": "^11.2.0",
+    "better-sqlite3": "^13.0.3",
+    "mldoc": "^1.6.0",
+    "shadow-cljs": "^3.5.4",
     "transit-js": "^0.8.874",
-    "ws": "^8.19.0",
-    "zod": "^4.4.3"
+    "ws": "^8.22.0",
+    "zod": "^4.6.5"
   },
   "devDependencies": {
     "@redocly/cli": "^2.38.0",
-    "@sentry/cli": "^3.3.3"
+    "@sentry/cli": "^3.8.0"
   },
   "pnpm": {
     "onlyBuiltDependencies": [

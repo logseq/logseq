@@ -5,11 +5,11 @@
   "private": true,
   "devDependencies": {
     "@logseq/nbb-logseq": "git+https://github.com/logseq/nbb-logseq.git#feat-db-v34",
-    "better-sqlite3": "^12.8.0"
+    "better-sqlite3": "^13.0.3"
   },
   "dependencies": {
     "@emoji-mart/data": "^1.2.1",
-    "mldoc": "^1.5.9",
+    "mldoc": "^1.6.0",
     "sanitize-filename": "1.6.4"
   },
   "scripts": {
