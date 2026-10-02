@@ -854,7 +854,7 @@ let metadata_source backup_dir =
   match read_file_opt (backup_metadata_path backup_dir) with
   | Some text -> (
       try
-        let metadata = Melange_edn_melange.of_edn_string text in
+        let metadata = Edn_util.of_edn_string text in
         Option.bind (Edn_util.get metadata "source") (fun value ->
             Edn_util.as_string_like value)
         |> Option.map strip_leading_colon
