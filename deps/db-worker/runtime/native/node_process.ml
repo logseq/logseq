@@ -1,7 +1,11 @@
 (* POSIX equivalents of the node process surface. *)
 
+external real_pid : unit -> int = "caml_logseq_process_id"
+
 let argv () = Array.to_list Sys.argv
-let pid = Unix.getpid
+(* win32unix Unix.getpid returns a duplicated self HANDLE value, not the
+   OS pid; the lifecycle JS records and probes real OS pids. *)
+let pid () = if Sys.os_type = "Win32" then real_pid () else Unix.getpid ()
 let exit = Stdlib.exit
 let cwd = Unix.getcwd
 let home_dir () =

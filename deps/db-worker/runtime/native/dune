@@ -2,6 +2,7 @@
  (name logseq_db_worker_platform_native)
  (implements logseq_db_worker_platform_spec)
  (modes native byte)
+ (foreign_stubs (language c) (names node_process_stubs))
  (libraries
   mldoc
   angstrom
