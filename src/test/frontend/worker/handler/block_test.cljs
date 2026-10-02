@@ -863,6 +863,47 @@
         (is (= [[open-grandchild-uuid "a0"]]
                (get-in children [open-child-uuid :items])))))))
 
+(deftest direct-children-membership-follows-recycled-ancestor-chain-test
+  (when-let [direct-children-membership
+             (direct-children-membership-api)]
+    (let [conn (db-test/create-conn)
+          ancestor-uuid (random-uuid)
+          nested-page-uuid (random-uuid)
+          content-uuid (random-uuid)]
+      (d/transact! conn
+                   [{:db/id -1
+                     :block/uuid ancestor-uuid
+                     :block/tx-id 40
+                     :block/title "QA-E-Visibility"
+                     :block/name "qa-e-visibility"
+                     :block/tags :logseq.class/Page}
+                    {:db/id -2
+                     :block/uuid nested-page-uuid
+                     :block/tx-id 40
+                     :block/title "QA visibility child"
+                     :block/name "qa visibility child"
+                     :block/tags :logseq.class/Page
+                     :block/page -1
+                     :block/parent -1
+                     :block/order "a0"}
+                    {:block/uuid content-uuid
+                     :block/tx-id 40
+                     :block/title "QA visibility content intact"
+                     :block/page -2
+                     :block/parent -2
+                     :block/order "a0"}])
+      (is (= [[content-uuid "a0"]]
+             (:items (direct-children-membership @conn nested-page-uuid))))
+      (d/transact! conn [[:db/add [:block/uuid ancestor-uuid]
+                          :logseq.property/deleted-at 1000]])
+      (is (empty? (:items (direct-children-membership @conn nested-page-uuid)))
+          "Inherited recycle hides the nested page body on a full membership read.")
+      (d/transact! conn [[:db/retract [:block/uuid ancestor-uuid]
+                          :logseq.property/deleted-at 1000]])
+      (is (= [[content-uuid "a0"]]
+             (:items (direct-children-membership @conn nested-page-uuid)))
+          "Restoring the ancestor makes the saved descendant blocks visible again."))))
+
 (deftest direct-children-membership-defaults-missing-parent-transaction-id-test
   (when-let [direct-children-membership
              (direct-children-membership-api)]
