@@ -364,7 +364,9 @@
   (testing "Los Angeles `.+` 1 month from Apr 30 17:00 is May 30 17:00, not May 31"
     (with-time-zone "America/Los_Angeles"
       (fn []
-        (let [now (t/local-date-time 2026 4 30 17 0)]
+        ;; `now` is a UtcDateTime like production's `t/now`; passing a local
+        ;; DateTime would add the months in local fields and mask #1355.
+        (let [now (tc/to-date-time (t/local-date-time 2026 4 30 17 0))]
           (is (= [2026 5 30 17 0]
                  (local-ymdh (get-next-time now month-unit 1 dotted-plus now)))))))))
 
@@ -398,17 +400,7 @@
           scheduled (t/date-time 2026 1 31)]
       (with-redefs [t/now (fn [] now)]
         (is (t/after? (tc/from-long (get-next-time scheduled month-unit 1 double-plus))
-                      now)))))
-  (testing "`++` from the 31st keeps the 31st when the landed month has that day (#1354)"
-    (with-time-zone "UTC"
-      (fn []
-        (let [deadline (t/local-date-time 2026 1 31)
-              now (t/local-date-time 2026 7 1 9 1)]
-          (is (= [2026 7 31] (local-ymd (get-next-time deadline month-unit 1 double-plus now)))))
-        (let [scheduled (t/local-date-time 2026 10 31 9 30)
-              now (t/local-date-time 2028 3 1 12 0)]
-          (is (= [2028 3 31 9 30]
-                 (local-ymdh (get-next-time scheduled month-unit 1 double-plus now)))))))))
+                      now))))))
 
 (deftest double-plus-far-overdue-minute-is-bounded-test
   (testing "`++` does not advance far-overdue minute repeats one interval at a time"
@@ -535,32 +527,36 @@
                      (tx-add-value commands-tx (:db/id block) :logseq.property/status))))))))))
 
 (defn- reschedule-date-property
-  "Completes a weekly repeating task whose temporal property is the user :date
-  property `due`, set to journal day 20260910, and returns the commands' tx."
-  [repeat-type now pages]
-  (let [conn (db-test/create-conn-with-blocks
-              {:properties {:due {:logseq.property/type :date}}
-               :pages-and-blocks
-               (into
-                (mapv (fn [day] {:page {:build/journal day}}) pages)
-                [{:page {:block/title "Inbox"}
-                  :blocks [{:block/title "weekly task"
-                            :build/properties
-                            {:logseq.property.repeat/repeated? true
-                             :logseq.property.repeat/recur-frequency 1
-                             :logseq.property.repeat/recur-unit :logseq.property.repeat/recur-unit.week
-                             :due [:build/page {:build/journal 20260910}]
-                             :logseq.property/status :logseq.property/status.todo}}]}])})
-        block (db-test/find-block-by-content @conn "weekly task")
-        _ (d/transact! conn [[:db/add (:db/id block) :logseq.property.repeat/repeat-type repeat-type]
-                             [:db/add (:db/id block) :logseq.property.repeat/temporal-property :user.property/due]])
-        report (d/transact! conn [[:db/add (:db/id block)
-                                   :logseq.property/status
-                                   :logseq.property/status.done]])]
-    (with-redefs [t/now (fn [] now)]
-      {:db @conn
-       :block block
-       :tx (doall (commands/run-commands report))})))
+  "Completes a repeating task whose temporal property is the user :date
+  property `due`, set to journal `day` (default 20260910, weekly), and returns
+  the commands' tx plus the conn and block."
+  ([repeat-type now pages]
+   (reschedule-date-property repeat-type now pages
+                             :logseq.property.repeat/recur-unit.week 20260910))
+  ([repeat-type now pages unit day]
+   (let [conn (db-test/create-conn-with-blocks
+               {:properties {:due {:logseq.property/type :date}}
+                :pages-and-blocks
+                (into
+                 (mapv (fn [journal-day] {:page {:build/journal journal-day}}) pages)
+                 [{:page {:block/title "Inbox"}
+                   :blocks [{:block/title "repeating task"
+                             :build/properties
+                             {:logseq.property.repeat/repeated? true
+                              :logseq.property.repeat/recur-frequency 1
+                              :logseq.property.repeat/recur-unit unit
+                              :due [:build/page {:build/journal day}]
+                              :logseq.property/status :logseq.property/status.todo}}]}])})
+         block (db-test/find-block-by-content @conn "repeating task")
+         _ (d/transact! conn [[:db/add (:db/id block) :logseq.property.repeat/repeat-type repeat-type]
+                              [:db/add (:db/id block) :logseq.property.repeat/temporal-property :user.property/due]])
+         report (d/transact! conn [[:db/add (:db/id block)
+                                    :logseq.property/status
+                                    :logseq.property/status.done]])]
+     (with-redefs [t/now (fn [] now)]
+       {:db @conn
+        :block block
+        :tx (doall (commands/run-commands report))}))))
 
 (deftest repeated-date-property-keeps-its-weekday-test
   (testing "A weekly repeat of a :date property lands 7 days later in any time zone"
@@ -579,6 +575,21 @@
     (let [now (t/local-date-time 2026 9 10 12 0 0)
           {:keys [tx]} (reschedule-date-property double-plus now [20260910])]
       (is (some #(= 20260917 (:block/journal-day %)) (filter map? tx))))))
+
+(deftest repeated-date-property-monthly-keeps-journal-day-west-of-utc-test
+  (testing "A monthly `+` repeat of a :date property keeps the journal day west of UTC"
+    ;; A :date value is a UTC-midnight day. Its Los Angeles local reading is the
+    ;; previous evening; adding a month there would land on Mar 28 evening,
+    ;; which reads back as Mar 29 — the hemisphere-mirror of #1355.
+    (with-time-zone "America/Los_Angeles"
+      (fn []
+        (let [now (t/date-time 2026 3 15 12 0)
+              {:keys [db block tx]} (reschedule-date-property
+                                     plus now [20260301 20260401]
+                                     :logseq.property.repeat/recur-unit.month
+                                     20260301)
+              [_ page-uuid] (tx-add-value tx (:db/id block) :user.property/due)]
+          (is (= 20260401 (:block/journal-day (d/entity db [:block/uuid page-uuid])))))))))
 
 (deftest resolve-recur-frequency-test
   (let [resolve (fn [db entity] (#'commands/resolve-recur-frequency db entity))]

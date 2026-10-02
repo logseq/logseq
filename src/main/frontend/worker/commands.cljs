@@ -120,17 +120,19 @@
 (defn- plus-period
   "Add `period` to `datetime`.
 
-  Month and year use the local calendar so a date-only Deadline (local
-  midnight) keeps its local day: east of UTC, March 1 00:00 is still February
-  in UTC, and `t/plus` on a UtcDateTime would clamp in February (#1355).
-  Other units stay on the stored instant.
+  With `local-calendar?`, month and year use the local calendar so a date-only
+  Deadline (local midnight) keeps its local day: east of UTC, March 1 00:00 is
+  still February in UTC, and `t/plus` on a UtcDateTime would clamp in February
+  (#1355). A `:date` value is a UTC-midnight journal day, not a local midnight,
+  so its callers pass false — a local add would drift the day the same way in
+  the other hemisphere. Other units stay on the stored instant.
 
   The add is one `t/plus` of the full period from `datetime`, so a 31st stays
   a 31st when the target month has that day. Incremental month adds from a
   clamped intermediate (Jan 31 + 5 months = Jun 30, then + 1 = Jul 30) are
   how `++` lost the original day (#1354)."
-  [datetime period]
-  (if (calendar-period? period)
+  [datetime period local-calendar?]
+  (if (and local-calendar? (calendar-period? period))
     (-> datetime
         t/to-default-time-zone
         (t/plus period)
@@ -138,43 +140,43 @@
     (t/plus datetime period)))
 
 (defn- period-clock
-  "Same instant as `datetime`, in the calendar `period` is applied on.
-   Month/year counts use local fields so `t/in-months` matches `plus-period`."
-  [datetime period]
-  (if (calendar-period? period)
+  "Same instant as `datetime`, in the calendar `plus-period` applies `period`
+   on, so `t/in-months` counts the same months `plus-period` adds."
+  [datetime period local-calendar?]
+  (if (and local-calendar? (calendar-period? period))
     (t/to-default-time-zone datetime)
     datetime))
 
 (defn- advance-from-completion
   "`.+` semantics: next occurrence = now + frequency * unit."
-  [now recur-unit frequency]
-  (plus-period now (recur-unit frequency)))
+  [now recur-unit frequency local-calendar?]
+  (plus-period now (recur-unit frequency) local-calendar?))
 
 (defn- advance-from-scheduled
   "`+` semantics: next occurrence = scheduled + frequency * unit. Can land in
   the past if completion was long after scheduled — that's the documented
   behavior (\"can stack overdue\")."
-  [datetime recur-unit frequency]
-  (plus-period datetime (recur-unit frequency)))
+  [datetime recur-unit frequency local-calendar?]
+  (plus-period datetime (recur-unit frequency) local-calendar?))
 
 (defn- advance-until-future
   "`++` semantics: advance from scheduled in frequency*unit steps until strictly
   after now. Every step counts from the original datetime — datetime + n*step —
   rather than from the previous step's result, so `t/plus` month-end clamping
   doesn't drift the day (Jan 31 + 6 months lands on Jul 31, not Jun 30 + 1
-  month = Jul 30). Months and years use the local calendar; weeks stay instant
-  durations and keep the weekday (apart from DST)."
-  [now datetime recur-unit period-f frequency]
+  month = Jul 30). Months and years use the caller's calendar; weeks stay
+  instant durations and keep the weekday (apart from DST)."
+  [now datetime recur-unit period-f frequency local-calendar?]
   (let [sample (recur-unit frequency)
-        now* (period-clock now sample)
-        datetime* (period-clock datetime sample)
+        now* (period-clock now sample local-calendar?)
+        datetime* (period-clock datetime sample local-calendar?)
         periods (max 1
                      (if (t/after? datetime* now*)
                        1
                        (period-f (t/interval datetime* now*))))
         steps (max 1 (long (Math/ceil (/ periods frequency))))]
     (loop [n steps]
-      (let [candidate (plus-period datetime (recur-unit (* n frequency)))]
+      (let [candidate (plus-period datetime (recur-unit (* n frequency)) local-calendar?)]
         (if (t/after? candidate now)
           candidate
           (recur (inc n)))))))
@@ -186,23 +188,29 @@
   ([datetime recur-unit period-f frequency repeat-type]
    (repeat-next-timestamp datetime recur-unit period-f frequency repeat-type (t/now)))
   ([datetime recur-unit period-f frequency repeat-type now]
+   (repeat-next-timestamp datetime recur-unit period-f frequency repeat-type now true))
+  ([datetime recur-unit period-f frequency repeat-type now local-calendar?]
    (case repeat-type
      :logseq.property.repeat/repeat-type.dotted-plus
-     (advance-from-completion now recur-unit frequency)
+     (advance-from-completion now recur-unit frequency local-calendar?)
 
      :logseq.property.repeat/repeat-type.plus
-     (advance-from-scheduled datetime recur-unit frequency)
+     (advance-from-scheduled datetime recur-unit frequency local-calendar?)
 
      ;; :double-plus or unknown fallback
-     (advance-until-future now datetime recur-unit period-f frequency))))
+     (advance-until-future now datetime recur-unit period-f frequency local-calendar?))))
 
 (defn- get-next-time
   "The next occurrence, in milliseconds, of a repeat whose current value is
   `current-value` (milliseconds). `now` defaults to the current time; a date
-  repeat passes today's UTC midnight so that it computes in whole UTC days."
+  repeat passes today's UTC midnight so that it computes in whole UTC days.
+  `local-calendar?` picks the calendar month/year arithmetic runs on: local
+  for instant values (Deadline/Scheduled), UTC for `:date` journal days."
   ([current-value unit frequency repeat-type]
    (get-next-time current-value unit frequency repeat-type (t/now)))
   ([current-value unit frequency repeat-type now]
+   (get-next-time current-value unit frequency repeat-type now true))
+  ([current-value unit frequency repeat-type now local-calendar?]
    (let [current-date-time (tc/to-date-time current-value)
          [recur-unit period-f] (case (:db/ident unit)
                                  :logseq.property.repeat/recur-unit.minute [t/minutes t/in-minutes]
@@ -215,7 +223,7 @@
      ;; Guard against frequency <= 0: `advance-until-future` would infinite-loop
      ;; on zero-length intervals, and the other variants produce nonsense.
      (when (and recur-unit (pos? frequency))
-       (tc/to-long (repeat-next-timestamp current-date-time recur-unit period-f frequency repeat-type now))))))
+       (tc/to-long (repeat-next-timestamp current-date-time recur-unit period-f frequency repeat-type now local-calendar?))))))
 
 (defn- resolve-recur-frequency
   "Returns `[frequency default-value-tx-data]` for a recurring task entity:
@@ -262,7 +270,7 @@
                              (date-time-util/ms->journal-day (tc/to-long (t/now)))))
               (t/now))]
     (when (and frequency unit current-value)
-      (when-let [next-time-long (get-next-time current-value unit frequency repeat-type now)]
+      (when-let [next-time-long (get-next-time current-value unit frequency repeat-type now (not date?))]
         (let [next-day (if date?
                          (date-time-util/utc-ms->journal-day next-time-long)
                          (date-time-util/ms->journal-day next-time-long))
