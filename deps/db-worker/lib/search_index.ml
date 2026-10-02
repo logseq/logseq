@@ -1594,14 +1594,18 @@ let entity_tree (db : db) (e : entity) : entity list =
     | Some (Uuid u) -> Ldb.get_block_and_children db u
     | _ -> [ e ]
 
+(* Reverse-ref lookups as raw index scans: entity_attr on block/_refs
+   resolves to this same seek (Ldb.reverse_attr_values, avet-backed when
+   indexed), so materializing the target and every referrer entity is
+   pure cost. *)
 let referrer_eids (db : db) (eids : entity_id list) : entity_id list =
   List.concat_map
     (fun id ->
-       match Ldb.ent_of_id db id with
-       | Some e ->
-           List.map (fun (r : entity) -> r.id)
-             (Ldb.ref_ents e "block/_refs" @ Ldb.ref_ents e "block/_alias")
-       | None -> [])
+       let eids_of a =
+         Ldb.reverse_attr_values db id a
+         |> List.filter_map (function Ref e -> Some e | _ -> None)
+       in
+       eids_of "block/_refs" @ eids_of "block/_alias")
     eids
 
 let entities_for (db : db) (eids : entity_id list) : entity list =

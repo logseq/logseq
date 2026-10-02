@@ -514,9 +514,10 @@ let disallow_removing_page_tag db (eids : entity_id list) (v : entity_id) : unit
                      | _ ->
                          (* has page children? (:block/_parent) *)
                          let children =
-                           List.of_seq
-                             (datoms db Aevt ~a:"block/parent" ~v:(Ref eid) ())
-                           |> List.filter_map (fun d -> Ldb.ent_of_id db d.e)
+                           Ldb.reverse_attr_values db eid "block/_parent"
+                           |> List.filter_map
+                                (function Ref id -> Some id | _ -> None)
+                           |> List.filter_map (fun id -> Ldb.ent_of_id db id)
                          in
                          if List.exists Ldb.is_page children then
                            raise

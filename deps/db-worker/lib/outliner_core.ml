@@ -1351,16 +1351,27 @@ let save_block (db : db) (block : Block_map.t) (opts : save_opts)
 let get_right_siblings (node : entity) : entity list =
   match Ldb.ref_ent node "block/parent" with
   | Some parent -> (
-      let children = Ldb.get_children parent in
-      let rec drop_until l =
-        match l with
-        | x :: rest ->
-            let xu = Ldb.uuid_value x "block/uuid" in
-            let nu = Ldb.uuid_value node "block/uuid" in
-            if xu = nu then rest else drop_until rest
-        | [] -> []
-      in
-      drop_until children)
+      let db = node.db in
+      match Ldb.live_order db node.id with
+      | Some node_order ->
+          (* siblings ordered after node, same exclusions/sort as
+             get_children, but left siblings never materialize *)
+          datoms db Avet ~a:"block/parent" ~v:(Ref parent.id) ()
+          |> Seq.fold_left
+               (fun acc (d : datom) ->
+                  match Ldb.live_order db d.e with
+                  | Some o
+                    when String.compare o node_order > 0
+                         || (o = node_order && d.e > node.id) ->
+                      if Ldb.non_ordinary_child db d.e then acc
+                      else (d.e, o) :: acc
+                  | _ -> acc)
+               []
+          |> List.sort (fun (e1, o1) (e2, o2) ->
+                 let c = String.compare o1 o2 in
+                 if c <> 0 then c else compare e1 e2)
+          |> List.filter_map (fun (id, _) -> Ldb.ent_of_id db id)
+      | None -> [])
   | None -> []
 
 let blocks_with_ordered_list_props (blocks : Block_map.t list)
