@@ -270,9 +270,10 @@ let replay_imported_rows (state : import_state) : unit Db_worker_effect.t =
         Common_sqlite.get_storage_conn storage (Db_schema.schema ())
       in
       let remaining = ref (snapshot_datoms_in_import_order source_conn) in
-      let rec loop () : unit Db_worker_effect.t =
+      let done_task, done_resolver = Db_worker_effect.wait () in
+      let rec step () : unit =
         match !remaining with
-        | [] -> Db_worker_effect.pure ()
+        | [] -> Db_worker_effect.wakeup done_resolver ()
         | _ ->
             let rec take acc rem n =
               if n >= snapshot_import_batch_size then (List.rev acc, rem)
@@ -284,13 +285,17 @@ let replay_imported_rows (state : import_state) : unit Db_worker_effect.t =
             let batch, rest = take [] !remaining 0 in
             remaining := rest;
             let wire_datoms = List.map Ds_wire.transit_of_datom batch in
-            import_datoms_batch state.conn state.aes_key state.graph_e2ee
-              wire_datoms
-            >>= fun () ->
-            log_import_progress state (List.length batch);
-            Db_worker_effect.sleep 0. >>= loop
+            Db_worker_effect.on_any
+              (import_datoms_batch state.conn state.aes_key state.graph_e2ee
+                 wire_datoms
+               >>= fun () ->
+               log_import_progress state (List.length batch);
+               Db_worker_effect.sleep 0.)
+              (fun () -> step ())
+              (fun e -> Db_worker_effect.reject done_resolver e)
       in
-      loop ()
+      step ();
+      done_task
 
 (* ---------- lifecycle ---------- *)
 
@@ -523,7 +528,7 @@ let row_of_wire (w : Wire.t) : int * string * string option =
 let stream_snapshot_row_batches ?(gzip_encoded = false) read_fn batch_size
     (on_batch : (int * string * string option) list -> unit Db_worker_effect.t)
     : unit Db_worker_effect.t =
-  let buffer = ref None in
+  let state = Db_sync_snapshot.framed_state () in
   let pending = Queue.create () in
   let first_chunk = ref true in
   let rec flush_pending () : unit Db_worker_effect.t =
@@ -537,9 +542,10 @@ let stream_snapshot_row_batches ?(gzip_encoded = false) read_fn batch_size
     else Db_worker_effect.pure ()
   in
   let process_chunk chunk : unit Db_worker_effect.t =
-    let rows, buf = Db_sync_snapshot.parse_framed_chunk !buffer chunk in
-    buffer := buf;
-    List.iter (fun r -> Queue.add r pending) (List.map row_of_wire rows);
+    List.iter
+      (fun r -> Queue.add r pending)
+      (List.map row_of_wire
+         (Db_sync_snapshot.parse_framed_chunk state chunk));
     flush_pending ()
   in
   let rec collect acc =
@@ -547,33 +553,57 @@ let stream_snapshot_row_batches ?(gzip_encoded = false) read_fn batch_size
     | None -> Db_worker_effect.pure (String.concat "" (List.rev acc))
     | Some c -> collect (c :: acc)
   in
-  let rec loop () : unit Db_worker_effect.t =
-    read_fn () >>= function
-    | None ->
-        let tail =
-          match !buffer with
-          | Some buf when Buffer.length buf > 0 ->
-              List.map row_of_wire
-                (Db_sync_snapshot.finalize_framed_buffer !buffer)
-          | _ -> []
-        in
-        let pending_rows = Queue.fold (fun acc r -> r :: acc) [] pending in
-        let rows = List.rev_append pending_rows tail in
-        if rows <> [] then on_batch rows else Db_worker_effect.pure ()
-    | Some chunk ->
-        (* transports that don't decompress themselves (Http_bytes does)
-           still land here — bounded whole-body decode fallback *)
-        if !first_chunk && gzip_encoded && gzip_bytes chunk then begin
-          first_chunk := false;
-          collect [ chunk ] >>= Compression.gzip_decode
-          >>= fun decoded -> process_chunk decoded >>= loop
-        end
-        else begin
-          first_chunk := false;
-          process_chunk chunk >>= loop
-        end
+  let done_task, done_resolver = Db_worker_effect.wait () in
+  let finish rows =
+    Db_worker_effect.on_any
+      (if rows <> [] then on_batch rows else Db_worker_effect.pure ())
+      (fun () -> Db_worker_effect.wakeup done_resolver ())
+      (fun e -> Db_worker_effect.reject done_resolver e)
   in
-  loop ()
+  (* flat step driver: each iteration completes its own task and the
+     next chunk is scheduled from the callback — a recursive
+     [process_chunk >>= loop] chain would leave the result of every
+     earlier iteration bound to the next one's resolution, and that
+     deep unwind chain never fully propagated on large snapshots. *)
+  let rec step () : unit =
+    Db_worker_effect.on_any (read_fn ())
+      (function
+        | None ->
+            let tail =
+              if Buffer.length state.buf - state.pos > 0
+              then
+                List.map row_of_wire
+                  (Db_sync_snapshot.finalize_framed_buffer state)
+              else []
+            in
+            let pending_rows =
+              Queue.fold (fun acc r -> r :: acc) [] pending
+            in
+            finish (List.rev_append pending_rows tail)
+        | Some chunk ->
+            (* transports that don't decompress themselves (Http_bytes
+               does) still land here — bounded whole-body decode
+               fallback *)
+            if !first_chunk && gzip_encoded && gzip_bytes chunk then begin
+              first_chunk := false;
+              Db_worker_effect.on_any
+                (collect [ chunk ] >>= Compression.gzip_decode)
+                (fun decoded ->
+                   Db_worker_effect.on_any (process_chunk decoded)
+                     (fun () -> step ())
+                     (fun e -> Db_worker_effect.reject done_resolver e))
+                (fun e -> Db_worker_effect.reject done_resolver e)
+            end
+            else begin
+              first_chunk := false;
+              Db_worker_effect.on_any (process_chunk chunk)
+                (fun () -> step ())
+                (fun e -> Db_worker_effect.reject done_resolver e)
+            end)
+      (fun e -> Db_worker_effect.reject done_resolver e)
+  in
+  step ();
+  done_task
 
 (* download-graph-by-id! *)
 let download_graph_by_id repo graph_id graph_e2ee : Wire.t Db_worker_effect.t =
