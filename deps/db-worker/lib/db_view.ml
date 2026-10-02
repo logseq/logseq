@@ -470,26 +470,33 @@ let expand_to_top_refs db (top_ref_ids : entity_id list)
     matched_ref_ids;
   List.of_seq (Hashtbl.to_seq_keys result)
 
-(* reference/linked-reference-top-block-ids *)
+(* reference/linked-reference-top-block-ids — datom-level: the avet
+   block/refs seek yields candidate eids, one eavt slice per candidate
+   answers tags/page, and the memoized ancestor walk covers hidden
+   checks — no per-ref entity materialization. *)
 let linked_reference_top_block_ids db (ids : entity_id list)
     (class_ids : entity_id list) : entity_id list =
+  let hidden_eid = hidden_eid_pred db in
   List.concat_map
     (fun pid ->
-       match Ldb.ent_of_id db pid with
-       | Some e -> Ldb.ref_ents e "block/_refs"
-       | None -> [])
+       Seq.fold_left
+         (fun acc (d : datom) -> d.e :: acc)
+         []
+         (datoms db Avet ~a:"block/refs" ~v:(Ref pid) ()))
     ids
-  |> List.filter (fun (ref : entity) ->
+  |> List.filter (fun rid ->
+         let tags = ref [] and page = ref None in
+         datoms db Eavt ~e:rid ()
+         |> Seq.iter (fun (d : datom) ->
+              if d.a = "block/tags" then
+                (match entid d.v with Some t -> tags := t :: !tags | None -> ())
+              else if d.a = "block/page" && !page = None then
+                page := entid d.v);
          not
            ((class_ids <> []
-             && List.exists
-                  (fun (t : entity) -> List.mem t.id class_ids)
-                  (Ldb.ref_ents ref "block/tags"))
-            || Ldb.hidden ref
-            || match Ldb.ref_ent ref "block/page" with
-               | Some p -> Ldb.hidden p
-               | None -> false))
-  |> List.map (fun (e : entity) -> e.id)
+             && List.exists (fun t -> List.mem t class_ids) !tags)
+            || hidden_eid (Some rid)
+            || hidden_eid !page))
   |> List.sort_uniq compare
 
 type linked_reference_result =
