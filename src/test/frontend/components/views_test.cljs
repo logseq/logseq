@@ -1,7 +1,7 @@
 (ns frontend.components.views-test
   (:require ["react" :as react]
             ["react-dom/server" :as react-dom-server]
-            [cljs.test :refer [async deftest is testing thrown-with-msg? use-fixtures]]
+            [cljs.test :refer [async deftest is testing use-fixtures]]
             [clojure.string :as string]
             [datascript.core :as d]
             [datascript.impl.entity :as de]
