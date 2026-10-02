@@ -36,8 +36,10 @@
                   {:status :loading})
                 db-hooks/use-blocks (fn [_] (is false "Property definitions must arrive with the block") nil)
                 db-hooks/use-block (fn [_] (is false "First paint must not load another block") nil)
-                property-component/property-key-cp (fn [_block property _opts]
-                                                     [:span.property-key (:block/title property)])
+                property-component/property-key-cp (fn [_block property opts]
+                                                     [:span.property-key
+                                                      {:data-key-bottom-pill (boolean (:bottom-pill? opts))}
+                                                      (:block/title property)])
                 property-value/property-value (fn [_block property _opts]
                                                 [:span.property-value (:db/ident property)])
                 hooks/use-ref (fn [_] #js {:current nil})
@@ -95,6 +97,95 @@
         "The scheduled pill is visible")
     (is (not (string/includes? markup "Icon"))
         "Icon is not rendered as a bottom pill")))
+
+(deftest bottom-pill-renders-property-key-as-pill-label-test
+  (let [deadline-uuid #uuid "44444444-4444-4444-4444-444444444444"
+        block-uuid #uuid "77777777-7777-7777-7777-777777777777"
+        deadline-property {:block/uuid deadline-uuid
+                           :db/ident :logseq.property/deadline
+                           :block/title "Deadline"
+                           :logseq.property/type :datetime}
+        markup (render-block-below
+                {:block/uuid block-uuid
+                 :block/title "deadline block"}
+                [deadline-uuid]
+                {deadline-uuid deadline-property})]
+    (is (string/includes? markup "data-key-bottom-pill=\"true\"")
+        "The pill renders its property key as a label, not a property config trigger")))
+
+(deftest property-key-title-bottom-pill-test
+  (let [property {:block/uuid #uuid "12121212-1212-1212-1212-121212121212"
+                  :db/ident :user.property/p1
+                  :block/title "p1"}
+        pill-markup (render-static
+                     (property-component/property-key-title {} property {:bottom-pill? true}))
+        panel-markup (render-static
+                      (property-component/property-key-title {} property {}))]
+    (is (string/includes? pill-markup "p1"))
+    (is (not (string/includes? pill-markup "jtrigger"))
+        "A pill key is not a trigger, so clicking it does not open property config")
+    (is (string/includes? panel-markup "jtrigger")
+        "Keys outside pills still open property config")))
+
+(defn- bottom-pill-event!
+  "Runs `handler` on a stubbed pill event. `inline-editor?` focuses a number
+  input inside the pill value."
+  [handler {:keys [in-value? meta? inline-editor?]}]
+  (let [*calls (atom {:trigger-clicks 0 :editor-blurs 0 :prevented 0})
+        value-trigger #js {:click #(swap! *calls update :trigger-clicks inc)}
+        editor #js {:tagName "INPUT"
+                    :blur #(swap! *calls update :editor-blurs inc)
+                    :closest (fn [selector]
+                               (when (= selector ".bottom-property-content") #js {}))}
+        pill #js {:querySelector (fn [selector]
+                                   (when (= selector ".bottom-property-content .jtrigger")
+                                     value-trigger))
+                  :contains (fn [node] (identical? node editor))}
+        target #js {:closest (fn [selector]
+                               (when (and in-value? (= selector ".bottom-property-content"))
+                                 #js {}))}
+        event #js {:target target
+                   :currentTarget pill
+                   :metaKey (boolean meta?)
+                   :ctrlKey (boolean meta?)
+                   :preventDefault #(swap! *calls update :prevented inc)
+                   :stopPropagation (fn [])}
+        previous-document (gobj/get js/globalThis "document")]
+    (gobj/set js/globalThis "document" #js {:activeElement (when inline-editor? editor)})
+    (try
+      (handler event)
+      (finally
+        (if (some? previous-document)
+          (gobj/set js/globalThis "document" previous-document)
+          (js-delete js/globalThis "document"))))
+    @*calls))
+
+(defn- click-bottom-pill!
+  [opts]
+  (bottom-pill-event! #'block/handle-bottom-pill-click! opts))
+
+(deftest bottom-pill-click-opens-value-picker-test
+  (is (= 1 (:trigger-clicks (click-bottom-pill! {})))
+      "Clicking the key or pill padding opens the value picker")
+  (is (= 0 (:trigger-clicks (click-bottom-pill! {:in-value? true})))
+      "Clicks inside the value are handled by the value itself")
+  (is (= 0 (:trigger-clicks (click-bottom-pill! {:meta? true})))
+      "Meta+click is left to the key, which opens the property page"))
+
+(deftest bottom-pill-click-closes-inline-editor-test
+  (let [{:keys [trigger-clicks editor-blurs]} (click-bottom-pill! {:inline-editor? true})]
+    (is (= 1 editor-blurs)
+        "Clicking the key while a number input is open commits and closes it")
+    (is (= 0 trigger-clicks)
+        "The value trigger is not clicked again, so the editor does not reopen"))
+  (is (= 1 (:prevented (bottom-pill-event! #'block/handle-bottom-pill-mouse-down!
+                                           {:inline-editor? true})))
+      "Mouse down on the key keeps focus in the editor until the click closes it")
+  (is (= 0 (:prevented (bottom-pill-event! #'block/handle-bottom-pill-mouse-down! {})))
+      "Mouse down does not interfere when no inline editor is open")
+  (is (= 0 (:prevented (bottom-pill-event! #'block/handle-bottom-pill-mouse-down!
+                                           {:inline-editor? true :in-value? true})))
+      "Mouse down inside the value keeps its default behavior"))
 
 (deftest hidden-properties-pill-toggle-only-for-zoom-in-root-test
   (let [root-uuid #uuid "22222222-2222-2222-2222-222222222222"
