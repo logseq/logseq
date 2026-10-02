@@ -4887,9 +4887,14 @@ setTimeout(() => process.exit(0), 120000).unref();
               expect_int "graph count" 1 (Vec.length graphs);
               Js.Promise.resolve ())
           |> Js.Promise.catch (fun error ->
+              let message =
+                Option.value
+                  (promise_error_message error)
+                  ~default:"remote-graphs test failed"
+              in
               stop_stub () |> Js.Promise.then_ (fun () ->
                   cleanup ();
-                  Js.Promise.reject error))
+                  Js.Promise.reject (Failure message)))
           |> Js.Promise.then_ (fun () -> stop_stub ())
         in
         cleanup ();
