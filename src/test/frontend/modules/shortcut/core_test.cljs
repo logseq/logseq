@@ -178,5 +178,6 @@
   (testing "highlight recent blocks appears in the toggle category"
     (is (some #{:ui/highlight-recent-blocks}
               (shortcut-config/get-category-shortcuts :shortcut.category/toggle)))))
+
 (comment
   (cljs.test/run-tests))
