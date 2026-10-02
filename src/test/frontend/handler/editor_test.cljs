@@ -343,6 +343,76 @@
              @tx-calls)
           "Content that differs from the persisted block must still be saved"))))
 
+(defn- save-current-block-while-editor-action
+  [{:keys [saved-title input-value editor-action flush-input?]}]
+  (let [block-uuid #uuid "33333333-3333-3333-3333-333333333333"
+        block {:db/id 1
+               :block/uuid block-uuid
+               :block/title saved-title}
+        input #js {:value input-value}
+        save-calls (atom [])
+        tx-calls (atom [])]
+    (with-redefs [state/editor-in-composition? (constantly false)
+                  state/get-editor-action (constantly editor-action)
+                  state/get-current-repo (constantly "flush-input-repo")
+                  state/get-edit-input-id (constantly "editor")
+                  state/get-edit-block (constantly block)
+                  gdom/getElement (constantly input)
+                  db-subs/block-snapshot
+                  (constantly {:status :ready :value block})
+                  conn/get-db (constantly nil)
+                  editor/wrap-parse-block identity
+                  frontend-outliner-op/save-block! (fn [block' opts]
+                                                     (swap! save-calls conj [block' opts]))
+                  db-transact/apply-outliner-ops
+                  (fn [db ops opts]
+                    (swap! tx-calls conj [db ops opts])
+                    :tx)]
+      (if flush-input?
+        (editor/save-current-block! {:flush-input? true})
+        (editor/save-current-block!)))
+    {:save-calls @save-calls
+     :tx-calls @tx-calls}))
+
+(deftest save-current-block-flushes-input-while-editor-action-is-active-test
+  (testing "new unsaved block title"
+    (is (= {:save-calls []
+            :tx-calls []}
+           (save-current-block-while-editor-action
+            {:saved-title ""
+             :input-value "plain draft text"
+             :editor-action :commands}))
+        "The editor-action guard must still skip a regular save")
+    (is (= {:save-calls [[{:block/uuid #uuid "33333333-3333-3333-3333-333333333333"
+                           :block/title "plain draft text"}
+                          nil]]
+            :tx-calls [[nil [] {:outliner-op :save-block}]]}
+           (save-current-block-while-editor-action
+            {:saved-title ""
+             :input-value "plain draft text"
+             :editor-action :commands
+             :flush-input? true}))
+        "Flushing the input persists a new block's unsaved title while a slash action is active"))
+
+  (testing "existing title with unsaved suffix"
+    (is (= {:save-calls []
+            :tx-calls []}
+           (save-current-block-while-editor-action
+            {:saved-title "baseline"
+             :input-value "baseline draft suffix"
+             :editor-action :property-input}))
+        "The editor-action guard must still skip a regular save")
+    (is (= {:save-calls [[{:block/uuid #uuid "33333333-3333-3333-3333-333333333333"
+                           :block/title "baseline draft suffix"}
+                          nil]]
+            :tx-calls [[nil [] {:outliner-op :save-block}]]}
+           (save-current-block-while-editor-action
+            {:saved-title "baseline"
+             :input-value "baseline draft suffix"
+             :editor-action :property-input
+             :flush-input? true}))
+        "Flushing the input persists an unsaved suffix while the property/date picker is active")))
+
 (deftest save-block-does-not-drop-a-revert-while-the-previous-save-is-pending-test
   (let [block-uuid #uuid "22222222-2222-2222-2222-222222222222"
         block {:db/id 1
