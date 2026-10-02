@@ -173,25 +173,38 @@ let download_large_title ~repo ~graph_id ~(obj : Wire.t)
     | _ -> ""
   in
   let url = asset_url http_base graph_id asset_uuid asset_type in
-  Http_bytes.send
-    { Http_bytes.url
-    ; method_ = "GET"
-    ; headers = auth_headers
-    ; body = None }
-  >>= fun (resp : Http_bytes.response) ->
-  if resp.status < 200 || resp.status >= 300 then
+  let status_failed status =
+    status < 200 || status >= 300
+  in
+  let download_failed status =
     Sync_util.fail_fast "db-sync/large-title-download-failed"
       (Wire.Map
          [ Wire.Keyword "repo", Wire.String repo
-         ; Wire.Keyword "status", Wire.Int resp.status ]);
-  let payload_str = resp.body in
+         ; Wire.Keyword "status", Wire.Int status ])
+  in
   (match aes_key with
-   | Wire.Nil -> Db_worker_effect.pure payload_str
+   | Wire.Nil ->
+       (* Plain-text title: fetch decodes the utf-8 body to text. *)
+       Http.send
+         { Http.url; method_ = "GET"; headers = auth_headers; body = None }
+       >>= fun (resp : Http.response) ->
+       if status_failed resp.status then download_failed resp.status
+       else Db_worker_effect.pure resp.body
    | _ ->
-       Db_worker_effect.catch
-         (Sync_deps.require "decrypt_text_value"
-            Sync_deps.decrypt_text_value aes_key payload_str)
-         (fun _ -> Db_worker_effect.pure payload_str))
+       (* Encrypted payload must stay raw bytes for decryption. *)
+       Http_bytes.send
+         { Http_bytes.url
+         ; method_ = "GET"
+         ; headers = auth_headers
+         ; body = None }
+       >>= fun (resp : Http_bytes.response) ->
+       if status_failed resp.status then download_failed resp.status
+       else
+         let payload_str = resp.body in
+         Db_worker_effect.catch
+           (Sync_deps.require "decrypt_text_value"
+              Sync_deps.decrypt_text_value aes_key payload_str)
+           (fun _ -> Db_worker_effect.pure payload_str))
 
 (* offload-large-titles — tx item vectors in; placeholder + object datom out *)
 let offload_large_titles (tx_data : Wire.t list)

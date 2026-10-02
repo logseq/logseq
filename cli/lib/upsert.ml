@@ -578,7 +578,7 @@ let tag_of_value value =
 let key_of_value = Property.parse_key
 
 let edn_value_of_string ~label text =
-  try Ok (Melange_edn_melange.of_edn_string text)
+  try Ok (Edn_util.of_edn_string text)
   with Melange_edn_melange.Parse_error _ ->
     Error (Error.invalid_options ("invalid " ^ label ^ " edn"))
 

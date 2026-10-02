@@ -93,7 +93,7 @@ let read_config_file path =
     let content = read_file path in
     if String.trim content = "" then Ok None
     else
-      try Ok (Some (Melange_edn_melange.of_edn_string content |> value_of_edn))
+      try Ok (Some (Edn_util.of_edn_string content |> value_of_edn))
       with exn ->
         Error
           (Error.make Error.Invalid_config
