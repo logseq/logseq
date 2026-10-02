@@ -479,14 +479,13 @@
 
 (defn get-all-sync-conflicts
   [repo]
-  (if-let [store (sqlite-store-or-throw repo)]
+  (when-let [store (sqlite-store-or-throw repo)]
     (->> (sqlite-rows store
                       (str "select id, block_uuid, attr, value, remote_t, created_at "
                            "from sync_conflicts order by created_at desc, id desc")
                       [])
          (map sync-conflict-row->map)
-         (group-by :block-uuid))
-    {}))
+         (group-by :block-uuid))))
 
 (defn get-sync-conflicts
   [repo block-uuid]
