@@ -178,6 +178,11 @@
     :config #js {:title "Get Property Ident"
                  :description "Resolve a property title to exactly one DB ident."
                  :inputSchema #js {:title (z/string)}}}
+  :getProperyUsers
+  {:fn mcp-compat/get-property-users
+   :config #js {:title "Get Property Users"
+            :description "List every page and block holding a value for this exact property ident, with literals and resolved reference values."
+            :inputSchema #js {:property_ident (z/string)}}}
    :getBlock
    {:fn mcp-compat/get-block
     :config #js {:title "Get Block"

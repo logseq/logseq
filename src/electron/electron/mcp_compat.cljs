@@ -739,6 +739,38 @@
                              properties)]
           (property-ident-result title properties))))
 
+(defn get-property-users
+  [api-fn args]
+  (let [ident (query-ident (aget args "property_ident"))]
+    (when-not ident
+      (throw (js/Error. "Expected an exact namespaced property ident such as :plugin.property.my_plugin/Effort, not a title or a UUID")))
+    (let [query (str "[:find (pull ?holder [:db/id :block/uuid :block/title "
+                      ":block/name {:block/page [:db/id :block/uuid :block/title]}]) "
+                      "?value :where [?holder " ident " ?value]]")]
+      (p/let [result (api-fn "logseq.DB.datascriptQuery" [query])
+              rows (filterv #(and (vector? %) (= 2 (count %)))
+                            (js->clj result :keywordize-keys true))
+              entity-ids (->> rows
+                              (map second)
+                              (filter #(and (number? %) (not (boolean? %))))
+                              set)
+              resolve-query "[:find [(pull ?e [:db/id :db/ident :block/title :logseq.property/value]) ...] :in $ [?e ...] :where [?e ?a _]]"
+              resolved-result (if (seq entity-ids)
+                                (api-fn "logseq.DB.datascriptQuery"
+                                        [resolve-query (clj->js (vec entity-ids))])
+                                [])
+              resolved (into {}
+                             (keep (fn [entity]
+                                     (let [id (page-stats-field entity :id)]
+                                       (when (some? id) [id entity]))))
+                             (query-result-rows resolved-result))]
+        (mapv (fn [[holder value]]
+                {:holder holder
+                 :value value
+                 :value_entity (when (and (number? value) (not (boolean? value)))
+                                 (get resolved value))})
+              rows)))))
+
 (defn get-block
   [api-fn args]
   (let [block-uuid (aget args "block_uuid")
@@ -974,6 +1006,7 @@
    :findOrphans ["logseq.DB.datascriptQuery"]
    :isTitleAvailable ["logseq.DB.datascriptQuery"]
   :findDuplicateTitles ["logseq.DB.datascriptQuery"]
+  :getProperyUsers ["logseq.DB.datascriptQuery"]
    :listRecycled ["logseq.DB.datascriptQuery"]
    :listStatus ["logseq.DB.datascriptQuery"]
    :listClosedValues ["logseq.DB.datascriptQuery"]

@@ -473,3 +473,31 @@
   (is (thrown-with-msg? js/Error #"normalize must be exact, loose, or fuzzy"
                         (mcp-compat/find-duplicate-titles
                          (fn [& _] nil) #js {"normalize" "aggressive"}))))
+
+(deftest get-property-users-preserves-literals-and-resolves-entities
+  (let [calls (atom [])
+        api (fn [method args]
+              (swap! calls conj [method args])
+              (if (string/includes? (first args) "pull ?holder")
+                #js [#js [#js {"uuid" "holder-1"} true]
+                     #js [#js {"uuid" "holder-2"} 99]
+                     #js [#js {"uuid" "holder-3"} "literal"]]
+                #js [#js {"id" 99 "title" "Resolved value" "value" "green"}]))]
+    (async done
+      (p/then (mcp-compat/get-property-users api
+                                             #js {"property_ident" ":user.property/flag"})
+              (fn [users]
+                (is (= 3 (count users)))
+                (is (true? (:value (first users))))
+                (is (nil? (:value_entity (first users))))
+                (is (= "Resolved value" (get-in users [1 :value_entity :title])))
+                (is (= "literal" (:value (nth users 2))))
+                (is (nil? (:value_entity (nth users 2))))
+                (is (= 2 (count @calls)))
+                (is (every? #(= "logseq.DB.datascriptQuery" (first %)) @calls))
+                (done))))))
+
+(deftest get-property-users-rejects-non-ident-input
+  (is (thrown-with-msg? js/Error #"exact namespaced property ident"
+                        (mcp-compat/get-property-users (fn [& _] nil)
+                                                      #js {"property_ident" "Flag"}))))
