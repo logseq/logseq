@@ -9,11 +9,11 @@
   logseq/db                   {:local/root "../db"}
   logseq/graph-parser         {:local/root "../graph-parser"}
   metosin/malli               {:git/url "https://github.com/metosin/malli"
-                               :sha     "52ea58a36ff5172b38dfc526ca638afa7226a4a0"}
+                               :sha     "76603d587553c5a8d60fa64c9e631fa3addb4b2e"}
   ;; stubbed via logseq.common.log
   com.lambdaisland/glogi      {:git/url "https://github.com/lambdaisland/glogi"
-                               :git/sha "30328a045141717aadbbb693465aed55f0904976"}}
+                               :git/sha "ea2595fceecfa8ca8b207641e2f39c18238ad793"}}
  :aliases
  {:clj-kondo
-  {:replace-deps {clj-kondo/clj-kondo {:mvn/version "2026.04.15"}}
+  {:replace-deps {clj-kondo/clj-kondo {:mvn/version "2026.08.04"}}
    :main-opts  ["-m" "clj-kondo.main"]}}}

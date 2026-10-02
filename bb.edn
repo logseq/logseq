@@ -2,12 +2,12 @@
  :deps
  {metosin/malli
   {:git/url "https://github.com/metosin/malli"
-   :sha     "52ea58a36ff5172b38dfc526ca638afa7226a4a0"}
-  borkdude/rewrite-edn {:mvn/version "0.5.9"}
+   :sha     "76603d587553c5a8d60fa64c9e631fa3addb4b2e"}
+  borkdude/rewrite-edn {:mvn/version "0.6.10"}
   logseq/bb-tasks
   #_{:local/root "../bb-tasks"}
   {:git/url "https://github.com/logseq/bb-tasks"
-   :git/sha "7cc218286c03f093996539b8195de56a0ec5df6a"}
+   :git/sha "957318b81b22099484f1e9817d4d9d7b8598fdf6"}
   logseq/graph-parser
   {:local/root "deps/graph-parser"}
   org.clj-commons/digest
@@ -15,7 +15,7 @@
   cheshire/cheshire
   {:mvn/version "6.2.0"}}
  :pods
- {clj-kondo/clj-kondo {:version "2026.04.15"}
+ {clj-kondo/clj-kondo {:version "2026.08.04"}
   org.babashka/fswatcher {:version "0.0.7"}
   org.babashka/go-sqlite3 {:version "0.3.13"}}
  :tasks

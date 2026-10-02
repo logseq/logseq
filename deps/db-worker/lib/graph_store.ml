@@ -118,8 +118,7 @@ let restore db addr =
                   | Some json ->
                       (match Storage_codec.decode_addresses json with
                        | [] -> payload
-                       | children ->
-                           Storage_node (Persistent_sorted_set.Branch (keys, Array.of_list children)))
+                       | children -> Storage_node (Persistent_sorted_set.Branch (keys, Array.of_list children)))
                   | None -> payload)
              | other -> other
            in
@@ -136,121 +135,10 @@ let delete db addrs =
          ~bind:[| Sqlite.Integer (Int64.of_string addr) |])
     addrs
 
-(* cljs store-impl! buffers all dirty index nodes into a single -store
-   call per commit (*store-buffer*). datascript-ocaml instead reaches
-   storage_store once per dirty node, so each payload pays its own sqlite
-   transaction (~1-3ms each; ~75 calls ≈ 150ms on a tail-compaction
-   commit — enough to lose keystrokes in flight). Every datascript-ocaml
-   write sequence ends with a Storage_root (full store) or Storage_tail
-   (tail append) payload, so we buffer entries until one arrives and
-   flush them as a single transaction. Reads during a buffered batch see
-   pending payloads first. *)
-let wal_checkpoint_idle_ms = 2000
-
 let storage db =
-  (* Keep the batch separate from the committed read-through cache.
-     Reversed entries preserve write order without repeated list append. *)
-  let pending = ref [] in
-  let pending_cache : (string, storage_payload) Hashtbl.t = Hashtbl.create 1024 in
-  let failed = ref false in
-  let committing = ref false in
-  let check_available () =
-    if !failed then
-      failwith "Graph storage persistence failed; close and reopen the graph"
-    else if !committing then
-      failwith "Graph storage commit in progress"
-  in
-  (* node addresses are sequential and payloads immutable once written,
-     so rows can live in a read-through cache; root/tail rows are
-     refreshed on every flush. The datascript store path re-reads branch
-     nodes to compute index depth, and lazy indexes restore a node per
-     lookup — without the cache each read is a sqlite roundtrip. *)
-  let cache : (string, storage_payload) Hashtbl.t = Hashtbl.create 1024 in
-  (* cljs schedule-wal-checkpoint!: debounced 2s idle WAL checkpoint.
-     Without it the WAL grows across every commit until close-db, and
-     commit writes slow progressively over a long session. *)
-  let checkpoint_timer : Timers.timer option ref = ref None in
-  let schedule_checkpoint () =
-    (match !checkpoint_timer with
-     | Some t -> Timers.clear t
-     | None -> ());
-    checkpoint_timer :=
-      Some
-        (Timers.set_timeout wal_checkpoint_idle_ms (fun () ->
-             checkpoint_timer := None;
-             (try Sqlite.checkpoint db
-              with e ->
-                Worker_log.warn "db-worker/wal-checkpoint-failed"
-                  [ "error", Printexc.to_string e ])))
-  in
-  (* DataScript installs conn.db and its tail before calling storage.
-     On failure those values cannot safely be reused, especially when a
-     COMMIT error leaves its outcome unknown. Fence this storage until the
-     caller closes the SQL handle and restores a new conn from disk. *)
-  let persist f =
-    check_available ();
-    committing := true;
-    match f () with
-    | () -> committing := false
-    | exception e ->
-        failed := true;
-        committing := false;
-        pending := [];
-        Hashtbl.clear pending_cache;
-        Hashtbl.clear cache;
-        (match !checkpoint_timer with
-         | Some t -> Timers.clear t; checkpoint_timer := None
-         | None -> ());
-        raise e
-  in
-  let flush () =
-    check_available ();
-    if !pending <> [] then begin
-      let entries = List.rev !pending in
-      persist (fun () ->
-          store db entries;
-          List.iter (fun (addr, p) -> Hashtbl.replace cache addr p) entries;
-          pending := [];
-          Hashtbl.clear pending_cache);
-      schedule_checkpoint ()
-    end
-  in
   {
-    storage_store =
-      (fun addr_payloads ->
-        check_available ();
-        List.iter (fun (addr, p) -> Hashtbl.replace pending_cache addr p) addr_payloads;
-        pending := List.rev_append addr_payloads !pending;
-        if
-          List.exists
-            (fun (_, payload) ->
-              match payload with
-              | Storage_root _ | Storage_tail _ -> true
-              | Storage_node _ -> false)
-            addr_payloads
-        then flush ());
-    storage_restore =
-      (fun addr ->
-        check_available ();
-        match Hashtbl.find_opt pending_cache addr with
-        | Some payload -> Some payload
-        | None -> (
-            match Hashtbl.find_opt cache addr with
-            | Some payload -> Some payload
-            | None -> (
-                match restore db addr with
-                | Some payload as some ->
-                    Hashtbl.replace cache addr payload;
-                    some
-                | None -> None)));
-    storage_list_addresses =
-      (fun () ->
-        flush ();
-        list_addresses db);
-    storage_delete =
-      (fun addrs ->
-        flush ();
-        persist (fun () ->
-            delete db addrs;
-            List.iter (fun a -> Hashtbl.remove cache a) addrs));
+    storage_store = (fun addr_payloads -> store db addr_payloads);
+    storage_restore = (fun addr -> restore db addr);
+    storage_list_addresses = (fun () -> list_addresses db);
+    storage_delete = (fun addrs -> delete db addrs);
   }

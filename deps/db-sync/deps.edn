@@ -7,20 +7,20 @@
                                          :exclusions [datascript/datascript]}
   com.cognitect/transit-cljs            {:mvn/version "0.8.280"}
   cljs-bean/cljs-bean                   {:mvn/version "1.9.0"}
-  thheller/shadow-cljs                  {:mvn/version "3.4.4"}
+  thheller/shadow-cljs                  {:mvn/version "3.5.4"}
   com.lambdaisland/glogi                {:git/url "https://github.com/lambdaisland/glogi"
-                                         :git/sha "30328a045141717aadbbb693465aed55f0904976"}
-  metosin/reitit                        {:mvn/version "0.10.1"
+                                         :git/sha "ea2595fceecfa8ca8b207641e2f39c18238ad793"}
+  metosin/reitit                        {:mvn/version "0.11.0"
                                          :exclusions [metosin/malli]}
   logseq/common                         {:local/root "../common"}
   logseq/db                             {:local/root "../db"}
   logseq/outliner                       {:local/root "../outliner"}}
  :aliases
  {:cljs {:extra-deps {org.clojure/tools.namespace      {:mvn/version "1.5.0"}
-                      cider/cider-nrepl                {:mvn/version "0.59.0"}
+                      cider/cider-nrepl                {:mvn/version "0.62.2"}
                       org.clojars.knubie/cljs-run-test {:mvn/version "1.0.1"}
                       tortue/spy                       {:mvn/version "2.15.0"}}
          :main-opts  ["-m" "shadow.cljs.devtools.cli"]}
   :clj-kondo
-  {:replace-deps {clj-kondo/clj-kondo {:mvn/version "2026.04.15"}}
+  {:replace-deps {clj-kondo/clj-kondo {:mvn/version "2026.08.04"}}
    :main-opts    ["-m" "clj-kondo.main"]}}}

@@ -6,11 +6,11 @@
     "test": "opam exec -- dune runtest"
   },
   "devDependencies": {
-    "vite": "^8.0.16"
+    "vite": "^8.3.2"
   },
   "dependencies": {
     "@logseq/graph-lifecycle": "file:../deps/graph-lifecycle",
-    "mldoc": "1.5.9",
+    "mldoc": "1.6.0",
     "transit-js": "0.8.874"
   }
 }

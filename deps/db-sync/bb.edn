@@ -3,10 +3,10 @@
  {logseq/bb-tasks
   #_{:local/root "../../../bb-tasks"}
   {:git/url "https://github.com/logseq/bb-tasks"
-   :git/sha "7cc218286c03f093996539b8195de56a0ec5df6a"}}
+   :git/sha "957318b81b22099484f1e9817d4d9d7b8598fdf6"}}
 
  :pods
- {clj-kondo/clj-kondo {:version "2026.04.15"}}
+ {clj-kondo/clj-kondo {:version "2026.08.04"}}
 
  :tasks
  {lint:large-vars

@@ -173,12 +173,6 @@ and apply_pending () : unit Js.Promise.t =
           if not all_dup then
             Editor_state.prune_overrides
               (List.concat_map Page_delta.delta_uuids deltas);
-          (* own_commit keeps the basis; identical-page sends are
-             deduped downstream *)
-          if p' != page then (
-            Runtime.push_page_items p';
-            Runtime.send (Action.Page_loaded p');
-            !Runtime.refresh_page_side p');
           Js.Promise.resolve ()
       | None ->
           Router.reload ();
