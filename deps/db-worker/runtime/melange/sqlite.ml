@@ -59,11 +59,12 @@ module Opfs = struct
   external close : handle -> unit = "close" [@@mel.send]
 
   (* PoolUtil methods — exportFile is sync (throws when the name is not in
-     the pool), importDb resolves a promise. *)
+     the pool), importDb is sync too (returns the bytes written) despite
+     the package's .d.mts claiming Promise<number>. *)
   external export_file : pool -> string -> Js.Typed_array.Uint8Array.t = "exportFile"
     [@@mel.send]
 
-  external import_db : pool -> string -> Js.Typed_array.Uint8Array.t -> unit Js.Promise.t = "importDb"
+  external import_db : pool -> string -> Js.Typed_array.Uint8Array.t -> int = "importDb"
     [@@mel.send]
 
   (* pool-level storage ops — absent on the node fake pool, hence
@@ -464,7 +465,11 @@ let import_db ~name ~dir ~path contents =
   else
     match Hashtbl.find_opt pools name with
     | Some pool ->
-        task_of_promise (Opfs.import_db pool path (u8a_of_string contents))
+        (try
+           ignore (Opfs.import_db pool path (u8a_of_string contents));
+           Db_worker_effect.pure ()
+         with Js.Exn.Error e ->
+           Db_worker_effect.error (Failure (js_error_message e)))
     | None ->
         Db_worker_effect.error
           (Failure ("opfs pool not prepared: " ^ name))
