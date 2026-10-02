@@ -1,0 +1,27 @@
+{
+  "object" : {
+    "artifacts" : [
+
+    ],
+    "dependencies" : [
+      {
+        "basedOn" : null,
+        "packageRef" : {
+          "identity" : "lui-apple-backend",
+          "kind" : "fileSystem",
+          "location" : "/Users/devin/repos/logseq-swift/_build/apple/macos/lui-apple-backend",
+          "name" : "LUIAppleBackend"
+        },
+        "state" : {
+          "name" : "fileSystem",
+          "path" : "/Users/devin/repos/logseq-swift/_build/apple/macos/lui-apple-backend"
+        },
+        "subpath" : "lui-apple-backend"
+      }
+    ],
+    "prebuilts" : [
+
+    ]
+  },
+  "version" : 7
+}

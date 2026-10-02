@@ -1,0 +1,68 @@
+{
+  "": {
+    "swift-dependencies": "/Users/devin/repos/logseq-swift/apple/.build/arm64-apple-macosx/debug/Logseq.build/primary.swiftdeps"
+  },
+  "/Users/devin/repos/logseq-swift/apple/Sources/Logseq/App.swift": {
+    "dependencies": "/Users/devin/repos/logseq-swift/apple/.build/arm64-apple-macosx/debug/Logseq.build/App.d",
+    "object": "/Users/devin/repos/logseq-swift/apple/.build/arm64-apple-macosx/debug/Logseq.build/App.swift.o",
+    "swiftmodule": "/Users/devin/repos/logseq-swift/apple/.build/arm64-apple-macosx/debug/Logseq.build/App~partial.swiftmodule",
+    "swift-dependencies": "/Users/devin/repos/logseq-swift/apple/.build/arm64-apple-macosx/debug/Logseq.build/App.swiftdeps",
+    "diagnostics": "/Users/devin/repos/logseq-swift/apple/.build/arm64-apple-macosx/debug/Logseq.build/App.dia"
+  },
+  "/Users/devin/repos/logseq-swift/apple/Sources/Logseq/LogseqElementView.swift": {
+    "dependencies": "/Users/devin/repos/logseq-swift/apple/.build/arm64-apple-macosx/debug/Logseq.build/LogseqElementView.d",
+    "object": "/Users/devin/repos/logseq-swift/apple/.build/arm64-apple-macosx/debug/Logseq.build/LogseqElementView.swift.o",
+    "swiftmodule": "/Users/devin/repos/logseq-swift/apple/.build/arm64-apple-macosx/debug/Logseq.build/LogseqElementView~partial.swiftmodule",
+    "swift-dependencies": "/Users/devin/repos/logseq-swift/apple/.build/arm64-apple-macosx/debug/Logseq.build/LogseqElementView.swiftdeps",
+    "diagnostics": "/Users/devin/repos/logseq-swift/apple/.build/arm64-apple-macosx/debug/Logseq.build/LogseqElementView.dia"
+  },
+  "/Users/devin/repos/logseq-swift/apple/Sources/Logseq/LogseqExtensions.swift": {
+    "dependencies": "/Users/devin/repos/logseq-swift/apple/.build/arm64-apple-macosx/debug/Logseq.build/LogseqExtensions.d",
+    "object": "/Users/devin/repos/logseq-swift/apple/.build/arm64-apple-macosx/debug/Logseq.build/LogseqExtensions.swift.o",
+    "swiftmodule": "/Users/devin/repos/logseq-swift/apple/.build/arm64-apple-macosx/debug/Logseq.build/LogseqExtensions~partial.swiftmodule",
+    "swift-dependencies": "/Users/devin/repos/logseq-swift/apple/.build/arm64-apple-macosx/debug/Logseq.build/LogseqExtensions.swiftdeps",
+    "diagnostics": "/Users/devin/repos/logseq-swift/apple/.build/arm64-apple-macosx/debug/Logseq.build/LogseqExtensions.dia"
+  },
+  "/Users/devin/repos/logseq-swift/apple/Sources/Logseq/LogseqLUIEvents.swift": {
+    "dependencies": "/Users/devin/repos/logseq-swift/apple/.build/arm64-apple-macosx/debug/Logseq.build/LogseqLUIEvents.d",
+    "object": "/Users/devin/repos/logseq-swift/apple/.build/arm64-apple-macosx/debug/Logseq.build/LogseqLUIEvents.swift.o",
+    "swiftmodule": "/Users/devin/repos/logseq-swift/apple/.build/arm64-apple-macosx/debug/Logseq.build/LogseqLUIEvents~partial.swiftmodule",
+    "swift-dependencies": "/Users/devin/repos/logseq-swift/apple/.build/arm64-apple-macosx/debug/Logseq.build/LogseqLUIEvents.swiftdeps",
+    "diagnostics": "/Users/devin/repos/logseq-swift/apple/.build/arm64-apple-macosx/debug/Logseq.build/LogseqLUIEvents.dia"
+  },
+  "/Users/devin/repos/logseq-swift/apple/Sources/Logseq/LogseqPlatform.swift": {
+    "dependencies": "/Users/devin/repos/logseq-swift/apple/.build/arm64-apple-macosx/debug/Logseq.build/LogseqPlatform.d",
+    "object": "/Users/devin/repos/logseq-swift/apple/.build/arm64-apple-macosx/debug/Logseq.build/LogseqPlatform.swift.o",
+    "swiftmodule": "/Users/devin/repos/logseq-swift/apple/.build/arm64-apple-macosx/debug/Logseq.build/LogseqPlatform~partial.swiftmodule",
+    "swift-dependencies": "/Users/devin/repos/logseq-swift/apple/.build/arm64-apple-macosx/debug/Logseq.build/LogseqPlatform.swiftdeps",
+    "diagnostics": "/Users/devin/repos/logseq-swift/apple/.build/arm64-apple-macosx/debug/Logseq.build/LogseqPlatform.dia"
+  },
+  "/Users/devin/repos/logseq-swift/apple/Sources/Logseq/LogseqRuntime.swift": {
+    "dependencies": "/Users/devin/repos/logseq-swift/apple/.build/arm64-apple-macosx/debug/Logseq.build/LogseqRuntime.d",
+    "object": "/Users/devin/repos/logseq-swift/apple/.build/arm64-apple-macosx/debug/Logseq.build/LogseqRuntime.swift.o",
+    "swiftmodule": "/Users/devin/repos/logseq-swift/apple/.build/arm64-apple-macosx/debug/Logseq.build/LogseqRuntime~partial.swiftmodule",
+    "swift-dependencies": "/Users/devin/repos/logseq-swift/apple/.build/arm64-apple-macosx/debug/Logseq.build/LogseqRuntime.swiftdeps",
+    "diagnostics": "/Users/devin/repos/logseq-swift/apple/.build/arm64-apple-macosx/debug/Logseq.build/LogseqRuntime.dia"
+  },
+  "/Users/devin/repos/logseq-swift/apple/Sources/Logseq/LogseqSVG.swift": {
+    "dependencies": "/Users/devin/repos/logseq-swift/apple/.build/arm64-apple-macosx/debug/Logseq.build/LogseqSVG.d",
+    "object": "/Users/devin/repos/logseq-swift/apple/.build/arm64-apple-macosx/debug/Logseq.build/LogseqSVG.swift.o",
+    "swiftmodule": "/Users/devin/repos/logseq-swift/apple/.build/arm64-apple-macosx/debug/Logseq.build/LogseqSVG~partial.swiftmodule",
+    "swift-dependencies": "/Users/devin/repos/logseq-swift/apple/.build/arm64-apple-macosx/debug/Logseq.build/LogseqSVG.swiftdeps",
+    "diagnostics": "/Users/devin/repos/logseq-swift/apple/.build/arm64-apple-macosx/debug/Logseq.build/LogseqSVG.dia"
+  },
+  "/Users/devin/repos/logseq-swift/apple/Sources/Logseq/LogseqStyles.swift": {
+    "dependencies": "/Users/devin/repos/logseq-swift/apple/.build/arm64-apple-macosx/debug/Logseq.build/LogseqStyles.d",
+    "object": "/Users/devin/repos/logseq-swift/apple/.build/arm64-apple-macosx/debug/Logseq.build/LogseqStyles.swift.o",
+    "swiftmodule": "/Users/devin/repos/logseq-swift/apple/.build/arm64-apple-macosx/debug/Logseq.build/LogseqStyles~partial.swiftmodule",
+    "swift-dependencies": "/Users/devin/repos/logseq-swift/apple/.build/arm64-apple-macosx/debug/Logseq.build/LogseqStyles.swiftdeps",
+    "diagnostics": "/Users/devin/repos/logseq-swift/apple/.build/arm64-apple-macosx/debug/Logseq.build/LogseqStyles.dia"
+  },
+  "/Users/devin/repos/logseq-swift/apple/Sources/Logseq/LogseqTextArea.swift": {
+    "dependencies": "/Users/devin/repos/logseq-swift/apple/.build/arm64-apple-macosx/debug/Logseq.build/LogseqTextArea.d",
+    "object": "/Users/devin/repos/logseq-swift/apple/.build/arm64-apple-macosx/debug/Logseq.build/LogseqTextArea.swift.o",
+    "swiftmodule": "/Users/devin/repos/logseq-swift/apple/.build/arm64-apple-macosx/debug/Logseq.build/LogseqTextArea~partial.swiftmodule",
+    "swift-dependencies": "/Users/devin/repos/logseq-swift/apple/.build/arm64-apple-macosx/debug/Logseq.build/LogseqTextArea.swiftdeps",
+    "diagnostics": "/Users/devin/repos/logseq-swift/apple/.build/arm64-apple-macosx/debug/Logseq.build/LogseqTextArea.dia"
+  }
+}
