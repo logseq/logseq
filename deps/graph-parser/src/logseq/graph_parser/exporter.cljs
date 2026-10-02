@@ -2733,7 +2733,8 @@
             (and (contains? new-properties property-name)
                  ;; A property needs a title to derive its ident; keep malformed
                  ;; pages as ordinary pages instead of crashing on lower-case
-                 (and (string? title) (not (string/blank? title)))
+                 (string? title)
+                 (not (string/blank? title))
                  (not (contains? class-occupied-property-names property-name))
                  (not (existing-named-page-is-class? import-state (:block/uuid page))))))
         [properties-tx pages-tx'] ((juxt filter remove) page-tx-for-new-property? pages-tx)
