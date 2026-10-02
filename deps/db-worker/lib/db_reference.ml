@@ -301,34 +301,62 @@ let get_ref_pages_count db (id : entity_id) (ref_blocks : entity list)
     |> List.sort (fun (_, a) (_, b) -> compare b a)
   end
 
+(* hidden-eid-pred — memoized ancestor walk; one eavt slice answers
+   hide?/deleted-at/parent per block instead of three seeks. *)
+let hidden_eid_pred db : entity_id option -> bool =
+  let cache : (entity_id, bool) Hashtbl.t = Hashtbl.create 31 in
+  let rec hidden eid seen =
+    match eid with
+    | None -> false
+    | Some id when List.mem id seen -> false
+    | Some id -> (
+        match Hashtbl.find_opt cache id with
+        | Some b -> b
+        | None ->
+            let hide = ref None and del = ref None and parent = ref None in
+            datoms db Eavt ~e:id ()
+            |> Seq.iter (fun (d : datom) ->
+                 if d.a = "logseq.property/hide?" && !hide = None then
+                   hide := Some d.v
+                 else if d.a = "logseq.property/deleted-at" && !del = None
+                 then del := Some d.v
+                 else if d.a = "block/parent" && !parent = None then
+                   parent := entid d.v);
+            let result =
+              Ldb.truthy !hide || Ldb.truthy !del || hidden !parent (id :: seen)
+            in
+            Hashtbl.replace cache id result;
+            result)
+  in
+  fun eid -> hidden eid []
+
 (* linked-reference-top-block-ids — top blocks directly referencing the
-   page (or its aliases). *)
+   page (or its aliases). Datom-level: avet block/refs seeks for
+   candidates, one eavt slice per block for tags/page, memoized
+   ancestor walk for hidden — no per-ref entity materialization. *)
 let linked_reference_top_block_ids db (ids : entity_id list)
     (class_ids : entity_id list option) : IdSet.t =
+  let hidden_eid = hidden_eid_pred db in
   List.concat_map
     (fun pid ->
-      match Ldb.ent_of_id db pid with
-      | Some e -> Ldb.ref_ents e "block/_refs"
-      | None -> [])
+       Seq.fold_left
+         (fun acc (d : datom) -> d.e :: acc)
+         []
+         (datoms db Avet ~a:"block/refs" ~v:(Ref pid) ()))
     ids
-  |> List.filter (fun (ref_ : entity) ->
+  |> List.filter (fun rid ->
+         let tags = ref [] and page = ref None in
+         datoms db Eavt ~e:rid ()
+         |> Seq.iter (fun (d : datom) ->
+              if d.a = "block/tags" then
+                (match entid d.v with Some t -> tags := t :: !tags | None -> ())
+              else if d.a = "block/page" && !page = None then
+                page := entid d.v);
          match class_ids with
-         | Some cids
-           when List.exists
-                  (fun cid ->
-                    List.mem cid (Ldb.ref_ids ref_ "block/tags"))
-                  cids ->
+         | Some cids when List.exists (fun cid -> List.mem cid !tags) cids ->
              false
-         | _ ->
-             not
-               (Ldb.hidden ref_
-                ||
-                (match Ldb.ref_ent ref_ "block/page" with
-                 | Some p -> Ldb.hidden p
-                 | None -> false)))
-  |> List.fold_left
-       (fun s (e : entity) -> IdSet.add e.id s)
-       IdSet.empty
+         | _ -> not (hidden_eid (Some rid) || hidden_eid !page))
+  |> List.fold_left (fun s eid -> IdSet.add eid s) IdSet.empty
 
 type linked_references =
   { ref_blocks : entity list

@@ -342,75 +342,48 @@ let block_children_or_property_children (block : entity) (parent : entity) : ent
 (* get-ordinary-sibling — sibling by :block/order among :block/parent
    children, skipping property-created and closed-value children.
 
-   cljs folds over every (:block/parent parent) datom with three index
-   lookups per child (order + two exclusion checks) — O(siblings) seeks.
-   The :block/order avet index already stores the same ordering, so scan
-   it from the block's own order toward the requested direction.
+   Folds the parent's filtered :block/_parent children and keeps the best
+   order on the requested side — O(siblings) bounded seeks, like cljs.
+   Same-order ties pick the smallest e.
 
-   Candidacy at an index position requires the scanned datom's value to
-   equal the entity's effective :block/order (the entity read, first eavt
-   datom — same value the cljs fold sees). Raw-datom replay can leave a
-   second :block/order datom on an entity; such a stale position is
-   dishonest — it is skipped, and the entity is yielded again at its
-   honest position (the live datom is itself an index entry, so it is
-   always seen there when in range). Every entity has at most one honest
-   position and it equals its live order, so scanning positions in order:
-   the first position with an honest eligible candidate is the argmax
-   over live orders on the requested side — identical to the cljs fold —
-   while costing only the order gap between siblings plus any stale
-   datoms in between, typically ~1-3 candidate lookups. Same-order ties
-   pick the smallest e, matching the fold's first-seen in e-ascending
-   iteration. *)
+   Order is the first eavt datom (the live position): raw-datom replay
+   can leave a second :block/order datom on an entity, and the
+   cardinality-one entity_attr would surface the larger stale value. *)
 let ordinary_sibling (block : entity) (dir : [ `Left | `Right ]) : entity option =
   let db = block.db in
-  match ref_ids block "block/parent", value block "block/order" with
-  | parent_id :: _, Some (String block_order) ->
-      let same_parent e =
-        Seq.exists
-          (fun (d : datom) ->
-            match d.v with Ref pid -> pid = parent_id | _ -> false)
-          (datoms db Eavt ~e ~a:"block/parent" ())
-      in
-      let excluded e =
-        Option.is_some
-          (Seq.uncons (datoms db Eavt ~e ~a:"logseq.property/created-from-property" ()))
-        || Option.is_some
-             (Seq.uncons (datoms db Eavt ~e ~a:"block/closed-value-property" ()))
-      in
-      let live_order e =
-        match Seq.uncons (datoms db Eavt ~e ~a:"block/order" ()) with
-        | Some (od, _) -> (match od.v with String s -> Some s | _ -> None)
-        | None -> None
-      in
-      let eligible o =
-        match dir with
-        | `Left -> String.compare o block_order < 0
-        | `Right -> String.compare o block_order > 0
-      in
-      let candidates =
-        (match dir with
-         | `Left -> rseek_datoms db Avet ~a:"block/order" ~v:(String block_order) ()
-         | `Right -> seek_datoms db Avet ~a:"block/order" ~v:(String block_order) ())
-        |> Seq.filter_map (fun (d : datom) ->
-            match d.v, live_order d.e with
-            | String stored, Some o
-              when String.equal o stored
-                   && eligible o
-                   && same_parent d.e
-                   && not (excluded d.e) ->
-                Some (d.e, o)
-            | _ -> None)
-      in
-      (match Seq.uncons candidates with
-       | None -> None
-       | Some ((first_e, first_o), rest) ->
-           let rec collect best_e rest =
-             match Seq.uncons rest with
-             | Some ((e, o), rest') when String.compare o first_o = 0 ->
-                 collect (min best_e e) rest'
-             | _ -> best_e
-           in
-           ent_of_id db (collect first_e rest))
+  let live_order e =
+    match Seq.uncons (datoms db Eavt ~e:e.id ~a:"block/order" ()) with
+    | Some (od, _) -> (match od.v with String s -> Some s | _ -> None)
+    | None -> None
+  in
+  match ref_ent block "block/parent", live_order block with
+  | Some parent, Some block_order ->
+      List.fold_left
+        (fun best (c : entity) ->
+          match live_order c with
+          | Some o -> (
+              let eligible =
+                match dir with
+                | `Left -> String.compare o block_order < 0
+                | `Right -> String.compare o block_order > 0
+              in
+              if not eligible then best
+              else
+                match best with
+                | None -> Some (c.id, o)
+                | Some (be, bo) -> (
+                    let closer =
+                      match dir with
+                      | `Left -> String.compare o bo > 0
+                      | `Right -> String.compare o bo < 0
+                    in
+                    if closer || (o = bo && c.id < be) then Some (c.id, o)
+                    else best))
+          | _ -> best)
+        None (parent_children parent)
+      |> (function
+           | Some (e, _) -> ent_of_id db e
+           | None -> None)
   | _ -> None
 
 (* get-left/right-sibling-for-property-children *)
