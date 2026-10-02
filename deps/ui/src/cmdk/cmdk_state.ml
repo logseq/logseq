@@ -377,7 +377,8 @@ let item_of_row w i : item =
   in
   let title =
     match
-      [ str_field w "block.temp/original-title"; str_field w "block/title" ]
+      [ str_field w "block.temp/unique-title"
+      ; str_field w "block.temp/original-title"; str_field w "block/title" ]
       |> List.filter_map Fun.id
     with
     | t :: _ -> t

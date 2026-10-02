@@ -19,7 +19,7 @@
 open Promise_ext
 let t = I18n.t
 
-let default_navs = [ "flashcards"; "all-pages"; "graph-view" ]
+let default_navs = [ "flashcards"; "all-pages" ]
 
 (* A rendered right-sidebar entry. kind maps to .item-type-<kind>. *)
 type item =
@@ -617,15 +617,6 @@ let open_sticky_item st kind =
         (match static_item "help" "help" (t "nav/help") with
          | Some it -> push_item st it
          | None -> ())
-    | "page-graph" when not (has_item st "page-graph") -> (
-        (* cljs sidebar-add-block! :page-graph requires a current page *)
-        match !Runtime.current_page with
-        | Some _ -> (
-            match static_item "page-graph" "page-graph" "graph.page/title"
-            with
-            | Some it -> push_item st it
-            | None -> ())
-        | None -> ())
     | (("rtc" | "undo-redo" | "profiler") as kind)
       when not (has_item st kind) -> (
         let label =

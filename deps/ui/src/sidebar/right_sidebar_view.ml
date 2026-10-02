@@ -54,9 +54,6 @@ let topbar st =
         ([ topbar_btn "contents" (t "page/contents") (fun n _ ->
                if n = "click" then
                  Sidebar_state.open_sticky_item st "contents")
-         ; topbar_btn "page-graph" (t "graph.page/title") (fun n _ ->
-               if n = "click" then
-                 Sidebar_state.open_sticky_item st "page-graph")
          ; topbar_btn "help" (t "nav/help") (fun n _ ->
                if n = "click" then Sidebar_state.open_sticky_item st "help")
          ]
@@ -206,15 +203,9 @@ let item_title (it : Sidebar_state.item) =
         [ Icons.icon ~cls:"text-md mr-2" "help"
         ; dom ~tag:"span" ~text:it.title [] ]
   | [], kind
-    when kind = "page-graph" || kind = "rtc" || kind = "undo-redo"
-         || kind = "profiler" ->
+    when kind = "rtc" || kind = "undo-redo" || kind = "profiler" ->
       (* cljs build-sidebar-item: icon + title in .flex.items-center *)
-      let ic =
-        match kind with
-        | "page-graph" -> "hierarchy"
-        | "undo-redo" -> "rotate-clockwise"
-        | _ -> "cloud"
-      in
+      let ic = match kind with "undo-redo" -> "rotate-clockwise" | _ -> "cloud" in
       dom ~key:("pt-" ^ kind) ~style_class:"flex items-center"
         [ Icons.icon ~cls:"text-md mr-2" ic
         ; dom ~tag:"span" ~text:it.title [] ]
