@@ -1,5 +1,38 @@
 module T = Transit_melange.Transit_core.Json
 
+type uint8_array
+type text_decoder
+
+external char_code_at : string -> int -> int = "charCodeAt" [@@mel.send]
+
+external uint8_array_from : string -> (string -> int) -> uint8_array
+  = "from" [@@mel.scope "Uint8Array"]
+
+external make_text_decoder : string -> < fatal : bool > Js.t -> text_decoder
+  = "TextDecoder" [@@mel.new]
+
+external decode : text_decoder -> uint8_array -> string = "decode" [@@mel.send]
+
+let utf8_decoder = make_text_decoder "utf-8" [%mel.obj { fatal = true }]
+
+(* Binary transit bodies (snapshot frames, remoteInvokeBinary payloads)
+   arrive as byte strings: UTF-8 bytes packed one-per-char. Decode them
+   to unicode before parsing; strings that are already unicode or ascii
+   pass through. *)
+let string_of_utf8_bytes (s : string) : string =
+  let len = String.length s in
+  let rec loop i =
+    if i >= len then `Ascii
+    else
+      let code = char_code_at s i in
+      if code > 0xFF then `Unicode else if code > 0x7F then `Bytes else loop (i + 1)
+  in
+  match loop 0 with
+  | `Ascii | `Unicode -> s
+  | `Bytes ->
+      (try decode utf8_decoder (uint8_array_from s (fun ch -> char_code_at ch 0))
+       with _ -> s)
+
 let rec of_transit (v : T.value) : Wire.t =
   match v with
   | T.Null -> Wire.Nil
@@ -44,7 +77,8 @@ let rec to_transit (t : Wire.t) : T.value =
   | Wire.Set xs -> T.Set (List.map to_transit xs)
   | Wire.Tagged (tag, rep) -> T.Tagged (tag, to_transit rep)
 
-let of_string s = of_transit (Transit_melange.Transit.Json.of_string s)
+let of_string s =
+  of_transit (Transit_melange.Transit.Json.of_string (string_of_utf8_bytes s))
 
 let to_string ?(mode = Wire.Normal) t =
   let mode = match mode with Wire.Normal -> T.Normal | Wire.Verbose -> T.Verbose in
