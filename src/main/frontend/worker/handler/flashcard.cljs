@@ -20,9 +20,7 @@
                   (when-not (string/blank? (:block/title query))
                     (:block/title query))))
         result (query-dsl/parse query db {})
-        card-tag-id (:db/id (d/entity db :logseq.class/Card))
-        card-tag-children-ids (db-class/get-structured-children db card-tag-id)
-        card-ids (cons card-tag-id card-tag-children-ids)
+        card-ids (db-class/card-class-ids db)
         q (cond-> '[:find [?b ...]
                     :in $ [?t ...] ?now-inst-ms %
                     :where
@@ -50,3 +48,5 @@
   [repo cards-id]
   (when-let [conn (worker-state/get-datascript-conn repo)]
     (fsrs-card-block-ids @conn cards-id false)))
+
+
