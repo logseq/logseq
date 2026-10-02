@@ -34,6 +34,7 @@
             [frontend.ui :as ui]
             [frontend.util :as util]
             [frontend.util.entity :as entity]
+            [lambdaisland.glogi :as log]
             [logseq.common.config :as common-config]
             [logseq.common.uuid :as common-uuid]
             [logseq.db :as ldb]
@@ -3413,7 +3414,9 @@
                                                           {:page (:block/uuid page)
                                                            :properties properties
                                                            :edit-block? false
-                                                           :outliner-op :create-view}
+                                                           :outliner-op :create-view
+                                                           ;; Keep a refused page-title save out of this tx.
+                                                           :skip-save-current-block? true}
                                                            auto-triggered?
                                                            (assoc :custom-uuid view-block-id)))]
         (db-async/<get-block repo (:block/uuid result) {:children? false})))))
@@ -4209,10 +4212,18 @@
                (when-let [notify! (:on-first-table-paint! option)]
                  (notify!))))]]))
 
+(defn- handle-default-view-creation-error!
+  "Log a failed default-view insert without throwing during render
+   and re-arm *started? so a later effect run can retry.
+   The page has no error boundary around this view."
+  [*started? error]
+  (set! (.-current *started?) false)
+  (log/warn :default-view-creation-failed error)
+  nil)
+
 (hsx/defc missing-view
   [view-parent-uuid view-feature-type]
   (let [view-parent (db-hooks/use-block view-parent-uuid)
-        [error set-error!] (hooks/use-state nil)
         *started? (hooks/use-ref false)]
     (hooks/use-effect!
      (fn []
@@ -4221,14 +4232,16 @@
          (-> (create-view! view-parent view-feature-type {:auto-triggered? true})
              (p/then (fn [view]
                        (when-not view
-                         (throw (ex-info "Default view creation returned no view"
-                                         {:view-parent-uuid view-parent-uuid
-                                          :view-feature-type view-feature-type})))))
-             (p/catch set-error!)))
+                         (handle-default-view-creation-error!
+                          *started?
+                          (ex-info "Default view creation returned no view"
+                                   {:view-parent-uuid view-parent-uuid
+                                    :view-feature-type view-feature-type})))))
+             (p/catch (fn [error]
+                        (handle-default-view-creation-error! *started? error)))))
        js/undefined)
      [view-parent view-parent-uuid view-feature-type])
-    (when error
-      (throw error))))
+    nil))
 
 (hsx/defc view
   [{:keys [view-parent-uuid view-feature-type view-uuid] :as option}]
