@@ -5,9 +5,12 @@
 # because dune regenerates that file from dune-project
 # (generate_opam_files) and the runtest diff check rejects hand edits.
 set -eu
-opam pin add -y -n datascript_ocaml git+https://github.com/logseq/datascript-ocaml.git#main
-opam pin add -y -n datascript-ocaml-melange git+https://github.com/logseq/datascript-ocaml.git#main
-opam pin add -y -n datascript-ocaml-native git+https://github.com/logseq/datascript-ocaml.git#main
+# Pin all three datascript packages at the same explicit version: the
+# melange/native opam files constrain datascript_ocaml with {= version},
+# and opam resolves unpinned versions inconsistently (~dev vs dev).
+opam pin add -y -n datascript_ocaml.dev git+https://github.com/logseq/datascript-ocaml.git#main
+opam pin add -y -n datascript-ocaml-melange.dev git+https://github.com/logseq/datascript-ocaml.git#main
+opam pin add -y -n datascript-ocaml-native.dev git+https://github.com/logseq/datascript-ocaml.git#main
 opam pin add -y -n persistent_sorted_set_ocaml git+https://github.com/logseq/persistent-sorted-set-ocaml.git#main
 opam pin add -y -n melange-edn-core git+https://github.com/logseq/melange-edn.git#main
 opam pin add -y -n melange-edn-melange git+https://github.com/logseq/melange-edn.git#main
