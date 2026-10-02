@@ -5,31 +5,19 @@
             [frontend.state :as state]
             [frontend.util :as util]))
 
-(def ^:private page-route-names #{:page :page-block})
-
-(defn- current-route-page-name
-  "Page identity from the visible route. For :page-block this is the host page,
-   not the zoomed heading."
-  []
-  (or (state/get-current-page)
-      (when (contains? page-route-names (state/get-current-route))
-        (get-in (state/get-route-match) [:path-params :name]))))
-
 (defn- ready-snapshot-value
   [{:keys [status value]}]
   (when (= :ready status)
     value))
 
-(defn- peek-block
+(defn- ready-block
   [block-uuid]
   (when (uuid? block-uuid)
     (ready-snapshot-value (db-subs/block-snapshot block-uuid))))
 
-(defn- peek-page-identity
-  [page-lookup]
-  (when (and (string? page-lookup)
-             (not (string/blank? page-lookup)))
-    (ready-snapshot-value (db-subs/resource-snapshot [:page-identity page-lookup]))))
+(defn- ready-resource
+  [resource-key]
+  (ready-snapshot-value (db-subs/resource-snapshot resource-key)))
 
 (defn- parse-uuid*
   [value]
@@ -37,6 +25,21 @@
     (uuid? value) value
     (and (string? value) (util/uuid-string? value)) (uuid value)
     :else nil))
+
+(defn- viewed-entity-uuid
+  "Uuid of the entity the visible route displays: the page for :page routes,
+   the zoomed block for :page-block routes. Only reads snapshots that the
+   page paint already loaded; nil when no page route is showing."
+  []
+  (or (when-let [lookup (state/get-current-page)]
+        (or (parse-uuid* lookup)
+            (when (and (string? lookup)
+                       (not (string/blank? lookup)))
+              (ready-resource [:page-identity lookup]))))
+      (when (= :page-block (state/get-current-route))
+        (ready-resource [:route-block
+                         (get-in (state/get-route-match) [:path-params :name])
+                         (get-in (state/get-route-match) [:path-params :block-route-name])]))))
 
 (defn- host-page
   "If the viewed entity is a zoomed block, return its host page."
@@ -49,37 +52,14 @@
   []
   (:block (first (state/get-editor-args))))
 
-(defn- route-page-uuid
-  []
-  (let [current-page (current-route-page-name)]
-    (or (when-let [route-uuid (parse-uuid* current-page)]
-          (let [entity (peek-block route-uuid)]
-            (or (parse-uuid* (:block/uuid (host-page entity)))
-                (parse-uuid* (:block/page-uuid entity))
-                route-uuid)))
-        (parse-uuid* (peek-page-identity current-page)))))
-
-(defn- route-page-id
-  []
-  (when-let [current-page (current-route-page-name)]
-    (if-let [route-uuid (parse-uuid* current-page)]
-      (let [entity (peek-block route-uuid)
-            host (host-page entity)]
-        (or (:db/id host)
-            (:block/page-id entity)
-            [:block/uuid (or (parse-uuid* (:block/uuid host))
-                             (parse-uuid* (:block/page-uuid entity))
-                             route-uuid)]))
-      (when-let [page-uuid (route-page-uuid)]
-        (or (:db/id (peek-block page-uuid))
-            [:block/uuid page-uuid])))))
-
 (defn get-current-page-uuid
   "Fetch the current page's uuid from the current route, then last edited block.
    A zoomed block resolves to its host page."
   []
-  (or (route-page-uuid)
-      (get-in (editor-block) [:block/page :block/uuid])))
+  (let [viewed-uuid (viewed-entity-uuid)]
+    (or (:block/uuid (host-page (ready-block viewed-uuid)))
+        viewed-uuid
+        (get-in (editor-block) [:block/page :block/uuid]))))
 
 (defn get-current-page-id
   "Fetches the current page id. Looks up page based on latest route and if
@@ -87,9 +67,13 @@
   Route pages without a cached numeric id are returned as [:block/uuid ...].
   A zoomed block resolves to its host page."
   []
-  (or (route-page-id)
-      (get-in (editor-block) [:block/page :db/id])
-      (:db/id (editor-block))))
+  (let [viewed-uuid (viewed-entity-uuid)
+        host (host-page (ready-block viewed-uuid))]
+    (or (:db/id host)
+        (when viewed-uuid
+          [:block/uuid viewed-uuid])
+        (get-in (editor-block) [:block/page :db/id])
+        (:db/id (editor-block)))))
 
 (defn entity-is-current-page?
   "True when the page-ref/tag entity is the page currently being viewed.
