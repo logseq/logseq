@@ -374,20 +374,22 @@ let non_ordinary_child db e =
 
 let ordinary_sibling (block : entity) (dir : [ `Left | `Right ]) : entity option =
   let db = block.db in
-  match
-    ( Seq.uncons (datoms db Eavt ~e:block.id ~a:"block/parent" ())
-    , live_order db block.id )
-  with
-  | Some ({ v = Ref parent_id; _ }, _), Some block_order ->
+  match Seq.uncons (datoms db Eavt ~e:block.id ~a:"block/parent" ()) with
+  | Some ({ v = Ref parent_id; _ }, _) ->
+      let block_order = live_order db block.id in
       Seq.fold_left
         (fun best (d : datom) ->
           let child = d.e in
           match live_order db child with
           | Some o -> (
               let eligible =
-                match dir with
-                | `Left -> String.compare o block_order < 0
-                | `Right -> String.compare o block_order > 0
+                (* cljs compares child-order against nil too — a block
+                   without order has every ordered child to its right. *)
+                match dir, block_order with
+                | `Left, Some bo -> String.compare o bo < 0
+                | `Right, Some bo -> String.compare o bo > 0
+                | `Left, None -> false
+                | `Right, None -> true
               in
               if (not eligible) || non_ordinary_child db child then best
               else
@@ -454,19 +456,30 @@ let get_right_sibling (block : entity) : entity option =
    sort_by_order would materialize every child's full attr set. *)
 let get_down (block : entity) : entity option =
   let db = block.db in
-  Seq.fold_left
-    (fun best (d : datom) ->
-      let c = d.e in
-      match live_order db c with
-      | Some o when not (non_ordinary_child db c) -> (
-          match best with
-          | Some (be, bo) when String.compare o bo > 0 || (o = bo && c > be) ->
-              best
-          | _ -> Some (c, o))
-      | _ -> best)
-    None
-    (datoms db Avet ~a:"block/parent" ~v:(Ref block.id) ())
-  |> (function Some (c, _) -> ent_of_id db c | None -> None)
+  (* cljs sort-by-order puts nil orders first, stable — an unordered
+     ordinary child (first in e order) wins over every ordered one. *)
+  let unordered, ordered =
+    Seq.fold_left
+      (fun (unord, ord) (d : datom) ->
+        let c = d.e in
+        if non_ordinary_child db c then (unord, ord)
+        else
+          match live_order db c with
+          | None -> (match unord with Some _ -> (unord, ord) | None -> (Some c, ord))
+          | Some o -> (
+              match ord with
+              | Some (be, bo)
+                when String.compare o bo < 0 || (o = bo && c < be) ->
+                  (unord, Some (c, o))
+              | Some _ -> (unord, ord)
+              | None -> (unord, Some (c, o))))
+      (None, None)
+      (datoms db Avet ~a:"block/parent" ~v:(Ref block.id) ())
+  in
+  (match unordered, ordered with
+   | Some c, _ -> ent_of_id db c
+   | None, Some (c, _) -> ent_of_id db c
+   | None, None -> None)
 
 let ref_v_to_ref = function
   | Int64 id -> Entity_id (Datascript.Util.int64_to_int_exn "entity id" id)
@@ -633,30 +646,29 @@ let get_block_last_direct_child_id db ?(not_collapsed = false)
       else
         (* max live :block/order among the parent's eligible children —
            datom-level scan: parent_children would materialize every
-           child's full attr set. *)
+           child's full attr set. cljs sort-by puts nil orders first, so
+           an unordered child is only ever last when no ordered child
+           exists — then the last child in e order wins. *)
         Seq.fold_left
-          (fun best (d : datom) ->
+          (fun (ord, unord) (d : datom) ->
             let c = d.e in
-            match Seq.uncons (datoms db Eavt ~e:c ~a:"block/order" ()) with
-            | Some ({ v = String o; _ }, _)
-              when not
-                     (Option.is_some
-                        (Seq.uncons
-                           (datoms db Eavt ~e:c
-                              ~a:"logseq.property/created-from-property" ()))
-                      || Option.is_some
-                           (Seq.uncons
-                              (datoms db Eavt ~e:c
-                                 ~a:"block/closed-value-property" ()))) -> (
-                match best with
-                | Some (be, bo)
-                  when String.compare o bo > 0 || (o = bo && c > be) ->
-                    Some (c, o)
-                | _ -> best)
-            | _ -> best)
-          None
+            if non_ordinary_child db c then (ord, unord)
+            else
+              match live_order db c with
+              | None -> (ord, Some c)
+              | Some o -> (
+                  match ord with
+                  | Some (be, bo)
+                    when String.compare o bo > 0 || (o = bo && c > be) ->
+                      (Some (c, o), unord)
+                  | Some _ -> (ord, unord)
+                  | None -> (Some (c, o), unord)))
+          (None, None)
           (datoms db Avet ~a:"block/parent" ~v:(Ref block_id) ())
-        |> Option.map fst
+        |> (function
+            | Some (c, _), _ -> Some c
+            | None, Some c -> Some c
+            | None, None -> None)
 
 (* ldb/get-block-and-children — preorder list of entity and its
    descendants. include-property-block? also walks each child's
@@ -948,22 +960,26 @@ let page_empty (db : db) (page_id : entity_id) : bool =
 let get_first_child db (id : entity_id) : entity option =
   match counted_entity db (Entity_id id) with
   | Some e ->
+      (* same nil-first rule as get_down, over the raw unfiltered
+         children *)
       Seq.fold_left
-        (fun best (d : datom) ->
+        (fun (unord, ord) (d : datom) ->
           let c = d.e in
           match Seq.uncons (datoms db Eavt ~e:c ~a:"block/order" ()) with
           | Some ({ v = String o; _ }, _) -> (
-              match best with
+              match ord with
               | Some (be, bo)
-                when String.compare o bo > 0 || (o = bo && c > be) ->
-                  best
-              | _ -> Some (c, o))
-          | _ -> best)
-        None
+                when String.compare o bo < 0 || (o = bo && c < be) ->
+                  (unord, Some (c, o))
+              | Some _ -> (unord, ord)
+              | None -> (unord, Some (c, o)))
+          | _ -> (match unord with Some _ -> (unord, ord) | None -> (Some c, ord)))
+        (None, None)
         (datoms db Avet ~a:"block/parent" ~v:(Ref e.id) ())
       |> (function
-           | Some (c, _) -> counted_entity db (Entity_id c)
-           | None -> None)
+           | Some c, _ -> counted_entity db (Entity_id c)
+           | None, Some (c, _) -> counted_entity db (Entity_id c)
+           | None, None -> None)
   | None -> None
 
 (* ldb/get-orphaned-pages — pages with no refs left, empty or containing a
