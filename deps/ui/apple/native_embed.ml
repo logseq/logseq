@@ -231,6 +231,7 @@ let platform_event payload =
   | None -> ()
 
 let dispose () : string =
+  Daemon_client.kill_all ();
   Queue.clear pending_batches;
   (match !current_app with
    | Some app ->

@@ -197,6 +197,14 @@ let ensure_graph_created (repo : string) : unit =
 
 let spawned : (string, int) Hashtbl.t = Hashtbl.create 4
 
+(* app shutdown: stop every daemon we spawned so the repo lock is
+   released before the process exits (a live daemon keeps the graph
+   locked and the next launch fails admission) *)
+let kill_all () =
+  Hashtbl.iter (fun _ pid -> try Unix.kill pid Sys.sigterm with _ -> ())
+    spawned;
+  Hashtbl.clear spawned
+
 (* spawn main.exe for [repo] (canonical "logseq_db_<name>"), wait for it
    to publish its port. Returns base-url. Blocking — caller runs this on
    a systhread. *)

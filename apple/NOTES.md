@@ -209,3 +209,12 @@ view/model stack via the LUI Apple backend).
   `curl -X POST localhost:<port>/v1/invoke -d '{"method":"thread-api/get-page-blocks-tree","argsTransit":"[\"logseq_db_Demo\",\"~u<page-uuid>\",null]"}'`;
   transit responses use `^N` cached-ref dedup, so literal-string greps
   miss repeated keys.
+
+### Daemon lifecycle: quit must stop the spawned worker
+- Cmd+Q terminates the app without running SwiftUI onDisappear, so
+  `runtime.stop()` never ran and `logseq-db-worker` survived — it kept
+  the graph locked and the next launch failed admission with
+  `repo-locked: Graph ownership is locked` (stuck at "Select a Graph").
+  `applicationWillTerminate` now calls `LogseqRuntime.terminateActive()`
+  → `lui_ocaml_dispose` → `Daemon_client.kill_all` SIGTERMs every
+  spawned pid.

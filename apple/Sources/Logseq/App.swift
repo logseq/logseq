@@ -81,5 +81,9 @@ private struct LogseqRuntimeHost: View {
   }
 
   func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
+
+  func applicationWillTerminate(_ notification: Notification) {
+    LogseqRuntime.terminateActive()
+  }
   func applicationSupportsSecureRestorableState(_ app: NSApplication) -> Bool { true }
 }
