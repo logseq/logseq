@@ -205,6 +205,11 @@
                 worker-returned-at (now-ms)
                 current-context? (and (= request-repo (state/get-current-repo))
                                       (= request-route (state/get-route-match)))
+                ;; A route/repo change skips inserted-block-edit-fn, which is
+                ;; what normally consumes :editor/pending-new-block.
+                _ (when (and (:editor/edit-block-fn opts')
+                             (not current-context?))
+                    (state/set-state! :editor/pending-new-block nil))
                 publish? (or delta
                              (and current-context?
                                   (:editor/edit-block-fn opts')))
