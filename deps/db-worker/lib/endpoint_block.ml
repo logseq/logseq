@@ -726,6 +726,48 @@ let membership_row_attr_map db (child_id : entity_id) : (attr * value) list =
          if List.mem d.a membership_row_attrs then Some (d.a, d.v)
          else None)
 
+(* Sibling eids cluster on imported graphs, so one bounded eavt range scan
+   covers a whole child list; scattered children fall back to their own
+   bounded slices. *)
+let children_membership_attrs db (child_ids : entity_id list)
+    : (entity_id, (attr * value) list) Hashtbl.t =
+  let tbl = Hashtbl.create (List.length child_ids + 8) in
+  (match child_ids with
+   | [] -> ()
+   | _ -> (
+       let lo = List.fold_left min max_int child_ids in
+       let hi = List.fold_left max min_int child_ids in
+       let covered =
+         if hi - lo + 1 <= 4096 then (
+           let wanted = Hashtbl.create (List.length child_ids) in
+           List.iter (fun eid -> Hashtbl.replace wanted eid ()) child_ids;
+           let seen = Hashtbl.create (List.length child_ids) in
+           let scanned = ref 0 in
+           (try
+              Seq.iter
+                (fun (d : datom) ->
+                  if d.e > hi then raise Exit;
+                  if Hashtbl.mem wanted d.e then (
+                    incr scanned;
+                    if !scanned > 16384 then raise Exit;
+                    Hashtbl.replace seen d.e ();
+                    if List.mem d.a membership_row_attrs then
+                      let prev =
+                        Option.value (Hashtbl.find_opt tbl d.e) ~default:[]
+                      in
+                      Hashtbl.replace tbl d.e ((d.a, d.v) :: prev)))
+                (seek_datoms db Eavt ~e:lo ())
+            with Exit -> ());
+           fun eid -> Hashtbl.mem seen eid)
+         else fun _ -> false
+       in
+       List.iter
+         (fun eid ->
+           if covered eid then ()
+           else Hashtbl.replace tbl eid (membership_row_attr_map db eid))
+         child_ids));
+  tbl
+
 let recycled_chain db (entity_id : entity_id) : bool =
   let rec loop eid seen =
     if List.mem eid seen then false
@@ -753,17 +795,21 @@ type membership_child =
   ; mc_collapsed : bool
   }
 
-let membership_row db (parent_uuid : string) (parent_recycled : bool)
-    (child_id : entity_id) : membership_child option =
-  let attrs = membership_row_attr_map db child_id in
-  let has a = List.mem_assoc a attrs in
-  if
-    parent_recycled || has "logseq.property/deleted-at"
-    || has "block/closed-value-property"
-    || has "logseq.property/created-from-property"
+let membership_row (parent_uuid : string) (parent_recycled : bool)
+    (child_id : entity_id) (attrs : (attr * value) list) :
+    membership_child option =
+  (* created-from-property linkage blocks dominate raw block/parent slices
+     on imported graphs *)
+  if parent_recycled || List.mem_assoc "logseq.property/created-from-property" attrs
   then None
   else
-    let child_uuid = List.assoc_opt "block/uuid" attrs in
+    let has a = List.mem_assoc a attrs in
+    if
+      has "logseq.property/deleted-at"
+      || has "block/closed-value-property"
+    then None
+    else
+      let child_uuid = List.assoc_opt "block/uuid" attrs in
     let order = List.assoc_opt "block/order" attrs in
     (match child_uuid with
      | Some (Uuid u) -> (
@@ -827,10 +873,19 @@ let parent_membership db (parent_uuid : string) (parent_id : entity_id)
     | Int64 n -> Datascript.Util.int64_to_int_exn "block tx id" n
     | _ -> assert false
   in
+  let child_ids =
+    List.of_seq (datoms db Avet ~a:"block/parent" ~v:(Ref parent_id) ())
+    |> List.map (fun (d : datom) -> d.e)
+  in
+  let attrs_by_eid = children_membership_attrs db child_ids in
   ( parent_tx_id
-  , List.of_seq (datoms db Avet ~a:"block/parent" ~v:(Ref parent_id) ())
-    |> List.filter_map (fun (d : datom) ->
-           membership_row db parent_uuid parent_recycled d.e)
+  , List.filter_map
+      (fun child_id ->
+        let attrs =
+          Option.value (Hashtbl.find_opt attrs_by_eid child_id) ~default:[]
+        in
+        membership_row parent_uuid parent_recycled child_id attrs)
+      child_ids
     |> List.stable_sort (fun a b ->
            Db_order.compare_order a.mc_order b.mc_order)
   )
@@ -891,17 +946,18 @@ let open_children_tree db (root_uuid : string) ?(node_limit : int option)
 (* document-order-uuids — first `limit` uuids in render order *)
 let document_order_uuids (children : (string * (int * membership_child list)) list)
     (root_uuid : string) (limit : int) : string list =
-  let items_of u =
-    match List.assoc_opt u children with
-    | Some (_, rows) -> List.map (fun r -> r.mc_uuid) rows
-    | None -> []
-  in
+  let by_uuid = Hashtbl.create (List.length children + 8) in
+  List.iter
+    (fun (u, (_, rows)) ->
+      Hashtbl.replace by_uuid u (List.map (fun r -> r.mc_uuid) rows))
+    children;
+  let items_of u = Option.value (Hashtbl.find_opt by_uuid u) ~default:[] in
   let rec loop pending n result =
     match pending with
-    | [] -> result
+    | [] -> List.rev result
     | uuid :: rest ->
-        if n <= 0 then result
-        else loop (items_of uuid @ rest) (n - 1) (result @ [ uuid ])
+        if n <= 0 then List.rev result
+        else loop (items_of uuid @ rest) (n - 1) (uuid :: result)
   in
   loop [ root_uuid ] limit []
 

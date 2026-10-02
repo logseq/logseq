@@ -773,7 +773,7 @@ let canonical_block ~(cache : batch_cache) (db : db)
   Wire.Map block'
 
 (* canonical-blocks — {:basis-rev :groups :blocks} *)
-let canonical_blocks (db : db) (block_uuids : Wire.t list) : Wire.t =
+let canonical_blocks (db : db) ?cache (block_uuids : Wire.t list) : Wire.t =
   let requested =
     List.filter_map
       (fun w ->
@@ -786,7 +786,7 @@ let canonical_blocks (db : db) (block_uuids : Wire.t list) : Wire.t =
             fail_render_read "Invalid canonical block UUID" [])
       block_uuids
   in
-  let cache = new_batch_cache () in
+  let cache = match cache with Some c -> c | None -> new_batch_cache () in
   let groups =
     List.map
       (fun (u, _) ->
@@ -803,4 +803,6 @@ let canonical_blocks (db : db) (block_uuids : Wire.t list) : Wire.t =
     ; (kw "groups", Wire.Map groups)
     ; (kw "blocks", Wire.Map blocks) ]
 
-let () = Sync_deps.canonical_blocks_fn := Some canonical_blocks
+let () =
+  Sync_deps.canonical_blocks_fn :=
+    Some (fun db block_uuids -> canonical_blocks db block_uuids)
