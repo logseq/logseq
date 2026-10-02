@@ -339,10 +339,12 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
     [ dom ~key:"pt-inner" ~style_class:"w-full relative"
         [ dom ~key:"pt-block"
             ~style_class_signal:
-              (Logseq_dom.class_signal (S.signal ()) (fun (st : S.t) ->
+              (Signal.map
+                 (fun (st : S.t) ->
                    if S.String_set.mem uuid st.S.selected then
                      "selected ls-block"
-                   else "ls-block"))
+                   else "ls-block")
+                 (S.signal ()))
             ~id:("ls-block-" ^ uuid)
             ~attrs:
               [ ("blockid", uuid); ("containerid", uuid)
