@@ -75,6 +75,100 @@
       {:found true :block_uuid block-uuid :block block})
     {:found false :block_uuid block-uuid :block nil}))
 
+(def ^:private max-fuzzy-titles 2000)
+
+(defn grouping-key
+  [title mode]
+  (if (= mode "exact")
+    title
+    (let [words (-> title
+        string/lower-case
+        (string/replace #"[^\w\s]+" " ")
+        (string/replace #"\s+" " ")
+        string/trim
+        (string/split #" "))]
+   (string/join " "
+          (map (fn [word]
+           (cond
+             (and (> (count word) 4) (string/ends-with? word "es"))
+             (subs word 0 (- (count word) 2))
+
+             (and (> (count word) 3)
+               (string/ends-with? word "s")
+               (not (string/ends-with? word "ss")))
+             (subs word 0 (dec (count word)))
+
+             :else word))
+            words)))))
+
+(defn- within-edit-distance?
+  [left right allowed]
+  (let [left-count (count left)
+        right-count (count right)]
+    (if (> (js/Math.abs (- left-count right-count)) allowed)
+      false
+      (loop [i 0
+             previous (vec (range (inc right-count)))]
+        (if (= i left-count)
+          (<= (peek previous) allowed)
+          (let [current (loop [j 0
+                               row [(inc i)]]
+                          (if (= j right-count)
+                            row
+                            (let [cost (if (= (.charAt left i) (.charAt right j)) 0 1)
+                                  value (min (inc (nth previous (inc j)))
+                                             (inc (peek row))
+                                             (+ (nth previous j) cost))]
+                              (recur (inc j) (conj row value)))))]
+            (if (> (apply min current) allowed)
+              false
+              (recur (inc i) current))))))))
+
+(defn- group-title-candidates
+  [candidates normalize]
+  (let [buckets (reduce (fn [result candidate]
+                          (update result (grouping-key (:title candidate) normalize)
+                                  (fnil conj []) candidate))
+                        {}
+                        candidates)
+        initial-groups (->> buckets vals (filter #(> (count %) 1)) vec)]
+    (if-not (= normalize "fuzzy")
+      initial-groups
+      (do
+        (when (> (count candidates) max-fuzzy-titles)
+          (throw (js/Error.
+                  (str (count candidates) " titles exceeds the " max-fuzzy-titles
+                       " limit for edit-distance matching, which compares every pair. Use normalize=loose."))))
+        (let [keys (vec (keys buckets))
+              adjacency (reduce (fn [result key]
+                                  (assoc result key #{key}))
+                                {}
+                                keys)
+              adjacency (reduce (fn [result [left-index left]]
+                                  (reduce (fn [result right]
+                                            (let [allowed (if (< (min (count left) (count right)) 8) 1 2)]
+                                              (if (within-edit-distance? left right allowed)
+                                                (-> result
+                                                    (update left (fnil conj #{}) right)
+                                                    (update right (fnil conj #{}) left))
+                                                result)))
+                                          result
+                                          (subvec keys (inc left-index))))
+                                adjacency
+                                (map-indexed vector keys))]
+          (loop [remaining keys
+                 seen #{}
+                 groups []]
+            (if-let [key (first remaining)]
+              (if (contains? seen key)
+                (recur (rest remaining) seen groups)
+                (let [cluster (get adjacency key)
+                      members (vec (mapcat buckets cluster))]
+                  (recur (rest remaining)
+                         (into seen cluster)
+                         (cond-> groups (> (count members) 1) (conj members)))))
+              groups)))))))
+
 (def ^:private page-details
   #{"page" "blocks" "tags" "properties" "declared" "all"})
 
@@ -738,6 +832,114 @@
                               (str " Counts cover the first " (count rows) " of " total
                                    "; raise or set limit for a different slice, or use pageStats for specific pages.")))})))))
 
+(defn- classify-duplicate-title-group
+  [members own empty refs aliased]
+  (let [detailed (mapv (fn [member]
+                         (let [id (:id member)
+                               own-blocks (get own id 0)]
+                           (-> (dissoc member :id)
+                               (assoc :own_blocks own-blocks
+                                      :content_blocks (- own-blocks (get empty id 0))
+                                      :block_refs (get refs id 0)
+                                      :alias (contains? aliased id)))))
+                       members)
+        titles (->> detailed (map :title) set sort vec)
+        with-content (filterv #(pos? (:content_blocks %)) detailed)
+        empty-members (filterv #(zero? (:content_blocks %)) detailed)
+        stubs (filterv #(zero? (:block_refs %)) empty-members)
+        referenced (filterv #(pos? (:block_refs %)) empty-members)
+        same-title? (= 1 (count titles))]
+    (cond
+      (some :alias detailed)
+      {:titles titles
+       :members detailed
+       :classification "alias"
+       :rank 5
+       :reading "NOT a duplicate. At least one of these is in an alias relation, which is live resolution wiring and looks identical to an abandoned stub in every count. Deleting either side breaks resolution and cannot be repaired through this API. Leave it alone."}
+
+      (> (count with-content) 1)
+      {:titles titles
+       :members detailed
+       :classification "genuine_split"
+       :rank 4
+       :reading "Both sides hold content. Merging is a human decision -- read both pages. No tool should choose for you."}
+
+      (and (seq with-content) (seq stubs) (empty? referenced))
+      {:titles titles
+       :members detailed
+       :classification "dead_stub"
+       :rank (if same-title? 0 1)
+       :reading (str (count stubs) " empty entity(s) with no BLOCK references, beside one holding content. The safest class -- but block_refs does not count tag holders or property values, so run pageStats on the specific page before recycling it, and remember a recycled page keeps its title.")}
+
+      (and (seq with-content) (seq referenced))
+      {:titles titles
+       :members detailed
+       :classification "split_identity"
+       :rank 2
+       :reading "One side is empty but REFERENCED, the other holds the content. Recycling the empty one strands its inbound references. If it is the empty side holding the title you want, retitleOverDuplicate moves the title in two renames without touching a block."}
+
+      :else
+      {:titles titles
+       :members detailed
+       :classification (if same-title? "both_empty" "near_title")
+       :rank 3
+       :reading "Similar titles, and nothing here distinguishes them by content or references. They may be two intentional pages: a plural and a singular, or two short words one character apart. Read them before assuming otherwise."})))
+
+(defn find-duplicate-titles
+  [api-fn args]
+  (let [normalize (or (aget args "normalize") "loose")
+        include-recycled? (not (false? (aget args "include_recycled")))]
+    (when-not (contains? #{"exact" "loose" "fuzzy"} normalize)
+      (throw (js/Error. "normalize must be exact, loose, or fuzzy")))
+    (p/let [page-class (api-fn "logseq.DB.datascriptQuery"
+                               ["[:find ?class . :where [?class :db/ident :logseq.class/Page]]"])
+            tag-class (api-fn "logseq.DB.datascriptQuery"
+                              ["[:find ?class . :where [?class :db/ident :logseq.class/Tag]]"])
+            inventory-result (api-fn "logseq.DB.datascriptQuery"
+                                     ["[:find [(pull ?e [:db/id :block/uuid :block/title :block/name :logseq.property/deleted-at {:block/tags [:db/id]}]) ...] :in $ [?class ...] :where [?e :block/tags ?class]]"
+                                      #js [page-class tag-class]])
+            inventory (query-result-rows inventory-result)
+            candidates (->> inventory
+                            (keep (fn [entity]
+                                    (let [title (or (:title entity) (:block/title entity))
+                                          deleted-at (or (:logseq.property/deleted-at entity)
+                                                         (:deleted-at entity))
+                                          recycled? (some? deleted-at)
+                                          id (or (:id entity) (:db/id entity))
+                                          class-ids (set (keep #(or (:id %) (:db/id %))
+                                                               (or (:tags entity) (:block/tags entity))))]
+                                      (when (and (map? entity) (seq title) id
+                                                 (or include-recycled? (not recycled?)))
+                                        {:id id
+                                         :uuid (or (:uuid entity) (:block/uuid entity))
+                                         :title title
+                                         :kind (if (contains? class-ids tag-class) "tag" "page")
+                                         :recycled (boolean recycled?)}))))
+                            vec)
+            groups (group-title-candidates candidates normalize)]
+      (if (empty? groups)
+        {:normalize normalize
+         :titles_examined (count candidates)
+         :groups []
+         :diagnostic (str "No title collisions among " (count candidates)
+                          " pages and tags at this normalisation. Try normalize=fuzzy for typo pairs, which is off by default because it also matches legitimately distinct short titles.")}
+        (p/let [[own empty refs] (count-journals api-fn
+                                                 (mapv #(select-keys % [:id])
+                                                       (mapcat identity groups)))
+                alias-result (api-fn "logseq.DB.datascriptQuery"
+                                     ["[:find ?holder ?target :where (or-join [?holder ?target] [?holder :logseq.property/alias ?target] [?holder :block/alias ?target])] "])
+                alias-rows (js->clj alias-result :keywordize-keys true)
+                aliased (into #{} (mapcat identity) alias-rows)
+                reports (->> groups
+                             (map #(classify-duplicate-title-group % own empty refs aliased))
+                             (sort-by (juxt :rank (comp - count :members)))
+                             vec)]
+          {:normalize normalize
+           :titles_examined (count candidates)
+           :groups reports
+           :diagnostic (str (count reports) " group(s) among " (count candidates)
+                            " pages and tags. Ranked cheapest-certainty first; `alias` and `genuine_split` groups are NOT actionable and are ranked last. `block_refs` counts :block/refs ONLY -- tag holders and property values are inbound references too and are not counted here, so a 0 does not mean nothing points at the page; pageStats reports all three. Nothing here has been changed, and no classification is an instruction -- confirm a symptom in the Logseq UI before any write.")})))))
+
 (defn list-tags
   [call-api-fn args]
   (call-api-fn "logseq.cli.listTags" [#js {:expand (aget args "expand")}]))
@@ -771,6 +973,7 @@
    :findBacklinks ["logseq.DB.datascriptQuery"]
    :findOrphans ["logseq.DB.datascriptQuery"]
    :isTitleAvailable ["logseq.DB.datascriptQuery"]
+  :findDuplicateTitles ["logseq.DB.datascriptQuery"]
    :listRecycled ["logseq.DB.datascriptQuery"]
    :listStatus ["logseq.DB.datascriptQuery"]
    :listClosedValues ["logseq.DB.datascriptQuery"]

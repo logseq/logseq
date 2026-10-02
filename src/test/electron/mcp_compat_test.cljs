@@ -119,6 +119,23 @@
                     (is (= {:found false :block_uuid "missing" :block nil}
                           (mcp-compat/block-result "missing" []))))
 
+                    (deftest duplicate-title-grouping-modes-preserve-their-contracts
+                      (is (= "Loom-Weaver" (mcp-compat/grouping-key "Loom-Weaver" "exact")))
+                      (is (not= (mcp-compat/grouping-key "Loom-Weaver" "exact")
+                           (mcp-compat/grouping-key "Loom Weaver" "exact")))
+                      (is (= (mcp-compat/grouping-key "Loom-Weaver" "loose")
+                        (mcp-compat/grouping-key "loom weaver" "loose")))
+                      (is (= (mcp-compat/grouping-key "Threads" "loose")
+                        (mcp-compat/grouping-key "Thread" "loose")))
+                      (is (= "class" (mcp-compat/grouping-key "Classes" "loose")))
+                      (is (= "its" (mcp-compat/grouping-key "Its" "loose"))))
+
+                    (deftest duplicate-title-fuzzy-groups-near-misses-only-in-fuzzy-mode
+                      (let [candidates [{:title "Persuade" :uuid "one"}
+                              {:title "Presuade" :uuid "two"}]]
+                        (is (= [] (#'mcp-compat/group-title-candidates candidates "loose")))
+                        (is (= 1 (count (#'mcp-compat/group-title-candidates candidates "fuzzy"))))))
+
   (deftest block-tree-result-applies-bounds
     (let [result (mcp-compat/block-tree-result
                   "root"
@@ -401,3 +418,58 @@
                         (mcp-compat/inspect-page (fn [& _] nil)
                                                 #js {"page_uuid" "00000000-0000-4000-8000-000000000012"
                                        "detail" "everything"}))))
+
+(deftest find-duplicate-titles-reports-dead-stubs-aliases-and-recycled-pages
+  (let [calls (atom [])
+        aliases (atom #js [])
+        inventory #js [#js {"id" 10
+                            "uuid" "00000000-0000-4000-8000-000000000010"
+                            "title" "Creativity"
+                            "name" "creativity"
+                            "tags" #js [#js {"id" 1}]}
+                       #js {"id" 11
+                            "uuid" "00000000-0000-4000-8000-000000000011"
+                            "title" "Creativity"
+                            "name" "creativity"
+                            "logseq.property/deleted-at" 100
+                            "tags" #js [#js {"id" 1}]}]
+        api (fn [method args]
+              (swap! calls conj [method args])
+              (let [query (first args)]
+                (cond
+                  (string/includes? query ":logseq.class/Page") 1
+                  (string/includes? query ":logseq.class/Tag") 2
+                  (string/includes? query "pull ?e") inventory
+                  (string/includes? query "or-join") @aliases
+                  (string/includes? query ":block/title \"\"") #js []
+                  (string/includes? query "(count ?block)") #js [#js [10 2] #js [11 0]]
+                  (string/includes? query "(count ?holder)") #js []
+                  :else nil)))]
+    (async done
+      (-> (p/let [dead-stub (mcp-compat/find-duplicate-titles api #js {"normalize" "exact"})
+                  _ (reset! aliases #js [#js [9 11]])
+                  alias-group (mcp-compat/find-duplicate-titles api #js {"normalize" "exact"})
+                  _ (reset! aliases #js [])
+                  live-only (mcp-compat/find-duplicate-titles
+                             api #js {"normalize" "exact" "include_recycled" false})]
+            [dead-stub alias-group live-only])
+          (p/then (fn [[dead-stub alias-group live-only]]
+                    (let [stub-group (first (:groups dead-stub))
+                          alias-group (first (:groups alias-group))]
+                      (is (= "dead_stub" (:classification stub-group)))
+                      (is (= 0 (:rank stub-group)))
+                      (is (true? (some :recycled (:members stub-group))))
+                      (is (= "alias" (:classification alias-group)))
+                      (is (= 5 (:rank alias-group)))
+                      (is (= 1 (:titles_examined live-only)))
+                      (is (= [] (:groups live-only)))
+                      (is (every? #(= "logseq.DB.datascriptQuery" (first %)) @calls)))
+                    (done)))
+          (p/catch (fn [error]
+                     (is false (str error))
+                     (done)))))))
+
+(deftest find-duplicate-titles-rejects-unknown-normalization
+  (is (thrown-with-msg? js/Error #"normalize must be exact, loose, or fuzzy"
+                        (mcp-compat/find-duplicate-titles
+                         (fn [& _] nil) #js {"normalize" "aggressive"}))))

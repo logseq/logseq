@@ -215,6 +215,12 @@
     :config #js {:title "Is Title Available"
                  :description "Check whether a title is held by any graph entity."
                  :inputSchema #js {:title (z/string)}}}
+  :findDuplicateTitles
+  {:fn mcp-compat/find-duplicate-titles
+   :config #js {:title "Find Duplicate Titles"
+                :description "Report and rank similar page/tag titles with content, block-reference, recycled, and alias evidence. This tool never changes data."
+                :inputSchema #js {:normalize (-> (z/enum #js ["exact" "loose" "fuzzy"]) .optional)
+                                  :include_recycled (-> (z/boolean) .optional)}}}
    :listRecycled
    {:fn mcp-compat/list-recycled
     :config #js {:title "List Recycled"
