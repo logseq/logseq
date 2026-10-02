@@ -200,6 +200,22 @@ let test_kv_store_preserves_uint8array_values_across_reloads () =
           check "loaded a" (loaded_a = Some value);
           check "loaded b" (loaded_b = Some value)))
 
+(* The string-typed [get] must stay usable on keys holding binaries:
+   the value comes back b64:-wrapped so kv_get_impl can decode it into
+   Wire.Binary instead of mistyping the bytes as a string. *)
+let test_get_on_binary_key_returns_b64_wrapped () =
+  with_tmp_dir (fun kv_dir ->
+      with_env "LOGSEQ_WORKER_KV_DIR" (Some kv_dir) (fun () ->
+          let key = "rtc-encrypted-aes-key###graph-1" in
+          let value = "\001\002\003\255" in
+          await (Idb.set_binary key value);
+          let loaded = await (Idb.get key) in
+          match loaded with
+          | Some s when String.length s > 4 && String.sub s 0 4 = "b64:" ->
+              check "b64 prefix" true;
+              check "round-trip" (await (Idb.get_binary key) = Some value)
+          | _ -> check "b64-wrapped binary" false))
+
 (* ---------- sqlite ops ---------- *)
 
 let open_test_db name =
@@ -428,6 +444,8 @@ let cases =
     , test_node_platform_cli_owner_uses_keychain_when_present
     ; "kv-store-preserves-uint8array-values-across-reloads-test"
     , test_kv_store_preserves_uint8array_values_across_reloads
+    ; "kv-store-get-on-binary-key-returns-b64-wrapped"
+    , test_get_on_binary_key_returns_b64_wrapped
     ; "exec-sql-string-creates-schema-and-writes-data"
     , test_exec_sql_string_creates_schema_and_writes_data
     ; "exec-row-mode-array-returns-index-addressable-rows"
