@@ -241,3 +241,58 @@
 (deftest list-journals-rejects-non-positive-limits
   (is (thrown-with-msg? js/Error #"limit must be a positive integer"
                         (mcp-compat/list-journals (fn [& _] nil) #js {"limit" 0}))))
+
+(deftest page-stats-counts-subtree-references-and-aliases
+  (let [page-uuid "00000000-0000-4000-8000-000000000001"
+        calls (atom [])
+        tree #js {"id" 10
+                  "name" "page"
+                  "_parent" #js [#js {"id" 11
+                                      "page" #js {"id" 10}
+                                      "_parent" #js [#js {"id" 12
+                                                          "name" "nested"
+                                                          "page" #js {"id" 10}
+                                                          "_parent" #js [#js {"id" 13
+                                                                              "page" #js {"id" 12}}]}]}
+                                 #js {"id" 14 "page" #js {"id" 99}}]}
+        api (fn [_method args]
+              (let [query (first args)]
+                (swap! calls conj query)
+                (cond
+                  (string/includes? query "pull ?entity [*]")
+                  #js {"id" 10 "uuid" page-uuid "name" "page" "title" "Page"}
+                  (string/includes? query "block/_parent") tree
+                  (string/includes? query "?holder")
+                  #js [#js {"uuid" "00000000-0000-4000-8000-000000000002"}]
+                  (string/includes? query "?alias")
+                  #js [#js {"uuid" "00000000-0000-4000-8000-000000000003"}]
+                  (string/includes? query "count ?b") (if (string/includes? query "block/title") 1 4)
+                  (string/includes? query "count ?e") (if (string/includes? query "block/refs") 2 1)
+                  (string/includes? query "?class :db/ident") 90
+                  (string/includes? query "?attr")
+                  #js [#js [#js {"ident" "user.property/target"} 20]
+                       #js [#js {"ident" "parent"} 21]]
+                  :else nil)))]
+    (async done
+      (p/then (mcp-compat/page-stats api #js {"page_uuid" page-uuid})
+              (fn [result]
+                (is (= page-uuid (:page_uuid result)))
+                (is (= "Page" (:title result)))
+                (is (= 4 (:own_blocks result)))
+                (is (= 1 (:empty_blocks result)))
+                (is (= 3 (:content_blocks result)))
+                (is (= 4 (:subtree_blocks result)))
+                (is (= 1 (:nested_pages result)))
+                (is (= 1 (:true_orphans result)))
+                (is (= 2 (:refs result)))
+                (is (= 1 (:tag_holders result)))
+                (is (= 1 (:property_values result)))
+                (is (= "00000000-0000-4000-8000-000000000002" (:is_alias_of result)))
+                (is (= ["00000000-0000-4000-8000-000000000003"] (:aliases result)))
+                (is (string/includes? (:diagnostic result) "ALIAS RELATION"))
+                (is (= 10 (count @calls)))
+                (done))))))
+
+(deftest page-stats-validates-page-uuid-before-querying
+  (is (thrown-with-msg? js/Error #"page_uuid must be a UUID"
+                        (mcp-compat/page-stats (fn [& _] nil) #js {"page_uuid" "not-a-uuid"}))))

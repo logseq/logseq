@@ -209,6 +209,11 @@
     :config #js {:title "Get Page UUID"
                  :description "Resolve a unique live page title to its UUID."
                  :inputSchema #js {:title (z/string)}}}
+  :pageStats
+  {:fn mcp-compat/page-stats
+   :config #js {:title "Page Stats"
+            :description "Return fixed-size counts for page blocks, nested pages, orphans, inbound references, property values, and alias relations."
+            :inputSchema #js {:page_uuid (z/string)}}}
    :getTagUUID
    {:fn mcp-compat/get-tag-uuid
     :config #js {:title "Get Tag UUID"
