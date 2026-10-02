@@ -2428,7 +2428,10 @@ let first_window_row_preview db (block_uuid : string) : (Wire.t * Wire.t) option
             [ (kw "block/uuid", Wire.Uuid block_uuid)
             ; (kw "db/id", Wire.Int e.id)
             ; ( kw "block/title"
-              , match Render_snapshot.renderer_display_title db e.id with
+              , match
+                  Render_snapshot.renderer_display_title db
+                    (Ldb.value e "block/title") e.id
+                with
                 | Some t -> Wire.String t
                 | None -> Wire.Nil )
             ; (kw "block.temp/first-window-preview?", Wire.Bool true) ] )
