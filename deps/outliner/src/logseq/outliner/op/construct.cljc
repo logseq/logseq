@@ -748,11 +748,7 @@
                          (remove nil? resolved-entities))
         selected-ids (set (map :db/id entities))
         has-selected-ancestor? (fn [ent]
-                                 (loop [parent (:block/parent ent)]
-                                   (if-let [parent-id (some-> parent :db/id)]
-                                     (or (contains? selected-ids parent-id)
-                                         (recur (:block/parent parent)))
-                                     false)))]
+                                 (ldb/some-parent ent #(contains? selected-ids (:db/id %))))]
     {:roots (->> entities
                  (remove has-selected-ancestor?)
                  vec)
@@ -928,10 +924,7 @@
   (let [blocks (mapv #(block-entity db %) ids)
         selected-ids (set (keep :db/id blocks))
         has-selected-ancestor? (fn [ent]
-                                 (loop [parent (:block/parent ent)]
-                                   (when-let [parent-id (some-> parent :db/id)]
-                                     (or (contains? selected-ids parent-id)
-                                         (recur (:block/parent parent))))))
+                                 (ldb/some-parent ent #(contains? selected-ids (:db/id %))))
         top-level-blocks (remove has-selected-ancestor? blocks)]
     (and (every? some? blocks)
          (seq top-level-blocks)

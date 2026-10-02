@@ -80,29 +80,20 @@
   (let [updated-at (common-util/time-ms)]
     (assoc block :block/updated-at updated-at)))
 
-(defn- selected-covering-ancestor?
-  "True when a selected ancestor covers `block`. `cover-ancestor?` is
-  (fn [block ancestor]) and decides whether that ancestor counts."
-  [selected-ids block cover-ancestor?]
-  (loop [parent (:block/parent block)
-         seen #{}]
-    (when-let [parent-id (:db/id parent)]
-      (when-not (contains? seen parent-id)
-        (or (and (contains? selected-ids parent-id)
-                 (cover-ancestor? block parent))
-            (recur (:block/parent parent) (conj seen parent-id)))))))
-
 (defn- filter-top-level-blocks
   ([db blocks]
    (filter-top-level-blocks db blocks (constantly true)))
   ([db blocks cover-ancestor?]
-   (let [->entity (fn [block]
-                    (if (de/entity? block) block (d/entity db (:db/id block))))
+   (let [blocks (map (fn [block]
+                       (if (de/entity? block) block (d/entity db (:db/id block))))
+                     blocks)
          selected-ids (set (keep :db/id blocks))]
-     (->> blocks
-          (remove (fn [block]
-                    (selected-covering-ancestor? selected-ids (->entity block) cover-ancestor?)))
-          (map ->entity)))))
+     (remove (fn [block]
+               (ldb/some-parent block
+                                (fn [parent]
+                                  (and (contains? selected-ids (:db/id parent))
+                                       (cover-ancestor? block parent)))))
+             blocks))))
 
 (defn- delete-covers-selected-ancestor?
   "A selected ancestor covers a block for delete when it is the direct parent

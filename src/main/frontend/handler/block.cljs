@@ -155,16 +155,6 @@
           {}
           (remove nil? nodes)))
 
-(defn- selected-ancestor?
-  "True when another selected block is an ancestor of `block`."
-  [selected-ids block]
-  (loop [parent (:block/parent block)
-         seen #{}]
-    (when-let [parent-id (:db/id parent)]
-      (when-not (contains? seen parent-id)
-        (or (contains? selected-ids parent-id)
-            (recur (:block/parent parent) (conj seen parent-id)))))))
-
 (defn get-top-level-blocks
   "Get only the top level blocks and their original blocks."
   [blocks]
@@ -178,7 +168,8 @@
         selected-original-blocks (selected-original-blocks-by-id
                                   (state/get-selection-blocks))]
     (->> (filter (fn [b] (= 1 (:block/level b))) level-blocks)
-         (remove #(selected-ancestor? selected-ids %))
+         (remove #(ldb/some-parent % (fn [parent]
+                                       (contains? selected-ids (:db/id parent)))))
          (map (fn [b]
                 (let [block-id (:block/uuid b)
                       original (or (:original-block b)

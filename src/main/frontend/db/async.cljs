@@ -94,9 +94,7 @@
                        [(get-else $ ?e :block/parent :none) ?parent]]
                      ids)
             seed-index (row-parent-index rows)
-            missing-parents (->> (vals seed-index)
-                                 (filter integer?)
-                                 (remove #(contains? seed-index %)))
+            missing-parents (remove seed-index (vals seed-index))
             extra-index (if (seq missing-parents)
                           (<parent-index graph missing-parents)
                           {})]
