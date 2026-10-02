@@ -327,11 +327,13 @@
     [(journal-identity-ref journal ref) nil]
     (if (new-page-ref? ref)
       (let [class? (contains? tag-names (:block/name ref))]
-        (if-let [page (and (not class?) (ldb/get-page db (:block/name ref)))]
-          [(if (ldb/journal? page)
-             (journal-identity-ref page ref)
-             (merge (select-keys page [:db/id :block/uuid :block/title :block/name :db/ident])
-                    (select-keys ref [:block.temp/original-page-name])))
+        (if-let [page (and (not class?)
+                           (when-let [e (ldb/get-page db (:block/name ref))]
+                             ;; Live journals already matched via existing-journal-page;
+                             ;; one found here is recycled, so create must restore it.
+                             (when-not (ldb/journal? e) e)))]
+          [(merge (select-keys page [:db/id :block/uuid :block/title :block/name :db/ident])
+                  (select-keys ref [:block.temp/original-page-name]))
            nil]
           (let [{:keys [page-uuid tx-data]} (outliner-page/create db (:block/title ref)
                                                                    {:uuid (:block/uuid ref)
