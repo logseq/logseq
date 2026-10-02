@@ -94,57 +94,37 @@ let drop_oversized_upload_datoms (datoms : datom list)
 let snapshot_rows_byte_length (rows : Wire.t list) : int =
   snapshot_frame_header_bytes + String.length (encode_snapshot_rows rows)
 
-(* max-prefix-rows-within-bytes — binary search *)
-let max_prefix_rows_within_bytes (rows : Wire.t list) max_bytes : int =
-  let n = List.length rows in
-  let rec take acc rem k =
-    if k <= 0 then List.rev acc
-    else
-      match rem with
-      | [] -> List.rev acc
-      | x :: xs -> take (x :: acc) xs (k - 1)
-  in
-  let rec bin low high best =
-    if low > high then best
-    else
-      let mid = (low + high) / 2 in
-      let size = snapshot_rows_byte_length (take [] rows mid) in
-      if size <= max_bytes then bin (mid + 1) high mid
-      else bin low (mid - 1) best
-  in
-  bin 1 n 0
-
+(* Greedy split by per-row encodes. A row encoded alone is never
+   smaller than inside the framed array (no cross-row transit cache), so
+   the estimate stays conservative and packing costs O(n) instead of
+   re-encoding prefixes in a binary search. A single row that does not
+   fit can never fit — fail fast. *)
 let split_snapshot_rows_by_max_bytes (rows : Wire.t list) max_bytes
     : Wire.t list list =
-  let rec loop remaining batches =
-    match remaining with
-    | [] -> List.rev batches
-    | _ ->
-        let prefix_count = max_prefix_rows_within_bytes remaining max_bytes in
-        if prefix_count > 0 then begin
-          let rec split acc rem n =
-            if n <= 0 then (List.rev acc, rem)
-            else
-              match rem with
-              | [] -> (List.rev acc, [])
-              | x :: xs -> split (x :: acc) xs (n - 1)
-          in
-          let batch, rest = split [] remaining prefix_count in
-          loop rest (batch :: batches)
-        end
-        else
-          match remaining with
-          | row :: _ ->
-              let row_size = snapshot_rows_byte_length [ row ] in
-              Sync_util.fail_fast "db-sync/snapshot-row-too-large"
-                (Wire.Map
-                   [ Wire.Keyword "max-bytes", Wire.Int max_bytes
-                   ; Wire.Keyword "row-size", Wire.Int row_size
-                   ; Wire.Keyword "addr"
-                   , (match row with Wire.Array (a :: _) -> a | _ -> row) ])
-          | [] -> List.rev batches
+  let emit batch batches =
+    match batch with
+    | [] -> batches
+    | _ -> List.rev batch :: batches
   in
-  loop rows []
+  let row_size (r : Wire.t) = snapshot_rows_byte_length [ r ] in
+  let rec loop remaining batches batch batch_size =
+    match remaining with
+    | [] -> List.rev (emit batch batches)
+    | row :: rest ->
+        let size = row_size row in
+        if batch_size + size <= max_bytes then
+          loop rest batches (row :: batch) (batch_size + size)
+        else if batch <> [] then
+          loop remaining (emit batch batches) [] 0
+        else
+          Sync_util.fail_fast "db-sync/snapshot-row-too-large"
+            (Wire.Map
+               [ Wire.Keyword "max-bytes", Wire.Int max_bytes
+               ; Wire.Keyword "row-size", Wire.Int size
+               ; Wire.Keyword "addr"
+               , (match row with Wire.Array (a :: _) -> a | _ -> row) ])
+  in
+  loop rows [] [] 0
 
 (* frame-bytes — 4-byte big-endian length header + payload *)
 let frame_bytes (data : string) : string =
@@ -180,26 +160,38 @@ let upload_snapshot_rows_batches (rows_batches : Wire.t list list)
     ~base ~graph_id ~first_batch ~finished ~checksum
     ~(auth_fetch : string -> (string * string) list -> string ->
         unit Db_worker_effect.t) : unit Db_worker_effect.t =
-  let rec loop remaining first_request =
-    match remaining with
-    | [] -> Db_worker_effect.pure ()
+  let remaining = ref rows_batches in
+  let first_request = ref first_batch in
+  let done_task, done_resolver = Db_worker_effect.wait () in
+  (* flat step driver — see stream_snapshot_row_batches *)
+  let rec step () : unit =
+    match !remaining with
+    | [] -> Db_worker_effect.wakeup done_resolver ()
     | batch :: rest ->
         let last_request = rest = [] in
         let finished_request = finished && last_request in
         let upload_url =
-          snapshot_upload_url base graph_id first_request finished_request
+          snapshot_upload_url base graph_id !first_request finished_request
             checksum
         in
-        snapshot_upload_body batch >>= fun (body, encoding) ->
-        let headers =
-          ("content-type", snapshot_content_type)
-          :: (match encoding with
-              | Some e -> [ ("content-encoding", e) ]
-              | None -> [])
-        in
-        auth_fetch upload_url headers body >>= fun () -> loop rest false
+        Db_worker_effect.on_any
+          (snapshot_upload_body batch
+           >>= fun (body, encoding) ->
+           let headers =
+             ("content-type", snapshot_content_type)
+             :: (match encoding with
+                 | Some e -> [ ("content-encoding", e) ]
+                 | None -> [])
+           in
+           auth_fetch upload_url headers body)
+          (fun () ->
+             remaining := rest;
+             first_request := false;
+             step ())
+          (fun e -> Db_worker_effect.reject done_resolver e)
   in
-  loop rows_batches first_batch
+  step ();
+  done_task
 
 (* <prepare-upload-temp-sqlite! *)
 let prepare_upload_temp_sqlite repo graph_id (source_conn : conn)
@@ -207,17 +199,18 @@ let prepare_upload_temp_sqlite repo graph_id (source_conn : conn)
     : Sqlite.db Db_worker_effect.t =
   let schema = Datascript.schema (Conn.db source_conn) in
   Sync_temp_sqlite.create_temp_sqlite_conn schema [] >>= fun (db, conn) ->
-  let datoms =
+  let datoms_seq () =
     datoms (Conn.db source_conn) Eavt ()
-    |> List.of_seq
-    |> List.filter (fun (d : datom) -> not (snapshot_local_only_attr d.a))
+    |> Seq.filter (fun (d : datom) -> not (snapshot_local_only_attr d.a))
   in
   let large_title_eids =
-    List.filter_map
-      (fun (d : datom) -> if Sync_large_title.large_title_datom d then Some d.e else None)
-      datoms
+    datoms_seq ()
+    |> Seq.filter_map (fun (d : datom) ->
+           if Sync_large_title.large_title_datom d then Some d.e else None)
+    |> List.of_seq
   in
-  Sync_large_title.process_upload_datoms_in_batches datoms
+  Sync_large_title.process_upload_datoms_in_batches (datoms_seq ())
+    ~total:(Seq.length (datoms_seq ()))
     ~batch_size:upload_prepare_datoms_batch_size
     ~process_batch:
       (fun batch ->
@@ -553,9 +546,14 @@ let upload_graph repo : Wire.t Db_worker_effect.t =
          >>= fun temp_db ->
          temp_db_ref := Some temp_db;
          let total_rows = count_kvs_rows temp_db in
-         let rec loop last_addr first_batch loaded : Wire.t Db_worker_effect.t =
+         let last_addr = ref (-1) in
+         let first_batch = ref true in
+         let loaded = ref 0 in
+         let done_task, done_resolver = Db_worker_effect.wait () in
+         (* flat step driver — see stream_snapshot_row_batches *)
+         let rec step () : unit =
            let rows =
-             fetch_kvs_rows temp_db last_addr upload_kvs_batch_size
+             fetch_kvs_rows temp_db !last_addr upload_kvs_batch_size
            in
            match rows with
            | [] ->
@@ -567,38 +565,46 @@ let upload_graph repo : Wire.t Db_worker_effect.t =
                     [ Wire.Keyword "sub-type", Wire.Keyword "upload-completed"
                     ; Wire.Keyword "message"
                     , Wire.String "Graph upload finished!" ]);
-               Db_worker_effect.pure
+               Db_worker_effect.wakeup done_resolver
                  (Wire.Map [ (Wire.Keyword "graph-id", Wire.String graph_id) ])
            | _ ->
                let max_addr =
                  List.fold_left
                    (fun acc (a, _, _) -> max acc a)
-                   last_addr rows
+                   !last_addr rows
                in
                let rows' = List.map row_to_wire rows in
-               let loaded' = loaded + List.length rows' in
-               let finished = loaded' = total_rows in
+               loaded := !loaded + List.length rows';
+               let finished = !loaded = total_rows in
                let row_batches =
                  split_snapshot_rows_by_max_bytes rows'
                    snapshot_upload_max_bytes
                in
-               upload_snapshot_rows_batches row_batches ~base ~graph_id
-                 ~first_batch ~finished ~checksum:snapshot_checksum
-                 ~auth_fetch:
-                   (fun upload_url headers body ->
-                      Sync_util.fetch_json upload_url ~meth:"POST" ~headers
-                        ~body ~response_schema:"sync/snapshot-upload" ()
-                      >>= fun _ -> Db_worker_effect.pure ())
-               >>= fun () ->
-               update_upload_progress
-                 (Wire.Map
-                    [ Wire.Keyword "sub-type", Wire.Keyword "upload-progress"
-                    ; Wire.Keyword "message"
-                    , Wire.String
-                        (Printf.sprintf "Uploading %d/%d" loaded' total_rows) ]);
-               loop max_addr false loaded'
+               Db_worker_effect.on_any
+                 (upload_snapshot_rows_batches row_batches ~base ~graph_id
+                    ~first_batch:!first_batch ~finished
+                    ~checksum:snapshot_checksum
+                    ~auth_fetch:
+                      (fun upload_url headers body ->
+                         Sync_util.fetch_json upload_url ~meth:"POST" ~headers
+                           ~body ~response_schema:"sync/snapshot-upload" ()
+                         >>= fun _ -> Db_worker_effect.pure ()))
+                 (fun () ->
+                    update_upload_progress
+                      (Wire.Map
+                         [ Wire.Keyword "sub-type"
+                         , Wire.Keyword "upload-progress"
+                         ; Wire.Keyword "message"
+                         , Wire.String
+                             (Printf.sprintf "Uploading %d/%d" !loaded
+                                total_rows) ]);
+                    last_addr := max_addr;
+                    first_batch := false;
+                    step ())
+                 (fun e -> Db_worker_effect.reject done_resolver e)
          in
-         loop (-1) true 0)
+         step ();
+         done_task)
         (fun () ->
            match !temp_db_ref with
            | Some db -> Sync_temp_sqlite.cleanup_temp_sqlite db
