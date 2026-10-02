@@ -616,24 +616,28 @@ let download_remote_assets_if_missing_impl repo graph_id candidates :
   let total = List.length candidates in
   let downloaded = ref 0 in
   let skipped_existing = ref 0 in
+  let failed = ref 0 in
   let rec worker () : unit Db_worker_effect.t =
     match pop () with
     | Some (asset_uuid, asset_type) ->
-        Asset_store.exists ~repo
-          ~name:(asset_file_name asset_uuid asset_type)
-        >>= fun exists ->
-        (* cljs has no per-asset catch here — a download rejection
-           propagates through p/all and rejects the whole batch *)
-        (if exists then begin
-           incr skipped_existing;
-           Db_worker_effect.pure ()
-         end
-         else
-           download_remote_asset repo (Some graph_id) asset_uuid
-             (Some asset_type)
-           >>= fun () ->
-           incr downloaded;
-           Db_worker_effect.pure ())
+        Db_worker_effect.catch
+          (Asset_store.exists ~repo
+             ~name:(asset_file_name asset_uuid asset_type)
+           >>= fun exists ->
+           if exists then begin
+             incr skipped_existing;
+             Db_worker_effect.pure ()
+           end
+           else
+             download_remote_asset repo (Some graph_id) asset_uuid
+               (Some asset_type)
+             >>= fun () ->
+             incr downloaded;
+             Db_worker_effect.pure ())
+          (fun e ->
+             incr failed;
+             log_request_asset_download_failed repo asset_uuid e;
+             Db_worker_effect.pure ())
         >>= worker
     | None -> Db_worker_effect.pure ()
   in
@@ -643,7 +647,8 @@ let download_remote_assets_if_missing_impl repo graph_id candidates :
     (Wire.Map
        [ Wire.Keyword "total", Wire.Int total
        ; Wire.Keyword "downloaded", Wire.Int !downloaded
-       ; Wire.Keyword "skipped-existing", Wire.Int !skipped_existing ])
+       ; Wire.Keyword "skipped-existing", Wire.Int !skipped_existing
+       ; Wire.Keyword "failed", Wire.Int !failed ])
 
 (* remote-asset-download-candidates-in-tx *)
 let remote_asset_download_candidates_in_tx db (tx_data : datom list)

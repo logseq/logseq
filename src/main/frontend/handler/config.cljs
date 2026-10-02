@@ -1,7 +1,6 @@
 (ns frontend.handler.config
   "Fns for setting repo config"
   (:require [borkdude.rewrite-edn :as rewrite]
-            [clojure.string :as string]
             [frontend.config :as config]
             [frontend.handler.db-based.editor :as db-editor-handler]
             [frontend.handler.repo-config :as repo-config-handler]
@@ -21,11 +20,11 @@
   [path k v]
   (when-let [repo (state/get-current-repo)]
     (p/let [content (<get-file-content repo path)]
-      (when content
-        (repo-config-handler/read-repo-config content))
-      (let [result (parse-repo-config (if (string/blank? content)
-                                        config/config-default-content
-                                        content))
+      ;; An unparsable file is rewritten from the default config so a settings
+      ;; change repairs the file instead of failing
+      (let [result (parse-repo-config (if (repo-config-handler/readable-config-content? content)
+                                        content
+                                        config/config-default-content))
               ks (if (vector? k) k [k])
               v (cond->> v
                   (map? v)

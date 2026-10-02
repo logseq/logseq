@@ -263,7 +263,8 @@
 
 (defn outliner-insert-block!
   [config current-block new-block {:keys [sibling? keep-uuid? ordered-list?
-                                          replace-empty-target? outliner-op]}]
+                                          replace-empty-target? outliner-op
+                                          skip-save-current-block?]}]
   (let [library? (:library? config)
         sibling? (insert-as-sibling? config current-block sibling?)
         new-block' (if library?
@@ -285,7 +286,10 @@
 
        (:editor/edit-block-fn config)
        (assoc :editor/edit-block-fn (:editor/edit-block-fn config)))
-     (save-current-block! {:current-block current-block})
+     ;; Auto view inserts must not ride a pending editor save. A refused
+     ;; page-title (e.g. "/") would fail the whole create-view transaction.
+     (when-not skip-save-current-block?
+       (save-current-block! {:current-block current-block}))
      (outliner-op/insert-blocks! [new-block'] current-block insert-opts))))
 
 (defn- block-self-alone-when-insert?
@@ -623,7 +627,7 @@
                    sibling? before? start? end?
                    properties
                    custom-uuid replace-empty-target? edit-block? ordered-list? other-attrs
-                   outliner-op]
+                   outliner-op skip-save-current-block?]
             :or {sibling? false
                  before? false
                  edit-block? true}
@@ -696,7 +700,8 @@
                                               :keep-uuid? true
                                               :ordered-list? ordered-list?
                                               :replace-empty-target? replace-empty-target?
-                                              :outliner-op outliner-op}))
+                                              :outliner-op outliner-op
+                                              :skip-save-current-block? skip-save-current-block?}))
                    (when edit-existing-block?
                      (edit-block! last-block :max))
                    (when-let [id (:block/uuid new-block)]
@@ -1648,28 +1653,35 @@
   (when @*auto-save-timeout
     (js/clearTimeout @*auto-save-timeout)))
 
+(defn- editor-input-value
+  [input-id]
+  (when-let [elem (and input-id (gdom/getElement input-id))]
+    (gobj/get elem "value")))
+
 (defn- current-editor-value
   [input-id current-block edit-block]
   (if (= (:block/uuid current-block) (:block/uuid edit-block))
     (:block/title current-block)
-    (when-let [elem (and input-id (gdom/getElement input-id))]
-      (gobj/get elem "value"))))
+    (editor-input-value input-id)))
 
 (defn save-current-block!
   ([]
    (save-current-block! {}))
-  ([{:keys [current-block] :as opts}]
+  ([{:keys [current-block flush-input?] :as opts}]
    (clear-block-auto-save-timeout!)
    ;; non English input method
    (when-not (or (state/editor-in-composition?)
-                 (state/get-editor-action))
+                 (and (not flush-input?)
+                      (state/get-editor-action)))
      (when (state/get-current-repo)
        (try
          (let [input-id (state/get-edit-input-id)
                block (state/get-edit-block)
-               value (current-editor-value input-id current-block block)]
+               value (if flush-input?
+                       (editor-input-value input-id)
+                       (current-editor-value input-id current-block block))]
            (when value
-             (save-block-aux! block value opts)))
+             (save-block-aux! block value (dissoc opts :flush-input?))))
          (catch :default error
            (js/console.error error)
            (log/error :save-block-failed error)))))))
@@ -2492,11 +2504,7 @@
 
 (defn- node-contains?
   [parent child]
-  (boolean
-   (or (and (gobj/get parent "nodeType")
-            (gdom/contains parent child))
-       (when-let [contains-fn (gobj/get parent "contains")]
-         (contains-fn child)))))
+  (boolean (gdom/contains parent child)))
 
 (defn- block-node-outside-comments-area
   [comments-node direction]

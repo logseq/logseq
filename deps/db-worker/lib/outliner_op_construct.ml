@@ -1279,11 +1279,9 @@ let build_insert_block_payload db_before (ent : entity) : Wire.t option =
            ((kw "block/uuid", block_uuid)
            :: List.map (sanitized_entry_of_entity db_before ent) keys))
 
-(* op-construct/selected-block-roots — returns [roots incomplete].
-   With [direct_parent], the selected blocks without a selected parent:
-   the blocks outliner.core/filter-top-level-blocks keeps, so a moved
-   block under a selected grandparent gets its own restore. *)
-let selected_block_roots ?(direct_parent = false) db_before (ids : Wire.t)
+(* op-construct/selected-block-roots — the selected blocks that are not
+   descendants of another selected block. Returns [roots incomplete]. *)
+let selected_block_roots db_before (ids : Wire.t)
     : entity list * bool =
   let resolved = List.map (block_entity db_before) (Wire.as_seq ids) in
   let incomplete = List.exists Option.is_none resolved in
@@ -1299,17 +1297,12 @@ let selected_block_roots ?(direct_parent = false) db_before (ids : Wire.t)
     |> List.rev
   in
   let selected_ids = List.map (fun e -> e.id) entities in
-  let rec has_selected_ancestor (parent : entity option) : bool =
-    match parent with
-    | Some p ->
-        if List.mem p.id selected_ids then true
-        else if direct_parent then false
-        else has_selected_ancestor (Ldb.ref_ent p "block/parent")
-    | None -> false
+  let has_selected_ancestor (ent : entity) : bool =
+    Option.is_some
+      (Ldb.some_parent ent (fun p ->
+           if List.mem p.id selected_ids then Some () else None))
   in
-  ( List.filter
-      (fun ent -> not (has_selected_ancestor (Ldb.ref_ent ent "block/parent")))
-      entities
+  ( List.filter (fun ent -> not (has_selected_ancestor ent)) entities
   , incomplete )
 
 (* op-construct/block-restore-target — [target-id sibling?] *)
@@ -1560,7 +1553,7 @@ let compare_document_order (p1 : value list) (p2 : value list) : int =
 (* op-construct/build-inverse-move-blocks *)
 let build_inverse_move_blocks db_before (ids : Wire.t) : Wire.t list option =
   let roots, incomplete =
-    selected_block_roots ~direct_parent:true db_before ids
+    selected_block_roots db_before ids
   in
   (* Restore in page order: a block's restore target, its left sibling
      or parent, may be another moved block, which must be back first. *)

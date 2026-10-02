@@ -158,31 +158,39 @@ let asset (e : entity) = Option.is_some (value e "logseq.property.asset/type")
 let is_page (e : entity) =
   internal_page e || is_journal e || is_class e || is_property e
 
+(* entity-util/some-parent — first Some (f parent) walking the
+   :block/parent chain, closest parent first; stops on a parentless
+   entity or a cycle. *)
+let some_parent (e : entity) (f : entity -> 'a option) : 'a option =
+  let rec loop (parent : entity option) seen =
+    match parent with
+    | Some p when not (List.mem p.id seen) -> (
+        match f p with
+        | Some _ as r -> r
+        | None -> loop (ref_ent p "block/parent") (p.id :: seen))
+    | _ -> None
+  in
+  loop (ref_ent e "block/parent") []
+
 (* entity-util/hidden? — own flags or any ancestor's, cycle-safe. *)
 let hidden (page : entity) : bool =
-  let rec hidden_parent (parent : entity option) seen =
-    match parent with
-    | Some e when not (List.mem e.id seen) ->
-        truthy (value e "logseq.property/hide?")
-        || truthy (value e "logseq.property/deleted-at")
-        || hidden_parent (ref_ent e "block/parent") (e.id :: seen)
-    | _ -> false
-  in
   truthy (value page "logseq.property/hide?")
   || truthy (value page "logseq.property/deleted-at")
-  || hidden_parent (ref_ent page "block/parent") []
+  || Option.is_some
+       (some_parent page (fun parent ->
+            if
+              truthy (value parent "logseq.property/hide?")
+              || truthy (value parent "logseq.property/deleted-at")
+            then Some ()
+            else None))
 
 (* entity-util/recycled? *)
 let recycled (e : entity) : bool =
-  let rec recycled_parent (parent : entity option) seen =
-    match parent with
-    | Some p when not (List.mem p.id seen) ->
-        truthy (value p "logseq.property/deleted-at")
-        || recycled_parent (ref_ent p "block/parent") (p.id :: seen)
-    | _ -> false
-  in
   truthy (value e "logseq.property/deleted-at")
-  || recycled_parent (ref_ent e "block/parent") []
+  || Option.is_some
+       (some_parent e (fun parent ->
+            if truthy (value parent "logseq.property/deleted-at") then Some ()
+            else None))
 
 let built_in (e : entity) = truthy (value e "logseq.property/built-in?")
 

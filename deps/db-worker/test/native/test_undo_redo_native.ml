@@ -1868,7 +1868,7 @@ let test_undo_move_of_block_and_its_grandchild_restores_both () =
               (uuid_lit page_2_uuid)));
       check "moved to page 2"
         (outline "outline 2"
-        = "(\"outline 2\" (\"a\" (\"b\" \"b1\")) \"b2\" \"d\")");
+        = "(\"outline 2\" (\"a\" (\"b\" \"b1\" \"b2\")) \"d\")");
       check "2 undos" (List.length (undo_all ()) = 2);
       check "outline 1 restored"
         (outline "outline 1" = outline_1_start);

@@ -94,7 +94,12 @@ jobs:
         run: pnpm test:ios-web-fonts
 
       - name: Build and upload iOS app
-        run: fastlane beta
+        run: |
+          : "${LOGSEQ_GITHUB_PAT:?LOGSEQ_GITHUB_PAT is required for the certificates repository}"
+          MATCH_GIT_BASIC_AUTHORIZATION="$(printf '%s' "x-access-token:${LOGSEQ_GITHUB_PAT}" | base64 | tr -d '\n')"
+          echo "::add-mask::${MATCH_GIT_BASIC_AUTHORIZATION}"
+          export MATCH_GIT_BASIC_AUTHORIZATION
+          fastlane beta
         working-directory: ./ios/App
         env:
           APP_STORE_CONNECT_API_KEY_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_KEY_ID }}
@@ -103,7 +108,7 @@ jobs:
           APP_STORE_CONNECT_API_KEY_IS_KEY_CONTENT_BASE64: true
           SLACK_URL: ${{ secrets.SLACK_URL }}
           MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
-          MATCH_GIT_BASIC_AUTHORIZATION: ${{ secrets.MATCH_GIT_BASIC_AUTHORIZATION }}
+          LOGSEQ_GITHUB_PAT: ${{ secrets.LOGSEQ_GITHUB_PAT }}
           XCODE_XCARGS: "-allowProvisioningUpdates"
 
       - name: Save Static File

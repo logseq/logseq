@@ -456,7 +456,7 @@
              :block/uuid block-b
              :block/title "b"
              :block/parent {:db/id parent-b}}]
-           (#'db-async/order-block-summaries [block-a block-b] rows)))))
+           (#'db-async/order-block-summaries [block-a block-b] rows {})))))
 
 (deftest get-block-summaries-keeps-pages-without-parent-test
   (let [page-a (random-uuid)
@@ -470,7 +470,8 @@
            (#'db-async/order-block-summaries
             [page-a page-b]
             [[2 page-b "Apr 15th, 2027" :none]
-             [1 page-a "Sep 15th, 2026" :none]])))))
+             [1 page-a "Sep 15th, 2026" :none]]
+            {})))))
 
 (deftest get-block-summaries-query-includes-pages-without-parent-test
   (async done

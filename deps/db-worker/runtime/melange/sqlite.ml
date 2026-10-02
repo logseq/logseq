@@ -113,6 +113,7 @@ type db =
   ; filename : string
   ; mutable tx_depth : int
   ; mutable savepoint_seq : int
+  ; mutable closed : bool
   }
 
 type bind =
@@ -216,6 +217,7 @@ let open_db ~path =
       ; filename = path
       ; tx_depth = 0
       ; savepoint_seq = 0
+      ; closed = false
       }
     with Js.Exn.Error e -> raise (Sqlite_error (js_error_message e))
   else
@@ -231,6 +233,7 @@ let open_db ~path =
            ; filename = path
            ; tx_depth = 0
            ; savepoint_seq = 0
+           ; closed = false
            }
          with Js.Exn.Error e -> raise (Sqlite_error (js_error_message e)))
     | None -> raise (Sqlite_error "sqlite-wasm module not initialized")
@@ -287,11 +290,13 @@ let open_db_pool ~name ~path =
            ; filename = path
            ; tx_depth = 0
            ; savepoint_seq = 0
+           ; closed = false
            }
          with Js.Exn.Error e -> raise (Sqlite_error (js_error_message e)))
     | None -> raise (Sqlite_error ("opfs pool not prepared: " ^ name))
 
 let close t =
+  t.closed <- true;
   match t.handle with
   | Node_db d -> Database.close d
   | Opfs_db d -> Opfs.close d
@@ -390,7 +395,13 @@ let transaction t f =
          end);
         raise exn)
 
-let checkpoint t = exec t ~sql:"pragma wal_checkpoint(TRUNCATE)" ~bind:[||]
+(* cljs close-db-aux! clears the pending idle-checkpoint timer; the
+   OCaml timer lives in the storage closure and still fires after the
+   db closes, so the flag makes a scheduled post-close checkpoint a
+   no-op like the cljs cancel. *)
+let checkpoint t =
+  if t.closed then ()
+  else exec t ~sql:"pragma wal_checkpoint(TRUNCATE)" ~bind:[||]
 
 let backup t ~dst_path =
   let escaped = String.concat "''" (String.split_on_char '\'' dst_path) in

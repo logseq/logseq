@@ -122,15 +122,30 @@ let get_non_consecutive_blocks db (blocks : entity list) : entity list =
   in
   go [] blocks
 
-(* outliner-core/filter-top-level-blocks *)
+(* outliner-core/delete-covers-selected-ancestor? — a selected ancestor
+   covers a block for delete when it is the direct parent (a page parent
+   only detaches) or a non-page ancestor whose delete retracts the
+   subtree. *)
+let delete_covers_selected_ancestor (block : entity) (ancestor : entity) : bool =
+  (match Ldb.ref_ent block "block/parent" with
+   | Some p -> ancestor.id = p.id
+   | None -> false)
+  || not (Ldb.is_page ancestor)
+
+(* outliner-core/filter-top-level-blocks — drop blocks covered by a
+   selected ancestor under the delete-cover predicate. *)
 let filter_top_level_blocks (blocks : entity list) : entity list =
   let block_ids = Hashtbl.create (List.length blocks) in
   List.iter (fun (b : entity) -> Hashtbl.replace block_ids b.id ()) blocks;
   List.filter
     (fun b ->
-       match Ldb.ref_ent b "block/parent" with
-       | Some p -> not (Hashtbl.mem block_ids p.id)
-       | None -> true)
+       Option.is_none
+         (Ldb.some_parent b (fun parent ->
+              if
+                Hashtbl.mem block_ids parent.id
+                && delete_covers_selected_ancestor b parent
+              then Some ()
+              else None)))
     blocks
 
 (* outliner-core/get-top-level-blocks *)

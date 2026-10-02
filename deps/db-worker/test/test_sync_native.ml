@@ -1023,6 +1023,43 @@ let () =
       Sync_assets.download_remote_asset_fn := prev_download;
       Worker_state.drop_datascript_conn repo)
 
+(* cljs download-remote-assets-if-missing-continues-past-failures-test —
+   a failed asset must not stop the remaining downloads; the result map
+   gains a :failed count. *)
+let () =
+  let repo = "asset-continue-repo" in
+  let graph_id = "graph-1" in
+  let failed_uuid = fresh_uuid () in
+  let ok_uuid = fresh_uuid () in
+  let download_calls = ref [] in
+  let prev_download = !Sync_assets.download_remote_asset_fn in
+  Sync_assets.download_remote_asset_fn :=
+    (fun _r _g u _t ->
+       download_calls := u :: !download_calls;
+       if u = failed_uuid then
+         Db_worker_effect.error (Failure "download asset failed")
+       else Db_worker_effect.pure ());
+  Fun.protect
+    (fun () ->
+       let result =
+         await
+           (Sync_assets.download_remote_assets_if_missing_impl repo graph_id
+              [ failed_uuid, "png"; ok_uuid, "png" ])
+       in
+       check "a failed download does not stop the rest"
+         (List.sort compare !download_calls
+          = List.sort compare [ failed_uuid; ok_uuid ]);
+       check "result counts failed"
+         (match result with
+          | Wire.Map _ ->
+              Wire.get "total" result = Some (Wire.Int 2)
+              && Wire.get "downloaded" result = Some (Wire.Int 1)
+              && Wire.get "skipped-existing" result = Some (Wire.Int 0)
+              && Wire.get "failed" result = Some (Wire.Int 1)
+          | _ -> false))
+    ~finally:(fun () ->
+      Sync_assets.download_remote_asset_fn := prev_download)
+
 (* ---- built-in sync repair tx-data shape (cljs parity) ---- *)
 (* cljs db-core/built-in-sync-repair-tx-data ground truth (cljs replay output):
    [idents; repeat-type(a0); closed-values(a1..a3); default-patch(a4);

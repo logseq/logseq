@@ -172,45 +172,43 @@ let block_with_updated_at (block : Block_map.t) : Block_map.t =
 
 (* ---------- filter-top-level-blocks ---------- *)
 
-(* cljs parent-ids = set((comp :db/id :block/parent) over blocks) ∩
-   set(:db/id over blocks) — a nil db/id intersects a nil parent-id, and
-   (contains? parent-ids nil) then removes parentless blocks too. *)
-type parent_id = Pid of entity_id | Pnil | Pother
+(* outliner-core/filter-top-level-blocks — resolve every input to its
+   entity, then drop blocks covered by a selected ancestor (any
+   ancestor on the :block/parent chain for which (cover block ancestor)
+   holds; default cover drops any selected ancestor). *)
+let filter_top_level_blocks
+    ?(cover : entity -> entity -> bool = fun _ _ -> true) (db : db)
+    (blocks : Block_map.t list) : entity list =
+  let blocks =
+    List.filter_map
+      (fun m ->
+         match mget m "db/id" with
+         | Some (Ref id) -> Ldb.ent_of_id db id
+         | Some (Int64 id) ->
+             Option.bind (Datascript.Util.int64_to_int id) (Ldb.ent_of_id db)
+         | _ -> None)
+      blocks
+  in
+  let selected = Hashtbl.create (List.length blocks) in
+  List.iter (fun (e : entity) -> Hashtbl.replace selected e.id ()) blocks;
+  List.filter
+    (fun block ->
+       Option.is_none
+         (Ldb.some_parent block (fun parent ->
+              if Hashtbl.mem selected parent.id && cover block parent then
+                Some ()
+              else None)))
+    blocks
 
-let filter_top_level_blocks (db : db) (blocks : Block_map.t list) : entity list =
-  let parent_key m =
-    (* (:db/id (:block/parent b)) — non-map/entity parents read as nil *)
-    match mget m "block/parent" with
-    | Some (Map _ as v) | Some (Ref _ as v) | Some (Ref_to _ as v) -> (
-        match id_of_value v with
-        | Some id -> Pid id
-        | None -> Pnil)
-    | Some _ | None -> Pnil
-  in
-  let self_key m =
-    match mget m "db/id" with
-    | Some (Ref id) -> Pid id
-    | Some (Int64 id) -> (
-        match Datascript.Util.int64_to_int id with
-        | Some id -> Pid id
-        | None -> Pnil)
-    | Some Nil | None -> Pnil
-    | Some _ -> Pother
-  in
-  let self_key_set = Hashtbl.create (List.length blocks) in
-  List.iter (fun k -> Hashtbl.replace self_key_set k ()) (List.map self_key blocks);
-  let top_parent_tbl = Hashtbl.create 64 in
-  List.iter
-    (fun k ->
-       if Hashtbl.mem self_key_set k then Hashtbl.replace top_parent_tbl k ())
-    (List.map parent_key blocks);
-  blocks
-  |> List.filter (fun m -> not (Hashtbl.mem top_parent_tbl (parent_key m)))
-  |> List.filter_map (fun m ->
-      match mget m "db/id" with
-      | Some (Ref id) -> Ldb.ent_of_id db id
-      | Some (Int64 id) -> Option.bind (Datascript.Util.int64_to_int id) (Ldb.ent_of_id db)
-      | _ -> None)
+(* outliner-core/delete-covers-selected-ancestor? — a selected ancestor
+   covers a block for delete when it is the direct parent (a page parent
+   only detaches, so its selected children must not also be deleted) or a
+   non-page ancestor whose delete retracts the subtree. *)
+let delete_covers_selected_ancestor (block : entity) (ancestor : entity) : bool =
+  (match Ldb.ref_ent block "block/parent" with
+   | Some p -> ancestor.id = p.id
+   | None -> false)
+  || not (Ldb.is_page ancestor)
 
 (* ---------- remove-orphaned-page-refs! ---------- *)
 
@@ -2760,7 +2758,9 @@ let del_in_txs (db : db) (txs_state : txs_state) (block_uuid : string) : unit =
 
 (* delete-blocks *)
 let delete_blocks (db : db) (blocks : Block_map.t list) : tx_result =
-  let top_level = filter_top_level_blocks db blocks in
+  let top_level =
+    filter_top_level_blocks ~cover:delete_covers_selected_ancestor db blocks
+  in
   let non_consecutive =
     List.length top_level > 1
     && Ldb.get_non_consecutive_blocks db top_level <> []

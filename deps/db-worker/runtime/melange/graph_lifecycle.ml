@@ -75,13 +75,24 @@ external promise_error_message : Js.Promise.error -> string option = "message"
 external promise_error_code : Js.Promise.error -> string option = "code"
   [@@mel.get] [@@mel.return { undefined_to_opt }]
 
+external set_code : Js.Exn.t -> string -> unit = "code" [@@mel.set]
+
+(* Coded rejections keep their Error{.code} shape so callers can branch
+   on the structured code (repo-locked, server-start-failed); an
+   uncoded rejection becomes a plain Failure like before. *)
 let exn_of_promise_error error =
   let message =
     Option.value (promise_error_message error)
       ~default:"graph-lifecycle call failed"
   in
   match promise_error_code error with
-  | Some c -> Failure (c ^ ": " ^ message)
+  | Some c ->
+      (try Js.Exn.raiseError (c ^ ": " ^ message)
+       with e ->
+         (match e with
+          | Js.Exn.Error js_e -> set_code js_e c
+          | _ -> ());
+         e)
   | None -> Failure message
 
 let await_promise promise =
