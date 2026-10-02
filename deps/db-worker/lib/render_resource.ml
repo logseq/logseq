@@ -2811,6 +2811,9 @@ let children_subtree_node_limit = 500
 
 let children_snapshot_groups db (parent_uuids : Wire.t list)
     : (Wire.t * (Wire.t * Wire.t) list) list =
+  (* one cache for the whole batch: positioned-property/schema/tag lookups
+     repeat across sibling rows *)
+  let cache = Render_snapshot.new_batch_cache () in
   List.map
     (fun parent ->
       match parent with
@@ -2824,7 +2827,7 @@ let children_snapshot_groups db (parent_uuids : Wire.t list)
               children_eager_block_limit
           in
           let canonical =
-            Render_snapshot.canonical_blocks db
+            Render_snapshot.canonical_blocks db ~cache
               (List.map (fun u -> Wire.Uuid u) eager_uuids)
           in
           let blocks =
