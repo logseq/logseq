@@ -552,6 +552,36 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
     body
     ) ctx parent
 
+(* .block-add-button — the imperative Add_button.ensure_all doc-scan can't
+   inject elements natively (no real DOM), so the element is emitted
+   declaratively here with the same shape build_el produces. Clicks reach
+   Editor_actions.append_block via the document-level click listener
+   matching closest ".block-add-button". has_children drives the same
+   opacity class build_el computes. *)
+let add_button_el ?puuid ~(has_children : 'a -> bool Signal.signal) : t =
+ fun context parent ->
+  let hc = has_children context in
+  (dom ~key:"bab"
+     ~style_class_signal:
+       (Logseq_dom.class_signal hc (fun has ->
+            "ls-block block-add-button flex-1 flex-col rounded-sm \
+             cursor-text transition-opacity ease-in duration-100 !py-0 "
+            ^ (if has then "opacity-0" else "opacity-50")))
+     ~attrs:
+       (("tabindex", "0")
+        :: (match puuid with
+            | Some u -> [ ("parentblockid", u) ]
+            | None -> []))
+     ~events:"click"
+     [ dom ~key:"bab-row" ~style_class:"flex flex-row"
+         [ dom ~key:"bab-inner" ~style_class:"flex items-center"
+             ~attrs:[ ("style", "height:28px;margin-left:22px;") ]
+             [ dom ~key:"bab-bc" ~tag:"span"
+                 ~style_class:"bullet-container"
+                 [ dom ~key:"bab-b" ~tag:"span" ~style_class:"bullet" [] ]
+             ] ] ])
+    context parent
+
 let blocks_inner ?puuid ?(virtualize = false) ?(library = false)
     ?(scope = "main") ?(container = true) (blocks : Model.block list) : t =
   let inner_attrs =
@@ -607,7 +637,12 @@ let blocks_inner ?puuid ?(virtualize = false) ?(library = false)
   dom ~key:"page-blocks" ~style_class:"mt-4 ls-page-blocks"
     ~attrs:[ ("style", "margin-left: -20px") ]
     [ dom ~key:"page-blocks-inner" ~style_class:"page-blocks-inner relative"
-        ~attrs:(("data-cid", scope) :: inner_attrs) body
+        ~attrs:(("data-cid", scope) :: inner_attrs)
+        (body
+         @ [ add_button_el ?puuid
+               ~has_children:(fun ctx ->
+                 Signal.constant ctx.Lui_ui.ui_scheduler (blocks <> []))
+           ])
     ]
 
 (* cljs components/block.cljs grouped-blocks-container: refs render
@@ -1236,6 +1271,7 @@ let blocks_area ~scope ~library ?puuid (ms : Model.t Signal.signal) : t =
                | Some u -> [ ("containerid", u) ]
                | None -> [])
             [ Logseq_dom.if_ ~test:nonempty list_el ]
+        ; add_button_el ?puuid ~has_children:(fun _ -> nonempty)
         ]
     ]
 

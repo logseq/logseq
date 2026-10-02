@@ -85,6 +85,64 @@ view/model stack via the LUI Apple backend).
 - deps/db-worker and cli AGENTS forbid dune-file edits — the native
   port must live entirely inside `deps/ui/apple/` + `apple/`.
 
+### SwiftPM local-package identity collision
+- Root package dir `apple/` collided with the local dep dir basename
+  `apple` (lui/platform/apple): SwiftPM reported
+  `product 'LUIAppleBackendStatic' not found` in BOTH directions.
+- Fix: `build.sh` creates a `lui-apple-backend` symlink inside
+  `_build/apple/` and `Package.swift` resolves
+  `.package(path: LOGSEQ_LUI_PACKAGE_PATH)` +
+  `.product(name:, package: "lui-apple-backend")`. Local package
+  identity comes from the path basename — keep them distinct.
+
+### Graph lifecycle admission (owner side)
+- Daemon spawn fails `graph-not-exists` unless the graph is first
+  admitted: `<graphs_dir>/<encoded>` must exist AND
+  `<lifecycle_dir>/<encoded>/state.json` must say
+  `{generation, phase:"available", workers:[], owner}`.
+- `daemon_client.ensure_graph_created` now mirrors
+  `deps/graph-lifecycle/index.cjs`'s `createGraph` before spawning
+  (sha256-keyed `.graph-lifecycle` dir, `logseq_db_`-stripped +
+  `~XX`-encoded graph dir name, uuid generation).
+- Extra spawn args the JS lifecycle passes (`--lifecycle-dir`,
+  `--admission-ticket`, `--graph-generation`) are NOT required — the
+  daemon admits fine without them.
+
+### `--create-empty-db` is for sync-downloaded graphs only
+- The flag sets `sync-download-graph?: true` in the daemon's own
+  create-or-open-db call, which SKIPS `Sqlite_create_graph.initial_tx_data`
+  — the seed tx that installs built-in classes/properties
+  (`logseq.class/Journal`, `logseq.class/Page`, `logseq.kv/db-type`, …).
+- Symptom: `create-page` with `today-journal?` wrote the page with
+  `block/journal-day` but the `logseq.class/Journal` tag silently
+  dropped (class entity didn't exist), so `is_journal` failed and
+  `thread-api/get-latest-journals` always returned `[]`.
+- Fix: do NOT pass `--create-empty-db`; `thread-api/create-or-open-db`
+  with `Wire.Map []` creates + seeds a local graph. Verified:
+  get-latest-journals then returns today's journal and a 161-op gen-3
+  batch renders the journals list natively.
+- `chunked` transfer-encoding: daemon `/v1/invoke` responses are
+  chunked — `http_post` needed a chunk decoder, not just Content-Length.
+
+### Patch batch queueing (don't coalesce)
+- `Lui_app.send`/`dispatch` + async host task drains each trigger a
+  flush → one patch batch per flush. A single `latest_patch` ref
+  overwrites batches emitted between bridge polls — boot lost ~8
+  batches. `pending_batches` queue → `take_patches()` returns a JSON
+  array of wire batches; Swift `apply` splits `[`-prefixed arrays.
+
+### Why sends produced zero patch ops (diagnosis)
+- `Lui_app.send` returning `true` only means lifecycle=Running — it
+  does NOT imply the model changed. `Lui_runtime.flush` →
+  `Signal.stabilize` runs dirty tasks; `siggen` only bumps when tasks
+  ran, and `ops=0` means recomputes produced no diff (dyn `~equal`
+  skipped, or data unchanged). Instrumented via
+  `Lui_runtime.diagnostics` (`[flush] status/ops/mounted/siggen`) —
+  the original "no post-boot patches" symptom was real data emptiness
+  (unseeded db), not a signal-propagation failure.
+- DOM-event dispatch and model `Signal.set` both route through the same
+  stabilize→ops path, so one fix covers both.
+
 ## Open risks
 
 - `emit_patch` swallows schema errors (blank screen, no error) —
@@ -98,3 +156,56 @@ view/model stack via the LUI Apple backend).
   riskiest seam — web relies on DOM event payloads
   (`Platform.event_str` on raw `Js.Json`); the native path needs the
   same field names from the Swift text views.
+- Document-level keydown/paste/selectionchange listeners are still
+  window-side stubs — editor_keys/editor_dom expect a global stream;
+  needs an NSEvent monitor forwarded as dom-events.
+
+### Live DOM state must not come from mount-time snapshots
+- `el` snapshots captured at mount carry `value=""` — `el_value` on a
+  textarea after typing returned the stale mount value, so Enter
+  committed empty titles. `live_fields` (id -> value/selectionStart/
+  selectionEnd) mirrors the browser's live `el.value`: refreshed from
+  every event's `target` snapshot and from imperative
+  `el_set_value`/`el_set_selection_range`.
+
+### add_event_listener prepends — ordering trap
+- `window_listeners` pushes `f :: cur`, so a listener registered later
+  runs FIRST. `on_input` (editor_keys) preceded the editor_dom live-field
+  refresh, read the previous value, and wrote it back via
+  `el_set_text_content` → the native text view got one-event-stale
+  strings and characters vanished mid-typing. Fix: refresh inside
+  `Platform.emit_event` itself via `pre_dispatch_hook` — order-free.
+
+### el.textContent != el.value (web semantics)
+- `on_input` calls `el_set_text_content` on every keystroke to keep
+  `:has-text` in lockstep. Mapping `set-text-content` to the native
+  string writes the (stale) buffer over live text — `domSetTextContent`
+  is intentionally a no-op.
+
+### updateNSView must not write text while focused
+- Prop-driven `textView.string = text` during unrelated re-renders
+  clobbers fresh keystrokes before the input event lands. Skip the
+  write when `firstResponder == textView`; imperative `domSetValue`
+  still applies.
+
+### Outliner indentation styling
+- `.block-children-container` carries `margin-left:29px` in
+  lui-core.css but isn't visible to the tailwind-token parser — added
+  an explicit semantic-class mapping (leading margin 29) +
+  `block-children-left-border` collapses the 4px indent-guide strip.
+
+### Autosave is a 400ms debounced setTimeout
+- `Outliner_ops.schedule_save` arms `Editor_dom.set_timeout_id` →
+  `Host` timer thread → `enqueue` → pump. `apply`/`apply_result` flush
+  `pending_save` before structure ops, so Enter/Tab paths save text
+  typed inside the debounce window. Verified: title persisted in db
+  after plain typing (no Enter/Tab).
+
+### GUI-driving quirks
+- First click on a fresh window is consumed by AppKit activation —
+  click twice; wait ~1s after focus before typing or leading
+  keystrokes are lost.
+- Daemon direct query:
+  `curl -X POST localhost:<port>/v1/invoke -d '{"method":"thread-api/get-page-blocks-tree","argsTransit":"[\"logseq_db_Demo\",\"~u<page-uuid>\",null]"}'`;
+  transit responses use `^N` cached-ref dedup, so literal-string greps
+  miss repeated keys.

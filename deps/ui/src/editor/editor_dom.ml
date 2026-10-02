@@ -32,8 +32,11 @@ external query_selector_all : string -> node_list = "querySelectorAll"
 external query_selector : string -> el option = "querySelector"
   [@@mel.scope "document"] [@@mel.return nullable]
 
-external active_element : el option = "document.activeElement"
+external active_element_dom : el option = "document.activeElement"
   [@@mel.return nullable]
+
+(* a function so native ports can back it with a focus-tracking ref *)
+let active_element () = active_element_dom
 
 external document_element : el = "document.documentElement"
 

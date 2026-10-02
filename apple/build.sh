@@ -99,5 +99,20 @@ if [[ -f $db_worker ]]; then
   cp "$db_worker" "$app_dir/Contents/Resources/logseq-db-worker"
 fi
 
+# tabler icon table: the OCaml twin (deps/ui/apple/icon_tabler_data.ml) reads
+# ../Resources/tabler-children.json; the Swift side embeds its own copy via
+# Bundle.module. Generated from resources/js/icon-data.js — see NOTES.md.
+icons_json="$apple_dir/Sources/Logseq/Resources/tabler-children.json"
+if [[ ! -f $icons_json ]]; then
+  python3 - "$repo_root/resources/js/icon-data.js" "$icons_json" <<'PY'
+import json, re, sys
+src = open(sys.argv[1]).read()
+body = src[src.index('__tablerChildren=') + len('__tablerChildren='):].rstrip().rstrip(';')
+with open(sys.argv[2], 'w') as f:
+    json.dump(json.loads(body), f, separators=(',', ':'))
+PY
+fi
+cp "$icons_json" "$app_dir/Contents/Resources/tabler-children.json"
+
 codesign --force --sign - --timestamp=none "$app_dir" || true
 echo "built: $app_dir"

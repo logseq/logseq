@@ -17,11 +17,36 @@ let document_add_listener (name : string) (f : ev -> unit)
     (_capture : bool) : unit =
   Platform.add_event_listener name f
 
+(* callers compare elements with physical equality (ae == el), so all
+   queries for the same DOM id must return the same allocation *)
+let el_cache : (string, el) Hashtbl.t = Hashtbl.create 64
+
+(* ids of elements the host has told us are mounted — element-mount /
+   element-unmount dom-events keep this truthful, so DOM probes like
+   `get_element_by_id "ui__ac-inner"` (is the autocomplete popup open?)
+   give real answers instead of always succeeding *)
+let live_ids : (string, unit) Hashtbl.t = Hashtbl.create 64
+
+(* live (value, selectionStart, selectionEnd) per DOM id — the cached
+   element snapshots only carry mount-time values, but a browser's
+   el.value tracks typing. Input events keep this truthful. *)
+let live_fields : (string, string * int * int) Hashtbl.t =
+  Hashtbl.create 16
+
 let get_element_by_id (id : string) : el option =
-  (* host keeps a live element registry; ask for the snapshot *)
-  Some
-    (Js.Json.JObject
-       [ ("#ref", Js.Json.JString id); ("ref-id", Js.Json.JString id) ])
+  if not (Hashtbl.mem live_ids id) then None
+  else
+    Some
+      (match Hashtbl.find_opt el_cache id with
+       | Some el -> el
+       | None ->
+           let el =
+             Js.Json.JObject
+               [ ("#ref", Js.Json.JString id); ("ref-id", Js.Json.JString id)
+               ]
+           in
+           Hashtbl.replace el_cache id el;
+           el)
 
 let query_selector (_ : string) : el option = None
 let query_selector_all (_ : string) : node_list = Js.Json.array [||]
@@ -70,7 +95,13 @@ let el_get_attr (el : el) (name : string) : string option =
           match List.assoc_opt "attrs" kvs with
           | Some (Js.Json.JObject attrs) ->
               Option.bind (List.assoc_opt name attrs) Js.Json.decodeString
-          | _ -> None))
+          | _ -> (
+              (* snapshots carry the DOM class under "class", not attrs *)
+              match name with
+              | "class" ->
+                  Option.bind (List.assoc_opt "class" kvs)
+                    Js.Json.decodeString
+              | _ -> None)))
   | _ -> None
 
 let el_set_attr (el : el) (name : string) (v : string) : unit =
@@ -100,7 +131,7 @@ let el_class_remove (el : el) (c : string) : unit =
   Host.dom_op "class-remove"
     (Js.Json.stringify (Js.Json.JObject [("ref", el); ("class", Js.Json.JString c)]))
 
-let el_value (el : el) : string =
+let snapshot_value (el : el) : string =
   match el with
   | Js.Json.JObject kvs -> (
       match List.assoc_opt "value" kvs with
@@ -108,12 +139,37 @@ let el_value (el : el) : string =
       | None -> "")
   | _ -> ""
 
+let el_dom_id (el : el) : string option =
+  match Dom_ext.str_prop "id" el with
+  | Some id when id <> "" -> Some id
+  | _ -> Dom_ext.str_prop "ref-id" el
+
+let el_value (el : el) : string =
+  match el_dom_id el with
+  | Some id -> (
+      match Hashtbl.find_opt live_fields id with
+      | Some (v, _, _) -> v
+      | None -> snapshot_value el)
+  | None -> snapshot_value el
+
+let set_live_value (id : string) (v : string) : unit =
+  match Hashtbl.find_opt live_fields id with
+  | Some (_, s, e) -> Hashtbl.replace live_fields id (v, s, e)
+  | None -> Hashtbl.replace live_fields id (v, 0, 0)
+
 let el_set_value (el : el) (v : string) : unit =
+  (match el_dom_id el with
+   | Some id -> set_live_value id v
+   | None -> ());
   Host.dom_op "set-value"
     (Js.Json.stringify (Js.Json.JObject [("ref", el); ("value", Js.Json.JString v)]))
 
-let el_closest (_ : el) (_ : string) : el option = None
-let el_tag (_ : el) : string = ""
+let el_closest (el : el) (sel : string) : el option =
+  Dom_ext.closest el sel
+
+let el_tag (el : el) : string =
+  String.uppercase_ascii
+    (Option.value (Dom_ext.str_prop "tag" el) ~default:"")
 
 (* ---------- timers ---------- *)
 
@@ -227,7 +283,79 @@ let register_doc_scan ?(run_if = fun _ -> true) ?(sync = false)
     @ [ { ds_run_if = run_if; ds_scan = scan; ds_sync = sync } ];
   scan [ document_element ]
 
-let active_element : el option = None
+(* the host's native text views emit "focus"/"blur" dom-events carrying a
+   target snapshot; the last focused DOM id stands in for
+   document.activeElement *)
+let last_active_id : string option ref = ref None
+
+let active_element () : el option =
+  match !last_active_id with
+  | Some id -> get_element_by_id id
+  | None -> None
+
+let () =
+  document_add_listener "focus"
+    (fun ev ->
+      last_active_id :=
+        (match Dom_ext.prop "target" ev with
+         | Js.Json.JObject _ as t -> Dom_ext.str_prop "ref-id" t
+         | _ -> None))
+    true;
+  document_add_listener "blur" (fun _ -> last_active_id := None) true;
+  document_add_listener "element-mount"
+    (fun ev ->
+      match Dom_ext.str_prop "id" ev with
+      | Some id when id <> "" -> Hashtbl.replace live_ids id ()
+      | _ -> ())
+    true;
+  document_add_listener "element-unmount"
+    (fun ev ->
+      match Dom_ext.str_prop "id" ev with
+      | Some id ->
+          Hashtbl.remove live_ids id;
+          Hashtbl.remove live_fields id
+      | _ -> ())
+    true;
+  (* refresh live fields from the target snapshot carried by every event
+     — the host always injects the text view's current value there, so
+     handlers that read el_value (e.g. Enter -> split) see the latest
+     text even when input events are still in flight. Runs inside
+     emit_event, before any listener — add_event_listener prepends, so
+     a plain listener could race a stale el_value read. *)
+  Platform.pre_dispatch_hook := fun ev ->
+    match Dom_ext.prop "target" ev with
+    | Js.Json.JObject _ as t -> (
+        let id =
+          match Dom_ext.str_prop "id" t with
+          | Some id when id <> "" -> Some id
+          | _ -> Dom_ext.str_prop "ref-id" t
+        in
+        match id with
+        | Some id -> (
+            let v =
+              match Dom_ext.str_prop "value" ev with
+              | Some v -> Some v
+              | None -> Dom_ext.str_prop "value" t
+            in
+            let num name j =
+              Option.map int_of_float (Dom_ext.num_prop name j)
+            in
+            match v with
+            | Some v ->
+                let s, e =
+                  match
+                    ( num "selectionStart" ev, num "selectionEnd" ev )
+                  with
+                  | Some s, Some e -> (s, e)
+                  | _ -> (
+                      match Hashtbl.find_opt live_fields id with
+                      | Some (_, s, e) -> (s, e)
+                      | None -> (0, 0))
+                in
+                Hashtbl.replace live_fields id (v, s, e)
+            | None -> ())
+        | None -> ())
+    | _ -> ()
 
 let el_set_text_content (el : el) (v : string) : unit =
   Host.dom_op "set-text-content"
@@ -237,11 +365,47 @@ let el_set_text_content (el : el) (v : string) : unit =
 (* native text views auto-size — keep the call as a no-op *)
 let autosize_textarea (_ : el) : unit = ()
 
-let el_set_selection_range (_ : el) (_ : int) (_ : int) : unit = ()
+let el_set_selection_range (el : el) (s : int) (e : int) : unit =
+  (match el_dom_id el with
+   | Some id -> (
+       match Hashtbl.find_opt live_fields id with
+       | Some (v, _, _) -> Hashtbl.replace live_fields id (v, s, e)
+       | None -> Hashtbl.replace live_fields id ("", s, e))
+   | None -> ());
+  Host.dom_op "set-selection-range"
+    (Js.Json.stringify
+       (Js.Json.JObject
+          [ ("ref", el)
+          ; ("start", Js.Json.JNumber (Float.of_int s))
+          ; ("end", Js.Json.JNumber (Float.of_int e)) ]))
 
-let el_selection_start (_ : el) : int = 0
+let el_selection_start (el : el) : int =
+  match el_dom_id el with
+  | Some id -> (
+      match Hashtbl.find_opt live_fields id with
+      | Some (_, s, _) -> s
+      | None ->
+          Option.value
+            (Option.map int_of_float (Dom_ext.num_prop "selectionStart" el))
+            ~default:0)
+  | None ->
+      Option.value
+        (Option.map int_of_float (Dom_ext.num_prop "selectionStart" el))
+        ~default:0
 
-let el_selection_end (_ : el) : int = 0
+let el_selection_end (el : el) : int =
+  match el_dom_id el with
+  | Some id -> (
+      match Hashtbl.find_opt live_fields id with
+      | Some (_, _, e) -> e
+      | None ->
+          Option.value
+            (Option.map int_of_float (Dom_ext.num_prop "selectionEnd" el))
+            ~default:0)
+  | None ->
+      Option.value
+        (Option.map int_of_float (Dom_ext.num_prop "selectionEnd" el))
+        ~default:0
 
 let ev_composing (_ : ev) : bool = false
 
@@ -308,11 +472,7 @@ let rec_target (r : mutation_record) : el =
 let json_of_el (e : el) : Js.Json.t = e
 
 let el_id (el : el) : string =
-  match el with
-  | Js.Json.JObject kvs ->
-      Option.bind (List.assoc_opt "id" kvs) Js.Json.decodeString
-      |> Option.value ~default:""
-  | _ -> ""
+  Option.value (Dom_ext.str_prop "id" el) ~default:""
 
 let stop_immediate (_ : ev) : unit = ()
 
