@@ -36,38 +36,19 @@ const nodeBuiltins = [
   ...builtinModules.map((moduleName) => `node:${moduleName}`),
 ];
 
-// runtime deps of the electron main bundle — resolved from
-// static/node_modules at runtime (resources/package.json dependencies
-// plus the electron runtime itself).
+// runtime deps of the electron main bundle that must resolve from
+// node_modules at runtime inside the packaged app: native modules
+// (keytar, zvec), @logseq/graph-lifecycle (loaded through a dynamic
+// require() the bundler cannot trace), and fastify which emits
+// dynamic ajv requires of its own.
+// Everything else (electron-log, zod, mldoc, ...) is bundled into
+// electron.js like shadow-cljs did for the cljs build — the packaged
+// asar does not carry static/node_modules.
 const electronRuntimeDeps = [
   "@logseq/graph-lifecycle",
   "@fastify/cors",
-  "@js-joda/core",
-  "@modelcontextprotocol/sdk",
-  "abort-controller",
-  "command-exists",
-  "diff-match-patch",
-  "electron-dl",
-  "electron-log",
-  "electron-updater",
-  "electron-window-state",
-  "extract-zip",
   "fastify",
-  "fs-extra",
-  "https-proxy-agent",
   "keytar",
-  "mldoc",
-  "node-fetch",
-  "open",
-  "picocolors",
-  "remove-accents",
-  "sanitize-filename",
-  "semver",
-  "socks-proxy-agent",
-  "string-width",
-  "tiny-pinyin",
-  "ws",
-  "zod",
   "@zvec/bindings-darwin-arm64",
   "@zvec/bindings-darwin-x64",
   "@zvec/bindings-linux-arm64",
