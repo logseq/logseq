@@ -1,7 +1,10 @@
 (ns frontend.worker.render-delta-test
   (:require [cljs.test :refer [deftest is testing]]
             [datascript.core :as d]
-            [frontend.worker.render-delta :as render-delta]))
+            [frontend.worker.render-delta :as render-delta]
+            [logseq.db :as ldb]
+            [logseq.db.test.helper :as db-test]
+            [logseq.outliner.recycle :as recycle]))
 
 (def ^:private schema
   {:block/uuid {:db/unique :db.unique/identity}
@@ -174,6 +177,110 @@
         (is (= {parent-uuid {:remove []
                              :upsert [[child-uuid "a0"]]}}
                (membership-operations (:children show-delta))))))))
+
+(deftest ancestor-recycle-state-refreshes-descendant-children-membership-test
+  (let [ancestor-uuid (random-uuid)
+        nested-page-uuid (random-uuid)
+        content-uuid (random-uuid)
+        live-db (db-with-blocks [{:db/id 1
+                                  :block/uuid ancestor-uuid
+                                  :block/tx-id 10
+                                  :block/title "QA-E-Visibility"}
+                                 {:db/id 2
+                                  :block/uuid nested-page-uuid
+                                  :block/parent 1
+                                  :block/order "a0"
+                                  :block/tx-id 10
+                                  :block/title "QA visibility child"}
+                                 {:db/id 3
+                                  :block/uuid content-uuid
+                                  :block/parent 2
+                                  :block/order "a0"
+                                  :block/tx-id 10
+                                  :block/title "QA visibility content intact"}])
+        hide-report (tx-report live-db [[:db/add 1 :logseq.property/deleted-at 1000]
+                                        [:db/add 1 :block/tx-id 11]])
+        hide-delta (build-delta
+                    hide-report
+                    {:blocks {ancestor-uuid (block ancestor-uuid 11 "QA-E-Visibility")}})
+        show-report (tx-report (:db-after hide-report)
+                               [[:db/retract 1 :logseq.property/deleted-at 1000]
+                                [:db/add 1 :block/tx-id 12]])
+        show-delta (build-delta
+                    show-report
+                    {:blocks {ancestor-uuid (block ancestor-uuid 12 "QA-E-Visibility")}})]
+    (is (= {ancestor-uuid {:remove [[nested-page-uuid "a0"]]
+                           :upsert []}
+            nested-page-uuid {:remove [[content-uuid "a0"]]
+                              :upsert []}}
+           (membership-operations (:children hide-delta)))
+        "Recycling an ancestor hides already-open descendant children, not just the ancestor's own row.")
+    (is (= {ancestor-uuid {:remove []
+                           :upsert [[nested-page-uuid "a0"]]}
+            nested-page-uuid {:remove []
+                              :upsert [[content-uuid "a0"]]}}
+           (membership-operations (:children show-delta)))
+        "Restoring an ancestor must republish the descendant children slot that reload emptied.")))
+
+(deftest independently-recycled-descendant-stays-hidden-when-ancestor-is-restored-test
+  (let [ancestor-uuid (random-uuid)
+        nested-page-uuid (random-uuid)
+        content-uuid (random-uuid)
+        recycled-db (db-with-blocks [{:db/id 1
+                                      :block/uuid ancestor-uuid
+                                      :block/tx-id 10
+                                      :block/title "Ancestor"
+                                      :logseq.property/deleted-at 1000}
+                                     {:db/id 2
+                                      :block/uuid nested-page-uuid
+                                      :block/parent 1
+                                      :block/order "a0"
+                                      :block/tx-id 10
+                                      :block/title "Nested page"
+                                      :logseq.property/deleted-at 1000}
+                                     {:db/id 3
+                                      :block/uuid content-uuid
+                                      :block/parent 2
+                                      :block/order "a0"
+                                      :block/tx-id 10
+                                      :block/title "Hidden content"}])
+        show-report (tx-report recycled-db
+                               [[:db/retract 1 :logseq.property/deleted-at 1000]
+                                [:db/add 1 :block/tx-id 11]])
+        show-delta (build-delta
+                    show-report
+                    {:blocks {ancestor-uuid (block ancestor-uuid 11 "Ancestor")}})]
+    (is (nil? (get (membership-operations (:children show-delta))
+                   nested-page-uuid))
+        "An independently recycled descendant keeps an empty children slot after its ancestor is restored.")))
+
+(deftest restore-tx-republishes-inherited-recycled-descendant-children-test
+  (let [conn (db-test/create-conn-with-blocks
+              [{:page {:block/title "QA-E-Visibility"}
+                :blocks [{:block/title "QA visibility child"
+                          :build/tags [:logseq.class/Page]
+                          :build/children [{:block/title "QA visibility content intact"}]}]}])
+        ancestor (ldb/get-page @conn "QA-E-Visibility")
+        nested-page (db-test/find-block-by-content @conn "QA visibility child")
+        content (db-test/find-block-by-content @conn "QA visibility content intact")
+        ancestor-uuid (:block/uuid ancestor)
+        nested-page-uuid (:block/uuid nested-page)
+        content-uuid (:block/uuid content)]
+    (ldb/transact! conn
+                   (recycle/recycle-page-tx-data @conn ancestor {})
+                   {:outliner-op :delete-page})
+    (let [recycled-ancestor (d/entity @conn [:block/uuid ancestor-uuid])
+          restore-report (d/with @conn (recycle/restore-tx-data @conn recycled-ancestor))
+          delta (build-delta restore-report {:blocks {}})]
+      (is (some? (:logseq.property/deleted-at (d/entity @conn (:db/id ancestor)))))
+      (is (nil? (:logseq.property/deleted-at
+                 (d/entity (:db-after restore-report) (:db/id ancestor)))))
+      (is (= [[content-uuid (:block/order content)]]
+             (get-in (membership-operations (:children delta))
+                     [nested-page-uuid :upsert]))
+          "The restore transaction must upsert the nested page body that inherited recycle emptied.")
+      (is (empty? (get-in (membership-operations (:children delta))
+                          [nested-page-uuid :remove]))))))
 
 (deftest insert-builds-a-minimal-child-upsert-test
   (let [parent-uuid (random-uuid)
