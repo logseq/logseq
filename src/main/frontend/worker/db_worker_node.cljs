@@ -652,8 +652,23 @@
                              (p/then (fn [_] (throw error))))))))
           (p/catch (fn [e] (throw e)))))))
 
+(defn- bootstrap-sync-from-env!
+  "Seed sync config from LOGSEQ_SYNC_URL/LOGSEQ_SYNC_TOKEN for headless node
+   workers, which have no localStorage for the app to push settings from.
+   set-db-sync-config re-pins it since a stock CLI frontend pushes the cloud
+   default. No-op when LOGSEQ_SYNC_URL is unset."
+  []
+  (when-let [url (some-> (aget (.-env js/process) "LOGSEQ_SYNC_URL") not-empty)]
+    (let [http-base (string/replace url #"/+$" "")
+          ws-url (str (string/replace http-base #"^http" "ws") "/sync/%s")]
+      (reset! worker-state/*db-sync-config {:http-base http-base :ws-url ws-url})
+      (when-let [token (some-> (aget (.-env js/process) "LOGSEQ_SYNC_TOKEN") not-empty)]
+        (worker-state/set-new-state! {:auth/static-sync-token token}))
+      (log/info :db-worker-node-sync-env-bootstrap {:http-base http-base}))))
+
 (defn main
   []
+  (bootstrap-sync-from-env!)
   (let [{:keys [root-dir repo help? version? owner-source] :as opts}
         (parse-args (.-argv js/process))]
     (when help?

@@ -217,9 +217,12 @@
 
 (defn- normalize-graph-e2ee?
   [graph-e2ee?]
-  (if (nil? graph-e2ee?)
-    true
-    (true? graph-e2ee?)))
+  (cond
+    (some? graph-e2ee?) (true? graph-e2ee?)
+    ;; A static-token (self-hosted) server has no Cognito/RSA identity for e2ee,
+    ;; so default nil->false there; the cloud service keeps nil->true.
+    (sync-util/static-sync-token) false
+    :else true))
 
 (defn- graph-id->uuid
   [repo graph-id]
