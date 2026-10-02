@@ -1319,6 +1319,7 @@ should be done through this fn in order to get global config and config defaults
                       :ui/select-query-cache {}
                       :editor/block-refs #{}
                       :editor/action-data nil
+                      :editor/pending-new-block nil
                       :view/selected-blocks nil)
          clear-editing-block?
          (assoc :editor/editing? nil

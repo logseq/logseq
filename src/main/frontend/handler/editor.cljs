@@ -143,12 +143,15 @@
       (let [result (save-block-inner! block value opts)]
         (if (p/promise? result)
           (-> result
-              (p/then (fn [_]
-                        (clear-pending-block-save-title! block-uuid value)))
-              (p/catch (fn [_]
-                         (clear-pending-block-save-title! block-uuid value))))
-          (clear-pending-block-save-title! block-uuid value))
-        result)
+              (p/then (fn [value']
+                        (clear-pending-block-save-title! block-uuid value)
+                        value'))
+              (p/catch (fn [error]
+                         (clear-pending-block-save-title! block-uuid value)
+                         (throw error))))
+          (do
+            (clear-pending-block-save-title! block-uuid value)
+            result)))
       (catch :default error
         (clear-pending-block-save-title! block-uuid value)
         (throw error)))))
@@ -1660,6 +1663,13 @@
     (:block/title current-block)
     (editor-input-value input-id)))
 
+(defn- handle-save-current-block-error!
+  [error]
+  (js/console.error error)
+  (log/error :save-block-failed error)
+  (clear-pending-new-block!)
+  error)
+
 (defn save-current-block!
   ([]
    (save-current-block! {}))
@@ -1677,10 +1687,15 @@
                        (editor-input-value input-id)
                        (current-editor-value input-id current-block block))]
            (when value
-             (save-block-aux! block value (dissoc opts :flush-input?))))
+             (let [result (save-block-aux! block value (dissoc opts :flush-input?))]
+               (if (p/promise? result)
+                 (p/catch result (fn [error]
+                                   (handle-save-current-block-error! error)
+                                   (throw error)))
+                 result))))
          (catch :default error
-           (js/console.error error)
-           (log/error :save-block-failed error)))))))
+           (handle-save-current-block-error! error)
+           nil))))))
 
 (defn save-current-block-before-navigate!
   "Closes any open editor popup so the raw textarea value is persisted,
@@ -2360,6 +2375,16 @@
   [el]
   (some? (dom/closest el ".block-editor")))
 
+(defn- page-title-editor?
+  "True when Enter/typing is in the page title editor. Prefer config, but also
+  accept the rendered page-title container so a stale editor/args snapshot
+  cannot start pending-new-block after a refused page-title save."
+  [state target]
+  (or (get-in state [:config :page-title?])
+      (try
+        (some? (dom/closest target ".ls-page-title"))
+        (catch :default _ false))))
+
 (defn keydown-new-block-handler [^js e]
   (let [target (when e (.-target e))
         state (cond-> (get-state)
@@ -2375,7 +2400,7 @@
         (let [new-line? (or (state/doc-mode-enter-for-new-line?)
                             (inside-of-single-block (:node state)))]
           (cond
-            (or (get-in state [:config :page-title?])
+            (or (page-title-editor? state target)
                 (leaf-property-value-insert-blocked? (:config state) (:block state)))
             (do
               (when e (.preventDefault e))
@@ -3096,10 +3121,12 @@
           (util/stop e)
           (notification/show! (t :page.validation/name-no-hash) :warning))
         (pending-new-block?)
-        (do
-          (when (= 1 (count (str key)))
-            (append-pending-new-block-text! key))
-          (util/stop e))
+        (if (page-title-editor? (get-state) input)
+          (clear-pending-new-block!)
+          (do
+            (when (= 1 (count (str key)))
+              (append-pending-new-block-text! key))
+            (util/stop e)))
 
         (contains? #{"ArrowLeft" "ArrowRight"} key)
         (state/clear-editor-action!)
@@ -4079,16 +4106,28 @@
                     (select-all-blocks! {:page (:block/name parent)})))))
             (select-all-blocks! {})))))))
 
+(defn- recover-editor-after-failed-save!
+  "A refused page-title save (e.g. \"/\") rejects the save promise. Keep the
+  editor open so the user can fix the title, and drop pending-new-block so
+  keydown-not-matched-handler cannot swallow letters for the rest of the session."
+  [error]
+  (js/console.error error)
+  (log/error :escape-editing-save-failed error)
+  (clear-pending-new-block!)
+  (state/clear-editor-action!)
+  nil)
+
 (defn escape-editing
   [& {:keys [select? save-block? editing-another-block?]
       :or {save-block? true}}]
-  (p/do!
-   (when save-block? (save-current-block!))
-   (if select?
-     (when-let [node (some-> (state/get-input) (util/rec-get-node "ls-block"))]
-       (state/exit-editing-and-set-selected-blocks! [node]))
-     (when-not editing-another-block?
-       (state/clear-edit!)))))
+  (-> (p/do!
+       (when save-block? (save-current-block!))
+       (if select?
+         (when-let [node (some-> (state/get-input) (util/rec-get-node "ls-block"))]
+           (state/exit-editing-and-set-selected-blocks! [node]))
+         (when-not editing-another-block?
+           (state/clear-edit!))))
+      (p/catch recover-editor-after-failed-save!)))
 
 (defn copy-current-ref
   [block-id]
