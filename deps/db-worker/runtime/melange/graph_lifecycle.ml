@@ -70,8 +70,10 @@ let resolve_storage ~root ~graphs_dir =
    (repo-locked, server-start-failed, ...); keep both readable — the JS
    object itself is not an OCaml exn and prints as `undefined`. *)
 external promise_error_message : Js.Promise.error -> string option = "message"
+  [@@mel.get] [@@mel.return { undefined_to_opt }]
 
 external promise_error_code : Js.Promise.error -> string option = "code"
+  [@@mel.get] [@@mel.return { undefined_to_opt }]
 
 let exn_of_promise_error error =
   let message =
