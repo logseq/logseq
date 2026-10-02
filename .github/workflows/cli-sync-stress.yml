@@ -93,13 +93,15 @@ jobs:
       - name: Install CLI Linux runtime deps
         run: sudo apt-get update && sudo apt-get install -y libsecret-1-0
 
-      - name: Fetch OCaml deps
-        working-directory: cli
+      - name: Disable opam sandboxing
         run: |
           opam option --global 'wrap-build-commands=[]'
           opam option --global 'wrap-install-commands=[]'
           opam option --global 'wrap-remove-commands=[]'
-          opam install . --deps-only --with-test --yes
+
+      - name: Fetch OCaml deps
+        working-directory: cli
+        run: opam install . --deps-only --with-test --yes
 
       - name: Fetch db-worker OCaml deps
         working-directory: deps/db-worker
