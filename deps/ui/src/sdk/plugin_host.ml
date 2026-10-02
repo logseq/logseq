@@ -999,8 +999,6 @@ let toast msg cls =
 
 let nil_fn _a _b _c _d = resolved_nil
 let false_fn _a _b _c _d = resolved (Js.Json.boolean false)
-let arr0_fn _a _b _c _d = resolved (Sdk_convert.json_arr [||])
-
 let install_plugin_hook_fn a b _c _d =
   (match arg_string a, arg_string b with
    | Some pid, Some key when pid <> "" && key <> "" ->

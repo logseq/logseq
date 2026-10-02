@@ -65,7 +65,6 @@ external query_selector : element -> string -> element option
 external doc_query_selector : string -> element option
   = "querySelector" [@@mel.scope "document"] [@@mel.return nullable]
 
-external tag_name : element -> string = "tagName" [@@mel.get]
 external value : element -> string = "value" [@@mel.get]
 external set_value : element -> string -> unit = "value" [@@mel.set]
 external selection_start : element -> int = "selectionStart" [@@mel.get]
@@ -203,10 +202,6 @@ let payload_string payload key =
           Option.bind (Js.Dict.get d key) Js.Json.decodeString
       | None -> None)
   | None -> None
-
-let is_text_input el =
-  let t = String.lowercase_ascii (tag_name el) in
-  t = "input" || t = "textarea"
 
 (* cljs ui.cljs auto-complete-keep-visible-scroll-top: scroll exactly
    enough to keep the row inside the viewport (no padding); when the row

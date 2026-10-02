@@ -94,16 +94,6 @@ let open_ name =
     set (fun d -> { d with dialogs = d.dialogs @ [ name ] });
     touch name)
 
-let replace_top name =
-  set (fun d ->
-      let rest =
-        match List.rev d.dialogs with
-        | _ :: r -> List.rev r
-        | [] -> []
-      in
-      { d with dialogs = rest @ [ name ] });
-  touch name
-
 let close_top () =
   (match value () with
    | { prompt = None; confirm = None; ui_request = Some r; _ } ->
