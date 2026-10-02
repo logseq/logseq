@@ -1349,6 +1349,8 @@
  :plugin.themes/group "{1}"
  :plugin.themes/light-and-dark "浅色与深色主题"
 
+ :profiler/fn-not-found-error "未找到函数：{1}"
+ :profiler/fn-unqualified-error "请使用带命名空间的函数名，例如 cljs.core/map。"
  :profiler/input-fn-placeholder "在此输入函数名"
  :profiler/unregister "注销"
 

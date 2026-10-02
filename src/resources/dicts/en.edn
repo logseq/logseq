@@ -1349,6 +1349,8 @@
  :plugin.themes/group "{1} themes"
  :plugin.themes/light-and-dark "light & dark themes"
 
+ :profiler/fn-not-found-error "Function not found: {1}"
+ :profiler/fn-unqualified-error "Use a qualified function name, such as cljs.core/map."
  :profiler/input-fn-placeholder "input fn name here"
  :profiler/unregister "Unregister"
 
