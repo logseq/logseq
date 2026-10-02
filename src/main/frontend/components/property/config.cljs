@@ -362,8 +362,8 @@
                              (submenu-content {:set-sub-open! set-sub-open! :id id1}) submenu-content)))
                         #(shui/dropdown-menu-item
                           (merge {:on-select (fn []
-                                               (when toggle?
-                                                 (some-> (gdom/getElement id2) (.click))))
+                                               (when (and toggle? on-toggle-checked-change)
+                                                 (on-toggle-checked-change (not toggle-checked?))))
                                   :id id1}
                                  item-props') %))]
     (wrap-menuitem
@@ -378,10 +378,13 @@
         (desc)
         (boolean? toggle-checked?)
         [:span.flex.items-center
+         ;; keep the toggle's dispatched input click from re-selecting
+         ;; the item, which would toggle it a second time
+         {:on-click #(util/stop-propagation %)}
          (let [f (if checkbox? shui/checkbox shui/switch)]
            (f {:id id2 :size "sm" :checked toggle-checked?
                :disabled disabled? :on-click #(util/stop-propagation %)
-               :on-checked-change (or on-toggle-checked-change identity)}))]
+               :on-checked-change (fn [checked?] ((or on-toggle-checked-change identity) checked?))}))]
         :else
         [:label [:span desc]
          (when disabled? (shui/tabler-icon "forbid-2" {:size 15}))])])))
@@ -843,8 +846,8 @@
                     :title (t :property/default-value)
                     :toggle-checked? (boolean default-value)
                     :checkbox? true
-                    :on-toggle-checked-change (fn []
-                                                (db-property-handler/set-block-property! (:block/uuid property) :logseq.property/scalar-default-value (not default-value)))})
+                    :on-toggle-checked-change (fn [checked?]
+                                                (db-property-handler/set-block-property! (:block/uuid property) :logseq.property/scalar-default-value checked?))})
                  (let [default-value (:logseq.property/default-value property)]
                    {:icon :settings-2 :title (t :property/default-value)
                     :desc (if default-value (db-property/property-value-content default-value) (t :property/set-value))
@@ -929,9 +932,9 @@
           (dropdown-editor-menuitem {:icon :checks :title (t :property/multiple-values)
                                      :toggle-checked? many?
                                      :on-toggle-checked-change
-                                     (fn []
+                                     (fn [checked?]
                                        (let [update-cardinality-fn #(db-property-handler/upsert-property! (:db/ident property)
-                                                                                                          {:db/cardinality (if many? :one :many)}
+                                                                                                          {:db/cardinality (if checked? :many :one)}
                                                                                                           {})]
                                       ;; Only show dialog for existing values as it can be reversed for unused properties
                                          (if (and (seq values) (not many?))
@@ -968,10 +971,10 @@
                               {:icon :eye-off :title (t :property/hide-empty-value)
                                :toggle-checked? (boolean (:logseq.property/hide-empty-value property))
                                :disabled? config/publishing?
-                               :on-toggle-checked-change (fn []
+                               :on-toggle-checked-change (fn [checked?]
                                                            (db-property-handler/set-block-property! (:block/uuid property)
                                                                                                     :logseq.property/hide-empty-value
-                                                                                                    (not (:logseq.property/hide-empty-value property))))}))]
+                                                                                                    checked?))}))]
                           (remove nil?))]
           (when (> (count group') 0)
             (cons (shui/dropdown-menu-separator) group'))))
