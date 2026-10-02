@@ -177,8 +177,7 @@ let make scheduler : t =
 let get t = Signal.get t.vs.Signal.state_signal
 
 (* signal of whether any popover layer (autocomplete / context menu /
-   picker popup) is open — drives chrome that must hide while one is up
-   (the selection action-bar, like cljs's popup layering) *)
+   picker popup) is open — drives chrome that must hide while one is up *)
 let popup_signal () =
   match !active with
   | Some t ->

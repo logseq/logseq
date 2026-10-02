@@ -1019,9 +1019,10 @@ let refresh_via_delta (resp : Wire.t option) : unit Js.Promise.t =
           !Runtime.refresh_page_side page';
           (* property areas hold worker data outside the spliced model;
              the broadcast echo of this tx is deduped, so refresh them
-             here or their chips stay stale. Fire-and-forget: awaiting
-             the get-display-properties roundtrip would add ~60ms to
-             every editing op before focus can land *)
+             here or their chips stay stale. Not awaited — the refresh
+             is a full-area refetch and would gate the caller's next
+             step (the Enter refocus mounts the new editor ~150ms
+             late) on cosmetic property chips *)
           ignore (!Runtime.refresh_property_areas ());
           Js.Promise.resolve ()
       | Some _ ->

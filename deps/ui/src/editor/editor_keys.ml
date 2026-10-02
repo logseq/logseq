@@ -218,6 +218,11 @@ let on_normal_key ev =
          clears the selection *)
       if S.ready () && (S.value ()).S.action_bar then A.hide_action_bar ()
       else A.clear_selection ()
+  | "?" ->
+      (* cljs shift+/ (:ui/toggle-help, global-non-editing-only) toggles
+         the help menu popup *)
+      D.prevent_default ev;
+      Runtime.send Action.Help_toggle
   | _ -> (
       match shortcut_key ev with
       | "a" when mods ev && shift ->

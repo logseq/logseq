@@ -27,6 +27,15 @@ module S = Editor_state
 
 let dom = Logseq_dom.dom
 
+let contains_sub s sub =
+  let n = String.length s and m = String.length sub in
+  let rec go i =
+    if i + m > n then false
+    else if String.sub s i m = sub then true
+    else go (i + 1)
+  in
+  go 0
+
 let block_key (b : Model.block) =
   match b.block_uuid with
   | Some u -> u
@@ -106,7 +115,6 @@ let row_attrs_sig_of ~scope ~depth (bs : Model.block Signal.signal) =
     (fun ((b : Model.block), (st : S.t)) ->
       let uuid = Option.value b.block_uuid ~default:"" in
       row_attrs_of ~scope ~depth uuid b st)
-
 let collapsed_sig ~scope (b : Model.block) =
   let uuid = Option.value b.block_uuid ~default:"" in
   Signal.map
@@ -573,12 +581,43 @@ and row_sig ~depth ~editable ~library scope
     (bs : Model.block Signal.signal) : t =
   let b0 = Signal.get bs in
   let key = block_key b0 in
+  (* the record isn't the only input to row_main: Render resolves
+     [[uuid]]/((uuid))/#[[uuid]] refs through Render_inline's pull cache
+     at mount, and an untouched record keeps its mount on every
+     publish. Pair the invalidation gens in and remount only when a uuid
+     this row mentions was invalidated since it last painted *)
+  (* remount iff a uuid the row renders was (re)invalidated since the
+     last paint — per-uuid gens compare [ia]@[ib] so re-touching a
+     previously invalidated entity still remounts *)
+  let gen_bumped (b : Model.block) ia ib =
+    let uuid = Option.value b.Model.block_uuid ~default:"" in
+    (* the painted title — committed-buffer overrides paint before the
+       worker's canon row lands, so the stored block_title can be "" *)
+    let title = S.title_for uuid b.Model.block_title in
+    Render_inline.Uuid_gens.exists
+      (fun u g ->
+        match Render_inline.Uuid_gens.find_opt u ia with
+        | Some g' when g' = g -> false
+        | _ ->
+            List.mem u b.Model.block_tag_uuids
+            || contains_sub title ("[[" ^ u ^ "]]")
+            || contains_sub title ("((" ^ u ^ "))"))
+      ib
+  in
   dom ~key:("ls-" ^ scope ^ "-" ^ key)
     ~style_class_signal:(row_class_sig_of bs)
     ~attrs_signal_v:(row_attrs_sig_of ~scope ~depth bs)
-    [ Logseq_dom.dyn ~equal:(fun (a : Model.block) (b : Model.block) ->
-          a == b)
-        (fun b -> row_main ~editable ~library scope b) bs
+    [ Logseq_dom.dyn
+        ~equal:
+          (fun ((a : Model.block), ga, ia) ((b : Model.block), gb, ib) ->
+          a == b && ga = gb && not (gen_bumped a ia ib))
+        (fun ((b : Model.block), _g, _i) ->
+          row_main ~editable ~library scope b)
+        (Signal.map2
+           (fun (b : Model.block) (_st : S.t) ->
+             let g, i = Render_inline.invalidation () in
+             (b, g, i))
+           bs (S.signal ()))
     ; row_children ~depth ~editable ~library scope bs
     ]
 
