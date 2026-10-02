@@ -39,6 +39,8 @@
     (is (= "//nas/share/x" (path/file-url-or-path->path "file://NAS/share/x")))
     (is (= "D:/a.txt" (path/file-url-or-path->path "file:///D%3A/a.txt")))
     (is (= "/home/admin/a.txt" (path/file-url-or-path->path "file:///home/admin/a.txt")))
+    ;; Electron assets:// URLs protect a Windows drive colon as /logseq__colon/
+    (is (= "C:/graph/assets/a.txt" (path/file-url-or-path->path "assets:///C/logseq__colon/graph/assets/a.txt")))
     (is (= "/D:/a.txt" (path/file-url-or-path->path "/D:/a.txt")))
     (is (= "/D:\\a.txt" (path/file-url-or-path->path "/D:\\a.txt")))
     (is (= "/home/admin/a.txt" (path/file-url-or-path->path "/home/admin/a.txt")))))
