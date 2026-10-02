@@ -327,11 +327,13 @@ let shutdown_server server =
           ~timeout_span:(Some (Time.span_of_ms 1_000L))))
     (fun _ -> Cli_effect.pure false)
 
+let account_runtime_dir = ".cli-sync-runtime"
+
 let ignored_graph_dir name =
   name = "Unlinked graphs" || name = "backup"
   || starts_with ~prefix:"file-version-" name
   || starts_with ~prefix:"logseq_db_" name
-  || starts_with ~prefix:".cli-" name
+  || name = account_runtime_dir
 
 let classify_graph_dir dir_name =
   if ignored_graph_dir dir_name then None

@@ -342,7 +342,7 @@
   (or (= graph-name common-config/unlinked-graphs-dir)
       (= graph-name backup-root-dir-name)
       (string/starts-with? graph-name common-config/file-version-prefix)
-      (string/starts-with? graph-name ".cli-")))
+      (= graph-name ".cli-sync-runtime")))
 
 (defn- legacy-derivation-signal?
   [dir-name]
