@@ -441,7 +441,7 @@
                 [:logseq.property.view/gallery-card-width
                  :logseq.property.view/gallery-card-height]))))
 
-(deftest migrate-65-34-converts-external-url-to-url-type
+(deftest migrate-65-35-converts-external-url-to-url-type
   (let [conn (d/create-conn db-schema/schema)
         block-uuid #uuid "11111111-1111-1111-1111-111111111111"
         property-uuid (common-uuid/gen-uuid :db-ident-block-uuid :logseq.property.asset/external-url)]
@@ -463,9 +463,9 @@
     (is (= "https://example.com/file.pdf"
            (:logseq.property.asset/external-url (d/entity @conn [:block/uuid block-uuid]))))
 
-    (db-migrate/migrate conn :target-version {:major 65 :minor 34})
+    (db-migrate/migrate conn :target-version {:major 65 :minor 35})
 
-    (is (= {:major 65 :minor 34}
+    (is (= {:major 65 :minor 35}
            (:kv/value (d/entity @conn :logseq.kv/schema-version))))
     (let [property (d/entity @conn :logseq.property.asset/external-url)
           value (:logseq.property.asset/external-url
