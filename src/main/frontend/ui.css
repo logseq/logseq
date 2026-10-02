@@ -237,7 +237,6 @@ input[type='range'] {
     grid-template-rows: 0fr;
 
     .ls-foldable-content-inner {
-      overflow: hidden;
       opacity: 0;
       pointer-events: none;
     }
