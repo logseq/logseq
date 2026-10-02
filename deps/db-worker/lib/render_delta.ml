@@ -139,38 +139,44 @@ let membership_eq (a : membership option) (b : membership option) : bool =
 let membership_operations (tx_report : tx_report)
     : (string * ((string * value) list * (string * value) list)) list =
   let db_before = tx_report.db_before and db_after = tx_report.db_after in
-  List.fold_left
-    (fun ops entity_id ->
+  (* group rm/up pairs by parent_uuid without assoc scans; [touches]
+     records every parent touched (newest first) so the output keeps the
+     assoc version's last-touch-recency order. *)
+  let groups = Hashtbl.create 16 and touches = ref [] in
+  let put uuid is_removal pair =
+    touches := uuid :: !touches;
+    let rm, up =
+      match Hashtbl.find_opt groups uuid with
+      | Some (rm, up) -> (rm, up)
+      | None -> ([], [])
+    in
+    if is_removal then Hashtbl.replace groups uuid (pair :: rm, up)
+    else Hashtbl.replace groups uuid (rm, pair :: up)
+  in
+  List.iter
+    (fun entity_id ->
        let before = membership_at db_before entity_id in
        let after = membership_at db_after entity_id in
-       if membership_eq before after then ops
-       else
-         let ops =
-           match before with
-           | Some m ->
-               let cur =
-                 match List.assoc_opt m.parent_uuid ops with
-                 | Some (rm, up) -> (rm, up)
-                 | None -> ([], [])
-               in
-               let rm, up = cur in
-               (m.parent_uuid, (rm @ [ (m.block_uuid, m.order) ], up))
-               :: List.remove_assoc m.parent_uuid ops
-           | None -> ops
-         in
+       if membership_eq before after then ()
+       else begin
+         (match before with
+          | Some m -> put m.parent_uuid true (m.block_uuid, m.order)
+          | None -> ());
          match after with
-         | Some m ->
-             let cur =
-               match List.assoc_opt m.parent_uuid ops with
-               | Some (rm, up) -> (rm, up)
-               | None -> ([], [])
-             in
-             let rm, up = cur in
-             (m.parent_uuid, (rm, up @ [ (m.block_uuid, m.order) ]))
-             :: List.remove_assoc m.parent_uuid ops
-         | None -> ops)
-    []
-    (List.rev (structural_entity_ids tx_report.tx_data))
+         | Some m -> put m.parent_uuid false (m.block_uuid, m.order)
+         | None -> ()
+       end)
+    (List.rev (structural_entity_ids tx_report.tx_data));
+  let emitted = Hashtbl.create (Hashtbl.length groups) in
+  List.filter_map
+    (fun uuid ->
+       if Hashtbl.mem emitted uuid then None
+       else (
+         Hashtbl.replace emitted uuid ();
+         match Hashtbl.find_opt groups uuid with
+         | Some (rm, up) -> Some (uuid, (List.rev rm, List.rev up))
+         | None -> None))
+    !touches
 
 (* ordered-operations — cljs sort-by (juxt (str order) (str uuid)) *)
 let str_of_value (v : value) : string =
@@ -432,6 +438,16 @@ let order_list_shifted_eids (r : tx_report) : entity_id list =
           in
           List.iter walk (Ldb.ref_ents e "block/_parent")
     in
+    (* per-eid tx_data scans were O(touched x tx_size) — prebuild the two
+       membership tables once. *)
+    let referrer_tbl = Hashtbl.create (List.length referrers) in
+    List.iter (fun id -> Hashtbl.replace referrer_tbl id ()) referrers;
+    let shift_trigger_eids = Hashtbl.create 64 in
+    List.iter
+      (fun (d : datom) ->
+         if d.a = "logseq.property/order-list-type" || d.a = "block/parent" then
+           Hashtbl.replace shift_trigger_eids d.e ())
+      r.tx_data;
     List.iter
       (fun eid ->
          let pids =
@@ -453,13 +469,8 @@ let order_list_shifted_eids (r : tx_report) : entity_id list =
               then diff (markers 0 eid pid) (markers 1 eid pid))
            pids;
          if
-           List.mem eid referrers
-           || List.exists
-                (fun (d : datom) ->
-                   d.e = eid
-                   && (d.a = "logseq.property/order-list-type"
-                      || d.a = "block/parent"))
-                r.tx_data
+           Hashtbl.mem referrer_tbl eid
+           || Hashtbl.mem shift_trigger_eids eid
          then mark_descendants eid)
       touched;
     Hashtbl.fold (fun eid () acc -> eid :: acc) shifted []

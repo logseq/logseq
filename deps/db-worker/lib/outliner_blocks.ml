@@ -124,11 +124,12 @@ let get_non_consecutive_blocks db (blocks : entity list) : entity list =
 
 (* outliner-core/filter-top-level-blocks *)
 let filter_top_level_blocks (blocks : entity list) : entity list =
-  let block_ids = List.map (fun (b : entity) -> b.id) blocks in
+  let block_ids = Hashtbl.create (List.length blocks) in
+  List.iter (fun (b : entity) -> Hashtbl.replace block_ids b.id ()) blocks;
   List.filter
     (fun b ->
        match Ldb.ref_ent b "block/parent" with
-       | Some p -> not (List.mem p.id block_ids)
+       | Some p -> not (Hashtbl.mem block_ids p.id)
        | None -> true)
     blocks
 
