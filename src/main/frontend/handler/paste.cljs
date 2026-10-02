@@ -170,7 +170,7 @@
            (not (string/blank? (util/get-selected-text))))
       (editor-format/html-link-format! text)
 
-      ;; Pastes only block id when inside of '(())'
+      ;; Pastes only block id when inside the deprecated '(())'
       (and (block-ref/block-ref? text)
            (editor-autopair/wrapped-by? input block-ref/left-parens block-ref/right-parens))
       (commands/simple-insert! input-id (block-ref/get-block-ref-id text) nil)

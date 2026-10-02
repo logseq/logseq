@@ -2,12 +2,12 @@
  :deps
  {metosin/malli
   {:git/url "https://github.com/metosin/malli"
-   :sha     "52ea58a36ff5172b38dfc526ca638afa7226a4a0"}
-  borkdude/rewrite-edn {:mvn/version "0.5.9"}
+   :sha     "76603d587553c5a8d60fa64c9e631fa3addb4b2e"}
+  borkdude/rewrite-edn {:mvn/version "0.6.10"}
   logseq/bb-tasks
   #_{:local/root "../bb-tasks"}
   {:git/url "https://github.com/logseq/bb-tasks"
-   :git/sha "7cc218286c03f093996539b8195de56a0ec5df6a"}
+   :git/sha "957318b81b22099484f1e9817d4d9d7b8598fdf6"}
   logseq/graph-parser
   {:local/root "deps/graph-parser"}
   org.clj-commons/digest
@@ -15,7 +15,7 @@
   cheshire/cheshire
   {:mvn/version "6.2.0"}}
  :pods
- {clj-kondo/clj-kondo {:version "2026.04.15"}
+ {clj-kondo/clj-kondo {:version "2026.08.04"}
   org.babashka/fswatcher {:version "0.0.7"}
   org.babashka/go-sqlite3 {:version "0.3.13"}}
  :tasks
@@ -37,13 +37,6 @@
   {:doc "Start electron dev by watching assets and opening dev app"
    ;; Parallel execution - https://book.babashka.org/#parallel
    :task (run '-dev:electron-start {:parallel true})}
-
-  dev:app-watch
-  logseq.tasks.dev.mobile/app-watch
-
-  dev:mobile-https-cert
-  {:doc "Generate local HTTPS certificate for mobile Shadow CLJS development"
-   :task logseq.tasks.dev.mobile/ensure-dev-ssl-cert-task}
 
   -dev:build-publishing-frontend
   logseq.tasks.dev/build-publishing-frontend
@@ -115,32 +108,6 @@
 
   dev:diff-datoms
   logseq.tasks.dev/diff-datoms
-
-  dev:cap-run-ios
-  logseq.tasks.dev.mobile/cap-run-ios
-
-  -dev:ios-app
-  {:depends [dev:app-watch dev:cap-run-ios]}
-
-  dev:ios-app
-  {:doc "iOS development environment"
-   :task (run '-dev:ios-app {:parallel true})}
-
-  release:ios-app
-  logseq.tasks.dev.mobile/run-ios-release
-
-  dev:cap-run-android
-  logseq.tasks.dev.mobile/cap-run-android
-
-  -dev:android-app
-  {:depends [dev:app-watch dev:cap-run-android]}
-
-  dev:android-app
-  {:doc "Android development environment"
-   :task (run '-dev:android-app {:parallel true})}
-
-  release:android-app
-  logseq.tasks.dev.mobile/run-android-release
 
   dev:validate-local-storage
   logseq.tasks.spec/validate-local-storage

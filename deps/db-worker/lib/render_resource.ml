@@ -1516,7 +1516,7 @@ let query_watch_keys db (spec_kvs : (Wire.t * Wire.t) list) (kind : string)
 (* require-query-spec! *)
 let query_common_keys =
   [ "kind"; "query"; "current-page-title"; "current-block-uuid"; "today-day"
-  ; "remove-block-children?"; "result-transform-edn" ]
+  ; "remove-block-children?"; "result-transform-edn"; "view-edn" ]
 
 let query_dsl_keys = query_common_keys @ [ "cards?" ]
 let query_datalog_keys = query_common_keys @ [ "inputs"; "rules" ]
@@ -1564,6 +1564,9 @@ let require_query_spec (spec : Wire.t) : string * (Wire.t * Wire.t) list =
              | Some (Wire.Bool _) -> true
              | _ -> false)
         && opt_ok "result-transform-edn" (function
+             | Some (Wire.String s) -> Unicode.trim s <> ""
+             | _ -> false)
+        && opt_ok "view-edn" (function
              | Some (Wire.String s) -> Unicode.trim s <> ""
              | _ -> false)
         &&
@@ -1846,7 +1849,7 @@ let execute_query_spec db (spec_kvs : (Wire.t * Wire.t) list) (kind : string)
   | _ -> []
 
 let query_result_rows db (rows : query_result list list)
-    (spec_kvs : (Wire.t * Wire.t) list) : Wire.t list =
+    (spec_kvs : (Wire.t * Wire.t) list) : Wire.t list * Wire.t option =
   let get k = List.assoc_opt (kw k) spec_kvs in
   let rows' =
     if block_query_result db rows then
@@ -1886,12 +1889,25 @@ let query_result_rows db (rows : query_result list list)
          | _ -> fail "Query result transform must return rows" [ (kw "result", out) ])
     | _ -> List.map (fun row -> Wire.Array (List.map wire_cell_of_query_result row)) rows'
   in
-  List.map
-    (fun row ->
-      match row with
-      | Wire.Array cells | Wire.List cells -> normalize_query_row db cells
-      | single -> normalize_query_row db [ single ])
-    rows_wire
+  (* :view — cljs evals view-f over the post-transform result seq inside
+     the component. Eval worker-side over the same cells; entity cells
+     then normalize to uuids for the wire the way row cells do. *)
+  let view =
+    match get "view-edn" with
+    | Some (Wire.String edn) when Unicode.trim edn <> "" ->
+        Some
+          (normalize_query_cell
+             (Render_deps.apply_result_transform ~entity_attr edn rows_wire)
+             db)
+    | _ -> None
+  in
+  ( List.map
+      (fun row ->
+        match row with
+        | Wire.Array cells | Wire.List cells -> normalize_query_row db cells
+        | single -> normalize_query_row db [ single ])
+      rows_wire
+  , view )
 
 let render_query db key runtime =
   let spec_wire = List.nth key 1 in
@@ -1931,9 +1947,11 @@ let render_query db key runtime =
       execute_query_spec db spec_kvs kind_str query_forms rules_forms
         query_string runtime
     in
+    let rows_wire, view = query_result_rows db rows spec_kvs in
     ( watch
     , Wire.Map
-        [ (kw "rows", Wire.Array (query_result_rows db rows spec_kvs)) ] )
+        ([ (kw "rows", Wire.Array rows_wire) ]
+         @ (match view with Some v -> [ (kw "view", v) ] | None -> [])) )
   with e -> (
     (* A user-supplied query can fail in many ways: reader errors on
        incomplete syntax while editing, invalid regex, malformed datalog,

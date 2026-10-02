@@ -1685,6 +1685,24 @@ let apply_edn ~(entity_attr : entity_id -> attr -> value) (edn : string)
           Wire.Array (List.map (fun v -> wire_of_rt (V v)) xs)
       | other -> wire_of_rt other)
 
+(* sci/eval-string — eval every top-level form in [code], last wins.
+   [bindings] are symbol -> rt pairs visible as free vars ('block in
+   src-block eval). Used by thread-api/eval-string. *)
+let eval_code ~(entity_attr : entity_id -> attr -> value)
+    ~(bindings : (string * rt) list) (code : string) : rt =
+  let c = { entity_attr } in
+  let saved = !current_ctx in
+  current_ctx := Some c;
+  Common_util.protect
+    ~finally:(fun () -> current_ctx := saved)
+    (fun () ->
+      let env = env_create None in
+      List.iter (fun (k, v) -> env_bind env k v) bindings;
+      let forms =
+        List.map Edn_util.value_of_edn (Edn_parser.of_edn_string_all code)
+      in
+      eval_do env forms)
+
 (* production wiring for the Render_deps result-transform hook *)
 let () =
   Render_deps.result_transform_fn :=

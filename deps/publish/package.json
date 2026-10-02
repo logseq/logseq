@@ -13,7 +13,7 @@
     "deploy": "pnpm bump-publish-version && pnpm clean && pnpm release && cd ./worker && pnpm exec wrangler deploy --env prod"
   },
   "dependencies": {
-    "mldoc": "^1.5.9",
-    "shadow-cljs": "^3.4.4"
+    "mldoc": "^1.6.0",
+    "shadow-cljs": "^3.5.4"
   }
 }

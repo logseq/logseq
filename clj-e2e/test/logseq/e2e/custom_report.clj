@@ -24,12 +24,35 @@
        (.setPath (java.nio.file.Paths/get "e2e-dump/"
                                           (into-array [(format "./screenshot-%s-%s.png" test-name (System/currentTimeMillis))]))))))
 
+(defn- dump-page-title-dups
+  "Debug aid: when a test errors, dump each [data-testid='page title']
+   element's text + ancestor chain so strict-mode violations are easy to
+   attribute."
+  [page]
+  (try
+    (let [out (.evaluate
+               page
+               "() => [...document.querySelectorAll(\"div[data-testid='page title']\")].map(e => {
+                  let chain = [], n = e;
+                  while (n && n !== document.body) {
+                    const cls = (n.className && n.className.split) ? n.className.split(' ').slice(0,3).join('.') : n.tagName;
+                    chain.unshift(n.tagName.toLowerCase() + '.' + cls);
+                    n = n.parentElement;
+                  }
+                  const r = e.getBoundingClientRect();
+                  return e.textContent.trim().slice(0,30) + ' @[' + (r.x|0) + ',' + (r.y|0) + '] ' + chain.join('>');
+                })")]
+      (spit (format "e2e-dump/title-dups-%s.txt" (System/currentTimeMillis))
+            (str (string/join "\n" out) "\n")))
+    (catch Throwable _ nil)))
+
 (defn- collect-info-when-error-or-failed
   []
   ;; screenshot for all pw pages when :error
   (when-let [all-contexts (seq *pw-contexts*)]
     (doseq [page (mapcat pw-page/get-pages all-contexts)]
-      (screenshot page (string/join "-" (map (comp str :name meta) t/*testing-vars*)))))
+      (screenshot page (string/join "-" (map (comp str :name meta) t/*testing-vars*)))
+      (dump-page-title-dups page)))
 
   ;; dump console logs
   (when-let [pw-page->console-logs (some-> *pw-page->console-logs* deref)]

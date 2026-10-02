@@ -165,7 +165,7 @@ let pools : (string, Opfs.pool) Hashtbl.t = Hashtbl.create 8
 let dropped_pools : (string, Opfs.pool) Hashtbl.t = Hashtbl.create 4
 let sqlite3_ref : Opfs.sqlite3 option ref = ref None
 
-external promise_error_message : Js.Promise.error -> string option = "message"
+external promise_error_message : Js.Promise.error -> string option = "message" [@@mel.get]
 
 let task_of_promise promise =
   let task, resolver = Db_worker_effect.wait () in

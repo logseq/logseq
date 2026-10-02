@@ -143,19 +143,9 @@ let block_positioned_properties_map db (block : entity) : Wire.t =
           db
           block.id))
 
-let reaction_selector =
-  "[:db/id :block/uuid :logseq.property.reaction/emoji-id \
-   {:logseq.property/created-by-ref [:db/id :block/uuid :block/title]}]"
-
+(* single impl lives in outliner_tree (shared with the page-tree pull) *)
 let block_reactions db (block_id : entity_id) : Wire.t =
-  Wire.Array
-    (List.of_seq
-       (datoms db Avet ~a:"logseq.property.reaction/target"
-          ~v:(Ref block_id) ())
-    |> List.map (fun (d : datom) ->
-           match pull_string db reaction_selector (Entity_id d.e) with
-           | Some p -> Ds_wire.transit_of_pulled p
-           | None -> Wire.Nil))
+  Outliner_tree.block_reactions db block_id
 
 let empty_render_display_properties =
   Wire.Map
@@ -1012,3 +1002,436 @@ let open_block_tree db (root_uuid : string) : Wire.t =
                       [ (kw "parent-tx-id", Wire.Int tx_id)
                       ; (kw "items", items_wire rows) ] ))
                 children) ) ])
+
+(* ---------------------------------------------------------------
+   parse-block — cljs wrap-parse-block + format-block/parse-block
+   (db_based/editor.cljs:101, format/block.cljs:75). The cljs frontend
+   mldoc-parses block/title before outliner save-block so [[page]] refs
+   land in :block/refs, heading/code/math display types materialize,
+   and title refs rewrite to [[uuid]]. Runs worker-side where the
+   datascript conn lives; the cljs :editor/block-refs cache and
+   markdown hashtag-link tag refs are editor-session state the worker
+   never sees and stay omitted.
+   --------------------------------------------------------------- *)
+
+(* format.block/standalone-display-block *)
+let standalone_display_block (bm : Block_map.t) : Block_map.t =
+  match Block_map.string_attr bm "block/title" with
+  | None -> bm
+  | Some raw -> (
+      let title = Unicode.trim raw in
+      let wrapped p =
+        let lp = String.length p in
+        String.length title >= 2 * lp
+        && String.sub title 0 lp = p
+        && String.sub title (String.length title - lp) lp = p
+      in
+      if (wrapped "```" || wrapped "$$") && title <> "" then
+        let ast_body =
+          match Block_map.attr_value bm "block.temp/ast-body" with
+          | Some v -> Clj_value.coll_items v
+          | None -> (
+              match
+                Gp_mldoc.to_edn_format ~content:title ~format:"markdown"
+              with
+              | Vector xs ->
+                  List.map
+                    (fun x ->
+                      match Clj_value.coll_items x with a :: _ -> a | [] -> Nil)
+                    xs
+              | _ -> [])
+        in
+        match ast_body with
+        | [ node ] -> (
+            match Clj_value.coll_items node with
+            | String "Src" :: data :: _ ->
+                let lines =
+                  List.filter_map
+                    (function String s -> Some s | _ -> None)
+                    (Clj_value.coll_items (Clj_value.map_get data "lines"))
+                in
+                let t' = String.concat "" lines in
+                let n = String.length t' in
+                let t' =
+                  if n >= 2 && String.sub t' (n - 2) 2 = "\r\n" then
+                    String.sub t' 0 (n - 2)
+                  else if n >= 1 && t'.[n - 1] = '\n' then
+                    String.sub t' 0 (n - 1)
+                  else t'
+                in
+                let bm =
+                  Block_map.put
+                    (Block_map.put bm "block/title" (String t'))
+                    "logseq.property.node/display-type" (Keyword "code")
+                in
+                (match Clj_value.map_get_opt data "language" with
+                 | Some (String lang) when lang <> "" ->
+                     Block_map.put bm "logseq.property.code/lang" (String lang)
+                 | _ -> bm)
+            | String "Displayed_Math" :: data :: _ -> (
+                match data with
+                | String s ->
+                    Block_map.put
+                      (Block_map.put bm "block/title"
+                         (String (Unicode.trim s)))
+                      "logseq.property.node/display-type" (Keyword "math")
+                | _ -> bm)
+            | _ -> bm)
+        | _ -> bm
+      else bm)
+
+(* cljs use-cached-refs + remove-empty-refs on the merged ref list;
+   cached-refs are the input block's own :block/refs (the cljs version
+   also reads :editor/block-refs UI state, unavailable here). *)
+let use_cached_refs (block_uuid : value) (cached : value list)
+    (refs : value list) : value list =
+  let cached_titles =
+    List.filter_map
+      (fun r ->
+        match Clj_value.map_get_opt r "block/title" with
+        | Some (String t) -> Some (t, r)
+        | _ -> None)
+      cached
+  in
+  List.filter_map
+    (fun x ->
+      match x with
+      | Map _ -> (
+          let xu = Clj_value.map_get x "block/uuid" in
+          if xu = block_uuid && xu <> Nil then None
+          else
+            match
+              (Clj_value.map_get_opt x "block/title", xu, block_uuid)
+            with
+            | _, Nil, Nil -> None (* cljs (= nil nil) drops uuid-less refs *)
+            | Some (String t), _, _ -> (
+                match List.assoc_opt t cached_titles with
+                | Some cached_ref -> (
+                    let cm = Gp_block.bm_of_map cached_ref in
+                    match
+                      Clj_value.map_get_opt x "block.temp/original-page-name"
+                    with
+                    | Some o ->
+                        Some
+                          (Map
+                             (List.map
+                                (fun (k, v) -> (Keyword k, v))
+                                (Block_map.put cm
+                                   "block.temp/original-page-name" o)))
+                    | None -> Some cached_ref)
+                | None -> Some x)
+            | _ -> Some x)
+      | Nil -> None
+      | _ -> Some x)
+    refs
+
+(* cljs util/distinct-by-last-wins on ref-dedupe-key *)
+let dedupe_refs (refs : value list) : value list =
+  let seen = Hashtbl.create 8 in
+  List.fold_right
+    (fun r acc ->
+      let key =
+        match r with
+        | Map _ | Vector _ -> (
+            match Clj_value.map_get_opt r "block/uuid" with
+            | Some (Uuid _ as u) -> Edn_util.pr_str u
+            | _ -> Edn_util.pr_str r)
+        | _ -> Edn_util.pr_str r
+      in
+      if Hashtbl.mem seen key then acc
+      else (
+        Hashtbl.add seen key ();
+        r :: acc))
+    refs []
+
+(* cljs format.block/parse-block — extract-blocks on "- <title>" *)
+let parse_block_extract (db : db) (bm : Block_map.t) (title : string) :
+    Block_map.t =
+  let inline_ast =
+    Gp_mldoc.to_edn_format ~content:(Unicode.trim title) ~format:"markdown"
+  in
+  let first_elem_type =
+    match inline_ast with
+    | Vector (Vector (String t :: _) :: _)
+    | Vector (List (String t :: _) :: _)
+    | List (Vector (String t :: _) :: _)
+    | List (List (String t :: _) :: _) -> t
+    | _ -> ""
+  in
+  let content' =
+    "-"
+    ^ (if Gp_mldoc.block_with_title first_elem_type then " " else "\n")
+    ^ title
+  in
+  let ast =
+    match Gp_mldoc.to_edn_format ~content:content' ~format:"markdown" with
+    | Vector xs -> xs
+    | List xs -> xs
+    | _ -> []
+  in
+  if ast = [] then bm
+  else
+    let opts : Gp_block.extract_options =
+      { user_config = []
+      ; block_pattern = "-"
+      ; date_formatter = Some (Ldb.journal_title_format db)
+      ; db
+      ; db_graph_mode = true
+      ; export_to_db_graph_flag = false
+      ; remove_properties = false
+      ; remove_logbook = false
+      ; remove_deadline_scheduled = false
+      ; page_name = None
+      ; filename_format = None
+      ; resolve_uuid_fn = (fun _ _ _ _ -> None)
+      ; skip_journal = false
+      }
+    in
+    match Gp_block.extract_blocks ast content' "markdown" opts with
+    | [] -> bm
+    | nb :: _ ->
+        let nb = standalone_display_block nb in
+        let props =
+          match Block_map.attr_value nb "block/properties" with
+          | Some (Map pkvs) -> pkvs
+          | _ -> []
+        in
+        let nb =
+          Block_map.dissoc nb
+            [ "block/format"; "block/properties"; "block/macros"
+            ; "block/properties-order" ]
+        in
+        List.fold_left
+          (fun acc (k, v) ->
+            match k with
+            | Keyword "heading" | String "heading" ->
+                Block_map.put acc "logseq.property/heading" v
+            | _ -> acc)
+          nb props
+
+(* cljs wrap-parse-block on the decoded block map *)
+let wrap_parse_block (db : db) (bm : Block_map.t) : Block_map.t =
+  match Block_map.string_attr bm "block/title" with
+  | None -> bm
+  | Some title0 -> (
+      let display_type_v =
+        Option.value
+          (Block_map.attr_value bm "logseq.property.node/display-type")
+          ~default:Nil
+      in
+      let code_or_math =
+        match display_type_v with
+        | Keyword "code" | Keyword "math" | String "code" | String "math" ->
+            true
+        | _ -> false
+      in
+      let heading_level =
+        if code_or_math then None
+        else Gp_exporter.markdown_heading_level (Some title0)
+      in
+      let title =
+        match heading_level with
+        | Some _ ->
+            Common_util.clear_markdown_heading (Common_util.str_triml title0)
+        | None -> title0
+      in
+      let parsed =
+        if Clj_value.truthy display_type_v || Unicode.trim title = "" then bm
+        else parse_block_extract db bm title
+      in
+      let merged =
+        Block_map.dissoc (Block_map.merge bm parsed)
+          [ "block/format"; "block.temp/ast-body"; "block/level" ]
+      in
+      let merged =
+        match Block_map.attr_value bm "block/uuid" with
+        | Some u -> Block_map.put merged "block/uuid" u
+        | None -> merged
+      in
+      let merged =
+        match Block_map.attr_value bm "block/level" with
+        | Some l -> Block_map.put merged "block/level" l
+        | None -> merged
+      in
+      let merged =
+        match heading_level with
+        | Some lvl ->
+            Block_map.put merged "logseq.property/heading"
+              (Int64 (Int64.of_int lvl))
+        | None -> merged
+      in
+      let new_display =
+        (not (Clj_value.truthy display_type_v))
+        &&
+        match Block_map.attr_value merged "logseq.property.node/display-type"
+        with
+        | Some (Keyword ("code" | "math")) | Some (String ("code" | "math"))
+          -> true
+        | _ -> false
+      in
+      let merged =
+        if new_display then merged
+        else Block_map.put merged "block/title" (String title)
+      in
+      let refs =
+        match Block_map.attr_value merged "block/refs" with
+        | Some v -> Clj_value.coll_items v
+        | None -> []
+      in
+      let cached =
+        match Block_map.attr_value bm "block/refs" with
+        | Some v -> Clj_value.coll_items v
+        | None -> []
+      in
+      let block_uuid =
+        Option.value (Block_map.attr_value bm "block/uuid") ~default:Nil
+      in
+      let refs = dedupe_refs (use_cached_refs block_uuid cached refs) in
+      let merged = Block_map.put merged "block/refs" (List refs) in
+      match Block_map.string_attr merged "block/title" with
+      | Some t ->
+          Block_map.put merged "block/title"
+            (String (Db_content.title_ref_to_id_ref t refs))
+      | None -> merged)
+
+(* :thread-api/parse-block [repo block] *)
+let parse_block args : Wire.t Db_worker_effect.t =
+  let repo =
+    match arg args 0 with
+    | Some (Wire.String s) -> s
+    | _ -> ""
+  in
+  match arg args 1 with
+  | Some (Wire.Map _ as block_w) -> (
+      match Worker_state.datascript_conn repo with
+      | None -> Db_worker_effect.pure block_w
+      | Some conn ->
+          let bm = Gp_block.bm_of_map (Ds_wire.value_of_transit block_w) in
+          Db_worker_effect.pure
+            (Block_map.to_transit (wrap_parse_block (Datascript.db conn) bm)))
+  | _ -> Db_worker_effect.pure Wire.Nil
+
+(* ---------------------------------------------------------------
+   paste-extract-blocks — cljs handler.paste.cljs/paste-text-parseable.
+   The clipboard's markdown (the UI converts text/html first) becomes
+   the flat preorder block maps outliner insert-blocks consumes under
+   :outliner-op :paste / :outliner-real-op :paste-text. Extraction runs
+   worker-side where the datascript conn lives so [[page]] refs land in
+   :block/refs and titles rewrite to [[uuid]].
+   --------------------------------------------------------------- *)
+
+(* per-block tail of paste-text-parseable: no tags on pasted blocks,
+   a heading block's title loses its #s, and [[name]] refs rewrite to
+   [[uuid]] against the extracted refs *)
+let paste_block_of (bm : Block_map.t) : Block_map.t =
+  (* the extracted :block/properties map is a property bag, not the
+     sequential attr the schema validates — hoist heading into
+     logseq.property/heading and drop the bag like parse-block does *)
+  let props =
+    match Block_map.attr_value bm "block/properties" with
+    | Some (Map pkvs) -> pkvs
+    | _ -> []
+  in
+  let bm =
+    Block_map.dissoc bm
+      [ "block/tags"; "block/properties"; "block/macros"
+      ; "block/properties-order" ]
+  in
+  let bm =
+    List.fold_left
+      (fun acc (k, v) ->
+        match k with
+        | Keyword "heading" | String "heading" ->
+            Block_map.put acc "logseq.property/heading" v
+        | _ -> acc)
+      bm props
+  in
+  let refs =
+    match Block_map.attr_value bm "block/refs" with
+    | Some v -> Clj_value.coll_items v
+    | None -> []
+  in
+  let bm =
+    match Block_map.string_attr bm "block/title" with
+    | Some t -> (
+        let t =
+          match Block_map.attr_value bm "logseq.property/heading" with
+          | Some v when Clj_value.truthy v ->
+              Common_util.clear_markdown_heading t
+          | _ -> t
+        in
+        Block_map.put bm "block/title"
+          (String (Db_content.title_ref_to_id_ref t refs)))
+    | None -> bm
+  in
+  bm
+
+(* :thread-api/paste-extract-blocks [repo text target-block-uuid] *)
+let paste_extract_blocks args : Wire.t Db_worker_effect.t =
+  let repo =
+    match arg args 0 with
+    | Some (Wire.String s) -> s
+    | _ -> ""
+  in
+  let text =
+    match arg args 1 with
+    | Some (Wire.String s) -> s
+    | _ -> ""
+  in
+  let target_uuid =
+    match arg args 2 with
+    | Some (Wire.String s) -> s
+    | _ -> ""
+  in
+  match Worker_state.datascript_conn repo with
+  | None -> Db_worker_effect.pure (Wire.Array [])
+  | Some conn -> (
+      let db = Datascript.db conn in
+      (* cljs db-async/<get-block-page-info on the editing block *)
+      let page = Option.bind
+          (entity db (Lookup_ref ("block/uuid", Uuid target_uuid)))
+          (fun e -> Ldb.ref_ent e "block/page")
+      in
+      let page_id =
+        match page with
+        | Some p -> Int64 (Int64.of_int p.id)
+        | None -> Nil
+      in
+      let page_name =
+        Option.bind page (fun p -> Ldb.string_value p "block/name")
+      in
+      let ast =
+        match Gp_mldoc.to_edn_format ~content:text ~format:"markdown" with
+        | Vector xs -> xs
+        | List xs -> xs
+        | _ -> []
+      in
+      if ast = [] then Db_worker_effect.pure (Wire.Array [])
+      else
+        let opts : Gp_block.extract_options =
+          { user_config = []
+          ; block_pattern = "-"
+          ; date_formatter = Some (Ldb.journal_title_format db)
+          ; db
+          ; db_graph_mode = true
+          ; export_to_db_graph_flag = false
+          ; remove_properties = false
+          ; remove_logbook = false
+          ; remove_deadline_scheduled = false
+          ; page_name
+          ; filename_format = None
+          ; resolve_uuid_fn = (fun _ _ _ _ -> None)
+          ; skip_journal = false
+          }
+        in
+        let blocks = Gp_block.extract_blocks ast text "markdown" opts in
+        let blocks = Gp_block.with_parent_and_order page_id blocks in
+        Db_worker_effect.pure
+          (Wire.Array
+             (List.map
+                (fun bm -> Block_map.to_transit (paste_block_of bm))
+                blocks)))
+
+let () = Dispatcher.register "thread-api/parse-block" parse_block
+let () =
+  Dispatcher.register "thread-api/paste-extract-blocks" paste_extract_blocks

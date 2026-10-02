@@ -1,0 +1,5 @@
+(lang dune 3.23)
+
+(using melange 1.0)
+
+(name logseq-ui)

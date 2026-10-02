@@ -1,0 +1,364 @@
+(* Browser platform helpers: document/window access outside LUI's
+   abstraction (boot mounting, hash routing, localStorage, globals the
+   e2e contract requires). *)
+
+open Promise_ext
+module W = Webapi.Dom
+
+external document_ : W.Document.t = "document"
+external location_ : Js.Json.t = "location"
+
+type loc
+
+external location_obj : loc = "location"
+
+external hash_of : loc -> string = "hash" [@@mel.get]
+
+let location_hash () = hash_of location_obj
+
+external set_hash : loc -> string -> unit = "hash" [@@mel.set]
+
+let set_location_hash s = set_hash location_obj s
+
+external search_of : loc -> string = "search" [@@mel.get]
+
+let location_search () = search_of location_obj
+
+external get_element_by_id : string -> W.Element.t option
+  = "getElementById" [@@mel.scope "document"] [@@mel.return nullable]
+
+external local_storage_obj : Js.Json.t option = "localStorage"
+  [@@mel.scope "globalThis"] [@@mel.return nullable]
+
+external ls_get_item : Js.Json.t -> string -> string option = "getItem"
+  [@@mel.send] [@@mel.return nullable]
+
+external ls_set_item : Js.Json.t -> string -> string -> unit = "setItem"
+  [@@mel.send]
+
+external ls_remove_item : Js.Json.t -> string -> unit = "removeItem"
+  [@@mel.send]
+
+(* localStorage is absent outside the browser (node test runner) *)
+let local_storage_get k =
+  match local_storage_obj with
+  | Some s -> ls_get_item s k
+  | None -> None
+
+let local_storage_set k v =
+  match local_storage_obj with Some s -> ls_set_item s k v | None -> ()
+
+let local_storage_remove k =
+  match local_storage_obj with Some s -> ls_remove_item s k | None -> ()
+
+(* sessionStorage — cljs graph_tab.cljs persists the per-tab graph so a
+   reload restores it; absent outside the browser *)
+external session_storage_obj : Js.Json.t option = "sessionStorage"
+
+let session_storage_get k =
+  match session_storage_obj with
+  | Some s -> ls_get_item s k
+  | None -> None
+
+let session_storage_set k v =
+  match session_storage_obj with Some s -> ls_set_item s k v | None -> ()
+
+external document_element : Js.Json.t = "document.documentElement"
+external document_body : Js.Json.t = "document.body"
+
+external set_lang : Js.Json.t -> string -> unit = "lang" [@@mel.set]
+
+let document_set_lang s = set_lang document_element s
+
+external dataset_of : Js.Json.t -> Js.Json.t = "dataset" [@@mel.get]
+
+external dataset_set :
+  Js.Json.t -> string -> string -> unit = "" [@@mel.set_index]
+
+(* generic object field set, e.g. el.style.visibility *)
+external set_prop : Js.Json.t -> string -> Js.Json.t -> unit = ""
+  [@@mel.set_index]
+
+let document_set_data name value =
+  dataset_set (dataset_of document_element) name value
+
+let body_set_data name value =
+  dataset_set (dataset_of document_body) name value
+
+let body_rm_data : string -> unit =
+  [%mel.raw "function (k) { delete document.body.dataset[k] }"]
+
+let root_add_class : string -> unit =
+  [%mel.raw "function (c) { document.documentElement.classList.add(c) }"]
+
+let root_rm_class : string -> unit =
+  [%mel.raw "function (c) { document.documentElement.classList.remove(c) }"]
+
+let body_add_class : string -> unit =
+  [%mel.raw "function (c) { document.body.classList.add(c) }"]
+
+let body_rm_class : string -> unit =
+  [%mel.raw "function (c) { document.body.classList.remove(c) }"]
+
+external console_log : 'a -> unit = "log" [@@mel.scope "console"]
+external console_error : 'a -> unit = "error" [@@mel.scope "console"]
+
+external date_now_ms : unit -> float = "now" [@@mel.scope "Date"]
+
+external perf_now : unit -> float = "now" [@@mel.scope "performance"]
+
+let perf_mark : string -> unit =
+  [%mel.raw
+    "function (n) { if (window.__navEvents) window.__navEvents.push([n, performance.now()]); }"]
+
+let perf_time (name : string) (f : unit -> 'a) : 'a =
+  let t0 = perf_now () in
+  let r = f () in
+  if perf_now () -. t0 > 1.0 then
+    perf_mark (name ^ ":" ^ string_of_float (perf_now () -. t0));
+  r
+
+external error_message :
+  Js.Promise.error -> string Js.Nullable.t = "message" [@@mel.get]
+
+(* Melange wraps JS rejections as Js.Exn.Error whose payload is the real
+   error in field _1 *)
+external error_inner : Js.Promise.error -> 'a = "_1" [@@mel.get]
+
+external add_event_listener :
+  string -> (Js.Json.t -> unit) -> unit = "addEventListener"
+  [@@mel.scope "window"]
+
+type url_search_params
+
+external new_url_search_params : string -> url_search_params
+  = "URLSearchParams" [@@mel.new]
+
+external search_params_get :
+  url_search_params -> string -> string option = "get"
+  [@@mel.send] [@@mel.return nullable]
+
+let query_param name =
+  match location_search () with
+  | "" -> None
+  | search -> search_params_get (new_url_search_params search) name
+
+(* query param inside the location hash: "#/page/x?graph-id=u" *)
+let hash_query_param name =
+  match location_hash () with
+  | "" -> None
+  | h -> (
+      match String.index_opt h '?' with
+      | Some i ->
+          search_params_get
+            (new_url_search_params
+               (String.sub h (i + 1) (String.length h - i - 1)))
+            name
+      | None -> None)
+
+(* rewrite the hash in place (no history entry, no hashchange) *)
+external replace_state :
+  Js.Json.t -> string -> string -> unit = "replaceState"
+  [@@mel.scope "history"]
+
+let replace_url_fragment hash = replace_state Js.Json.null "" hash
+
+let on_hash_change f =
+  add_event_listener "hashchange" (fun _ -> f ())
+
+external history_back : unit -> unit = "back" [@@mel.scope "history"]
+external history_forward : unit -> unit = "forward" [@@mel.scope "history"]
+
+external clipboard_write_text : string -> unit Js.Promise.t = "writeText"
+  [@@mel.scope "navigator.clipboard"]
+
+let copy_to_clipboard s = ignore (clipboard_write_text s)
+
+external add_document_listener :
+  string -> (Js.Json.t -> unit) -> unit = "addEventListener"
+  [@@mel.scope "document"]
+
+(* CustomEvents dispatched on document do not bubble to window *)
+let on_document_event name f = add_document_listener name f
+
+external decode_uri : string -> string = "decodeURIComponent"
+
+external js_escape : string -> string = "escape"
+
+(* OCaml source literals hold UTF-8 bytes; Melange hands them to JS as a
+   byte-string so non-ASCII renders mojibake. Percent-encode each byte then
+   UTF-8 decode to obtain the real JS string. Only safe for literals — worker
+   (transit-decoded) strings are already proper JS strings and would throw. *)
+let utf8 s = decode_uri (js_escape s)
+
+external navigator_ : Js.Json.t = "navigator"
+external navigator_platform : Js.Json.t -> string = "platform" [@@mel.get]
+
+external clipboard_write_text : string -> unit = "writeText"
+  [@@mel.scope ("navigator", "clipboard")]
+
+(* cljs (or util/mac? util/win32?) — goog platform detection *)
+let desktop_os () =
+  let p = String.lowercase_ascii (navigator_platform navigator_) in
+  let n = String.length p in
+  let rec contains i sub =
+    let m = String.length sub in
+    i + m <= n && (String.sub p i m = sub || contains (i + 1) sub)
+  in
+  contains 0 "mac" || contains 0 "win"
+
+(* cljs util/mac? — goog.userAgent MAC *)
+let is_mac () =
+  let p = String.lowercase_ascii (navigator_platform navigator_) in
+  let n = String.length p in
+  let rec go i =
+    i + 3 <= n && (String.sub p i 3 = "mac" || go (i + 1))
+  in
+  go 0
+
+external json_parse : string -> Js.Json.t = "parse" [@@mel.scope "JSON"]
+external json_prop : Js.Json.t -> string -> Js.Json.t = "" [@@mel.get_index]
+
+(* string field from a JSON payload (dom-event "payload", already an
+   option — None reads as the empty object so callers don't need
+   Option.value ~default:"{}") *)
+let payload_str json key =
+  match Option.map json_parse json with
+  | Some json -> (
+      match Js.Json.decodeString (json_prop json key) with
+      | Some s -> s
+      | None -> "")
+  | None -> ""
+
+let payload_bool json key =
+  match Option.map json_parse json with
+  | Some json -> (
+      match Js.Json.decodeBoolean (json_prop json key) with
+      | Some b -> b
+      | None -> false)
+  | None -> false
+
+let payload_num json key =
+  match Option.map json_parse json with
+  | Some json -> (
+      match Js.Json.decodeNumber (json_prop json key) with
+      | Some n -> n
+      | None -> 0.)
+  | None -> 0.
+
+(* raw DOM event field, e.g. keydown "key" *)
+let event_str ev key =
+  match Js.Json.decodeString (json_prop ev key) with
+  | Some s -> s
+  | None -> ""
+
+let rtc_test_mode () =
+  match query_param "rtc-test" with Some "true" -> true | _ -> false
+
+external navigator_on_line : bool = "navigator.onLine"
+
+(* util/network-online? *)
+let online () = navigator_on_line
+
+external visibility_state : string = "visibilityState"
+  [@@mel.scope "document"]
+
+(* cljs flows/document-visibility-state *)
+let document_visible () = visibility_state = "visible"
+
+external random_uuid : unit -> string = "randomUUID"
+  [@@mel.scope "crypto"]
+
+(* window.pfs — the LightningFS handle installed by the db-worker client
+   (worker_client.ml set_worker_fs). Asset file writes go through it so
+   the worker's asset-sync listener can upload them. *)
+type pfs
+
+external window_pfs : pfs Js.Nullable.t = "pfs" [@@mel.scope "window"]
+
+let pfs_handle () = Js.Nullable.toOption window_pfs
+
+external pfs_mkdir : pfs -> string -> unit Js.Promise.t = "mkdir"
+  [@@mel.send]
+
+external pfs_write_file :
+  pfs -> string -> Js.Typed_array.Uint8Array.t -> unit Js.Promise.t =
+  "writeFile" [@@mel.send]
+
+type subtle
+
+external crypto_subtle : subtle = "subtle" [@@mel.scope "crypto"]
+
+external crypto_digest :
+  subtle -> string -> Js.Typed_array.Uint8Array.t
+  -> Js.Typed_array.ArrayBuffer.t Js.Promise.t = "digest" [@@mel.send]
+
+(* cljs decode-digest: bytes -> lowercase hex *)
+let sha256_hex (u8 : Js.Typed_array.Uint8Array.t) =
+  let* buf = crypto_digest crypto_subtle "SHA-256" u8 in
+  let a = Js.Typed_array.Uint8Array.fromBuffer buf () in
+  let n = Js.Typed_array.Uint8Array.length a in
+  let b = Buffer.create (n * 2) in
+  for i = 0 to n - 1 do
+    Buffer.add_string b
+      (Printf.sprintf "%02x"
+         (Js.Typed_array.Uint8Array.unsafe_get a i))
+  done;
+  Js.Promise.resolve (Buffer.contents b)
+
+(* lightning-fs mkdir has no recursive flag — create each path segment,
+   ignoring EEXIST-style rejections *)
+let pfs_ensure_dir pfs path =
+  let segs =
+    List.filter (fun s -> s <> "") (String.split_on_char '/' path)
+  in
+  let* _ =
+    List.fold_left
+      (fun acc seg ->
+        let* prefix = acc in
+        let p = prefix ^ "/" ^ seg in
+        let* () =
+          pfs_mkdir pfs p
+          |> Js.Promise.catch (fun _ -> Js.Promise.resolve ())
+        in
+        Js.Promise.resolve p)
+      (Js.Promise.resolve "") segs
+  in
+  Js.Promise.resolve ()
+
+(* asset_store.ml browser_path — pfs paths strip one logseq_db_ prefix *)
+let strip_db_prefix repo =
+  let prefix = "logseq_db_" in
+  let n = String.length prefix in
+  if String.length repo >= n && String.sub repo 0 n = prefix then
+    String.sub repo n (String.length repo - n)
+  else repo
+
+(* cljs config/dev? = dev-release? || goog.DEBUG — true in every build
+   we ship (the vite bundle has no separate release config). Injected via
+   vite `define`; guarded so the node test runner (no define) is safe. *)
+let dev_build : bool =
+  [%mel.raw "typeof logseq_dev !== 'undefined' && logseq_dev"]
+
+(* dispatch a DOM CustomEvent on document — cross-area comms *)
+external custom_event : string -> Js.Json.t -> Js.Json.t = "CustomEvent"
+  [@@mel.new]
+
+external dispatch_event : Js.Json.t -> unit = "document.dispatchEvent"
+
+let dispatch name detail =
+  dispatch_event
+    (custom_event name
+       (Js.Json.object_ (Js.Dict.fromList [ ("detail", detail) ])))
+
+external query_selector_all : string -> Js.Json.t array
+  = "querySelectorAll" [@@mel.scope "document"]
+
+external get_attribute : Js.Json.t -> string -> string option
+  = "getAttribute" [@@mel.send] [@@mel.return nullable]
+
+(* uuid list of .ls-block.selected blocks, in DOM order *)
+let selected_block_uuids () =
+  query_selector_all ".ls-block.selected"
+  |> Array.to_list
+  |> List.filter_map (fun el -> get_attribute el "blockid")

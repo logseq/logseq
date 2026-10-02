@@ -1422,8 +1422,9 @@ let test_blocks_vec_tree_data_preserves_caller_field_policy () =
         ; Keyword "block/parent", Pulled_scalar (Ref 1)
         ; Keyword "block/tx-id", Pulled_scalar (Int64 9L) ] }
   in
+  let db = Datascript.empty_db () in
   let result =
-    Outliner_tree.vec_tree_data ~include_root:false ~root:None ~root_id:1
+    Outliner_tree.vec_tree_data ~include_root:false ~db ~root:None ~root_id:1
       [ child ]
   in
   check "blocks->vec-tree-data vector" (List.length result = 1);
@@ -1435,7 +1436,7 @@ let test_blocks_vec_tree_data_preserves_caller_field_policy () =
          (Wire.get "block/tx-id" (Wire.Map pairs) = None)
    | _ -> check "blocks->vec-tree-data vector" false);
   let renderer_result =
-    Outliner_tree.vec_tree_data ~include_root:false
+    Outliner_tree.vec_tree_data ~include_root:false ~db
       ~keep_block_tx_id:true ~root:None ~root_id:1 [ child ]
   in
   (match renderer_result with

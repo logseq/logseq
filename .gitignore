@@ -57,16 +57,10 @@ charlie/
 /.claude/settings.local.json
 /.preprocessor-cljs
 docker
-android/app/src/main/assets/capacitor.plugin.json
-ios/App/App/capacitor.config.json
-ios/App/App/public
-
 startup.png
 
 /src/test/docs*
 ~*~
-
-android/app/src/main/assets/capacitor.config.json
 
 *.sublime-*
 /public
@@ -104,3 +98,4 @@ _build/
 /cli/_opam
 /cli/compile_commands.json
 /cli/.eglot-root
+deps/ui/_opam

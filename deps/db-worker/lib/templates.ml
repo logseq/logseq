@@ -15,7 +15,7 @@ let config_edn = {|{:meta/version 1
  ;; Default value: true
  ;; :ui/show-brackets? true
 
- ;; Display all lines of a block when referencing ((block)).
+ ;; Display all lines of a block when referencing [[block]].
  ;; Default value: false
  :ui/show-full-blocks? false
 

@@ -711,11 +711,14 @@ let download_graph_by_id repo graph_id graph_e2ee : Wire.t Db_worker_effect.t =
                               [ Wire.Keyword "repo", Wire.String repo ]))
               in
               stage := "stream-snapshot";
+              let row_count = ref 0 in
               stream_snapshot_row_batches ~gzip_encoded read 25000
                 (fun rows ->
+                   row_count := !row_count + List.length rows;
                    ensure_import () >>= fun import_id ->
                    import_rows_chunk rows graph_id import_id >>= fun _ ->
-                   Db_worker_effect.pure ()))
+                   Db_worker_effect.pure ())
+              >>= fun () -> Db_worker_effect.pure ())
          >>= fun () ->
          rtc_download_log
            (Wire.Map

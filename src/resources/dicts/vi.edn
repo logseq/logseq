@@ -446,10 +446,6 @@
  :date.nlp/tomorrow "Ngày mai"
  :date.nlp/yesterday "Hôm qua"
 
- :deeplink/open-block-error "Mở liên kết thất bại. Block-id `{1}` không tồn tại trong đồ thị."
- :deeplink/open-graph-error "Mở đồ thị thất bại. Đồ thị `{1}` không tồn tại."
- :deeplink/open-page-error "Mở liên kết thất bại. Trang `{1}` không tồn tại trong đồ thị."
-
  :editor/add-content-first-warning "Vui lòng thêm nội dung trước."
  :editor/auto-heading "Tiêu đề tự động"
  :editor/block-search "Tìm kiếm khối"

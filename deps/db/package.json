@@ -5,10 +5,10 @@
   "private": true,
   "devDependencies": {
     "@logseq/nbb-logseq": "git+https://github.com/logseq/nbb-logseq.git#feat-db-v34",
-    "fs-extra": "^11.3.4"
+    "fs-extra": "^11.4.1"
   },
   "dependencies": {
-    "better-sqlite3": "^12.8.0"
+    "better-sqlite3": "^13.0.3"
   },
   "scripts": {
     "test": "pnpm exec nbb-logseq -cp test -m nextjournal.test-runner",

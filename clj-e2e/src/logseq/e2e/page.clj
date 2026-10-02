@@ -1,5 +1,6 @@
 (ns logseq.e2e.page
-  (:require [logseq.e2e.assert :as assert]
+  (:require [clojure.test :refer [is]]
+            [logseq.e2e.assert :as assert]
             [logseq.e2e.block :as b]
             [logseq.e2e.keyboard :as k]
             [logseq.e2e.locator :as loc]
@@ -20,6 +21,19 @@
 (defn get-page-name
   []
   (util/get-text "div[data-testid='page title'] .block-title-wrap"))
+
+(defn wait-page-name
+  "Waits until the page title text equals `expected`. Navigation updates the
+   title asynchronously (worker pull + repaint), so a one-shot read right after
+   a nav-triggering click can still show the previous page's name."
+  [expected]
+  (let [deadline (+ (System/currentTimeMillis) 10000)]
+    (loop []
+      (let [title (try (get-page-name) (catch Exception _e nil))]
+        (cond
+          (= expected title) true
+          (< deadline (System/currentTimeMillis)) (is (= expected title))
+          :else (do (util/wait-timeout 100) (recur)))))))
 
 (defn new-page
   [title]

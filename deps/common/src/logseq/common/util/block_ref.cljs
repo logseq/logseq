@@ -1,10 +1,12 @@
 (ns logseq.common.util.block-ref
-  "Core vars and util fns for block-refs"
+  "Core vars and util fns for the deprecated `(())` block-ref syntax.
+  Block references are written as `[[uuid]]` and render through the same
+  page-reference path as `[[]]`."
   (:require [clojure.string :as string]))
 
-(def left-parens "Opening characters for block-ref" "((")
-(def right-parens "Closing characters for block-ref" "))")
-(def left-and-right-parens "Opening and closing characters for block-ref"
+(def left-parens "Opening characters for the deprecated `(())` block-ref form" "((")
+(def right-parens "Closing characters for the deprecated `(())` block-ref form" "))")
+(def left-and-right-parens "Opening and closing characters for the deprecated `(())` block-ref form"
   (str left-parens right-parens))
 (def block-ref-re #"\(\(([a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12})\)\)")
 

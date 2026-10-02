@@ -87,7 +87,7 @@ Page and node references use Logseq page reference syntax:
 ```
 
 Node property values are exported as `[[Node title]]`. Mirror export does not
-use `((uuid))` for node property values.
+use the deprecated `((uuid))` block-ref form for node property values.
 
 ## Tags
 Tags are exported on block lines when they are normal user tags:

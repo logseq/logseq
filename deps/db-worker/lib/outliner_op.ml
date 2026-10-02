@@ -145,13 +145,83 @@ let toggle_reaction (conn : conn) (target_uuid : string) (emoji_id : string)
              conn [ Entity { db_id = None; attrs } ]);
            true)
 
+(* cljs db-based-editor/wrap-parse-block — the cljs editor parses [[name]]
+   refs out of the title and sends :block/refs placeholder maps (fresh
+   uuids) plus a [[uuid]]-rewritten title; resolve-page-refs in -save then
+   links them to existing pages or creates them. The OCaml UI sends only
+   uuid+title, so the extraction runs here instead. Skipped when the
+   caller already supplies :block/refs. *)
+let attach_title_page_refs (conn : conn) (block : Block_map.t)
+    : Block_map.t =
+  match Block_map.attr_value block "block/refs" with
+  | Some _ -> block
+  | None -> (
+      match Block_map.attr_value block "block/title" with
+      | Some (String title) -> (
+          let names =
+            let rec scan pos acc =
+              match
+                Regexp.exec ~pos Db_content.page_ref_without_nested_re
+                  title
+              with
+              | None -> List.rev acc
+              | Some m ->
+                  let name =
+                    match m.groups.(1) with
+                    | Some s -> Unicode.trim s
+                    | None -> ""
+                  in
+                  let tag_ref =
+                    m.offset > 0 && title.[m.offset - 1] = '#'
+                  in
+                  if tag_ref || name = "" || Common_util.uuid_string name then
+                    scan m.last acc
+                  else scan m.last (name :: acc)
+            in
+            List.sort_uniq String.compare (scan 0 [])
+          in
+          let refs =
+            List.filter_map
+              (fun name ->
+                (* cljs wrap-parse-block calls page-name->map with no
+                   uuid override: journals get their deterministic
+                   gen-journal-page-uuid and existing pages reuse their
+                   real uuid, so resolve-page-refs / the tx upsert lands
+                   on the existing page. *)
+                match
+                  Gp_block.page_name_to_map name (Datascript.db conn) true
+                    (Some Date_time_util.default_journal_title_formatter)
+                    ()
+                with
+                | Some bm ->
+                    Some
+                      (Map (List.map (fun (a, v) -> (Keyword a, v)) bm))
+                | None -> None)
+              names
+          in
+          match refs with
+          | [] -> block
+          | _ ->
+              let block = Block_map.put block "block/refs" (Vector refs) in
+              Block_map.put block "block/title"
+                (String (Db_content.title_ref_to_id_ref title refs)))
+      | _ -> block)
+
 (* apply-insert-blocks-op! *)
 let apply_insert_blocks_op conn result_ref (blocks : Wire.t list)
     (target_block_id : Wire.t) (opts : Wire.t) : unit =
   match Option.bind (uuid_of_wire target_block_id) (entity_of_uuid (Conn.db conn)) with
   | None -> ()
   | Some target_block ->
-      let blocks = List.map block_map_of_wire blocks in
+      (* cljs insert-block-tree runs every incoming block through
+         wrap-parse-block ([[name]] -> :block/refs placeholders +
+         uuid-rewritten title) before the insert-blocks op. API callers
+         (insertBatchBlock) send only titles, so extract refs here. *)
+      let blocks =
+        List.map
+          (fun b -> attach_title_page_refs conn (block_map_of_wire b))
+          blocks
+      in
       let target_bm = Block_map.of_entity target_block in
       let r =
         Outliner_core.insert_blocks_conn conn blocks target_bm
@@ -390,7 +460,8 @@ let apply_op (conn : conn) (opts' : Wire.t) (op : string) (args : Wire.t list)
       in
       (try
          ignore
-           (Outliner_core.save_block_conn conn (block_map_of_wire block)
+           (Outliner_core.save_block_conn conn
+              (attach_title_page_refs conn (block_map_of_wire block))
               (save_opts_of opts_map) (block_map_of_wire opts_map))
        with (Outliner_validate.Notification _ as e) -> raise e);
       None

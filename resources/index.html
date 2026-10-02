@@ -33,6 +33,33 @@
 <div id="root"></div>
 <script>window.__LSP__HOST__ = true</script>
 <script>window.user = null</script>
+<script>
+// Minimal React-runtime shim so tabler.ext.js icon factories produce
+// plain react-element-shaped objects that the UI converts to DOM.
+(function () {
+  var elementType = Symbol.for('react.element');
+  function jsx(type, config) {
+    var props = {}, key = null;
+    for (var k in config) {
+      if (k === 'key') key = config[k];
+      else props[k] = config[k];
+    }
+    return { $$typeof: elementType, type: type, key: key, ref: null,
+             props: props, _owner: null };
+  }
+  window.ReactJSXRuntime = { jsx: jsx, jsxs: jsx, Fragment: Symbol.for('react.fragment') };
+  window.React = { createElement: function (type, config) {
+    var props = {}, key = null;
+    for (var k in (config || {})) {
+      if (k === 'key') key = config[k]; else props[k] = config[k];
+    }
+    var children = [].slice.call(arguments, 2);
+    if (children.length) props.children = children.length > 1 ? children : children[0];
+    return { $$typeof: elementType, type: type, key: key, ref: null,
+             props: props, _owner: null };
+  }, Fragment: Symbol.for('react.fragment') };
+})();
+</script>
 <script src="./js/magic_portal.js"></script>
 <script defer src="./js/highlight.min.js"></script>
 <script defer src="./js/interact.min.js"></script>
@@ -43,10 +70,11 @@
 <script defer src="./js/photoswipe.umd.min.js"></script>
 <script defer src="./js/photoswipe-lightbox.umd.min.js"></script>
 <script defer src="./js/html2canvas.min.js"></script>
+<script defer src="./js/purify.js"></script>
 <script defer src="./js/lsplugin.core.js"></script>
-<script defer src="./js/main.js"></script>
-<script defer src="./js/prop-types.min.js"></script>
 <script defer src="./js/tabler.ext.js"></script>
-<script defer src="./js/code-editor.js"></script>
+<script defer src="./js/icon-data.js"></script>
+<script defer src="./js/emoji-data.js"></script>
+<script defer src="./js/main.js"></script>
 </body>
 </html>

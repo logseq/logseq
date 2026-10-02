@@ -670,6 +670,19 @@ let test_search_blocks_escapes_quotes_for_fts () =
          (Search_index.get_match_input q))
     cases
 
+let test_search_blocks_non_word_with_boolean () =
+  let cases =
+    [ "x and [[", "\"x AND [[\"*"
+    ; "block [[y]] or z", "\"block [[y]] OR z\"*"
+    ; "a/b and c", "\"a/b AND c\"*"
+    ; "foo and bar", "foo AND bar" ]
+  in
+  List.iteri
+    (fun i (q, expected) ->
+       check_eq (Printf.sprintf "non-word + boolean [%d]" i) expected
+         (Search_index.get_match_input q))
+    cases
+
 let test_search_blocks_dangling_boolean () =
   let cases =
     [ "xxx and ", "\"xxx AND \"*"
@@ -2214,6 +2227,7 @@ let () =
   test_search_indexes_hide_by_default_properties ();
   test_search_blocks_aux_bind_count ();
   test_search_blocks_escapes_quotes_for_fts ();
+  test_search_blocks_non_word_with_boolean ();
   test_search_blocks_dangling_boolean ();
   test_search_blocks_large_graph_no_rank_scan ();
   test_search_blocks_fuzzy_matches_from_search_db ();

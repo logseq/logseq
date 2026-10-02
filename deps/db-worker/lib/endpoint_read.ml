@@ -26,6 +26,23 @@ let plain_map_wire db (e : entity) : Wire.t =
   Plain_value.with_explicit_ref_fields_recursive
     (Plain_value.entity_forward_map db e)
 
+(* page tags as [{ident, title}] — the UI needs both (ident for
+   class checks, title for data-page-tags) *)
+let tags_wire (page : entity) : Wire.t =
+  Wire.List
+    (List.map
+       (fun (t : entity) ->
+         Wire.Map
+           [ ( kw "ident",
+               match Ldb.ident_of t with
+               | Some i -> Wire.String i
+               | None -> Wire.nil )
+           ; ( kw "title",
+               Ds_wire.transit_of_value
+                 (Option.value (Ldb.value t "block/title") ~default:Nil) )
+           ])
+       (Ldb.ref_ents page "block/tags"))
+
 (* handler/page.cljs page-entity->summary *)
 let page_summary db (page : entity) : Wire.t =
   let field k v =
@@ -39,7 +56,9 @@ let page_summary db (page : entity) : Wire.t =
      @ field "block/title" (Ldb.value page "block/title")
      @ field "block/raw-title" (Ldb.raw_title db page)
      @ field "block/name" (Ldb.value page "block/name")
-     @ field "block/journal-day" (Ldb.value page "block/journal-day"))
+     @ field "block/journal-day" (Ldb.value page "block/journal-day")
+     @ field "icon" (Ldb.value page "logseq.property/icon")
+     @ [ (kw "tags", tags_wire page) ])
 
 (* :thread-api/get-journal-page-by-day [repo journal-day] *)
 let get_journal_page_by_day args =
@@ -534,11 +553,34 @@ let get_page_route_info args =
                         Ds_wire.transit_of_value
                           (Option.value (Ldb.value page "block/title") ~default:Nil) )
                     ; ( kw "hidden?", Wire.Bool (Ldb.hidden page) )
+                    ; ( kw "internal?",
+                        Wire.Bool (Ldb.internal_page page) )
+                    ; ( kw "tag?", Wire.Bool (Ldb.is_class page) )
                     ; ( kw "property?", Wire.Bool (Ldb.is_property page) )
                     ; ( kw "built-in?", Wire.Bool (Ldb.built_in page) )
                     ; ( kw "private-built-in?",
                         Wire.Bool
                           (Ldb.built_in page && Ldb.private_built_in_page page) )
+                    ; (* objects.cljs: class-objects shows "new object" unless
+                         the class ident is private (Asset exempt) *)
+                      ( kw "add-object?",
+                        Wire.Bool
+                          (match Ldb.ident_of page with
+                           | Some "logseq.class/Asset" -> true
+                           | Some ident ->
+                               not (List.mem ident Db_class.private_tags)
+                           | None -> false) )
+                    ; ( kw "journal-day",
+                        Ds_wire.transit_of_value
+                          (Option.value
+                             (Ldb.value page "block/journal-day")
+                             ~default:Nil) )
+                    ; ( kw "icon",
+                        Ds_wire.transit_of_value
+                          (Option.value
+                             (Ldb.value page "logseq.property/icon")
+                             ~default:Nil) )
+                    ; ( kw "tags", tags_wire page )
                     ]
                   in
                   let base =
@@ -623,6 +665,40 @@ let get_block_refs args =
          | None -> Wire.nil))
 
 let () = Dispatcher.register "thread-api/get-block-refs" get_block_refs
+
+(* :thread-api/get-unlinked-references — [:db/id? eid] → plain block maps
+   of unlinked mentions (title contains page title, not in :block/refs) *)
+let get_unlinked_references args =
+  with_conn args (fun db ->
+      let eid = Option.bind (arg args 1) Wire.as_int in
+      Db_worker_effect.pure
+        (match eid with
+         | Some eid ->
+             Wire.List
+               (List.map (plain_map_wire db)
+                  (Db_view.get_unlinked_references db eid))
+         | None -> Wire.nil))
+
+let () =
+  Dispatcher.register "thread-api/get-unlinked-references"
+    get_unlinked_references
+
+(* :thread-api/get-unlinked-refs — [:db/id? eid] → plain maps for blocks
+   whose title text-mentions the page but doesn't ref it *)
+let get_unlinked_refs args =
+  with_conn args (fun db ->
+      let eid = Option.bind (arg args 1) Wire.as_int in
+      Db_worker_effect.pure
+        (match eid with
+         | Some eid ->
+             Wire.List
+               (List.map (plain_map_wire db)
+                  (Db_view.get_unlinked_references db eid))
+         | None -> Wire.nil))
+
+let () =
+  Dispatcher.register "thread-api/get-unlinked-refs" get_unlinked_refs
+
 
 module IntSet = Set.Make (Int)
 
@@ -765,6 +841,30 @@ let get_page_block_index db (ref_t : Wire.t) (initial_limit : Wire.t) : Wire.t =
         ; (kw "blocks", Wire.Array blocks)
         ]
 
+(* A page's outline children = :block/page members UNION the recursive
+   :block/_parent subtree (cljs use-children walks _parent only).
+   Page-typed outline children carry no :block/page (the insert tx
+   dissocs it for entities with block/name), so the AVET pull alone
+   misses Library children and nested pages. Entities already pulled via
+   :block/page are skipped; the walk still descends through them. *)
+let page_parent_subtree db (page : entity) (have : entity_id list) :
+    pulled_entity list =
+  let seen = Hashtbl.create 64 in
+  List.iter (fun id -> Hashtbl.replace seen id ()) have;
+  let rec walk acc (e : entity) =
+    List.fold_left
+      (fun acc (c : entity) ->
+        if Hashtbl.mem seen c.id then acc
+        else (
+          Hashtbl.replace seen c.id ();
+          walk (c :: acc) c))
+      acc (Ldb.get_children e)
+  in
+  let extras = List.rev (walk [] page) in
+  Datascript.pull_many_string db "[*]"
+    (List.map (fun (e : entity) -> Entity_id e.id) extras)
+  |> List.filter_map (fun x -> x)
+
 (* :thread-api/get-page-blocks-tree *)
 let get_page_blocks_tree args =
   with_conn args (fun db ->
@@ -782,10 +882,34 @@ let get_page_blocks_tree args =
                  get_page_block_index db ref_t w
              | _ -> (
                  match Ldb.get_page db (Ds_wire.value_of_transit ref_t) with
-                 | Some page ->
-                     let blocks = Ldb.get_page_blocks db page.id in
-                     Wire.Array
-                       (Outliner_tree.page_blocks_vec_tree db blocks page.id)
+                 | Some page -> (
+                     (* the cljs UI renders a page's children by
+                        :block/_parent traversal, so include blocks that
+                        lost :block/page when tagged #Page (block->page
+                        conversion retracts :block/page but keeps
+                        :block/parent) *)
+                     match Ldb.value page "block/uuid" with
+                     | Some (Uuid u) ->
+                         let blocks =
+                           Ldb.get_block_and_children db u
+                           |> List.map (fun (e : entity) -> Entity_id e.id)
+                           |> Datascript.pull_many_string db "[*]"
+                           |> List.filter_map (fun x -> x)
+                         in
+                         Wire.Array
+                           (Outliner_tree.page_blocks_vec_tree db blocks
+                              page)
+                     | _ ->
+                         let blocks = Ldb.get_page_blocks db page.id in
+                         let extras =
+                           page_parent_subtree db page
+                             (List.map
+                                (fun (p : pulled_entity) -> p.pulled_id)
+                                blocks)
+                         in
+                         Wire.Array
+                           (Outliner_tree.page_blocks_vec_tree db
+                              (blocks @ extras) page))
                  | None -> Wire.nil))
          | None -> Wire.nil))
 

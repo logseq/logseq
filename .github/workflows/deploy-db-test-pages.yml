@@ -78,6 +78,7 @@ jobs:
         working-directory: deps/db-worker
         run: |
           sh scripts/install-opam-deps.sh
+          cd ../../deps/ui && sh scripts/install-opam-deps.sh
           pnpm install
 
       - name: Save opam switch cache
@@ -94,7 +95,7 @@ jobs:
 
       - name: Build Released-Web
         run: |
-          pnpm gulp:build && clojure -M:cljs release app --config-merge '{:compiler-options {:source-map true :source-map-include-sources-content true :source-map-detail-level :symbols}}' && pnpm db-worker:build
+          pnpm gulp:build && pnpm ui:build && pnpm db-worker:build
           rsync -avz --exclude node_modules --exclude android --exclude ios --exclude mobile ./static/ ./public/
           ls -lR ./public && mkdir r2 && mv ./public/js/main.js.map ./r2/db-test.main.js.map
           sed -i 's/=main.js.map/=https:\/\/assets.logseq.io\/db-test.main.js.map/g' ./public/js/main.js

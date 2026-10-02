@@ -1434,7 +1434,7 @@
     (w/click
      (loc/filter ".page-reference .page-ref"
                  :has-text "autocomplete existing page"))
-    (is (= "autocomplete existing page" (p/get-page-name)))
+    (p/wait-page-name "autocomplete existing page")
     (p/goto-page "autocomplete host")
     (b/new-block "")
     (util/press-seq "#autocomplete-new-tag")
@@ -1777,7 +1777,7 @@
         (assert/assert-is-visible
          (loc/filter ".page-reference"
                      :has-text "reference autocomplete updated target"))
-        (is (= source-page (p/get-page-name)))
+        (p/wait-page-name source-page)
         (w/click (.first (loc/filter ".page-reference .page-ref"
                                      :has-text "reference autocomplete updated target")))
         (is (string/includes? (.url (w/get-page)) target-uuid))
@@ -1916,7 +1916,7 @@
       (is (= marker (util/get-edit-content)))
       (w/click
        (.first (loc/filter ".page-reference .page-ref" :has-text target-page)))
-      (is (= target-page (p/get-page-name)))
+      (p/wait-page-name target-page)
       (p/goto-page host-page)
       (assert/assert-is-visible
        (loc/filter ".ls-page-blocks .block-title-wrap" :has-text marker))
@@ -1962,7 +1962,7 @@
       (assert/assert-is-visible ".ui__popover-content a.menu-link")
       (w/click
        (.first (loc/filter ".page-reference .page-ref" :has-text target-page)))
-      (is (= target-page (p/get-page-name)))
+      (p/wait-page-name target-page)
       (p/goto-page host-page)
       (assert/assert-is-visible
        (loc/filter ".ls-page-blocks .block-title-wrap" :has-text marker))

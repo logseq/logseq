@@ -264,11 +264,14 @@ let raw_title db (e : entity) : value option =
   else
     value e "block/title"
 
-(* ldb/get-page — eid | uuid | page name (case-insensitive). *)
+(* ldb/get-page — eid | uuid | page name (case-insensitive). Lookup
+   refs like [:block/uuid u] come in as vectors from transit. *)
 let get_page db (ref_v : value) : entity option =
   match ref_v with
   | Int64 id -> ent_of_id db (Datascript.Util.int64_to_int_exn "entity id" id)
   | Uuid u -> counted_entity db (Lookup_ref ("block/uuid", Uuid u))
+  | Vector [ Keyword a; v ] | List [ Keyword a; v ] ->
+      counted_entity db (Lookup_ref (a, v))
   | String s ->
       if is_uuid_string s then
         counted_entity db (Lookup_ref ("block/uuid", Uuid s))

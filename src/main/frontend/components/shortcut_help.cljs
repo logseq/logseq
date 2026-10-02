@@ -4,7 +4,6 @@
             [frontend.context.i18n :refer [t]]
             [frontend.extensions.highlight :as highlight]
             [frontend.extensions.latex :as latex]
-            [logseq.common.util.block-ref :as block-ref]
             [logseq.common.util.page-ref :as page-ref]
             [logseq.shui.ui :as shui]
             [io.factorhouse.hsx.core :as hsx]))
@@ -28,7 +27,7 @@
      [:td.text-right [:code page-ref/left-and-right-brackets]]]
     [:tr
      [:td.text-left (t :help/block-reference)]
-     [:td.text-right [:code block-ref/left-and-right-parens]]]
+     [:td.text-right [:code page-ref/left-and-right-brackets]]]
     [:tr
      [:td.text-left (t :help/open-link-in-sidebar)]
      [:td.text-right [:code (t :help/open-link-in-sidebar-action)]]]

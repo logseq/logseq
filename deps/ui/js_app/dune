@@ -1,0 +1,7 @@
+(melange.emit
+ (target js_app)
+ (modules main)
+ (module_systems esm)
+ (libraries logseq_ui melange.js)
+ (preprocess
+  (pps melange.ppx)))

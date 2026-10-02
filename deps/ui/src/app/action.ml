@@ -1,0 +1,35 @@
+(* Reducer actions for the app loop. *)
+
+type t =
+  | Boot_graph_ready of string
+  | Repos_loaded of string list
+  | Page_loaded of Model.page
+  | Page_load_failed (* page/block lookup resolved to nothing *)
+  | Journals_loaded of Model.page list
+  | Refs_loaded of Model.block list
+  | Unlinked_loaded of Model.block list
+  | Unlinked_exists of bool
+  | Navigate_to of Model.route
+  | Worker_event of string * Wire.t
+  | Refresh_page
+  | Toggle_left_sidebar
+  | Toggle_right_sidebar
+  | Toggle_search
+  | Block_content_changed of string * string
+  | Title_edit_start
+  | Title_edit_done (* value already committed via page op *)
+  | Page_menu_set of (float * float * bool) option
+  | Appearance_set of (float * float) option
+  | Confirm_set of Model.confirm option
+  | Dismiss_all (* Escape / outside click *)
+  | Toast_push of Model.toast
+  | Toast_dismiss of int
+  | Toast_dismiss_key of string
+  | Toasts_clear
+  | Unlinked_toggle_open
+  | Unlinked_toggle_search
+  | Unlinked_set_query of string
+  | Help_toggle
+  | Rtc_state of Model.rtc (* rtc-sync-state broadcast *)
+  | Rtc_state_clear (* a graph's sync is (re)starting — hide stale state *)
+  | Noop

@@ -9,31 +9,40 @@ external self_obj : remote = "self"
 external wrap : remote -> remote = "wrap" [@@mel.module "comlink"]
 external remote_invoke : remote -> string -> string -> string Js.Promise.t
   = "remoteInvoke" [@@mel.send]
-external promise_error_message : Js.Promise.error -> string option = "message"
+external promise_error_message : Js.Promise.error -> string option = "message" [@@mel.get]
 
 let main_thread = lazy (wrap self_obj)
 
-let task_of_promise promise =
+let invoke_remote name transit_args =
   let task, resolver = Db_worker_effect.wait () in
-  let finish result =
-    if Db_worker_effect.is_pending task then Db_worker_effect.wakeup resolver result
+  post_message_raw
+    (Transit_codec.to_string
+       (Wire.Array
+          [ Wire.Keyword "dbg-remote-marker"; Wire.String name ]));
+  let promise =
+    remote_invoke (Lazy.force main_thread) name transit_args
   in
-  let on_ok value = finish (Ok value); Js.Promise.resolve () in
-  let on_error error =
-    let message =
-      Option.value (promise_error_message error) ~default:"JavaScript promise rejected"
-    in
-    finish (Error message);
-    Js.Promise.resolve ()
-  in
+  Worker_log.info "dbg invoke_remote sent" [ ("name", name) ];
   ignore
-    (promise |> Js.Promise.then_ on_ok |> Js.Promise.catch on_error
-      : unit Js.Promise.t);
+    (promise
+     |> Js.Promise.then_ (fun v ->
+            Worker_log.info "dbg invoke_remote resolved"
+              [ ("name", name) ];
+            (if Db_worker_effect.is_pending task then
+               Db_worker_effect.wakeup resolver (Ok v));
+            Js.Promise.resolve ())
+     |> Js.Promise.catch (fun e ->
+            Worker_log.info "dbg invoke_remote rejected"
+              [ ("name", name)
+              ; ( "err"
+                , Option.value
+                    (promise_error_message e)
+                    ~default:"unknown" ) ];
+            (if Db_worker_effect.is_pending task then
+               Db_worker_effect.wakeup resolver (Error "rejected"));
+            Js.Promise.resolve ()));
   Db_worker_effect.bind task (function
     | Ok value -> Db_worker_effect.pure value
     | Error message -> Db_worker_effect.error (Failure message))
-
-let invoke_remote name transit_args =
-  task_of_promise (remote_invoke (Lazy.force main_thread) name transit_args)
 
 let post_message msg = post_message_raw msg

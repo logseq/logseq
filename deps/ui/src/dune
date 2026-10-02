@@ -1,0 +1,21 @@
+(include_subdirs unqualified)
+
+; Generate src/dicts_gen.ml from the shared cljs dicts. The dicts dir lives
+; outside this dune-project (../../src/resources/dicts), so it can't be a
+; tracked dep -- run `dune build --force` to pick up dict edits.
+(rule
+ (target dicts_gen.ml)
+ (action
+  (run
+   sh
+   -c
+   "%{exe:../tools/dict_gen.exe} \"$DUNE_SOURCEROOT/../../src/resources/dicts\" %{target}")))
+
+(library
+ (name logseq_ui)
+ (wrapped false)
+ (modes melange)
+ (libraries lui lui.web.dom melange-webapi melange.dom
+   melange-transit-melange melange-fetch)
+ (preprocess
+  (pps melange.ppx lui.ppx)))

@@ -315,7 +315,7 @@
                 (recur other-inlines true []
                        (replace-page-embeds-helper
                         current-paragraph-inlines block-uuid-or-page-name r origin-level)))
-            :else ;; not ((block-uuid)) or [[page-name]], just drop the original ast
+            :else ;; not ((block-uuid)) (deprecated form) or [[page-name]], just drop the original ast
             (recur other-inlines heading-exist? current-paragraph-inlines r))
 
           :else
@@ -356,7 +356,7 @@
                 (recur other-inlines [] true
                        (replace-page-embeds-helper
                         current-paragraph-inlines block-uuid-or-page-name blocks current-level)))
-            :else ;; not ((block-uuid)) or [[page-name]], just drop the original ast
+            :else ;; not ((block-uuid)) (deprecated form) or [[page-name]], just drop the original ast
             (recur other-inlines current-paragraph-inlines false blocks))
 
           :else

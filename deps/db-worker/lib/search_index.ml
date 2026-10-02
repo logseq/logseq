@@ -681,6 +681,10 @@ let get_match_input (q : string) : string =
         || not (List.exists (Ns_util.str_contains match_input) [ "AND"; "OR"; "NOT" ])
         || Ns_util.str_contains q "/")
   then fts_phrase_input match_input
+  else if Regexp.test non_word_re q then
+    (* non-word input that also carries boolean words (e.g. "[[x]] and y"
+       -> "[[x]] AND y") still can't form a valid fts5 expression *)
+    fts_phrase_input match_input
   else if q <> match_input then
     str_replace_literal match_input ~pattern:"," ~replacement:""
   else match_input
@@ -1539,14 +1543,18 @@ let truncate_vector_index (vector_index : Vector_index.index option) =
 
 (* ---- build index ---- *)
 
-let get_all_blocks (db : db) : entity list =
+let get_all_blocks ?(on_hidden = fun (_ : entity) -> ()) (db : db)
+    : entity list =
   datoms db Avet ~a:"block/uuid" ()
   |> Seq.filter_map (fun (d : datom) ->
          match d.v with
          | Uuid _ -> Ldb.ent_of_id db d.e
          | _ -> None)
   |> List.of_seq
-  |> List.filter (fun e -> not (hidden_entity (Ev.of_entity e)))
+  |> List.filter (fun e ->
+         let hidden = hidden_entity (Ev.of_entity e) in
+         if hidden then on_hidden e;
+         not hidden)
 
 let build_blocks_indice ?(include_vector_title = false) (db : db) : index_item list =
   List.filter_map
@@ -1875,9 +1883,9 @@ let search_blocks ~(conn : conn) ~(search_db : Sqlite.db option)
             ~query_embedding:opts.opt_query_embedding
       | _ -> []
     in
+    let raw = exact_title_result @ fuzzy_result @ matched_result @ non_match_result in
     let combined =
-      combine_results ~vector_results:vector_result ~q db_ctx
-        (exact_title_result @ fuzzy_result @ matched_result @ non_match_result)
+      combine_results ~vector_results:vector_result ~q db_ctx raw
     in
     let code_class =
       if opts.opt_code_only then

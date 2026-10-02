@@ -150,17 +150,27 @@ let on_become_master (repo : string) (start_opts : Wire.t) : unit E.t =
   Worker_log.info "db-worker/on-become-master-start"
     [ "repo", repo
     ; "import-type", edn_of_opt (Wire.get "import-type" start_opts) ];
-  E.bind (Sqlite.init ()) (fun () ->
-      match Wire.get "import-type" start_opts with
-      | Some w when w <> Wire.Nil -> E.pure ()
-      | _ ->
-          E.bind
-            (Endpoint_lifecycle.create_or_open_db
-               [ Wire.String repo; start_opts ])
-            (fun _ ->
-               (* cljs asserts the datascript conn opened *)
-               assert (Worker_state.datascript_conn repo <> None);
-               E.pure ()))
+  E.catch
+    (E.bind (Sqlite.init ()) (fun () ->
+         match Wire.get "import-type" start_opts with
+         | Some w when w <> Wire.Nil -> E.pure ()
+         | _ ->
+             E.bind
+               (Endpoint_lifecycle.create_or_open_db
+                  [ Wire.String repo; start_opts ])
+               (fun _ ->
+                  (* cljs asserts the datascript conn opened *)
+                  assert (Worker_state.datascript_conn repo <> None);
+                  E.pure ())))
+    (fun exn ->
+       let detail =
+         match exn with
+         | Dispatcher.Exn_info (msg, _) -> "Exn_info: " ^ msg
+         | exn -> Printexc.to_string exn
+       in
+       Worker_log.error "db-worker/on-become-master-failed"
+         [ "exn", detail; "bt", Printexc.get_backtrace () ];
+       E.error exn)
 
 (* cljs <init-service! — per-graph shared-service creation. *)
 let init_service (graph : string option) (start_opts : Wire.t)

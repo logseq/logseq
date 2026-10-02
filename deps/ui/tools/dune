@@ -1,0 +1,3 @@
+(executable
+ (name dict_gen)
+ (modes native))

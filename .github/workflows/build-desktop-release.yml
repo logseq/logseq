@@ -127,7 +127,7 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: ~/.opam
-          key: ${{ runner.os }}-opam-${{ env.OCAML_VERSION }}-${{ hashFiles('deps/db-worker/dune.lock/**', 'deps/db-worker/scripts/install-opam-deps.sh', 'deps/db-worker/*.opam', 'cli/*.opam') }}
+          key: ${{ runner.os }}-opam-${{ env.OCAML_VERSION }}-${{ hashFiles('deps/db-worker/dune.lock/**', 'deps/db-worker/scripts/install-opam-deps.sh', 'deps/db-worker/*.opam', 'deps/ui/scripts/install-opam-deps.sh', 'deps/ui/*.opam', 'cli/*.opam') }}
           restore-keys: |
             ${{ runner.os }}-opam-${{ env.OCAML_VERSION }}-
 
@@ -146,6 +146,10 @@ jobs:
         run: |
           sh scripts/install-opam-deps.sh
           pnpm install
+
+      - name: Fetch ui OCaml deps
+        working-directory: deps/ui
+        run: sh scripts/install-opam-deps.sh
 
       - name: Save opam switch cache
         uses: actions/cache/save@v4
@@ -183,11 +187,13 @@ jobs:
           echo "ENABLE_PLUGINS=${{ github.event_name == 'schedule' || github.event.inputs.enable-plugins == 'true' }}" >> $GITHUB_ENV
           echo "ENABLE_FILE_SYNC_PRODUCTION=${{ github.event_name == 'schedule' || github.event.inputs.enable-file-sync-production == 'true' }}" >> $GITHUB_ENV
 
-      - name: Compile CLJS
+      - name: Compile UI
         run: |
           pnpm install --frozen-lockfile
           gulp build
-          pnpm cljs:release-electron
+          pnpm ui:build
+          pnpm cljs:release-publishing
+          pnpm electron:build
           opam exec -- pnpm cli:release
           pnpm db-worker:build
           pnpm db-worker-node:bundle

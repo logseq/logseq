@@ -152,7 +152,8 @@ let update_user_presence ~broadcast (client : Sync_state.client)
      an empty string does not *)
   match editing_block_uuid with
   | Some editing_block_uuid -> begin
-    client.online_users :=
+    let before = !(client.online_users) in
+    let after_ =
       List.map
         (fun u ->
            match Wire.get "user/uuid" u with
@@ -167,7 +168,11 @@ let update_user_presence ~broadcast (client : Sync_state.client)
                            , Wire.String editing_block_uuid ) ])
                 | _ -> u)
            | _ -> u)
-        !(client.online_users);
-    broadcast client
+        before
+    in
+    if after_ <> before then begin
+      client.online_users := after_;
+      broadcast client
+    end
   end
   | None -> ()

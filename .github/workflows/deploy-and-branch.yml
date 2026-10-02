@@ -68,6 +68,7 @@ jobs:
         working-directory: deps/db-worker
         run: |
           sh scripts/install-opam-deps.sh
+          cd ../../deps/ui && sh scripts/install-opam-deps.sh
           pnpm install
 
       - name: Save opam switch cache
@@ -85,8 +86,7 @@ jobs:
       - name: Build web + workers
         run: |
           pnpm gulp:build
-          clojure -M:cljs release app \
-            --config-merge '{:compiler-options {:source-map true :source-map-include-sources-content true :source-map-detail-level :symbols}}'
+          pnpm ui:build
           pnpm db-worker:build
 
           rsync -avz \

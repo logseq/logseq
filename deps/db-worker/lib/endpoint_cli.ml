@@ -641,7 +641,7 @@ let api_get_page_data db (title : string) : Wire.t =
                        :: List.remove_assoc
                             (Keyword "block/title") p.pulled_attrs }
                | None -> p)
-        |> fun bs -> Outliner_tree.page_blocks_vec_tree db bs page.id
+        |> fun bs -> Outliner_tree.page_blocks_vec_tree db bs page
       in
       let blocks' =
         List.map
