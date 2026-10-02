@@ -92,8 +92,9 @@ discovery query. `listJournals` now uses a bounded query adapter and preserves
 the optional four-query count envelope. `pageStats` now reports bounded page
 counts, nested-page/orphan classification, and alias relations. `inspectPage`
 now supports page, blocks, tags, properties, declared, and all detail levels.
-There are 27 registered tools so far: seven API-backed tools and 20
-compatibility data tools.
+`upsertNodes` remains excluded from MCP because it is outside the reference
+tool contract and performs unverified batch writes. There are 26 registered
+tools so far: six API-backed tools and 20 compatibility data tools.
 Entry criteria still outstanding:
 
 1. Both baselines have valid, recorded results.

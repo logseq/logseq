@@ -12,15 +12,12 @@
 
 (deftest compatibility-routes-preserve-api-contracts
   (let [calls (atom [])
-        api (recording-api calls :ok)
-        operations #js []]
+  api (recording-api calls :ok)]
     (is (= :ok (mcp-compat/get-page api #js {"pageName" "Inbox"})))
     (is (= :ok (mcp-compat/list-pages api #js {"expand" true})))
     (is (= :ok (mcp-compat/list-tags api #js {"expand" false})))
     (is (= :ok (mcp-compat/list-properties api #js {"expand" true})))
     (is (= :ok (mcp-compat/search-blocks api #js {"searchTerm" "needle"})))
-    (is (= :ok (mcp-compat/upsert-nodes api #js {"operations" operations
-                                                  "dry-run" true})))
     (is (= ["logseq.cli.getPageData" ["Inbox"]]
            (first @calls)))
     (is (= "logseq.cli.listPages" (first (second @calls))))
@@ -28,10 +25,7 @@
     (is (= "logseq.cli.listTags" (first (nth @calls 2))))
     (is (= "logseq.cli.listProperties" (first (nth @calls 3))))
     (is (= ["logseq.app.search" "needle"]
-           [(first (nth @calls 4)) (first (second (nth @calls 4)))]))
-    (is (= "logseq.cli.upsertNodes" (first (nth @calls 5))))
-    (is (identical? operations (first (second (nth @calls 5)))))
-    (is (= true (aget (second (second (nth @calls 5))) "dry-run")))))
+          [(first (nth @calls 4)) (first (second (nth @calls 4)))]))))
 
     (deftest page-uuid-result-resolves-one-live-page
       (is (= {:found true :title "Inbox" :page_uuid "page-1"}

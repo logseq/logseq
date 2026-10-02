@@ -751,7 +751,133 @@
   (call-api-fn "logseq.app.search"
                [(aget args "searchTerm") #js {:enable-snippet? false}]))
 
-(defn upsert-nodes
-  [call-api-fn args]
-  (call-api-fn "logseq.cli.upsertNodes"
-               [(aget args "operations") #js {:dry-run (aget args "dry-run")}]))
+(def ^:private capability-tool-routes
+  {:listPages ["logseq.cli.listPages"]
+   :listJournals ["logseq.DB.datascriptQuery"]
+   :getPage ["logseq.cli.getPageData"]
+   :searchBlocks ["logseq.app.search"]
+   :listTags ["logseq.cli.listTags"]
+   :listProperties ["logseq.cli.listProperties"]
+   :getPageUUID ["logseq.DB.datascriptQuery"]
+   :pageStats ["logseq.DB.datascriptQuery"]
+   :inspectPage ["logseq.DB.datascriptQuery"]
+   :getTagUUID ["logseq.DB.getTagsByName"]
+   :getTag ["logseq.DB.datascriptQuery"]
+   :getPropertyIndent ["logseq.DB.datascriptQuery"]
+   :getBlock ["logseq.DB.datascriptQuery"]
+   :getTagUsers ["logseq.DB.datascriptQuery"]
+   :getBlockUUID ["logseq.DB.datascriptQuery"]
+   :getBlockTree ["logseq.DB.datascriptQuery"]
+   :findBacklinks ["logseq.DB.datascriptQuery"]
+   :findOrphans ["logseq.DB.datascriptQuery"]
+   :isTitleAvailable ["logseq.DB.datascriptQuery"]
+   :listRecycled ["logseq.DB.datascriptQuery"]
+   :listStatus ["logseq.DB.datascriptQuery"]
+   :listClosedValues ["logseq.DB.datascriptQuery"]
+   :listOrphanTags ["logseq.DB.datascriptQuery"]
+   :listOrphanProperties ["logseq.DB.getAllProperties" "logseq.DB.datascriptQuery"]
+   :listAssets ["logseq.DB.datascriptQuery"]})
+
+(def ^:private capability-probe-args
+  {"logseq.DB.datascriptQuery" ["[:find ?e . :where [?e :block/uuid]]"]
+   "logseq.DB.getTagsByName" ["__mcp_capability_probe__"]
+   "logseq.DB.getAllProperties" []
+   "logseq.cli.listPages" [#js {}]
+   "logseq.cli.listTags" [#js {}]
+   "logseq.cli.listProperties" [#js {}]
+   "logseq.cli.getPageData" ["__mcp_capability_probe__"]
+   "logseq.app.search" ["__mcp_capability_probe__" #js {:enable-snippet? false}]})
+
+(def ^:private capability-absent-markers
+  ["no method found" "unknown method" "not supported" "not implemented"
+   "is not a function" "unsupported"])
+
+(def ^:private capability-present-markers
+  ["invalid" "missing required" "should be either" "disallowed"
+   "expected" "required"])
+
+(defn- capability-finding
+  [method error-message result]
+  (let [message (some-> error-message str string/lower-case)]
+    (cond
+      (and message (some #(string/includes? message %) capability-absent-markers))
+      {:method method :state "unavailable" :basis "probed"
+       :detail (subs (str error-message) 0 (min 200 (count (str error-message))))}
+
+      (and message (some #(string/includes? message %) capability-present-markers))
+      {:method method :state "available" :basis "probed"
+       :detail "rejected probe arguments, so the method exists"}
+
+      message
+      {:method method :state "unknown" :basis "probed"
+       :detail (str "unrecognised error: "
+                    (subs (str error-message) 0 (min 200 (count (str error-message)))))}
+
+      (nil? result)
+      {:method method :state "unknown" :basis "probed"
+       :detail "returned null for probe arguments; cannot distinguish a missing method from a silent no-op"}
+
+      :else
+      {:method method :state "available" :basis "probed" :detail "returned a result"})))
+
+(defn- probe-capability-method
+  [api-fn method]
+  (-> (p/let [result (api-fn method (get capability-probe-args method))
+              error-message (when (and result (object? result))
+                              (or (aget result "error") (get result "error")))]
+        (capability-finding method error-message result))
+      (p/catch (fn [error]
+                 (capability-finding method (.-message error) nil)))))
+
+(defn- capability-tool-status
+  [tool routes findings]
+  (let [severity {"available" 0 "unknown" 1 "unavailable" 2}
+        routes (get capability-tool-routes tool)
+        statuses (mapv #(get findings % {:state "unknown"
+                                         :detail "a required route was not probed"})
+                       routes)
+        worst (last (sort-by #(get severity (:state %) 1) statuses))]
+    [tool (cond-> {:state (:state worst) :basis "inferred"}
+            (and (not= "available" (:state worst)) (:detail worst))
+            (assoc :detail (:detail worst)))]))
+
+(defn capabilities
+  [api-fn args]
+  (p/let [info-result (api-fn "logseq.App.getAppInfo" [])
+          graph-result (api-fn "logseq.App.checkCurrentIsDbGraph" [])
+          info (js->clj info-result :keywordize-keys true)]
+    (when-not (true? (:supportDb info))
+      (throw (js/Error. "Connected Logseq instance does not report DB support")))
+    (when-not (true? graph-result)
+      (throw (js/Error. "The current Logseq graph is not a DB graph")))
+    (p/let [probe-methods (->> capability-tool-routes vals (apply concat) distinct sort)
+            findings (p/all (map #(probe-capability-method api-fn %) probe-methods))
+            findings-by-method (into {} (map (juxt :method identity) findings))
+            tools (into (sorted-map)
+                        (map #(capability-tool-status %1 %2 findings-by-method))
+                        (sort-by key capability-tool-routes))
+            unavailable (->> tools (keep (fn [[tool status]]
+                                           (when (= "unavailable" (:state status)) (name tool)))) sort vec)
+            unknown (->> tools (keep (fn [[tool status]]
+                                      (when (= "unknown" (:state status)) (name tool)))) sort vec)
+            version (:version info)
+            body {:graph {:version version
+                          :verified_against "2.0.1"
+                          :version_matches (= version "2.0.1")
+                          :checked_at (/ (.now js/Date) 1000)}
+                  :tools tools
+                  :what_available_means "The route exists and responds. Probes send deliberately invalid arguments, so `available` establishes reachability, not that the route accepts a real payload."}
+            body (cond-> body
+                   (seq unavailable) (assoc :unavailable unavailable)
+                   (seq unknown) (assoc :unknown unknown
+                                        :note "`unknown` means the probe was inconclusive, not that the tool is unavailable. Try it and check the result.")
+                   (not= version "2.0.1")
+                   (assoc-in [:graph :caveat]
+                             "This graph is not the version these tools were verified against; behaviour may differ.")
+                   (true? (aget args "include_diagnostics"))
+                   (assoc :diagnostics {:routes (into (sorted-map)
+                                                      (map (fn [[tool routes]]
+                                                             [(name tool) routes]))
+                                                      capability-tool-routes)
+                                        :method_findings (vec (sort-by :method findings))}))]
+      body)))

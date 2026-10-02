@@ -107,68 +107,6 @@
 (def ^:large-vars/data-var api-tools
   "MCP Tools when calling API server"
   {:listPages
-    {:fn mcp-compat/list-pages
-    :config #js {:title "List Pages"
-                 :description "List all pages in a graph"
-                 :inputSchema
-                 #js {:expand (-> (z/boolean) .optional (.describe "Provide additional detail on each page"))}}}
-    :listJournals
-    {:fn mcp-compat/list-journals
-     :config #js {:title "List Journals"
-              :description "List journal pages newest first; optionally include block and inbound-reference counts."
-              :inputSchema #js {:with_counts (-> (z/boolean) .optional)
-                          :limit (-> (z/number) .int .positive .optional)}}}
-   :getPage
-  {:fn mcp-compat/get-page
-    :config #js {:title "Get Page"
-                 :description "Get a page's content including its blocks. A property and a tag are pages."
-                 :inputSchema #js {:pageName (-> (z/string) (.describe "The page's name or uuid"))}}}
-   :upsertNodes
-  {:fn mcp-compat/upsert-nodes
-    :config
-    #js {:title "Upsert Nodes"
-         :description
-         "This tool must be called at most once per user request. Never re-call it unless explicitly asked.
-          It takes an object with field :operations, which is an array of operation objects.
-          Each operation creates or edits a page, block, tag or property. Each operation is a object
-          that must have :operation, :entityType and :data fields. More about fields in an operation object:
-            * :operation  - Either :add or :edit
-            * :entityType - What type of node, e.g. :block, :page, :tag or :property
-            * :id - For :edit, this _must_ be a string uuid. For :add, use a temporary unique string if the new page is referenced by later operations e.g. add blocks
-            * :data - A map of fields to set or update. This map can have the following keys:
-              * :title - A page/tag/property's name or a block's content
-              * :page-id - A page string uuid of a block. Required when adding a block.
-              * :tags - A list of tags as string uuids
-              * :property-type - A property's type
-              * :property-cardinality - A property's cardinality. Must be :one or :many
-              * :property-classes - A property's list of allowed tags, each being a uuid string or a tag's name
-              * :class-extends - List of parent tags, each being a uuid string or a tag's name
-              * :class-properties - A tag's list of properties, each eing a uuid string or a property's name
-
-         Example inputs with their prompt, description and data as clojure EDN:
-
-         Description: This input adds a new block to page with id '119268a6-704f-4e9e-8c34-36dfc6133729' and update the title of a page with uuid '119268a6-704f-4e9e-8c34-36dfc6133729':
-
-         {:operations
-          [{:operation :add
-            :entityType :block
-            :id nil
-            :data {:page-id \"119268a6-704f-4e9e-8c34-36dfc6133729\"
-                   :title \"New block text\"}}
-           {:operation :edit
-            :entity :page
-            :id \"119268a6-704f-4e9e-8c34-36dfc6133729\"
-            :data {:title \"Revised page title\"}}]}
-
-        Prompt: Add task 't1' to new page 'Inbox'
-        Description: This input creates a page 'Inbox' and adds a 't1' block with tag \"00000002-1282-1814-5700-000000000000\" (task) to it:
-
-        {:operations
-          [{:operation :add
-            :entityType :page
-            :id \"temp-Inbox\"
-            :data {:title \"Inbox\"}}
-           {:operation :add
             :entityType :block
             :data {:page-id \"temp-Inbox\"
                    :title \"t1\"
