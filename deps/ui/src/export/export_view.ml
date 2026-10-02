@@ -41,8 +41,7 @@ let checkbox_cls =
 (* shui/checkbox: button[role=checkbox] + check svg only when checked *)
 let checkbox ctx ~key ~cls ~show ~on ~on_toggle =
   dom ~key ~tag:"button" ~style_class:(checkbox_cls ^ " " ^ cls)
-    ~attrs:
-      (reactive
+    ~attrs_signal_v:(Logseq_dom.reactive_attrs
          (fun (st : S.t) ->
            let chk = if on st then "checked" else "unchecked" in
            vis_attrs st (show st)
@@ -68,8 +67,7 @@ let checkbox ctx ~key ~cls ~show ~on ~on_toggle =
 (* option label div with the same visibility as its checkbox *)
 let opt_label ctx ~key ~show ~text =
   dom ~key
-    ~attrs:
-      (reactive
+    ~attrs_signal_v:(Logseq_dom.reactive_attrs
          (fun (st : S.t) -> [ ("style", "visibility: " ^ vis (show st)) ])
          (Signal.value (S.st ctx)))
     ~text []
@@ -78,8 +76,7 @@ let opt_label ctx ~key ~show ~text =
    the matching rendered state is the selected option *)
 let select_el ctx ~key ~cls ~show ~value ~options ~on_change =
   dom ~key ~tag:"select" ~style_class:cls
-    ~attrs:
-      (reactive (fun (st : S.t) -> vis_attrs st (show st) [])
+    ~attrs_signal_v:(Logseq_dom.reactive_attrs (fun (st : S.t) -> vis_attrs st (show st) [])
          (Signal.value (S.st ctx)))
     ~events:"change"
     ~on_dom_event:(fun n payload ->
@@ -158,8 +155,7 @@ let copy_save_row ctx =
             match (Signal.get_state (S.st ctx)).S.fmt with
             | S.Png -> P.copy_png (S.st ctx)
             | _ -> P.copy (S.st ctx))
-        ~text:
-          (reactive
+        ~text_signal:(Logseq_dom.reactive_text
              (fun (st : S.t) ->
                if st.copied then I18n.t "export/copied-to-clipboard"
                else I18n.t "ui/copy-to-clipboard")
@@ -176,8 +172,7 @@ let options_rows ctx =
   dom ~key:"export-opts"
     [ dom ~key:"row-indent" ~style_class:"flex items-center"
         [ dom ~key:"indent-l" ~tag:"label" ~style_class:"mr-4"
-            ~attrs:
-              (reactive
+            ~attrs_signal_v:(Logseq_dom.reactive_attrs
                  (fun (st : S.t) ->
                    [ ("style", "visibility: " ^ vis (in_text st)) ])
                  st_sig)
@@ -222,8 +217,7 @@ let options_rows ctx =
             ~text:(I18n.t "export/open-blocks-only") ]
     ; dom ~key:"row-level" ~style_class:"flex items-center"
         [ dom ~key:"level-l" ~tag:"label" ~style_class:"mr-2"
-            ~attrs:
-              (reactive
+            ~attrs_signal_v:(Logseq_dom.reactive_attrs
                  (fun (st : S.t) ->
                    [ ("style", "visibility: " ^ vis (in_structured st)) ])
                  st_sig)
@@ -243,8 +237,7 @@ let png_preview ctx =
         (dom ~key:"png-loading" ~style_class:"absolute"
            [ Icons.icon "loader-2" ])
     ; dom ~key:"export-preview-img" ~tag:"img" ~style_class:"my-4"
-        ~attrs:
-          (reactive
+        ~attrs_signal_v:(Logseq_dom.reactive_attrs
              (fun (st : S.t) ->
                [ ("id", "export-preview"); ("alt", I18n.export_preview_alt)
                ; ( "style"
@@ -288,8 +281,7 @@ let body (_ms : Model.t Signal.signal) : t =
                     dom ~key:"export-preview" ~tag:"textarea"
                       ~style_class:"overflow-y-auto h-96"
                       ~attrs:[ ("readonly", "") ]
-                      ~text:
-                        (reactive
+                      ~text_signal:(Logseq_dom.reactive_text
                            (fun (st : S.t) ->
                              Option.value ~default:"" st.content)
                            (Signal.value (S.st ctx)))

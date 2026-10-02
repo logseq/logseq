@@ -76,8 +76,7 @@ let nav_edit_menu st checked =
         if name = "click" then
           Sidebar_state.toggle_nav st nav (not (List.mem nav checked)))
       [ dom ~tag:"div"
-          ~attrs:
-            (reactive
+          ~attrs_signal_v:(Logseq_dom.reactive_attrs
                (fun cur ->
                  [ ("role", "menuitemcheckbox")
                  ; ("aria-checked", string_of_bool (List.mem nav cur))
@@ -444,8 +443,7 @@ let page_item_el st (p : Model.page) ~li_class ~recent ~key =
 let content_group st ~key ~class_ ~label ~items_sig ~li_class ~ul_class
     ~always_bd ~recent =
   dom ~key
-    ~style_class:
-      (reactive
+    ~style_class_signal:(Logseq_dom.reactive_class
          (fun ps ->
            "sidebar-content-group " ^ class_ ^ " is-expand"
            ^ if ps = [] then "" else " has-children")
@@ -557,7 +555,7 @@ let graphs_selector (ms : Model.t Signal.signal) : t =
             [ dom ~key:"gsel-th" ~tag:"span" ~style_class:"thumb"
                 [ icon "topology-star" ]
             ; dom ~key:"gsel-n" ~tag:"strong"
-                ~text:(reactive name_of ms) []
+                ~text_signal:(Logseq_dom.reactive_text name_of ms) []
             ; icon "selector" ] ] ]
 
 let header (ms : Model.t Signal.signal) : t =

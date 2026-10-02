@@ -64,7 +64,8 @@ let clear_range uuid from to_ = snd (replace_range uuid from to_ "")
 let prop_batch ~caret uuid ops =
   let buf = A.live_buffer uuid in
   A.with_focus_after uuid caret
-    (Ops.apply_and_refresh_deferred (Ops.save_block uuid buf :: ops))
+    (let* sop = Ops.save_block_parsed uuid buf in
+     Ops.apply_and_refresh_deferred (sop :: ops))
 
 (* same, but drop edit mode first (cljs :editor/exit — code blocks leave
    the textarea while the view re-renders the code surface), then focus
@@ -74,7 +75,8 @@ let exit_to_props uuid ops =
   let buf = A.live_buffer uuid in
   S.set (fun st -> { st with S.editing = None });
   A.with_focus_after uuid 0
-    (Ops.apply_and_refresh (Ops.save_block uuid buf :: ops))
+    (let* sop = Ops.save_block_parsed uuid buf in
+     Ops.apply_and_refresh (sop :: ops))
 
 (* ---------- calendar ---------- *)
 
@@ -132,13 +134,23 @@ let close_popup ?focus_caret p =
 (* cljs Enter handler: "date picker" closes the popup and inserts
    [[journal]]; scheduled/deadline set the datetime property and keep
    the calendar open (still editing) *)
+(* cljs commands/insert! — the trigger text stays in the buffer while
+   the popup is open and the commit replaces the last "/" through the
+   caret with the output ([[journal]] for date-picker, [l](u) for link) *)
+let insert_at_trigger p text =
+  let to_ =
+    match D.textarea_of p.uuid with
+    | Some el -> D.el_selection_start el
+    | None -> p.from
+  in
+  replace_range p.uuid p.from to_ text
+
 let commit_cal p =
   let d = day_date p in
   match p.kind with
   | Cal_insert ->
       let nv, caret =
-        replace_range p.uuid p.from p.from
-          ("[[" ^ Dates.journal_title_of d ^ "]]")
+        insert_at_trigger p ("[[" ^ Dates.journal_title_of d ^ "]]")
       in
       Ops.schedule_save p.uuid nv;
       close_popup p ~focus_caret:caret
@@ -310,15 +322,13 @@ let nlp_commit p input =
     | None ->
         Toast.warning (I18n.tf "date/invalid-date-warning" [ v ])
 
-(* the picker anchors under the editing textarea (cljs renders it
-   inside the editing block) *)
+(* cljs open-editor-popup! anchors at the caret mirror span *)
 let cal_pos_style ?top uuid =
   match D.textarea_of uuid with
   | Some el ->
-      let r = V.el_rect el in
+      let x, y, _ = Dom_ext.caret_popup_pos (D.json_of_el el) in
       Printf.sprintf "position:fixed;left:%.0fpx;top:%.0fpx;z-index:900"
-        (V.rect_left r)
-        (Option.value top ~default:(V.rect_bottom r +. 4.))
+        x (Option.value top ~default:y)
   | None -> "position:fixed;top:96px;left:240px;z-index:900"
 
 (* base-ui avoidCollisions: once mounted, flip the picker above the
@@ -339,7 +349,6 @@ let cal_clamp_in_view uuid root =
         in
         V.el_set_attr root "style" (cal_pos_style ~top uuid))
   | None -> ()
-
 let open_cal kind uuid from =
   let today = Dates.date_now () in
   let cy = int_of_float (Js.Date.getFullYear today)
@@ -444,9 +453,9 @@ let open_link_form image uuid from =
     V.h ~cls:"ls-editor-link-form"
       ~attrs:
         [ ("style"
-          , "position:fixed;top:96px;left:240px;z-index:900;\
-             display:flex;flex-direction:column;gap:4px;padding:8px;\
-             background:var(--lx-popover-bg,#fff)") ]
+          , cal_pos_style uuid
+            ^ ";display:flex;flex-direction:column;gap:4px;padding:8px;\
+               background:var(--lx-popover-bg,#fff)") ]
       ~children:[ url_inp; label_inp ] ()
   in
   let p =
@@ -471,7 +480,7 @@ let submit_link p =
   let label = if label = "" then url else label in
   let bang = (match p.kind with Link_form true -> "!" | _ -> "") in
   let nv, caret =
-    replace_range p.uuid p.from p.from
+    insert_at_trigger p
       (bang ^ "[" ^ label ^ "](" ^ url ^ ")")
   in
   Ops.schedule_save p.uuid nv;
@@ -704,20 +713,26 @@ let toggle_children_list uuid caret =
            repaint now (the deferred path waits ~8s while editing) *)
         if ops <> [] then
           A.with_focus_after uuid caret
-            (Ops.apply_and_refresh
-               (Ops.save_block uuid (A.live_buffer uuid) :: ops));
+            (let* sop =
+               Ops.save_block_parsed uuid (A.live_buffer uuid)
+             in
+             Ops.apply_and_refresh (sop :: ops));
         Js.Promise.resolve ())
 
 let run_editor_cmd uuid command from to_ =
+  (* date-picker/link/image-link keep the trigger text while the popup
+     is open — [from] anchors it for the commit replace *)
+  match command with
+  | "date-picker" -> open_cal Cal_insert uuid from
+  | "link" -> open_link_form false uuid from
+  | "image-link" -> open_link_form true uuid from
+  | _ ->
   let caret = clear_range uuid from to_ in
   match command with
-  | "date-picker" -> open_cal Cal_insert uuid caret
   | "scheduled" ->
       open_cal (Cal_prop "logseq.property/scheduled") uuid caret
   | "deadline" ->
       open_cal (Cal_prop "logseq.property/deadline") uuid caret
-  | "link" -> open_link_form false uuid caret
-  | "image-link" -> open_link_form true uuid caret
   | "quote" ->
       set_props ~caret uuid "logseq.property.node/display-type"
         (W.Keyword "quote")

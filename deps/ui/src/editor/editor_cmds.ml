@@ -197,8 +197,9 @@ let run ~command ~block ~value =
           let title =
             match b with Some x -> x.Model.block_title | None -> ""
           in
-          apply_soft
-            [ Outliner_ops.save_block uuid ("> " ^ title) ]
+          ignore
+            (let* sop = Outliner_ops.save_block_parsed uuid ("> " ^ title) in
+             Outliner_ops.apply_and_refresh_deferred [ sop ])
       | "cycle-todo" | "deadline" | "scheduled" | "date-picker"
       | "add-comment" | "copy-export-as" | "set-icon" | "add-reaction" ->
           Platform.console_error ("editor command not implemented", command)

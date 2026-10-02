@@ -576,8 +576,8 @@ let test_title_refs () =
   (* dedup keeps the LAST occurrence: order is right-to-left *)
   eq "scan_title refs deduped" [ "y"; "Z"; "X" ] refs
     (String.concat ",");
-  (* only #[[Z]] tags the block; a bare #y is a hash ref *)
-  eq "scan_title tags deduped" [ "Z" ] tags
+  (* #[[Z]] and the bare #y both tag the block (cljs parity) *)
+  eq "scan_title tags deduped" [ "y"; "Z" ] tags
     (String.concat ",");
   eq "scan_title hash deduped" [ "y" ] hash
     (String.concat ",");
@@ -1005,33 +1005,19 @@ let test_outliner_ops () =
      = Wire.Map [ (Wire.String "block/uuid", Wire.Uuid "u") ])
 
 let test_outliner_ops2 () =
-  (* saved_block_map / normalized_title: markdown heading split out
-     unless the block has a display type *)
+  (* normalized_title: markdown heading split out unless the block has a
+     display type (the saved map itself is built async via
+     block_map_parsed — Title_refs resolves entities through the worker) *)
   let saved_page = !Runtime.current_page in
   Runtime.current_page := None;
-  let sm = Outliner_ops.saved_block_map "u" "## hello [[P]]" in
-  check "saved_block_map heading split"
-    (Wire.get sm "logseq.property/heading" = Some (Wire.Int 2)
-    && (match Wire.map_get_string sm "block/title" with
-        | Some t -> String.sub t 0 5 = "hello"
-        | None -> false));
   eqs "normalized_title strips heading" "hello [[P]]"
     (Outliner_ops.normalized_title "u" "  ## hello [[P]]");
   let codeblk =
     { (block "cb" "x") with Model.block_display_type = Some "code" } in
   Runtime.current_page := Some (page [ codeblk ]);
-  let sm2 = Outliner_ops.saved_block_map "cb" "## raw" in
-  check "code block keeps raw title"
-    (Wire.map_get_string sm2 "block/title" = Some "## raw"
-    && Wire.get sm2 "logseq.property/heading" = None);
   eqs "normalized_title code" "## raw"
     (Outliner_ops.normalized_title "cb" " ## raw");
   Runtime.current_page := saved_page;
-  (* save-block op wraps the map *)
-  check "save_block op"
-    (match op_name_args (Outliner_ops.save_block "u" "t") with
-     | Some ("save-block", [ Wire.Map _; Wire.Map [] ]) -> true
-     | _ -> false);
   check "delete_blocks op"
     (match op_name_args (Outliner_ops.delete_blocks [ "a" ]) with
      | Some ("delete-blocks", [ Wire.List [ Wire.Uuid "a" ]; Wire.Map [] ]) ->
@@ -1285,12 +1271,13 @@ let test_cmdk_rows () =
   Runtime.current_route := saved_route;
   Runtime.current_page := saved_page;
   (* search opts *)
-  let so = Cmdk_state.search_opts true 20 in
+  let so = Cmdk_state.search_opts ~dev:true true 20 in
   check "search_opts move-mode"
     (Wire.get so "page-only?" = Some (Wire.Bool true)
-    && Wire.get so "limit" = Some (Wire.Int 20));
+    && Wire.get so "limit" = Some (Wire.Int 20)
+    && Wire.get so "dev?" = Some (Wire.Bool true));
   check "search_opts normal"
-    (Wire.get (Cmdk_state.search_opts false 10) "page-only?" = None)
+    (Wire.get (Cmdk_state.search_opts ~dev:false false 10) "page-only?" = None)
 
 let test_cmdk_view () =
   (* hl matching uses idx — items only get real indices via renumber *)

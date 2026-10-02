@@ -49,7 +49,7 @@ let page_link ~(tag : bool) ?label ?uuid_sig name =
       (* cljs sets :data-uuid on the anchor once the page entity resolves;
          attrs apply is replace-semantic so emit the whole set *)
       D.el ~tag:"a" ~style_class:cls ~attrs:base
-        ~attrs_signal:(Signal.map (fun u -> if u = "" then base else ("data-uuid", u) :: base) u_sig)
+        ~attrs_signal_v:(Logseq_dom.attrs_signal u_sig (fun u -> if u = "" then base else ("data-uuid", u) :: base))
         [ D.el ~tag:"span" [ D.txt text ] ]
 
 (* ---- pull memoization ----
@@ -255,7 +255,7 @@ let block_ref_anchor uuid : t =
   let title_sig = Signal.map fst (Signal.value st) in
   D.el ~tag:"a" ~style_class:"relative page-ref"
     ~attrs:[ ("data-ref", uuid); ("tabindex", "0") ]
-    ~text:(reactive title_sig)
+    ~text_signal:(Logseq_dom.reactive_text Fun.id title_sig)
     [] context parent
 
 let block_ref uuid =
@@ -388,10 +388,8 @@ let cloze_el answer cue : t =
     Runtime.signal_set open_ (not (Signal.get_state open_))
   in
   D.el ~tag:"span"
-    ~style_class:
-      (reactive (fun o -> if o then "cloze cloze-revealed" else "cloze") sig_)
-    ~attrs:
-      (reactive
+    ~style_class_signal:(Logseq_dom.reactive_class (fun o -> if o then "cloze cloze-revealed" else "cloze") sig_)
+    ~attrs_signal_v:(Logseq_dom.reactive_attrs
          (fun o ->
            [ ("role", "button"); ("tabindex", "0")
            ; ("aria-pressed", string_of_bool o) ])
@@ -582,8 +580,7 @@ and page_ref ?(tag = false) ~refs ~self name =
     else
       D.el ~tag:"span" ~style_class:"page-reference"
         ~attrs:[ ("data-ref", name) ]
-        ~attrs:
-          (reactive (fun u -> [ ("data-ref", if u = "" then name else u) ])
+        ~attrs_signal_v:(Logseq_dom.reactive_attrs (fun u -> [ ("data-ref", if u = "" then name else u) ])
              uuid_sig)
         [ bracket "[["
         ; preview_link (page_link ~tag:false ~uuid_sig name)
@@ -603,8 +600,7 @@ and resolved_ref ~refs ~self uuid : t =
   in
   D.el ~tag:"a" ~style_class:"relative page-ref"
     ~attrs:[ ("data-uuid", uuid); ("tabindex", "0"); ("draggable", "true") ]
-    ~attrs:
-      (reactive
+    ~attrs_signal_v:(Logseq_dom.reactive_attrs
          (fun n ->
            [ ("data-uuid", uuid); ("tabindex", "0"); ("draggable", "true")
            ; ("data-ref", String.lowercase_ascii n) ])
@@ -625,13 +621,12 @@ and resolved_tag_ref ~refs ~self uuid : t =
   let title_sig = Signal.map fst (Signal.value st) in
   D.el ~tag:"a" ~style_class:"relative tag"
     ~attrs:[ ("data-uuid", uuid); ("tabindex", "0") ]
-    ~attrs:
-      (reactive
+    ~attrs_signal_v:(Logseq_dom.reactive_attrs
          (fun n ->
            [ ("data-uuid", uuid); ("tabindex", "0")
            ; ("data-ref", String.lowercase_ascii n) ])
          title_sig)
-    [ D.el ~tag:"span" ~text:(reactive (fun n -> "#" ^ n) title_sig) [] ]
+    [ D.el ~tag:"span" ~text_signal:(Logseq_dom.reactive_text (fun n -> "#" ^ n) title_sig) [] ]
     context parent
 
 and macro_el ~refs:_refs ~self:_self body =

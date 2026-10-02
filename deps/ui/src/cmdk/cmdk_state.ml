@@ -112,7 +112,7 @@ let decorate (v : view) : view =
                   { it with
                     ihl = v.hl = it.idx
                   ; imouse = v.mouse
-                  ; iq = v.input })
+                  ; iq = (if g.gid = G_create then "" else v.input) })
                 g.gitems })
         v.groups }
 
@@ -393,14 +393,15 @@ let item_of_row w i : item =
 
 let wmap kvs = Wire.Map (List.map (fun (k, v) -> (Wire.kw k, v)) kvs)
 
-let search_opts move_mode nodes_limit =
+let search_opts ~dev move_mode nodes_limit =
   wmap
     ([ ("limit", Wire.Int nodes_limit)
      ; ("search-limit", Wire.Int 100)
      ; ("enable-snippet?", Wire.Bool true)
      ; ("include-breadcrumb?", Wire.Bool true)
      ; ("include-matched-count?", Wire.Bool true)
-     ; ("built-in?", Wire.Bool true) ]
+     ; ("built-in?", Wire.Bool true)
+     ; ("dev?", Wire.Bool dev) ]
     @ if move_mode then [ ("page-only?", Wire.Bool true) ] else [])
 
 (* cljs get-group-limit: nodes-ish groups page at 10, expand to 100 on
@@ -416,7 +417,7 @@ let current_page_limit expanded =
 let run_search repo q move_mode nodes_limit =
   let* w =
     Runtime.invoke3 "thread-api/search-blocks" (Wire.String repo)
-      (Wire.String q) (search_opts move_mode nodes_limit)
+      (Wire.String q) (search_opts ~dev:Platform.dev_build move_mode nodes_limit)
   in
   let rows, total =
     match w with
@@ -664,10 +665,8 @@ let recents_item_of_wire w =
             { ikey = "recent-" ^ uuid; idx = -1; gid = G_recently_updated
             ; ititle = p.page_title; info = None; header = None
             ; iicon = "file"; isc = ""
-            ; ibadge =
-                (match current_page_uuid () with
-                 | Some cur when cur = uuid -> Text_badge
-                 | _ -> No_badge)
+            ; ibadge = No_badge (* cljs recent-page-items never sets
+                                 :current-page? *)
             ; act = Open_page uuid
             ; ihl = false; imouse = false; iq = "" }
       | None -> None)
@@ -695,11 +694,10 @@ let load_recents st repo =
 
 let on_input st q =
   set_in st (fun v -> upsert_create { v with input = q });
-  (* search fires on the keystroke itself — a debounce delays the last
-     keystroke's results past the worker roundtrip it should overlap.
-     gen-stamped responses keep stale answers from overwriting newer
-     input *)
-  refresh ~clear:false st
+  let gen = (incr st.gen; !(st.gen)) in
+  Dom_ext.set_timeout
+    (fun () -> if gen = !(st.gen) then refresh ~clear:false st)
+    100
 
 (* -- open/close ------------------------------------------------------ *)
 
@@ -817,7 +815,11 @@ let open_palette ?(move = false) st =
     match Dom_ext.doc_query_selector ".cp__cmdk-search-input" with
     | Some el ->
         Dom_ext.focus el;
-        if q <> "" then Dom_ext.set_value el q
+        if q <> "" then (
+          Dom_ext.set_value el q;
+          (* cljs mounts with the restored query fully selected
+             (core.cljs (.select el)) so typing replaces it *)
+          Dom_ext.set_selection_range el 0 (String.length q))
     | None ->
         if tries > 0 then Dom_ext.set_timeout (fun () -> focus_input (tries - 1)) 20
   in

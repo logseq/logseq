@@ -52,15 +52,32 @@ let install_listeners () =
             match D.closest el ".selection-action-bar" with
             | Some _ -> ()
             | None ->
-                (* only pay the flush when a bar is actually showing —
-                   every plain click otherwise forces an extra reconcile *)
-                if Editor_actions.selected_uuids () <> [] then
+                let inside sel =
+                  match D.closest el sel with Some _ -> true | None -> false
+                in
+                (* cljs container.cljs window pointerdown →
+                   hide-context-menu-and-clear-selection: a plain click
+                   outside any block/input clears the selection, so the
+                   later mouseup never re-raises the bar *)
+                if
+                  Editor_actions.selected_uuids () <> []
+                  && (not (inside ".ls-block"))
+                  && (not (inside "[data-keep-selection]"))
+                  && (not (inside "input,textarea,select,[contenteditable]"))
+                  && (not (D.shift_key e))
+                  && (not (D.meta_key e))
+                  && (not (D.ctrl_key e))
+                  && Editor_state.editing_uuid () = None
+                then Editor_actions.clear_selection ()
+                else if Editor_actions.selected_uuids () <> [] then
                   Editor_actions.hide_action_bar ())
         | None -> ())
       true;
     D.add_document_listener "mouseup"
       (fun e ->
-        let tgt = D.target e in
+        (* cljs show-selection-action-bar-for-pointer!: only a primary-
+           button release can raise the bar *)
+        let tgt = if D.button e = 0 then D.target e else None in
         D.set_timeout
           (fun () ->
             match tgt with
@@ -79,11 +96,16 @@ let install_listeners () =
 (* cljs hides the action-bar while another popup is up — fold the
    popup/cmdk flags into the same dyn source (nested dyn has no parent
    node to anchor to) *)
-let view () : t =
-  (* the editor signal only exists once a block row has mounted the state
-     — on an empty page no selection can exist anyway *)
-  if not (S.ready ()) then Logseq_dom.nothing
-  else (
+let rec view () : t =
+  (* the editor state signal only exists once a block row has mounted —
+     check it at mount time (this node's ctx fn runs after the block rows
+     it follows in the children list), not at construction where it would
+     permanently stay unmounted on pages that render before any block *)
+  fun ctx parent ->
+    if not (S.ready ()) then Logseq_dom.nothing ctx parent
+    else node () ctx parent
+
+and node () : t = (
     install_listeners ();
     let sel_sig =
       Signal.map
@@ -95,7 +117,7 @@ let view () : t =
         Signal.map (fun (sel, bar) -> (sel, bar, false, false)) sel_sig
       in
       let with_popup =
-        match Popups_state.popup_signal () with
+        match Popups_state.non_cm_popup_signal () with
         | Some ps ->
             Signal.map2 (fun (sel, bar, _, c) p -> (sel, bar, p, c)) base ps
         | None -> base

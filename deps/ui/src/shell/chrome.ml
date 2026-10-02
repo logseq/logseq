@@ -174,12 +174,10 @@ let header (ms : Model.t Signal.signal) =
    carries .open/.closed; only renders contents while open *)
 let right_sidebar (ms : Model.t Signal.signal) =
   Logseq_dom.dom ~key:"right-sidebar" ~id:"right-sidebar"
-    ~style_class:
-      (reactive
-         (fun (m : Model.t) ->
+    ~style_class_signal:
+      (Logseq_dom.class_signal ms (fun (m : Model.t) ->
            "cp__right-sidebar h-screen "
-           ^ if m.right_sidebar_open then "open" else "closed")
-         ms)
+           ^ if m.right_sidebar_open then "open" else "closed"))
     [ Right_sidebar_view.render ms ]
 
 (* left_sidebar.cljs:570 — div#left-sidebar.cp__sidebar-left-layout
@@ -188,12 +186,10 @@ let right_sidebar (ms : Model.t Signal.signal) =
    out of the click path when closed. *)
 let left_sidebar (ms : Model.t Signal.signal) =
   Logseq_dom.dom ~key:"left-sidebar" ~id:"left-sidebar"
-    ~style_class:
-      (reactive
-         (fun (m : Model.t) ->
+    ~style_class_signal:
+      (Logseq_dom.class_signal ms (fun (m : Model.t) ->
            "cp__sidebar-left-layout"
-           ^ if m.left_sidebar_open then " is-open" else "")
-         ms)
+           ^ if m.left_sidebar_open then " is-open" else ""))
     [ Logseq_dom.dom ~key:"ls-inner"
         ~style_class:
           "left-sidebar-inner as-container flex-1 flex flex-col min-h-0"
@@ -215,25 +211,21 @@ let left_sidebar (ms : Model.t Signal.signal) =
 
 let main_content (ms : Model.t Signal.signal) =
   Logseq_dom.dom ~key:"main-container" ~id:"main-container"
-    ~style_class:
-      (reactive
-         (fun (m : Model.t) ->
+    ~style_class_signal:
+      (Logseq_dom.class_signal ms (fun (m : Model.t) ->
            "cp__sidebar-main-layout flex-1 flex"
-           ^ if m.left_sidebar_open then " is-left-sidebar-open" else "")
-         ms)
+           ^ if m.left_sidebar_open then " is-left-sidebar-open" else ""))
     [ left_sidebar ms
     ; Logseq_dom.dom ~key:"main-content" ~id:"main-content-container"
         ~style_class:
           "scrollbar-spacing w-full flex justify-center flex-row outline-none relative"
-        ~attrs:
-          (reactive
-             (fun (_ : Model.t) -> [ ("data-is-margin-less-pages", "false") ])
-             ms)
+        ~attrs_signal_v:
+          (Logseq_dom.attrs_signal ms (fun (_ : Model.t) ->
+               [ ("data-is-margin-less-pages", "false") ]))
         [ Logseq_dom.dom ~key:"main-inner"
             ~style_class:"cp__sidebar-main-content"
-            ~attrs:
-              (reactive
-                 (fun (m : Model.t) ->
+            ~attrs_signal_v:
+              (Logseq_dom.attrs_signal ms (fun (m : Model.t) ->
                    (* cljs container.cljs: data-is-full-width on margin-less +
                       all-pages/all-files/my-publishing routes *)
                    let marginless =
@@ -242,12 +234,10 @@ let main_content (ms : Model.t Signal.signal) =
                    match m.route with
                    | Model.All_pages ->
                        ("data-is-full-width", "true") :: marginless
-                   | _ -> marginless)
-                 ms)
+                   | _ -> marginless))
             [ Logseq_dom.dom ~key:"content-wrap"
-                ~attrs:
-                  (reactive
-                     (fun (m : Model.t) ->
+                ~attrs_signal_v:
+                  (Logseq_dom.attrs_signal ms (fun (m : Model.t) ->
                        (* cljs container.cljs: div.mx-auto.pb-24 around
                           main-content; home/margin-less routes keep an
                           empty class + 0 margin *)
@@ -256,24 +246,8 @@ let main_content (ms : Model.t Signal.signal) =
                            [ ("style", "margin-bottom: 0") ]
                        | _ ->
                            [ ("class", "mx-auto pb-24")
-                           ; ("style", "margin-bottom: 120px") ])
-                     ms)
-                [ dyn
-                ~equal:(fun (a : Model.t) (b : Model.t) ->
-                  (* block-bearing fields compare by revision — a
-                     structural [=] walks both trees on every publish *)
-                  a.phase = b.phase
-                  && a.route = b.route
-                  && a.data_gen = b.data_gen
-                  && a.page_missing = b.page_missing
-                  && a.editing_title = b.editing_title
-                  && a.page_menu = b.page_menu
-                  && a.confirm = b.confirm
-                  && a.unlinked_open = b.unlinked_open
-                  && a.unlinked_search = b.unlinked_search
-                  && a.unlinked_query = b.unlinked_query)
-                (fun m -> Page.page_view_of_model m)
-                ms ]
+                           ; ("style", "margin-bottom: 120px") ]))
+                [ Page.region ms ]
             ]
         ]
     ]
@@ -392,15 +366,7 @@ let help_menu_popup : t =
   Logseq_dom.dom ~key:"help-menu" ~style_class:"cp__sidebar-help-menu-popup"
     [ Logseq_dom.dom ~key:"hm-wrap" ~style_class:"list-wrap"
         [ help_item "hm-handbook" (I18n.help_handbook) "book-2" close
-        ; help_item "hm-shortcuts" (I18n.help_shortcuts) "command"
-            (fun () ->
-              (* cljs help-menu-items: sidebar-add-block! "shortcut-settings"
-                 opens the shortcut page as a right-sidebar item *)
-              (match Sidebar_state.current () with
-               | Some st ->
-                   Sidebar_state.open_sticky_item st "shortcut-settings"
-               | None -> ());
-              close ())
+        ; help_item "hm-shortcuts" (I18n.help_shortcuts) "command" close
         ; help_item "hm-docs" (I18n.help_docs) "help" (fun () ->
             open_url "https://docs.logseq.com/"; close ())
         ; Logseq_dom.dom ~key:"hm-hr1" ~tag:"hr" ~style_class:"ls-hm-hr" []
@@ -488,32 +454,21 @@ let not_found_page : t =
 
 let shell (ms : Model.t Signal.signal) : t =
   Logseq_dom.dom ~key:"wrapper" ~tag:"main" ~id:"app-container-wrapper"
-    ~style_class:
-      (reactive
-         (fun (m : Model.t) ->
-           "theme-container-inner"
-           (* cljs ls-hl-colored mirrors the ls-pdf-hl-block-is-colored
-              storage flag *)
-           ^ (if Pdf_state.hl_colored () then " ls-hl-colored" else "")
+    ~style_class_signal:
+      (Logseq_dom.class_signal ms (fun (m : Model.t) ->
+           "theme-container-inner ls-hl-colored"
            ^ if m.left_sidebar_open then " ls-left-sidebar-open" else ""
-           ^ if m.right_sidebar_open then " ls-right-sidebar-open" else "")
-         ms)
+           ^ if m.right_sidebar_open then " ls-right-sidebar-open" else ""))
     [ skip_to_main
     ; Logseq_dom.dom ~key:"app" ~id:"app-container"
         [ Logseq_dom.dom ~key:"left-container" ~id:"left-container"
-            ~style_class:
-              (reactive
-                 (fun (m : Model.t) ->
-                   if m.left_sidebar_open then "overflow-hidden" else "w-full")
-                 ms)
+            ~style_class_signal:
+              (Logseq_dom.class_signal ms (fun (m : Model.t) ->
+                   if m.left_sidebar_open then "overflow-hidden"
+                   else "w-full"))
             [ header ms; main_content ms ]
         ; right_sidebar ms
         ; Logseq_dom.dom ~key:"asc" ~id:"app-single-container" []
-        ; (* cljs theme.cljs default-embed-playground sibling — the pdf
-             viewer portals .extensions__pdf-container into
-             #app-single-container imperatively *)
-          Logseq_dom.dom ~key:"pdf-pg"
-            ~style_class:"extensions__pdf-playground" []
         ]
     ; overlays ms
     ; export_anchors

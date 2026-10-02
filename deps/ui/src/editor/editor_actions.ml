@@ -173,7 +173,8 @@ let commit uuid buf =
   if buf <> model_title uuid then (
     S.override_title uuid (Ops.normalized_title uuid buf);
     ignore
-      (let* _ = Ops.apply_and_refresh [ Ops.save_block uuid buf ] in
+      (let* sop = Ops.save_block_parsed uuid buf in
+      let* _ = Ops.apply_and_refresh [ sop ] in
       (* the buffer is now persisted — advance base so the undo
                 resync gate treats it as clean and can restore reverted
                 titles instead of masking them with the pre-undo text *)
@@ -300,7 +301,9 @@ let flush_edit () =
       let buf = live_buffer e.uuid in
       S.set (fun st -> { st with S.editing = None });
       if buf <> model_title e.uuid then
-        ignore (Ops.apply [ Ops.save_block e.uuid buf ])
+        ignore
+          (let* sop = Ops.save_block_parsed e.uuid buf in
+           Ops.apply [ sop ])
 
 (* property value cells open their own inline editor — entering one
    exits block editing just like a click into another block *)
@@ -532,17 +535,18 @@ let merge_prev uuid =
                in flight — the debounced save's delta only lands with
                this op, and the model title would drop typed text *)
             let ptitle = S.title_for prev_uuid prev.Model.block_title in
-            let ops =
-              move_children_ops b prev_uuid
-              @ [ Ops.delete_blocks [ uuid ]
-                ; Ops.save_block prev_uuid (ptitle ^ buf)
-                ]
-            in
             (* the merged-away row repaints before the delete lands — pin
                its live buffer so it doesn't flash the stale title *)
             S.override_title uuid (Ops.normalized_title uuid buf);
             ignore
-              (let* pbuf = Ops.title_for_edit (String.trim ptitle) in
+              (let* sop =
+                 Ops.save_block_parsed prev_uuid (ptitle ^ buf)
+               in
+               let ops =
+                 move_children_ops b prev_uuid
+                 @ [ Ops.delete_blocks [ uuid ]; sop ]
+               in
+               let* pbuf = Ops.title_for_edit (String.trim ptitle) in
               S.set (fun st ->
                   { st with
                     S.editing =
@@ -668,16 +672,28 @@ let index_of lst u =
   in
   go 0 lst
 
+(* the page-title row is a selectable .ls-block that sits above every
+   block without being part of the flat list — a selection anchored on
+   it extends down into the blocks *)
+let anchor_is_page_title anchor =
+  match
+    D.query_selector (".ls-page-title .ls-block[blockid='" ^ anchor ^ "']")
+  with
+  | Some _ -> true
+  | None -> false
+
 (* range anchor..head (inclusive) in visible order; [] when either
    endpoint isn't a visible block (e.g. a journal row's page uuid from a
    co-mounted virt list extending on the same scroller) *)
 let range_between anchor head =
   let uuids = flat_uuids () in
   let ia = index_of uuids anchor and ih = index_of uuids head in
-  if ia < 0 || ih < 0 then []
-  else
+  if ia >= 0 && ih >= 0 then
     let lo, hi = (min ia ih, max ia ih) in
     List.filteri (fun i _ -> i >= lo && i <= hi) uuids
+  else if ia < 0 && ih >= 0 && anchor_is_page_title anchor then
+    anchor :: List.filteri (fun i _ -> i <= ih) uuids
+  else []
 
 (* extend selection one visible step from the current head *)
 let extend_selection up =
@@ -694,7 +710,19 @@ let extend_selection up =
         | _ -> None
       in
       match head with
-      | None -> ()
+      | None -> (
+          (* only the title row selected: ArrowDown enters the block
+             list from the top *)
+          match (up, uuids) with
+          | false, first :: _ when anchor_is_page_title anchor ->
+              let range = range_between anchor first in
+              S.set (fun st ->
+                  { st with
+                    S.selected = S.String_set.of_list range
+                  ; anchor = Some anchor
+                  ; action_bar = true
+                  })
+          | _ -> ())
       | Some h -> (
           let nbr =
             (if up
@@ -1888,7 +1916,8 @@ let run_query_command ~advanced =
       in
       let _ = () in
       ignore
-        (let* () =
+        (let* sop = Ops.save_block_parsed e.uuid "" in
+        let* () =
           Ops.apply_and_refresh
             ([ Ops.op "create-property-text-block"
                  [ Wire.Uuid e.uuid
@@ -1901,7 +1930,7 @@ let run_query_command ~advanced =
                  ]
              ; Ops.set_block_property e.uuid "block/tags"
                  (Wire.Keyword "logseq.class/Query")
-             ; Ops.save_block e.uuid ""
+             ; sop
              ]
             @ extra)
         in
@@ -1987,7 +2016,9 @@ let save_uploaded_files (input : Editor_dom.el) =
              it is still being edited *)
           let pre =
             if empty_target then Js.Promise.resolve ()
-            else Ops.apply [ Ops.save_block e.uuid buffer ]
+            else
+              let* sop = Ops.save_block_parsed e.uuid buffer in
+              Ops.apply [ sop ]
           in
           ignore
             (let* () = pre in

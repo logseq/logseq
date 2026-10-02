@@ -209,15 +209,24 @@ external el_query_all : el -> string -> node_list = "querySelectorAll"
 
 external node_type : el -> int = "nodeType" [@@mel.get]
 
+type el_set
+
+external el_set_new : unit -> el_set = "Set" [@@mel.new]
+external el_set_has : el_set -> el -> bool = "has" [@@mel.send]
+external el_set_add : el_set -> el -> el_set = "add" [@@mel.send]
+
 (* elements matching [sel] touched by the mutation roots: each root's
    closest ancestor-or-self match plus its matching descendants. Roots
    are the mutation records' addedNodes — a subtree inserted under an
    already-mounted shell is covered by the ancestor direction. *)
 let for_each_touched roots sel f =
-  let seen : el list ref = ref [] in
+  (* a page mount feeds hundreds of per-node roots through each scan;
+     the dedup must stay O(1) — an identity-list scan measured ~260ms
+     on a 200-block nav *)
+  let seen = el_set_new () in
   let emit el =
-    if not (List.exists (fun e -> e == el) !seen) then begin
-      seen := el :: !seen;
+    if not (el_set_has seen el) then begin
+      ignore (el_set_add seen el);
       f el
     end
   in

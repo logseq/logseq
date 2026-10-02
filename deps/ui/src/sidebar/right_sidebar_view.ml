@@ -240,7 +240,7 @@ let item_header st idx (it : Sidebar_state.item) =
       (* cljs on-pointer-up: middle click removes the sidebar item *)
       if
         name = "pointerup"
-        && (Platform.payload_num payload "which" = 2.)
+        && Platform.payload_num payload "which" = 2.
       then Sidebar_state.remove_item st it.key)
     [ dom ~key:("hdr-" ^ it.key) ~tag:"button"
         ~style_class:"flex flex-row px-2 items-center w-full overflow-hidden"
@@ -383,196 +383,6 @@ let object_tabs_host (it : Sidebar_state.item) =
             ])
   | _ -> dom ~key:("tabs-none-" ^ it.key) []
 
-(* cljs components/onboarding.cljs `help` — the :help sidebar item body:
-   .help.cp__sidebar-help-docs holding (p.mt-4.mb-1 > b group title) +
-   (ul > li > a[href target=_blank]) groups. The "Keyboard shortcuts"
-   row has no href — it opens the shortcut-settings item (cljs
-   sidebar-add-block!). *)
-let help_docs_body () =
-  let icon_label key name icon_name =
-    dom ~key ~style_class:"flex-row inline-flex items-center"
-      [ dom ~tag:"span" ~style_class:"mr-1" ~text:name []
-      ; Icons.icon ~size:20. icon_name ]
-  in
-  let ext key label href =
-    dom ~key ~tag:"a"
-      ~attrs:[ ("href", href); ("target", "_blank") ]
-      ~text:label []
-  in
-  let group key title items =
-    [ dom ~key:(key ^ "-h") ~tag:"p" ~style_class:"mt-4 mb-1"
-        [ dom ~tag:"b" ~text:title [] ]
-    ; dom ~key:(key ^ "-u") ~tag:"ul"
-        (List.mapi
-           (fun i it ->
-             dom ~key:(key ^ "-" ^ string_of_int i) ~tag:"li" [ it ])
-           items)
-    ]
-  in
-  dom ~key:"help-docs" ~style_class:"help cp__sidebar-help-docs"
-    (group "g-usage" (t "help/usage-title")
-       [ dom ~key:"l-shortcuts" ~tag:"a" ~events:"click"
-           ~on_dom_event:(fun n _ ->
-             if n = "click" then
-               match Sidebar_state.current () with
-               | Some st ->
-                   Sidebar_state.open_sticky_item st "shortcut-settings"
-               | None -> ())
-           [ icon_label "li-sc" (t "help.shortcuts/label") "command" ]
-       ; ext "l-docs" (t "help/docs") "https://docs.logseq.com/"
-       ; ext "l-start" (t "help/start")
-           "https://docs.logseq.com/#/page/tutorial"
-       ; ext "l-faq" "FAQ" "https://docs.logseq.com/#/page/faq"
-       ]
-     @ group "g-community" (t "help/community-title")
-         [ ext "l-awesome" (t "help/awesome-logseq")
-             "https://github.com/logseq/awesome-logseq"
-         ; ext "l-blog" (t "help/blog") "https://blog.logseq.com"
-         ; dom ~key:"l-forum" ~tag:"a"
-             ~attrs:
-               [ ("href", "https://discuss.logseq.com")
-               ; ("target", "_blank") ]
-             [ icon_label "li-forum" (t "help/forum-community")
-                 "message-circle" ]
-         ]
-     @ group "g-dev" (t "help/development-title")
-         [ ext "l-roadmap" (t "help/roadmap")
-             "https://discuss.logseq.com/t/logseq-product-roadmap/34267"
-         ; ext "l-bug" (t "help/bug")
-             "https://github.com/logseq/db-test/issues/new?labels=from:in-app&template=bug_report.yaml"
-         ; ext "l-feature" (t "help/feature")
-             "https://discuss.logseq.com/c/feedback/feature-requests/"
-         ; ext "l-changelog" (t "help/changelog")
-             "https://docs.logseq.com/#/page/changelog"
-         ]
-     @ group "g-about" (t "help/about-title")
-         [ ext "l-about" (t "help/about") "https://blog.logseq.com/about/" ]
-     @ group "g-terms" (t "help/terms-title")
-         [ ext "l-privacy" (t "help/privacy")
-             "https://blog.logseq.com/privacy-policy/"
-         ; ext "l-terms" (t "help/terms") "https://blog.logseq.com/terms/"
-         ])
-
-(* cljs shortcut_help.cljs — .classic-table.w-full with a two-cell thead *)
-let classic_table ~key head_l head_r rows =
-  dom ~key ~tag:"table" ~style_class:"classic-table w-full"
-    [ dom ~tag:"thead"
-        [ dom ~tag:"tr"
-            [ dom ~tag:"th" ~style_class:"text-left"
-                [ dom ~tag:"b" ~text:head_l [] ]
-            ; dom ~tag:"th" ~style_class:"text-right" [ head_r ]
-            ]
-        ]
-    ; dom ~tag:"tbody" rows
-    ]
-
-let sc_row ~key label cell =
-  dom ~key ~tag:"tr"
-    [ dom ~tag:"td" ~style_class:"text-left" ~text:label []
-    ; dom ~tag:"td" ~style_class:"text-right" [ cell ] ]
-
-let sc_code ~key s = dom ~key ~tag:"code" ~text:s []
-
-(* cljs shortcut-help.cljs trigger-table *)
-let trigger_table () =
-  classic_table ~key:"triggers" (t "help.shortcuts/triggers")
-    (dom ~tag:"b" ~text:(t "help.shortcuts/shortcut-column") [])
-    [ sc_row ~key:"r-slash" (t "help/slash-autocomplete")
-        (sc_code ~key:"c-slash" "/")
-    ; sc_row ~key:"r-search" (t "help/search")
-        (* cljs (shui/shortcut ["mod" "k"]) — :separate style *)
-        (dom ~key:"c-search" ~style_class:"float-right"
-           [ dom ~tag:"span"
-               ~attrs:
-                 [ ( "style"
-                   , "display: inline-flex; align-items: center; \
-                      white-space: nowrap" )
-                 ]
-               [ Cmdk_view.separate_el "c-search-sc" [ "mod"; "k" ]
-                   "mod k" ]
-           ])
-    ; sc_row ~key:"r-ref" (t "help/reference-autocomplete")
-        (sc_code ~key:"c-ref" "[[]]")
-    ; sc_row ~key:"r-bref" (t "help/block-reference")
-        (sc_code ~key:"c-bref" "[[]]")
-    ; sc_row ~key:"r-sidebar" (t "help/open-link-in-sidebar")
-        (sc_code ~key:"c-sidebar" (t "help/open-link-in-sidebar-action"))
-    ; sc_row ~key:"r-ctx" (t "help/context-menu")
-        (sc_code ~key:"c-ctx" (t "help/context-menu-action"))
-    ]
-
-(* cljs shortcut-help.cljs markdown-syntax — raw markup left, rendered
-   right. KaTeX/hljs runtimes don't ship in the Melange bundle, so the
-   math/code cells keep raw tex/pre markup (same stub as
-   Render_inline.katex_el). *)
-let markdown_syntax_table () =
-  let raw ~key s = dom ~key ~tag:"code" ~text:s [] in
-  let cell ~key el = dom ~key ~tag:"td" ~style_class:"text-right" [ el ] in
-  let row ~key left right =
-    dom ~key ~tag:"tr"
-      [ dom ~tag:"td" ~style_class:"text-left" [ left ]; cell ~key:(key ^ "r") right ]
-  in
-  classic_table ~key:"md" (t "help/markdown-syntax")
-    (dom ~tag:"a"
-       ~attrs:
-         [ ("href", "https://www.markdownguide.org/basic-syntax") ]
-       ~text:(t "help/learn-more" ^ " \xe2\x86\x92") [])
-    [ row ~key:"m-bold"
-        (raw ~key:"m-bold-l" ("**" ^ t "format/bold" ^ "**"))
-        (dom ~tag:"b" ~text:(t "format/bold") [])
-    ; row ~key:"m-italics"
-        (raw ~key:"m-italics-l" ("_" ^ t "format/italics" ^ "_"))
-        (dom ~tag:"i" ~text:(t "format/italics") [])
-    ; row ~key:"m-del"
-        (raw ~key:"m-del-l" ("~~" ^ t "format/strikethrough" ^ "~~"))
-        (dom ~tag:"del" ~text:(t "format/strikethrough") [])
-    ; row ~key:"m-mark"
-        (raw ~key:"m-mark-l" ("^^" ^ t "format/highlight" ^ "^^"))
-        (dom ~tag:"mark" ~text:(t "format/highlight") [])
-    ; row ~key:"m-math"
-        (raw ~key:"m-math-l" (t "help/inline-math-example-prefix" ^ " $E = mc^2$"))
-        (dom ~tag:"span"
-           ~text:(t "help/inline-math-example-prefix" ^ " ")
-           [ Render_inline.katex_el ~block:false ~display:false "E = mc^2" ])
-    ; row ~key:"m-latex" (raw ~key:"m-latex-l" "$$E = mc^2$$")
-        (dom ~tag:"div" ~style_class:"latex"
-           [ Render_inline.katex_el ~block:true ~display:true "E = mc^2" ])
-    ; row ~key:"m-code"
-        (raw ~key:"m-code-l" ("`" ^ t "format/code" ^ "`"))
-        (dom ~tag:"code" ~text:(t "format/code") [])
-    ; row ~key:"m-link" (raw ~key:"m-link-l" "[Link](https://www.example.com)")
-        (dom ~tag:"a" ~attrs:[ ("href", "https://www.example.com") ]
-           ~text:(t "ui/link") [])
-    ; row ~key:"m-pre"
-        (dom ~key:"m-pre-l" ~tag:"pre"
-           ~text:"```clojure\n  (println \"Hello world!\")\n```" [])
-        (dom ~tag:"pre" ~style_class:"code pre-wrap-white-space"
-           [ dom ~tag:"code"
-               ~attrs:
-                 [ ("id", "help-highlight"); ("data-lang", "clojure") ]
-               ~text:"(println \"Hello world!\")" [] ])
-    ; row ~key:"m-img"
-        (raw ~key:"m-img-l" "![image](https://asset.logseq.com/static/img/logo.png)")
-        (dom ~tag:"img"
-           ~attrs:
-             [ ("style", "float: right; width: 32px; height: 32px;")
-             ; ("src", "https://asset.logseq.com/static/img/logo.png")
-             ; ("alt", t "ui/image") ]
-           [])
-    ]
-
-(* cljs right_sidebar.cljs shortcut-settings — .contents.flex-col.flex.ml-3
-   > .cp__shortcut-page.px-2.-mt-2 (show-title? false) with the shared
-   keymap pane (same component as the settings Keymap tab) *)
-let shortcut_page_body () =
-  dom ~key:"shortcut-wrap" ~style_class:"contents flex-col flex ml-3"
-    [ dom ~key:"shortcut-page" ~style_class:"cp__shortcut-page px-2 -mt-2"
-        [ trigger_table ()
-        ; markdown_syntax_table ()
-        ; Settings_page.keymap_pane ()
-        ]
-    ]
-
 let item_body st idx (it : Sidebar_state.item) =
   let n = string_of_int idx in
   let is_node, wrap_attrs, margin_left =
@@ -595,8 +405,7 @@ let item_body st idx (it : Sidebar_state.item) =
     | None -> (false, [], "")
   in
   (* cljs right_sidebar page items render the full page-inner body:
-     .cp__page-inner-wrap > .page-inner > (props + tabs + blocks + refs);
-     :help and :shortcut-settings items render their own fixed body. *)
+     .cp__page-inner-wrap > .page-inner > (props + tabs + blocks + refs) *)
   dom ~key:("body-" ^ it.key)
     ~attrs:
       [ ("role", "region")
@@ -610,11 +419,7 @@ let item_body st idx (it : Sidebar_state.item) =
        match it.Sidebar_state.kind with
        | "search" | "shortcut-settings" -> ""
        | _ -> " px-2")
-    [ (match it.Sidebar_state.kind with
-       | "help" -> help_docs_body ()
-       | "shortcut-settings" -> shortcut_page_body ()
-       | _ ->
-       dom ~key:("wrap-" ^ it.key)
+    [ dom ~key:("wrap-" ^ it.key)
         ~style_class:
           ("flex-1 page relative cp__page-inner-wrap"
           ^ if is_node then " is-node-page" else "")
@@ -641,7 +446,7 @@ let item_body st idx (it : Sidebar_state.item) =
             @ (if it.kind = "page" then
                  [ Page.references_view it.linked_refs ]
                else []))
-        ])
+        ]
     ]
 
 

@@ -609,10 +609,7 @@ let open_uuid st uuid =
 let open_sticky_item st kind =
   let repo = Runtime.repo () in
   if repo = "" then ()
-  else begin
-    (* cljs sidebar-add-block! also opens the sidebar — the topbar path
-       already implies open, the help-menu path does not *)
-    ensure_right_open ();
+  else
     match kind with
     | "contents" when not (has_item st "contents") ->
         add_promise st (contents_item repo)
@@ -648,7 +645,6 @@ let open_sticky_item st kind =
          | Some it -> push_item st it
          | None -> ())
     | _ -> ()
-  end
 
 let ensure_contents st =
   let repo = Runtime.repo () in
@@ -776,6 +772,7 @@ let on_model st (m : Model.t) =
 
 let close_menu st = Runtime.signal_set st.open_menu ""
 let open_nav_menu st = Runtime.signal_set st.open_menu "nav-edit"
+let open_dots_menu st = Runtime.signal_set st.open_menu "dots"
 (* anchor for the right-sidebar item actions menu — cljs popup-show!
    positions at the pointer (contextmenu) / trigger click *)
 let im_xy : (float * float) ref = ref (0., 0.)
@@ -827,15 +824,7 @@ let on_doc_click st ev =
     with
     | Some _ -> ()
     | None -> close_menu st);
-  match
-    (match click_target "a.page-ref" ev with
-     | Some _ as r -> r
-     | None ->
-         (* the anchor inside .page-reference mounts empty (lazy title
-            pull) — a click on the bracket shell still has data-ref on the
-            wrapper *)
-         click_target ".page-reference" ev)
-  with
+  match click_target "a.page-ref" ev with
   | Some el -> (
       match
         (* uuid refs ([[uuid]]/((uuid))) carry data-uuid; data-ref holds the

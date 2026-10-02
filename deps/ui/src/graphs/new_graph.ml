@@ -19,9 +19,8 @@ let checkbox_cls checked =
 
 let checkbox ~key ~id ~checked ~on_click =
   dom ~key ~tag:"button" ~id
-    ~style_class:(reactive checkbox_cls checked)
-    ~attrs:
-      (reactive
+    ~style_class_signal:(Logseq_dom.reactive_class checkbox_cls checked)
+    ~attrs_signal_v:(Logseq_dom.reactive_attrs
          (fun c ->
            [ ("role", "checkbox")
            ; ("type", "button")
@@ -139,8 +138,7 @@ let body (_ms : Model.t Signal.signal) : t =
           ~style_class:
             "inline-flex items-center justify-center rounded-md text-sm \
              font-medium bg-primary text-primary-foreground px-4 py-2"
-          ~attrs:
-            (reactive
+          ~attrs_signal_v:(Logseq_dom.reactive_attrs
                (fun c -> if c then [ ("disabled", "true") ] else [])
                (Signal.value creating))
           ~on_dom_event:(fun n _ ->

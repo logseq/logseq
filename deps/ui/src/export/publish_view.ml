@@ -242,8 +242,7 @@ let toggle_pw ctx =
   let st_sig = Signal.value (st ctx) in
   dom ~key:"pub-pw-wrap" ~style_class:"ls-toggle-password-input relative"
     [ dom ~key:"pub-pw" ~tag:"input" ~style_class:input_cls
-        ~attrs:
-          (reactive
+        ~attrs_signal_v:(Logseq_dom.reactive_attrs
              (fun (s : pst) ->
                [ ("type", if s.visible then "text" else "password")
                ; ("placeholder", I18n.t "publish/password-optional-placeholder") ])
@@ -257,7 +256,7 @@ let toggle_pw ctx =
                     { s with
                       password = Platform.payload_str payload "value" })
             | None -> ())
-        ~text:(reactive (fun (s : pst) -> s.password) st_sig)
+        ~text_signal:(Logseq_dom.reactive_text (fun (s : pst) -> s.password) st_sig)
         []
     ; if_
         ~test:
@@ -312,8 +311,7 @@ let body (_ms : Model.t Signal.signal) : t =
               ~style_class:
                 (btn_base
                ^ " bg-primary text-primary-foreground hover:bg-primary/90")
-              ~attrs:
-                (reactive
+              ~attrs_signal_v:(Logseq_dom.reactive_attrs
                    (fun (s : pst) ->
                      [ ("type", "submit"); ("autofocus", "") ]
                      @ if s.publishing then [ ("disabled", "") ] else [])
@@ -321,8 +319,7 @@ let body (_ms : Model.t Signal.signal) : t =
               ~events:"click"
               ~on_dom_event:(fun n _ ->
                 if n = "click" then submit ctx)
-              ~text:
-                (reactive
+              ~text_signal:(Logseq_dom.reactive_text
                    (fun (s : pst) ->
                      if s.publishing then "Publishing..." else "Publish")
                    (Signal.value st))

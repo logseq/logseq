@@ -188,6 +188,19 @@ let popup_signal () =
            t.vs.Signal.state_signal)
   | None -> None
 
+(* signal of whether a popover layer other than the context menu is open —
+   cljs keeps the selection action-bar rendered while the block context
+   menu that spawned from it is open, so the bar only hides under the
+   other layers *)
+let non_cm_popup_signal () =
+  match !active with
+  | Some t ->
+      Some
+        (Signal.map
+           (fun v -> v.ac <> None || v.pv <> None)
+           t.vs.Signal.state_signal)
+  | None -> None
+
 let ac_open () =
   match !active with
   | Some t -> (get t).ac <> None
@@ -677,7 +690,7 @@ let run_block_search t ac =
        Runtime.invoke3 "thread-api/search-blocks"
          (Wire.String (repo ()))
          (Wire.String ac.query)
-         (Cmdk_state.search_opts false 20)
+         (Cmdk_state.search_opts ~dev:false false 20)
      in
      let rows =
        match w with
@@ -711,7 +724,7 @@ let run_node_search t ac =
        Runtime.invoke3 "thread-api/search-blocks"
          (Wire.String (repo ()))
          (Wire.String ac.query)
-         (Cmdk_state.search_opts false 20)
+         (Cmdk_state.search_opts ~dev:false false 20)
      in
      let rows =
        match w with
@@ -1330,10 +1343,10 @@ let apply_template t ac uuid =
       let buf = Dom_ext.value ac.editor in
       close_ac t;
       ignore
-        (Outliner_ops.apply_and_refresh
+        (let* sop = Outliner_ops.save_block_parsed buuid buf in
+         Outliner_ops.apply_and_refresh
            ~opts:(Outliner_ops.op_opts "apply-template")
-           [ Outliner_ops.save_block buuid buf
-           ; Outliner_ops.apply_template uuid buuid ])
+           [ sop; Outliner_ops.apply_template uuid buuid ])
 (* cljs run-query-command! / advanced-query-steps: save the current
    block, tag it logseq.class/Query, create the hidden
    logseq.property/query value block and copy the current title into it
@@ -1350,9 +1363,10 @@ let run_query t ac ~advanced =
       Editor_actions.exit_edit ~select:false;
       let repo_v = repo () in
       ignore
-        (let* _ =
+        (let* sop = Outliner_ops.save_block_parsed buuid title in
+        let* _ =
            Outliner_ops.apply
-             [ Outliner_ops.save_block buuid title
+             [ sop
              ; Outliner_ops.op "create-property-text-block"
                  [ Wire.Uuid buuid
                  ; Wire.Keyword "logseq.property/query"
@@ -1428,8 +1442,18 @@ let apply_item t ac it =
   | Emit (text, back) -> insert_text ac text back; close_ac t
   | Emit_exit text -> emit ~exit:true ac.editor ac.tpos text; close_ac t
   | Editor_cmd c ->
-      (* cljs strips the "/cmd" trigger text like an Emit "" insert *)
-      emit ac.editor ac.tpos "";
+      (match c with
+       | "date-picker" ->
+           (* cljs :editor/show-date-picker keeps the typed trigger
+              text — the calendar's commit replaces it *)
+           ()
+       | "link" | "image-link" ->
+           (* cljs [:editor/input "/link"] — the buffer holds the literal
+              command text while the form is open *)
+           emit ac.editor ac.tpos ("/" ^ c)
+       | _ ->
+           (* cljs strips the "/cmd" trigger text like an Emit "" insert *)
+           emit ac.editor ac.tpos "");
       emit_cmd ~pos:ac.tpos c [];
       close_ac t  | Plugin_slash (pid, tag) ->
       (* cljs handle-steps — strip the "/tag" trigger like an Emit ""

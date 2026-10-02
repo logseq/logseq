@@ -394,19 +394,17 @@ let list ?(scroll_parent_id = "main-content-container") ?(overscan = 5)
   let versions : (string, int) Hashtbl.t = Hashtbl.create 16 in
   let vstate_sig = st.Signal.state_signal in
   let spacer_attrs =
-    Signal.map
-      (fun s ->
+    Logseq_dom.attrs_signal vstate_sig (fun s ->
         [ ( "style"
           , Printf.sprintf "height:%.4fpx;position:relative;width:100%%"
               s.v_total )
         ])
-      vstate_sig
   in
   let row_mount (row_sig : vrow Signal.signal) : t =
     let row = Signal.get row_sig in
     D.dom ~key:("vr-" ^ row_version_key versions row)
       ~style_class:"ls-virt-row"
-      ~attrs:(reactive (fun it -> row_attrs !margin it) row_sig)
+      ~attrs_signal_v:(Logseq_dom.reactive_attrs (fun it -> row_attrs !margin it) row_sig)
       [ if row.v_index < Array.length !data then render !data.(row.v_index)
         else box ~key:("vrx-" ^ row.v_key) [] ]
   in
@@ -418,7 +416,7 @@ let list ?(scroll_parent_id = "main-content-container") ?(overscan = 5)
   D.dom ~key:("vl-" ^ list_id) ~id:list_id ~style_class:list_class
     ~attrs:list_attrs
     [ D.dom ~key:("vs-" ^ list_id) ~style_class:"ls-virt-spacer"
-        ~attrs_signal:spacer_attrs
+        ~attrs_signal_v:spacer_attrs
         [ keyed ~source:(Signal.map (fun s -> s.v_rows) vstate_sig)
             ~key:(fun r -> row_version_key versions r) ~cmp:String.compare
             ~mount:row_mount

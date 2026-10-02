@@ -13,6 +13,10 @@ open Lui_elements
 module S = Popups_state
 module U = I18n
 
+let sv s = Lui_protocol.StringValue s
+
+let attrs_v pairs = sv (Logseq_dom.attrs_json pairs)
+
 (* -- autocomplete item ----------------------------------------------- *)
 
 (* cljs svg/help-circle used inside the Query item's doc tooltip *)
@@ -200,21 +204,23 @@ let ac_item_el ~key (st : S.t) (item_sig : S.ac_item Signal.signal) : t =
   in
   Logseq_dom.dom ~key ~style_class:"menu-link-wrap"
     [ Logseq_dom.dom ~key:"lnk" ~tag:"a"
-            ~style_class:
-              (reactive
+            ~style_class_signal:
+              (Signal.map
                  (fun (it, v) ->
                    let chosen =
                      match v.S.ac with
                      | Some ac -> ac.S.chosen = it.S.ai_idx
                      | None -> false
                    in
-                   (if chosen then "chosen " else " ") ^ "menu-link")
+                   sv
+                     ((if chosen then "chosen " else " ") ^ "menu-link"))
                  pair)
-            ~attrs:
-              (reactive
+            ~attrs_signal_v:
+              (Signal.map
                  (fun (it, _) ->
-                   [ ("id", "ac-" ^ string_of_int it.S.ai_idx)
-                   ; ("tabindex", "0") ])
+                   attrs_v
+                     [ ("id", "ac-" ^ string_of_int it.S.ai_idx)
+                     ; ("tabindex", "0") ])
                  pair)
             [ Logseq_dom.dom ~key:"flex1" ~tag:"span"
                 [ dyn
@@ -386,31 +392,33 @@ let ac_popover (st : S.t) : t =
   (* cljs PopoverContent: ui__popover-content + card + transition classes *)
   (Logseq_dom.dom ~key:"ac-pop"
     ~style_class:"ui__popover-content"
-    ~attrs:
-      (reactive
+    ~attrs_signal_v:
+      (Signal.map
          (fun (v : S.view) ->
            match v.S.ac with
            | Some a ->
-               [ ("style", popover_style ~x:a.S.x ~y:a.S.y ~flip:a.S.flip)
-               ; ("data-open", "")
-               ; ( "data-side"
-                 , (match a.S.flip with Some _ -> "top" | None -> "bottom") )
-               ; ("data-align", "start")
-               ; ("tabindex", "-1")
-               ; ("data-base-ui-focusable", "")
-               ; ("role", "dialog")
-               ; ("data-state", "open")
-               ; ( "data-editor-popup-ref"
-                 , S.popup_ref_of_kind a.S.kind ) ]
-           | None -> [])
+               attrs_v
+                 [ ("style", popover_style ~x:a.S.x ~y:a.S.y ~flip:a.S.flip)
+                 ; ("data-open", "")
+                 ; ( "data-side"
+                   , (match a.S.flip with Some _ -> "top" | None -> "bottom") )
+                 ; ("data-align", "start")
+                 ; ("tabindex", "-1")
+                 ; ("data-base-ui-focusable", "")
+                 ; ("role", "dialog")
+                 ; ("data-state", "open")
+                 ; ( "data-editor-popup-ref"
+                   , S.popup_ref_of_kind a.S.kind ) ]
+           | None -> attrs_v [])
          st.S.vs.Signal.state_signal)
     [ Logseq_dom.dom ~key:"ac" ~id:"ui__ac"
-        ~style_class:
-          (reactive
+        ~style_class_signal:
+          (Signal.map
              (fun (v : S.view) ->
-               match v.S.ac with
-               | Some a -> S.ac_class_of_kind a.S.kind
-               | None -> "")
+               sv
+                 (match v.S.ac with
+                  | Some a -> S.ac_class_of_kind a.S.kind
+                  | None -> ""))
              st.S.vs.Signal.state_signal)
         [ ac_inner st ]
     ; (* cljs page-search-aux: mod+enter hint under the tag list *)
@@ -646,18 +654,24 @@ let cm_popover (st : S.t) : t =
      sit in a flat div[data-keep-selection], not a second card *)
   Logseq_dom.dom ~key:"cm"
     ~style_class:"ui__dropdown-menu-content ls-context-menu-content"
-    ~attrs:
-      (reactive
+    ~attrs_signal_v:
+      (Signal.map
          (fun (v : S.view) ->
            match v.S.cm with
            | Some m ->
-               [ ( "style"
-                 , Printf.sprintf
-                     "position: fixed; left: %.0fpx; top: %.0fpx; \
-                      z-index: 999; --available-height: calc(100vh - %.0fpx)"
-                     m.S.cx m.S.cy (m.S.cy +. 8.) )
-               ; ("role", "menu") ]
-           | None -> [])
+               attrs_v
+                 [ ( "style"
+                   , Printf.sprintf
+                       "position: fixed; left: %.0fpx; top: %.0fpx; \
+                        z-index: 999; --available-height: calc(100vh - %.0fpx)"
+                       (* cljs anchors a 1px point at the click and the
+                          base-ui dropdown centers the 280px content on it *)
+                       (Float.max 8.
+                          (Float.min (m.S.cx -. 140.)
+                             (Dom_ext.window_inner_width -. 288.)))
+                       m.S.cy (m.S.cy +. 8.) )
+                 ; ("role", "menu") ]
+           | None -> attrs_v [])
          st.S.vs.Signal.state_signal)
     [ Logseq_dom.dom ~key:"cm-wrap"
         ~attrs:[ ("data-keep-selection", "") ]

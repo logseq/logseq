@@ -98,7 +98,9 @@ let hidden_checkbox ~key ~on =
   dom ~key ~tag:"input"
     ~attrs:
       ([ ("type", "checkbox")
-       ; ("style", "clip-path: inset(50%); overflow: hidden;") ]
+       ; ( "style"
+         , "position: fixed; top: 0; left: 0; width: 1px; height: 1px; \
+            clip-path: inset(50%); overflow: hidden;" ) ]
       @ if on then [ ("checked", "") ] else [])
     []
 
@@ -248,7 +250,9 @@ let language_row ctx =
           ~anchor_sel:"#settings-lang-trigger"
       ; dom ~key:"lang-sel-i" ~tag:"input"
           ~attrs:
-            [ ("style", "clip-path: inset(50%); overflow: hidden;")
+            [ ( "style"
+              , "position: fixed; top: 0; left: 0; width: 1px; height: 1px; \
+                 clip-path: inset(50%); overflow: hidden;" )
             ; ("value", V.current_lang ()) ]
           []
       ]
@@ -261,7 +265,7 @@ let theme_row ctx =
     [ dom ~key:"theme-lc" ~style_class:"ls-it-label-col"
         [ label_el ~key:"theme-l" ~for_:"toggle_theme" ~text:""
             ~text_signal:
-              (Signal.map
+              (Logseq_dom.reactive_text
                  (fun m ->
                    let effective =
                      if m = "system" then
@@ -867,8 +871,7 @@ let tab_title = function
 let nav_item ~key (id, label, icn) =
   dom ~key ~tag:"li" ~style_class:"settings-menu-item"
     ~attrs:[ ("data-id", id) ]
-    ~style_class:
-      (reactive
+    ~style_class_signal:(Logseq_dom.reactive_class
          (fun (s : S.t) ->
            if s.tab = id then "active settings-menu-item"
            else "settings-menu-item")
@@ -896,7 +899,7 @@ let article ~modal ctx =
     [ dom ~key:"art-h" ~tag:"header" ~style_class:"cp__settings-header"
         [ dom ~key:"art-ht" ~tag:"h1"
             ~style_class:"cp__settings-category-title"
-            ~text:(reactive (fun (s : S.t) -> tab_title s.tab) (S.signal ()))
+            ~text_signal:(Logseq_dom.reactive_text (fun (s : S.t) -> tab_title s.tab) (S.signal ()))
             []
         ]
     ; dyn ~equal:( = ) (fun (s : S.t) -> pane_of ~modal ctx s.tab)
@@ -937,8 +940,11 @@ let view (_m : Model.t) : t = inner ~modal:false
 let modal_body (_ms : Model.t Signal.signal) : t =
   fun ctx parent ->
     let node =
+      (* cljs general() calls (accent-color-row false) in the settings
+         dialog too — modal=true is only for the compact appearance
+         popup (autofocus, as-modal-picker grid, no shortcut chips) *)
       dom ~key:"settings-modal" ~style_class:"settings-modal"
-        [ inner ~modal:true ]
+        [ inner ~modal:false ]
     in
     node ctx parent
 

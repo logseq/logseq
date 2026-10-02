@@ -213,12 +213,11 @@ let on_normal_key ev =
               D.prevent_default ev;
               A.enter_edit u 0
           | _ -> ()))
-  | "Escape" -> A.clear_selection ()
-  | "?" ->
-      (* cljs shift+/ (:ui/toggle-help, global-non-editing-only) toggles
-         the help menu popup *)
-      D.prevent_default ev;
-      Runtime.send Action.Help_toggle
+  | "Escape" ->
+      (* cljs: first Escape closes the action-bar popover, the next one
+         clears the selection *)
+      if S.ready () && (S.value ()).S.action_bar then A.hide_action_bar ()
+      else A.clear_selection ()
   | _ -> (
       match shortcut_key ev with
       | "a" when mods ev && shift ->
@@ -482,28 +481,12 @@ let on_input ev =
         | Some uuid ->
             let v = D.el_value el in
             S.note_input ();
-            let already_ordered =
-              match S.find uuid with
-              | Some b -> b.Model.block_order_list <> None
-              | None -> false
-            in
-            if v = "1. " && not already_ordered then (
-              (* cljs input autopattern: a whole buffer of "1. " converts
-                 the block to an ordered-list item and clears the typed
-                 prefix — the buffer must be emptied before prop_batch
-                 reads it for the bundled save *)
-              A.sync_buffer uuid "";
-              D.el_set_value el "";
-              D.el_set_text_content el "";
-              D.autosize_textarea el;
-              Editor_commands.toggle_own_list uuid 0)
-            else (
-              A.sync_buffer uuid v;
-              (* keep textContent in lockstep so innerText/:has-text see the
-                 buffer (textarea innerText follows textContent, not value) *)
-              D.el_set_text_content el v;
-              D.autosize_textarea el;
-              Outliner_ops.schedule_save uuid v)
+            A.sync_buffer uuid v;
+            (* keep textContent in lockstep so innerText/:has-text see the
+               buffer (textarea innerText follows textContent, not value) *)
+            D.el_set_text_content el v;
+            D.autosize_textarea el;
+            Outliner_ops.schedule_save uuid v
         | None ->
             (* non-block editors (e.g. a comment textarea) still need
                textContent synced for :has-text *)
@@ -585,8 +568,7 @@ let on_click ev =
                         "button, a, input, audio, video, details, summary, \
                          sup.fn, [contenteditable=true], .cloze, \
                          .cloze-revealed, .query-table, .image-resize, \
-                         .view-action-type, .ui-fenced-code-editor, \
-                         .page-reference"
+                         .view-action-type, .ui-fenced-code-editor"
                         target
                     with
                     | Some _ -> ()
