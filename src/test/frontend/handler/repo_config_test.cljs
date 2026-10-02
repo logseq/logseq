@@ -53,18 +53,25 @@
   ;; `[:config repo]` stays populated and settings toggles keep working
   (async done
     (let [repo "logseq_db_repo_config_invalid_file"
-          previous-state (state/get-state)]
-      (p/with-redefs [repo-config-handler/<get-file-content
-                      (fn [_repo' _path]
-                        (p/resolved "{:ui/show-brackets?"))
-                      notification/show! (fn [& _args] nil)]
-        (-> (p/let [config (repo-config-handler/restore-repo-config! repo)]
-              (is (true? (:ui/enable-tooltip? config)))
-              (is (true? (:ui/enable-tooltip? (state/get-graph-config repo)))))
-            (p/catch
-             (fn [error]
-               (is false (str error))))
-            (p/finally
-             (fn []
-               (state/replace-state! previous-state)
-               (done))))))))
+          previous-state (state/get-state)
+          previous-worker @state/*db-worker
+          previous-notification notification/show!]
+      ;; Mocks are restored synchronously in p/finally: p/with-redefs restores
+      ;; in a microtask that can run after the next test has started
+      (set! notification/show! (fn [& _args] nil))
+      (reset! state/*db-worker
+              (fn [method-k & _args]
+                (p/resolved (when (= :thread-api/get-file-content method-k)
+                              "{:ui/show-brackets?"))))
+      (-> (p/let [config (repo-config-handler/restore-repo-config! repo)]
+            (is (true? (:ui/enable-tooltip? config)))
+            (is (true? (:ui/enable-tooltip? (state/get-graph-config repo)))))
+          (p/catch
+           (fn [error]
+             (is false (str error))))
+          (p/finally
+           (fn []
+             (set! notification/show! previous-notification)
+             (reset! state/*db-worker previous-worker)
+             (state/replace-state! previous-state)
+             (done)))))))

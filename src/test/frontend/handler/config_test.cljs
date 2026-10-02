@@ -84,6 +84,7 @@
           previous-state (state/get-state)
           previous-worker @state/*db-worker
           previous-pub-event state/pub-event!
+          previous-notification notification/show!
           file-content (atom "{:ui/show-brackets?")]
       (reset! state/*db-worker
               (fn [method-k _repo & [arg1]]
@@ -94,21 +95,24 @@
                   (p/resolved nil))))
       ;; [:shortcut/refresh] publishing touches DOM listeners unavailable in node
       (set! state/pub-event! (fn [& _] nil))
+      ;; Mocks are restored synchronously in p/finally: p/with-redefs restores
+      ;; in a microtask that can run after the next test has started
+      (set! notification/show! (fn [& _args] nil))
       (state/swap-state! assoc :git/current-repo repo)
-      (p/with-redefs [notification/show! (fn [& _args] nil)]
-        (-> (p/let [_ (config-handler/set-config! :ui/show-brackets? false)
-                    content @file-content]
-              (is (some? content))
-              (is (string/includes? content ":ui/show-brackets? false"))
-              (is (string/includes? content ":meta/version 1"))
-              ;; restore-repo-config! re-reads the file so [:config repo] updates
-              (is (false? (:ui/show-brackets? (state/get-graph-config repo)))))
-            (p/catch
-             (fn [error]
-               (is false (str error))))
-            (p/finally
-             (fn []
-               (reset! state/*db-worker previous-worker)
-               (set! state/pub-event! previous-pub-event)
-               (state/replace-state! previous-state)
-               (done))))))))
+      (-> (p/let [_ (config-handler/set-config! :ui/show-brackets? false)
+                  content @file-content]
+            (is (some? content))
+            (is (string/includes? content ":ui/show-brackets? false"))
+            (is (string/includes? content ":meta/version 1"))
+            ;; restore-repo-config! re-reads the file so [:config repo] updates
+            (is (false? (:ui/show-brackets? (state/get-graph-config repo)))))
+          (p/catch
+           (fn [error]
+             (is false (str error))))
+          (p/finally
+           (fn []
+             (reset! state/*db-worker previous-worker)
+             (set! state/pub-event! previous-pub-event)
+             (set! notification/show! previous-notification)
+             (state/replace-state! previous-state)
+             (done)))))))
