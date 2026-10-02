@@ -37,6 +37,20 @@ let parse (s : string) : Wire.t =
          | _ -> fail (Printf.sprintf "expected %s" lit))
       lit
   in
+  let hex_digit c =
+    match c with
+    | '0' .. '9' -> Char.code c - Char.code '0'
+    | 'a' .. 'f' -> Char.code c - Char.code 'a' + 10
+    | 'A' .. 'F' -> Char.code c - Char.code 'A' + 10
+    | _ -> fail "invalid \\u escape"
+  in
+  let read_u4 () =
+    let v = ref 0 in
+    for _ = 1 to 4 do
+      v := (!v lsl 4) + hex_digit (next ())
+    done;
+    !v
+  in
   let parse_string () : string =
     expect '"';
     let b = Buffer.create 16 in
@@ -49,9 +63,7 @@ let parse (s : string) : Wire.t =
           incr pos;
           (match next () with
            | 'u' ->
-               let hex = String.sub s !pos 4 in
-               pos := !pos + 4;
-               let code = int_of_string ("0x" ^ hex) in
+               let code = read_u4 () in
                (* surrogate pair *)
                let code =
                  if code >= 0xD800 && code <= 0xDBFF
@@ -59,9 +71,7 @@ let parse (s : string) : Wire.t =
                     && s.[!pos] = '\\' && s.[!pos + 1] = 'u'
                  then begin
                    pos := !pos + 2;
-                   let hex2 = String.sub s !pos 4 in
-                   pos := !pos + 4;
-                   let lo = int_of_string ("0x" ^ hex2) in
+                   let lo = read_u4 () in
                    0x10000 + (((code - 0xD800) lsl 10) lor (lo - 0xDC00))
                  end
                  else code
@@ -78,16 +88,16 @@ let parse (s : string) : Wire.t =
     Buffer.contents b
   in
   let rec parse_number () : Wire.t =
-    let start = !pos in
-    (match peek () with Some '-' -> incr pos | _ -> ());
-    while (match peek () with
-           | Some c -> (c >= '0' && c <= '9') || c = '.' || c = 'e' || c = 'E'
-                       || c = '+' || c = '-'
-           | None -> false)
-    do
-      incr pos
+    let b = Buffer.create 12 in
+    let is_digit c =
+      (c >= '0' && c <= '9') || c = '.' || c = 'e' || c = 'E'
+      || c = '+' || c = '-'
+    in
+    (match peek () with Some '-' -> incr pos; Buffer.add_char b '-' | _ -> ());
+    while (match peek () with Some c -> is_digit c | None -> false) do
+      Buffer.add_char b (next ())
     done;
-    let tok = String.sub s start (!pos - start) in
+    let tok = Buffer.contents b in
     if tok = "" then fail "empty number";
     let is_float =
       String.exists (fun c -> c = '.' || c = 'e' || c = 'E') tok

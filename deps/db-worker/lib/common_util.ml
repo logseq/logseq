@@ -7,13 +7,20 @@ open Datascript
 
 (* ---- tiny string helpers (cljs clojure.string analogs) ---- *)
 
+(* char-wise compare — melange String.sub materializes the whole source
+   per call, so substring-equality scans go quadratic on long strings *)
+let str_match_at (s : string) (i : int) (pattern : string) : bool =
+  let m = String.length pattern in
+  let rec k j = j >= m || (s.[i + j] = pattern.[j] && k (j + 1)) in
+  k 0
+
 let str_index_of (s : string) (pattern : string) : int option =
   let n = String.length s and m = String.length pattern in
   if m = 0 then Some 0
   else
     let rec go i =
       if i + m > n then None
-      else if String.sub s i m = pattern then Some i
+      else if str_match_at s i pattern then Some i
       else go (i + 1)
     in
     go 0
@@ -22,7 +29,7 @@ let str_last_index_of (s : string) (pattern : string) : int option =
   let n = String.length s and m = String.length pattern in
   let rec go i =
     if i < 0 then None
-    else if String.sub s i m = pattern then Some i
+    else if str_match_at s i pattern then Some i
     else go (i - 1)
   in
   if n < m then None else go (n - m)
@@ -43,7 +50,7 @@ let str_replace_all (s : string) (old_value : string) (new_value : string) : str
       let n = String.length s in
       let rec loop k =
         if k + m > n then None
-        else if String.sub s k m = p then Some k
+        else if str_match_at s k p then Some k
         else loop (k + 1)
       in
       if i + m > n then None else loop i

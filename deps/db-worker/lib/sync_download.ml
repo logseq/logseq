@@ -524,29 +524,22 @@ let stream_snapshot_row_batches ?(gzip_encoded = false) read_fn batch_size
     (on_batch : (int * string * string option) list -> unit Db_worker_effect.t)
     : unit Db_worker_effect.t =
   let buffer = ref None in
-  let pending = ref [] in
+  let pending = Queue.create () in
   let first_chunk = ref true in
   let rec flush_pending () : unit Db_worker_effect.t =
-    if List.length !pending >= batch_size then begin
-      let batch =
-        let rec take acc rem n =
-          if n >= batch_size then List.rev acc
-          else
-            match rem with
-            | [] -> List.rev acc
-            | x :: xs -> take (x :: acc) xs (n + 1)
-        in
-        take [] !pending 0
+    if Queue.length pending >= batch_size then begin
+      let rec take acc n =
+        if n >= batch_size || Queue.is_empty pending then List.rev acc
+        else take (Queue.pop pending :: acc) (n + 1)
       in
-      pending := List.filteri (fun i _ -> i >= batch_size) !pending;
-      on_batch batch >>= flush_pending
+      on_batch (take [] 0) >>= flush_pending
     end
     else Db_worker_effect.pure ()
   in
   let process_chunk chunk : unit Db_worker_effect.t =
     let rows, buf = Db_sync_snapshot.parse_framed_chunk !buffer chunk in
     buffer := buf;
-    pending := !pending @ List.map row_of_wire rows;
+    List.iter (fun r -> Queue.add r pending) (List.map row_of_wire rows);
     flush_pending ()
   in
   let rec collect acc =
@@ -559,14 +552,17 @@ let stream_snapshot_row_batches ?(gzip_encoded = false) read_fn batch_size
     | None ->
         let tail =
           match !buffer with
-          | Some buf when String.length buf > 0 ->
+          | Some buf when Buffer.length buf > 0 ->
               List.map row_of_wire
                 (Db_sync_snapshot.finalize_framed_buffer !buffer)
           | _ -> []
         in
-        let rows = !pending @ tail in
+        let pending_rows = Queue.fold (fun acc r -> r :: acc) [] pending in
+        let rows = List.rev_append pending_rows tail in
         if rows <> [] then on_batch rows else Db_worker_effect.pure ()
     | Some chunk ->
+        (* transports that don't decompress themselves (Http_bytes does)
+           still land here — bounded whole-body decode fallback *)
         if !first_chunk && gzip_encoded && gzip_bytes chunk then begin
           first_chunk := false;
           collect [ chunk ] >>= Compression.gzip_decode
@@ -593,7 +589,10 @@ let download_graph_by_id repo graph_id graph_e2ee : Wire.t Db_worker_effect.t =
               ; Wire.Keyword "message"
               , Wire.String "Preparing graph snapshot download" ]);
          stage := "fetch-pull";
-         Sync_util.fetch_json (base ^ "/sync/" ^ graph_id ^ "/pull")
+         (* only :t is used; skipping the tx log keeps large graphs from
+            pulling every tx body just to read remote-tx *)
+         Sync_util.fetch_json
+           (base ^ "/sync/" ^ graph_id ^ "/pull?since=9007199254740991")
            ~response_schema:"sync/pull" ()
          >>= fun pull_resp ->
          (* cljs (when-not (integer? remote-tx) throw) — non-integer
