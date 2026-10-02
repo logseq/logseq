@@ -40,8 +40,18 @@ module Idb_db = struct
   external result_string : request -> string Js.Undefined.t = "result"
     [@@mel.get]
 
-  external result_u8 : request -> Js.Typed_array.Uint8Array.t Js.Undefined.t
-    = "result" [@@mel.get]
+  (* result re-read as an opaque value for runtime type sniffing: IDB stores
+     structured-clone JS values, so a key written via set_binary comes back
+     as a Uint8Array and must not flow through the string-typed getters. *)
+  type any_value
+
+  external result_any : request -> any_value Js.Undefined.t = "result"
+    [@@mel.get]
+
+  external is_view : any_value -> bool = "isView" [@@mel.scope "ArrayBuffer"]
+
+  external u8_of_any : any_value -> Js.Typed_array.Uint8Array.t
+    = "Uint8Array" [@@mel.new]
 
   external result_keys : request -> string array = "result" [@@mel.get]
   external create_object_store : db -> string -> unit = "createObjectStore"
@@ -198,6 +208,89 @@ let bytes_of_wire = function
              | _ -> '\000'))
   | _ -> None
 
+(* b64: wrapper for binary values read through the string-typed [get].
+   IDB stores Uint8Array via structured clone; the kv layer (sync_crypt
+   kv_get_impl) already understands "b64:"-prefixed strings, so binary
+   results are wrapped on read rather than cast to string. *)
+let b64_alphabet =
+  "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+
+let b64_encode s =
+  let n = String.length s in
+  let buf = Buffer.create (((n + 2) / 3) * 4) in
+  let byte i = Char.code (String.unsafe_get s i) in
+  let emit v pad =
+    Buffer.add_char buf b64_alphabet.[(v lsr 18) land 63];
+    Buffer.add_char buf b64_alphabet.[(v lsr 12) land 63];
+    Buffer.add_char buf
+      (if pad >= 2 then '=' else b64_alphabet.[(v lsr 6) land 63]);
+    Buffer.add_char buf (if pad >= 1 then '=' else b64_alphabet.[v land 63])
+  in
+  let i = ref 0 in
+  while !i + 3 <= n do
+    emit ((byte !i lsl 16) lor (byte (!i + 1) lsl 8) lor byte (!i + 2)) 0;
+    i := !i + 3
+  done;
+  (match n - !i with
+   | 1 -> emit (byte !i lsl 16) 2
+   | 2 -> emit ((byte !i lsl 16) lor (byte (!i + 1) lsl 8)) 1
+   | _ -> ());
+  Buffer.contents buf
+
+let b64_val c =
+  match String.index_opt b64_alphabet c with
+  | Some i -> i
+  | None -> -1
+
+let b64_decode s =
+  let n = String.length s in
+  let buf = Buffer.create ((n / 4) * 3) in
+  let i = ref 0 in
+  while !i + 4 <= n do
+    let a = b64_val s.[!i] and b = b64_val s.[!i + 1] in
+    let c = if s.[!i + 2] = '=' then -1 else b64_val s.[!i + 2] in
+    let d = if s.[!i + 3] = '=' then -1 else b64_val s.[!i + 3] in
+    if a >= 0 && b >= 0 then begin
+      let v = (a lsl 18) lor (b lsl 12) in
+      Buffer.add_char buf (Char.chr ((v lsr 16) land 0xFF));
+      if c >= 0 then begin
+        let v = v lor (c lsl 6) in
+        Buffer.add_char buf (Char.chr ((v lsr 8) land 0xFF));
+        if d >= 0 then begin
+          let v = v lor d in
+          Buffer.add_char buf (Char.chr (v land 0xFF))
+        end
+      end
+    end;
+    i := !i + 4
+  done;
+  Buffer.contents buf
+
+let b64_prefix = "b64:"
+
+let has_b64_prefix s =
+  String.length s >= 4 && String.sub s 0 4 = b64_prefix
+
+(* Classify the JS value returned by IDB before handing it to a typed
+   getter: strings stay strings, TypedArray/DataView results become
+   binary, anything else counts as missing. *)
+type stored_value =
+  | Stored_none
+  | Stored_string of string
+  | Stored_binary of string
+
+let classify_result (r : Idb_db.request) : stored_value =
+  match Js.Undefined.toOption (Idb_db.result_any r) with
+  | None -> Stored_none
+  | Some v ->
+      if Js.typeof v = "string" then
+        (match Js.Undefined.toOption (Idb_db.result_string r) with
+         | Some s -> Stored_string s
+         | None -> Stored_none)
+      else if Idb_db.is_view v then
+        Stored_binary (string_of_u8 (Idb_db.u8_of_any v))
+      else Stored_none
+
 (* ---------- spec ops ---------- *)
 
 let is_browser () =
@@ -215,7 +308,11 @@ let get key =
     Db_worker_effect.map
       (fun () ->
         match !req with
-        | Some r -> Js.Undefined.toOption (Idb_db.result_string r)
+        | Some r ->
+            (match classify_result r with
+             | Stored_string s -> Some s
+             | Stored_binary b -> Some (b64_prefix ^ b64_encode b)
+             | Stored_none -> None)
         | None -> None)
       (with_store (fun os -> req := Some (Idb_db.store_get os key)))
   end
@@ -223,7 +320,10 @@ let get key =
     Db_worker_effect.map (fun kvs ->
         match List.assoc_opt (Wire.String key) kvs with
         | Some (Wire.String s) -> Some s
-        | Some other -> bytes_of_wire other
+        | Some other ->
+            (match bytes_of_wire other with
+             | Some b -> Some (b64_prefix ^ b64_encode b)
+             | None -> None)
         | None -> None)
         (load_state ())
 
@@ -266,9 +366,14 @@ let get_binary key =
       (fun () ->
         match !req with
         | Some r ->
-            (match Js.Undefined.toOption (Idb_db.result_u8 r) with
-             | Some u8 -> Some (string_of_u8 u8)
-             | None -> None)
+            (match classify_result r with
+             | Stored_binary b -> Some b
+             | Stored_string s ->
+                 Some
+                   (if has_b64_prefix s then
+                      b64_decode (String.sub s 4 (String.length s - 4))
+                    else s)
+             | Stored_none -> None)
         | None -> None)
       (with_store (fun os -> req := Some (Idb_db.store_get os key)))
   end
