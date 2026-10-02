@@ -560,6 +560,18 @@ let blocks_inner ?puuid ?(virtualize = false) ?(library = false)
             [ ("data-level", "0"); ("data-virtuoso-scroller", "true") ]
           [ Virt_list.list ~key_of:Tree.block_key
               ~estimate_size:(fun _ -> 32.)
+              ~data_sig:(fun ctx ->
+                Some
+                  (Signal.value
+                     (Runtime.page_items_sig ctx.Lui_ui.ui_scheduler
+                        ~scope ~puuid items)))
+              ~pin_key:(fun () ->
+                match S.editing () with
+                | Some e when e.S.scope = scope ->
+                    Some (S.top_level_uuid e.S.uuid)
+                | _ -> None)
+              ~pin_sig:(fun () ->
+                if S.ready () then Some (S.signal ()) else None)
               ~render:(Tree.block_row ~library ~scope) items ] ]
     else
       [ dom ~key:"blw" ~style_class:"blocks-list-wrap"
