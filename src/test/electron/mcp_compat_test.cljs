@@ -563,3 +563,71 @@
                            #js {"title" "user.property/Budget"
                                 "schema" #js {"type" "number"}})))
     (is (empty? @calls))))
+
+(deftest delete-property-refuses-value-loss-without-acknowledgement
+  (let [ident ":plugin.property._test_plugin/Flag"
+        calls (atom [])
+        property #js {"id" 41 "ident" ident "title" "Flag"}
+        api (fn [method args]
+              (swap! calls conj [method args])
+              (when (and (= method "logseq.DB.datascriptQuery")
+                         (string/includes? (first args) "pull ?property"))
+                property)
+              (if (and (= method "logseq.DB.datascriptQuery")
+                       (string/includes? (first args) "pull ?holder"))
+                #js [#js [#js {"uuid" "holder-1"} true]]
+                (when (and (= method "logseq.DB.datascriptQuery")
+                           (string/includes? (first args) "pull ?property"))
+                  property)))]
+    (async done
+      (p/then (mcp-compat/delete-property api #js {"property_ident" ident})
+              (fn [result]
+                (is (false? (:verified result)))
+                (is (string/includes? (:diagnostic result) "acknowledge_value_loss=true"))
+                (is (some? (:previous_state result)))
+                (is (not-any? #(contains? #{"logseq.DB.removeProperty"
+                                            "logseq.DB.removeBlock"}
+                                          (first %))
+                              @calls))
+                (done))))))
+
+(deftest delete-property-verifies-removal-and-sweeps-value-blocks
+  (let [ident ":plugin.property._test_plugin/Flag"
+        calls (atom [])
+        property-present (atom true)
+        usage-reads (atom 0)
+        property #js {"id" 41 "ident" ident "title" "Flag"}
+        api (fn [method args]
+              (swap! calls conj [method args])
+              (case method
+                "logseq.DB.removeProperty" (do (reset! property-present false) nil)
+                "logseq.DB.removeBlock" nil
+                "logseq.DB.datascriptQuery"
+                (let [query (first args)]
+                  (cond
+                    (string/includes? query "created-from-property") #js ["value-block"]
+                    (string/includes? query "pull ?holder")
+                    (if (= 1 (swap! usage-reads inc))
+                      #js [#js [#js {"uuid" "holder-1"} true]]
+                      #js [])
+                    (string/includes? query "pull ?property")
+                    (when @property-present property)
+                    :else nil))
+                nil))]
+    (async done
+      (p/then (mcp-compat/delete-property
+               api #js {"property_ident" ident "acknowledge_value_loss" true})
+              (fn [result]
+                (is (true? (:verified result)))
+                (is (string/includes? (:diagnostic result) "swept 1 orphaned value block"))
+                (is (some #(= "logseq.DB.removeProperty" (first %)) @calls))
+                (is (some #(= "logseq.DB.removeBlock" (first %)) @calls))
+                (done))))))
+
+(deftest delete-property-rejects-non-ident-before-querying
+  (let [calls (atom [])]
+    (is (thrown-with-msg? js/Error #"exact namespaced property ident"
+                          (mcp-compat/delete-property
+                           (fn [method args] (swap! calls conj [method args]))
+                           #js {"property_ident" "Flag"})))
+    (is (empty? @calls))))

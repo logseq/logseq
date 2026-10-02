@@ -1160,9 +1160,12 @@
    :findBacklinks ["logseq.DB.datascriptQuery"]
    :findOrphans ["logseq.DB.datascriptQuery"]
    :isTitleAvailable ["logseq.DB.datascriptQuery"]
-  :findDuplicateTitles ["logseq.DB.datascriptQuery"]
-  :getProperyUsers ["logseq.DB.datascriptQuery"]
-  :createProperty ["logseq.DB.upsertProperty"]
+   :findDuplicateTitles ["logseq.DB.datascriptQuery"]
+   :getProperyUsers ["logseq.DB.datascriptQuery"]
+   :createProperty ["logseq.DB.upsertProperty"]
+   :deleteProperty ["logseq.DB.datascriptQuery"
+              "logseq.DB.removeProperty"
+              "logseq.DB.removeBlock"]
    :listRecycled ["logseq.DB.datascriptQuery"]
    :listStatus ["logseq.DB.datascriptQuery"]
    :listClosedValues ["logseq.DB.datascriptQuery"]
@@ -1179,6 +1182,8 @@
    "logseq.cli.listProperties" [#js {}]
   "logseq.cli.getPageData" ["__mcp_capability_probe__"]
   "logseq.DB.upsertProperty" ["__mcp_capability_probe__/invalid" #js {}]
+  "logseq.DB.removeProperty" ["__mcp_capability_probe__"]
+  "logseq.DB.removeBlock" ["__mcp_capability_probe__"]
    "logseq.app.search" ["__mcp_capability_probe__" #js {:enable-snippet? false}]})
 
 (def ^:private capability-absent-markers

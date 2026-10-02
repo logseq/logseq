@@ -98,9 +98,11 @@ reports and ranks read-only groups, preserving alias protection and recycled-
 page handling. `getProperyUsers` reports literal and resolved property values
 for an exact ident. `createProperty` verifies the returned ident and stored
 type; its capability probe uses a namespace-invalid title that is rejected
-before any write. There are 29 registered tools: six API-backed tools and 23
-compatibility data tools. `capabilities` reports inconclusive probes as
-`unknown`; it does not probe or report `upsertNodes`.
+before any write. `deleteProperty` requires value-loss acknowledgement and
+verifies removal before sweeping orphaned value blocks. There are 30
+registered tools: six API-backed tools and 24 compatibility data tools.
+`capabilities` reports inconclusive probes as `unknown`; write probes use
+invalid arguments, and `upsertNodes` is neither probed nor reported.
 Entry criteria still outstanding:
 
 1. Both baselines have valid, recorded results.

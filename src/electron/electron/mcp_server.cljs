@@ -191,6 +191,13 @@
                         :schema (-> (z/object #js {}) .passthrough)
                         :options (-> (z/object #js {}) .passthrough .optional)
                         :verbose (-> (z/boolean) .optional)}}}
+  :deleteProperty
+  {:fn mcp-compat/delete-property
+   :config #js {:title "Delete Property"
+            :description "Delete a property definition and its values. Requires explicit acknowledgement when values exist; this cannot be undone."
+            :inputSchema #js {:property_ident (z/string)
+                        :acknowledge_value_loss (-> (z/boolean) .optional)
+                        :verbose (-> (z/boolean) .optional)}}}
    :getBlock
    {:fn mcp-compat/get-block
     :config #js {:title "Get Block"
