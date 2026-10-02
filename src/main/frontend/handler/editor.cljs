@@ -259,7 +259,8 @@
 
 (defn outliner-insert-block!
   [config current-block new-block {:keys [sibling? keep-uuid? ordered-list?
-                                          replace-empty-target? outliner-op]}]
+                                          replace-empty-target? outliner-op
+                                          skip-save-current-block?]}]
   (let [library? (:library? config)
         sibling? (insert-as-sibling? config current-block sibling?)
         new-block' (if library?
@@ -281,7 +282,10 @@
 
        (:editor/edit-block-fn config)
        (assoc :editor/edit-block-fn (:editor/edit-block-fn config)))
-     (save-current-block! {:current-block current-block})
+     ;; Auto view inserts must not ride a pending editor save. A refused
+     ;; page-title (e.g. "/") would fail the whole create-view transaction.
+     (when-not skip-save-current-block?
+       (save-current-block! {:current-block current-block}))
      (outliner-op/insert-blocks! [new-block'] current-block insert-opts))))
 
 (defn- block-self-alone-when-insert?
@@ -619,7 +623,7 @@
                    sibling? before? start? end?
                    properties
                    custom-uuid replace-empty-target? edit-block? ordered-list? other-attrs
-                   outliner-op]
+                   outliner-op skip-save-current-block?]
             :or {sibling? false
                  before? false
                  edit-block? true}
@@ -692,7 +696,8 @@
                                               :keep-uuid? true
                                               :ordered-list? ordered-list?
                                               :replace-empty-target? replace-empty-target?
-                                              :outliner-op outliner-op}))
+                                              :outliner-op outliner-op
+                                              :skip-save-current-block? skip-save-current-block?}))
                    (when edit-existing-block?
                      (edit-block! last-block :max))
                    (when-let [id (:block/uuid new-block)]
