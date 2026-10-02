@@ -76,21 +76,17 @@
         :page-uuid page-uuid}))))
 
 (defn- unpublish-targets
-  [graph-uuid page-uuid published-url]
-  (let [parsed (parse-published-url published-url)
-        current (when (and graph-uuid page-uuid)
-                  {:kind :page
-                   :graph-uuid graph-uuid
+  [graph-uuid page-uuid parsed]
+  (let [current (when (and graph-uuid page-uuid)
+                  {:graph-uuid graph-uuid
                    :page-uuid page-uuid
                    :url (publish-page-endpoint graph-uuid page-uuid)})
         from-url (when (and (:graph-uuid parsed) (:page-uuid parsed))
-                   {:kind :page
-                    :graph-uuid (:graph-uuid parsed)
+                   {:graph-uuid (:graph-uuid parsed)
                     :page-uuid (:page-uuid parsed)
                     :url (publish-page-endpoint (:graph-uuid parsed) (:page-uuid parsed))})
         short-target (when-let [short-id (:short-id parsed)]
-                       {:kind :short
-                        :short-id short-id
+                       {:short-id short-id
                         :url (publish-short-endpoint short-id)})]
     (->> [current from-url short-target]
          (remove nil?)
@@ -113,7 +109,7 @@
                (some #(contains? #{401 403} (:status %)) results))
          results
          (p/let [result (<delete-published-url! (:url target) headers)]
-           (conj results (assoc result :kind (:kind target)))))))
+           (conj results result)))))
    (p/resolved [])
    targets))
 
@@ -515,10 +511,11 @@
         token (state/get-auth-id-token)
         headers (cond-> {}
                   token (assoc "authorization" (str "Bearer " token)))
-        published-url (published-url-of-page page)]
+        published-url (published-url-of-page page)
+        parsed (parse-published-url published-url)]
     (p/let [graph-uuid (<get-graph-uuid repo)
             page-uuid (some-> (:block/uuid page) str)
-            targets (unpublish-targets graph-uuid page-uuid published-url)]
+            targets (unpublish-targets graph-uuid page-uuid parsed)]
       (if (seq targets)
         (-> (p/let [results (<try-unpublish-targets targets headers)]
               (cond
@@ -531,7 +528,7 @@
                 (notification/show! (t :publish/unpublish-error) :error)
 
                 (every? #(= 404 (:status %)) results)
-                (p/let [short-id (:short-id (parse-published-url published-url))
+                (p/let [short-id (:short-id parsed)
                         gone? (if short-id
                                 (<published-short-gone? short-id)
                                 true)]
