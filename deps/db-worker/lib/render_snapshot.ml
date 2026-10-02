@@ -38,6 +38,9 @@ type batch_cache =
       (entity_id list, Outliner_property.block_classes_properties)
       Hashtbl.t
   ; display_property_maps : (entity_id, Wire.t) Hashtbl.t
+  ; tag_class_page : (entity_id list, bool) Hashtbl.t
+  ; entity_ident : (entity_id, string option) Hashtbl.t
+  ; sort_keys : (entity_id, value option * string) Hashtbl.t
   ; mutable hidden_eid_pred : (entity_id option -> bool) option
   }
 
@@ -49,7 +52,48 @@ let new_batch_cache () : batch_cache =
   ; positioned_meta = Hashtbl.create 31
   ; classes_props = Hashtbl.create 31
   ; display_property_maps = Hashtbl.create 31
+  ; tag_class_page = Hashtbl.create 31
+  ; entity_ident = Hashtbl.create 63
+  ; sort_keys = Hashtbl.create 63
   ; hidden_eid_pred = None }
+
+let entity_ident_of ~(cache : batch_cache) (e : entity) : string option =
+  match Hashtbl.find_opt cache.entity_ident e.id with
+  | Some i -> i
+  | None ->
+      let i = Ldb.ident_of e in
+      Hashtbl.replace cache.entity_ident e.id i;
+      i
+
+(* Export_file.sort_properties with (block/order, block/uuid) memoized
+   per entity — the comparator otherwise issues two eavt seeks per
+   comparison for every positioned group of every block in the batch *)
+let sort_properties_of ~(cache : batch_cache) (props : entity list)
+    : entity list =
+  let key_of e =
+    match Hashtbl.find_opt cache.sort_keys e.id with
+    | Some k -> k
+    | None ->
+        let k =
+          ( Ldb.value e "block/order"
+          , match Ldb.value e "block/uuid" with
+            | Some (Uuid u) -> u
+            | _ -> "" )
+        in
+        Hashtbl.replace cache.sort_keys e.id k;
+        k
+  in
+  List.stable_sort
+    (fun a b ->
+      let a_order, a_uuid = key_of a in
+      let b_order, b_uuid = key_of b in
+      match a_order, b_order with
+      | None, None -> compare a_uuid b_uuid
+      | None, Some _ -> 1
+      | Some _, None -> -1
+      | Some x, Some y ->
+          (match compare x y with 0 -> compare a_uuid b_uuid | c -> c))
+    props
 
 let hidden_eid_pred ~(cache : batch_cache) (db : db)
     : entity_id option -> bool =
@@ -258,6 +302,10 @@ let render_schema_or_tag_related_property (property_id : string) : bool =
 (* render-tag-class-page? — entity tagged :logseq.class/Tag or instance.
    A block with no tags can only be the Tag class page itself (idents
    are unique) — skips the class-instance walk entirely *)
+(* memoized per tag set — Entity_view.class_instance reads only
+   block/tags plus the classes' parent chains, so a whole window of
+   same-class pages shares one result. The logseq.class/Tag self-check
+   stays per-block. *)
 let render_tag_class_page ~(cache : batch_cache) (db : db)
     ~(tag_ids : entity_id list) (block : entity) : bool =
   match ident_entity ~cache db "logseq.class/Tag" with
@@ -265,8 +313,16 @@ let render_tag_class_page ~(cache : batch_cache) (db : db)
   | Some tag ->
       if tag_ids = [] then false
       else
-        Entity_view.class_instance (Entity_view.of_entity tag)
-          (Entity_view.of_entity block)
+        let key = List.sort_uniq compare tag_ids in
+        (match Hashtbl.find_opt cache.tag_class_page key with
+         | Some b -> b
+         | None ->
+             let r =
+               Entity_view.class_instance (Entity_view.of_entity tag)
+                 (Entity_view.of_entity block)
+             in
+             Hashtbl.replace cache.tag_class_page key r;
+             r)
   | None -> false
 
 (* cljs direct-block-property-ids — db-property/property?; callers in
@@ -383,7 +439,7 @@ let block_positioned_property_idents_by_position ~(cache : batch_cache)
         .classes_properties
   in
   let classes_property_ids_set =
-    List.filter_map Ldb.ident_of classes_properties
+    List.filter_map (entity_ident_of ~cache) classes_properties
   in
   let property_ids =
     if class_page then own_property_ids
@@ -402,24 +458,24 @@ let block_positioned_property_idents_by_position ~(cache : batch_cache)
   in
   (* group-by position, sort entities by db-property/sort-properties *)
   List.filter_map
-    (fun position ->
-      let idents =
-        List.filter_map (fun (p, id) -> if p = position then Some id else None)
-          grouped
-      in
-      match idents with
-      | [] -> None
-      | _ ->
-          let ents =
-            List.filter_map
-              (fun id -> ident_entity ~cache db id)
-              idents
-            |> Export_file.sort_properties
-          in
-          Some
-            ( position
-            , List.filter_map Ldb.ident_of ents ))
-    render_property_positions
+      (fun position ->
+        let idents =
+          List.filter_map (fun (p, id) -> if p = position then Some id else None)
+            grouped
+        in
+        match idents with
+        | [] -> None
+        | _ ->
+            let ents =
+              List.filter_map
+                (fun id -> ident_entity ~cache db id)
+                idents
+              |> sort_properties_of ~cache
+            in
+            Some
+              ( position
+              , List.filter_map (entity_ident_of ~cache) ents ))
+      render_property_positions
 
 (* common-initial-data/get-block-refs-count with the cljs limit —
    None once the count would exceed the bound *)
@@ -625,44 +681,48 @@ let canonical_block ~(cache : batch_cache) (db : db)
   in
   (* cljs assoc semantics: later keys replace earlier ones *)
   let assoc key value map = (key, value) :: List.remove_assoc key map in
+  let refs_count =
+    match block_refs_count ~cache ~tag_ids ~ident_v:!ident_v
+            ~alias_ids:!alias_ids db entity_id with
+    | Some n -> Wire.Int n
+    | None -> Wire.Nil
+  in
+  let has_children = Wire.Bool (block_has_children db entity_id) in
+  let class_idents =
+    Wire.Set
+      (List.map kw
+         ((classes_properties_of ~cache db tag_ids entity_id)
+            .classes_properties
+          |> List.filter_map (entity_ident_of ~cache)
+          |> List.sort_uniq String.compare))
+  in
+  let positioned =
+    Wire.Map
+      (List.map
+         (fun (position, idents) ->
+           ( kw position
+           , Wire.Array
+               (List.filter_map
+                  (fun ident ->
+                    match ident_entity ~cache db ident with
+                    | Some p ->
+                        Some (display_property_map_of ~cache db p)
+                    | None -> None)
+                  idents) ))
+         (block_positioned_property_idents_by_position ~cache
+            ~tag_ids ~own_property_ids
+            ~direct_value:(Hashtbl.find_opt attr_first) db entity_id))
+  in
   let block' =
     assoc (kw "block/tx-id") (Ds_wire.wire_int64 block_tx_id)
       (assoc
-         (kw "block.temp/refs-count")
-         (match block_refs_count ~cache ~tag_ids ~ident_v:!ident_v
-                  ~alias_ids:!alias_ids db entity_id with
-          | Some n -> Wire.Int n
-          | None -> Wire.Nil)
+         (kw "block.temp/refs-count") refs_count
          (assoc
-            (kw "block.temp/has-children?")
-            (Wire.Bool (block_has_children db entity_id))
+            (kw "block.temp/has-children?") has_children
             (assoc
-               (kw "block.temp/class-property-idents")
-               (Wire.Set
-                  (List.map kw
-                     ((classes_properties_of ~cache db tag_ids entity_id)
-                        .classes_properties
-                      |> List.filter_map Ldb.ident_of
-                      |> List.sort_uniq String.compare)))
+               (kw "block.temp/class-property-idents") class_idents
                (assoc
-                  (kw "block.temp/positioned-properties")
-                  (Wire.Map
-                     (List.map
-                        (fun (position, idents) ->
-                          ( kw position
-                          , Wire.Array
-                              (List.filter_map
-                                 (fun ident ->
-                                   match ident_entity ~cache db ident with
-                                   | Some p ->
-                                       Some
-                                         (display_property_map_of ~cache db p)
-                                   | None -> None)
-                                 idents) ))
-                        (block_positioned_property_idents_by_position ~cache
-                           ~tag_ids ~own_property_ids
-                           ~direct_value:(Hashtbl.find_opt attr_first) db
-                           entity_id)))
+                  (kw "block.temp/positioned-properties") positioned
                   attrs))))
   in
   (* view-for + no sort-groups-desc? -> default true *)
