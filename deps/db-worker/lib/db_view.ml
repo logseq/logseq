@@ -19,6 +19,8 @@ let rec list_drop n l =
 let rec list_take_while p l =
   match l with x :: tl when p x -> x :: list_take_while p tl | _ -> []
 
+module Int_set = Db_reference.IdSet
+
 (* clojure.string/includes? equivalent *)
 let contains_substring haystack needle =
   let lh = String.length haystack and ln = String.length needle in
@@ -82,9 +84,7 @@ let get_block_alias_ids db (eid : entity_id) : entity_id list =
       (fun (d : datom) -> d.e)
       (List.of_seq (datoms db Avet ~a:"block/alias" ~v:(Ref eid) ()))
   in
-  List.fold_left
-    (fun acc x -> if List.mem x acc then acc else acc @ [ x ])
-    [] (forward @ backward)
+  dedupe_ids (forward @ backward)
 
 (* common-initial-data/get-block-alias — the bidirectional :alias rule
    query (shared with Db_reference). *)
@@ -103,53 +103,87 @@ let hidden_eid_pred db : entity_id option -> bool =
         (match Hashtbl.find_opt cache id with
          | Some b -> b
          | None ->
-             let flag_true a =
-               match Seq.uncons (datoms db Eavt ~e:id ~a ()) with
-               | Some (d, _) -> Ldb.truthy (Some d.v)
-               | None -> false
-             in
+             (* one eavt slice covers hide?/deleted-at/parent — three
+                separate seeks per ancestor on storage-backed indexes *)
+             let hide = ref None and del = ref None and parent = ref None in
+             datoms db Eavt ~e:id ()
+             |> Seq.iter (fun (d : datom) ->
+                  if d.a = "logseq.property/hide?" && !hide = None then
+                    hide := Some d.v
+                  else if d.a = "logseq.property/deleted-at" && !del = None
+                  then del := Some d.v
+                  else if d.a = "block/parent" && !parent = None then
+                    parent := entid d.v);
              let result =
-               flag_true "logseq.property/hide?"
-               || flag_true "logseq.property/deleted-at"
-               || hidden (datom_v db id "block/parent") (id :: seen)
+               Ldb.truthy !hide
+               || Ldb.truthy !del
+               || hidden !parent (id :: seen)
              in
              Hashtbl.replace cache id result;
              result)
   in
   fun eid -> hidden eid []
 
-(* common-initial-data/hidden-ref-id-pred *)
-let hidden_ref_id_pred db (id : entity_id) : entity_id option -> bool =
-  let hidden_eid = hidden_eid_pred db in
-  let entity = Ldb.ent_of_id db id in
-  let entity_ident = Option.bind entity Ldb.ident_of in
-  let class_ids =
-    match entity with
-    | Some e when Ldb.is_class e ->
-        Some (id :: Db_class.get_structured_children db id)
-    | _ -> None
+(* common-initial-data/hidden-ref-id-pred — ~hidden_eid lets a batch of
+   blocks share one memoized ancestor walk *)
+let hidden_ref_id_pred_with db (id : entity_id)
+    ~(hidden_eid : entity_id option -> bool)
+    ?(is_class : bool option)
+    ?(entity_ident : attr option option)
+    () : entity_id option -> bool =
+  let entity_ident, class_ids =
+    match is_class, entity_ident with
+    | Some ic, Some ident ->
+        ( ident
+        , if ic then Some (id :: Db_class.get_structured_children db id)
+          else None )
+    | _ ->
+        let entity = Ldb.ent_of_id db id in
+        ( Option.bind entity Ldb.ident_of
+        , match entity with
+          | Some e when Ldb.is_class e ->
+              Some (id :: Db_class.get_structured_children db id)
+          | _ -> None )
   in
   fun ref_eid ->
     match ref_eid with
     | None -> true
     | Some rid ->
-        rid = id
-        || datom_v db rid "block/page" = Some id
-        || datom_v db rid "logseq.property/view-for" = Some id
-        || hidden_eid (datom_v db rid "block/page")
-        || hidden_eid ref_eid
-        || (match class_ids with
-            | Some cids ->
-                List.exists
-                  (fun cid -> List.mem cid cids)
-                  (datom_vs db rid "block/tags")
-            | None -> false)
-        || (match entity_ident with
-            | Some ident ->
-                (match Seq.uncons (datoms db Eavt ~e:rid ~a:ident ()) with
-                 | Some _ -> true
-                 | None -> false)
-            | None -> false)
+        if rid = id then true
+        else
+          (* one eavt slice answers block/page, view-for, tags and the
+             ident check — cljs issues ~4 separate index scans per ref;
+             each is a real storage seek on this backend *)
+          let page = ref None
+          and view_for = ref None
+          and tags = ref []
+          and ident_hit = ref false in
+          datoms db Eavt ~e:rid ()
+          |> Seq.iter (fun (d : datom) ->
+               if d.a = "block/page" && !page = None then
+                 page := entid d.v
+               else if d.a = "logseq.property/view-for" && !view_for = None
+               then view_for := entid d.v
+               else if d.a = "block/tags" then
+                 (match entid d.v with
+                  | Some t -> tags := t :: !tags
+                  | None -> ())
+               else (
+                 match entity_ident with
+                 | Some ident -> if d.a = ident then ident_hit := true
+                 | None -> ()));
+          !page = Some id
+          || !view_for = Some id
+          || hidden_eid !page
+          || hidden_eid ref_eid
+          || (match class_ids with
+              | Some cids ->
+                  List.exists (fun cid -> List.mem cid cids) !tags
+              | None -> false)
+          || !ident_hit
+
+let hidden_ref_id_pred db (id : entity_id) : entity_id option -> bool =
+  hidden_ref_id_pred_with db id ~hidden_eid:(hidden_eid_pred db) ()
 
 (* common-initial-data/hidden-ref-pred — entity variant *)
 let hidden_ref_pred db (id : entity_id) : entity -> bool =
@@ -407,6 +441,9 @@ let matched_ref_block_ids_under_top db (top_ref_block_ids : entity_id list)
 (* reference/expand-to-top-refs *)
 let expand_to_top_refs db (top_ref_ids : entity_id list)
     (matched_ref_ids : entity_id list) : entity_id list =
+  let top_ref_id_set =
+    List.fold_left (fun s id -> Int_set.add id s) Int_set.empty top_ref_ids
+  in
   let parent_cache : (entity_id, entity_id option) Hashtbl.t = Hashtbl.create 31 in
   let result = Hashtbl.create 31 in
   let parent_of eid =
@@ -426,7 +463,7 @@ let expand_to_top_refs db (top_ref_ids : entity_id list)
              if Hashtbl.mem result id then ()
              else begin
                Hashtbl.replace result id ();
-               if not (List.mem id top_ref_ids) then loop (parent_of id)
+               if not (Int_set.mem id top_ref_id_set) then loop (parent_of id)
              end
        in
        loop (Some start))
@@ -492,16 +529,22 @@ let get_linked_references db (id : entity_id)
   in
   let final_ref_ids =
     if has_filters then
-      List.filter
-        (fun id -> List.mem id matched_refs_with_children_ids)
-        full_ref_block_ids
+      let matched_set =
+        List.fold_left
+          (fun s id -> Int_set.add id s)
+          Int_set.empty matched_refs_with_children_ids
+      in
+      List.filter (fun id -> Int_set.mem id matched_set) full_ref_block_ids
     else full_ref_block_ids
   in
   let ref_blocks = List.filter_map (Ldb.ent_of_id db) final_ref_ids in
   let children_ids =
     if has_filters then
+      let full_set =
+        List.fold_left (fun s id -> Int_set.add id s) Int_set.empty full_ref_block_ids
+      in
       List.filter
-        (fun id -> not (List.mem id full_ref_block_ids))
+        (fun id -> not (Int_set.mem id full_set))
         matched_refs_with_children_ids
     else if include_ref_pages_count then
       List.concat_map
@@ -1465,12 +1508,15 @@ let build_fast_filter_pred db (filters : view_filters) (input : string) :
               | [] -> None
               | ids ->
                   Some
-                    (fun (row : entity) ->
+                    (let id_set =
+                       List.fold_left (fun s id -> Int_set.add id s) Int_set.empty ids
+                     in
+                     fun (row : entity) ->
                        let hit =
                          List.exists
                            (fun v ->
                               match filter_match_id db v with
-                              | Some id -> List.mem id ids
+                              | Some id -> Int_set.mem id id_set
                               | None -> false)
                            (row_value_list (row_get row f_ident))
                        in

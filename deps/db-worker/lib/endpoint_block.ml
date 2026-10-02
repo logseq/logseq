@@ -127,7 +127,14 @@ let block_positioned_properties_map db (block : entity) : Wire.t =
                       Some (Endpoint_property.display_property_map db p)
                   | None -> None)
                 idents) ))
-       (Render_snapshot.block_positioned_property_idents_by_position db
+       (Render_snapshot.block_positioned_property_idents_by_position
+          ~cache:(Render_snapshot.new_batch_cache ())
+          ~tag_ids:(Render_snapshot.tag_ids_of db block.id)
+          ~own_property_ids:
+            (Render_snapshot.direct_block_property_ids db block.id)
+          ~direct_value:(fun a ->
+            Property_maps.entity_direct_value db block.id a)
+          db
           block.id))
 
 let reaction_selector =
@@ -226,7 +233,19 @@ let wire_merge (a : (Wire.t * Wire.t) list) (b : (Wire.t * Wire.t) list) =
    --------------------------------------------------------------- *)
 
 let block_refs_count_dispatch db (block_id : entity_id) : int option =
-  Render_snapshot.block_refs_count db block_id
+  Render_snapshot.block_refs_count
+    ~cache:(Render_snapshot.new_batch_cache ())
+    ~tag_ids:(Render_snapshot.tag_ids_of db block_id)
+    ~ident_v:
+      (match Seq.uncons (datoms db Eavt ~e:block_id ~a:"db/ident" ()) with
+       | Some (d, _) -> Some d.v
+       | None -> None)
+    ~alias_ids:
+      (datoms db Eavt ~e:block_id ~a:"block/alias" ()
+       |> Seq.filter_map (fun (d : datom) ->
+            match d.v with Ref id -> Some id | _ -> None)
+       |> List.of_seq)
+    db block_id
 
 type gb_opts =
   { gb_all : bool

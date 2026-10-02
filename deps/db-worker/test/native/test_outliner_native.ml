@@ -1527,7 +1527,12 @@ let test_property_with_other_position_default_bottom_rules () =
    port returns idents grouped by position instead of property
    entities; asserted equivalently. *)
 let positioned_idents_at db eid position =
-  Render_snapshot.block_positioned_property_idents_by_position db eid
+  Render_snapshot.block_positioned_property_idents_by_position
+    ~cache:(Render_snapshot.new_batch_cache ())
+    ~tag_ids:(Render_snapshot.tag_ids_of db eid)
+    ~own_property_ids:(Render_snapshot.direct_block_property_ids db eid)
+    ~direct_value:(fun a -> Property_maps.entity_direct_value db eid a)
+    db eid
   |> List.assoc_opt position
   |> Option.value ~default:[]
 
