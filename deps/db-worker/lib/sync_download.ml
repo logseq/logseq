@@ -211,9 +211,14 @@ let import_datoms_batch (conn : conn) aes_key graph_e2ee
   (match tx_data with
    | [] -> ()
    | _ ->
+       (* cljs replays snapshot datoms through datascript's raw d/transact! —
+          no outliner pipeline, no mid-import db validation: refs and
+          property-typing datoms can legitimately land in later batches, so
+          validating each partial state reports false cross-batch errors *)
        ignore
          (Db_transact.transact conn tx_data
-            [ "sync-download-graph?", Bool true ]));
+            [ "sync-download-graph?", Bool true
+            ; "skip-validate-db?", Bool true ]));
   Db_worker_effect.pure ()
 
 let schema_datom ident_eids schema_version_eid (d : datom) : bool =

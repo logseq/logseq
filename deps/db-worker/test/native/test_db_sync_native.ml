@@ -3056,6 +3056,57 @@ let test_apply_remote_txs_keeps_browser_assets_lazy () =
         apply_remote_asset_tx_with_owner_source "browser" calls;
         check "no download calls" (!calls = []))
 
+(* cljs download.cljs import-datoms-batch! replays snapshot datoms through
+   datascript's raw d/transact! — no outliner pipeline or db validation,
+   since property-typing datoms (logseq.property/type) and ref targets can
+   legitimately land in later batches. The OCaml port used the pipeline
+   transact, so validating each partial batch raised Invalid_tx on real
+   graph downloads (29 false cross-batch errors at finalize-import). *)
+let test_import_datoms_batch_skips_db_validation () =
+  preserve_state (fun () ->
+      let conn = Db_test_util.create_conn () in
+      (* state an early replay batch legitimately produces: the property
+         entities' ident/schema datoms have landed, but highprop's
+         logseq.property/type and lowprop's ref target have not *)
+      ignore
+        (Datascript.transact_conn_string conn
+           "[{:db/ident :user.property/lowprop
+              :db/valueType :db.type/ref
+              :db/cardinality :db.cardinality/one
+              :logseq.property/type :url}
+             {:db/ident :user.property/highprop
+              :db/valueType :db.type/ref
+              :db/cardinality :db.cardinality/one}]");
+      let block_uuid = fresh_uuid () in
+      let replay_datoms =
+        [ Wire.Array
+            [ Wire.Int 58000; kw "block/uuid"; Wire.Uuid block_uuid
+            ; Wire.Int 536870913 ]
+        ; Wire.Array
+            [ Wire.Int 58000; kw "block/title"; Wire.String "x"
+            ; Wire.Int 536870913 ]
+        ; Wire.Array
+            [ Wire.Int 58000; kw "user.property/lowprop"; Wire.Int 8800000
+            ; Wire.Int 536870913 ]
+        ; Wire.Array
+            [ Wire.Int 58000; kw "user.property/highprop"; Wire.Int 9900000
+            ; Wire.Int 536870913 ] ]
+      in
+      await_unit
+        (Sync_download.import_datoms_batch conn Wire.Nil false replay_datoms);
+      let landed =
+        datoms (Datascript.db conn) Eavt ~e:58000 ()
+        |> Seq.map (fun (d : datom) -> d.a)
+        |> List.of_seq
+      in
+      (* the property datoms replay as raw values even though their targets
+         have not landed yet — the refs resolve once a later batch adds
+         them, same as cljs d/transact! *)
+      check "cross-batch datoms replayed"
+        (List.mem "block/uuid" landed && List.mem "block/title" landed
+         && List.mem "user.property/lowprop" landed
+         && List.mem "user.property/highprop" landed))
+
 (* cljs non-recycle-validation-entities *)
 let non_recycle_validation_entities
     (validation : Db_validate.grouped_error list) : value list =
@@ -11188,7 +11239,8 @@ let test_upload_preparation_processes_datoms_in_batches () =
   let seen_batches = ref [] in
   let progress_calls = ref [] in
   await_unit
-    (Sync_large_title.process_upload_datoms_in_batches datoms
+    (Sync_large_title.process_upload_datoms_in_batches
+       (List.to_seq datoms) ~total:(List.length datoms)
        ~batch_size:2
        ~process_batch:(fun batch ->
          seen_batches :=
@@ -13711,6 +13763,8 @@ let () =
         ; Alcotest.test_case
             "apply-remote-txs-keeps-browser-assets-lazy"
             `Quick test_apply_remote_txs_keeps_browser_assets_lazy
+        ; Alcotest.test_case "import-datoms-batch-skips-db-validation"
+            `Quick test_import_datoms_batch_skips_db_validation
         ; Alcotest.test_case
             "apply-remote-txs-preserves-many-page-property-values"
             `Quick
