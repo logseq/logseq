@@ -12,16 +12,16 @@ collapsible staircase parent.
 
 | Metric | Out | LUI | Verdict |
 |---|---:|---:|---|
-| Cold load → first block | 170 | 1035 | LUI 6.1× slower |
-| Page nav `[[link]]` → rows mounted | 155 | 715 | LUI 4.6× slower |
-| Typing keydown → DOM update | 20 | 5 | LUI faster |
-| Enter → new block editable | 49 | 146 | LUI 3.0× slower |
-| Indent (Tab) | 27 | 1 | LUI faster |
-| Outdent (Shift-Tab) | 27 | 79 | LUI 2.9× slower |
-| Collapse (chevron) | 33 | 2 | LUI faster |
-| Palette open (Cmd-K) | 49 | 32 | LUI faster |
-| Palette query → first results | 57 | 26 | LUI faster |
-| Scroll 200-block page | 713 | 579 | LUI faster |
+| Cold load → first block | 173 | 1040 | LUI 6.0× slower |
+| Page nav `[[link]]` → rows mounted | 138 | 566 | LUI 4.1× slower |
+| Typing keydown → DOM update | 30 | 12 | LUI faster |
+| Enter → new block editable | 60 | 74 | ~par (was 146) |
+| Indent (Tab) | 29 | 1 | LUI faster |
+| Outdent (Shift-Tab) | 46 | 55 | ~par (was 79) |
+| Collapse (chevron) | 63 | 2 | LUI faster |
+| Palette open (Cmd-K) | 64 | 20 | LUI faster |
+| Palette query → first results | 71 | 18 | LUI faster |
+| Scroll 200-block page | 716 | 578 | LUI faster |
 | Scroll long tasks | 0 | 0 | par |
 
 ## Root causes found and fixed
@@ -43,28 +43,58 @@ Measured: 203 → 1 calls per page mount / refresh storm.
 identity scan over a growing OCaml list — ~260ms CPU measured on a
 200-block nav flush. Replaced with a JS `Set` for O(1) membership.
 
+### 3. Full-page re-render on every op (`page.ml`, `chrome.ml`, `tree.ml`)
+
+Every delta splice republished the whole page and the route dyn rebuilt
+~6000 DOM nodes — ~195ms flush on Enter/outdent, and every row's model
+subscription re-rendered on each publish.
+
+Fix: `Page.region` keeps the route-page element mounted across data
+publishes. The top-level block list is now a `Logseq_dom.keyed`
+collection keyed on block uuid — `Signal.keyed` republishes only items
+whose record changed, and `block_row_sig` keeps a stable `.ls-block`
+shell (class/attr signals fed by `Signal.map2` over the item signal +
+editor state) with `row_main`/`row_children` dyn segments inside. A
+one-block splice patches one row (~17ms flush, was ~195ms).
+
+### 4. Eager per-row property area setup (`properties_area.ml`, `tree.ml`)
+
+Each row emitted a permanent `.ls-block-content-indent` div and
+`mount_block_area` ran its DOM queries per row at mount (~200ms tail on
+nav). The indent div is gone from the tree; the area now resolves
+column/indent/left-host lazily on the first refresh that finds content
+and creates the indent on demand as a direct `.ls-block` child.
+
+### 5. Enter refocus gated on the property-refresh wave (`outliner_ops.ml`)
+
+`refresh_via_delta` awaited `refresh_property_areas` — a full-area
+`get-blocks`/`pull`/`get-bidirectional-properties` refetch (~160-270ms)
+— before `with_focus_after` could focus the new block's editor, so the
+textarea only became active after the entire wave. Now fire-and-forget:
+the refresh still runs, it just doesn't serialize the caller.
+
+### 6. Duplicate `collapsed_sig` subscriptions per row (`tree.ml`)
+
+`control_wrap` built a fresh `collapsed_sig` (a `Signal.map` on the
+global editor state) for each of three class signals — hoisted to one
+shared derived signal per row.
+
 ## Remaining gaps (not fixed here — architectural)
 
-- **Nav (~715ms)**: ~105ms serial worker pipeline (route-info → page tree →
-  tags) then a single ~340ms LUI mount flush. CPU profile shows diffuse
-  runtime cost — `_2` currying dispatch ~97ms, string building
-  (`unsafe_blits`/`caml_create_bytes`/`bytes_to_string`) ~120ms, Map/Hashtbl
-  ops ~100ms, `List.sort` ~70ms, GC ~65ms, native DOM ~140ms — no single
-  fixable hotspot. LUI emits ~30 DOM elements per row vs Out's ~7
-  (6091 vs 1480 elements for ~200 rows): bullet, chevron, content wrapper,
-  indent container, properties host per block. Cheaper mounts would need
-  lighter row DOM — a tree/view-level change, not a point fix.
-- **Cold load (~1035ms)**: 7.9MB dev bundle eval (~200ms incl. DCL), worker
+- **Nav (~566ms)**: ~95ms serial worker pipeline (route-info → page tree →
+  tags) then a ~330ms LUI mount flush for the first render of ~200 rows
+  (keyed can't help an initial mount). CPU profile shows diffuse runtime
+  cost — `unsafe_blits`, Map/Hashtbl ops, `List.sort`, GC — no single
+  fixable hotspot, and ~30 DOM elements per row vs Out's ~7 (6091 vs 1480
+  total). In the real app `Virt_list` (≥64 rows) mounts only the visible
+  window; `rtc-test` disables virtualization, so the bench measures the
+  full-mount path.
+- **Cold load (~1040ms)**: 7.9MB dev bundle eval (~200ms incl. DCL), worker
   boot (5.7MB worker bundle eval), sqlite/OPFS init + graph open, then the
   first page mount. Serial boot chain: init → set-context →
   set-db-sync-config → sync-app-state → set-context (rtc-test) → list-db →
   create-or-open-db → journal check → route. Out has no worker and a small
   bundle.
-- **Enter (~146ms)**: ~35ms `apply-outliner-ops` roundtrip + ~55ms delta
-  splice flush + ~30-50ms editor (CodeMirror) mount for the new block.
-- **Outdent (~79ms)**: same op+splice+editor path as Enter; LUI's Indent is
-  ~1ms because it is a pure DOM reparenting, while Outdent re-renders the
-  parent subtree.
 
 ## Reproduce
 

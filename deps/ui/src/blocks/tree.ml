@@ -34,16 +34,32 @@ let block_key (b : Model.block) =
 
 (* -- per-row signals -- *)
 
-let row_class_sig uuid blank embed (b : Model.block) =
+let row_class_str (b : Model.block) uuid (st : S.t) =
   let order_list = b.Model.block_order_list = Some "number" in
+  let blank = String.trim b.block_title = "" in
+  let embed = b.Model.block_link <> None in
+  (* cljs :class order — dynamic flags first, base classes last *)
+  (if S.String_set.mem uuid st.selected then "selected " else "")
+  ^ (if order_list then "is-order-list " else "")
+  ^ (if blank then "is-blank " else "")
+  ^ (if embed then "embed-block " else "")
+  ^ (if Comments.is_comments_area b then "is-comments-area " else "")
+  ^ "ls-block"
+
+let row_class_sig uuid blank embed (b : Model.block) =
+  ignore (blank, embed);
   Logseq_dom.class_signal (S.signal ()) (fun (st : S.t) ->
-      (* cljs :class order — dynamic flags first, base classes last *)
-      (if S.String_set.mem uuid st.selected then "selected " else "")
-      ^ (if order_list then "is-order-list " else "")
-      ^ (if blank then "is-blank " else "")
-      ^ (if embed then "embed-block " else "")
-      ^ (if Comments.is_comments_area b then "is-comments-area " else "")
-      ^ "ls-block")
+      row_class_str b uuid st)
+
+(* same class signal driven by a per-item block signal — keyed rows get
+   fresh block records on republish, so blank/embed/order-list must not
+   be captured at mount *)
+let row_class_sig_of (bs : Model.block Signal.signal) =
+  Logseq_dom.class_signal
+    (Signal.map2 (fun a b -> (a, b)) bs (S.signal ()))
+    (fun ((b : Model.block), (st : S.t)) ->
+      let uuid = Option.value b.block_uuid ~default:"" in
+      row_class_str b uuid st)
 
 (* effective collapse for a block: scoped UI overrides, then persisted
    set || view default — Editor_state.effective_collapsed_in on the
@@ -51,36 +67,46 @@ let row_class_sig uuid blank embed (b : Model.block) =
 let effective_collapsed_st ~scope uuid default (st : S.t) =
   S.effective_collapsed_in ~scope uuid default st
 
-let row_attrs_sig ~scope ~depth uuid (b : Model.block) =
+let row_attrs_of ~scope ~depth uuid (b : Model.block) (st : S.t) =
   let has_children = S.children_of b <> [] in
   let embed = b.Model.block_link <> None in
+  [ ("id", "ls-block-" ^ uuid)
+  ; ("blockid", uuid)
+  ; ("containerid", uuid)
+  ; ("data-block-title", b.block_title)
+  ; ("data-comment-item", string_of_bool b.Model.block_is_comment)
+  ; ("data-block-format", "markdown")
+  ; ("haschild", string_of_bool has_children)
+  ; ( "data-collapsed"
+    , string_of_bool
+        (has_children
+         && effective_collapsed_st ~scope uuid b.block_default_collapsed
+              st) )
+  ; ("data-db-collapsable", string_of_bool b.Model.block_db_collapsable)
+  ; (* cljs level = render depth (config :level, 0 at page root), not the
+       db block/level *)
+    ("level", string_of_int depth)
+  ]
+  @ (if Comments.is_comments_area b then
+       [ ("data-comments-area", "true") ]
+     else [])
+  (* cljs sets blockid to the linked entity's uuid and
+     originalblockid to the linking block's — we keep blockid as the
+     embed block's own uuid so delegated editing/ops resolve it *)
+  @ (if embed then [ ("originalblockid", uuid); ("data-embed", "true") ]
+     else [])
+
+let row_attrs_sig ~scope ~depth uuid (b : Model.block) =
   Logseq_dom.attrs_signal (S.signal ()) (fun (st : S.t) ->
-      [ ("id", "ls-block-" ^ uuid)
-      ; ("blockid", uuid)
-      ; ("containerid", uuid)
-      ; ("data-block-title", b.block_title)
-      ; ("data-comment-item", string_of_bool b.Model.block_is_comment)
-      ; ("data-block-format", "markdown")
-      ; ("haschild", string_of_bool has_children)
-      ; ( "data-collapsed"
-        , string_of_bool
-            (has_children
-             && effective_collapsed_st ~scope uuid
-                  b.block_default_collapsed st) )
-      ; ("data-db-collapsable", string_of_bool b.Model.block_db_collapsable)
-      ; (* cljs level = render depth (config :level, 0 at page root), not
-           the db block/level *)
-        ("level", string_of_int depth)
-      ]
-      @ (if Comments.is_comments_area b then
-           [ ("data-comments-area", "true") ]
-         else [])
-      (* cljs sets blockid to the linked entity's uuid and
-         originalblockid to the linking block's — we keep blockid as the
-         embed block's own uuid so delegated editing/ops resolve it *)
-      @ (if embed then
-           [ ("originalblockid", uuid); ("data-embed", "true") ]
-         else []))
+      row_attrs_of ~scope ~depth uuid b st)
+
+let row_attrs_sig_of ~scope ~depth (bs : Model.block Signal.signal) =
+  Logseq_dom.attrs_signal
+    (Signal.map2 (fun a b -> (a, b)) bs (S.signal ()))
+    (fun ((b : Model.block), (st : S.t)) ->
+      let uuid = Option.value b.block_uuid ~default:"" in
+      row_attrs_of ~scope ~depth uuid b st)
+
 let collapsed_sig ~scope (b : Model.block) =
   let uuid = Option.value b.block_uuid ~default:"" in
   Signal.map
@@ -175,6 +201,10 @@ let control_wrap ~scope ~library uuid (b : Model.block) : t =
         ; ("style", "--ls-block-icon-size:" ^ string_of_int size ^ "px") ]
     | None -> [])
   in
+  (* one derived signal for all collapse-driven classes in this row —
+     a fresh map per class_signal triples the subscriptions on every
+     S.set publish *)
+  let cs = collapsed_sig ~scope b in
   dom ~key:("ctrlw-" ^ uuid)
     ~style_class:"block-control-wrap flex flex-row items-center h-6"
     ~attrs:heading_attrs
@@ -183,11 +213,11 @@ let control_wrap ~scope ~library uuid (b : Model.block) : t =
         [ dom ~key:("ctrlspan-" ^ uuid) ~tag:"span"
             ~id:("ctrlspan-" ^ scope ^ "-" ^ uuid)
             ~style_class_signal:
-              (Logseq_dom.class_signal (collapsed_sig ~scope b)
+              (Logseq_dom.class_signal cs
                  (fun c -> if c then "control-show" else "control-hide"))
             [ dom ~key:("ra-" ^ uuid) ~tag:"span"
                 ~style_class_signal:
-                  (Logseq_dom.class_signal (collapsed_sig ~scope b)
+                  (Logseq_dom.class_signal cs
                      (fun c ->
                        "rotating-arrow"
                        ^ if c then " collapsed" else " not-collapsed"))
@@ -199,7 +229,7 @@ let control_wrap ~scope ~library uuid (b : Model.block) : t =
             ~id:("dot-" ^ uuid)
             ~attrs:[ ("blockid", uuid); ("draggable", "true") ]
             ~style_class_signal:
-              (Logseq_dom.class_signal (collapsed_sig ~scope b) (fun c ->
+              (Logseq_dom.class_signal cs (fun c ->
                    bullet_cls ^ if c then " bullet-closed" else ""))
             [ (match node_icon ~library b with
                | Some icon -> icon_el uuid icon
@@ -441,23 +471,13 @@ let rec block_row
   (row_el ~depth ~editable ~library scope b) ctx parent
 
 
-and row_el ~depth ~editable scope ~(library : bool) (b : Model.block) : t =
-
+(* the .block-main-container subtree — everything inside .ls-block
+   except the children container *)
+and row_main ~editable ~library scope (b : Model.block) : t =
   let uuid = Option.value b.block_uuid ~default:"" in
-  if b.Model.block_is_comments_area then Comments_view.area_el b
-  else
   let key = block_key b in
-  let embed = b.block_link <> None in
-  let has_children = S.children_of b <> [] in
-  let blank = String.trim b.block_title = "" in
-  (* the reload key is scope-namespaced: the same block uuid renders in the
-     main list, sidebars, previews and embeds simultaneously, and a bare
-     ls-<uuid> key makes those distinct rows claim each other's DOM node *)
-  dom ~key:("ls-" ^ scope ^ "-" ^ key)
-    ~style_class_signal:(row_class_sig uuid blank embed b)
-    ~attrs_signal_v:(row_attrs_sig ~scope ~depth uuid b)
-    [ dom ~key:("main-" ^ key)
-        ~style_class:"block-main-container flex flex-row gap-1"
+  dom ~key:("main-" ^ key)
+      ~style_class:"block-main-container flex flex-row gap-1"
         ~attrs:
           (match b.block_heading with
            | Some lvl -> [ ("data-has-heading", string_of_int lvl) ]
@@ -513,27 +533,88 @@ and row_el ~depth ~editable scope ~(library : bool) (b : Model.block) : t =
             ; Comments_view.reactions_el uuid b.Model.block_reactions
             ]
         ]
-    ; dom ~key:("bci2-" ^ key)
-        ~style_class:"ls-block-content-indent" []
+
+and row_el ~depth ~editable scope ~(library : bool) (b : Model.block) : t =
+
+  let uuid = Option.value b.block_uuid ~default:"" in
+  if b.Model.block_is_comments_area then Comments_view.area_el b
+  else
+  let key = block_key b in
+  let embed = b.block_link <> None in
+  let has_children = S.children_of b <> [] in
+  let blank = String.trim b.block_title = "" in
+  (* the reload key is scope-namespaced: the same block uuid renders in the
+     main list, sidebars, previews and embeds simultaneously, and a bare
+     ls-<uuid> key makes those distinct rows claim each other's DOM node *)
+  dom ~key:("ls-" ^ scope ^ "-" ^ key)
+    ~style_class_signal:(row_class_sig uuid blank embed b)
+    ~attrs_signal_v:(row_attrs_sig ~scope ~depth uuid b)
+    [ row_main ~editable ~library scope b
     ; (if has_children && not (Comments.is_comments_area b) then
          children_el ~depth ~editable ~library uuid scope b
        else Logseq_dom.nothing)
+    ]
+
+(* keyed-row variant of row_el: the .ls-block shell is a stable node
+   (keyed reconcile needs a node per item) and the content inside it is
+   rebuilt only when the row's own block record changes *)
+and row_sig ~depth ~editable ~library scope
+    (bs : Model.block Signal.signal) : t =
+  let b0 = Signal.get bs in
+  let key = block_key b0 in
+  dom ~key:("ls-" ^ scope ^ "-" ^ key)
+    ~style_class_signal:(row_class_sig_of bs)
+    ~attrs_signal_v:(row_attrs_sig_of ~scope ~depth bs)
+    [ Logseq_dom.dyn ~equal:(fun (a : Model.block) (b : Model.block) ->
+          a == b)
+        (fun b -> row_main ~editable ~library scope b) bs
+    ; row_children ~depth ~editable ~library scope bs
+    ]
+
+and row_children ~depth ~editable ~library scope
+    (bs : Model.block Signal.signal) : t =
+  Logseq_dom.dyn
+    ~equal:(fun ((a : Model.block), ca) ((b : Model.block), cb) ->
+      a == b && ca = cb)
+    (fun (b, collapsed) ->
+      if collapsed || Comments.is_comments_area b || S.children_of b = []
+      then Logseq_dom.nothing
+      else
+        let uuid = Option.value b.block_uuid ~default:"" in
+        children_dom ~depth ~editable ~library uuid scope b)
+    (Signal.map2
+       (fun (b : Model.block) (st : S.t) ->
+         let uuid = Option.value b.block_uuid ~default:"" in
+         ( b
+         , effective_collapsed_st ~scope uuid b.block_default_collapsed
+             st ))
+       bs (S.signal ()))
+
+and block_row_sig
+    ?(depth = 0) ?(scope = "main") ?(editable = true) ?(library = false)
+    (bs : Model.block Signal.signal) : t =
+ fun ctx parent ->
+  S.ensure ctx;
+  let b0 = Signal.get bs in
+  (if b0.Model.block_is_comments_area then Comments_view.area_el b0
+   else row_sig ~depth ~editable ~library scope bs) ctx parent
+
+and children_dom ~depth ~editable ~library uuid scope (b : Model.block) : t =
+  dom ~key:("children-" ^ uuid)
+    ~style_class:"block-children-container flex"
+    [ dom ~key:("border-" ^ uuid)
+        ~style_class:"block-children-left-border"
+        ~attrs:[ ("blockid", uuid) ] []
+    ; dom ~key:("clist-" ^ uuid) ~style_class:"block-children w-full"
+        (List.map (block_row ~scope ~editable ~depth:(depth + 1) ~library)
+           (S.children_of b))
     ]
 
 and children_el ~depth ~editable ~library uuid scope (b : Model.block) : t =
 
   if_
     ~test:(Signal.map (fun c -> not c) (collapsed_sig ~scope b))
-    (dom ~key:("children-" ^ uuid)
-       ~style_class:"block-children-container flex"
-       [ dom ~key:("border-" ^ uuid)
-           ~style_class:"block-children-left-border"
-           ~attrs:[ ("blockid", uuid) ] []
-       ; dom ~key:("clist-" ^ uuid) ~style_class:"block-children w-full"
-           (List.map (block_row ~scope ~editable ~depth:(depth + 1) ~library)
-              (S.children_of b))
-
-       ])
+    (children_dom ~depth ~editable ~library uuid scope b)
 
 (* Read-only row for linked-reference lists: same shell as row_el but the
    content never swaps to editor_el — a block shown in .references can
@@ -597,8 +678,6 @@ and block_row_static ?(depth = 0) ?(library = false) (b : Model.block) : t =
             ; Comments_view.reactions_el uuid b.Model.block_reactions
             ]
         ]
-    ; dom ~key:("bci2-" ^ key)
-        ~style_class:"ls-block-content-indent" []
     ; (if has_children then children_static_el ~depth ~library uuid b
        else Logseq_dom.nothing)
     ])

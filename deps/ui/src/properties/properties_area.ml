@@ -378,25 +378,32 @@ let render_area ?(left_host = None) ~host (ctx : V.ctx) ~owner_is_tag
         p)
   |> ignore
 
-(* block area: one get-blocks render-data call supplies the positioned
-   property maps (position already resolved worker-side like cljs
-   :block.temp/positioned-properties), the display-properties rows for
-   the panel, and the block's own attrs for values *)
-let render_block_area ~ind ~left_host (ctx : V.ctx) ~owner_is_tag ~owner_title area_el =
-  let* block_wire = D.block_render_data ctx.block_uuid in
+let block_wire_rows block_wire =
+  let left_rows = D.positioned_rows block_wire "block-left" in
+  let below_rows = D.positioned_rows block_wire "block-below" in
+  let display =
+    Option.value ~default:W.Nil
+      (W.get block_wire "block.temp/display-properties")
+  in
+  let rows, hidden = D.split_display display in
+  (left_rows, below_rows, rows, hidden)
+
+let block_area_has_content block_wire =
   match block_wire with
   | W.Map _ ->
-      let left_rows =
-        D.positioned_rows block_wire "block-left"
+      let left_rows, below_rows, rows, hidden =
+        block_wire_rows block_wire
       in
-      let below_rows =
-        D.positioned_rows block_wire "block-below"
+      left_rows <> [] || below_rows <> [] || rows <> [] || hidden <> []
+  | _ -> false
+
+let render_block_area_with ~ind ~left_host (ctx : V.ctx) ~owner_is_tag
+    ~owner_title area_el block_wire =
+  match block_wire with
+  | W.Map _ ->
+      let left_rows, below_rows, rows, hidden =
+        block_wire_rows block_wire
       in
-      let display =
-        Option.value ~default:W.Nil
-          (W.get block_wire "block.temp/display-properties")
-      in
-      let rows, hidden = D.split_display display in
       let has_content =
         left_rows <> [] || below_rows <> [] || rows <> []
         || hidden <> []
@@ -425,6 +432,16 @@ let render_block_area ~ind ~left_host (ctx : V.ctx) ~owner_is_tag ~owner_title a
       Js.Promise.resolve ()
   | _ -> Js.Promise.resolve ()
 
+(* block area: one get-blocks render-data call supplies the positioned
+   property maps (position already resolved worker-side like cljs
+   :block.temp/positioned-properties), the display-properties rows for
+   the panel, and the block's own attrs for values *)
+let render_block_area ~ind ~left_host (ctx : V.ctx) ~owner_is_tag
+    ~owner_title area_el =
+  let* block_wire = D.block_render_data ctx.block_uuid in
+  render_block_area_with ~ind ~left_host ctx ~owner_is_tag ~owner_title
+    area_el block_wire
+
 (* ---------- block mounts ---------- *)
 
 let block_uuid_of_ls_block el =
@@ -434,73 +451,97 @@ let block_uuid_of_ls_block el =
   else None
 
 (* the indent container hosting area + pills: cljs emits ONE
-   .ls-block-content-indent per ls-block (sibling of block-main-container)
-   and renders db-properties-cp inside it, so reuse the tree-emitted
-   indent instead of appending a second one inside the column *)
-let ensure_indent_for block_el col_el uuid =
+   .ls-block-content-indent per ls-block (direct child, next to the
+   block-main-container). The tree view does not emit it — a block
+   without visible properties must not carry an extra element — so it
+   is created here on demand *)
+let ensure_indent_for block_el =
   match el_query block_el ":scope > .ls-block-content-indent" with
   | Some e -> Some e
   | None ->
       let ind = mk ~cls:"ls-block-content-indent" "div" in
-      el_append_child col_el ind;
-      ignore uuid;
+      el_append_child block_el ind;
       Some ind
 
-(* register a block's property area: creates the area element once and
-   returns the refresh closure *)
+(* register a block's property area — DOM setup is lazy: most blocks
+   have no visible properties, so the per-row mount pays only an attr
+   check until a refresh actually finds content *)
 let mount_block_area block_el uuid =
-  let col =
-    match el_query block_el ".block-main-container .flex.flex-col.w-full" with
-    | Some col -> Some col
-    | None -> el_query block_el ".flex.flex-col.w-full"
-  in
-  match col with
-  | None -> ()
-  | Some col -> (
-      match ensure_indent_for block_el col uuid with
-      | None -> ()
-      | Some ind -> (
-          match el_get_attr ind "data-props-mounted" with
-          | Some _ -> () (* already mounted *)
-          | None ->
-              el_set_attr ind "data-props-mounted" "1";
-              (* created detached — render_area attaches it only when
-                 there is something to show *)
-              let area =
-                mk "div"
-                  ~cls:"ls-properties-area ls-block-properties"
-                  ~attrs:[ ("id", uuid); ("tabindex", "0") ]
-              in
-              (* block-left chips live inside .block-main-content *)
-              let left_host =
-                match
-                  el_query block_el ".block-main-content"
-                with
-                | Some bmc -> Some bmc
-                | None -> el_query block_el ".block-row"
-              in
-              let rec ctx : V.ctx =
-                { block_uuid = uuid
-                ; block_id = None
-                ; refresh = (fun () -> ignore (refresh ()))
-                ; is_page = false
-                ; class_schema = false
-                }
-              and refresh () =
-                render_block_area ~ind ~left_host ctx ~owner_is_tag:false
-                  ~owner_title:"" area
-              in
-              ignore (refresh ());
-              (* register the always-connected indent, not area: the
-                 area element stays detached when the block has no
-                 visible rows, and live_areas prunes detached containers,
-                 which would unregister the refresh before a later
-                 property tx lands *)
-              S.register_area ind (fun () ->
-                  if el_is_connected ind then refresh ()
-                  else (
-                    S.unregister_area ind;
-                    Js.Promise.resolve ()))))
+  match el_get_attr block_el "data-props-mounted" with
+  | Some _ -> () (* already mounted *)
+  | None ->
+      el_set_attr block_el "data-props-mounted" "1";
+      let resolved : (el * el * el option) option ref = ref None in
+      let resolve () =
+        match !resolved with
+        | Some r -> Some r
+        | None -> (
+            let col =
+              match
+                el_query block_el
+                  ".block-main-container .flex.flex-col.w-full"
+              with
+              | Some col -> Some col
+              | None -> el_query block_el ".flex.flex-col.w-full"
+            in
+            match col with
+            | None -> None
+            | Some _ -> (
+                match ensure_indent_for block_el with
+                | None -> None
+                | Some ind ->
+                    (* created detached — render attaches it only when
+                       there is something to show *)
+                    let area =
+                      mk "div"
+                        ~cls:"ls-properties-area ls-block-properties"
+                        ~attrs:[ ("id", uuid); ("tabindex", "0") ]
+                    in
+                    (* block-left chips live inside .block-main-content *)
+                    let left_host =
+                      match
+                        el_query block_el ".block-main-content"
+                      with
+                      | Some bmc -> Some bmc
+                      | None -> el_query block_el ".block-row"
+                    in
+                    let r = (ind, area, left_host) in
+                    resolved := Some r;
+                    Some r))
+      in
+      let rec ctx : V.ctx =
+        { block_uuid = uuid
+        ; block_id = None
+        ; refresh = (fun () -> ignore (refresh ()))
+        ; is_page = false
+        ; class_schema = false
+        }
+      and refresh () =
+        match !resolved with
+        | Some (ind, area, left_host) ->
+            render_block_area ~ind ~left_host ctx ~owner_is_tag:false
+              ~owner_title:"" area
+        | None -> (
+            let* block_wire = D.block_render_data ctx.block_uuid in
+            match block_area_has_content block_wire with
+            | false -> Js.Promise.resolve ()
+            | true -> (
+                match resolve () with
+                | Some (ind, area, left_host) ->
+                    render_block_area_with ~ind ~left_host ctx
+                      ~owner_is_tag:false ~owner_title:"" area block_wire
+                | None -> Js.Promise.resolve ()))
+      in
+      ignore (refresh ());
+      (* register the block row, not the area/indent: the area stays
+         detached when the block has no visible rows, and live_areas
+         prunes detached containers, which would unregister the refresh
+         before a later property tx lands *)
+      S.register_area block_el (fun () ->
+          if el_is_connected block_el then refresh ()
+          else (
+            S.unregister_area block_el;
+            Js.Promise.resolve ()))
 
 (* ---------- page mount ---------- *)
 
