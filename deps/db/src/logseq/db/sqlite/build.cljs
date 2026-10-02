@@ -199,18 +199,27 @@
     []
     (map second (re-seq page-ref/page-ref-re s))))
 
+(defn- block-tree-uuids
+  "UUIDs on a block and any nested :build/children."
+  [block]
+  (into #{}
+        (keep :block/uuid)
+        (tree-seq :build/children :build/children block)))
+
 (defn dedupe-blocks-by-uuid
-  "Keep the first occurrence of each :block/uuid in a page :blocks vector.
-   Selected-node exports can list a referenced selected target twice; import
-   assigns :block/order from vector order, so a trailing duplicate would move it."
+  "Keep the first occurrence of each :block/uuid in a page :blocks vector,
+   including UUIDs nested under :build/children. Selected-node exports can list
+   a referenced target twice — as a nested child and again as a shallow root.
+   Import assigns :block/parent and :block/order from that vector, so a later
+   root copy would move the child to the page."
   [blocks]
   (second
    (reduce (fn [[seen acc] block]
              (if-let [id (:block/uuid block)]
                (if (contains? seen id)
                  [seen acc]
-                 [(conj seen id) (conj acc block)])
-               [seen (conj acc block)]))
+                 [(into seen (block-tree-uuids block)) (conj acc block)])
+               [(into seen (block-tree-uuids block)) (conj acc block)]))
            [#{} []]
            blocks)))
 
