@@ -2499,11 +2499,7 @@
 
 (defn- node-contains?
   [parent child]
-  (boolean
-   (or (and (gobj/get parent "nodeType")
-            (gdom/contains parent child))
-       (when-let [contains-fn (gobj/get parent "contains")]
-         (contains-fn child)))))
+  (boolean (gdom/contains parent child)))
 
 (defn- block-node-outside-comments-area
   [comments-node direction]
