@@ -4144,7 +4144,10 @@
        (and (not (:ignore-block-collapsed? config))
             (util/collapsed? block))
        (and (util/mobile?) (:logseq.property/query block))
-       (and (or (:list-view? config) (:ref? config))
+       ;; List-view rows mount whole page trees; every level stays
+       ;; collapsed so scrolling only pays for row shells.
+       (:list-view? config)
+       (and (:ref? config)
             (worker-has-children? block)
             (integer? (:block-level config))
             (>= (:block-level config) (state/get-ref-open-blocks-level)))
