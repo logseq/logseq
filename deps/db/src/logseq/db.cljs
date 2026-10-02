@@ -588,6 +588,10 @@
              (let [ident (if (keyword? extend) extend (:db/ident extend))]
                (and (keyword? ident)
                     (not= :logseq.class/Root ident)
+                    ;; Built-in parents (e.g. a tag extending a built-in class)
+                    ;; do not count as namespaces. Keyword idents carry no
+                    ;; `built-in?` flag, so fall back to the class namespace.
+                    (not= "logseq.class" (namespace ident))
                     (not (or (and (map? extend) (:logseq.property/built-in? extend))
                              (and (de/entity? extend) (:logseq.property/built-in? extend)))))))
            (let [extends (:logseq.property.class/extends class)]

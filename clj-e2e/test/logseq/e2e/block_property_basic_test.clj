@@ -428,7 +428,9 @@
       (page/new-page "tag object host")
         (let [object (ls-api-call! :editor.appendBlockInPage
                                    (current-page-name)
-                                   (str "sample child object #" child-tag-name)
+                                   ;; Reference the child tag by id: a bare
+                                   ;; `#child` always creates a top-level tag
+                                   (str "sample child object #[[" (get child-tag "uuid") "]]")
                                    {:properties {inherited-property "kept"}})]
         (page/goto-page parent-tag-name)
         (assert/assert-is-visible

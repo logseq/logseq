@@ -80,6 +80,7 @@
 
 (def ^:private page-for-create-selector
   '[:db/id :block/uuid :block/title :block/name :logseq.property/deleted-at
+    :logseq.property/built-in?
     {:block/tags [:db/id :db/ident :block/uuid :block/title]}
     {:block/parent ...}])
 

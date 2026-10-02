@@ -172,9 +172,7 @@
 (defn- existing-class-for-title
   [db title]
   (when (string? title)
-    (some->> (ldb/page-exists? db title #{:logseq.class/Tag})
-             first
-             (d/entity db))))
+    (ldb/find-matching-create-page db title #{:logseq.class/Tag})))
 
 (defn- resolve-create-page-tag
   "Resolve a tag passed to page create.
@@ -414,13 +412,12 @@
                      :journal? (contains? types :logseq.class/Journal)}
         existing-page (or (if class-ident-namespace?
                             (some (fn [id]
-                                    (try (let [e (d/entity db id)]
-                                           (when (and e
-                                                      (= (str (namespace (:db/ident e)))
-                                                         class-ident-namespace)
-                                                      (ldb/matching-create-page? e create-opts))
-                                             e))
-                                         (catch :default _ nil)))
+                                    (let [e (d/entity db id)]
+                                      (when (and e
+                                                 (= (str (namespace (:db/ident e)))
+                                                    class-ident-namespace)
+                                                 (ldb/matching-create-page? e create-opts))
+                                        e)))
                                   existing-names-page)
                             (ldb/find-matching-create-page db title types))
                           existing-page-by-journal-uuid)]

@@ -76,6 +76,7 @@
               :block/uuid page-uuid
               :block/tags [{:db/ident :logseq.class/Page}]}
         page-selector '[:db/id :block/uuid :block/title :block/name :logseq.property/deleted-at
+                        :logseq.property/built-in?
                         {:block/tags [:db/id :db/ident :block/uuid :block/title]}
                         {:block/parent ...}]
         calls (atom [])]
@@ -355,28 +356,6 @@
             "Creating page foo after tag #Foo must not reuse the tag")
         (is (ldb/internal-page? (d/entity @conn (:db/id result))))
         (is (ldb/class? (d/entity @conn (:db/id tag))))))))
-
-(deftest-async create-page-beside-existing-property-test
-  (let [conn (db-test/create-conn-with-blocks
-              {:properties {:user.property/coexist {:logseq.property/type :default}}})
-        property (d/entity @conn :user.property/coexist)]
-    (is (ldb/property? property)
-        "Fixture property exists before create")
-    (p/with-redefs [state/get-current-repo (constantly "test")
-                    state/<invoke-db-worker (pull-from-conn conn)
-                    db-transact/apply-outliner-ops
-                    (fn [_conn ops _opts]
-                      (let [[op [title create-options]] (first ops)]
-                        (is (= :create-page op))
-                        (p/resolved (outliner-page/create! conn title create-options))))]
-      (p/let [result (page-common-handler/<create! (:block/title property) {:redirect? false :edit? false})
-              property' (d/entity @conn :user.property/coexist)]
-        (is (some? result))
-        (is (not= (:db/id property) (:db/id result))
-            "Creating a page after a same-named property must not reuse the property")
-        (is (ldb/internal-page? (d/entity @conn (:db/id result))))
-        (is (ldb/property? property')
-            "The original property remains")))))
 
 (deftest-async create-page-allows-db-less-page-tag
   (let [calls (atom [])

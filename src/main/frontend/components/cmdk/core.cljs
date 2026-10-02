@@ -105,12 +105,13 @@
   share a name with a new top-level page (or tag)."
   [input blocks]
   (let [class? (string/starts-with? (or input "") "#")
-        title (if class? (get-class-from-input input) input)]
+        title (if class? (get-class-from-input input) input)
+        title-lc (util/page-name-sanity-lc title)]
     (boolean
      (when-not (string/blank? title)
        (some (fn [block]
                (and (:page? block)
-                    (= (util/page-name-sanity-lc title)
+                    (= title-lc
                        (util/page-name-sanity-lc (:block.temp/original-title block)))
                     (ldb/matching-create-page? block {:class? class?})))
              blocks)))))

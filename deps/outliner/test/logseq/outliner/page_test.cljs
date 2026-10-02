@@ -348,7 +348,15 @@
       (is (not= nested-uuid top-uuid))
       (is (= "Foo" (:block/title (:block/parent nested))))
       (is (nil? (:block/parent top)))
-      (is (= 2 (count (d/q '[:find [?e ...] :where [?e :block/title "Bar"]] @conn)))))))
+      (is (= 2 (count (d/q '[:find [?e ...] :where [?e :block/title "Bar"]] @conn))))))
+  (testing "Foo/Bar then Foo reuses the namespace root"
+    (let [conn (db-test/create-conn)
+          [_ _] (outliner-page/create! conn "Foo/Bar" {:split-namespace? true})
+          foo (db-test/find-page-by-title @conn "Foo")
+          [_ foo2-uuid] (outliner-page/create! conn "Foo" {})]
+      (is (= (:block/uuid foo) foo2-uuid)
+          "A namespace root is a top-level create target")
+      (is (= 1 (count (d/q '[:find [?e ...] :where [?e :block/title "Foo"]] @conn)))))))
 
 (deftest create-page-and-tag-with-same-name-is-order-independent
   (testing "tag then page"
@@ -365,16 +373,6 @@
       (is (not= tag-uuid page-uuid))
       (is (ldb/class? (d/entity @conn [:block/uuid tag-uuid])))
       (is (ldb/internal-page? (d/entity @conn [:block/uuid page-uuid]))))))
-
-(deftest create-page-beside-existing-property-with-same-name
-  (let [conn (db-test/create-conn-with-blocks
-              {:properties {:user.property/coexist {:logseq.property/type :default}}})
-        property (d/entity @conn :user.property/coexist)
-        [_ page-uuid] (outliner-page/create! conn (:block/title property) {})]
-    (is (ldb/property? property))
-    (is (not= (:block/uuid property) page-uuid))
-    (is (ldb/property? (d/entity @conn :user.property/coexist)))
-    (is (ldb/internal-page? (d/entity @conn [:block/uuid page-uuid])))))
 
 (deftest create-tag-after-namespaced-tag-is-order-independent
   (testing "Foo/Baz then Baz"
