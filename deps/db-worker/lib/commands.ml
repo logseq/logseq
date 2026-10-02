@@ -545,12 +545,16 @@ let execute_command (db : db) (ent : entity) (datoms : datom list)
 
 (* cljs run-commands — group tx-data by e, check conditions, run actions *)
 let run_commands (db_after : db) (tx_data : datom list) : tx_op list =
+  let by_e_tbl : (entity_id, datom list) Hashtbl.t = Hashtbl.create 31 in
+  let e_order = ref [] in
+  List.iter
+    (fun (d : datom) ->
+       match Hashtbl.find_opt by_e_tbl d.e with
+       | Some cur -> Hashtbl.replace by_e_tbl d.e (d :: cur)
+       | None -> e_order := d.e :: !e_order; Hashtbl.replace by_e_tbl d.e [ d ])
+    tx_data;
   let by_e =
-    List.fold_left
-      (fun acc (d : datom) ->
-        let cur = try List.assoc d.e acc with Not_found -> [] in
-        (d.e, d :: cur) :: List.remove_assoc d.e acc)
-      [] tx_data
+    List.map (fun e -> (e, Hashtbl.find by_e_tbl e)) (List.rev !e_order)
   in
   List.concat_map
     (fun (e, datoms) ->

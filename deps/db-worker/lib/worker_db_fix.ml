@@ -98,23 +98,28 @@ let heal_instant_values (conn : conn) =
   | Some (Bool true) -> ()
   | _ ->
       let ops =
-        List.of_seq (datoms db Eavt ())
-        |> List.concat_map (fun (d : datom) ->
-         if List.mem d.a instant_attrs then
-           match d.v with
-           | Instant _ -> []
-           | value -> (
-               match Common_util.timestamp_ms value with
-               | Some ms ->
-                   [ Retract (Entity_id d.e, d.a, Some d.v)
-                   ; Add (Entity_id d.e, d.a, Instant ms) ]
-               | None -> [])
-         else
-           match d.v with
-           | Instant ms ->
-               [ Retract (Entity_id d.e, d.a, Some d.v)
-               ; Add (Entity_id d.e, d.a, Common_util.value_of_ms ms) ]
-           | _ -> [])
+        Seq.fold_left
+          (fun acc (d : datom) ->
+            if List.mem d.a instant_attrs then
+              match d.v with
+              | Instant _ -> acc
+              | value -> (
+                  match Common_util.timestamp_ms value with
+                  | Some ms ->
+                      Add (Entity_id d.e, d.a, Instant ms)
+                      :: Retract (Entity_id d.e, d.a, Some d.v)
+                      :: acc
+                  | None -> acc)
+            else
+              match d.v with
+              | Instant ms ->
+                  Add (Entity_id d.e, d.a, Common_util.value_of_ms ms)
+                  :: Retract (Entity_id d.e, d.a, Some d.v)
+                  :: acc
+              | _ -> acc)
+          []
+          (datoms db Eavt ())
+        |> List.rev
       in
       if ops <> [] then
         Worker_log.info "worker-db-fix/heal-instant-values"

@@ -13,6 +13,16 @@ let distinct_entities (ents : entity list) : entity list =
       else begin Hashtbl.replace seen e.id (); true end)
     ents
 
+(* cljs `distinct` over tx ops — hash-dedup preserving first-occurrence
+   order; a `List.mem` seen-list is O(n^2) on large retract sets *)
+let distinct_txs (txs : tx_op list) : tx_op list =
+  let seen = Hashtbl.create 16 in
+  List.filter
+    (fun tx ->
+      if Hashtbl.mem seen tx then false
+      else begin Hashtbl.replace seen tx (); true end)
+    txs
+
 let str_replace (s : string) (pattern : string) (repl : string) : string =
   (* cljs string/replace with a string pattern — literal, all occurrences *)
   let plen = String.length pattern in
@@ -200,8 +210,7 @@ let new_property_history_retract_tx (db : db) (txs : tx_op list)
       (vector_adds_by_eid txs) []
   in
   let all = map_retract_tx @ vector_retract_tx in
-  let seen = ref [] in
-  List.filter (fun x -> if List.mem x !seen then false else (seen := x :: !seen; true)) all
+  distinct_txs all
 
 (* cljs build-retracted-tx: for each entity that :block/refs a retracted
    block, retract the ref and rewrite :block/title with the deleted block's
@@ -261,8 +270,7 @@ let expand_delete_blocks_tx (db : db) (txs : tx_op list) ~(outliner_op : string)
       |> List.map (fun e -> RetractEntity (Entity_id e.id))
     in
     let all = txs @ subtree_tx in
-    let seen = ref [] in
-    List.filter (fun x -> if List.mem x !seen then false else (seen := x :: !seen; true)) all
+    distinct_txs all
   else txs
 
 let direct_cleanup_tx (entities : entity list) : tx_op list =
@@ -319,8 +327,7 @@ let build_cleanup_tx (db : db) (txs : tx_op list) : tx_op list =
       (new_property_history_retract_tx db txs
          (List.fold_left (fun s e -> Int_set.add e.id s) Int_set.empty initial))
   in
-  let seen = ref [] in
-  List.filter (fun x -> if List.mem x !seen then false else (seen := x :: !seen; true)) cleanup
+  distinct_txs cleanup
 
 let update_refs_history (db : db) (txs : tx_op list) : tx_op list =
   build_cleanup_tx db txs

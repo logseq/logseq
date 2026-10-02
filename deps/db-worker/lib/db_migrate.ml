@@ -31,7 +31,9 @@ let delete_property (db : db) (property_key : attr) : Wire.t list =
     | None -> false
   in
   let direct_remove : tx_op list =
-    List.of_seq (datoms db Avet ~a:property_key ())
+    (* Aevt, not Avet: attrs without :db/index true (e.g. block/pre-block?)
+       reject Avet access; aevt covers every datom regardless *)
+    List.of_seq (datoms db Aevt ~a:property_key ())
     |> List.map (fun (d : datom) -> Retract (Entity_id d.e, property_key, None))
   in
   let remove_datoms : tx_op list =
@@ -47,13 +49,7 @@ let delete_property (db : db) (property_key : attr) : Wire.t list =
          | None -> [])
   in
   let cleanup = Delete_blocks.update_refs_history db remove_datoms in
-  let all =
-    List.fold_left
-      (fun acc (tx : tx_op) ->
-        if List.exists (fun x -> x = tx) acc then acc else acc @ [ tx ])
-      []
-      (cleanup @ remove_datoms)
-  in
+  let all = Delete_blocks.distinct_txs (cleanup @ remove_datoms) in
   List.map Ds_wire.transit_of_tx_op all
 
 (* db-migrate/remove-block-path-refs *)
