@@ -636,6 +636,7 @@
  :export/debug-transit-desc "Exports to a .transit file to send to us for debugging. Any sensitive data will be removed in the exported file."
  :export/debug-transit-file "Export debug transit file"
  :export/edn-desc "Exports to a readable and editable .edn file. Don't rely on this as a primary backup."
+ :export/error-unexpected "An unexpected error occurred during export. See the javascript console for details."
  :export/exporting "Exporting"
  :export/finalizing "Finalizing"
  :export/format-text "Text"
@@ -1820,6 +1821,7 @@
  :sidebar.right/resize-handle "Right sidebar resize handler"
  :sidebar.right/toggle "Toggle right sidebar"
 
+ :storage/invalid-data-writing "Invalid data writing to db!"
  :storage/sqlitedb-error "SQLiteDB error: {1}"
  :storage/sqlitedb-import-error "SQLiteDB import error: {1}"
  :storage/sqlitedb-save-error "SQLiteDB save error: {1}"
