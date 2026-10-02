@@ -282,6 +282,86 @@
       (is (empty? (get-in (membership-operations (:children delta))
                           [nested-page-uuid :remove]))))))
 
+(deftest moving-a-subtree-across-a-recycled-ancestor-refreshes-nested-children-test
+  (let [live-parent-uuid (random-uuid)
+        recycled-uuid (random-uuid)
+        moved-uuid (random-uuid)
+        nested-uuid (random-uuid)
+        content-uuid (random-uuid)
+        live-db (db-with-blocks [{:db/id 1
+                                  :block/uuid live-parent-uuid
+                                  :block/tx-id 10}
+                                 {:db/id 2
+                                  :block/uuid recycled-uuid
+                                  :block/tx-id 10
+                                  :logseq.property/deleted-at 1000}
+                                 {:db/id 3
+                                  :block/uuid moved-uuid
+                                  :block/parent 1
+                                  :block/order "a0"
+                                  :block/tx-id 10}
+                                 {:db/id 4
+                                  :block/uuid nested-uuid
+                                  :block/parent 3
+                                  :block/order "a0"
+                                  :block/tx-id 10}
+                                 {:db/id 5
+                                  :block/uuid content-uuid
+                                  :block/parent 4
+                                  :block/order "a0"
+                                  :block/tx-id 10}])
+        hide-report (tx-report live-db [[:db/add 3 :block/parent 2]])
+        hide-delta (build-delta hide-report {:blocks {}})
+        show-report (tx-report (:db-after hide-report)
+                               [[:db/add 3 :block/parent 1]])
+        show-delta (build-delta show-report {:blocks {}})]
+    (is (= {nested-uuid {:remove [[content-uuid "a0"]]
+                         :upsert []}}
+           (select-keys (membership-operations (:children hide-delta))
+                        [nested-uuid]))
+        "Moving a live subtree under a recycled ancestor empties already-open nested children.")
+    (is (= {nested-uuid {:remove []
+                         :upsert [[content-uuid "a0"]]}}
+           (select-keys (membership-operations (:children show-delta))
+                        [nested-uuid]))
+        "Moving that subtree back onto a live ancestor republishes the nested children.")))
+
+(deftest live-parent-move-does-not-walk-nested-children-test
+  (let [old-parent-uuid (random-uuid)
+        new-parent-uuid (random-uuid)
+        moved-uuid (random-uuid)
+        nested-uuid (random-uuid)
+        content-uuid (random-uuid)
+        db-before (db-with-blocks [{:db/id 1
+                                    :block/uuid old-parent-uuid
+                                    :block/tx-id 10}
+                                   {:db/id 2
+                                    :block/uuid new-parent-uuid
+                                    :block/tx-id 10}
+                                   {:db/id 3
+                                    :block/uuid moved-uuid
+                                    :block/parent 1
+                                    :block/order "a0"
+                                    :block/tx-id 10}
+                                   {:db/id 4
+                                    :block/uuid nested-uuid
+                                    :block/parent 3
+                                    :block/order "a0"
+                                    :block/tx-id 10}
+                                   {:db/id 5
+                                    :block/uuid content-uuid
+                                    :block/parent 4
+                                    :block/order "a0"
+                                    :block/tx-id 10}])
+        report (tx-report db-before [[:db/add 3 :block/parent 2]])
+        delta (build-delta report {:blocks {}})]
+    (is (= {old-parent-uuid {:remove [[moved-uuid "a0"]]
+                             :upsert []}
+            new-parent-uuid {:remove []
+                             :upsert [[moved-uuid "a0"]]}}
+           (membership-operations (:children delta)))
+        "A live-to-live move must not emit descendant children patches.")))
+
 (deftest insert-builds-a-minimal-child-upsert-test
   (let [parent-uuid (random-uuid)
         child-uuid (random-uuid)
