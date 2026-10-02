@@ -416,7 +416,9 @@ let get_block_and_children db (id_or_page_name : value) (opts : gb_opts) :
 
 let uuid_eid_of_string db (u : string) : entity_id option =
   match
-    Seq.uncons (datoms db Avet ~a:"block/uuid" ~v:(Uuid u) ())
+    Seq.uncons
+      (datoms db Avet ~a:"block/uuid"
+         ~v:(Uuid (Datascript.Util.uuid_canonicalize u)) ())
   with
   | Some (d, _) -> Some d.e
   | None -> None
@@ -854,7 +856,9 @@ let membership_row (parent_uuid : string) (parent_recycled : bool)
 
 let resolve_parent_id db (parent_uuid : string) : entity_id =
   match
-    Seq.uncons (datoms db Avet ~a:"block/uuid" ~v:(Uuid parent_uuid) ())
+    Seq.uncons
+      (datoms db Avet ~a:"block/uuid"
+         ~v:(Uuid (Datascript.Util.uuid_canonicalize parent_uuid)) ())
   with
   | Some (d, _) -> d.e
   | None ->
