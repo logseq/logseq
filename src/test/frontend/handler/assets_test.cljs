@@ -128,7 +128,13 @@
       (testing "literal % that is not a valid escape stays literal"
         (is (= "assets:///workspace/shared/logseq-qa/fixtures/50%25ba%25zz.png"
                (assets/file-path->assets-url
-                "/workspace/shared/logseq-qa/fixtures/50%ba%zz.png")))))))
+                "/workspace/shared/logseq-qa/fixtures/50%ba%zz.png"))))
+      (testing "file URL keeps a literal %20 filename"
+        (is (= "assets:///tmp/a%2520b.png"
+               (assets/file-path->assets-url "file:///tmp/a%2520b.png"))))
+      (testing "an undecodable filename does not block escapes in other segments"
+        (is (= "assets:///tmp/my%20photos/50%25ba.png"
+               (assets/file-path->assets-url "/tmp/my%20photos/50%ba.png")))))))
 
 (deftest make-asset-url-electron-test
   (async done
