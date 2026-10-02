@@ -124,7 +124,11 @@
                 "file:///workspace/shared/logseq-qa/fixtures/path spaces/qa image.png"))))
       (testing "already-encoded assets URL is not encoded again"
         (is (= expected
-               (assets/file-path->assets-url expected)))))))
+               (assets/file-path->assets-url expected))))
+      (testing "literal % that is not a valid escape stays literal"
+        (is (= "assets:///workspace/shared/logseq-qa/fixtures/50%25ba%25zz.png"
+               (assets/file-path->assets-url
+                "/workspace/shared/logseq-qa/fixtures/50%ba%zz.png")))))))
 
 (deftest make-asset-url-electron-test
   (async done

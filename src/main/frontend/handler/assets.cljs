@@ -186,7 +186,10 @@
   (if (and (string? file-path)
            (re-find #"(?i)%[0-9a-f]{2}" file-path))
     (let [escaped (string/replace file-path #"%(?![0-9a-fA-F]{2})" "%25")]
-      (common-util/safe-decode-uri-component escaped))
+      (try
+        (js/decodeURIComponent escaped)
+        ;; Invalid escapes are literal filename characters.
+        (catch :default _ file-path)))
     file-path))
 
 (defn- local-file-path->absolute-path
