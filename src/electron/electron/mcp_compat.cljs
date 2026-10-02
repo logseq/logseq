@@ -837,6 +837,95 @@
                           :diagnostic diagnostic}
                      (property-digest property)))))))))))
 
+(defn- sweep-property-value-blocks
+  [api-fn block-uuids]
+  (reduce (fn [remaining-p block-uuid]
+            (p/let [remaining remaining-p
+                    left (-> (p/let [_ (api-fn "logseq.DB.removeBlock" [block-uuid])
+                                     entity (api-fn "logseq.DB.datascriptQuery"
+                                                    ["[:find ?e . :in $ ?uuid :where [?e :block/uuid ?uuid]]"
+                                                     block-uuid])]
+                            (when (some? entity) block-uuid))
+                          (p/catch (fn [_error] block-uuid)))]
+              (cond-> remaining left (conj left))))
+          (p/resolved [])
+          block-uuids))
+
+(defn delete-property
+  [api-fn args]
+  (let [ident (query-ident (aget args "property_ident"))
+        acknowledge? (true? (aget args "acknowledge_value_loss"))
+        verbose? (not (false? (aget args "verbose")))]
+    (when-not ident
+      (throw (js/Error. "Expected an exact namespaced property ident")))
+    (when-not (string/starts-with? (subs ident 1) "plugin.property.")
+      (throw (js/Error. (str "Property " ident " is outside the writable plugin-property namespace"))))
+    (let [property-query (str "[:find (pull ?property [*]) . :where "
+                              "[?property :db/ident " ident "]]")]
+      (p/let [property-result (api-fn "logseq.DB.datascriptQuery" [property-query])
+              property (js->clj property-result :keywordize-keys true)]
+        (when-not property
+          (throw (js/Error. (str "No property exists with exact ident " ident))))
+        (let [property-id (or (:id property) (:db/id property))
+              previous-state-fn (fn [usage]
+                                  {:property property :usage usage})]
+          (p/let [usage (get-property-users api-fn #js {"property_ident" ident})]
+            (if (and (seq usage) (not acknowledge?))
+              (let [diagnostic (str (count usage) " entities hold a value for " ident
+                                    ", and deleting the definition destroys every one of them. "
+                                    "Recreating the property does not restore them. Set "
+                                    "acknowledge_value_loss=true to proceed.")]
+                (if verbose?
+                  {:response nil
+                   :verified_state nil
+                   :recovered_after_timeout false
+                   :previous_state (previous-state-fn usage)
+                   :diagnostic diagnostic
+                   :verified false
+                   :observed_state usage}
+                  {:verified false
+                   :uuid nil
+                   :parent nil
+                   :page nil
+                   :diagnostic diagnostic
+                   :observed (mapv (fn [_] {:uuid nil :parent nil :page nil}) usage)}))
+              (p/let [value-blocks-result (api-fn "logseq.DB.datascriptQuery"
+                                                  ["[:find [?uuid ...] :in $ ?property :where [?block :logseq.property/created-from-property ?property] [?block :block/uuid ?uuid]]"
+                                                   property-id])
+                      value-blocks (query-result-rows value-blocks-result)
+                      response (api-fn "logseq.DB.removeProperty" [ident])]
+                (when-let [error (and response (aget response "error"))]
+                  (throw (js/Error. (str error))))
+                (p/let [current-result (api-fn "logseq.DB.datascriptQuery" [property-query])
+                        current (js->clj current-result :keywordize-keys true)]
+                  (when current
+                    (throw (js/Error. (str "Property " ident
+                                           " is still present after removal"))))
+                  (p/let [remaining (get-property-users api-fn #js {"property_ident" ident})]
+                    (when (seq remaining)
+                      (throw (js/Error. "Property definition is gone but values remain attached")))
+                    (p/let [left (sweep-property-value-blocks api-fn value-blocks)
+                            swept (- (count value-blocks) (count left))
+                            diagnostic (str "Removed " ident
+                                            (when (pos? swept)
+                                              (str "; swept " swept " orphaned value block(s)"))
+                                            (when (seq left)
+                                              (str "; " (count left)
+                                                   " value block(s) could not be removed and remain on their pages")))]
+                      (if verbose?
+                        {:response (js->clj response :keywordize-keys true)
+                         :verified_state nil
+                         :recovered_after_timeout false
+                         :previous_state (previous-state-fn usage)
+                         :diagnostic diagnostic
+                         :verified true
+                         :observed_state nil}
+                        {:verified true
+                         :uuid nil
+                         :parent nil
+                         :page nil
+                         :diagnostic diagnostic}))))))))))))
+
 (defn get-block
   [api-fn args]
   (let [block-uuid (aget args "block_uuid")
