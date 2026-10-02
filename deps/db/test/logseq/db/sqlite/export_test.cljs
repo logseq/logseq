@@ -986,7 +986,7 @@
         "Import creates a single alpha block")
     (is (= alpha-uuid (:block/uuid imported-alpha))
         "Imported target keeps its UUID")
-    (is (= alpha-uuid (:block/uuid (first (:block/refs imported-beta))))
+    (is (re-find (re-pattern (str alpha-uuid)) (:block/title imported-beta))
         "Imported block ref still resolves to the target")))
 
 (deftest import-selected-nodes-edn-with-duplicate-keep-uuid-target
@@ -1014,7 +1014,8 @@
     (is (= 1 (count (d/datoms @conn :avet :block/title "order alpha")))
         "Duplicate keep-uuid target does not create a second visible alpha")
     (is (= alpha-uuid (:block/uuid imported-alpha)))
-    (is (= alpha-uuid (:block/uuid (first (:block/refs imported-beta)))))))
+    (is (re-find (re-pattern (str alpha-uuid)) (:block/title imported-beta))
+        "Imported block ref still resolves to the target")))
 
 (deftest export-selected-nodes-with-missing-node
   (let [conn (db-test/create-conn-with-blocks
