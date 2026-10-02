@@ -304,48 +304,6 @@
       (is (nil? @*property))
       (is (false? @*show-new-property-config?)))))
 
-(deftest show-hidden-properties-toggle-for-page-title-surface-test
-  (let [page {:block/uuid #uuid "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
-              :block/title "Tagged page"
-              :block/tags [{:db/ident :logseq.class/Page}]}
-        hidden [{:property-ident :user.property/secret}]
-        show? (fn [opts current-route-page?]
-                (#'property-component/show-hidden-properties-toggle?
-                 page
-                 opts
-                 {:hidden-properties hidden
-                  :current-route-page? current-route-page?
-                  :root-block? false}))]
-    (is (true? (show? {:page-title? true} true))
-        "Current tagged page shows the toggle")
-    (is (true? (show? {:page-title? true} false))
-        "Page-title surface still shows the toggle when the route name is not the page uuid")
-    (is (true? (show? {:sidebar-properties? true} false))
-        "Sidebar page properties can reveal hidden properties")
-    (is (false? (show? {:page-title? false} false))
-        "Nested outliner nodes without a page-title surface keep the toggle hidden")
-    (is (false? (#'property-component/show-hidden-properties-toggle?
-                 page
-                 {:page-title? true}
-                 {:hidden-properties []
-                  :current-route-page? true
-                  :root-block? false}))
-        "No toggle when there are no hidden properties")))
-
-(deftest properties-area-hidden-only-early-nil-keeps-toggle-path-test
-  (let [hidden-only {:full-properties []
-                     :hidden-properties [{:property-ident :user.property/secret}]
-                     :root-block? false
-                     :sidebar-properties? false
-                     :class? false
-                     :show-hidden-properties? false}]
-    (is (true? (#'property-component/properties-area-hidden-only-early-nil?
-                (assoc hidden-only :show-hidden-properties-toggle-button? false)))
-        "Nested hidden-only nodes still collapse the properties area")
-    (is (false? (#'property-component/properties-area-hidden-only-early-nil?
-                 (assoc hidden-only :show-hidden-properties-toggle-button? true)))
-        "Do not early-return nil when Show hidden properties would render")))
-
 (deftest page-title-property-surface-hides-outliner-add-property-test
   (is (true? (#'property-component/page-title-property-surface? {:page-title? true}))
       "The current page title can add properties")
@@ -378,7 +336,10 @@
       (merge {:skip-bidirectional-properties? true}
              opts)))))
 
-(deftest tagged-page-with-only-hide-empty-properties-shows-hidden-toggle-test
+(deftest hidden-only-properties-area-shows-toggle-on-page-surfaces-test
+  ;; db-test#1288: a tagged page whose tag properties are all hide-empty and
+  ;; empty must still offer "Show hidden properties", and mount
+  ;; ls-properties-area so the toggle can be clicked.
   (let [page-uuid #uuid "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
         hidden-prop {:property-id :user.property/secret
                      :property-ident :user.property/secret
@@ -387,38 +348,31 @@
         page {:block/uuid page-uuid
               :block/title "Tagged page"
               :block/tags [{:db/ident :logseq.class/Page}]}
-        markup (render-properties-area
-                page
-                {:page-title? true}
-                {:full-properties []
+        display {:full-properties []
                  :hidden-properties [hidden-prop]
                  :description-property-uuid nil
-                 :class-properties-property-uuid nil}
-                :current-page (str page-uuid))]
-    (is (string/includes? markup "Show hidden properties")
-        "A tagged page whose tag properties are all hide-empty and empty must still offer Show hidden properties (db-test#1288)")
-    (is (string/includes? markup "ls-properties-area")
-        "The page properties area must mount so the toggle can be clicked")))
-
-(deftest page-title-surface-shows-hidden-toggle-when-route-is-not-the-page-test
-  (let [page-uuid #uuid "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
-        hidden-prop {:property-id :user.property/secret
-                     :property-ident :user.property/secret
-                     :property-uuid #uuid "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
-                     :value nil}
-        page {:block/uuid page-uuid
-              :block/title "Tagged page"
-              :block/tags [{:db/ident :logseq.class/Page}]}
-        markup (render-properties-area
-                page
-                {:page-title? true}
-                {:full-properties []
-                 :hidden-properties [hidden-prop]
-                 :description-property-uuid nil
-                 :class-properties-property-uuid nil}
-                :current-page "a-different-page")]
-    (is (string/includes? markup "Show hidden properties")
-        "The page-title properties surface must show the toggle even if the route name is not the page uuid")))
+                 :class-properties-property-uuid nil}]
+    (let [markup (render-properties-area page {:page-title? true} display
+                                         :current-page (str page-uuid))]
+      (is (string/includes? markup "Show hidden properties")
+          "The current route's tagged page still offers Show hidden properties")
+      (is (string/includes? markup "ls-properties-area")
+          "The page properties area must mount so the toggle can be clicked"))
+    (is (string/includes?
+         (render-properties-area page {:page-title? true} display
+                                 :current-page "a-different-page")
+         "Show hidden properties")
+        "A page-title surface shows the toggle even when the route is another page")
+    (is (string/includes?
+         (render-properties-area page {:sidebar-properties? true} display
+                                 :current-page "a-different-page")
+         "Show hidden properties")
+        "Sidebar page properties can reveal hidden properties")
+    (is (= ""
+           (render-properties-area page {:page-title? true}
+                                   (assoc display :hidden-properties [])
+                                   :current-page (str page-uuid)))
+        "No hidden properties means no toggle and no properties area")))
 
 (deftest nested-block-with-only-hidden-properties-still-omits-properties-area-test
   (let [block-uuid #uuid "cccccccc-cccc-cccc-cccc-cccccccccccc"
