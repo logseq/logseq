@@ -127,13 +127,25 @@ let page_icon_picker (page : Model.page) (anchor : string) =
         ~on_chosen:(fun c -> set_page_icon page c)
 
 let title_editor (page : Model.page) : t =
-  let commit value =
+  let commit ?(select = false) value =
     let value = String.trim value in
     (match page.page_uuid with
-     | Some u -> ignore (Page_ops.rename u value)
-     | None -> ());
-    Runtime.send Action.Title_edit_done;
-    Runtime.flush ()
+     | Some u ->
+         ignore
+           (Page_ops.rename u value
+            |> Js.Promise.then_ (fun () ->
+              Runtime.send Action.Title_edit_done;
+              if select then Editor_actions.select_single u;
+              Runtime.flush ();
+              Js.Promise.resolve ())
+            |> Js.Promise.catch (fun _ ->
+              (* rejected rename (e.g. "#" in the name): the worker
+                 notification toast already explains it; the editor
+                 stays open on the typed text like cljs *)
+              Js.Promise.resolve ()))
+     | None ->
+         Runtime.send Action.Title_edit_done;
+         Runtime.flush ())
   in
   (* cljs: the page-title editor is the regular editor box —
      .editor-wrapper > .editor-inner.block-editor > textarea +
@@ -153,11 +165,11 @@ let title_editor (page : Model.page) : t =
                 Platform.payload_str payload "key"
               with
               | "Enter" | "Escape" ->
-                  commit
-                    (Platform.payload_str payload "value");
                   (* cljs: exiting the title editor selects the title
-                     block, same as leaving any block edit *)
-                  Editor_actions.select_single uuid
+                     block, same as leaving any block edit — only once
+                     the rename actually commits *)
+                  commit ~select:true
+                    (Platform.payload_str payload "value")
               | _ -> ())
           | _ -> ())
         []
