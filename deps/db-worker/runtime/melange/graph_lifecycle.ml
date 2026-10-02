@@ -66,10 +66,21 @@ let resolve_storage ~root ~graphs_dir =
   }
 
 (* promise -> Db_worker_effect.t (http_bytes task_of_promise pattern).
-   cljs callers read (.-code e) off the rejection (repo-locked etc.), so
-   the JS error object itself is kept as the exn box. %identity is safe
-   here: the rejection value already is the JS Error. *)
-external promise_error_as_exn : Js.Promise.error -> exn = "%identity"
+   graph-lifecycle rejections are Error objects carrying {.message .code}
+   (repo-locked, server-start-failed, ...); keep both readable — the JS
+   object itself is not an OCaml exn and prints as `undefined`. *)
+external promise_error_message : Js.Promise.error -> string option = "message"
+
+external promise_error_code : Js.Promise.error -> string option = "code"
+
+let exn_of_promise_error error =
+  let message =
+    Option.value (promise_error_message error)
+      ~default:"graph-lifecycle call failed"
+  in
+  match promise_error_code error with
+  | Some c -> Failure (c ^ ": " ^ message)
+  | None -> Failure message
 
 let await_promise promise =
   let task, resolver = Db_worker_effect.wait () in
@@ -78,7 +89,7 @@ let await_promise promise =
   in
   let on_ok value = finish (Ok value); Js.Promise.resolve () in
   let on_error error =
-    finish (Error (promise_error_as_exn error));
+    finish (Error (exn_of_promise_error error));
     Js.Promise.resolve ()
   in
   ignore
