@@ -199,6 +199,21 @@
     []
     (map second (re-seq page-ref/page-ref-re s))))
 
+(defn dedupe-blocks-by-uuid
+  "Keep the first occurrence of each :block/uuid in a page :blocks vector.
+   Selected-node exports can list a referenced selected target twice; import
+   assigns :block/order from vector order, so a trailing duplicate would move it."
+  [blocks]
+  (second
+   (reduce (fn [[seen acc] block]
+             (if-let [id (:block/uuid block)]
+               (if (contains? seen id)
+                 [seen acc]
+                 [(conj seen id) (conj acc block)])
+               [seen (conj acc block)]))
+           [#{} []]
+           blocks)))
+
 (defn- expand-build-children
   "Expands any blocks with :build/children to return a flattened vec with
   children having correct :block/parent. Also ensures all blocks have a :block/uuid"
@@ -814,7 +829,7 @@
                                   (update :page #(with-meta % {::new-page? true})))))
         expand-block-children (fn [m]
                                 (if (:blocks m)
-                                  (update m :blocks expand-build-children)
+                                  (update m :blocks (comp expand-build-children dedupe-blocks-by-uuid))
                                   m))
         expand-journal (fn [m]
                          (if-let [date-int (get-in m [:page :build/journal])]
