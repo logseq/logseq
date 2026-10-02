@@ -392,29 +392,29 @@ let filter_matched_ref_blocks db (top_ref_block_ids : entity_id list)
     : entity_id list =
   let visited = Hashtbl.create 31 in
   let out = Hashtbl.create 31 in
-  let rec loop stack =
-    match stack with
-    | [] -> ()
-    | eid :: rest ->
-        if Hashtbl.mem visited eid then loop rest
-        else begin
-          Hashtbl.replace visited eid ();
-          let eff_refs = eff eid in
-          if not (class_ok eid) then loop (child_ids db eid @ rest)
-          else if not (can_satisfy_includes eff_refs eid) then loop rest
-          else begin
-            let include_set =
-              List.sort_uniq compare (eff_refs @ allowed_subrefs eid)
-            in
-            if
-              matches_filters ~include_set ~exclude_set:eff_refs ~includes
-                ~excludes
-            then Hashtbl.replace out eid ();
-            loop (child_ids db eid @ rest)
-          end
-        end
-  in
-  loop top_ref_block_ids;
+  (* Stack keeps the same DFS preorder as `child_ids @ rest` without
+     copying the stack per visited node. *)
+  let stack = Stack.create () in
+  let push_all ids = List.iter (fun id -> Stack.push id stack) (List.rev ids) in
+  push_all top_ref_block_ids;
+  while not (Stack.is_empty stack) do
+    let eid = Stack.pop stack in
+    if not (Hashtbl.mem visited eid) then begin
+      Hashtbl.replace visited eid ();
+      let eff_refs = eff eid in
+      if not (class_ok eid) then push_all (child_ids db eid)
+      else if can_satisfy_includes eff_refs eid then begin
+        let include_set =
+          List.sort_uniq compare (eff_refs @ allowed_subrefs eid)
+        in
+        if
+          matches_filters ~include_set ~exclude_set:eff_refs ~includes
+            ~excludes
+        then Hashtbl.replace out eid ();
+        push_all (child_ids db eid)
+      end
+    end
+  done;
   List.of_seq (Hashtbl.to_seq_keys out)
 
 (* reference/matched-ref-block-ids-under-top *)

@@ -356,11 +356,13 @@ let sanitize_block_payload db ?(created_uuids : Wire.t list = [])
       let created_ref_uuids =
         if created_uuids = [] || refs = [] then []
         else
+          let created_tbl = Hashtbl.create (List.length created_uuids) in
+          List.iter (fun u -> Hashtbl.replace created_tbl u ()) created_uuids;
           distinct
             (List.filter_map
                (fun r ->
                   match ref_entity_attr db "block/uuid" r with
-                  | Some u when List.mem u created_uuids -> Some u
+                  | Some u when Hashtbl.mem created_tbl u -> Some u
                   | _ -> None)
                refs)
       in
@@ -793,17 +795,17 @@ let moved_block_ids_from_tx_data (tx_data : Wire.t list) : Wire.t list =
   |> distinct
 
 (* op-construct/remap-lookup-ref-by-uuid-map — uuid-map : (old,new) assoc *)
-let rec remap_lookup_ref_by_uuid_map (uuid_map : (string * string) list)
+let rec remap_lookup_ref_by_uuid_map (uuid_tbl : (string, string) Hashtbl.t)
     (v : Wire.t) : Wire.t =
   match v with
   | Wire.Array [ Wire.Keyword "block/uuid"; Wire.Uuid u ] ->
       Wire.Array
         [ kw "block/uuid"
         ; Wire.Uuid
-            (match List.assoc_opt u uuid_map with Some n -> n | None -> u) ]
-  | Wire.Set xs -> Wire.Set (List.map (remap_lookup_ref_by_uuid_map uuid_map) xs)
-  | Wire.List xs -> Wire.List (List.map (remap_lookup_ref_by_uuid_map uuid_map) xs)
-  | Wire.Array xs -> Wire.Array (List.map (remap_lookup_ref_by_uuid_map uuid_map) xs)
+            (match Hashtbl.find_opt uuid_tbl u with Some n -> n | None -> u) ]
+  | Wire.Set xs -> Wire.Set (List.map (remap_lookup_ref_by_uuid_map uuid_tbl) xs)
+  | Wire.List xs -> Wire.List (List.map (remap_lookup_ref_by_uuid_map uuid_tbl) xs)
+  | Wire.Array xs -> Wire.Array (List.map (remap_lookup_ref_by_uuid_map uuid_tbl) xs)
   | _ -> v
 
 (* op-construct/remap-block-lookup-values-by-uuid-map *)
@@ -811,8 +813,13 @@ let remap_block_lookup_values_by_uuid_map (block : Wire.t)
     (uuid_map : (string * string) list) : Wire.t =
   match block with
   | Wire.Map entries ->
+      let uuid_tbl = Hashtbl.create (List.length uuid_map) in
+      List.iter
+        (fun (k, v) ->
+           if not (Hashtbl.mem uuid_tbl k) then Hashtbl.replace uuid_tbl k v)
+        uuid_map;
       Wire.Map
-        (List.map (fun (k, v) -> (k, remap_lookup_ref_by_uuid_map uuid_map v))
+        (List.map (fun (k, v) -> (k, remap_lookup_ref_by_uuid_map uuid_tbl v))
            entries)
   | _ -> block
 

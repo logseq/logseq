@@ -60,12 +60,14 @@ let direct_child_blocks db (block_id : entity_id) ?(reverse = false)
 let get_block_children db (block : entity) ~(all : bool)
     ~(include_collapsed_children : bool) ~(include_property_block : bool)
     : bool * entity list =
-  let rec loop pending seen result =
-    if (not all) && List.length result >= block_children_limit then
-      (true, result)
+  (* result accumulates reversed so each visited node costs O(its children),
+     not O(result); count avoids a per-node List.length. *)
+  let rec loop pending seen result_rev count =
+    if (not all) && count >= block_children_limit then
+      (true, List.rev result_rev)
     else
       match pending with
-      | [] -> (false, result)
+      | [] -> (false, List.rev result_rev)
       | parent :: rest ->
           let expand =
             include_collapsed_children
@@ -88,11 +90,15 @@ let get_block_children db (block : entity) ~(all : bool)
           List.iter (fun (c : entity) -> Hashtbl.replace seen c.id ()) children;
           (* cljs pending is a stack: (into pending children) appends and
              peek pops the last child first *)
-          loop (List.rev children @ rest) seen (result @ children)
+          loop
+            (List.rev children @ rest)
+            seen
+            (List.rev_append children result_rev)
+            (count + List.length children)
   in
   let seen = Hashtbl.create 64 in
   Hashtbl.replace seen block.id ();
-  let large_page, children_blocks = loop [ block ] seen [] in
+  let large_page, children_blocks = loop [ block ] seen [] 0 in
   let children_blocks =
     List.filter (fun (c : entity) -> not (Ldb.recycled c)) children_blocks
   in

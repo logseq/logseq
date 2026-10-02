@@ -2732,14 +2732,28 @@ let require_snapshot_request (request : Wire.t) : (Wire.t list * Wire.t list * W
 (* merge-slots — conflict on same key with different value *)
 let merge_slots (left : (Wire.t * Wire.t) list) (right : (Wire.t * Wire.t) list)
     : (Wire.t * Wire.t) list =
-  List.fold_left
-    (fun slots (k, v) ->
-      match List.find_opt (fun (ek, _) -> ek = k) slots with
-      | Some (_, existing) when existing <> v ->
-          fail "Conflicting renderer snapshot slots" [ (kw "slot-key", k) ]
-      | Some _ -> slots
-      | None -> slots @ [ (k, v) ])
-    left right
+  (* key index avoids the O(left x right) scan; first value per key wins,
+     matching the assoc semantics of the list version *)
+  let index : (Wire.t, Wire.t) Hashtbl.t =
+    Hashtbl.create (List.length left)
+  in
+  List.iter
+    (fun (k, v) ->
+       if not (Hashtbl.mem index k) then Hashtbl.replace index k v)
+    left;
+  let rev_slots =
+    List.fold_left
+      (fun slots (k, v) ->
+        match Hashtbl.find_opt index k with
+        | Some existing when existing <> v ->
+            fail "Conflicting renderer snapshot slots" [ (kw "slot-key", k) ]
+        | Some _ -> slots
+        | None ->
+            Hashtbl.replace index k v;
+            (k, v) :: slots)
+      (List.rev left) right
+  in
+  List.rev rev_slots
 
 let block_snapshot_slots db (block_uuids : Wire.t list)
     : (Wire.t * Wire.t) list * ((Wire.t * Wire.t) list) =
@@ -2755,23 +2769,35 @@ let block_snapshot_slots db (block_uuids : Wire.t list)
           | _ -> [] )
     | _ -> ([], [])
   in
-  let slots =
-    List.fold_left
-      (fun slots buuid ->
-        if List.exists (fun (k, _) -> k = buuid) blocks then slots
-        else
-          slots @ [ (wkey [ kw "block"; buuid ], Wire.Map [ (kw "missing?", Wire.Bool true) ]) ])
-      (block_slots blocks) block_uuids
+  let blocks_tbl : (Wire.t, unit) Hashtbl.t =
+    Hashtbl.create (List.length blocks)
   in
+  List.iter (fun (k, _) -> Hashtbl.replace blocks_tbl k ()) blocks;
+  let slots =
+    List.rev
+      (List.fold_left
+         (fun slots buuid ->
+           if Hashtbl.mem blocks_tbl buuid then slots
+           else
+             ( wkey [ kw "block"; buuid ]
+             , Wire.Map [ (kw "missing?", Wire.Bool true) ] )
+             :: slots)
+         (List.rev (block_slots blocks)) block_uuids)
+  in
+  let groups_tbl : (Wire.t, Wire.t) Hashtbl.t =
+    Hashtbl.create (List.length groups)
+  in
+  List.iter
+    (fun (k, v) ->
+       if not (Hashtbl.mem groups_tbl k) then Hashtbl.replace groups_tbl k v)
+    groups;
   let groups' =
     List.map
       (fun buuid ->
         let deps =
-          match
-            List.find_opt (fun (k, _) -> k = buuid) groups
-          with
-          | Some (_, Wire.Array dep_uuids) | Some (_, Wire.List dep_uuids)
-          | Some (_, Wire.Set dep_uuids) ->
+          match Hashtbl.find_opt groups_tbl buuid with
+          | Some (Wire.Array dep_uuids) | Some (Wire.List dep_uuids)
+          | Some (Wire.Set dep_uuids) ->
               List.map (fun d -> wkey [ kw "block"; d ]) dep_uuids
           | _ -> [ wkey [ kw "block"; buuid ] ]
         in

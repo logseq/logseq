@@ -455,15 +455,16 @@ let task_entity (db : db) (entity_id : entity_id) : bool =
       | None -> false)
 
 let task_attribute_keys db_before db_after datoms : Wire.t list =
-  let grouped =
-    List.fold_left
-      (fun acc (d : datom) ->
-         match List.assoc_opt d.e acc with
-         | Some ds -> (d.e, d :: ds) :: List.remove_assoc d.e acc
-         | None -> (d.e, [ d ]) :: acc)
-      [] datoms
+  let groups : (entity_id, datom list) Hashtbl.t =
+    Hashtbl.create (List.length datoms)
   in
-  grouped
+  List.iter
+    (fun (d : datom) ->
+       match Hashtbl.find_opt groups d.e with
+       | Some ds -> Hashtbl.replace groups d.e (d :: ds)
+       | None -> Hashtbl.replace groups d.e [ d ])
+    datoms;
+  Hashtbl.fold (fun entity_id ds acc -> (entity_id, ds) :: acc) groups []
   |> List.concat_map
        (fun (entity_id, ds) ->
           if

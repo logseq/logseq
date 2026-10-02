@@ -79,18 +79,22 @@ let block_subtree db (block : entity) : entity list =
   List.filter_map (Ldb.ent_of_id db) ids
 
 let page_descendants (page : entity) : entity list =
-  let rec loop pages result =
-    match pages with
-    | [] -> List.rev result
-    | page' :: rest ->
-      let children =
-        block_children page'
-        |> List.filter Ldb.is_page
-        |> Ldb.sort_by_order
-      in
-      loop (rest @ children) (page' :: result)
-  in
-  loop [ page ] []
+  (* FIFO queue — a (rest @ children) list queue copies the pending spine
+     per node, O(n^2) on large trees *)
+  let q = Queue.create () in
+  Queue.add page q;
+  let result = ref [] in
+  while not (Queue.is_empty q) do
+    let page' = Queue.pop q in
+    result := page' :: !result;
+    let children =
+      block_children page'
+      |> List.filter Ldb.is_page
+      |> Ldb.sort_by_order
+    in
+    List.iter (fun c -> Queue.add c q) children
+  done;
+  List.rev !result
 
 let distinct_by_id (ents : entity list) : entity list =
   let module S = Set.Make (Int) in

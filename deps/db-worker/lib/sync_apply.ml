@@ -860,17 +860,26 @@ let next_large_upload_request_chunk (db : db) (tx_data : Wire.t list)
     (start : int) : Wire.t list * int =
   let range_by_start = upload_group_range_by_start db tx_data in
   let total = List.length tx_data in
-  let rec loop idx chunk =
+  let arr = Array.of_list tx_data in
+  let rec loop idx chunk_len chunk_rev =
     if idx < total then begin
-      let next_idx, group = next_upload_tx_group tx_data range_by_start idx in
-      let next_count = List.length chunk + List.length group in
-      if chunk <> [] && next_count > !max_upload_request_datoms then
-        (chunk, idx)
-      else loop next_idx (chunk @ group)
+      let next_idx, group_len =
+        match Hashtbl.find_opt range_by_start idx with
+        | Some e -> (e + 1, e + 1 - idx)
+        | None -> (idx + 1, 1)
+      in
+      let next_count = chunk_len + group_len in
+      if chunk_rev <> [] && next_count > !max_upload_request_datoms then
+        (List.rev chunk_rev, idx)
+      else
+        loop next_idx next_count
+          (List.rev_append
+             (Array.to_list (Array.init group_len (fun i -> arr.(idx + i))))
+             chunk_rev)
     end
-    else (chunk, total)
+    else (List.rev chunk_rev, total)
   in
-  loop start []
+  loop start 0 []
 
 (* tx-entry wire maps: {tx-id tx-data outliner-op large-upload-*} *)
 let cap_upload_request_tx_entries repo (db : db)
@@ -886,9 +895,9 @@ let cap_upload_request_tx_entries repo (db : db)
         let next_count = datom_count + entry_count in
         if result = [] && entry_count > !max_upload_request_datoms then
           [ large_upload_request_entry repo db entry ]
-        else if next_count > !max_upload_request_datoms then result
-        else loop rest (result @ [ entry ]) next_count)
-    | [] -> result
+        else if next_count > !max_upload_request_datoms then List.rev result
+        else loop rest (entry :: result) next_count)
+    | [] -> List.rev result
   and large_upload_request_entry repo (db : db) (entry : Wire.t)
       : Wire.t =
     let tx_data =
@@ -1124,7 +1133,7 @@ let batch_transact_with_temp_conn_impl (conn : conn) (tx_meta : tx_meta)
   let collected = ref [] in
   let listener_id =
     Datascript.listen temp_conn "temp-conn-batch-tx" (fun report ->
-         collected := !collected @ report.tx_data;
+         collected := List.rev_append report.tx_data !collected;
          match listen_db with
          | Some listen -> listen report
          | None -> ())
@@ -1134,7 +1143,7 @@ let batch_transact_with_temp_conn_impl (conn : conn) (tx_meta : tx_meta)
       match before_commit with
       | Some bc -> bc ()
       | None -> ());
-  match !collected with
+  match List.rev !collected with
   | [] -> None
   | datoms ->
       Db_transact.transact conn
@@ -2290,8 +2299,7 @@ let rollback_and_mark_failed_txs repo (tx_ids : string list) : unit =
                           with
                           | Some (Keyword "rebase"), Some (Bool true)
                             when report.tx_data <> [] ->
-                             rebase_tx_reports :=
-                               !rebase_tx_reports @ [ report ]
+                             rebase_tx_reports := report :: !rebase_tx_reports
                           | _ -> ()))
                       (fun c ->
                          ignore (reverse_local_txs c rejected_and_after);
@@ -2300,7 +2308,7 @@ let rollback_and_mark_failed_txs repo (tx_ids : string list) : unit =
                              (Some rebase_db_before))
                       ()
                   in
-                  List.iter (handle_local_tx repo) !rebase_tx_reports;
+                  List.iter (handle_local_tx repo) (List.rev !rebase_tx_reports);
                   repair_applied_txs conn tx_report;
                   let replay_tx_ids =
                     List.filter_map
@@ -2691,7 +2699,7 @@ let apply_remote_tx_with_local_changes repo conn local_txs remote_txs
              with
              | Some (Keyword "rebase"), Some (Bool true)
                when report.tx_data <> [] ->
-                 rebase_tx_reports := !rebase_tx_reports @ [ report ]
+                 rebase_tx_reports := report :: !rebase_tx_reports
              | _ -> ())
           ~before_commit:(fun () ->
              fail_if_pending_tx_snapshot_changed repo local_txs)
@@ -2704,7 +2712,7 @@ let apply_remote_tx_with_local_changes repo conn local_txs remote_txs
                rebase_local_txs repo c local_txs (Some rebase_db_before))
           ()
       in
-      List.iter (handle_local_tx repo) !rebase_tx_reports;
+      List.iter (handle_local_tx repo) (List.rev !rebase_tx_reports);
       repair_applied_txs conn tx_report;
       (* Mark only explicitly stale rebases as non-pending — cljs
          apply-remote-tx-with-local-changes! *)

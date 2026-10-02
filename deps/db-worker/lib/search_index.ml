@@ -962,29 +962,35 @@ let node_ref_title_entry ~replace_block_refs (r : Ev.node) =
   | _ -> None
 
 let node_block_ref_id_to_title (ent : Ev.node) max_depth replace_block_refs =
-  let rec loop frontier seen acc depth =
-    if depth >= max_depth || frontier = [] then acc
+  let seen = Hashtbl.create 64 in
+  let rec loop frontier acc_rev depth =
+    if depth >= max_depth || frontier = [] then List.rev acc_rev
     else begin
       let new_refs =
         List.filter
           (fun n ->
              match Ev.uuid n with
-             | Some u -> not (List.mem (Unicode.lowercase u) seen)
+             | Some u -> not (Hashtbl.mem seen (Unicode.lowercase u))
              | None -> false)
           frontier
       in
-      let seen' =
-        seen @ List.filter_map (fun n ->
-            Option.map Unicode.lowercase (Ev.uuid n)) new_refs
-      in
-      let acc' =
-        acc @ List.filter_map (node_ref_title_entry ~replace_block_refs) new_refs
+      List.iter
+        (fun n ->
+           match Ev.uuid n with
+           | Some u -> Hashtbl.replace seen (Unicode.lowercase u) ()
+           | None -> ())
+        new_refs;
+      let acc_rev =
+        List.fold_left
+          (fun a x -> x :: a)
+          acc_rev
+          (List.filter_map (node_ref_title_entry ~replace_block_refs) new_refs)
       in
       let next = List.concat_map (fun n -> Ev.ref_nodes n "block/refs") new_refs in
-      loop next seen' acc' (depth + 1)
+      loop next acc_rev (depth + 1)
     end
   in
-  loop (Ev.ref_nodes ent "block/refs") [] [] 0
+  loop (Ev.ref_nodes ent "block/refs") [] 0
 
 let recur_replace_title ?(max_depth = 10) ?(replace_block_refs = true)
     (block : Ev.node) (title : string) : string =
@@ -1550,18 +1556,19 @@ let build_blocks_indice ?(include_vector_title = false) (db : db) : index_item l
 (* ---- tx-report diff (get-affected-blocks / sync-search-indice) ---- *)
 
 let page_descendants (page : entity) : entity list =
-  let rec loop (pages : entity list) (result : entity list) =
-    match pages with
-    | [] -> result
-    | p :: rest ->
-        let children =
-          Ldb.ref_ents p "block/_parent"
-          |> List.filter Ldb.is_page
-          |> Ldb.sort_by_order
-        in
-        loop (rest @ children) (result @ [ p ])
-  in
-  loop [ page ] []
+  (* BFS via Queue — appending to rest/result per node was O(n^2). *)
+  let result = ref [] in
+  let queue = Queue.create () in
+  Queue.add page queue;
+  while not (Queue.is_empty queue) do
+    let p = Queue.pop queue in
+    result := p :: !result;
+    Ldb.ref_ents p "block/_parent"
+    |> List.filter Ldb.is_page
+    |> Ldb.sort_by_order
+    |> List.iter (fun c -> Queue.add c queue)
+  done;
+  List.rev !result
 
 let page_tree (db : db) (page : entity) : entity list =
   page_descendants page
@@ -1573,10 +1580,12 @@ let page_tree (db : db) (page : entity) : entity list =
                  | Some (Uuid u) -> Ldb.get_block_and_children db u
                  | _ -> [])
               (Ldb.sort_by_order (Ldb.ref_ents p "block/_page")))
-  |> List.fold_left
-       (fun acc (e : entity) ->
-          if List.exists (fun (x : entity) -> x.id = e.id) acc then acc else acc @ [ e ])
-       []
+  |> List.filter
+       (let seen = Hashtbl.create 128 in
+        fun (e : entity) ->
+          match Hashtbl.mem seen e.id with
+          | true -> false
+          | false -> Hashtbl.replace seen e.id (); true)
 
 let entity_tree (db : db) (e : entity) : entity list =
   if Ldb.is_page e then page_tree db e
@@ -1596,12 +1605,15 @@ let referrer_eids (db : db) (eids : entity_id list) : entity_id list =
     eids
 
 let entities_for (db : db) (eids : entity_id list) : entity list =
-  List.fold_left
-    (fun acc id ->
+  let seen = Hashtbl.create (List.length eids) in
+  List.filter_map
+    (fun id ->
        match Ldb.ent_of_id db id with
-       | Some e when not (List.exists (fun (x : entity) -> x.id = e.id) acc) -> acc @ [ e ]
-       | _ -> acc)
-    [] eids
+       | Some e when not (Hashtbl.mem seen e.id) ->
+           Hashtbl.replace seen e.id ();
+           Some e
+       | _ -> None)
+    eids
 
 let eids_of (ents : entity list) = List.map (fun (e : entity) -> e.id) ents
 
@@ -1763,8 +1775,10 @@ let sync_search_indice ?(include_vector_title = false) (r : tx_report) :
                match Ldb.value e "block/uuid" with Some (Uuid u) -> Some u | _ -> None)
             to_remove
         in
+        let indexed_tbl = Hashtbl.create (List.length indexed_uuids) in
+        List.iter (fun u -> Hashtbl.replace indexed_tbl u ()) indexed_uuids;
         let dropped =
-          List.filter (fun u -> not (List.mem u indexed_uuids)) added_uuids
+          List.filter (fun u -> not (Hashtbl.mem indexed_tbl u)) added_uuids
         in
         Some
           { blocks_to_remove = List.sort_uniq compare (removed_uuids @ dropped)

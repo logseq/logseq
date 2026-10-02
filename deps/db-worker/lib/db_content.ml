@@ -181,31 +181,37 @@ let uuid_of (e : entity) =
   match Ldb.value e "block/uuid" with Some (Uuid u) -> Some u | _ -> None
 
 let block_ref_id_to_title (ent : entity) max_depth replace_block_refs =
-  let rec loop frontier seen id_to_title depth =
-    if depth >= max_depth || frontier = [] then id_to_title
+  let seen = Hashtbl.create 64 in
+  let rec loop frontier id_to_title_rev depth =
+    if depth >= max_depth || frontier = [] then List.rev id_to_title_rev
     else begin
       let new_refs =
         List.filter
           (fun (e : entity) ->
             match uuid_of e with
-            | Some u -> not (List.mem u seen)
+            | Some u -> not (Hashtbl.mem seen u)
             | None -> false)
           frontier
       in
-      let seen' =
-        seen @ List.filter_map uuid_of new_refs
-      in
-      let id_to_title' =
-        id_to_title
-        @ List.filter_map (ref_to_title_entry replace_block_refs) new_refs
+      List.iter
+        (fun (e : entity) ->
+           match uuid_of e with
+           | Some u -> Hashtbl.replace seen u ()
+           | None -> ())
+        new_refs;
+      let id_to_title_rev =
+        List.fold_left
+          (fun a x -> x :: a)
+          id_to_title_rev
+          (List.filter_map (ref_to_title_entry replace_block_refs) new_refs)
       in
       let next =
         List.concat_map (fun e -> Ldb.ref_ents e "block/refs") new_refs
       in
-      loop next seen' id_to_title' (depth + 1)
+      loop next id_to_title_rev (depth + 1)
     end
   in
-  loop (Ldb.ref_ents ent "block/refs") [] [] 0
+  loop (Ldb.ref_ents ent "block/refs") [] 0
 
 (* db-content/recur-replace-uuid-in-block-title *)
 let recur_replace_uuid_in_block_title ?(max_depth = 10)

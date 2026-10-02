@@ -350,7 +350,7 @@ let batch_transact_with_temp_conn ?(tx_meta : tx_meta = [])
   let collected : datom list list ref = ref [] in
   let key =
     listen temp "temp-conn-batch-tx" (fun (r : tx_report) ->
-        collected := !collected @ [ r.tx_data ];
+        collected := r.tx_data :: !collected;
         match listen_db with
         | Some l -> l r
         | None -> ())
@@ -361,7 +361,7 @@ let batch_transact_with_temp_conn ?(tx_meta : tx_meta = [])
         (match before_commit with
          | Some g -> g ()
          | None -> ());
-        List.concat !collected)
+        List.concat (List.rev !collected))
   in
   if tx_data = [] then None
   else
@@ -389,7 +389,7 @@ let batch_transact ?(tx_meta : tx_meta = [])
   let collected : datom list ref = ref [] in
   let key =
     listen conn "batch-tx" (fun (r : tx_report) ->
-        collected := !collected @ r.tx_data;
+        collected := List.rev_append r.tx_data !collected;
         match listen_db with
         | Some l -> l r
         | None -> ())
@@ -409,7 +409,7 @@ let batch_transact ?(tx_meta : tx_meta = [])
     try f conn; None with e -> Some e
   in
   inside_batch_tx := prev_inside;
-  let batch_tx_data = !collected in
+  let batch_tx_data = List.rev !collected in
   collected := [];
   match batch_error with
   | Some e ->
