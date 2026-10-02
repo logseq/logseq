@@ -261,6 +261,16 @@
         (rfx/init! {:initial-value original-state
                     :registry (atom {})})))))
 
+(deftest clear-edit-keeps-pending-new-block-buffer-test
+  (let [prev-pending (state/get-state :editor/pending-new-block)]
+    (try
+      (state/set-state! :editor/pending-new-block {:typed-text "draft"})
+      (state/clear-edit!)
+      (is (= {:typed-text "draft"} (state/get-state :editor/pending-new-block))
+          "Switching editors must not drop letters buffered for an in-flight insert")
+      (finally
+        (state/set-state! :editor/pending-new-block prev-pending)))))
+
 (deftest clear-editor-action-if-switching-block-test
   (let [block-a {:block/uuid (random-uuid)}
         block-b {:block/uuid (random-uuid)}
