@@ -157,18 +157,17 @@
 
 (defn- empty-placeholder-value?
   "Date-picker delete keeps the property on the block and writes
-  `:logseq.property/empty-placeholder`. Datetime properties store the keyword;
-  date properties store the placeholder entity."
+  `:logseq.property/empty-placeholder` — the keyword for scalar :datetime
+  values, the placeholder entity for ref-typed values. `:db/ident` reads
+  through a datascript Entity; `map?` would miss it (Entity is not IMap)."
   [value]
-  (or (= value :logseq.property/empty-placeholder)
-      (and (map? value)
-           (= (:db/ident value) :logseq.property/empty-placeholder))))
+  (= :logseq.property/empty-placeholder
+     (or (:db/ident value) value)))
 
 (defn- present-date-value
   "A real date/datetime occurrence, or nil when the property is unset or cleared."
   [value]
-  (when (and (some? value)
-             (not (empty-placeholder-value? value)))
+  (when-not (empty-placeholder-value? value)
     value))
 
 (defn- get-next-time

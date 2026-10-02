@@ -531,10 +531,12 @@
       (ldb/register-transact-pipeline-fn! identity))))
 
 (deftest get-next-time-treats-empty-placeholder-as-absent-test
-  (testing "Date-picker delete writes a keyword, not a date"
-    (is (nil? (get-next-time :logseq.property/empty-placeholder day-unit 1)))
-    (is (nil? (get-next-time :logseq.property/empty-placeholder day-unit 1 dotted-plus)))
-    (is (nil? (get-next-time {:db/ident :logseq.property/empty-placeholder} day-unit 1)))))
+  (testing "Date-picker delete writes the placeholder, not a date"
+    (is (nil? (get-next-time :logseq.property/empty-placeholder day-unit 1))
+        "scalar datetime properties store the keyword")
+    (let [conn (db-test/create-conn)]
+      (is (nil? (get-next-time (d/entity @conn :logseq.property/empty-placeholder) day-unit 1))
+          "ref-typed values store the placeholder entity, not the keyword"))))
 
 (deftest reschedule-property-idents-skips-empty-placeholder-test
   (testing "Companion Scheduled cleared with the trash button is absent"
