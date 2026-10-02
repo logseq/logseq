@@ -301,11 +301,10 @@
   "A page can be the first segment of a page namespace when it is top-level
    (Library or no parent). Classes and properties are included so create can
    reject them as parents."
-  [db entity]
+  [library entity]
   (cond
     (ldb/internal-page? entity)
-    (let [parent (:block/parent entity)
-          library (ldb/get-built-in-page db common-config/library-page-name)]
+    (let [parent (:block/parent entity)]
       (or (nil? parent)
           (= (:db/id parent) (:db/id library))))
 
@@ -321,11 +320,12 @@
   "Resolve the first namespace segment to a top-level page or tag.
    Nested children that share the name (Bar/Foo when creating Foo/Baz) are ignored."
   [db title class?]
-  (let [by-name (->> (entity-util/get-pages-by-name db title)
+  (let [library (ldb/get-built-in-page db common-config/library-page-name)
+        by-name (->> (entity-util/get-pages-by-name db title)
                      (sort-by :e)
                      (keep (fn [d]
                              (let [e (d/entity db (:e d))]
-                               (when (page-namespace-root? db e)
+                               (when (page-namespace-root? library e)
                                  e)))))]
     (if class?
       (or (->> (d/datoms db :avet :block/title title)
