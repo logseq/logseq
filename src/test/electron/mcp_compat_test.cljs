@@ -296,3 +296,74 @@
 (deftest page-stats-validates-page-uuid-before-querying
   (is (thrown-with-msg? js/Error #"page_uuid must be a UUID"
                         (mcp-compat/page-stats (fn [& _] nil) #js {"page_uuid" "not-a-uuid"}))))
+
+(deftest inspect-page-all-returns-each-detail-with-structural-values-filtered
+  (let [page-uuid "00000000-0000-4000-8000-000000000011"
+        calls (atom [])
+        api (fn [_method args]
+              (let [query (first args)]
+                (swap! calls conj [query args])
+                (cond
+                  (string/includes? query "pull ?entity [*]")
+                  #js {"id" 10 "uuid" page-uuid "name" "home" "title" "Home"}
+                     (string/includes? query ":block/parent+ ?page")
+                     #js [["block-uuid" "Body" 0]
+                       ["child-uuid" "Child" 1]]
+                       (string/includes? query "?holder ?attr ?value")
+                       #js [#js [#js {"ident" "user.property/score"}
+                           #js {"uuid" page-uuid}
+                           42]
+                         #js [#js {"ident" "block/parent"}
+                           #js {"uuid" page-uuid}
+                           10]]
+                  (string/includes? query "?holder")
+                  #js [#js {"uuid" page-uuid "tags" #js [#js {"ident" "user.class/Topic"}]}]
+                       (string/includes? query "property.class/properties")
+                       #js [#js [#js {"title" "Topic"}
+                           #js {"ident" "user.property/score" "title" "Score"}]]
+                  (string/includes? query "?class :db/ident") 90
+                  (string/includes? query "?e ?a _")
+                  #js [#js {"id" 42 "title" "Choice" "value" "green"}]
+                  :else nil)))]
+    (async done
+      (-> (p/then (mcp-compat/inspect-page api #js {"page_uuid" page-uuid "detail" "all"})
+                  (fn [result]
+                    (is (true? (:found result)))
+                    (is (= "Home" (get-in result [:page :title])))
+                    (is (= [{:uuid "block-uuid" :title "Body" :order 0 :page_uuid page-uuid}
+                            {:uuid "child-uuid" :title "Child" :order 1 :page_uuid page-uuid}]
+                           (:blocks result)))
+                    (is (= 1 (count (:tags result))))
+                    (is (= 1 (count (:properties result))))
+                    (is (= 42 (get-in result [:properties 0 :value])))
+                    (is (= "Choice" (get-in result [:properties 0 :value_entity :title])))
+                    (is (= [{:class {:title "Topic"}
+                             :property {:ident "user.property/score" :title "Score"}}]
+                           (:declared_properties result)))
+                    (is (= 7 (count @calls)))
+                    (done)))
+          (p/catch (fn [_error]
+                     (is false "inspectPage query rejected")
+                     (done)))))))
+
+(deftest inspect-page-reports-missing-page-and-block
+  (let [page-uuid "00000000-0000-4000-8000-000000000012"]
+    (async done
+      (-> (p/let [missing (mcp-compat/inspect-page (fn [& _] nil) #js {"page_uuid" page-uuid})
+                  block (mcp-compat/inspect-page (fn [& _]
+                                                  #js {"id" 12 "uuid" page-uuid "title" "Block"})
+                                                #js {"page_uuid" page-uuid})]
+            [missing block])
+          (p/then (fn [[missing block]]
+                    (is (= {:found false :page_uuid page-uuid :page nil} missing))
+                    (is (= "target is a block, not a page" (:reason block)))
+                    (done)))
+          (p/catch (fn [_error]
+                     (is false "inspectPage lookup rejected")
+                     (done)))))))
+
+(deftest inspect-page-rejects-invalid-detail
+  (is (thrown-with-msg? js/Error #"detail must be one of"
+                        (mcp-compat/inspect-page (fn [& _] nil)
+                                                #js {"page_uuid" "00000000-0000-4000-8000-000000000012"
+                                       "detail" "everything"}))))

@@ -214,6 +214,12 @@
    :config #js {:title "Page Stats"
             :description "Return fixed-size counts for page blocks, nested pages, orphans, inbound references, property values, and alias relations."
             :inputSchema #js {:page_uuid (z/string)}}}
+  :inspectPage
+  {:fn mcp-compat/inspect-page
+   :config #js {:title "Inspect Page"
+            :description "Read a page and select its blocks, tags, property values, or declared properties."
+            :inputSchema #js {:page_uuid (z/string)
+                        :detail (-> (z/enum #js ["page" "blocks" "tags" "properties" "declared" "all"]) .optional)}}}
    :getTagUUID
    {:fn mcp-compat/get-tag-uuid
     :config #js {:title "Get Tag UUID"

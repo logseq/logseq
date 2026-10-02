@@ -90,9 +90,10 @@ each property ident before sequentially checking whether it has any values.
 `listAssets` preserves the reference server's unverified attribute-name
 discovery query. `listJournals` now uses a bounded query adapter and preserves
 the optional four-query count envelope. `pageStats` now reports bounded page
-counts, nested-page/orphan classification, and alias relations. There are 25
-registered tools so far: seven API-backed tools and 18 compatibility data
-tools.
+counts, nested-page/orphan classification, and alias relations. `inspectPage`
+now supports page, blocks, tags, properties, declared, and all detail levels.
+There are 27 registered tools so far: seven API-backed tools and 20
+compatibility data tools.
 Entry criteria still outstanding:
 
 1. Both baselines have valid, recorded results.
