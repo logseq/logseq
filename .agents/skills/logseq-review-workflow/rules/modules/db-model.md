@@ -10,6 +10,7 @@ Apply when a change touches built-in properties, common keywords, DB schema, mig
 - Built-in property changes require matching migrations in `frontend.worker.db.migrate/schema-version->updates`.
 - Persisted data shape changes require migration, import/export, and sync review.
 - DB graph and file graph behavior should be intentionally different only when documented by the domain model.
+- DB graphs do not support `(())` (empty block refs); do not add handling for them.
 
 ## Red flags
 

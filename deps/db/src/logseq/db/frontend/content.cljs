@@ -2,6 +2,7 @@
   "Fns to handle block content e.g. internal ids"
   (:require [clojure.string :as string]
             [datascript.core :as d]
+            [datascript.impl.entity :as de]
             [logseq.common.util :as common-util]
             [logseq.common.util.page-ref :as page-ref]
             [logseq.db.frontend.entity-util :as entity-util]))
@@ -16,15 +17,33 @@
     ")"
     "\\]\\]")))
 
+;; ((uuid))
+(def ^:private id-block-ref-pattern
+  (re-pattern
+   (str
+    "\\(\\("
+    "("
+    common-util/uuid-pattern
+    ")"
+    "\\)\\)")))
+
 (def ^:private id-or-tag-ref-pattern
   (re-pattern
    (str
     "(#?)"
+    "(?:"
     "\\[\\["
     "("
     common-util/uuid-pattern
     ")"
-    "\\]\\]")))
+    "\\]\\]"
+    "|"
+    "\\(\\("
+    "("
+    common-util/uuid-pattern
+    ")"
+    "\\)\\)"
+    ")")))
 
 (defn content-id-ref->page
   "Convert id ref backs to page name using refs."
@@ -81,10 +100,15 @@
 
 (defn get-matched-ids
   [content]
-  (->> (re-seq id-ref-pattern content)
-       (distinct)
+  (->> (concat (re-seq id-ref-pattern content)
+               (re-seq id-block-ref-pattern content))
        (map second)
+       (distinct)
        (map uuid)))
+
+(defn title-has-id-ref?
+  [title]
+  (boolean (some->> title (re-find id-or-tag-ref-pattern))))
 
 (defn- replace-tag-ref
   [content page-name id]
@@ -197,12 +221,14 @@
    (string/trim)))
 
 (defn- title-ref-replacement
-  [id->title matched hash-prefix id]
-  (if-let [ref-title (get id->title id)]
-    (if (and (= "#" hash-prefix)
-             (not (string/includes? ref-title " ")))
-      (str "#" ref-title)
-      (str hash-prefix (page-ref/->page-ref ref-title)))
+  [id->title matched hash-prefix page-ref-id block-ref-id]
+  (if-let [ref-title (get id->title (or page-ref-id block-ref-id))]
+    (if block-ref-id
+      ref-title
+      (if (and (= "#" hash-prefix)
+               (not (string/includes? ref-title " ")))
+        (str "#" ref-title)
+        (str hash-prefix (page-ref/->page-ref ref-title))))
     matched))
 
 (defn- replace-title-refs-once
@@ -220,16 +246,28 @@
                  (entity-util/page? ref)))
     [(str block-uuid) title]))
 
+(defn- title-block-ref-entities
+  "((uuid)) refs are self-contained in the title, so their targets can be
+   resolved directly without relying on :block/refs being up to date."
+  [ent]
+  (when (de/entity? ent)
+    (->> (:block/title ent)
+         (re-seq id-block-ref-pattern)
+         (map (comp uuid second))
+         (keep #(d/entity (.-db ent) [:block/uuid %])))))
+
 (defn- block-ref-id->title
   [ent max-depth replace-block-refs?]
-  (loop [frontier (set (:block/refs ent))
+  (loop [frontier (into (set (:block/refs ent))
+                        (title-block-ref-entities ent))
          seen-ids #{}
          id->title {}
          depth 0]
     (if (or (>= depth max-depth)
             (empty? frontier))
       id->title
-      (let [refs (filter map? frontier)
+      (let [ref-entity? (fn [ref] (or (map? ref) (de/entity? ref)))
+            refs (filter ref-entity? frontier)
             new-refs (remove (fn [ref]
                                (contains? seen-ids (:block/uuid ref)))
                              refs)
@@ -238,8 +276,10 @@
                              (keep #(ref->title-entry replace-block-refs? %))
                              new-refs)
             next-frontier (->> new-refs
-                               (mapcat :block/refs)
-                               (filter map?)
+                               (mapcat (fn [ref]
+                                         (concat (:block/refs ref)
+                                                 (title-block-ref-entities ref))))
+                               (filter ref-entity?)
                                set)]
         (recur next-frontier seen-ids' id->title' (inc depth))))))
 
@@ -252,11 +292,11 @@
   ([ent max-depth {:keys [replace-block-refs?]
                    :or {replace-block-refs? true}}]
    (let [title (:block/title ent)]
-     (if (some->> title (re-find id-ref-pattern))
+     (if (some->> title (re-find id-or-tag-ref-pattern))
        (let [id->title (block-ref-id->title ent max-depth replace-block-refs?)]
          (loop [result title depth 0]
            (if (or (>= depth max-depth)
-                   (not (re-find id-ref-pattern result)))
+                   (not (re-find id-or-tag-ref-pattern result)))
              result
              (let [next-result (replace-title-refs-once result id->title)]
                (if (= result next-result)
