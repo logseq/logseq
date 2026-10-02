@@ -86,9 +86,7 @@ let open_sqlite_datascript (graphs_dir : string option) (db_name : string)
   let db = Sqlite.open_db ~path:db_full_path in
   Graph_store.create_kvs_table db;
   let storage = Graph_store.storage db in
-  match Datascript.restore_conn storage with
-  | Some conn -> conn
-  | None -> Datascript.create_conn ~schema:(Db_schema.schema ()) ~storage ()
+  Common_sqlite.get_storage_conn storage (Db_schema.schema ())
 
 (* cljs open-db! *)
 let open_db (graphs_dir : string option) (db_name : string) : conn =

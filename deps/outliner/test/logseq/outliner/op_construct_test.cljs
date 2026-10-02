@@ -116,6 +116,27 @@
                              (uuid? (second class-ref)))))
                   (get-in inverse-outliner-ops [0 1 1 :logseq.property/classes]))))))
 
+(deftest derive-history-outliner-ops-upsert-property-omits-many-to-one-with-values-test
+  (testing "inverse of one-to-many with existing values omits :db/cardinality"
+    (let [conn (db-test/create-conn-with-blocks
+                [{:page {:block/title "page1"}
+                  :blocks [{:block/title "b1" :build/properties {:note "text 1"}}]}])
+          property-id :user.property/note
+          before-property (d/entity @conn property-id)
+          expected-schema (-> (db-property/get-property-schema (into {} before-property))
+                              (dissoc :db/cardinality))
+          tx-meta {:outliner-op :upsert-property
+                   :outliner-ops [[:upsert-property [property-id
+                                                     {:logseq.property/type :default
+                                                      :db/cardinality :many}
+                                                     {}]]]}
+          {:keys [inverse-outliner-ops]}
+          (op-construct/derive-history-outliner-ops @conn @conn [] tx-meta)]
+      (is (= :db.cardinality/one (:db/cardinality before-property)))
+      (is (= [[:upsert-property [property-id expected-schema {:property-name "note"}]]]
+             inverse-outliner-ops))
+      (is (nil? (get-in inverse-outliner-ops [0 1 1 :db/cardinality]))))))
+
 (deftest derive-history-outliner-ops-delete-blocks-inverse-avoids-self-target-test
   (testing "delete-blocks inverse falls back to parent target when left sibling resolves to self"
     (let [conn (db-test/create-conn-with-blocks

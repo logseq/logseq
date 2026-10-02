@@ -116,7 +116,7 @@ let remote_invoke_js =
         Db_worker_effect.on_any
           (Worker_core.remote_invoke name transit_args)
           (fun result -> resolve result [@u])
-          (fun exn -> reject exn [@u]))
+          (fun exn -> reject (rejection_of_exn name exn) [@u]))
 
 (* cljs remoteInvokeBinary — bypasses the service; payload arrives as
    Uint8Array (or undefined for export calls), result is a
@@ -141,9 +141,10 @@ let remote_invoke_binary_js =
             | Wire.Nil -> resolve Js.Nullable.null [@u]
             | _ ->
                 reject
-                  (Failure "remoteInvokeBinary: non-binary result")
+                  (rejection_of_exn name
+                     (Failure "remoteInvokeBinary: non-binary result"))
                   [@u])
-          (fun exn -> reject exn [@u]))
+          (fun exn -> reject (rejection_of_exn name exn) [@u]))
 
 let exposed_object =
   [%obj

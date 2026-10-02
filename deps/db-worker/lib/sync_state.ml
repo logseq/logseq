@@ -160,27 +160,41 @@ let client_ops_conn repo : Sqlite.db =
       if not (Sqlite.pooled_runtime ()) then
         ignore (File_sys.mkdir_p (Filename.dirname path));
       let db = Sqlite.open_db_pool ~name:(Graph_dir.pool_name repo) ~path in
-      (* cljs enable-sqlite-wal-mode! runs on every db get-dbs opens *)
-      Sqlite.exec db ~sql:"pragma locking_mode=exclusive" ~bind:[||];
-      Sqlite.exec db ~sql:"pragma journal_mode=WAL" ~bind:[||];
       Hashtbl.replace client_ops_conns repo db;
-      db
+      (* cljs enable-sqlite-wal-mode! runs on every db get-dbs opens;
+         synchronous=NORMAL skips per-commit fsyncs — WAL checkpoints
+         still fsync, matching cljs sql.js's in-memory durability. *)
+      (try
+         Sqlite.exec db ~sql:"pragma locking_mode=exclusive" ~bind:[||];
+         Sqlite.exec db ~sql:"pragma journal_mode=WAL" ~bind:[||];
+         Sqlite.exec db ~sql:"pragma synchronous=NORMAL" ~bind:[||];
+         db
+       with exn ->
+         (* drop before close: a close failure must not leave the
+            closed handle cached for the next client_ops_conn *)
+         Hashtbl.remove client_ops_conns repo;
+         let error =
+           try
+             Sqlite.close db;
+             exn
+           with close_exn ->
+             Failure
+               (Printf.sprintf "Client ops initialization failed: %s; close failed: %s"
+                  (Printexc.to_string exn) (Printexc.to_string close_exn))
+         in
+         raise error)
 
 let has_client_ops_conn repo = Hashtbl.mem client_ops_conns repo
 
 let close_client_ops_conn repo =
   match Hashtbl.find_opt client_ops_conns repo with
-  | Some db -> Sqlite.close db; Hashtbl.remove client_ops_conns repo
+  | Some db -> Hashtbl.remove client_ops_conns repo; Sqlite.close db
   | None -> ()
 
 (* cljs get-client-ops-conn returns the open conn (if any) without
    creating one — used by recompute-checksum-diagnostics. *)
 let client_ops_conn_opt repo : Sqlite.db option =
   Hashtbl.find_opt client_ops_conns repo
-
-(* cljs logseq.db-sync/*repo->latest-remote-checksum atom *)
-let latest_remote_checksums : (string, string) Hashtbl.t =
-  Hashtbl.create 7
 
 (* worker-state/get-sqlite-conn [repo which-db] — :db main graph sqlite,
    :search the vector/search index db (search package owns the schema). *)

@@ -181,6 +181,24 @@ let () =
         (wire_get "client-revision" w = Some (Wire.String "explicit-revision"))
   | None -> check "coerce-http-request preserves explicit client-revision" false
 
+(* pull responses arrive as plain JSON — :outliner-op is a string that the
+   malli json-transformer decodes to a keyword *)
+let () =
+  let body =
+    Json_codec.parse
+      {|{"type":"pull/ok","t":3,"txs":[{"t":1,"tx":"[1]","outliner-op":"insert-blocks"},{"t":2,"tx":"[2]","outliner-op":null}]}|}
+  in
+  match Sync_util.coerce_http_response "sync/pull" body with
+  | Some w ->
+      let txs =
+        match wire_get "txs" w with Some (Wire.Array xs) -> xs | _ -> []
+      in
+      check "pull-ok outliner-op string decodes to keyword"
+        (wire_get "outliner-op" (List.nth txs 0)
+         = Some (Wire.Keyword "insert-blocks")
+         && wire_get "outliner-op" (List.nth txs 1) = Some Wire.Nil)
+  | None -> check "pull-ok outliner-op string decodes to keyword" false
+
 (* ---- client_op_test.cljs ---- *)
 
 let () =
@@ -1004,6 +1022,79 @@ let () =
     ~finally:(fun () ->
       Sync_assets.download_remote_asset_fn := prev_download;
       Worker_state.drop_datascript_conn repo)
+
+(* ---- built-in sync repair tx-data shape (cljs parity) ---- *)
+(* cljs db-core/built-in-sync-repair-tx-data ground truth (cljs replay output):
+   [idents; repeat-type(a0); closed-values(a1..a3); default-patch(a4);
+    comments/blocks(a5); Comments(no order); Comment(no order)]
+   with icon {:type :tabler-icon :id "message-circle"} and class/refs left as
+   keywords (ident resolution happens at transact). *)
+let () =
+  let items = Endpoint_lifecycle.built_in_sync_repair_tx_data () in
+  let get name m = match m with Wire.Map kvs -> List.assoc_opt (Wire.Keyword name) kvs | _ -> None in
+  let ident m =
+    match get "db/ident" m with
+    | Some (Wire.Keyword kw) -> Some kw
+    | _ -> None
+  in
+  let has_uuid m = get "block/uuid" m <> None in
+  let order m =
+    match get "block/order" m with
+    | Some (Wire.String s) -> Some s
+    | _ -> None
+  in
+  let ordered =
+    List.filter_map
+      (fun m -> match order m with Some o -> Some (o, ident m) | None -> None)
+      items
+  in
+  check "repair tx assigns block/order in cljs emission order"
+    (ordered
+     = [ "a0", Some "logseq.property.repeat/repeat-type"
+       ; "a1", Some "logseq.property.repeat/repeat-type.dotted-plus"
+       ; "a2", Some "logseq.property.repeat/repeat-type.plus"
+       ; "a3", Some "logseq.property.repeat/repeat-type.double-plus"
+       ; "a4", None
+       ; "a5", Some "logseq.property.comments/blocks" ]);
+  check "default-value patch map without db/ident still gets block/order"
+    (List.exists
+       (fun m -> has_uuid m && ident m = None && order m = Some "a4")
+       items);
+  check "unordered repair classes get no block/order"
+    (List.for_all
+       (fun m ->
+          match ident m with
+          | Some "logseq.class/Comments" | Some "logseq.class/Comment" ->
+              order m = None
+          | _ -> true)
+       items);
+  check "class extends/properties stay keywords like cljs"
+    (List.exists
+       (fun m ->
+          match get "logseq.property.class/extends" m, get "logseq.property.class/properties" m with
+          | Some (Wire.Keyword "logseq.class/Root")
+          , Some (Wire.Array [ Wire.Keyword "logseq.property.comments/blocks" ]) -> true
+          | _ -> false)
+       items);
+  check "class icon is a map like cljs"
+    (List.exists
+       (fun m ->
+          match get "logseq.property/icon" m with
+          | Some (Wire.Map kvs) ->
+              List.assoc_opt (Wire.Keyword "type") kvs = Some (Wire.Keyword "tabler-icon")
+              && List.assoc_opt (Wire.Keyword "id") kvs = Some (Wire.String "message-circle")
+          | _ -> false)
+       items);
+  check "class block/uuid follows cljs db-ident-block-uuid derivation"
+    (List.exists
+       (fun m ->
+          ident m = Some "logseq.class/Comments"
+          && get "block/uuid" m
+             = Some (Wire.Uuid "00000002-2556-9161-5000-000000000000"))
+       items);
+  check "db-ident-block-uuid hashes like cljs murmur3"
+    (Common_uuid.gen_uuid "db-ident-block-uuid" "logseq.class/Comments"
+     = "00000002-2556-9161-5000-000000000000")
 
 (* ---- summary ---- *)
 

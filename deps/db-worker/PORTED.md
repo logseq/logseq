@@ -29,6 +29,46 @@ dependency cone, master SHAs):
     8edb86a2fa  fix(db-sync): heal stale local checksum on graph open via covered commit (#13415)
     8e11118390  fix: show property title instead of db-ident in query builder (#13420)
     b7558934aa  fix: isolate query render errors so editing /query with incomplete syntax doesn't crash (#13419)
+    1b58ccff8b  fix(outliner): dedupe repeated new-page refs in one insert
+    a802e6b03f  fix(outliner): dedupe class refs by title
+    3c17bf397e  fix(outliner): match class tags by title in ref remapping
+    2ef453b73a  refactor: extract ref dedup fold from resolve-page-refs
+    16c4ed1a04  refactor: share title-aware tag-ref matching between save and insert
+    3fdabc0810  fix: show selected values in node property pickers (#13521)
+    fdfd7758a3  fix: keep '++' repeat anchored to original date across month-end clamp
+    82e2717796  fix: refuse renaming a page to a case variant of another page
+    74b61250e3  fix: keep recycle parent until both sides restore
+    829fb85cca  fix: use local days for scheduled and deadline range
+    53db271a4b  fix: refuse converting namespaced pages to properties
+    cda0f025a5  fix(repeat): keep date repeats on the right day
+    79a5201bad  fix(views): order leftover eids by eid in unlimited index walk
+    5391127cb8  perf(views): sort small sets without a row limit
+    1f1589e02f  fix(outliner): do not revert many to one on undo (#13526)
+    c4d837fce5  fix(undo): restore deleted pages with inner refs
+    e2ca31b906  fix(undo): restore deleted blocks with inner refs
+    5803194cdd  fix(undo): keep newest entries when stack is full
+    5442f36335  fix(undo): don't reuse a property in page replay
+    49610e9f0e  fix(undo): restore up/down moves into an embed
+    8a4e6c6aa7  fix(undo): restore a property with its value block
+    dc370d9fd8  fix(undo): restore a deleted tag named like a page
+    e1e8da3da6  fix(undo): order restored blocks at their target
+    59e9843841  fix(undo): restore all moved blocks in page order
+    1ee906b817  fix(undo): restore scattered blocks moved up/down
+    fff75ea17d  perf(db): set WAL synchronous=NORMAL (#13491)
+    8c3438d4ce  perf(sync): keep checksum only on remote graphs
+    ec0549993d  perf(sync): compute page-tag eids once per db
+    dd4c6439b9  perf(sync): hash checksum fields without vectors
+    57a8caf564  perf(sync): check checksum eligibility on datoms
+    354a428b0f  fix(sync): keep value replacements in one request
+    93c8379a7e  fix: restore deleted property schemas in undo history (#13532)
+    3b6c4573af  fix: show linked references on tag pages (#13440)
+    768f525916  fix: hide recycled nested pages from All Pages (#13492)
+    f632f9eb7a  fix: store plugin integer number properties as values (#13488)
+    792f86328b  perf(search): find FTS rows by rowid (#13475)
+    e8f044822a  fix(search): validate migration before creating temporary index (#13529)
+    eb9eb1a541  fix(db): restore :max-tx of pipeline transactions (#13468)
+    2be6bfc156  fix(worker): allow a missing :block/order on a direct child (#13081)
+    68a68263b7  fix: repair nested pages missing block order (#13280)
 
 When diffs against the baseline reference these, the OCaml side already
 carries them (canonicalize-insert-ops, Library move restriction,
@@ -50,8 +90,8 @@ same change.
 The engine follows `logseq/datascript-ocaml#main` (opam pin). Baseline
 for this port state:
 
-    b3f5689 (on top of 1bec8d6 incremental mid-tx schema refresh +
-             once-per-refresh removals fix)
+    e6ac32c add Conn.update_db / Conn.storage_tail accessors
+            (includes 5a5d3fb index-order restore verification/heal)
 
 When the engine pin moves, re-run `dune build @runtest` plus
 `test_export_native.exe` — export/import roundtrip is the most

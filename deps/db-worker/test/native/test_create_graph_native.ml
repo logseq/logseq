@@ -64,6 +64,24 @@ let create_conn () : conn =
        ~tx_meta:[ "initial-db?", Bool true ]);
   conn
 
+(* New graphs must stamp the current schema on both version entities. *)
+let () =
+  let db = Datascript.db (create_conn ()) in
+  List.iter
+    (fun ident ->
+      let version =
+        match Datascript.entity db (Ident ident) with
+        | Some e -> Option.map Db_schema.parse_schema_version (Ldb.value e "kv/value")
+        | None -> None
+      in
+      check (ident ^ ": current schema version") (version = Some Db_schema.version);
+      check (ident ^ ": includes page-order repair schema")
+        (match version with
+         | Some v -> Db_schema.compare_schema_version v
+             { sv_major = 65; sv_minor = Some 34 } >= 0
+         | None -> false))
+    [ "logseq.kv/schema-version"; "logseq.kv/graph-initial-schema-version" ]
+
 (* cljs [:find [?b ...] :where [?b :db/ident]] *)
 let ident_entities (db : db) : entity list =
   List.of_seq (datoms db Aevt ~a:"db/ident" ())

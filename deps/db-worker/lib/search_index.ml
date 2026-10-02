@@ -137,9 +137,42 @@ let create_blocks_table (db : Sqlite.db) =
                         title TEXT NOT NULL,
                         page TEXT)" ~bind:[||]
 
-let create_blocks_fts_table (db : Sqlite.db) =
+(* blocks-fts-triggers — triggers that keep `fts_table` in step with
+   blocks. An FTS row has the rowid of its blocks row, so delete/update
+   find it by rowid: FTS5 cannot index the id column, and a lookup by id
+   reads every FTS row. *)
+let blocks_fts_triggers ~(trigger_prefix : string) ~(fts_table : string) :
+    string list =
+  [ Printf.sprintf
+      "CREATE TRIGGER IF NOT EXISTS %s_ad AFTER DELETE ON blocks
+         BEGIN
+             DELETE FROM %s WHERE rowid = old.rowid;
+         END;"
+      trigger_prefix fts_table
+  ; Printf.sprintf
+      "CREATE TRIGGER IF NOT EXISTS %s_ai AFTER INSERT ON blocks
+         BEGIN
+             INSERT INTO %s (rowid, id, title, page)
+             VALUES (new.rowid, new.id, new.title, new.page);
+         END;"
+      trigger_prefix fts_table
+  ; Printf.sprintf
+      "CREATE TRIGGER IF NOT EXISTS %s_au AFTER UPDATE ON blocks
+         BEGIN
+             DELETE FROM %s WHERE rowid = old.rowid;
+             INSERT INTO %s (rowid, id, title, page)
+             VALUES (new.rowid, new.id, new.title, new.page);
+         END;"
+      trigger_prefix fts_table fts_table ]
+
+let create_blocks_fts_table (db : Sqlite.db) (table : string) =
+  (* The trigram tokenizer extends FTS5 to support substring matching in
+     general, instead of the usual token matching. *)
   Sqlite.exec db
-    ~sql:"CREATE VIRTUAL TABLE IF NOT EXISTS blocks_fts USING fts5(id, title, page, tokenize=\"trigram\")"
+    ~sql:
+      (Printf.sprintf
+         "CREATE VIRTUAL TABLE IF NOT EXISTS %s USING fts5(id, title, page, tokenize=\"trigram\")"
+         table)
     ~bind:[||]
 
 let create_blocks_title_index (db : Sqlite.db) =
@@ -150,26 +183,12 @@ let create_blocks_title_index (db : Sqlite.db) =
 let add_blocks_fts_triggers (db : Sqlite.db) =
   List.iter
     (fun sql -> Sqlite.exec db ~sql ~bind:[||])
-    [ "CREATE TRIGGER IF NOT EXISTS blocks_ad AFTER DELETE ON blocks
-                  BEGIN
-                      DELETE from blocks_fts where id = old.id;
-                  END;"
-    ; "CREATE TRIGGER IF NOT EXISTS blocks_ai AFTER INSERT ON blocks
-                  BEGIN
-                      INSERT INTO blocks_fts (id, title, page)
-                      VALUES (new.id, new.title, new.page);
-                  END;"
-    ; "CREATE TRIGGER IF NOT EXISTS blocks_au AFTER UPDATE ON blocks
-                  BEGIN
-                      DELETE from blocks_fts where id = old.id;
-                      INSERT INTO blocks_fts (id, title, page)
-                      VALUES (new.id, new.title, new.page);
-                  END;" ]
+    (blocks_fts_triggers ~trigger_prefix:"blocks" ~fts_table:"blocks_fts")
 
 let create_tables_and_triggers (db : Sqlite.db) =
   try
     create_blocks_table db;
-    create_blocks_fts_table db;
+    create_blocks_fts_table db "blocks_fts";
     create_blocks_title_index db;
     add_blocks_fts_triggers db
   with exn ->
@@ -179,9 +198,77 @@ let create_tables_and_triggers (db : Sqlite.db) =
 let drop_tables_and_triggers (db : Sqlite.db) =
   Sqlite.exec db ~sql:"DROP TABLE IF EXISTS blocks" ~bind:[||];
   Sqlite.exec db ~sql:"DROP TABLE IF EXISTS blocks_fts" ~bind:[||];
+  Sqlite.exec db ~sql:"DROP TABLE IF EXISTS blocks_fts_next" ~bind:[||];
   Sqlite.exec db ~sql:"DROP TRIGGER IF EXISTS blocks_ad" ~bind:[||];
   Sqlite.exec db ~sql:"DROP TRIGGER IF EXISTS blocks_ai" ~bind:[||];
   Sqlite.exec db ~sql:"DROP TRIGGER IF EXISTS blocks_au" ~bind:[||]
+
+let drop_next_fts_triggers_sql = "
+DROP TRIGGER IF EXISTS blocks_fts_next_ad;
+DROP TRIGGER IF EXISTS blocks_fts_next_ai;
+DROP TRIGGER IF EXISTS blocks_fts_next_au;
+"
+
+(* start-fts-rowid-migration! — moves an index whose blocks_fts rows
+   have rowids unrelated to their blocks rows (version 4 and older) to
+   rowid keys: creates blocks_fts_next with rowid triggers of its own.
+   blocks_fts and its triggers keep serving queries until
+   finish_fts_rowid_migration. A move cut short starts over. *)
+let start_fts_rowid_migration (db : Sqlite.db) : unit =
+  Sqlite.transaction db (fun () ->
+      Sqlite.exec db
+        ~sql:(drop_next_fts_triggers_sql ^ "DROP TABLE IF EXISTS blocks_fts_next;")
+        ~bind:[||];
+      create_blocks_fts_table db "blocks_fts_next";
+      List.iter
+        (fun sql -> Sqlite.exec db ~sql ~bind:[||])
+        (blocks_fts_triggers ~trigger_prefix:"blocks_fts_next"
+           ~fts_table:"blocks_fts_next"))
+
+(* copy-fts-rowid-batch! — copies into blocks_fts_next the blocks rows
+   after rowid `after`, at most `limit` of them, that it lacks (its
+   triggers add rows written since the start). Returns the last rowid
+   of the batch, None when no row is left. *)
+let copy_fts_rowid_batch (db : Sqlite.db) ~(after : int64) ~(limit : int)
+    : int64 option =
+  let last_rowid =
+    match
+      Sqlite.query db
+        ~sql:"SELECT max(rowid) FROM (SELECT rowid FROM blocks WHERE rowid > ? ORDER BY rowid LIMIT ?)"
+        ~bind:[| Sqlite.Integer after; Sqlite.Integer (Int64.of_int limit) |]
+    with
+    | [ [| Sqlite.Integer n |] ] -> Some n
+    | _ -> None
+  in
+  match last_rowid with
+  | None -> None
+  | Some last_rowid ->
+      Sqlite.exec db
+        ~sql:"INSERT INTO blocks_fts_next (rowid, id, title, page)
+              SELECT rowid, id, title, page FROM blocks
+              WHERE rowid > ? AND rowid <= ?
+                AND NOT EXISTS (SELECT 1 FROM blocks_fts_next f WHERE f.rowid = blocks.rowid)"
+        ~bind:[| Sqlite.Integer after; Sqlite.Integer last_rowid |];
+      Some last_rowid
+
+(* finish-fts-rowid-migration! — replaces blocks_fts and its triggers
+   with blocks_fts_next and rowid triggers, and sets the index version,
+   in 1 transaction. *)
+let finish_fts_rowid_migration (db : Sqlite.db) (version : int) : unit =
+  Sqlite.transaction db (fun () ->
+      Sqlite.exec db
+        ~sql:
+          (drop_next_fts_triggers_sql
+          ^ "DROP TRIGGER IF EXISTS blocks_ad;
+DROP TRIGGER IF EXISTS blocks_ai;
+DROP TRIGGER IF EXISTS blocks_au;
+DROP TABLE blocks_fts;
+ALTER TABLE blocks_fts_next RENAME TO blocks_fts;")
+        ~bind:[||];
+      add_blocks_fts_triggers db;
+      Sqlite.exec db
+        ~sql:(Printf.sprintf "PRAGMA user_version = %d" version)
+        ~bind:[||])
 
 (* ---- upsert / delete / truncate ---- *)
 
@@ -875,29 +962,35 @@ let node_ref_title_entry ~replace_block_refs (r : Ev.node) =
   | _ -> None
 
 let node_block_ref_id_to_title (ent : Ev.node) max_depth replace_block_refs =
-  let rec loop frontier seen acc depth =
-    if depth >= max_depth || frontier = [] then acc
+  let seen = Hashtbl.create 64 in
+  let rec loop frontier acc_rev depth =
+    if depth >= max_depth || frontier = [] then List.rev acc_rev
     else begin
       let new_refs =
         List.filter
           (fun n ->
              match Ev.uuid n with
-             | Some u -> not (List.mem (Unicode.lowercase u) seen)
+             | Some u -> not (Hashtbl.mem seen (Unicode.lowercase u))
              | None -> false)
           frontier
       in
-      let seen' =
-        seen @ List.filter_map (fun n ->
-            Option.map Unicode.lowercase (Ev.uuid n)) new_refs
-      in
-      let acc' =
-        acc @ List.filter_map (node_ref_title_entry ~replace_block_refs) new_refs
+      List.iter
+        (fun n ->
+           match Ev.uuid n with
+           | Some u -> Hashtbl.replace seen (Unicode.lowercase u) ()
+           | None -> ())
+        new_refs;
+      let acc_rev =
+        List.fold_left
+          (fun a x -> x :: a)
+          acc_rev
+          (List.filter_map (node_ref_title_entry ~replace_block_refs) new_refs)
       in
       let next = List.concat_map (fun n -> Ev.ref_nodes n "block/refs") new_refs in
-      loop next seen' acc' (depth + 1)
+      loop next acc_rev (depth + 1)
     end
   in
-  loop (Ev.ref_nodes ent "block/refs") [] [] 0
+  loop (Ev.ref_nodes ent "block/refs") [] 0
 
 let recur_replace_title ?(max_depth = 10) ?(replace_block_refs = true)
     (block : Ev.node) (title : string) : string =
@@ -1451,7 +1544,7 @@ let get_all_blocks ?(on_hidden = fun (_ : entity) -> ()) (db : db)
   datoms db Avet ~a:"block/uuid" ()
   |> Seq.filter_map (fun (d : datom) ->
          match d.v with
-         | Uuid u -> entity db (Lookup_ref ("block/uuid", Uuid u))
+         | Uuid _ -> Ldb.ent_of_id db d.e
          | _ -> None)
   |> List.of_seq
   |> List.filter (fun e ->
@@ -1467,18 +1560,19 @@ let build_blocks_indice ?(include_vector_title = false) (db : db) : index_item l
 (* ---- tx-report diff (get-affected-blocks / sync-search-indice) ---- *)
 
 let page_descendants (page : entity) : entity list =
-  let rec loop (pages : entity list) (result : entity list) =
-    match pages with
-    | [] -> result
-    | p :: rest ->
-        let children =
-          Ldb.ref_ents p "block/_parent"
-          |> List.filter Ldb.is_page
-          |> Ldb.sort_by_order
-        in
-        loop (rest @ children) (result @ [ p ])
-  in
-  loop [ page ] []
+  (* BFS via Queue — appending to rest/result per node was O(n^2). *)
+  let result = ref [] in
+  let queue = Queue.create () in
+  Queue.add page queue;
+  while not (Queue.is_empty queue) do
+    let p = Queue.pop queue in
+    result := p :: !result;
+    Ldb.ref_ents p "block/_parent"
+    |> List.filter Ldb.is_page
+    |> Ldb.sort_by_order
+    |> List.iter (fun c -> Queue.add c queue)
+  done;
+  List.rev !result
 
 let page_tree (db : db) (page : entity) : entity list =
   page_descendants page
@@ -1490,10 +1584,12 @@ let page_tree (db : db) (page : entity) : entity list =
                  | Some (Uuid u) -> Ldb.get_block_and_children db u
                  | _ -> [])
               (Ldb.sort_by_order (Ldb.ref_ents p "block/_page")))
-  |> List.fold_left
-       (fun acc (e : entity) ->
-          if List.exists (fun (x : entity) -> x.id = e.id) acc then acc else acc @ [ e ])
-       []
+  |> List.filter
+       (let seen = Hashtbl.create 128 in
+        fun (e : entity) ->
+          match Hashtbl.mem seen e.id with
+          | true -> false
+          | false -> Hashtbl.replace seen e.id (); true)
 
 let entity_tree (db : db) (e : entity) : entity list =
   if Ldb.is_page e then page_tree db e
@@ -1502,23 +1598,30 @@ let entity_tree (db : db) (e : entity) : entity list =
     | Some (Uuid u) -> Ldb.get_block_and_children db u
     | _ -> [ e ]
 
+(* Reverse-ref lookups as raw index scans: entity_attr on block/_refs
+   resolves to this same seek (Ldb.reverse_attr_values, avet-backed when
+   indexed), so materializing the target and every referrer entity is
+   pure cost. *)
 let referrer_eids (db : db) (eids : entity_id list) : entity_id list =
   List.concat_map
     (fun id ->
-       match Ldb.ent_of_id db id with
-       | Some e ->
-           List.map (fun (r : entity) -> r.id)
-             (Ldb.ref_ents e "block/_refs" @ Ldb.ref_ents e "block/_alias")
-       | None -> [])
+       let eids_of a =
+         Ldb.reverse_attr_values db id a
+         |> List.filter_map (function Ref e -> Some e | _ -> None)
+       in
+       eids_of "block/_refs" @ eids_of "block/_alias")
     eids
 
 let entities_for (db : db) (eids : entity_id list) : entity list =
-  List.fold_left
-    (fun acc id ->
+  let seen = Hashtbl.create (List.length eids) in
+  List.filter_map
+    (fun id ->
        match Ldb.ent_of_id db id with
-       | Some e when not (List.exists (fun (x : entity) -> x.id = e.id) acc) -> acc @ [ e ]
-       | _ -> acc)
-    [] eids
+       | Some e when not (Hashtbl.mem seen e.id) ->
+           Hashtbl.replace seen e.id ();
+           Some e
+       | _ -> None)
+    eids
 
 let eids_of (ents : entity list) = List.map (fun (e : entity) -> e.id) ents
 
@@ -1680,8 +1783,10 @@ let sync_search_indice ?(include_vector_title = false) (r : tx_report) :
                match Ldb.value e "block/uuid" with Some (Uuid u) -> Some u | _ -> None)
             to_remove
         in
+        let indexed_tbl = Hashtbl.create (List.length indexed_uuids) in
+        List.iter (fun u -> Hashtbl.replace indexed_tbl u ()) indexed_uuids;
         let dropped =
-          List.filter (fun u -> not (List.mem u indexed_uuids)) added_uuids
+          List.filter (fun u -> not (Hashtbl.mem indexed_tbl u)) added_uuids
         in
         Some
           { blocks_to_remove = List.sort_uniq compare (removed_uuids @ dropped)

@@ -19,6 +19,8 @@ let rec list_drop n l =
 let rec list_take_while p l =
   match l with x :: tl when p x -> x :: list_take_while p tl | _ -> []
 
+module Int_set = Db_reference.IdSet
+
 (* clojure.string/includes? equivalent *)
 let contains_substring haystack needle =
   let lh = String.length haystack and ln = String.length needle in
@@ -82,9 +84,7 @@ let get_block_alias_ids db (eid : entity_id) : entity_id list =
       (fun (d : datom) -> d.e)
       (List.of_seq (datoms db Avet ~a:"block/alias" ~v:(Ref eid) ()))
   in
-  List.fold_left
-    (fun acc x -> if List.mem x acc then acc else acc @ [ x ])
-    [] (forward @ backward)
+  dedupe_ids (forward @ backward)
 
 (* common-initial-data/get-block-alias — the bidirectional :alias rule
    query (shared with Db_reference). *)
@@ -103,53 +103,87 @@ let hidden_eid_pred db : entity_id option -> bool =
         (match Hashtbl.find_opt cache id with
          | Some b -> b
          | None ->
-             let flag_true a =
-               match Seq.uncons (datoms db Eavt ~e:id ~a ()) with
-               | Some (d, _) -> Ldb.truthy (Some d.v)
-               | None -> false
-             in
+             (* one eavt slice covers hide?/deleted-at/parent — three
+                separate seeks per ancestor on storage-backed indexes *)
+             let hide = ref None and del = ref None and parent = ref None in
+             datoms db Eavt ~e:id ()
+             |> Seq.iter (fun (d : datom) ->
+                  if d.a = "logseq.property/hide?" && !hide = None then
+                    hide := Some d.v
+                  else if d.a = "logseq.property/deleted-at" && !del = None
+                  then del := Some d.v
+                  else if d.a = "block/parent" && !parent = None then
+                    parent := entid d.v);
              let result =
-               flag_true "logseq.property/hide?"
-               || flag_true "logseq.property/deleted-at"
-               || hidden (datom_v db id "block/parent") (id :: seen)
+               Ldb.truthy !hide
+               || Ldb.truthy !del
+               || hidden !parent (id :: seen)
              in
              Hashtbl.replace cache id result;
              result)
   in
   fun eid -> hidden eid []
 
-(* common-initial-data/hidden-ref-id-pred *)
-let hidden_ref_id_pred db (id : entity_id) : entity_id option -> bool =
-  let hidden_eid = hidden_eid_pred db in
-  let entity = Ldb.ent_of_id db id in
-  let entity_ident = Option.bind entity Ldb.ident_of in
-  let class_ids =
-    match entity with
-    | Some e when Ldb.is_class e ->
-        Some (id :: Db_class.get_structured_children db id)
-    | _ -> None
+(* common-initial-data/hidden-ref-id-pred — ~hidden_eid lets a batch of
+   blocks share one memoized ancestor walk *)
+let hidden_ref_id_pred_with db (id : entity_id)
+    ~(hidden_eid : entity_id option -> bool)
+    ?(is_class : bool option)
+    ?(entity_ident : attr option option)
+    () : entity_id option -> bool =
+  let entity_ident, class_ids =
+    match is_class, entity_ident with
+    | Some ic, Some ident ->
+        ( ident
+        , if ic then Some (id :: Db_class.get_structured_children db id)
+          else None )
+    | _ ->
+        let entity = Ldb.ent_of_id db id in
+        ( Option.bind entity Ldb.ident_of
+        , match entity with
+          | Some e when Ldb.is_class e ->
+              Some (id :: Db_class.get_structured_children db id)
+          | _ -> None )
   in
   fun ref_eid ->
     match ref_eid with
     | None -> true
     | Some rid ->
-        rid = id
-        || datom_v db rid "block/page" = Some id
-        || datom_v db rid "logseq.property/view-for" = Some id
-        || hidden_eid (datom_v db rid "block/page")
-        || hidden_eid ref_eid
-        || (match class_ids with
-            | Some cids ->
-                List.exists
-                  (fun cid -> List.mem cid cids)
-                  (datom_vs db rid "block/tags")
-            | None -> false)
-        || (match entity_ident with
-            | Some ident ->
-                (match Seq.uncons (datoms db Eavt ~e:rid ~a:ident ()) with
-                 | Some _ -> true
-                 | None -> false)
-            | None -> false)
+        if rid = id then true
+        else
+          (* one eavt slice answers block/page, view-for, tags and the
+             ident check — cljs issues ~4 separate index scans per ref;
+             each is a real storage seek on this backend *)
+          let page = ref None
+          and view_for = ref None
+          and tags = ref []
+          and ident_hit = ref false in
+          datoms db Eavt ~e:rid ()
+          |> Seq.iter (fun (d : datom) ->
+               if d.a = "block/page" && !page = None then
+                 page := entid d.v
+               else if d.a = "logseq.property/view-for" && !view_for = None
+               then view_for := entid d.v
+               else if d.a = "block/tags" then
+                 (match entid d.v with
+                  | Some t -> tags := t :: !tags
+                  | None -> ())
+               else (
+                 match entity_ident with
+                 | Some ident -> if d.a = ident then ident_hit := true
+                 | None -> ()));
+          !page = Some id
+          || !view_for = Some id
+          || hidden_eid !page
+          || hidden_eid ref_eid
+          || (match class_ids with
+              | Some cids ->
+                  List.exists (fun cid -> List.mem cid cids) !tags
+              | None -> false)
+          || !ident_hit
+
+let hidden_ref_id_pred db (id : entity_id) : entity_id option -> bool =
+  hidden_ref_id_pred_with db id ~hidden_eid:(hidden_eid_pred db) ()
 
 (* common-initial-data/hidden-ref-pred — entity variant *)
 let hidden_ref_pred db (id : entity_id) : entity -> bool =
@@ -358,29 +392,29 @@ let filter_matched_ref_blocks db (top_ref_block_ids : entity_id list)
     : entity_id list =
   let visited = Hashtbl.create 31 in
   let out = Hashtbl.create 31 in
-  let rec loop stack =
-    match stack with
-    | [] -> ()
-    | eid :: rest ->
-        if Hashtbl.mem visited eid then loop rest
-        else begin
-          Hashtbl.replace visited eid ();
-          let eff_refs = eff eid in
-          if not (class_ok eid) then loop (child_ids db eid @ rest)
-          else if not (can_satisfy_includes eff_refs eid) then loop rest
-          else begin
-            let include_set =
-              List.sort_uniq compare (eff_refs @ allowed_subrefs eid)
-            in
-            if
-              matches_filters ~include_set ~exclude_set:eff_refs ~includes
-                ~excludes
-            then Hashtbl.replace out eid ();
-            loop (child_ids db eid @ rest)
-          end
-        end
-  in
-  loop top_ref_block_ids;
+  (* Stack keeps the same DFS preorder as `child_ids @ rest` without
+     copying the stack per visited node. *)
+  let stack = Stack.create () in
+  let push_all ids = List.iter (fun id -> Stack.push id stack) (List.rev ids) in
+  push_all top_ref_block_ids;
+  while not (Stack.is_empty stack) do
+    let eid = Stack.pop stack in
+    if not (Hashtbl.mem visited eid) then begin
+      Hashtbl.replace visited eid ();
+      let eff_refs = eff eid in
+      if not (class_ok eid) then push_all (child_ids db eid)
+      else if can_satisfy_includes eff_refs eid then begin
+        let include_set =
+          List.sort_uniq compare (eff_refs @ allowed_subrefs eid)
+        in
+        if
+          matches_filters ~include_set ~exclude_set:eff_refs ~includes
+            ~excludes
+        then Hashtbl.replace out eid ();
+        push_all (child_ids db eid)
+      end
+    end
+  done;
   List.of_seq (Hashtbl.to_seq_keys out)
 
 (* reference/matched-ref-block-ids-under-top *)
@@ -407,6 +441,9 @@ let matched_ref_block_ids_under_top db (top_ref_block_ids : entity_id list)
 (* reference/expand-to-top-refs *)
 let expand_to_top_refs db (top_ref_ids : entity_id list)
     (matched_ref_ids : entity_id list) : entity_id list =
+  let top_ref_id_set =
+    List.fold_left (fun s id -> Int_set.add id s) Int_set.empty top_ref_ids
+  in
   let parent_cache : (entity_id, entity_id option) Hashtbl.t = Hashtbl.create 31 in
   let result = Hashtbl.create 31 in
   let parent_of eid =
@@ -426,33 +463,40 @@ let expand_to_top_refs db (top_ref_ids : entity_id list)
              if Hashtbl.mem result id then ()
              else begin
                Hashtbl.replace result id ();
-               if not (List.mem id top_ref_ids) then loop (parent_of id)
+               if not (Int_set.mem id top_ref_id_set) then loop (parent_of id)
              end
        in
        loop (Some start))
     matched_ref_ids;
   List.of_seq (Hashtbl.to_seq_keys result)
 
-(* reference/linked-reference-top-block-ids *)
+(* reference/linked-reference-top-block-ids — datom-level: the avet
+   block/refs seek yields candidate eids, one eavt slice per candidate
+   answers tags/page, and the memoized ancestor walk covers hidden
+   checks — no per-ref entity materialization. *)
 let linked_reference_top_block_ids db (ids : entity_id list)
     (class_ids : entity_id list) : entity_id list =
+  let hidden_eid = hidden_eid_pred db in
   List.concat_map
     (fun pid ->
-       match Ldb.ent_of_id db pid with
-       | Some e -> Ldb.ref_ents e "block/_refs"
-       | None -> [])
+       Seq.fold_left
+         (fun acc (d : datom) -> d.e :: acc)
+         []
+         (datoms db Avet ~a:"block/refs" ~v:(Ref pid) ()))
     ids
-  |> List.filter (fun (ref : entity) ->
+  |> List.filter (fun rid ->
+         let tags = ref [] and page = ref None in
+         datoms db Eavt ~e:rid ()
+         |> Seq.iter (fun (d : datom) ->
+              if d.a = "block/tags" then
+                (match entid d.v with Some t -> tags := t :: !tags | None -> ())
+              else if d.a = "block/page" && !page = None then
+                page := entid d.v);
          not
            ((class_ids <> []
-             && List.exists
-                  (fun (t : entity) -> List.mem t.id class_ids)
-                  (Ldb.ref_ents ref "block/tags"))
-            || Ldb.hidden ref
-            || match Ldb.ref_ent ref "block/page" with
-               | Some p -> Ldb.hidden p
-               | None -> false))
-  |> List.map (fun (e : entity) -> e.id)
+             && List.exists (fun t -> List.mem t class_ids) !tags)
+            || hidden_eid (Some rid)
+            || hidden_eid !page))
   |> List.sort_uniq compare
 
 type linked_reference_result =
@@ -492,16 +536,22 @@ let get_linked_references db (id : entity_id)
   in
   let final_ref_ids =
     if has_filters then
-      List.filter
-        (fun id -> List.mem id matched_refs_with_children_ids)
-        full_ref_block_ids
+      let matched_set =
+        List.fold_left
+          (fun s id -> Int_set.add id s)
+          Int_set.empty matched_refs_with_children_ids
+      in
+      List.filter (fun id -> Int_set.mem id matched_set) full_ref_block_ids
     else full_ref_block_ids
   in
   let ref_blocks = List.filter_map (Ldb.ent_of_id db) final_ref_ids in
   let children_ids =
     if has_filters then
+      let full_set =
+        List.fold_left (fun s id -> Int_set.add id s) Int_set.empty full_ref_block_ids
+      in
       List.filter
-        (fun id -> not (List.mem id full_ref_block_ids))
+        (fun id -> not (Int_set.mem id full_set))
         matched_refs_with_children_ids
     else if include_ref_pages_count then
       List.concat_map
@@ -603,6 +653,11 @@ let distinct_by_label (maps : Wire.t list) : Wire.t list =
        end)
     maps
 
+let exclude_tbl (exclude_ids : entity_id list) =
+  let tbl = Hashtbl.create (List.length exclude_ids) in
+  List.iter (fun id -> Hashtbl.replace tbl id ()) exclude_ids;
+  tbl
+
 type view_entities =
   | Entities of entity list
   | Linked of linked_reference_result
@@ -634,9 +689,10 @@ let get_entities_for_all_pages db (index_attr : attr) : entity list =
                (List.of_seq (datoms db Avet ~a:"block/tags" ~v:(Ref tag_id) ())))
           prop_tag_eids )
   in
+  let excluded = exclude_tbl exclude_ids in
   List.of_seq (datoms db Avet ~a:index_attr ())
   |> List.filter_map (fun (d : datom) ->
-         if List.mem d.e exclude_ids then None
+         if Hashtbl.mem excluded d.e then None
          else
            match Ldb.ent_of_id db d.e with
            | Some e when not (Ldb.hidden e) -> Some e
@@ -1459,12 +1515,15 @@ let build_fast_filter_pred db (filters : view_filters) (input : string) :
               | [] -> None
               | ids ->
                   Some
-                    (fun (row : entity) ->
+                    (let id_set =
+                       List.fold_left (fun s id -> Int_set.add id s) Int_set.empty ids
+                     in
+                     fun (row : entity) ->
                        let hit =
                          List.exists
                            (fun v ->
                               match filter_match_id db v with
-                              | Some id -> List.mem id ids
+                              | Some id -> Int_set.mem id id_set
                               | None -> false)
                            (row_value_list (row_get row f_ident))
                        in
@@ -1868,9 +1927,16 @@ let sort_eids_from_avet db (match_ : entity_id -> bool) (sorting : sorting_item 
            (match leftover with
             | None -> Some matched
             | Some ids ->
+                (* Eids with no value on the sort attr tie on nil in
+                   sort_eids_by_sorting; keep its eid tie-break order here. *)
                 let seen = Hashtbl.create 31 in
                 List.iter (fun i -> Hashtbl.replace seen i ()) matched;
-                Some (matched @ List.filter (fun i -> not (Hashtbl.mem seen i)) ids)))
+                let rest =
+                  ids
+                  |> List.filter (fun i -> not (Hashtbl.mem seen i))
+                  |> List.sort (fun a b -> if s_asc then compare a b else compare b a)
+                in
+                Some (matched @ rest)))
   | _ -> None
 
 (* view/sort-eids-by-sorting *)
@@ -1898,7 +1964,13 @@ let sort_eids_by_sorting db (eids : entity_id list) (sorting : sorting_item list
   List.stable_sort
     (fun a b ->
        let rec loop = function
-         | [] -> 0
+         | [] ->
+             (* Break ties by eid in the direction of the first sort, the
+                order an AVET walk ([a v e], reversed when descending)
+                gives, so a window read from the index and a list sorted
+                here agree on equal values. *)
+             let asc0, _ = List.hd schemas in
+             if asc0 then compare a b else compare b a
          | ((asc, _), vm) :: rest ->
              let c =
                compare_sort_values (Hashtbl.find_opt vm a) (Hashtbl.find_opt vm b) asc
@@ -1908,14 +1980,27 @@ let sort_eids_by_sorting db (eids : entity_id list) (sorting : sorting_item list
        loop (List.combine schemas value_maps))
     eids
 
+(* view/unlimited-eid-sort-max — without a row limit, sets up to this
+   size sort their own eids. The AVET walk would copy the whole index of
+   the sort attribute (79034 updated-at datoms took 132-165ms), while
+   sorting reads one value per eid (a 40k All Pages window spent ~2s,
+   about 50us per eid). *)
+let unlimited_eid_sort_max = 1000
+
 (* view/take-sorted-eids *)
 let take_sorted_eids db (eids : entity_id list) (sorting : sorting_item list)
     (row_limit : int option) (row_offset : int option) : entity_id list =
   let wanted = Hashtbl.create 31 in
   List.iter (fun e -> Hashtbl.replace wanted e ()) eids;
   let match_ e = Hashtbl.mem wanted e in
+  (* 21 Tags spent 165ms copying 79034 updated-at datoms. The leftover
+     set already fits the window, so sort those eids directly. A request
+     without a row limit (a table's remaining rows) does the same for a
+     small set. *)
   let use_eid_sort =
-    match row_limit with Some l -> List.length eids <= l | None -> false
+    match row_limit with
+    | Some l -> List.length eids <= l
+    | None -> List.length eids <= unlimited_eid_sort_max
   in
   let avet =
     if use_eid_sort then None
@@ -1933,18 +2018,53 @@ let take_sorted_eids db (eids : entity_id list) (sorting : sorting_item list)
 let feature_filters (filters : view_filters) (input : string) : bool =
   Unicode.trim input <> "" || filters.vf_clauses <> []
 
+(* view/with-descendant-eids — each eid plus every :block/parent
+   descendant; recycled/hidden parents must also drop nested pages *)
+let with_descendant_eids db (eids : entity_id list) : entity_id list =
+  let seen = Hashtbl.create 61 in
+  let rec loop queue =
+    match queue with
+    | [] -> ()
+    | id :: rest ->
+        if Hashtbl.mem seen id then loop rest
+        else begin
+          Hashtbl.replace seen id ();
+          let children =
+            List.map
+              (fun (d : datom) -> d.e)
+              (List.of_seq (datoms db Avet ~a:"block/parent" ~v:(Ref id) ()))
+          in
+          loop (children @ rest)
+        end
+  in
+  loop eids;
+  Hashtbl.fold (fun k () acc -> k :: acc) seen []
+
+(* cljs caches get-exclude-page-ids per immutable db value in a WeakMap
+   (exclude-page-ids-cache): hidden/deleted/built-in/property-page ids only
+   change with the snapshot. A single-slot memo keyed on db identity gives
+   the same reuse semantics here — repeated scans would otherwise re-seek
+   and re-decode storage-backed index nodes on every request. The visible
+   page-eid set is cached the same way for the same reason. *)
+let exclude_page_ids_memo : (Datascript.db * entity_id list) option ref = ref None
+
+let page_eids_memo : (Datascript.db * (int * (entity_id, unit) Hashtbl.t)) option ref = ref None
+
 (* view/get-exclude-page-ids — shared by the entity and eid paths *)
-let get_exclude_page_ids db : entity_id list =
+let get_exclude_page_ids_uncached db : entity_id list =
   let prop_tag_eids =
     match Db_class.ident_eid db "logseq.class/Property" with
     | Some tag_id -> [ tag_id ]
     | None -> []
   in
-  List.sort_uniq compare
-    ( List.map (fun (d : datom) -> d.e)
-        (List.of_seq (datoms db Avet ~a:"logseq.property/hide?" ~v:(Bool true) ()))
+  let hidden_or_deleted =
+    List.map (fun (d : datom) -> d.e)
+      (List.of_seq (datoms db Avet ~a:"logseq.property/hide?" ~v:(Bool true) ()))
     @ List.map (fun (d : datom) -> d.e)
         (List.of_seq (datoms db Avet ~a:"logseq.property/deleted-at" ()))
+  in
+  List.sort_uniq compare
+    ( with_descendant_eids db hidden_or_deleted
     @ List.map (fun (d : datom) -> d.e)
         (List.of_seq (datoms db Avet ~a:"logseq.property/built-in?" ~v:(Bool true) ()))
     @ List.concat_map
@@ -1953,26 +2073,53 @@ let get_exclude_page_ids db : entity_id list =
              (List.of_seq (datoms db Avet ~a:"block/tags" ~v:(Ref tag_id) ())))
         prop_tag_eids )
 
-(* view/count-all-page-ids *)
-let count_all_page_ids db (exclude_ids : entity_id list) : int =
-  let excluded = Hashtbl.create 31 in
-  List.iter (fun id -> Hashtbl.replace excluded id ()) exclude_ids;
-  Seq.fold_left
-    (fun n (d : datom) -> if Hashtbl.mem excluded d.e then n else n + 1)
-    0
-    (datoms db Avet ~a:"block/name" ())
+let get_exclude_page_ids db : entity_id list =
+  match !exclude_page_ids_memo with
+  | Some (cached_db, ids) when cached_db == db -> ids
+  | _ ->
+      let ids = get_exclude_page_ids_uncached db in
+      exclude_page_ids_memo := Some (db, ids);
+      ids
 
-(* view/all-pages-eid? *)
-let all_pages_eid db (exclude_ids : entity_id list) (eid : entity_id) : bool =
-  (not (List.mem eid exclude_ids))
-  && Option.is_some (indexed_attr_value db eid "block/name")
+(* Visible page eids — one block/name index walk. cljs checks
+   (:block/name (d/entity db eid)) per candidate eid, which is cheap on
+   its all-in-memory indexes; for storage-backed indexes each check is a
+   separate seek, so the set is built once here and memoized per db
+   snapshot. Same result: all-pages-eid? = not excluded && has block/name. *)
+let page_eids_tbl db (excluded : (entity_id, unit) Hashtbl.t) :
+    int * (entity_id, unit) Hashtbl.t =
+  match !page_eids_memo with
+  | Some (cached_db, memo) when cached_db == db -> memo
+  | _ ->
+      let pages = Hashtbl.create 1024 in
+      let count =
+        Seq.fold_left
+          (fun n (d : datom) ->
+             if Hashtbl.mem excluded d.e then n
+             else begin
+               Hashtbl.replace pages d.e ();
+               n + 1
+             end)
+          0
+          (datoms db Avet ~a:"block/name" ())
+      in
+      page_eids_memo := Some (db, (count, pages));
+      (count, pages)
 
 (* view/get-all-page-ids *)
 let get_all_page_ids db : entity_id list =
-  let exclude_ids = get_exclude_page_ids db in
+  let excluded = exclude_tbl (get_exclude_page_ids db) in
   List.filter_map
-    (fun (d : datom) -> if List.mem d.e exclude_ids then None else Some d.e)
+    (fun (d : datom) -> if Hashtbl.mem excluded d.e then None else Some d.e)
     (List.of_seq (datoms db Avet ~a:"block/name" ()))
+
+(* The full sorted page list is a pure function of (db, sorting): on
+   storage-backed indexes computing it costs one sort-value seek per page,
+   so keep the last computed list per db snapshot — same shape as the
+   exclude-ids memo above. *)
+let all_pages_sorted_memo :
+    (Datascript.db * sorting_item list * entity_id list) option ref =
+  ref None
 
 (* view/first-window-feature-row-data *)
 let first_window_feature_row_data db (feat_type : string) (class_id : entity_id option)
@@ -1980,14 +2127,47 @@ let first_window_feature_row_data db (feat_type : string) (class_id : entity_id 
     (int * entity_id list) option =
   match feat_type with
   | "all-pages" ->
-      let exclude_ids = get_exclude_page_ids db in
-      (match
-         sort_eids_from_avet db
-           (fun e -> all_pages_eid db exclude_ids e)
-           sorting row_limit None row_offset
-       with
-       | Some data -> Some (count_all_page_ids db exclude_ids, data)
-       | None -> None)
+      let count, pages = page_eids_tbl db (exclude_tbl (get_exclude_page_ids db)) in
+      (* A window the page set can't fill makes the sort-attr walk scan
+         the whole index for nothing (on storage-backed indexes that
+         means decoding every datom of the sort attr); fall back to
+         sorting the page eids directly, as take_sorted_eids does. *)
+      let use_avet =
+        match row_limit with
+        | Some l -> l < count
+        | None -> count > unlimited_eid_sort_max
+      in
+      let data =
+        match
+          (if use_avet then
+             sort_eids_from_avet db
+               (fun e -> Hashtbl.mem pages e)
+               sorting row_limit None row_offset
+           else None)
+        with
+        | Some d -> d
+        | None ->
+            let sorted =
+              match !all_pages_sorted_memo with
+              | Some (cached_db, cached_sorting, eids)
+                when cached_db == db && cached_sorting = sorting -> eids
+              | _ ->
+                  let eids =
+                    Hashtbl.fold (fun e () acc -> e :: acc) pages []
+                    |> fun eids -> sort_eids_by_sorting db eids sorting
+                  in
+                  all_pages_sorted_memo := Some (db, sorting, eids);
+                  eids
+            in
+            (match row_limit, row_offset with
+             | Some l, _ ->
+                 sorted
+                 |> list_drop (Option.value ~default:0 row_offset)
+                 |> list_take l
+             | None, Some o when o > 0 -> list_drop o sorted
+             | None, _ -> sorted)
+      in
+      Some (count, data)
   | "class-objects" ->
       (match class_id with
        | Some cid ->

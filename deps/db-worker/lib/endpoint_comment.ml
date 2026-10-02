@@ -52,8 +52,20 @@ let block_ref_entity db (v : value) : entity option =
   match v with
   | Uuid u -> entity db (Lookup_ref ("block/uuid", Uuid u))
   | String s when Ldb.is_uuid_string s ->
-      entity db (Lookup_ref ("block/uuid", Uuid s))
+      entity db
+        (Lookup_ref ("block/uuid", Uuid (Datascript.Util.uuid_canonicalize s)))
   | Int64 id -> entity db (Entity_id (Datascript.Util.int64_to_int_exn "entity id" id))
+  (* cljs :else (d/entity db block-ref): numeric eids arrive as Int64
+     above; lookup-refs, idents and {:db/id} maps resolve through entity
+     refs *)
+  | Vector [ Keyword a; v' ] | List [ Keyword a; v' ] ->
+      entity db (Lookup_ref (a, v'))
+  | Keyword ident -> entity db (Ident ident)
+  | Map kvs -> (
+      match List.assoc_opt (Keyword "db/id") kvs with
+      | Some (Int64 id) ->
+          entity db (Entity_id (Datascript.Util.int64_to_int_exn "entity id" id))
+      | _ -> None)
   | _ -> None
 
 (* :thread-api/get-comment-threads-for-block *)

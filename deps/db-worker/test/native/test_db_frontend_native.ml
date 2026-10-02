@@ -1007,6 +1007,38 @@ let test_priority_queries_with_multi_word_and_custom_values () =
   check "(priority \"very high\") is case insensitive"
     (dsl_titles db "(priority \"very high\")" = [ "urgent task" ])
 
+(* cljs coll?-check: a single-clause dsl query parses to flat elements;
+   cards? must wrap them into one clause before prepending the card
+   clause, else :where gets bare elements and the query raises. *)
+let test_execute_query_cards_single_clause () =
+  let db =
+    db_of
+      (create_conn_with_blocks
+         ~pages_and_blocks:
+           [ { page = { default_page with pg_title = Some "page1" };
+               blocks =
+                 [ { default_block with
+                     b_title = Some "card ref [[fctag]]";
+                     b_tags = [ "logseq.class/Card" ] };
+                   { default_block with
+                     b_title = Some "plain ref [[fctag]]" } ] } ]
+         ())
+  in
+  check "plain dsl finds both referencing blocks"
+    (List.length (dsl_titles db "[[fctag]]") = 2);
+  let titles =
+    match
+      Db_query_dsl.execute_query db "[[fctag]]"
+        { default_exec_opts with opt_cards = true }
+    with
+    | Some rows -> titles_of_rows rows
+    | None -> []
+  in
+  check "cards? single-clause dsl returns only card-tagged block"
+    (match titles with
+     | [ t ] -> String.starts_with ~prefix:"card ref " t
+     | _ -> false)
+
 (* ---------- inputs_test.cljs ---------- *)
 
 let empty_ctx : Db_inputs.context =
@@ -1236,4 +1268,6 @@ let cases : unit Alcotest.test_case list =
     Alcotest.test_case "task-queries-with-multi-word-and-custom-statuses" `Quick
       test_task_queries_with_multi_word_and_custom_statuses;
     Alcotest.test_case "priority-queries-with-multi-word-and-custom-values" `Quick
-      test_priority_queries_with_multi_word_and_custom_values ]
+      test_priority_queries_with_multi_word_and_custom_values;
+    Alcotest.test_case "execute-query-cards-single-clause" `Quick
+      test_execute_query_cards_single_clause ]

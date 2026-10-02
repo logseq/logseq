@@ -140,3 +140,31 @@ Gotcha: if the app sits on skeleton/"Select a graph" after login, the UI chain
 (`:thread-api/init` → `set-db-sync-config` → `:user/fetch-info-and-graphs` →
 ensure) may not have run — inject config + auth state manually as above to hit
 the same endpoint with identical args.
+
+## Rapid graph-switch race repro
+
+For worker races tied to conn lifetime (e.g. `thread-api/get-render-snapshots`
+throwing `Missing renderer snapshot database` when `Worker_state.datascript_conn
+repo` = None after `close_other_sqlite_conns` drops the old repo's conn):
+
+- Two small local graphs suffice (a journal page with a few blocks each; every
+  page mount issues snapshot loads via `frontend.db.subs-loader/load!`, so no
+  special content needed).
+- Switch via the left-sidebar graph name (~x=63,y=105 at 1024px) → dropdown →
+  "Switch to:" item (~x=45,y=148). Switching is in-place (no reload) — the
+  console persists across switches, so poll it for the error string.
+- UI floor is ~1 switch per ~1.3 s even at 0.2 s click cadence — the dropdown
+  open + async restore serialize it; truly overlapping switches are NOT
+  reachable by clicks. Worker side: `restore-graph!` open ~90-170 ms,
+  `graph-switch-spent` ~120-270 ms (watch those console lines as the timing
+  signal).
+- To get commits in flight during the switch (the pressure case): click just
+  below the last journal block to focus the append editor (verify a `<textarea>`
+  appears in the DOM — a click too far below lands on dead space and the typed
+  text is silently dropped), type a multi-line burst (each `\n` commits a block
+  via a separate transact), then immediately open the dropdown and switch.
+  Verify afterwards that the burst blocks actually persisted in the source
+  graph.
+- Detection: the throw surfaces in the page console as an error and/or as an
+  ErrorBoundary view replacing main content — screenshot and count occurrences
+  per switch count to bound the window.

@@ -261,11 +261,12 @@ let block_by_content (db : db) (t : string) : entity =
   | Some e -> e
   | None -> failwith ("no block titled " ^ t)
 
-let fresh_cache () : Block_breadcrumb.cache = Hashtbl.create 64
+let fresh_cache () : Render_snapshot.batch_cache =
+  Render_snapshot.new_batch_cache ()
 
 (* cljs (block-handler/canonical-block @conn entity) *)
 let canonical_block (db : db) (block : entity) : Wire.t =
-  Render_snapshot.canonical_block ~ref_cache:(fresh_cache ()) db block
+  Render_snapshot.canonical_block ~cache:(fresh_cache ()) db block
 
 let canonical_blocks (db : db) (block_uuids : Wire.t list) : Wire.t =
   Render_snapshot.canonical_blocks db block_uuids
@@ -1277,6 +1278,55 @@ let test_direct_children_membership_defaults_missing_tx_id () =
       ignore
         (Endpoint_block.direct_children_membership db (fresh_uuid ())))
 
+(* (deftest direct-children-membership-allows-missing-child-order-test ...)
+   src/test/frontend/worker/handler/block_test.cljs *)
+let test_direct_children_membership_allows_missing_child_order () =
+  let conn = create_conn () in
+  let p_uuid = fresh_uuid () in
+  let ordered_uuid = fresh_uuid () in
+  let orderless_uuid = fresh_uuid () in
+  ignore
+    (Datascript.transact_conn_string conn
+       (Printf.sprintf
+          "[{:db/id -1 :block/uuid #uuid \"%s\" :block/tx-id 11 :block/title \
+           \"Parent\" :block/name \"parent\" :block/tags :logseq.class/Page}\n\
+          {:block/uuid #uuid \"%s\" :block/tx-id 11 :block/title \"Ordered \
+           child\" :block/page -1 :block/parent -1 :block/order \"a0\"}\n\
+          {:db/id -2 :block/uuid #uuid \"%s\" :block/tx-id 11 :block/title \
+           \"Child page without order\" :block/name \"child page without \
+           order\" :block/tags :logseq.class/Page :block/parent -1}]"
+          p_uuid ordered_uuid orderless_uuid));
+  let db = db_of conn in
+  let resp = Endpoint_block.direct_children_membership db p_uuid in
+  match wg resp "items" with
+  | Some items ->
+      check "orderless child does not remove siblings"
+        (List.length (wseq items) = 2);
+      check "nil order sorts first"
+        (wseq items
+         = [ Wire.Array [ Wire.Uuid orderless_uuid; Wire.Nil ]
+           ; Wire.Array [ Wire.Uuid ordered_uuid; Wire.String "a0" ] ])
+  | None -> check "items present" false
+
+(* (deftest direct-children-membership-rejects-non-string-child-order-test ...)
+   src/test/frontend/worker/handler/block_test.cljs *)
+let test_direct_children_membership_rejects_non_string_child_order () =
+  let conn = create_conn () in
+  let p_uuid = fresh_uuid () in
+  let child_uuid = fresh_uuid () in
+  ignore
+    (Datascript.transact_conn_string conn
+       (Printf.sprintf
+          "[{:db/id -1 :block/uuid #uuid \"%s\" :block/title \"Parent\" \
+           :block/name \"parent\" :block/tags :logseq.class/Page}\n\
+          {:block/uuid #uuid \"%s\" :block/title \"Broken child\" \
+           :block/page -1 :block/parent -1 :block/order 42}]"
+          p_uuid child_uuid));
+  let db = db_of conn in
+  throws_any "non-string order throws"
+    (fun () ->
+      ignore (Endpoint_block.direct_children_membership db p_uuid))
+
 (* (deftest canonical-block-snapshots-are-transit-safe-pure-results-test ...) *)
 let test_canonical_block_snapshots_are_transit_safe () =
   let conn = canonical_block_fixture () in
@@ -1410,7 +1460,14 @@ let test_canonical_block_positions_default_task_status () =
   let idents_at (eid : entity_id) (position : string) : string list =
     match
       List.assoc_opt position
-        (Render_snapshot.block_positioned_property_idents_by_position db eid)
+        (Render_snapshot.block_positioned_property_idents_by_position
+           ~cache:(fresh_cache ())
+           ~tag_ids:(Render_snapshot.tag_ids_of db eid)
+           ~own_property_ids:
+             (Render_snapshot.direct_block_property_ids db eid)
+           ~direct_value:(fun a ->
+             Property_maps.entity_direct_value db eid a)
+           db eid)
     with
     | Some idents -> idents
     | None -> []
@@ -1996,6 +2053,12 @@ let block_cases =
       "direct-children-membership-defaults-missing-parent-transaction-id-test"
       `Quick test_direct_children_membership_defaults_missing_tx_id
   ; Alcotest.test_case
+      "direct-children-membership-allows-missing-child-order-test" `Quick
+      test_direct_children_membership_allows_missing_child_order
+  ; Alcotest.test_case
+      "direct-children-membership-rejects-non-string-child-order-test" `Quick
+      test_direct_children_membership_rejects_non_string_child_order
+  ; Alcotest.test_case
       "canonical-block-snapshots-are-transit-safe-pure-results-test" `Quick
       test_canonical_block_snapshots_are_transit_safe
   ; Alcotest.test_case
@@ -2476,7 +2539,14 @@ let positioned_idents (db : db) (block_id : entity_id) (position : string) :
   List.sort_uniq String.compare
     (Option.value
        (List.assoc_opt position
-          (Render_snapshot.block_positioned_property_idents_by_position db
+          (Render_snapshot.block_positioned_property_idents_by_position
+             ~cache:(fresh_cache ())
+             ~tag_ids:(Render_snapshot.tag_ids_of db block_id)
+             ~own_property_ids:
+               (Render_snapshot.direct_block_property_ids db block_id)
+             ~direct_value:(fun a ->
+               Property_maps.entity_direct_value db block_id a)
+             db
              block_id))
        ~default:[])
 

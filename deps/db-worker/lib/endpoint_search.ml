@@ -25,7 +25,12 @@ module E = Db_worker_effect
 
 (* ---- constants (cljs defs at top of handler/search.cljs) ---- *)
 
-let search_db_version = 4
+let search_db_version = 5
+
+(* fts-id-keyed-search-db-version — the last version whose blocks_fts
+   rows have rowids unrelated to their blocks rows. Such an index moves
+   to rowid keys in place instead of a rebuild from the graph. *)
+let fts_id_keyed_search_db_version = 4
 
 let search_index_build_batch_size = 200
 
@@ -69,8 +74,14 @@ let search_db_path repo =
 
 (* cljs get-dbs/resolve-db-path: the search sqlite lives inside the
    graph's OPFS pool as "search/db.sqlite" (browser path is the identity
-   through resolve-db-path); on node it is a sibling file. *)
-let open_search_db repo : Sqlite.db =
+   through resolve-db-path); on node it is a sibling file.
+
+   Raw open — the handle is NOT registered in *sqlite-conns. get-dbs
+   registers its conn via open_search_db; scratch opens like
+   <invalidate-search-db! must not, since the handle is closed in the
+   same breath and a stale registration would hand a closed db to the
+   next get_search_db. *)
+let open_search_db_file repo : Sqlite.db =
   let db =
     if Worker_state.publishing () then Sqlite.open_db ~path:"/search-db.sqlite"
     else if Sqlite.pooled_runtime () then
@@ -78,11 +89,32 @@ let open_search_db repo : Sqlite.db =
         ~path:"search/db.sqlite"
     else Sqlite.open_db ~path:(search_db_path repo)
   in
-  (* locking_mode=exclusive must precede any access: the sahpool VFS has no
-     xShmMap, so a WAL-mode file is only readable once exclusive locking is
-     set (sqlite then uses a heap wal-index). *)
-  Sqlite.exec db ~sql:"pragma locking_mode=exclusive" ~bind:[||];
-  Search_index.create_tables_and_triggers db;
+  (* cljs get-dbs runs enable-sqlite-wal-mode! on the search conn before
+     any statement executes on it. The OPFS SAH pool has no shared-memory
+     support, so a WAL-mode db file raises SQLITE_CANTOPEN on its first
+     access unless locking_mode=exclusive is set first. *)
+  try
+    Sqlite.exec db ~sql:"pragma locking_mode=exclusive" ~bind:[||];
+    Sqlite.exec db ~sql:"pragma journal_mode=WAL" ~bind:[||];
+    Sqlite.exec db ~sql:"pragma synchronous=NORMAL" ~bind:[||];
+    Search_index.create_tables_and_triggers db;
+    db
+  with exn ->
+    let error =
+      try
+        Sqlite.close db;
+        exn
+      with close_exn ->
+        Failure
+          (Printf.sprintf "Search initialization failed: %s; close failed: %s"
+             (Printexc.to_string exn) (Printexc.to_string close_exn))
+    in
+    raise error
+
+(* cljs get-dbs registers the :search conn in *sqlite-conns. *)
+let open_search_db repo : Sqlite.db =
+  let db = open_search_db_file repo in
+  Worker_state.set_sqlite_conn_of repo Worker_state.Search db;
   db
 
 let get_search_db repo : Sqlite.db option =
@@ -94,7 +126,6 @@ let get_search_db repo : Sqlite.db option =
       | None -> None
       | Some _ ->
           let db = open_search_db repo in
-          Worker_state.set_sqlite_conn_of repo Worker_state.Search db;
           Some db)
 
 let search_index_version (db : Sqlite.db) : int =
@@ -166,13 +197,13 @@ let report_search_index_progress repo (payload : Wire.t) : unit E.t =
     E.pure ()
   end
   else
-    ( E.map
+    E.map
       (fun _ -> ())
       (E.catch
          (Comlink.invoke_remote "thread-api/search-index-build-progress"
             (Transit_codec.to_string
                (Wire.Array [ Wire.String repo; payload ])))
-         (fun _ -> E.pure "")) )
+         (fun _ -> E.pure ""))
 
 let progress_payload ~build_id ~status ~stage ~progress ~processed ~total :
     Wire.t =
@@ -398,14 +429,82 @@ let schedule_vector_index_rebuild repo build_id
                else E.pure ())
           |> E.map (fun _ -> clear_vector_index_rebuild repo build_id))
 
+(* fts-rowid-migration-pause-ratio — the move waits this many times as
+   long as its last batch took before the next one, so it takes at most
+   a third of the worker's time. *)
+let fts_rowid_migration_pause_ratio = 2.
+
+(* <migrate-fts-to-rowid! — moves an index of
+   fts_id_keyed_search_db_version to rowid-keyed FTS rows, copied from
+   its own blocks table in paced batches. Queries keep reading the old
+   blocks_fts, which its triggers keep complete, until the last step
+   swaps the tables in 1 transaction. Stops when another build takes
+   over or the index is truncated. *)
+let lt_migrate_fts_to_rowid repo search_db build_id : unit E.t =
+  let started_at = Time.epoch_ms_to_float (Time.now ()) in
+  E.bind (E.sleep 0.) (fun () ->
+      ensure_active_search_index_build repo build_id;
+      if search_index_version search_db = fts_id_keyed_search_db_version then begin
+        Search_index.start_fts_rowid_migration search_db;
+        let rec loop (after : int64) (pause_ms : float) : unit E.t =
+          E.bind (E.sleep pause_ms) (fun () ->
+              E.bind (wait_for_search_index_idle repo build_id) (fun () ->
+                  if search_index_version search_db
+                     = fts_id_keyed_search_db_version
+                  then begin
+                    let batch_started_at =
+                      Time.epoch_ms_to_float (Time.now ())
+                    in
+                    match
+                      Search_index.copy_fts_rowid_batch search_db ~after
+                        ~limit:search_index_build_batch_size
+                    with
+                    | Some after' ->
+                        loop after'
+                          (fts_rowid_migration_pause_ratio
+                          *. (Time.epoch_ms_to_float (Time.now ())
+                              -. batch_started_at))
+                    | None ->
+                        Search_index.finish_fts_rowid_migration search_db
+                          search_db_version;
+                        Worker_log.info "search/fts-rowid-migration-done"
+                          [ ("repo", repo)
+                          ; ( "ms"
+                            , Printf.sprintf "%.0f"
+                                (Time.epoch_ms_to_float (Time.now ())
+                                 -. started_at) ) ];
+                        E.pure ()
+                  end
+                  else E.pure ()))
+        in
+        loop 0L 0.
+      end
+      else E.pure ())
+
+(* schedule-fts-rowid-migration! *)
+let schedule_fts_rowid_migration repo search_db : unit =
+  if Worker_state.search_index_build_id repo = None then
+    let build_id = start_search_index_build repo in
+    E.async (fun () ->
+        E.finally
+          (E.catch
+             (lt_migrate_fts_to_rowid repo search_db build_id)
+             (fun exn ->
+                (match exn with
+                 | Stale_index_build _ -> ()
+                 | _ ->
+                     Worker_log.error "search/fts-rowid-migration-failed"
+                       [ ("repo", repo)
+                       ; ("error", Printexc.to_string exn) ]);
+                E.pure ()))
+          (fun () -> E.pure (clear_search_index_build repo build_id)))
+
 (* ---- <build-blocks-index! ---- *)
 
 let lt_build_blocks_index repo search_db (conn : conn) build_id : unit E.t =
   ensure_active_search_index_build repo build_id;
   let db = Datascript.db conn in
-  let blocks =
-    Search_index.get_all_blocks db
-  in
+  let blocks = Search_index.get_all_blocks db in
   let total = List.length blocks in
   let vector_index = Worker_state.vector_index repo in
   let include_vector_title = Option.is_some vector_index in
@@ -441,12 +540,8 @@ let lt_build_blocks_index repo search_db (conn : conn) build_id : unit E.t =
         let processed' = processed + List.length batch in
         let indexed =
           List.filter_map
-            (fun en ->
-               let node = Ev.of_entity en in
-               match Search_index.block_to_index ~include_vector_title node with
-               | Some it -> Some it
-               | None -> None)
-            batch
+            (Search_index.block_to_index ~include_vector_title)
+            (List.map Ev.of_entity batch)
         in
         let indexed_blocks' = indexed_blocks @ indexed in
         let progress = progress_for_fts processed' in
@@ -608,11 +703,7 @@ let search_blocks_handler args : Wire.t E.t =
   let args = normalize_repo_args args in
   match args with
   | Wire.String repo :: Wire.String q :: option_rest ->
-      let opts =
-        match option_rest with
-        | t :: _ -> decode_search_opts t
-        | [] -> Search_index.default_opts
-      in
+      let opts = match option_rest with t :: _ -> decode_search_opts t | [] -> Search_index.default_opts in
       lt_search_blocks repo q opts
   | _ -> invalid_arg "search-blocks expects (repo q option)"
 
@@ -686,6 +777,11 @@ let search_build_blocks_indice_in_worker args : Wire.t E.t =
           let version = search_index_version search_db in
           if version = search_db_version && not force then
             E.pure (Wire.Int version)
+          else if version = fts_id_keyed_search_db_version && not force then begin
+            (* The index is complete, so search keeps working while it moves *)
+            schedule_fts_rowid_migration repo search_db;
+            E.pure (Wire.Int version)
+          end
           else
             match Worker_state.datascript_conn repo with
             | None -> E.pure Wire.nil
@@ -747,11 +843,13 @@ let invalidate_search_db args : Wire.t E.t =
           if Worker_state.publishing () then E.pure Wire.nil
           else
             (* cljs <invalidate-search-db!: even without a cached conn it
-               opens the pool's search db and truncates it. *)
+               opens the pool's search db and truncates it. cljs opens
+               through platform/sqlite-open — the scratch conn never
+               enters *sqlite-conns, so close leaves no stale handle. *)
             E.bind
               (Sqlite.prepare_pool ~name:(Graph_dir.pool_name repo))
               (fun () ->
-                let db = open_search_db repo in
+                let db = open_search_db_file repo in
                 (try Search_index.truncate_table db
                  with exn ->
                    Worker_log.error "search/invalidate-search-db-failed"
@@ -767,9 +865,12 @@ let invalidate_search_db args : Wire.t E.t =
    for tx-meta :from-disk? and the importer flags. *)
 
 let search_listener repo (r : tx_report) : unit =
-  (* cljs wraps the whole handler in p/do! — async so it does not block the
-     commit's broadcast to the main thread. *)
+  (* cljs wraps the whole handler in p/do! — the index update is deferred
+     so it does not block the commit's broadcast to the main thread.
+     Db_worker_effect.async runs its thunk eagerly, so the body is moved
+     behind a zero-delay sleep to keep the sync work off the commit path. *)
   Db_worker_effect.async (fun () ->
+      Db_worker_effect.bind (Db_worker_effect.sleep 0.) (fun () ->
       try
         let meta k =
           match List.assoc_opt k r.tx_meta with
@@ -807,7 +908,7 @@ let search_listener repo (r : tx_report) : unit =
       with e ->
         Worker_log.error "search/search-listener-failed"
           [ ("repo", repo); ("error", Printexc.to_string e) ];
-        Db_worker_effect.pure ())
+        Db_worker_effect.pure ()))
 
 (* ---- init wiring ---- *)
 

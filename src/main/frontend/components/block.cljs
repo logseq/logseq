@@ -286,7 +286,14 @@
                 (fn [_e]
                   ;; Electron renderer cannot fetch file:// URLs; read the
                   ;; file via IPC and copy the blob directly.
-                  (if (util/electron?)
+                  ;; image-src is a filesystem path when it has no URL
+                  ;; scheme (a Windows drive like C: is not one) and src is
+                  ;; not a protocol-relative URL — an assets:// UNC path
+                  ;; normalizes to //server/share but is still a file.
+                  (if (and (util/electron?)
+                           (seq image-src)
+                           (not (re-find #"(?i)^[a-z][a-z0-9+.-]+:" image-src))
+                           (not (util/starts-with? src "//")))
                     (let [ext (some-> (util/get-file-ext image-src) string/lower-case)
                           ;; Should support all exts in common-config/img-formats
                           ext->mime {"png" "image/png"
@@ -306,11 +313,13 @@
                               (util/copy-image-blob-to-clipboard blob))
                             (p/then #(notification/show! (t :notification/copied) :success))
                             (p/catch (fn [error]
-                                       (js/console.error error))))))
+                                       (js/console.error error)
+                                       (notification/show! (t :asset/missing-file image-src) :warning))))))
                     (-> (util/copy-image-to-clipboard src')
                         (p/then #(notification/show! (t :notification/copied) :success))
                         (p/catch (fn [error]
-                                   (js/console.error error))))))
+                                   (js/console.error error)
+                                   (notification/show! (t :asset/missing-file image-src) :warning))))))
                 handle-delete!
                 (fn [_e]
                   (when-let [block-id (get-blockid)]
@@ -344,7 +353,9 @@
                     (property-handler/set-block-property! asset-id
                                                           :logseq.property.asset/align
                                                           align)))]
-            (when asset-block
+            ;; Inline ![](../img.png) images have no asset entity: still offer
+            ;; Copy/Show file in folder on Electron; Align and Delete need one.
+            (when (or asset-block (and (util/electron?) (seq image-src)))
               ;; Only stop propagation here: the container's pointerdown
               ;; handler calls preventDefault, which suppresses the mousedown
               ;; the menu trigger opens on, so the menu never opened.
@@ -359,48 +370,62 @@
                    :class "h-6 w-6"}
                   (shui/tabler-icon "dots-vertical")))
                 (shui/dropdown-menu-content
-                 (shui/dropdown-menu-sub
-                  (shui/dropdown-menu-sub-trigger
-                   [:span.flex.items-center.gap-1
-                    (ui/icon "layout-align-left") (t :asset/align)])
-                  (shui/dropdown-menu-sub-content
-                   (shui/dropdown-menu-item
-                    {:on-click #(handle-set-align! :left)}
-                    [:span.flex.items-center.gap-2
-                     (ui/icon "layout-align-left")
-                     (t :asset/align-left)
-                     (when (or (nil? asset-align) (= asset-align :left))
-                       (ui/icon "check"))])
-                   (shui/dropdown-menu-item
-                    {:on-click #(handle-set-align! :center)}
-                    [:span.flex.items-center.gap-2
-                     (ui/icon "layout-align-center")
-                     (t :asset/align-center)
-                     (when (= asset-align :center)
-                       (ui/icon "check"))])
-                   (shui/dropdown-menu-item
-                    {:on-click #(handle-set-align! :right)}
-                    [:span.flex.items-center.gap-2
-                     (ui/icon "layout-align-right")
-                     (t :asset/align-right)
-                     (when (= asset-align :right)
-                       (ui/icon "check"))])))
+                 (when asset-block
+                   (shui/dropdown-menu-sub
+                    (shui/dropdown-menu-sub-trigger
+                     [:span.flex.items-center.gap-1
+                      (ui/icon "layout-align-left") (t :asset/align)])
+                    (shui/dropdown-menu-sub-content
+                     (shui/dropdown-menu-item
+                      {:on-click #(handle-set-align! :left)}
+                      [:span.flex.items-center.gap-2
+                       (ui/icon "layout-align-left")
+                       (t :asset/align-left)
+                       (when (or (nil? asset-align) (= asset-align :left))
+                         (ui/icon "check"))])
+                     (shui/dropdown-menu-item
+                      {:on-click #(handle-set-align! :center)}
+                      [:span.flex.items-center.gap-2
+                       (ui/icon "layout-align-center")
+                       (t :asset/align-center)
+                       (when (= asset-align :center)
+                         (ui/icon "check"))])
+                     (shui/dropdown-menu-item
+                      {:on-click #(handle-set-align! :right)}
+                      [:span.flex.items-center.gap-2
+                       (ui/icon "layout-align-right")
+                       (t :asset/align-right)
+                       (when (= asset-align :right)
+                         (ui/icon "check"))]))))
 
                  (shui/dropdown-menu-item
                   {:on-click handle-copy!}
                   [:span.flex.items-center.gap-1
                    (ui/icon "copy") (t :asset/copy)])
                  (when (util/electron?)
-                   (shui/dropdown-menu-item
-                    {:on-click (fn [e]
-                                 (util/stop e)
-                                 (if local?
-                                   (ipc/ipc "openFileInFolder" image-src)
-                                   (js/window.apis.openExternal image-src)))}
-                    [:span.flex.items-center.gap-1
-                     (ui/icon "folder-pin") (t (if local? :asset/show-file-in-folder :asset/open-in-browser))]))
+                   ;; http(s) opens in browser; a filesystem path reveals in
+                   ;; folder; anything else (data:, blob:, // src) supports
+                   ;; neither. src is checked for // since assets:// UNC
+                   ;; paths normalize to //server/share but are still files.
+                   (let [remote-src? (and image-src (re-find #"(?i)^https?:" image-src))
+                         file-src? (and image-src
+                                        (not (re-find #"(?i)^[a-z][a-z0-9+.-]+:" image-src))
+                                        (not (util/starts-with? src "//")))]
+                     (when (or remote-src? file-src?)
+                       (shui/dropdown-menu-item
+                      {:on-click (fn [e]
+                                   (util/stop e)
+                                   (if remote-src?
+                                     (js/window.apis.openExternal image-src)
+                                     (-> (fs/file-exists? image-src)
+                                         (p/then (fn [exists?]
+                                                   (if exists?
+                                                     (ipc/ipc "openFileInFolder" image-src)
+                                                     (notification/show! (t :asset/missing-file image-src) :warning)))))))}
+                      [:span.flex.items-center.gap-1
+                       (ui/icon "folder-pin") (t (if remote-src? :asset/open-in-browser :asset/show-file-in-folder))]))))
 
-                 (when-not config/publishing?
+                 (when (and asset-block (not config/publishing?))
                    [:<>
                     (shui/dropdown-menu-separator)
                     (shui/dropdown-menu-item
@@ -664,12 +689,21 @@
      [:span.warning full_text]
      (if (common-config/local-relative-asset? href)
        (asset-link config title href metadata full_text)
-       (let [href (cond
-                    (util/starts-with? href "http")
+       (let [local-path? (or (util/starts-with? href "/") (util/starts-with? href "~"))
+             href (cond
+                    (util/starts-with? (string/lower-case href) "http")
                     href
 
-                    (or (util/starts-with? href "/") (util/starts-with? href "~"))
+                    ;; Protocol-relative URL (//host/path)
+                    (util/starts-with? href "//")
                     href
+
+                    ;; Absolute and ~ home paths stay root-relative outside
+                    ;; Electron; Electron resolves them to assets:// URLs.
+                    local-path?
+                    (if (util/electron?)
+                      (assets-handler/file-path->assets-url href)
+                      href)
 
                     config/publishing?
                     (subs href 1)
@@ -677,10 +711,17 @@
                     (= "Embed_data" (first url))
                     href
 
+                    (assets-handler/check-alias-path? href)
+                    (assets-handler/normalize-asset-resource-url href)
+
+                    ;; Graph-relative paths (`../x.png`, `./x.png`, `x.png`)
+                    ;; and file:// URLs resolve to assets:// URLs; the raw
+                    ;; path resolves against the app origin and 404s.
+                    (util/electron?)
+                    (assets-handler/file-path->assets-url href)
+
                     :else
-                    (if (assets-handler/check-alias-path? href)
-                      (assets-handler/normalize-asset-resource-url href)
-                      href))]
+                    href)]
          [:div.as-plain-image-link
           (resizable-image config title href metadata full_text false)])))))
 
@@ -1325,10 +1366,23 @@
            (when (and brackets? (not blank-title?))
              [:span.text-gray-500.bracket page-ref/right-brackets])])))))
 
+(hsx/defc broken-page-reference
+  "Render a [[uuid]] ref whose entity doesn't exist."
+  [_config uuid-or-title]
+  [:a.page-ref.broken
+   {:title (t :block/ref-not-exist)
+    :on-click (fn [e]
+                (util/stop e)
+                (notification/show! (t :block/ref-not-exist) :warning))}
+   (str "[[" uuid-or-title "]]")])
+
 (hsx/defc subscribed-page-reference
   [config uuid-or-title label page-uuid fallback-block]
-  (let [block (db-hooks/use-block page-uuid)]
-    (page-reference-content config uuid-or-title label (or block fallback-block))))
+  (let [{:keys [status value error]} (db-hooks/use-block-projection-snapshot page-uuid identity)]
+    (case status
+      :error (throw error)
+      :missing (broken-page-reference config uuid-or-title)
+      (page-reference-content config uuid-or-title label (or value fallback-block)))))
 
 (defn referenced-block
   [block uuid-or-title]
@@ -3856,7 +3910,13 @@
         (root-block? config block)
         (and (or (entity/class? block) (entity/property? block))
              (:page-title? config)))
-    temp-collapsed?
+    ;; A list-view row mounts a whole page tree; without a collapsed
+    ;; default every visible row cascades [:children] + per-child
+    ;; [:block] loads on scroll. Default collapsed unless the user
+    ;; explicitly expanded this block.
+    (if (and (:list-view? config) (nil? temp-collapsed?))
+      true
+      temp-collapsed?)
 
     :else
     (if (some? temp-collapsed?)
@@ -4421,7 +4481,9 @@
 (defn- same-block-revision?
   [previous-block next-block]
   (and (= (:block/uuid previous-block) (:block/uuid next-block))
-       (= (:block/tx-id previous-block) (:block/tx-id next-block))))
+       (= (:block/tx-id previous-block) (:block/tx-id next-block))
+       (= (:block.temp/order-list-index previous-block)
+          (:block.temp/order-list-index next-block))))
 
 (hsx/defc block-container-inner
   [container-state repo config* block opts]

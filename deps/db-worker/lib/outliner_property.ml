@@ -403,7 +403,9 @@ let entity_of_wire db (v : Wire.t) : entity option =
   | Wire.Int id -> Ldb.ent_of_id db id
   | Wire.Int64 id -> Ldb.ent_of_id db (Int64.to_int id)
   | Wire.Keyword k -> entity db (Ident k)
-  | Wire.Uuid u -> entity db (Lookup_ref ("block/uuid", Uuid u))
+  | Wire.Uuid u ->
+      entity db
+        (Lookup_ref ("block/uuid", Uuid (Datascript.Util.uuid_canonicalize u)))
   | Wire.Array [ Wire.Keyword a; x ] ->
       (match Ds_wire.value_of_transit x with
        | exception _ -> None
@@ -768,6 +770,35 @@ let convert_property_input_string (block_type : string option)
       Wire.Float (fail_parse_double s)
   | _ -> v
 
+(* resolve-update-cardinality *)
+let resolve_update_cardinality (property : entity) (schema : Wire.t) : string =
+  let new_type =
+    match Cljs_map.get schema "logseq.property/type" with
+    | Some (Wire.Keyword _ as t) -> t
+    | Some Wire.Nil | None ->
+        (match ent_property_type property with
+         | Some t -> Wire.Keyword t
+         | None -> Wire.Nil)
+    | Some w -> w
+  in
+  let force_one =
+    match new_type with
+    | Wire.Keyword t ->
+        not (List.mem t Db_property_type.cardinality_property_types)
+    | Wire.Nil -> false
+    | _ -> true
+  in
+  if force_one then "db.cardinality/one"
+  else
+    match Cljs_map.get schema "db/cardinality" with
+    | Some (Wire.Keyword ("many" | "db.cardinality/many")) ->
+        "db.cardinality/many"
+    | Some _ -> "db.cardinality/one"
+    | None ->
+        (match Ldb.value property "db/cardinality" with
+         | Some (Keyword c) -> c
+         | _ -> "db.cardinality/one")
+
 (* update-datascript-schema *)
 let update_datascript_schema (property : entity) (schema : Wire.t) : Wire.t list =
   let new_type =
@@ -776,12 +807,7 @@ let update_datascript_schema (property : entity) (schema : Wire.t) : Wire.t list
     | _ -> None
   in
   let ident = Ldb.ident_of property in
-  let cardinality =
-    match Cljs_map.get schema "db/cardinality" with
-    | Some (Wire.Keyword ("many" | "db.cardinality/many")) ->
-        "db.cardinality/many"
-    | _ -> "db.cardinality/one"
-  in
+  let cardinality = resolve_update_cardinality property schema in
   let old_type = ent_property_type property in
   let old_ref_type =
     match old_type with
@@ -824,6 +850,43 @@ let validate_property_name_update conn (property : entity)
       Outliner_validate.validate_property_title name
   | _ -> ()
 
+(* throw-disallowed-many-to-one! *)
+let throw_disallowed_many_to_one () : 'a =
+  raise
+    (Outliner_validate.Notification
+       (Wire.Map
+          [ (kw "type", kw "notification")
+          ; (kw "payload",
+             Wire.Map
+               [ (kw "message",
+                  Wire.String
+                    "This property can't change from multiple values to one \
+                     value because it has existing data.")
+               ; (kw "i18n-key", kw "property.validation/many-to-one")
+               ; (kw "type", kw "warning") ]) ]))
+
+(* schema-for-update — drop an unsafe many→one cardinality restore when other
+   schema fields are being replayed; a cardinality-only many→one with data
+   still throws *)
+let schema_for_update db (db_ident : string) (property : entity)
+    (schema : Wire.t) : Wire.t =
+  let many_to_one =
+    ent_many property
+    && (match Cljs_map.get schema "db/cardinality" with
+        | Some (Wire.Keyword ("one" | "db.cardinality/one")) -> true
+        | _ -> false)
+  in
+  let has_values =
+    Seq.uncons (datoms db Avet ~a:db_ident ()) |> Option.is_some
+  in
+  if many_to_one && has_values then begin
+    let schema' = Cljs_map.dissoc schema "db/cardinality" in
+    match schema' with
+    | Wire.Map (_ :: _) -> schema'
+    | _ -> throw_disallowed_many_to_one ()
+  end
+  else schema
+
 (* update-property *)
 let update_property conn (db_ident : string) (property : entity)
     (schema : Wire.t) ~(property_name : string option)
@@ -831,6 +894,7 @@ let update_property conn (db_ident : string) (property : entity)
   let db = Datascript.db conn in
   validate_property_name_update conn property property_name;
   Outliner_validate.validate_editing_built_in_property property schema;
+  let schema = schema_for_update db db_ident property schema in
   let ent_get (e : entity) (k : string) : Wire.t =
     match Ldb.value e k with
     | Some v -> Ds_wire.transit_of_value v
@@ -917,29 +981,6 @@ let update_property conn (db_ident : string) (property : entity)
            build_property_value_tx_data conn property property_id v)
         properties
   in
-  let many_to_one =
-    ent_many property
-    &&
-    (match Cljs_map.get schema "db/cardinality" with
-     | Some (Wire.Keyword ("one" | "db.cardinality/one")) -> true
-     | _ -> false)
-  in
-  if
-    many_to_one
-    && Seq.uncons (datoms db Avet ~a:db_ident ()) |> Option.is_some
-  then
-    raise
-      (Outliner_validate.Notification
-         (Wire.Map
-            [ (kw "type", kw "notification")
-            ; (kw "payload",
-               Wire.Map
-                 [ (kw "message",
-                    Wire.String
-                      "This property can't change from multiple values to one \
-                       value because it has existing data.")
-                 ; (kw "i18n-key", kw "property.validation/many-to-one")
-                 ; (kw "type", kw "warning") ]) ]));
   if
     List.exists (fun (k, _) -> k = "logseq.property/type") changed_property_attrs
     && Seq.uncons (datoms db Avet ~a:db_ident ()) |> Option.is_some
@@ -1247,7 +1288,8 @@ let find_or_create_property_value conn (property_id : string) (v : Wire.t)
 
 (* convert-ref-property-value *)
 let convert_ref_property_value conn (property_id : string) (v : Wire.t)
-    (property_type : string) (block_id : Wire.t option) : Wire.t =
+    (property_type : string) ~(entity_id : bool option)
+    (block_id : Wire.t option) : Wire.t =
   let db = Datascript.db conn in
   let number_property = property_type = "number" in
   match v with
@@ -1263,12 +1305,13 @@ let convert_ref_property_value conn (property_id : string) (v : Wire.t)
   | Wire.Int id when
       (not number_property)
       ||
-      (match Ldb.ent_of_id db id with
-       | Some e ->
-           (match Ldb.ref_ent e "logseq.property/created-from-property" with
-            | Some p -> Ldb.ident_of p = Some property_id
-            | None -> false)
-       | None -> false) ->
+      (entity_id <> Some false
+       && (match Ldb.ent_of_id db id with
+           | Some e ->
+               (match Ldb.ref_ent e "logseq.property/created-from-property" with
+                | Some p -> Ldb.ident_of p = Some property_id
+                | None -> false)
+           | None -> false)) ->
       v
   | _ when property_type = "page" ->
       (match v with
@@ -1307,7 +1350,8 @@ let convert_ref_property_value conn (property_id : string) (v : Wire.t)
 
 (* convert-ref-property-values *)
 let convert_ref_property_values conn (property_id : string) (value : Wire.t)
-    (property_type : string) ~(many : bool) ~(block_id : Wire.t option) : Wire.t =
+    (property_type : string) ~(many : bool) ~(entity_id : bool option)
+    ~(block_id : Wire.t option) : Wire.t =
   match value with
   | (Wire.Array vs | Wire.List vs | Wire.Set vs) when many ->
       (try
@@ -1315,7 +1359,7 @@ let convert_ref_property_values conn (property_id : string) (value : Wire.t)
            (List.map
               (fun v ->
                  convert_ref_property_value conn property_id v property_type
-                   block_id)
+                   ~entity_id block_id)
               vs)
        with e ->
          raise
@@ -1331,7 +1375,8 @@ let convert_ref_property_values conn (property_id : string) (value : Wire.t)
                       ("Failed to convert many property values: "
                        ^ Printexc.to_string e)) ])))
   | _ ->
-      convert_ref_property_value conn property_id value property_type block_id
+      convert_ref_property_value conn property_id value property_type
+        ~entity_id block_id
 
 (* throw-error-if-self-value *)
 let throw_error_if_self_value (block : entity) (value : Wire.t) (ref_ : bool)
@@ -1661,7 +1706,8 @@ let throw_error_if_batch_alias_targets (block_eids : Wire.t list)
 
 (* batch-set-property! *)
 let batch_set_property conn (block_ids : Wire.t list) (property_id : string)
-    (v : Wire.t) ?(entity_id_opt = false) ?(preserve_task_tag = false) () : unit =
+    (v : Wire.t) ?(entity_id_opt : bool option = None)
+    ?(preserve_task_tag = false) () : unit =
   throw_error_if_read_only_property property_id;
   let db = Datascript.db conn in
   if v = Wire.Nil then
@@ -1692,7 +1738,7 @@ let batch_set_property conn (block_ids : Wire.t list) (property_id : string)
       Option.value (ent_property_type property) ~default:"default"
     in
     let many = ent_many property in
-    let entity_id_v = entity_id_opt && (match v with Wire.Int _ -> true | _ -> false) in
+    let entity_id_v = entity_id_opt = Some true && (match v with Wire.Int _ -> true | _ -> false) in
     let ref_ = List.mem property_type Db_schema.all_ref_property_types in
     let extends_ = property_id = "logseq.property.class/extends" in
     let default_url_not_closed =
@@ -1706,7 +1752,7 @@ let batch_set_property conn (block_ids : Wire.t list) (property_id : string)
           normalize_and_validate_default_url_property_values db property v ~many
         else
           convert_ref_property_values conn property_id v property_type ~many
-            ~block_id:None
+            ~entity_id:entity_id_opt ~block_id:None
       else v
     in
     if v' = Wire.Nil then failwith "Property value must be not nil";
@@ -1724,7 +1770,7 @@ let batch_set_property conn (block_ids : Wire.t list) (property_id : string)
                          | _ -> false)
                  then
                    convert_ref_property_values conn property_id v' property_type
-                     ~many ~block_id:(Some (Wire.Int block.id))
+                     ~many ~entity_id:None ~block_id:(Some (Wire.Int block.id))
                  else v'
                in
                throw_error_if_self_value block v' ref_;
@@ -1884,7 +1930,7 @@ let set_block_property conn (block_eid : Wire.t) (property_id : string)
          if extends_ then normalize_extends_value db v
          else if ref_ then
            convert_ref_property_value conn property_id v property_type
-             (Some block_eid')
+             ~entity_id:None (Some block_eid')
          else v
        in
        (match block, property with
@@ -2022,15 +2068,18 @@ let upsert_property conn (property_id : string option) (schema : Wire.t)
         | Some (Wire.Int id) -> Some id
         | _ -> None
       in
-      let block_uuid =
+      let page =
         match db_id with
-        | Some id ->
-            (match Ldb.ent_of_id db id with
-             | Some e ->
-                 (match Ldb.value e "block/uuid" with
-                  | Some (Uuid u) -> Some u
-                  | _ -> None)
-             | None -> None)
+        | Some id -> Ldb.ent_of_id db id
+        | None -> None
+      in
+      Outliner_validate.validate_page_to_property_conversion page;
+      let block_uuid =
+        match page with
+        | Some e ->
+            (match Ldb.value e "block/uuid" with
+             | Some (Uuid u) -> Some u
+             | _ -> None)
         | None -> None
       in
       let new_property =
@@ -2055,6 +2104,45 @@ let upsert_property conn (property_id : string option) (schema : Wire.t)
       (match entity (Datascript.db conn) (Ident db_ident') with
        | Some e -> e
        | None -> failwith "upsert-property failed to create entity")
+
+(* node-value-target-id — resolves a :node property value to the id of
+   the node it targets. Such values can be hidden property value blocks
+   whose :block/title is the target's uuid. Only resolves value blocks
+   created by property-ident itself — a value block created for another
+   property carries its own content even when stored under this
+   property. *)
+let node_value_target_id db (v : value) (property_ident : attr)
+    : entity_id option =
+  let ent =
+    match v with
+    | Ref id -> Ldb.ent_of_id db id
+    | Int64 i -> (
+        match Datascript.Util.int64_to_int i with
+        | Some id -> Ldb.ent_of_id db id
+        | None -> None)
+    | _ -> None
+  in
+  match ent with
+  | Some e -> (
+      let matches =
+        match Ldb.ref_ent e "logseq.property/created-from-property" with
+        | Some p -> Ldb.ident_of p = Some property_ident
+        | None -> false
+      in
+      match matches, Ldb.string_value e "block/title" with
+      | true, Some title when Ldb.is_uuid_string title -> (
+          match entity db (Lookup_ref ("block/uuid", Uuid title)) with
+          | Some target -> Some target.id
+          | None -> Some e.id)
+      | _ -> Some e.id)
+  | None -> None
+
+(* cljs (if (de/entity? v) (:db/id v) v) — ref values carry the target
+   eid; scalars carry themselves *)
+let match_value_of (v : value) : value =
+  match v with
+  | Ref id -> Int64 (Int64.of_int id)
+  | _ -> v
 
 (* batch-delete-property-value! *)
 let batch_delete_property_value conn (block_eids : Wire.t list)
@@ -2104,30 +2192,48 @@ let batch_delete_property_value conn (block_eids : Wire.t list)
                  [ ("outliner-op", Keyword "save-block") ]
                |> ignore
              end else
+               let node_type =
+                 Ldb.value property "logseq.property/type"
+                 = Some (Keyword "node")
+               in
                List.iter
                  (fun e ->
                     match entity_of_eid db e with
                     | Some block ->
                         let current_val = Ldb.values block property_id in
-                        let fv = List.nth_opt current_val 0 in
-                        if
-                          List.length current_val = 1
-                          &&
-                          (match fv, property_value with
-                           | Some (Ref id), Wire.Int vid -> id = vid
-                           | Some rv, _ ->
-                               rv = Ds_wire.value_of_transit property_value
-                           | _ -> false)
-                        then
-                          remove_block_property conn (Wire.Int block.id)
-                            property_id
-                        else
-                          Db_transact.transact conn
-                            [ Wire.Array
-                                [ kw "db/retract"; Wire.Int block.id
-                                ; kw property_id; property_value ] ]
-                            [ ("outliner-op", Keyword "save-block") ]
-                          |> ignore
+                        (* cljs match-id — the first value equal to
+                           property-value, or (for :node properties) whose
+                           hidden value block resolves to it *)
+                        let matched =
+                          List.find_opt
+                            (fun v ->
+                               let v_id = match_value_of v in
+                               Ds_wire.value_of_transit property_value
+                               = v_id
+                               || (node_type
+                                   &&
+                                   (match property_value,
+                                          node_value_target_id db v
+                                            property_id
+                                    with
+                                    | Wire.Int vid, Some tid -> vid = tid
+                                    | _ -> false)))
+                            current_val
+                        in
+                        (match matched with
+                         | Some _ when List.length current_val = 1 ->
+                             remove_block_property conn (Wire.Int block.id)
+                               property_id
+                         | Some v ->
+                             Db_transact.transact conn
+                               [ Wire.Array
+                                   [ kw "db/retract"; Wire.Int block.id
+                                   ; kw property_id
+                                   ; Ds_wire.transit_of_value
+                                       (match_value_of v) ] ]
+                               [ ("outliner-op", Keyword "save-block") ]
+                             |> ignore
+                         | None -> ())
                     | None -> ())
                  block_eids
            end

@@ -137,19 +137,26 @@ let ref_value_summary db (eid : entity_id) : Wire.t =
       in
       Wire.Map (List.rev m)
 
-(* node-property-target-id *)
-let node_property_target_id db (value_id : entity_id) : entity_id =
+(* node-property-target-id — resolves a :node property value to the id of
+   the node it targets. :node values are often stored as hidden property
+   value blocks whose :block/title is the target's uuid; direct node refs
+   resolve to themselves. A value block only stands in for its target
+   through the property that created it, so property-ident must match the
+   value block's creator. *)
+let node_property_target_id db (value_id : entity_id) (property_ident : attr)
+    : entity_id =
   match Ldb.ent_of_id db value_id with
-  | Some pv when Option.is_some (Ldb.value pv "logseq.property/created-from-property") ->
-      (match Ldb.string_value pv "block/title" with
-       | Some title when Ldb.is_uuid_string title ->
-           (match
-              entity db (Lookup_ref ("block/uuid", Uuid title))
-            with
-            | Some target -> target.id
-            | None -> invalid_arg ("Missing node property target: " ^ title))
-       | _ -> value_id)
-  | _ -> value_id
+  | Some pv -> (
+      match Ldb.ref_ent pv "logseq.property/created-from-property" with
+      | Some creator when Ldb.ident_of creator = Some property_ident -> (
+          match Ldb.string_value pv "block/title" with
+          | Some title when Ldb.is_uuid_string title -> (
+              match entity db (Lookup_ref ("block/uuid", Uuid title)) with
+              | Some target -> target.id
+              | None -> invalid_arg ("Missing node property target: " ^ title))
+          | _ -> value_id)
+      | _ -> value_id)
+  | None -> value_id
 
 (* attribute-value->plain — cljs ref-attr? takes only the attr; any numeric
    stored value under a ref attr is an entity id, so Int/Float values
@@ -172,7 +179,7 @@ let attribute_value_to_plain db (a : attr) (v : value) : Wire.t =
         match property with
         | Some p
           when Ldb.value p "logseq.property/type" = Some (Keyword "node") ->
-            node_property_target_id db id
+            node_property_target_id db id a
         | _ -> id
       in
       ref_value_summary db ref_id

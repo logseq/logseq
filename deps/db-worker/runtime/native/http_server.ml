@@ -90,7 +90,9 @@ let reader_line (r : reader) : string option =
   go ()
 
 let reader_read (r : reader) (n : int) : string =
-  let out = Buffer.create n in
+  (* The advertised length is untrusted — buffer for what actually
+     arrives instead of pre-allocating the claim. *)
+  let out = Buffer.create (min n 65536) in
   let remaining = ref n in
   while !remaining > 0 do
     if not (reader_fill r) then remaining := 0

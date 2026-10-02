@@ -51,11 +51,64 @@ let write_kv key value_opt =
         (fun () ->
           File_sys.write_text (kv_path ()) (Transit_codec.to_string wire)))
 
+(* cljs kv-transit-writer "uint8array" handler — Uint8Array <-> vector
+   of byte ints under a custom transit tag. *)
+let uint8array_tag = "uint8array"
+
+let bytes_of_tagged = function
+  | Wire.Binary s -> Some s
+  | Wire.Tagged (tag, Wire.Array xs) when tag = uint8array_tag ->
+      Some
+        (String.concat ""
+           (List.filter_map
+              (fun w ->
+                match w with
+                | Wire.Int n -> Some (String.make 1 (Char.chr n))
+                | Wire.Int64 n -> Some (String.make 1 (Char.chr (Int64.to_int n)))
+                | Wire.Float f -> Some (String.make 1 (Char.chr (int_of_float f)))
+                | _ -> None)
+              xs))
+  | _ -> None
+
+let b64_alphabet =
+  "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+
+let b64_encode s =
+  let n = String.length s in
+  let buf = Buffer.create (((n + 2) / 3) * 4) in
+  let byte i = Char.code (String.unsafe_get s i) in
+  let emit v pad =
+    Buffer.add_char buf b64_alphabet.[(v lsr 18) land 63];
+    Buffer.add_char buf b64_alphabet.[(v lsr 12) land 63];
+    Buffer.add_char buf
+      (if pad >= 2 then '=' else b64_alphabet.[(v lsr 6) land 63]);
+    Buffer.add_char buf (if pad >= 1 then '=' else b64_alphabet.[v land 63])
+  in
+  let i = ref 0 in
+  while !i + 3 <= n do
+    emit ((byte !i lsl 16) lor (byte (!i + 1) lsl 8) lor byte (!i + 2)) 0;
+    i := !i + 3
+  done;
+  (match n - !i with
+   | 1 -> emit (byte !i lsl 16) 2
+   | 2 -> emit ((byte !i lsl 16) lor (byte (!i + 1) lsl 8)) 1
+   | _ -> ());
+  Buffer.contents buf
+
+(* Binary values come back through the string-typed [get] wrapped as
+   "b64:" strings — the kv layer (sync_crypt kv_get_impl) decodes them
+   back to Wire.Binary. *)
 let get key =
   Db_worker_effect.map
     (fun m ->
       match List.assoc_opt key m with
-      | Some v -> Wire.as_string v
+      | Some v ->
+          (match Wire.as_string v with
+           | Some s -> Some s
+           | None ->
+               (match bytes_of_tagged v with
+                | Some b -> Some ("b64:" ^ b64_encode b)
+                | None -> None))
       | None -> None)
     (load_kv ())
 
@@ -66,27 +119,15 @@ let keys () = Db_worker_effect.map (fun m -> List.map fst m) (load_kv ())
 (* cljs idb/init! — no-op on file stores. *)
 let init () = Db_worker_effect.pure ()
 
-(* cljs kv-transit-writer "uint8array" handler — Uint8Array <-> vector
-   of byte ints under a custom transit tag. *)
-let uint8array_tag = "uint8array"
-
 let get_binary key =
   Db_worker_effect.map
     (fun m ->
       match List.assoc_opt key m with
-      | Some (Wire.Binary s) -> Some s
-      | Some (Wire.Tagged (tag, Wire.Array xs)) when tag = uint8array_tag ->
-          Some
-            (String.concat ""
-               (List.filter_map
-                  (fun w ->
-                    match w with
-                    | Wire.Int n -> Some (String.make 1 (Char.chr n))
-                    | Wire.Int64 n -> Some (String.make 1 (Char.chr (Int64.to_int n)))
-                    | Wire.Float f -> Some (String.make 1 (Char.chr (int_of_float f)))
-                    | _ -> None)
-                  xs))
-      | _ -> None)
+      | Some v ->
+          (match bytes_of_tagged v with
+           | Some b -> Some b
+           | None -> Wire.as_string v)
+      | None -> None)
     (load_kv ())
 
 let set_binary key value =

@@ -86,32 +86,52 @@ let maps_equal (a : (attr * value) list) (b : (attr * value) list) : bool =
    as check-and-fix-schema, so it never enters local-tx. *)
 let instant_attrs = [ "file/created-at"; "file/last-modified-at" ]
 
+(* Stray ~m values can only come from data already on disk — the write
+   path does not produce them — so one clean pass per graph is enough.
+   The marker keeps every later open at a single point lookup instead of
+   another full eavt walk. *)
+let instant_healed_ident = "logseq.kv/instant-values-healed"
+
 let heal_instant_values (conn : conn) =
   let db = Datascript.db conn in
-  let ops =
-    List.of_seq (datoms db Eavt ())
-    |> List.concat_map (fun (d : datom) ->
-         if List.mem d.a instant_attrs then
-           match d.v with
-           | Instant _ -> []
-           | value -> (
-               match Common_util.timestamp_ms value with
-               | Some ms ->
-                   [ Retract (Entity_id d.e, d.a, Some d.v)
-                   ; Add (Entity_id d.e, d.a, Instant ms) ]
-               | None -> [])
-         else
-           match d.v with
-           | Instant ms ->
-               [ Retract (Entity_id d.e, d.a, Some d.v)
-               ; Add (Entity_id d.e, d.a, Common_util.value_of_ms ms) ]
-           | _ -> [])
-  in
-  if ops <> [] then begin
-    Worker_log.info "worker-db-fix/heal-instant-values"
-      [ ("datoms", string_of_int (List.length ops / 2)) ];
-    ignore (Datascript.transact_bang conn ops)
-  end
+  match Ldb.get_key_value db instant_healed_ident with
+  | Some (Bool true) -> ()
+  | _ ->
+      let ops =
+        Seq.fold_left
+          (fun acc (d : datom) ->
+            if List.mem d.a instant_attrs then
+              match d.v with
+              | Instant _ -> acc
+              | value -> (
+                  match Common_util.timestamp_ms value with
+                  | Some ms ->
+                      Add (Entity_id d.e, d.a, Instant ms)
+                      :: Retract (Entity_id d.e, d.a, Some d.v)
+                      :: acc
+                  | None -> acc)
+            else
+              match d.v with
+              | Instant ms ->
+                  Add (Entity_id d.e, d.a, Common_util.value_of_ms ms)
+                  :: Retract (Entity_id d.e, d.a, Some d.v)
+                  :: acc
+              | _ -> acc)
+          []
+          (datoms db Eavt ())
+        |> List.rev
+      in
+      if ops <> [] then
+        Worker_log.info "worker-db-fix/heal-instant-values"
+          [ ("datoms", string_of_int (List.length ops / 2)) ];
+      ignore
+        (Datascript.transact_bang conn
+           (ops
+            @ [ Entity
+                  { db_id = None
+                  ; attrs =
+                      [ ("db/ident", One_value (Keyword instant_healed_ident))
+                      ; ("kv/value", One_value (Bool true)) ] } ]))
 
 let check_and_fix_schema (conn : conn) =
   let conn_schema = Datascript.schema (Datascript.db conn) in

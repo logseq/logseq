@@ -86,6 +86,16 @@ jobs:
         uses: ocaml/setup-ocaml@v3
         with:
           ocaml-compiler: ${{ env.OCAML_VERSION }}
+          dune-cache: true
+
+      - name: Restore opam switch cache
+        id: opam-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.opam
+          key: ${{ runner.os }}-opam-${{ env.OCAML_VERSION }}-${{ hashFiles('deps/db-worker/dune.lock/**', 'deps/db-worker/scripts/install-opam-deps.sh', 'deps/db-worker/*.opam', 'cli/*.opam') }}
+          restore-keys: |
+            ${{ runner.os }}-opam-${{ env.OCAML_VERSION }}-
 
       - name: Fetch db-worker OCaml deps
         working-directory: deps/db-worker
@@ -93,10 +103,26 @@ jobs:
           sh scripts/install-opam-deps.sh
           pnpm install
 
+      - name: Save opam switch cache
+        uses: actions/cache/save@v4
+        if: steps.opam-cache.outputs.cache-hit != 'true'
+        with:
+          path: ~/.opam
+          key: ${{ steps.opam-cache.outputs.cache-primary-key }}
+
       # electron.db-worker-manager-test spawns static/db-worker-node.js,
       # which requires the OCaml bundle produced by db-worker:build
       - name: Build db-worker node bundle
         run: pnpm db-worker:build
+
+      - name: Run db-worker OCaml tests
+        working-directory: deps/db-worker
+        run: |
+          node scripts/check-schema-version.cjs
+          node --test scripts/secret-kv-regression.cjs scripts/service-retry-regression.cjs
+          node scripts/graph-storage-recovery.cjs
+          node test/endpoint_lifecycle_probe.cjs
+          opam exec -- dune runtest
 
       - name: Build test asset
         run: pnpm cljs:test
@@ -149,6 +175,16 @@ jobs:
         uses: ocaml/setup-ocaml@v3
         with:
           ocaml-compiler: ${{ env.OCAML_VERSION }}
+          dune-cache: true
+
+      - name: Restore opam switch cache
+        id: opam-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.opam
+          key: ${{ runner.os }}-opam-${{ env.OCAML_VERSION }}-${{ hashFiles('deps/db-worker/dune.lock/**', 'deps/db-worker/scripts/install-opam-deps.sh', 'deps/db-worker/*.opam', 'cli/*.opam') }}
+          restore-keys: |
+            ${{ runner.os }}-opam-${{ env.OCAML_VERSION }}-
 
       - name: Clojure cache
         uses: actions/cache@v4
@@ -164,6 +200,12 @@ jobs:
         if: steps.clojure-deps.outputs.cache-hit != 'true'
         run: clojure -A:cljs -P
 
+      - name: Disable opam sandboxing
+        run: |
+          opam option --global 'wrap-build-commands=[]'
+          opam option --global 'wrap-install-commands=[]'
+          opam option --global 'wrap-remove-commands=[]'
+
       - name: Fetch OCaml deps
         working-directory: cli
         run: opam install . --deps-only --with-test --yes
@@ -173,6 +215,13 @@ jobs:
         run: |
           sh scripts/install-opam-deps.sh
           pnpm install
+
+      - name: Save opam switch cache
+        uses: actions/cache/save@v4
+        if: steps.opam-cache.outputs.cache-hit != 'true'
+        with:
+          path: ~/.opam
+          key: ${{ steps.opam-cache.outputs.cache-primary-key }}
 
       - name: Fetch pnpm deps
         run: pnpm install --frozen-lockfile
@@ -263,9 +312,25 @@ jobs:
         uses: ocaml/setup-ocaml@v3
         with:
           ocaml-compiler: ${{ env.OCAML_VERSION }}
+          dune-cache: true
+
+      - name: Restore opam switch cache
+        id: opam-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.opam
+          key: ${{ runner.os }}-opam-${{ env.OCAML_VERSION }}-${{ hashFiles('deps/db-worker/dune.lock/**', 'deps/db-worker/scripts/install-opam-deps.sh', 'deps/db-worker/*.opam', 'cli/*.opam') }}
+          restore-keys: |
+            ${{ runner.os }}-opam-${{ env.OCAML_VERSION }}-
 
       - name: Install CLI Linux runtime deps
         run: sudo apt-get update && sudo apt-get install -y libsecret-1-0
+
+      - name: Disable opam sandboxing
+        run: |
+          opam option --global 'wrap-build-commands=[]'
+          opam option --global 'wrap-install-commands=[]'
+          opam option --global 'wrap-remove-commands=[]'
 
       - name: Fetch OCaml deps
         working-directory: cli
@@ -276,6 +341,13 @@ jobs:
         run: |
           sh scripts/install-opam-deps.sh
           pnpm install
+
+      - name: Save opam switch cache
+        uses: actions/cache/save@v4
+        if: steps.opam-cache.outputs.cache-hit != 'true'
+        with:
+          path: ~/.opam
+          key: ${{ steps.opam-cache.outputs.cache-primary-key }}
 
       - name: Fetch scripts pnpm deps
         run: pnpm --dir scripts install --frozen-lockfile --ignore-workspace

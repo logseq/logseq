@@ -10,6 +10,6 @@
 (source
  (fetch
   (url
-   git+https://github.com/logseq/persistent-sorted-set-ocaml.git#879de3b2f2d40aa9afcdecd1bb304b2f5f4e3ee5)))
+   git+https://github.com/logseq/persistent-sorted-set-ocaml.git#7393117ea0baa7c878287e164416a009b255dd24)))
 
 (dev)

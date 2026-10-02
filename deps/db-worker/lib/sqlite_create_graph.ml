@@ -545,9 +545,14 @@ let build_initial_files (config_content : string) : BM.t list =
 
 (* ---------- create-graph/build-db-initial-data ---------- *)
 
-(* cljs db-schema/version = (parse-schema-version "65.33") *)
+(* Use the same version as the default migration target. *)
 let db_schema_version : value =
-  Map [ Keyword "major", Int64 65L; Keyword "minor", Int64 33L ]
+  let version = Db_schema.version in
+  Map
+    ([ Keyword "major", Int64 (Int64.of_int version.sv_major) ]
+     @ match version.sv_minor with
+       | None -> []
+       | Some minor -> [ Keyword "minor", Int64 (Int64.of_int minor) ])
 
 (* cljs build-db-initial-data — the whole seed tx for a new graph.
    [db] is the fresh conn's db (used by Block_map.to_tx_op to decide which
@@ -571,7 +576,7 @@ let initial_tx_data
       [ "db/ident", Keyword "logseq.property/empty-placeholder"
       ; "block/uuid"
       , Uuid
-          (Common_uuid.gen_uuid "builtin-block-uuid"
+          (Common_uuid.gen_uuid_keyword "builtin-block-uuid"
              "logseq.property/empty-placeholder") ] ]
     @ (match graph_git_sha with
        | Some sha -> [ kv "logseq.kv/graph-git-sha" (String sha) ]

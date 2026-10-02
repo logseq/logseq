@@ -10,7 +10,24 @@
             [logseq.e2e.rtc :as rtc]
             [logseq.e2e.settings :as settings]
             [logseq.e2e.util :as util]
-            [wally.main :as w]))
+            [wally.main :as w])
+  (:import (com.microsoft.playwright Page$NavigateOptions)
+           (com.microsoft.playwright.options WaitUntilState)))
+
+(def ^:private first-load-timeout-ms
+  "The first load in a new browser context is cold: the browser downloads
+  and compiles the app's JS, and the app creates a graph before it shows the
+  header. It gets a long limit of its own, which only catches an app that
+  never shows up. The strict checks run on the reload in
+  `settings/refresh-test-env!`."
+  60000)
+
+(defn- open-app!
+  [port]
+  ;; returns once the server answers; the wait below covers the whole load
+  (.navigate (w/get-page) (pw-page/get-test-url port)
+             (doto (Page$NavigateOptions.) (.setWaitUntil WaitUntilState/COMMIT)))
+  (w/wait-for "#search-button" {:timeout first-load-timeout-ms}))
 
 ;; TODO: save trace
 ;; TODO: parallel support
@@ -25,7 +42,7 @@
               custom-report/*pw-page->console-logs* (atom {})]
       (settings/install-init-script! (.context (w/get-page)))
       (w/grant-permissions :clipboard-write :clipboard-read)
-      (w/navigate (pw-page/get-test-url port))
+      (open-app! port)
       (settings/developer-mode)
       (settings/refresh-test-env!)
       (let [p (w/get-page)]
@@ -52,7 +69,7 @@
       (run!
        #(w/with-page %
           (w/grant-permissions :clipboard-write :clipboard-read)
-          (w/navigate (pw-page/get-test-url (or port @config/*port)))
+          (open-app! (or port @config/*port))
           (settings/developer-mode)
           (settings/refresh-test-env!)
           (let [p (w/get-page)]

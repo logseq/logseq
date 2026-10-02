@@ -874,7 +874,7 @@ let ensure_comments_blocks_property_on_tag_additions (report : tx_report)
 
 let gen_created_by_block (claims : Worker_util.jwt_claims) : Block_map.t =
   let now = Date_time_util.time_ms () in
-  [ "block/uuid", Uuid claims.sub
+  [ "block/uuid", Uuid (Datascript.Util.uuid_canonicalize claims.sub)
   ; "block/name",
     String (Option.value ~default:"" claims.username)
   ; "block/title",
@@ -899,7 +899,9 @@ let add_created_by_ref_hook (db_before : db) (db_after : db)
     | None -> []
     | Some claims ->
         let created_by_ent =
-          entity db_after (Lookup_ref ("block/uuid", Uuid claims.sub))
+          entity db_after
+            (Lookup_ref
+               ("block/uuid", Uuid (Datascript.Util.uuid_canonicalize claims.sub)))
         in
         let created_by_ref : value =
           match created_by_ent with

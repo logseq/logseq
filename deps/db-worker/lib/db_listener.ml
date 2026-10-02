@@ -99,10 +99,12 @@ let log_tx_outliner_op_perf (data : Wire.t) =
           [ ("data", Ds_wire.edn_of_transit data') ]
       else if !Sync_state.outliner_perf_logging
               && List.mem (op_names_of data') e2e_perf_op_names then
+        (* cljs select-keys [:op-names :worker-apply-ms] *)
         let slim =
           Wire.Map
             (List.filter
-               (fun (k, _) -> k = kw "op-names" || k = kw "worker-apply-ms")
+               (fun (k, _) ->
+                 k = kw "op-names" || k = kw "worker-apply-ms")
                (Wire.as_map data'))
         in
         Worker_log.info ":db-worker/outliner-op-perf"
@@ -207,13 +209,17 @@ let canonical_replacements (r : tx_report) : Wire.t =
          else None)
       r.tx_data
   in
+  let shifted_uuids = Render_delta.order_list_shifted_uuids r in
+  let uuids =
+    List.sort_uniq String.compare
+      (block_uuids @ parent_uuids @ shifted_uuids)
+  in
   (* canonical_blocks lives in render_snapshot which transitively
      depends on db_listener — late-bound ref like endpoint_transaction *)
   match !Sync_deps.canonical_blocks_fn with
   | Some f -> (
       match
-        f db_after
-          (List.map (fun u -> Wire.Uuid u) (block_uuids @ parent_uuids))
+        f db_after (List.map (fun u -> Wire.Uuid u) uuids)
       with
       | Wire.Map _ as m ->
           Option.value (Wire.get "blocks" m) ~default:(Wire.Map [])
@@ -386,14 +392,24 @@ let invoke_listener_handler (timings : (string * float) list ref) k
 let process_committed_tx ~persist_enabled ~sync_db_to_main_thread
     ~(deferred : (string * handler) list) repo conn (r : tx_report) =
   let started_at = perf_time_ms () in
-  run_post_commit repo r.tx_meta "update-checksum" (fun () ->
-      !update_checksum repo r);
+  (* one sqlite txn around the two client-ops db writes — each separate
+     txn costs a real OPFS write batch, unlike cljs sql.js's in-memory
+     commits *)
+  let with_client_ops_tx f =
+    if Sync_state.has_client_ops_conn repo then
+      Sqlite.transaction (Sync_state.client_ops_conn repo) f
+    else f ()
+  in
+  with_client_ops_tx (fun () ->
+      run_post_commit repo r.tx_meta "update-checksum" (fun () ->
+          !update_checksum repo r));
   let checksum_at = perf_time_ms () in
   let handler_timings = ref [] in
   (if persist_enabled then
-     run_post_commit repo r.tx_meta "persist-local-tx" (fun () ->
-         invoke_listener_handler handler_timings "db-sync"
-           !persist_local_tx repo r));
+     with_client_ops_tx (fun () ->
+         run_post_commit repo r.tx_meta "persist-local-tx" (fun () ->
+             invoke_listener_handler handler_timings "db-sync"
+               !persist_local_tx repo r)));
   let persist_at = perf_time_ms () in
   let sync_result =
     if sync_db_to_main_thread then

@@ -2480,10 +2480,12 @@
   (min view-prefetch-max-rows (rows-for-height viewport-height item-height)))
 
 (defn- view-prefetch-row-count
-  "Hydrate one screen. Virtuoso overscan keeps placeholders and does not
-  belong in the snapshot batch."
+  "Hydrate the current screen plus the next one. A one-screen window meant
+  every scroll landed on cold slots: the batch only started after the new
+  viewport rendered placeholders."
   [viewport-height item-height]
-  (initial-view-prefetch-count viewport-height item-height))
+  (min view-prefetch-max-rows
+       (* 2 (initial-view-prefetch-count viewport-height item-height))))
 
 (defn- view-prefetch-bounds
   [rows-count start-index end-index window-size]
@@ -2828,6 +2830,27 @@
   (let [view-feature-type (:logseq.property.view/feature-type view-entity)
         references-view? (contains? #{:linked-references :unlinked-references} view-feature-type)
         config (assoc config :container-id (view-container-id config))
+        all-uuids? (every? uuid? rows)
+        ;; Rows subscribe their block on mount; without a render-ahead window
+        ;; every scrolled screen mounted cold and painted placeholders first.
+        ;; Source resolution mirrors windowed-view-row: live offset rows
+        ;; first, then the full id list. Partitioned (grouped) rows keep
+        ;; per-mount loads; their per-list indexes do not line up with one
+        ;; global prefetch window.
+        prefetch-source (cond
+                          (seq (:offset-rows option))
+                          (:offset-rows option)
+
+                          (seq (:all-row-ids option))
+                          (:all-row-ids option)
+
+                          all-uuids?
+                          rows
+
+                          :else
+                          [])
+        [_initial-rows-ready? _hydrate-row-uuids prefetch-rows!]
+        (use-view-row-prefetch prefetch-source)
         lazy-item-render (fn [row-uuid]
                            (lazy-item [row-uuid] 0 (assoc option :list-view? true)
                                       (fn [block]
@@ -2845,6 +2868,8 @@
                                                                 (:view-parent-uuid option)))]
                                             (block-container config' block))))))
         notify-visible-range! (fn [rendered]
+                                (when-not (seq (:offset-rows option))
+                                  (prefetch-rows! rendered))
                                 (when-let [[visible-start visible-end] (prefetch-visible-range rendered)]
                                   (when-let [next-offset (next-scrolled-row-offset
                                                           (:row-offset option)
@@ -2874,8 +2899,15 @@
                                           (lazy-item-render row-uuid)
                                           (lazy-item-placeholder false false nil nil nil)))}
                        disable-virtualized?))))
-        breadcrumb (state/get-component :block/breadcrumb)
-        all-uuids? (every? uuid? rows)]
+        breadcrumb (state/get-component :block/breadcrumb)]
+    ;; Offset windows replace the id list. Hydrate the whole live window;
+    ;; it is at most two screens.
+    (hooks/use-effect!
+     (fn []
+       (when (seq (:offset-rows option))
+         (prefetch-rows! [0 (dec (count (:offset-rows option)))]))
+       nil)
+     [(count (:offset-rows option)) (:row-offset option)])
     (if all-uuids?
       (list-cp rows)
       (for [[idx row] (medley/indexed rows)]

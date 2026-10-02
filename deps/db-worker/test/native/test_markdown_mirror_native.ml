@@ -1671,7 +1671,14 @@ let test_windows_reserved_journal_filename_fails_with_diagnostic_test () =
         (reason_of result = Some "invalid-file-name");
       check "no writes"
         (let journals = page_path "journals" in
-         not (Sys.file_exists (journals ^ "/CON.md"))))
+         (* stat on win32 resolves reserved device names (CON.md -> the
+            CON device), so "was it written" has to look at the
+            directory entries instead *)
+         not
+           (Sys.file_exists journals
+            && Array.exists
+                 (String.equal "CON.md")
+                 (Sys.readdir journals))))
 
 (* (deftest duplicate-journal-day-fails-without-overwrite-test ...) *)
 let test_duplicate_journal_day_fails_without_overwrite_test () =

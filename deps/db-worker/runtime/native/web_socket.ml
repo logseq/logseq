@@ -81,9 +81,18 @@ let rec command_loop t (src : _ Eio.Flow.source) =
        | true -> ()
        | false -> command_loop t src)
 
+(* A server that accepts TCP but never completes the WS handshake would
+   otherwise leave [connect] pending forever — bound the whole setup
+   (DNS/TCP/TLS/handshake) so sync can schedule a reconnect. *)
+let connect_timeout_s = 30.
+
 let connect ~url ~on_event =
   let task, resolver = Db_worker_effect.wait () in
-  let pipe_r, pipe_w = Unix.pipe ~cloexec:true () in
+  (* A socketpair rather than a pipe: the read end is imported as an
+     eio socket stream, and win32unix pipe fds are not sockets. *)
+  let pipe_r, pipe_w =
+    Unix.socketpair ~cloexec:true Unix.PF_UNIX Unix.SOCK_STREAM 0
+  in
   let ws =
     { state = 0
     ; wsd = None
@@ -94,18 +103,51 @@ let connect ~url ~on_event =
     }
   in
   let resolved = ref false in
+  let close_sent = ref false in
+  let setup_failure = ref None in
+  (* Signal for the deadline watchdog: resolved once the handshake
+     completes or the connection is torn down, so the timer fiber exits
+     instead of pinning the eio switch (and its thread) for 30s. *)
+  let setup_done = ref (fun () -> ()) in
+  let mark_setup_done () =
+    !setup_done ();
+    setup_done := (fun () -> ())
+  in
   let fail msg =
     ws.state <- 3;
+    mark_setup_done ();
     if !resolved
     then on_event (Error msg)
     else (
       resolved := true;
       Db_worker_effect.reject resolver (Failure msg))
   in
+  let emit_close code =
+    mark_setup_done ();
+    if not !close_sent then begin
+      close_sent := true;
+      on_event (Close (code, ""))
+    end
+  in
   let run () =
     try
-      Eio_posix.run (fun env ->
+      Eio_run.run (fun env ->
         Eio.Switch.run (fun sw ->
+          let clock = Eio.Stdenv.clock env in
+          let setup_done_p, setup_done_u = Eio.Promise.create () in
+          setup_done := (fun () -> Eio.Promise.resolve setup_done_u ());
+          Eio.Fiber.fork ~sw (fun () ->
+            match
+              Eio.Fiber.first
+                (fun () -> Eio.Time.sleep clock connect_timeout_s; `Timeout)
+                (fun () -> Eio.Promise.await setup_done_p; `Done)
+            with
+            | `Done -> ()
+            | `Timeout ->
+                if not !resolved then begin
+                  setup_failure := Some "websocket: connect timed out";
+                  Eio.Switch.fail sw (Failure "websocket: connect timed out")
+                end);
           let host, target, flow = Net_eio.connect_flow ~env ~sw url in
           Lazy.force Net_eio.rng_init;
           let nonce = Mirage_crypto_rng.generate 16 in
@@ -129,6 +171,7 @@ let connect ~url ~on_event =
             ws.state <- 1;
             resolved := true;
             Db_worker_effect.wakeup resolver ws;
+            mark_setup_done ();
             on_event Open;
             let flush_msg () =
               let s = Buffer.contents frag in
@@ -162,7 +205,7 @@ let connect ~url ~on_event =
             ; eof =
                 (fun ?error:_ () ->
                    finish ws;
-                   on_event (Close (1000, "")))
+                   emit_close 1000)
             }
           in
           let conn =
@@ -179,14 +222,26 @@ let connect ~url ~on_event =
           (* conn ended: unblock the command fiber and release fds *)
           finish ws;
           flow.close ();
-          (try Unix.close pipe_r with _ -> ())))
+          (try Unix.close pipe_r with _ -> ());
+          (* Any teardown after the handshake must surface a Close:
+             callers reconnect on it, and an abrupt drop emits no Close
+             frame from the wire. *)
+          if !resolved then emit_close 1006))
     with
     | exn ->
         finish ws;
         (try Unix.close pipe_r with _ -> ());
-        if !resolved then on_event (Error (Printexc.to_string exn)) else (
-          resolved := true;
-          Db_worker_effect.reject resolver exn)
+        (match !setup_failure with
+         | Some msg when not !resolved ->
+             resolved := true;
+             Db_worker_effect.reject resolver (Failure msg)
+         | _ ->
+             if !resolved then begin
+               on_event (Error (Printexc.to_string exn));
+               emit_close 1006
+             end else (
+               resolved := true;
+               Db_worker_effect.reject resolver exn))
   in
   ignore (Thread.create (fun () -> run ()) ());
   task

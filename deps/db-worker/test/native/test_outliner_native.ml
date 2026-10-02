@@ -113,7 +113,11 @@ let test_validate_block_title_unique_for_tags () =
     ~i18n_key:"class.validation/duplicate"
     (fun () ->
       validate db (Some "Card")
-        (Datascript.entity db (Ident "user.class/Class1")))
+        (Datascript.entity db (Ident "user.class/Class1")));
+  (* "Allow a class to use a case variant of another class name" *)
+  validate db (Some "class1")
+    (Datascript.entity db (Ident "user.class/Class2"));
+  check "validate-block-title-unique-for-tags case variant" true
 
 (* (deftest validate-block-title-unique-for-namespaced-pages ...) *)
 let test_validate_block_title_unique_for_namespaced_pages () =
@@ -142,17 +146,40 @@ let test_validate_block_title_unique_for_namespaced_pages () =
               { default_page with
                 pg_title = Some "n3";
                 pg_extra = [ "block/parent", parent_ref n1_uuid ] };
+            blocks = [] };
+          { page =
+              { default_page with
+                pg_title = Some "other";
+                pg_extra = [ "block/parent", parent_ref library_uuid ] };
+            blocks = [] };
+          { page = { default_page with pg_title = Some "Foo" };
             blocks = [] } ]
       ()
   in
   let db = db_of conn in
   (* "Disallow duplicate namespace child" *)
   expect_notification "validate-block-title-unique-for-namespaced dup"
-    ~i18n_key:"page.validation/duplicate"
+    ~i18n_key:"page.validation/duplicate-name"
     (fun () -> validate db (Some "n2") (find_page conn "n3"));
   (* "Allow namespace child if unique" *)
   validate db (Some "n4") (find_page conn "n3");
-  check "validate-block-title-unique-for-namespaced unique" true
+  check "validate-block-title-unique-for-namespaced unique" true;
+  (* "Disallow renaming a namespace child to a case variant of a sibling" *)
+  expect_notification "validate-block-title-unique-for-namespaced case dup"
+    ~i18n_key:"page.validation/duplicate-name"
+    (fun () -> validate db (Some "N2") (find_page conn "n3"));
+  (* "Allow a namespace child to share a case-insensitive name with a
+     different-parent page" *)
+  validate db (Some "Other") (find_page conn "n3");
+  check "validate-block-title-unique-for-namespaced other parent" true;
+  (* "Allow a namespace child to share a case-insensitive name with a
+     top-level page" *)
+  validate db (Some "foo") (find_page conn "n3");
+  check "validate-block-title-unique-for-namespaced top-level" true;
+  (* "Allow a top-level page to share a case-insensitive name with a
+     namespaced page" *)
+  validate db (Some "N2") (find_page conn "Foo");
+  check "validate-block-title-unique-for-namespaced ns from top" true
 
 (* (deftest validate-block-title-unique-for-pages ...) *)
 let test_validate_block_title_unique_for_pages () =
@@ -162,6 +189,8 @@ let test_validate_block_title_unique_for_pages () =
         [ { page = { default_page with pg_title = Some "page1" };
             blocks = [] };
           { page = { default_page with pg_title = Some "another page" };
+            blocks = [] };
+          { page = { default_page with pg_title = Some "Foo" };
             blocks = [] };
           { page =
               { default_page with
@@ -185,13 +214,83 @@ let test_validate_block_title_unique_for_pages () =
   (* "Allow page with same name for different tag" *)
   validate db (Some "Apple") (find_page conn "Banana");
   check "validate-block-title-unique-for-pages other tag" true;
-  (* "Disallow duplicate page without tag" *)
+  (* "Disallow duplicate page without tag" — common tags are just Page,
+     so cljs throws the duplicate-name payload *)
   expect_notification "validate-block-title-unique-for-pages untagged dup"
-    ~i18n_key:"page.validation/duplicate"
+    ~i18n_key:"page.validation/duplicate-name"
     (fun () -> validate db (Some "page1") (find_page conn "another page"));
   (* "Allow class to have same name as a page" *)
   validate db (Some "Apple") (find_page conn "Fruit");
-  check "validate-block-title-unique-for-pages class entity" true
+  check "validate-block-title-unique-for-pages class entity" true;
+  (* "Disallow renaming to a case variant of another top-level page" —
+     cljs asserts ex-message "Duplicate page", :i18n-key
+     :page.validation/duplicate-name and :message
+     "Another page named \"foo\" already exists." *)
+  (match
+     (try
+        validate db (Some "foo") (find_page conn "another page");
+        `no_exn
+       with Outliner_validate.Notification w -> `notif w)
+   with
+   | `no_exn ->
+       check "validate-block-title-unique-for-pages case dup threw" false
+   | `notif w ->
+       let payload = Wire.get "payload" w in
+       let key =
+         match payload with
+         | Some p -> Wire.get "i18n-key" p
+         | None -> None
+       in
+       check "validate-block-title-unique-for-pages case dup key"
+         (key = Some (Wire.Keyword "page.validation/duplicate-name"));
+       let msg =
+         match payload with
+         | Some p -> (
+             match Wire.get "message" p with
+             | Some (Wire.String s) -> Some s
+             | _ -> None)
+         | None -> None
+       in
+       check "validate-block-title-unique-for-pages case dup msg"
+         (msg = Some "Another page named \"foo\" already exists."));
+  (* "Allow renaming a page to a case variant of its own title" *)
+  validate db (Some "PAGE1") (find_page conn "page1");
+  check "validate-block-title-unique-for-pages own case" true;
+  (* "Disallow renaming to a case variant of another page with the same
+     tag" *)
+  expect_notification "validate-block-title-unique-for-pages case tagged dup"
+    ~i18n_key:"page.validation/duplicate"
+    (fun () ->
+      validate db (Some "apple") (find_page conn "Another Company"));
+  (* "Allow a case variant of the same name for a different tag" *)
+  validate db (Some "apple") (find_page conn "Banana");
+  check "validate-block-title-unique-for-pages case other tag" true
+
+(* (deftest validate-block-title-unique-checks-all-candidates ...) *)
+let test_validate_block_title_unique_checks_all_candidates () =
+  let conn =
+    create_conn_with_blocks
+      ~pages_and_blocks:
+        [ { page =
+              { default_page with
+                pg_title = Some "Foo"; pg_tags = [ "Company" ] };
+            blocks = [] };
+          { page =
+              { default_page with
+                pg_title = Some "foo"; pg_tags = [ "Fruit" ] };
+            blocks = [] };
+          { page =
+              { default_page with
+                pg_title = Some "Bar"; pg_tags = [ "Fruit" ] };
+            blocks = [] } ]
+      ()
+  in
+  let db = db_of conn in
+  (* "Disallow rename when any candidate collides, even if an exempt
+     candidate is checked first" *)
+  expect_notification "validate-block-title-unique-checks-all-candidates"
+    ~i18n_key:"page.validation/duplicate"
+    (fun () -> validate db (Some "FOO") (find_page conn "Bar"))
 
 (* ---------- deps/outliner/test/logseq/outliner/recycle_test.cljs ---------- *)
 
@@ -1428,7 +1527,12 @@ let test_property_with_other_position_default_bottom_rules () =
    port returns idents grouped by position instead of property
    entities; asserted equivalently. *)
 let positioned_idents_at db eid position =
-  Render_snapshot.block_positioned_property_idents_by_position db eid
+  Render_snapshot.block_positioned_property_idents_by_position
+    ~cache:(Render_snapshot.new_batch_cache ())
+    ~tag_ids:(Render_snapshot.tag_ids_of db eid)
+    ~own_property_ids:(Render_snapshot.direct_block_property_ids db eid)
+    ~direct_value:(fun a -> Property_maps.entity_direct_value db eid a)
+    db eid
   |> List.assoc_opt position
   |> Option.value ~default:[]
 
@@ -1812,12 +1916,67 @@ let test_create_page () =
   let _, page_uuid = create_page conn "fooz" () in
   let page = entity_by_uuid_exn conn (Option.get page_uuid) in
   check "Page created correctly" (ent_title page = Some "fooz");
+  (* "Creating a case variant of an existing page opens the existing
+     page" *)
+  let _, foo_uuid = create_page conn "Foo" () in
+  let _, foo_lc_uuid = create_page conn "foo" () in
+  check "case-variant create opens the existing page"
+    (foo_uuid = foo_lc_uuid);
   throws_with "Page can't have '/'n title" "can't include \"/\""
     (fun () -> create_page conn "foo/bar" ());
   throws_with "Page can't have '#' in title" "can't include \"#\""
     (fun () -> create_page conn "foo#bar" ());
   throws_with "Page can't have leading '#' in title" "can't include \"#\""
     (fun () -> create_page conn "#tagstyle" ())
+
+(* (deftest rename-page-rejects-case-variant-of-existing-page ...) *)
+let test_rename_page_rejects_case_variant_of_existing_page () =
+  let conn = create_conn_with_blocks () in
+  let _, foo_uuid = create_page conn "Foo" () in
+  let _, bar_uuid = create_page conn "Bar" () in
+  let foo = entity_by_uuid_exn conn (Option.get foo_uuid) in
+  let bar = entity_by_uuid_exn conn (Option.get bar_uuid) in
+  (match
+     (try
+        Outliner_validate.validate_block_title (db_of conn) "foo"
+          (Some bar);
+        `no_exn
+      with Outliner_validate.Notification w -> `notif w)
+   with
+   | `no_exn ->
+       check "rename to case variant throws a duplicate-name notification"
+         false
+   | `notif w ->
+       let payload = Wire.get "payload" w in
+       let key =
+         match payload with
+         | Some p -> Wire.get "i18n-key" p
+         | None -> None
+       in
+       check "rename refused: :page.validation/duplicate-name"
+         (key = Some (Wire.Keyword "page.validation/duplicate-name"));
+       let msg =
+         match payload with
+         | Some p -> (
+             match Wire.get "message" p with
+             | Some (Wire.String s) -> Some s
+             | _ -> None)
+         | None -> None
+       in
+       check "rename refused: message"
+         (msg = Some "Another page named \"foo\" already exists."));
+  check "Bar keeps its original title" (ent_title bar = Some "Bar");
+  check "Foo is unchanged" (ent_title foo = Some "Foo");
+  check "The graph still has one page named foo"
+    ((match
+        Datascript.q_string (db_of conn)
+          "[:find [?e ...] :where [?e :block/name \"foo\"]]"
+      with
+      | rows -> List.length rows)
+     = 1);
+  (* "A page can be renamed to a case variant of its own title" *)
+  Outliner_validate.validate_block_title (db_of conn) "FOO" (Some foo);
+  check "own case variant rename allowed" true
 
 (* (deftest create-page-with-tag-named-tag ...) *)
 let test_create_page_with_tag_named_tag () =
@@ -2154,11 +2313,177 @@ let test_create_slash_formatted_journal_no_namespace () =
   check "Journal title is not split into a day namespace page"
     (Ldb.get_page db (String "18") = None)
 
+(* ---------- recycle_test.cljs namespace-restore cases (74b61250e3) --
+   placed here: they use create_page (defined above in page_test). *)
+
+let entity_in db uuid =
+  Datascript.entity db (Lookup_ref ("block/uuid", Uuid uuid))
+
+(* cljs create-namespace-parent-child! *)
+let create_namespace_parent_child conn parent_title child_title =
+  let _, child_uuid =
+    create_page conn (parent_title ^ "/" ^ child_title)
+      ~split_namespace:true ()
+  in
+  let child = entity_by_uuid_exn conn (Option.get child_uuid) in
+  let parent = Option.get (Ldb.ref_ent child "block/parent") in
+  (parent, child, uuid_of parent, Option.get child_uuid, parent.id)
+
+(* cljs recycle-page! — re-fetches the page entity before recycling *)
+let recycle_page_bang conn (page : entity) =
+  ldb_transact conn ~outliner_op:"delete-page"
+    (Outliner_recycle.recycle_page_tx_data (db_of conn)
+       (Option.get (entity_in (db_of conn) (uuid_of page)))
+       ())
+
+(* cljs assert-namespace-restored *)
+let assert_namespace_restored ~name db parent_uuid child_uuid =
+  let parent = entity_in db parent_uuid in
+  let child = entity_in db child_uuid in
+  check (name ^ " parent exists") (Option.is_some parent);
+  check (name ^ " child exists") (Option.is_some child);
+  (match parent, child with
+   | Some parent, Some child ->
+       check (name ^ " parent not recycled")
+         (not (Outliner_recycle.recycled parent));
+       check (name ^ " child not recycled")
+         (not (Outliner_recycle.recycled child));
+       check (name ^ " child reattached to parent")
+         (match Ldb.ref_ent child "block/parent" with
+          | Some p -> p.id = parent.id
+          | None -> false);
+       check (name ^ " child original-parent cleared")
+         (Ldb.value child "logseq.property.recycle/original-parent" = None);
+       check (name ^ " child original-order cleared")
+         (Ldb.value child "logseq.property.recycle/original-order" = None)
+   | _ -> ())
+
+(* (deftest restore-namespace-child-before-parent-reattaches ...) *)
+let test_restore_namespace_child_before_parent_reattaches () =
+  let conn = create_conn_with_blocks () in
+  let parent, child, parent_uuid, child_uuid, parent_id =
+    create_namespace_parent_child conn "Foo" "Bar"
+  in
+  recycle_page_bang conn child;
+  recycle_page_bang conn parent;
+  check "restore-namespace-child-before-parent child restored"
+    (Outliner_recycle.restore conn child_uuid);
+  let child' = entity_by_uuid_exn conn child_uuid in
+  check "restore-namespace-child-before-parent child not recycled"
+    (not (Outliner_recycle.recycled child'));
+  check "restore-namespace-child-before-parent child has no parent"
+    (Ldb.ref_ent child' "block/parent" = None);
+  check "restore-namespace-child-before-parent child keeps original-parent"
+    (match
+       Ldb.ref_ent child' "logseq.property.recycle/original-parent"
+     with
+     | Some p -> p.id = parent_id
+     | None -> false);
+  check "restore-namespace-child-before-parent parent restored"
+    (Outliner_recycle.restore conn parent_uuid);
+  assert_namespace_restored ~name:"restore-namespace-child-before-parent"
+    (db_of conn) parent_uuid child_uuid
+
+(* (deftest restore-namespace-parent-before-child-reattaches ...) *)
+let test_restore_namespace_parent_before_child_reattaches () =
+  let conn = create_conn_with_blocks () in
+  let parent, child, parent_uuid, child_uuid, _ =
+    create_namespace_parent_child conn "Foo" "Bar"
+  in
+  recycle_page_bang conn child;
+  recycle_page_bang conn parent;
+  check "restore-namespace-parent-first parent restored"
+    (Outliner_recycle.restore conn parent_uuid);
+  check "restore-namespace-parent-first child restored"
+    (Outliner_recycle.restore conn child_uuid);
+  assert_namespace_restored ~name:"restore-namespace-parent-first"
+    (db_of conn) parent_uuid child_uuid
+
+(* (deftest apply-ops-restore-namespace-child-before-parent-reattaches ...) *)
+let test_apply_ops_restore_namespace_child_before_parent_reattaches () =
+  let conn = create_conn_with_blocks () in
+  let parent, child, parent_uuid, child_uuid, _ =
+    create_namespace_parent_child conn "Foo" "Bar"
+  in
+  recycle_page_bang conn child;
+  recycle_page_bang conn parent;
+  apply_ops conn
+    [ Wire.List
+        [ Wire.Keyword "restore-recycled"; Wire.List [ Wire.Uuid child_uuid ] ] ];
+  apply_ops conn
+    [ Wire.List
+        [ Wire.Keyword "restore-recycled"; Wire.List [ Wire.Uuid parent_uuid ] ] ];
+  assert_namespace_restored ~name:"apply-ops-restore-namespace"
+    (db_of conn) parent_uuid child_uuid
+
+(* (deftest restore-namespace-children-then-parent-reattaches-all ...) *)
+let test_restore_namespace_children_then_parent_reattaches_all () =
+  let conn = create_conn_with_blocks () in
+  let parent, child, parent_uuid, child_uuid, _ =
+    create_namespace_parent_child conn "Foo" "Bar"
+  in
+  let _, baz_uuid =
+    create_page conn "Foo/Baz" ~split_namespace:true ()
+  in
+  let baz_uuid = Option.get baz_uuid in
+  let baz = entity_by_uuid_exn conn baz_uuid in
+  recycle_page_bang conn child;
+  recycle_page_bang conn baz;
+  recycle_page_bang conn parent;
+  check "restore-namespace-children child restored"
+    (Outliner_recycle.restore conn child_uuid);
+  check "restore-namespace-children baz restored"
+    (Outliner_recycle.restore conn baz_uuid);
+  check "restore-namespace-children parent restored"
+    (Outliner_recycle.restore conn parent_uuid);
+  assert_namespace_restored ~name:"restore-namespace-children bar"
+    (db_of conn) parent_uuid child_uuid;
+  assert_namespace_restored ~name:"restore-namespace-children baz"
+    (db_of conn) parent_uuid baz_uuid;
+  let parent' = entity_by_uuid_exn conn parent_uuid in
+  check "restore-namespace-children parent has both children"
+    (sort_uniq (children_titles parent') = [ "Bar"; "Baz" ])
+
+(* (deftest restore-namespace-parent-skips-child-moved-elsewhere ...) *)
+let test_restore_namespace_parent_skips_child_moved_elsewhere () =
+  let conn = create_conn_with_blocks () in
+  let parent, child, parent_uuid, child_uuid, _ =
+    create_namespace_parent_child conn "Foo" "Bar"
+  in
+  let _, other_uuid = create_page conn "Other" () in
+  let other = entity_by_uuid_exn conn (Option.get other_uuid) in
+  recycle_page_bang conn child;
+  recycle_page_bang conn parent;
+  check "restore-moved-child child restored"
+    (Outliner_recycle.restore conn child_uuid);
+  ignore
+    (Datascript.transact_conn conn
+       [ Entity
+           { db_id = Some (Entity_id child.id)
+           ; attrs = [ "block/parent", One_value (Ref other.id) ] } ]);
+  check "restore-moved-child parent restored"
+    (Outliner_recycle.restore conn parent_uuid);
+  let child' = entity_by_uuid_exn conn child_uuid in
+  let parent' = entity_by_uuid_exn conn parent_uuid in
+  check "restore-moved-child child stays under Other"
+    (match Ldb.ref_ent child' "block/parent" with
+     | Some p -> p.id = other.id
+     | None -> false);
+  check "restore-moved-child child original-parent cleared"
+    (Ldb.value child' "logseq.property.recycle/original-parent" = None);
+  check "restore-moved-child parent not recycled"
+    (not (Outliner_recycle.recycled parent'));
+  check "restore-moved-child parent not reattached"
+    (match Ldb.ref_ent child' "block/parent" with
+     | Some p -> p.id <> parent'.id
+     | None -> true)
+
 (* page_test.cljs *)
 let page_cases : unit Alcotest.test_case list =
   [ Alcotest.test_case "create-class" `Quick test_create_class;
     Alcotest.test_case "create-namespace-pages" `Quick test_create_namespace_pages;
     Alcotest.test_case "create-page" `Quick test_create_page;
+    Alcotest.test_case "rename-page-rejects-case-variant-of-existing-page" `Quick test_rename_page_rejects_case_variant_of_existing_page;
     Alcotest.test_case "create-page-with-tag-named-tag" `Quick test_create_page_with_tag_named_tag;
     Alcotest.test_case "create-page-with-existing-public-and-new-tags" `Quick test_create_page_with_existing_public_and_new_tags;
     Alcotest.test_case "create-page-with-public-tag-reuses-existing-page" `Quick test_create_page_with_public_tag_reuses_existing_page;
@@ -2179,6 +2504,7 @@ let cases : unit Alcotest.test_case list =
     Alcotest.test_case "validate-block-title-unique-for-tags" `Quick test_validate_block_title_unique_for_tags;
     Alcotest.test_case "validate-block-title-unique-for-namespaced-pages" `Quick test_validate_block_title_unique_for_namespaced_pages;
     Alcotest.test_case "validate-block-title-unique-for-pages" `Quick test_validate_block_title_unique_for_pages;
+    Alcotest.test_case "validate-block-title-unique-checks-all-candidates" `Quick test_validate_block_title_unique_checks_all_candidates;
     Alcotest.test_case "recycle-page-creates-page-tagged-recycle-when-missing" `Quick test_recycle_page_creates_page_tagged_recycle_when_missing;
     Alcotest.test_case "recycle-page-repairs-untagged-recycle" `Quick test_recycle_page_repairs_untagged_recycle;
     Alcotest.test_case "restore-recycled-page-removes-recycle-parent" `Quick test_restore_recycled_page_removes_recycle_parent;
@@ -2194,6 +2520,11 @@ let cases : unit Alcotest.test_case list =
     Alcotest.test_case "apply-ops-restore-recycled-page-removes-recycle-parent" `Quick test_apply_ops_restore_recycled_page_removes_recycle_parent;
     Alcotest.test_case "apply-ops-permanently-delete-recycled-page-removes-page-and-descendants" `Quick test_apply_ops_permanently_delete_recycled_page;
     Alcotest.test_case "apply-ops-permanently-delete-recycled-block-removes-subtree-only" `Quick test_apply_ops_permanently_delete_recycled_block;
+    Alcotest.test_case "restore-namespace-child-before-parent-reattaches" `Quick test_restore_namespace_child_before_parent_reattaches;
+    Alcotest.test_case "restore-namespace-parent-before-child-reattaches" `Quick test_restore_namespace_parent_before_child_reattaches;
+    Alcotest.test_case "apply-ops-restore-namespace-child-before-parent-reattaches" `Quick test_apply_ops_restore_namespace_child_before_parent_reattaches;
+    Alcotest.test_case "restore-namespace-children-then-parent-reattaches-all" `Quick test_restore_namespace_children_then_parent_reattaches_all;
+    Alcotest.test_case "restore-namespace-parent-skips-child-moved-elsewhere" `Quick test_restore_namespace_parent_skips_child_moved_elsewhere;
     Alcotest.test_case "new-graph-should-be-valid" `Quick test_new_graph_should_be_valid ]
 
 (* f6fc6f78ac (deftest insert-blocks-preserves-existing-reference-ids):
@@ -2253,6 +2584,67 @@ let pipeline_cases : unit Alcotest.test_case list =
 let tree_cases : unit Alcotest.test_case list =
   [ Alcotest.test_case "blocks->vec-tree-data-preserves-caller-field-policy" `Quick test_blocks_vec_tree_data_preserves_caller_field_policy ]
 
+(* (deftest upsert-property-converts-plain-page ...) *)
+let test_upsert_property_converts_plain_page () =
+  let conn = create_conn_with_blocks () in
+  let _, page_uuid = create_page conn "PlainPage" () in
+  let page = entity_by_uuid_exn conn (Option.get page_uuid) in
+  let property =
+    Outliner_property.upsert_property conn None
+      (Wire.Map [ Wire.Keyword "logseq.property/type", Wire.Keyword "default" ])
+      ~property_name:(Some "PlainPage")
+      ~properties:[ "db/id", Wire.Int page.id ]
+  in
+  let converted =
+    Option.get (Ldb.ent_of_id (db_of conn) page.id)
+  in
+  check "upsert-property-converts-plain-page returns property"
+    (Ldb.is_property property);
+  check "upsert-property-converts-plain-page same entity"
+    (converted.id = page.id);
+  check "upsert-property-converts-plain-page is property"
+    (Ldb.is_property converted);
+  check "upsert-property-converts-plain-page page tag dropped"
+    (not (Ldb.internal_page converted))
+
+(* (deftest upsert-property-refuses-namespaced-page ...) *)
+let test_upsert_property_refuses_namespaced_page () =
+  let conn = create_conn_with_blocks () in
+  let _, bar_uuid = create_page conn "Foo/Bar" ~split_namespace:true () in
+  let bar = entity_by_uuid_exn conn (Option.get bar_uuid) in
+  let foo = Option.get (Ldb.get_page (db_of conn) (String "foo")) in
+  let convert_error (page : entity) property_name =
+    try
+      ignore
+        (Outliner_property.upsert_property conn None
+           (Wire.Map
+              [ Wire.Keyword "logseq.property/type", Wire.Keyword "default" ])
+           ~property_name:(Some property_name)
+           ~properties:[ "db/id", Wire.Int page.id ]);
+      None
+    with Outliner_validate.Notification w -> Some w
+  in
+  let check_refusal name (page : entity) property_name =
+    match convert_error page property_name with
+    | Some w ->
+        check (name ^ " notification type")
+          (Wire.get "type" w = Some (Wire.Keyword "notification"));
+        check (name ^ " i18n-key")
+          (match Wire.get "payload" w with
+           | Some p ->
+               Wire.get "i18n-key" p
+               = Some (Wire.Keyword "page.convert/page-to-property-namespaced")
+           | None -> false);
+        let page' = Option.get (Ldb.ent_of_id (db_of conn) page.id) in
+        check (name ^ " still page") (Ldb.internal_page page');
+        check (name ^ " not property") (not (Ldb.is_property page'))
+    | None -> check (name ^ " threw notification") false
+  in
+  (* "Namespace child" *)
+  check_refusal "upsert-property-refuses child" bar "Bar";
+  (* "Namespace root" *)
+  check_refusal "upsert-property-refuses root" foo "Foo"
+
 (* property_test.cljs remainder (the first 20 deftests are in
    test_db_native.ml's endpoint group) *)
 let property_cases : unit Alcotest.test_case list =
@@ -2264,7 +2656,9 @@ let property_cases : unit Alcotest.test_case list =
     Alcotest.test_case "extends-redundant-cleanup-with-lookup-ref-parent" `Quick test_extends_redundant_cleanup_with_lookup_ref_parent;
     Alcotest.test_case "extends-redundant-cleanup-with-keyword-vector-parents" `Quick test_extends_redundant_cleanup_with_keyword_vector_parents;
     Alcotest.test_case "extends-redundant-direct-parent-cleanup-for-root-reset" `Quick test_extends_redundant_direct_parent_cleanup_for_root_reset;
-    Alcotest.test_case "delete-property-value!" `Quick test_delete_property_value ]
+    Alcotest.test_case "delete-property-value!" `Quick test_delete_property_value;
+    Alcotest.test_case "upsert-property-converts-plain-page" `Quick test_upsert_property_converts_plain_page;
+    Alcotest.test_case "upsert-property-refuses-namespaced-page" `Quick test_upsert_property_refuses_namespaced_page ]
 
 (* core_test uses value ctors heavily; re-open so they win over
    Db_test_util.edn's same-named ctors. *)
@@ -4402,6 +4796,57 @@ let test_derive_upsert_property_update_schema_restore_inverse () =
             classes)
    | [] -> check "inverse nonempty" false)
 
+(* (deftest derive-history-outliner-ops-upsert-property-omits-many-to-one-with-values-test) *)
+let test_derive_upsert_property_omits_many_to_one_with_values () =
+  let conn =
+    create_conn_with_blocks
+      ~pages_and_blocks:
+        [ { page = { default_page with pg_title = Some "page1" }
+          ; blocks =
+              [ { default_block with
+                    b_title = Some "b1"
+                ; b_properties = [ "note", Str "text 1" ] } ] } ]
+      ()
+  in
+  let db = db_of conn in
+  let property_id = "user.property/note" in
+  let before_property =
+    Option.get (Datascript.entity db (Ident property_id))
+  in
+  (* cljs (-> (db-property/get-property-schema (into {} before-property))
+       (dissoc :db/cardinality)) *)
+  let expected_schema =
+    Cljs_map.dissoc
+      (wire_of_block_map
+         (Db_property.get_property_schema
+            (Block_map.of_entity before_property)))
+      "db/cardinality"
+  in
+  let meta =
+    tx_meta "upsert-property"
+      [ wop "upsert-property"
+          [ wkw property_id
+          ; wmap
+              [ wkw "logseq.property/type", wkw "default"
+              ; wkw "db/cardinality", wkw "many" ]
+          ; wmap [] ] ]
+  in
+  let _forward, inverse = derive_ops db db [] meta in
+  check "before-property is cardinality one"
+    (Ldb.value before_property "db/cardinality"
+    = Some (Keyword "db.cardinality/one"));
+  check "upsert-property inverse restores schema sans cardinality"
+    (wire_list_equal inverse
+       [ wop "upsert-property"
+           [ wkw property_id
+           ; expected_schema
+           ; wmap [ wkw "property-name", Wire.String "note" ] ] ]);
+  (match inverse with
+   | entry :: _ ->
+       check "inverse schema omits :db/cardinality"
+         (wget "db/cardinality" (op_arg entry 1) = Wire.Nil)
+   | [] -> check "inverse nonempty" false)
+
 (* (deftest derive-history-outliner-ops-delete-blocks-inverse-avoids-self-target-test)
    Equivalent real-path coverage: cljs stubs ldb/get-left-sibling to return
    the deleted root; here the child is genuinely the parent's only child,
@@ -5088,6 +5533,7 @@ let op_construct_cases : unit Alcotest.test_case list =
     Alcotest.test_case "derive-history-outliner-ops-handles-replace-empty-target-insert-inverse" `Quick test_derive_replace_empty_target_insert_inverse;
     Alcotest.test_case "derive-history-outliner-ops-builds-upsert-property-inverse-delete-page" `Quick test_derive_upsert_property_inverse_delete_page;
     Alcotest.test_case "derive-history-outliner-ops-upsert-property-update-builds-schema-restore-inverse" `Quick test_derive_upsert_property_update_schema_restore_inverse;
+    Alcotest.test_case "derive-history-outliner-ops-upsert-property-omits-many-to-one-with-values" `Quick test_derive_upsert_property_omits_many_to_one_with_values;
     Alcotest.test_case "derive-history-outliner-ops-delete-blocks-inverse-avoids-self-target" `Quick test_derive_delete_blocks_inverse_avoids_self_target;
     Alcotest.test_case "compound-history-inverses-run-in-reverse-dependency-order" `Quick test_compound_history_inverses_reverse_dependency_order;
     Alcotest.test_case "derive-history-outliner-ops-delete-blocks-with-stale-id-keeps-id" `Quick test_derive_delete_blocks_stale_id_keeps_id;

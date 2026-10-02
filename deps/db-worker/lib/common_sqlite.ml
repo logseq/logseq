@@ -6,12 +6,28 @@ open Datascript
    on-disk format); kept here for API parity with the cljs ns. *)
 let create_kvs_table (db : Sqlite.db) : unit = Graph_store.create_kvs_table db
 
+(* tail-max-tx — cljs: max :tx over every datom in (:tx-tail @conn). A
+   stored tail entry can carry several tx ids (the pipeline extends one
+   caller tx into multiple d/with steps), while restore seeds :max-tx
+   from each group's first datom. Bump :max-tx to the true tail max so
+   the next tx id doesn't collide with a replayed one (and the stored
+   checksum stays valid across reopens). *)
+let tail_max_tx (tail : datom list list) : int =
+  List.fold_left
+    (fun max_tx datoms ->
+      List.fold_left (fun max_tx (d : datom) -> max max_tx d.tx) max_tx datoms)
+    0 tail
+
 (* get-storage-conn — (or (d/restore-conn storage)
    (d/create-conn schema {:storage storage})) *)
 let get_storage_conn (storage : storage) (schema : (attr * schema_attr) list)
     : conn =
   match Datascript.restore_conn storage with
-  | Some conn -> conn
+  | Some conn ->
+      let max_tx = tail_max_tx (Datascript.Conn.storage_tail conn) in
+      (if max_tx > (Datascript.db conn).max_tx then
+         Datascript.Conn.update_db conn (fun db -> { db with max_tx }));
+      conn
   | None -> Datascript.create_conn ~schema ~storage ()
 
 (* sanitize-db-name *)

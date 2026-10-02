@@ -2,7 +2,7 @@
 
    The daemon already multiplexes work across OS threads (one thread per
    inbound HTTP connection), so each outbound request/connection runs its
-   own [Eio_posix.run] loop on its own thread — no shared scheduler, no
+   own [Eio_run.run] loop on its own thread — no shared scheduler, no
    cross-domain promise juggling. *)
 
 module type RUNTIME = sig
@@ -147,15 +147,32 @@ let tls_client_flow (flow : _ Eio.Flow.two_way) ~host : Tls_eio.t =
 let parse_url url =
   let split ~scheme s =
     let rest = String.sub s (String.length scheme) (String.length s - String.length scheme) in
+    (* authority ends at '/', '?' or '#' — a bare `host?query` URL must
+       not leak the query into the hostname; the request target still
+       carries it, rooted at '/'. *)
     let authority_end =
-      match String.index_opt rest '/' with
-      | Some i -> i
-      | None -> String.length rest
+      let cut c =
+        match String.index_opt rest c with
+        | Some i -> i
+        | None -> String.length rest
+      in
+      min (cut '/') (min (cut '?') (cut '#'))
     in
     let authority = String.sub rest 0 authority_end in
+    (* '#' only ends the authority — the fragment itself never goes on
+       the wire, so the target stops there too. *)
     let target =
       if authority_end < String.length rest
-      then String.sub rest authority_end (String.length rest - authority_end)
+      then
+        let target_end =
+          match String.index_from_opt rest authority_end '#' with
+          | Some i -> i
+          | None -> String.length rest
+        in
+        let tail = String.sub rest authority_end (target_end - authority_end) in
+        if String.length tail = 0
+        then "/"
+        else if rest.[authority_end] = '/' then tail else "/" ^ tail
       else "/"
     in
     let host, port =

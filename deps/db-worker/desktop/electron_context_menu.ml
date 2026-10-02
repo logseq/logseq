@@ -41,6 +41,8 @@ external params_media_type : params -> string = "mediaType" [@@mel.get]
 external params_misspelled_word : params -> string = "misspelledWord"
   [@@mel.get]
 external params_src_url : params -> string = "srcURL" [@@mel.get]
+external params_x : params -> float = "x" [@@mel.get]
+external params_y : params -> float = "y" [@@mel.get]
 
 external edit_can_cut : edit_flags -> bool = "canCut" [@@mel.get]
 external edit_can_copy : edit_flags -> bool = "canCopy" [@@mel.get]
@@ -195,12 +197,8 @@ let setup_context_menu (win : Browser_window.t) :
               { label = Electron_i18n.t "electron/copy-image" [||]
               ; click =
                   (fun [@u] () ->
-                     let path =
-                       String.sub (src_url ()) 7
-                         (String.length (src_url ()) - 7)
-                     in
-                     Clipboard.write_image
-                       (Native_image.create_from_path path))
+                     web_contents_copy_image_at web_contents
+                       (params_x params) (params_y params))
               }])));
 
     if Array.length (menu_items menu) > 0 then menu_popup menu

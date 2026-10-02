@@ -76,7 +76,9 @@ let map_key_of (v : value) (a : attr) : value option =
 type txs_state = { mutable txs : tx_op list }
 
 let new_txs_state () : txs_state = { txs = [] }
-let txs_push (s : txs_state) (ops : tx_op list) : unit = s.txs <- s.txs @ ops
+(* txs stays reversed while pushes accumulate; readers List.rev once. *)
+let txs_push (s : txs_state) (ops : tx_op list) : unit =
+  s.txs <- List.rev_append ops s.txs
 
 (* ---------- direct-op-entry ---------- *)
 
@@ -195,12 +197,15 @@ let filter_top_level_blocks (db : db) (blocks : Block_map.t list) : entity list 
     | Some Nil | None -> Pnil
     | Some _ -> Pother
   in
-  let self_keys = List.map self_key blocks in
-  let top_parent_ids =
-    List.filter (fun k -> List.mem k self_keys) (List.map parent_key blocks)
-  in
+  let self_key_set = Hashtbl.create (List.length blocks) in
+  List.iter (fun k -> Hashtbl.replace self_key_set k ()) (List.map self_key blocks);
+  let top_parent_tbl = Hashtbl.create 64 in
+  List.iter
+    (fun k ->
+       if Hashtbl.mem self_key_set k then Hashtbl.replace top_parent_tbl k ())
+    (List.map parent_key blocks);
   blocks
-  |> List.filter (fun m -> not (List.mem (parent_key m) top_parent_ids))
+  |> List.filter (fun m -> not (Hashtbl.mem top_parent_tbl (parent_key m)))
   |> List.filter_map (fun m ->
       match mget m "db/id" with
       | Some (Ref id) -> Ldb.ent_of_id db id
@@ -805,9 +810,30 @@ let resolve_refs_dedup (db : db) ?(base_db : db option) (refs : value list)
   in
   List.rev resolved
 
+(* A refs/tags item that cannot resolve at transact: a [:block/uuid u]
+   lookup or bare positive eid whose entity is missing from db. datascript
+   throws "Nothing found for entity id" on it — cljs hits the same crash on
+   e.g. Enter-splitting a block whose pasted [[uuid]] ref points at a
+   deleted entity; drop the dangling edge instead (the title keeps the
+   literal [[uuid]] text). [pending_uuids] are uuids minted by this op —
+   they are not in db yet but resolve at commit. *)
+let dangling_ref (db : db) (pending_uuids : (string, unit) Hashtbl.t)
+    (r : value) : bool =
+  match r with
+  | Vector [ Keyword "block/uuid"; Uuid u ]
+  | List [ Keyword "block/uuid"; Uuid u ] ->
+      Option.is_none (entity db (Lookup_ref ("block/uuid", Uuid u)))
+      && not (Hashtbl.mem pending_uuids u)
+  | Ref id when id > 0 -> Option.is_none (Ldb.ent_of_id db id)
+  | Int64 id -> (
+      match Datascript.Util.int64_to_int id with
+      | Some id when id > 0 -> Option.is_none (Ldb.ent_of_id db id)
+      | _ -> false)
+  | _ -> false
+
 (* resolve-page-refs — rewrite block/refs + block/tags and title uuids *)
-let resolve_page_refs (db : db) ?(base_db : db option) (block : Block_map.t)
-    : Block_map.t * tx_op list =
+let resolve_page_refs (db : db) ?(base_db : db option) ?(pending_uuids : string list = [])
+    (block : Block_map.t) : Block_map.t * tx_op list =
   let refs =
     match mget block "block/refs" with
     | Some (Vector vs) | Some (List vs) | Some (Set vs) -> vs
@@ -826,22 +852,61 @@ let resolve_page_refs (db : db) ?(base_db : db option) (block : Block_map.t)
             vs
       | _ -> []
     in
-    let resolved = resolve_refs_dedup db ?base_db refs tag_names in
-    let refs' = List.map fst resolved in
-    let page_txs = List.concat_map snd resolved in
-    let tag_refs =
-      List.fold_left
-        (fun m (r : value) ->
-          match map_key_of r "db/ident" with
-          | Some (Keyword _) -> (
-              let n = map_key_of r "block/name" in
-              match List.assoc_opt n m with
-              | Some l -> (n, r :: l) :: List.remove_assoc n m
-              | None -> (n, [ r ]) :: m)
-          | _ -> m)
-        [] refs'
-      |> List.map (fun (n, l) -> (n, List.rev l))
+    let resolved =
+      List.combine refs (resolve_refs_dedup db ?base_db refs tag_names)
     in
+    (* pending uuids can number in the blocks; each ref checks membership *)
+    let pending_tbl = Hashtbl.create (List.length pending_uuids) in
+    List.iter (fun u -> Hashtbl.replace pending_tbl u ()) pending_uuids;
+    let dropped_uuids =
+      List.filter_map
+        (fun (_src, (r', _tx)) ->
+          match r' with
+          | (Vector [ Keyword "block/uuid"; Uuid u ]
+            | List [ Keyword "block/uuid"; Uuid u ])
+            when dangling_ref db pending_tbl r' ->
+              Some u
+          | _ -> None)
+        resolved
+    in
+    (* Each [[uuid]] ref ships a synthetic page stub (name/title = the uuid
+       string, fresh :block/uuid) next to the lookup. Once the lookup is
+       dropped as dangling the stub would still mint a ghost page titled by
+       the raw uuid — drop the stub with its create-tx too. A stub whose
+       name resolves to an existing page (empty tx) is kept. *)
+    let dropped_tbl = Hashtbl.create (List.length dropped_uuids) in
+    List.iter (fun u -> Hashtbl.replace dropped_tbl u ()) dropped_uuids;
+    let dead_stub ((src, (r', tx)) : value * (value * tx_op list)) : bool =
+      new_page_ref src && tx <> []
+      &&
+      (match map_key_of r' "block/name" with
+       | Some (String n) -> Hashtbl.mem dropped_tbl n
+       | _ -> false)
+    in
+    (* resolve + drop dangling refs, keeping src->resolved pairing for the
+       title rewrite below *)
+    let kept =
+      List.filter
+        (fun p ->
+          (not (dangling_ref db pending_tbl (fst (snd p))))
+          && not (dead_stub p))
+        resolved
+    in
+    let refs' = List.map (fun (_, (r', _)) -> r') kept in
+    let page_txs = List.concat_map (fun (_, (_, tx)) -> tx) kept in
+    let tag_refs : (value option, value list) Hashtbl.t =
+      Hashtbl.create 16
+    in
+    List.iter
+      (fun (r : value) ->
+        match map_key_of r "db/ident" with
+        | Some (Keyword _) ->
+            let n = map_key_of r "block/name" in
+            Hashtbl.replace tag_refs n
+              (r
+              :: Option.value (Hashtbl.find_opt tag_refs n) ~default:[])
+        | _ -> ())
+      refs';
     let tags =
       match mget block "block/tags" with
       | Some (Vector vs) | Some (List vs) | Some (Set vs) -> vs
@@ -853,8 +918,9 @@ let resolve_page_refs (db : db) ?(base_db : db option) (block : Block_map.t)
           match
             matching_ref_for_tag tag
               (Option.value
-                 (List.assoc_opt (map_key_of tag "block/name") tag_refs)
-                 ~default:[])
+                 (Hashtbl.find_opt tag_refs (map_key_of tag "block/name"))
+                 ~default:[]
+                 |> List.rev)
           with
           | Some r ->
               let tag = tag_dissoc tag "block/type" in
@@ -868,14 +934,15 @@ let resolve_page_refs (db : db) ?(base_db : db option) (block : Block_map.t)
                | None -> tag)
           | None -> tag)
         tags
+      |> List.filter (fun t -> not (dangling_ref db pending_tbl t))
     in
     let replacements =
       List.filter_map
-        (fun (r, r') ->
+        (fun (r, (r', _)) ->
           match uuid_of_value r, uuid_of_value r' with
           | Some old_u, Some new_u when old_u <> new_u -> Some (old_u, new_u)
           | _ -> None)
-        (List.combine refs refs')
+        kept
     in
     let replace_refs title =
       List.fold_left
@@ -1277,23 +1344,34 @@ let save_block (db : db) (block : Block_map.t) (opts : save_opts)
       let txs_state = new_txs_state () in
       let block' = Block_map.merge (Block_map.of_entity e) block in
       save_in_txs db txs_state block' opts;
-      Some { tx_data = txs_state.txs; tx_meta = [] }
+      Some { tx_data = List.rev txs_state.txs; tx_meta = [] }
 
 (* ---------- insert-blocks ---------- *)
 
 let get_right_siblings (node : entity) : entity list =
   match Ldb.ref_ent node "block/parent" with
   | Some parent -> (
-      let children = Ldb.get_children parent in
-      let rec drop_until l =
-        match l with
-        | x :: rest ->
-            let xu = Ldb.uuid_value x "block/uuid" in
-            let nu = Ldb.uuid_value node "block/uuid" in
-            if xu = nu then rest else drop_until rest
-        | [] -> []
-      in
-      drop_until children)
+      let db = node.db in
+      match Ldb.live_order db node.id with
+      | Some node_order ->
+          (* siblings ordered after node, same exclusions/sort as
+             get_children, but left siblings never materialize *)
+          datoms db Avet ~a:"block/parent" ~v:(Ref parent.id) ()
+          |> Seq.fold_left
+               (fun acc (d : datom) ->
+                  match Ldb.live_order db d.e with
+                  | Some o
+                    when String.compare o node_order > 0
+                         || (o = node_order && d.e > node.id) ->
+                      if Ldb.non_ordinary_child db d.e then acc
+                      else (d.e, o) :: acc
+                  | _ -> acc)
+               []
+          |> List.sort (fun (e1, o1) (e2, o2) ->
+                 let c = String.compare o1 o2 in
+                 if c <> 0 then c else compare e1 e2)
+          |> List.filter_map (fun (id, _) -> Ldb.ent_of_id db id)
+      | None -> [])
   | None -> []
 
 let blocks_with_ordered_list_props (blocks : Block_map.t list)
@@ -1874,6 +1952,13 @@ let insert_blocks_aux (db : db) (blocks : Block_map.t list)
       | _ -> uuid_map
     else uuid_map
   in
+  (* lookup tables over uuid_map / id_to_new_uuid — assoc scans inside the
+     per-block loop would be O(blocks^2) on large pastes *)
+  let uuid_tbl = Hashtbl.create (List.length uuid_map) in
+  List.iter
+    (fun (k, v) ->
+       if not (Hashtbl.mem uuid_tbl k) then Hashtbl.replace uuid_tbl k v)
+    uuid_map;
   (* cljs id->new-uuid maps db/id -> (get uuids block-uuid), i.e. the
      post-replace-empty-target uuid map *)
   let id_to_new_uuid =
@@ -1881,36 +1966,41 @@ let insert_blocks_aux (db : db) (blocks : Block_map.t list)
       (fun (b, bu) ->
         match mget b "db/id" |> Option.map id_of_value |> Option.join with
         | Some id -> (
-            match List.assoc_opt (Option.value ~default:"" bu) uuid_map with
+            match Hashtbl.find_opt uuid_tbl (Option.value ~default:"" bu) with
             | Some uu -> Some (id, uu)
             | None -> None)
         | None -> None)
       (List.combine blocks block_uuids)
   in
+  let id_tbl = Hashtbl.create (List.length id_to_new_uuid) in
+  List.iter
+    (fun (k, v) ->
+       if not (Hashtbl.mem id_tbl k) then Hashtbl.replace id_tbl k v)
+    id_to_new_uuid;
   let get_new_id (lookup : value) : value option =
     match lookup with
     | Map _ -> (
         match id_of_value lookup with
         | Some id -> (
-            match List.assoc_opt id id_to_new_uuid with
+            match Hashtbl.find_opt id_tbl id with
             | Some u -> Some (Ref_to (Lookup_ref ("block/uuid", Uuid u)))
             | None -> None)
         | None -> (
             match uuid_of_value lookup with
             | Some u -> (
-                match List.assoc_opt u uuid_map with
+                match Hashtbl.find_opt uuid_tbl u with
                 | Some uu -> Some (Ref_to (Lookup_ref ("block/uuid", Uuid uu)))
                 | None -> None)
             | None -> None))
     | Vector [ Keyword "block/uuid"; Uuid u ]
     | List [ Keyword "block/uuid"; Uuid u ] -> (
-        match List.assoc_opt u uuid_map with
+        match Hashtbl.find_opt uuid_tbl u with
         | Some uu -> Some (Ref_to (Lookup_ref ("block/uuid", Uuid uu)))
         | None -> None)
     (* cljs: entity -> id->new-uuid remap (nil when outside the inserted set);
        integer -> passthrough *)
     | Ref id | Ref_to (Entity_id id) -> (
-        match List.assoc_opt id id_to_new_uuid with
+        match Hashtbl.find_opt id_tbl id with
         | Some u -> Some (Ref_to (Lookup_ref ("block/uuid", Uuid u)))
         | None -> None)
     | Int64 id -> Some (Int64 id)
@@ -1923,6 +2013,10 @@ let insert_blocks_aux (db : db) (blocks : Block_map.t list)
   let block_ids =
     List.filter_map (fun b -> mget_uuid b "block/uuid") blocks
   in
+  let block_ids_tbl = Hashtbl.create (List.length block_ids) in
+  List.iter (fun u -> Hashtbl.replace block_ids_tbl u ()) block_ids;
+  let uuids_arr = Array.of_list uuids in
+  let orders_arr = Array.of_list orders in
   (* the db before any of this insert's page_txs — refs resolving to pages
      minted earlier in the loop must not pin their ephemeral :db/id *)
   let base_db = Some db in
@@ -1935,13 +2029,13 @@ let insert_blocks_aux (db : db) (blocks : Block_map.t list)
            still gets the uuid minted for the nil key, not a passthrough *)
         let uuid' =
           match mget_uuid block "block/uuid" with
-          | Some u -> List.assoc_opt u uuid_map
-          | None -> List.nth_opt uuids idx
+          | Some u -> Hashtbl.find_opt uuid_tbl u
+          | None -> (if idx < Array.length uuids_arr then Some uuids_arr.(idx) else None)
         in
         (match uuid' with
          | Some uuid' ->
              let block, page_txs =
-               resolve_page_refs db ?base_db
+               resolve_page_refs db ?base_db ~pending_uuids:uuids
                  (remove_disallowed_inline_classes db block)
              in
              let top_level =
@@ -1952,7 +2046,10 @@ let insert_blocks_aux (db : db) (blocks : Block_map.t list)
                  target_block top_level opts.sibling get_new_id
                  opts.outliner_op opts.replace_empty_target idx
              in
-             let order = List.nth_opt orders idx in
+             let order =
+               if idx < Array.length orders_arr then Some orders_arr.(idx)
+               else None
+             in
              (match parent, order with
               | Some _, Some _ -> ()
               | _ -> failwith "Parent or order is nil");
@@ -1968,7 +2065,7 @@ let insert_blocks_aux (db : db) (blocks : Block_map.t list)
                          in
                          List.filter
                            (fun u ->
-                             List.mem u block_ids
+                             Hashtbl.mem block_ids_tbl u
                              && Some u <> mget_uuid block "block/uuid")
                            ref_uuids
                      | None -> [])
@@ -2758,7 +2855,7 @@ let delete_blocks (db : db) (blocks : Block_map.t list) : tx_result =
          (List.filter_map
             (fun id -> page_updated_at_tx db (Some id))
             container_eids));
-  { tx_data = txs_state.txs; tx_meta = [] }
+  { tx_data = List.rev txs_state.txs; tx_meta = [] }
 
 (* ---------- move-blocks ---------- *)
 

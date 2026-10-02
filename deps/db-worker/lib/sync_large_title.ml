@@ -360,32 +360,38 @@ let offload_large_titles_in_datoms_batch repo graph_id
   in
   loop [] datoms
 
-(* process-upload-datoms-in-batches! *)
-let process_upload_datoms_in_batches (datoms : 'a list) ~batch_size
-    ~(process_batch : 'a list -> unit Db_worker_effect.t)
+(* process-upload-datoms-in-batches! — streams the seq so the whole
+   index never materializes as one list *)
+let process_upload_datoms_in_batches (datoms : 'a Seq.t) ~total
+    ~batch_size ~(process_batch : 'a list -> unit Db_worker_effect.t)
     ~(progress : int -> int -> unit) : unit Db_worker_effect.t =
-  let total = List.length datoms in
   let remaining = ref datoms in
   let processed = ref 0 in
-  let rec loop () : unit Db_worker_effect.t =
-    match !remaining with
-    | [] -> Db_worker_effect.pure ()
-    | _ ->
-        let rec take acc rem n =
-          if n >= batch_size then (List.rev acc, rem)
-          else
-            match rem with
-            | [] -> (List.rev acc, [])
-            | x :: xs -> take (x :: acc) xs (n + 1)
-        in
-        let batch, rest = take [] !remaining 0 in
+  let done_task, done_resolver = Db_worker_effect.wait () in
+  (* flat step driver — see stream_snapshot_row_batches *)
+  let rec step () : unit =
+    let rec take acc s n =
+      if n >= batch_size then (List.rev acc, s)
+      else
+        match s () with
+        | Seq.Nil -> (List.rev acc, Seq.empty)
+        | Seq.Cons (x, s') -> take (x :: acc) s' (n + 1)
+    in
+    match take [] !remaining 0 with
+    | [], _ -> Db_worker_effect.wakeup done_resolver ()
+    | batch, rest ->
         remaining := rest;
         processed := !processed + List.length batch;
-        process_batch batch >>= fun () ->
-        progress !processed total;
-        Db_worker_effect.sleep 0. >>= loop
+        Db_worker_effect.on_any
+          (process_batch batch
+           >>= fun () ->
+           progress !processed total;
+           Db_worker_effect.sleep 0.)
+          (fun () -> step ())
+          (fun e -> Db_worker_effect.reject done_resolver e)
   in
-  loop ()
+  step ();
+  done_task
 
 (* rehydrate-large-titles-from-db! *)
 let rehydrate_large_titles_from_db repo graph_id

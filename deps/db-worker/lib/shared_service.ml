@@ -84,8 +84,19 @@ let wire_string (k : string) (data : Wire.t) : string option =
   | _ -> None
 
 let error_to_wire (e : exn) : Wire.t =
-  Wire.Map
-    [ Wire.String "message", Wire.String (Printexc.to_string e) ]
+  match e with
+  | Dispatcher.Exn_info (message, kvs) ->
+      (* cljs bean/->clj on an ExceptionInfo keeps message + data *)
+      Wire.Map
+        [ Wire.String "message", Wire.String message
+        ; Wire.String "data", Wire.Map kvs ]
+  | Outliner_validate.Notification w ->
+      Wire.Map
+        [ Wire.String "message", Wire.String (Printexc.to_string e)
+        ; Wire.String "data", w ]
+  | _ ->
+      Wire.Map
+        [ Wire.String "message", Wire.String (Printexc.to_string e) ]
 
 (* ---- client-id ---- *)
 
@@ -159,12 +170,13 @@ let listen_client_channel (ch : Broadcast_channel.t)
    unknown methods instead of asserting Some. *)
 let apply_target_f (target : target) (method_name : string)
     (args : Wire.t list) : Wire.t E.t =
-  (* handlers can raise synchronously (Dispatcher.invoke_transit
-     re-raises Exn_info for eager handler throws); inside a channel
-     handler there is no Comlink boundary to absorb the throw, so
-     convert it to a rejected effect — callers turn it into an error
-     response or rejection instead of letting it escape uncaught. *)
-  try target method_name args with exn -> E.error exn
+  (* bind invokes the thunk synchronously and converts eager throws to errors. *)
+  E.bind (E.pure ()) (fun () -> target method_name args)
+
+let settle_status_ready (status_ready : unit E.resolver) initialize : unit E.t =
+  let task = E.bind (E.pure ()) initialize in
+  E.on_any task (E.wakeup status_ready) (E.reject status_ready);
+  task
 
 (* ---- election ---- *)
 
@@ -277,31 +289,41 @@ let create_on_request_handler (client_channel : Broadcast_channel.t)
                  E.pure ()))
     | _ -> ()
 
+(* Armed from <slave-registered-handler — once the master acks a slave's
+   "slave-register", matching cljs. The pending-request check keeps the
+   exclusive-lock request single; when it resolves, the master has gone
+   and the slave triggers a master re-check (which may re-register). *)
+let watch_master_lock ~service_name ~slave_client_id : unit E.t =
+  E.map
+    (fun (qr : Navigator_locks.query_result) ->
+       let already_watching =
+         List.exists
+           (fun (li : Navigator_locks.lock_info) ->
+              li.name = service_name && li.client_id = slave_client_id)
+           qr.pending
+       in
+       if not already_watching then
+         (* dont watch multiple times *)
+         do_not_wait
+           (Navigator_locks.request ~name:service_name ~mode:"exclusive"
+              (fun _lock ->
+                (* The master has gone, elect the new master *)
+                Worker_log.debug "shared-service/master-has-gone" [];
+                trigger_master_re_check "re-check";
+                E.pure ())))
+    (Navigator_locks.query ())
+
 let slave_registered_handler ~service_name ~slave_client_id ~event
     ~(register_finish : (unit E.t * unit E.resolver) option ref) : unit =
   match Wire.get "slave-client-id" event with
   | Some (Wire.String sid) when sid = slave_client_id ->
       E.async (fun () ->
-          E.bind (Navigator_locks.query ()) (fun qr ->
-              let already_watching =
-                List.exists
-                  (fun (li : Navigator_locks.lock_info) ->
-                     li.name = service_name && li.client_id = slave_client_id)
-                  qr.pending
-              in
-              if not already_watching then
-                (* dont watch multiple times *)
-                do_not_wait
-                  (Navigator_locks.request ~name:service_name
-                     ~mode:"exclusive" (fun _lock ->
-                       (* The master has gone, elect the new master *)
-                       Worker_log.debug "shared-service/master-has-gone" [];
-                       trigger_master_re_check "re-check";
-                       E.pure ()));
-              (match !register_finish with
-               | Some (_, r) -> E.wakeup r ()
-               | None -> ());
-              E.pure ()))
+          E.bind (watch_master_lock ~service_name ~slave_client_id)
+            (fun () ->
+               (match !register_finish with
+                | Some (_, r) -> E.wakeup r ()
+                | None -> ());
+               E.pure ()))
   | _ -> ()
 
 let re_requests_in_flight_on_slave (client_channel : Broadcast_channel.t)
@@ -344,93 +366,88 @@ let re_requests_in_flight_on_master (target : target) : unit =
 
 let on_become_slave ~slave_client_id ~service_name ~common_channel
     ~broadcast_data_types ~(status_ready : unit E.resolver) () : unit E.t =
-  let client_channel = ensure_client_channel slave_client_id service_name in
-  let register_finish : (unit E.t * unit E.resolver) option ref = ref None in
-  let register () =
-    Broadcast_channel.post_message common_channel
-      (Wire.Map
-         [ Wire.String "type", Wire.String "slave-register"
-         ; Wire.String "slave-client-id", Wire.String slave_client_id ]);
-    let t, r = E.wait () in
-    register_finish := Some (t, r);
-    t
-  in
-  listen_client_channel client_channel on_response_handler;
-  listen_common_channel common_channel (fun data ->
-      let ty = wire_string "type" data in
-      match ty with
-      | Some t when List.mem t broadcast_data_types ->
-          (* cljs (.postMessage js/self data) — forward the broadcast
-             transit-payload straight to this client's UI thread only;
-             Broadcast.to_clients would re-relay it onto the common
-             channel via extra_poster, looping between slaves *)
-          (match Wire.get "data" data with
-           | Some (Wire.String payload) -> Comlink.post_message payload
-           | _ -> ())
-      | Some "master-changed" ->
-          E.async (fun () ->
-              Worker_log.debug
-                "shared-service/master-client-change-detected" [];
-              E.bind (register ()) (fun () ->
-                  re_requests_in_flight_on_slave client_channel;
-                  E.pure ()))
-      | Some "slave-registered" ->
-          slave_registered_handler ~service_name ~slave_client_id
-            ~event:data ~register_finish
-      | Some "slave-register" ->
-          Worker_log.debug "shared-service/ignored-event"
-            [ "event", Ds_wire.edn_of_transit data ]
-      | _ ->
-          Worker_log.error "shared-service/unknown-event"
-            [ "event", Ds_wire.edn_of_transit data ]);
-  E.catch
-    (E.bind (register ()) (fun () ->
-         E.wakeup status_ready ();
-         E.pure ()))
-    (fun e ->
-       Worker_log.error "shared-service/on-become-slave"
-         [ "error", Printexc.to_string e ];
-       E.error e)
+  settle_status_ready status_ready (fun () ->
+    let client_channel = ensure_client_channel slave_client_id service_name in
+    let register_finish : (unit E.t * unit E.resolver) option ref = ref None in
+    let register () =
+      Broadcast_channel.post_message common_channel
+        (Wire.Map
+           [ Wire.String "type", Wire.String "slave-register"
+           ; Wire.String "slave-client-id", Wire.String slave_client_id ]);
+      let t, r = E.wait () in
+      register_finish := Some (t, r);
+      t
+    in
+    listen_client_channel client_channel on_response_handler;
+    listen_common_channel common_channel (fun data ->
+        let ty = wire_string "type" data in
+        match ty with
+        | Some t when List.mem t broadcast_data_types ->
+            (* cljs (.postMessage js/self data) — forward the broadcast
+               transit-payload straight to this client's UI thread only;
+               Broadcast.to_clients would re-relay it onto the common
+               channel via extra_poster, looping between slaves *)
+            (match Wire.get "data" data with
+             | Some (Wire.String payload) -> Comlink.post_message payload
+             | _ -> ())
+        | Some "master-changed" ->
+            E.async (fun () ->
+                Worker_log.debug
+                  "shared-service/master-client-change-detected" [];
+                E.bind (register ()) (fun () ->
+                    re_requests_in_flight_on_slave client_channel;
+                    E.pure ()))
+        | Some "slave-registered" ->
+            slave_registered_handler ~service_name ~slave_client_id
+              ~event:data ~register_finish
+        | Some "slave-register" ->
+            Worker_log.debug "shared-service/ignored-event"
+              [ "event", Ds_wire.edn_of_transit data ]
+        | _ ->
+            Worker_log.error "shared-service/unknown-event"
+              [ "event", Ds_wire.edn_of_transit data ]);
+    E.catch
+      (register ())
+      (fun e ->
+         Worker_log.error "shared-service/on-become-slave"
+           [ "error", Printexc.to_string e ];
+         E.error e))
 
 let on_become_master ~master_client_id ~service_name ~common_channel
     ~target ~on_become_master_handler ~(status_ready : unit E.resolver) ()
     : unit E.t =
-  Worker_log.debug "shared-service/become-master"
-    [ "master-client-id", master_client_id; "service", service_name ];
-  listen_common_channel common_channel (fun data ->
-      match wire_string "type" data, wire_string "slave-client-id" data with
-      | Some "slave-register", Some sid ->
-          let ch =
-            Broadcast_channel.create
-              (get_broadcast_channel_name sid service_name)
-          in
-          master_slave_channels := ch :: !master_slave_channels;
-          do_not_wait
-            (Navigator_locks.request ~name:sid ~mode:"exclusive" (fun _ ->
-                 Worker_log.debug "shared-service/slave-has-gone"
-                   [ "slave-client-id", sid ];
-                 Broadcast_channel.close ch;
-                 E.pure ()));
-          listen_client_channel ch (create_on_request_handler ch target);
-          Broadcast_channel.post_message common_channel
-            (Wire.Map
-               [ Wire.String "type", Wire.String "slave-registered"
-               ; Wire.String "slave-client-id", Wire.String sid
-               ; Wire.String "master-client-id", Wire.String master_client_id
-               ; Wire.String "serviceName", Wire.String service_name ])
-      | _ -> ());
-  Broadcast_channel.post_message common_channel
-    (Wire.Map
-       [ Wire.String "type", Wire.String "master-changed"
-       ; Wire.String "master-client-id", Wire.String master_client_id
-       ; Wire.String "serviceName", Wire.String service_name ]);
-  E.finally
-    (E.bind
-       (E.catch
-          (on_become_master_handler service_name)
-          (fun e -> E.error e))
-       (fun () -> re_requests_in_flight_on_master target; E.pure ()))
-    (fun () -> E.wakeup status_ready (); E.pure ())
+  settle_status_ready status_ready (fun () ->
+    Worker_log.debug "shared-service/become-master"
+      [ "master-client-id", master_client_id; "service", service_name ];
+    listen_common_channel common_channel (fun data ->
+        match wire_string "type" data, wire_string "slave-client-id" data with
+        | Some "slave-register", Some sid ->
+            let ch =
+              Broadcast_channel.create
+                (get_broadcast_channel_name sid service_name)
+            in
+            master_slave_channels := ch :: !master_slave_channels;
+            do_not_wait
+              (Navigator_locks.request ~name:sid ~mode:"exclusive" (fun _ ->
+                   Worker_log.debug "shared-service/slave-has-gone"
+                     [ "slave-client-id", sid ];
+                   Broadcast_channel.close ch;
+                   E.pure ()));
+            listen_client_channel ch (create_on_request_handler ch target);
+            Broadcast_channel.post_message common_channel
+              (Wire.Map
+                 [ Wire.String "type", Wire.String "slave-registered"
+                 ; Wire.String "slave-client-id", Wire.String sid
+                 ; Wire.String "master-client-id", Wire.String master_client_id
+                 ; Wire.String "serviceName", Wire.String service_name ])
+        | _ -> ());
+    Broadcast_channel.post_message common_channel
+      (Wire.Map
+         [ Wire.String "type", Wire.String "master-changed"
+         ; Wire.String "master-client-id", Wire.String master_client_id
+         ; Wire.String "serviceName", Wire.String service_name ]);
+    E.bind (on_become_master_handler service_name)
+      (fun () -> re_requests_in_flight_on_master target; E.pure ()))
 
 (* cljs <create-service — broadcast-data-types: wire "type" strings
    whose broadcasts are forwarded straight to this client's UI thread
@@ -442,10 +459,9 @@ let create_service ~service_name ~target ~on_become_master_handler
     master_client := true;
     client_id := Some "node";
     let ready, ready_r = E.wait () in
-    E.async (fun () ->
-        E.bind (on_become_master_handler service_name) (fun () ->
-            E.wakeup ready_r ();
-            E.pure ()));
+    ignore
+      (settle_status_ready ready_r (fun () ->
+           on_become_master_handler service_name));
     E.pure
       { proxy = (fun args -> apply_target_f target "remoteInvoke" args)
       ; status_ready = ready

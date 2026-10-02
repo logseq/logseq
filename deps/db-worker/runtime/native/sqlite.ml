@@ -135,24 +135,24 @@ let transaction t f =
   Fun.protect
     ~finally:(fun () -> t.tx_depth <- t.tx_depth - 1)
     (fun () ->
-      match f () with
-      | result ->
-          exec t
-            ~sql:
-              (if outermost then "commit" else "RELEASE SAVEPOINT " ^ savepoint)
-            ~bind:[||];
-          result
-      | exception exn ->
-          (if outermost then
-             (try exec t ~sql:"rollback" ~bind:[||] with _ -> ())
-           else begin
-             (try
-                exec t ~sql:("ROLLBACK TO SAVEPOINT " ^ savepoint) ~bind:[||]
-              with _ -> ());
-             (try exec t ~sql:("RELEASE SAVEPOINT " ^ savepoint) ~bind:[||]
-              with _ -> ())
-           end);
-          raise exn)
+      try
+        let result = f () in
+        exec t
+          ~sql:
+            (if outermost then "commit" else "RELEASE SAVEPOINT " ^ savepoint)
+          ~bind:[||];
+        result
+      with exn ->
+        (if outermost then
+           (try exec t ~sql:"rollback" ~bind:[||] with _ -> ())
+         else begin
+           (try
+              exec t ~sql:("ROLLBACK TO SAVEPOINT " ^ savepoint) ~bind:[||]
+            with _ -> ());
+           (try exec t ~sql:("RELEASE SAVEPOINT " ^ savepoint) ~bind:[||]
+            with _ -> ())
+         end);
+        raise exn)
 
 let checkpoint t = exec t ~sql:"pragma wal_checkpoint(TRUNCATE)" ~bind:[||]
 

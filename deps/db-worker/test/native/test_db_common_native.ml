@@ -865,7 +865,8 @@ let fresh_graphs_dir () =
   incr graphs_dir_seq;
   let dir =
     Filename.concat (Filename.get_temp_dir_name ())
-      (Printf.sprintf "logseq-initial-data-%d-%d" (Unix.getpid ())
+      (Printf.sprintf "logseq-initial-data-%d-%d-%d" (Unix.getpid ())
+         (int_of_float (Unix.gettimeofday ()))
          !graphs_dir_seq)
   in
   Unix.mkdir dir 0o755;
@@ -954,6 +955,144 @@ let test_restore_initial_data () =
   check "restore-initial-data restores recently updated page"
     (find_page_by_title (db_of conn) "page1" <> None)
 
+(* ---------- deps/common/test/logseq/common/util/date_time_test.cljs ----------
+
+   Local calendar-day range for Scheduled/Deadline. cljs nil inputs have
+   no OCaml int analogue — the option returns are exercised with an
+   invalid journal-day int instead. TZ fixtures use fixed offsets east
+   of UTC; the production helpers read the process timezone, and the
+   fixture asserts derive bounds at each offset directly. *)
+
+let journal_day_to_utc_ms (day : int) : int64 =
+  Time.epoch_ms_to_int64
+    (Time.epoch_ms_of_civil Time.utc
+       (Time.civil ~year:(day / 10000) ~month:((day / 100) mod 100)
+          ~day:(day mod 100) ~hour:0 ~minute:0 ~second:0 ~ms:0))
+
+let journal_day_to_ms_at_offset (day : int) (offset_min : int) : int64 =
+  Int64.sub (journal_day_to_utc_ms day) (Int64.of_int (offset_min * 60_000))
+
+let local_date_time_ms (day : int) (hour : int) (offset_min : int) : int64 =
+  Int64.add (journal_day_to_ms_at_offset day offset_min)
+    (Int64.of_int (hour * 3_600_000))
+
+let in_range (ms : int64) (start : int64) (end_ : int64) : bool =
+  Int64.compare start ms <= 0 && Int64.compare ms end_ <= 0
+
+(* (deftest journal-day-plus-test ...) *)
+let test_journal_day_plus () =
+  check "journal-day-plus +7"
+    (Date_time_util.journal_day_plus 20260928 7 = Some 20261005);
+  check "journal-day-plus month rollover"
+    (Date_time_util.journal_day_plus 20260228 1 = Some 20260301);
+  check "journal-day-plus invalid day is none"
+    (Date_time_util.journal_day_plus 20260230 1 = None)
+
+(* (deftest journal-day->local-ms-is-local-midnight ...) *)
+let test_journal_day_to_local_ms_is_local_midnight () =
+  let day = 20260928 in
+  let local = Date_time_util.journal_day_to_local_ms day in
+  let utc = journal_day_to_utc_ms day in
+  (* cljs (.getTime (js/Date. 2026 8 28)) — the same local midnight via a
+     different code path. *)
+  let expected =
+    Date_time_util.local_date_start_ms
+      (Option.get (Time.local_date_of_journal_day (Time.local_tz ()) day))
+  in
+  check "journal-day->local-ms is local midnight" (local = expected);
+  check "local midnight differs from UTC midnight by the local offset"
+    (let offset_ms = Int64.sub utc local in
+     Int64.rem offset_ms 60_000L = 0L);
+  check "local ms round-trips to the journal day"
+    (Date_time_util.ms_to_journal_day local = day)
+
+(* (deftest journal-day-local-range-ms-uses-local-calendar-days ...) *)
+let test_journal_day_local_range_ms_uses_local_calendar_days () =
+  let today = 20260928 in
+  let future_days = 7 in
+  let today_no_time = Date_time_util.journal_day_to_local_ms 20260928 in
+  let yesterday_21 =
+    Int64.add (Date_time_util.journal_day_to_local_ms 20260927)
+      (Int64.of_int (21 * 3_600_000))
+  in
+  let plus6_21 =
+    Int64.add (Date_time_util.journal_day_to_local_ms 20261004)
+      (Int64.of_int (21 * 3_600_000))
+  in
+  let plus7_no_time = Date_time_util.journal_day_to_local_ms 20261005 in
+  let plus7_21 = Int64.add plus7_no_time (Int64.of_int (21 * 3_600_000)) in
+  let start, end_ =
+    Option.get
+      (Date_time_util.journal_day_local_range_ms today future_days)
+  in
+  check "local range starts at local midnight today"
+    (start = today_no_time);
+  check "local range ends at local midnight day+7" (end_ = plus7_no_time);
+  check "today without a time is listed"
+    (in_range today_no_time start end_);
+  check "yesterday 21:00 is not listed as today"
+    (not (in_range yesterday_21 start end_));
+  check "6 days ahead at 21:00 is listed"
+    (in_range plus6_21 start end_);
+  check "the last day without a time is listed"
+    (in_range plus7_no_time start end_);
+  check "after local midnight of day+7 is outside the window"
+    (not (in_range plus7_21 start end_))
+
+(* (deftest scheduled-deadline-range-tz-fixtures-test ...) *)
+let test_scheduled_deadline_range_tz_fixtures () =
+  let today = 20260928 in
+  let yesterday = 20260927 in
+  let plus6 = 20261004 in
+  let plus7 = 20261005 in
+  List.iter
+    (fun offset_min ->
+       let start = journal_day_to_ms_at_offset today offset_min in
+       let end_ = journal_day_to_ms_at_offset plus7 offset_min in
+       let utc_start = journal_day_to_utc_ms today in
+       let utc_end = journal_day_to_utc_ms plus7 in
+       let today_no_time = start in
+       let yesterday_21 = local_date_time_ms yesterday 21 offset_min in
+       let plus6_21 = local_date_time_ms plus6 21 offset_min in
+       let plus7_no_time = end_ in
+       let utc_includes_today = in_range today_no_time utc_start utc_end in
+       let utc_includes_yesterday_21 =
+         in_range yesterday_21 utc_start utc_end
+       in
+       let utc_includes_plus6_21 = in_range plus6_21 utc_start utc_end in
+       check
+         (Printf.sprintf "offset %+d: today without a time is inside the \
+                          local range" offset_min)
+         (in_range today_no_time start end_);
+       check
+         (Printf.sprintf "offset %+d: yesterday 21:00 is outside the \
+                          local range" offset_min)
+         (not (in_range yesterday_21 start end_));
+       check
+         (Printf.sprintf "offset %+d: 6 days ahead at 21:00 is inside \
+                          the local range" offset_min)
+         (in_range plus6_21 start end_);
+       check
+         (Printf.sprintf "offset %+d: day+7 without a time is inside the \
+                          local range" offset_min)
+         (in_range plus7_no_time start end_);
+       if offset_min > 0 then
+         check
+           (Printf.sprintf "offset %+d: UTC range drops today's \
+                            date-only task" offset_min)
+           (not utc_includes_today);
+       if offset_min < 0 then begin
+         check
+           (Printf.sprintf "offset %+d: UTC range lists yesterday 21:00 \
+                            as today" offset_min)
+           utc_includes_yesterday_21;
+         check
+           (Printf.sprintf "offset %+d: UTC range drops 6 days ahead at \
+                            21:00" offset_min)
+           (not utc_includes_plus6_21)
+       end)
+    [ 540; 120; -240; -720; 0 ]
+
 let cases : unit Alcotest.test_case list =
   [ Alcotest.test_case "delete-blocks-removes-reactions" `Quick test_delete_blocks_removes_reactions;
     Alcotest.test_case "delete-blocks-expands-property-value-children" `Quick test_delete_blocks_expands_property_value_children;
@@ -980,4 +1119,8 @@ let cases : unit Alcotest.test_case list =
     Alcotest.test_case "get-block-and-children-has-children-flag" `Quick test_get_block_and_children_has_children_flag;
     Alcotest.test_case "get-initial-data" `Quick test_get_initial_data;
     Alcotest.test_case "get-initial-data-includes-property-description-datoms" `Quick test_get_initial_data_includes_property_description_datoms;
-    Alcotest.test_case "restore-initial-data" `Quick test_restore_initial_data ]
+    Alcotest.test_case "restore-initial-data" `Quick test_restore_initial_data;
+    Alcotest.test_case "journal-day-plus-test" `Quick test_journal_day_plus;
+    Alcotest.test_case "journal-day->local-ms-is-local-midnight" `Quick test_journal_day_to_local_ms_is_local_midnight;
+    Alcotest.test_case "journal-day-local-range-ms-uses-local-calendar-days" `Quick test_journal_day_local_range_ms_uses_local_calendar_days;
+    Alcotest.test_case "scheduled-deadline-range-tz-fixtures-test" `Quick test_scheduled_deadline_range_tz_fixtures ]

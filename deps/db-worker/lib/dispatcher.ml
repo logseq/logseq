@@ -90,5 +90,4 @@ let invoke_transit name transit_args =
   | `Task task ->
       Db_worker_effect.catch task (fun exn ->
           Db_worker_effect.pure (encode_error name exn))
-      >>= fun result ->
-      Db_worker_effect.pure (Transit_codec.to_string result)
+      >>= fun result -> Db_worker_effect.pure (Transit_codec.to_string result)

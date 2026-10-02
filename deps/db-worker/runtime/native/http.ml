@@ -31,7 +31,7 @@ let connect_timeout_s = 30.
 (* One HTTP/1.1 request per connection, on a dedicated eio loop thread —
    same as the cljs fetch+single-request model this replaces. *)
 let fetch (req : request) : response =
-  Eio_posix.run (fun env ->
+  Eio_run.run (fun env ->
     Eio.Switch.run (fun sw ->
       let clock = Eio.Stdenv.clock env in
       let host, target, flow =

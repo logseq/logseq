@@ -621,13 +621,33 @@ let rec validate_and_fix_invalid_blocks (conn : conn) : db_result =
   else result
 
 (* worker-db-validate/validate-db — returns the wire result map *)
+(* fix-missing-internal-page-parent-orders! — imported/internal pages under
+   a namespace parent that lack a string :block/order get one assigned;
+   each emitted order resets the global max-key (cljs doseq over
+   (keep :block/order tx-data)). *)
+let fix_missing_internal_page_parent_orders (conn : conn) : unit =
+  let db = Conn.db conn in
+  let tx_data =
+    List.map wire_map (Db_order.missing_internal_page_parent_order_tx db)
+  in
+  if tx_data <> [] then begin
+    ignore (transact_fix conn tx_data [ "fix-db?", Bool true ]);
+    List.iter
+      (fun (w : Wire.t) ->
+        match Wire.get "block/order" w with
+        | Some (Wire.String o) -> Db_order.reset_max_key (Some o)
+        | _ -> ())
+      tx_data
+  end
+
 let validate_db ?(fix = true) (conn : conn) : Wire.t =
   if fix then begin
     fix_extends_cardinality conn;
     fix_icon_wrong_type conn;
     ignore (Db_migrate.ensure_built_in_data_exists conn);
     fix_non_closed_values conn;
-    fix_num_prefix_db_idents conn
+    fix_num_prefix_db_idents conn;
+    fix_missing_internal_page_parent_orders conn
   end;
   let result =
     if fix then validate_and_fix_invalid_blocks conn

@@ -60,12 +60,14 @@ let direct_child_blocks db (block_id : entity_id) ?(reverse = false)
 let get_block_children db (block : entity) ~(all : bool)
     ~(include_collapsed_children : bool) ~(include_property_block : bool)
     : bool * entity list =
-  let rec loop pending seen result =
-    if (not all) && List.length result >= block_children_limit then
-      (true, result)
+  (* result accumulates reversed so each visited node costs O(its children),
+     not O(result); count avoids a per-node List.length. *)
+  let rec loop pending seen result_rev count =
+    if (not all) && count >= block_children_limit then
+      (true, List.rev result_rev)
     else
       match pending with
-      | [] -> (false, result)
+      | [] -> (false, List.rev result_rev)
       | parent :: rest ->
           let expand =
             include_collapsed_children
@@ -88,11 +90,15 @@ let get_block_children db (block : entity) ~(all : bool)
           List.iter (fun (c : entity) -> Hashtbl.replace seen c.id ()) children;
           (* cljs pending is a stack: (into pending children) appends and
              peek pops the last child first *)
-          loop (List.rev children @ rest) seen (result @ children)
+          loop
+            (List.rev children @ rest)
+            seen
+            (List.rev_append children result_rev)
+            (count + List.length children)
   in
   let seen = Hashtbl.create 64 in
   Hashtbl.replace seen block.id ();
-  let large_page, children_blocks = loop [ block ] seen [] in
+  let large_page, children_blocks = loop [ block ] seen [] 0 in
   let children_blocks =
     List.filter (fun (c : entity) -> not (Ldb.recycled c)) children_blocks
   in
@@ -127,7 +133,14 @@ let block_positioned_properties_map db (block : entity) : Wire.t =
                       Some (Endpoint_property.display_property_map db p)
                   | None -> None)
                 idents) ))
-       (Render_snapshot.block_positioned_property_idents_by_position db
+       (Render_snapshot.block_positioned_property_idents_by_position
+          ~cache:(Render_snapshot.new_batch_cache ())
+          ~tag_ids:(Render_snapshot.tag_ids_of db block.id)
+          ~own_property_ids:
+            (Render_snapshot.direct_block_property_ids db block.id)
+          ~direct_value:(fun a ->
+            Property_maps.entity_direct_value db block.id a)
+          db
           block.id))
 
 (* single impl lives in outliner_tree (shared with the page-tree pull) *)
@@ -216,7 +229,19 @@ let wire_merge (a : (Wire.t * Wire.t) list) (b : (Wire.t * Wire.t) list) =
    --------------------------------------------------------------- *)
 
 let block_refs_count_dispatch db (block_id : entity_id) : int option =
-  Render_snapshot.block_refs_count db block_id
+  Render_snapshot.block_refs_count
+    ~cache:(Render_snapshot.new_batch_cache ())
+    ~tag_ids:(Render_snapshot.tag_ids_of db block_id)
+    ~ident_v:
+      (match Seq.uncons (datoms db Eavt ~e:block_id ~a:"db/ident" ()) with
+       | Some (d, _) -> Some d.v
+       | None -> None)
+    ~alias_ids:
+      (datoms db Eavt ~e:block_id ~a:"block/alias" ()
+       |> Seq.filter_map (fun (d : datom) ->
+            match d.v with Ref id -> Some id | _ -> None)
+       |> List.of_seq)
+    db block_id
 
 type gb_opts =
   { gb_all : bool
@@ -381,7 +406,9 @@ let get_block_and_children db (id_or_page_name : value) (opts : gb_opts) :
 
 let uuid_eid_of_string db (u : string) : entity_id option =
   match
-    Seq.uncons (datoms db Avet ~a:"block/uuid" ~v:(Uuid u) ())
+    Seq.uncons
+      (datoms db Avet ~a:"block/uuid"
+         ~v:(Uuid (Datascript.Util.uuid_canonicalize u)) ())
   with
   | Some (d, _) -> Some d.e
   | None -> None
@@ -691,6 +718,48 @@ let membership_row_attr_map db (child_id : entity_id) : (attr * value) list =
          if List.mem d.a membership_row_attrs then Some (d.a, d.v)
          else None)
 
+(* Sibling eids cluster on imported graphs, so one bounded eavt range scan
+   covers a whole child list; scattered children fall back to their own
+   bounded slices. *)
+let children_membership_attrs db (child_ids : entity_id list)
+    : (entity_id, (attr * value) list) Hashtbl.t =
+  let tbl = Hashtbl.create (List.length child_ids + 8) in
+  (match child_ids with
+   | [] -> ()
+   | _ -> (
+       let lo = List.fold_left min max_int child_ids in
+       let hi = List.fold_left max min_int child_ids in
+       let covered =
+         if hi - lo + 1 <= 4096 then (
+           let wanted = Hashtbl.create (List.length child_ids) in
+           List.iter (fun eid -> Hashtbl.replace wanted eid ()) child_ids;
+           let seen = Hashtbl.create (List.length child_ids) in
+           let scanned = ref 0 in
+           (try
+              Seq.iter
+                (fun (d : datom) ->
+                  if d.e > hi then raise Exit;
+                  if Hashtbl.mem wanted d.e then (
+                    incr scanned;
+                    if !scanned > 16384 then raise Exit;
+                    Hashtbl.replace seen d.e ();
+                    if List.mem d.a membership_row_attrs then
+                      let prev =
+                        Option.value (Hashtbl.find_opt tbl d.e) ~default:[]
+                      in
+                      Hashtbl.replace tbl d.e ((d.a, d.v) :: prev)))
+                (seek_datoms db Eavt ~e:lo ())
+            with Exit -> ());
+           fun eid -> Hashtbl.mem seen eid)
+         else fun _ -> false
+       in
+       List.iter
+         (fun eid ->
+           if covered eid then ()
+           else Hashtbl.replace tbl eid (membership_row_attr_map db eid))
+         child_ids));
+  tbl
+
 let recycled_chain db (entity_id : entity_id) : bool =
   let rec loop eid seen =
     if List.mem eid seen then false
@@ -714,21 +783,25 @@ let recycled_chain db (entity_id : entity_id) : bool =
 type membership_child =
   { mc_id : entity_id
   ; mc_uuid : string
-  ; mc_order : string
+  ; mc_order : string option
   ; mc_collapsed : bool
   }
 
-let membership_row db (parent_uuid : string) (parent_recycled : bool)
-    (child_id : entity_id) : membership_child option =
-  let attrs = membership_row_attr_map db child_id in
-  let has a = List.mem_assoc a attrs in
-  if
-    parent_recycled || has "logseq.property/deleted-at"
-    || has "block/closed-value-property"
-    || has "logseq.property/created-from-property"
+let membership_row (parent_uuid : string) (parent_recycled : bool)
+    (child_id : entity_id) (attrs : (attr * value) list) :
+    membership_child option =
+  (* created-from-property linkage blocks dominate raw block/parent slices
+     on imported graphs *)
+  if parent_recycled || List.mem_assoc "logseq.property/created-from-property" attrs
   then None
   else
-    let child_uuid = List.assoc_opt "block/uuid" attrs in
+    let has a = List.mem_assoc a attrs in
+    if
+      has "logseq.property/deleted-at"
+      || has "block/closed-value-property"
+    then None
+    else
+      let child_uuid = List.assoc_opt "block/uuid" attrs in
     let order = List.assoc_opt "block/order" attrs in
     (match child_uuid with
      | Some (Uuid u) -> (
@@ -737,13 +810,27 @@ let membership_row db (parent_uuid : string) (parent_recycled : bool)
              Some
                { mc_id = child_id
                ; mc_uuid = u
-               ; mc_order = o
+               ; mc_order = Some o
                ; mc_collapsed =
                    (match List.assoc_opt "block/collapsed?" attrs with
                     | Some (Bool b) -> b
                     | _ -> false)
                }
-         | _ ->
+         | None ->
+             (* :block/order is {:optional true} for pages in normal-page, so
+                a parented page may legitimately have none. Sort those first,
+                matching ldb/sort-by-order, rather than failing the whole
+                membership read. *)
+             Some
+               { mc_id = child_id
+               ; mc_uuid = u
+               ; mc_order = None
+               ; mc_collapsed =
+                   (match List.assoc_opt "block/collapsed?" attrs with
+                    | Some (Bool b) -> b
+                    | _ -> false)
+               }
+         | Some _ ->
              fail_render_read "Invalid direct-child order"
                [ (kw "parent-uuid", Wire.Uuid parent_uuid)
                ; (kw "block-uuid", Wire.Uuid u)
@@ -759,7 +846,9 @@ let membership_row db (parent_uuid : string) (parent_recycled : bool)
 
 let resolve_parent_id db (parent_uuid : string) : entity_id =
   match
-    Seq.uncons (datoms db Avet ~a:"block/uuid" ~v:(Uuid parent_uuid) ())
+    Seq.uncons
+      (datoms db Avet ~a:"block/uuid"
+         ~v:(Uuid (Datascript.Util.uuid_canonicalize parent_uuid)) ())
   with
   | Some (d, _) -> d.e
   | None ->
@@ -778,17 +867,30 @@ let parent_membership db (parent_uuid : string) (parent_id : entity_id)
     | Int64 n -> Datascript.Util.int64_to_int_exn "block tx id" n
     | _ -> assert false
   in
+  let child_ids =
+    List.of_seq (datoms db Avet ~a:"block/parent" ~v:(Ref parent_id) ())
+    |> List.map (fun (d : datom) -> d.e)
+  in
+  let attrs_by_eid = children_membership_attrs db child_ids in
   ( parent_tx_id
-  , List.of_seq (datoms db Avet ~a:"block/parent" ~v:(Ref parent_id) ())
-    |> List.filter_map (fun (d : datom) ->
-           membership_row db parent_uuid parent_recycled d.e)
-    |> List.stable_sort (fun a b -> String.compare a.mc_order b.mc_order)
+  , List.filter_map
+      (fun child_id ->
+        let attrs =
+          Option.value (Hashtbl.find_opt attrs_by_eid child_id) ~default:[]
+        in
+        membership_row parent_uuid parent_recycled child_id attrs)
+      child_ids
+    |> List.stable_sort (fun a b ->
+           Db_order.compare_order a.mc_order b.mc_order)
   )
+
+let order_wire (o : string option) : Wire.t =
+  match o with Some s -> Wire.String s | None -> Wire.Nil
 
 let items_wire (rows : membership_child list) : Wire.t =
   Wire.Array
     (List.map
-       (fun r -> Wire.Array [ Wire.Uuid r.mc_uuid; Wire.String r.mc_order ])
+       (fun r -> Wire.Array [ Wire.Uuid r.mc_uuid; order_wire r.mc_order ])
        rows)
 
 let direct_children_membership db (parent_uuid : string) : Wire.t =
@@ -838,17 +940,18 @@ let open_children_tree db (root_uuid : string) ?(node_limit : int option)
 (* document-order-uuids — first `limit` uuids in render order *)
 let document_order_uuids (children : (string * (int * membership_child list)) list)
     (root_uuid : string) (limit : int) : string list =
-  let items_of u =
-    match List.assoc_opt u children with
-    | Some (_, rows) -> List.map (fun r -> r.mc_uuid) rows
-    | None -> []
-  in
+  let by_uuid = Hashtbl.create (List.length children + 8) in
+  List.iter
+    (fun (u, (_, rows)) ->
+      Hashtbl.replace by_uuid u (List.map (fun r -> r.mc_uuid) rows))
+    children;
+  let items_of u = Option.value (Hashtbl.find_opt by_uuid u) ~default:[] in
   let rec loop pending n result =
     match pending with
-    | [] -> result
+    | [] -> List.rev result
     | uuid :: rest ->
-        if n <= 0 then result
-        else loop (items_of uuid @ rest) (n - 1) (result @ [ uuid ])
+        if n <= 0 then List.rev result
+        else loop (items_of uuid @ rest) (n - 1) (uuid :: result)
   in
   loop [ root_uuid ] limit []
 

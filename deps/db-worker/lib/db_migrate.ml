@@ -31,7 +31,9 @@ let delete_property (db : db) (property_key : attr) : Wire.t list =
     | None -> false
   in
   let direct_remove : tx_op list =
-    List.of_seq (datoms db Avet ~a:property_key ())
+    (* Aevt, not Avet: attrs without :db/index true (e.g. block/pre-block?)
+       reject Avet access; aevt covers every datom regardless *)
+    List.of_seq (datoms db Aevt ~a:property_key ())
     |> List.map (fun (d : datom) -> Retract (Entity_id d.e, property_key, None))
   in
   let remove_datoms : tx_op list =
@@ -47,18 +49,18 @@ let delete_property (db : db) (property_key : attr) : Wire.t list =
          | None -> [])
   in
   let cleanup = Delete_blocks.update_refs_history db remove_datoms in
-  let all =
-    List.fold_left
-      (fun acc (tx : tx_op) ->
-        if List.exists (fun x -> x = tx) acc then acc else acc @ [ tx ])
-      []
-      (cleanup @ remove_datoms)
-  in
+  let all = Delete_blocks.distinct_txs (cleanup @ remove_datoms) in
   List.map Ds_wire.transit_of_tx_op all
 
 (* db-migrate/remove-block-path-refs *)
 let remove_block_path_refs (db : db) : Wire.t list =
   delete_property db "block/path-refs"
+
+(* 65.34 fix — db-order/missing-internal-page-parent-order-tx emits
+   {:db/id :block/order} entity maps; callers reset the global max-key
+   per emitted order after the update transacts. *)
+let missing_internal_page_parent_orders (db : db) : Wire.t list =
+  List.map wire_map (Db_order.missing_internal_page_parent_order_tx db)
 
 (* db-migrate/remove-position-property-from-url-properties *)
 let remove_position_property_from_url_properties (db : db) : Wire.t list =
@@ -285,7 +287,11 @@ let schema_version_updates : (string * update_spec) list =
         ; "logseq.property.view/gallery-display-properties"
         ; "logseq.property.view/gallery-card-size"
         ; "logseq.property.view/gallery-card-width"
-        ; "logseq.property.view/gallery-card-height" ] () ]
+        ; "logseq.property.view/gallery-card-height" ] ()
+  ; "65.34",
+    update
+      ~fix:("missing-internal-page-parent-orders",
+            missing_internal_page_parent_orders) () ]
 
 (* cljs (sqlite-create-graph/build-db-initial-data config-content) restricted
    to what ensure-built-in-data-exists! consumes: the seed entity maps
@@ -330,7 +336,7 @@ let seed_initial_data () : Block_map.t list =
   ; [ "db/ident", Keyword "logseq.property/empty-placeholder"
     ; ( "block/uuid"
       , Uuid
-          (Common_uuid.gen_uuid "builtin-block-uuid"
+          (Common_uuid.gen_uuid_keyword "builtin-block-uuid"
              "logseq.property/empty-placeholder") ) ]
   ; (let s = Common_uuid.new_block_id () in
      kv "logseq.kv/local-graph-uuid"
@@ -588,6 +594,14 @@ let upgrade_version (conn : conn) (version : string) (update : update_spec) :
       [ "db-migrate?", Bool true; "skip-validate-db?", Bool true ]
   with
   | Some (r : tx_report) ->
+      (* cljs (doseq [order (keep :block/order fixes)]
+           (db-order/reset-max-key! order)) *)
+      List.iter
+        (fun (w : Wire.t) ->
+          match Wire.get "block/order" w with
+          | Some (Wire.String o) -> Db_order.reset_max_key (Some o)
+          | _ -> ())
+        fixes;
       Some
         { r with
           tx_meta = r.tx_meta @ [ ("migrate-updates", migrate_updates_value update) ] }

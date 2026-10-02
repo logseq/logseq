@@ -346,39 +346,66 @@ let prop_view_of_arg db (v : Wire.t) : prop_view option =
 let property_node_selector_values db (property : prop_view) (option : Wire.t)
     : Wire.t =
   let values = get_property_values_of_option db property.pv_ident option in
-  match property.pv_value_type with
-  | Some "db.type/ref" ->
-      (match values with
-       | Wire.Array choices ->
-           Wire.Array
-             (List.map
-                (fun choice ->
-                   let value_eid =
-                     match Wire.get "value" choice with
-                     | Some v -> Option.bind (Wire.get "db/id" v) Wire.as_int
-                     | None -> None
-                   in
-                   match Option.bind value_eid (Ldb.ent_of_id db) with
-                   | Some value_entity ->
-                       let fwd =
-                         Plain_value.entity_forward_map db value_entity
-                           ~properties:
-                             [ "db/ident"; "block/uuid"; "block/tags"; "block/alias" ]
+  (* Serialized property maps may omit attrs, so read the type from the
+     db; only :node values stand in for another node. *)
+  let node_type =
+    match entity db (Ident property.pv_ident) with
+    | Some e -> Ldb.value e "logseq.property/type" = Some (Keyword "node")
+    | None -> false
+  in
+  match values with
+  | Wire.Array choices ->
+      Wire.Array
+        (List.map
+           (fun choice ->
+              let original_id =
+                match Wire.get "value" choice with
+                | Some v -> Option.bind (Wire.get "db/id" v) Wire.as_int
+                | None -> None
+              in
+              (* Resolve hidden property value blocks to their target node
+                 so choice ids match the ids selected block snapshots
+                 resolve to *)
+              let eid =
+                match node_type, original_id with
+                | true, Some id ->
+                    Some
+                      (Plain_value.node_property_target_id db id
+                         property.pv_ident)
+                | _ -> original_id
+              in
+              match Option.bind eid (Ldb.ent_of_id db) with
+              | Some value_entity ->
+                  let fwd =
+                    Plain_value.entity_forward_map db value_entity
+                      ~properties:
+                        [ "db/ident"; "block/uuid"; "block/tags"; "block/alias" ]
+                  in
+                  let alias_sources =
+                    List.of_seq
+                      (datoms db Avet ~a:"block/alias"
+                         ~v:(Ref value_entity.id) ())
+                  in
+                  let fwd =
+                    match alias_sources with
+                    | src :: _ -> wire_assoc "block/alias-source-page-id" (Wire.Int src.e) fwd
+                    | [] -> fwd
+                  in
+                  let choice' = wire_assoc "value" fwd choice in
+                  (match eid, original_id with
+                   | Some e, Some o when e <> o ->
+                       let label =
+                         match Ldb.string_value value_entity "block/title" with
+                         | Some t -> Wire.String t
+                         | None ->
+                             (match Wire.get "label" choice with
+                              | Some l -> l
+                              | None -> Wire.nil)
                        in
-                       let alias_sources =
-                         List.of_seq
-                           (datoms db Avet ~a:"block/alias"
-                              ~v:(Ref value_entity.id) ())
-                       in
-                       let fwd =
-                         match alias_sources with
-                         | src :: _ -> wire_assoc "block/alias-source-page-id" (Wire.Int src.e) fwd
-                         | [] -> fwd
-                       in
-                       wire_assoc "value" fwd choice
-                   | None -> choice)
-                choices)
-       | _ -> values)
+                       wire_assoc "label" label choice'
+                   | _ -> choice')
+              | None -> choice)
+           choices)
   | _ -> values
 
 (* handler broad-scoped-node-property? *)

@@ -148,6 +148,129 @@ let test_ordinary_sibling_skips_closed_value_property_children () =
   check_ordinary_sibling "ordinary-sibling-skips-closed-value-property-children"
     (create_sibling_conn ":block/closed-value-property -2")
 
+(* ordinary-sibling under stale :block/order datoms: raw-datom replay
+   (sync/RTC) can leave a second :block/order datom on an entity. A stale
+   index position must not steal the candidacy from a closer live
+   sibling. conn_from_datoms keeps both datoms, as a replayed log would. *)
+let create_stale_sibling_conn () =
+  let datom = Datascript.datom in
+  let parent = Ref 1 in
+  Datascript.conn_from_datoms ~schema:(Db_test_util.schema ())
+    [ datom ~e:1 ~a:"block/title" ~v:(String "page") ();
+      datom ~e:1 ~a:"block/name" ~v:(String "page") ();
+      datom ~e:10 ~a:"block/title" ~v:(String "c0") ();
+      datom ~e:10 ~a:"block/parent" ~v:parent ();
+      datom ~e:10 ~a:"block/order" ~v:(String "a0") ();
+      datom ~e:11 ~a:"block/title" ~v:(String "c1") ();
+      datom ~e:11 ~a:"block/parent" ~v:parent ();
+      datom ~e:11 ~a:"block/order" ~v:(String "a1") ();
+      datom ~e:11 ~a:"block/order" ~v:(String "a4") ();
+      datom ~e:12 ~a:"block/title" ~v:(String "c2") ();
+      datom ~e:12 ~a:"block/parent" ~v:parent ();
+      datom ~e:12 ~a:"block/order" ~v:(String "a3") ();
+      datom ~e:13 ~a:"block/title" ~v:(String "t") ();
+      datom ~e:13 ~a:"block/parent" ~v:parent ();
+      datom ~e:13 ~a:"block/order" ~v:(String "a5") () ]
+
+let test_ordinary_sibling_ignores_stale_order_datoms () =
+  let db = db_of (create_stale_sibling_conn ()) in
+  let c1 = Option.get (block_by_title db "c1") in
+  let c2 = Option.get (block_by_title db "c2") in
+  let t = Option.get (block_by_title db "t") in
+  check "ordinary-sibling-ignores-stale-order-datoms left of t"
+    (match Ldb.get_left_sibling t with
+     | Some e -> e.id = c2.id
+     | None -> false);
+  check "ordinary-sibling-ignores-stale-order-datoms left of c2"
+    (match Ldb.get_left_sibling c2 with
+     | Some e -> e.id = c1.id
+     | None -> false)
+
+(* order-list-index propagation: emitted markers per sibling list and the
+   shifted-eid diff that augments delta.blocks. Root children cover
+   untyped/letter/number runs, an equal-order pair and a typed nested
+   parent; e30/e31 exercise the descendant representation flip. *)
+let create_order_list_delta_conn () =
+  let datom = Datascript.datom in
+  let uuid n = Uuid (Printf.sprintf "00000000-0000-4000-8000-%012d" n) in
+  let lt = "logseq.property/order-list-type" in
+  let child e parent order t uuid_n =
+    [ datom ~e ~a:"block/parent" ~v:(Ref parent) ();
+      datom ~e ~a:"block/order" ~v:(String order) ();
+      datom ~e ~a:"block/uuid" ~v:(uuid uuid_n) () ]
+    @
+    match t with
+    | Some ty -> [ datom ~e ~a:lt ~v:(String ty) () ]
+    | None -> []
+  in
+  Datascript.conn_from_datoms ~schema:(Db_test_util.schema ())
+    ([ datom ~e:1 ~a:"block/title" ~v:(String "page") ();
+       datom ~e:1 ~a:"block/uuid" ~v:(uuid 1) () ]
+     @ child 10 1 "a1" (Some "number") 10
+     @ child 11 1 "a2" (Some "number") 11
+     @ child 16 1 "a2" (Some "number") 16
+     @ child 12 1 "a3" (Some "number") 12
+     @ child 13 1 "a4" (Some "number") 13
+     @ child 14 1 "a5" None 14
+     @ child 15 1 "a6" (Some "letter") 15
+     @ child 20 1 "a7" (Some "number") 20
+     @ child 21 20 "a0" (Some "number") 21
+     @ child 22 20 "a1" None 22
+     @ child 23 20 "a2" (Some "number") 23
+     @ child 30 1 "a8" (Some "number") 30
+     @ child 31 30 "a0" (Some "number") 31
+     @ child 32 1 "a9" (Some "number") 32)
+
+(* sibling_index_markers must agree with the per-child
+   order_list_index/emitted value on every child *)
+let test_order_list_index_markers_match_per_child () =
+  let db = db_of (create_order_list_delta_conn ()) in
+  let check_list name parent =
+    let children = Ldb.get_children parent in
+    let markers = Render_delta.sibling_index_markers children in
+    List.iter
+      (fun (c : entity) ->
+         let expected = Render_delta.index_marker_of c in
+         check (name ^ " e" ^ string_of_int c.id)
+           (Hashtbl.find markers c.id = expected))
+      children
+  in
+  check_list "markers root" (Option.get (block_by_title db "page"));
+  check_list "markers nested" (Option.get (Ldb.ent_of_id db 20))
+
+(* a same-parent reorder shifts the emitted index of siblings whose own
+   datoms did not change *)
+let test_order_list_shifted_uuids_reports_displaced_sibling () =
+  let conn = create_order_list_delta_conn () in
+  let r =
+    Datascript.transact_conn conn
+      [ Datascript.Retract (Entity_id 12, "block/order", Some (String "a3"));
+        Datascript.Add (Entity_id 12, "block/order", String "az") ]
+  in
+  let shifted = Render_delta.order_list_shifted_uuids r in
+  check "shifted includes displaced D"
+    (List.mem "00000000-0000-4000-8000-000000000013" shifted);
+  check "shifted includes moved C"
+    (List.mem "00000000-0000-4000-8000-000000000012" shifted);
+  check "shifted excludes unchanged A"
+    (not (List.mem "00000000-0000-4000-8000-000000000010" shifted));
+  check "shifted excludes unchanged B"
+    (not (List.mem "00000000-0000-4000-8000-000000000011" shifted))
+
+(* reparenting a typed block flips the representation of its typed
+   descendants (ancestor count mod 3) — they are shifted even though
+   their own datoms did not change *)
+let test_order_list_shifted_uuids_covers_descendants () =
+  let conn = create_order_list_delta_conn () in
+  let r =
+    Datascript.transact_conn conn
+      [ Datascript.Retract (Entity_id 30, "block/parent", Some (Ref 1));
+        Datascript.Add (Entity_id 30, "block/parent", Ref 32) ]
+  in
+  let shifted = Render_delta.order_list_shifted_uuids r in
+  check "shifted includes descendant Y"
+    (List.mem "00000000-0000-4000-8000-000000000031" shifted)
+
 (* (deftest page-exists ...)
    cljs page-exists? returns a seq of page eids (e.g. ["foo" page]);
    Ldb.page_exists returns bool — boolean equivalents asserted. *)
@@ -259,6 +382,41 @@ let test_get_bidirectional_properties_ignores_recycled_entities () =
      predates the deleted-at tx *)
   check "get-bidirectional-properties-ignores-recycled-entities"
     (Ldb.get_bidirectional_properties (db_of conn) target.id = [])
+
+(* get-all-pages-excludes-nested-pages-under-recycled-parent — cljs
+   db_test: pages nested under a recycled page drop out of
+   ldb/get-all-pages with their parent. *)
+let test_get_all_pages_excludes_nested_under_recycled_parent () =
+  let conn =
+    Db_test_util.create_conn_with_blocks
+      ~pages_and_blocks:
+        [ { Db_test_util.page =
+              Db_test_util.{ default_page with pg_title = Some "page1" };
+            Db_test_util.blocks =
+              [ Db_test_util.{ default_block with
+                    b_title = Some "page2"
+                  ; b_tags = [ "logseq.class/Page" ]
+                  ; b_extra = [ "block/name", Db_test_util.Str "page2" ] } ] }
+        ; { Db_test_util.page =
+              Db_test_util.{ default_page with pg_title = Some "keep" };
+            Db_test_util.blocks = [] } ]
+      ()
+  in
+  let titles () =
+    Ldb.get_all_pages (db_of conn)
+    |> List.filter_map (fun e -> Ldb.string_value e "block/title")
+  in
+  check "page2 visible before" (List.mem "page2" (titles ()));
+  let page1 =
+    Option.get (Db_test_util.find_page_by_title (db_of conn) "page1")
+  in
+  ignore
+    (Datascript.transact_conn_string conn
+       (Printf.sprintf "[{:db/id %d :logseq.property/deleted-at 1}]" page1.id));
+  let after = titles () in
+  check "keep remains" (List.mem "keep" after);
+  check "page1 gone" (not (List.mem "page1" after));
+  check "page2 gone with parent" (not (List.mem "page2" after))
 
 (* cljs bidirectional-perf-conn: n Person pages each pointing all given
    properties at the Target page. *)
@@ -660,6 +818,99 @@ let test_batch_transact_ () =
             [ Retract
                 (Ident "logseq.class/Task", "block/tags",
                  Some (Ref prop_eid)) ])))
+(* Finished batches and closed graphs must not keep their connections alive. *)
+let check_connections_released run =
+  let conns = Weak.create 100 in
+  for i = 0 to 99 do
+    run (fun conn -> Weak.set conns i (Some conn))
+  done;
+  Gc.full_major ();
+  Gc.full_major ();
+  let retained = ref 0 in
+  for i = 0 to 99 do
+    if Weak.check conns i then incr retained
+  done;
+  Alcotest.(check int) "connections retained after completion" 0 !retained
+
+exception Batch_lifetime_failure
+
+let lifetime_tx = [ Add (Temp_id "lifetime", "test/value", String "value") ]
+
+let test_temp_batch_connection_lifetime mode () =
+  let conn = create_conn () in
+  if mode = "commit-failure" then
+    ignore (listen conn "lifetime-commit-failure" (fun _ -> raise Batch_lifetime_failure));
+  check_connections_released (fun remember ->
+      let run () =
+        Db_tx.batch_transact_with_temp_conn conn
+          ?listen_db:(if mode = "listener-failure" then
+                        Some (fun _ -> raise Batch_lifetime_failure)
+                      else None)
+          ?before_commit:(if mode = "before-commit-failure" then
+                            Some (fun () -> raise Batch_lifetime_failure)
+                          else None)
+          (fun temp ->
+             remember temp;
+             if mode = "body-failure" then raise Batch_lifetime_failure;
+             if mode = "nested" then begin
+               (try
+                  ignore (Db_tx.batch_transact temp (fun _ -> ()));
+                  check "temp batch rejects nested real batch" false
+                with Db_tx.Batch_tx_nested -> ());
+               ignore (Db_tx.batch_transact_with_temp_conn temp (fun inner ->
+                   ignore (Db_tx.transact inner lifetime_tx)))
+             end else if mode <> "empty" then
+               ignore (Db_tx.transact temp lifetime_tx))
+      in
+      try ignore (run ()) with Batch_lifetime_failure -> ())
+
+let test_wire_temp_batch_connection_lifetime fail () =
+  let conn = create_conn () in
+  check_connections_released (fun remember ->
+      try
+        ignore (Db_transact.batch_transact_with_temp_conn conn [] (fun temp ->
+            remember temp;
+            if fail then raise Batch_lifetime_failure;
+            ignore (Db_tx.transact temp lifetime_tx)))
+      with Batch_lifetime_failure -> ())
+
+let test_sync_temp_batch_connection_lifetime mode () =
+  let conn = create_conn () in
+  check_connections_released (fun remember ->
+      try
+        ignore (Sync_apply.batch_transact_with_temp_conn_impl conn []
+                  ?before_commit:(if mode = "before-commit-failure" then
+                                    Some (fun () -> raise Batch_lifetime_failure)
+                                  else None)
+                  (fun temp ->
+                     remember temp;
+                     if mode = "body-failure" then raise Batch_lifetime_failure;
+                     ignore (Db_tx.transact temp lifetime_tx)) ())
+      with Batch_lifetime_failure -> ())
+
+let test_closed_graph_connection_lifetime () =
+  let repo = "test/flags-connection-lifetime" in
+  check_connections_released (fun remember ->
+      let conn = create_conn () in
+      remember conn;
+      Worker_state.set_datascript_conn repo conn;
+      ignore (Db_tx.transact conn lifetime_tx);
+      Endpoint_lifecycle.close_db_aux repo)
+
+let connection_lifetime_cases =
+  List.map (fun mode -> Alcotest.test_case ("typed-temp-" ^ mode) `Quick
+                         (test_temp_batch_connection_lifetime mode))
+    [ "empty"; "success"; "body-failure"; "listener-failure";
+      "before-commit-failure"; "commit-failure"; "nested" ]
+  @ [ Alcotest.test_case "wire-temp-success" `Quick
+        (test_wire_temp_batch_connection_lifetime false)
+    ; Alcotest.test_case "wire-temp-failure" `Quick
+        (test_wire_temp_batch_connection_lifetime true) ]
+  @ List.map (fun mode -> Alcotest.test_case ("sync-temp-" ^ mode) `Quick
+                           (test_sync_temp_batch_connection_lifetime mode))
+      [ "success"; "body-failure"; "before-commit-failure" ]
+  @ [ Alcotest.test_case "closed-graph" `Quick test_closed_graph_connection_lifetime ]
+
 (* (deftest batch-transact-with-temp-conn-before-commit-can-abort-live-commit-test
    ...) — before-commit runs after the temp work and before the live conn
    is modified; throwing aborts the commit *)
@@ -1180,6 +1431,17 @@ let test_private_create_page_tag_test () =
 
 (* ---------- deps/outliner/test/logseq/outliner/property_test.cljs ---------- *)
 
+(* cljs db-property/many? *)
+let prop_is_many (e : entity) : bool =
+  Ldb.value e "db/cardinality" = Some (Keyword "db.cardinality/many")
+
+(* cljs set? on an entity attr value — materializes as a collection when
+   the attr is cardinality many *)
+let attr_is_set (e : entity) (a : attr) : bool =
+  match entity_attr e a with
+  | Some (Many_values _) | Some (Many_entities _) -> true
+  | _ -> false
+
 (* (deftest upsert-property! "Creates a property" ...) *)
 let test_upsert_property () =
   let conn = Db_test_util.create_conn_with_blocks () in
@@ -1241,7 +1503,9 @@ let test_upsert_property_2 () =
        check "upsert-property! type->checkbox"
          (Ldb.value e "logseq.property/type" = Some (Keyword "checkbox"));
        check "upsert-property! checkbox drops db/valueType"
-         (Ldb.value e "db/valueType" = None)
+         (Ldb.value e "db/valueType" = None);
+       check "upsert-property! checkbox resets many"
+         (not (prop_is_many e))
    | None -> check "upsert-property! type->checkbox" false)
 
 (* (deftest upsert-property! "Multiple properties that generate the same
@@ -1311,6 +1575,169 @@ let test_upsert_property_rejects_type_change_with_existing_data_2 () =
        check "upsert-property type change allowed with no values"
          (Ldb.value e "logseq.property/type" = Some (Keyword "number"))
    | None -> check "upsert-property type change allowed with no values" false)
+
+(* (deftest upsert-property-type-change-to-non-cardinality-type-resets-many ...) *)
+let test_upsert_property_type_change_to_non_cardinality_type_resets_many () =
+  (* testing "changing an unused many property to checkbox or datetime
+     restores :one" *)
+  List.iter
+    (fun property_type ->
+       let conn =
+         Db_test_util.create_conn_with_blocks
+           ~properties:
+             [ "note"
+               , Db_test_util.{ default_property with p_type = "default" } ]
+           ()
+       in
+       ignore
+         (Outliner_property.upsert_property conn
+            (Some "user.property/note")
+            (Wire.Map [ kw "db/cardinality", kw "many" ])
+            ~property_name:None ~properties:[]);
+       ignore
+         (Outliner_property.upsert_property conn
+            (Some "user.property/note")
+            (Wire.Map [ kw "logseq.property/type", kw property_type ])
+            ~property_name:None ~properties:[]);
+       match ent_ident (db_of conn) "user.property/note" with
+       | Some e ->
+           check ("upsert-property! type->" ^ property_type)
+             (Ldb.value e "logseq.property/type"
+             = Some (Keyword property_type));
+           check ("upsert-property! " ^ property_type ^ " resets many")
+             (not (prop_is_many e))
+       | None -> check ("upsert-property! type->" ^ property_type) false)
+    [ "checkbox"; "datetime" ];
+  (* testing "changing an unused many property to another cardinality type
+     keeps :many" *)
+  let conn =
+    Db_test_util.create_conn_with_blocks
+      ~properties:
+        [ "note", Db_test_util.{ default_property with p_type = "default" } ]
+      ()
+  in
+  ignore
+    (Outliner_property.upsert_property conn (Some "user.property/note")
+       (Wire.Map [ kw "db/cardinality", kw "many" ])
+       ~property_name:None ~properties:[]);
+  ignore
+    (Outliner_property.upsert_property conn (Some "user.property/note")
+       (Wire.Map [ kw "logseq.property/type", kw "number" ])
+       ~property_name:None ~properties:[]);
+  (match ent_ident (db_of conn) "user.property/note" with
+   | Some e ->
+       check "upsert-property! type->number"
+         (Ldb.value e "logseq.property/type" = Some (Keyword "number"));
+       check "upsert-property! type->number keeps many" (prop_is_many e)
+   | None -> check "upsert-property! type->number" false)
+
+(* (deftest upsert-property-schema-restore-skips-many-to-one-when-other-fields-present ...) *)
+let test_upsert_property_schema_restore_skips_many_to_one () =
+  (* testing "replaying a schema that includes :one plus type keeps :many
+     when values exist" *)
+  let conn =
+    Db_test_util.create_conn_with_blocks
+      ~pages_and_blocks:
+        [ { Db_test_util.page =
+              Db_test_util.{ default_page with pg_title = Some "page1" }
+          ; Db_test_util.blocks =
+              [ Db_test_util.{ default_block with b_title = Some "b1"
+                               ; b_properties =
+                                   [ "note", Db_test_util.Str "text 1" ] } ] } ]
+      ()
+  in
+  ignore
+    (Outliner_property.upsert_property conn (Some "user.property/note")
+       (Wire.Map [ kw "db/cardinality", kw "many" ])
+       ~property_name:None ~properties:[]);
+  ignore
+    (Outliner_property.upsert_property conn (Some "user.property/note")
+       (Wire.Map
+          [ kw "logseq.property/type", kw "default"
+          ; kw "db/cardinality", kw "one" ])
+       ~property_name:None ~properties:[]);
+  (match ent_ident (db_of conn) "user.property/note" with
+   | Some e -> check "schema replay keeps many" (prop_is_many e)
+   | None -> check "schema replay keeps many" false);
+  check "b1 note value is a set"
+    (attr_is_set
+       (Option.get
+          (Db_test_util.find_block_by_content (db_of conn) "b1"))
+       "user.property/note")
+
+(* (deftest upsert-property-omitted-cardinality-keeps-many-with-closed-values ...) *)
+let test_upsert_property_omitted_cardinality_keeps_many_with_closed_values () =
+  (* testing "omitting :db/cardinality does not convert many to one when
+     choices exist" *)
+  let conn =
+    Db_test_util.create_conn_with_blocks
+      ~properties:
+        [ "status"
+          , Db_test_util.{ default_property with
+              p_type = "default"
+            ; p_closed_values =
+                [ { Db_test_util.cv_value = "active"
+                  ; cv_uuid = None
+                  ; cv_ident = None
+                  ; cv_icon = None
+                  ; cv_properties = [] } ] } ]
+      ~pages_and_blocks:
+        [ { Db_test_util.page =
+              Db_test_util.{ default_page with pg_title = Some "page1" }
+          ; Db_test_util.blocks =
+              [ Db_test_util.{ default_block with b_title = Some "b1"
+                               ; b_properties =
+                                   [ "status", Db_test_util.Str "active" ] } ] } ]
+      ()
+  in
+  ignore
+    (Outliner_property.upsert_property conn (Some "user.property/status")
+       (Wire.Map [ kw "db/cardinality", kw "many" ])
+       ~property_name:None ~properties:[]);
+  (match ent_ident (db_of conn) "user.property/status" with
+   | Some e -> check "status many" (prop_is_many e)
+   | None -> check "status many" false);
+  ignore
+    (Outliner_property.upsert_property conn (Some "user.property/status")
+       (Wire.Map [ kw "logseq.property/type", kw "default" ])
+       ~property_name:None ~properties:[]);
+  (match ent_ident (db_of conn) "user.property/status" with
+   | Some e -> check "omitted cardinality keeps many" (prop_is_many e)
+   | None -> check "omitted cardinality keeps many" false);
+  check "b1 status value is a set"
+    (attr_is_set
+       (Option.get
+          (Db_test_util.find_block_by_content (db_of conn) "b1"))
+       "user.property/status")
+
+(* (deftest upsert-property-rejects-many-to-one-with-existing-data ...) *)
+let test_upsert_property_rejects_many_to_one_with_existing_data () =
+  (* testing "Changing many to one is rejected when property has values" *)
+  let conn =
+    Db_test_util.create_conn_with_blocks
+      ~pages_and_blocks:
+        [ { Db_test_util.page =
+              Db_test_util.{ default_page with pg_title = Some "page1" }
+          ; Db_test_util.blocks =
+              [ Db_test_util.{ default_block with b_title = Some "b1"
+                               ; b_properties =
+                                   [ "note", Db_test_util.Str "text 1" ] } ] } ]
+      ()
+  in
+  ignore
+    (Outliner_property.upsert_property conn (Some "user.property/note")
+       (Wire.Map [ kw "db/cardinality", kw "many" ])
+       ~property_name:None ~properties:[]);
+  (match ent_ident (db_of conn) "user.property/note" with
+   | Some e -> check "note many" (prop_is_many e)
+   | None -> check "note many" false);
+  throws_with
+    "upsert-property rejects many-to-one with existing data"
+    "multiple values to one value"
+    (fun () ->
+       Outliner_property.upsert_property conn (Some "user.property/note")
+         (Wire.Map [ kw "db/cardinality", kw "one" ])
+         ~property_name:None ~properties:[])
 
 (* (deftest convert-property-input-string ...)
    cljs calls the private fn with a bare property map; the OCaml fn takes an
@@ -1833,6 +2260,184 @@ let test_batch_set_property_3 () =
        check "batch-set-property! id vector persisted as many values"
          (contents = [ "Step 1"; "Step 2"; "Step 3" ])
    | None -> check "batch-set-property! id vector persisted" false)
+
+(* batch-set-property-stores-explicit-literal-numbers — cljs
+   property_test: literal integers including 0, negatives, and
+   coincidental entity ids store as numbers under {:entity-id? false};
+   {:entity-id? true} keeps the integer as the ref itself. *)
+let test_batch_set_property_stores_explicit_literal_numbers () =
+  let conn =
+    Db_test_util.create_conn_with_blocks
+      ~properties:
+        [ "rating", Db_test_util.{ default_property with p_type = "number" } ]
+      ~pages_and_blocks:
+        [ { Db_test_util.page =
+              Db_test_util.{ default_page with pg_title = Some "page1" };
+            Db_test_util.blocks =
+              [ Db_test_util.{ default_block with b_title = Some "b1" };
+                Db_test_util.{ default_block with b_title = Some "b2" } ] } ]
+      ()
+  in
+  let find t = Db_test_util.find_block_by_content (db_of conn) t in
+  let uuid t =
+    match find t with Some b -> uuid_of b | None -> failwith (t ^ " missing")
+  in
+  let rating_id t =
+    match find t with
+    | Some b ->
+        (match prop_value_ents b "user.property/rating" with
+         | [ pv ] -> pv.id
+         | _ -> -1)
+    | None -> -1
+  in
+  let rating_content t =
+    match find t with
+    | Some b ->
+        (match prop_value_ents b "user.property/rating" with
+         | [ pv ] -> prop_value_content pv
+         | _ -> "MISSING")
+    | None -> "MISSING"
+  in
+  Outliner_property.batch_set_property conn [ Wire.Uuid (uuid "b1") ]
+    "user.property/rating" (Wire.Int 0) ~entity_id_opt:(Some false) ();
+  check "literal 0" (rating_content "b1" = "0");
+  Outliner_property.batch_set_property conn [ Wire.Uuid (uuid "b1") ]
+    "user.property/rating" (Wire.Int (-3)) ~entity_id_opt:(Some false) ();
+  check "literal -3" (rating_content "b1" = "-3");
+  Outliner_property.batch_set_property conn [ Wire.Uuid (uuid "b1") ]
+    "user.property/rating" (Wire.Int 2) ~entity_id_opt:(Some false) ();
+  let value_block_id = rating_id "b1" in
+  check "value block id resolved" (value_block_id > 0);
+  Outliner_property.batch_set_property conn [ Wire.Uuid (uuid "b2") ]
+    "user.property/rating" (Wire.Int value_block_id)
+    ~entity_id_opt:(Some false) ();
+  check "coincidental eid stored as number"
+    (rating_content "b2" = Printf.sprintf "%d" value_block_id);
+  check "not a ref to the other value block"
+    (rating_id "b2" <> value_block_id);
+  check "content is not 2" (rating_content "b2" <> "2");
+  Outliner_property.batch_set_property conn [ Wire.Uuid (uuid "b2") ]
+    "user.property/rating" (Wire.Int value_block_id)
+    ~entity_id_opt:(Some true) ();
+  check "entity-id? true stores the eid as ref"
+    (rating_id "b2" = value_block_id);
+  check "ref reads back as 2" (rating_content "b2" = "2")
+
+(* number-closed-choices-preserve-implicit-entity-ids — cljs
+   property_test: with no :entity-id? option a number closed value's
+   eid still resolves to that choice (auto ref resolution). *)
+let test_number_closed_choices_preserve_implicit_entity_ids () =
+  let first_uuid = "00000000-0000-4000-9000-00000000f001" in
+  let second_uuid = "00000000-0000-4000-9000-00000000f002" in
+  let conn =
+    Db_test_util.create_conn_with_blocks
+      ~properties:
+        [ "rating"
+          , Db_test_util.{ default_property with
+              p_type = "number"
+            ; p_closed_values =
+                [ { Db_test_util.cv_value = "1"
+                  ; cv_uuid = Some first_uuid
+                  ; cv_ident = None
+                  ; cv_icon = None
+                  ; cv_properties = [] }
+                ; { Db_test_util.cv_value = "2"
+                  ; cv_uuid = Some second_uuid
+                  ; cv_ident = None
+                  ; cv_icon = None
+                  ; cv_properties = [] } ] } ]
+      ~pages_and_blocks:
+        [ { Db_test_util.page =
+              Db_test_util.{ default_page with pg_title = Some "page1" };
+            Db_test_util.blocks =
+              [ Db_test_util.{ default_block with b_title = Some "b1" } ] } ]
+      ()
+  in
+  let db = db_of conn in
+  let block_id =
+    match Db_test_util.find_block_by_content db "b1" with
+    | Some b -> b.id
+    | None -> failwith "b1 missing"
+  in
+  let choice_id u =
+    match Datascript.entity db (Lookup_ref ("block/uuid", Uuid u)) with
+    | Some e -> e.id
+    | None -> failwith "choice missing"
+  in
+  let first_id = choice_id first_uuid and second_id = choice_id second_uuid in
+  let rating_id () =
+    match Ldb.ent_of_id (db_of conn) block_id with
+    | Some b ->
+        (match prop_value_ents b "user.property/rating" with
+         | [ pv ] -> pv.id
+         | _ -> -1)
+    | None -> -1
+  in
+  let rating_content () =
+    match Ldb.ent_of_id (db_of conn) block_id with
+    | Some b ->
+        (match prop_value_ents b "user.property/rating" with
+         | [ pv ] -> prop_value_content pv
+         | _ -> "MISSING")
+    | None -> "MISSING"
+  in
+  Outliner_property.batch_set_property conn [ Wire.Int block_id ]
+    "user.property/rating" (Wire.Int first_id) ();
+  check "batch-set keeps implicit eid" (rating_id () = first_id);
+  Outliner_property.set_block_property conn (Wire.Int block_id)
+    "user.property/rating" (Wire.Int second_id);
+  check "set-block-property keeps implicit eid" (rating_id () = second_id);
+  check "content is 2" (rating_content () = "2")
+
+(* batch-set-many-numbers-preserves-literal-mode — cljs property_test:
+   :entity-id? false applies per element of a many number property. *)
+let test_batch_set_many_numbers_preserves_literal_mode () =
+  let conn =
+    Db_test_util.create_conn_with_blocks
+      ~properties:
+        [ "ratings"
+          , Db_test_util.{ default_property with
+              p_type = "number"; p_cardinality_many = true } ]
+      ~pages_and_blocks:
+        [ { Db_test_util.page =
+              Db_test_util.{ default_page with pg_title = Some "page1" };
+            Db_test_util.blocks =
+              [ Db_test_util.{ default_block with b_title = Some "b1" };
+                Db_test_util.{ default_block with b_title = Some "b2" } ] } ]
+      ()
+  in
+  let find t = Db_test_util.find_block_by_content (db_of conn) t in
+  let uuid t =
+    match find t with Some b -> uuid_of b | None -> failwith (t ^ " missing")
+  in
+  (* seed b1.ratings = {2} *)
+  Outliner_property.batch_set_property conn [ Wire.Uuid (uuid "b1") ]
+    "user.property/ratings" (Wire.Int 2) ~entity_id_opt:(Some false) ();
+  let value_id =
+    match find "b1" with
+    | Some b ->
+        (match prop_value_ents b "user.property/ratings" with
+         | [ pv ] -> pv.id
+         | _ -> failwith "b1 rating missing")
+    | None -> failwith "b1 missing"
+  in
+  let b2_uuid = uuid "b2" in
+  Outliner_property.batch_set_property conn [ Wire.Uuid b2_uuid ]
+    "user.property/ratings"
+    (Wire.Array [ Wire.Int 0; Wire.Int (-3); Wire.Int value_id ])
+    ~entity_id_opt:(Some false) ();
+  (match ent_uuid (db_of conn) b2_uuid with
+   | Some b ->
+       let contents =
+         List.sort compare
+           (List.map prop_value_content
+              (prop_value_ents b "user.property/ratings"))
+       in
+       check "many literals preserved"
+         (contents
+          = List.sort compare
+              [ "0"; "-3"; Printf.sprintf "%d" value_id ])
+   | None -> check "many literals preserved" false)
 
 (* batch-set-property "Invalid many values throw and don't partially persist" *)
 let test_batch_set_property_4 () =
@@ -2484,7 +3089,13 @@ let test_validate_block_title_unique_for_tags () =
     "Another tag named"
     (fun () ->
        Outliner_validate.validate_unique_by_name_and_tags db (Some "Card")
-         (ent_ident db "user.class/Class1") None)
+         (ent_ident db "user.class/Class1") None);
+  check "validate unique: class may use a case variant of another class name"
+    (try
+       Outliner_validate.validate_unique_by_name_and_tags db (Some "class1")
+         (ent_ident db "user.class/Class2") None;
+       true
+     with _ -> false)
 
 (* (deftest validate-block-title-unique-for-pages ...) *)
 let test_validate_block_title_unique_for_pages () =
@@ -2496,6 +3107,9 @@ let test_validate_block_title_unique_for_pages () =
             Db_test_util.blocks = [] };
           { Db_test_util.page =
               Db_test_util.{ default_page with pg_title = Some "another page" };
+            Db_test_util.blocks = [] };
+          { Db_test_util.page =
+              Db_test_util.{ default_page with pg_title = Some "Foo" };
             Db_test_util.blocks = [] };
           { Db_test_util.page =
               Db_test_util.{ default_page with pg_title = Some "Apple";
@@ -2533,7 +3147,55 @@ let test_validate_block_title_unique_for_pages () =
        Outliner_validate.validate_unique_by_name_and_tags db (Some "Apple")
          (Db_test_util.find_page_by_title db "Fruit") None;
        true
+     with _ -> false);
+  throws_with "validate unique: rename to case variant of top-level page"
+    "Another page named \"foo\" already exists."
+    (fun () ->
+       Outliner_validate.validate_unique_by_name_and_tags db (Some "foo")
+         (Db_test_util.find_page_by_title db "another page") None);
+  check "validate unique: rename to own title's case variant allowed"
+    (try
+       Outliner_validate.validate_unique_by_name_and_tags db (Some "PAGE1")
+         (Db_test_util.find_page_by_title db "page1") None;
+       true
+     with _ -> false);
+  throws_with "validate unique: rename to case variant with same tag"
+    "Another page named"
+    (fun () ->
+       Outliner_validate.validate_unique_by_name_and_tags db (Some "apple")
+         (Db_test_util.find_page_by_title db "Another Company") None);
+  check "validate unique: case variant allowed for different tag"
+    (try
+       Outliner_validate.validate_unique_by_name_and_tags db (Some "apple")
+         (Db_test_util.find_page_by_title db "Banana") None;
+       true
      with _ -> false)
+
+(* (deftest validate-block-title-unique-checks-all-candidates ...) *)
+let test_validate_block_title_unique_checks_all_candidates () =
+  let conn =
+    Db_test_util.create_conn_with_blocks
+      ~pages_and_blocks:
+        [ { Db_test_util.page =
+              Db_test_util.{ default_page with pg_title = Some "Foo";
+                             pg_tags = [ "Company" ] };
+            Db_test_util.blocks = [] };
+          { Db_test_util.page =
+              Db_test_util.{ default_page with pg_title = Some "foo";
+                             pg_tags = [ "Fruit" ] };
+            Db_test_util.blocks = [] };
+          { Db_test_util.page =
+              Db_test_util.{ default_page with pg_title = Some "Bar";
+                             pg_tags = [ "Fruit" ] };
+            Db_test_util.blocks = [] } ]
+      ()
+  in
+  let db = db_of conn in
+  throws_with "validate unique: any colliding candidate rejects the rename"
+    "Another page named"
+    (fun () ->
+       Outliner_validate.validate_unique_by_name_and_tags db (Some "FOO")
+         (Db_test_util.find_page_by_title db "Bar") None)
 
 (* (deftest validate-block-title-unique-for-namespaced-pages ...)
    :build-existing-tx? is a fixture flag; same shape via explicit
@@ -2573,6 +3235,17 @@ let test_validate_block_title_unique_for_namespaced_pages () =
                                  Db_test_util.Vec
                                    [ Db_test_util.Kw "block/uuid";
                                      Db_test_util.Uuid "3aa1e950-5a9b-4efc-81d4-b6d89a504591" ] ] };
+            Db_test_util.blocks = [] };
+          { Db_test_util.page =
+              Db_test_util.{ default_page with pg_title = Some "other";
+                             pg_extra =
+                               [ "block/parent",
+                                 Db_test_util.Vec
+                                   [ Db_test_util.Kw "block/uuid";
+                                     Db_test_util.Uuid "d246c71a-3e71-42f0-928f-afe607ee5ce0" ] ] };
+            Db_test_util.blocks = [] };
+          { Db_test_util.page =
+              Db_test_util.{ default_page with pg_title = Some "Foo" };
             Db_test_util.blocks = [] } ]
       ()
   in
@@ -2586,6 +3259,29 @@ let test_validate_block_title_unique_for_namespaced_pages () =
     (try
        Outliner_validate.validate_unique_by_name_and_tags db (Some "n4")
          (Db_test_util.find_page_by_title db "n3") None;
+       true
+     with _ -> false);
+  throws_with "validate unique: rename ns child to sibling's case variant"
+    "Another page named"
+    (fun () ->
+       Outliner_validate.validate_unique_by_name_and_tags db (Some "N2")
+         (Db_test_util.find_page_by_title db "n3") None);
+  check "validate unique: ns child may share name with other-parent page"
+    (try
+       Outliner_validate.validate_unique_by_name_and_tags db (Some "Other")
+         (Db_test_util.find_page_by_title db "n3") None;
+       true
+     with _ -> false);
+  check "validate unique: ns child may share name with top-level page"
+    (try
+       Outliner_validate.validate_unique_by_name_and_tags db (Some "foo")
+         (Db_test_util.find_page_by_title db "n3") None;
+       true
+     with _ -> false);
+  check "validate unique: top-level page may share name with ns page"
+    (try
+       Outliner_validate.validate_unique_by_name_and_tags db (Some "N2")
+         (Db_test_util.find_page_by_title db "Foo") None;
        true
      with _ -> false)
 
@@ -3132,6 +3828,10 @@ let endpoint_cases : unit Alcotest.test_case list =
     Alcotest.test_case "upsert-property-3" `Quick test_upsert_property_3;
     Alcotest.test_case "upsert-property-rejects-type-change-with-existing-data" `Quick test_upsert_property_rejects_type_change_with_existing_data;
     Alcotest.test_case "upsert-property-rejects-type-change-with-existing-data-2" `Quick test_upsert_property_rejects_type_change_with_existing_data_2;
+    Alcotest.test_case "upsert-property-type-change-to-non-cardinality-type-resets-many" `Quick test_upsert_property_type_change_to_non_cardinality_type_resets_many;
+    Alcotest.test_case "upsert-property-schema-restore-skips-many-to-one-when-other-fields-present" `Quick test_upsert_property_schema_restore_skips_many_to_one;
+    Alcotest.test_case "upsert-property-omitted-cardinality-keeps-many-with-closed-values" `Quick test_upsert_property_omitted_cardinality_keeps_many_with_closed_values;
+    Alcotest.test_case "upsert-property-rejects-many-to-one-with-existing-data" `Quick test_upsert_property_rejects_many_to_one_with_existing_data;
     Alcotest.test_case "convert-property-input-string" `Quick test_convert_property_input_string;
     Alcotest.test_case "create-property-text-block" `Quick test_create_property_text_block;
     Alcotest.test_case "create-property-text-block-2" `Quick test_create_property_text_block_2;
@@ -3148,6 +3848,9 @@ let endpoint_cases : unit Alcotest.test_case list =
     Alcotest.test_case "status-property-setting-classes" `Quick test_status_property_setting_classes;
     Alcotest.test_case "task-child-class-does-not-add-parent-task-tag" `Quick test_task_child_class_does_not_add_parent_task_tag;
     Alcotest.test_case "batch-set-property-rejects-private-built-in-entity" `Quick test_batch_set_property_rejects_private_built_in_entity;
+    Alcotest.test_case "batch-set-property-stores-explicit-literal-numbers" `Quick test_batch_set_property_stores_explicit_literal_numbers;
+    Alcotest.test_case "number-closed-choices-preserve-implicit-entity-ids" `Quick test_number_closed_choices_preserve_implicit_entity_ids;
+    Alcotest.test_case "batch-set-many-numbers-preserves-literal-mode" `Quick test_batch_set_many_numbers_preserves_literal_mode;
     Alcotest.test_case "batch-remove-property" `Quick test_batch_remove_property;
     Alcotest.test_case "batch-remove-property-rejects-private-built-in-entity" `Quick test_batch_remove_property_rejects_private_built_in_entity;
     Alcotest.test_case "add-existing-values-to-closed-values" `Quick test_add_existing_values_to_closed_values;
@@ -3160,6 +3863,7 @@ let endpoint_cases : unit Alcotest.test_case list =
     Alcotest.test_case "validate-block-title-unique-for-properties" `Quick test_validate_block_title_unique_for_properties;
     Alcotest.test_case "validate-block-title-unique-for-tags" `Quick test_validate_block_title_unique_for_tags;
     Alcotest.test_case "validate-block-title-unique-for-pages" `Quick test_validate_block_title_unique_for_pages;
+    Alcotest.test_case "validate-block-title-unique-checks-all-candidates" `Quick test_validate_block_title_unique_checks_all_candidates;
     Alcotest.test_case "validate-block-title-unique-for-namespaced-pages" `Quick test_validate_block_title_unique_for_namespaced_pages;
     Alcotest.test_case "validate-extends-property" `Quick test_validate_extends_property;
     Alcotest.test_case "validate-tags-property" `Quick test_validate_tags_property;
@@ -3177,6 +3881,10 @@ let db_test_cases : unit Alcotest.test_case list =
     Alcotest.test_case "get-journal-page-by-day" `Quick test_get_journal_page_by_day;
     Alcotest.test_case "ordinary-sibling-skips-created-from-property-children" `Quick test_ordinary_sibling_skips_created_from_property_children;
     Alcotest.test_case "ordinary-sibling-skips-closed-value-property-children" `Quick test_ordinary_sibling_skips_closed_value_property_children;
+    Alcotest.test_case "ordinary-sibling-ignores-stale-order-datoms" `Quick test_ordinary_sibling_ignores_stale_order_datoms;
+    Alcotest.test_case "order-list-index-markers-match-per-child" `Quick test_order_list_index_markers_match_per_child;
+    Alcotest.test_case "order-list-shifted-uuids-reports-displaced-sibling" `Quick test_order_list_shifted_uuids_reports_displaced_sibling;
+    Alcotest.test_case "order-list-shifted-uuids-covers-descendants" `Quick test_order_list_shifted_uuids_covers_descendants;
     Alcotest.test_case "page-exists" `Quick test_page_exists;
     Alcotest.test_case "test-transact-with-multiple-tx-datoms" `Quick test_transact_with_multiple_tx_datoms;
     Alcotest.test_case "get-bidirectional-properties" `Quick
@@ -3184,6 +3892,7 @@ let db_test_cases : unit Alcotest.test_case list =
         test_get_bidirectional_properties_disabled ();
         test_get_bidirectional_properties ());
     Alcotest.test_case "get-bidirectional-properties-ignores-recycled-entities" `Quick test_get_bidirectional_properties_ignores_recycled_entities;
+    Alcotest.test_case "get-all-pages-excludes-nested-pages-under-recycled-parent" `Quick test_get_all_pages_excludes_nested_under_recycled_parent;
     Alcotest.test_case "get-block-parents-returns-parents" `Quick test_get_block_parents_returns_parents;
     Alcotest.test_case "get-block-refs-returns-linked-references" `Quick test_get_block_refs_returns_linked_references;
     Alcotest.test_case "get-bidirectional-properties-performance-single-property" `Quick test_get_bidirectional_properties_performance_single_property;
@@ -3212,7 +3921,8 @@ let db_test_cases : unit Alcotest.test_case list =
 
 let () =
   Alcotest.run "db-worker"
-    [ "db_test", db_test_cases
+    [ "connection-lifetime", connection_lifetime_cases
+    ; "db_test", db_test_cases
     ; "endpoint", endpoint_cases
     ; "common", Test_db_common_native.cases
     ; "frontend", Test_db_frontend_native.cases

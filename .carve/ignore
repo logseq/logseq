@@ -70,3 +70,6 @@ logseq.db-worker.log/log-path
 logseq.db-worker.log/install!
 frontend.test.helper/with-config
 frontend.test.noise/mute-console-fixture
+;; defonce
+mobile.bottom-tabs/add-tab-listeners!
+mobile.components.popup/native-sheet-listener

@@ -380,9 +380,12 @@
    (let [id (page-util/get-current-page-uuid)]
      (copy-page-url id)))
   ([page-uuid]
-   (if page-uuid
-     (util/copy-to-clipboard!
-      (url-util/get-logseq-web-page-url config/app-website
-                                        (graph-handler/current-graph-id)
-                                        (str page-uuid)))
-     (notification/show! (t :page/no-page-found-to-copy) :warning))))
+   (if-not page-uuid
+     (notification/show! (t :page/no-page-found-to-copy) :warning)
+     (if-let [url (url-util/entity-url-for-copy config/app-website
+                                                (graph-handler/current-graph-id)
+                                                (state/get-current-repo)
+                                                (str page-uuid)
+                                                :page)]
+       (util/copy-to-clipboard! url)
+       (notification/show! (t :page/copy-url-unavailable-warning) :warning)))))

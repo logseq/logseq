@@ -155,6 +155,25 @@ let test_invalid_or_bare_protocol_urls () =
   check "url-normalize assets:// is a string"
     (String.length (Common_path.url_normalize "assets://") >= 0)
 
+(* js/URL .pathname percent-encoding in url-to-path — graph names with
+   spaces or reserved bytes live in pfs under the encoded path. *)
+let test_url_to_path_encodes_path () =
+  check "url-to-path encodes space"
+    (Common_path.url_to_path "memory:///rtc 2/assets"
+     = "/rtc%202/assets");
+  check "url-to-path encodes non-ascii utf-8"
+    (Common_path.url_to_path "memory:///日本語/x" = "/%E6%97%A5%E6%9C%AC%E8%AA%9E/x");
+  check "url-to-path keeps literal percent raw"
+    (Common_path.url_to_path "memory:///a%b/x" = "/a%b/x");
+  check "url-to-path decodes then re-encodes"
+    (Common_path.url_to_path "memory:///rtc%202/assets"
+     = "/rtc%202/assets");
+  check "path-join on url_to_path output keeps encoding"
+    (Common_path.path_join
+       (Common_path.url_to_path "memory:///rtc 2/assets")
+       [ "u.png" ]
+     = "/rtc%202/assets/u.png")
+
 (* ---------- deps/common util_test.cljs ---------- *)
 
 (* deftest extract-file-extension? *)
@@ -459,7 +478,9 @@ let () =
         ; Alcotest.test_case "path-absolute" `Quick test_path_absolute
         ; Alcotest.test_case "protocol-url" `Quick test_protocol_url
         ; Alcotest.test_case "invalid-or-bare-protocol-urls" `Quick
-            test_invalid_or_bare_protocol_urls ] )
+            test_invalid_or_bare_protocol_urls
+        ; Alcotest.test_case "url-to-path-encodes-path" `Quick
+            test_url_to_path_encodes_path ] )
     ; ( "util_test"
       , [ Alcotest.test_case "extract-file-extension?" `Quick
             test_extract_file_extension

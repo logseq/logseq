@@ -29,6 +29,9 @@ let send req = !send_impl req
 let send_stream _ _ =
   Db_worker_effect.error (Failure "Http_bytes: not implemented on native yet")
 
+let gunzip_read _ _ () =
+  Db_worker_effect.error (Failure "Http_bytes: not implemented on native yet")
+
 let () =
   Native_test_hooks.install_http_bytes_fn := (fun sb ->
       send_impl := (fun req ->

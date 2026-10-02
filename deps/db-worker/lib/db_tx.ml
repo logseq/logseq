@@ -37,7 +37,8 @@ type conn_flags =
 (* Flags are looked up by physical identity (==): a structural Hashtbl on
    conn is unsound because conn's contents mutate as the db changes,
    changing its hash and losing the flags between calls. Few conns exist
-   (live + temp), so an assoc list suffices. *)
+   (live + temp), so an assoc list suffices. Entries must be released when
+   a temp batch finishes or a graph closes. *)
 let conn_flags_list : (conn * conn_flags) list ref = ref []
 
 (* cljs *batch-tx-report?* — a dynamic var bound only while the
@@ -54,6 +55,21 @@ let flags_of (conn : conn) : conn_flags =
     let f = { batch_tx = false; skip_store = false; skip_validate = false } in
     conn_flags_list := (conn, f) :: !conn_flags_list;
     f
+
+(* Remove only this physical conn; nested batches keep their outer flags. *)
+let release_flags (conn : conn) : unit =
+  conn_flags_list := List.filter (fun (c, _) -> c != conn) !conn_flags_list
+
+(* Match on the callback result rather than using Fun.protect: Melange
+   cannot restore raw backtraces, and must preserve the original exception. *)
+let with_temp_conn_cleanup conn key f =
+  let cleanup () =
+    unlisten conn key;
+    release_flags conn
+  in
+  match f () with
+  | result -> cleanup (); result
+  | exception exn -> cleanup (); raise exn
 
 (* ---- ldb/transact! tx-data normalization ---- *)
 
@@ -334,26 +350,24 @@ let batch_transact_with_temp_conn ?(tx_meta : tx_meta = [])
   let collected : datom list list ref = ref [] in
   let key =
     listen temp "temp-conn-batch-tx" (fun (r : tx_report) ->
-        collected := !collected @ [ r.tx_data ];
+        collected := r.tx_data :: !collected;
         match listen_db with
         | Some l -> l r
         | None -> ())
   in
-  (try
-     f temp;
-     (match before_commit with
-      | Some g -> g ()
-      | None -> ());
-     let tx_data = List.concat !collected in
-     unlisten temp key;
-     if tx_data = [] then None
-     else
-       Some
-         (transact ~tx_meta conn
-            (List.map (fun d -> Raw_datom d) tx_data))
-   with e ->
-     unlisten temp key;
-     raise e)
+  let tx_data =
+    with_temp_conn_cleanup temp key (fun () ->
+        f temp;
+        (match before_commit with
+         | Some g -> g ()
+         | None -> ());
+        List.concat (List.rev !collected))
+  in
+  if tx_data = [] then None
+  else
+    Some
+      (transact ~tx_meta conn
+         (List.map (fun d -> Raw_datom d) tx_data))
 
 (* ldb/batch-transact! — batch on the real conn: inner transacts run
    with :skip-store?/:batch-tx-report? tx-meta, then the aggregated
@@ -375,7 +389,7 @@ let batch_transact ?(tx_meta : tx_meta = [])
   let collected : datom list ref = ref [] in
   let key =
     listen conn "batch-tx" (fun (r : tx_report) ->
-        collected := !collected @ r.tx_data;
+        collected := List.rev_append r.tx_data !collected;
         match listen_db with
         | Some l -> l r
         | None -> ())
@@ -395,7 +409,7 @@ let batch_transact ?(tx_meta : tx_meta = [])
     try f conn; None with e -> Some e
   in
   inside_batch_tx := prev_inside;
-  let batch_tx_data = !collected in
+  let batch_tx_data = List.rev !collected in
   collected := [];
   match batch_error with
   | Some e ->

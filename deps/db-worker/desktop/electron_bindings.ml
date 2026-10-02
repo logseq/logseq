@@ -262,6 +262,9 @@ external web_contents_replace_misspelling :
 external web_contents_show_definition_for_selection :
   Web_contents.t -> unit = "showDefinitionForSelection" [@@mel.send]
 
+external web_contents_copy_image_at :
+  Web_contents.t -> float -> float -> unit = "copyImageAt" [@@mel.send]
+
 external session_default_session : Session.t = "defaultSession"
   [@@mel.module "electron"] [@@mel.scope "session"]
 
@@ -293,18 +296,6 @@ external menu_append : Menu_.t -> Menu_item.t -> unit = "append"
 external menu_items : Menu_.t -> Menu_item.t array = "items" [@@mel.get]
 
 external menu_popup : Menu_.t -> unit = "popup" [@@mel.send]
-
-module Native_image = struct
-  type t
-
-  external create_from_path : string -> t = "createFromPath"
-    [@@mel.module "electron"] [@@mel.scope "nativeImage"]
-end
-
-module Clipboard = struct
-  external write_image : Native_image.t -> unit = "writeImage"
-    [@@mel.module "electron"] [@@mel.scope "clipboard"]
-end
 
 external dialog_show_message_box_sync : 'a -> int = "showMessageBoxSync"
   [@@mel.module "electron"] [@@mel.scope "dialog"]

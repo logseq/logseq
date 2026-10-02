@@ -314,7 +314,23 @@ let build_links (links : link_raw list) : Wire.t list =
   let index_by_endpoints : (string * string, int) Hashtbl.t =
     Hashtbl.create 64
   in
-  let result = ref [] in
+  (* growable array — entries are both appended and rewritten by recorded
+     index, so a plain list would be O(n^2). *)
+  let capacity = ref 16 in
+  let result = ref (Array.make !capacity Wire.Nil) in
+  let count = ref 0 in
+  let result_get idx = if idx < !count then Some !result.(idx) else None in
+  let result_set idx v = if idx < !count then !result.(idx) <- v in
+  let result_push v =
+    if !count = !capacity then begin
+      capacity := !capacity * 2;
+      result :=
+        Array.init !capacity
+          (fun i -> if i < !count then !result.(i) else Wire.Nil)
+    end;
+    !result.(!count) <- v;
+    incr count
+  in
   List.iter
     (fun l ->
       match l.from_id, l.to_id with
@@ -330,7 +346,7 @@ let build_links (links : link_raw list) : Wire.t list =
            | Some idx ->
                if l.class_extends then (
                  (* assoc edge/type + optional label onto existing entry *)
-                 match List.nth_opt !result idx with
+                 match result_get idx with
                  | Some (Wire.Map kvs) ->
                      let kvs =
                        if
@@ -357,28 +373,20 @@ let build_links (links : link_raw list) : Wire.t list =
                              kvs
                        | None -> kvs
                      in
-                     result :=
-                       List.mapi
-                         (fun i x -> if i = idx then Wire.Map kvs else x)
-                         !result
+                     result_set idx (Wire.Map kvs)
                  | _ -> ())
                else
                  (match label_ with
                   | Some s -> (
                       (* assoc label onto existing entry *)
-                      match List.nth_opt !result idx with
+                      match result_get idx with
                       | Some (Wire.Map kvs)
                         when not
                                (List.exists
                                   (fun (k, _) -> Wire.key_matches "label" k)
                                   kvs) ->
-                          result :=
-                            List.mapi
-                              (fun i x ->
-                                if i = idx then
-                                  Wire.Map (kvs @ [ (kw "label", Wire.String s) ])
-                                else x)
-                              !result
+                          result_set idx
+                            (Wire.Map (kvs @ [ (kw "label", Wire.String s) ]))
                       | _ -> ())
                   | None -> ())
            | None ->
@@ -394,11 +402,11 @@ let build_links (links : link_raw list) : Wire.t list =
                    | Some s -> [ (kw "label", Wire.String s) ]
                    | None -> [] )
                in
-               Hashtbl.replace index_by_endpoints endpoints (List.length !result);
-               result := !result @ [ entry ])
+               Hashtbl.replace index_by_endpoints endpoints !count;
+               result_push entry)
       | _ -> ())
     links;
-  !result
+  Array.to_list (Array.init !count (fun i -> !result.(i)))
 
 (* ---------- helpers ---------- *)
 

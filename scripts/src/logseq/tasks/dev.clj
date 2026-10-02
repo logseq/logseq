@@ -31,10 +31,17 @@
 
 (def isolated-test-namespaces
   #{"frontend.components.block.drop-boundary-test"
+    ;; p/with-redefs frames in async tests restore a microtask after `done`
+    ;; fires, so leaked state/* bindings pollute later namespaces in the batch
+    "frontend.db.transact-test"
+    "frontend.handler.block-test"
     "frontend.handler.db-based.page-test"
     "frontend.handler.editor-lifecycle-test"
     "frontend.handler.editor-test"
+    "frontend.handler.history-test"
+    "frontend.handler.paste-test"
     "frontend.handler.route-test"
+    "frontend.persist-db-test"
     "frontend.rfx-test"})
 
 (def serial-test-namespaces

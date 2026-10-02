@@ -1503,6 +1503,53 @@
                         "Delete must use the editor state captured by its keydown.")))
           (p/finally done)))))
 
+(deftest editor-delete-guards-nil-input-test
+  (testing "stale editing state without a textarea is a no-op"
+    (let [deleted (atom [])]
+      (with-redefs [state/editing? (constantly true)
+                    state/get-input (constantly nil)
+                    state/get-edit-block (constantly {:block/uuid (random-uuid)
+                                                      :block/title ""})
+                    util/stop (constantly nil)
+                    editor/delete-and-update (fn [& args]
+                                               (swap! deleted conj args))]
+        (editor/editor-delete #js {})
+        (editor/keydown-delete-handler #js {})
+        (is (empty? @deleted)
+            "Delete must not mutate content when the edit textarea is gone"))))
+
+  (testing "Delete in a real editor still deletes the next character"
+    (let [input #js {:value "abc"
+                     :selectionStart 1
+                     :selectionEnd 1}
+          deleted (atom nil)]
+      (with-redefs [state/editing? (constantly true)
+                    state/get-input (constantly input)
+                    state/get-edit-block (constantly {:block/uuid (random-uuid)
+                                                      :block/title "abc"})
+                    util/stop (constantly nil)
+                    editor/delete-and-update (fn [in start end]
+                                               (reset! deleted [in start end]))]
+        (editor/editor-delete #js {})
+        (is (= [input 1 2] @deleted)
+            "Delete in an open editor still removes the character after the cursor"))))
+
+  (testing "Delete with a selection still deletes the selected range"
+    (let [input #js {:value "abc"
+                     :selectionStart 0
+                     :selectionEnd 2}
+          deleted (atom nil)]
+      (with-redefs [state/editing? (constantly true)
+                    state/get-input (constantly input)
+                    state/get-edit-block (constantly {:block/uuid (random-uuid)
+                                                      :block/title "abc"})
+                    util/stop (constantly nil)
+                    editor/delete-and-update (fn [in start end]
+                                               (reset! deleted [in start end]))]
+        (editor/editor-delete #js {})
+        (is (= [input 0 2] @deleted)
+            "Delete with a selection still removes the selected text")))))
+
 (deftest repeated-backspace-does-not-restore-erased-current-title-test
   (let [current {:db/id 2
                  :block/uuid #uuid "22222222-2222-2222-2222-222222222222"
@@ -2545,6 +2592,57 @@
       (is (empty? @collapsed)
           "Comment editor collapse shortcut should not collapse synthetic draft blocks"))))
 
+(deftest toggle-collapse-does-not-throw-on-property-value-row-only-selection
+  (let [empty-row (mock-ls-block {:class-name "ls-block property-value-container"})
+        threw (atom nil)]
+    (with-redefs [util/stop (constantly nil)
+                  state/editing? (constantly false)
+                  state/selection? (constantly true)
+                  editor/get-selected-blocks (constantly [empty-row])]
+      (try
+        (editor/toggle-collapse! nil)
+        (catch :default e
+          (reset! threw e)))
+      (is (nil? @threw)
+          "A property-value row with no blockid must be skipped, not passed to uuid"))))
+
+(deftest toggle-collapse-skips-property-value-rows-without-blockid
+  (async done
+         (let [real-uuid #uuid "11111111-1111-1111-1111-111111111111"
+               real-block (mock-ls-block {:blockid (str real-uuid)})
+               empty-row (mock-ls-block {:class-name "ls-block property-value-container"})
+               collapsed (atom [])
+               expanded (atom [])
+               loaded (atom [])]
+           (-> (try
+                 (p/with-redefs [util/stop (constantly nil)
+                                 state/editing? (constantly false)
+                                 state/selection? (constantly true)
+                                 state/get-current-repo (constantly "test")
+                                 editor/get-selected-blocks (constantly [empty-row real-block])
+                                 db-async/<get-block
+                                 (fn [_repo block-id _opts]
+                                   (swap! loaded conj block-id)
+                                   (p/resolved {:block/uuid block-id
+                                                :block/collapsed? false}))
+                                 editor/collapse-block! (fn [block-id & _]
+                                                          (swap! collapsed conj block-id))
+                                 editor/expand-block! (fn [block-id & _]
+                                                        (swap! expanded conj block-id))]
+                   (editor/toggle-collapse! nil)
+                   (p/delay 20))
+                 (catch :default e
+                   (p/rejected e)))
+               (p/then (fn [_]
+                         (is (= [real-uuid] @loaded)
+                             "First real selected block decides collapse vs expand")
+                         (is (= [real-uuid] @collapsed)
+                             "Property rows without blockid are skipped; real selected blocks collapse")
+                         (is (empty? @expanded))))
+               (p/catch (fn [error]
+                          (is false (str error))))
+               (p/finally done)))))
+
 (defn- <expand-unselected-block-ids
   [blocks]
   (let [expanded (atom [])]
@@ -2608,6 +2706,7 @@
           original-exceed-limit-size? assets-handler/exceed-limit-size?
           original-<get-today-journal-title db-async/<get-today-journal-title
           original-<get-journal-page-by-day db-async/<get-journal-page-by-day
+          original-<invoke-db-worker db-async/<invoke-db-worker
           original-db-based-write-asset! editor-assets/db-based-write-asset!
           original-insert-blocks! frontend-outliner-op/insert-blocks!
           original-<get-blocks db-async/<get-blocks
@@ -2622,6 +2721,7 @@
                                                 (p/resolved "Today")))
       (set! db-async/<get-journal-page-by-day (fn [_repo _journal-day]
                                                 (p/resolved {:block/uuid #uuid "f43caf78-18c4-4724-99d2-b2f61f697a0e"})))
+      (set! db-async/<invoke-db-worker (fn [& _] (p/resolved nil)))
       (set! editor-assets/db-based-write-asset! (fn [& _args]
                                            (p/resolved nil)))
       (set! frontend-outliner-op/insert-blocks! (fn [blocks target opts]
@@ -2654,6 +2754,7 @@
                        (set! assets-handler/exceed-limit-size? original-exceed-limit-size?)
                        (set! db-async/<get-today-journal-title original-<get-today-journal-title)
                        (set! db-async/<get-journal-page-by-day original-<get-journal-page-by-day)
+                       (set! db-async/<invoke-db-worker original-<invoke-db-worker)
                        (set! editor-assets/db-based-write-asset! original-db-based-write-asset!)
                        (set! frontend-outliner-op/insert-blocks! original-insert-blocks!)
                        (set! db-async/<get-blocks original-<get-blocks)
@@ -2674,6 +2775,7 @@
           original-exceed-limit-size? assets-handler/exceed-limit-size?
           original-<get-today-journal-title db-async/<get-today-journal-title
           original-<get-journal-page-by-day db-async/<get-journal-page-by-day
+          original-<invoke-db-worker db-async/<invoke-db-worker
           original-db-based-write-asset! editor-assets/db-based-write-asset!
           original-insert-blocks! frontend-outliner-op/insert-blocks!
           original-<get-blocks db-async/<get-blocks
@@ -2688,6 +2790,7 @@
                                                 (p/resolved "Today")))
       (set! db-async/<get-journal-page-by-day (fn [_repo _journal-day]
                                                 (p/resolved {:block/uuid #uuid "f43caf78-18c4-4724-99d2-b2f61f697a0e"})))
+      (set! db-async/<invoke-db-worker (fn [& _] (p/resolved nil)))
       (set! editor-assets/db-based-write-asset! (fn [& _args]
                                            (p/resolved nil)))
       (set! frontend-outliner-op/insert-blocks! (fn [blocks target opts]
@@ -2718,6 +2821,7 @@
                        (set! assets-handler/exceed-limit-size? original-exceed-limit-size?)
                        (set! db-async/<get-today-journal-title original-<get-today-journal-title)
                        (set! db-async/<get-journal-page-by-day original-<get-journal-page-by-day)
+                       (set! db-async/<invoke-db-worker original-<invoke-db-worker)
                        (set! editor-assets/db-based-write-asset! original-db-based-write-asset!)
                        (set! frontend-outliner-op/insert-blocks! original-insert-blocks!)
                        (set! db-async/<get-blocks original-<get-blocks)

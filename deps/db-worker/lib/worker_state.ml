@@ -8,9 +8,28 @@ type db_kind =
 
 let sqlite_conns : (string * db_kind, Sqlite.db) Hashtbl.t = Hashtbl.create 7
 
-let datascript_conn repo = Hashtbl.find_opt datascript_conns repo
+let datascript_conn repo =
+  let conn = Hashtbl.find_opt datascript_conns repo in
+  (* Graph_store fences storage after a persistence failure. Check its
+     root before exposing conn.db, which DataScript installs before store.
+     Healthy Graph_store reads hit the committed root cache. *)
+  Option.iter
+    (fun conn ->
+       match Datascript.storage (Datascript.db conn) with
+       | Some storage -> ignore (storage.storage_restore "0")
+       | None -> ())
+    conn;
+  conn
 let set_datascript_conn repo conn = Hashtbl.replace datascript_conns repo conn
-let drop_datascript_conn repo = Hashtbl.remove datascript_conns repo
+let drop_datascript_conn repo =
+  (* Teardown owns the registered conn even when its storage is fenced.
+     Do not use the operational getter, which deliberately rejects reads. *)
+  match Hashtbl.find_opt datascript_conns repo with
+  | None -> ()
+  | Some conn ->
+      Hashtbl.remove datascript_conns repo;
+      Db_tx.release_flags conn;
+      Datascript.unlisten conn "listen-db-changes!"
 
 let sqlite_conn_of repo kind = Hashtbl.find_opt sqlite_conns (repo, kind)
 let set_sqlite_conn_of repo kind db = Hashtbl.replace sqlite_conns (repo, kind) db
@@ -32,14 +51,17 @@ let repos () =
    sqlite/datascript conns. *)
 let close_graph_resources_fn : (string -> unit) ref =
   ref (fun repo ->
-    Hashtbl.iter
-      (fun (r, kind) db ->
-        if r = repo then begin
-          (try Sqlite.close db with _ -> ());
-          drop_sqlite_conn_of r kind;
-          if kind = Db then drop_datascript_conn r
-        end)
-      sqlite_conns)
+    let entries =
+      Hashtbl.fold
+        (fun (r, kind) db acc -> if r = repo then (kind, db) :: acc else acc)
+        sqlite_conns []
+    in
+    List.iter
+      (fun (kind, db) ->
+        drop_sqlite_conn_of repo kind;
+        if kind = Db then drop_datascript_conn repo;
+        (try Sqlite.close db with _ -> ()))
+      entries)
 
 let close_other_sqlite_conns keep_repo =
   let repos =

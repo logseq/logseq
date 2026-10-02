@@ -67,7 +67,8 @@ let rec value_of_form (f : query_form) : value =
   | QueryFormSet xs -> Set (List.map value_of_form xs)
   | QueryFormMap kvs ->
       Map (List.map (fun (k, v) -> (value_of_form k, value_of_form v)) kvs)
-  | QueryFormTagged ("uuid", QueryFormString s) -> Uuid s
+  | QueryFormTagged ("uuid", QueryFormString s) ->
+      Uuid (Datascript.Util.uuid_canonicalize s)
   | QueryFormTagged ("regex", QueryFormString s) -> Regex s
   | QueryFormTagged ("inst", QueryFormString s) ->
       (* ISO 8601 inst literal -> epoch ms; keep the raw string on

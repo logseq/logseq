@@ -110,15 +110,16 @@ let epoch_ms_of_civil tz c =
      constructor and Date.UTC (cljs-time/goog.date semantics). Only
      single-arg setters are used: melange < 7 lacks the optional-arg
      forms and the utc/makeWith* helpers, so each field is set
-     individually. Pinning the day to 1 while the month shifts keeps an
-     oversized day from bleeding into the next month, and the year is
-     written last so it combines with the already-final month/day in
-     one evaluation — setting it earlier could produce a transient
-     out-of-range date that later setters cannot recover. *)
+     individually. Pinning the day to 1 first keeps an oversized day
+     from bleeding into the next month while year and month shift, and
+     the year must precede month/day: month overflow rolls the year
+     forward, and out-of-range days are judged against the target
+     year's month lengths (Feb 29 needs a leap year already in place). *)
   match tz with
   | Local_tz ->
       let d = Js.Date.make () in
       let _ = Js.Date.setDate ~date:1.0 d in
+      let _ = Js.Date.setFullYear ~year:(float_of_int c.cv_year) d in
       let _ = Js.Date.setMonth ~month:(float_of_int (c.cv_month - 1)) d in
       let _ = Js.Date.setDate ~date:(float_of_int c.cv_day) d in
       let _ = Js.Date.setHours ~hours:(float_of_int c.cv_hour) d in
@@ -127,7 +128,6 @@ let epoch_ms_of_civil tz c =
       let _ =
         Js.Date.setMilliseconds ~milliseconds:(float_of_int c.cv_ms) d
       in
-      let _ = Js.Date.setFullYear ~year:(float_of_int c.cv_year) d in
       Int64.of_float (Js.Date.getTime d)
   | Offset_tz off ->
       (* Same field order in UTC space. Date.UTC itself is unusable
@@ -135,6 +135,7 @@ let epoch_ms_of_civil tz c =
          keeps the literal year. *)
       let d = Js.Date.make () in
       let _ = Js.Date.setUTCDate ~date:1.0 d in
+      let _ = Js.Date.setUTCFullYear ~year:(float_of_int c.cv_year) d in
       let _ = Js.Date.setUTCMonth ~month:(float_of_int (c.cv_month - 1)) d in
       let _ = Js.Date.setUTCDate ~date:(float_of_int c.cv_day) d in
       let _ = Js.Date.setUTCHours ~hours:(float_of_int c.cv_hour) d in
@@ -143,7 +144,6 @@ let epoch_ms_of_civil tz c =
       let _ =
         Js.Date.setUTCMilliseconds ~milliseconds:(float_of_int c.cv_ms) d
       in
-      let _ = Js.Date.setUTCFullYear ~year:(float_of_int c.cv_year) d in
       Int64.of_float (Js.Date.getTime d -. float_of_int (off * 60000))
 
 (* ---- local_date ---- *)

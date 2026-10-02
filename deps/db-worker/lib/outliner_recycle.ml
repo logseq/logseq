@@ -79,18 +79,22 @@ let block_subtree db (block : entity) : entity list =
   List.filter_map (Ldb.ent_of_id db) ids
 
 let page_descendants (page : entity) : entity list =
-  let rec loop pages result =
-    match pages with
-    | [] -> List.rev result
-    | page' :: rest ->
-      let children =
-        block_children page'
-        |> List.filter Ldb.is_page
-        |> Ldb.sort_by_order
-      in
-      loop (rest @ children) (page' :: result)
-  in
-  loop [ page ] []
+  (* FIFO queue — a (rest @ children) list queue copies the pending spine
+     per node, O(n^2) on large trees *)
+  let q = Queue.create () in
+  Queue.add page q;
+  let result = ref [] in
+  while not (Queue.is_empty q) do
+    let page' = Queue.pop q in
+    result := page' :: !result;
+    let children =
+      block_children page'
+      |> List.filter Ldb.is_page
+      |> Ldb.sort_by_order
+    in
+    List.iter (fun c -> Queue.add c q) children
+  done;
+  List.rev !result
 
 let distinct_by_id (ents : entity list) : entity list =
   let module S = Set.Make (Int) in
@@ -239,32 +243,113 @@ let restore_target db (root : entity) =
     | Some p -> (not (recycled p)) && Option.is_some (Ldb.ent_of_id db p.id)
     | None -> false
   in
+  (* cljs parent-pending? — an original parent exists but is still in
+     Recycle (or gone), so the child keeps its original-parent markers *)
+  let parent_pending =
+    Option.is_some original_parent && not parent_valid
+  in
   if Ldb.is_page root then
     Some
       ( (if parent_valid then original_parent else None)
       , Some root
-      , match Ldb.value root "logseq.property.recycle/original-order" with
-        | Some (String o) -> Some o
-        | _ -> if parent_valid then Option.map restore_order original_parent else None )
+      , (match Ldb.value root "logseq.property.recycle/original-order" with
+         | Some (String o) -> Some o
+         | _ -> if parent_valid then Option.map restore_order original_parent else None)
+      , parent_pending )
   else if parent_valid then
     Some
       ( original_parent
       , original_page
-      , match Ldb.value root "logseq.property.recycle/original-order" with
-        | Some (String o) -> Some o
-        | _ -> Option.map restore_order original_parent )
+      , (match Ldb.value root "logseq.property.recycle/original-order" with
+         | Some (String o) -> Some o
+         | _ -> Option.map restore_order original_parent)
+      , parent_pending )
   else
     (match original_page with
      | Some p
        when Option.is_some (Ldb.ent_of_id db p.id) && not (recycled p) ->
-       Some (Some p, Some p, Some (restore_order p))
+       Some (Some p, Some p, Some (restore_order p), parent_pending)
      | _ -> None)
+
+(* cljs awaiting-original-parent? — a restored child whose parent is
+   absent, still recycled, or the Recycle page itself is waiting for its
+   original parent to come back *)
+let awaiting_original_parent db (child : entity) : bool =
+  match Ldb.ref_ent child "block/parent" with
+  | None -> true
+  | Some p ->
+      recycled p
+      || (match recycle_page db with
+          | Some r -> p.id = r.id
+          | None -> false)
+
+(* cljs relink-waiting-children-tx — re-attach live children that still
+   record this page as their recycle original parent *)
+let relink_waiting_children_tx db (parent : entity) : tx_op list =
+  let children =
+    Ldb.ref_ents parent "logseq.property.recycle/_original-parent"
+    |> List.filter (fun (c : entity) -> not (recycled c))
+    |> List.filter (fun (c : entity) -> c.id <> parent.id)
+  in
+  match children with
+  | [] -> []
+  | _ ->
+      let last_order0 =
+        match
+          List.rev (Ldb.sort_by_order (Ldb.ref_ents parent "block/_parent"))
+        with
+        | c :: _ ->
+            (match Ldb.value c "block/order" with
+             | Some (String o) -> Some o
+             | _ -> None)
+        | [] -> None
+      in
+      let txs, _ =
+        List.fold_left
+          (fun (txs, last_order) (child : entity) ->
+             let awaiting = awaiting_original_parent db child in
+             let order =
+               if awaiting then
+                 match
+                   Ldb.value child
+                     "logseq.property.recycle/original-order"
+                 with
+                 | Some (String o) -> Some o
+                 | _ -> Some (Db_order.gen_key last_order None)
+               else None
+             in
+             let clear =
+               [ RetractAttr
+                   (Entity_id child.id,
+                    "logseq.property.recycle/original-parent")
+               ; RetractAttr
+                   (Entity_id child.id,
+                    "logseq.property.recycle/original-page")
+               ; RetractAttr
+                   (Entity_id child.id,
+                    "logseq.property.recycle/original-order") ]
+             in
+             let attach =
+               match awaiting, order with
+               | true, Some o ->
+                   [ Entity
+                       { db_id = Some (Entity_id child.id)
+                       ; attrs =
+                           [ "block/parent", One_value (Ref parent.id)
+                           ; "block/order", One_value (String o) ] } ]
+               | _ -> []
+             in
+             ( txs @ attach @ clear
+             , match order with Some _ -> order | None -> last_order ))
+          ([], last_order0) children
+      in
+      txs
 
 (* restore-tx-data *)
 let restore_tx_data db (root : entity) : tx_op list =
   match restore_target db root with
   | None -> []
-  | Some (parent, page, order) ->
+  | Some (parent, page, order, parent_pending) ->
     let subtree = if Ldb.is_page root then [] else block_subtree db root in
     let clear_structure =
       [ RetractAttr (Entity_id root.id, "block/parent")
@@ -272,14 +357,19 @@ let restore_tx_data db (root : entity) : tx_op list =
       @ (if Ldb.is_page root then []
          else [ RetractAttr (Entity_id root.id, "block/page") ])
     in
+    (* a child restored while its original parent is still recycled keeps
+       :logseq.property.recycle/original-parent / original-order so the
+       parent's restore can reattach it *)
     let clear_meta =
       List.map
         (fun a -> RetractAttr (Entity_id root.id, a))
-        [ "logseq.property/deleted-at"
-        ; "logseq.property/deleted-by-ref"
-        ; "logseq.property.recycle/original-parent"
-        ; "logseq.property.recycle/original-page"
-        ; "logseq.property.recycle/original-order" ]
+        ( [ "logseq.property/deleted-at"
+          ; "logseq.property/deleted-by-ref"
+          ; "logseq.property.recycle/original-page" ]
+          @ (if not parent_pending then
+               [ "logseq.property.recycle/original-parent"
+               ; "logseq.property.recycle/original-order" ]
+             else []) )
     in
     let root_attrs =
       []
@@ -300,9 +390,12 @@ let restore_tx_data db (root : entity) : tx_op list =
           subtree
       | None -> []
     in
+    let relink_tx =
+      if Ldb.is_page root then relink_waiting_children_tx db root else []
+    in
     clear_structure
     @ [ Entity { db_id = Some (Entity_id root.id); attrs = root_attrs } ]
-    @ subtree_page_tx @ clear_meta
+    @ subtree_page_tx @ clear_meta @ relink_tx
 
 let restore (conn : conn) (root_uuid : string) : bool =
   match entity (Conn.db conn) (Lookup_ref ("block/uuid", Uuid root_uuid)) with

@@ -29,7 +29,7 @@ let rec value_of_edn (Edn_parser.Any v) : value =
   | Edn_parser.Tagged (t, v) ->
       (match t, value_of_edn v with
        (* cljs reader literals: #uuid -> uuid, #inst -> date *)
-       | "uuid", String s -> Uuid s
+       | "uuid", String s -> Uuid (Datascript.Util.uuid_canonicalize s)
        | "inst", String s -> (
            match Date_time_util.epoch_ms_of_iso s with
            | Some ms -> Instant ms

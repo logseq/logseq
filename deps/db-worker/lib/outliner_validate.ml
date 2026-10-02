@@ -42,30 +42,30 @@ let is_page_tags tags =
   || has_tag_ident tags "logseq.class/Tag"
   || has_tag_ident tags "logseq.class/Property"
 
-(* outliner-validate/find-other-ids-with-title-and-tags — the three cljs
-   query variants: built-in exclusion for properties, same-parent when
-   the entity has a parent, plain otherwise. *)
-let find_other_ids db ~is_property ~has_parent ~eid ~title ~tag_ids : entity_id list =
-  let q =
+(* outliner-validate/find-other-ids-with-title-and-tags — properties and
+   tags match by exact :block/title; ordinary pages match by :block/name
+   (page-name-sanity-lc, same as page creation). Entities with a parent
+   are scoped to that parent; top-level pages only match other top-level
+   pages. *)
+let find_other_ids db ~case_sensitive ~is_property ~has_parent ~eid ~title ~tag_ids : entity_id list =
+  let title_attr =
+    if case_sensitive then ":block/title" else ":block/name"
+  in
+  let cond =
     if is_property then
-      "[:find [?b ...] :in $ ?eid ?title [?tag-id ...] :where \
-       [?b :block/title ?title] \
-       [?b :block/tags ?tag-id] \
-       [(missing? $ ?b :logseq.property/built-in?)] \
-       [(not= ?b ?eid)]]"
+      (* Property names are unique in that they can have the same names
+         as built-in property names *)
+      "[(missing? $ ?b :logseq.property/built-in?)]"
     else if has_parent then
+      "[?b :block/parent ?bp] [?eid :block/parent ?ep] [(= ?bp ?ep)]"
+    else if not case_sensitive then "[(missing? $ ?b :block/parent)]"
+    else ""
+  in
+  let q =
+    Printf.sprintf
       "[:find [?b ...] :in $ ?eid ?title [?tag-id ...] :where \
-       [?b :block/title ?title] \
-       [?b :block/tags ?tag-id] \
-       [(not= ?b ?eid)] \
-       [?b :block/parent ?bp] \
-       [?eid :block/parent ?ep] \
-       [(= ?bp ?ep)]]"
-    else
-      "[:find [?b ...] :in $ ?eid ?title [?tag-id ...] :where \
-       [?b :block/title ?title] \
-       [?b :block/tags ?tag-id] \
-       [(not= ?b ?eid)]]"
+       [?b %s ?title] [?b :block/tags ?tag-id] [(not= ?b ?eid)] %s]"
+      title_attr cond
   in
   q_string db q
     ~inputs:
@@ -81,36 +81,57 @@ let find_other_ids db ~is_property ~has_parent ~eid ~title ~tag_ids : entity_id 
   |> List.filter_map
        (fun row -> match row with [ Result_entity b ] -> Some b | _ -> None)
 
+(* outliner-validate/colliding-tag-ids — shared tag idents of the first
+   colliding entity. An entity is exempt when it shares the name under
+   different tags e.g. Apple #Company and Apple #Fruit. *)
+let colliding_tag_ids db (tags : entity list) (other_ids : entity_id list)
+    : string list option =
+  let this_tag_idents =
+    List.filter_map Ldb.ident_of tags |> List.sort_uniq String.compare
+  in
+  List.find_map
+    (fun another_id ->
+       let another_tag_idents =
+         match Ldb.ent_of_id db another_id with
+         | Some a ->
+             List.filter_map Ldb.ident_of (Ldb.ref_ents a "block/tags")
+             |> List.sort_uniq String.compare
+         | None -> []
+       in
+       let common_tag_idents =
+         List.filter (fun i -> List.mem i another_tag_idents) this_tag_idents
+       in
+       if
+         common_tag_idents = [ "logseq.class/Page" ]
+         && List.length this_tag_idents > 1
+         && List.length another_tag_idents > 1
+       then None
+       else Some common_tag_idents)
+    other_ids
+
 (* outliner-validate/validate-unique-for-page *)
 let validate_unique_for_page db (new_title : string option) ~is_property ~is_class ~has_parent ~eid
     (tags : entity list) : unit =
   match tags with
   | [] -> ()
   | _ ->
+      (* cljs case-sensitive-title? — properties and tags keep
+         exact-title uniqueness; ordinary pages match create via
+         :block/name (page-name-sanity-lc) *)
+      let case_sensitive = is_property || is_class in
+      let lookup =
+        if case_sensitive then new_title
+        else Option.map Ldb.page_name_sanity_lc new_title
+      in
       let tag_ids = List.map (fun (t : entity) -> t.id) tags in
-      (match find_other_ids db ~is_property ~has_parent ~eid ~title:new_title ~tag_ids with
-       | [] -> ()
-       | another_id :: _ ->
-           let another = Ldb.ent_of_id db another_id in
-           let this_tag_idents =
-             List.filter_map Ldb.ident_of tags |> List.sort_uniq String.compare
-           in
-           let another_tag_idents =
-             match another with
-             | Some a ->
-                 List.filter_map Ldb.ident_of (Ldb.ref_ents a "block/tags")
-                 |> List.sort_uniq String.compare
-             | None -> []
-           in
-           let common_tag_idents =
-             List.filter (fun i -> List.mem i another_tag_idents) this_tag_idents
-           in
-           if
-             common_tag_idents = [ "logseq.class/Page" ]
-             && List.length this_tag_idents > 1
-             && List.length another_tag_idents > 1
-           then ()
-           else if is_property then
+      let other_ids =
+        find_other_ids db ~case_sensitive ~is_property ~has_parent ~eid
+          ~title:lookup ~tag_ids
+      in
+      (match colliding_tag_ids db tags other_ids with
+       | None -> ()
+       | Some common_tag_idents ->
+           if is_property then
              let title_arg =
                match new_title with Some t -> Wire.String t | None -> Wire.Nil
              in
@@ -133,6 +154,18 @@ let validate_unique_for_page db (new_title : string option) ~is_property ~is_cla
                        ("Another tag named " ^ pr_str_title new_title
                         ^ " already exists.")
                      ~i18n_key:"class.validation/duplicate"
+                     ~i18n_args:[ title_arg ]))
+           else if common_tag_idents = [ "logseq.class/Page" ] then
+             let title_arg =
+               match new_title with Some t -> Wire.String t | None -> Wire.Nil
+             in
+             raise
+               (Notification
+                  (notification_payload
+                     ~message:
+                       ("Another page named " ^ pr_str_title new_title
+                        ^ " already exists.")
+                     ~i18n_key:"page.validation/duplicate-name"
                      ~i18n_args:[ title_arg ]))
            else
              let tag_titles =
@@ -481,9 +514,10 @@ let disallow_removing_page_tag db (eids : entity_id list) (v : entity_id) : unit
                      | _ ->
                          (* has page children? (:block/_parent) *)
                          let children =
-                           List.of_seq
-                             (datoms db Aevt ~a:"block/parent" ~v:(Ref eid) ())
-                           |> List.filter_map (fun d -> Ldb.ent_of_id db d.e)
+                           Ldb.reverse_attr_values db eid "block/_parent"
+                           |> List.filter_map
+                                (function Ref id -> Some id | _ -> None)
+                           |> List.filter_map (fun id -> Ldb.ent_of_id db id)
                          in
                          if List.exists Ldb.is_page children then
                            raise
@@ -509,6 +543,29 @@ let disallow_removing_page_tag db (eids : entity_id list) (v : entity_id) : unit
              end)
       eids
   end
+
+(* outliner-validate/validate-page-to-property-conversion — namespaced
+   pages (pages with a parent, including Library-parented namespace
+   roots) cannot become properties. Retracting #Page would otherwise be
+   treated as page->block and drop :block/name. *)
+let validate_page_to_property_conversion (page : entity option) : unit =
+  match page with
+  | Some page
+    when Entity_util.internal_page page
+         && Option.is_some (Ldb.value page "block/parent") ->
+      raise
+        (Notification
+           (Wire.Map
+              [ (kw "type", Wire.Keyword "notification")
+              ; (kw "payload",
+                 Wire.Map
+                   [ (kw "message",
+                      Wire.String "Namespaced pages can't be properties")
+                   ; (kw "i18n-key",
+                      Wire.Keyword
+                        "page.convert/page-to-property-namespaced")
+                   ; (kw "type", Wire.Keyword "error") ]) ]))
+  | _ -> ()
 
 (* outliner-validate/validate-block-can-tag-with-page-tag *)
 let validate_block_can_tag_with_page_tag db (eids : entity_id list)

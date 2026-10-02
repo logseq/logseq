@@ -158,7 +158,7 @@ let rec value_of_transit (t : Wire.t) : value =
   | Wire.Big_int s -> Int64 (Int64.of_string s)
   | Wire.Big_decimal s -> Float (float_of_string s)
   | Wire.Date_ms ms -> Instant ms
-  | Wire.Uuid s -> Uuid s
+  | Wire.Uuid s -> Uuid (Datascript.Util.uuid_canonicalize s)
   | Wire.Uri s -> String s
   | Wire.Array xs -> Vector (List.map value_of_transit xs)
   | Wire.List xs -> List (List.map value_of_transit xs)
