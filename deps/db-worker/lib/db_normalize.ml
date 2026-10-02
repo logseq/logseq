@@ -29,6 +29,52 @@ let take_wire item n =
 
 let wire_key (w : Wire.t) : string = Transit_codec.to_string w
 
+(* structural identity key without transit-encoding: covers the scalar
+   wires that dominate tx_data (eids, attrs, uuid/string/int values);
+   complex values fall back to the transit string. Keyed lookups below
+   only need equality, so any injective string form works *)
+let rec cheap_key (w : Wire.t) : string option =
+  match w with
+  | Wire.Int n -> Some ("i" ^ string_of_int n)
+  | Wire.Int64 n -> Some ("l" ^ Int64.to_string n)
+  | Wire.Keyword s -> Some ("k" ^ s)
+  | Wire.String s -> Some ("s" ^ s)
+  | Wire.Uuid s -> Some ("u" ^ s)
+  | Wire.Bool b -> Some (if b then "b1" else "b0")
+  | Wire.Nil -> Some "n"
+  | Wire.Array xs | Wire.List xs -> (
+      let rec parts acc = function
+        | [] -> Some (List.rev acc)
+        | x :: rest -> (
+            match cheap_key x with
+            | Some k -> parts (k :: acc) rest
+            | None -> None)
+      in
+      match parts [] xs with
+      | Some ps -> Some ("a" ^ String.concat "\x1f" ps)
+      | None -> None)
+  | _ -> None
+
+let item_key (w : Wire.t) : string =
+  match cheap_key w with Some k -> k | None -> wire_key w
+
+(* per-call memo tables: eid resolution and attr ref-type checks cost
+   real seeks on storage-backed dbs, and tx_data repeats the same eids
+   and attrs thousands of times per tx *)
+type memo =
+  { resolved : (string, Wire.t option) Hashtbl.t
+  ; ref_type : (string, bool) Hashtbl.t
+  ; entity_exists : (string, bool) Hashtbl.t
+  ; entity_id : (string, entity option) Hashtbl.t
+  }
+
+let create_memo () : memo =
+  { resolved = Hashtbl.create 1024
+  ; ref_type = Hashtbl.create 64
+  ; entity_exists = Hashtbl.create 256
+  ; entity_id = Hashtbl.create 256
+  }
+
 (* d/entity on a wire entity-ref *)
 let entity_of_wire (db : db) (w : Wire.t) : entity option =
   try
@@ -49,13 +95,27 @@ let entity_ident (e : entity) : Wire.t option =
   | Some (One_value (String s)) -> Some (kw s)
   | _ -> None
 
-let entity_value_type_ref (db : db) (attr : attr) : bool =
-  match entity_of_wire db (kw attr) with
-  | Some e -> (
-      match Datascript.entity_attr e "db/valueType" with
-      | Some (One_value (Keyword "db.type/ref")) -> true
-      | _ -> false)
-  | None -> false
+(* db tag distinguishes identical attrs across db_before/db_after — an
+   attr may be defined in only one of them *)
+let entity_value_type_ref ?memo ?(db_tag = "") (db : db) (attr : attr) : bool =
+  let compute () =
+    match entity_of_wire db (kw attr) with
+    | Some e -> (
+        match Datascript.entity_attr e "db/valueType" with
+        | Some (One_value (Keyword "db.type/ref")) -> true
+        | _ -> false)
+    | None -> false
+  in
+  match memo with
+  | None -> compute ()
+  | Some m -> (
+      let k = db_tag ^ attr in
+      match Hashtbl.find_opt m.ref_type k with
+      | Some b -> b
+      | None ->
+          let b = compute () in
+          Hashtbl.replace m.ref_type k b;
+          b)
 
 (* [:block/uuid id] lookup ref from entity, else ident keyword *)
 let eid_lookup (db : db) (e : Wire.t) : Wire.t option =
@@ -77,16 +137,30 @@ let eid_tempid (db : db) (e : Wire.t) : Wire.t option =
           | Some (Wire.Keyword s) -> Some (Wire.String (":" ^ s))
           | _ -> None))
 
+(* memoized entity existence probe — retract sets repeat lookup refs *)
+let entity_exists ?memo (db : db) (w : Wire.t) : bool =
+  let probe () = entity_of_wire db w <> None in
+  match memo with
+  | None -> probe ()
+  | Some m ->
+      let k = item_key w in
+      (match Hashtbl.find_opt m.entity_exists k with
+       | Some b -> b
+       | None ->
+           let b = probe () in
+           Hashtbl.replace m.entity_exists k b;
+           b)
+
 (* remove-retract-entity-ref — drop datoms referencing retracted entities
    that no longer exist in db *)
-let remove_retract_entity_ref (db : db) (tx_data : Wire.t list) : Wire.t list =
+let remove_retract_entity_ref ?memo (db : db) (tx_data : Wire.t list) : Wire.t list =
   let retracted =
     List.filter_map
       (fun item ->
          match item with
          | Wire.Array [ op; value ] | Wire.List [ op; value ]
            when op = kw "db/retractEntity"
-                && entity_of_wire db value = None ->
+                && not (entity_exists ?memo db value) ->
              Some value
          | _ -> None)
       tx_data
@@ -94,34 +168,30 @@ let remove_retract_entity_ref (db : db) (tx_data : Wire.t list) : Wire.t list =
   match retracted with
   | [] -> tx_data
   | _ ->
-      let retracted_keys = List.map wire_key retracted in
-      let retract_uuid_strs =
-        List.filter_map
-          (fun v ->
-             match v with
-             | Wire.Array [ _; u ] -> (
-                 match u with
-                 | Wire.Uuid s -> Some s
-                 | Wire.String s -> Some s
-                 | _ -> None)
-             | _ -> None)
-          retracted
-      in
-      let retracted_ids =
-        retracted_keys @ List.map (fun s -> wire_key (Wire.String s)) retract_uuid_strs
-      in
+      let retracted_keys : (string, unit) Hashtbl.t = Hashtbl.create 63 in
+      List.iter
+        (fun v -> Hashtbl.replace retracted_keys (item_key v) ())
+        retracted;
+      List.iter
+        (fun v ->
+           match v with
+           | Wire.Array [ _; u ] -> (
+               match u with
+               | Wire.Uuid s | Wire.String s ->
+                   Hashtbl.replace retracted_keys (item_key (Wire.String s)) ()
+               | _ -> ())
+           | _ -> ())
+        retracted;
       List.filter
         (fun item ->
            not
              (item_len item = 5
-              && (List.mem (wire_key (nth_wire item 1)) retracted_keys
-                  || List.mem (wire_key (nth_wire item 1)) retracted_ids
-                  || List.mem (wire_key (nth_wire item 3)) retracted_keys
-                  || List.mem (wire_key (nth_wire item 3)) retracted_ids)))
+              && (Hashtbl.mem retracted_keys (item_key (nth_wire item 1))
+                  || Hashtbl.mem retracted_keys (item_key (nth_wire item 3)))))
         tx_data
 
 (* replace-attr-retract-with-retract-entity-v2 *)
-let replace_attr_retract_with_retract_entity_v2 (db : db)
+let replace_attr_retract_with_retract_entity_v2 ?memo (db : db)
     (normalized_tx_data : Wire.t list) : Wire.t list =
   normalized_tx_data
   |> List.map (fun item ->
@@ -134,53 +204,70 @@ let replace_attr_retract_with_retract_entity_v2 (db : db)
          else if a <> Wire.Nil && v <> Wire.Nil then
            Wire.Array [ op; eid; a; v; nth_wire item 4 ]
          else Wire.Array [ op; eid ])
-  |> remove_retract_entity_ref db
+  |> remove_retract_entity_ref ?memo db
 
 (* replace-attr-retract-with-retract-entity (v1) — on datom-like items *)
-let replace_attr_retract_with_retract_entity (db_after : db)
+let replace_attr_retract_with_retract_entity ?memo (db_after : db)
     (tx_data : Wire.t list) : Wire.t list =
-  let retract_eids_by_entity =
-    List.filter_map
-      (fun d ->
-         let a = nth_wire d 1 in
-         let added = nth_wire d 4 in
-         if a = kw "block/uuid" && added = Wire.Bool false then
-           let v = nth_wire d 2 in
-           let entity =
-             entity_of_wire db_after (Wire.Array [ kw "block/uuid"; v ])
-           in
-           let e = nth_wire d 0 in
-           let entity_id =
-             match entity with
-             | Some e' -> Some (Wire.Int e'.id)
-             | None -> None
-           in
-           (match entity_id with
-            | Some id when id = e -> None (* eid unchanged *)
-            | _ ->
-                Some
-                  ( wire_key e
-                  , (match entity with
-                     | Some _ -> e
-                     | None -> Wire.Array [ kw "block/uuid"; v ]) ))
-         else None)
-      tx_data
+  let retract_eids_by_entity : (string, Wire.t) Hashtbl.t =
+    Hashtbl.create 63
   in
-  let rec loop result seen remaining =
+  List.iter
+    (fun d ->
+       let a = nth_wire d 1 in
+       let added = nth_wire d 4 in
+       if a = kw "block/uuid" && added = Wire.Bool false then begin
+         let v = nth_wire d 2 in
+         let entity =
+           (match memo with
+            | Some m ->
+                let k = item_key v in
+                (match Hashtbl.find_opt m.entity_id k with
+                 | Some e -> e
+                 | None ->
+                     let e =
+                       entity_of_wire db_after
+                         (Wire.Array [ kw "block/uuid"; v ])
+                     in
+                     Hashtbl.replace m.entity_id k e;
+                     e)
+            | None ->
+                entity_of_wire db_after (Wire.Array [ kw "block/uuid"; v ]))
+         in
+         let e = nth_wire d 0 in
+         let entity_id =
+           match entity with
+           | Some e' -> Some (Wire.Int e'.id)
+           | None -> None
+         in
+         (match entity_id with
+          | Some id when id = e -> () (* eid unchanged *)
+          | _ ->
+              Hashtbl.replace retract_eids_by_entity (item_key e)
+                (match entity with
+                 | Some _ -> e
+                 | None -> Wire.Array [ kw "block/uuid"; v ]))
+       end)
+    tx_data;
+  let seen : (string, unit) Hashtbl.t = Hashtbl.create 63 in
+  let rec loop result remaining =
     match remaining with
     | [] -> List.rev result
     | d :: more -> (
         let e = nth_wire d 0 in
-        match List.assoc_opt (wire_key e) retract_eids_by_entity with
+        let ek = item_key e in
+        match Hashtbl.find_opt retract_eids_by_entity ek with
         | Some eid ->
-            if List.mem (wire_key e) seen then loop result seen more
-            else
+            if Hashtbl.mem seen ek then loop result more
+            else begin
+              Hashtbl.replace seen ek ();
               loop
                 (Wire.Array [ kw "db/retractEntity"; eid ] :: result)
-                (wire_key e :: seen) more
-        | None -> loop (d :: result) seen more)
+                more
+            end
+        | None -> loop (d :: result) more)
   in
-  loop [] [] tx_data
+  loop [] tx_data
 
 (* sort-datoms — properties first (stable) *)
 let sort_datoms (datoms : Wire.t list) : Wire.t list =
@@ -346,9 +433,10 @@ let remove_conflict_datoms (datoms : Wire.t list) : Wire.t list =
   List.iter
     (fun d ->
        let key = take_wire d 4 in
-       let k = wire_key key in
+       let k = item_key key in
        match Hashtbl.find_opt tbl k with
-       | Some (k_wire, group) -> Hashtbl.replace tbl k (k_wire, group @ [ d ])
+       | Some (k_wire, group) ->
+           Hashtbl.replace tbl k (k_wire, d :: group)
        | None ->
            Hashtbl.add tbl k (key, [ d ]);
            order := k :: !order)
@@ -368,8 +456,8 @@ let remove_conflict_datoms (datoms : Wire.t list) : Wire.t list =
     List.filter_map
       (fun k ->
          match Hashtbl.find_opt tbl k with
-         | Some (_, group) -> List.nth_opt group (List.length group - 1)
-         | None -> None)
+         | Some (_, last :: _) -> Some last
+         | _ -> None)
       ordered_keys
   in
   List.stable_sort
@@ -392,35 +480,33 @@ let retract_entity_match_keys (e : Wire.t) : Wire.t list =
    retracted eids next, then everything else, then remaining retracts *)
 let reorder_retract_entity (tx_data : Wire.t list) : Wire.t list =
   let retract_ops = List.filter retract_entity_op tx_data in
-  let recreated_block_uuids =
-    List.filter_map
-      (fun item ->
-         if item_len item >= 4
-            && nth_wire item 0 = kw "db/add"
-            && nth_wire item 2 = kw "block/uuid" then
-           Some (nth_wire item 3)
-         else None)
-      tx_data
-  in
-  let recreated_keys = List.map wire_key recreated_block_uuids in
+  let recreated_keys : (string, unit) Hashtbl.t = Hashtbl.create 63 in
+  List.iter
+    (fun item ->
+       if item_len item >= 4
+          && nth_wire item 0 = kw "db/add"
+          && nth_wire item 2 = kw "block/uuid" then
+         Hashtbl.replace recreated_keys (item_key (nth_wire item 3)) ())
+    tx_data;
   let is_recreated item =
     match nth_wire item 1 with
-    | Wire.Array [ a; u ] as e when a = kw "block/uuid" ->
-        ignore e;
-        List.mem (wire_key u) recreated_keys
+    | Wire.Array [ a; u ] when a = kw "block/uuid" ->
+        Hashtbl.mem recreated_keys (item_key u)
     | _ -> false
   in
   let recreated_block_retract_ops, end_retract_ops =
     List.partition is_recreated retract_ops
   in
-  let retract_keys =
-    List.concat_map
-      (fun item -> retract_entity_match_keys (nth_wire item 1))
-      retract_ops
-    |> List.map wire_key
-  in
+  let retract_keys : (string, unit) Hashtbl.t = Hashtbl.create 63 in
+  List.iter
+    (fun item ->
+       List.iter
+         (fun k -> Hashtbl.replace retract_keys (item_key k) ())
+         (retract_entity_match_keys (nth_wire item 1)))
+    retract_ops;
   let datom_for_retracted_eid item =
-    item_len item >= 4 && List.mem (wire_key (nth_wire item 1)) retract_keys
+    item_len item >= 4
+    && Hashtbl.mem retract_keys (item_key (nth_wire item 1))
   in
   let datoms_for_retracted_eids = List.filter datom_for_retracted_eid tx_data in
   let others =
@@ -432,18 +518,31 @@ let reorder_retract_entity (tx_data : Wire.t list) : Wire.t list =
   recreated_block_retract_ops @ datoms_for_retracted_eids @ others
   @ end_retract_ops
 
-let resolve_eid (db_before : db) (db_after : db) ~(retract : bool)
+let resolve_eid ?memo (db_before : db) (db_after : db) ~(retract : bool)
     (e : Wire.t) : Wire.t option =
-  if retract then eid_lookup db_before e
-  else
-    match eid_lookup db_before e with
-    | Some _ as r -> r
-    | None -> eid_tempid db_after e
+  let compute () =
+    if retract then eid_lookup db_before e
+    else
+      match eid_lookup db_before e with
+      | Some _ as r -> r
+      | None -> eid_tempid db_after e
+  in
+  match memo with
+  | None -> compute ()
+  | Some m ->
+      let k = (if retract then "r" else "a") ^ item_key e in
+      (match Hashtbl.find_opt m.resolved k with
+       | Some r -> r
+       | None ->
+           let r = compute () in
+           Hashtbl.replace m.resolved k r;
+           r)
 
-let ref_value_type (db_after : db) (db_before : db) (attr : attr) : bool =
-  entity_value_type_ref db_after attr || entity_value_type_ref db_before attr
+let ref_value_type ?memo (db_after : db) (db_before : db) (attr : attr) : bool =
+  entity_value_type_ref ?memo ~db_tag:"a:" db_after attr
+  || entity_value_type_ref ?memo ~db_tag:"b:" db_before attr
 
-let normalize_datom (db_after : db) (db_before : db) (item : Wire.t)
+let normalize_datom ?memo (db_after : db) (db_before : db) (item : Wire.t)
     : Wire.t option =
   let e = nth_wire item 0 in
   let a = nth_wire item 1 in
@@ -460,11 +559,11 @@ let normalize_datom (db_after : db) (db_before : db) (item : Wire.t)
     | _ -> ""
   in
   let retract = not added in
-  let e' = resolve_eid db_before db_after ~retract e in
+  let e' = resolve_eid ?memo db_before db_after ~retract e in
   let v' =
     match v with
-    | Wire.Int n when n > 0 && ref_value_type db_after db_before a_str ->
-        resolve_eid db_before db_after ~retract v
+    | Wire.Int n when n > 0 && ref_value_type ?memo db_after db_before a_str ->
+        resolve_eid ?memo db_before db_after ~retract v
     | _ -> Some v
   in
   match (e', v') with
@@ -475,28 +574,30 @@ let normalize_datom (db_after : db) (db_before : db) (item : Wire.t)
            ; e''; a; v''; t ])
   | _ -> None
 
-let normalize_retract_entity_item (db_before : db) (d : Wire.t)
+let normalize_retract_entity_item ?memo (db_before : db) (d : Wire.t)
     : Wire.t option =
   match d with
   | Wire.Array [ op; e ] | Wire.List [ op; e ]
     when op = kw "db/retractEntity" -> (
-      match eid_lookup db_before e with
+      match
+        resolve_eid ?memo db_before db_before ~retract:true e
+      with
       | Some e' -> Some (Wire.Array [ op; e' ])
       | None -> None)
   | _ -> None
 
-let normalize_tx_item (db_after : db) (db_before : db) (d : Wire.t)
+let normalize_tx_item ?memo (db_after : db) (db_before : db) (d : Wire.t)
     : Wire.t option =
   match item_len d with
-  | 5 -> normalize_datom db_after db_before d
-  | 2 -> normalize_retract_entity_item db_before d
+  | 5 -> normalize_datom ?memo db_after db_before d
+  | 2 -> normalize_retract_entity_item ?memo db_before d
   | _ -> None
 
 let distinct_wire (items : Wire.t list) : Wire.t list =
   let seen = Hashtbl.create (List.length items) in
   List.filter
     (fun i ->
-       let k = wire_key i in
+       let k = item_key i in
        if Hashtbl.mem seen k then false
        else begin
          Hashtbl.add seen k ();
@@ -504,14 +605,14 @@ let distinct_wire (items : Wire.t list) : Wire.t list =
        end)
     items
 
-let normalize_tx_data (db_after : db) (db_before : db) (tx_data : Wire.t list)
-    : Wire.t list =
+let normalize_tx_data ?memo (db_after : db) (db_before : db)
+    (tx_data : Wire.t list) : Wire.t list =
   tx_data
   |> remove_conflict_datoms
-  |> replace_attr_retract_with_retract_entity db_after
+  |> replace_attr_retract_with_retract_entity ?memo db_after
   |> sort_datoms
-  |> List.filter_map (normalize_tx_item db_after db_before)
-  |> remove_retract_entity_ref db_after
+  |> List.filter_map (normalize_tx_item ?memo db_after db_before)
+  |> remove_retract_entity_ref ?memo db_after
   |> reorder_retract_entity
   |> distinct_wire
 

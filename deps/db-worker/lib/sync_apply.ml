@@ -75,12 +75,12 @@ let remove_ignored_attrs (tx_data : datom list) : datom list =
   List.filter (fun (d : datom) -> not (List.mem d.a rtc_ignored_attrs)) tx_data
 
 (* normalize-tx-data on tx-report datoms; returns wire tx forms *)
-let normalize_tx_data (db_after : db) (db_before : db) (tx_data : datom list)
-    : Wire.t list =
+let normalize_tx_data ?memo (db_after : db) (db_before : db)
+    (tx_data : datom list) : Wire.t list =
   tx_data
   |> remove_ignored_attrs
   |> Db_normalize.wire_of_datoms
-  |> Db_normalize.normalize_tx_data db_after db_before
+  |> Db_normalize.normalize_tx_data ?memo db_after db_before
   |> List.filter (fun item ->
          let e = Db_normalize.nth_wire item 1 in
          match e with
@@ -89,16 +89,16 @@ let normalize_tx_data (db_after : db) (db_before : db) (tx_data : datom list)
          | _ -> true)
 
 (* reverse-tx-data: datoms -> reversed wire tx forms *)
-let reverse_tx_data (db_before : db) (db_after : db) (tx_data : datom list)
-    : Wire.t list =
+let reverse_tx_data ?memo (db_before : db) (db_after : db)
+    (tx_data : datom list) : Wire.t list =
   tx_data
   |> List.rev
   |> List.filter_map (fun (d : datom) ->
          let reversed =
            Db_normalize.wire_of_datom { d with added = not d.added }
          in
-         Db_normalize.normalize_datom db_before db_after reversed)
-  |> Db_normalize.replace_attr_retract_with_retract_entity_v2 db_after
+         Db_normalize.normalize_datom ?memo db_before db_after reversed)
+  |> Db_normalize.replace_attr_retract_with_retract_entity_v2 ?memo db_after
   |> Db_normalize.reorder_retract_entity
 
 let ws_open = Sync_transport.ws_open
@@ -2916,10 +2916,14 @@ let apply_remote_tx repo client (tx_data : Wire.t list) =
 
 let rec enqueue_local_tx_aux repo (tx_report : tx_report) : string option =
   let normalized =
-    normalize_tx_data tx_report.db_after tx_report.db_before tx_report.tx_data
+    normalize_tx_data ~memo:(Db_normalize.create_memo ())
+      tx_report.db_after tx_report.db_before tx_report.tx_data
   in
   let reversed_datoms =
-    reverse_tx_data tx_report.db_before tx_report.db_after tx_report.tx_data
+    (* separate memo: the db roles swap between forward and reverse, so a
+       shared resolve cache would return the wrong db's lookups *)
+    reverse_tx_data ~memo:(Db_normalize.create_memo ())
+      tx_report.db_before tx_report.db_after tx_report.tx_data
   in
   match normalized with
   | [] -> None
