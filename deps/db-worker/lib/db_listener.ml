@@ -392,7 +392,7 @@ let invoke_listener_handler (timings : (string * float) list ref) k
 let process_committed_tx ~persist_enabled ~sync_db_to_main_thread
     ~(deferred : (string * handler) list) repo conn (r : tx_report) =
   let started_at = perf_time_ms () in
-  (* one sqlite txn around the two client-ops db writes — each separate
+  (* one sqlite txn around the client-ops db writes — each separate
      txn costs a real OPFS write batch, unlike cljs sql.js's in-memory
      commits *)
   let with_client_ops_tx f =
@@ -400,16 +400,17 @@ let process_committed_tx ~persist_enabled ~sync_db_to_main_thread
       Sqlite.transaction (Sync_state.client_ops_conn repo) f
     else f ()
   in
+  let handler_timings = ref [] in
+  let checksum_at = ref (perf_time_ms ()) in
   with_client_ops_tx (fun () ->
       run_post_commit repo r.tx_meta "update-checksum" (fun () ->
-          !update_checksum repo r));
-  let checksum_at = perf_time_ms () in
-  let handler_timings = ref [] in
-  (if persist_enabled then
-     with_client_ops_tx (fun () ->
-         run_post_commit repo r.tx_meta "persist-local-tx" (fun () ->
-             invoke_listener_handler handler_timings "db-sync"
-               !persist_local_tx repo r)));
+          !update_checksum repo r);
+      checksum_at := perf_time_ms ();
+      if persist_enabled then
+        run_post_commit repo r.tx_meta "persist-local-tx" (fun () ->
+            invoke_listener_handler handler_timings "db-sync"
+              !persist_local_tx repo r));
+  let checksum_at = !checksum_at in
   let persist_at = perf_time_ms () in
   let sync_result =
     if sync_db_to_main_thread then
