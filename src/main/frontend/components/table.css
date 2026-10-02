@@ -28,9 +28,6 @@
   }
 
   .ls-table-rows {
-    overflow-x: auto;
-    overflow-y: hidden;
-
     > .relative {
       @apply pt-[34px] pb-[38px];
     }
