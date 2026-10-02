@@ -771,6 +771,72 @@
                                  (get resolved value))})
               rows)))))
 
+(defn- property-digest
+  [property]
+  {:uuid (:uuid property)
+   :parent (let [parent (:parent property)]
+             (if (map? parent) (:id parent) parent))
+   :page (let [page (:page property)]
+           (if (map? page) (:id page) page))})
+
+(defn create-property
+  [api-fn args]
+  (let [title (aget args "title")
+        schema (aget args "schema")
+        options (or (aget args "options") #js {})
+        verbose? (not (false? (aget args "verbose")))]
+    (when-not (and (string? title) (not (string/blank? title)))
+      (throw (js/Error. "Property title must not be empty")))
+    (when (string/includes? title "/")
+      (throw (js/Error. "Property title must be a plain title, not a namespaced ident")))
+    (p/let [response (api-fn "logseq.DB.upsertProperty" [title schema options])]
+      (if-let [error (and response (aget response "error"))]
+        response
+        (let [response-map (js->clj response :keywordize-keys true)
+              ident (query-ident (or (:ident response-map) (:db/ident response-map)))]
+          (when-not ident
+            (throw (js/Error. "Property creation did not return a namespaced ident")))
+          (p/let [property-result (api-fn "logseq.DB.datascriptQuery"
+                                          [(str "[:find (pull ?property [*]) . :where "
+                                                "[?property :db/ident " ident "]]" )])
+                  property (js->clj property-result :keywordize-keys true)]
+            (when-not property
+              (throw (js/Error. "Property creation reported success but the property is absent")))
+            (let [requested-type (when schema (aget schema "type"))
+                  actual-type (or (:logseq.property/type property) (:type property))
+                  actual-type (if (keyword? actual-type) (name actual-type) actual-type)]
+              (when (and requested-type (not= requested-type actual-type))
+                (throw (js/Error. (str "Property " ident " was created with type "
+                                       (pr-str actual-type) ", not the requested "
+                                       (pr-str requested-type)))))
+              (let [notes (cond-> []
+                            (and (string? (:title property))
+                                 (not= title (:title property)))
+                            (conj (str "Logseq normalized the title " (pr-str title)
+                                       " to " (pr-str (:title property))
+                                       "; use the exact ident " (pr-str ident) " for later operations"))
+
+                            (or (:db/cardinality property) (:cardinality property))
+                            (conj (str "cardinality is "
+                                       (or (:db/cardinality property) (:cardinality property))))
+
+                            (:db/valueType property)
+                            (conj (str "values are stored as " (:db/valueType property)
+                                       " -- a write supplies a literal and Logseq mints the value entity")))
+                    diagnostic (when (seq notes) (string/join "; " notes))]
+                (if verbose?
+                  {:response response-map
+                   :verified_state property
+                   :recovered_after_timeout false
+                   :previous_state nil
+                   :diagnostic diagnostic
+                   :verified true
+                   :observed_state nil}
+                  (merge {:verified true
+                          :ident ident
+                          :diagnostic diagnostic}
+                     (property-digest property)))))))))))
+
 (defn get-block
   [api-fn args]
   (let [block-uuid (aget args "block_uuid")
@@ -1007,6 +1073,7 @@
    :isTitleAvailable ["logseq.DB.datascriptQuery"]
   :findDuplicateTitles ["logseq.DB.datascriptQuery"]
   :getProperyUsers ["logseq.DB.datascriptQuery"]
+  :createProperty ["logseq.DB.upsertProperty"]
    :listRecycled ["logseq.DB.datascriptQuery"]
    :listStatus ["logseq.DB.datascriptQuery"]
    :listClosedValues ["logseq.DB.datascriptQuery"]
@@ -1021,7 +1088,8 @@
    "logseq.cli.listPages" [#js {}]
    "logseq.cli.listTags" [#js {}]
    "logseq.cli.listProperties" [#js {}]
-   "logseq.cli.getPageData" ["__mcp_capability_probe__"]
+  "logseq.cli.getPageData" ["__mcp_capability_probe__"]
+  "logseq.DB.upsertProperty" ["__mcp_capability_probe__/invalid" #js {}]
    "logseq.app.search" ["__mcp_capability_probe__" #js {:enable-snippet? false}]})
 
 (def ^:private capability-absent-markers
@@ -1030,7 +1098,7 @@
 
 (def ^:private capability-present-markers
   ["invalid" "missing required" "should be either" "disallowed"
-   "expected" "required"])
+  "expected" "required" "plugins can only upsert its own properties"])
 
 (defn- capability-finding
   [method error-message result]

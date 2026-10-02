@@ -96,10 +96,11 @@ now supports page, blocks, tags, properties, declared, and all detail levels.
 tool contract and performs unverified batch writes. `findDuplicateTitles` now
 reports and ranks read-only groups, preserving alias protection and recycled-
 page handling. `getProperyUsers` reports literal and resolved property values
-for an exact ident. There are 28 registered tools: six API-backed tools and
-22 compatibility data tools.
-`capabilities` now probes those read routes and reports inconclusive results
-as `unknown`; it does not probe or report `upsertNodes`.
+for an exact ident. `createProperty` verifies the returned ident and stored
+type; its capability probe uses a namespace-invalid title that is rejected
+before any write. There are 29 registered tools: six API-backed tools and 23
+compatibility data tools. `capabilities` reports inconclusive probes as
+`unknown`; it does not probe or report `upsertNodes`.
 Entry criteria still outstanding:
 
 1. Both baselines have valid, recorded results.

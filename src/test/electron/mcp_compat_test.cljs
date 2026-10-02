@@ -46,6 +46,10 @@
                     (is (not (contains? (:tools result) :upsertNodes)))
                     (is (not (contains? (get-in result [:diagnostics :routes]) "upsertNodes")))
                     (is (not-any? #(= "logseq.cli.upsertNodes" (first %)) @calls))
+                      (is (some #(and (= "logseq.DB.upsertProperty" (first %))
+                                (= "__mcp_capability_probe__/invalid"
+                                  (first (second %))))
+                            @calls))
                     (is (= 2 (count (filter #(string/starts-with? (first %) "logseq.App.") @calls))))
                     (done)))
           (p/catch (fn [error]
@@ -501,3 +505,61 @@
   (is (thrown-with-msg? js/Error #"exact namespaced property ident"
                         (mcp-compat/get-property-users (fn [& _] nil)
                                                       #js {"property_ident" "Flag"}))))
+
+(deftest create-property-verifies-assigned-ident-and-stored-type
+  (let [calls (atom [])
+        response #js {"ident" ":plugin.property._test_plugin/Budget"}
+        property #js {"id" 19
+                      "uuid" "property-uuid"
+                      "ident" ":plugin.property._test_plugin/Budget"
+                      "title" "Budget"
+                      "logseq.property/type" "number"
+                      "db/cardinality" "db.cardinality/one"}
+        api (fn [method args]
+              (swap! calls conj [method args])
+              (if (= method "logseq.DB.upsertProperty") response property))]
+    (async done
+      (p/then (mcp-compat/create-property api
+                                          #js {"title" "Budget"
+                                               "schema" #js {"type" "number"}
+                                               "options" #js {}
+                                               "verbose" true})
+              (fn [result]
+                (is (true? (:verified result)))
+                (is (= ":plugin.property._test_plugin/Budget"
+                       (get-in result [:verified_state :ident])))
+                (is (= "number" (get-in result [:verified_state :logseq.property/type])))
+                (is (= "cardinality is db.cardinality/one" (:diagnostic result)))
+                (is (= ["logseq.DB.upsertProperty" "logseq.DB.datascriptQuery"]
+                       (mapv first @calls)))
+                (done))))))
+
+(deftest create-property-terse-response-retains-ident
+  (let [api (fn [method _args]
+              (if (= method "logseq.DB.upsertProperty")
+                #js {"ident" ":plugin.property._test_plugin/Count"}
+                #js {"uuid" "property-uuid"
+                     "ident" ":plugin.property._test_plugin/Count"
+                     "title" "Count"
+                     "logseq.property/type" "number"}))]
+    (async done
+      (p/then (mcp-compat/create-property api
+                                          #js {"title" "Count"
+                                               "schema" #js {"type" "number"}
+                                               "verbose" false})
+              (fn [result]
+                (is (true? (:verified result)))
+                (is (= ":plugin.property._test_plugin/Count" (:ident result)))
+                (is (= "property-uuid" (:uuid result)))
+                (is (not (contains? result :verified_state)))
+                (done))))))
+
+(deftest create-property-rejects-namespaced-title-before-writing
+  (let [calls (atom [])]
+    (is (thrown-with-msg? js/Error #"plain title"
+                          (mcp-compat/create-property
+                           (fn [method args]
+                             (swap! calls conj [method args]))
+                           #js {"title" "user.property/Budget"
+                                "schema" #js {"type" "number"}})))
+    (is (empty? @calls))))

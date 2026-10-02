@@ -183,6 +183,14 @@
    :config #js {:title "Get Property Users"
             :description "List every page and block holding a value for this exact property ident, with literals and resolved reference values."
             :inputSchema #js {:property_ident (z/string)}}}
+  :createProperty
+  {:fn mcp-compat/create-property
+   :config #js {:title "Create Property"
+            :description "Create a property definition, verify its assigned ident and stored type, and return that ident for later operations."
+            :inputSchema #js {:title (z/string)
+                        :schema (-> (z/object #js {}) .passthrough)
+                        :options (-> (z/object #js {}) .passthrough .optional)
+                        :verbose (-> (z/boolean) .optional)}}}
    :getBlock
    {:fn mcp-compat/get-block
     :config #js {:title "Get Block"
