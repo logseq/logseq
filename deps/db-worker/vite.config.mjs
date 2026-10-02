@@ -47,6 +47,9 @@ const nodeBuiltins = [
 const electronRuntimeDeps = [
   "@logseq/graph-lifecycle",
   "@fastify/cors",
+  // its browser entry destructures AbortController off `self`,
+  // undefined in the Electron main process
+  "abort-controller",
   "fastify",
   "keytar",
   "@zvec/bindings-darwin-arm64",
