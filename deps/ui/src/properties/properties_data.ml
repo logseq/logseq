@@ -349,28 +349,79 @@ let entity_by_uuid uuid = entity (uuid_ref uuid)
 let entity_by_title title = invoke "get-case-page" [ repo (); W.String title ]
 
 (* get-blocks {:render-data? true} -> block wire carrying
-   block.temp/positioned-properties *)
+   block.temp/positioned-properties. Every mounted .ls-block properties
+   area calls this — batching callers in the same task into ONE request
+   turns a page load's N+1 roundtrip storm into a single call. *)
+external rd_set_timeout : (unit -> unit) -> int -> unit = "setTimeout"
+
+let rd_pending : (string * (W.t -> unit)) list ref = ref []
+let rd_scheduled = ref false
+
+let rd_result_of_pair pair =
+  match getf pair "block" with
+  | Some res -> res
+  | None -> ( match W.elems pair with [ _; res ] -> res | _ -> W.Nil)
+
+let rd_pair_uuid pair =
+  match W.get pair "id" with
+  | Some w -> (
+      match W.as_uuid w with
+      | Some u -> Some u
+      | None -> W.as_string w)
+  | None -> entity_uuid_of (rd_result_of_pair pair)
+
+let rd_flush () =
+  rd_scheduled := false;
+  let pending = List.rev !rd_pending in
+  rd_pending := [];
+  match pending with
+  | [] -> ()
+  | _ -> (
+      try
+        (let* w =
+         invoke "get-blocks"
+           [ repo ()
+           ; W.Array
+               (List.map
+                  (fun u ->
+                    W.Map
+                      [ (W.String "id", W.Uuid u)
+                      ; ( W.String "opts"
+                        , W.Map
+                            [ (W.Keyword "render-data?", W.Bool true) ]
+                        ) ])
+                  (List.sort_uniq String.compare (List.map fst pending)))
+           ]
+       in
+       let results =
+         List.filter_map
+           (fun pair ->
+             Option.map
+               (fun u -> (u, rd_result_of_pair pair))
+               (rd_pair_uuid pair))
+           (W.elems w)
+       in
+       List.iter
+         (fun (uuid, resolve) ->
+           resolve
+             (Option.value (List.assoc_opt uuid results) ~default:W.Nil))
+         pending;
+       Js.Promise.resolve ())
+       |> Js.Promise.catch (fun e ->
+              Platform.console_error ("render-data batch failed", e);
+              List.iter (fun (_, resolve) -> resolve W.Nil) pending;
+              Js.Promise.resolve ())
+       |> ignore
+      with e ->
+        Platform.console_error ("render-data batch failed", e);
+        List.iter (fun (_, resolve) -> resolve W.Nil) pending)
+
 let block_render_data uuid =
-  let* w =
-    invoke "get-blocks"
-      [ repo ()
-      ; W.Array
-          [ W.Map
-              [ (W.String "id", W.Uuid uuid)
-              ; ( W.String "opts"
-                , W.Map [ (W.Keyword "render-data?", W.Bool true) ] )
-              ]
-          ]
-      ]
-  in
-  Js.Promise.resolve
-    (match W.elems w with
-     | [ pair ] -> (
-         match getf pair "block" with
-         | Some res -> res
-         | None -> (
-             match W.elems pair with [ _; res ] -> res | _ -> W.Nil))
-     | _ -> W.Nil)
+  Js.Promise.make (fun ~resolve ~reject:_ ->
+      rd_pending := (uuid, (fun w -> resolve w [@u])) :: !rd_pending;
+      if not !rd_scheduled then (
+        rd_scheduled := true;
+        rd_set_timeout rd_flush 0))
 
 (* ---------- ops ---------- *)
 
