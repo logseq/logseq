@@ -51,14 +51,17 @@ let repos () =
    sqlite/datascript conns. *)
 let close_graph_resources_fn : (string -> unit) ref =
   ref (fun repo ->
-    Hashtbl.iter
-      (fun (r, kind) db ->
-        if r = repo then begin
-          (try Sqlite.close db with _ -> ());
-          drop_sqlite_conn_of r kind;
-          if kind = Db then drop_datascript_conn r
-        end)
-      sqlite_conns)
+    let entries =
+      Hashtbl.fold
+        (fun (r, kind) db acc -> if r = repo then (kind, db) :: acc else acc)
+        sqlite_conns []
+    in
+    List.iter
+      (fun (kind, db) ->
+        drop_sqlite_conn_of repo kind;
+        if kind = Db then drop_datascript_conn repo;
+        (try Sqlite.close db with _ -> ()))
+      entries)
 
 let close_other_sqlite_conns keep_repo =
   let repos =

@@ -74,8 +74,14 @@ let search_db_path repo =
 
 (* cljs get-dbs/resolve-db-path: the search sqlite lives inside the
    graph's OPFS pool as "search/db.sqlite" (browser path is the identity
-   through resolve-db-path); on node it is a sibling file. *)
-let open_search_db repo : Sqlite.db =
+   through resolve-db-path); on node it is a sibling file.
+
+   Raw open — the handle is NOT registered in *sqlite-conns. get-dbs
+   registers its conn via open_search_db; scratch opens like
+   <invalidate-search-db! must not, since the handle is closed in the
+   same breath and a stale registration would hand a closed db to the
+   next get_search_db. *)
+let open_search_db_file repo : Sqlite.db =
   let db =
     if Worker_state.publishing () then Sqlite.open_db ~path:"/search-db.sqlite"
     else if Sqlite.pooled_runtime () then
@@ -83,7 +89,6 @@ let open_search_db repo : Sqlite.db =
         ~path:"search/db.sqlite"
     else Sqlite.open_db ~path:(search_db_path repo)
   in
-  Worker_state.set_sqlite_conn_of repo Worker_state.Search db;
   (* cljs get-dbs runs enable-sqlite-wal-mode! on the search conn before
      any statement executes on it. The OPFS SAH pool has no shared-memory
      support, so a WAL-mode db file raises SQLITE_CANTOPEN on its first
@@ -98,7 +103,6 @@ let open_search_db repo : Sqlite.db =
     let error =
       try
         Sqlite.close db;
-        Worker_state.drop_sqlite_conn_of repo Worker_state.Search;
         exn
       with close_exn ->
         Failure
@@ -106,6 +110,12 @@ let open_search_db repo : Sqlite.db =
              (Printexc.to_string exn) (Printexc.to_string close_exn))
     in
     raise error
+
+(* cljs get-dbs registers the :search conn in *sqlite-conns. *)
+let open_search_db repo : Sqlite.db =
+  let db = open_search_db_file repo in
+  Worker_state.set_sqlite_conn_of repo Worker_state.Search db;
+  db
 
 let get_search_db repo : Sqlite.db option =
   match Worker_state.sqlite_conn_of repo Worker_state.Search with
@@ -830,11 +840,13 @@ let invalidate_search_db args : Wire.t E.t =
           if Worker_state.publishing () then E.pure Wire.nil
           else
             (* cljs <invalidate-search-db!: even without a cached conn it
-               opens the pool's search db and truncates it. *)
+               opens the pool's search db and truncates it. cljs opens
+               through platform/sqlite-open — the scratch conn never
+               enters *sqlite-conns, so close leaves no stale handle. *)
             E.bind
               (Sqlite.prepare_pool ~name:(Graph_dir.pool_name repo))
               (fun () ->
-                let db = open_search_db repo in
+                let db = open_search_db_file repo in
                 (try Search_index.truncate_table db
                  with exn ->
                    Worker_log.error "search/invalidate-search-db-failed"

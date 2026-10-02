@@ -170,10 +170,12 @@ let client_ops_conn repo : Sqlite.db =
          Sqlite.exec db ~sql:"pragma synchronous=NORMAL" ~bind:[||];
          db
        with exn ->
+         (* drop before close: a close failure must not leave the
+            closed handle cached for the next client_ops_conn *)
+         Hashtbl.remove client_ops_conns repo;
          let error =
            try
              Sqlite.close db;
-             Hashtbl.remove client_ops_conns repo;
              exn
            with close_exn ->
              Failure
