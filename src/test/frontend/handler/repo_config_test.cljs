@@ -1,5 +1,6 @@
 (ns frontend.handler.repo-config-test
   (:require [cljs.test :refer [async deftest is]]
+            [frontend.handler.notification :as notification]
             [frontend.handler.repo-config :as repo-config-handler]
             [frontend.state :as state]
             [promesa.core :as p]))
@@ -46,3 +47,24 @@
              (reset! state/*db-worker previous-worker)
              (state/replace-state! previous-state)
              (done)))))))
+
+(deftest restore-repo-config-falls-back-to-default-when-file-invalid-test
+  ;; An unparsable config.edn also falls back to the default config so
+  ;; `[:config repo]` stays populated and settings toggles keep working
+  (async done
+    (let [repo "logseq_db_repo_config_invalid_file"
+          previous-state (state/get-state)]
+      (p/with-redefs [repo-config-handler/<get-file-content
+                      (fn [_repo' _path]
+                        (p/resolved "{:ui/show-brackets?"))
+                      notification/show! (fn [& _args] nil)]
+        (-> (p/let [config (repo-config-handler/restore-repo-config! repo)]
+              (is (true? (:ui/enable-tooltip? config)))
+              (is (true? (:ui/enable-tooltip? (state/get-graph-config repo)))))
+            (p/catch
+             (fn [error]
+               (is false (str error))))
+            (p/finally
+             (fn []
+               (state/replace-state! previous-state)
+               (done))))))))
