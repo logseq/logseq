@@ -4,6 +4,8 @@
             [cljs.test :refer [deftest is]]
             [clojure.string :as string]
             [datascript.core :as d]
+            [frontend.handler.export.common :as export-common]
+            [frontend.worker.export :as worker-export]
             [logseq.common.export.file :as common-file]
             [logseq.common.util.date-time :as date-time-util]
             [logseq.db.frontend.property :as db-property]
@@ -94,6 +96,44 @@
                 "- after")
            content))
     (is (not (string/includes? content "should not appear")))))
+
+(deftest selected-block-text-export-includes-default-property-value-children
+  (let [conn (db-test/create-conn-with-blocks
+              {:properties {:user.property/qa-transfer-note {:logseq.property/type :default}
+                            :user.property/qa-website {:logseq.property/type :url}}
+               :pages-and-blocks
+               [{:page {:block/title "QA-Text-Transfer"}
+                 :blocks [{:block/title "QA transfer owner"
+                           :build/properties
+                           {:user.property/qa-transfer-note
+                            {:build/property-value :block
+                             :block/title "QA property value"
+                             :build/children
+                             [{:block/title "QA value child"
+                               :build/children [{:block/title "QA value grandchild"}]}]}
+                            :user.property/qa-website
+                            {:build/property-value :block
+                             :block/title "https://example.com"
+                             :build/children [{:block/title "url value child"}]}}
+                           :build/children [{:block/title "QA ordinary child"}]}
+                          {:block/title "QA transfer control"}]}]})
+        owner (db-test/find-block-by-content @conn "QA transfer owner")
+        control (db-test/find-block-by-content @conn "QA transfer control")
+        content-config (export-common/get-content-config)
+        content (worker-export/export-blocks-as-format
+                 @conn
+                 [(:block/uuid owner) (:block/uuid control)]
+                 :markdown
+                 {:remove-options #{}}
+                 content-config)]
+    (is (true? (:export-default-property-values-as-blocks? content-config)))
+    (is (string/includes? content "QA property value"))
+    (is (string/includes? content "QA value child"))
+    (is (string/includes? content "QA value grandchild"))
+    (is (string/includes? content "QA ordinary child"))
+    (is (string/includes? content "QA transfer control"))
+    (is (string/includes? content "https://example.com"))
+    (is (not (string/includes? content "url value child")))))
 
 (deftest highlighted-export-preserves-code-and-math-content
   (let [conn (db-test/create-conn-with-blocks
