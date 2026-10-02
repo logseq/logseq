@@ -80,3 +80,67 @@
     (assert/assert-have-count
      (format ".block-tag :text('%s')" tag-name)
      0)))
+
+(defn- block-q
+  [title]
+  (loc/filter ".ls-page-blocks .ls-block:not(.block-add-button)"
+              :has-text title))
+
+(defn- assert-block-tag
+  [title tag present?]
+  (let [q (loc/filter (block-q title)
+                      :has (format ".block-tag :text('%s')" tag))]
+    (if present?
+      (assert/assert-is-visible q)
+      (assert/assert-have-count q 0))))
+
+(defn- apply-selection-toolbar-tag!
+  [tag]
+  (assert/assert-is-visible ".selection-action-bar")
+  (w/click ".selection-action-bar button:has(.ls-icon-hash)")
+  (w/wait-for ".ls-property-dialog .cp__select-input")
+  (w/fill ".ls-property-dialog .cp__select-input" tag)
+  (assert/assert-is-visible
+   (loc/filter ".ls-property-dialog a.menu-link" :has-text tag))
+  (k/enter)
+  (doseq [title ["QA tag alpha" "QA tag beta"]]
+    (assert-block-tag title tag true)))
+
+(deftest floating-toolbar-tags-follow-expanded-selection-test
+  (b/new-blocks ["QA tag alpha"
+                 "QA tag beta"
+                 "QA tag gamma"
+                 "QA tag delta"
+                 "QA tag sentinel"])
+  (util/exit-edit)
+  (b/jump-to-block "QA tag alpha")
+  (util/wait-editor-visible)
+  (k/esc)
+  (assert/assert-selected-block-text "QA tag alpha")
+  (k/shift+arrow-down)
+  (assert/assert-selected-block-text "QA tag beta")
+  (assert/assert-is-visible ".selection-action-bar")
+  (k/shift+arrow-down)
+  (k/shift+arrow-down)
+  (assert/assert-selected-block-text "QA tag delta")
+  (assert/assert-have-count
+   (loc/filter ".ls-page-blocks .ls-block.selected" :has-text "QA tag sentinel")
+   0)
+  (apply-selection-toolbar-tag! "QALateTag")
+  (assert-block-tag "QA tag gamma" "QALateTag" true)
+  (assert-block-tag "QA tag delta" "QALateTag" true)
+  (assert-block-tag "QA tag sentinel" "QALateTag" false)
+  (k/esc)
+  (assert/assert-is-visible ".selection-action-bar")
+  (k/shift+arrow-up)
+  (k/shift+arrow-up)
+  (assert/assert-selected-block-text "QA tag beta")
+  (assert/assert-have-count
+   (loc/filter ".ls-page-blocks .ls-block.selected" :has-text "QA tag gamma")
+   0)
+  (apply-selection-toolbar-tag! "QAOutsideTag")
+  (assert-block-tag "QA tag alpha" "QAOutsideTag" true)
+  (assert-block-tag "QA tag beta" "QAOutsideTag" true)
+  (assert-block-tag "QA tag gamma" "QAOutsideTag" false)
+  (assert-block-tag "QA tag delta" "QAOutsideTag" false)
+  (assert-block-tag "QA tag sentinel" "QAOutsideTag" false))
