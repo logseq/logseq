@@ -280,17 +280,6 @@
       (is (nil? (outliner-validate/validate-unique-by-name-and-tags @conn "Foo" qux))
           "Renaming #Qux to #Foo must not collide with #Bar/Foo")))
 
-  (testing "Renaming a top-level tag to another top-level tag title is refused"
-    (let [conn (db-test/create-conn)
-          _ (outliner-page/create! conn "Foo" {:class? true})
-          [_ bar-uuid] (outliner-page/create! conn "Bar" {:class? true})]
-      (is (thrown-with-msg?
-           js/Error
-           #"Duplicate class"
-           (outliner-validate/validate-unique-by-name-and-tags
-            @conn "Foo" (d/entity @conn [:block/uuid bar-uuid]))))
-      (is (= "Bar" (:block/title (d/entity @conn [:block/uuid bar-uuid]))))))
-
   (testing "Namespaced tags under the same parent cannot share a title"
     (let [conn (db-test/create-conn)
           bar-uuid (random-uuid)

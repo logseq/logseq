@@ -639,7 +639,7 @@
                          db
                          (or exclude-id -1)
                          lookup
-                         tag-idents))))))))))
+                         tag-idents)))))))))
 
 (defn get-page
   "Get a page given its unsanitized name or uuid"
