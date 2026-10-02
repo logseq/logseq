@@ -181,6 +181,12 @@
         (:class-extends rules/rules))
    (remove #{eid})))
 
+(defn card-class-ids
+  "Entity ids of :logseq.class/Card and every structured child (tags that extend Card)."
+  [db]
+  (let [card-id (:db/id (d/entity db :logseq.class/Card))]
+    (cons card-id (get-structured-children db card-id))))
+
 (defn get-class-extends
   "Returns all extends of a class"
   [class]

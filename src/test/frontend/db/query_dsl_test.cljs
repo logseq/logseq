@@ -352,6 +352,28 @@
            (set (map :block/title (dsl-query "(property status \"Doing\")"))))
         "Blocks or tagged with or descended from a tag that don't have closed default-value property value")))
 
+(deftest cards-query-includes-classes-extending-card
+  (load-test-files
+   {:classes {:Milestone {:build/class-extends [:logseq.class/Card]}
+              :Project {:build/class-extends [:Milestone]}}
+    :pages-and-blocks
+    [{:page {:block/title "page1"}
+      :blocks [{:block/title "direct card"
+                :build/tags [:logseq.class/Card]}
+               {:block/title "milestone card"
+                :build/tags [:Milestone]}
+               {:block/title "project card"
+                :build/tags [:Project]}
+               {:block/title "plain"}]}]})
+  (let [db (conn/get-db test-helper/test-db)
+        titles (set (map (comp :block/title first)
+                         (query-dsl/execute-query
+                          "(page page1)" db
+                          {:cards? true
+                           :block-attrs db-block-attrs})))]
+    (is (= #{"direct card" "milestone card" "project card"} titles)
+        "cards? includes blocks tagged with Card and any class extending it")))
+
 (deftest block-property-query-performance
   (let [pages (->> (repeat 10 {:tags ["tag1" "tag2"]})
                    (map-indexed (fn [idx {:keys [tags]}]
