@@ -3264,6 +3264,7 @@ let test_delete_page_with_outliner_core () =
   check "page2 order detached"
     (Ldb.value page2' "block/order" = None)
 
+
 (* (deftest delete-blocks-hard-retracts-subtree ...) *)
 let test_delete_blocks_hard_retracts_subtree () =
   let conn =
@@ -3559,6 +3560,100 @@ let test_move_blocks_bottom_skips_blank_property_value () =
   check "page content order" (titles = [ "a-content"; "moving-block" ])
 
 (* core_test.cljs — the ported deftests *)
+
+(* cljs delete-blocks-deletes-grandchild-when-selected-page-ancestor-does-not-retract-it
+   (core_test.cljs) — a page ancestor only detaches, so a nested selected
+   block must remain its own delete root. *)
+let test_delete_blocks_page_ancestor_keeps_nested_root () =
+  let conn =
+    Db_test_util.create_conn_with_blocks
+      ~pages_and_blocks:
+        [ { page = { default_page with pg_title = Some "page-a" };
+            blocks = [ { default_block with b_title = Some "a-child" } ] };
+          { page = { default_page with pg_title = Some "page-b" };
+            blocks = [ { default_block with b_title = Some "x" } ] } ]
+      ()
+  in
+  let page_a = Option.get (Ldb.get_page (db_of conn) (String "page-a")) in
+  let page_b = Option.get (Ldb.get_page (db_of conn) (String "page-b")) in
+  ignore
+    (Datascript.transact_conn_string conn
+       (Printf.sprintf
+          "[{:db/id %d :block/order \"a1\" :block/parent %d}]" page_b.id
+          page_a.id));
+  let x = Option.get (find_block_by_content (db_of conn) "x") in
+  delete_blocks_bang conn [ page_a; x ] ();
+  check "x deleted" (find_block_by_content (db_of conn) "x" = None);
+  let page_a' = Option.get (Ldb.get_page (db_of conn) (String "page-a")) in
+  check "page-a kept and detached"
+    (Ldb.ref_ent page_a' "block/parent" = None);
+  check "page-b kept" (Ldb.get_page (db_of conn) (String "page-b") <> None)
+
+(* cljs nested-outline-conn — a (a1, a2 (a2x)), b, c *)
+let nested_outline_conn () =
+  Db_test_util.create_conn_with_blocks
+    ~pages_and_blocks:
+      [ { page = { default_page with pg_title = Some "page1" };
+          blocks =
+            [ { default_block with
+                b_title = Some "a"
+              ; b_children =
+                  [ { default_block with b_title = Some "a1" };
+                    { default_block with
+                      b_title = Some "a2"
+                    ; b_children =
+                        [ { default_block with b_title = Some "a2x" } ] } ] };
+            { default_block with b_title = Some "b" };
+            { default_block with b_title = Some "c" } ] } ]
+    ()
+
+(* outline_child_titles (below) minus the created-from-property filter —
+   these fixtures create only titled blocks. *)
+let ordered_child_titles (block : entity) : string list =
+  Ldb.sort_by_order (Ldb.ref_ents block "block/_parent")
+  |> List.filter_map ent_title
+
+(* cljs moves-keep-selected-descendants-under-their-ancestor — a selected
+   descendant covered by a selected ancestor is not a move root. *)
+let test_moves_keep_selected_descendants_under_their_ancestor () =
+  let cases =
+    [ ( "move", false, [ "b"; "a"; "c" ]
+      , fun conn a a2x b ->
+          move_blocks_bang conn [ a; a2x ] b
+            ~opts:{ Outliner_core.default_insert_opts with sibling = true } () )
+    ; ( "move reversed", true, [ "b"; "a"; "c" ]
+      , fun conn a a2x b ->
+          move_blocks_bang conn [ a2x; a ] b
+            ~opts:{ Outliner_core.default_insert_opts with sibling = true } () )
+    ; ( "up", false, [ "a"; "b"; "c" ]
+      , fun conn a a2x _b ->
+          Outliner_core.move_blocks_up_down_conn conn [ a; a2x ] true )
+    ; ( "down", false, [ "b"; "a"; "c" ]
+      , fun conn a a2x _b ->
+          Outliner_core.move_blocks_up_down_conn conn [ a; a2x ] false ) ]
+  in
+  List.iter
+    (fun (label, _reversed, expected, apply) ->
+       let conn = nested_outline_conn () in
+       let db = db_of conn in
+       let page = Option.get (Ldb.get_page db (String "page1")) in
+       let a = Option.get (find_block_by_content db "a") in
+       let a2x = Option.get (find_block_by_content db "a2x") in
+       let b = Option.get (find_block_by_content db "b") in
+       apply conn a a2x b;
+       let db = db_of conn in
+       let page' = Option.get (Ldb.ent_of_id db page.id) in
+       check (label ^ " page order")
+         (ordered_child_titles page' = expected);
+       let a' = Option.get (find_block_by_content db "a") in
+       check (label ^ " a children kept")
+         (ordered_child_titles a' = [ "a1"; "a2" ]);
+       let a2' = Option.get (find_block_by_content db "a2") in
+       check (label ^ " a2x stays under a2")
+         (ordered_child_titles a2' = [ "a2x" ]))
+    cases
+
+
 let core_cases : unit Alcotest.test_case list =
   [ Alcotest.test_case "insert-blocks-does-not-trust-stale-right-order" `Quick test_insert_blocks_does_not_trust_stale_right_order;
     Alcotest.test_case "insert-blocks-finds-right-order-on-1k-sibling-page" `Quick test_insert_blocks_finds_right_order_on_1k_sibling_page;
@@ -3574,6 +3669,8 @@ let core_cases : unit Alcotest.test_case list =
     Alcotest.test_case "delete-paste-created-pages" `Quick test_delete_paste_created_pages;
     Alcotest.test_case "test-delete-block-with-default-property" `Quick test_delete_block_with_default_property;
     Alcotest.test_case "test-delete-page-with-outliner-core" `Quick test_delete_page_with_outliner_core;
+    Alcotest.test_case "delete-blocks-page-ancestor-keeps-nested-root" `Quick test_delete_blocks_page_ancestor_keeps_nested_root;
+    Alcotest.test_case "moves-keep-selected-descendants" `Quick test_moves_keep_selected_descendants_under_their_ancestor;
     Alcotest.test_case "delete-blocks-hard-retracts-subtree" `Quick test_delete_blocks_hard_retracts_subtree;
     Alcotest.test_case "delete-blocks-removes-range-comments-when-all-targets-are-deleted" `Quick test_delete_blocks_removes_range_comments_when_all_targets_are_deleted;
     Alcotest.test_case "delete-blocks-keeps-range-comments-when-some-targets-remain" `Quick test_delete_blocks_keeps_range_comments_when_some_targets_remain;

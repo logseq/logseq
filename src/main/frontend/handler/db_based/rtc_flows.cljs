@@ -104,7 +104,7 @@ conditions:
   (let [state* (atom nil)
         timeout-id (atom nil)
         emit! (fn [event]
-                (when @flows/current-login-user
+                (when (:email @flows/current-login-user)
                   (when-let [id @timeout-id]
                     (js/clearTimeout id))
                   (reset! timeout-id (js/setTimeout #(reset! state* event) 50))))]

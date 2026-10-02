@@ -1665,17 +1665,25 @@ let execute_query (db : db) (query_string : string) (opts : exec_opts) : query_r
     | Some { pquery = Some query_star; prules; psample; _ } ->
         let query_star =
           if opts.opt_cards then
-            let card_id =
+            (* cljs card-class-ids: Card + every structured child (tags that
+               extend Card), matched via a contains? set predicate *)
+            let card_ids =
               match entity db (Ident "logseq.class/Card") with
-              | Some e -> int e.id
-              | None -> QueryFormNil
+              | Some e -> e.id :: Db_class.get_structured_children db e.id
+              | None -> []
             in
             let clauses =
               match query_star with
               | first :: _ when is_coll first -> query_star
               | _ -> [ list_ query_star ]
             in
-            vec_ [ sym "?b"; kw "block/tags"; card_id ] :: clauses
+            vec_ [ sym "?b"; kw "block/tags"; sym "?t" ]
+            :: vec_
+                 [ list_
+                     [ sym "contains?"
+                     ; QueryFormSet (List.map int card_ids)
+                     ; sym "?t" ] ]
+            :: clauses
           else query_star
         in
         let q' = query_wrapper query_star ~blocks:true ~block_attrs_edn:opts.opt_block_attrs in

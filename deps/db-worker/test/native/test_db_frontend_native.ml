@@ -1039,6 +1039,44 @@ let test_execute_query_cards_single_clause () =
      | [ t ] -> String.starts_with ~prefix:"card ref " t
      | _ -> false)
 
+(* cljs cards-query-includes-classes-extending-card *)
+let test_cards_query_includes_classes_extending_card () =
+  let db =
+    db_of
+      (create_conn_with_blocks
+         ~classes:
+           [ "Milestone",
+             { default_class with
+               c_title = Some "Milestone";
+               c_extends = [ "logseq.class/Card" ] };
+             "Project",
+             { default_class with
+               c_title = Some "Project"; c_extends = [ "Milestone" ] } ]
+         ~pages_and_blocks:
+           [ { page = { default_page with pg_title = Some "page1" };
+               blocks =
+                 [ { default_block with
+                     b_title = Some "direct card";
+                     b_tags = [ "logseq.class/Card" ] };
+                   { default_block with
+                     b_title = Some "milestone card";
+                     b_tags = [ "Milestone" ] };
+                   { default_block with
+                     b_title = Some "project card"; b_tags = [ "Project" ] };
+                   { default_block with b_title = Some "plain" } ] } ]
+         ())
+  in
+  let titles =
+    match
+      Db_query_dsl.execute_query db "(page page1)"
+        { default_exec_opts with opt_cards = true }
+    with
+    | Some rows -> List.sort compare (titles_of_rows rows)
+    | None -> []
+  in
+  check "cards? includes blocks tagged with Card and any class extending it"
+    (titles = [ "direct card"; "milestone card"; "project card" ])
+
 (* ---------- inputs_test.cljs ---------- *)
 
 let empty_ctx : Db_inputs.context =
@@ -1270,4 +1308,6 @@ let cases : unit Alcotest.test_case list =
     Alcotest.test_case "priority-queries-with-multi-word-and-custom-values" `Quick
       test_priority_queries_with_multi_word_and_custom_values;
     Alcotest.test_case "execute-query-cards-single-clause" `Quick
-      test_execute_query_cards_single_clause ]
+      test_execute_query_cards_single_clause;
+    Alcotest.test_case "cards-query-includes-classes-extending-card" `Quick
+      test_cards_query_includes_classes_extending_card ]

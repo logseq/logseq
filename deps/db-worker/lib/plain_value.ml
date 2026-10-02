@@ -15,6 +15,18 @@ let has_key k pairs = Option.is_some (map_get k pairs)
 
 let assoc k v pairs = (kw k, v) :: List.remove_assoc (kw k) pairs
 
+(* class-extends-summaries — ancestor class idents for renderer card
+   detection (Card + structured children) *)
+let class_extends_summaries (e : entity) : Wire.t list =
+  if not (Ldb.is_class e) then []
+  else
+    List.filter_map
+      (fun parent ->
+        match Ldb.ident_of parent with
+        | Some ident -> Some (Wire.Map [ field "db/ident" (kw ident) ])
+        | None -> None)
+      (Db_class.get_class_extends e)
+
 (* ref-value->summary *)
 let ref_value_summary db (eid : entity_id) : Wire.t =
   match Ldb.ent_of_id db eid with
@@ -119,6 +131,12 @@ let ref_value_summary db (eid : entity_id) : Wire.t =
         match Ldb.value e "db/ident" with
         | Some v -> field "db/ident" (Ds_wire.transit_of_value v) :: m
         | None -> m
+      in
+      let m =
+        match class_extends_summaries e with
+        | [] -> m
+        | xs ->
+            field "logseq.property.class/extends" (Wire.Array xs) :: m
       in
       Wire.Map (List.rev m)
 

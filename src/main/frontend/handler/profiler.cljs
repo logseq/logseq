@@ -2,7 +2,9 @@
   "Provides fns for profiling.
   TODO: support both main thread and worker thread."
   (:require-macros [frontend.handler.profiler :refer [arity-n-fn]])
-  (:require [goog.object :as g]))
+  (:require [frontend.context.i18n :refer [t]]
+            [frontend.handler.notification :as notification]
+            [goog.object :as g]))
 
 (def ^:private *fn-symbol->key->call-count (volatile! {}))
 (def ^:private *fn-symbol->key->time-sum (volatile! {}))
@@ -39,13 +41,30 @@
 (defn register-fn!
   "(custom-key-fn args-seq result) return non-nil key"
   [fn-sym & {:keys [custom-key-fn] :as _opts}]
-  (assert (qualified-symbol? fn-sym))
+  (when-not (qualified-symbol? fn-sym)
+    (throw (ex-info (str "fn-sym must be a qualified symbol: " fn-sym)
+                    {:fn-sym fn-sym :reason :unqualified})))
   (let [ns (namespace fn-sym)
         s (munge (name fn-sym))]
     (if-let [original-fn (find-ns-obj (str ns "." s))]
       (do (replace-fn-helper! ns s fn-sym original-fn custom-key-fn)
           (swap! *fn-symbol->origin-fn assoc fn-sym original-fn))
-      (throw (ex-info (str "fn-sym not found: " fn-sym) {})))))
+      (throw (ex-info (str "fn-sym not found: " fn-sym)
+                      {:fn-sym fn-sym :reason :not-found})))))
+
+(defn register-fn-from-ui!
+  "Register fn-sym from the Profiler UI. Invalid names notify and do not throw."
+  [fn-sym]
+  (try
+    (register-fn! fn-sym)
+    (catch :default e
+      (notification/show!
+       (case (:reason (ex-data e))
+         :unqualified (t :profiler/fn-unqualified-error)
+         :not-found (t :profiler/fn-not-found-error (str fn-sym))
+         (or (ex-message e) (.-message e) (str e)))
+       :error)
+      nil)))
 
 (defn unregister-fn!
   [fn-sym]
