@@ -1349,7 +1349,9 @@
                       (p/do!
                        (delete-rest!)
                        (clear-selection!))))
-            (p/catch (fn [_])))
+            ;; dialog-confirm! rejects with a falsy value on cancel; anything
+            ;; truthy is a real failure and must surface.
+            (p/catch (fn [e] (when e (throw e)))))
 
         :else
         (p/do!
