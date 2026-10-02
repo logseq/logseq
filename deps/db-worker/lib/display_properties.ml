@@ -339,6 +339,18 @@ let display_properties db (block : entity) ~(gallery_view : bool)
      groups positioned property rows by position; each entry uses the same
      {property-id property value} row shape as full/hidden lists *)
   let positioned_properties =
+    let cache = Render_snapshot.new_batch_cache () in
+    let tag_ids =
+      List.map (fun (t : entity) -> t.id)
+        (Ldb.ref_ents block "block/tags")
+    in
+    let own_property_ids =
+      List.filter_map
+        (fun (k, _) ->
+          let id = prop_ident_of_key k in
+          if Db_property.property id then Some id else None)
+        properties_kvs
+    in
     Wire.Map
       (List.map
          (fun (position, idents) ->
@@ -347,8 +359,9 @@ let display_properties db (block : entity) ~(gallery_view : bool)
                (List.filter_map
                   (fun id -> display_property_row db id (get_prop id))
                   idents) ))
-         (Render_snapshot.block_positioned_property_idents_by_position db
-            block.id))
+         (Render_snapshot.block_positioned_property_idents_by_position
+            ~cache ~tag_ids ~own_property_ids
+            ~direct_value:(Ldb.value block) db block.id))
   in
   Wire.Map
     [ field "full-properties"
