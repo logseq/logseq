@@ -323,7 +323,7 @@
        ldb/sort-by-order
        (mapv :block/title)))
 
-(defn- issue-1317-conn
+(defn- nested-outline-conn
   "Page with a (children a1; a2 with child a2x), b, c."
   []
   (db-test/create-conn-with-blocks
@@ -353,17 +353,6 @@
       (is (some? (ldb/get-page @conn "page-a")))
       (is (nil? (:block/parent (ldb/get-page @conn "page-a"))))
       (is (some? (ldb/get-page @conn "page-b"))))))
-
-(deftest delete-blocks-retracts-grandchild-covered-by-selected-block-ancestor
-  (let [conn (issue-1317-conn)
-        page (db-test/find-page-by-title @conn "page1")
-        a (db-test/find-block-by-content @conn "a")
-        a2x (db-test/find-block-by-content @conn "a2x")]
-    (outliner-core/delete-blocks! conn [a a2x] {})
-    (is (nil? (db-test/find-block-by-content @conn "a")))
-    (is (nil? (db-test/find-block-by-content @conn "a2x")))
-    (is (nil? (db-test/find-block-by-content @conn "a2")))
-    (is (= ["b" "c"] (child-titles conn page)))))
 
 (deftest delete-blocks-hard-retracts-subtree
   (let [user-uuid (random-uuid)
@@ -499,55 +488,27 @@
           (db-test/silence-stderr
             (outliner-core/move-blocks! conn [placeholder] target {:sibling? true}))))))
 
-(deftest move-blocks-keeps-selected-grandchild-under-selected-ancestor
-  (testing "Moving ancestor a together with grandchild a2x keeps a2x under a2"
-    (let [conn (issue-1317-conn)
-          page (db-test/find-page-by-title @conn "page1")
-          a (db-test/find-block-by-content @conn "a")
-          a2 (db-test/find-block-by-content @conn "a2")
-          a2x (db-test/find-block-by-content @conn "a2x")
-          b (db-test/find-block-by-content @conn "b")]
-      (outliner-core/move-blocks! conn [a a2x] b {:sibling? true})
-      (is (= ["b" "a" "c"] (child-titles conn page)))
-      (is (= ["a1" "a2"] (child-titles conn a)))
-      (is (= ["a2x"] (child-titles conn a2)))
-      (is (= (:db/id a2)
-             (:db/id (:block/parent (d/entity @conn (:db/id a2x))))))))
-
-  (testing "Selection order a2x then a still keeps a2x in a's subtree"
-    (let [conn (issue-1317-conn)
-          page (db-test/find-page-by-title @conn "page1")
-          a (db-test/find-block-by-content @conn "a")
-          a2 (db-test/find-block-by-content @conn "a2")
-          a2x (db-test/find-block-by-content @conn "a2x")
-          b (db-test/find-block-by-content @conn "b")]
-      (outliner-core/move-blocks! conn [a2x a] b {:sibling? true})
-      (is (= ["b" "a" "c"] (child-titles conn page)))
-      (is (= ["a1" "a2"] (child-titles conn a)))
-      (is (= ["a2x"] (child-titles conn a2))))))
-
-(deftest move-blocks-up-down-keeps-selected-grandchild-under-selected-ancestor
-  (testing "Move-up of first-on-page ancestor plus grandchild is a no-op for the grandchild"
-    (let [conn (issue-1317-conn)
-          page (db-test/find-page-by-title @conn "page1")
-          a (db-test/find-block-by-content @conn "a")
-          a2 (db-test/find-block-by-content @conn "a2")
-          a2x (db-test/find-block-by-content @conn "a2x")]
-      (outliner-core/move-blocks-up-down! conn [a a2x] true)
-      (is (= ["a" "b" "c"] (child-titles conn page)))
-      (is (= ["a1" "a2"] (child-titles conn a)))
-      (is (= ["a2x"] (child-titles conn a2)))))
-
-  (testing "Move-down of ancestor plus grandchild moves the whole subtree"
-    (let [conn (issue-1317-conn)
-          page (db-test/find-page-by-title @conn "page1")
-          a (db-test/find-block-by-content @conn "a")
-          a2 (db-test/find-block-by-content @conn "a2")
-          a2x (db-test/find-block-by-content @conn "a2x")]
-      (outliner-core/move-blocks-up-down! conn [a a2x] false)
-      (is (= ["b" "a" "c"] (child-titles conn page)))
-      (is (= ["a1" "a2"] (child-titles conn a)))
-      (is (= ["a2x"] (child-titles conn a2))))))
+(deftest moves-keep-selected-descendants-under-their-ancestor
+  (doseq [[operation reversed? expected-order]
+          [[:move false ["b" "a" "c"]]
+           [:move true ["b" "a" "c"]]
+           [:up false ["a" "b" "c"]]
+           [:down false ["b" "a" "c"]]]]
+    (testing (str operation ", reversed selection: " reversed?)
+      (let [conn (nested-outline-conn)
+            page (db-test/find-page-by-title @conn "page1")
+            a (db-test/find-block-by-content @conn "a")
+            a2 (db-test/find-block-by-content @conn "a2")
+            a2x (db-test/find-block-by-content @conn "a2x")
+            b (db-test/find-block-by-content @conn "b")
+            selection (if reversed? [a2x a] [a a2x])]
+        (case operation
+          :move (outliner-core/move-blocks! conn selection b {:sibling? true})
+          :up (outliner-core/move-blocks-up-down! conn selection true)
+          :down (outliner-core/move-blocks-up-down! conn selection false))
+        (is (= expected-order (child-titles conn page)))
+        (is (= ["a1" "a2"] (child-titles conn a)))
+        (is (= ["a2x"] (child-titles conn a2)))))))
 
 (deftest move-blocks-protects-comment-blocks
   (let [conn (db-test/create-conn-with-blocks

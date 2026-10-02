@@ -89,49 +89,26 @@
       (is (= [(select-keys original [:block/uuid])]
              (block-handler/get-top-level-blocks [block]))))))
 
-(deftest get-top-level-blocks-drops-descendant-covered-by-selected-ancestor
-  (let [conn (db-test/create-conn-with-blocks
-              [{:page {:block/title "page1"}
-                :blocks [{:block/title "a"
-                          :build/children [{:block/title "a1"}
-                                           {:block/title "a2"
-                                            :build/children [{:block/title "a2x"}]}]}
-                         {:block/title "b"}]}])
-        a (db-test/find-block-by-content @conn "a")
-        a2 (db-test/find-block-by-content @conn "a2")
-        a2x (db-test/find-block-by-content @conn "a2x")]
-    (with-redefs [state/get-edit-block (constantly nil)
-                  state/get-input (constantly nil)
-                  state/get-selection-blocks (constantly [])]
-      (is (= [(:block/uuid a)]
-             (mapv :block/uuid (block-handler/get-top-level-blocks [a a2x])))
-          "A selected grandchild is already covered by its selected ancestor.")
-      (is (= [(:block/uuid a)]
-             (mapv :block/uuid (block-handler/get-top-level-blocks [a2x a])))
-          "Selection order must not treat the grandchild as a move root.")
-      (is (= [(:block/uuid a)]
-             (mapv :block/uuid (block-handler/get-top-level-blocks [a a2])))
-          "A selected direct child is still dropped when the parent is selected."))))
-
-(deftest get-top-level-blocks-drops-grandchild-from-copy-summaries
-  (let [a-id (random-uuid)
-        x-id (random-uuid)
-        summaries [{:db/id 1
-                    :block/uuid a-id
-                    :block/title "a"
-                    :block/parent {:db/id 10}}
-                   {:db/id 3
-                    :block/uuid x-id
-                    :block/title "a2x"
-                    :block/parent {:db/id 2
-                                   :block/parent {:db/id 1
-                                                  :block/parent {:db/id 10}}}}]]
-    (with-redefs [state/get-edit-block (constantly nil)
-                  state/get-input (constantly nil)
-                  state/get-selection-blocks (constantly [])]
-      (is (= [a-id]
-             (mapv :block/uuid (block-handler/get-top-level-blocks summaries)))
-          "Copy summaries with a hydrated parent chain must not export the grandchild twice."))))
+(deftest copy-summaries-exclude-covered-descendants
+  (async done
+    (let [conn (db-test/create-conn-with-blocks
+                [{:page {:block/title "outline"}
+                  :blocks [{:block/title "ancestor"
+                            :build/children [{:block/title "middle"
+                                              :build/children [{:block/title "leaf"}]}]}]}])
+          db @conn
+          ancestor-id (:block/uuid (db-test/find-block-by-content db "ancestor"))
+          leaf-id (:block/uuid (db-test/find-block-by-content db "leaf"))]
+      (p/with-redefs [db-async/<q (fn [_graph _opts query & inputs]
+                                  (p/resolved (apply d/q query db inputs)))
+                     state/get-edit-block (constantly nil)
+                     state/get-input (constantly nil)
+                     state/get-selection-blocks (constantly [])]
+        (-> (p/let [summaries (db-async/<get-block-summaries "graph" [leaf-id ancestor-id])]
+              (is (= [ancestor-id]
+                     (mapv :block/uuid (block-handler/get-top-level-blocks summaries)))))
+            (p/catch #(is false (str %)))
+            (p/finally done))))))
 
 (deftest edit-block-loads-target-through-worker-test
   (async done

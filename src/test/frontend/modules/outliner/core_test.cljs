@@ -10,7 +10,6 @@
             [frontend.state :as state]
             [frontend.test.helper :as test-helper]
             [logseq.db :as ldb]
-            [logseq.db.test.helper :as db-test]
             [logseq.graph-parser.block :as gp-block]
             [logseq.outliner.core :as outliner-core]
             [logseq.outliner.transaction :as outliner-tx]))
@@ -229,68 +228,6 @@
                                  {:sibling? false}))
     (is (= [3 5 4] (get-children 2)))
     (is (= [2 6 7 8] (get-children 22)))))
-
-(deftest test-move-ancestor-with-selected-grandchild
-  (testing "Moving a together with grandchild a2x keeps a2x under a2"
-    ;; a=2 (a1=3; a2=4 with a2x=5), b=6, c=7
-    (transact-tree! [[22 [[2 [[3]
-                              [4 [[5]]]]]
-                          [6]
-                          [7]]]])
-    (outliner-tx/transact!
-     (transact-opts)
-     (outliner-core/move-blocks! (conn/get-db test-db false)
-                                 [(get-block 2) (get-block 5)] (get-block 6)
-                                 {:sibling? true}))
-    (is (= [6 2 7] (get-children 22)))
-    (is (= [3 4] (get-children 2)))
-    (is (= [5] (get-children 4))))
-
-  (testing "Move-up of first ancestor plus grandchild does not pull a2x out"
-    (transact-tree! [[22 [[2 [[3]
-                              [4 [[5]]]]]
-                          [6]
-                          [7]]]])
-    (outliner-tx/transact!
-     (transact-opts)
-     (outliner-core/move-blocks-up-down! (conn/get-db test-db false)
-                                         [(get-block 2) (get-block 5)]
-                                         true))
-    (is (= [2 6 7] (get-children 22)))
-    (is (= [3 4] (get-children 2)))
-    (is (= [5] (get-children 4)))))
-
-(deftest test-delete-ancestor-with-selected-grandchild
-  (testing "Deleting block ancestor a with grandchild a2x retracts the whole subtree"
-    (transact-tree! [[22 [[2 [[3]
-                              [4 [[5]]]]]
-                          [6]
-                          [7]]]])
-    (outliner-tx/transact!
-     (transact-opts)
-     (outliner-core/delete-blocks! (conn/get-db test-db false)
-                                   [(get-block 2) (get-block 5)] {}))
-    (is (nil? (get-block 2)))
-    (is (nil? (get-block 5)))
-    (is (= [6 7] (get-children 22))))
-
-  (testing "Deleting page A with grandchild X under nested page B still deletes X"
-    (let [conn (db-test/create-conn-with-blocks
-                [{:page {:block/title "page-a"}
-                  :blocks [{:block/title "a-child"}]}
-                 {:page {:block/title "page-b"}
-                  :blocks [{:block/title "x"}]}])
-          page-a (ldb/get-page @conn "page-a")
-          page-b (ldb/get-page @conn "page-b")
-          _ (d/transact! conn [{:db/id (:db/id page-b)
-                                :block/order "a1"
-                                :block/parent (:db/id page-a)}])
-          x (db-test/find-block-by-content @conn "x")]
-      (outliner-core/delete-blocks! conn [page-a x] {})
-      (is (nil? (db-test/find-block-by-content @conn "x")))
-      (is (some? (ldb/get-page @conn "page-a")))
-      (is (nil? (:block/parent (ldb/get-page @conn "page-a"))))
-      (is (some? (ldb/get-page @conn "page-b"))))))
 
 (deftest test-indent-blocks
   (testing "

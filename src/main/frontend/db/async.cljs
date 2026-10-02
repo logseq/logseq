@@ -9,15 +9,30 @@
 
 (def <q db-async-util/<q)
 
-(defn- parent-chain
-  [id->parent-id parent-id]
-  (letfn [(walk [pid seen]
-            (when (and (integer? pid) (not (contains? seen pid)))
-              (let [next-id (get id->parent-id pid)]
-                (cond-> {:db/id pid}
-                  (integer? next-id)
-                  (assoc :block/parent (walk next-id (conj seen pid)))))))]
-    (walk parent-id #{})))
+(defn- parent-chains
+  [id->parent-id parent-ids]
+  ;; Build each ancestor once and share its map across overlapping chains.
+  (reduce
+   (fn [chains parent-id]
+     (let [path (loop [pid parent-id
+                       path []
+                       seen #{}]
+                  (if (or (not (integer? pid))
+                          (contains? chains pid)
+                          (contains? seen pid))
+                    path
+                    (recur (get id->parent-id pid)
+                           (conj path pid)
+                           (conj seen pid))))]
+       (reduce (fn [result pid]
+                 (let [parent (get result (get id->parent-id pid))]
+                   (assoc result pid
+                          (cond-> {:db/id pid}
+                            parent (assoc :block/parent parent)))))
+               chains
+               (rseq path))))
+   {}
+   parent-ids))
 
 (defn- row-parent-index
   [rows]
@@ -28,20 +43,18 @@
         rows))
 
 (defn- order-block-summaries
-  ([ids rows]
-   (order-block-summaries ids rows nil))
-  ([ids rows id->parent-id]
-   (let [id->parent-id (or id->parent-id {})
-         blocks-by-uuid (into {}
-                              (map (fn [[db-id block-uuid title parent-id]]
-                                     [block-uuid
-                                      (cond-> {:db/id db-id
-                                               :block/uuid block-uuid
-                                               :block/title title}
-                                        (integer? parent-id)
-                                        (assoc :block/parent (parent-chain id->parent-id parent-id)))]))
-                              rows)]
-     (vec (keep blocks-by-uuid ids)))))
+  [ids rows id->parent-id]
+  (let [chains (parent-chains id->parent-id (map #(nth % 3) rows))
+        blocks-by-uuid (into {}
+                             (map (fn [[db-id block-uuid title parent-id]]
+                                    [block-uuid
+                                     (cond-> {:db/id db-id
+                                              :block/uuid block-uuid
+                                              :block/title title}
+                                       (integer? parent-id)
+                                       (assoc :block/parent (get chains parent-id)))]))
+                             rows)]
+    (vec (keep blocks-by-uuid ids))))
 
 (defn- <parent-index
   [graph eids]
