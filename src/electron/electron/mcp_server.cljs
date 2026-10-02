@@ -147,6 +147,11 @@
     :config #js {:title "Get Page UUID"
                  :description "Resolve a unique live page title to its UUID."
                  :inputSchema #js {:title (z/string)}}}
+        :capabilities
+        {:fn mcp-compat/capabilities
+         :config #js {:title "Capabilities"
+                  :description "Report which registered MCP tools are available on the current DB graph, with optional probe diagnostics."
+                  :inputSchema #js {:include_diagnostics (-> (z/boolean) .optional)}}}
   :pageStats
   {:fn mcp-compat/page-stats
    :config #js {:title "Page Stats"

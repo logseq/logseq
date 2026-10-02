@@ -27,6 +27,46 @@
     (is (= ["logseq.app.search" "needle"]
           [(first (nth @calls 4)) (first (second (nth @calls 4)))]))))
 
+(deftest capabilities-reports-only-the-registered-reference-routes
+  (let [calls (atom [])
+        api (fn [method args]
+              (swap! calls conj [method args])
+              (case method
+                "logseq.App.getAppInfo" #js {"version" "2.0.1" "supportDb" true}
+                "logseq.App.checkCurrentIsDbGraph" true
+                "logseq.DB.getTagsByName" nil
+                #js []))]
+    (async done
+      (-> (p/then (mcp-compat/capabilities api #js {"include_diagnostics" true})
+                  (fn [result]
+                    (is (= "2.0.1" (get-in result [:graph :version])))
+                    (is (true? (get-in result [:graph :version_matches])))
+                    (is (= "unknown" (get-in result [:tools :getTagUUID :state])))
+                    (is (some #{"getTagUUID"} (:unknown result)))
+                    (is (not (contains? (:tools result) :upsertNodes)))
+                    (is (not (contains? (get-in result [:diagnostics :routes]) "upsertNodes")))
+                    (is (not-any? #(= "logseq.cli.upsertNodes" (first %)) @calls))
+                    (is (= 2 (count (filter #(string/starts-with? (first %) "logseq.App.") @calls))))
+                    (done)))
+          (p/catch (fn [error]
+                     (is false (str error))
+                     (done)))))))
+
+(deftest capabilities-refuses-non-db-graphs
+  (let [api (fn [method _args]
+              (case method
+                "logseq.App.getAppInfo" #js {"version" "2.0.1" "supportDb" true}
+                "logseq.App.checkCurrentIsDbGraph" false
+                #js []))]
+    (async done
+      (-> (p/then (mcp-compat/capabilities api #js {})
+                  (fn [_]
+                    (is false "capabilities should reject a non-DB graph")
+                    (done)))
+          (p/catch (fn [error]
+                     (is (string/includes? (.-message error) "not a DB graph"))
+                     (done)))))))
+
     (deftest page-uuid-result-resolves-one-live-page
       (is (= {:found true :title "Inbox" :page_uuid "page-1"}
         (mcp-compat/page-uuid-result "Inbox" [{:uuid "page-1"}])))

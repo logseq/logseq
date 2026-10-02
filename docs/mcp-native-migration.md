@@ -95,6 +95,8 @@ now supports page, blocks, tags, properties, declared, and all detail levels.
 `upsertNodes` remains excluded from MCP because it is outside the reference
 tool contract and performs unverified batch writes. There are 26 registered
 tools so far: six API-backed tools and 20 compatibility data tools.
+`capabilities` now probes those read routes and reports inconclusive results
+as `unknown`; it does not probe or report `upsertNodes`.
 Entry criteria still outstanding:
 
 1. Both baselines have valid, recorded results.

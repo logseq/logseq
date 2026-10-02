@@ -830,7 +830,7 @@
                  (capability-finding method (.-message error) nil)))))
 
 (defn- capability-tool-status
-  [tool routes findings]
+  [tool findings]
   (let [severity {"available" 0 "unknown" 1 "unavailable" 2}
         routes (get capability-tool-routes tool)
         statuses (mapv #(get findings % {:state "unknown"
@@ -853,9 +853,10 @@
     (p/let [probe-methods (->> capability-tool-routes vals (apply concat) distinct sort)
             findings (p/all (map #(probe-capability-method api-fn %) probe-methods))
             findings-by-method (into {} (map (juxt :method identity) findings))
-            tools (into (sorted-map)
-                        (map #(capability-tool-status %1 %2 findings-by-method))
-                        (sort-by key capability-tool-routes))
+                 tools (into (sorted-map)
+                   (map (fn [[tool _routes]]
+                     (capability-tool-status tool findings-by-method)))
+                   (sort-by key capability-tool-routes))
             unavailable (->> tools (keep (fn [[tool status]]
                                            (when (= "unavailable" (:state status)) (name tool)))) sort vec)
             unknown (->> tools (keep (fn [[tool status]]
