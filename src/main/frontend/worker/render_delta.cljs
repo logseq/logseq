@@ -97,19 +97,17 @@
                (conj seen id)))
       seen)))
 
-(defn- recycle-chain-changed-ids
-  [tx-data]
-  (into #{}
-        (keep (fn [datom]
-                (when (= :logseq.property/deleted-at (:a datom))
-                  (:e datom))))
-        tx-data))
+(defn- recycle-chain-flipped?
+  [db-before db-after entity-id]
+  (not= (recycled-chain? db-before entity-id)
+        (recycled-chain? db-after entity-id)))
 
 (defn- structural-entity-ids
   "Entities whose own membership-affecting attrs changed, plus descendants of
-   any entity whose :logseq.property/deleted-at changed. Children membership
-   hides every node under a recycled ancestor, so restoring or recycling that
-   ancestor must refresh already-open descendant children slots."
+   any such entity whose recycle-chain visibility flipped. Children membership
+   hides every node under a recycled ancestor, so restoring, recycling, or
+   moving a node across that boundary must refresh already-open descendant
+   children slots. Live-to-live parent moves do not walk descendants."
   [{:keys [db-before db-after tx-data]}]
   (let [direct (into #{}
                      (keep (fn [datom]
@@ -120,7 +118,8 @@
           (mapcat (fn [entity-id]
                     (concat (descendant-entity-ids db-before entity-id)
                             (descendant-entity-ids db-after entity-id))))
-          (recycle-chain-changed-ids tx-data))))
+          (filter #(recycle-chain-flipped? db-before db-after %)
+                  direct))))
 
 (defn- membership-at
   [db entity-id]
