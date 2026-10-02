@@ -320,7 +320,8 @@
 
 (defn- start-pending-new-block!
   []
-  (state/set-state! :editor/pending-new-block {:typed-text ""}))
+  (state/set-state! :editor/pending-new-block {:id (random-uuid)
+                                              :typed-text ""}))
 
 (defn- pending-new-block
   []
