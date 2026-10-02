@@ -9,10 +9,12 @@ let main_window : Browser_window.t option ref = ref None
 let mac = String.equal process_platform "darwin"
 let win32 = String.equal process_platform "win32"
 let linux = String.equal process_platform "linux"
+(* cljs `prod?`: NODE_ENV=production. Packaged launches carry no
+   NODE_ENV — app.isPackaged is the packaged signal there. *)
 let prod =
   match Js.Dict.get process_env "NODE_ENV" with
   | Some "production" -> true
-  | _ -> false
+  | _ -> App.is_packaged App.t
 let dev = not prod
 
 (* state.atom {:config, :window/graph window->repo, :window/once-graph-ready} *)
