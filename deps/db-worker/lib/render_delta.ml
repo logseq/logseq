@@ -352,12 +352,9 @@ let order_list_shifted_eids (r : tx_report) : entity_id list =
     |> List.concat_map (fun eid ->
            List.concat_map
              (fun db ->
-                match entity db (Entity_id eid) with
-                | Some e ->
-                    List.map
-                      (fun (c : entity) -> c.id)
-                      (Ldb.ref_ents e "logseq.property/_order-list-type")
-                | None -> [])
+                datoms db Aevt ~a:"logseq.property/order-list-type"
+                  ~v:(Ref eid) ()
+                |> Seq.fold_left (fun acc (d : datom) -> d.e :: acc) [])
              [ r.db_before; r.db_after ])
     |> List.sort_uniq compare
   in
@@ -370,24 +367,29 @@ let order_list_shifted_eids (r : tx_report) : entity_id list =
   in
   if touched = [] then []
   else begin
-    (* parents that own >=1 order-list-typed child on each db side —
-       only those can hold a meaningful marker diff, so untyped parents
-       skip the O(children) marker pass entirely *)
-    let typed_parents (db : db) : (entity_id, unit) Hashtbl.t =
-      let t = Hashtbl.create 16 in
-      Seq.iter
-        (fun (d : datom) ->
-           match entity db (Entity_id d.e) with
-           | Some e -> (
-               match Ldb.ref_ent e "block/parent" with
-               | Some p -> Hashtbl.replace t p.id ()
-               | None -> ())
-           | None -> ())
-        (datoms db Aevt ~a:"logseq.property/order-list-type" ());
-      t
+    (* does pid own >=1 order-list-typed child on this db — memoized per
+       (side, pid) and bounded by that parent's children; only those
+       parents can hold a meaningful marker diff, so untyped parents skip
+       the O(children) marker pass entirely. The old whole-attr
+       Aevt scan cost O(#order-list-type datoms) per tx. *)
+    let typed_tbls = [| Hashtbl.create 16; Hashtbl.create 16 |] in
+    let typed_parent (side : int) (db : db) (pid : entity_id) : bool =
+      let tbl = typed_tbls.(side) in
+      match Hashtbl.find_opt tbl pid with
+      | Some b -> b
+      | None ->
+          let b =
+            Seq.exists
+              (fun (d : datom) ->
+                 Option.is_some
+                   (Seq.uncons
+                      (datoms db Eavt ~e:d.e
+                         ~a:"logseq.property/order-list-type" ())))
+              (datoms db Avet ~a:"block/parent" ~v:(Ref pid) ())
+          in
+          Hashtbl.replace tbl pid b;
+          b
     in
-    let typed_before = typed_parents r.db_before
-    and typed_after = typed_parents r.db_after in
     let shifted = Hashtbl.create 16 and marker_tbls = Hashtbl.create 4 in
     let markers (side : int) (eid : entity_id) (pid : entity_id)
         : (entity_id, index_marker) Hashtbl.t =
@@ -424,19 +426,30 @@ let order_list_shifted_eids (r : tx_report) : entity_id list =
         after
     in
     let mark_descendants (eid : entity_id) : unit =
-      match entity r.db_after (Entity_id eid) with
-      | None -> ()
-      | Some e ->
-          let rec walk (c : entity) : unit =
-            let m_before =
-              match entity r.db_before (Entity_id c.id) with
-              | Some b -> index_marker_of b
-              | None -> Absent
-            and m_after = index_marker_of c in
-            if m_before <> m_after then Hashtbl.replace shifted c.id ();
-            List.iter walk (Ldb.ref_ents c "block/_parent")
-          in
-          List.iter walk (Ldb.ref_ents e "block/_parent")
+      (* marker diff needs the entity only when the node actually has an
+         order-list-type — untyped children stay Absent at probe cost. *)
+      let marker_of (db : db) (cid : entity_id) : index_marker =
+        match
+          Seq.uncons
+            (datoms db Eavt ~e:cid ~a:"logseq.property/order-list-type" ())
+        with
+        | None -> Absent
+        | Some _ -> (
+            match entity db (Entity_id cid) with
+            | Some b -> index_marker_of b
+            | None -> Absent)
+      in
+      let rec walk (cid : entity_id) : unit =
+        let m_before = marker_of r.db_before cid
+        and m_after = marker_of r.db_after cid in
+        if m_before <> m_after then Hashtbl.replace shifted cid ();
+        Seq.iter
+          (fun (d : datom) -> walk d.e)
+          (datoms r.db_after Avet ~a:"block/parent" ~v:(Ref cid) ())
+      in
+      Seq.iter
+        (fun (d : datom) -> walk d.e)
+        (datoms r.db_after Avet ~a:"block/parent" ~v:(Ref eid) ())
     in
     (* per-eid tx_data scans were O(touched x tx_size) — prebuild the two
        membership tables once. *)
@@ -453,19 +466,18 @@ let order_list_shifted_eids (r : tx_report) : entity_id list =
          let pids =
            [ r.db_before; r.db_after ]
            |> List.filter_map (fun db ->
-                  match entity db (Entity_id eid) with
-                  | Some e -> (
-                      match Ldb.ref_ent e "block/parent" with
-                      | Some p -> Some p.id
-                      | None -> None)
-                  | None -> None)
+                  match
+                    Seq.uncons (datoms db Eavt ~e:eid ~a:"block/parent" ())
+                  with
+                  | Some ({ v = Ref pid; _ }, _) -> Some pid
+                  | _ -> None)
            |> List.sort_uniq compare
          in
          List.iter
            (fun pid ->
               if
-                Hashtbl.mem typed_before pid
-                || Hashtbl.mem typed_after pid
+                typed_parent 0 r.db_before pid
+                || typed_parent 1 r.db_after pid
               then diff (markers 0 eid pid) (markers 1 eid pid))
            pids;
          if

@@ -302,13 +302,12 @@ let block_subtree_entities (root : entity) : entity list =
         if e.id = 0 || Int_set.mem e.id seen then go rest seen acc
         else
           let children =
-            List.of_seq
-              (datoms e.db Aevt ~a:"block/parent"
-                 ~v:(Ref e.id) ())
-            |> List.filter_map (fun d -> Ldb.ent_of_id e.db d.e)
+            Ldb.reverse_attr_values e.db e.id "block/_parent"
+            |> List.filter_map (function Ref id -> Some id | _ -> None)
+            |> List.filter_map (fun id -> Ldb.ent_of_id e.db id)
             |> List.filter block_entity
           in
-          go (rest @ children) (Int_set.add e.id seen) (e :: acc)
+          go (children @ rest) (Int_set.add e.id seen) (e :: acc)
   in
   go [ root ] Int_set.empty []
 
@@ -394,22 +393,38 @@ let replace_ref_with_deleted_block_title (block : entity)
   let title = sub_all ("[[" ^ uuid_str ^ "]]") title in
   title
 
+(* referrer title at datom level: only a journal-day-bearing referrer
+   pays an entity materialization for the is_journal tag check (the
+   cljs raw-title journal branch). *)
+let referrer_title db (eid : entity_id) : value option =
+  match
+    Seq.uncons (datoms db Eavt ~e:eid ~a:"block/journal-day" ())
+  with
+  | Some _ -> (
+      match Ldb.ent_of_id db eid with
+      | Some e -> Ldb.raw_title db e
+      | None -> None)
+  | None -> (
+      match Seq.uncons (datoms db Eavt ~e:eid ~a:"block/title" ()) with
+      | Some ({ v; _ }, _) -> Some v
+      | None -> None)
+
 (* delete-blocks/build-retracted-tx *)
 let build_retracted_tx ?(extra_retract_ids : int list = [])
     (retracted_blocks : entity list) : Wire.t list =
   let refs =
     retracted_blocks
     |> List.map (fun b ->
-           List.of_seq
-             (datoms b.db Aevt ~a:"block/refs" ~v:(Ref b.id) ())
-           |> List.map (fun d -> d.e))
+           Ldb.reverse_attr_values b.db b.id "block/_refs"
+           |> List.filter_map (function Ref e -> Some (b.db, e) | _ -> None))
     |> List.concat
-    |> List.filter_map (fun id ->
-           match retracted_blocks with
-           | [] -> None
-           | b :: _ -> Ldb.ent_of_id b.db id)
+    |> List.filter_map (fun (db, id) ->
+           (* keep the old ent_of_id existence filter at probe cost *)
+           match Seq.uncons (datoms db Eavt ~e:id ()) with
+           | Some _ -> Some (db, id)
+           | None -> None)
     (* cljs (common-util/distinct-by :db/id refs) *)
-    |> Common_util.distinct_by (fun e -> e.id)
+    |> Common_util.distinct_by (fun (_, id) -> id)
   in
   let retract_ids =
     List.fold_left
@@ -418,12 +433,11 @@ let build_retracted_tx ?(extra_retract_ids : int list = [])
       (List.map (fun b -> b.id) retracted_blocks @ extra_retract_ids)
   in
   List.concat_map
-    (fun ref_e ->
-       let id = ref_e.id in
+    (fun (db, id) ->
        let replaced_title =
          if Int_set.mem id retract_ids then None
          else
-           match Ldb.raw_title ref_e.db ref_e with
+           match referrer_title db id with
            | Some (String rt) ->
                Some
                  (List.fold_left
@@ -448,8 +462,9 @@ let build_retracted_tx ?(extra_retract_ids : int list = [])
 
 (* reverse-ref scans: entities whose [a] points at e *)
 let reverse_refs (db : db) (attr : string) (target : entity_id) : entity list =
-  List.of_seq (datoms db Aevt ~a:attr ~v:(Ref target) ())
-  |> List.filter_map (fun d -> Ldb.ent_of_id db d.e)
+  Ldb.reverse_attr_values db target (reverse_ref attr)
+  |> List.filter_map (function Ref id -> Some id | _ -> None)
+  |> List.filter_map (fun id -> Ldb.ent_of_id db id)
 
 (* delete-blocks/direct-cleanup-tx *)
 let direct_cleanup_tx db (entities : entity list) : Wire.t list =

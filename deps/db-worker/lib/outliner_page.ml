@@ -622,8 +622,9 @@ let split_namespace_pages db (page : Wire.t) (date_formatter : string option)
 
 let next_child_order (parent : entity) : string =
   let children =
-    List.of_seq (datoms parent.db Aevt ~a:"block/parent" ~v:(Ref parent.id) ())
-    |> List.filter_map (fun d -> Ldb.ent_of_id parent.db d.e)
+    Ldb.reverse_attr_values parent.db parent.id "block/_parent"
+    |> List.filter_map (function Ref id -> Some id | _ -> None)
+    |> List.filter_map (fun id -> Ldb.ent_of_id parent.db id)
     |> Ldb.sort_by_order
   in
   let last_order =
