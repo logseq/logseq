@@ -10,7 +10,9 @@ let t = Logseq_dom.dom ~tag:"raw-text" []
 let upload_files (_files : Js.Json.t array) : unit = ()
 
 let upload_input key : Lui_elements.t =
-  dom ~key ~tag:"asset-upload-input" ~attrs:[ ("hidden", "") ] []
+  dom ~key ~tag:"input"
+    ~attrs:[ ("type", "file"); ("hidden", "") ; ("id", "upload-file") ]
+    []
 
 let on_asset_write_finish ~repo':_ ~asset_id:_ = ()
 let retry_pending () = ()
@@ -28,7 +30,8 @@ let file_cell (w : Wire.t) : Views_dom.el =
     ()
 
 let block_view uuid (_b : Model.block) : Lui_elements.t =
-  dom ~key:("asset-" ^ uuid) ~tag:"asset"
+  dom ~key:("asset-" ^ uuid) ~tag:"div"
+    ~style_class:"asset-container"
     ~attrs:[ ("data-asset-uuid", uuid) ] []
 
 let install () = ()

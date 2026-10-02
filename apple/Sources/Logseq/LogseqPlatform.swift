@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import LUIAppleBackend
 import OSLog
 
 /// One live native view backing an OCaml-side DOM element. Views register
@@ -34,9 +35,17 @@ extension LogseqElement {
 @MainActor final class LogseqElementRegistry {
   static let shared = LogseqElementRegistry()
   private var elements: [String: NSWeakReferenceBox] = [:]
+  /// A long-lived extension context used to emit lifecycle events for
+  /// nodes whose own context is already dead (drop-node during reconcile).
+  /// `app-container` is the stable root — it outlives everything below it.
+  var eventAnchor: LUIAppleExtensionViewContext?
 
   func register(_ id: String, _ element: LogseqElement) {
     elements[id] = NSWeakReferenceBox(element)
+  }
+
+  func registerAnchor(_ id: String, _ context: LUIAppleExtensionViewContext) {
+    if id == "app-container" || eventAnchor == nil { eventAnchor = context }
   }
 
   func unregister(_ id: String) {

@@ -270,7 +270,9 @@ let edit_text_cell ?(steal = false) ctx row cell initial =
      editable surface *)
   set_timeout
     (fun () ->
-      if el_is_connected ta && (steal || not (is_editable_target active_element))
+      if
+        el_is_connected ta
+        && (steal || not (is_editable_target (active_element ())))
       then focus_end ta)
     0;
   let committed = ref false in

@@ -86,12 +86,35 @@ import SwiftUI
   var foreground: Color?
   var background: Color?
   var padding: EdgeInsets?
+  var margin: EdgeInsets?
   var cornerRadius: CGFloat?
   var isMono = false
   var isItalic = false
   var isUnderline = false
   var isBold = false
   var maxWidth: CGFloat?
+  var maxHeight: CGFloat?
+  var fixedWidth: CGFloat?
+  var fixedHeight: CGFloat?
+  var minWidth: CGFloat?
+  var minHeight: CGFloat?
+  var isHidden = false
+  // CSS opacity != visibility: an opacity-0 element still hit-tests
+  // (the .block-add-button click surface relies on that).
+  var alpha: Double = 1
+  var isRow = false
+  var fullWidth = false
+  var fullHeight = false
+  var grow = false
+  var isScrollable = false
+  var stackSpacing: CGFloat?
+  var centerContent = false
+  var lineLimitOne = false
+  var lineSpacing: CGFloat?
+  var wantsOpen = false
+  var hasIsOpen = false
+  var centerHorizontally = false
+  var outOfFlow = false
 
   private static let spacingUnit: CGFloat = 4 // tailwind spacing scale unit
 
@@ -100,20 +123,237 @@ import SwiftUI
     for cls in classes.split(separator: " ").map(String.init) {
       style.apply(cls)
     }
+    if style.wantsOpen && !style.hasIsOpen { style.isHidden = true }
     return style
   }
 
+  /// The `accessibility-identifier` prop carries the DOM `id` — several shell
+  /// containers get their layout from `#id` rules in the theme stylesheet
+  /// (no tailwind classes), so map those here.
+  /// Parse the DOM `style` attr ("height:28px; margin-left:22px;") — the
+  /// same CSS declarations the web stylesheet would apply, in the subset the
+  /// native renderer can honor.
+  mutating func applyInline(_ css: String) {
+    for decl in css.split(separator: ";") {
+      let parts = decl.split(separator: ":", maxSplits: 1)
+      guard parts.count == 2 else { continue }
+      let key = parts[0].trimmingCharacters(in: .whitespaces).lowercased()
+      let value = parts[1].trimmingCharacters(in: .whitespaces).lowercased()
+      let px = Double(value.replacingOccurrences(of: "px", with: ""))
+      switch key {
+      case "display":
+        if value == "none" { isHidden = true }
+      case "visibility":
+        if value == "hidden" { isHidden = true }
+      case "opacity":
+        if let v = px { alpha = v }
+      case "position":
+        if value == "fixed" || value == "absolute" { outOfFlow = true }
+      case "height": fixedHeight = px.map { CGFloat($0) }
+      case "min-height": minHeight = px.map { CGFloat($0) }
+      case "max-height": maxHeight = px.map { CGFloat($0) }
+      case "width": fixedWidth = px.map { CGFloat($0) }
+      case "min-width": minWidth = px.map { CGFloat($0) }
+      case "max-width": maxWidth = px.map { CGFloat($0) }
+      case "overflow", "overflow-y":
+        if value == "auto" || value == "scroll" { isScrollable = true }
+      case "white-space":
+        if value == "nowrap" { lineLimitOne = true }
+      case "margin", "margin-top", "margin-bottom", "margin-left", "margin-right":
+        var m = margin ?? EdgeInsets()
+        switch key {
+        case "margin": m = EdgeInsets(top: px ?? 0, leading: px ?? 0, bottom: px ?? 0, trailing: px ?? 0)
+        case "margin-top": m.top = px ?? 0
+        case "margin-bottom": m.bottom = px ?? 0
+        case "margin-left": m.leading = px ?? 0
+        case "margin-right": m.trailing = px ?? 0
+        default: break
+        }
+        margin = m
+      case "padding", "padding-top", "padding-bottom", "padding-left", "padding-right":
+        var p = padding ?? EdgeInsets()
+        switch key {
+        case "padding": p = EdgeInsets(top: px ?? 0, leading: px ?? 0, bottom: px ?? 0, trailing: px ?? 0)
+        case "padding-top": p.top = px ?? 0
+        case "padding-bottom": p.bottom = px ?? 0
+        case "padding-left": p.leading = px ?? 0
+        case "padding-right": p.trailing = px ?? 0
+        default: break
+        }
+        padding = p
+      case "font-size":
+        fontSize = px.map { CGFloat($0) }
+      case "font-weight":
+        if value == "bold" || (px ?? 0) >= 600 { isBold = true }
+      default:
+        break
+      }
+    }
+  }
+
+  mutating func applyAccessibilityId(_ id: String) {
+    switch id {
+    // #skip-to-main is visually hidden in the theme stylesheet.
+    case "skip-to-main":
+      isHidden = true
+    // The DOM root fills the window (html/body/#app are height:100%).
+    case "app-container-wrapper":
+      grow = true; fullWidth = true; fullHeight = true
+    case "app-container":
+      isRow = true; fullWidth = true; fullHeight = true
+    // #app-single-container has no layout rules in the theme — an empty
+    // flex sibling must not claim any of the window's width.
+    case "app-single-container":
+      break
+    case "left-container":
+      grow = true; fullHeight = true
+    case "head":
+      isRow = true; fullWidth = true
+    case "main-container":
+      grow = true; fullHeight = true
+    case "main-content-container":
+      grow = true; fullHeight = true; isScrollable = true
+      padding = EdgeInsets(top: 32, leading: 32, bottom: 32, trailing: 16)
+    case "left-sidebar":
+      fixedWidth = 246; fullHeight = true
+    default:
+      break
+    }
+  }
+
   private mutating func apply(_ cls: String) {
-    // strip variant prefixes ("hover:", "dark:", "md:") — hover/dark states
-    // are handled natively; keep the base rule only.
-    if cls.contains(":") {
+    // Variant prefixes ("hover:", "md:", "group-hover:") drop — their states
+    // are handled natively or don't apply. "dark:" rules apply when the app
+    // is in dark appearance. Arbitrary values like "bg-[color:var(--x)]"
+    // contain ":" inside brackets and are NOT variants.
+    var cls = cls
+    // tailwind "!" important marker — strip it, the weight is irrelevant
+    // natively
+    if cls.hasPrefix("!") { cls = String(cls.dropFirst()) }
+    if cls.hasPrefix("opacity-"), let n = Double(cls.dropFirst(8)) {
+      alpha = n / 100
       return
+    }
+    if let colon = cls.firstIndex(of: ":"),
+       !cls[..<colon].contains("[") {
+      let prefix = String(cls[..<colon])
+      if prefix == "dark" {
+        guard LogseqColors.isDark else { return }
+        cls = String(cls[cls.index(after: colon)...])
+      } else {
+        return
+      }
     }
     switch cls {
     case "font-bold", "font-semibold": isBold = true
     case "italic": isItalic = true
     case "underline": isUnderline = true
     case "font-mono", "monospace": isMono = true
+    // ---- visibility ----
+    case "hidden", "invisible", "sr-only", "!hidden",
+         "display-none", "d-none", "collapse", "scale-0":
+      isHidden = true
+    case "opacity-0": alpha = 0
+    // ---- layout ----
+    case "flex", "flex-row", "inline-flex", "flex-nowrap": isRow = true
+    case "flex-col", "flex-col-reverse": isRow = false
+    case "w-full": fullWidth = true
+    case "h-full": fullHeight = true
+    case "grow", "flex-1", "flex-grow", "flex-auto":
+      grow = true; fullWidth = true
+    case "overflow-y-auto", "overflow-auto", "overflow-scroll",
+         "overflow-y-scroll":
+      isScrollable = true
+    case "items-center", "justify-center": centerContent = true
+    case "truncate", "whitespace-nowrap": lineLimitOne = true
+    // ---- Logseq theme classes (compiled-CSS selectors in resources/css)
+    case "closed": isHidden = true
+    // lui-core.css: .block-head-wrap { display:flex; flex:1; width:100%;
+    // justify-content: space-between; align-items: center }
+    case "block-head-wrap":
+      isRow = true; grow = true; fullWidth = true
+    case "is-open": hasIsOpen = true
+    case "cp__sidebar-left-layout":
+      wantsOpen = true; fixedWidth = 246; fullHeight = true
+    // Overlay layer (cmdk, popups, dialogs, toasts) and other
+    // `position:fixed` elements: children render but the element itself
+    // must not consume layout space.
+    case "cp__overlays", "cp__sidebar-help-btn":
+      outOfFlow = true
+    case "cp__sidebar-main-layout": isRow = true; grow = true
+    case "cp__sidebar-main-content":
+      grow = true; maxWidth = 960; centerHorizontally = true
+    case "cp__header": isRow = true; fullWidth = true
+    case "left-sidebar-inner": fullHeight = true
+    case "item", "block-row", "block-main-container", "block-control-wrap":
+      isRow = true
+    // lui-core.css: .block-children-container { margin-left:29px; padding-top:
+    // .125rem; margin-bottom:-.125rem } — child-block indentation
+    case "block-children-container":
+      margin = EdgeInsets(top: 2, leading: 29,
+                          bottom: margin?.bottom ?? 0,
+                          trailing: margin?.trailing ?? 0)
+    // the indent-guide strip is a 4px absolute element — collapse it
+    case "block-children-left-border": isHidden = true
+    case "block-main-content", "block-content", "block-content-inner",
+         "block-content-or-editor-inner", "page-blocks-inner",
+         "ls-page-blocks", "cp__page-inner-wrap", "page", "page-inner":
+      grow = true
+    case "ls-page-title", "title":
+      if fontSize == nil { fontSize = 18 }; isBold = true
+    case let c where c.hasPrefix("w-"):
+      let v = String(c.dropFirst(2))
+      if v == "screen" || v == "full" { fullWidth = true }
+      else if let d = dimensionValue(v) { fixedWidth = d }
+    case let c where c.hasPrefix("h-"):
+      let v = String(c.dropFirst(2))
+      if v == "screen" || v == "full" { fullHeight = true }
+      else if let d = dimensionValue(v) { fixedHeight = d }
+    case let c where c.hasPrefix("min-w-"):
+      if let v = dimensionValue(String(c.dropFirst(6))) { minWidth = v }
+    case let c where c.hasPrefix("min-h-"):
+      if let v = dimensionValue(String(c.dropFirst(6))) { minHeight = v }
+    case let c where c.hasPrefix("max-w-"):
+      if let v = dimensionValue(String(c.dropFirst(6))) { maxWidth = v }
+    case let c where c.hasPrefix("max-h-"):
+      if let v = dimensionValue(String(c.dropFirst(6))) { maxHeight = v }
+    case let c where c.hasPrefix("gap-"):
+      stackSpacing = spacingValue(c.dropFirst(4))
+    case let c where c.hasPrefix("space-y-"):
+      stackSpacing = spacingValue(c.dropFirst(8))
+    case let c where c.hasPrefix("space-x-"):
+      stackSpacing = spacingValue(c.dropFirst(8))
+    case let c where c.hasPrefix("leading-"):
+      lineSpacing = spacingValue(c.dropFirst(8))
+    // ---- margins ----
+    case let c where c.hasPrefix("m") && c.dropFirst().first?.isNumber == true:
+      let v = spacingValue(c.dropFirst(1))
+      margin = EdgeInsets(top: v, leading: v, bottom: v, trailing: v)
+    case let c where c.hasPrefix("mx-"):
+      let v = spacingValue(c.dropFirst(3))
+      margin = EdgeInsets(top: margin?.top ?? 0, leading: v,
+                          bottom: margin?.bottom ?? 0, trailing: v)
+    case let c where c.hasPrefix("my-"):
+      let v = spacingValue(c.dropFirst(3))
+      margin = EdgeInsets(top: v, leading: margin?.leading ?? 0,
+                          bottom: v, trailing: margin?.trailing ?? 0)
+    case let c where c.hasPrefix("mt-"):
+      let v = spacingValue(c.dropFirst(3))
+      margin = EdgeInsets(top: v, leading: margin?.leading ?? 0,
+                          bottom: margin?.bottom ?? 0, trailing: margin?.trailing ?? 0)
+    case let c where c.hasPrefix("mb-"):
+      let v = spacingValue(c.dropFirst(3))
+      margin = EdgeInsets(top: margin?.top ?? 0, leading: margin?.leading ?? 0,
+                          bottom: v, trailing: margin?.trailing ?? 0)
+    case let c where c.hasPrefix("ml-"):
+      let v = spacingValue(c.dropFirst(3))
+      margin = EdgeInsets(top: margin?.top ?? 0, leading: v,
+                          bottom: margin?.bottom ?? 0, trailing: margin?.trailing ?? 0)
+    case let c where c.hasPrefix("mr-"):
+      let v = spacingValue(c.dropFirst(3))
+      margin = EdgeInsets(top: margin?.top ?? 0, leading: margin?.leading ?? 0,
+                          bottom: margin?.bottom ?? 0, trailing: v)
+    // ---- padding ----
     case let c where c.hasPrefix("text-"):
       applyTextScale(c)
     case let c where c.hasPrefix("font-"):
@@ -129,6 +369,18 @@ import SwiftUI
       let v = spacingValue(cls.dropFirst(3))
       padding = EdgeInsets(top: v, leading: padding?.leading ?? 0,
                            bottom: v, trailing: padding?.trailing ?? 0)
+    case let c where c.hasPrefix("pt-"):
+      let v = spacingValue(cls.dropFirst(3))
+      padding = EdgeInsets(top: v, leading: padding?.leading ?? 0,
+                           bottom: padding?.bottom ?? 0, trailing: padding?.trailing ?? 0)
+    case let c where c.hasPrefix("pb-"):
+      let v = spacingValue(cls.dropFirst(3))
+      padding = EdgeInsets(top: padding?.top ?? 0, leading: padding?.leading ?? 0,
+                           bottom: v, trailing: padding?.trailing ?? 0)
+    case let c where c.hasPrefix("pr-"):
+      let v = spacingValue(cls.dropFirst(3))
+      padding = EdgeInsets(top: padding?.top ?? 0, leading: padding?.leading ?? 0,
+                           bottom: padding?.bottom ?? 0, trailing: v)
     case let c where c.hasPrefix("pl-"):
       let v = spacingValue(cls.dropFirst(3))
       padding = EdgeInsets(top: padding?.top ?? 0, leading: v,
@@ -141,6 +393,32 @@ import SwiftUI
     default:
       applyColor(cls)
     }
+  }
+
+  /// tailwind size scale -> points (spacing scale, plus the common named
+  /// widths). Arbitrary values like `w-[240px]`/`w-64` both land here.
+  private func dimensionValue(_ s: String) -> CGFloat? {
+    switch s {
+    case "full": return nil // handled via fullWidth/fullHeight flags
+    case "screen": return 400 // viewport sentinel; app window clips anyway
+    case "auto": return nil
+    default:
+      if let bracket = s.firstIndex(of: "["),
+         let end = s.firstIndex(of: "]") {
+        let inner = String(s[s.index(after: bracket)..<end])
+        return numericSize(inner)
+      }
+      return numericSize(s)
+    }
+  }
+
+  private func numericSize(_ s: String) -> CGFloat? {
+    if s.hasSuffix("px"), let n = Double(s.dropLast(2)) { return CGFloat(n) }
+    if s.hasSuffix("rem"), let n = Double(s.dropLast(3)) { return CGFloat(n) * 16 }
+    if s.hasSuffix("em"), let n = Double(s.dropLast(2)) { return CGFloat(n) * 16 }
+    if s.hasSuffix("%") { return nil }
+    if let n = Double(s) { return CGFloat(n) * Self.spacingUnit }
+    return nil
   }
 
   private mutating func applyTextScale(_ cls: String) {
@@ -248,5 +526,16 @@ import SwiftUI
     if s == "px" { return 1 }
     if let n = Double(s) { return CGFloat(n) * Self.spacingUnit }
     return 0
+  }
+}
+
+extension View {
+  /// Applies `transform` only when `condition` holds, keeping one code path
+  /// readable inside long modifier chains.
+  @ViewBuilder func `if`<Content: View>(
+    _ condition: Bool,
+    transform: (Self) -> Content
+  ) -> some View {
+    if condition { transform(self) } else { self }
   }
 }

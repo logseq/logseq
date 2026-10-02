@@ -53,6 +53,7 @@ private struct LogseqRuntimeHost: View {
     Group {
       if let runtime, let rootID = runtime.rootID {
         LUISwiftUIRoot(backend: runtime.backend, rootID: rootID)
+          .frame(maxWidth: .infinity, maxHeight: .infinity)
       } else {
         ProgressView("Opening Logseq")
       }

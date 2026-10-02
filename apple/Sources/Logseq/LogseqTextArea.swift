@@ -13,6 +13,8 @@ struct LogseqTextArea: NSViewRepresentable {
   let style: LogseqStyle
   let wired: Set<String>
   let text: String
+  /// DOM `id` dom-ops resolve against (accessibility-identifier).
+  let domID: String
 
   func makeNSView(context: NSViewRepresentableContext<Self>) -> NSScrollView {
     let scrollView = NSTextView.scrollableTextView()
@@ -35,8 +37,8 @@ struct LogseqTextArea: NSViewRepresentable {
     scrollView.borderType = .noBorder
     context.coordinator.textView = textView
     context.coordinator.owner = self
-    if let id = attrs["id"] as? String, !id.isEmpty {
-      LogseqElementRegistry.shared.register(id, context.coordinator)
+    if !domID.isEmpty {
+      LogseqElementRegistry.shared.register(domID, context.coordinator)
     }
     textView.string = text
     return scrollView
@@ -45,7 +47,11 @@ struct LogseqTextArea: NSViewRepresentable {
   func updateNSView(_ scrollView: NSScrollView, context: NSViewRepresentableContext<Self>) {
     let textView = scrollView.documentView as! NSTextView
     context.coordinator.owner = self
-    if textView.string != text {
+    // While the view has focus, the user's typing is authoritative: a
+    // re-render carrying the not-yet-updated buffer must not clobber
+    // fresh keystrokes. Imperative domSetValue still applies directly.
+    let focused = scrollView.window?.firstResponder === textView
+    if !focused, textView.string != text {
       let selected = textView.selectedRange()
       context.coordinator.suppressEvents = true
       textView.string = text
@@ -55,8 +61,8 @@ struct LogseqTextArea: NSViewRepresentable {
                 length: min(selected.length, length - selected.location)))
       context.coordinator.suppressEvents = false
     }
-    if let id = attrs["id"] as? String, !id.isEmpty {
-      LogseqElementRegistry.shared.register(id, context.coordinator)
+    if !domID.isEmpty {
+      LogseqElementRegistry.shared.register(domID, context.coordinator)
     }
   }
 
@@ -83,10 +89,31 @@ struct LogseqTextArea: NSViewRepresentable {
     func textView(
       _ textView: NSTextView, doCommandBy commandSelector: Selector
     ) -> Bool {
-      // Return false: the raw key event path (keyDown) reports to OCaml, which
-      // decides semantics. Letting AppKit also run insertNewline etc. would
-      // double-apply.
-      false
+      // Report the DOM-shaped keydown to OCaml, which decides semantics.
+      // For keys the editor owns (Enter/Tab/Escape) swallow the command so
+      // AppKit doesn't also insert a newline/indent — OCaml's keymap runs
+      // the outliner op and the textarea updates from patches.
+      let key: String
+      var shift = false
+      var which = 0
+      switch commandSelector {
+      case #selector(NSResponder.insertNewline(_:)):
+        key = "Enter"; which = 13
+      case #selector(NSResponder.insertTab(_:)):
+        key = "Tab"; which = 9
+      case #selector(NSResponder.insertBacktab(_:)):
+        key = "Tab"; which = 9; shift = true
+      case #selector(NSResponder.cancelOperation(_:)):
+        key = "Escape"; which = 27
+      default:
+        return false
+      }
+      emit("keydown", payload: [
+        "key": key, "which": which,
+        "shiftKey": shift,
+        "metaKey": false, "ctrlKey": false, "altKey": false,
+      ])
+      return true
     }
 
     func textDidBeginEditing(_ notification: Notification) {
@@ -110,7 +137,12 @@ struct LogseqTextArea: NSViewRepresentable {
       suppressEvents = false
     }
 
-    func domSetTextContent(_ text: String) { domSetValue(text) }
+    // On the web el.textContent is not el.value — setting it never
+    // touches the user's text. The block editor calls
+    // el_set_text_content on every input to keep innerText in lockstep;
+    // mapping it to the native string would write a stale buffer back
+    // over fresh keystrokes, so it is a no-op here.
+    func domSetTextContent(_ text: String) {}
 
     func domSetSelectionRange(_ start: Int, _ end: Int) {
       textView?.setSelectedRange(NSRange(location: start, length: max(0, end - start)))
@@ -128,6 +160,11 @@ struct LogseqTextArea: NSViewRepresentable {
       else { return }
       var enriched = payload
       enriched["nodeId"] = owner.context.nodeID
+      var target = LogseqDOMSnapshot.snapshot(for: owner.context)
+      // OCaml's el_value reads "value" off the target snapshot — carry the
+      // live string so on_input sees the current buffer, not the last patch.
+      target["value"] = textView?.string ?? ""
+      enriched["target"] = target
       guard let data = try? JSONSerialization.data(withJSONObject: enriched),
         let json = String(data: data, encoding: .utf8)
       else { return }
@@ -145,6 +182,7 @@ struct LogseqInputField: NSViewRepresentable {
   let style: LogseqStyle
   let wired: Set<String>
   let text: String
+  let domID: String
 
   func makeNSView(context: NSViewRepresentableContext<Self>) -> NSTextField {
     let field = NSTextField()
@@ -158,15 +196,17 @@ struct LogseqInputField: NSViewRepresentable {
     field.stringValue = text
     context.coordinator.field = field
     context.coordinator.owner = self
-    if let id = attrs["id"] as? String, !id.isEmpty {
-      LogseqElementRegistry.shared.register(id, context.coordinator)
+    if !domID.isEmpty {
+      LogseqElementRegistry.shared.register(domID, context.coordinator)
     }
     return field
   }
 
   func updateNSView(_ field: NSTextField, context: NSViewRepresentableContext<Self>) {
     context.coordinator.owner = self
-    if field.stringValue != text {
+    // Same rule as the textarea: focused input keeps its own text.
+    let focused = field.window?.firstResponder === field
+    if !focused, field.stringValue != text {
       field.stringValue = text
     }
     field.placeholderString = attrs["placeholder"] as? String
@@ -208,6 +248,9 @@ struct LogseqInputField: NSViewRepresentable {
       else { return }
       var enriched = payload
       enriched["nodeId"] = owner.context.nodeID
+      var target = LogseqDOMSnapshot.snapshot(for: owner.context)
+      target["value"] = field?.stringValue ?? ""
+      enriched["target"] = target
       guard let data = try? JSONSerialization.data(withJSONObject: enriched),
         let json = String(data: data, encoding: .utf8)
       else { return }
@@ -239,7 +282,11 @@ struct LogseqFlowLayout: Layout {
       rowHeight = max(rowHeight, size.height)
       x += size.width
     }
-    return CGSize(width: width, height: y + rowHeight)
+    // Never report infinity back — a nil width proposal would return
+    // CGSize(width: .infinity) and crash layout with a NaN origin.
+    return CGSize(
+      width: width.isFinite ? width : x,
+      height: y + rowHeight)
   }
 
   func placeSubviews(
@@ -248,10 +295,11 @@ struct LogseqFlowLayout: Layout {
   ) {
     var x = bounds.minX
     var y = bounds.minY
+    let maxX = bounds.maxX.isFinite ? bounds.maxX : CGFloat.greatestFiniteMagnitude
     var rowHeight: CGFloat = 0
     for subview in subviews {
       let size = subview.sizeThatFits(.unspecified)
-      if x + size.width > bounds.maxX && x > bounds.minX {
+      if x + size.width > maxX && x > bounds.minX {
         x = bounds.minX
         y += rowHeight + spacing
         rowHeight = 0

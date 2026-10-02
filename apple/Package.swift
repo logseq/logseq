@@ -36,6 +36,7 @@ let package = Package(
                 .product(name: "LUIAppleBackendStatic", package: "lui-apple-backend"), // dep identity = path basename
             ],
             path: "Sources/Logseq",
+            resources: [.process("Resources")],
             linkerSettings: nativeLinkerSettings
         ),
     ]

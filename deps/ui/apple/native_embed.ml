@@ -82,8 +82,6 @@ let initialize platform_code host_code (_payload : string) : string =
     ; apply_batch =
         (fun batch ->
           let json = Lui_wire.encode_batch batch in
-          prerr_endline
-            ("[patch] batch len=" ^ string_of_int (String.length json));
           Queue.add json pending_batches;
           true)
     }
@@ -95,28 +93,13 @@ let initialize platform_code host_code (_payload : string) : string =
       Update.update View.view
   in
   current_app := Some app;
-  let flush_logged () =
-    ignore (Lui_app.flush app);
-    let d = Lui_runtime.diagnostics (Lui_app.runtime app) in
-    prerr_endline
-      (Printf.sprintf
-         "[flush] status=%d gen=%d ops=%d mounted=%d siggen=%d rounds=%d \
-          dirty=%d"
-         (match d.flush_status with
-          | Lui_runtime.NotFlushed -> 0
-          | NoBatch -> 1
-          | Applied -> 2
-          | Rejected -> 3)
-         d.flush_generation d.flush_operation_count
-         d.flush_mounted_node_count d.flush_signal_generation
-         d.flush_signal_round_count d.flush_signal_dirty_task_count)
-  in
+  let flush_app () = ignore (Lui_app.flush app) in
   Runtime.app_send :=
     (fun action ->
       let changed = Lui_app.send app action in
-      flush_logged ();
+      flush_app ();
       changed);
-  Runtime.app_flush := flush_logged;
+  Runtime.app_flush := flush_app;
   (* OCaml-internal async completions (HTTP, timers, daemon spawn) hop
      through Host onto this thread via the host wakeup *)
   Host.set_wakeup (fun () -> wakeup ());

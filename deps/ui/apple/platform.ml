@@ -176,10 +176,24 @@ let add_event_listener name f =
 let add_document_listener name f = add_event_listener name f
 let on_document_event name f = add_document_listener name f
 
+(* runs on every event payload before listeners see it — lets the DOM
+   shim refresh live element state (value/selection) so listeners that
+   read el_value during dispatch never see a stale snapshot regardless
+   of registration order *)
+let pre_dispatch_hook : (Js.Json.t -> unit) ref = ref (fun _ -> ())
+
 (* host -> OCaml event entry; called by the bridge. *)
 let emit_event name payload =
+  !pre_dispatch_hook payload;
   match Hashtbl.find_opt window_listeners name with
-  | Some fns -> List.iter (fun f -> f payload) fns
+  | Some fns ->
+      List.iter
+        (fun f ->
+          try f payload
+          with e ->
+            Printf.eprintf "[dispatch] %s handler exn: %s\n%!" name
+              (Printexc.to_string e))
+        fns
   | None -> ()
 
 (* ---------- url / hash routing ---------- *)

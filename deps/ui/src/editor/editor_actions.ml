@@ -101,7 +101,7 @@ let rec apply_focus () =
              landing — only consume the pending state once the element
              really holds focus; otherwise keep retrying so the remounted
              editor gets it *)
-          match D.active_element with
+          match D.active_element () with
           | Some ae when ae == el ->
               S.pending_focus := None;
               focus_attempts := 0;

@@ -448,7 +448,6 @@ let post_invoke (base_url : string) (name : string) (args : Wire.t list)
        (fun () ->
          try
            let _status, resp = http_post ~host ~port ~path:"/v1/invoke" ~body in
-           prerr_endline ("[daemon] invoke " ^ name ^ " -> " ^ String.sub resp 0 (min 120 (String.length resp)));
            let j = Js.Json.parseExn resp in
            let ok =
              match json_field "ok" j with

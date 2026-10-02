@@ -120,10 +120,31 @@ enum LogseqExtensionFingerprint {
     }
   }
 
-  static func registry() throws -> LUIAppleExtensionRegistry {
+  static func registry(
+    view: (@MainActor (LUIAppleExtensionViewContext) -> AnyView)? = nil
+  ) throws -> LUIAppleExtensionRegistry {
     let registry = LUIAppleExtensionRegistry()
     for tag in tags {
-      try registry.register(elementExtension(tag: tag))
+      if let view {
+        let identifier = "logseq-" + tag
+        try registry.register(
+          LUIAppleExtension(
+            identifier: identifier,
+            fingerprint: LogseqExtensionFingerprint.make(
+              identifier: identifier,
+              profiles: profiles,
+              standardChildren: true,
+              children: identifiers,
+              properties: propertySchemas,
+              events: [domEvent]),
+            acceptsStandardChildren: true,
+            childIdentifiers: identifiers,
+            properties: propertyDecls,
+            events: [domEventSchema],
+            viewFactory: view))
+      } else {
+        try registry.register(elementExtension(tag: tag))
+      }
     }
     return registry
   }
