@@ -255,8 +255,9 @@ let main_content (ms : Model.t Signal.signal) =
                        | Model.Journals | Model.Home ->
                            [ ("style", "margin-bottom: 0") ]
                        | _ ->
-                            [ ("class", "mx-auto pb-24")
-                            ; ("style", "margin-bottom: 120px") ]))
+                           [ ("class", "mx-auto pb-24")
+                           ; ("style", "margin-bottom: 120px") ])
+                     ms)
                  [ Page.region ms ]
             ]
         ]

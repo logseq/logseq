@@ -1341,8 +1341,8 @@ let page_view_ms (ms : Model.t Signal.signal) : t =
     | Some p -> p.page_uuid
     | None -> None
   in
-  (dom ~key:"page" ~style_class_signal:(Logseq_dom.class_signal ms page_cls)
-      ~attrs_signal_v:(Logseq_dom.attrs_signal ms wrap_attrs_of)
+  (dom ~key:"page" ~style_class_signal:(Signal.map page_cls ms)
+      ~attrs_signal:(Signal.map wrap_attrs_of ms)
     [ dom ~key:"page-inner"
         ~style_class:"relative grid gap-4 sm:gap-8 page-inner mb-16"
         [ Logseq_dom.dyn ~equal:top_eq top_view ms

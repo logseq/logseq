@@ -27,6 +27,15 @@ module S = Editor_state
 
 let dom = Logseq_dom.dom
 
+let contains_sub s sub =
+  let n = String.length s and m = String.length sub in
+  let rec go i =
+    if i + m > n then false
+    else if String.sub s i m = sub then true
+    else go (i + 1)
+  in
+  go 0
+
 let block_key (b : Model.block) =
   match b.block_uuid with
   | Some u -> u
@@ -219,35 +228,17 @@ let control_wrap ~scope ~library uuid (b : Model.block) : t =
         ~id:("control-" ^ uuid)
         [ dom ~key:("ctrlspan-" ^ uuid) ~tag:"span"
             ~id:("ctrlspan-" ^ scope ^ "-" ^ uuid)
-<<<<<<< HEAD
             ~style_class:
               (reactive
                  (fun c -> if c then "control-show" else "control-hide")
-                 (collapsed_sig ~scope b))
-||||||| parent of 1fc7a638a9 (perf(ui): keyed page list, lazy property areas, ungated Enter focus)
-            ~style_class_signal:
-              (Logseq_dom.class_signal (collapsed_sig ~scope b)
-                 (fun c -> if c then "control-show" else "control-hide"))
-=======
-            ~style_class_signal:
-              (Logseq_dom.class_signal cs
-                 (fun c -> if c then "control-show" else "control-hide"))
->>>>>>> 1fc7a638a9 (perf(ui): keyed page list, lazy property areas, ungated Enter focus)
+                 cs)
             [ dom ~key:("ra-" ^ uuid) ~tag:"span"
-<<<<<<< HEAD
                 ~style_class:
                   (reactive
-||||||| parent of 1fc7a638a9 (perf(ui): keyed page list, lazy property areas, ungated Enter focus)
-                ~style_class_signal:
-                  (Logseq_dom.class_signal (collapsed_sig ~scope b)
-=======
-                ~style_class_signal:
-                  (Logseq_dom.class_signal cs
->>>>>>> 1fc7a638a9 (perf(ui): keyed page list, lazy property areas, ungated Enter focus)
                      (fun c ->
                        "rotating-arrow"
                        ^ if c then " collapsed" else " not-collapsed")
-                     (collapsed_sig ~scope b))
+                     cs)
                 [ Ui_parts.rotating_arrow ("arw-" ^ uuid) ]
             ]
         ]
@@ -255,20 +246,10 @@ let control_wrap ~scope ~library uuid (b : Model.block) : t =
         [ dom ~key:("dotw-" ^ uuid) ~tag:"span"
             ~id:("dot-" ^ uuid)
             ~attrs:[ ("blockid", uuid); ("draggable", "true") ]
-<<<<<<< HEAD
             ~style_class:
               (reactive
                  (fun c -> bullet_cls ^ if c then " bullet-closed" else "")
-                 (collapsed_sig ~scope b))
-||||||| parent of 1fc7a638a9 (perf(ui): keyed page list, lazy property areas, ungated Enter focus)
-            ~style_class_signal:
-              (Logseq_dom.class_signal (collapsed_sig ~scope b) (fun c ->
-                   bullet_cls ^ if c then " bullet-closed" else ""))
-=======
-            ~style_class_signal:
-              (Logseq_dom.class_signal cs (fun c ->
-                   bullet_cls ^ if c then " bullet-closed" else ""))
->>>>>>> 1fc7a638a9 (perf(ui): keyed page list, lazy property areas, ungated Enter focus)
+                 cs)
             [ (match node_icon ~library b with
                | Some icon -> icon_el uuid icon
                | None ->
@@ -518,34 +499,8 @@ let rec block_row
 and row_main ~editable ~library scope (b : Model.block) : t =
   let uuid = Option.value b.block_uuid ~default:"" in
   let key = block_key b in
-<<<<<<< HEAD
-  let embed = b.block_link <> None in
-  let has_children = S.children_of b <> [] in
-  let blank = String.trim b.block_title = "" in
-  (* the reload key is scope-namespaced: the same block uuid renders in the
-     main list, sidebars, previews and embeds simultaneously, and a bare
-     ls-<uuid> key makes those distinct rows claim each other's DOM node *)
-  dom ~key:("ls-" ^ scope ^ "-" ^ key)
-    ~style_class_signal:(row_class_sig uuid blank embed b)
-    ~attrs_signal:(row_attrs_sig ~scope ~depth uuid b)
-    [ dom ~key:("main-" ^ key)
-        ~style_class:"block-main-container flex flex-row gap-1"
-||||||| parent of 1fc7a638a9 (perf(ui): keyed page list, lazy property areas, ungated Enter focus)
-  let embed = b.block_link <> None in
-  let has_children = S.children_of b <> [] in
-  let blank = String.trim b.block_title = "" in
-  (* the reload key is scope-namespaced: the same block uuid renders in the
-     main list, sidebars, previews and embeds simultaneously, and a bare
-     ls-<uuid> key makes those distinct rows claim each other's DOM node *)
-  dom ~key:("ls-" ^ scope ^ "-" ^ key)
-    ~style_class_signal:(row_class_sig uuid blank embed b)
-    ~attrs_signal_v:(row_attrs_sig ~scope ~depth uuid b)
-    [ dom ~key:("main-" ^ key)
-        ~style_class:"block-main-container flex flex-row gap-1"
-=======
   dom ~key:("main-" ^ key)
       ~style_class:"block-main-container flex flex-row gap-1"
->>>>>>> 1fc7a638a9 (perf(ui): keyed page list, lazy property areas, ungated Enter focus)
         ~attrs:
           (match b.block_heading with
            | Some lvl -> [ ("data-has-heading", string_of_int lvl) ]
@@ -616,7 +571,7 @@ and row_el ~depth ~editable scope ~(library : bool) (b : Model.block) : t =
      ls-<uuid> key makes those distinct rows claim each other's DOM node *)
   dom ~key:("ls-" ^ scope ^ "-" ^ key)
     ~style_class_signal:(row_class_sig uuid blank embed b)
-    ~attrs_signal_v:(row_attrs_sig ~scope ~depth uuid b)
+    ~attrs_signal:(row_attrs_sig ~scope ~depth uuid b)
     [ row_main ~editable ~library scope b
     ; (if has_children && not (Comments.is_comments_area b) then
          children_el ~depth ~editable ~library uuid scope b
@@ -630,12 +585,43 @@ and row_sig ~depth ~editable ~library scope
     (bs : Model.block Signal.signal) : t =
   let b0 = Signal.get bs in
   let key = block_key b0 in
+  (* the record isn't the only input to row_main: Render resolves
+     [[uuid]]/((uuid))/#[[uuid]] refs through Render_inline's pull cache
+     at mount, and an untouched record keeps its mount on every
+     publish. Pair the invalidation gens in and remount only when a uuid
+     this row mentions was invalidated since it last painted *)
+  (* remount iff a uuid the row renders was (re)invalidated since the
+     last paint — per-uuid gens compare [ia]@[ib] so re-touching a
+     previously invalidated entity still remounts *)
+  let gen_bumped (b : Model.block) ia ib =
+    let uuid = Option.value b.Model.block_uuid ~default:"" in
+    (* the painted title — committed-buffer overrides paint before the
+       worker's canon row lands, so the stored block_title can be "" *)
+    let title = S.title_for uuid b.Model.block_title in
+    Render_inline.Uuid_gens.exists
+      (fun u g ->
+        match Render_inline.Uuid_gens.find_opt u ia with
+        | Some g' when g' = g -> false
+        | _ ->
+            List.mem u b.Model.block_tag_uuids
+            || contains_sub title ("[[" ^ u ^ "]]")
+            || contains_sub title ("((" ^ u ^ "))"))
+      ib
+  in
   dom ~key:("ls-" ^ scope ^ "-" ^ key)
     ~style_class_signal:(row_class_sig_of bs)
-    ~attrs_signal_v:(row_attrs_sig_of ~scope ~depth bs)
-    [ Logseq_dom.dyn ~equal:(fun (a : Model.block) (b : Model.block) ->
-          a == b)
-        (fun b -> row_main ~editable ~library scope b) bs
+    ~attrs_signal:(row_attrs_sig_of ~scope ~depth bs)
+    [ Logseq_dom.dyn
+        ~equal:
+          (fun ((a : Model.block), ga, ia) ((b : Model.block), gb, ib) ->
+          a == b && ga = gb && not (gen_bumped a ia ib))
+        (fun ((b : Model.block), _g, _i) ->
+          row_main ~editable ~library scope b)
+        (Signal.map2
+           (fun (b : Model.block) (_st : S.t) ->
+             let g, i = Render_inline.invalidation () in
+             (b, g, i))
+           bs (S.signal ()))
     ; row_children ~depth ~editable ~library scope bs
     ]
 

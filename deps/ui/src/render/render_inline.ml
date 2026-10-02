@@ -78,7 +78,26 @@ let repo_cache repo =
       Hashtbl.replace pull_caches repo c;
       c
 
-let invalidate_pull_caches () = Hashtbl.reset pull_caches
+module Uuid_gens = Stdlib.Map.Make (String)
+
+(* republish key for keyed rows: a keyed item keeps its mount whenever
+   the spliced/refetched record is structurally equal, so rows whose
+   rendered text depends on a touched entity would paint stale resolved
+   refs forever. Pair [(reset_gen, uuid_gens)] into the row's dyn key:
+   [reset_gen] bumps on invalidate-all (remounts every row — a rare
+   unknown-delta path), and each invalidated uuid carries a fresh
+   generation so re-invalidating a previously-touched entity still
+   remounts the rows that mention it *)
+let invalidation_gen = ref 0
+let reset_gen = ref 0
+let invalidated_gens = ref Uuid_gens.empty
+
+let invalidation () = (!reset_gen, !invalidated_gens)
+
+let invalidate_pull_caches () =
+  Hashtbl.reset pull_caches;
+  incr reset_gen;
+  invalidated_gens := Uuid_gens.empty
 
 (* drop only the entities a tx touched — a broadcast used to reset every
    repo cache, so each op re-pulled every [[ref]]/anchor title on the
@@ -87,6 +106,12 @@ let invalidate_pull_uuids (uuids : string list) =
   match uuids with
   | [] -> ()
   | _ ->
+      invalidated_gens :=
+        List.fold_left
+          (fun m u ->
+            incr invalidation_gen;
+            Uuid_gens.add u !invalidation_gen m)
+          !invalidated_gens uuids;
       Hashtbl.iter
         (fun _repo (c : pull_cache) ->
           List.iter (Hashtbl.remove c.c_uuid_meta) uuids;
