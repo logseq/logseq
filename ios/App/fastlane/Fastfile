@@ -28,7 +28,8 @@ platform :ios do
 
     sync_code_signing(
       type: "appstore",
-      readonly: false
+      readonly: false,
+      renew_expired_certs: true
     )
 
     version_number = get_version_number(
