@@ -88,8 +88,9 @@ holders for an exact tag UUID. `listOrphanTags` uses the Tag class and reverse
 `:block/_tags` relation to list unused tags. `listOrphanProperties` validates
 each property ident before sequentially checking whether it has any values.
 `listAssets` preserves the reference server's unverified attribute-name
-discovery query. There are 23 registered tools so far: the six existing
-API-backed tools and 17 compatibility data tools.
+discovery query. `listJournals` now uses a bounded query adapter and preserves
+the optional four-query count envelope. There are 24 registered tools so far:
+seven API-backed tools and 17 compatibility data tools.
 Entry criteria still outstanding:
 
 1. Both baselines have valid, recorded results.

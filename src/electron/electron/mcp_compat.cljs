@@ -468,6 +468,81 @@
   [call-api-fn args]
   (call-api-fn "logseq.cli.listPages" [#js {:expand (aget args "expand")}]))
 
+(defn- query-result-rows
+  [result]
+  (let [rows (js->clj result :keywordize-keys true)]
+    (if (and (= 1 (count rows)) (vector? (first rows)))
+      (first rows)
+      rows)))
+
+(defn- count-index
+  [result]
+  (let [rows (js->clj result :keywordize-keys true)]
+    (into {}
+          (keep (fn [row]
+                  (when (and (vector? row) (= 2 (count row)))
+                    [(first row) (second row)])))
+          rows)))
+
+(defn- count-journals
+  [api-fn journals]
+  (let [page-ids (keep #(or (:id %) (:db/id %)) journals)
+        ids (clj->js (vec page-ids))]
+    (if (seq page-ids)
+      (p/let [own (api-fn "logseq.DB.datascriptQuery"
+                          ["[:find ?page (count ?block) :in $ [?page ...] :where [?block :block/page ?page]]"
+                           ids])
+              empty (api-fn "logseq.DB.datascriptQuery"
+                            ["[:find ?page (count ?block) :in $ [?page ...] :where [?block :block/page ?page] [?block :block/title \"\"]]"
+                             ids])
+              refs (api-fn "logseq.DB.datascriptQuery"
+                           ["[:find ?target (count ?holder) :in $ [?target ...] :where [?holder :block/refs ?target]]"
+                            ids])]
+        [(count-index own)
+         (count-index empty)
+         (count-index refs)])
+      (p/resolved [{} {} {}]))))
+
+(defn list-journals
+  [api-fn args]
+  (let [with-counts? (true? (aget args "with_counts"))
+        limit (aget args "limit")]
+    (when (and (some? limit)
+               (not (and (number? limit)
+                         (js/Number.isInteger limit)
+                         (pos? limit))))
+      (throw (js/Error. "limit must be a positive integer")))
+    (p/let [result (api-fn "logseq.DB.datascriptQuery"
+                           ["[:find [(pull ?page [:db/id :block/uuid :block/name :block/title :block/journal-day]) ...] :where [?page :block/journal-day _]]"])
+            journals (->> (query-result-rows result)
+                          (sort-by #(or (:journal-day %) (:block/journal-day %) 0) >)
+                          vec)
+            total (count journals)
+            counted (if with-counts?
+                      (vec (take (or limit 500) journals))
+                      (if limit (vec (take limit journals)) journals))]
+      (if-not with-counts?
+        counted
+        (p/let [[own empty refs] (count-journals api-fn counted)
+                rows (mapv (fn [page]
+                             (let [id (or (:id page) (:db/id page))
+                                   own-blocks (get own id 0)
+                                   empty-blocks (get empty id 0)]
+                               (assoc page
+                                      :own_blocks own-blocks
+                                      :content_blocks (- own-blocks empty-blocks)
+                                      :refs (get refs id 0))))
+                           counted)
+                truncated? (> total (count rows))]
+          {:journals rows
+           :total total
+           :counted (count rows)
+           :truncated truncated?
+           :diagnostic (str "own_blocks includes the empty block createPage seeds and any trailing empty block, so content_blocks is the figure to pair with refs when judging whether a page carries anything."
+                            (when truncated?
+                              (str " Counts cover the first " (count rows) " of " total
+                                   "; raise or set limit for a different slice, or use pageStats for specific pages.")))})))))
+
 (defn list-tags
   [call-api-fn args]
   (call-api-fn "logseq.cli.listTags" [#js {:expand (aget args "expand")}]))

@@ -177,3 +177,67 @@
                   (is (string/includes? query "clojure.string/includes?"))
                   (is (string/includes? query "\"asset\"")))
                 (done))))))
+
+(deftest list-journals-sorts-and-limits-the-cheap-listing
+  (let [calls (atom [])
+        journals #js [#js {"id" 1 "title" "Older" "journal-day" 20250101}
+                      #js {"id" 2 "title" "Newest" "journal-day" 20260101}
+                      #js {"id" 3 "title" "Middle" "journal-day" 20250601}]
+        api (fn [method args]
+              (swap! calls conj [method args])
+              journals)]
+    (async done
+      (p/then (mcp-compat/list-journals api #js {"limit" 2})
+              (fn [result]
+                (is (= ["Newest" "Middle"] (mapv :title result)))
+                (is (= 1 (count @calls)))
+                (is (= "logseq.DB.datascriptQuery" (first (first @calls))))
+                (done))))))
+
+(deftest list-journals-counts-in-four-queries-and-zero-fills
+  (let [calls (atom [])
+        journals #js [#js {"id" 1 "title" "Older" "journal-day" 20250101}
+                      #js {"id" 2 "title" "Newest" "journal-day" 20260101}]
+        api (fn [method args]
+              (swap! calls conj [method args])
+              (case (count @calls)
+                1 journals
+                2 #js [#js [1 2]]
+                3 #js [#js [1 1]]
+                4 #js [#js [1 3]]))]
+    (async done
+      (p/then (mcp-compat/list-journals api #js {"with_counts" true})
+              (fn [result]
+                (let [by-title (into {} (map (juxt :title identity) (:journals result)))]
+                  (is (= 4 (count @calls)))
+                  (is (= 2 (:total result)))
+                  (is (= 2 (:counted result)))
+                  (is (false? (:truncated result)))
+                  (is (= 1 (:content_blocks (by-title "Older"))))
+                  (is (= 0 (:own_blocks (by-title "Newest"))))
+                  (is (= 0 (:refs (by-title "Newest")))))
+                (done))))))
+
+(deftest list-journals-counted-limit-reports-truncation
+  (let [calls (atom [])
+        journals #js [#js {"id" 1 "title" "Oldest" "journal-day" 20240101}
+                      #js {"id" 2 "title" "Middle" "journal-day" 20250101}
+                      #js {"id" 3 "title" "Newest" "journal-day" 20260101}]
+        api (fn [method args]
+              (swap! calls conj [method args])
+              (case (count @calls)
+                1 journals
+                #js []))]
+    (async done
+      (p/then (mcp-compat/list-journals api #js {"with_counts" true "limit" 1})
+              (fn [result]
+                (is (= 3 (:total result)))
+                (is (= 1 (:counted result)))
+                (is (true? (:truncated result)))
+                (is (= ["Newest"] (mapv :title (:journals result))))
+                (is (= [3] (js->clj (second (second (second @calls))))))
+                (done))))))
+
+(deftest list-journals-rejects-non-positive-limits
+  (is (thrown-with-msg? js/Error #"limit must be a positive integer"
+                        (mcp-compat/list-journals (fn [& _] nil) #js {"limit" 0}))))

@@ -112,6 +112,12 @@
                  :description "List all pages in a graph"
                  :inputSchema
                  #js {:expand (-> (z/boolean) .optional (.describe "Provide additional detail on each page"))}}}
+    :listJournals
+    {:fn mcp-compat/list-journals
+     :config #js {:title "List Journals"
+              :description "List journal pages newest first; optionally include block and inbound-reference counts."
+              :inputSchema #js {:with_counts (-> (z/boolean) .optional)
+                          :limit (-> (z/number) .int .positive .optional)}}}
    :getPage
   {:fn mcp-compat/get-page
     :config #js {:title "Get Page"
