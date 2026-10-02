@@ -1305,6 +1305,9 @@ should be done through this fn in order to get global config and config defaults
       (set-state! [:ui/sidebar-collapsed-blocks item] collapsed?))))
 
 (defn clear-edit!
+  "Does not clear `:editor/pending-new-block`. An in-flight Enter insert buffers
+  typed-ahead letters there until `inserted-block-edit-fn` consumes them; an
+  unrelated editor switch must not drop that text."
   [& {:keys [clear-editing-block?]
       :or {clear-editing-block? true}}]
   (let [online-users (some-> (get-state :rtc/state) :online-users)]
@@ -1319,7 +1322,6 @@ should be done through this fn in order to get global config and config defaults
                       :ui/select-query-cache {}
                       :editor/block-refs #{}
                       :editor/action-data nil
-                      :editor/pending-new-block nil
                       :view/selected-blocks nil)
          clear-editing-block?
          (assoc :editor/editing? nil
