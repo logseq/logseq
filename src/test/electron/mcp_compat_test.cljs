@@ -158,3 +158,22 @@
                 (is (not-any? #(string/includes? (first (second %)) "unqualified")
                               (rest @calls)))
                 (done))))))
+
+(deftest list-assets-uses-unverified-attribute-discovery-query
+  (let [calls (atom [])
+        attributes #js [":logseq.property/asset/url" ":logseq.property/asset/remote-metadata"]
+        api (fn [method args]
+              (swap! calls conj [method args])
+              attributes)]
+    (async done
+      (p/then (mcp-compat/list-assets api #js {})
+              (fn [result]
+                (let [[method [query]] (first @calls)]
+                  (is (= [":logseq.property/asset/url"
+                           ":logseq.property/asset/remote-metadata"]
+                         result))
+                  (is (= "logseq.DB.datascriptQuery" method))
+                  (is (= 1 (count (second (first @calls)))))
+                  (is (string/includes? query "clojure.string/includes?"))
+                  (is (string/includes? query "\"asset\"")))
+                (done))))))

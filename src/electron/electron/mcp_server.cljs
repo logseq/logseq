@@ -279,6 +279,11 @@
    {:fn mcp-compat/list-orphan-properties
     :config #js {:title "List Orphan Properties"
                  :description "List properties with no values anywhere."
+                 :inputSchema #js {}}}
+   :listAssets
+   {:fn mcp-compat/list-assets
+    :config #js {:title "List Assets"
+                 :description "Discover attributes whose names contain 'asset'. This is an unverified probe, not a complete asset inventory."
                  :inputSchema #js {}}}})
 
 (defn call-api-tool [tool-fn api-fn args]

@@ -87,8 +87,9 @@ that rejects page entities. `getTagUsers` now queries all page and block
 holders for an exact tag UUID. `listOrphanTags` uses the Tag class and reverse
 `:block/_tags` relation to list unused tags. `listOrphanProperties` validates
 each property ident before sequentially checking whether it has any values.
-There are 22 registered tools so far: the six existing API-backed tools and
-16 compatibility data tools.
+`listAssets` preserves the reference server's unverified attribute-name
+discovery query. There are 23 registered tools so far: the six existing
+API-backed tools and 17 compatibility data tools.
 Entry criteria still outstanding:
 
 1. Both baselines have valid, recorded results.

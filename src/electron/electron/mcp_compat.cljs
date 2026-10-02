@@ -424,6 +424,15 @@
      (p/resolved [])
      properties)))
 
+(defn list-assets
+  [api-fn _args]
+  (let [query "[:find [?attr ...] :where [_ ?attr _] [(str ?attr) ?s] [(clojure.string/includes? ?s \"asset\")]]"]
+    (p/let [result (api-fn "logseq.DB.datascriptQuery" [query])
+            attributes (js->clj result :keywordize-keys true)]
+      (if (and (= 1 (count attributes)) (vector? (first attributes)))
+        (first attributes)
+        attributes))))
+
     (defn get-property-ident
       [api-fn args]
       (let [title (aget args "title")
