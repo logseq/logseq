@@ -95,7 +95,11 @@ jobs:
 
       - name: Fetch OCaml deps
         working-directory: cli
-        run: opam install . --deps-only --with-test --yes
+        run: |
+          opam option --global 'wrap-build-commands=[]'
+          opam option --global 'wrap-install-commands=[]'
+          opam option --global 'wrap-remove-commands=[]'
+          opam install . --deps-only --with-test --yes
 
       - name: Fetch db-worker OCaml deps
         working-directory: deps/db-worker
