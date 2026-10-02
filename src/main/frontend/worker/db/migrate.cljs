@@ -199,7 +199,7 @@
                           :logseq.property.view/gallery-card-width
                           :logseq.property.view/gallery-card-height]}]
    ["65.34" {:fix db-order/missing-internal-page-parent-order-tx}]
-   ["65.35" {:fix convert-external-url-to-url-type}]]))
+   ["65.35" {:fix convert-external-url-to-url-type}]])
 
 (let [[major minor] (last (sort (map (comp (juxt :major :minor) db-schema/parse-schema-version first)
                                      schema-version->updates)))]
