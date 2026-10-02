@@ -93,6 +93,7 @@
  :block/open-block-references "Открыть ссылки на блок"
  :block/practice "Практика"
  :block/practice-cards "Практика карточек"
+ :block/ref-not-exist "Этот блок не существует."
  :block/remove-tag "Удалить тег"
  :block/remove-this-tag "Удалить этот тег"
  :block/render-error "Ошибка отрисовки блока:"

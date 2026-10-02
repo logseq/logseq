@@ -93,6 +93,7 @@
  :block/open-block-references "Buka referensi blok"
  :block/practice "Latihan"
  :block/practice-cards "Latihan kartu"
+ :block/ref-not-exist "Blok ini tidak ada."
  :block/remove-tag "Hapus tag"
  :block/remove-this-tag "Hapus tag ini"
  :block/render-error "Kesalahan Render Blok:"

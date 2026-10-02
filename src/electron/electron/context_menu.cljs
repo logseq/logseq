@@ -1,7 +1,7 @@
 (ns electron.context-menu
   (:require [electron.i18n :refer [t]]
             [electron.utils :as utils]
-            ["electron" :refer [Menu MenuItem shell nativeImage clipboard] :as electron]
+            ["electron" :refer [Menu MenuItem shell] :as electron]
             ["electron-dl" :refer [download]]))
 
 ;; context menu is registered in window/setup-window-listeners!
@@ -86,8 +86,10 @@
 
               (. menu append
                  (MenuItem. #js {:label (t :electron/copy-image)
+                                 ;; copyImageAt copies the rendered image for any
+                                 ;; src (file://, assets://, https://, ...)
                                  :click (fn []
-                                          (. clipboard writeImage (. nativeImage createFromPath (subs (.-srcURL params) 7))))})))
+                                          (. web-contents copyImageAt (.-x params) (.-y params)))})))
 
             (when (not-empty (.-items menu))
               (. menu popup))))]
