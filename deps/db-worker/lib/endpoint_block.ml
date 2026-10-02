@@ -1221,7 +1221,28 @@ let parse_block args : Wire.t Db_worker_effect.t =
    a heading block's title loses its #s, and [[name]] refs rewrite to
    [[uuid]] against the extracted refs *)
 let paste_block_of (bm : Block_map.t) : Block_map.t =
-  let bm = Block_map.dissoc bm [ "block/tags" ] in
+  (* the extracted :block/properties map is a property bag, not the
+     sequential attr the schema validates — hoist heading into
+     logseq.property/heading and drop the bag like parse-block does *)
+  let props =
+    match Block_map.attr_value bm "block/properties" with
+    | Some (Map pkvs) -> pkvs
+    | _ -> []
+  in
+  let bm =
+    Block_map.dissoc bm
+      [ "block/tags"; "block/properties"; "block/macros"
+      ; "block/properties-order" ]
+  in
+  let bm =
+    List.fold_left
+      (fun acc (k, v) ->
+        match k with
+        | Keyword "heading" | String "heading" ->
+            Block_map.put acc "logseq.property/heading" v
+        | _ -> acc)
+      bm props
+  in
   let refs =
     match Block_map.attr_value bm "block/refs" with
     | Some v -> Clj_value.coll_items v
