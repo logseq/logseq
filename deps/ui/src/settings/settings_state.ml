@@ -22,6 +22,17 @@ let initial =
 
 let st : t Signal.state option ref = ref None
 
+(* tab requested before the pane mounts (menubar "menu-open-settings"
+   {tab}) — consumed by the next activate (the mount-time settings
+   effect), which otherwise defaults the tab to "general". The plain
+   set_tab path cannot run before mount because the state signal does
+   not exist yet. *)
+let pending_tab : string option ref = ref None
+
+let request_tab tab = pending_tab := Some tab
+
+let clear_pending_tab () = pending_tab := None
+
 let ensure (ctx : Lui_ui.ui_context) =
   match !st with
   | Some _ -> ()
@@ -115,9 +126,16 @@ let load () =
    Uses Signal.set (no flush) — called during mount, the pending render
    picks up the fresh value. *)
 let activate () =
-  Platform.body_set_data "settingsTab" "general";
+  let tab =
+    match !pending_tab with
+    | Some t ->
+        pending_tab := None;
+        t
+    | None -> "general"
+  in
+  Platform.body_set_data "settingsTab" tab;
   if ready () then (
-    Signal.set (state ()) { (value ()) with tab = "general" };
+    Signal.set (state ()) { (value ()) with tab };
     load ())
 
 let deactivate () = Platform.body_rm_data "settingsTab"
