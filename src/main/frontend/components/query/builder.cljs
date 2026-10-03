@@ -631,6 +631,7 @@
 (defn- get-q
   [block]
   (sanitize-q (or (:file-version/query-macro-title block)
+                  (:block/raw-title block)
                   (:block/title block)
                   "")))
 

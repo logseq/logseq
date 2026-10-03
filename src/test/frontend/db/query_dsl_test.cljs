@@ -160,7 +160,36 @@
       "(and \"for #clojure\" #tag foo)"
 
       "(and [[outside]] (property prop \"2 [[6a8ead3b-a450-4916-a7e2-d16d0d2b59fd]]\"))"
-      "(and \"[[outside]]\" (property prop \"2 [[6a8ead3b-a450-4916-a7e2-d16d0d2b59fd]]\"))")))
+      "(and \"[[outside]]\" (property prop \"2 [[6a8ead3b-a450-4916-a7e2-d16d0d2b59fd]]\"))"))
+
+  (testing "page refs with special title characters stay readable EDN"
+    (let [page-ref (fn [page-name] (str "[[" page-name "]]"))
+          wrap-tags (fn [page-name] (str "(tags " (page-ref page-name) ")"))
+          quote-tags (fn [page-name] (str "(tags " (pr-str (page-ref page-name)) ")"))]
+      (is (= (quote-tags "Project\"")
+             (query-dsl/pre-transform (wrap-tags "Project\""))))
+      (is (= (quote-tags "Project\\")
+             (query-dsl/pre-transform (wrap-tags "Project\\"))))
+      (is (= (quote-tags (str "Project" "[[" "Gremlin Garden" "]]"))
+             (query-dsl/pre-transform (wrap-tags (str "Project" "[[" "Gremlin Garden" "]]")))))
+      (is (= (quote-tags (str "Project" "]]"))
+             (query-dsl/pre-transform (wrap-tags (str "Project" "]]")))))
+      (is (= (quote-tags (str "Project" "]]" " Garden"))
+             (query-dsl/pre-transform (wrap-tags (str "Project" "]]" " Garden")))))
+      (is (= (str "(tags [ " (pr-str "[[foo]]") "])")
+             (query-dsl/pre-transform "(tags [ [[foo]]])")))
+      (is (= (str "(tags [ " (pr-str (str "[[" "foo]" "]]")) "])")
+             (query-dsl/pre-transform "(tags [ [[foo]]]])")))
+      (is (= (str "(tags [ " (pr-str (str "[[" "foo" "]]" "]]")) "])")
+             (query-dsl/pre-transform "(tags [ [[foo]]]]])")))
+      (is (= (str "(and (between " (pr-str "[[Dec 26th, 2020]]") " tomorrow) (tags "
+                  (pr-str (str "[[" "bar" "]]" "]]")) "))")
+             (query-dsl/pre-transform
+              "(and (between [[Dec 26th, 2020]] tomorrow) (tags [[bar]]]]))")))
+      (is (= (str "(and (between " (pr-str "[[Dec 26th, 2020]]") " tomorrow) "
+                  (pr-str (str "[[" "foo" "]]" "]]")) ")")
+             (query-dsl/pre-transform
+              "(and (between [[Dec 26th, 2020]] tomorrow) [[foo]]]])"))))))
 
 (defn- testable-content
   "Only test :block/title up to page-ref to make tests readable"
@@ -200,6 +229,12 @@
          (map (comp first string/split-lines :block/title)
               (dsl-query "(and (property prop-c \"page c\"))")))
       "Blocks have property value from a set of values")
+
+  (let [page-c-uuid (:block/uuid (ldb/get-page (conn/get-db test-helper/test-db) "page c"))]
+    (is (= ["b3"]
+           (map (comp first string/split-lines :block/title)
+                (dsl-query (str "(property prop-c [[" page-c-uuid "]])"))))
+        "Blocks have property value resolved from a uuid page ref"))
 
   (is (= ["b3"]
          (map (comp first string/split-lines :block/title)
@@ -635,6 +670,9 @@
     "(tags [[page-tag-1]])"
     ["page1"]
 
+    (str "(tags [[" (:block/uuid (ldb/get-page (conn/get-db test-helper/test-db) "page-tag-1")) "]])")
+    ["page1"]
+
     "(tags page-tag-2)"
     ["page1" "page2"]
 
@@ -646,6 +684,46 @@
 
     "(tags [page-tag-1 page-tag-2])"
     ["page1" "page2"]))
+
+(deftest tags-queries-special-title-characters
+  (let [page-ref (fn [page-name] (str "[[" page-name "]]"))
+        wrap-tags (fn [page-name] (str "(tags " (page-ref page-name) ")"))]
+    (load-test-files
+     {:classes {:quote-tag {:block/title "Project\""}
+                :backslash-tag {:block/title "Project\\"}
+                :nested-open-tag {:block/title (str "Project" "[[" "Gremlin Garden" "]]")}
+                :nested-close-tag {:block/title (str "Project" "]]")}
+                :double-bracket-end-tag {:block/title (str "foo" "]]")}}
+      :pages-and-blocks
+      [{:page {:block/title "page-quote" :build/tags [:quote-tag]}}
+       {:page {:block/title "page-backslash" :build/tags [:backslash-tag]}}
+       {:page {:block/title "page-nested-open" :build/tags [:nested-open-tag]}}
+       {:page {:block/title "page-nested-close" :build/tags [:nested-close-tag]}}
+       {:page {:block/title "page-double-bracket-end" :build/tags [:double-bracket-end-tag]}}]})
+
+    (is (= ["page-quote"]
+           (map :block/name (dsl-query (wrap-tags "Project\""))))
+        "Query still matches after a tag title gains a double quote")
+
+    (is (= ["page-backslash"]
+           (map :block/name (dsl-query (wrap-tags "Project\\"))))
+        "Query still matches after a tag title gains a backslash")
+
+    (is (= ["page-nested-open"]
+           (map :block/name (dsl-query (wrap-tags (str "Project" "[[" "Gremlin Garden" "]]")))))
+        "Query still matches after a tag title gains [[")
+
+    (is (= ["page-nested-close"]
+           (map :block/name (dsl-query (wrap-tags (str "Project" "]]")))))
+        "Query still matches after a tag title gains ]]")
+
+    (is (= ["page-quote"]
+           (map :block/name (dsl-query "(tags [ [[Project\"]]])")))
+        "A page ref at the end of a tags vector still parses")
+
+    (is (= ["page-double-bracket-end"]
+           (map :block/name (dsl-query (str "(tags [ " (page-ref (str "foo" "]]")) "])"))))
+        "A tag title ending with ]] still matches inside a tags vector")))
 
 (deftest block-content-query
   (load-test-files [{:page {:block/title "page1"}
@@ -704,6 +782,12 @@
       (is (= ["b2"]
              (map testable-content (dsl-query query)))
           "UUID page ref arg"))
+
+    (let [db (conn/get-db test-helper/test-db)
+          page-uuid (:block/uuid (ldb/get-page db "page1"))]
+      (is (= (set (map testable-content (dsl-query "(page page1)")))
+             (set (map testable-content (dsl-query (str "(page [[" page-uuid "]])")))))
+          "UUID page ref arg in (page) matches title form"))
 
     (is (= ["b2"]
            (map testable-content (dsl-query "#tag1")))
@@ -797,7 +881,13 @@
       3)
 
     (is (= 3 (count (dsl-query "(and (task todo done) (between created-at [[Dec 26th, 2020]]))"))))
-    (is (= 3 (count (dsl-query "(and (task todo done) (between created-at [[Dec 26th, 2020]] +1d))"))))))
+    (is (= 3 (count (dsl-query "(and (task todo done) (between created-at [[Dec 26th, 2020]] +1d))"))))
+
+    (let [journal-uuid (:block/uuid (ldb/get-page (conn/get-db test-helper/test-db)
+                                                "Dec 26th, 2020"))]
+      (is (= 3 (count (dsl-query
+                      (str "(and (task todo done) (between [[" journal-uuid "]] tomorrow))"))))
+          "between resolves journal uuids"))))
 
 (deftest custom-query-test
   (load-test-files

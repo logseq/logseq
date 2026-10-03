@@ -5,10 +5,12 @@
             [datascript.core :as d]
             [datascript.impl.entity :as de]
             [logseq.common.util :as common-util]
+            [logseq.common.util.page-ref :as page-ref]
             [logseq.db :as ldb]
             [logseq.db.common.entity-plus :as entity-plus]
             [logseq.db.common.order :as db-order]
             [logseq.db.frontend.class :as db-class]
+            [logseq.db.frontend.content :as db-content]
             [logseq.db.frontend.db-ident :as db-ident]
             [logseq.db.frontend.entity-util :as entity-util]
             [logseq.db.frontend.malli-schema :as db-malli-schema]
@@ -438,6 +440,17 @@
         _ (assert (some? property) (str "Property " property-id " doesn't exist yet"))
         value' (convert-property-input-string (:logseq.property/type block)
                                               property value)
+        value' (if (and (= property-id :logseq.property/query)
+                        (string? value')
+                        (string/includes? value' "[["))
+                 (let [ref-pages (->> (re-seq page-ref/page-ref-re value')
+                                      (map second)
+                                      distinct
+                                      (keep #(ldb/get-page @conn %)))]
+                   (if (seq ref-pages)
+                     (db-content/title-ref->id-ref value' ref-pages {:replace-tag? false})
+                     value'))
+                 value')
         _ (when (and (not= (:logseq.property/type property) :number)
                      (not (string? value')))
             (throw (ex-info "value should be a string" {:block-id block-id

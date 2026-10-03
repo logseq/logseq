@@ -3943,7 +3943,10 @@
   [config block query-block]
   (let [query-block-uuid (:block/uuid query-block)
         current-query-block (db-hooks/use-block query-block-uuid)
-        query (:block/title current-query-block)
+        ;; Execute the stored title (id refs like [[uuid]]); :block/title is
+        ;; already display-substituted on the wire
+        query (or (:block/raw-title current-query-block)
+                  (:block/title current-query-block))
         result (common-util/safe-read-string {:log-error? false} query)
         advanced-query? (map? result)]
     (when current-query-block
@@ -3952,7 +3955,8 @@
                                                     :dsl-query? (not advanced-query?)
                                                     :cards? (cards-block? block)))
          (if advanced-query? result {:builder nil
-                                     :query (query-builder-component/sanitize-q query)}))])))
+                                     :query (query-builder-component/sanitize-q query)
+                                     :query-display (:block/title current-query-block)}))])))
 
 (defn- build-block
   [config block* {:keys [navigated?]}]
