@@ -649,15 +649,24 @@ let outline_children (block : entity) : entity list =
 
 let page_root_blocks (page : entity) : entity list = outline_children page
 
-(* flattened pre-order with sibling ordering numbers *)
+(* flattened pre-order with sibling ordering numbers. visited guards
+   :block/parent cycles — a malformed cyclic chain must not hang the
+   mirror render. *)
 let block_line_infos db (blocks : entity list) : block_line_info list =
+  let visited = Hashtbl.create 16 in
   let rec loop number result = function
     | [] -> List.rev result
     | block :: more ->
         let ordered = order_list_number block in
         let marker = if ordered then string_of_int number ^ "." else "-" in
         let info = block_line_info db block marker in
-        let children = loop 1 [] (outline_children block) in
+        let children =
+          if Hashtbl.mem visited block.id then []
+          else begin
+            Hashtbl.add visited block.id ();
+            loop 1 [] (outline_children block)
+          end
+        in
         loop
           (if ordered then number + 1 else number)
           (List.rev_append (List.rev children) (info :: result))

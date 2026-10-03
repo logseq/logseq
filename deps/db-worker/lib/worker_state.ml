@@ -1,5 +1,11 @@
 let datascript_conns : (string, Datascript.conn) Hashtbl.t = Hashtbl.create 7
 
+(* RTC graphs keep a second conn holding only confirmed state (restored
+   snapshot + remote txs + acked local txs); the registered datascript_conn
+   is an in-memory projection of it plus pending ops replayed forward. The
+   server conn registry lives in Sync_state — this module is sealed by
+   spec/worker/worker_state.mli. *)
+
 (* cljs worker-state/*sqlite-conns* — (repo, kind) -> db *)
 type db_kind =
   | Db

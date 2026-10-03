@@ -257,11 +257,15 @@ let sibling_index_markers (children : entity list)
     : (entity_id, index_marker) Hashtbl.t =
   let idx_of = Hashtbl.create 16 and ancestor_chain = Hashtbl.create 16 in
   let type_of (b : entity) = Plain_value.order_list_type b in
-  (* consecutive entities on the parent chain, b included, typed lt *)
+  (* consecutive entities on the parent chain, b included, typed lt.
+     Pre-seeding 0 before recursing doubles as an in-progress mark — a
+     :block/parent cycle then contributes its chain once instead of
+     looping (post-order memo alone never lands on a cycle). *)
   let rec typed_chain (b : entity) (lt : string) : int =
     match Hashtbl.find_opt ancestor_chain (b.id, lt) with
     | Some n -> n
     | None ->
+        Hashtbl.replace ancestor_chain (b.id, lt) 0;
         let n =
           match type_of b with
           | Some t when String.equal t lt ->
@@ -439,13 +443,17 @@ let order_list_shifted_eids (r : tx_report) : entity_id list =
             | Some b -> index_marker_of b
             | None -> Absent)
       in
+      let seen = Hashtbl.create 16 in
       let rec walk (cid : entity_id) : unit =
-        let m_before = marker_of r.db_before cid
-        and m_after = marker_of r.db_after cid in
-        if m_before <> m_after then Hashtbl.replace shifted cid ();
-        Seq.iter
-          (fun (d : datom) -> walk d.e)
-          (datoms r.db_after Avet ~a:"block/parent" ~v:(Ref cid) ())
+        if not (Hashtbl.mem seen cid) then begin
+          Hashtbl.add seen cid ();
+          let m_before = marker_of r.db_before cid
+          and m_after = marker_of r.db_after cid in
+          if m_before <> m_after then Hashtbl.replace shifted cid ();
+          Seq.iter
+            (fun (d : datom) -> walk d.e)
+            (datoms r.db_after Avet ~a:"block/parent" ~v:(Ref cid) ())
+        end
       in
       Seq.iter
         (fun (d : datom) -> walk d.e)

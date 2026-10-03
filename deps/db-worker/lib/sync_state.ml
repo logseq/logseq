@@ -270,3 +270,31 @@ let dev_or_test : bool ref = ref false
    e2e app builds. The runtime signal for the same "e2e build" here is the
    :dev? flag the app sends in its transact context (DEV-RELEASE). *)
 let outliner_perf_logging : bool ref = ref false
+
+(* Set while pending ops are forward-replayed onto the display conn after a
+   server-state rebind. Gates client-ops persistence (handle-local-tx!) and
+   checksum updates: replayed reports must neither re-queue nor advance the
+   stored checksum past confirmed state. *)
+let pending_replay : bool ref = ref false
+
+(* RTC graph server conn: storage-backed, confirmed state only. The
+   registered Worker_state.datascript_conn on a remote graph is the
+   display projection (server state + pending ops replayed forward). *)
+let server_conns : (string, Datascript.conn) Hashtbl.t = Hashtbl.create 7
+
+let server_conn repo = Hashtbl.find_opt server_conns repo
+let set_server_conn repo conn = Hashtbl.replace server_conns repo conn
+let drop_server_conn repo =
+  match Hashtbl.find_opt server_conns repo with
+  | None -> ()
+  | Some conn ->
+      Hashtbl.remove server_conns repo;
+      Db_tx.release_flags conn
+
+(* Writes of confirmed state (remote txs, acked local txs, sync
+   bookkeeping) go to the server conn; falls back to the display conn on
+   local graphs and pre-split download opens. *)
+let confirmed_conn repo =
+  match server_conn repo with
+  | Some c -> Some c
+  | None -> Worker_state.datascript_conn repo

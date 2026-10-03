@@ -28,7 +28,12 @@ let require_conn repo : conn =
 (* maybe-run-recycle-gc! *)
 let recycle_gc_kv = "logseq.kv/recycle-last-gc-at"
 
-let maybe_run_recycle_gc (conn : conn) : unit =
+(* GC bookkeeping writes are system writes — on remote graphs they
+   belong to the confirmed base (server conn), not the projection. *)
+let maybe_run_recycle_gc repo : unit =
+  match Sync_state.confirmed_conn repo with
+  | None -> ()
+  | Some conn ->
   let now = Time.now () in
   let last_gc_at =
     match entity (Conn.db conn) (Ident recycle_gc_kv) with
@@ -130,7 +135,7 @@ let transact args : Wire.t Db_worker_effect.t =
        ignore
          (Db_transact.transact conn tx_data'
             (Ds_wire.tx_meta_of_transit tx_meta'));
-     maybe_run_recycle_gc conn;
+     maybe_run_recycle_gc repo;
      Db_worker_effect.pure Wire.Nil
    with e ->
      (* cljs (log/error ::worker-transact-failed {...}) then rethrow *)
