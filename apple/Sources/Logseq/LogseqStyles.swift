@@ -56,6 +56,22 @@ import SwiftUI
     return hex(palette[min(max(step - 1, 0), 11)])
   }
 
+  /// Tailwind-style named hues used by `--color-<name>-<step>` vars
+  /// (block background swatches, tag colors). 500-step hexes.
+  static func namedHue(_ name: String) -> Color? {
+    switch name {
+    case "yellow": return hex(0xeab308)
+    case "red": return hex(0xef4444)
+    case "pink": return hex(0xec4899)
+    case "green": return hex(0x22c55e)
+    case "blue": return hex(0x3b82f6)
+    case "purple": return hex(0xa855f7)
+    case "orange": return hex(0xf97316)
+    case "gray": return hex(0x6b7280)
+    default: return nil
+    }
+  }
+
   static func grayNS(_ step: Int) -> NSColor {
     let palette = isDark ? darkGray : lightGray
     return hexNS(palette[min(max(step - 1, 0), 11)])
@@ -205,6 +221,8 @@ import SwiftUI
         fontSize = px.map { CGFloat($0) }
       case "font-weight":
         if value == "bold" || (px ?? 0) >= 600 { isBold = true }
+      case "background-color":
+        if let c = parseCSSColor(value) { background = c }
       default:
         break
       }
@@ -411,6 +429,32 @@ import SwiftUI
       cornerRadius = 4
     case "menu-separator", "ui__dropdown-menu-separator":
       margin = EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0)
+    case "ui__dropdown-menu-sub-trigger":
+      isRow = true; fullWidth = true
+      if fontSize == nil { fontSize = 13 }
+      padding = EdgeInsets(top: 6, leading: 8, bottom: 6, trailing: 8)
+      cornerRadius = 4
+    case "ui__dropdown-menu-sub-content":
+      minWidth = 160
+      background = LogseqColors.gray(LogseqColors.isDark ? 3 : 1)
+      cornerRadius = 6
+      hasShadow = true
+      padding = EdgeInsets(top: 4, leading: 4, bottom: 4, trailing: 4)
+    case "ls-cm-headings-row", "ls-cm-colors-row":
+      isRow = true; stackSpacing = 2
+    case "ls-cm-heading-btn":
+      fixedWidth = 28; fixedHeight = 28
+    case "ls-cm-swatch":
+      fixedWidth = 24; fixedHeight = 24
+    case "heading-bg":
+      fixedWidth = 20; fixedHeight = 20; cornerRadius = 10
+      fontSize = fontSize ?? 11
+    case "shui-shortcut-combo", "shui-shortcut-separate":
+      isRow = true; stackSpacing = 2
+      fontSize = fontSize ?? 10
+      foreground = LogseqColors.secondaryText
+    case "ls-cm-sc": isRow = true
+    case "ls-menu-chevron": foreground = LogseqColors.secondaryText
     case "ls-context-menu-content": fixedWidth = 280
     case "ls-dots-menu": fixedWidth = 256
     case "cp__right-sidebar-settings":
@@ -625,6 +669,50 @@ import SwiftUI
     case "transparent": return .clear
     default: return nil
     }
+  }
+
+  /// CSS color string -> Color: `var(--x)` custom properties,
+  /// `#rgb`/`#rrggbb`, and `rgb()/rgba()`.
+  private func parseCSSColor(_ value: String) -> Color? {
+    var v = value
+    if v.hasPrefix("var(--"), let close = v.firstIndex(of: ")") {
+      let name = String(v[v.index(v.startIndex, offsetBy: 5)..<close])
+      // --color-<hue>-<step> tailwind-style palette vars
+      let parts = name.split(separator: "-")
+      if parts.first == "color", let hue = parts.dropFirst().first {
+        return LogseqColors.namedHue(String(hue))
+      }
+      return resolveVar(name)
+    }
+    if v.hasPrefix("#") {
+      v.removeFirst()
+      guard let hex = UInt32(v, radix: 16) else { return nil }
+      let r, g, b, a: Double
+      switch v.count {
+      case 3:
+        r = Double((hex >> 8) & 0xF) / 15
+        g = Double((hex >> 4) & 0xF) / 15
+        b = Double(hex & 0xF) / 15
+        a = 1
+      default:
+        r = Double((hex >> 16) & 0xFF) / 255
+        g = Double((hex >> 8) & 0xFF) / 255
+        b = Double(hex & 0xFF) / 255
+        a = v.count == 8 ? Double((hex >> 24) & 0xFF) / 255 : 1
+      }
+      return Color(.sRGB, red: r, green: g, blue: b, opacity: a)
+    }
+    if v.hasPrefix("rgb") {
+      let nums =
+        v.drop { $0 != "(" }.dropFirst().dropLast()
+        .split(separator: ",").compactMap { Double($0.trimmingCharacters(in: .whitespaces)) }
+      if nums.count >= 3 {
+        return Color(
+          .sRGB, red: nums[0] / 255, green: nums[1] / 255, blue: nums[2] / 255,
+          opacity: nums.count > 3 ? nums[3] : 1)
+      }
+    }
+    return nil
   }
 
   /// --ls-* / --lx-* custom property lookup -> the radix scale the web theme

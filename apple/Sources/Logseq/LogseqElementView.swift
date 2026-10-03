@@ -95,8 +95,8 @@ struct LogseqElementView: View {
         GeometryReader { g in
           Color.clear.preference(
             key: LogseqFrameKey.self,
-            value: LogseqFrameStore.enabled
-              ? [context.nodeID: g.frame(in: .named("logseqWindow"))] : [:])
+            value: [context.nodeID: LogseqFrameEntry(
+              rect: g.frame(in: .named("logseqWindow")), tag: tag)])
         })
       .onAppear {
         // OCaml's get_element_by_id only resolves elements that have
@@ -755,17 +755,34 @@ extension EnvironmentValues {
   }
 }
 
-/// Frame bookkeeping for debugging + future bounding_rect support:
-/// every element reports its window-space frame through a preference;
-/// `dump-frames` serializes the collected map.
+/// Frame bookkeeping: every element reports its window-space frame through
+/// a preference. Feeds `dump-frames` (debug) and right-click hit-testing —
+/// DOM contextmenu needs the deepest element at the pointer, which SwiftUI
+/// gestures can't reach (they don't exist for right-click).
+struct LogseqFrameEntry: Equatable {
+  let rect: CGRect
+  let tag: String
+}
+
 @MainActor enum LogseqFrameStore {
-  static let enabled = ProcessInfo.processInfo.environment["LOGSEQ_DUMP"] != nil
-  static var frames: [Int: CGRect] = [:]
+  static var entries: [Int: LogseqFrameEntry] = [:]
+
+  /// Deepest element at the point: smallest containing frame wins,
+  /// approximating DOM hit order (children paint over ancestors).
+  static func hitTest(_ point: CGPoint) -> (nodeID: Int, tag: String)? {
+    var best: (id: Int, area: CGFloat)?
+    for (id, entry) in entries where entry.rect.contains(point) {
+      let area = entry.rect.width * entry.rect.height
+      if best == nil || area < best!.area { best = (id, area) }
+    }
+    guard let best, let entry = entries[best.id] else { return nil }
+    return (best.id, entry.tag)
+  }
 }
 
 struct LogseqFrameKey: PreferenceKey {
-  static let defaultValue: [Int: CGRect] = [:]
-  static func reduce(value: inout [Int: CGRect], nextValue: () -> [Int: CGRect]) {
+  static let defaultValue: [Int: LogseqFrameEntry] = [:]
+  static func reduce(value: inout [Int: LogseqFrameEntry], nextValue: () -> [Int: LogseqFrameEntry]) {
     value.merge(nextValue()) { _, new in new }
   }
 }
@@ -898,6 +915,7 @@ private struct LogseqElementRegistration: View {
     // OCaml's doc_query_selector emits "#ref": "node-<id>" for them.
     let handle = LogseqElementHandle(nodeID: context.nodeID)
     LogseqElementRegistry.shared.register("node-\(context.nodeID)", handle)
+    LogseqElementRegistry.shared.registerContext(context)
     guard !id.isEmpty else { return }
     LogseqElementRegistry.shared.register(id, handle)
     LogseqElementRegistry.shared.registerAnchor(id, context)
@@ -905,6 +923,7 @@ private struct LogseqElementRegistration: View {
 
   private func unregister() {
     LogseqElementRegistry.shared.unregister("node-\(context.nodeID)")
+    LogseqElementRegistry.shared.unregisterContext(context.nodeID)
     guard !id.isEmpty else { return }
     LogseqElementRegistry.shared.unregister(id)
   }

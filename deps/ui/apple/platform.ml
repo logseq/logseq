@@ -426,7 +426,11 @@ let strip_db_prefix repo =
 
 (* CustomEvent dispatch on document — cross-area comms; native: call
    the registered listeners directly. *)
-let dispatch name detail = emit_event name detail
+(* CustomEvent semantics: listeners read ev.detail.<key> (json_field
+   "detail"), so the payload must be wrapped under "detail" the way
+   `new CustomEvent(name, {detail})` does it on web. *)
+let dispatch name detail =
+  emit_event name (Js.Json.JObject [ ("detail", detail) ])
 
 let selected_block_uuids () = []
 

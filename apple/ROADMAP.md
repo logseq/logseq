@@ -45,11 +45,20 @@ Swift. Goal: feature parity with the Electron app.
   render and emit clicks (Help dropdown works), item cards pack
   top with header row + actions (dots, close) + page preview,
   collapse via header click.
+- Block context menu: right-click resolves the hit node via the
+  frame store, emits `contextmenu` with clientX/Y + target snapshot;
+  menu renders as an anchored overlay at the pointer and items
+  dispatch (`ls:editor-command` → copy-ref → clipboard,
+  open-in-sidebar → sidebar verified). Outside click dismisses;
+  `mousemove` emits at node granularity for submenu hovers.
 
 ## In progress
 
-- Block context menu (right-click menu structure exists in OCaml
-  view code; Swift side needs a contextMenu surface for it).
+- Context-menu polish: `cm_heading_row` renders vertically (needs
+  isRow), `ui__dropdown-menu-sub-trigger` unstyled, icon/emoji
+  picker surface untested, some commands stubbed OCaml-side
+  (add-comment, copy-export-as, set-icon, add-reaction →
+  "editor command not implemented").
 - Slash commands / autocomplete popups (`#ui__ac-inner`): AC popup
   state works OCaml-side; positioning + item rendering on the Swift
   side is incomplete.
