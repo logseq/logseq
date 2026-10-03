@@ -195,16 +195,26 @@ private struct LogseqRuntimeHost: View {
           }
           .navigationSplitViewColumnWidth(min: 200, ideal: 246, max: 400)
         } detail: {
-          GeometryReader { geo in
-            LUISwiftUIRoot(backend: runtime.backend, rootID: rootID)
-              // Electron zoomin/zoomout semantics: the LUI surface lays out
-              // on a smaller/larger logical area, then magnifies.
-              .frame(
-                width: geo.size.width / appState.zoomLevel,
-                height: geo.size.height / appState.zoomLevel)
-              .scaleEffect(appState.zoomLevel, anchor: .topLeading)
-              .frame(width: geo.size.width, height: geo.size.height, alignment: .topLeading)
-              .clipped()
+          Group {
+            if appState.zoomLevel == 1.0 {
+              // Plain path: GeometryReader could latch a 0×0 proposal
+              // while NavigationSplitView settles its columns, leaving the
+              // whole surface blank until a manual resize re-proposed.
+              LUISwiftUIRoot(backend: runtime.backend, rootID: rootID)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            } else {
+              GeometryReader { geo in
+                LUISwiftUIRoot(backend: runtime.backend, rootID: rootID)
+                  // Electron zoomin/zoomout semantics: the LUI surface lays
+                  // out on a smaller/larger logical area, then magnifies.
+                  .frame(
+                    width: geo.size.width / appState.zoomLevel,
+                    height: geo.size.height / appState.zoomLevel)
+                  .scaleEffect(appState.zoomLevel, anchor: .topLeading)
+                  .frame(width: geo.size.width, height: geo.size.height, alignment: .topLeading)
+                  .clipped()
+              }
+            }
           }
           .frame(maxWidth: .infinity, maxHeight: .infinity)
           .overlay(alignment: .topLeading) {
