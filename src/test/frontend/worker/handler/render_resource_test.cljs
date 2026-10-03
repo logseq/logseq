@@ -1124,6 +1124,59 @@
                                                 inner-uuid (str "[[" leaf-uuid "]] bar")}}
                                   response)))))
 
+(deftest block-breadcrumb-resource-resolves-uuids-inside-ref-titles-test
+  (when-let [api (render-resource-api)]
+    (let [{:keys [conn page]} (render-resource-fixture)
+          leaf-uuid (random-uuid)
+          ref-uuid (random-uuid)
+          ancestor-uuid (random-uuid)
+          target-uuid (random-uuid)]
+      (d/transact! conn
+                   [{:db/id -110
+                     :block/uuid leaf-uuid
+                     :block/tx-id 21
+                     :block/title "foo"}
+                    {:db/id -111
+                     :block/uuid ref-uuid
+                     :block/tx-id 21
+                     :block/title (str "[[" leaf-uuid "]] bar")
+                     :block/refs -110}
+                    ;; Block-ref shape: the ancestor title references a block
+                    ;; whose own title is an id ref, so the leaf uuid is only
+                    ;; reachable through the ref's title.
+                    {:db/id -112
+                     :block/uuid ancestor-uuid
+                     :block/tx-id 21
+                     :block/title (str "[[" ref-uuid "]] nested")
+                     :block/page [:block/uuid page]
+                     :block/parent [:block/uuid page]
+                     :block/order "n0"
+                     :block/refs -111}
+                    {:db/id -113
+                     :block/uuid target-uuid
+                     :block/tx-id 21
+                     :block/title "Target"
+                     :block/page [:block/uuid page]
+                     :block/parent -112
+                     :block/order "n1"}])
+      (let [resource-key [:block-breadcrumb target-uuid 16]
+            target-block (d/entity @conn [:block/uuid target-uuid])
+            breadcrumb-ancestors (block-breadcrumb/block-breadcrumb @conn target-block 16)
+            response (call-resource api conn resource-key)]
+        (assert-resource-envelope @conn
+                                  resource-key
+                                  #{[:entity target-uuid]
+                                    [:entity page]
+                                    [:entity ancestor-uuid]
+                                    [:entity leaf-uuid]
+                                    [:entity ref-uuid]}
+                                  {:target-uuid target-uuid
+                                   :ancestor-uuids [page ancestor-uuid]
+                                   :ancestors breadcrumb-ancestors
+                                   :ref-titles {leaf-uuid "foo"
+                                                ref-uuid (str "[[" leaf-uuid "]] bar")}}
+                                  response)))))
+
 (deftest block-breadcrumb-resource-returns-empty-payload-for-missing-blocks-test
   (when-let [api (render-resource-api)]
     (let [{:keys [conn]} (render-resource-fixture)

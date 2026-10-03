@@ -236,7 +236,17 @@
         title-ref-uuids (fn [entity]
                           (when-let [title (:block/title entity)]
                             (db-content/get-matched-ids title)))]
-    (loop [frontier (into [] (mapcat title-ref-uuids) entities)
+    ;; Seed from ref titles too: a [[uuid]] nested inside a ref's own title
+    ;; (e.g. a block ref whose title is itself an id ref) is not reachable
+    ;; from the ancestor titles alone.
+    (loop [frontier (into []
+                          (comp
+                           (mapcat (fn [entity]
+                                     (into (title-ref-uuids entity)
+                                           (mapcat #(title-ref-uuids %)
+                                                   (:block/refs entity)))))
+                           (remove nil?))
+                          entities)
            seen (into #{} (keys ref-titles))
            titles ref-titles]
       (if-let [ref-uuid (first frontier)]
