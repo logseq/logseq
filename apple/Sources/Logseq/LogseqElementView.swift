@@ -15,6 +15,7 @@ struct LogseqElementView: View {
   var inOverlay = false
   @Environment(\.logseqInOverlay) private var nestedInOverlay
   @Environment(\.logseqInImperative) private var inImperativeLayer
+  @ObservedObject private var titleHoverStore = LogseqTitleHoverStore.shared
   /// lui-overlay.css's `#ui__ac-inner` max-height: the enclosing
   /// `data-editor-popup-ref` popover pushes its --available-height budget
   /// down through this env so the AC list caps at
@@ -176,6 +177,38 @@ struct LogseqElementView: View {
     return ""
   }
 
+  /// `block-content-wrapper` — the page title row; its hover state
+  /// reveals `ls-page-title-actions` descendants.
+  private var isTitleHoverRegion: Bool {
+    guard case .string(let classes) = context.property("style-class")
+    else { return false }
+    return classes.split(separator: " ").contains {
+      $0 == "block-content-wrapper"
+    }
+  }
+
+  /// `ls-page-title-actions` — the "Add icon"/"Set property" row; shows
+  /// only while the pointer is over the title block (web parity).
+  private var isTitleActions: Bool {
+    guard case .string(let classes) = context.property("style-class")
+    else { return false }
+    return classes.split(separator: " ").contains {
+      $0 == "ls-page-title-actions"
+    }
+  }
+
+  /// Web parity: visible only while an ancestor `block-content-wrapper`
+  /// is hovered.
+  private var titleActionsVisible: Bool {
+    guard isTitleActions else { return true }
+    var ancestor = context.parentID(of: context.nodeID)
+    while let id = ancestor {
+      if titleHoverStore.hovered.contains(id) { return true }
+      ancestor = context.parentID(of: id)
+    }
+    return false
+  }
+
   /// The DOM `id` dom-ops resolve against — carried on the
   /// `accessibility-identifier` prop (see LogseqStyles).
   private var domID: String {
@@ -239,6 +272,16 @@ struct LogseqElementView: View {
             }
           }
         })
+      .onHover { inside in
+        if isTitleHoverRegion {
+          titleHoverStore.set(context.nodeID, inside: inside)
+          if ProcessInfo.processInfo.environment["LOGSEQ_DUMP"] != nil {
+            try? "{\"hover\":\(inside),\"node\":\(context.nodeID)}".write(
+              toFile: "/tmp/title-hover.json", atomically: true,
+              encoding: .utf8)
+          }
+        }
+      }
       .onAppear {
         // OCaml's get_element_by_id only resolves elements that have
         // announced themselves — its DOM probes (e.g. #ui__ac-inner for an
@@ -256,6 +299,9 @@ struct LogseqElementView: View {
       .onDisappear {
         emitLifecycle("element-unmount")
         if isLeftSidebarLayout { LogseqSidebarStore.shared.open = false }
+        if isTitleHoverRegion {
+          titleHoverStore.set(context.nodeID, inside: false)
+        }
       }
       .onChange(of: sidebarOpen) { _, open in
         if isLeftSidebarLayout {
@@ -308,6 +354,11 @@ struct LogseqElementView: View {
       }
     } else {
       contentBody
+        // Web: page title actions fade in on title-block hover.
+        .opacity(titleActionsVisible ? 1 : 0)
+        .allowsHitTesting(titleActionsVisible)
+        .animation(
+          .easeInOut(duration: 0.12), value: titleActionsVisible)
     }
   }
 
@@ -896,6 +947,26 @@ extension EnvironmentValues {
   var logseqInImperative: Bool {
     get { self[LogseqInImperativeKey.self] }
     set { self[LogseqInImperativeKey.self] = newValue }
+  }
+}
+
+/// `block-content-wrapper` node ids currently under the pointer —
+/// `ls-page-title-actions` ("Add icon"/"Set property") fades in only
+/// while its own wrapper ancestor is hovered (web's
+/// `.block-content-wrapper:hover .ls-page-title-actions`). A shared store,
+/// not the environment: extension children resolve through AnyView
+/// snapshots where env writes on the element view can get dropped.
+@MainActor
+final class LogseqTitleHoverStore: ObservableObject {
+  static let shared = LogseqTitleHoverStore()
+  @Published private(set) var hovered: Set<Int> = []
+
+  func set(_ nodeID: Int, inside: Bool) {
+    if inside {
+      hovered.insert(nodeID)
+    } else {
+      hovered.remove(nodeID)
+    }
   }
 }
 

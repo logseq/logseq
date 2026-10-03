@@ -117,7 +117,7 @@ let crumb_title ms =
              | Some p when p.Model.page_title <> "" -> p.page_title
              | _ -> (
                match m.route with
-               | Model.Home -> I18n.t "nav/home"
+               | Model.Home -> ""
                | Model.Journals -> I18n.t "nav/journals"
                | Model.All_pages -> I18n.t "nav.all-pages/title"
                | Model.Settings -> I18n.t "nav/settings"
@@ -141,13 +141,19 @@ let right_toggle_btn ms =
       Sidebar_state.ensure_contents (Sidebar_state.ensure ms))
 
 (* Out's navigation group: system sidebar toggle (NavigationSplitView
-   supplies it), ‹ › nav, home, › + title. *)
+   supplies it), ‹ › nav, home, › + title. The trailing controls each
+   hoist as their own toolbar element — separate items, not one fused
+   capsule. *)
 let topbar (ms : Model.t Signal.signal) : t list =
   [ toolbar ~key:"tb-leading" ~placement:"navigation"
       ~label:"Window Toolbar"
       [ back_btn ms; forward_btn ms; home_btn ms; crumb_title ms ]
-  ; toolbar ~key:"tb-trailing" ~placement:"primary-action"
-      ~label:"Actions" [ search_btn; dots_btn; right_toggle_btn ms ]
+  ; toolbar ~key:"tb-search" ~placement:"primary-action"
+      ~label:"Search" [ search_btn ]
+  ; toolbar ~key:"tb-dots" ~placement:"primary-action"
+      ~label:"Page Menu" [ dots_btn ]
+  ; toolbar ~key:"tb-right" ~placement:"primary-action"
+      ~label:"Toggle Right Sidebar" [ right_toggle_btn ms ]
   ]
 
 (* components/rtc/indicator.cljs — cloud status button + hidden rtc-tx
