@@ -5,7 +5,6 @@
             [clojure.string :as string]
             [datascript.core :as d]
             [logseq.common.date :as common-date]
-            [logseq.common.util :as common-util]
             [logseq.common.util.namespace :as ns-util]
             [logseq.db :as ldb]
             [logseq.db.frontend.class :as db-class]
@@ -47,78 +46,60 @@
                                       :i18n-key :page.validation/name-blank
                                       :type :warning}})))))
 
-(defn- case-sensitive-title?
-  "Properties and tags keep exact-title uniqueness. Ordinary pages match create
-   via :block/name (page-name-sanity-lc)."
-  [entity]
-  (or (ldb/property? entity) (ldb/class? entity)))
-
-(defn- find-other-ids-with-title-and-tags
-  "Query that finds other ids given the id to ignore, title or lc name to look up, and tags to consider.
-   Properties and tags match by exact :block/title; ordinary pages match by :block/name
-   (page-name-sanity-lc, same as page creation). Entities with a parent are scoped to
-   that parent; top-level pages only match other top-level pages."
-  [entity]
-  (let [case-sensitive? (case-sensitive-title? entity)]
-    (vec
-     (concat
-      '[:find [?b ...]
-        :in $ ?eid ?title [?tag-id ...]
-        :where]
-      [(vector '?b (if case-sensitive? :block/title :block/name) '?title)
-       '[?b :block/tags ?tag-id]
-       '[(not= ?b ?eid)]]
-      (cond
-        (ldb/property? entity)
-        ;; Property names are unique in that they can
-        ;; have the same names as built-in property names
-        '[[(missing? $ ?b :logseq.property/built-in?)]]
-        (:block/parent entity)
-        ;; same parent
-        '[[?b :block/parent ?bp]
-          [?eid :block/parent ?ep]
-          [(= ?bp ?ep)]]
-        (not case-sensitive?)
-        '[[(missing? $ ?b :block/parent)]])))))
+(def ^:private other-user-property-ids-with-title-query
+  "Property names are unique among user properties; built-in names may be reused."
+  '[:find [?b ...]
+    :in $ ?eid ?title [?tag-id ...]
+    :where
+    [?b :block/title ?title]
+    [?b :block/tags ?tag-id]
+    [(missing? $ ?b :logseq.property/built-in?)]
+    [(not= ?b ?eid)]])
 
 (defn- throw-duplicate
   [title payload]
   (throw (ex-info title {:type :notification :payload payload})))
 
+(defn- allowed-shared-page-title?
+  "Apple #Company and Apple #Fruit may share a title; the only common tag is #Page."
+  [this-tags another-tags]
+  (and (= (set/intersection this-tags another-tags) #{:logseq.class/Page})
+       (> (count this-tags) 1)
+       (> (count another-tags) 1)))
+
 (defn- colliding-tag-ids
-  "Shared tag idents of the first colliding entity. An entity is exempt when it
-   shares the name under different tags e.g. Apple #Company and Apple #Fruit."
-  [db entity lookup tags]
+  "Shared tag idents of the first colliding entity in this uniqueness group.
+   An entity is exempt when it shares the title under different tags e.g.
+   Apple #Company and Apple #Fruit."
+  [db entity new-title tags]
   (let [this-tags (set (map :db/ident tags))]
     (some (fn [another-id]
             (let [another-tags (set (map :db/ident (:block/tags (d/entity db another-id))))
                   common-tags (set/intersection this-tags another-tags)]
-              (when-not (and (= common-tags #{:logseq.class/Page})
-                             (> (count this-tags) 1)
-                             (> (count another-tags) 1))
+              (when-not (allowed-shared-page-title? this-tags another-tags)
                 common-tags)))
-          (d/q (find-other-ids-with-title-and-tags entity)
-               db
-               (:db/id entity)
-               lookup
-               (map :db/id tags)))))
+          (ldb/page-exists-by-parent? db
+                                      new-title
+                                      (map :db/ident tags)
+                                      (ldb/uniqueness-parent-ids entity)
+                                      {:exclude-id (:db/id entity)}))))
 
 (defn- validate-unique-for-page
   [db new-title {:block/keys [tags] :as entity}]
   (when (seq tags)
-    (let [lookup (if (case-sensitive-title? entity)
-                   new-title
-                   (common-util/page-name-sanity-lc new-title))
-          common-tag-ids (colliding-tag-ids db entity lookup tags)]
-      (when common-tag-ids
+    (if (ldb/property? entity)
+      (when (seq (d/q other-user-property-ids-with-title-query
+                      db
+                      (:db/id entity)
+                      new-title
+                      (map :db/id tags)))
+        (throw-duplicate "Duplicate property"
+                         {:message (str "Another property named " (pr-str new-title) " already exists.")
+                          :i18n-key :property.validation/duplicate
+                          :i18n-args [new-title]
+                          :type :warning}))
+      (when-let [common-tag-ids (colliding-tag-ids db entity new-title tags)]
         (cond
-          (ldb/property? entity)
-          (throw-duplicate "Duplicate property"
-                           {:message (str "Another property named " (pr-str new-title) " already exists.")
-                            :i18n-key :property.validation/duplicate
-                            :i18n-args [new-title]
-                            :type :warning})
-
           (ldb/class? entity)
           (throw-duplicate "Duplicate class"
                            {:message (str "Another tag named " (pr-str new-title) " already exists.")
@@ -147,7 +128,10 @@
    - Ordinary page names are unique by :block/name (case-insensitive) for the same parent or among top-level pages
    - Page names are unique for a tag e.g. their can be Apple #Company and Apple #Fruit
    - Property names are unique with user properties being allowed to have the same name as built-in ones
-   - Class names are unique regardless of their extends or if they're built-in"
+   - Page and tag titles are unique within a parent: top-level pages (no parent
+     or Library) share one group; namespace children share a group with siblings.
+     Tags follow the same rule using user-tag extends as the parent. The same
+     title is allowed under different parents."
   [db new-title entity]
   (when (entity-util/page? entity)
     (validate-unique-for-page db new-title entity)))
