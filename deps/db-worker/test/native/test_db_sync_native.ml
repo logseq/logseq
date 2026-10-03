@@ -11407,6 +11407,123 @@ let test_rehydrate_large_title_tempid () =
                  (Ldb.ent_of_ref (Datascript.db conn) (Temp_id tempid)
                   = None)))
 
+(* On a remote graph the split makes conn the server conn and installs a
+   display projection: a confirmed block's rehydrated title must land on
+   BOTH conns, while a pending-created block — an eid the server conn
+   never allocated — takes a display-only write. *)
+let test_rehydrate_dual_conn_remote_graph () =
+  preserve_state (fun () ->
+      let conn =
+        Db_test_util.create_conn_with_blocks
+          ~pages_and_blocks:
+            [ { Db_test_util.page =
+                  { Db_test_util.default_page with
+                    pg_title = Some "rehydrate-page" }
+              ; blocks =
+                  [ { Db_test_util.default_block with
+                      b_title = Some "confirmed-block" } ] } ]
+          ()
+      in
+      mark_graph_remote conn;
+      let confirmed =
+        Option.get
+          (Db_test_util.find_block_by_content (Datascript.db conn)
+             "confirmed-block")
+      in
+      let confirmed_id = confirmed.id in
+      let confirmed_obj =
+        Sync_large_title.large_title_object_wire "title-confirmed" "txt"
+      in
+      let pending_uuid = fresh_uuid () in
+      let pending_obj =
+        Sync_large_title.large_title_object_wire "title-pending" "txt"
+      in
+      with_datascript_conns conn None (fun () ->
+          let server_conn =
+            Option.get (Sync_state.server_conn test_repo)
+          in
+          let display =
+            Option.get (Worker_state.datascript_conn test_repo)
+          in
+          check "conn split into server + display" (server_conn == conn);
+          check "display is a separate conn" (not (display == conn));
+          (* offload the confirmed block's title on the server conn *)
+          raw_transact_string conn
+            [ db_add (Wire.Int confirmed_id) "block/title"
+                (Wire.String "")
+            ; db_add (Wire.Int confirmed_id)
+                "logseq.property.sync/large-title-object" confirmed_obj ];
+          (* a pending-created block only exists on the display conn *)
+          let page =
+            Option.get
+              (Db_test_util.find_page_by_title (Datascript.db display)
+                 "rehydrate-page")
+          in
+          raw_transact_string display
+            [ db_add (Wire.String pending_uuid) "block/uuid"
+                (Wire.Uuid pending_uuid)
+            ; db_add (Wire.String pending_uuid) "block/title"
+                (Wire.String "")
+            ; db_add (Wire.String pending_uuid) "block/page"
+                (Wire.Int page.id)
+            ; db_add (Wire.String pending_uuid) "block/parent"
+                (Wire.Int page.id)
+            ; db_add (Wire.String pending_uuid) "block/order"
+                (Wire.String "a0")
+            ; db_add (Wire.String pending_uuid) "block/created-at"
+                (Wire.Int 1)
+            ; db_add (Wire.String pending_uuid) "block/updated-at"
+                (Wire.Int 1)
+            ; db_add (Wire.String pending_uuid)
+                "logseq.property.sync/large-title-object" pending_obj ];
+          let pending_id =
+            (Option.get
+               (ent_by_block_uuid (Datascript.db display) pending_uuid))
+              .id
+          in
+          let tx_data =
+            [ db_add (Wire.Int confirmed_id)
+                "logseq.property.sync/large-title-object" confirmed_obj
+            ; db_add (Wire.Int pending_id)
+                "logseq.property.sync/large-title-object" pending_obj ]
+          in
+          let download_fn ~repo:_ ~graph_id:_ ~obj:_ ~aes_key:_ =
+            Db_worker_effect.pure "rehydrated-title"
+          in
+          await_unit
+            (Sync_large_title.rehydrate_large_titles test_repo
+               ~graph_id:(Some "graph-1")
+               ~tx_data:(Some tx_data)
+               ~download_fn
+               ~graph_e2ee:(fun () -> false)
+               ~ensure_graph_aes_key:(fun _ ->
+                 Db_worker_effect.pure Wire.Nil)
+               ~conn:(Some display));
+          let server_confirmed =
+            Option.get
+              (Ldb.ent_of_id (Datascript.db conn) confirmed_id)
+          in
+          let display_confirmed =
+            Option.get
+              (Ldb.ent_of_id (Datascript.db display) confirmed_id)
+          in
+          check "confirmed title landed on server conn"
+            (Ldb.value server_confirmed "block/title"
+             = Some (String "rehydrated-title"));
+          check "confirmed title landed on display conn"
+            (Ldb.value display_confirmed "block/title"
+             = Some (String "rehydrated-title"));
+          check "pending title landed on display conn"
+            (match
+               ent_by_block_uuid (Datascript.db display) pending_uuid
+             with
+             | Some e ->
+                 Ldb.value e "block/title"
+                 = Some (String "rehydrated-title")
+             | None -> false);
+          check "pending entity never created on server conn"
+            (ent_by_block_uuid (Datascript.db conn) pending_uuid = None)))
+
 (* cljs rehydrate-large-titles-from-db-skips-missing-object-attr-test *)
 let test_rehydrate_from_db_skips_missing_object_attr () =
   preserve_state (fun () ->
@@ -14272,6 +14389,8 @@ let () =
             test_rehydrate_large_title
         ; Alcotest.test_case "rehydrate-large-title-tempid" `Quick
             test_rehydrate_large_title_tempid
+        ; Alcotest.test_case "rehydrate-dual-conn-remote-graph" `Quick
+            test_rehydrate_dual_conn_remote_graph
         ; Alcotest.test_case
             "rehydrate-from-db-skips-missing-object-attr" `Quick
             test_rehydrate_from_db_skips_missing_object_attr

@@ -4745,6 +4745,530 @@ let test_pending_replay_deleted_target_fallbacks () =
           check "pending queue drained"
             (Sync_apply.pending_txs repo_b () = [])))
 
+(* Pending insert-after op whose sibling target was remotely deleted:
+   with surviving siblings the fallback lands on the nearest left
+   sibling (same parent, order between it and the next sibling), not on
+   the page root. *)
+let test_pending_replay_fallback_surviving_left_sibling () =
+  let seed = Option.value (env_seed ()) ~default:default_seed in
+  let rng = make_rng seed in
+  let gen_uuid () = rng_uuid rng in
+  let base_uuid = gen_uuid () in
+  let conn_a = create_remote_conn ()
+  and conn_b = create_remote_conn () in
+  let ops_a = new_client_ops_db ()
+  and ops_b = new_client_ops_db () in
+  let client_a = make_client repo_a
+  and client_b = make_client repo_b in
+  let server = make_server () in
+  let history = ref [] in
+  let uuid_l1 = gen_uuid ()
+  and uuid_l2 = gen_uuid ()
+  and uuid_l3 = gen_uuid ()
+  and uuid_new = gen_uuid () in
+  with_test_repos
+    [ repo_a, { conn = conn_a; ops_conn = Some ops_a }
+    ; repo_b, { conn = conn_b; ops_conn = Some ops_b } ]
+    (fun () ->
+      let { repro = _; restore } = install_invalid_tx_repro_bang seed history in
+      Fun.protect
+        ~finally:restore
+        (fun () ->
+          Hashtbl.reset Sync_apply.repo_latest_remote_tx;
+          record_meta_bang history
+            [ "seed", Wire.Int seed; "base-uuid", Wire.Uuid base_uuid
+            ; "phase", kw "pending-replay-fallback-left-sibling" ];
+          List.iter
+            (fun c -> ensure_base_page_bang c base_uuid)
+            [ conn_a; conn_b ];
+          List.iter
+            (fun repo -> Sync_client_op.update_local_tx repo 0)
+            [ repo_a; repo_b ];
+          let clients =
+            [ { repo = repo_a; conn = conn_a; client = client_a
+              ; online = true; gen_uuid = Some gen_uuid }
+            ; { repo = repo_b; conn = conn_b; client = client_b
+              ; online = true; gen_uuid = Some gen_uuid } ]
+          in
+          (* A seeds: base -> {l1, l2, l3}. parent inserts land at the
+             top, so l3 goes in first to end up displayed l1, l2, l3 *)
+          (match ent_at_uuid (db_of_conn conn_a) base_uuid with
+           | Some base ->
+               create_block_bang conn_a base "l3" uuid_l3;
+               create_block_bang conn_a base "l2" uuid_l2;
+               create_block_bang conn_a base "l1" uuid_l1
+           | None -> ());
+          sync_loop_bang server clients;
+          (* B queues insert-after-l2 while offline *)
+          let ops_opts =
+            wire_map
+              [ "client-id", Wire.String repo_b
+              ; "local-tx?", Wire.Bool true ]
+          in
+          ignore
+            (apply_ops_bang conn_b
+               (edn_wire
+                  (Printf.sprintf
+                     "[[:insert-blocks [[{:block/uuid %s :block/title \
+                      \"new\"}] %s {:sibling? true :keep-uuid? \
+                      true}]]]"
+                     (uuid_lit uuid_new) (uuid_lit uuid_l2)))
+               ops_opts);
+          check "pending queued on B"
+            (List.length (Sync_apply.pending_txs repo_b ()) >= 1);
+          (* A deletes l2 only — l1 and l3 survive *)
+          delete_block_bang conn_a uuid_l2;
+          let clients_a_only =
+            [ { repo = repo_a; conn = conn_a; client = client_a
+              ; online = true; gen_uuid = Some gen_uuid } ]
+          in
+          sync_loop_bang server clients_a_only;
+          (* B reconnects: l2's delete lands, the pending insert replays *)
+          sync_loop_bang server clients;
+          sync_loop_bang server clients;
+          let db_b = db_of_conn conn_b in
+          let parent_uuid_of u =
+            match ent_at_uuid db_b u with
+            | Some e -> (
+                match Ldb.ref_ent e "block/parent" with
+                | Some p -> ent_uuid p
+                | None -> None)
+            | None -> None
+          in
+          let order_of u =
+            match ent_at_uuid db_b u with
+            | Some e -> Ldb.live_order db_b e.id
+            | None -> None
+          in
+          check "new block lands under base"
+            (parent_uuid_of uuid_new = Some base_uuid);
+          (match order_of uuid_l1, order_of uuid_new, order_of uuid_l3 with
+           | Some o1, Some on, Some o3 ->
+               check "new block sorts after l1" (String.compare o1 on < 0);
+               check "new block sorts before l3" (String.compare on o3 < 0)
+           | _ -> check "l1/new/l3 orders present" false);
+          let failed_count =
+            match
+              Sqlite.query ops_b
+                ~sql:"select count(*) from client_ops where failed = 1"
+                ~bind:[||]
+            with
+            | [| Sqlite.Integer n |] :: _ -> Int64.to_int n
+            | _ -> -1
+          in
+          check "entry replayed, not marked failed" (failed_count = 0);
+          check "pending queue drained"
+            (Sync_apply.pending_txs repo_b () = [])))
+
+(* Pending insert-under op whose parent target was remotely deleted:
+   resolve_ancestor_or_page climbs db_before and lands on the closest
+   surviving ancestor (base -> a -> b -> c, c and b deleted -> parent a),
+   not the page root. *)
+let test_pending_replay_fallback_multi_level_ancestor () =
+  let seed = Option.value (env_seed ()) ~default:default_seed in
+  let rng = make_rng seed in
+  let gen_uuid () = rng_uuid rng in
+  let base_uuid = gen_uuid () in
+  let conn_a = create_remote_conn ()
+  and conn_b = create_remote_conn () in
+  let ops_a = new_client_ops_db ()
+  and ops_b = new_client_ops_db () in
+  let client_a = make_client repo_a
+  and client_b = make_client repo_b in
+  let server = make_server () in
+  let history = ref [] in
+  let uuid_a = gen_uuid ()
+  and uuid_b = gen_uuid ()
+  and uuid_c = gen_uuid ()
+  and uuid_new = gen_uuid () in
+  with_test_repos
+    [ repo_a, { conn = conn_a; ops_conn = Some ops_a }
+    ; repo_b, { conn = conn_b; ops_conn = Some ops_b } ]
+    (fun () ->
+      let { repro = _; restore } = install_invalid_tx_repro_bang seed history in
+      Fun.protect
+        ~finally:restore
+        (fun () ->
+          Hashtbl.reset Sync_apply.repo_latest_remote_tx;
+          record_meta_bang history
+            [ "seed", Wire.Int seed; "base-uuid", Wire.Uuid base_uuid
+            ; "phase", kw "pending-replay-fallback-multi-level-ancestor" ];
+          List.iter
+            (fun c -> ensure_base_page_bang c base_uuid)
+            [ conn_a; conn_b ];
+          List.iter
+            (fun repo -> Sync_client_op.update_local_tx repo 0)
+            [ repo_a; repo_b ];
+          let clients =
+            [ { repo = repo_a; conn = conn_a; client = client_a
+              ; online = true; gen_uuid = Some gen_uuid }
+            ; { repo = repo_b; conn = conn_b; client = client_b
+              ; online = true; gen_uuid = Some gen_uuid } ]
+          in
+          (* A seeds: base -> a -> b -> c *)
+          (match ent_at_uuid (db_of_conn conn_a) base_uuid with
+           | Some base ->
+               create_block_bang conn_a base "a" uuid_a;
+               (match ent_at_uuid (db_of_conn conn_a) uuid_a with
+                | Some a ->
+                    create_block_bang conn_a a "b" uuid_b;
+                    (match ent_at_uuid (db_of_conn conn_a) uuid_b with
+                     | Some b -> create_block_bang conn_a b "c" uuid_c
+                     | None -> ())
+                | None -> ())
+           | None -> ());
+          sync_loop_bang server clients;
+          (* B queues insert-under-c while offline *)
+          let ops_opts =
+            wire_map
+              [ "client-id", Wire.String repo_b
+              ; "local-tx?", Wire.Bool true ]
+          in
+          ignore
+            (apply_ops_bang conn_b
+               (edn_wire
+                  (Printf.sprintf
+                     "[[:insert-blocks [[{:block/uuid %s :block/title \
+                      \"new\"}] %s {:sibling? false :keep-uuid? \
+                      true}]]]"
+                     (uuid_lit uuid_new) (uuid_lit uuid_c)))
+               ops_opts);
+          check "pending queued on B"
+            (List.length (Sync_apply.pending_txs repo_b ()) >= 1);
+          (* A deletes c AND b — a survives *)
+          delete_block_bang conn_a uuid_c;
+          delete_block_bang conn_a uuid_b;
+          let clients_a_only =
+            [ { repo = repo_a; conn = conn_a; client = client_a
+              ; online = true; gen_uuid = Some gen_uuid } ]
+          in
+          sync_loop_bang server clients_a_only;
+          sync_loop_bang server clients;
+          sync_loop_bang server clients;
+          let db_b = db_of_conn conn_b in
+          let parent_uuid_of u =
+            match ent_at_uuid db_b u with
+            | Some e -> (
+                match Ldb.ref_ent e "block/parent" with
+                | Some p -> ent_uuid p
+                | None -> None)
+            | None -> None
+          in
+          check "new block lands under closest surviving ancestor a"
+            (parent_uuid_of uuid_new = Some uuid_a);
+          let failed_count =
+            match
+              Sqlite.query ops_b
+                ~sql:"select count(*) from client_ops where failed = 1"
+                ~bind:[||]
+            with
+            | [| Sqlite.Integer n |] :: _ -> Int64.to_int n
+            | _ -> -1
+          in
+          check "entry replayed, not marked failed" (failed_count = 0);
+          check "pending queue drained"
+            (Sync_apply.pending_txs repo_b () = [])))
+
+(* Pending apply-template op whose sibling target was remotely deleted:
+   page_root_fallback applies to apply-template too, so the template
+   content lands at the page root instead of failing the entry. *)
+let test_pending_replay_apply_template_fallback () =
+  let seed = Option.value (env_seed ()) ~default:default_seed in
+  let rng = make_rng seed in
+  let gen_uuid () = rng_uuid rng in
+  let base_uuid = gen_uuid () in
+  let conn_a = create_remote_conn ()
+  and conn_b = create_remote_conn () in
+  let ops_a = new_client_ops_db ()
+  and ops_b = new_client_ops_db () in
+  let client_a = make_client repo_a
+  and client_b = make_client repo_b in
+  let server = make_server () in
+  let history = ref [] in
+  let uuid_tpl = gen_uuid ()
+  and uuid_tc = gen_uuid ()
+  and uuid_tgt = gen_uuid () in
+  with_test_repos
+    [ repo_a, { conn = conn_a; ops_conn = Some ops_a }
+    ; repo_b, { conn = conn_b; ops_conn = Some ops_b } ]
+    (fun () ->
+      let { repro = _; restore } = install_invalid_tx_repro_bang seed history in
+      Fun.protect
+        ~finally:restore
+        (fun () ->
+          Hashtbl.reset Sync_apply.repo_latest_remote_tx;
+          record_meta_bang history
+            [ "seed", Wire.Int seed; "base-uuid", Wire.Uuid base_uuid
+            ; "phase", kw "pending-replay-apply-template-fallback" ];
+          List.iter
+            (fun c -> ensure_base_page_bang c base_uuid)
+            [ conn_a; conn_b ];
+          List.iter
+            (fun repo -> Sync_client_op.update_local_tx repo 0)
+            [ repo_a; repo_b ];
+          let clients =
+            [ { repo = repo_a; conn = conn_a; client = client_a
+              ; online = true; gen_uuid = Some gen_uuid }
+            ; { repo = repo_b; conn = conn_b; client = client_b
+              ; online = true; gen_uuid = Some gen_uuid } ]
+          in
+          let ops_opts_a =
+            wire_map
+              [ "client-id", Wire.String repo_a
+              ; "local-tx?", Wire.Bool true ]
+          in
+          (* A seeds: template tpl -> tc (minimal one-block template) and
+             a plain target block tgt, both under base *)
+          ignore
+            (apply_ops_bang conn_a
+               (edn_wire
+                  (Printf.sprintf
+                     "[[:insert-blocks [[{:block/uuid %s :block/title \
+                      \"tpl\" :block/tags #{:logseq.class/Template}} \
+                      {:block/uuid %s :block/title \"tc\" :block/parent \
+                      [:block/uuid %s]}] %s {:sibling? false \
+                      :keep-uuid? true}]]]"
+                     (uuid_lit uuid_tpl) (uuid_lit uuid_tc)
+                     (uuid_lit uuid_tpl) (uuid_lit base_uuid)))
+               ops_opts_a);
+          (match ent_at_uuid (db_of_conn conn_a) base_uuid with
+           | Some base -> create_block_bang conn_a base "tgt" uuid_tgt
+           | None -> ());
+          sync_loop_bang server clients;
+          (* B queues apply-template tgt while offline *)
+          let ops_opts =
+            wire_map
+              [ "client-id", Wire.String repo_b
+              ; "local-tx?", Wire.Bool true ]
+          in
+          ignore
+            (apply_ops_bang conn_b
+               (edn_wire
+                  (Printf.sprintf
+                     "[[:apply-template [%s %s {:sibling? true}]]]"
+                     (uuid_lit uuid_tpl) (uuid_lit uuid_tgt)))
+               ops_opts);
+          check "pending queued on B"
+            (List.length (Sync_apply.pending_txs repo_b ()) >= 1);
+          (* A deletes the template's target *)
+          delete_block_bang conn_a uuid_tgt;
+          let clients_a_only =
+            [ { repo = repo_a; conn = conn_a; client = client_a
+              ; online = true; gen_uuid = Some gen_uuid } ]
+          in
+          sync_loop_bang server clients_a_only;
+          sync_loop_bang server clients;
+          sync_loop_bang server clients;
+          (* the applied copy of "tc" lands as a child of base *)
+          let db_b = db_of_conn conn_b in
+          let tc_copy =
+            match ent_at_uuid db_b base_uuid with
+            | Some base ->
+                List.find_opt
+                  (fun e ->
+                     Ldb.string_value e "block/title" = Some "tc")
+                  (Ldb.get_children base)
+            | None -> None
+          in
+          check "template content landed at page root"
+            (tc_copy <> None);
+          let failed_count =
+            match
+              Sqlite.query ops_b
+                ~sql:"select count(*) from client_ops where failed = 1"
+                ~bind:[||]
+            with
+            | [| Sqlite.Integer n |] :: _ -> Int64.to_int n
+            | _ -> -1
+          in
+          check "entry replayed, not marked failed" (failed_count = 0);
+          check "pending queue drained"
+            (Sync_apply.pending_txs repo_b () = [])))
+
+(* One pending entry containing two ops — an insert that succeeds and a
+   move whose target was remotely deleted (moves get no fallback): the
+   entry is marked failed and the second rebuild pass drops the insert's
+   residue, leaving no trace on the display conn. *)
+let test_pending_replay_residue_multi_op_entry () =
+  let seed = Option.value (env_seed ()) ~default:default_seed in
+  let rng = make_rng seed in
+  let gen_uuid () = rng_uuid rng in
+  let base_uuid = gen_uuid () in
+  let conn_a = create_remote_conn ()
+  and conn_b = create_remote_conn () in
+  let ops_a = new_client_ops_db ()
+  and ops_b = new_client_ops_db () in
+  let client_a = make_client repo_a
+  and client_b = make_client repo_b in
+  let server = make_server () in
+  let history = ref [] in
+  let uuid_mv = gen_uuid ()
+  and uuid_new = gen_uuid () in
+  with_test_repos
+    [ repo_a, { conn = conn_a; ops_conn = Some ops_a }
+    ; repo_b, { conn = conn_b; ops_conn = Some ops_b } ]
+    (fun () ->
+      let { repro = _; restore } = install_invalid_tx_repro_bang seed history in
+      Fun.protect
+        ~finally:restore
+        (fun () ->
+          Hashtbl.reset Sync_apply.repo_latest_remote_tx;
+          record_meta_bang history
+            [ "seed", Wire.Int seed; "base-uuid", Wire.Uuid base_uuid
+            ; "phase", kw "pending-replay-residue-multi-op" ];
+          List.iter
+            (fun c -> ensure_base_page_bang c base_uuid)
+            [ conn_a; conn_b ];
+          List.iter
+            (fun repo -> Sync_client_op.update_local_tx repo 0)
+            [ repo_a; repo_b ];
+          let clients =
+            [ { repo = repo_a; conn = conn_a; client = client_a
+              ; online = true; gen_uuid = Some gen_uuid }
+            ; { repo = repo_b; conn = conn_b; client = client_b
+              ; online = true; gen_uuid = Some gen_uuid } ]
+          in
+          (* A seeds: base -> mv (the move target) *)
+          (match ent_at_uuid (db_of_conn conn_a) base_uuid with
+           | Some base -> create_block_bang conn_a base "mv" uuid_mv
+           | None -> ());
+          sync_loop_bang server clients;
+          (* B queues ONE batch: insert new under live base, then move it
+             under mv — one pending entry holding both forward ops *)
+          let ops_opts =
+            wire_map
+              [ "client-id", Wire.String repo_b
+              ; "local-tx?", Wire.Bool true ]
+          in
+          ignore
+            (apply_ops_bang conn_b
+               (edn_wire
+                  (Printf.sprintf
+                     "[[:insert-blocks [[{:block/uuid %s :block/title \
+                      \"new\"}] %s {:sibling? false :keep-uuid? true}]] \
+                      [:move-blocks [[%s] %s {:sibling? false}]]]"
+                     (uuid_lit uuid_new) (uuid_lit base_uuid)
+                     (uuid_lit uuid_new) (uuid_lit uuid_mv)))
+               ops_opts);
+          check "single pending entry queued on B"
+            (List.length (Sync_apply.pending_txs repo_b ()) = 1);
+          (* A deletes the move target *)
+          delete_block_bang conn_a uuid_mv;
+          let clients_a_only =
+            [ { repo = repo_a; conn = conn_a; client = client_a
+              ; online = true; gen_uuid = Some gen_uuid } ]
+          in
+          sync_loop_bang server clients_a_only;
+          sync_loop_bang server clients;
+          sync_loop_bang server clients;
+          let db_b = db_of_conn conn_b in
+          let failed_count =
+            match
+              Sqlite.query ops_b
+                ~sql:"select count(*) from client_ops where failed = 1"
+                ~bind:[||]
+            with
+            | [| Sqlite.Integer n |] :: _ -> Int64.to_int n
+            | _ -> -1
+          in
+          check "multi-op entry marked failed" (failed_count = 1);
+          check "insert residue gone from display conn"
+            (ent_at_uuid db_b uuid_new = None);
+          check "pending queue drained"
+            (Sync_apply.pending_txs repo_b () = [])))
+
+(* Pending verbatim txs creating and then using a user.property attr:
+   the attr ident only exists inside the pending queue, so replay must
+   treat it as pending-created (kept) rather than remotely deleted —
+   the block keeps its pending property value after reconnect. *)
+let test_pending_property_attrs_verbatim_replay () =
+  let seed = Option.value (env_seed ()) ~default:default_seed in
+  let rng = make_rng seed in
+  let gen_uuid () = rng_uuid rng in
+  let base_uuid = gen_uuid () in
+  let conn_a = create_remote_conn ()
+  and conn_b = create_remote_conn () in
+  let ops_a = new_client_ops_db ()
+  and ops_b = new_client_ops_db () in
+  let client_a = make_client repo_a
+  and client_b = make_client repo_b in
+  let server = make_server () in
+  let history = ref [] in
+  let uuid_blk = gen_uuid ()
+  and uuid_r = gen_uuid () in
+  with_test_repos
+    [ repo_a, { conn = conn_a; ops_conn = Some ops_a }
+    ; repo_b, { conn = conn_b; ops_conn = Some ops_b } ]
+    (fun () ->
+      let { repro = _; restore } = install_invalid_tx_repro_bang seed history in
+      Fun.protect
+        ~finally:restore
+        (fun () ->
+          Hashtbl.reset Sync_apply.repo_latest_remote_tx;
+          record_meta_bang history
+            [ "seed", Wire.Int seed; "base-uuid", Wire.Uuid base_uuid
+            ; "phase", kw "pending-property-attrs-verbatim-replay" ];
+          List.iter
+            (fun c -> ensure_base_page_bang c base_uuid)
+            [ conn_a; conn_b ];
+          List.iter
+            (fun repo -> Sync_client_op.update_local_tx repo 0)
+            [ repo_a; repo_b ];
+          let clients =
+            [ { repo = repo_a; conn = conn_a; client = client_a
+              ; online = true; gen_uuid = Some gen_uuid }
+            ; { repo = repo_b; conn = conn_b; client = client_b
+              ; online = true; gen_uuid = Some gen_uuid } ]
+          in
+          (match ent_at_uuid (db_of_conn conn_a) base_uuid with
+           | Some base -> create_block_bang conn_a base "blk" uuid_blk
+           | None -> ());
+          sync_loop_bang server clients;
+          (* B queues two verbatim txs while offline: (a) create property
+             entity user.property/x, (b) set it on blk *)
+          let tx_meta =
+            [ "client-id", String repo_b
+            ; "local-tx?", Bool true ]
+          in
+          ignore
+            (Db_transact.transact conn_b
+               [ Sqlite_util.build_new_property "user.property/x"
+                   (Wire.Map []) ]
+               tx_meta);
+          Outliner_property.set_block_property conn_b
+            (Wire.Array [ kw "block/uuid"; Wire.Uuid uuid_blk ])
+            "user.property/x" (Wire.String "local value");
+          check "pending queued on B"
+            (List.length (Sync_apply.pending_txs repo_b ()) >= 2);
+          (* A sends any remote tx — forces B's pending queue to rebase *)
+          (match ent_at_uuid (db_of_conn conn_a) base_uuid with
+           | Some base -> create_block_bang conn_a base "r" uuid_r
+           | None -> ());
+          let clients_a_only =
+            [ { repo = repo_a; conn = conn_a; client = client_a
+              ; online = true; gen_uuid = Some gen_uuid } ]
+          in
+          sync_loop_bang server clients_a_only;
+          sync_loop_bang server clients;
+          sync_loop_bang server clients;
+          let db_b = db_of_conn conn_b in
+          check "block keeps pending property value"
+            (match ent_at_uuid db_b uuid_blk with
+             | Some e -> (
+                 match Ldb.value e "user.property/x" with
+                 | Some (Ref id) -> (
+                     match
+                       Datascript.entity db_b (Entity_id id)
+                     with
+                     | Some ve ->
+                         Ldb.value ve "block/title"
+                         = Some (String "local value")
+                     | None -> false)
+                 | _ -> false)
+             | None -> false);
+          check "pending queue drained"
+            (Sync_apply.pending_txs repo_b () = [])))
+
 (* deftest three-clients-single-repo-sim-test *)
 let test_three_clients_single_repo_sim () =
   let seed = Option.value (env_seed ()) ~default:default_seed in
@@ -4968,5 +5492,17 @@ let () =
         ; Alcotest.test_case
             "pending-replay-deleted-target-fallbacks-test" `Quick
             test_pending_replay_deleted_target_fallbacks
+        ; Alcotest.test_case
+            "pending-replay-fallback-surviving-left-sibling" `Quick
+            test_pending_replay_fallback_surviving_left_sibling
+        ; Alcotest.test_case
+            "pending-replay-fallback-multi-level-ancestor" `Quick
+            test_pending_replay_fallback_multi_level_ancestor
+        ; Alcotest.test_case "pending-replay-apply-template-fallback"
+            `Quick test_pending_replay_apply_template_fallback
+        ; Alcotest.test_case "pending-replay-residue-multi-op-entry"
+            `Quick test_pending_replay_residue_multi_op_entry
+        ; Alcotest.test_case "pending-property-attrs-verbatim-replay"
+            `Quick test_pending_property_attrs_verbatim_replay
         ; Alcotest.test_case "three-clients-single-repo-sim-test" `Quick
             test_three_clients_single_repo_sim ] ) ]
