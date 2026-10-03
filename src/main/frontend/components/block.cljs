@@ -1492,10 +1492,15 @@
                 (not html-export?)
                 (not (= (:id config) "contents")))
        [:span.text-gray-500 page-ref/left-brackets])
-     (let [page-name (subs content 2 (- (count content) 2))]
-       (page-cp (assoc config
-                       :children children
-                       :nested-link? true) {:block/name page-name}))
+     (let [page-name (subs content 2 (- (count content) 2))
+           page-uuid (when-not (string/blank? page-name)
+                       (db-hooks/use-resource [:page-identity page-name]))]
+       (if page-uuid
+         (page-cp (assoc config :nested-link? true)
+                  {:block/uuid page-uuid})
+         (page-cp (assoc config
+                         :children children
+                         :nested-link? true) {:block/name page-name})))
      (when (and show-brackets?
                 (not html-export?)
                 (not (= (:id config) "contents")))

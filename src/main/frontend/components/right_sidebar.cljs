@@ -75,8 +75,11 @@
     (when breadcrumb-data
       (block-breadcrumb/breadcrumb config repo block-id
                        {:indent? false
-                        :block (assoc block :block.temp/breadcrumb
-                                     (breadcrumb-model/resource-ancestors breadcrumb-data))}))))
+                        :block (assoc block
+                                      :block.temp/breadcrumb
+                                      (breadcrumb-model/resource-ancestors breadcrumb-data)
+                                      :block.temp/breadcrumb-ref-titles
+                                      (:ref-titles breadcrumb-data))}))))
 
 (defn- block-with-breadcrumb
   [repo block idx sidebar-key ref?]

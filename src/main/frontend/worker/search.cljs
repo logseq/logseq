@@ -935,7 +935,9 @@ ALTER TABLE blocks_fts_next RENAME TO blocks_fts;"))
                             block
                             {:title display-title
                              :alias (:block/title alias)
-                             :truncate? false})]
+                             :truncate? false})
+              breadcrumb-ancestors (when (:include-breadcrumb? option)
+                                   (block-breadcrumb/block-breadcrumb @conn block))]
           (cond-> {:db/id (:db/id block)
                    :block/uuid (:block/uuid block)
                    :block/title display-title
@@ -943,8 +945,9 @@ ALTER TABLE blocks_fts_next RENAME TO blocks_fts;"))
                    :block.temp/unique-title unique-title
                    :page? (ldb/page? block)}
             (:include-breadcrumb? option)
-            (assoc :block.temp/breadcrumb
-                   (block-breadcrumb/block-breadcrumb @conn block))
+            (assoc :block.temp/breadcrumb breadcrumb-ancestors
+                   :block.temp/breadcrumb-ref-titles
+                   (block-breadcrumb/breadcrumb-ref-titles @conn (into [block] breadcrumb-ancestors)))
 
             block-page
             (assoc :block/page block-page)

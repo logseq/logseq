@@ -844,6 +844,33 @@
          :block/tags [page-tag]}]
        recent-response))))
 
+(deftest page-identity-resource-resolves-names-containing-uuid-refs-test
+  (when-let [api (render-resource-api)]
+    (let [conn (db-test/create-conn)
+          leaf-uuid (random-uuid)
+          inner-uuid (random-uuid)]
+      ;; Nested page-ref names keep their inner ref uuid-substituted:
+      ;; "[[foo]] bar" is stored as "[[<leaf-uuid>]] bar".
+      (d/transact! conn
+                   [{:db/id -1
+                     :block/uuid leaf-uuid
+                     :block/tx-id 1
+                     :block/title "foo"
+                     :block/name "foo"}
+                    {:db/id -2
+                     :block/uuid inner-uuid
+                     :block/tx-id 1
+                     :block/title (str "[[" leaf-uuid "]] bar")
+                     :block/name (str "[[" leaf-uuid "]] bar")
+                     :block/refs -1}])
+      (let [response (call-resource api conn
+                                    [:page-identity (str "[[" leaf-uuid "]] bar")])]
+        (assert-resource-envelope @conn
+                                  [:page-identity (str "[[" leaf-uuid "]] bar")]
+                                  #{[:page-lookup (str "[[" leaf-uuid "]] bar")]}
+                                  inner-uuid
+                                  response)))))
+
 (deftest missing-page-identity-keeps-a-creation-watch-key-test
   (when-let [api (render-resource-api)]
     (let [{:keys [conn]} (render-resource-fixture)
