@@ -603,6 +603,57 @@
     (is (<= (:entity-calls input) 3))
     (is (= ["Beta"] (result-titles conn (:result input))))))
 
+(defn- note-topic-conn
+  []
+  (topic-conn
+   [{:page {:block/title "Page"}
+     :blocks [{:block/title "Apple block"
+               :build/tags [:Topic]
+               :build/properties {:user.property/note "Apple"}}
+              {:block/title "Orange block"
+               :build/tags [:Topic]
+               :build/properties {:user.property/note "Orange"}}]}]
+   :properties {:user.property/note {:logseq.property/type :default}}))
+
+(defn- title-id
+  [conn title]
+  (d/q '[:find ?e .
+         :in $ ?title
+         :where [?e :block/title ?title]]
+       @conn
+       title))
+
+(defn- note-filter
+  [operator]
+  {:or? false
+   :filters [[:user.property/note operator "apple"]]})
+
+(deftest get-view-data-class-objects-text-not-contains-is-case-insensitive-test
+  (let [conn (note-topic-conn)
+        class-id (:db/id (d/entity @conn :user.class/Topic))
+        view-id (create-view-id conn :class-objects :view-for-id class-id)
+        option {:view-feature-type :class-objects
+                :view-for-id class-id
+                :sorting [{:id :block/title :asc? true}]}
+        contains (db-view/get-view-data @conn view-id (assoc option :filters (note-filter :text-contains)))
+        not-contains (db-view/get-view-data @conn view-id (assoc option :filters (note-filter :text-not-contains)))]
+    (is (= ["Apple block"] (result-titles conn contains)))
+    (is (= ["Orange block"] (result-titles conn not-contains))
+        "does not contain must ignore case the same way contains does")))
+
+(deftest get-view-data-query-result-text-not-contains-is-case-insensitive-test
+  (let [conn (note-topic-conn)
+        view-id (create-view-id conn :query-result)
+        option {:view-feature-type :query-result
+                :query-entity-ids [(title-id conn "Apple block")
+                                   (title-id conn "Orange block")]
+                :sorting [{:id :block/title :asc? true}]}
+        contains (db-view/get-view-data @conn view-id (assoc option :filters (note-filter :text-contains)))
+        not-contains (db-view/get-view-data @conn view-id (assoc option :filters (note-filter :text-not-contains)))]
+    (is (= ["Apple block"] (result-titles conn contains)))
+    (is (= ["Orange block"] (result-titles conn not-contains))
+        "Query tables must apply the same case-insensitive does-not-contain match")))
+
 (deftest get-view-data-class-objects-number-filter-and-sort-test
   (let [conn (topic-conn
               [{:page {:block/title "A" :build/tags [:Topic]
