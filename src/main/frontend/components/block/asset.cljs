@@ -6,7 +6,8 @@
   without assuming that the URL itself contains a file extension."
   (:require [clojure.string :as string]
             [frontend.util :as util]
-            [logseq.common.config :as common-config]))
+            [logseq.common.config :as common-config]
+            [logseq.db.frontend.property :as db-property]))
 
 (defn- asset-type->keyword
   "Coerces `asset-type` from an asset entity into a lowercase keyword.
@@ -46,7 +47,7 @@
   "Returns true when an asset points to a local graph file that should already
   exist but is absent."
   [asset-block file-exists?]
-  (let [external-url (:logseq.property.asset/external-url asset-block)
+  (let [external-url (db-property/asset-external-url asset-block)
         remote-metadata (:logseq.property.asset/remote-metadata asset-block)]
     (and (false? file-exists?)
          (string/blank? external-url)

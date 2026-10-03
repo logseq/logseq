@@ -13,6 +13,7 @@
             [frontend.util :as util]
             [logseq.common.path :as path]
             [logseq.db :as ldb]
+            [logseq.db.frontend.property :as db-property]
             [promesa.core :as p]))
 
 (defn <sha256-hex
@@ -248,7 +249,7 @@
   [repo graph-uuid asset]
   (let [asset-type (:logseq.property.asset/type asset)
         asset-uuid (some-> (:block/uuid asset) str)
-        external-url (:logseq.property.asset/external-url asset)
+        external-url (db-property/asset-external-url asset)
         token (state/get-auth-id-token)]
     (if (or (not (string? asset-type)) (string/blank? asset-type) external-url (nil? asset-uuid))
       (p/resolved nil)

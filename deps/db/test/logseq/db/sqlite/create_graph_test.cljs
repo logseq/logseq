@@ -123,7 +123,15 @@
              (-> (d/entity @conn :logseq.property.repeat/recur-frequency)
                  :logseq.property/default-value
                  db-property/property-value-content))
-          "A numeric property is created correctly"))))
+          "A numeric property is created correctly")
+      (is (= {:logseq.property/type :url
+              :db/valueType :db.type/ref}
+             (select-keys (d/entity @conn :logseq.property.asset/external-url)
+                          [:logseq.property/type :db/valueType]))
+          "External URL is created as a :url ref property")
+      (is (= :url
+             (:logseq.property/type (d/entity @conn :logseq.property.publish/published-url)))
+          "Published URL is created as a :url property"))))
 
 (deftest new-graph-is-valid
   (let [conn (db-test/create-conn)

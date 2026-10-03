@@ -36,6 +36,7 @@
             [logseq.common.path :as path]
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
+            [logseq.db.frontend.property :as db-property]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [logseq.shui.popup.core :as shui-popup]
@@ -315,7 +316,7 @@
                          (let [assets-dir (config/get-current-repo-assets-root)
                                repo-dir (config/get-repo-dir (state/get-current-repo))
                                ext (:logseq.property.asset/type block)
-                               ext-url (:logseq.property.asset/external-url block)
+                               ext-url (db-property/asset-external-url block)
                                file-path (cond
                                            ;; Plugin-sourced asset stored under assets/storages/<plugin-id>/...
                                            (and (not (string/blank? ext-url))

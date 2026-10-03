@@ -1619,6 +1619,28 @@
                                  md-children-blocks*)]
     (into annotation-blocks md-children-blocks)))
 
+(defn- wrap-asset-external-url
+  "External URL is a :url ref property; wrap leftover string values as
+   property-value entities so file-graph import can transact them."
+  [asset]
+  (let [url (:logseq.property.asset/external-url asset)]
+    (if (string? url)
+      (let [block' (assoc asset
+                          :db/id [:block/uuid (:block/uuid asset)]
+                          :block/page {:db/id (:block/page asset)})
+            value-block (db-property-build/build-property-value-block
+                         block'
+                         {:db/ident :logseq.property.asset/external-url
+                          :logseq.property/type :url}
+                         url)]
+        ;; Place property values first since they are referenced by block
+        [(dissoc asset :logseq.property.asset/external-url)
+         value-block
+         [:db/add [:block/uuid (:block/uuid asset)]
+          :logseq.property.asset/external-url
+          [:block/uuid (:block/uuid value-block)]]])
+      [asset])))
+
 (defn- build-new-asset [asset-data]
   (merge (sqlite-util/block-with-timestamps
           {:block/order (db-order/gen-key)
@@ -1643,20 +1665,24 @@
   [parent-asset-paths assets {:keys [notify-user]}]
   (let [image-dirs (set (map #(string/replace-first % #"(?i)\.pdf$" "") parent-asset-paths))
         image-paths (filter #(contains? image-dirs (node-path/dirname %)) (keys @assets))
-        txs (keep #(let [asset-id (get-asset-block-id assets %)]
-                     (if-not asset-id
-                       (notify-user {:msg (str "Skipped creating asset " (pr-str %) " because it has no asset id")
-                                     :level :error})
-                       (let [new-asset (merge (build-new-asset (get @assets %))
-                                              {:block/title "pdf area highlight"
-                                               :block/uuid asset-id})]
-                         (swap! assets assoc-in [% :asset-created?] true)
-                         new-asset)))
-                  image-paths)]
-    {:txs txs
+        image-entries (keep (fn [image-path]
+                              (let [asset-id (get-asset-block-id assets image-path)]
+                                (if-not asset-id
+                                  (do
+                                    (notify-user {:msg (str "Skipped creating asset " (pr-str image-path) " because it has no asset id")
+                                                  :level :error})
+                                    nil)
+                                  (let [new-asset (merge (build-new-asset (get @assets image-path))
+                                                         {:block/title "pdf area highlight"
+                                                          :block/uuid asset-id})]
+                                    (swap! assets assoc-in [image-path :asset-created?] true)
+                                    {:path image-path :asset new-asset}))))
+                            image-paths)]
+    {:txs (mapcat (fn [{:keys [asset]}] (wrap-asset-external-url asset)) image-entries)
      :image-asset-name-to-uuids
-     (->> (map (fn [image-path tx]
-                 [(node-path/basename image-path) (:block/uuid tx)]) image-paths txs)
+     (->> image-entries
+          (map (fn [{:keys [path asset]}]
+                 [(node-path/basename path) (:block/uuid asset)]))
           (into {}))}))
 
 ;; Reference same default class in cljs + nbb without needing .cljc
@@ -1818,7 +1844,7 @@
                                   [(or asset-name asset-link-or-name)]))
         pdf-annotations-tx (when (some pdf-file? pdf-annotations-paths)
                              (build-pdf-annotations-tx pdf-annotations-paths assets new-asset pdf-annotation-pages opts))
-        asset-tx (concat [new-asset] pdf-annotations-tx)]
+        asset-tx (concat (wrap-asset-external-url new-asset) pdf-annotations-tx)]
     ;; (prn :asset-added! (node-path/basename asset-name))
     ;; (cljs.pprint/pprint asset-link)
     ;; (prn :debug :asset-tx asset-tx)

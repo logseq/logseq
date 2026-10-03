@@ -14,6 +14,7 @@
    [logseq.common.config :as common-config]
    [logseq.common.util :as common-util]
    [logseq.db :as ldb]
+   [logseq.db.frontend.property :as db-property]
    [promesa.core :as p]))
 
 (def max-asset-size (* 100 1024 1024))
@@ -451,7 +452,7 @@
             db)
        (keep (fn [[e asset-uuid asset-type]]
                (let [ent (d/entity db e)]
-                 (when-not (seq (some-> (:logseq.property.asset/external-url ent) str))
+                 (when-not (seq (some-> (db-property/asset-external-url ent) str))
                    {:asset-uuid asset-uuid
                     :asset-type asset-type}))))
        (sort-by (comp str :asset-uuid))))
