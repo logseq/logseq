@@ -26,7 +26,18 @@
   boolean indicating if db is valid"
   [{:keys [db-after tx-data tx-meta]} {:keys [closed-schema?]}]
   (binding [db-malli-schema/*skip-strict-url-validate?* true]
-    (let [changed-ids (->> tx-data (keep :e) distinct)
+    ;; An entity whose only changed attrs are bookkeeping timestamps didn't
+    ;; change semantically; validating it would let latent invalid state block
+    ;; unrelated writes (e.g. every tx that stamps :block/updated-at).
+    ;; Touches that leave a timestamp missing or non-integer still count.
+    (let [bookkeeping-attrs #{:block/created-at :block/updated-at}
+          changed-ids (->> (group-by :e tx-data)
+                           (keep (fn [[e datoms]]
+                                   (when (or (some #(not (contains? bookkeeping-attrs (:a %)))
+                                                   datoms)
+                                             (some #(not (int? (get (d/entity db-after e) (:a %))))
+                                                   datoms))
+                                     e))))
           tx-datoms (mapcat (fn [id]
                               (d/datoms db-after :eavt id))
                             changed-ids)
