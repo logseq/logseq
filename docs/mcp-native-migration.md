@@ -112,7 +112,15 @@ page by UUID. `createBlock` verifies its parent, owning page and stored content;
 `updateBlock` verifies title changes on the original UUID. `renamePage`
 preflights title availability and verifies the original page UUID. `moveBlock`
 checks cycle safety and verifies parent, page, descendants, and placement.
-There are 41 registered tools: five API-backed tools and 36 compatibility data tools.
+`removeBlock` inventories a bounded subtree before deletion and verifies every
+UUID is absent afterward. `splitBlock` validates every part and verifies tail
+sibling placement before truncating the original. `moveBlocks` preflights the
+selection, stops on failed verification, and reports best-effort rollback;
+it currently composes `moveBlock`, using more reads than the optimized reference.
+`migratePage` previews literal top-level selection and reads the source after moving.
+There are 45 registered tools: five API-backed tools and 40 compatibility data tools.
+Remaining tools: `importPage`, `repairLinks`, `retitleOverDuplicate`, `deletePage`,
+`clearPage`, and `createPageofBlocks`. Desktop smoke testing remains pending.
 `capabilities` reports inconclusive probes as `unknown`; write probes use
 invalid arguments, and `upsertNodes` is neither probed nor reported.
 Entry criteria still outstanding:

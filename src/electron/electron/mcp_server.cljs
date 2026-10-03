@@ -189,6 +189,28 @@
             :description "Delete a block and its subtree after inventorying it, then verify every UUID is absent."
             :inputSchema #js {:block_uuid (z/string)
                         :verbose (-> (z/boolean) .optional)}}}
+  :splitBlock
+  {:fn mcp-compat/split-block
+   :config #js {:title "Split Block"
+                :description "Split text into ordered siblings, verifying tails before truncating the original."
+                :inputSchema #js {:block_uuid (z/string)
+                                  :offset (-> (z/number) .optional)
+                                  :delimiter (-> (z/string) .optional)}}}
+  :moveBlocks
+  {:fn mcp-compat/move-blocks
+   :config #js {:title "Move Blocks"
+                :description "Move up to 50 blocks sequentially in supplied order; stop on failed verification. Rollback cannot restore original positions."
+                :inputSchema #js {:block_uuids (z/array (z/string)) :target_uuid (z/string)
+                                  :placement (-> (z/enum #js ["child" "last-child" "before" "after"]) .optional)
+                                  :all_or_nothing (-> (z/boolean) .optional)}}}
+  :migratePage
+  {:fn mcp-compat/migrate-page
+   :config #js {:title "Migrate Page"
+                :description "Move selected top-level blocks in order; dry-run previews a literal case-sensitive substring selection."
+                :inputSchema #js {:source_uuid (z/string) :target_uuid (z/string)
+                                  :contains (-> (z/string) .optional)
+                                  :placement (-> (z/enum #js ["child" "last-child" "before" "after"]) .optional)
+                                  :dry_run (-> (z/boolean) .optional)}}}
   :pageStats
   {:fn mcp-compat/page-stats
    :config #js {:title "Page Stats"

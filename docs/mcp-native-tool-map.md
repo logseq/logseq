@@ -60,11 +60,11 @@ the full/terse response behavior. Batch writes remain non-atomic.
 | `createBlock` | parent UUID, title, dry-run, verbose | `insertBlock` | compatibility adapter implemented; verifies parent, page and content | native mutation |
 | `createPageofBlocks` | page UUID, outline, dry-run, verbose | batch insert per parent | block adapter | native mutation |
 | `updateBlock` | block UUID, title, dry-run, verbose | `updateBlock` | compatibility adapter implemented; content and UUID read-back | native mutation |
-| `splitBlock` | UUID, exactly one offset/delimiter | create parts then update original | block adapter | native mutation |
+| `splitBlock` | UUID, exactly one offset/delimiter | create parts then update original | compatibility adapter implemented; validates all parts and verifies tail placement before truncation | native mutation |
 | `moveBlock` | UUIDs, target, placement, verbose | `moveBlock` | compatibility adapter implemented; verifies parent, page, descendants and append order | native mutation |
-| `moveBlocks` | UUID list, target, placement, rollback flag | repeated move + order verification | block adapter | native mutation |
-| `migratePage` | source/target, substring, placement, dry-run | selected `moveBlocks` | block adapter | native mutation |
-| `removeBlock` | block UUID, verbose | `removeBlock` | block adapter | native mutation |
+| `moveBlocks` | UUID list, target, placement, rollback flag | repeated move + order verification | compatibility adapter implemented; sequential verified moves, nested-selection guards, 50-block cap and best-effort rollback | native mutation |
+| `migratePage` | source/target, substring, placement, dry-run | selected `moveBlocks` | compatibility adapter implemented; literal top-level selection, dry-run previews and source read-back | native mutation |
+| `removeBlock` | block UUID, verbose | `removeBlock` | compatibility adapter implemented; inventories bounded subtree and verifies every UUID is absent | native mutation |
 | `creatTag` | title, options, verbose | `createTag` | tag adapter | native mutation |
 | `deleteTag` | UUID, detach/reparent acknowledgements | `deletePage` + reference checks | tag adapter | native mutation |
 | `addTag` | target UUID, tag UUID, verbose | `addBlockTag` | tag adapter | native mutation |

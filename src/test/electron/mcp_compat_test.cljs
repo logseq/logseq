@@ -1,7 +1,10 @@
 (ns electron.mcp-compat-test
   (:require [clojure.string :as string]
+            [cljs.reader :as reader]
             [cljs.test :refer [async deftest is]]
+            [datascript.core :as d]
             [electron.mcp-compat :as mcp-compat]
+            [logseq.sdk.utils :as sdk-utils]
             [promesa.core :as p]))
 
 (defn- recording-api
@@ -9,6 +12,194 @@
   (fn [method args]
     (swap! calls conj [method args])
     result))
+
+(deftest move-block-queries-use-native-uuid-types-and-json-normalization
+  (let [page-uuid "00000000-0000-4000-8000-000000000150"
+        source-uuid "00000000-0000-4000-8000-000000000151"
+        child-uuid "00000000-0000-4000-8000-000000000152"
+        conn (d/create-conn {:block/uuid {:db/unique :db.unique/identity}
+                             :block/parent {:db/valueType :db.type/ref}
+                             :block/page {:db/valueType :db.type/ref}
+                             :block/parent+ {:db/valueType :db.type/ref :db/cardinality :db.cardinality/many}})
+        api (fn [method args]
+              (case method
+                "logseq.DB.datascriptQuery"
+                (clj->js (sdk-utils/normalize-keyword-for-json
+                           (apply d/q (reader/read-string (first args)) @conn
+                                  (map #(if (string? %) (reader/read-string %) %) (rest args))) false))
+                "logseq.DB.moveBlock"
+                (do (d/transact! conn [{:db/id 151 :block/parent 150 :block/page 150 :block/order "a1"}
+                                      {:db/id 152 :block/page 150}]) nil)
+                nil))]
+    (d/transact! conn [{:db/id 149 :block/uuid (uuid "00000000-0000-4000-8000-000000000149")
+                       :block/title "Old page" :block/name "old"}
+                      {:db/id 150 :block/uuid (uuid page-uuid) :block/title "Target" :block/name "target"}
+                      {:db/id 151 :block/uuid (uuid source-uuid) :block/title "Source"
+                       :block/parent 149 :block/page 149 :block/order "a0"}
+                      {:db/id 152 :block/uuid (uuid child-uuid) :block/title "Child"
+                       :block/parent 151 :block/parent+ [151] :block/page 149 :block/order "a0"}])
+    (async done
+      (-> (p/then (mcp-compat/move-block api #js {"block_uuid" source-uuid "target_uuid" page-uuid})
+                  (fn [result]
+                    (is (true? (:verified result)))
+                    (is (= source-uuid (get-in result [:verified_entities 0 :uuid])))
+                    (is (= 150 (get-in result [:verified_entities 0 :parent :id])))
+                    (is (= 150 (:db/id (:block/page (d/entity @conn 152)))))
+                    (done)))
+          (p/catch (fn [error]
+                     (is false (str "Native-shaped query test failed: " (.-message error)))
+                     (done)))))))
+
+    (deftest split-block-parts-preserves-literal-delimiters-and-unicode-offsets
+      (is (= ["one" "two" "three"] (mcp-compat/split-block-parts "one.*two.*three" nil ".*")))
+      (is (= ["a" "b"] (mcp-compat/split-block-parts "ab" 1 nil)))
+      (is (= [(js/String.fromCodePoint 128512) "x"]
+        (mcp-compat/split-block-parts (str (js/String.fromCodePoint 128512) "x") 1 nil)))
+      (doseq [[title offset delimiter] [["a b" 1 nil] ["a::" nil "::"] ["ab" nil "z"]
+              ["ab" nil nil] ["ab" 1 "b"]]]
+        (is (try (mcp-compat/split-block-parts title offset delimiter) false
+            (catch :default _ true)))))
+
+(deftest move-blocks-validates-before-reading-or-writing
+  (let [uuid "00000000-0000-4000-8000-000000000110"
+        target "00000000-0000-4000-8000-000000000111"
+        calls (atom [])
+        api (recording-api calls nil)]
+    (doseq [args [#js {"block_uuids" #js [] "target_uuid" target}
+                 #js {"block_uuids" #js [uuid uuid] "target_uuid" target}
+                 #js {"block_uuids" #js [uuid] "target_uuid" uuid}]]
+      (is (try (mcp-compat/move-blocks api args) false (catch :default _ true))))
+    (is (empty? @calls))))
+
+(defn- split-fixture
+  [move-succeeds?]
+  (let [root-uuid "00000000-0000-4000-8000-000000000110"
+        calls (atom [])
+        counter (atom 110)
+        entities (atom {root-uuid {:id 110 :uuid root-uuid :title "head|tail|end" :order "A"
+                                   :parent {:id 90} :page {:id 90}}})
+        api (fn [method args]
+              (swap! calls conj [method args])
+              (case method
+                "logseq.DB.datascriptQuery"
+                (let [query (first args)]
+                  (cond
+                    (string/includes? query "block/uuid #uuid") (get @entities root-uuid)
+                    (string/includes? query "pull ?child")
+                    (vec (filter #(= (second args) (get-in % [:parent :id])) (vals @entities)))
+                    (string/includes? query "?descendant") []
+                    :else (get @entities (str (reader/read-string (second args))))))
+                "logseq.DB.insertBlock"
+                (let [id (swap! counter inc)
+                      uuid (str "00000000-0000-4000-8000-000000000" id)]
+                  (swap! entities assoc uuid {:id id :uuid uuid :title (second args) :order (str id)
+                                             :parent {:id 110} :page {:id 90}})
+                  #js {:uuid uuid})
+                "logseq.DB.moveBlock"
+                (do
+                  (when move-succeeds?
+                    (swap! entities update (first args) assoc
+                           :parent {:id 90} :order (str (:order (get @entities (second args))) "V")))
+                  nil)
+                "logseq.DB.updateBlock"
+                (do (swap! entities update (first args) assoc :title (second args)) nil)
+                nil))]
+    {:root_uuid root-uuid :entities entities :calls calls :api api}))
+
+(defn- batch-fixture
+  []
+  (let [fixture (split-fixture true)
+        uuids (mapv #(str "00000000-0000-4000-8000-000000000" %) [111 112 113])]
+    (doseq [[uuid id] (map vector uuids [111 112 113])]
+      (swap! (:entities fixture) assoc uuid
+             {:id id :uuid uuid :title (str id) :order (str id)
+              :parent {:id 110 :uuid (:root_uuid fixture)} :page {:id 90}}))
+    (assoc fixture :uuids uuids)))
+
+(deftest move-blocks-chains-moves-in-supplied-order
+  (let [{:keys [root_uuid uuids api calls]} (batch-fixture)]
+    (async done
+      (-> (p/then (mcp-compat/move-blocks
+                   api #js {"block_uuids" (clj->js uuids) "target_uuid" root_uuid "placement" "after"})
+                  (fn [result]
+                    (is (true? (:verified result)))
+                    (is (true? (:order_preserved result)))
+                    (is (= 3 (get-in result [:summary :landed])))
+                    (is (= [root_uuid (first uuids) (second uuids)]
+                           (mapv #(second (second %)) (filter #(= "logseq.DB.moveBlock" (first %)) @calls))))
+                    (done)))
+          (p/catch (fn [error]
+                     (is false (str "moveBlocks failed: " (.-message error)))
+                     (done)))))))
+
+(deftest migrate-page-dry-run-selects-only-literal-top-level-matches
+  (let [{:keys [root_uuid uuids api calls entities]} (batch-fixture)
+        target-uuid "00000000-0000-4000-8000-000000000140"]
+    (swap! entities update root_uuid assoc :name "source")
+    (swap! entities assoc target-uuid {:id 140 :uuid target-uuid :name "target" :title "Target"})
+    (async done
+      (-> (p/then (mcp-compat/migrate-page api #js {"source_uuid" root_uuid "target_uuid" target-uuid
+                                                  "contains" "112" "dry_run" true})
+                  (fn [result]
+                    (is (false? (:verified result)))
+                    (is (= [(second uuids)] (mapv :uuid (:planned result))))
+                    (is (= 3 (:remaining result)))
+                    (is (every? #(= "logseq.DB.datascriptQuery" (first %)) @calls))
+                    (done)))
+          (p/catch (fn [error]
+                     (is false (str "migratePage failed: " (.-message error)))
+                     (done)))))))
+
+(deftest move-blocks-stops-and-reports-the-unattempted-remainder
+  (let [{:keys [root_uuid uuids api]} (batch-fixture)
+        wrapped-api (fn [method args]
+                      (if (and (= method "logseq.DB.moveBlock") (= (first args) (second uuids)))
+                        nil
+                        (api method args)))]
+    (async done
+      (-> (p/then (mcp-compat/move-blocks
+                   wrapped-api #js {"block_uuids" (clj->js uuids) "target_uuid" root_uuid "placement" "after"})
+                  (fn [result]
+                    (is (false? (:verified result)))
+                    (is (= [true false] (mapv :verified (:moved result))))
+                    (is (= [(last uuids)] (:not_attempted result)))
+                    (is (= 1 (get-in result [:summary :landed])))
+                    (done)))
+          (p/catch (fn [error]
+                     (is false (str "moveBlocks failed: " (.-message error)))
+                     (done)))))))
+
+(deftest split-block-truncates-only-after-verified-tail-placement
+  (let [{:keys [root_uuid entities calls api]} (split-fixture true)]
+    (async done
+      (-> (p/then (mcp-compat/split-block api #js {"block_uuid" root_uuid "delimiter" "|"})
+                  (fn [result]
+                    (is (true? (:verified result)))
+                    (is (= 3 (:parts result)))
+                    (is (= 2 (count (:created result))))
+                    (is (= "head" (:title (get @entities root_uuid))))
+                    (is (every? #(= 90 (get-in % [:parent :id])) (vals @entities)))
+                    (let [writes (filter #(not= "logseq.DB.datascriptQuery" (first %)) @calls)]
+                      (is (= ["logseq.DB.insertBlock" "logseq.DB.insertBlock"
+                              "logseq.DB.moveBlock" "logseq.DB.moveBlock" "logseq.DB.updateBlock"]
+                             (mapv first writes))))
+                    (done)))
+          (p/catch (fn [error]
+                     (is false (str "splitBlock failed: " (.-message error)))
+                     (done)))))))
+
+(deftest split-block-preserves-original-when-a-tail-move-does-not-verify
+  (let [{:keys [root_uuid entities calls api]} (split-fixture false)]
+    (async done
+      (-> (p/then (mcp-compat/split-block api #js {"block_uuid" root_uuid "delimiter" "|"})
+                  (fn [result]
+                    (is (false? (:verified result)))
+                    (is (= "head|tail|end" (:title (get @entities root_uuid))))
+                    (is (not-any? #(= "logseq.DB.updateBlock" (first %)) @calls))
+                    (done)))
+          (p/catch (fn [error]
+                     (is false (str "splitBlock failed: " (.-message error)))
+                     (done)))))))
 
 (deftest compatibility-routes-preserve-api-contracts
   (let [calls (atom [])
@@ -1042,7 +1233,7 @@
         page-uuid "00000000-0000-4000-8000-000000000096"
         calls (atom [])
         moved? (atom false)
-        source (fn [] {:id 95 :uuid block-uuid :title "Source"
+        source (fn [] {:id 95 :uuid block-uuid :title "Source" :order "A"
                  :parent {:id (if @moved? 96 94)}
                  :page {:id (if @moved? 96 94)}})
         target {:id 96 :uuid page-uuid :name "target" :title "Target"}
@@ -1054,7 +1245,8 @@
                 (let [query (first args)]
                   (cond
                     (string/includes? query "pull ?entity")
-                    (if (= (second args) page-uuid) target (source))
+                    (if (= (str (reader/read-string (second args))) page-uuid) target (source))
+                    (string/includes? query "pull ?child") [(source)]
                     :else []))
                 nil))]
     (async done
@@ -1091,7 +1283,7 @@
                 (let [query (first args)]
                   (cond
                     (string/includes? query "pull ?entity")
-                    (if (= (second args) page-uuid) target (source))
+                    (if (= (str (reader/read-string (second args))) page-uuid) target (source))
                     (string/includes? query "pull ?child")
                     (if @moved? [existing-child (source)] [existing-child])
                     :else []))
@@ -1121,7 +1313,8 @@
               (if (and (= method "logseq.DB.datascriptQuery")
                        (string/includes? (first args) "?descendant :block/parent+"))
                 [[target-uuid]]
-                (entity (second args) (if (= (second args) block-uuid) 100 101))))]
+                (let [uuid (str (reader/read-string (second args)))]
+                  (entity uuid (if (= uuid block-uuid) 100 101)))))]
     (async done
       (-> (p/then (mcp-compat/move-block
                    api #js {"block_uuid" block-uuid "target_uuid" target-uuid})
@@ -1131,5 +1324,42 @@
           (p/catch (fn [error]
                      (is (string/includes? (.-message error) "own subtree"))
                      (is (not-any? #(= "logseq.DB.moveBlock" (first %)) @calls))
+                     (done)))))))
+
+(deftest remove-block-inventories-and-verifies-the-subtree
+  (let [root-uuid "00000000-0000-4000-8000-000000000102"
+        child-uuid "00000000-0000-4000-8000-000000000103"
+        entities (atom {root-uuid {:id 102 :uuid root-uuid :title "Root"
+                                   :parent {:id 90 :uuid "00000000-0000-4000-8000-000000000090"}
+                                   :page {:id 90 :uuid "00000000-0000-4000-8000-000000000090"}}
+                        child-uuid {:id 103 :uuid child-uuid :title "Child"
+                                    :parent {:id 102 :uuid root-uuid}
+                                    :page {:id 90 :uuid "00000000-0000-4000-8000-000000000090"}}})
+        api (fn [method args]
+              (case method
+                "logseq.DB.removeBlock" (do (reset! entities {}) nil)
+                "logseq.DB.datascriptQuery"
+                (let [query (first args)]
+                  (cond
+                    (string/includes? query "pull ?entity")
+                    (get @entities (str (reader/read-string (second args))))
+                    (string/includes? query "pull ?child")
+                    (->> (vals @entities)
+                         (filter #(= (second args) (get-in % [:parent :id])))
+                         vec)
+                    :else []))
+                nil))]
+    (async done
+      (-> (p/then (mcp-compat/remove-block api #js {"block_uuid" root-uuid "verbose" true})
+                  (fn [result]
+                    (is (true? (:verified result)))
+                    (is (= 2 (:previous_count result)))
+                    (is (= #{root-uuid child-uuid}
+                           (set (map :uuid (:previous_entities result)))))
+                    (is (nil? (get @entities root-uuid)))
+                    (is (nil? (get @entities child-uuid)))
+                    (done)))
+          (p/catch (fn [error]
+                     (is false (str "removeBlock failed: " (.-message error)))
                      (done)))))))
 
