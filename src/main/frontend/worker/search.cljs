@@ -899,7 +899,7 @@ ALTER TABLE blocks_fts_next RENAME TO blocks_fts;"))
        (code-block? code-class block))))
 
 (defn- search-result->block-result
-  [conn q code-class option {:keys [id page title snippet] :as result}]
+  [conn q code-class option {:keys [id page snippet] :as result}]
   (let [block-id (uuid id)]
     (when-let [block (or (get result search-result-block-key)
                          (d/entity @conn [:block/uuid block-id]))]
@@ -908,9 +908,12 @@ ALTER TABLE blocks_fts_next RENAME TO blocks_fts;"))
                                    (select-keys [:block/uuid :block/title]))
               alias-match (matched-alias q block)
               page-or-object-result? (page-or-object? block)
-              result-title (if page-or-object-result?
-                             (block-result-title block)
-                             (or title (:block/title block)))
+              ;; pulled maps lack :block/refs, so ref titles resolve via entity
+              result-title (block-result-title
+                            (if (and (map? block)
+                                     (db-content/title-has-id-ref? (:block/title block)))
+                              (d/entity @conn [:block/uuid (:block/uuid block)])
+                              block))
               display-title (if (:enable-snippet? option)
                               (ensure-highlighted-snippet snippet result-title q)
                               (if page-or-object-result?
@@ -932,7 +935,9 @@ ALTER TABLE blocks_fts_next RENAME TO blocks_fts;"))
                             block
                             {:title display-title
                              :alias (:block/title alias)
-                             :truncate? false})]
+                             :truncate? false})
+              breadcrumb-ancestors (when (:include-breadcrumb? option)
+                                   (block-breadcrumb/block-breadcrumb @conn block))]
           (cond-> {:db/id (:db/id block)
                    :block/uuid (:block/uuid block)
                    :block/title display-title
@@ -940,8 +945,9 @@ ALTER TABLE blocks_fts_next RENAME TO blocks_fts;"))
                    :block.temp/unique-title unique-title
                    :page? (ldb/page? block)}
             (:include-breadcrumb? option)
-            (assoc :block.temp/breadcrumb
-                   (block-breadcrumb/block-breadcrumb @conn block))
+            (assoc :block.temp/breadcrumb breadcrumb-ancestors
+                   :block.temp/breadcrumb-ref-titles
+                   (block-breadcrumb/breadcrumb-ref-titles @conn (into [block] breadcrumb-ancestors)))
 
             block-page
             (assoc :block/page block-page)

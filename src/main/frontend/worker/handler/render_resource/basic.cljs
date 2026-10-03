@@ -115,21 +115,6 @@
        [:attr :block/alias]}
      (common/entity-uuid! db (:db/id source))]))
 
-(defn- breadcrumb-ref-titles
-  [entities]
-  (into {}
-        (comp
-         (mapcat :block/refs)
-         (keep (fn [ref]
-                 (when-let [ref-uuid (:block/uuid ref)]
-                   (let [title (:block/title ref)]
-                     (when-not (string? title)
-                       (common/fail! "Invalid breadcrumb reference title"
-                              {:ref-uuid ref-uuid
-                               :title title}))
-                     [ref-uuid title])))))
-        entities))
-
 (defn- empty-block-breadcrumb
   [block-uuid]
   {:target-uuid block-uuid
@@ -146,7 +131,8 @@
     (if-let [block (d/entity db [:block/uuid block-uuid])]
       (let [breadcrumb-ancestors (block-breadcrumb-handler/block-breadcrumb db block load-depth)
             ancestor-uuids (mapv :block/uuid breadcrumb-ancestors)
-            ref-titles (breadcrumb-ref-titles (into [block] breadcrumb-ancestors))
+            ref-titles (block-breadcrumb-handler/breadcrumb-ref-titles
+                        db (into [block] breadcrumb-ancestors))
             watch-uuids (into (conj (set ancestor-uuids) block-uuid)
                               (keys ref-titles))
             watch-keys (into #{}

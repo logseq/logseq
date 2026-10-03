@@ -749,6 +749,43 @@
       (is (= page-uuid (:block/uuid result)))
       (is (vector? (:block.temp/breadcrumb result))))))
 
+(deftest search-result-resolves-node-ref-uuids-test
+  (let [conn (db-test/create-conn)
+        page-uuid #uuid "77777777-7777-7777-7777-777777777777"
+        target-uuid #uuid "88888888-8888-8888-8888-888888888888"
+        ref-uuid #uuid "99999999-9999-9999-9999-999999999999"]
+    (d/transact! conn [{:db/id -1
+                        :block/name "p1"
+                        :block/title "p1"
+                        :block/uuid page-uuid}
+                       {:db/id -2
+                        :block/title "Target block"
+                        :block/uuid target-uuid
+                        :block/page -1
+                        :block/parent -1
+                        :block/order "a"}
+                       {:db/id -3
+                        :block/title (str "see [[" target-uuid "]]")
+                        :block/uuid ref-uuid
+                        :block/page -1
+                        :block/parent -1
+                        :block/order "b"}])
+    (let [ref-block (db-test/find-block-by-content @conn #"^see")
+          index (search/block->index ref-block)]
+      (is (= "see [[Target block]]" (:title index))
+          "search index stores the resolved title")
+      (let [result (#'search/search-result->block-result
+                    conn
+                    "see"
+                    nil
+                    {:enable-snippet? false}
+                    {:id (str ref-uuid)
+                     :page (str page-uuid)
+                     ;; stale index title from before refs resolved
+                     :title (str "see [[" target-uuid "]]")})]
+        (is (= "see [[Target block]]" (:block/title result))
+            "display title resolves [[uuid]] even from a stale index entry")))))
+
 (deftest search-breadcrumb-survives-every-named-page-test
   (let [conn (db-test/create-conn)
         failures (into []
