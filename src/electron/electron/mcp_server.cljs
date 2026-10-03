@@ -107,22 +107,15 @@
 (def ^:large-vars/data-var api-tools
   "MCP Tools when calling API server"
   {:listPages
-            :entityType :block
-            :data {:page-id \"temp-Inbox\"
-                   :title \"t1\"
-                   :tags [\"00000002-1282-1814-5700-000000000000\"]}}]}
-
-         Additional advice for building operations:
-         * Before creating any page, tag or property, check that it exists with getPage"
-         :inputSchema
-         #js {:operations
-              (z/array
-               (z/object
-                #js {:operation   (z/enum #js ["add" "edit"])
-                     :entityType  (z/enum #js ["block" "page" "tag" "property"])
-                     :id          (.optional (z/union #js [(z/string) (z/number) (z/null)]))
-                     :data        (-> (z/object #js {}) (.passthrough))}))
-              :dry-run (-> (z/boolean) .optional (.describe "Pretend to do batch update. Does everything except actually commit change to db e.g. validation."))}}}
+     {:fn mcp-compat/list-pages
+      :config #js {:title "List Pages"
+          :description "List all pages in a graph."
+          :inputSchema #js {:expand (-> (z/boolean) .optional)}}}
+     :getPage
+     {:fn mcp-compat/get-page
+      :config #js {:title "Get Page"
+          :description "Get a page's content including its blocks."
+          :inputSchema #js {:pageName (z/string)}}}
    :searchBlocks
   {:fn mcp-compat/search-blocks
     :config #js {:title "Search Blocks"
@@ -284,6 +277,12 @@
     :config #js {:title "List Recycled"
                  :description "List recycled pages and their retained deleted-at data."
                  :inputSchema #js {}}}
+    :listJournals
+    {:fn mcp-compat/list-journals
+     :config #js {:title "List Journals"
+              :description "List journal pages, optionally with block counts."
+              :inputSchema #js {:with_counts (-> (z/boolean) .optional)
+                          :limit (-> (z/number) .optional)}}}
    :listStatus
    {:fn mcp-compat/list-status
     :config #js {:title "List Status"
