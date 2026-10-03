@@ -92,6 +92,13 @@ import SwiftUI
   static var link: Color { blue(11) }
 }
 
+/// Right sidebar width — local-only view state like the web's resizer
+/// (the OCaml side emits a fixed aria-valuenow; the drag lives natively).
+@MainActor @Observable final class LogseqRightSidebarLayout {
+  static let shared = LogseqRightSidebarLayout()
+  var width: CGFloat = 420
+}
+
 /// Parses the space-separated `style-class` prop (tailwind-ish utility class
 /// names Logseq emits) into a small set of native style hints. Unknown classes
 /// are ignored; the web CSS class names are the contract, not the mechanism.
@@ -137,6 +144,9 @@ import SwiftUI
   var hasIsOpen = false
   var centerHorizontally = false
   var outOfFlow = false
+  /// position:absolute inset-y-0 — out-of-flow child stretched to the
+  /// container's full height (the right-sidebar resize handle).
+  var outOfFlowFillY = false
   /// position:fixed full-viewport layer — escapes the collapsed overlay
   /// containers and renders in the window-level overlay z-stack instead.
   var fillsOverlay = false
@@ -396,7 +406,7 @@ import SwiftUI
     // ---- right sidebar (#right-sidebar.cp__right-sidebar.open/closed;
     // the .closed class already collapses it via isHidden) ----
     case "cp__right-sidebar":
-      fixedWidth = 420; fullHeight = true
+      fixedWidth = LogseqRightSidebarLayout.shared.width; fullHeight = true
       background = LogseqColors.gray(LogseqColors.isDark ? 2 : 1)
     case "cp__right-sidebar-scrollable":
       isScrollable = true; grow = true; fullHeight = true
@@ -418,7 +428,7 @@ import SwiftUI
     case "sidebar-item-header": isRow = true; fullWidth = true
     case "item-actions": isRow = true
     case "resizer":
-      outOfFlow = true; fixedWidth = 3; fullHeight = true
+      outOfFlow = true; outOfFlowFillY = true; fixedWidth = 3; fullHeight = true
       background = LogseqColors.border
     case "breadcrumb": isRow = true
       if fontSize == nil { fontSize = 12 }

@@ -65,6 +65,23 @@ struct LogseqElementView: View {
     return classes.split(separator: " ").contains { $0 == "left-sidebar-inner" }
   }
 
+  /// Right sidebar `.resizer` separator — the OCaml side emits a static
+  /// element; the width drag is native view state (LogseqRightSidebarLayout).
+  /// The drag handle renders as an overlay on `cp__right-sidebar` instead of
+  /// the resizer node itself: the resizer is an out-of-flow *sibling* of the
+  /// sidebar content, which covers it in hit-test order.
+  private var isRightSidebarResizer: Bool {
+    guard case .string(let classes) = context.property("style-class")
+    else { return false }
+    return classes.split(separator: " ").contains { $0 == "resizer" }
+  }
+
+  private var isRightSidebarContainer: Bool {
+    guard case .string(let classes) = context.property("style-class")
+    else { return false }
+    return classes.split(separator: " ").contains { $0 == "cp__right-sidebar" }
+  }
+
   /// `ti-<name>`/`tie-<name>` classes on `i`/`span` mark a tabler font icon;
   /// resolve the icon name + whether it's the extension font (nil when the
   /// node isn't an icon).
@@ -142,6 +159,12 @@ struct LogseqElementView: View {
       // Out-style native sidebar — the OCaml DOM subtree serves as the data
       // model while SwiftUI renders the native chrome.
       LogseqNativeSidebar(context: context)
+
+    } else if isRightSidebarResizer {
+      LogseqSidebarResizer()
+
+    } else if isRightSidebarContainer {
+      contentBody.overlay(alignment: .topLeading) { LogseqSidebarResizer() }
 
     } else if style.fillsOverlay && !inOverlay {
       // position:fixed layers — the web renders these at window scope; our
@@ -339,6 +362,8 @@ struct LogseqElementView: View {
         value: (s.grow || s.fullWidth || isTextInput) ? 1 : 0)
       .layoutValue(key: LogseqGrowYKey.self, value: (s.grow || s.fullHeight) ? 1 : 0)
       .layoutValue(key: LogseqOutOfFlowKey.self, value: s.outOfFlow)
+      .layoutValue(
+        key: LogseqOutOfFlowFillYKey.self, value: s.outOfFlowFillY)
       .layoutValue(
         key: LogseqAnchorKey.self,
         value: LogseqAnchor(
@@ -634,6 +659,12 @@ private struct LogseqOutOfFlowKey: LayoutValueKey {
   static let defaultValue = false
 }
 
+/// position:absolute inset-y-0 — the OOF child is stretched to the
+/// container's height instead of its ideal size.
+private struct LogseqOutOfFlowFillYKey: LayoutValueKey {
+  static let defaultValue = false
+}
+
 /// CSS absolute-position anchors for out-of-flow children — nil fields pin
 /// that axis to the container's leading/top edge.
 private struct LogseqAnchor: Equatable {
@@ -718,13 +749,16 @@ struct LogseqRowLayout: Layout {
         // declared anchors (top-leading when none).
         let anchor = subview[LogseqAnchorKey.self]
         let w = ideals[index]
-        let h = subview.sizeThatFits(.unspecified).height
+        let fillY = subview[LogseqOutOfFlowFillYKey.self]
+        let h = fillY ? bounds.height
+          : subview.sizeThatFits(.unspecified).height
         let px = anchor.x.map { bounds.minX + $0 }
           ?? anchor.right.map { bounds.maxX - $0 - w }
           ?? bounds.minX
-        let py = anchor.y.map { bounds.minY + $0 }
-          ?? anchor.bottom.map { bounds.maxY - $0 - h }
-          ?? bounds.minY
+        let py = fillY ? bounds.minY
+          : anchor.y.map { bounds.minY + $0 }
+            ?? anchor.bottom.map { bounds.maxY - $0 - h }
+            ?? bounds.minY
         subview.place(
           at: CGPoint(x: px, y: py),
           proposal: ProposedViewSize(width: w, height: h))
@@ -808,16 +842,18 @@ struct LogseqColumnLayout: Layout {
         let anchor = subview[LogseqAnchorKey.self]
         let w = subview.sizeThatFits(
           ProposedViewSize(width: bounds.width, height: heights[index])).width
+        let fillY = subview[LogseqOutOfFlowFillYKey.self]
+        let h = fillY ? bounds.height : heights[index]
         let px = anchor.x.map { bounds.minX + $0 }
           ?? anchor.right.map { bounds.maxX - $0 - w }
           ?? bounds.minX
-        let py = anchor.y.map { bounds.minY + $0 }
-          ?? anchor.bottom.map { bounds.maxY - $0 - heights[index] }
-          ?? bounds.minY
+        let py = fillY ? bounds.minY
+          : anchor.y.map { bounds.minY + $0 }
+            ?? anchor.bottom.map { bounds.maxY - $0 - h }
+            ?? bounds.minY
         subview.place(
           at: CGPoint(x: px, y: py),
-          proposal: ProposedViewSize(
-            width: bounds.width, height: heights[index]))
+          proposal: ProposedViewSize(width: bounds.width, height: h))
         continue
       }
       var h = heights[index]
