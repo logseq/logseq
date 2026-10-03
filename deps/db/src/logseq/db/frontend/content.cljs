@@ -17,33 +17,15 @@
     ")"
     "\\]\\]")))
 
-;; ((uuid))
-(def ^:private id-block-ref-pattern
-  (re-pattern
-   (str
-    "\\(\\("
-    "("
-    common-util/uuid-pattern
-    ")"
-    "\\)\\)")))
-
 (def ^:private id-or-tag-ref-pattern
   (re-pattern
    (str
     "(#?)"
-    "(?:"
     "\\[\\["
     "("
     common-util/uuid-pattern
     ")"
-    "\\]\\]"
-    "|"
-    "\\(\\("
-    "("
-    common-util/uuid-pattern
-    ")"
-    "\\)\\)"
-    ")")))
+    "\\]\\]")))
 
 (defn content-id-ref->page
   "Convert id ref backs to page name using refs."
@@ -100,15 +82,14 @@
 
 (defn get-matched-ids
   [content]
-  (->> (concat (re-seq id-ref-pattern content)
-               (re-seq id-block-ref-pattern content))
-       (map second)
+  (->> (re-seq id-ref-pattern content)
        (distinct)
+       (map second)
        (map uuid)))
 
 (defn title-has-id-ref?
   [title]
-  (boolean (some->> title (re-find id-or-tag-ref-pattern))))
+  (boolean (some->> title (re-find id-ref-pattern))))
 
 (defn- replace-tag-ref
   [content page-name id]
@@ -221,14 +202,12 @@
    (string/trim)))
 
 (defn- title-ref-replacement
-  [id->title matched hash-prefix page-ref-id block-ref-id]
-  (if-let [ref-title (get id->title (or page-ref-id block-ref-id))]
-    (if block-ref-id
-      ref-title
-      (if (and (= "#" hash-prefix)
-               (not (string/includes? ref-title " ")))
-        (str "#" ref-title)
-        (str hash-prefix (page-ref/->page-ref ref-title))))
+  [id->title matched hash-prefix id]
+  (if-let [ref-title (get id->title id)]
+    (if (and (= "#" hash-prefix)
+             (not (string/includes? ref-title " ")))
+      (str "#" ref-title)
+      (str hash-prefix (page-ref/->page-ref ref-title)))
     matched))
 
 (defn- replace-title-refs-once
@@ -290,11 +269,11 @@
   ([ent max-depth {:keys [replace-block-refs?]
                    :or {replace-block-refs? true}}]
    (let [title (:block/title ent)]
-     (if (some->> title (re-find id-or-tag-ref-pattern))
+     (if (some->> title (re-find id-ref-pattern))
        (let [id->title (block-ref-id->title ent max-depth replace-block-refs?)]
          (loop [result title depth 0]
            (if (or (>= depth max-depth)
-                   (not (re-find id-or-tag-ref-pattern result)))
+                   (not (re-find id-ref-pattern result)))
              result
              (let [next-result (replace-title-refs-once result id->title)]
                (if (= result next-result)

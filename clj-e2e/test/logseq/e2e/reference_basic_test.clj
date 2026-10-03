@@ -97,7 +97,7 @@
   (not (re-find #"\(\(|[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-" text)))
 
 (deftest search-displays-referenced-block-title
-  (testing "cmdk and (( autocomplete resolve ((uuid)) to the referenced title"
+  (testing "cmdk and [[ autocomplete resolve [[uuid]] to the referenced title"
     (b/new-block "ref target")
     (b/copy)
     (b/new-block "")
@@ -109,7 +109,7 @@
     (util/search "ref target")
     (assert/assert-is-visible ".cp__cmdk :text('ref target')")
     (is (no-raw-uuid? (inner-text ".cp__cmdk"))
-        "cmdk results show resolved title, not raw ((uuid))")
+        "cmdk results show resolved title, not raw [[uuid]]")
     ;; first esc clears the query, second closes the modal
     (k/esc)
     (k/esc)
