@@ -949,7 +949,8 @@ let pending_tx_uuid_delta (items : Wire.t list) : SSet.t * SSet.t =
            | true, Wire.Uuid u -> (created, SSet.add u retracted)
            | _ -> (created, retracted))
        | (Wire.Array [ op; e ] | Wire.List [ op; e ])
-         when op = kw "db/retractEntity" -> (
+         when op = kw "db/retractEntity"
+              || op = kw "db.fn/retractEntity" -> (
            match e with
            | Wire.Array [ a; Wire.Uuid u ] | Wire.List [ a; Wire.Uuid u ]
              when a = kw "block/uuid" -> (created, SSet.add u retracted)
@@ -2448,7 +2449,15 @@ let replay_pending_entry (repo : string) (conn : conn)
   let already_materialized =
     created_uuids <> []
     && List.for_all
-         (fun u -> Outliner_op.entity_of_uuid db u <> None)
+         (fun u ->
+            match Outliner_op.entity_of_uuid db u with
+            | Some e ->
+                (* a uuid-only entity is the stub injected by
+                   rewrite_missing_uuid_refs — the entry's own
+                   effects (title, parent, ...) are NOT materialized
+                   and the entry must replay *)
+                List.length (Datascript.entity_attrs e) > 1
+            | None -> false)
          created_uuids
   in
   if already_materialized then ()
@@ -2645,46 +2654,49 @@ let confirm_pending_txs repo (tx_ids : string list) : unit =
          verbatim and let transact surface it. *)
       List.iter
         (fun (local_tx : Sync_client_op.local_tx_entry) ->
-           match normalize_tx_data_for_rebase local_tx.tx with
-           | [] -> ()
-           | tx_data ->
-               let db = Conn.db server_conn in
-               (* sanitize with the upload domain: uuids the server
-                  conn can see, and attrs live on either conn — the
-                  server conn must only ever gain what the upload
-                  could actually have carried *)
-               let uuid_exists u =
-                 Outliner_op.entity_of_uuid (Conn.db server_conn) u
-                 <> None
-               in
-               let attr_live (a : Wire.t) : bool =
-                 attr_resolves db a
-                 || (match Worker_state.datascript_conn repo with
-                     | Some display -> attr_resolves (Conn.db display) a
-                     | None -> true)
-               in
-               let tx_data =
-                 (try
-                    sanitize_pending_tx_refs ~uuid_exists ~attr_live db
-                      tx_data
-                  with _ -> tx_data)
-                 |> List.map (resolve_temp_id db)
-                 |> fun items ->
-                    List.map Ds_wire.value_of_transit items
-                    |> Db_sync_tx_sanitize.sanitize_tx db
-                    |> List.map Ds_wire.transit_of_value
-               in
-               if tx_data <> [] then
-                 try
+           try
+             match normalize_tx_data_for_rebase local_tx.tx with
+             | [] -> ()
+             | tx_data ->
+                 let db = Conn.db server_conn in
+                 (* sanitize with the upload domain: uuids the server
+                    conn can see, and attrs live on either conn — the
+                    server conn must only ever gain what the upload
+                    could actually have carried *)
+                 let uuid_exists u =
+                   Outliner_op.entity_of_uuid (Conn.db server_conn) u
+                   <> None
+                 in
+                 let attr_live (a : Wire.t) : bool =
+                   attr_resolves db a
+                   || (match Worker_state.datascript_conn repo with
+                       | Some display -> attr_resolves (Conn.db display) a
+                       | None -> true)
+                 in
+                 let tx_data =
+                   (try
+                      sanitize_pending_tx_refs ~uuid_exists ~attr_live db
+                        tx_data
+                    with _ -> tx_data)
+                   |> List.map (resolve_temp_id db)
+                   |> fun items ->
+                      List.map Ds_wire.value_of_transit items
+                      |> Db_sync_tx_sanitize.sanitize_tx db
+                      |> List.map Ds_wire.transit_of_value
+                 in
+                 if tx_data <> [] then
                    ignore
                      (Db_transact.transact server_conn tx_data
                         [ "rtc-tx?", Bool true ])
-                 with e ->
-                   ignore (mark_failed_txs repo [ local_tx.tx_id ]);
-                   Worker_log.warn "db-sync/confirm-tx-failed"
-                     [ "repo", repo
-                     ; "tx-id", local_tx.tx_id
-                     ; "error", Printexc.to_string e ])
+           with e ->
+             (* an exception anywhere in one entry's confirm pipeline
+                must not abort the loop — client.inflight stays set and
+                uploads stall, or a rejected tx re-uploads forever *)
+             ignore (mark_failed_txs repo [ local_tx.tx_id ]);
+             Worker_log.warn "db-sync/confirm-tx-failed"
+               [ "repo", repo
+               ; "tx-id", local_tx.tx_id
+               ; "error", Printexc.to_string e ])
         entries)
 
 (* Remote graphs keep two conns: the storage-backed conn registered at
