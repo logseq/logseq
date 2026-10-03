@@ -89,12 +89,14 @@ Swift. Goal: feature parity with the Electron app.
 - Code editor polish: actions bar renders in-flow (web overlays
   top-right on hover); multi-line code sizes by line count, no
   horizontal soft-scroll parity yet.
-- Whiteboards, graph view (canvas), plugins, RTC/sync UI, settings
-  pages, export (assets/filesystem flows partially stubbed).
+- Whiteboards, graph view (canvas), plugins, RTC/sync UI,
+  export (assets/filesystem flows partially stubbed).
 - Slash menu, block refs/page-refs autocomplete positioning,
   keyboard-driven selection model polish.
-- Menubar/app menus (macOS-native idioms), Cmd-K/W shortcuts,
-  multi-window.
+- Cmd-K/W shortcuts, multi-window.
+- Settings polish: accent-color custom picker (CC button),
+  per-pane gaps documented in NOTES (no account/ai/plugins panes
+  in the OCaml emitters yet).
 - Accessibility pass (labels, rotor order), drag & drop blocks.
 
 ## Build / run

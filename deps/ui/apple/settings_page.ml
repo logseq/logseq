@@ -107,45 +107,23 @@ let hidden_checkbox ~key ~on =
 
 (* ui/toggle -> base-ui span.ui__switch[role=switch] + hidden input *)
 let switch_el ~key ~on ~on_toggle =
-  let chk = if on then "checked" else "unchecked" in
-  dom ~key ~tag:"span"
+  switch_ ~key ~checked:on ~label:"switch"
     ~style_class:"ui__switch"
-    ~attrs:
-      [ ("role", "switch")
-      ; ("aria-checked", string_of_bool on); ("data-" ^ chk, "") ]
-    ~events:"click"
-    ~on_dom_event:(fun n _ -> if n = "click" then on_toggle ())
-    [ dom ~key:(key ^ "-th") ~tag:"span"
-        ~style_class:"ui__switch-thumb"
-        ~attrs:[ ("data-" ^ chk, "") ]
-        []
-    ]
+    ~on_toggle:(fun ev ->
+      match ev with
+      | Lui_protocol.ToggleChanged _ -> on_toggle ()
+      | _ -> ())
+    []
 
 (* shui/checkbox -> button role=checkbox + indicator span w/ check svg *)
 let checkbox_el ~key ~on ~on_change =
-  let chk = if on then "checked" else "unchecked" in
-  dom ~key ~tag:"button"
+  checkbox ~key ~checked:on ~label:"checkbox"
     ~style_class:"ui__checkbox"
-    ~attrs:
-      [ ("type", "button"); ("role", "checkbox")
-      ; ("aria-checked", string_of_bool on); ("data-" ^ chk, "")
-      ; ("data-state", chk) ]
-    ~events:"click"
-    ~on_dom_event:(fun n _ -> if n = "click" then on_change (not on))
-    (if on then
-       [ dom ~key:(key ^ "-in") ~tag:"span"
-           [ dom ~key:(key ^ "-ck") ~tag:"svg"
-               ~style_class:"ls-icon-sm"
-               ~attrs:
-                 [ ("viewBox", "0 0 24 24"); ("fill", "none")
-                 ; ("stroke", "currentColor"); ("stroke-width", "2")
-                 ; ("stroke-linecap", "round")
-                 ; ("stroke-linejoin", "round") ]
-               [ dom ~key:(key ^ "-p") ~tag:"path"
-                   ~attrs:[ ("d", "M20 6 9 17l-5-5") ] [] ]
-           ]
-       ]
-     else [])
+    ~on_toggle:(fun ev ->
+      match ev with
+      | Lui_protocol.ToggleChanged (_, v) -> on_change v
+      | _ -> ())
+    []
 
 let label_el ~key ~for_ ~text ?text_signal children =
   dom ~key ~tag:"label"
@@ -247,8 +225,8 @@ let language_row ctx =
   action_row ~key:"lang" ~for_:"preferred_language"
     ~label:T.language_label
     ~actions:
-      [ V.lang_trigger ~key:"lang-sel" ~h_cls:"ls-select-md" ~st:lang_label
-          ~anchor_sel:"#settings-lang-trigger"
+      [ V.lang_trigger ~ctx ~key:"lang-sel" ~h_cls:"ls-select-md"
+          ~st:lang_label
       ; dom ~key:"lang-sel-i" ~tag:"input"
           ~attrs:
             [ ( "style"
@@ -897,6 +875,7 @@ let pane_of ~modal ctx tab =
 
 let article ~modal ctx =
   dom ~key:"settings-article" ~tag:"article"
+    ~style_class:"cp__settings-article"
     [ dom ~key:"art-h" ~tag:"header" ~style_class:"cp__settings-header"
         [ dom ~key:"art-ht" ~tag:"h1"
             ~style_class:"cp__settings-category-title"

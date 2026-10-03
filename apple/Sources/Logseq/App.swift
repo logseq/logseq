@@ -3,8 +3,34 @@ import SwiftUI
 import OSLog
 import AppKit
 
+/// Menu-driven app chrome state (Electron viewMenu/windowMenu parity).
+@MainActor final class LogseqAppState: ObservableObject {
+  static let shared = LogseqAppState()
+  /// Electron zoomin/zoomout/resetzoom: scales the whole LUI surface.
+  @Published var zoomLevel = 1.0
+  /// Electron "Always on Top" checkbox: floats the key window.
+  @Published var alwaysOnTop = false {
+    didSet {
+      NSApp.keyWindow?.level = alwaysOnTop ? .floating : .normal
+    }
+  }
+
+  static let zoomSteps: [Double] = [0.5, 0.67, 0.8, 0.9, 1.0, 1.1, 1.25, 1.5, 1.75, 2.0]
+
+  func zoomIn() {
+    zoomLevel = Self.zoomSteps.first { $0 > zoomLevel + 0.001 } ?? zoomLevel
+  }
+
+  func zoomOut() {
+    zoomLevel = Self.zoomSteps.last { $0 < zoomLevel - 0.001 } ?? zoomLevel
+  }
+
+  func zoomReset() { zoomLevel = 1.0 }
+}
+
 @main struct LogseqApplication: App {
   @NSApplicationDelegateAdaptor(LogseqApplicationDelegate.self) private var delegate
+  @StateObject private var appState = LogseqAppState.shared
 
   var body: some Scene {
     Window("Logseq", id: "main") {
@@ -12,6 +38,62 @@ import AppKit
         .frame(minWidth: 480, minHeight: 360)
     }
     .defaultSize(width: 1200, height: 800)
+    .commands {
+      // macOS convention places Settings in the app menu; the web app
+      // binds the same action to mod+,.
+      CommandGroup(replacing: .appSettings) {
+        Button("Settings…") {
+          LogseqRuntime.postPlatformEvent(name: "menu-open-settings", json: "{}")
+        }
+        .keyboardShortcut(",", modifiers: .command)
+      }
+      // Electron File menu's close role (⌘W). Contributing to .newItem
+      // is what makes the system render a File menu for a non-document
+      // app; the system adds its own Close/Close All items alongside.
+      CommandGroup(replacing: .newItem) {
+        Button("Close Window") {
+          NSApp.keyWindow?.performClose(nil)
+        }
+        .keyboardShortcut("w", modifiers: .command)
+      }
+      CommandGroup(after: .sidebar) {
+        Button("Toggle Left Sidebar") {
+          LogseqRuntime.postPlatformEvent(
+            name: "menu-toggle-left-sidebar", json: "{}")
+        }
+        .keyboardShortcut("l", modifiers: [.command, .shift])
+        Button("Toggle Right Sidebar") {
+          LogseqRuntime.postPlatformEvent(
+            name: "menu-toggle-right-sidebar", json: "{}")
+        }
+        .keyboardShortcut("r", modifiers: [.command, .shift])
+        Button("Toggle Wide Mode") {
+          LogseqRuntime.postPlatformEvent(
+            name: "menu-toggle-wide-mode", json: "{}")
+        }
+        Divider()
+        Button("Zoom In") { appState.zoomIn() }
+          .keyboardShortcut("=", modifiers: .command)
+        Button("Zoom Out") { appState.zoomOut() }
+          .keyboardShortcut("-", modifiers: .command)
+        Button("Actual Size") { appState.zoomReset() }
+          .keyboardShortcut("0", modifiers: .command)
+      }
+      CommandGroup(before: .windowList) {
+        Toggle("Always on Top", isOn: $appState.alwaysOnTop)
+      }
+      CommandGroup(replacing: .help) {
+        Button("Keyboard Shortcuts") {
+          LogseqRuntime.postPlatformEvent(
+            name: "menu-open-settings", json: "{\"tab\":\"keymap\"}")
+        }
+        Button("Logseq Documentation") {
+          if let url = URL(string: "https://docs.logseq.com") {
+            NSWorkspace.shared.open(url)
+          }
+        }
+      }
+    }
   }
 }
 
@@ -48,12 +130,23 @@ private struct LogseqHost: View {
 private struct LogseqRuntimeHost: View {
   let extensions: LUIAppleExtensionRegistry
   @State private var runtime: LogseqRuntime?
+  @ObservedObject private var appState = LogseqAppState.shared
 
   var body: some View {
     Group {
       if let runtime, let rootID = runtime.rootID {
-        LUISwiftUIRoot(backend: runtime.backend, rootID: rootID)
-          .frame(maxWidth: .infinity, maxHeight: .infinity)
+        GeometryReader { geo in
+          LUISwiftUIRoot(backend: runtime.backend, rootID: rootID)
+            // Electron zoomin/zoomout semantics: the LUI surface lays out
+            // on a smaller/larger logical area, then magnifies.
+            .frame(
+              width: geo.size.width / appState.zoomLevel,
+              height: geo.size.height / appState.zoomLevel)
+            .scaleEffect(appState.zoomLevel, anchor: .topLeading)
+            .frame(width: geo.size.width, height: geo.size.height, alignment: .topLeading)
+            .clipped()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
           .overlay(alignment: .topLeading) { LogseqOverlayLayer() }
           .coordinateSpace(name: "logseqWindow")
           .onPreferenceChange(LogseqFrameKey.self) {

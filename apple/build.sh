@@ -114,5 +114,12 @@ PY
 fi
 cp "$icons_json" "$app_dir/Contents/Resources/tabler-children.json"
 
+# settings theme-mode previews (resources/img/{light,dark,system}-theme.png,
+# rendered by i.mode-* elements in the settings appearance pane)
+for theme_png in light-theme.png dark-theme.png system-theme.png; do
+  src_png="$repo_root/resources/img/$theme_png"
+  [[ -f $src_png ]] && cp "$src_png" "$app_dir/Contents/Resources/$theme_png"
+done
+
 codesign --force --sign - --timestamp=none "$app_dir" || true
 echo "built: $app_dir"
