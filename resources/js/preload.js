@@ -99,17 +99,20 @@ contextBridge.exposeInMainWorld('apis', {
   /**
    * save all publish assets to disk
    *
-   * @param {string} html html file with embedded state
+   * @param {string} html published index.html
+   * @param {string} repoPath graph directory
+   * @param {string[]} assetFilenames asset files to copy
+   * @param {string} outputDir export destination
+   * @param {string} dbTransit published graph transit payload
    */
-  exportPublishAssets (html, customCSSPath, exportCSSPath, repoPath, assetFilenames, outputDir) {
+  exportPublishAssets (html, repoPath, assetFilenames, outputDir, dbTransit) {
     ipcRenderer.invoke(
       'export-publish-assets',
       html,
-      customCSSPath,
-      exportCSSPath,
       repoPath,
       assetFilenames,
-      outputDir
+      outputDir,
+      dbTransit
     )
   },
 

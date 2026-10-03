@@ -149,7 +149,7 @@
      (.unregisterProtocol protocol FILE_LSP_SCHEME)
      (.unregisterProtocol protocol FILE_ASSETS_SCHEME)))
 
-(defn- handle-export-publish-assets [_event html repo-path asset-filenames output-path]
+(defn- handle-export-publish-assets [_event html repo-path asset-filenames output-path db-transit]
   (p/let [app-path (. app getAppPath)
           asset-filenames (->> (js->clj asset-filenames) (remove nil?))
           root-dir (or output-path (handler/open-dir-dialog))]
@@ -160,6 +160,7 @@
        repo-path
        root-dir
        {:asset-filenames asset-filenames
+        :db-transit db-transit
         :log-error-fn logger/error
         :notification-fn #(send-to-renderer :notification %)}))))
 
