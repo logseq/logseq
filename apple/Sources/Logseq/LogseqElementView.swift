@@ -1349,6 +1349,7 @@ private struct LogseqElementRegistration: View {
 /// Default element handle — dom-ops land on a no-op surface until richer
 /// per-tag handles (text views etc.) register themselves.
 private final class LogseqElementHandle: LogseqElement {
+  let isPlaceholder = true
   let nodeID: Int
   init(nodeID: Int) { self.nodeID = nodeID }
 

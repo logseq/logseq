@@ -282,7 +282,8 @@ let title_content (page : Model.page) : t =
         ~style_class:"block-content-inner flex flex-row justify-between"
         [ dom ~key:"pt-bh" ~style_class:"block-head-wrap"
             [ dom ~key:"pt-w" ~style_class:"w-full inline"
-                [ Render.wrap ~self:uuid page.page_title ]
+                [ Render.wrap ~cls:"block-title-wrap ls-title-text"
+                    ~self:uuid page.page_title ]
             ]
         ]
     ]
@@ -479,7 +480,7 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
                                             ([ dom ~key:"pt-cw"
                                                  ~style_class:
                                                    "flex flex-col flex-1 \
-                                                    w-full \
+                                                    w-full gap-2 \
                                                     block-content-wrapper"
                                                  ~attrs:
                                                    [ ( "style"

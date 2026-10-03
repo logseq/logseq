@@ -300,32 +300,9 @@ let export_anchors : t =
 
 (* cljs container.cljs help-button: fixed bottom-right "?" — click toggles
    the help menu popup; popup itself not ported yet *)
-(* cljs container.cljs help-button: inline tabler help-small svg *)
-let help_svg : t =
-  Logseq_dom.dom ~key:"help-svg" ~tag:"svg"
-    ~attrs:
-      [ ("stroke", "currentColor")
-      ; ("fill", "none")
-      ; ("stroke-linejoin", "round")
-      ; ("width", "24")
-      ; ("viewBox", "0 0 24 24")
-      ; ("xmlns", "http://www.w3.org/2000/svg")
-      ; ("stroke-linecap", "round")
-      ; ("stroke-width", "2")
-      ; ("height", "24")
-      ]
-    ~style_class:"icon icon-tabler icon-tabler-help-small scale-125"
-    [ Logseq_dom.dom ~key:"hsv-p0" ~tag:"path"
-        ~attrs:[ ("stroke", "none"); ("d", "M0 0h24v24H0z"); ("fill", "none") ]
-        []
-    ; Logseq_dom.dom ~key:"hsv-p1" ~tag:"path" ~attrs:[ ("d", "M12 16v.01") ] []
-    ; Logseq_dom.dom ~key:"hsv-p2" ~tag:"path"
-        ~attrs:
-          [ ( "d"
-            , "M12 13a2 2 0 0 0 .914 -3.782a1.98 1.98 0 0 0 -2.414 .483" )
-          ]
-        []
-    ]
+(* cljs container.cljs help-button: the tabler help glyph — the native
+   path renders bundled tabler icons; a hand-rolled svg renders empty *)
+let help_svg : t = Icons.icon ~size:20. "help-small"
 
 let open_url (u : string) = Host.open_url u
 

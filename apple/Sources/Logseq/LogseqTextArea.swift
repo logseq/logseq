@@ -377,9 +377,13 @@ struct LogseqInputField: NSViewRepresentable {
 
   func updateNSView(_ field: NSTextField, context: NSViewRepresentableContext<Self>) {
     context.coordinator.owner = self
-    // Same rule as the textarea: focused input keeps its own text.
-    let focused = field.window?.firstResponder === field
-    if !focused, field.stringValue != text {
+    // Same rule as the textarea: focused input keeps its own text. During
+    // editing the first responder is the field editor (an NSTextView), not
+    // the field itself — checking `firstResponder === field` is always
+    // false while typing, so every re-render wiped typed text back to the
+    // prop value (cmdk input echoing nothing and dropping chars).
+    let editing = field.currentEditor() != nil
+    if !editing, field.stringValue != text {
       field.stringValue = text
     }
     field.placeholderString = attrs["placeholder"] as? String
@@ -443,11 +447,24 @@ struct LogseqInputField: NSViewRepresentable {
 
     func domFocus() {
       // see the textarea coordinator — resigning the first responder
-      // emits blur synchronously and would deadlock the OCaml callback
-      let input = field
-      DispatchQueue.main.async {
-        input?.window?.makeFirstResponder(input)
+      // emits blur synchronously and would deadlock the OCaml callback.
+      // Overlay-mounted fields (cmdk input) may not be in a window yet when
+      // the op arrives — retry until the view attaches or attempts run out.
+      func attempt(_ remaining: Int) {
+        DispatchQueue.main.async { [weak self] in
+          guard let self else { return }
+          guard let input = self.field else {
+            if remaining > 0 { attempt(remaining - 1) }
+            return
+          }
+          if input.window != nil {
+            input.window?.makeFirstResponder(input)
+          } else if remaining > 0 {
+            attempt(remaining - 1)
+          }
+        }
       }
+      attempt(25)
     }
 
     func domSetValue(_ value: String) {
