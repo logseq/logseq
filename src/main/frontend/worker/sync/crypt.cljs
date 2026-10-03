@@ -340,6 +340,19 @@
                                                  :reason :empty-ui-password}))
     password))
 
+(defn- invalid-e2ee-password-ex
+  "Returns error normalized to :db-sync/invalid-e2ee-password, or nil when it
+  isn't an e2ee password failure."
+  [error]
+  (if (= :db-sync/invalid-e2ee-password (:code (ex-data error)))
+    error
+    (when (or (true? (:invalid-password? (ex-data error)))
+              (= "decrypt-private-key" (ex-message error))
+              (crypt/expected-crypto-operation-error? error))
+      (ex-info "invalid-e2ee-password"
+               {:code :db-sync/invalid-e2ee-password}
+               error))))
+
 (defn- <verify-e2ee-password
   [password encrypted-private-key-or-str]
   (when-not (seq password)
@@ -349,12 +362,8 @@
                                   encrypted-private-key-or-str)
           private-key (-> (crypt/<decrypt-private-key password encrypted-private-key)
                           (p/catch (fn [error]
-                                     (if (true? (:invalid-password? (ex-data error)))
-                                       (p/rejected
-                                        (ex-info "invalid-e2ee-password"
-                                                 {:code :db-sync/invalid-e2ee-password}
-                                                 error))
-                                       (p/rejected error)))))]
+                                     (p/rejected (or (invalid-e2ee-password-ex error)
+                                                     error)))))]
     private-key))
 
 (defn- <verify-and-save-e2ee-password!
@@ -553,7 +562,8 @@
                                                  :graph-id graph-id
                                                  :first-error error
                                                  :retry-error retry-error})
-                                      (throw retry-error)))))))
+                                      (throw (or (invalid-e2ee-password-ex retry-error)
+                                                 retry-error))))))))
           (p/then (fn [key-material]
                     (if-let [password (when (seq @ui-password*)
                                        @ui-password*)]
