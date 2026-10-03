@@ -25,6 +25,11 @@ final class LogseqBlockTextView: NSTextView {
   override func becomeFirstResponder() -> Bool {
     let ok = super.becomeFirstResponder()
     if ok { coordinator?.noteFocused() }
+    if ProcessInfo.processInfo.environment["LOGSEQ_PERF"] != nil {
+      FileHandle.standardError.write(
+        "PERF becomeFR ok=\(ok) coord=\(coordinator != nil) domID=\(domID ?? "-")\n"
+          .data(using: .utf8)!)
+    }
     return ok
   }
 
@@ -275,7 +280,12 @@ struct LogseqTextArea: NSViewRepresentable {
       // runloop tick so the blur lands after the outer call returns.
       let view = textView
       DispatchQueue.main.async {
-        view?.window?.makeFirstResponder(view)
+        let ok = view?.window?.makeFirstResponder(view) ?? false
+        if ProcessInfo.processInfo.environment["LOGSEQ_PERF"] != nil {
+          FileHandle.standardError.write(
+            "PERF domfocus view=\(view != nil) window=\(view?.window != nil) ok=\(ok) accepts=\(view?.acceptsFirstResponder ?? false) editable=\(view?.isEditable ?? false) selectable=\(view?.isSelectable ?? false) key=\(view?.window?.isKeyWindow ?? false)\n"
+              .data(using: .utf8)!)
+        }
       }
     }
 
@@ -353,10 +363,27 @@ struct LogseqTextArea: NSViewRepresentable {
       enriched["target"] = target
       guard let data = try? JSONSerialization.data(withJSONObject: enriched),
         let json = String(data: data, encoding: .utf8)
-      else { return }
-      try? owner.context.emit(
-        name: "dom-event",
-        values: ["name": .string(name), "payload": .string(json)])
+      else {
+        if ProcessInfo.processInfo.environment["LOGSEQ_PERF"] != nil {
+          FileHandle.standardError.write(
+            "PERF emit-fail name=\(name) serialize\n".data(using: .utf8)!)
+        }
+        return
+      }
+      do {
+        try owner.context.emit(
+          name: "dom-event",
+          values: ["name": .string(name), "payload": .string(json)])
+        if ProcessInfo.processInfo.environment["LOGSEQ_PERF"] != nil {
+          FileHandle.standardError.write(
+            "PERF emit-ok name=\(name)\n".data(using: .utf8)!)
+        }
+      } catch {
+        if ProcessInfo.processInfo.environment["LOGSEQ_PERF"] != nil {
+          FileHandle.standardError.write(
+            "PERF emit-fail name=\(name) err=\(error)\n".data(using: .utf8)!)
+        }
+      }
     }
   }
 }
