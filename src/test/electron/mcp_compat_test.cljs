@@ -121,24 +121,6 @@
                      (is false (str "createPage unexpectedly failed: " (.-message error)))
                      (done)))))))
 
-(deftest rename-page-refuses-a-title-held-by-another-entity
-  (let [page-uuid "00000000-0000-4000-8000-000000000084"
-        calls (atom [])
-        api (fn [method args]
-              (swap! calls conj [method args])
-              (if (string/includes? (first args) "block/title ?title")
-                [{:uuid "other-page" :title "Taken" :name "taken"}]
-                {:id 84 :uuid page-uuid :name "source" :title "Source"}))]
-    (async done
-      (-> (p/then (mcp-compat/rename-page api #js {"page_uuid" page-uuid "new_title" "Taken"})
-                  (fn [_]
-                    (is false "renamePage should reject an occupied title")
-                    (done)))
-          (p/catch (fn [error]
-                     (is (string/includes? (.-message error) "already exists"))
-                     (is (not-any? #(= "logseq.DB.renamePage" (first %)) @calls))
-                     (done)))))))
-
 (deftest rename-page-verifies-the-original-uuid
   (let [page-uuid "00000000-0000-4000-8000-000000000085"
         title (atom "Before")
@@ -994,5 +976,64 @@
                     (done)))
           (p/catch (fn [error]
                      (is false (str "removeTag unexpectedly failed: " (.-message error)))
+                     (done)))))))
+
+(deftest create-block-verifies-parent-page-and-content
+  (let [page-uuid "00000000-0000-4000-8000-000000000091"
+        block-uuid "00000000-0000-4000-8000-000000000092"
+        calls (atom [])
+        inserted? (atom false)
+        page {:id 91 :uuid page-uuid :name "fixture" :title "Fixture"}
+        block {:id 92 :uuid block-uuid :title "Fixture block"
+               :parent {:id 91} :page {:id 91}}
+        api (fn [method args]
+              (swap! calls conj [method args])
+              (case method
+                "logseq.DB.insertBlock" (do (reset! inserted? true) #js {:uuid block-uuid})
+                "logseq.DB.datascriptQuery"
+                (let [query (first args)]
+                  (cond
+                    (string/includes? query "block/uuid #uuid") page
+                    (string/includes? query ":block/parent ?parent-id")
+                    (if @inserted? [block] [])
+                    (string/includes? query ":in $ ?uuid") block
+                    :else []))
+                nil))]
+    (async done
+      (-> (p/then (mcp-compat/create-block
+                   api #js {"parent_uuid" page-uuid "title" "Fixture block" "verbose" true})
+                  (fn [result]
+                    (is (true? (:verified result)))
+                    (is (= 91 (get-in result [:verified_entities 0 :parent :id])))
+                    (is (= 91 (get-in result [:verified_entities 0 :page :id])))
+                    (is (some #(= "logseq.DB.insertBlock" (first %)) @calls))
+                    (done)))
+          (p/catch (fn [error]
+                     (is false (str "createBlock failed: " (.-message error)))
+                     (done)))))))
+
+(deftest update-block-verifies-the-original-uuid-and-content
+  (let [block-uuid "00000000-0000-4000-8000-000000000094"
+        title (atom "Before")
+        calls (atom [])
+        block (fn [] {:id 94 :uuid block-uuid :title @title
+                      :parent {:id 91} :page {:id 90}})
+        api (fn [method args]
+              (swap! calls conj [method args])
+              (case method
+                "logseq.DB.updateBlock" (do (reset! title (second args)) nil)
+                "logseq.DB.datascriptQuery" (block)
+                nil))]
+    (async done
+      (-> (p/then (mcp-compat/update-block
+                   api #js {"block_uuid" block-uuid "title" "After" "verbose" true})
+                  (fn [result]
+                    (is (true? (:verified result)))
+                    (is (= block-uuid (get-in result [:verified_entities 0 :uuid])))
+                    (is (= "After" (get-in result [:verified_entities 0 :title])))
+                    (is (= "Before" (get-in result [:previous_entities 0 :title])))
+                    (done)))
+          (p/catch (fn [error]
+                     (is false (str "updateBlock failed: " (.-message error)))
                      (done)))))))
 

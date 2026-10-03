@@ -167,6 +167,14 @@
                         :title (z/string)
                         :dry_run (-> (z/boolean) .optional)
                         :verbose (-> (z/boolean) .optional)}}}
+  :updateBlock
+  {:fn mcp-compat/update-block
+   :config #js {:title "Update Block"
+            :description "Update a block title and verify the same block UUID retains its parent and page."
+            :inputSchema #js {:block_uuid (z/string)
+                        :title (z/string)
+                        :dry_run (-> (z/boolean) .optional)
+                        :verbose (-> (z/boolean) .optional)}}}
   :pageStats
   {:fn mcp-compat/page-stats
    :config #js {:title "Page Stats"

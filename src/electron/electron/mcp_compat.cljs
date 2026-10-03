@@ -1117,6 +1117,71 @@
                           (merge {:verified true :diagnostic nil}
                                  (entity-write-digest block)))))))))))))))
 
+(defn update-block
+  [api-fn args]
+  (let [block-uuid (aget args "block_uuid")
+        title (aget args "title")
+        dry-run? (true? (aget args "dry_run"))
+        verbose? (not (false? (aget args "verbose")))]
+    (when-not (and (string? block-uuid)
+                   (re-matches page-stats-uuid-pattern block-uuid))
+      (throw (js/Error. "block_uuid must be a UUID")))
+    (when-not (and (string? title) (not (string/blank? title)))
+      (throw (js/Error. "Expected a non-empty title")))
+    (when (re-find #"(?m)^[\t ]*-\s" title)
+      (throw (js/Error. "title: a line begins with '- '; Logseq truncates the block there")))
+    (let [query "[:find (pull ?block [:db/id :block/uuid :block/title :block/name :block/order {:block/parent [:db/id]} {:block/page [:db/id]}]) . :in $ ?uuid :where [?block :block/uuid ?uuid]]"]
+      (p/let [previous-result (api-fn "logseq.DB.datascriptQuery" [query block-uuid])
+              previous (js->clj previous-result :keywordize-keys true)]
+        (when-not previous
+          (throw (js/Error. (str "No entity exists with exact UUID " block-uuid))))
+        (when (or (:name previous) (:block/name previous))
+          (throw (js/Error. "UUID identifies a page, not a block. Use renamePage instead.")))
+        (if dry-run?
+          {:validation {:block previous :title title}
+           :response nil
+           :verified_entities []
+           :previous_entities [previous]
+           :recovered_after_timeout false
+           :verified false
+           :diagnostic "Dry run: nothing was written, so verified is false by design. The block exists and the title is usable."}
+          (p/let [response (api-fn "logseq.DB.updateBlock" [block-uuid title])
+                  _ (when-let [error (and response (aget response "error"))]
+                      (throw (js/Error. (str error))))
+                  current-result (api-fn "logseq.DB.datascriptQuery" [query block-uuid])
+                  current (js->clj current-result :keywordize-keys true)
+                  previous-title (or (:title previous) (:block/title previous))
+                  current-title (or (:title current) (:block/title current))
+                  loss (when current (content-loss title (or current-title "")))]
+            (cond
+              (nil? current)
+              {:validation nil :response (js->clj response :keywordize-keys true)
+               :verified_entities [] :previous_entities [previous]
+               :recovered_after_timeout false :verified false
+               :diagnostic "The block disappeared during the edit"}
+
+              (and (= current-title previous-title) (not= title previous-title))
+              {:validation nil :response (js->clj response :keywordize-keys true)
+               :verified_entities [] :previous_entities [previous]
+               :observed_entities [current] :recovered_after_timeout false
+               :verified false
+               :diagnostic "The edit was not observed; the block still has its original title."}
+
+              loss
+              {:validation nil :response (js->clj response :keywordize-keys true)
+               :verified_entities [current] :previous_entities [previous]
+               :observed_entities [current] :recovered_after_timeout false
+               :verified false :diagnostic (str "The block was edited but its content is not what was sent. " loss)}
+
+              verbose?
+              {:validation nil :response (js->clj response :keywordize-keys true)
+               :verified_entities [current] :previous_entities [previous]
+               :recovered_after_timeout false :verified true :diagnostic nil}
+
+              :else
+              (merge {:verified true :diagnostic nil :previous_count 1}
+                     (entity-write-digest current)))))))))
+
 (defn create-page
   [api-fn args]
   (let [title (aget args "title")
@@ -1792,8 +1857,9 @@
    :addTag ["logseq.DB.addBlockTag" "logseq.DB.datascriptQuery"]
    :removeTag ["logseq.DB.removeBlockTag" "logseq.DB.datascriptQuery"]
    :createPage ["logseq.DB.datascriptQuery" "logseq.DB.createPage"]
-  :renamePage ["logseq.DB.datascriptQuery" "logseq.DB.renamePage"]
+   :renamePage ["logseq.DB.datascriptQuery" "logseq.DB.renamePage"]
    :createBlock ["logseq.DB.insertBlock" "logseq.DB.datascriptQuery"]
+   :updateBlock ["logseq.DB.updateBlock" "logseq.DB.datascriptQuery"]
    :getTag ["logseq.DB.datascriptQuery"]
    :getPropertyIndent ["logseq.DB.datascriptQuery"]
    :getBlock ["logseq.DB.datascriptQuery"]
@@ -1830,6 +1896,7 @@
    "logseq.DB.createTag" ["__mcp_capability_probe__/invalid"]
    "logseq.DB.insertBlock" ["__mcp_capability_probe__" "__mcp_capability_probe__" #js {:sibling false}]
   "logseq.DB.renamePage" ["__mcp_capability_probe__" "__mcp_capability_probe__"]
+  "logseq.DB.updateBlock" ["__mcp_capability_probe__" "__mcp_capability_probe__"]
    "logseq.DB.deletePage" ["__mcp_capability_probe__"]
    "logseq.DB.addBlockTag" ["__mcp_capability_probe__" "__mcp_capability_probe__"]
    "logseq.DB.removeBlockTag" ["__mcp_capability_probe__" "__mcp_capability_probe__"]

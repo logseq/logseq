@@ -108,9 +108,10 @@ holder-detach and child-reparent acknowledgement and verifies deletion;
 `addTag` verifies the target's tag relation and preserves page identity;
 `removeTag` verifies removal while preserving other tags and page identity.
 `createPage` checks title availability before writing and verifies the created
-page by UUID. `createBlock` verifies its parent, owning page and stored content.
-There are 38 registered tools: five API-backed tools and 33 compatibility data
-tools.
+page by UUID. `createBlock` verifies its parent, owning page and stored content;
+`updateBlock` verifies title changes on the original UUID. `renamePage`
+preflights title availability and verifies the original page UUID. There are
+40 registered tools: five API-backed tools and 35 compatibility data tools.
 `capabilities` reports inconclusive probes as `unknown`; write probes use
 invalid arguments, and `upsertNodes` is neither probed nor reported.
 Entry criteria still outstanding:
