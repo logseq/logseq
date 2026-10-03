@@ -381,8 +381,7 @@
           (p/then (fn [_]
                     (is (= (str (page-marker page-uuid) "\n\n"
                                 "- body\n"
-                                "  * notes::\n"
-                                "    - property value bullet\n"
+                                "  * notes:: property value bullet\n"
                                 "- after")
                            (get @files (page-path "pages/Properties.md"))))))
           (p/catch (fn [e] (is false (str "unexpected error: " e))))
@@ -468,11 +467,9 @@
           (p/then (fn [_]
                     (let [content (get @files (page-path "pages/Issue.md"))]
                       (is (= (str (page-marker (:block/uuid page)) "\n"
-                                  "* reproducible-steps::\n"
-                                  "  - Open settings\n\n"
+                                  "* reproducible-steps:: Open settings\n\n"
                                   "- TODO ## TODO body\n"
-                                  "  * reproducible-steps::\n"
-                                  "    - Click mirror\n"
+                                  "  * reproducible-steps:: Click mirror\n"
                                   "  * rating:: 5")
                              content)))))
           (p/catch (fn [e] (is false (str "unexpected error: " e))))
@@ -746,11 +743,9 @@
           (p/then (fn [_]
                     (let [content (get @files (page-path "pages/Page Props.md"))]
                       (is (= (str (page-marker (:block/uuid page)) "\n"
-                                  "* p1::\n"
-                                  "  - hello\n"
+                                  "* p1:: hello\n"
                                   "* p2:: 1\n"
-                                  "* p3::\n"
-                                  "  - Author 1\n\n"
+                                  "* p3:: Author 1\n\n"
                                   "- body")
                              content)))))
           (p/catch (fn [e] (is false (str "unexpected error: " e))))
@@ -797,14 +792,11 @@
           (p/then (fn [_]
                     (let [content (get @files (page-path "journals/2026_05_05.md"))]
                       (is (= (str (page-marker (:block/uuid journal)) "\n"
-                                  "* p1::\n"
-                                  "  - hey\n\n"
+                                  "* p1:: hey\n\n"
                                   "- TODO hello great test\n"
-                                  "  * p1::\n"
-                                  "    - hello\n"
+                                  "  * p1:: hello\n"
                                   "  * p2:: 1\n"
-                                  "  * p3::\n"
-                                  "    - Author 1")
+                                  "  * p3:: Author 1")
                              content)))))
           (p/catch (fn [e] (is false (str "unexpected error: " e))))
           (p/finally done)))))

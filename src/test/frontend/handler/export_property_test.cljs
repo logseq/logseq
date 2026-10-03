@@ -77,6 +77,22 @@
                 "- after")
            (export-page conn "Text Prop Children")))))
 
+(deftest single-cardinality-default-properties-export-inline
+  (let [conn (db-test/create-conn-with-blocks
+              {:properties {:user.property/myprop {:logseq.property/type :default
+                                                   :db/cardinality :db.cardinality/one}
+                            :user.property/items {:logseq.property/type :default
+                                                  :db/cardinality :db.cardinality/many}}
+               :pages-and-blocks [{:page {:block/title "Cardinality"}
+                                   :blocks [{:block/title "body"
+                                             :build/properties {:user.property/myprop "some value"
+                                                                :user.property/items #{"list value"}}}]}]})]
+    (is (= (str "- body\n"
+                "  * myprop:: some value\n"
+                "  * items::\n"
+                "    - list value")
+           (export-page conn "Cardinality")))))
+
 (deftest url-property-value-children-are-not-exported
   (let [conn (db-test/create-conn-with-blocks
               {:properties {:user.property/website {:logseq.property/type :url}}
