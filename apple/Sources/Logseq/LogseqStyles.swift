@@ -414,7 +414,9 @@ import SwiftUI
       isRow = true; grow = true; fullWidth = true
     case "is-open": hasIsOpen = true
     case "cp__sidebar-left-layout":
-      wantsOpen = true; fixedWidth = 246; fullHeight = true
+      // The NavigationSplitView column owns the sidebar chrome; the DOM
+      // container stays mounted (0pt) purely for is-open registration.
+      wantsOpen = true; fixedWidth = 0
     // Overlay layer (cmdk, popups, dialogs, toasts) and other
     // `position:fixed` elements: children render but the element itself
     // must not consume layout space.
@@ -437,6 +439,11 @@ import SwiftUI
       padding = EdgeInsets(top: 6, leading: 8, bottom: 6, trailing: 8)
       cornerRadius = 4
     case "ls-hm-icon": foreground = LogseqColors.gray(10)
+    // window-toolbar breadcrumb (Out parity): "›  Page title" —
+    // secondary text in the hoisted navigation group.
+    case "ls-tb-crumb":
+      if fontSize == nil { fontSize = 13 }
+      foreground = LogseqColors.gray(10)
     case "ls-hm-hr":
       margin = EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0)
     case "ls-hm-meta":
@@ -609,6 +616,9 @@ import SwiftUI
     case "form-select", "form-input":
       minWidth = 140; maxWidth = 220
       if fontSize == nil { fontSize = 13 }
+      padding = EdgeInsets(top: 4, leading: 8, bottom: 4, trailing: 8)
+      cornerRadius = 6
+      borderColor = LogseqColors.border; borderWidth = 1
     case "ui__select-trigger":
       isRow = true; spaceBetween = true; stackSpacing = 4
       padding = EdgeInsets(top: 6, leading: 12, bottom: 6, trailing: 12)
@@ -664,11 +674,63 @@ import SwiftUI
     case "ls-desc":
       if fontSize == nil { fontSize = 14 }
       alpha = 0.5
+      // sits beside the switch inside an isRow wrap — without grow it lays
+      // out at ideal width and hard-clips mid-word at the pane edge
+      grow = true
     case "keyboard-shortcut": isRow = true; stackSpacing = 4
     case "ls-btn-label":
       padding = EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 4)
     case "ls-kbd-label":
       padding = EdgeInsets(top: 0, leading: 4, bottom: 0, trailing: 4)
+    // ---- keymap (shortcut) pane ----
+    case "cp__shortcut-page-x":
+      padding = EdgeInsets(top: 8, leading: 8, bottom: 8, trailing: 8)
+    case "shortcut-toolbar-row":
+      isRow = true; centerCross = true; stackSpacing = 8; fullWidth = true
+    case "search-input-wrap":
+      isRow = true; centerCross = true; stackSpacing = 6; grow = true
+      padding = EdgeInsets(top: 3, leading: 4, bottom: 3, trailing: 4)
+    case "search-icon": foreground = LogseqColors.gray(9)
+    case "shortcut-keystroke-inactive":
+      isRow = true; centerCross = true; stackSpacing = 4
+      padding = EdgeInsets(top: 5, leading: 8, bottom: 5, trailing: 8)
+      cornerRadius = 6; borderColor = LogseqColors.border; borderWidth = 1
+      if fontSize == nil { fontSize = 13 }
+    case "shortcut-pills-row":
+      isRow = true; centerCross = true; spaceBetween = true; fullWidth = true
+    case "shortcut-filter-pills": isRow = true; centerCross = true; stackSpacing = 6
+    case "shortcut-filter-pill":
+      isRow = true; centerCross = true; stackSpacing = 2
+      padding = EdgeInsets(top: 3, leading: 10, bottom: 3, trailing: 10)
+      cornerRadius = 10; background = LogseqColors.gray(3)
+      if fontSize == nil { fontSize = 12 }
+    case "shortcut-filter-pill--active":
+      background = LogseqColors.link
+      foreground = .white
+    case "shortcut-filter-pill-count":
+      if fontSize == nil { fontSize = 11 }
+      alpha = 0.6
+    case "icon-link":
+      padding = EdgeInsets(top: 4, leading: 4, bottom: 4, trailing: 4)
+      foreground = LogseqColors.gray(10)
+    case "shortcut-row":
+      isRow = true; centerCross = true; spaceBetween = true; fullWidth = true
+      padding = EdgeInsets(top: 4, leading: 8, bottom: 4, trailing: 8)
+    case "label-wrap": isRow = true; centerCross = true; grow = true
+    case "action-wrap": isRow = true; centerCross = true; stackSpacing = 6
+    case "ls-dc": isRow = true; centerCross = true
+    case "shui-shortcut-wrap": isRow = true; centerCross = true; stackSpacing = 4
+    case "shui-shortcut-separator": fixedWidth = 2
+    case "shortcut-status-label":
+      if fontSize == nil { fontSize = 12 }
+      foreground = LogseqColors.gray(9)
+    case "ls-th-strong":
+      if fontSize == nil { fontSize = 13 }
+      fontWeight = .semibold
+    // keymap category header rows — label left, fold chevron right
+    case "th":
+      isRow = true; centerCross = true; spaceBetween = true; fullWidth = true
+      padding = EdgeInsets(top: 10, leading: 8, bottom: 4, trailing: 8)
     case "ls-it-top": break // grid align-items:start; rows are top-aligned already
     // ---- dropdown / context menus (position:fixed anchored) ----
     case "ui__dropdown-menu-content":
@@ -810,7 +872,10 @@ import SwiftUI
       isRow = true; stackSpacing = 2
       fontSize = fontSize ?? 10
       foreground = LogseqColors.secondaryText
-    case "ls-cm-sc": isRow = true
+    case "ls-cm-sc":
+      // Shortcut cell — web's margin-left:auto: take the row's spare
+      // width so the kbd chips pin to the item's right edge.
+      isRow = true; grow = true; alignTrailing = true; stackSpacing = 4
     case "ls-menu-chevron": foreground = LogseqColors.secondaryText
     case "ls-context-menu-content": fixedWidth = 280
     case "ls-dots-menu": fixedWidth = 256
@@ -984,7 +1049,16 @@ import SwiftUI
     case "top-0": fixedY = 0
     case "left-0": fixedX = 0
     case "bottom-0": fixedBottom = 0
-    case "keyboard-shortcut", "kbd", "shui-shortcut-key":
+    case "kbd", "shui-shortcut-key":
+      // Web renders kbd as a bordered keycap chip, not bare text.
+      if fontSize == nil { fontSize = 10 }
+      isMono = true
+      foreground = LogseqColors.secondaryText
+      borderColor = LogseqColors.border
+      borderWidth = 1
+      cornerRadius = 3
+      padding = EdgeInsets(top: 1, leading: 4, bottom: 1, trailing: 4)
+    case "keyboard-shortcut":
       if fontSize == nil { fontSize = 10 }
       isMono = true
       foreground = LogseqColors.secondaryText
@@ -1034,6 +1108,18 @@ import SwiftUI
     // actions bar instead)
     case "ls-code-editor-wrap": fullWidth = true
     case "extensions__code-lang": isHidden = true
+    case "code-block-actions":
+      // Web: absolute top-right action bar over the code editor.
+      outOfFlow = true
+      fixedRight = 6; fixedY = 6
+      isRow = true; stackSpacing = 4
+    case "ls-code-action":
+      isRow = true; stackSpacing = 4
+      fontSize = fontSize ?? 11
+      foreground = LogseqColors.secondaryText
+      padding = EdgeInsets(top: 2, leading: 5, bottom: 2, trailing: 5)
+      background = LogseqColors.gray(2)
+      cornerRadius = 4
     // lui-core.css: .block-head-wrap { display:flex; flex:1; width:100% }
     // — takes the row's leftover inside justify-between content-inner
     case "block-head-wrap": isRow = true; grow = true; fullWidth = true

@@ -14,6 +14,7 @@ struct LogseqElementView: View {
   /// skips the presenter branch so the element draws normally.
   var inOverlay = false
   @Environment(\.logseqInOverlay) private var nestedInOverlay
+  @Environment(\.logseqInImperative) private var inImperativeLayer
   /// lui-overlay.css's `#ui__ac-inner` max-height: the enclosing
   /// `data-editor-popup-ref` popover pushes its --available-height budget
   /// down through this env so the AC list caps at
@@ -81,6 +82,12 @@ struct LogseqElementView: View {
     return s
   }
 
+  /// Hit-test layer for LogseqFrameStore: overlay/imperative popups paint
+  /// above page content; overlayZ keeps same-layer stacking order.
+  private var frameZ: Int {
+    (inOverlay || inImperativeLayer ? 1000 : 0) + style.overlayZ
+  }
+
   private func hasClass(_ cls: String) -> Bool {
     guard case .string(let classes) = context.property("style-class")
     else { return false }
@@ -104,15 +111,25 @@ struct LogseqElementView: View {
     return classes.split(separator: " ").contains { $0 == "bullet" }
   }
 
-  /// `left-sidebar-inner` div — intercepted by LogseqNativeSidebar, which
-  /// renders the subtree's data through a native macOS sidebar instead of
-  /// the web-shaped DOM.
+  /// `left-sidebar-inner` div — the node whose subtree backs the
+  /// NavigationSplitView sidebar column (LogseqSidebarStore hands its
+  /// context to the App-level split view); inline it mounts invisibly so
+  /// element emitters stay live.
   private var isNativeSidebar: Bool {
     guard tag == "div",
       case .string(let classes) = context.property("style-class")
     else { return false }
     return classes.split(separator: " ").contains { $0 == "left-sidebar-inner" }
   }
+
+  /// `cp__sidebar-left-layout` — the DOM sidebar container. The split
+  /// view owns the chrome now; it still mounts (hidden) so its `is-open`
+  /// class can drive the column visibility (style.wantsOpen marks it).
+  private var isLeftSidebarLayout: Bool { style.wantsOpen }
+
+  /// The split-view column visibility source-of-truth: open iff the DOM
+  /// sidebar container carries `is-open`.
+  private var sidebarOpen: Bool { style.wantsOpen && style.hasIsOpen }
 
   /// Right sidebar `.resizer` separator — the OCaml side emits a static
   /// element; the width drag is native view state (LogseqRightSidebarLayout).
@@ -217,7 +234,8 @@ struct LogseqElementView: View {
               Color.clear.preference(
                 key: LogseqFrameKey.self,
                 value: [context.nodeID: LogseqFrameEntry(
-                  rect: g.frame(in: .named("logseqWindow")), tag: tag)])
+                  rect: g.frame(in: .named("logseqWindow")), tag: tag,
+                  z: frameZ)])
             }
           }
         })
@@ -226,8 +244,29 @@ struct LogseqElementView: View {
         // announced themselves — its DOM probes (e.g. #ui__ac-inner for an
         // open autocomplete) depend on truthful mount state.
         emitLifecycle("element-mount")
+        if isLeftSidebarLayout {
+          LogseqSidebarStore.shared.open = sidebarOpen
+          if ProcessInfo.processInfo.environment["LOGSEQ_DUMP"] != nil {
+            try? "{\"open\":\(sidebarOpen)}".write(
+              toFile: "/tmp/sidebar-open.json", atomically: true,
+              encoding: .utf8)
+          }
+        }
       }
-      .onDisappear { emitLifecycle("element-unmount") }
+      .onDisappear {
+        emitLifecycle("element-unmount")
+        if isLeftSidebarLayout { LogseqSidebarStore.shared.open = false }
+      }
+      .onChange(of: sidebarOpen) { _, open in
+        if isLeftSidebarLayout {
+          LogseqSidebarStore.shared.open = open
+          if ProcessInfo.processInfo.environment["LOGSEQ_DUMP"] != nil {
+            try? "{\"open\":\(open)}".write(
+              toFile: "/tmp/sidebar-open.json", atomically: true,
+              encoding: .utf8)
+          }
+        }
+      }
       .background(Group {
         // text inputs register their real coordinator handle themselves —
         // the generic no-op handle must not clobber it.
@@ -243,9 +282,14 @@ struct LogseqElementView: View {
       EmptyView()
 
     } else if isNativeSidebar {
-      // Out-style native sidebar — the OCaml DOM subtree serves as the data
-      // model while SwiftUI renders the native chrome.
-      LogseqNativeSidebar(context: context)
+      // The OCaml DOM subtree is the data model for the split view's
+      // sidebar column; mount it invisibly so emitters stay live.
+      LogseqSidebarMount(context: context)
+
+    } else if isLeftSidebarLayout {
+      // The split view owns the sidebar chrome; keep mounting children so
+      // left-sidebar-inner can register for the column.
+      contentBody
 
     } else if isRightSidebarResizer {
       LogseqSidebarResizer()
@@ -839,6 +883,22 @@ extension EnvironmentValues {
   }
 }
 
+/// Marks views rendered inside LogseqImperativeLayer — a body-attached
+/// popup paints above page content, so its frames must outrank
+/// underlying elements in LogseqFrameStore.hitTest regardless of size.
+/// Distinct from logseqInOverlay: the imperative layer does NOT
+/// suppress fillsOverlay hoisting (popups still pin to window bounds).
+private struct LogseqInImperativeKey: EnvironmentKey {
+  static let defaultValue = false
+}
+
+extension EnvironmentValues {
+  var logseqInImperative: Bool {
+    get { self[LogseqInImperativeKey.self] }
+    set { self[LogseqInImperativeKey.self] = newValue }
+  }
+}
+
 private struct LogseqOutOfFlowKey: LayoutValueKey {
   static let defaultValue = false
 }
@@ -1127,18 +1187,27 @@ private struct LogseqClipper: ViewModifier {
 struct LogseqFrameEntry: Equatable {
   let rect: CGRect
   let tag: String
+  /// Painting layer: 0 = page content, 1000+ = overlay/imperative popup
+  /// (plus overlayZ stacking). Monitor hit-tests prefer the top layer —
+  /// a smaller element UNDER a popup must never steal its hit.
+  var z: Int = 0
 }
 
 @MainActor enum LogseqFrameStore {
   static var entries: [Int: LogseqFrameEntry] = [:]
 
-  /// Deepest element at the point: smallest containing frame wins,
-  /// approximating DOM hit order (children paint over ancestors).
+  /// Deepest element at the point: highest paint layer first, then the
+  /// smallest containing frame wins — approximating DOM hit order
+  /// (overlays paint above content; children paint over ancestors).
   static func hitTest(_ point: CGPoint) -> (nodeID: Int, tag: String)? {
-    var best: (id: Int, area: CGFloat)?
+    var best: (id: Int, z: Int, area: CGFloat)?
     for (id, entry) in entries where entry.rect.contains(point) {
       let area = entry.rect.width * entry.rect.height
-      if best == nil || area < best!.area { best = (id, area) }
+      if best == nil || entry.z > best!.z
+        || (entry.z == best!.z && area < best!.area)
+      {
+        best = (id, entry.z, area)
+      }
     }
     guard let best, let entry = entries[best.id] else { return nil }
     return (best.id, entry.tag)
