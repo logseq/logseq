@@ -354,6 +354,26 @@ let get_pending_local_txs repo ?(limit : int option) () : local_tx_entry list =
   rows (store repo) sql params
   |> List.filter_map row_to_pending_local_tx
 
+let get_pending_local_tx_ids repo : string list =
+  rows (store repo)
+    "select tx_id from client_ops where kind = 'tx' and pending = 1 order by created_at asc, id asc"
+    []
+  |> List.filter_map (fun r -> col_text_opt r 0)
+
+(* queue-ordered pending rows for a known id set — confirm/reject paths
+   only need the rows the server named, not a decode of the whole queue *)
+let get_pending_local_txs_in repo (tx_ids : string list) : local_tx_entry list =
+  match tx_ids with
+  | [] -> []
+  | _ ->
+      let ph = String.concat "," (List.map (fun _ -> "?") tx_ids) in
+      rows (store repo)
+        (pending_tx_select
+         ^ " and pending = 1 and tx_id in (" ^ ph
+         ^ ") order by created_at asc, id asc")
+        (List.map text tx_ids)
+      |> List.filter_map row_to_pending_local_tx
+
 (* ---- sync_conflicts ---- *)
 
 type sync_conflict =

@@ -415,7 +415,10 @@ let process_committed_tx ~persist_enabled ~checksum_enabled
   let checksum_at = !checksum_at in
   let persist_at = perf_time_ms () in
   let sync_result =
-    if sync_db_to_main_thread then
+    (* during pending replay each entry's per-report main-thread delta
+       would duplicate work — commit_synthesized_report emits the one
+       combined delta for the whole rebuild *)
+    if sync_db_to_main_thread && not !Sync_state.pending_replay then
       main_thread_sync_result repo conn r
     else None
   in
