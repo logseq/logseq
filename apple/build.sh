@@ -122,10 +122,11 @@ for theme_png in light-theme.png dark-theme.png system-theme.png; do
 done
 
 # SwiftPM resource bundles (Bundle.module): the generated
-# resource_bundle_accessor only falls back to the .build path in a dev
-# checkout — a shipped .app must carry them at its root.
+# resource_bundle_accessor also searches Contents/Resources — bundles at
+# the .app root count as unsealed contents and break the signature
+# (Gatekeeper reports the app as "damaged").
 for bundle in "$product_dir"/*.bundle; do
-  [[ -d $bundle ]] && cp -R "$bundle" "$app_dir/"
+  [[ -d $bundle ]] && cp -R "$bundle" "$app_dir/Contents/Resources/"
 done
 
 codesign --force --sign - --timestamp=none "$app_dir" || true
