@@ -202,3 +202,24 @@
       "- [~~k~~](a.md)" "k"
       "- [**k**](a.md)" "k"
       "- [*k*](a.md)" "k")))
+
+(defn- extract-typed-hashtag
+  [title]
+  (let [content (str "- " title)
+        ast (gp-mldoc/->db-edn content :markdown)]
+    (first (gp-block/extract-blocks ast content :markdown {:db-graph-mode? true}))))
+
+(deftest db-graph-typed-hashtags-share-tag-and-ref-identity
+  (testing "Typed hashtags without a db become DB tags with one uuid"
+    (doseq [tag-title ["research" "исследование" "日本語" "über" "café"]]
+      (let [parsed (extract-typed-hashtag (str "hello #" tag-title))
+            tag (first (:block/tags parsed))
+            ref (first (filter #(= tag-title (:block/title %)) (:block/refs parsed)))]
+        (is (= tag-title (:block/title tag))
+            (str "Parses #" tag-title " as a tag"))
+        (is (some #{:logseq.class/Tag} (:block/tags tag))
+            (str "#" tag-title " is a DB tag, not a file-graph page"))
+        (is (qualified-keyword? (:db/ident tag))
+            (str "#" tag-title " has a class ident"))
+        (is (= (:block/uuid tag) (:block/uuid ref))
+            (str "#" tag-title " tag and ref share one uuid"))))))

@@ -2,9 +2,11 @@
   (:require [cljs.test :refer [are async deftest is testing]]
             [frontend.db :as db]
             [frontend.db.async :as db-async]
+            [clojure.string :as string]
             [frontend.handler.db-based.editor :as db-editor-handler]
             [frontend.handler.property :as property-handler]
             [frontend.state :as state]
+            [logseq.db.frontend.content :as db-content]
             [promesa.core :as p]))
 
 (deftest wrap-parse-block-standalone-fenced-code-test
@@ -105,6 +107,26 @@
           (is (= :code (:logseq.property.node/display-type result)))
           (is (= [cached-ref-uuid]
                  (map :block/uuid (:block/refs result)))))))))
+
+(deftest wrap-parse-block-typed-non-ascii-hashtags-test
+  (testing "typed hashtags without autocomplete stay DB tags and convert back on re-edit"
+    (doseq [tag-title ["research" "исследование" "日本語" "über" "café"]]
+      (let [title (str "hello #" tag-title)
+            result (db-editor-handler/wrap-parse-block {:block/title title})
+            tag (first (:block/tags result))
+            ref (first (filter #(= tag-title (:block/title %)) (:block/refs result)))]
+        (is (string/includes? (:block/title result) "[[")
+            (str "#" tag-title " is saved as an id ref"))
+        (is (= tag-title (:block/title tag)))
+        (is (= (:block/uuid tag) (:block/uuid ref))
+            (str "#" tag-title " tag and ref share one uuid"))
+        (is (some #{:logseq.class/Tag}
+                  (map #(or (:db/ident %) %) (:block/tags tag)))
+            (str "#" tag-title " is a DB tag"))
+        (is (string/includes? (name (:db/ident tag)) tag-title)
+            (str "#" tag-title " keeps a readable class ident"))
+        (is (= title (db-content/id-ref->title-ref (:block/title result) (:block/refs result)))
+            (str "#" tag-title " converts back when re-entering the block"))))))
 
 (deftest wrap-parse-block-preserves-cached-map-refs-without-renderer-db-test
   (let [block-uuid #uuid "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
