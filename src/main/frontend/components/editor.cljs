@@ -186,10 +186,7 @@
 
 (defn- matched-pages-with-new-page [partial-matched-pages db-tag? q exact-page]
   (when (some? partial-matched-pages)
-    (let [page-exists? (and (nil? (:block/parent exact-page))
-                            (if db-tag?
-                              (entity/class? exact-page)
-                              (entity/page? exact-page)))]
+    (let [page-exists? (ldb/matching-create-page? exact-page {:class? db-tag?})]
       (if (or page-exists?
               (and db-tag? (class-alias? exact-page)))
         partial-matched-pages

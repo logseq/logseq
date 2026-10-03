@@ -328,6 +328,74 @@
     (is (= default-name (:block/name page))
         "Journal block/name remains the default formatter, independent of title format")))
 
+(deftest create-page-after-namespaced-child-is-order-independent
+  (testing "Foo/Bar then Bar"
+    (let [conn (db-test/create-conn)
+          [_ nested-uuid] (outliner-page/create! conn "Foo/Bar" {:split-namespace? true})
+          [_ top-uuid] (outliner-page/create! conn "Bar" {:split-namespace? true})
+          nested (d/entity @conn [:block/uuid nested-uuid])
+          top (d/entity @conn [:block/uuid top-uuid])]
+      (is (not= nested-uuid top-uuid))
+      (is (= "Foo" (:block/title (:block/parent nested))))
+      (is (nil? (:block/parent top)))
+      (is (= 2 (count (d/q '[:find [?e ...] :where [?e :block/title "Bar"]] @conn))))))
+  (testing "Bar then Foo/Bar"
+    (let [conn (db-test/create-conn)
+          [_ top-uuid] (outliner-page/create! conn "Bar" {:split-namespace? true})
+          [_ nested-uuid] (outliner-page/create! conn "Foo/Bar" {:split-namespace? true})
+          nested (d/entity @conn [:block/uuid nested-uuid])
+          top (d/entity @conn [:block/uuid top-uuid])]
+      (is (not= nested-uuid top-uuid))
+      (is (= "Foo" (:block/title (:block/parent nested))))
+      (is (nil? (:block/parent top)))
+      (is (= 2 (count (d/q '[:find [?e ...] :where [?e :block/title "Bar"]] @conn))))))
+  (testing "Foo/Bar then Foo reuses the namespace root"
+    (let [conn (db-test/create-conn)
+          [_ _] (outliner-page/create! conn "Foo/Bar" {:split-namespace? true})
+          foo (db-test/find-page-by-title @conn "Foo")
+          [_ foo2-uuid] (outliner-page/create! conn "Foo" {})]
+      (is (= (:block/uuid foo) foo2-uuid)
+          "A namespace root is a top-level create target")
+      (is (= 1 (count (d/q '[:find [?e ...] :where [?e :block/title "Foo"]] @conn)))))))
+
+(deftest create-page-and-tag-with-same-name-is-order-independent
+  (testing "tag then page"
+    (let [conn (db-test/create-conn)
+          [_ tag-uuid] (outliner-page/create! conn "Foo" {:class? true})
+          [_ page-uuid] (outliner-page/create! conn "foo" {})]
+      (is (not= tag-uuid page-uuid))
+      (is (ldb/class? (d/entity @conn [:block/uuid tag-uuid])))
+      (is (ldb/internal-page? (d/entity @conn [:block/uuid page-uuid])))))
+  (testing "page then tag"
+    (let [conn (db-test/create-conn)
+          [_ page-uuid] (outliner-page/create! conn "foo" {})
+          [_ tag-uuid] (outliner-page/create! conn "Foo" {:class? true})]
+      (is (not= tag-uuid page-uuid))
+      (is (ldb/class? (d/entity @conn [:block/uuid tag-uuid])))
+      (is (ldb/internal-page? (d/entity @conn [:block/uuid page-uuid]))))))
+
+(deftest create-tag-after-namespaced-tag-is-order-independent
+  (testing "Foo/Baz then Baz"
+    (let [conn (db-test/create-conn)
+          [_ nested-uuid] (outliner-page/create! conn "Foo/Baz" {:split-namespace? true :class? true})
+          [_ top-uuid] (outliner-page/create! conn "Baz" {:class? true})
+          nested (d/entity @conn [:block/uuid nested-uuid])
+          top (d/entity @conn [:block/uuid top-uuid])]
+      (is (not= nested-uuid top-uuid))
+      (is (contains? (set (map :block/title (:logseq.property.class/extends nested))) "Foo"))
+      (is (not (contains? (set (map :block/title (:logseq.property.class/extends top))) "Foo")))
+      (is (= 2 (count (d/q '[:find [?e ...] :where [?e :block/title "Baz"]] @conn))))))
+  (testing "Baz then Foo/Baz"
+    (let [conn (db-test/create-conn)
+          [_ top-uuid] (outliner-page/create! conn "Baz" {:class? true})
+          [_ nested-uuid] (outliner-page/create! conn "Foo/Baz" {:split-namespace? true :class? true})
+          nested (d/entity @conn [:block/uuid nested-uuid])
+          top (d/entity @conn [:block/uuid top-uuid])]
+      (is (not= nested-uuid top-uuid))
+      (is (contains? (set (map :block/title (:logseq.property.class/extends nested))) "Foo"))
+      (is (not (contains? (set (map :block/title (:logseq.property.class/extends top))) "Foo")))
+      (is (= 2 (count (d/q '[:find [?e ...] :where [?e :block/title "Baz"]] @conn)))))))
+
 (deftest create-slash-formatted-journal-does-not-create-namespace-pages
   (let [conn (db-test/create-conn)
         _ (d/transact! conn [[:db/add :logseq.class/Journal :logseq.property.journal/title-format "yyyy/MM/dd"]])

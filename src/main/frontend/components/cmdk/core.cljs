@@ -31,6 +31,7 @@
             [frontend.util.text :as text-util]
             [goog.object :as gobj]
             [logseq.common.util :as common-util]
+            [logseq.db :as ldb]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]
@@ -97,6 +98,24 @@
   [input]
   (string/replace input #"^#+" ""))
 
+(defn create-target-exists?
+  "True when Cmd+K should hide Create because a reusable same-kind page exists.
+
+  A nested page, tag or property with the same title is not enough: those can
+  share a name with a new top-level page (or tag)."
+  [input blocks]
+  (let [class? (string/starts-with? (or input "") "#")
+        title (if class? (get-class-from-input input) input)
+        title-lc (util/page-name-sanity-lc title)]
+    (boolean
+     (when-not (string/blank? title)
+       (some (fn [block]
+               (and (:page? block)
+                    (= title-lc
+                       (util/page-name-sanity-lc (:block.temp/original-title block)))
+                    (ldb/matching-create-page? block {:class? class?})))
+             blocks)))))
+
 (defn create-items [q]
   (when (and (not (string/blank? q))
              (not (#{"config.edn" "custom.js" "custom.css"} q))
@@ -137,12 +156,7 @@
 
                             :else
                             (take (get-group-limit group) items))))
-        node-exists? (let [blocks-result (keep :source-block (get-in results [:nodes :items]))]
-                       (when-not (string/blank? input)
-                         (some (fn [block]
-                                 (and
-                                  (:page? block)
-                                  (= (util/page-name-sanity-lc input) (util/page-name-sanity-lc (:block.temp/original-title block))))) blocks-result)))
+        node-exists? (create-target-exists? input (keep :source-block (get-in results [:nodes :items])))
         include-slash? (string/includes? input "/")
         start-with-slash? (string/starts-with? input "/")
         order* (cond
