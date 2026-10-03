@@ -1135,6 +1135,46 @@
       (first rows)
       rows)))
 
+(defn create-tag
+  [api-fn args]
+  (let [title (aget args "title")
+        options (or (aget args "options") #js {})
+        verbose? (not (false? (aget args "verbose")))]
+    (when-not (and (string? title) (not (string/blank? title)))
+      (throw (js/Error. "Tag title must not be empty")))
+    (when (string/includes? title "/")
+      (throw (js/Error. "Tag title should not include forward slash")))
+    (let [clash-query "[:find [(pull ?e [:db/id :block/uuid :block/title :block/name]) ...] :in $ ?title :where [?e :block/name] [?e :block/title ?title]]"]
+      (p/let [clashes-result (api-fn "logseq.DB.datascriptQuery" [clash-query title])
+              clashes (query-result-rows clashes-result)]
+        (when (seq clashes)
+          (throw (js/Error. (str "An entity titled " (pr-str title)
+                                 " already exists. Tags and pages share a title space, so creating this tag would make both unresolvable by title."))))
+        (p/let [response (api-fn "logseq.DB.createTag" [title options])]
+          (when-let [error (and response (aget response "error"))]
+            (throw (js/Error. (str error))))
+          (let [response-map (js->clj response :keywordize-keys true)
+                tag-uuid (or (:uuid response-map) (:block/uuid response-map))]
+            (when-not (string? tag-uuid)
+              (throw (js/Error. "Tag creation did not return an entity with a UUID")))
+            (let [tag-query "[:find (pull ?tag [:db/id :db/ident :block/uuid :block/title {:block/tags [:db/ident]}]) . :in $ ?uuid :where [?tag :block/uuid ?uuid] [?tag :block/tags ?class] [?class :db/ident :logseq.class/Tag]]"]
+              (p/let [tag-result (api-fn "logseq.DB.datascriptQuery" [tag-query tag-uuid])
+                      tag (js->clj tag-result :keywordize-keys true)]
+                (when-not tag
+                  (throw (js/Error. "Tag creation reported success but the tag is not present")))
+                (if verbose?
+                  {:response response-map
+                   :verified_state tag
+                   :recovered_after_timeout false
+                   :previous_state nil
+                   :diagnostic nil
+                   :verified true
+                   :observed_state nil}
+                  {:verified true
+                   :uuid (or (:uuid tag) (:block/uuid tag))
+                   :ident (or (:ident tag) (:db/ident tag))
+                   :diagnostic nil})))))))))
+
 (defn- count-index
   [result]
   (let [rows (js->clj result :keywordize-keys true)]
@@ -1335,6 +1375,7 @@
    :pageStats ["logseq.DB.datascriptQuery"]
    :inspectPage ["logseq.DB.datascriptQuery"]
    :getTagUUID ["logseq.DB.getTagsByName"]
+  :creatTag ["logseq.DB.createTag"]
    :getTag ["logseq.DB.datascriptQuery"]
    :getPropertyIndent ["logseq.DB.datascriptQuery"]
    :getBlock ["logseq.DB.datascriptQuery"]
@@ -1368,6 +1409,7 @@
    "logseq.cli.listProperties" [#js {}]
   "logseq.cli.getPageData" ["__mcp_capability_probe__"]
   "logseq.DB.upsertProperty" ["__mcp_capability_probe__/invalid" #js {}]
+  "logseq.DB.createTag" ["__mcp_capability_probe__/invalid"]
   "logseq.DB.upsertBlockProperty" ["__mcp_capability_probe__"
                                     "__mcp_capability_probe__"
                                     "__mcp_capability_probe__"]
@@ -1382,7 +1424,8 @@
 
 (def ^:private capability-present-markers
   ["invalid" "missing required" "should be either" "disallowed"
-  "expected" "required" "plugins can only upsert its own properties"])
+  "expected" "required" "forward slash"
+  "plugins can only upsert its own properties"])
 
 (defn- capability-finding
   [method error-message result]

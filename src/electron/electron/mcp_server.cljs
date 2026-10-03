@@ -173,6 +173,13 @@
     :config #js {:title "Get Tag"
                  :description "Read one exact tag entity by UUID."
                  :inputSchema #js {:tag_uuid (z/string)}}}
+  :creatTag
+  {:fn mcp-compat/create-tag
+   :config #js {:title "Create Tag"
+            :description "Create a tag, refuse title collisions with pages or tags, and verify its generated identity."
+            :inputSchema #js {:title (z/string)
+                        :options (-> (z/object #js {}) .passthrough .optional)
+                        :verbose (-> (z/boolean) .optional)}}}
    :getPropertyIndent
    {:fn mcp-compat/get-property-ident
     :config #js {:title "Get Property Ident"

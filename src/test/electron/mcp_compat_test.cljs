@@ -757,3 +757,43 @@
           (p/catch (fn [error]
                      (is false (str error))
                      (done)))))))
+
+(deftest creat-tag-verifies-the-generated-identity
+  (let [calls (atom [])
+        tag-uuid "00000000-0000-4000-8000-000000000041"
+        response #js {"uuid" tag-uuid "ident" ":plugin.class._test_plugin/Topic"}
+        tag #js {"id" 41 "uuid" tag-uuid "ident" ":plugin.class._test_plugin/Topic"
+                 "title" "Topic" "tags" #js [#js {"ident" "logseq.class/Tag"}]}
+        api (fn [method args]
+              (swap! calls conj [method args])
+              (case method
+                "logseq.DB.createTag" response
+                (if (string/includes? (first args) "block/name")
+                  #js []
+                  tag)))]
+    (async done
+      (p/then (mcp-compat/create-tag api #js {"title" "Topic"})
+              (fn [result]
+                (is (true? (:verified result)))
+                (is (= tag-uuid (get-in result [:verified_state :uuid])))
+                (is (= ":plugin.class._test_plugin/Topic"
+                       (get-in result [:verified_state :ident])))
+                (is (= ["logseq.DB.datascriptQuery" "logseq.DB.createTag"
+                        "logseq.DB.datascriptQuery"]
+                       (mapv first @calls)))
+                (done))))))
+
+(deftest creat-tag-refuses-an-existing-page-title-before-writing
+  (let [calls (atom [])
+        api (fn [method args]
+              (swap! calls conj [method args])
+              #js [#js {"uuid" "existing-page" "title" "Topic" "name" "topic"}])]
+    (async done
+      (-> (p/then (mcp-compat/create-tag api #js {"title" "Topic"})
+                  (fn [_]
+                    (is false "creatTag should refuse title collisions")
+                    (done)))
+          (p/catch (fn [error]
+                     (is (string/includes? (.-message error) "already exists"))
+                     (is (= 1 (count @calls)))
+                     (done)))))))
