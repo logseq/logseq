@@ -178,9 +178,55 @@ and apply_pending () : unit Js.Promise.t =
           Router.reload ();
           Js.Promise.resolve ())
   | _ ->
-      Router.reload ();
-      finish ();
-      Js.Promise.resolve ()
+      (* journals route keeps its pages in current_journals — splice
+         the queued deltas into the touched day(s) like the op path;
+         a delta-less/foreign/failed splice still reloads the route *)
+      if !Runtime.current_journals <> [] && deltas <> [] && not unknown
+      then
+        let start_js = !Runtime.current_journals in
+        let all_dup =
+          List.for_all Page_delta.delta_already_applied deltas
+        in
+        let* merged =
+          Page_delta.with_apply_queue (fun () ->
+              let rec go js = function
+                | [] -> Js.Promise.resolve (Some js)
+                | d :: rest -> (
+                    let* applied =
+                      Page_delta.apply_to_journals ~strict:true
+                        Outliner_ops.delta_helpers js d
+                    in
+                    match applied with
+                    | Some js' -> go js' rest
+                    | None -> Js.Promise.resolve None)
+              in
+              go start_js deltas)
+        in
+        (match merged with
+         | Some js' when js' != start_js
+                        && !Runtime.current_journals == start_js ->
+             Runtime.send (Action.Journals_loaded js');
+             List.iter2
+               (fun o (n : Model.page) ->
+                 if o != n then Runtime.push_journal_page n)
+               start_js js';
+             if not all_dup then begin
+               finish ();
+               Editor_state.prune_overrides
+                 (List.concat_map Page_delta.delta_uuids deltas)
+             end;
+             Js.Promise.resolve ()
+         | Some _ ->
+             if not all_dup then finish ();
+             Js.Promise.resolve ()
+         | None ->
+             Router.reload ();
+             finish ();
+             Js.Promise.resolve ())
+      else (
+        Router.reload ();
+        finish ();
+        Js.Promise.resolve ())
 
 let dispatch kind payload =
   match kind with

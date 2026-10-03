@@ -475,3 +475,47 @@ let apply_to_page ?(strict = true) (h : helpers) (page : Model.page)
           in
           own_commit := Some page';
           Js.Promise.resolve (Some page')))
+
+(* fold [delta] onto the journal page(s) it touches. A delta is relevant
+   to a journal page when its membership patch keys the page uuid
+   (top-level list) or any canon/deleted/parent uuid lives inside the
+   page's block tree. Some merged list when every relevant page spliced
+   cleanly, None when nothing matched (delta targets an unloaded page —
+   caller refetches) or a splice failed. Cross-page membership edits
+   leave patches unconsumed on one side and fall back to a reload. *)
+let apply_to_journals ?(strict = true) (mk_helpers : Model.page -> helpers)
+    (journals : Model.page list) (delta : Wire.t)
+    : Model.page list option Js.Promise.t =
+  match parse delta with
+  | None -> Js.Promise.resolve None
+  | Some p ->
+      if already_applied p.rev then Js.Promise.resolve (Some journals)
+      else
+        let rec block_touches (b : Model.block) =
+          (match b.Model.block_uuid with
+           | Some u ->
+               SMap.mem u p.canon || SSet.mem u p.deleted
+               || SMap.mem u p.patches
+           | None -> false)
+          || List.exists block_touches b.Model.block_children
+          || List.exists block_touches b.Model.block_embed_children
+        in
+        let relevant (page : Model.page) =
+          match page.Model.page_uuid with
+          | Some pu when SMap.mem pu p.patches -> true
+          | _ -> List.exists block_touches page.Model.page_blocks
+        in
+        let rec go acc = function
+          | [] -> Js.Promise.resolve (Some (List.rev acc))
+          | page :: rest ->
+              if not (relevant page) then go (page :: acc) rest
+              else
+                let* applied =
+                  apply_to_page ~strict (mk_helpers page) page delta
+                in
+                (match applied with
+                 | Some p' -> go (p' :: acc) rest
+                 | None -> Js.Promise.resolve None)
+        in
+        if List.exists relevant journals then go [] journals
+        else Js.Promise.resolve None

@@ -74,11 +74,17 @@ let get_journal_page_by_day args =
 
 let () = Dispatcher.register "thread-api/get-journal-page-by-day" get_journal_page_by_day
 
-(* :thread-api/get-latest-journals [repo n] *)
+(* :thread-api/get-latest-journals [repo n ?offset] *)
 let get_latest_journals args =
   with_conn args (fun db ->
       let n = Option.value (Option.bind (arg args 1) Wire.as_int) ~default:0 in
-      let js = Ldb.get_latest_journals db |> Seq.take n |> List.of_seq in
+      let offset =
+        Option.value (Option.bind (arg args 2) Wire.as_int) ~default:0
+      in
+      let js =
+        Ldb.get_latest_journals db |> Seq.drop offset |> Seq.take n
+        |> List.of_seq
+      in
       Db_worker_effect.pure
         (Wire.Array (List.map (page_summary db) js)))
 

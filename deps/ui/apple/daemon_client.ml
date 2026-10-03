@@ -195,7 +195,11 @@ let ensure_graph_created (repo : string) : unit =
 
 (* ---------- daemon spawn ---------- *)
 
-let spawned : (string, int) Hashtbl.t = Hashtbl.create 4
+(* repo -> base-url of the daemon this process is attached to. Daemons
+   outlive the app on purpose: a live daemon keeps its repo admission
+   and the graph open, so a later launch re-attaches in one healthz
+   round-trip instead of paying a cold spawn + graph open. *)
+let attached : (string, string) Hashtbl.t = Hashtbl.create 4
 
 (* boot timing: stderr marks carry seconds since module init so launch
    profiling needs no external stopwatch *)
@@ -203,14 +207,6 @@ let boot_t0 = Unix.gettimeofday ()
 
 let boot_mark msg =
   Printf.eprintf "[boot +%.3fs] %s\n%!" (Unix.gettimeofday () -. boot_t0) msg
-
-(* app shutdown: stop every daemon we spawned so the repo lock is
-   released before the process exits (a live daemon keeps the graph
-   locked and the next launch fails admission) *)
-let kill_all () =
-  Hashtbl.iter (fun _ pid -> try Unix.kill pid Sys.sigterm with _ -> ())
-    spawned;
-  Hashtbl.clear spawned
 
 (* spawn main.exe for [repo] (canonical "logseq_db_<name>"), wait for it
    to publish its port. Returns base-url. Blocking — caller runs this on
@@ -244,7 +240,6 @@ let spawn_daemon (repo : string) : string =
   in
   Unix.close devnull;
   Unix.close log_fd;
-  Hashtbl.replace spawned repo pid;
   (* poll server-list for our pid *)
   let deadline = Unix.gettimeofday () +. 15. in
   let rec poll () =
@@ -265,6 +260,105 @@ let spawn_daemon (repo : string) : string =
         end
   in
   poll ()
+
+(* ---------- daemon reuse ---------- *)
+
+(* blocking GET with a short socket timeout; returns (status, body).
+   Used only to probe /healthz — stale server-list entries (dead pids,
+   reused ports) fail fast instead of hanging the boot chain. *)
+let http_get ~(port : int) ~(path : string) : (int * string) option =
+  let addr =
+    Unix.ADDR_INET (Unix.inet_addr_of_string "127.0.0.1", port)
+  in
+  let fd = Unix.socket Unix.PF_INET Unix.SOCK_STREAM 0 in
+  try
+    Unix.setsockopt_float fd Unix.SO_RCVTIMEO 0.5;
+    Unix.setsockopt_float fd Unix.SO_SNDTIMEO 0.5;
+    Unix.connect fd addr;
+    let oc = Unix.out_channel_of_descr fd in
+    Printf.fprintf oc "GET %s HTTP/1.0\r\nHost: 127.0.0.1:%d\r\n\r\n"
+      path port;
+    flush oc;
+    let ic = Unix.in_channel_of_descr fd in
+    let status_line = input_line ic in
+    let status =
+      match String.split_on_char ' ' status_line with
+      | _ :: code :: _ ->
+          Option.value (int_of_string_opt code) ~default:0
+      | _ -> 0
+    in
+    let rec skip () =
+      let line = input_line ic in
+      if line <> "" && line <> "\r" then skip ()
+    in
+    skip ();
+    (* the daemon always sends Transfer-Encoding: chunked, so decode
+       chunk frames — a raw read-to-EOF leaves the hex sizes in the
+       body and breaks JSON parsing *)
+    let buf = Buffer.create 2048 in
+    (try
+       while true do
+         let size_line = String.trim (input_line ic) in
+         match int_of_string_opt ("0x" ^ size_line) with
+         | Some 0 ->
+             (* consume the terminal CRLF, then stop — the daemon may
+                keep the connection alive, so do NOT read past the last
+                chunk (a timeout raises EAGAIN, not End_of_file, and
+                would discard the body via the outer catch) *)
+             ignore (input_line ic);
+             raise Exit
+         | Some n ->
+             Buffer.add_channel buf ic n;
+             ignore (input_line ic)
+         | None -> raise Exit
+       done
+     with End_of_file | Exit -> ());
+    Unix.close fd;
+    Some (status, Buffer.contents buf)
+  with _ ->
+    (try Unix.close fd with _ -> ());
+    None
+
+(* /healthz tells us which repo the daemon owns and whether it is
+   ready — a ready daemon already holds the admission and has run
+   create-or-open-db, so attaching is a warm path. *)
+let probe_daemon ~(port : int) : (string * bool) option =
+  match http_get ~port ~path:"/healthz" with
+  | Some (status, body) when status >= 200 && status < 300 -> (
+      try
+        match Yojson.Safe.from_string body with
+        | `Assoc kvs ->
+            let field name =
+              match List.assoc_opt name kvs with
+              | Some (`String s) -> s
+              | _ -> ""
+            in
+            Some (field "repo", field "status" = "ready")
+        | _ -> None
+      with _ -> None)
+  | _ -> None
+
+let find_live_daemon (repo : string) : string option =
+  let entries = read_server_list () in
+  boot_mark ("probe server-list entries="
+    ^ string_of_int (List.length entries));
+  List.find_map
+    (fun (pid, port) ->
+       match probe_daemon ~port with
+       | Some (r, true) when r = repo ->
+           boot_mark
+             ("probe ok pid=" ^ string_of_int pid ^ " port="
+              ^ string_of_int port);
+           Some ("http://127.0.0.1:" ^ string_of_int port)
+       | r ->
+           boot_mark
+             ("probe fail pid=" ^ string_of_int pid ^ " port="
+              ^ string_of_int port ^ " got="
+              ^ (match r with
+                 | Some (rr, ready) -> rr ^ " ready=" ^ string_of_bool ready
+                 | None -> "none"));
+           None)
+    entries
 
 (* ---------- graph listing ---------- *)
 
@@ -291,26 +385,28 @@ let ipc (args : Wire.t list) : Wire.t Js.Promise.t =
               resolve (Wire.Array (list_repo_names ())))
       | [ Wire.String "db-worker-runtime"; Wire.String repo; _ ] ->
           boot_mark ("ipc db-worker-runtime " ^ repo);
-          (* re-use a live daemon for the repo when we have one *)
           let base =
-            match Hashtbl.find_opt spawned repo with
-            | Some pid -> (
-                match port_for_pid pid with
-                | Some port ->
-                    "http://127.0.0.1:" ^ string_of_int port
+            match Hashtbl.find_opt attached repo with
+            | Some base -> base
+            | None -> (
+                (* prefer a daemon left running by a previous launch —
+                   it still owns the repo admission and has the graph
+                   open, so attaching costs one healthz round-trip *)
+                match find_live_daemon repo with
+                | Some base ->
+                    boot_mark ("reuse daemon " ^ base);
+                    base
                 | None -> spawn_daemon repo)
-            | None -> spawn_daemon repo
           in
+          Hashtbl.replace attached repo base;
           Host.enqueue (fun () ->
               resolve
                 (Wire.Map [ (Wire.kw "base-url", Wire.String base) ]))
-      | [ Wire.String "releaseDbWorkerRuntime"; Wire.String repo ] -> (
-          match Hashtbl.find_opt spawned repo with
-          | Some pid ->
-              Hashtbl.remove spawned repo;
-              (try Unix.kill pid Sys.sigterm with _ -> ());
-              Host.enqueue (fun () -> resolve Wire.Nil)
-          | None -> Host.enqueue (fun () -> resolve Wire.Nil))
+      | [ Wire.String "releaseDbWorkerRuntime"; Wire.String repo ] ->
+          (* detach only — the daemon keeps the repo open so a later
+             attach (or the next app launch) is instant *)
+          Hashtbl.remove attached repo;
+          Host.enqueue (fun () -> resolve Wire.Nil)
       | _ -> Host.enqueue (fun () -> resolve Wire.Nil)
     with e ->
       prerr_endline

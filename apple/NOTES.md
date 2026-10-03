@@ -1098,3 +1098,33 @@ channels, which is why they still rendered.
 Fix: skip the GeometryReader when `zoomLevel == 1.0` (the common
 case) and give the root `.frame(maxWidth/maxHeight: .infinity)`. The
 zoom!=1 path keeps the reader since it needs the container size.
+
+## journals route: delta splice + lazy pagination (2026-10-03)
+
+- Root cause of "所有操作都卡": on the journals route `current_page=None`, so
+  `refresh_via_delta`/`apply_pending` fell back to `Router.reload` ->
+  `load_journals` = get-latest-journals + per-day tree+refs + sidebar +
+  properties ≈ 15 serial invokes per op (Demo), ~80 on 40-day graphs.
+- `Page_delta.apply_to_journals` splices an op/broadcast delta into the
+  mounted `Model.page list`: `relevant` filter (page patch or touched
+  block uuids) -> `apply_to_page` per touched day; falls back to reload
+  only when the delta is missing or the splice returns None.
+- Each journal day has its own `Signal.state` (`Runtime.journal_page_sig`
+  keyed by page uuid): `journal_item` wraps `journal_item_inner` in a dyn
+  so a splice repaints only the touched day, not the whole list.
+- Pagination: `journals_initial=3` days on load, `journals_chunk=2` per
+  `load_more_journals` (endpoint gained a `?offset` arg). Outer Virt_list
+  got `~data_sig` (swaps appended days without remount — preserves scroll)
+  and `~on_end` (fires when the last row publishes). update.ml skips the
+  data_gen bump when the new journals list is a block-only-prefix match.
+- Pitfall: `Runtime.journals_sig` must seed the state from
+  `!current_journals`, not `[||]` — `push_journals_items` before the list
+  mounts is a no-op (`journals_items=None`), so a Journals_loaded that
+  lands before mount was silently dropped and the list mounted empty.
+- Pitfall: `deps/ui/apple/virt_list.ml` is a separate eager twin — params
+  added to `src/virt/virt_list.ml` must be mirrored there (it ignores
+  pin/data plumbing but must accept `~data_sig`/`~on_end`).
+- Measured: launch->journal patch applied ~0.30s (daemon reuse ~1ms);
+  Enter/op = 1 apply-outliner-ops invoke + splice, e2e ~8ms; no
+  get-latest-journals/tree/refs after ops. Typing commits still ride the
+  750ms edit-input debounce (local echo is immediate).

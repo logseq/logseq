@@ -994,6 +994,45 @@ let apply_queued _page delta =
           Js.Promise.resolve (a, touched))
       | None -> Js.Promise.resolve (None, touched))
 
+(* journals-route fold of the op response (+ any deferred deltas) —
+   the route page lives in current_journals, so the page-route splice
+   can't see it; apply each delta to the journal day it touches and
+   push the changed day into its mounted item signal *)
+let refresh_journals_via_delta (delta : Wire.t) : unit Js.Promise.t =
+  let deltas = Page_delta.drain_deferred () @ [ delta ] in
+  let touched = List.concat_map Page_delta.delta_uuids deltas in
+  let start_js = !Runtime.current_journals in
+  Page_delta.with_apply_queue (fun () ->
+      let rec go js = function
+        | [] -> Js.Promise.resolve (Some js)
+        | d :: rest -> (
+            let* applied =
+              Page_delta.apply_to_journals ~strict:false delta_helpers js
+                d
+            in
+            match applied with
+            | Some js' -> go js' rest
+            | None -> Js.Promise.resolve None)
+      in
+      let* merged = go start_js deltas in
+      (* a navigation mid-splice emptied the journals — this publish
+         would resurrect the old route's days *)
+      let still_current = !Runtime.current_journals == start_js in
+      (match merged with
+       | Some js' when js' != start_js && still_current ->
+           Runtime.send (Action.Journals_loaded js');
+           (* repaint only the days the splice actually changed *)
+           List.iter2
+             (fun o (n : Model.page) ->
+               if o != n then Runtime.push_journal_page n)
+             start_js js';
+           Js.Promise.resolve ()
+       | Some _ -> Js.Promise.resolve ()
+       | None -> refresh_page ())
+      |> Js.Promise.then_ (fun () ->
+             S.prune_overrides touched;
+             Js.Promise.resolve ()))
+
 let refresh_via_delta (resp : Wire.t option) : unit Js.Promise.t =
   match
     (Option.bind resp (fun r -> Wire.get r "delta"), !Runtime.current_page)
@@ -1029,6 +1068,10 @@ let refresh_via_delta (resp : Wire.t option) : unit Js.Promise.t =
           (* page moved on mid-splice — this page is gone *)
           Js.Promise.resolve ()
       | None -> refresh_page ())
+  | Some delta, None when !Runtime.current_journals <> [] ->
+      (* journals / other route-less views keep their pages in
+         current_journals — splice the delta into the day it touches *)
+      refresh_journals_via_delta delta
   | _ -> refresh_page ()
 
 let apply_and_refresh ?opts ops =
