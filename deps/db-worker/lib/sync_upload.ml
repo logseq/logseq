@@ -330,6 +330,9 @@ let persist_upload_graph_identity repo graph_id graph_e2ee =
          [ Wire.Keyword "repo", Wire.String repo
          ; Wire.Keyword "field", Wire.Keyword "graph-id" ]);
   set_graph_sync_metadata repo graph_id graph_e2ee;
+  (* the graph just became remote — split off the server conn now so
+     remote txs never interleave with pending ops on one conn *)
+  Sync_apply.split_off_server_if_remote repo;
   ensure_client_graph_uuid repo graph_id;
   Wire.Map
     [ Wire.Keyword "graph-id", Wire.String graph_id

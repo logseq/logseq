@@ -1089,13 +1089,15 @@ let prepare_upload_tx_entries ?repo ?server_db (conn : conn option)
          match tx_data with
          | Some items ->
              (match available with
-              | Some avail ->
-                  let created', retracted' =
-                    pending_tx_uuid_delta (tx_items_of e.tx)
-                  in
+              | Some avail when items <> [] ->
+                  (* availability must track what actually uploads — the
+                     sanitized items, and only while the entry survives;
+                     a uuid whose creation was sanitized out of an
+                     emptied entry never reaches the server *)
+                  let created', retracted' = pending_tx_uuid_delta items in
                   SSet.iter (fun u -> Hashtbl.replace avail u ()) created';
                   SSet.iter (fun u -> Hashtbl.remove avail u) retracted'
-              | None -> ());
+              | _ -> ());
              Some
                (Wire.Map
                   [ kw "tx-id", Wire.String e.tx_id
@@ -1194,20 +1196,26 @@ let pending_txs repo ?limit () : Sync_client_op.local_tx_entry list =
 let pending_tx_by_id repo tx_id : Sync_client_op.local_tx_entry option =
   Sync_client_op.get_local_tx_entry repo tx_id
 
+(* forward-ref to rebuild_display (defined below) — dropping pending
+   entries must re-project the display conn *)
+let rebuild_display_fn : (string -> unit) ref = ref (fun _ -> ())
+
 let mark_failed_txs repo (tx_ids : string list) : int =
   match tx_ids with
   | [] -> 0
   | _ ->
       clear_large_upload_progress repo tx_ids;
       let removed = Sync_client_op.mark_failed_txs repo tx_ids in
-      if removed > 0 then
+      if removed > 0 then begin
         Sync_client_op.adjust_pending_local_tx_count repo (-removed);
+        (* dropping pending entries must re-project the display conn —
+           during replay the rebuild in progress already drops them,
+           and replay_pending_txs rebinds once more when any entry
+           failed mid-apply *)
+        if not !Sync_state.pending_replay then !rebuild_display_fn repo
+      end;
       broadcast_rtc_state (current_client repo);
       removed
-
-(* forward-ref to rebuild_display (defined below) — dropping pending
-   entries must re-project the display conn *)
-let rebuild_display_fn : (string -> unit) ref = ref (fun _ -> ())
 
 let mark_pending_txs_false repo (tx_ids : string list) : int =
   match tx_ids with
@@ -1405,22 +1413,27 @@ let resolve_ancestor_or_page (db_before : db) (current_db : db)
             try Datascript.entity d r with _ -> None)
     | _ -> None
   in
+  let visited = Hashtbl.create 7 in
   let rec up (e : entity) : entity option =
-    match parent_on db_before e with
-    | Some p -> (
-        match entity_on_current p with
-        | Some cur -> Some cur
-        | None -> up p)
-    | None -> (
-        match Datascript.entity_attr e "block/page" with
-        | Some (One_entity pe) -> (
-            match
-              Option.bind pe.db_id (fun r ->
-                  try Datascript.entity db_before r with _ -> None)
-            with
-            | Some page -> entity_on_current page
-            | None -> None)
-        | _ -> None)
+    if Hashtbl.mem visited e.id then None
+    else begin
+      Hashtbl.replace visited e.id ();
+      match parent_on db_before e with
+      | Some p -> (
+          match entity_on_current p with
+          | Some cur -> Some cur
+          | None -> up p)
+      | None -> (
+          match Datascript.entity_attr e "block/page" with
+          | Some (One_entity pe) -> (
+              match
+                Option.bind pe.db_id (fun r ->
+                    try Datascript.entity db_before r with _ -> None)
+              with
+              | Some page -> entity_on_current page
+              | None -> None)
+          | _ -> None)
+    end
   in
   up tb
 
@@ -2387,13 +2400,30 @@ let transact_remote_txs ?(display_db : db option) (conn : conn)
 
 (* ---- pending replay / display rebuild ---- *)
 
+(* Attrs whose db/ident creation is still queued — a property that only
+   exists inside a pending entry is pending-created, not remotely
+   deleted, so verbatim replay must keep items on it. *)
+let pending_property_attrs (pending : Sync_client_op.local_tx_entry list)
+    : SSet.t =
+  List.fold_left
+    (fun acc (e : Sync_client_op.local_tx_entry) ->
+       List.fold_left
+         (fun acc item ->
+            match item with
+            | Wire.Array l | Wire.List l
+              when List.length l >= 4
+                   && List.nth l 0 = kw "db/add"
+                   && List.nth l 2 = kw "db/ident" -> (
+                match List.nth l 3 with
+                | Wire.Keyword a | Wire.String a
+                  when Db_property.property a -> SSet.add a acc
+                | _ -> acc)
+            | _ -> acc)
+         acc (tx_items_of e.tx))
+    SSet.empty pending
 
-(* Forward replay of one queued local tx onto the display conn: the
-   canonical outliner ops re-execute the op semantics against the new
-   server base. Entries without forward ops (raw transacts) fall back to
-   replaying the queued tx data verbatim. *)
 let replay_pending_entry (repo : string) (conn : conn)
-    (rebase_db_before : db option)
+    (rebase_db_before : db option) ~(pending_attrs : SSet.t)
     (local_tx : Sync_client_op.local_tx_entry) : unit =
   let db = Conn.db conn in
   (* idempotent replay: a queued op may re-run against a newer base (e.g.
@@ -2464,6 +2494,10 @@ let replay_pending_entry (repo : string) (conn : conn)
         | _ :: _ as tx_data ->
             let attr_live (a : Wire.t) : bool =
               attr_resolves db a
+              || (match a with
+                  | Wire.Keyword a' | Wire.String a' ->
+                      SSet.mem a' pending_attrs
+                  | _ -> false)
               || (match rebase_db_before with
                   | Some b -> not (attr_resolves b a)
                   | None -> true)
@@ -2482,18 +2516,25 @@ let replay_pending_entry (repo : string) (conn : conn)
 
 (* Replays the pending queue in order. A replay failure marks the entry
    failed — the server stays authoritative and the op leaves the
-   projection. *)
+   projection. Returns how many entries failed: ops committed before a
+   failing op within the same entry stay applied on conn, so callers
+   that can rebind should do a second pass to drop the residue. *)
 let replay_pending_txs repo (conn : conn)
-    (rebase_db_before : db option) : unit =
+    (rebase_db_before : db option) : int =
   let pending = pending_txs repo () in
-  if pending <> [] then begin
+  if pending = [] then 0
+  else begin
+    let failed = ref 0 in
     Sync_state.pending_replay := true;
+    let pending_attrs = pending_property_attrs pending in
     (try
        List.iter
          (fun (local_tx : Sync_client_op.local_tx_entry) ->
             try
-              replay_pending_entry repo conn rebase_db_before local_tx
+              replay_pending_entry repo conn rebase_db_before
+                ~pending_attrs local_tx
             with e ->
+              incr failed;
               Worker_log.warn "db-sync/pending-replay-failed"
                 [ "repo", repo
                 ; "tx-id", local_tx.tx_id
@@ -2505,7 +2546,8 @@ let replay_pending_txs repo (conn : conn)
      with e ->
        Sync_state.pending_replay := false;
        raise e);
-    Sync_state.pending_replay := false
+    Sync_state.pending_replay := false;
+    !failed
   end
 
 (* Display conns share the server conn's storage for lazy index reads but
@@ -2541,7 +2583,19 @@ let rebuild_display repo ~(jump_tx_data : datom list) : unit =
           (fun r -> replay_reports := r :: !replay_reports)
       in
       (try
-         replay_pending_txs repo display_conn (Some db_before)
+         let failed =
+           replay_pending_txs repo display_conn (Some db_before)
+         in
+         if failed > 0 then begin
+           (* ops committed before a failing op stay applied — rebind to
+              the server base once more and replay the surviving queue
+              (failed entries are out of pending now) so no residue
+              leaks into the projection *)
+           Conn.update_db display_conn (fun _ ->
+               display_db_from_server (Conn.db server_conn));
+           replay_reports := [];
+           ignore (replay_pending_txs repo display_conn (Some db_before))
+         end
        with e ->
          Datascript.unlisten display_conn lid;
          raise e);
@@ -2595,8 +2649,24 @@ let confirm_pending_txs repo (tx_ids : string list) : unit =
            | [] -> ()
            | tx_data ->
                let db = Conn.db server_conn in
+               (* sanitize with the upload domain: uuids the server
+                  conn can see, and attrs live on either conn — the
+                  server conn must only ever gain what the upload
+                  could actually have carried *)
+               let uuid_exists u =
+                 Outliner_op.entity_of_uuid (Conn.db server_conn) u
+                 <> None
+               in
+               let attr_live (a : Wire.t) : bool =
+                 attr_resolves db a
+                 || (match Worker_state.datascript_conn repo with
+                     | Some display -> attr_resolves (Conn.db display) a
+                     | None -> true)
+               in
                let tx_data =
-                 (try sanitize_pending_tx_refs db tx_data
+                 (try
+                    sanitize_pending_tx_refs ~uuid_exists ~attr_live db
+                      tx_data
                   with _ -> tx_data)
                  |> List.map (resolve_temp_id db)
                  |> fun items ->
@@ -2641,7 +2711,12 @@ let split_off_server_if_remote repo : unit =
         let display = display_conn_from_server db in
         Worker_state.set_datascript_conn repo display;
         Db_listener.listen_db_changes repo display;
-        replay_pending_txs repo display None
+        let failed = replay_pending_txs repo display None in
+        if failed > 0 then begin
+          Conn.update_db display (fun _ ->
+              display_db_from_server (Conn.db conn));
+          ignore (replay_pending_txs repo display None)
+        end
       end
 
 (* ---- handle-local-tx! (forward decl via ref) ---- *)
