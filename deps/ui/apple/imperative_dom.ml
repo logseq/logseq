@@ -858,7 +858,16 @@ let () =
                           set_rect id l t r b
                       | _ -> ())
                   | None -> ())
-                frames
+                frames;
+              (match List.assoc_opt "drop" kvs with
+               | Some (JArray dropped) ->
+                   List.iter
+                     (fun v ->
+                       match decodeNumber v with
+                       | Some n -> Hashtbl.remove rects (int_of_float n)
+                       | None -> ())
+                     (Array.to_list dropped)
+               | _ -> ())
           | _ -> ())
       | _ -> ())
 

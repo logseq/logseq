@@ -34,6 +34,62 @@ private func luiOCamlRootNode() -> Int64
 
 nonisolated(unsafe) private var activeRuntime: LogseqRuntime?
 
+/// Every OCaml entry point runs on one pinned worker thread. The bridge
+/// acquires the runtime lock inside each entry (leave_blocking_section)
+/// and releases it on return (enter_blocking_section), so domain-0
+/// systhreads (daemon HTTP, timers) interleave between entries on their
+/// own threads. A DispatchQueue would hop OS threads and break OCaml's
+/// per-thread domain binding — this is a real NSThread + runloop mailbox.
+private final class OCamlWorker: NSObject {
+  private let thread: Thread
+  private let lock = NSLock()
+  private var workItems: [() -> Void] = []
+
+  override init() {
+    thread = Thread {
+      while true {
+        _ = autoreleasepool {
+          RunLoop.current.run(mode: .default, before: .distantFuture)
+        }
+      }
+    }
+    thread.name = "logseq-ocaml"
+    thread.qualityOfService = .userInteractive
+    thread.stackSize = 16 << 20
+    super.init()
+    thread.start()
+  }
+
+  @objc private func drain() {
+    lock.lock()
+    while !workItems.isEmpty {
+      let item = workItems.removeFirst()
+      lock.unlock()
+      item()
+      lock.lock()
+    }
+    lock.unlock()
+  }
+
+  func async(_ work: @escaping () -> Void) {
+    lock.lock()
+    workItems.append(work)
+    lock.unlock()
+    perform(#selector(drain), on: thread, with: nil, waitUntilDone: false)
+  }
+
+  func sync<T>(_ work: @escaping () -> T) -> T {
+    var result: T?
+    let semaphore = DispatchSemaphore(value: 0)
+    async {
+      result = work()
+      semaphore.signal()
+    }
+    semaphore.wait()
+    return result!
+  }
+}
+
 extension LogseqRuntime {
   /// Cmd+Q / window-close terminate: NSApplication does not run SwiftUI
   /// onDisappear, so the delegate stops the runtime here — this also
@@ -47,40 +103,63 @@ extension LogseqRuntime {
   }
 }
 
-/// OCaml only invokes the patch callback from entries the host runs on the main
-/// actor, so `assumeIsolated` holds by construction.
+/// Patches arrive on the OCaml worker thread; queue them and drain once per
+/// burst on the main actor (ordering preserved by the FIFO).
+nonisolated(unsafe) private var pendingPatchJSONs: [String] = []
+nonisolated(unsafe) private var patchDrainScheduled = false
+private let patchQueueLock = NSLock()
+
 private let receivePatch: PatchCallback = { source in
   guard let source else { return }
   let json = String(cString: source)
-  MainActor.assumeIsolated {
-    activeRuntime?.apply(json: json)
+  patchQueueLock.lock()
+  pendingPatchJSONs.append(json)
+  let shouldSchedule = !patchDrainScheduled
+  patchDrainScheduled = true
+  patchQueueLock.unlock()
+  guard shouldSchedule else { return }
+  DispatchQueue.main.async {
+    patchQueueLock.lock()
+    let batch = pendingPatchJSONs
+    pendingPatchJSONs.removeAll()
+    patchDrainScheduled = false
+    patchQueueLock.unlock()
+    MainActor.assumeIsolated {
+      for json in batch { activeRuntime?.apply(json: json) }
+    }
   }
 }
 
-/// Fired on whichever OCaml worker thread enqueued cross-thread work; hop to
-/// the main actor before draining the pump queue.
+/// Fired on whichever OCaml thread enqueued cross-thread work — enqueue the
+/// pump straight onto the OCaml worker; the main thread isn't needed.
 private let wakeup: WakeupCallback = {
-  Task { @MainActor in
-    activeRuntime?.pump()
-  }
+  activeRuntime?.enqueuePump()
 }
 
 /// OCaml calls this on its app thread with a "<op>\n<payload>" envelope.
 private let platformRequest: PlatformRequestCallback = { data, length in
   guard let data, length > 0 else { return }
   let text = String(decoding: Data(bytes: data, count: Int(length)), as: UTF8.self)
-  MainActor.assumeIsolated {
-    activeRuntime?.deliverPlatformRequest(text)
+  DispatchQueue.main.async {
+    MainActor.assumeIsolated {
+      activeRuntime?.deliverPlatformRequest(text)
+    }
   }
 }
 
 /// Owns the lui backend and the OCaml runtime for one Logseq session.
+/// All OCaml entry points run on `ocaml` — a pinned worker thread — so
+/// event dispatch, flushes, doc scans and patch encoding never touch the
+/// main thread; only decoded patch application and UI callbacks do.
 @Observable @MainActor final class LogseqRuntime {
   let backend: LUIAppleBackend
   let platform: LogseqPlatform
   private(set) var rootID: Int?
   private(set) var appliedPatches = 0
   private var started = false
+  /// nonisolated(unsafe): immutable after init — readable from any thread
+  /// (the wakeup callback fires on OCaml systhreads).
+  nonisolated(unsafe) private let ocaml = OCamlWorker()
 
   init(extensionRegistry: LUIAppleExtensionRegistry) throws {
     platform = LogseqPlatform()
@@ -104,31 +183,49 @@ private let platformRequest: PlatformRequestCallback = { data, length in
   func start() {
     guard !started else { return }
     activeRuntime = self
-    var payload = Data()
-    let accepted = payload.withUnsafeBytes { bytes in
-      luiOCamlStart(
-        receivePatch,
-        wakeup,
-        platformRequest,
-        1, // MacOS
-        2, // SwiftUIHost
-        bytes.baseAddress?.assumingMemoryBound(to: CChar.self),
-        Int32(bytes.count))
+    enqueueStart()
+  }
+
+  /// nonisolated so the worker-item closure isn't MainActor-bound: a
+  /// closure formed inside an @MainActor method keeps that isolation and
+  /// traps (checkIsolatedSwift) when it runs on the OCaml thread.
+  nonisolated private func enqueueStart() {
+    ocaml.async { [weak self] in
+      let payload = Data()
+      let accepted = payload.withUnsafeBytes { bytes in
+        luiOCamlStart(
+          receivePatch,
+          wakeup,
+          platformRequest,
+          1, // MacOS
+          2, // SwiftUIHost
+          bytes.baseAddress?.assumingMemoryBound(to: CChar.self),
+          Int32(bytes.count))
+      }
+      DispatchQueue.main.async {
+        MainActor.assumeIsolated {
+          guard let self, self === activeRuntime else { return }
+          guard accepted == 1 else {
+            activeRuntime = nil
+            return
+          }
+          self.started = true
+          self.platform.attach()
+        }
+      }
     }
-    guard accepted == 1 else {
-      activeRuntime = nil
-      return
-    }
-    started = true
-    platform.attach()
   }
 
   func stop() {
     guard started else { return }
     platform.detach()
-    _ = luiOCamlStop()
+    _ = syncStop()
     started = false
     activeRuntime = nil
+  }
+
+  nonisolated private func syncStop() -> Int32 {
+    ocaml.sync { luiOCamlStop() }
   }
 
   private static let patchDumpPath: String? = {
@@ -170,22 +267,21 @@ private let platformRequest: PlatformRequestCallback = { data, length in
     }
   }
 
-  /// The OCaml runtime lock is not re-entrant: a Swift->OCaml call made
-  /// while OCaml is already running on this thread (e.g. a blur emit
-  /// raised by a focus dom-op inside a pump) blocks on the runtime lock
-  /// the outer call holds — a self-deadlock. Defer such events to the
-  /// next main-loop turn instead.
-  private var ocamlCallDepth = 0
+  /// Reentrancy no longer exists: every Swift->OCaml call is a queued
+  /// work item on the single OCaml thread, and OCaml->Swift callbacks are
+  /// marshaled the other way — neither side ever blocks on the other.
 
-  private func inOCaml<T>(_ body: () -> T) -> T {
-    ocamlCallDepth += 1
-    defer { ocamlCallDepth -= 1 }
-    return body()
+  /// Enqueues a pump on the OCaml worker. Called from `wakeup` on any
+  /// OCaml thread; safe to call before `started` flips — the item just
+  /// runs after init.
+  nonisolated func enqueuePump() {
+    let worker = ocaml
+    worker.async { _ = luiOCamlPump() }
   }
 
   func pump() {
     guard started else { return }
-    _ = inOCaml { luiOCamlPump() }
+    enqueuePump()
   }
 
   /// "<op>\n<payload>" envelopes from OCaml's Host.host_op.
@@ -200,41 +296,69 @@ private let platformRequest: PlatformRequestCallback = { data, length in
   /// Pushes one host-originated "<name>\n<json>" envelope to OCaml.
   func sendPlatformEvent(name: String, json: String) {
     guard started else { return }
-    if ocamlCallDepth > 0 {
-      // A Task hops to the MainActor like the pump wakeup does; a plain
-      // DispatchQueue.main.async block loses every main-queue slot to the
-      // next pump task and the event lands only after retry loops give up.
-      Task { [weak self] in
-        self?.sendPlatformEvent(name: name, json: json)
+    enqueuePlatformEvent(name + "\n" + json)
+  }
+
+  nonisolated private func enqueuePlatformEvent(_ envelope: String) {
+    ocaml.async {
+      envelope.withCString { pointer in
+        _ = luiOCamlPlatformEvent(pointer, Int32(envelope.utf8.count))
       }
-      return
-    }
-    let envelope = name + "\n" + json
-    envelope.withCString { pointer in
-      _ = inOCaml { luiOCamlPlatformEvent(pointer, Int32(envelope.utf8.count)) }
     }
   }
 
   private func handle(_ event: LUIEvent) {
     guard started else { return }
-    if ocamlCallDepth > 0 {
-      Task { [weak self] in self?.handle(event) }
-      return
-    }
-    _ = inOCaml { LogseqLUIEvents.dispatch(event) }
+    enqueueDispatch(event)
+  }
+
+  nonisolated private func enqueueDispatch(_ event: LUIEvent) {
+    ocaml.async { _ = LogseqLUIEvents.dispatch(event) }
   }
 
   /// The backend's coalesced node-id → frame table, forwarded as the
   /// {rects:{nodeId:{left,top,right,bottom}}} payload imperative_dom's
   /// "imperative-rects" listener stores for rect lookups.
+  ///
+  /// Throttled + diffed: a layout animation (sidebar toggle, resize)
+  /// reports every moved node per frame — tens of multi-KB platform
+  /// events per second, each enqueuing a full pump on the OCaml side.
+  /// Only rects that actually changed ship, at most once per 120ms.
+  private var lastReportedRects: [Int: CGRect] = [:]
+  private var pendingRects: [Int: CGRect]?
+  private var rectsFlushScheduled = false
+
   private func reportImperativeRects(_ frames: [Int: CGRect]) {
     guard started else { return }
-    let parts = frames.map { id, rect in
-      "\"\(id)\":{\"left\":\(rect.minX),\"top\":\(rect.minY)"
-        + ",\"right\":\(rect.maxX),\"bottom\":\(rect.maxY)}"
+    pendingRects = frames
+    guard !rectsFlushScheduled else { return }
+    rectsFlushScheduled = true
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) { [weak self] in
+      guard let self else { return }
+      self.rectsFlushScheduled = false
+      self.flushRectsDiff()
     }
+  }
+
+  private func flushRectsDiff() {
+    guard let frames = pendingRects else { return }
+    pendingRects = nil
+    var changed: [String] = []
+    changed.reserveCapacity(64)
+    for (id, rect) in frames where lastReportedRects[id] != rect {
+      changed.append(
+        "\"\(id)\":{\"left\":\(rect.minX),\"top\":\(rect.minY)"
+          + ",\"right\":\(rect.maxX),\"bottom\":\(rect.maxY)}")
+    }
+    var drop = ""
+    let removed = lastReportedRects.keys.filter { frames[$0] == nil }
+    if !removed.isEmpty {
+      drop = ",\"drop\":[" + removed.map { String($0) }.joined(separator: ",") + "]"
+    }
+    lastReportedRects = frames
+    guard !changed.isEmpty || !drop.isEmpty else { return }
     sendPlatformEvent(
       name: "imperative-rects",
-      json: "{\"rects\":{" + parts.joined(separator: ",") + "}}")
+      json: "{\"rects\":{" + changed.joined(separator: ",") + "}" + drop + "}")
   }
 }

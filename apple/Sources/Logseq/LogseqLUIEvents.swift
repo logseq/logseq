@@ -36,7 +36,9 @@ private func luiOCamlExtensionEvent(
   _ node: Int64, _ name: UnsafePointer<CChar>?, _ values: UnsafePointer<CChar>?
 ) -> Int32
 
-@MainActor enum LogseqLUIEvents {
+enum LogseqLUIEvents {
+  /// Stateless C adapter — safe to call from the OCaml worker thread; the
+  /// bridge entries it invokes manage their own runtime-lock acquire/release.
   static func dispatch(_ event: LUIEvent) -> Int32 {
     switch event {
     case .appear(let node): return luiOCamlAppear(Int64(node))
