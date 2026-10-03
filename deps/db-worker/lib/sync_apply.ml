@@ -2740,7 +2740,12 @@ let split_off_server_if_remote repo : unit =
         Worker_state.set_datascript_conn repo display;
         Db_listener.listen_db_changes repo display;
         if had_pipeline then Outliner_db_pipeline.add_listener display;
-        let failed = replay_pending_txs repo display None in
+        (* the pre-split conn db is the best available db_before: at a
+           mid-session split (or a pre-upgrade graph whose pending datoms
+           were persisted) it still resolves remotely-deleted targets so
+           ancestor fallback can run; on a fresh restart under the new
+           model it simply lacks them and those ops mark failed *)
+        let failed = replay_pending_txs repo display (Some db) in
         if failed > 0 then begin
           Conn.update_db display (fun _ ->
               display_db_from_server (Conn.db conn));
