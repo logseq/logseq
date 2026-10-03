@@ -71,9 +71,12 @@ Swift. Goal: feature parity with the Electron app.
   picker surface untested, some commands stubbed OCaml-side
   (add-comment, copy-export-as, set-icon, add-reaction →
   "editor command not implemented").
-- Slash commands / autocomplete popups (`#ui__ac-inner`): AC popup
-  state works OCaml-side; positioning + item rendering on the Swift
-  side is incomplete.
+- Slash commands / autocomplete popups (`#ui__ac-inner`): working —
+  caret-anchored positioning + flip, keyboard nav/commit/Escape,
+  click-to-apply, `/`, `[[`, `((`, `#` triggers all verified in GUI.
+  Gaps: ctrl+p/n nav, `.center` scroll reveal, block-search fixture,
+  a few master semantics edges (see NOTES "Autocomplete / slash
+  popups").
 - Textarea polish: first keystrokes after mount can drop during the
   focus-settle window; selection/marks interplay untested.
 - Right sidebar gaps: item reorder/drag, drop indicators, the resizer
@@ -91,8 +94,9 @@ Swift. Goal: feature parity with the Electron app.
   horizontal soft-scroll parity yet.
 - Whiteboards, graph view (canvas), plugins, RTC/sync UI, settings
   pages, export (assets/filesystem flows partially stubbed).
-- Slash menu, block refs/page-refs autocomplete positioning,
-  keyboard-driven selection model polish.
+- AC popover migration onto the shared imperative element layer
+  (imperative_dom.ml + LogseqImperative.swift) during integration;
+  remaining keyboard-driven selection model polish (ctrl+p/n).
 - Menubar/app menus (macOS-native idioms), Cmd-K/W shortcuts,
   multi-window.
 - Accessibility pass (labels, rotor order), drag & drop blocks.

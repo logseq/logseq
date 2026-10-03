@@ -145,6 +145,12 @@ import SwiftUI
   var fixedY: CGFloat?
   var fixedRight: CGFloat?
   var fixedBottom: CGFloat?
+  /// 1px `--ls-border-color` stroke (popover chrome).
+  var hasBorder = false
+  /// Clip children at the element's own frame (popover overflow).
+  var clipContent = false
+  /// `hide-scrollbar` — scrollable without visible indicators.
+  var hideScrollIndicators = false
 
   private static let spacingUnit: CGFloat = 4 // tailwind spacing scale unit
 
@@ -223,6 +229,23 @@ import SwiftUI
         if value == "bold" || (px ?? 0) >= 600 { isBold = true }
       case "background-color":
         if let c = parseCSSColor(value) { background = c }
+      case "border-radius":
+        cornerRadius = px.map { CGFloat($0) }
+      // base-ui popover max-height: "Npx" direct, or
+      // "calc(100vh - Npx)" viewport-relative.
+      case "--available-height":
+        if let px {
+          maxHeight = CGFloat(px)
+        } else if let range = value.range(
+          of: #"calc\(100vh - ([\d.]+)px\)"#, options: .regularExpression)
+        {
+          let inner = String(value[range]).dropFirst(13).dropLast(3)
+          if let n = Double(inner),
+            let vh = NSApp.mainWindow?.contentView?.bounds.height
+          {
+            maxHeight = max(0, vh - CGFloat(n))
+          }
+        }
       default:
         break
       }
@@ -254,6 +277,10 @@ import SwiftUI
       padding = EdgeInsets(top: 32, leading: 32, bottom: 32, trailing: 16)
     case "left-sidebar":
       fixedWidth = 246; fullHeight = true
+    // The autocomplete list scrolls when its env cap (from the enclosing
+    // popover's --available-height) kicks in; hide-scrollbar in the web.
+    case "ui__ac-inner":
+      isScrollable = true; hideScrollIndicators = true
     default:
       break
     }
@@ -457,6 +484,49 @@ import SwiftUI
     case "ls-menu-chevron": foreground = LogseqColors.secondaryText
     case "ls-context-menu-content": fixedWidth = 280
     case "ls-dots-menu": fixedWidth = 256
+    // ---- autocomplete popup (#ui__ac inside .ui__popover-content) ----
+    case "ui__popover-content":
+      // lui-overlay.css .ui__popover-content — popover bg, border, shadow.
+      minWidth = 128
+      background = LogseqColors.gray(LogseqColors.isDark ? 2 : 1)
+      cornerRadius = cornerRadius ?? 6
+      hasBorder = true
+      hasShadow = true
+      clipContent = true
+      if fontSize == nil { fontSize = 16 }
+    case "menu-link":
+      isRow = true; fullWidth = true; spaceBetween = true
+      if fontSize == nil { fontSize = 14 }
+      foreground = LogseqColors.primaryText.opacity(0.75)
+      padding = EdgeInsets(top: 6, leading: 8, bottom: 6, trailing: 8)
+      cornerRadius = cornerRadius ?? 4
+    // #ui__ac-inner .menu-link.chosen + cp__select-main hover highlight
+    case "chosen": background = LogseqColors.gray(4)
+    case "menu-link-wrap": fullWidth = true
+    case "ui__ac-group-name":
+      if fontSize == nil { fontSize = 12 }
+      fontWeight = .medium
+      foreground = LogseqColors.primaryText.opacity(0.2)
+      padding = EdgeInsets(top: 8, leading: 8, bottom: 8, trailing: 8)
+    case "ls-ac-empty":
+      if fontSize == nil { fontSize = 14 }
+      foreground = LogseqColors.gray(10)
+      padding = EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16)
+    case "ls-ac-node-icon":
+      fixedHeight = 20
+      margin = EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 4)
+      alpha = 0.5
+    case "ls-ac-bc":
+      if fontSize == nil { fontSize = 12 }
+      alpha = 0.7
+      margin = EdgeInsets(top: 0, leading: 3, bottom: 4, trailing: 0)
+    case "ls-ac-ic": isRow = true; stackSpacing = 4
+    case "ls-tag-search-hint":
+      isRow = true; stackSpacing = 8
+      if fontSize == nil { fontSize = 14 }
+      alpha = 0.5
+      padding = EdgeInsets(top: 0, leading: 4, bottom: 0, trailing: 4)
+    case "hide-scrollbar": hideScrollIndicators = true
     case "cp__right-sidebar-settings":
       isRow = true; stackSpacing = 4
     case "cp__sidebar-main-layout": isRow = true; grow = true
