@@ -454,9 +454,11 @@
             without-properties (<export-blocks-as-markdown
                                 [(uuid "f81f4f64-578a-42ff-8741-19adac45f42a")]
                                 {:remove-options #{:property}})]
-      (is (= (string/trim "
-- issue
-  reproducible-steps:: Switch to a password protected graph")
+      ;; Text/:default values export as nested blocks (db-test#1390), then
+      ;; export-helper re-indents the value with the default tab style.
+      (is (= (str "- issue\n"
+                  "  reproducible-steps::  \n"
+                  "\t\t\t\t- Switch to a password protected graph")
              (string/trim with-properties)))
       (is (= "- issue"
              (string/trim without-properties)))

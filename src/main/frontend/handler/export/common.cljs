@@ -10,7 +10,10 @@
    ;; Encode block background-color highlights as ^^text^^ so they survive
    ;; Text/OPML/HTML export instead of being silently dropped (the property
    ;; is otherwise hidden from export like other :hide? true properties).
-   :encode-highlight-as-mark? true})
+   :encode-highlight-as-mark? true
+   ;; Expand children of Text/:default property values so selected-block
+   ;; Text/OPML/HTML export matches file export (db-test#1390).
+   :export-default-property-values-as-blocks? true})
 
 (defn <export-blocks-as-format
   [repo root-block-uuids-or-page-uuid format-type options]
