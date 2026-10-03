@@ -34,8 +34,7 @@ let live_fields : (string, string * int * int) Hashtbl.t =
   Hashtbl.create 16
 
 let get_element_by_id (id : string) : el option =
-  if not (Hashtbl.mem live_ids id) then None
-  else
+  if Hashtbl.mem live_ids id then
     Some
       (match Hashtbl.find_opt el_cache id with
        | Some el -> el
@@ -47,19 +46,32 @@ let get_element_by_id (id : string) : el option =
            in
            Hashtbl.replace el_cache id el;
            el)
+  else
+    (* mounted extension elements that carry the id but haven't fired a
+       lifecycle event yet resolve through the snapshot index *)
+    match Vdom.node_of_dom_id id with
+    | Some node -> Some (!Vdom.snapshot_of_node node)
+    | None -> None
 
-let query_selector (_ : string) : el option = None
-let query_selector_all (_ : string) : node_list = Js.Json.array [||]
+let query_selector (sel : string) : el option =
+  Dom_ext.doc_query_selector sel
 
-let node_list_iter (_ : node_list) (_ : el -> unit) : unit = ()
+let query_selector_all (sel : string) : node_list =
+  Js.Json.array (Array.of_list (Dom_ext.doc_query_selector_all sel))
+
+let node_list_iter (nl : node_list) (f : el -> unit) : unit =
+  match nl with
+  | Js.Json.JArray a -> Array.iter f a
+  | _ -> ()
 
 let el_of_json (j : Js.Json.t) : el = j
 
-let create_element (tag : string) : el =
-  Js.Json.JObject [ ("tag", Js.Json.JString tag) ]
+let create_element (tag : string) : el = Vdom.new_el tag
 
 let create_text_node (text : string) : el =
-  Js.Json.JObject [ ("#text", Js.Json.JString text) ]
+  let el = Vdom.new_el "raw-text" in
+  Vdom.set_text el text;
+  el
 
 (* ---------- events ---------- *)
 
@@ -77,7 +89,8 @@ let ev_target (ev : ev) : el option =
   | _ -> None
 
 let prevent_default (_ : ev) : unit = ()
-let stop_propagation (_ : ev) : unit = ()
+let stop_propagation (_ : ev) : unit = Platform.request_stop ()
+let request_stop = Platform.request_stop
 
 let ev_buttons (ev : ev) : int =
   match json_prop "buttons" ev with
@@ -87,49 +100,51 @@ let ev_buttons (ev : ev) : int =
 (* ---------- element ops ---------- *)
 
 let el_get_attr (el : el) (name : string) : string option =
-  match el with
-  | Js.Json.JObject kvs -> (
-      match List.assoc_opt ("attr-" ^ name) kvs with
-      | Some v -> Js.Json.decodeString v
-      | None -> (
-          match List.assoc_opt "attrs" kvs with
-          | Some (Js.Json.JObject attrs) ->
-              Option.bind (List.assoc_opt name attrs) Js.Json.decodeString
-          | _ -> (
-              (* snapshots carry the DOM class under "class", not attrs *)
-              match name with
-              | "class" ->
-                  Option.bind (List.assoc_opt "class" kvs)
+  match Vdom.vrec_of_el el with
+  | Some _ -> Vdom.attr_get el name
+  | None -> (
+      match el with
+      | Js.Json.JObject kvs -> (
+          match List.assoc_opt ("attr-" ^ name) kvs with
+          | Some v -> Js.Json.decodeString v
+          | None -> (
+              match List.assoc_opt "attrs" kvs with
+              | Some (Js.Json.JObject attrs) ->
+                  Option.bind (List.assoc_opt name attrs)
                     Js.Json.decodeString
-              | _ -> None)))
-  | _ -> None
+              | _ -> (
+                  (* snapshots carry the DOM class under "class", not
+                     attrs *)
+                  match name with
+                  | "class" ->
+                      Option.bind (List.assoc_opt "class" kvs)
+                        Js.Json.decodeString
+                  | _ -> None)))
+      | _ -> None)
 
 let el_set_attr (el : el) (name : string) (v : string) : unit =
-  Host.dom_op "set-attr"
-    (Js.Json.stringify
-       (Js.Json.JObject [("ref", el); ("name", Js.Json.JString name); ("value", Js.Json.JString v)]))
+  Vdom.set_attr el name v
 
 let el_remove_attr (el : el) (name : string) : unit =
-  Host.dom_op "remove-attr"
-    (Js.Json.stringify (Js.Json.JObject [("ref", el); ("name", Js.Json.JString name)]))
+  Vdom.remove_attr el name
 
-let el_append_child (_ : el) (_ : el) : unit = ()
-let el_contains (_ : el) (_ : el) : bool = false
+let el_append_child (parent : el) (child : el) : unit =
+  Vdom.append_child parent child
+
+let el_contains (a : el) (b : el) : bool = Vdom.contains a b
 
 let el_focus (el : el) : unit =
-  Host.dom_op "focus" (Js.Json.stringify (Js.Json.JObject [("ref", el)]))
+  Host.dom_op "focus"
+    (Js.Json.stringify (Js.Json.JObject [ ("ref", Vdom.ref_json el) ]))
 
 let el_scroll_into_view (el : el) : unit =
   Host.dom_op "scroll-into-view"
-    (Js.Json.stringify (Js.Json.JObject [("ref", el)]))
+    (Js.Json.stringify (Js.Json.JObject [ ("ref", Vdom.ref_json el) ]))
 
-let el_class_add (el : el) (c : string) : unit =
-  Host.dom_op "class-add"
-    (Js.Json.stringify (Js.Json.JObject [("ref", el); ("class", Js.Json.JString c)]))
+let el_class_add (el : el) (c : string) : unit = Vdom.class_add el c
 
 let el_class_remove (el : el) (c : string) : unit =
-  Host.dom_op "class-remove"
-    (Js.Json.stringify (Js.Json.JObject [("ref", el); ("class", Js.Json.JString c)]))
+  Vdom.class_remove el c
 
 let snapshot_value (el : el) : string =
   match el with
@@ -140,9 +155,18 @@ let snapshot_value (el : el) : string =
   | _ -> ""
 
 let el_dom_id (el : el) : string option =
-  match Dom_ext.str_prop "id" el with
-  | Some id when id <> "" -> Some id
-  | _ -> Dom_ext.str_prop "ref-id" el
+  match Vdom.vrec_of_el el with
+  | Some v -> (
+      match List.assoc_opt "id" v.Vdom.v_attrs with
+      | Some id when id <> "" -> Some id
+      | _ -> (
+          match v.Vdom.v_node with
+          | Some n -> Some (Printf.sprintf "node-%d" n)
+          | None -> None))
+  | None -> (
+      match Dom_ext.str_prop "id" el with
+      | Some id when id <> "" -> Some id
+      | _ -> Dom_ext.str_prop "ref-id" el)
 
 let el_value (el : el) : string =
   match el_dom_id el with
@@ -161,11 +185,15 @@ let el_set_value (el : el) (v : string) : unit =
   (match el_dom_id el with
    | Some id -> set_live_value id v
    | None -> ());
-  Host.dom_op "set-value"
-    (Js.Json.stringify (Js.Json.JObject [("ref", el); ("value", Js.Json.JString v)]))
+  Vdom.set_value el v
 
 let el_closest (el : el) (sel : string) : el option =
-  Dom_ext.closest el sel
+  match Vdom.vrec_of_el el with
+  | Some v -> (
+      match v.Vdom.v_node with
+      | Some node -> Dom_ext.closest (!Vdom.snapshot_of_node node) sel
+      | None -> None)
+  | None -> Dom_ext.closest el sel
 
 let el_tag (el : el) : string =
   String.uppercase_ascii
@@ -208,11 +236,10 @@ let is_editable_target target =
   | None -> false
 
 let el_set_class (el : el) (c : string) : unit =
-  Host.dom_op "set-class"
-    (Js.Json.stringify
-       (Js.Json.JObject [("ref", el); ("class", Js.Json.JString c)]))
+  Vdom.set_class el c
 
-let el_query_all (_ : el) (_ : string) : node_list = Js.Json.JArray [||]
+let el_query_all (el : el) (sel : string) : node_list =
+  Js.Json.JArray (Array.of_list (Vdom.query_all el sel))
 
 let node_list_length (nl : node_list) : int =
   match nl with Js.Json.JArray a -> Array.length a | _ -> 0
@@ -257,15 +284,14 @@ let ui_icon_el ?(size = 18.) ?(cls = "") (name : string) : el =
       el_set_class i ("ti ti-" ^ name ^ (if cls = "" then "" else " " ^ cls));
       i
 
-(* doc-scan selectors run against the Swift element registry — not
-   ported yet; callbacks simply never fire *)
-let for_each_selector (_sel : string) (_f : el -> unit) : unit = ()
+let for_each_selector (sel : string) (f : el -> unit) : unit =
+  List.iter f (Dom_ext.doc_query_selector_all sel)
 
 let for_each_touched (_roots : 'a) (sel : string) (f : el -> unit)
     : unit =
   for_each_selector sel f
 
-let el_query (_ : el) (_ : string) : el option = None
+let el_query (el : el) (sel : string) : el option = Vdom.query el sel
 
 type doc_scan =
   { ds_run_if : mutation_record array -> bool
@@ -282,6 +308,25 @@ let register_doc_scan ?(run_if = fun _ -> true) ?(sync = false)
     !doc_scans
     @ [ { ds_run_if = run_if; ds_scan = scan; ds_sync = sync } ];
   scan [ document_element ]
+
+(* the mutation observer analogue: native_embed runs this after every
+   flush — structural scans re-query the extension tree and mount/drop
+   their managed areas. Records are synthesized around the document root:
+   run_if predicates that inspect rec_target see a non-managed element *)
+let scans_running = ref false
+
+let run_doc_scans () =
+  if not !scans_running then begin
+    scans_running := true;
+    (let recs =
+       [| Js.Json.JObject [ ("target", document_element) ] |]
+     in
+     List.iter
+       (fun ds ->
+         if ds.ds_run_if recs then ds.ds_scan [ document_element ])
+       !doc_scans);
+    scans_running := false
+  end
 
 (* the host's native text views emit "focus"/"blur" dom-events carrying a
    target snapshot; the last focused DOM id stands in for
@@ -328,7 +373,15 @@ let () =
         let id =
           match Dom_ext.str_prop "id" t with
           | Some id when id <> "" -> Some id
-          | _ -> Dom_ext.str_prop "ref-id" t
+          | _ -> (
+              match Dom_ext.str_prop "ref-id" t with
+              | Some _ as r -> r
+              | None -> (
+                  (* id-less extension elements register as node-<n> *)
+                  match Dom_ext.num_prop "node-id" t with
+                  | Some n ->
+                      Some (Printf.sprintf "node-%d" (int_of_float n))
+                  | None -> None))
         in
         match id with
         | Some id -> (
@@ -358,9 +411,7 @@ let () =
     | _ -> ()
 
 let el_set_text_content (el : el) (v : string) : unit =
-  Host.dom_op "set-text-content"
-    (Js.Json.stringify
-       (Js.Json.JObject [("ref", el); ("text", Js.Json.JString v)]))
+  Vdom.set_text el v
 
 (* native text views auto-size — keep the call as a no-op *)
 let autosize_textarea (_ : el) : unit = ()
@@ -474,7 +525,7 @@ let json_of_el (e : el) : Js.Json.t = e
 let el_id (el : el) : string =
   Option.value (Dom_ext.str_prop "id" el) ~default:""
 
-let stop_immediate (_ : ev) : unit = ()
+let stop_immediate (_ : ev) : unit = Platform.request_stop ()
 
 type data_transfer = Js.Json.t
 let ev_data_transfer (e : ev) : data_transfer option =

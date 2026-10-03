@@ -286,9 +286,8 @@ let item_header st idx (it : Sidebar_state.item) =
     ]
 
 (* cljs sidebar-page-properties: ghost toggle + db-properties-cp +
-   hr.my-4. collapsed? = (not class?) — class pages start expanded. The
-   area itself is mounted imperatively by
-   Properties_area.mount_sidebar_area off the data-sb-* host. *)
+   hr.my-4. collapsed? = (not class?) — class pages start expanded.
+   The area mounts declaratively inside the data-sb-* host. *)
 let sidebar_props_row st (it : Sidebar_state.item) =
   let empty = dom ~key:("props-none-" ^ it.key) [] in
   match it.Sidebar_state.kind with
@@ -316,7 +315,10 @@ let sidebar_props_row st (it : Sidebar_state.item) =
                     ; ( "data-sb-tag"
                       , if p.Model.page_is_tag then "1" else "0" )
                     ]
-                  []
+                  [ Properties_area.sidebar_area ~uuid
+                      ~db_id:p.Model.page_db_id
+                      ~title:p.Model.page_title
+                      ~is_tag:p.Model.page_is_tag ]
               ; dom ~key:("phr-" ^ it.key) ~tag:"hr"
                   ~style_class:"my-4" []
               ]

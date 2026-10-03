@@ -25,9 +25,9 @@ let action_btn key ?(title = "") ?(text = "") on_click children : t =
 
 (* popover opened under the bar for the current selection (the dialog's
    own current_target resolves the selected uuids for batch ops) *)
-let open_prop_dlg ~remove ~anchor =
+let open_prop_dlg ~remove =
   match Properties_dialog.current_target () with
-  | Some tgt -> Properties_dialog.open_dialog ~remove ~anchor tgt
+  | Some tgt -> Properties_dialog.open_dialog ~remove tgt
   | None -> ()
 
 (* cljs mounts the bar as a radix popover (:selection-action-bar): an
@@ -161,7 +161,7 @@ and node () : t = (
                       "ui__toolbar-group selection-action-group \
                        inline-flex items-center"
                     [ action_btn "sab-tags" ~title:(I18n.t "property/set-tags")
-                        (fun () -> open_prop_dlg ~remove:false ~anchor:(l, below))
+                        (fun () -> open_prop_dlg ~remove:false)
                         [ Icons.icon ~size:13. "hash" ]
                     ; action_btn "sab-cmt"
                         ~title:(I18n.t "block.comments/add-comment")
@@ -174,11 +174,11 @@ and node () : t = (
                         []
                     ; action_btn "sab-setp"
                         ~text:(I18n.t "property/set-property")
-                        (fun () -> open_prop_dlg ~remove:false ~anchor:(l, below))
+                        (fun () -> open_prop_dlg ~remove:false)
                         []
                     ; action_btn "sab-unset"
                         ~text:(I18n.t "property/unset-property")
-                        (fun () -> open_prop_dlg ~remove:true ~anchor:(l, below))
+                        (fun () -> open_prop_dlg ~remove:true)
                         []
                     ; action_btn "sab-del"
                         (fun () -> Editor_actions.delete_selection ())

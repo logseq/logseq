@@ -440,6 +440,108 @@ import SwiftUI
       cornerRadius = 6
       hasShadow = true
       padding = EdgeInsets(top: 4, leading: 4, bottom: 4, trailing: 4)
+    // ---- popovers (ui__popover-content: shared shui card — border,
+    // radius .375rem, popover bg, shadow, min-width 8rem, overflow-y
+    // auto; position:fixed offsets come from the inline style) ----
+    case "ui__popover-content":
+      minWidth = 128
+      isScrollable = true
+      background = LogseqColors.gray(LogseqColors.isDark ? 3 : 1)
+      cornerRadius = 6
+      hasShadow = true
+      padding = EdgeInsets(top: 4, leading: 4, bottom: 4, trailing: 4)
+    // ---- cp__select pickers (command-palette-style input + results) ----
+    case "cp__select", "cp__select-main", "property-select":
+      minWidth = 260; grow = true
+    case "input-wrap":
+      isRow = true; fullWidth = true
+    case "cp__select-input":
+      grow = true; fullWidth = true
+      if fontSize == nil { fontSize = 15 }
+      foreground = LogseqColors.secondaryText
+      padding = EdgeInsets(top: 8, leading: 10, bottom: 8, trailing: 10)
+    case "cp__select-results", "item-results-wrap", "choices-list",
+         "ui__ac", "ui__ac-inner":
+      isScrollable = true; maxHeight = 380; fullWidth = true
+    case "select-item-row", "menu-link", "menu-link-wrap":
+      isRow = true; fullWidth = true; spaceBetween = true
+      padding = EdgeInsets(top: 4, leading: 8, bottom: 4, trailing: 8)
+      cornerRadius = 4
+    case "select-item-left", "menu-item-icon-row":
+      isRow = true; stackSpacing = 4
+    case "menu-item-label": grow = true
+    case "ui__ac-group-name", "ls-menu-h3":
+      if fontSize == nil { fontSize = 11 }
+      foreground = LogseqColors.gray(9)
+      padding = EdgeInsets(top: 6, leading: 8, bottom: 2, trailing: 8)
+    // ---- property areas (page + block) ----
+    // lui-core.css: .block-properties/.page-properties get a gray-03
+    // background block under the page title / block content.
+    case "ls-properties-area", "ls-bidirectional-properties",
+         "ls-bidirectional-group", "positioned-properties",
+         "properties-panel":
+      fullWidth = true
+    case "ls-properties-area":
+      background = LogseqColors.tertiaryBackground
+      cornerRadius = 4
+      padding = EdgeInsets(top: 4, leading: 8, bottom: 4, trailing: 8)
+      margin = EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0)
+    // property panel row: [key column | value column] — the web uses a
+    // grid; natively a fixed-width key cell + growing value cell.
+    case "property-pair", "property-panel-row":
+      isRow = true; fullWidth = true; stackSpacing = 4
+      padding = EdgeInsets(top: 1, leading: 0, bottom: 1, trailing: 0)
+    case "property-key-panel":
+      isRow = true; fixedWidth = 160
+    case "property-key", "property-key-inner":
+      isRow = true; stackSpacing = 4
+      if fontSize == nil { fontSize = 13 }
+      foreground = LogseqColors.secondaryText
+    case "property-k":
+      isRow = true; grow = true
+      if fontSize == nil { fontSize = 13 }
+      foreground = LogseqColors.secondaryText
+    case "property-value-container", "property-value-panel",
+         "property-value", "property-value-inner",
+         "property-value-panel-inner", "property-block-container":
+      grow = true; fullWidth = true
+    case "property-panel-edit-btn", "property-icon":
+      foreground = LogseqColors.gray(9)
+    case "property-panel-bullet", "bullet-container":
+      isRow = true; centerContent = true; fixedWidth = 16
+    // block-below pills: "key : value" chips in a wrapping row
+    case "bottom-property-pill":
+      isRow = true; stackSpacing = 4
+      padding = EdgeInsets(top: 1, leading: 4, bottom: 1, trailing: 4)
+    case "bottom-property-content": isRow = true; stackSpacing = 4
+    case "ls-page-title-actions":
+      isRow = true; stackSpacing = 4
+      margin = EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0)
+    case "bottom-property-action-icon": foreground = LogseqColors.gray(9)
+    // ---- property dialog / add-property row ----
+    case "ls-property-dialog": minWidth = 280; stackSpacing = 4
+    case "ls-property-input", "ls-property-add", "ls-pa-row", "ls-pd-row",
+         "ls-ep-row", "ls-property-key", "ls-property-date-picker",
+         "ls-datetime", "ls-icon-color-wrap", "ls-block-right",
+         "ls-prop-input-wrap":
+      isRow = true; stackSpacing = 4; centerContent = false
+    case "ls-property-input", "ls-property-add":
+      grow = true
+    case "ls-check-cell":
+      fixedWidth = 16; fixedHeight = 16; centerContent = true
+    case "ls-p1":
+      padding = EdgeInsets(top: 4, leading: 4, bottom: 4, trailing: 4)
+    case "ls-pt":
+      padding = EdgeInsets(top: 4, leading: 0, bottom: 0, trailing: 0)
+    case "ls-py":
+      padding = EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0)
+    case "ls-icon-dim": foreground = LogseqColors.gray(9)
+    case "hidden-properties-toggle-key":
+      isRow = true; stackSpacing = 4
+      if fontSize == nil { fontSize = 13 }
+      foreground = LogseqColors.gray(9)
+    case "ls-new-property":
+      padding = EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0)
     case "ls-cm-headings-row", "ls-cm-colors-row":
       isRow = true; stackSpacing = 2
     case "ls-cm-heading-btn":
