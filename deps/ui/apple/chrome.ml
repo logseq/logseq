@@ -388,25 +388,37 @@ let help_menu_popup : t =
 
 let help_area (ms : Model.t Signal.signal) : t =
   Logseq_dom.fragment
+    (* click handler on the OUTER element: the native hit test resolves the
+       smallest frame at the point and may land on the wrapper or the svg —
+       the document listener walks ancestors, so the handler must sit on
+       the outermost element of the hit box. *)
     [ Logseq_dom.dom ~key:"help" ~style_class:"cp__sidebar-help-btn"
+        ~events:"click"
+        ~on_dom_event:(fun n _ ->
+          if n = "click" then (
+            Runtime.send Action.Help_toggle; Runtime.flush ()))
         [ Logseq_dom.dom ~key:"help-inner" ~style_class:"inner"
-            ~events:"click"
-            ~on_dom_event:(fun n _ ->
-              if n = "click" then (
-                Runtime.send Action.Help_toggle; Runtime.flush ()))
             [ help_svg ] ]
     ; dyn
         ~equal:(fun (a : Model.t) (b : Model.t) -> a.help_open = b.help_open)
         (fun (m : Model.t) ->
           if m.help_open then
-            Logseq_dom.fragment
+            (* The dismiss catcher mounts while the mouse button that opened
+               the menu is still down — its click lands on the catcher and
+               would instantly re-close the popup. Ignore clicks for a short
+               grace window after construction. *)
+            let opened_at = Platform.date_now_ms () in
+            (* a dyn child must be a real element — Logseq_dom.fragment is
+               only valid in static child lists; inside a dyn it mounts into
+               the wrong parent and the children never materialize *)
+            Logseq_dom.dom ~key:"help-open" ~style_class:""
               [ Logseq_dom.dom ~key:"help-dismiss"
                   ~style_class:"cp__cmdk-dismiss"
                   ~attrs:[ ("role", "presentation") ]
                   ~events:"click"
                   ~on_dom_event:(fun n _ ->
-                    if n = "click" then (
-                      Runtime.send Action.Help_toggle; Runtime.flush ()))
+                    if n = "click" && Platform.date_now_ms () -. opened_at > 400.
+                    then ( Runtime.send Action.Help_toggle; Runtime.flush ()))
                   []
               ; help_menu_popup ]
           else Logseq_dom.nothing)

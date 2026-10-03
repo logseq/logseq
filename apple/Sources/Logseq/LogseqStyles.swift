@@ -162,7 +162,12 @@ import SwiftUI
   var grow = false
   var isScrollable = false
   var stackSpacing: CGFloat?
-  var centerContent = false
+  /// items-center — flex cross-axis centering (vertical in a row,
+  /// horizontal in a column).
+  var centerCross = false
+  /// justify-center — flex main-axis centering (horizontal in a row,
+  /// vertical in a column).
+  var centerMain = false
   var lineLimitOne = false
   var lineSpacing: CGFloat?
   var wantsOpen = false
@@ -397,7 +402,8 @@ import SwiftUI
     case "overflow-y-auto", "overflow-auto", "overflow-scroll",
          "overflow-y-scroll":
       isScrollable = true
-    case "items-center", "justify-center": centerContent = true
+    case "items-center": centerCross = true
+    case "justify-center": centerMain = true
     case "justify-between": spaceBetween = true
     case "truncate", "whitespace-nowrap": lineLimitOne = true
     // ---- Logseq theme classes (compiled-CSS selectors in resources/css)
@@ -731,7 +737,7 @@ import SwiftUI
     case "property-panel-edit-btn", "property-icon":
       foreground = LogseqColors.gray(9)
     case "property-panel-bullet", "bullet-container":
-      isRow = true; centerContent = true; fixedWidth = 16
+      isRow = true; centerCross = true; centerMain = true; fixedWidth = 16
     // block-below pills: "key : value" chips in a wrapping row
     case "bottom-property-pill":
       isRow = true; stackSpacing = 4
@@ -747,11 +753,11 @@ import SwiftUI
          "ls-ep-row", "ls-property-key", "ls-property-date-picker",
          "ls-datetime", "ls-icon-color-wrap", "ls-block-right",
          "ls-prop-input-wrap":
-      isRow = true; stackSpacing = 4; centerContent = false
+      isRow = true; stackSpacing = 4
     case "ls-property-input", "ls-property-add":
       grow = true
     case "ls-check-cell":
-      fixedWidth = 16; fixedHeight = 16; centerContent = true
+      fixedWidth = 16; fixedHeight = 16; centerCross = true; centerMain = true
     case "ls-p1":
       padding = EdgeInsets(top: 4, leading: 4, bottom: 4, trailing: 4)
     case "ls-pt":
@@ -832,23 +838,23 @@ import SwiftUI
     // (cljs view-head div carries the utilities; the stylesheet rule set
     //  covers only the helpers)
     case "ls-view-head":
-      isRow = true; centerContent = true; spaceBetween = true
+      isRow = true; centerCross = true; centerMain = true; spaceBetween = true
       grow = true; fullWidth = true
       stackSpacing = stackSpacing ?? 4
     case "ls-view-head-left":
-      isRow = true; centerContent = true
+      isRow = true; centerCross = true; centerMain = true
       stackSpacing = stackSpacing ?? 8
     case "views":
-      isRow = true; centerContent = true
+      isRow = true; centerCross = true; centerMain = true
       stackSpacing = stackSpacing ?? 4
     case "view-actions":
-      isRow = true; centerContent = true
+      isRow = true; centerCross = true; centerMain = true
       stackSpacing = stackSpacing ?? 4
-    case "view-action-search": isRow = true; centerContent = true
+    case "view-action-search": isRow = true; centerCross = true; centerMain = true
     case "ls-icon-color-wrap", "ls-drag-row":
-      isRow = true; centerContent = true
+      isRow = true; centerCross = true; centerMain = true
     case "ls-icon-btn":
-      isRow = true; centerContent = true
+      isRow = true; centerCross = true; centerMain = true
       foreground = LogseqColors.secondaryText
     case "ls-count":
       fontSize = fontSize ?? 12
@@ -865,7 +871,7 @@ import SwiftUI
       fontSize = fontSize ?? 14
       alpha = 0.5
     case "ls-view-order-setting":
-      isRow = true; centerContent = true; spaceBetween = true
+      isRow = true; centerCross = true; centerMain = true; spaceBetween = true
       stackSpacing = stackSpacing ?? 8
       padding = padding ?? EdgeInsets(top: 0, leading: 8, bottom: 0, trailing: 8)
     case "ls-xs", "ls-op-label":
@@ -881,13 +887,13 @@ import SwiftUI
       fixedHeight = 28
       fontSize = fontSize ?? 14
     case "ls-vf-chip":
-      isRow = true; centerContent = true
+      isRow = true; centerCross = true; centerMain = true
       cornerRadius = cornerRadius ?? 4
     case "ls-vf-chips":
-      isRow = true; centerContent = true
+      isRow = true; centerCross = true; centerMain = true
       stackSpacing = stackSpacing ?? 8
     case "filters-row":
-      isRow = true; centerContent = true; spaceBetween = true
+      isRow = true; centerCross = true; centerMain = true; spaceBetween = true
       fullWidth = true
       stackSpacing = stackSpacing ?? 16
       padding = padding ?? EdgeInsets(top: 8, leading: 0, bottom: 8, trailing: 0)
@@ -1132,6 +1138,18 @@ import SwiftUI
     case "full": return nil // handled via fullWidth/fullHeight flags
     case "screen": return 400 // viewport sentinel; app window clips anyway
     case "auto": return nil
+    // Tailwind's named container scale (max-w-2xl etc.)
+    case "xs": return 320
+    case "sm": return 384
+    case "md": return 448
+    case "lg": return 512
+    case "xl": return 576
+    case "2xl": return 672
+    case "3xl": return 768
+    case "4xl": return 896
+    case "5xl": return 1024
+    case "6xl": return 1152
+    case "7xl": return 1280
     default:
       if let bracket = s.firstIndex(of: "["),
          let end = s.firstIndex(of: "]") {
@@ -1186,13 +1204,24 @@ import SwiftUI
       }
       return
     }
-    // plain color names
+    // plain color names — a `/NN` suffix is an alpha modifier
+    // (bg-background/90); unresolved names must NOT wipe a background a
+    // theme class already painted.
     if lower.hasPrefix("bg-") {
-      background = namedColor(String(lower.dropFirst(3)))
+      var name = String(lower.dropFirst(3))
+      var alpha: Double? = nil
+      if let slash = name.lastIndex(of: "/") {
+        alpha = Double(name[name.index(after: slash)...]).map { $0 / 100 }
+        name = String(name[..<slash])
+      }
+      if var c = namedColor(name) {
+        if let alpha { c = c.opacity(alpha) }
+        background = c
+      }
     } else if lower.hasPrefix("text-") {
-      foreground = namedColor(String(lower.dropFirst(5)))
+      if let c = namedColor(String(lower.dropFirst(5))) { foreground = c }
     } else if lower.hasPrefix("border-") {
-      foreground = namedColor(String(lower.dropFirst(7)))
+      if let c = namedColor(String(lower.dropFirst(7))) { foreground = c }
     }
   }
 
@@ -1216,6 +1245,13 @@ import SwiftUI
     case "gray-700": return LogseqColors.gray(11)
     case "gray-800", "gray-900": return LogseqColors.gray(12)
     case "transparent": return .clear
+    // shui semantic tokens — bg-background / bg-foreground etc.
+    case "background": return LogseqColors.gray(1)
+    case "foreground": return LogseqColors.gray(12)
+    case "secondary": return LogseqColors.gray(3)
+    case "muted": return LogseqColors.gray(3)
+    case "muted-foreground": return LogseqColors.gray(9)
+    case "accent": return LogseqColors.blue(9)
     default: return nil
     }
   }

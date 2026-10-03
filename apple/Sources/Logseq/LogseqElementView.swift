@@ -13,6 +13,7 @@ struct LogseqElementView: View {
   /// Rendered by the window-level overlay layer rather than inline —
   /// skips the presenter branch so the element draws normally.
   var inOverlay = false
+  @Environment(\.logseqInOverlay) private var nestedInOverlay
   /// lui-overlay.css's `#ui__ac-inner` max-height: the enclosing
   /// `data-editor-popup-ref` popover pushes its --available-height budget
   /// down through this env so the AC list caps at
@@ -72,9 +73,9 @@ struct LogseqElementView: View {
         s.fixedY = (s.fixedY ?? 0) - 18
       }
     }
-    for decl in LogseqStyleOverrides.shared.liveDecls(
+    let live = LogseqStyleOverrides.shared.liveDecls(
       for: context.nodeID, emitted: attrs["style"] as? String ?? "")
-    {
+    for decl in live {
       s.applyInline(decl)
     }
     return s
@@ -252,13 +253,14 @@ struct LogseqElementView: View {
     } else if isRightSidebarContainer {
       contentBody.overlay(alignment: .topLeading) { LogseqSidebarResizer() }
 
-    } else if style.fillsOverlay && !inOverlay {
+    } else if style.fillsOverlay && !inOverlay && !nestedInOverlay {
       // position:fixed layers — the web renders these at window scope; our
       // collapsed overlay containers can't give them bounds, so the element
       // re-renders in LogseqOverlayLayer instead. The anchor/sizing lives in
       // the overlay copy's own body so it stays reactive to style changes.
       LogseqOverlayPresenter(nodeID: context.nodeID, priority: style.overlayZ) {
         LogseqElementView(tag: tag, context: context, inOverlay: true)
+          .environment(\.logseqInOverlay, true)
       }
     } else {
       contentBody
@@ -495,7 +497,12 @@ struct LogseqElementView: View {
         key: LogseqGrowXKey.self,
         value: (s.grow || s.fullWidth || isTextInput) ? 1 : 0)
       .layoutValue(key: LogseqGrowYKey.self, value: (s.grow || s.fullHeight) ? 1 : 0)
-      .layoutValue(key: LogseqOutOfFlowKey.self, value: s.outOfFlow)
+      // Inside the overlay layer a nested fillsOverlay child renders inline
+      // (no second hoist) — it participates in the overlay's own layout
+      // (e.g. a flex-centered dialog overlay) rather than being pinned.
+      .layoutValue(
+        key: LogseqOutOfFlowKey.self,
+        value: s.outOfFlow && !(nestedInOverlay && s.fillsOverlay))
       .layoutValue(
         key: LogseqOutOfFlowFillYKey.self, value: s.outOfFlowFillY)
       .layoutValue(
@@ -522,7 +529,8 @@ struct LogseqElementView: View {
       } else if style.isRow {
         LogseqRowLayout(
           nodeID: context.nodeID, spacing: style.stackSpacing ?? 0,
-          spaceBetween: style.spaceBetween) {
+          spaceBetween: style.spaceBetween,
+          centerMain: style.centerMain, centerCross: style.centerCross) {
           if !effectiveText.isEmpty { styledText }
           if !html.isEmpty { htmlText }
           ForEach(children, id: \.self) { child in
@@ -530,7 +538,9 @@ struct LogseqElementView: View {
           }
         }
       } else {
-        LogseqColumnLayout(nodeID: context.nodeID, spacing: style.stackSpacing ?? 0) {
+        LogseqColumnLayout(
+          nodeID: context.nodeID, spacing: style.stackSpacing ?? 0,
+          centerMain: style.centerMain, centerCross: style.centerCross) {
           if !effectiveText.isEmpty { styledText }
           if !html.isEmpty { htmlText }
           ForEach(children, id: \.self) { child in
@@ -815,8 +825,20 @@ private struct LogseqGrowYKey: LayoutValueKey {
   static let defaultValue = 0
 }
 
-/// position:fixed analogue — the subview renders at its ideal size pinned to
-/// the container's top-leading corner but consumes no flow space.
+/// Marks views re-rendered inside LogseqOverlayLayer — a `fillsOverlay`
+/// descendant must NOT hoist again: its parent already provides window
+/// bounds and (for dialog overlays) the centering layout the web relies on.
+private struct LogseqInOverlayKey: EnvironmentKey {
+  static let defaultValue = false
+}
+
+extension EnvironmentValues {
+  var logseqInOverlay: Bool {
+    get { self[LogseqInOverlayKey.self] }
+    set { self[LogseqInOverlayKey.self] = newValue }
+  }
+}
+
 private struct LogseqOutOfFlowKey: LayoutValueKey {
   static let defaultValue = false
 }
@@ -850,6 +872,12 @@ struct LogseqRowLayout: Layout {
   var nodeID: Int = 0
   var spacing: CGFloat = 0
   var spaceBetween = false
+  /// justify-center — center the packed row horizontally (ignored when a
+  /// child grows or space-between already distributes the leftover).
+  var centerMain = false
+  /// items-center — center each child on the row's cross axis (vertically)
+  /// instead of stretching it to the row height.
+  var centerCross = false
 
   func sizeThatFits(
     proposal: ProposedViewSize, subviews: Subviews, cache: inout ()
@@ -905,6 +933,9 @@ struct LogseqRowLayout: Layout {
       gap = spacing + max(0, leftover) / CGFloat(flowIndex - 1)
     }
     var x = bounds.minX
+    if centerMain && totalWeight == 0 && !spaceBetween {
+      x += max(0, leftover) / 2
+    }
     for (index, subview) in subviews.enumerated() {
       if subview[LogseqOutOfFlowKey.self] {
         // position:absolute analogue — pinned inside the container at the
@@ -934,9 +965,17 @@ struct LogseqRowLayout: Layout {
         w += leftover * CGFloat(weights[index]) / CGFloat(totalWeight)
       }
       w = max(0, w)
+      // align-items: stretch by default; items-center hugs the child to its
+      // natural height and centers it on the cross axis.
+      let h = centerCross
+        ? subview.sizeThatFits(.unspecified).height
+        : bounds.height
+      let py = centerCross
+        ? bounds.minY + max(0, bounds.height - h) / 2
+        : bounds.minY
       subview.place(
-        at: CGPoint(x: x, y: bounds.minY),
-        proposal: ProposedViewSize(width: w, height: bounds.height))
+        at: CGPoint(x: x, y: py),
+        proposal: ProposedViewSize(width: w, height: h))
       x += w + gap
     }
   }
@@ -950,6 +989,12 @@ struct LogseqRowLayout: Layout {
 struct LogseqColumnLayout: Layout {
   var nodeID: Int = 0
   var spacing: CGFloat = 0
+  /// justify-center — center the packed column vertically (ignored when a
+  /// child grows, since the grow consumes the leftover).
+  var centerMain = false
+  /// items-center — center each child horizontally instead of stretching it
+  /// to the container width.
+  var centerCross = false
 
   func sizeThatFits(
     proposal: ProposedViewSize, subviews: Subviews, cache: inout ()
@@ -999,6 +1044,9 @@ struct LogseqColumnLayout: Layout {
     }
     let leftover = bounds.height - total
     var y = bounds.minY
+    if centerMain && totalWeight == 0 {
+      y += max(0, leftover) / 2
+    }
     for (index, subview) in subviews.enumerated() {
       if subview[LogseqOutOfFlowKey.self] {
         let anchor = subview[LogseqAnchorKey.self]
@@ -1023,9 +1071,23 @@ struct LogseqColumnLayout: Layout {
         h += leftover * CGFloat(weights[index]) / CGFloat(totalWeight)
       }
       h = max(0, h)
+      // align-items: stretch by default; items-center hugs the child to its
+      // natural width and centers it horizontally. A child whose ideal is
+      // degenerate (0 — e.g. a bare .frame(maxWidth:.infinity) leaf) or
+      // already ≥ the container fills the width either way.
+      var px = bounds.minX
+      var pw = bounds.width
+      if centerCross {
+        let natural = subview.sizeThatFits(
+          ProposedViewSize(width: nil, height: h)).width
+        if natural > 0 && natural < bounds.width {
+          px = bounds.minX + (bounds.width - natural) / 2
+          pw = natural
+        }
+      }
       subview.place(
-        at: CGPoint(x: bounds.minX, y: y),
-        proposal: ProposedViewSize(width: bounds.width, height: h))
+        at: CGPoint(x: px, y: y),
+        proposal: ProposedViewSize(width: pw, height: h))
       y += h + spacing
     }
   }
@@ -1245,7 +1307,9 @@ private struct LogseqOverlayPresenter<Content: View>: View {
       .onAppear {
         LogseqOverlayStore.shared.present(nodeID, AnyView(body_()), priority: priority)
       }
-      .onDisappear { LogseqOverlayStore.shared.dismiss(nodeID) }
+      .onDisappear {
+        LogseqOverlayStore.shared.dismiss(nodeID)
+      }
   }
 }
 
