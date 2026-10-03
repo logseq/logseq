@@ -1083,15 +1083,9 @@ let is_today_page (m : Model.t) (page : Model.page) : bool =
   | Some d -> d = Dates.today_journal_day () && m.route <> Model.Home
   | None -> false
 
-let journal_item ?(last = false) (m : Model.t) (p : Model.page) : t =
-  let key = Option.value p.page_uuid ~default:p.page_title in
-  (* cljs journal-item > page-inner: .cp__page-inner-wrap.is-journals
-     containing the same editable db-page-title row as a page; the last
-     item drops its separator border via .journal-last-item *)
-  dom ~key:("ji-" ^ key)
-    ~style_class:
-      ("journal-item content relative" ^ if last then " journal-last-item" else "")
-    [ dom ~key:("jiw-" ^ key)
+let journal_item_inner (m : Model.t) (p : Model.page) : t =
+  let key = Runtime.journal_item_key p in
+  dom ~key:("jiw-" ^ key)
         ~style_class:
           "flex-1 page relative cp__page-inner-wrap is-journals"
         ~attrs:(page_wrap_attrs p)
@@ -1114,6 +1108,25 @@ let journal_item ?(last = false) (m : Model.t) (p : Model.page) : t =
                   [ journal_references_view p ]
               ])
         ]
+
+let journal_item ?(last = false) (m : Model.t) (p : Model.page) : t =
+  let key = Runtime.journal_item_key p in
+  (* cljs journal-item > page-inner: .cp__page-inner-wrap.is-journals
+     containing the same editable db-page-title row as a page; the last
+     item drops its separator border via .journal-last-item *)
+  dom ~key:("ji-" ^ key)
+    ~style_class:
+      ("journal-item content relative" ^ if last then " journal-last-item" else "")
+    [ (fun ctx parent ->
+        (* delta-splices push the merged page into the item's signal —
+           only that day remounts; the outer journals list (and other
+           days' DOM) survives *)
+        let p_sig = Runtime.journal_page_sig ctx.Lui_ui.ui_scheduler p in
+        (Logseq_dom.dyn
+           ~equal:(fun (a : Model.page) b -> a == b)
+           (fun (p' : Model.page) -> journal_item_inner m p')
+           (Signal.value p_sig))
+          ctx parent)
     ]
 
 (* cljs all-journals mounts a Virtuoso scroller with custom-scroll-parent:
@@ -1144,6 +1157,13 @@ let journals_view (m : Model.t) (js : Model.page list) : t =
                    [ Virt_list.list
                        ~list_attrs:[ ("data-virtuoso-scroller", "true") ]
                        ~estimate_size:(fun _ -> 640.)
+                       ~on_end:(fun () ->
+                         ignore (!Runtime.journals_load_more ()))
+                       ~data_sig:(fun ctx ->
+                         Some
+                           (Signal.value
+                              (Runtime.journals_sig
+                                 ctx.Lui_ui.ui_scheduler)))
                        ~key_of:(fun (p : Model.page) ->
                          Option.value p.page_uuid ~default:p.page_title)
                        ~render:(journal_item m) items ]

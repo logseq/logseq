@@ -4,6 +4,8 @@
    CustomEvent (dispatched by sdk push_state). *)
 
 open Promise_ext
+module SSet = Stdlib.Set.Make (String)
+
 let decode s = try Platform.decode_uri s with _ -> s
 
 (* strip "#" and "?graph-id=..." — hash may carry query params *)
@@ -159,25 +161,37 @@ let fetch_refs ~stale:(is_stale : unit -> bool) (p : Model.page) =
   |> ignore
 
 
+(* only the on-screen days are fetched up front — scrolling near the
+   bottom of the journals list pulls the next chunk (chat-style
+   pagination) instead of preloading 40 days of trees + refs *)
+let journals_initial = 3
+let journals_chunk = 2
+let journals_has_more = ref true
+let journals_loading_more = ref false
+
+let collect_journal p =
+  let* p' = fetch_blocks p in
+  let* refs = fetch_refs_blocks p' in
+  Js.Promise.resolve
+    { p' with Model.page_linked_refs = refs }
+
+let journal_summaries w =
+  match w with
+  | Wire.Array xs | Wire.List xs ->
+      List.filter_map Decode.page_of_summary xs
+  | _ -> []
+
 let load_journals () =
   Platform.perf_mark "nav:journals";
+  journals_has_more := true;
+  journals_loading_more := false;
   (let* w =
     Runtime.invoke2 "thread-api/get-latest-journals" (Wire.String (repo ()))
-      (Wire.Int 40)
+      (Wire.Int journals_initial)
   in
-  let pages =
-    match w with
-    | Wire.Array xs | Wire.List xs ->
-        List.filter_map Decode.page_of_summary xs
-    | _ -> []
-  in
-  let collect p =
-    let* p' = fetch_blocks p in
-    let* refs = fetch_refs_blocks p' in
-    Js.Promise.resolve
-      { p' with Model.page_linked_refs = refs }
-  in
-  let* arr = Js.Promise.all (Array.of_list (List.map collect pages)) in
+  let pages = journal_summaries w in
+  if List.length pages < journals_initial then journals_has_more := false;
+  let* arr = Js.Promise.all (Array.of_list (List.map collect_journal pages)) in
   let* js = Js.Promise.resolve (Array.to_list arr) in
   Js.Promise.resolve
     (match !Runtime.current_route with
@@ -191,6 +205,57 @@ let load_journals () =
               Runtime.send Action.Page_load_failed
           | _ -> ());
          Js.Promise.resolve ())
+
+(* scroll-end pagination — the next [journals_chunk] days fetch + append;
+   days already loaded (e.g. a fresh page created mid-session) are
+   deduped by uuid so the keyed list never sees the same day twice *)
+let load_more_journals () : unit Js.Promise.t =
+  if
+    !journals_loading_more || not !journals_has_more
+    || !Runtime.current_journals = []
+  then Js.Promise.resolve ()
+  else (
+    journals_loading_more := true;
+    (let* w =
+       Runtime.invoke3 "thread-api/get-latest-journals"
+         (Wire.String (repo ()))
+         (Wire.Int journals_chunk)
+         (Wire.Int (List.length !Runtime.current_journals))
+     in
+     let pages = journal_summaries w in
+     if List.length pages < journals_chunk then
+       journals_has_more := false;
+     let* arr =
+       Js.Promise.all (Array.of_list (List.map collect_journal pages))
+     in
+     (match !Runtime.current_route with
+      | Some (Model.Journals | Model.Home) ->
+          let known =
+            List.fold_left
+              (fun s (p : Model.page) ->
+                match p.Model.page_uuid with
+                | Some u -> SSet.add u s
+                | None -> s)
+              SSet.empty !Runtime.current_journals
+          in
+          let fresh =
+            Array.to_list arr
+            |> List.filter (fun (p : Model.page) ->
+                   match p.Model.page_uuid with
+                   | Some u -> not (SSet.mem u known)
+                   | None -> true)
+          in
+          if fresh <> [] then
+            Runtime.send
+              (Action.Journals_loaded
+                 (!Runtime.current_journals @ fresh))
+      | _ -> ());
+     journals_loading_more := false;
+     Js.Promise.resolve ())
+    |> Js.Promise.catch (fun e ->
+           journals_loading_more := false;
+           Platform.console_error ("load_more_journals failed", e);
+           Js.Promise.resolve ()))
 
 (* fetches for the same route can resolve out of order — only the
    latest-initiated load may commit, otherwise an older response lands
@@ -322,6 +387,7 @@ let load_home () =
      journal-item), not today's journal as a standalone page *)
   | None ->
       Runtime.reload_current_view := load_journals;
+      Runtime.journals_load_more := load_more_journals;
       load_journals ())
   |> Js.Promise.catch (fun e ->
          Platform.console_error ("load_home failed", e);
@@ -481,18 +547,23 @@ let load_route (route : Model.route) =
      fallback) reload *this* view instead of whatever route last set it *)
   (match route with
    | Model.Journals | Model.Home ->
-       Runtime.reload_current_view := load_journals
+       Runtime.reload_current_view := load_journals;
+       Runtime.journals_load_more := load_more_journals
    | Model.Page s ->
        Runtime.reload_current_view :=
-         (fun () -> load_page_ref route (Wire.page_ref s))
+         (fun () -> load_page_ref route (Wire.page_ref s));
+       Runtime.journals_load_more := (fun () -> Js.Promise.resolve ())
    | Model.Block_zoom uuid ->
-       Runtime.reload_current_view := (fun () -> load_block_zoom uuid)
+       Runtime.reload_current_view := (fun () -> load_block_zoom uuid);
+       Runtime.journals_load_more := (fun () -> Js.Promise.resolve ())
    | Model.Library ->
        Runtime.reload_current_view :=
-         (fun () -> load_page_ref route (Wire.String "Library"))
+         (fun () -> load_page_ref route (Wire.String "Library"));
+       Runtime.journals_load_more := (fun () -> Js.Promise.resolve ())
    | Model.All_pages | Model.All_graphs | Model.Graph_view | Model.Import
    | Model.Not_found _ | Model.Settings ->
-       Runtime.reload_current_view := (fun () -> Js.Promise.resolve ()));
+       Runtime.reload_current_view := (fun () -> Js.Promise.resolve ());
+       Runtime.journals_load_more := (fun () -> Js.Promise.resolve ()));
   match route with
   | Model.Home -> ignore (load_home ())
   | Model.Page s ->

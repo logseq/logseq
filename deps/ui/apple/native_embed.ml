@@ -498,7 +498,8 @@ let platform_event payload =
   | None -> ()
 
 let dispose () : string =
-  Daemon_client.kill_all ();
+  (* daemons deliberately outlive the app — they keep the repo admitted
+     and the graph open so the next launch attaches instantly *)
   Queue.clear pending_batches;
   (match !current_app with
    | Some app ->

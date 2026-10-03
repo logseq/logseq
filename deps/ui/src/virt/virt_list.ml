@@ -157,7 +157,8 @@ let rows_of (v : V.t) =
 (* One mounted list instance: deferred virtualizer attach once the list
    element exists, scope cleanup on unmount. *)
 let attach (ctx : Lui_ui.ui_context) st margin list_id scroll_parent_id
-    data versions key_of overscan estimate_size pin_key pin_sig data_sig =
+    data versions key_of overscan estimate_size pin_key pin_sig data_sig
+    on_end =
   match get_by_id list_id, get_by_id scroll_parent_id with
   | Some list_el, Some scroll_el ->
       margin :=
@@ -202,6 +203,12 @@ let attach (ctx : Lui_ui.ui_context) st margin list_id scroll_parent_id
         in
         Signal.set st { v_rows = rows; v_total = V.get_total_size v };
         Runtime.flush ();
+        (* the last data row rendered — ask the owner for the next
+           page (journals scroll-back pagination; a no-op hook on
+           fixed-size lists) *)
+        (match List.nth_opt rows (List.length rows - 1) with
+         | Some r when r.v_index >= Array.length !data - 1 -> on_end ()
+         | _ -> ());
         (* cljs virtuoso items-rendered: while a block-range drag is in
            progress the selection extends to the boundary row in the
            scroll direction — a stale mid-range row must never shrink it.
@@ -382,6 +389,7 @@ let list ?(scroll_parent_id = "main-content-container") ?(overscan = 5)
     ?(list_class = "ls-virt-list") ?(pin_key = fun () -> None)
     ?(pin_sig = fun () -> None)
     ?(data_sig = fun (_ : Lui_ui.ui_context) -> None)
+    ?(on_end = fun () -> ())
     ~key_of ~render (data : 'a array) : t =
  fun ctx parent ->
   let st = Signal.state ctx.ui_scheduler { v_rows = []; v_total = 0. } in
@@ -411,7 +419,7 @@ let list ?(scroll_parent_id = "main-content-container") ?(overscan = 5)
   set_timeout
     (fun () ->
       attach ctx st margin list_id scroll_parent_id data versions key_of
-        overscan estimate_size pin_key pin_sig data_sig)
+        overscan estimate_size pin_key pin_sig data_sig on_end)
     0;
   D.dom ~key:("vl-" ^ list_id) ~id:list_id ~style_class:list_class
     ~attrs:list_attrs

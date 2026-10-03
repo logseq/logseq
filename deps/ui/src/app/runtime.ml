@@ -19,6 +19,11 @@ let current_journals : Model.page list ref = ref []
 let reload_current_view : (unit -> unit Js.Promise.t) ref =
   ref (fun () -> Js.Promise.resolve ())
 
+(* the journals list's scroll-end pagination hook — the router installs
+   load_more_journals so page.ml stays below the routing layer *)
+let journals_load_more : (unit -> unit Js.Promise.t) ref =
+  ref (fun () -> Js.Promise.resolve ())
+
 (* mutation paths outside the editor (sdk bridge) refresh the current
    view through this hook — Outliner_ops sets it to refresh_page (avoids
    an editor->sdk dependency cycle) *)
@@ -157,6 +162,56 @@ let clear_page_items () =
   Hashtbl.iter (fun _ s -> Signal.dispose_signal (Signal.value s)) page_items;
   Hashtbl.reset page_items
 
+(* per-journal-day signals for mounted journal items — a delta-spliced
+   journal page pushes straight into the item's dyn so the journals
+   view need not remount (inner block lists are eager — the item dyn
+   is the repaint channel) *)
+let journal_items : (string, Model.page Signal.state) Hashtbl.t =
+  Hashtbl.create 8
+
+let journal_item_key (p : Model.page) =
+  Option.value p.Model.page_uuid ~default:p.Model.page_title
+
+let journal_page_sig scheduler (p : Model.page) : Model.page Signal.state
+    =
+  let k = journal_item_key p in
+  match Hashtbl.find_opt journal_items k with
+  | Some s -> s
+  | None ->
+      let s = Signal.state scheduler p in
+      Hashtbl.replace journal_items k s;
+      s
+
+let push_journal_page (p : Model.page) =
+  match Hashtbl.find_opt journal_items (journal_item_key p) with
+  | Some s -> Signal.set s p
+  | None -> ()
+
+let clear_journal_items () =
+  Hashtbl.iter (fun _ s -> Signal.dispose_signal (Signal.value s)) journal_items;
+  Hashtbl.reset journal_items
+
+(* the mounted outer journals list's data signal — appended paginated
+   days swap in through the splice path so the list (and the scroll
+   offset) survives; page.ml creates it lazily on mount *)
+let journals_items : Model.page array Signal.state option ref = ref None
+
+let journals_sig scheduler : Model.page array Signal.state =
+  match !journals_items with
+  | Some s -> s
+  | None ->
+      (* Journals_loaded can land before the list mounts — a
+         push_journals_items before then is a no-op, so seed the
+         signal from the authoritative list, not an empty array *)
+      let s = Signal.state scheduler (Array.of_list !current_journals) in
+      journals_items := Some s;
+      s
+
+let push_journals_items (js : Model.page list) =
+  match !journals_items with
+  | Some s -> Signal.set s (Array.of_list js)
+  | None -> ()
+
 (* Router clears its loading_route dedupe when a route load commits or
    fails (avoids a Runtime -> Router cycle) *)
 let nav_load_done : (unit -> unit) ref = ref (fun () -> ())
@@ -199,10 +254,13 @@ let track action =
       after_page_load := None
   | Action.Journals_loaded js ->
       !nav_load_done ();
-      current_journals := js
+      current_journals := js;
+      push_journals_items js
   | Action.Navigate_to r ->
       Page_delta.reset ();
       clear_page_items ();
+      clear_journal_items ();
+      push_journals_items [];
       !on_navigate ();
       current_page := None;
       current_journals := [];

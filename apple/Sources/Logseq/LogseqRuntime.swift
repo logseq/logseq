@@ -136,6 +136,10 @@ private let wakeup: WakeupCallback = {
   activeRuntime?.enqueuePump()
 }
 
+/// Most recent event enqueued toward OCaml, for event->apply latency
+/// marks under LOGSEQ_PERF.
+nonisolated(unsafe) private var perfLastEvent: (label: String, at: CFAbsoluteTime)?
+
 /// OCaml calls this on its app thread with a "<op>\n<payload>" envelope.
 private let platformRequest: PlatformRequestCallback = { data, length in
   guard let data, length > 0 else { return }
@@ -258,13 +262,17 @@ private let platformRequest: PlatformRequestCallback = { data, length in
     }
     for batch in batches {
       do {
+        let t0 = CFAbsoluteTimeGetCurrent()
         try backend.apply(json: batch)
         rootID = backend.rootIDs.first
         appliedPatches += 1
         if Self.perfLogging {
           let gen = Self.batchGeneration(batch)
+          let ms = (CFAbsoluteTimeGetCurrent() - t0) * 1000
+          let e2e = perfLastEvent.map {
+            Int((CFAbsoluteTimeGetCurrent() - $0.at) * 1000) } ?? -1
           FileHandle.standardError.write(
-            "PERF apply gen=\(gen) t=\(String(format: "%.3f", Date().timeIntervalSince1970)) \(backend.debugModelCounts) root=\(rootID ?? -1)\n"
+            "PERF apply gen=\(gen) t=\(String(format: "%.3f", Date().timeIntervalSince1970)) \(backend.debugModelCounts) root=\(rootID ?? -1) dur=\(Int(ms))ms e2e=\(e2e)ms last=\(perfLastEvent?.label ?? "")\n"
               .data(using: .utf8)!)
         }
       } catch {
@@ -273,7 +281,7 @@ private let platformRequest: PlatformRequestCallback = { data, length in
     }
   }
 
-  private static let perfLogging =
+  nonisolated private static let perfLogging =
     ProcessInfo.processInfo.environment["LOGSEQ_PERF"] != nil
 
   private static func batchGeneration(_ json: String) -> Int {
@@ -294,7 +302,15 @@ private let platformRequest: PlatformRequestCallback = { data, length in
   /// runs after init.
   nonisolated func enqueuePump() {
     let worker = ocaml
-    worker.async { _ = luiOCamlPump() }
+    worker.async {
+      let t0 = CFAbsoluteTimeGetCurrent()
+      _ = luiOCamlPump()
+      let ms = (CFAbsoluteTimeGetCurrent() - t0) * 1000
+      if Self.perfLogging, ms > 4 {
+        FileHandle.standardError.write(
+          "PERF pump dur=\(Int(ms))ms\n".data(using: .utf8)!)
+      }
+    }
   }
 
   func pump() {
@@ -318,9 +334,16 @@ private let platformRequest: PlatformRequestCallback = { data, length in
   }
 
   nonisolated private func enqueuePlatformEvent(_ envelope: String) {
+    perfLastEvent = (String(envelope.prefix(48)), CFAbsoluteTimeGetCurrent())
     ocaml.async {
+      let t0 = CFAbsoluteTimeGetCurrent()
       envelope.withCString { pointer in
         _ = luiOCamlPlatformEvent(pointer, Int32(envelope.utf8.count))
+      }
+      let ms = (CFAbsoluteTimeGetCurrent() - t0) * 1000
+      if Self.perfLogging, ms > 4 {
+        FileHandle.standardError.write(
+          "PERF pevent \(envelope.prefix(32)) dur=\(Int(ms))ms\n".data(using: .utf8)!)
       }
     }
   }
@@ -331,7 +354,18 @@ private let platformRequest: PlatformRequestCallback = { data, length in
   }
 
   nonisolated private func enqueueDispatch(_ event: LUIEvent) {
-    ocaml.async { _ = LogseqLUIEvents.dispatch(event) }
+    perfLastEvent = (String(describing: event).prefix(48).description,
+                     CFAbsoluteTimeGetCurrent())
+    ocaml.async {
+      let t0 = CFAbsoluteTimeGetCurrent()
+      _ = LogseqLUIEvents.dispatch(event)
+      let ms = (CFAbsoluteTimeGetCurrent() - t0) * 1000
+      if Self.perfLogging, ms > 4 {
+        FileHandle.standardError.write(
+          "PERF dispatch \(String(describing: event).prefix(40)) dur=\(Int(ms))ms\n"
+            .data(using: .utf8)!)
+      }
+    }
   }
 
   /// The backend's coalesced node-id → frame table, forwarded as the

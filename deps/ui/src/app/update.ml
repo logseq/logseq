@@ -42,7 +42,24 @@ let update (model : t) (action : Action.t) : t =
       { model with
         journals = js
       ; data_gen =
-          (if js = model.journals then model.data_gen
+          (let rec prefix_same a b =
+             match a, b with
+             | [], _ -> true
+             | (x : Model.page) :: xs, (y : Model.page) :: ys ->
+                 { x with Model.page_blocks = [] }
+                 = { y with Model.page_blocks = [] }
+                 && prefix_same xs ys
+             | _ -> false
+           in
+           if
+             (* delta splices only move page_blocks and pagination only
+                appends days — both reach the mounted journals list
+                through its data signal, so skipping the gen bump keeps
+                the outer list (and the scroll offset) alive. The first
+                load ([] -> days) still bumps: the placeholder has to
+                swap for the list *)
+             model.journals <> [] && prefix_same model.journals js
+           then model.data_gen
            else model.data_gen + 1)
       }
   | Refs_loaded refs ->
