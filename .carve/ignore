@@ -30,10 +30,28 @@ frontend.modules.outliner.tree/filter-top-level-blocks
 frontend.db.model/get-all-classes
 ;; Initial loaded
 frontend.ui/_emoji-init-data
-;; Used by shadow.cljs
-frontend.worker.db-worker/init
-;; Used by shadow.cljs (node entrypoint)
-frontend.worker.db-worker-node/main
 ;; defonce
 mobile.components.popup/native-sheet-listener
 mobile.bottom-tabs/add-tab-listeners!
+;; Callers were the deleted cljs db-worker; kept as host-side/daemon API surface
+frontend.common.crypt/<export-public-key
+frontend.common.crypt/<import-public-key
+frontend.common.crypt/<encrypt-uint8array
+frontend.common.crypt/<decrypt-uint8array
+frontend.common.crypt/<encrypt-text
+frontend.common.crypt/<decrypt-text-if-encrypted
+frontend.common.crypt/<encrypt-text-by-text-password
+frontend.common.crypt/<decrypt-text-by-text-password
+frontend.common.file.opfs/<write-text!
+frontend.common.file.opfs/<read-text!
+frontend.common.thread-api/ocaml-registered?
+frontend.common.thread-api/<ocaml-invoke
+frontend.db.subs/block-changed?
+frontend.handler.editor/delete-block!
+frontend.util/with-time
+logseq.cli.common.db-worker/list-nodes
+logseq.common.export.file/get-all-page->content
+logseq.db-worker.log/log-path
+logseq.db-worker.log/install!
+frontend.test.helper/with-config
+frontend.test.noise/mute-console-fixture

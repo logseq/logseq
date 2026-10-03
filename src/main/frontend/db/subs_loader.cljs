@@ -5,7 +5,7 @@
 
 (def ^:private view-resource-kinds #{:view-data :views})
 (def ^:private flush-kind-order [:view-resources :blocks :children :resources])
-(def ^:private limits {:view-resources 25 :resources 25 :blocks 1000 :children 25})
+(def ^:private limits {:view-resources 25 :resources 25 :blocks 1000 :children 50})
 (def ^:private slot-kind {:block :blocks :children :children :resource :resources})
 (def ^:private cancelled-error
   (ex-info "Renderer snapshot load cancelled" {::cancelled true}))

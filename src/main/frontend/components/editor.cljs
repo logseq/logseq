@@ -63,6 +63,7 @@
   [search-matched initial-commands]
   (not= search-matched initial-commands))
 
+
 (defn node-render
   [block q {:keys [db-tag?]}]
   (let [block' (cond-> block
@@ -107,6 +108,7 @@
         has-heading? (boolean (pu/lookup edit-block :logseq.property/heading))
         matched (or (filter-commands page? has-heading? matched') no-matched-commands)
         filtered? (slash-commands-search-filtered? matched' @commands/*initial-commands)]
+
     (ui/auto-complete
      matched
      (cond->

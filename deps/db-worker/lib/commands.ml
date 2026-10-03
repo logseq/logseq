@@ -1,0 +1,584 @@
+(* frontend.worker.commands — invoke commands based on user settings.
+   cljs-time arithmetic is UTC: civil math runs through Time.civil at
+   Time.utc (no timezone offset). *)
+
+open Datascript
+
+(* ---------- UTC civil arithmetic (cljs-time.core on UTC instants) -- *)
+
+let utc_ms (c : Time.civil) : int64 =
+  Time.epoch_ms_to_int64 (Time.epoch_ms_of_civil Time.utc c)
+
+let utc_civil (ms : int64) : Time.civil =
+  Time.civil_of_epoch_ms Time.utc (Time.epoch_ms ms)
+
+type recur_unit = Minute | Hour | Day | Week | Month | Year
+
+(* cljs-time t/plus with joda month/year clamping semantics *)
+let add_units (c : Time.civil) (u : recur_unit) (n : int) : Time.civil =
+  let y, mo, d, h, mi, s, ms = Time.civil_fields c in
+  match u with
+  | Month | Year ->
+      let total = (y * 12 + (mo - 1)) + (if u = Year then n * 12 else n) in
+      let y' = total / 12 and m0 = total mod 12 in
+      let y', m0 = if m0 < 0 then (y' - 1, m0 + 12) else (y', m0) in
+      let mo' = m0 + 1 in
+      let d' = min d (Date_time_util.days_in_month y' mo') in
+      Time.civil ~year:y' ~month:mo' ~day:d' ~hour:h ~minute:mi ~second:s
+        ~ms
+  | _ ->
+      let delta =
+        match u with
+        | Minute -> Int64.mul (Int64.of_int n) 60000L
+        | Hour -> Int64.mul (Int64.of_int n) 3600000L
+        | Day -> Int64.mul (Int64.of_int n) 86400000L
+        | Week -> Int64.mul (Int64.of_int n) 604800000L
+        | Month | Year -> invalid_arg "unreachable"
+      in
+      utc_civil (Int64.add (utc_ms c) delta)
+
+(* cljs-time t/in-* — whole units between two instants *)
+let in_units (a : Time.civil) (b : Time.civil) (u : recur_unit) : int =
+  let ms_a = utc_ms a and ms_b = utc_ms b in
+  match u with
+  | Minute -> Int64.to_int (Int64.div (Int64.sub ms_b ms_a) 60000L)
+  | Hour -> Int64.to_int (Int64.div (Int64.sub ms_b ms_a) 3600000L)
+  | Day -> Int64.to_int (Int64.div (Int64.sub ms_b ms_a) 86400000L)
+  | Week -> Int64.to_int (Int64.div (Int64.sub ms_b ms_a) 604800000L)
+  | Month | Year ->
+      let ay, amo, ad, ah, ami, asec, ams = Time.civil_fields a in
+      let by, bmo, bd, bh, bmi, bsec, bms = Time.civil_fields b in
+      let tod h mi s ms = h * 3600000 + mi * 60000 + s * 1000 + ms in
+      let raw = (by - ay) * 12 + (bmo - amo) in
+      (* a whole month only counts when the day/time doesn't regress *)
+      let months =
+        if ms_b >= ms_a
+           && (bd < ad
+               || (bd = ad && tod bh bmi bsec bms < tod ah ami asec ams))
+        then raw - 1
+        else if ms_b < ms_a
+                && (bd > ad
+                    || (bd = ad && tod bh bmi bsec bms > tod ah ami asec ams))
+        then raw + 1
+        else raw
+      in
+      if u = Year then months / 12 else months
+
+(* cljs cljs-time.core/now — behind a ref so tests can pin the clock the way
+   cljs tests do with (with-redefs t/now ...) *)
+let now_fn : (unit -> Time.epoch_ms) ref = ref Time.now
+
+let utc_now () : Time.civil =
+  Time.civil_of_epoch_ms Time.utc (!now_fn ())
+
+let utc_civil_after (a : Time.civil) (b : Time.civil) : bool =
+  Int64.compare (utc_ms a) (utc_ms b) > 0
+
+(* date-time-util/journal-day->ms — yyyymmdd int parsed as UTC date *)
+let journal_day_to_ms (day : int) : int64 =
+  utc_ms
+    (Time.civil ~year:(day / 10000) ~month:((day / 100) mod 100)
+       ~day:(day mod 100) ~hour:0 ~minute:0 ~second:0 ~ms:0)
+
+(* ---------- commands core ---------- *)
+
+(* cljs get-property — :status resolves through
+   :logseq.property.repeat/checked-property *)
+let get_property (ent : entity) (property : string) : string =
+  if property = "status" then
+    match Ldb.ref_ent ent "logseq.property.repeat/checked-property" with
+    | Some p ->
+        (match Ldb.ident_of p with
+         | Some i -> i
+         | None -> "logseq.property/status")
+    | None -> "logseq.property/status"
+  else property
+
+(* cljs get-value — :status :done/:todo resolve via closed values or
+   checkbox type *)
+let get_value (ent : entity) (property : string) (value : value) : value =
+  let resolved_done checked =
+    match Ldb.ref_ent ent "logseq.property.repeat/checked-property" with
+    | Some p ->
+        let choices =
+          Db_property.property_closed_values p
+        in
+        if Ldb.value p "logseq.property/type" = Some (Keyword "checkbox") then
+          Some (Bool checked)
+        else
+          List.find_map
+            (fun (c : entity) ->
+              match Ldb.value c "logseq.property/choice-checkbox-state" with
+              | Some (Bool s) when s = checked -> Some (Int64 (Int64.of_int c.id))
+              | _ -> None)
+            choices
+    | None -> None
+  in
+  match property, value with
+  | "status", Keyword "done" ->
+      (match resolved_done true with
+       | Some v -> v
+       | None -> Keyword "logseq.property/status.done")
+  | "status", Keyword "todo" ->
+      (match resolved_done false with
+       | Some v -> v
+       | None -> Keyword "logseq.property/status.todo")
+  | _ -> value
+
+(* cljs satisfy-condition? *)
+let satisfy_condition (db : db) (ent : entity)
+    ~(kind : string) ~(property : string) ~(value : value)
+    (datoms : datom list) : bool =
+  let property' = get_property ent property in
+  let value' = get_value ent property value in
+  match entity db (Ident property') with
+  | None -> false
+  | Some property_entity ->
+      let ref_ =
+        match Ldb.value property_entity "logseq.property/type" with
+        | Some (Keyword t) ->
+            List.mem t Db_property.all_ref_property_types
+        | _ -> false
+      in
+      let value_matches (datom_value : value option) : bool =
+        (* cljs db-value: entity-conditions read the raw attr value;
+           ref? dereferences the datom eid to an entity *)
+        let db_value =
+          match datom_value with
+          | None ->
+              if ref_ then
+                (match Ldb.ref_ent ent property' with
+                 | Some e -> `VEnt e
+                 | None ->
+                     (match Ldb.ref_ents ent property' with
+                      | _ :: _ as es -> `VEnts es
+                      | [] -> `VRaw (Ldb.value ent property')))
+              else `VRaw (Ldb.value ent property')
+          | Some dv ->
+              if ref_ then
+                (* cljs (d/entity db datom-value) — ref datoms carry Ref *)
+                (match dv with
+                 | Ref id ->
+                     (match Ldb.ent_of_id db id with
+                      | Some e -> `VEnt e
+                      | None -> `VRaw (Some dv))
+                 | Int64 id ->
+                     (match Option.bind (Datascript.Util.int64_to_int id) (Ldb.ent_of_id db) with
+                      | Some e -> `VEnt e
+                      | None -> `VRaw (Some dv))
+                 | _ -> `VRaw (Some dv))
+              else `VRaw (Some dv)
+        in
+        let qualified_keyword (v : value) : string option =
+          match v with
+          | Keyword k when String.contains k '/' -> Some k
+          | _ -> None
+        in
+        match qualified_keyword value' with
+        | Some k ->
+            (* cljs (and (map? db-value) (= value' (:db/ident db-value))) *)
+            (match db_value with
+             | `VEnt e -> Ldb.ident_of e = Some k
+             | _ -> false)
+        | None when ref_ ->
+            (match db_value with
+             | `VEnt e ->
+                 (* cljs: uuid? | property-value-content | :db/id *)
+                 (match value' with
+                  | Uuid u -> Ldb.value e "block/uuid" = Some (Uuid u)
+                  | _ -> false)
+                 || Db_property.property_value_content e = Some value'
+                 || (match value' with
+                     | Int64 i -> Int64.equal (Int64.of_int e.id) i
+                     | _ -> false)
+             | `VRaw (Some (Int64 i)) when value' = Int64 i -> true
+             | _ -> false)
+        | None ->
+            (match db_value with
+             | `VRaw v -> v = Some value'
+             | `VEnt _ | `VEnts _ -> false)
+      in
+      if datoms <> [] then
+        if kind = "datom-attribute-check?" then
+          List.exists
+            (fun (d : datom) ->
+              match entity db (Ident d.a) with
+              | Some attr_ent ->
+                  Ldb.value attr_ent property
+                  = Some value'
+              | None -> false)
+            datoms
+        else
+          List.exists
+            (fun (d : datom) -> d.added && value_matches (Some d.v))
+            (List.filter (fun (d : datom) -> d.a = property') datoms)
+      else value_matches None
+
+(* cljs commands table — user-configurable via *commands atom upstream;
+   the two defaults are the entire current set. *)
+type command_condition =
+  { kind : string
+  ; property : string
+  ; value : value }
+
+type command =
+  { entity_conditions : command_condition list
+  ; tx_conditions : command_condition list
+  ; actions : string list list }
+
+let commands : command list =
+  [ { entity_conditions =
+        [ { kind = "entity-value"
+          ; property = "logseq.property.repeat/repeated?"
+          ; value = Bool true } ]
+    ; tx_conditions =
+        [ { kind = "tx-value"
+          ; property = "status"
+          ; value = Keyword "done" } ]
+    ; actions = [ [ "reschedule" ]; [ "set-property"; "status"; "todo" ] ] }
+  ; { entity_conditions = []
+    ; tx_conditions =
+        [ { kind = "datom-attribute-check?"
+          ; property = "logseq.property/enable-history?"
+          ; value = Bool true } ]
+    ; actions = [ [ "record-property-history" ] ] } ]
+
+(* cljs advance-from-completion — `.+` *)
+let advance_from_completion (now : Time.civil) (u : recur_unit)
+    (frequency : int) : Time.civil =
+  add_units now u frequency
+
+(* cljs advance-from-scheduled — `+` *)
+let advance_from_scheduled (datetime : Time.civil) (u : recur_unit)
+    (frequency : int) : Time.civil =
+  add_units datetime u frequency
+
+(* cljs advance-until-future — `++`. Every step counts from the original
+   datetime — datetime + n*step — rather than from the previous step's
+   result, so t/plus month-end clamping doesn't drift the day (Jan 31 + 6
+   months lands on Jul 31, not Jun 30 + 1 month = Jul 30). cljs-time
+   arithmetic is UTC, so adding whole weeks preserves day-of-week by
+   construction — no fix-up needed *)
+let advance_until_future (now : Time.civil) (datetime : Time.civil)
+    (u : recur_unit) (frequency : int) : Time.civil =
+  let periods =
+    max 1
+      (if utc_civil_after datetime now then 1
+       else in_units datetime now u)
+  in
+  let steps = max 1 ((periods + frequency - 1) / frequency) in
+  let rec loop n =
+    let cand = add_units datetime u (n * frequency) in
+    if utc_civil_after cand now then cand else loop (n + 1)
+  in
+  loop steps
+
+let repeat_next_timestamp ?(now : Time.civil = utc_now ())
+    (datetime : Time.civil) (u : recur_unit) (frequency : int)
+    (repeat_type : string) : Time.civil =
+  match repeat_type with
+  | "logseq.property.repeat/repeat-type.dotted-plus" ->
+      advance_from_completion now u frequency
+  | "logseq.property.repeat/repeat-type.plus" ->
+      advance_from_scheduled datetime u frequency
+  | _ -> advance_until_future now datetime u frequency
+
+(* cljs get-next-time — the next occurrence, in milliseconds, of a repeat
+   whose current value is current-value (milliseconds). now defaults to the
+   current time; a date repeat passes today's UTC midnight so that it
+   computes in whole UTC days. *)
+let get_next_time ?(now : Time.civil = utc_now ()) (current_value : int64)
+    (unit : entity) (frequency : int) (repeat_type : string) : int64 option =
+  let recur_unit =
+    match Ldb.ident_of unit with
+    | Some "logseq.property.repeat/recur-unit.minute" -> Some Minute
+    | Some "logseq.property.repeat/recur-unit.hour" -> Some Hour
+    | Some "logseq.property.repeat/recur-unit.day" -> Some Day
+    | Some "logseq.property.repeat/recur-unit.week" -> Some Week
+    | Some "logseq.property.repeat/recur-unit.month" -> Some Month
+    | Some "logseq.property.repeat/recur-unit.year" -> Some Year
+    | _ -> None
+  in
+  match recur_unit with
+  | Some u when frequency > 0 ->
+      Some
+        (utc_ms
+           (repeat_next_timestamp ~now (utc_civil current_value) u
+              frequency repeat_type))
+  | _ -> None
+
+(* cljs resolve-recur-frequency — explicit value or default-value block *)
+let resolve_recur_frequency (db : db) (ent : entity)
+    : int * tx_op list =
+  let explicit =
+    match Ldb.ref_ent ent "logseq.property.repeat/recur-frequency" with
+    | Some v ->
+        (match Db_property.property_value_content v with
+         | Some (Int64 n) -> Datascript.Util.int64_to_int n
+         | Some (Float f) -> Some (int_of_float f)
+         | _ -> None)
+    | None -> None
+  in
+  match explicit with
+  | Some n -> (n, [])
+  | None ->
+      let property =
+        match entity db (Ident "logseq.property.repeat/recur-frequency") with
+        | Some p -> p
+        | None -> invalid_arg "recur-frequency property missing"
+      in
+      let default_value_block =
+        Db_property_build.build_property_value_block
+          (Block_map.of_entity property) (Block_map.of_entity property)
+          (Int64 1L)
+      in
+      let dvb_uuid =
+        match Block_map.uuid_attr default_value_block "block/uuid" with
+        | Some u -> u
+        | None -> invalid_arg "default value block missing uuid"
+      in
+      (1,
+       [ Block_map.to_tx_op db default_value_block
+       ; Add
+           (Entity_id property.id,
+            "logseq.property/default-value",
+            Ref_to (Lookup_ref ("block/uuid", Uuid dvb_uuid))) ])
+
+(* cljs compute-reschedule-property-tx *)
+let compute_reschedule_property_tx (db : db) (ent : entity)
+    (property_ident : string) : tx_op list =
+  let frequency, default_value_tx_data =
+    resolve_recur_frequency db ent
+  in
+  let unit = Ldb.ref_ent ent "logseq.property.repeat/recur-unit" in
+  let repeat_type =
+    match
+      Option.bind
+        (Ldb.ref_ent ent "logseq.property.repeat/repeat-type")
+        Ldb.ident_of
+    with
+    | Some i -> i
+    | None -> "logseq.property.repeat/repeat-type.double-plus"
+  in
+  let property = entity db (Ident property_ident) in
+  let date_ =
+    match property with
+    | Some p -> Ldb.value p "logseq.property/type" = Some (Keyword "date")
+    | None -> false
+  in
+  let current_value : int64 option =
+    match entity db (Ident property_ident) |> Option.is_some,
+          Ldb.ref_ent ent property_ident,
+          Ldb.value ent property_ident
+    with
+    | true, Some v, _ when date_ ->
+        (match Ldb.value v "block/journal-day" with
+         | Some (Int64 day) ->
+             (* date-time-util/journal-day->ms — ms of local midnight
+                of the journal day *)
+             Some (journal_day_to_ms (Datascript.Util.int64_to_int_exn "journal-day" day))
+         | _ -> None)
+    (* cljs untyped get — epoch-ms reads back as the platform's numeric
+       rep; Instant only for legacy ~t-decoded data *)
+    | true, _, Some (Int64 ms) -> Some ms
+    | true, _, Some (Float f) -> Some (Int64.of_float f)
+    | true, _, Some (Instant ms) -> Some ms
+    | _ -> None
+  in
+  (* A :date value is a day, carried here as its UTC midnight. It is
+     advanced in whole UTC days against today's UTC midnight and read back
+     as a UTC day; read in the local zone, UTC midnight is the previous
+     evening west of UTC and the repeat landed a day early. *)
+  let now : Time.civil =
+    if date_ then
+      utc_civil
+        (journal_day_to_ms
+           (Date_time_util.ms_to_journal_day (utc_ms (utc_now ()))))
+    else utc_now ()
+  in
+  match frequency > 0, unit, current_value with
+  | true, Some u, Some cv ->
+      (match get_next_time ~now cv u frequency repeat_type with
+       | None -> []
+       | Some next_time_long ->
+           let next_day =
+             if date_ then
+               Date_time_util.utc_ms_to_journal_day next_time_long
+             else Date_time_util.ms_to_journal_day next_time_long
+           in
+           let journal_page_id =
+             match
+               Seq.uncons
+                 (datoms db Avet ~a:"block/journal-day"
+                    ~v:(Int64 (Int64.of_int next_day)) ())
+             with
+             | Some (d, _) -> Some d.e
+             | None -> None
+           in
+           let page_uuid, page_txs =
+             match journal_page_id with
+             | Some eid ->
+                 ((match Ldb.ent_of_id db eid with
+                   | Some e ->
+                       (match Ldb.value e "block/uuid" with
+                        | Some (Uuid u) -> Some u
+                        | _ -> None)
+                   | None -> None),
+                  [])
+             | None ->
+                 let formatter =
+                   match entity db (Ident "logseq.class/Journal") with
+                   | Some j ->
+                       Ldb.string_value j
+                         "logseq.property.journal/title-format"
+                   | None -> None
+                 in
+                 let title =
+                   Ldb.journal_title_of_day next_day
+                     (match formatter with
+                      | Some f -> f
+                      | None -> "MMM do, yyyy")
+                 in
+                 let r = Outliner_page.create db title () in
+                 ( r.page_uuid
+                 , Datascript.parse_tx_data_string
+                     (Db_transact.tx_edn r.tx_data) )
+           in
+           let value =
+             if date_ then
+               match page_uuid with
+               | Some u ->
+                   Some (Ref_to (Lookup_ref ("block/uuid", Uuid u)))
+               | None -> None
+             else Some (Common_util.value_of_ms next_time_long)
+           in
+           default_value_tx_data @ page_txs
+           @ (match value with
+              | Some v ->
+                  [ Add (Entity_id ent.id, property_ident, v) ]
+              | None -> []))
+  | _ -> []
+
+(* cljs repeat-temporal-property-idents *)
+let repeat_temporal_property_idents =
+  [ "logseq.property/scheduled"; "logseq.property/deadline" ]
+
+let existing_repeat_temporal_property_idents (ent : entity) : string list =
+  List.filter
+    (fun a -> Option.is_some (Ldb.value ent a))
+    repeat_temporal_property_idents
+
+(* cljs reschedule-property-idents *)
+let reschedule_property_idents (ent : entity) : string list =
+  let explicit =
+    Option.bind
+      (Ldb.ref_ent ent "logseq.property.repeat/temporal-property")
+      Ldb.ident_of
+  in
+  match explicit with
+  | Some epi ->
+      let others =
+        match epi with
+        | "logseq.property/scheduled" ->
+            if Option.is_some (Ldb.value ent "logseq.property/deadline")
+            then [ "logseq.property/deadline" ] else []
+        | "logseq.property/deadline" ->
+            if Option.is_some (Ldb.value ent "logseq.property/scheduled")
+            then [ "logseq.property/scheduled" ] else []
+        | _ -> []
+      in
+      List.sort_uniq String.compare (epi :: others)
+  | None -> existing_repeat_temporal_property_idents ent
+
+(* cljs handle-command :reschedule *)
+let handle_reschedule (db : db) (ent : entity) : tx_op list =
+  List.concat_map
+    (compute_reschedule_property_tx db ent)
+    (reschedule_property_idents ent)
+
+(* cljs handle-command :set-property *)
+let handle_set_property (ent : entity) (property : string)
+    (value : value) : tx_op list =
+  let property' = get_property ent property in
+  let value' = get_value ent property value in
+  [ Add (Entity_id ent.id, property', value') ]
+
+(* cljs handle-command :record-property-history *)
+let handle_record_property_history (db : db) (ent : entity)
+    (datoms : datom list) : tx_op list =
+  List.filter_map
+    (fun (d : datom) ->
+      match entity db (Ident d.a) with
+      | Some property
+        when Ldb.value property "logseq.property/enable-history?"
+             = Some (Bool true) && d.added ->
+          let ref_ =
+            Ldb.value property "db/valueType" = Some (Keyword "db.type/ref")
+          in
+          let value_key =
+            if ref_ then "logseq.property.history/ref-value"
+            else "logseq.property.history/scalar-value"
+          in
+          Some
+            (Block_map.to_tx_op db
+               (Db_property_build.block_with_timestamps
+                  [ "block/uuid", Uuid (Common_uuid.new_block_id ())
+                  ; (value_key), d.v
+                  ; "logseq.property.history/block", Int64 (Int64.of_int ent.id)
+                  ; "logseq.property.history/property", Int64 (Int64.of_int property.id) ]))
+      | _ -> None)
+    datoms
+
+(* cljs execute-command — dispatch actions *)
+let execute_command (db : db) (ent : entity) (datoms : datom list)
+    (command : command) : tx_op list =
+  List.concat_map
+    (fun action ->
+      match action with
+      | [ "reschedule" ] -> handle_reschedule db ent
+      | [ "set-property"; prop; v ] ->
+          handle_set_property ent prop (Keyword v)
+      | [ "record-property-history" ] ->
+          handle_record_property_history db ent datoms
+      | _ -> invalid_arg "Unhandled command")
+    command.actions
+
+(* cljs run-commands — group tx-data by e, check conditions, run actions *)
+let run_commands (db_after : db) (tx_data : datom list) : tx_op list =
+  let by_e_tbl : (entity_id, datom list) Hashtbl.t = Hashtbl.create 31 in
+  let e_order = ref [] in
+  List.iter
+    (fun (d : datom) ->
+       match Hashtbl.find_opt by_e_tbl d.e with
+       | Some cur -> Hashtbl.replace by_e_tbl d.e (d :: cur)
+       | None -> e_order := d.e :: !e_order; Hashtbl.replace by_e_tbl d.e [ d ])
+    tx_data;
+  let by_e =
+    List.map (fun e -> (e, Hashtbl.find by_e_tbl e)) (List.rev !e_order)
+  in
+  List.concat_map
+    (fun (e, datoms) ->
+      let datoms = List.rev datoms in
+      match entity db_after (Entity_id e) with
+      | None -> []
+      | Some ent ->
+          let matching =
+            List.filter
+              (fun (c : command) ->
+                (c.entity_conditions = []
+                 || List.for_all
+                      (fun cond ->
+                        satisfy_condition db_after ent ~kind:cond.kind
+                          ~property:cond.property ~value:cond.value [])
+                      c.entity_conditions)
+                && List.for_all
+                     (fun cond ->
+                       satisfy_condition db_after ent ~kind:cond.kind
+                         ~property:cond.property ~value:cond.value datoms)
+                     c.tx_conditions)
+              commands
+          in
+          List.concat_map
+            (execute_command db_after ent datoms)
+            matching)
+    by_e

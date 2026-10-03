@@ -1,0 +1,36 @@
+(version v0.17.0-1)
+
+(build
+ (all_platforms
+  ((action
+    (progn
+     (patch remove-outdated-mirage-xen-cross-compilation-rules.patch)
+     (run dune build -p %{pkg-self:name} -j %{jobs}))))))
+
+(depends
+ (all_platforms
+  (ocaml
+   base
+   ppx_compare
+   ppx_custom_printf
+   ppx_fields_conv
+   ppx_optcomp
+   ppx_sexp_conv
+   ppx_stable_witness
+   ppx_variants_conv
+   dune)))
+
+(source
+ (fetch
+  (url
+   https://github.com/janestreet/bin_prot/archive/refs/tags/v0.17.0.tar.gz)
+  (checksum
+   sha256=0e6c61aff150d19a0f89cb3e354ab36189e4bc23e28ab8bce03b6c6b6004f237)))
+
+(extra_sources
+ (remove-outdated-mirage-xen-cross-compilation-rules.patch
+  (fetch
+   (url
+    https://github.com/ocaml/opam-source-archives/raw/refs/heads/main/patches/bin_prot/remove-outdated-mirage-xen-cross-compilation-rules.patch)
+   (checksum
+    sha256=0c6fdc1a9377ae678895f237bae191ac458e507550063de143f1ee70a39ba318))))

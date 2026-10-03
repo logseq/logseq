@@ -47,7 +47,11 @@
                           graph-handler/settle-metadata-to-local!
                           (fn [metadata]
                             (swap! calls conj [:metadata (keys metadata)])
-                            (p/resolved nil))]
+                            (p/resolved nil))
+                          graph-handler/<upsert-current-graph-registry!
+                          (fn [] (p/resolved nil))
+                          graph-handler/remember-current-graph-id-in-tab!
+                          (fn [] (p/resolved nil))]
             (p/let [created (repo-handler/new-db! "  created  " {})
                     _ (do
                         (is (= "logseq_db_created" created))

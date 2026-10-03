@@ -108,7 +108,7 @@ assertNotContains(buildWorkflow, "pnpm db-worker-node:compile:bundle", "db graph
 const desktopReleaseWorkflow = readText(".github/workflows/build-desktop-release.yml");
 assert.match(
   desktopReleaseWorkflow,
-  /OCAML_VERSION: '5\.1\.1'/,
+  /OCAML_VERSION: '5\.5\.1'/,
   "desktop release workflow should define the OCaml version used by cli/",
 );
 assert.match(
@@ -179,10 +179,7 @@ const carveIgnore = readText(".carve/ignore");
 assertNotContains(carveIgnore, "logseq.cli.main/main", ".carve/ignore");
 
 assertFilesDoNotMatch(
-  [
-    "src/test/logseq/cli/server_test.cljs",
-    "src/test/frontend/worker/db_worker_node_test.cljs",
-  ],
+  ["src/test/logseq/cli/server_test.cljs"],
   /logseq\.cli\.config|cli-config\/server-list-path/,
   "retained db-worker-node runtime tests",
 );

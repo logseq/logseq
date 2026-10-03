@@ -1,0 +1,32 @@
+(version dev)
+
+(build
+ (all_platforms
+  ((action
+    (progn
+     (when %{pkg-self:dev} (run dune subst))
+     (run dune build -p %{pkg-self:name} -j %{jobs} @install))))))
+
+(depends
+ (all_platforms
+  (dune
+   ocaml
+   angstrom
+   cmdliner
+   core
+   core_bench
+   core_unix
+   js_of_ocaml
+   js_of_ocaml-ppx
+   ppx_deriving_yojson
+   uri
+   yojson
+   lwt
+   xmlm)))
+
+(source
+ (fetch
+  (url
+   git+https://github.com/logseq/mldoc#553dea6ed8694352527a189747f787365469c9cb)))
+
+(dev)

@@ -1,0 +1,45 @@
+(version 1)
+
+(build
+ (all_platforms ((action (run pkg-config sqlite3)))))
+
+(depends
+ (all_platforms (conf-pkg-config)))
+
+(depexts
+ ((libsqlite3-dev)
+  (= %{os_family} debian))
+ ((libsqlite3-dev)
+  (= %{os_family} ubuntu))
+ ((sqlite3)
+  (= %{os} freebsd))
+ ((database/sqlite3)
+  (= %{os} openbsd))
+ ((sqlite-devel)
+  (= %{os_distribution} centos))
+ ((sqlite-devel)
+  (= %{os_distribution} rhel))
+ ((sqlite-devel)
+  (= %{os_family} fedora))
+ ((sqlite-devel)
+  (= %{os_distribution} ol))
+ ((sqlite-dev)
+  (= %{os_distribution} alpine))
+ ((sqlite3-devel)
+  (or_absorb_undefined_var
+   (= %{os_family} suse)
+   (= %{os_family} opensuse)))
+ ((sqlite)
+  (= %{os_distribution} nixos))
+ ((sqlite)
+  (and_absorb_undefined_var
+   (= %{os} macos)
+   (= %{os_distribution} homebrew)))
+ ((sqlite3)
+  (and_absorb_undefined_var
+   (= %{os} macos)
+   (= %{os_distribution} macports)))
+ ((sqlite3)
+  (and_absorb_undefined_var
+   (= %{os} win32)
+   (= %{os_distribution} cygwinports))))

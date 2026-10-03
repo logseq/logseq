@@ -1,0 +1,119 @@
+(version 5.5.0)
+
+(install
+ (all_platforms
+  (withenv
+   ((= MSYS2_ARG_CONV_EXCL *)
+    (= LSAN_OPTIONS detect_leaks=0,exitcode=0)
+    (= ASAN_OPTIONS detect_leaks=0,exitcode=0))
+   (run
+    sh
+    tools/opam/process.sh
+    %{make}
+    install
+    %{pkg-self:build-id}
+    %{pkg-self:name}
+    %{prefix}))))
+
+(build
+ (choice
+  ((((arch x86_64)
+     (os linux))
+    ((arch arm64)
+     (os linux)))
+   ((action
+     (withenv
+      ((= MSYS2_ARG_CONV_EXCL *)
+       (= LSAN_OPTIONS detect_leaks=0,exitcode=0)
+       (= ASAN_OPTIONS detect_leaks=0,exitcode=0))
+      (run
+       sh
+       tools/opam/process.sh
+       %{make}
+       -j%{jobs}
+       %{pkg-self:build-id}
+       %{pkg-self:name}
+       %{pkg:compiler-cloning:version}
+       (when false "")
+       (when false "")
+       (when false "")
+       (when false "")
+       --prefix=%{prefix}
+       --docdir=%{doc}/ocaml
+       --with-additional-stublibsdir
+       --with-relative-libdir
+       --enable-runtime-search
+       --enable-runtime-search-target=fallback
+       (when false "")
+       (when false "")
+       (when false "")
+       (when false "")
+       (when false "")
+       (when false "")
+       (when false "")
+       (when false "")
+       (when false "")
+       (when false "")
+       (when false "")
+       (when false "")
+       (when false "")
+       (when false "")
+       (when false "")
+       (when false "")
+       --disable-warn-error)))))
+  ((((arch x86_64)
+     (os macos))
+    ((arch arm64)
+     (os macos)))
+   ((action
+     (withenv
+      ((= MSYS2_ARG_CONV_EXCL *)
+       (= LSAN_OPTIONS detect_leaks=0,exitcode=0)
+       (= ASAN_OPTIONS detect_leaks=0,exitcode=0))
+      (run
+       sh
+       tools/opam/process.sh
+       %{make}
+       -j%{jobs}
+       %{pkg-self:build-id}
+       %{pkg-self:name}
+       %{pkg:compiler-cloning:version}
+       (when false "")
+       (when false "")
+       (when false "")
+       (when false "")
+       --prefix=%{prefix}
+       --docdir=%{doc}/ocaml
+       --with-additional-stublibsdir
+       --with-relative-libdir
+       --enable-runtime-search
+       --enable-runtime-search-target=fallback
+       (when false "")
+       (when false "")
+       (when false "")
+       (when false "")
+       (when false "")
+       (when false "")
+       (when false "")
+       CC=cc
+       (when false "")
+       (when false "")
+       (when false "")
+       (when false "")
+       (when false "")
+       (when false "")
+       (when false "")
+       (when false "")
+       (when false "")
+       (when false "")
+       --disable-warn-error)))))))
+
+(depends
+ (all_platforms (compiler-cloning)))
+
+(source
+ (fetch
+  (url
+   https://github.com/ocaml/ocaml/releases/download/5.5.0/ocaml-5.5.0.tar.gz)
+  (checksum
+   sha256=c018052c8264a3791a8f54f84179e6bcc78ed82eb889bacc2773df445259aed3)))

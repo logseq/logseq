@@ -573,7 +573,6 @@
  :export/debug-transit-desc "به فایل .transit برای ارسال به ما جهت اشکال‌زدایی صادر می‌کند. هرگونه داده حساس در فایل صادر شده حذف خواهد شد."
  :export/debug-transit-file "صدور فایل transit اشکال‌زدایی"
  :export/edn-desc "به فایل .edn قابل خواندن و ویرایش صادر می‌کند. به عنوان پشتیبان اصلی به آن تکیه نکنید."
- :export/error-unexpected "خطای غیرمنتظره‌ای هنگام صادرات رخ داد. برای جزئیات کنسول جاوااسکریپت را ببینید."
  :export/exporting "در حال صدور"
  :export/finalizing "نهایی‌سازی"
  :export/format-text "متن"
@@ -1652,7 +1651,6 @@
  :sidebar.right/resize-handle "جداکننده"
  :sidebar.right/toggle "تغییر نوار کناری راست"
 
- :storage/invalid-data-writing "نوشتن داده نامعتبر."
  :storage/sqlitedb-error "خطای SQLiteDB: {1}"
  :storage/sqlitedb-import-error "خطای وارد کردن SQLiteDB: {1}"
  :storage/sqlitedb-save-error "خطای ذخیره SQLiteDB: {1}"

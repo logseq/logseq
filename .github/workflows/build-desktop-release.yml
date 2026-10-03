@@ -57,7 +57,7 @@ env:
   CLOJURE_VERSION: '1.12.4.1618'
   NODE_VERSION: '24'
   JAVA_VERSION: '21'
-  OCAML_VERSION: '5.1.1'
+  OCAML_VERSION: '5.5.1'
 
 jobs:
   compile-cljs:
@@ -120,10 +120,39 @@ jobs:
         uses: ocaml/setup-ocaml@v3
         with:
           ocaml-compiler: ${{ env.OCAML_VERSION }}
+          dune-cache: true
+
+      - name: Restore opam switch cache
+        id: opam-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.opam
+          key: ${{ runner.os }}-opam-${{ env.OCAML_VERSION }}-${{ hashFiles('deps/db-worker/dune.lock/**', 'deps/db-worker/scripts/install-opam-deps.sh', 'deps/db-worker/*.opam', 'cli/*.opam') }}
+          restore-keys: |
+            ${{ runner.os }}-opam-${{ env.OCAML_VERSION }}-
+
+      - name: Disable opam sandboxing
+        run: |
+          opam option --global 'wrap-build-commands=[]'
+          opam option --global 'wrap-install-commands=[]'
+          opam option --global 'wrap-remove-commands=[]'
 
       - name: Fetch OCaml deps
         working-directory: cli
         run: opam install . --deps-only --with-test --yes
+
+      - name: Fetch db-worker OCaml deps
+        working-directory: deps/db-worker
+        run: |
+          sh scripts/install-opam-deps.sh
+          pnpm install
+
+      - name: Save opam switch cache
+        uses: actions/cache/save@v4
+        if: steps.opam-cache.outputs.cache-hit != 'true'
+        with:
+          path: ~/.opam
+          key: ${{ steps.opam-cache.outputs.cache-primary-key }}
 
       - name: Fetch CLI pnpm deps
         run: pnpm --dir cli install --frozen-lockfile --ignore-workspace
@@ -161,7 +190,7 @@ jobs:
           pnpm cljs:release-electron
           pnpm db-worker-node:bundle
           opam exec -- pnpm cli:release
-          pnpm webpack-app-build
+          pnpm db-worker:build
           pnpm desktop:prepare-runtime-js
         env:
           LOGSEQ_SENTRY_DSN: ${{ secrets.LOGSEQ_SENTRY_DSN }}

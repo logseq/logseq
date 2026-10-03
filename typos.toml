@@ -25,4 +25,6 @@ extend-exclude = ["resources/*",
                   "src/test/fixtures/*",
                   "deps/db-sync/test/logseq/db_sync/fixtures/*.edn",
                   "clj-e2e/resources/*",
-                  "deps/common/src/logseq/common/plural.cljs"]
+                  "deps/common/src/logseq/common/plural.cljs",
+                  "deps/db-worker/lib/plural.ml",
+                  "deps/db-worker/PORTED.md"]

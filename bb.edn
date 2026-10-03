@@ -163,9 +163,6 @@
   dev:run-test-namespaces
   logseq.tasks.dev/run-test-namespaces
 
-  dev:test-no-worker
-  logseq.tasks.dev/test-no-worker
-
   dev:lint-and-test
   logseq.tasks.dev/lint-and-test
 
@@ -196,9 +193,9 @@
   logseq.tasks.dev/gen-malli-kondo-config
 
   dev:db-worker-node
-  {:doc "Compile and start db-worker-node (pass-through args forwarded to node)"
+  {:doc "Build the OCaml db-worker bundle and start db-worker-node (pass-through args forwarded to node)"
    :task (do
-           (shell "clojure" "-M:cljs" "compile" "db-worker-node")
+           (shell "pnpm" "db-worker:build")
            (apply shell "node" "./static/db-worker-node.js" *command-line-args*))}
 
   dev:cli-e2e
@@ -227,9 +224,6 @@
 
   lint:ns-docstrings
   logseq.bb-tasks.lint.ns-docstrings/-main
-
-  lint:worker-and-frontend-separate
-  logseq.tasks.dev.lint/worker-and-frontend-separate
 
   nbb:watch
   logseq.bb-tasks.nbb.watch/watch

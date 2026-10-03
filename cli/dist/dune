@@ -2,6 +2,7 @@
  (alias bundle)
  (target logseq-cli.js)
  (deps
+  (env_var LOGSEQ_REVISION)
   (alias ../bin/melange)
   (:entrypoint ../bin/logseq_cli_melange/bin/main.js)
   (glob_files_rec ../bin/logseq_cli_melange/**)

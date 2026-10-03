@@ -1,0 +1,19 @@
+(version 0.6.2)
+
+(build
+ (all_platforms
+  ((action
+    (progn
+     (when %{pkg-self:dev} (run dune subst))
+     (run dune build -p %{pkg-self:name} -j %{jobs}))))))
+
+(depends
+ (all_platforms
+  (dune cppo ocaml)))
+
+(source
+ (fetch
+  (url
+   https://github.com/let-def/merlin-extend/releases/download/v0.6.2/merlin-extend-0.6.2.tbz)
+  (checksum
+   sha512=50696cb2099b84d4a5497fb778c969ca446e5639a91bcde6e2177588fbf72fe4f7a3c27b62384292ad873291719c5893673f1acce4755e81b5e05f9fd3e45b65)))

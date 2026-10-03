@@ -96,7 +96,11 @@
 (defn toggle-blocks-as-own-order-list!
   [blocks]
   (when (seq blocks)
-    (let [has-ordered?    (some own-order-number-list? blocks)
+    ;; ref-valued attrs can arrive as {:db/id} stubs without :block/title
+    ;; (e.g. from get-block-immediate-children), so value resolution via
+    ;; own-order-number-list? isn't reliable; "number" is the only list type
+    ;; the UI writes, so property presence is the signal.
+    (let [has-ordered?    (some #(some? (:logseq.property/order-list-type %)) blocks)
           blocks-uuids    (some->> blocks (map :block/uuid) (remove nil?))
           order-list-prop :logseq.property/order-list-type]
       (if has-ordered?
@@ -2376,6 +2380,7 @@
                             (inside-of-single-block (:node state)))]
           (cond
             (or (get-in state [:config :page-title?])
+                (comments-model/comments-area? (:block state))
                 (leaf-property-value-insert-blocked? (:config state) (:block state)))
             (do
               (when e (.preventDefault e))
@@ -4082,13 +4087,20 @@
 (defn escape-editing
   [& {:keys [select? save-block? editing-another-block?]
       :or {save-block? true}}]
-  (p/do!
-   (when save-block? (save-current-block!))
-   (if select?
-     (when-let [node (some-> (state/get-input) (util/rec-get-node "ls-block"))]
-       (state/exit-editing-and-set-selected-blocks! [node]))
-     (when-not editing-another-block?
-       (state/clear-edit!)))))
+  ;; `save-current-block!` resolves after the worker persists the block; during
+  ;; that window the user may have left or re-entered editing, so only proceed
+  ;; while this exact edit session is still the active one. Every new edit
+  ;; session installs a fresh `:editor/block`, so identity catches re-editing
+  ;; the same block too.
+  (let [editing-block (state/get-edit-block)]
+    (p/do!
+     (when save-block? (save-current-block!))
+     (when (identical? editing-block (state/get-edit-block))
+       (if select?
+         (when-let [node (some-> (state/get-input) (util/rec-get-node "ls-block"))]
+           (state/exit-editing-and-set-selected-blocks! [node]))
+         (when-not editing-another-block?
+           (state/clear-edit!)))))))
 
 (defn copy-current-ref
   [block-id]
@@ -4140,7 +4152,10 @@
        (and (not (:ignore-block-collapsed? config))
             (util/collapsed? block))
        (and (util/mobile?) (:logseq.property/query block))
-       (and (or (:list-view? config) (:ref? config))
+       ;; List-view rows mount whole page trees; every level stays
+       ;; collapsed so scrolling only pays for row shells.
+       (:list-view? config)
+       (and (:ref? config)
             (worker-has-children? block)
             (integer? (:block-level config))
             (>= (:block-level config) (state/get-ref-open-blocks-level)))

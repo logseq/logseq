@@ -1,0 +1,19 @@
+(version 0.2.0)
+
+(build
+ (all_platforms
+  ((action
+    (progn
+     (when %{pkg-self:dev} (run dune subst))
+     (run dune build -p %{pkg-self:name} -j %{jobs} @install))))))
+
+(depends
+ (all_platforms
+  (ocaml dune melange)))
+
+(source
+ (fetch
+  (url
+   https://github.com/ahrefs/melange-fest/releases/download/0.2.0/melange-fest-0.2.0.tbz)
+  (checksum
+   sha512=2b59e1e23d4c027df99ebd94eeb9c49d0b5a024f22ebfd01ff19ea9497348c60adaf67f161aaac743ae94d8093240399463a0eb0dffce8351fa75a73d99a9c88)))

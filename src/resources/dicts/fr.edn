@@ -573,7 +573,6 @@
  :export/debug-transit-desc "Exporte vers un fichier .transit à nous envoyer pour le débogage. Les données sensibles seront supprimées du fichier exporté."
  :export/debug-transit-file "Exporter le fichier transit de débogage"
  :export/edn-desc "Exporte vers un fichier .edn lisible et modifiable. Ne vous fiez pas à ceci comme sauvegarde principale."
- :export/error-unexpected "Une erreur inattendue s'est produite lors de l'export. Consultez la console JavaScript pour plus de détails."
  :export/exporting "Exportation"
  :export/finalizing "Finalisation"
  :export/format-text "Texte"
@@ -1652,7 +1651,6 @@
  :sidebar.right/resize-handle "Poignée de redimensionnement de la barre latérale droite"
  :sidebar.right/toggle "Activer le panneau latéral droit"
 
- :storage/invalid-data-writing "Écriture de données invalide."
  :storage/sqlitedb-error "Erreur SQLiteDB : {1}"
  :storage/sqlitedb-import-error "Erreur d'importation SQLiteDB : {1}"
  :storage/sqlitedb-save-error "Erreur de sauvegarde SQLiteDB : {1}"

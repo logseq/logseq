@@ -573,7 +573,6 @@
  :export/debug-transit-desc "Mengekspor ke file .transit untuk dikirimkan kepada kami untuk debugging. Data sensitif akan dihapus dari file yang diekspor."
  :export/debug-transit-file "Ekspor file debug transit"
  :export/edn-desc "Mengekspor ke file .edn yang dapat dibaca dan diedit. Jangan mengandalkan ini sebagai cadangan utama."
- :export/error-unexpected "Kesalahan tak terduga terjadi selama ekspor. Lihat konsol JavaScript untuk detailnya."
  :export/exporting "Mengekspor"
  :export/finalizing "Menyelesaikan"
  :export/format-text "Teks"
@@ -1652,7 +1651,6 @@
  :sidebar.right/resize-handle "Pengatur ukuran bilah sisi kanan"
  :sidebar.right/toggle "Beralih ke bilah sisi kanan"
 
- :storage/invalid-data-writing "Penulisan data tidak valid."
  :storage/sqlitedb-error "Kesalahan SQLiteDB: {1}"
  :storage/sqlitedb-import-error "Kesalahan impor SQLiteDB: {1}"
  :storage/sqlitedb-save-error "Kesalahan penyimpanan SQLiteDB: {1}"

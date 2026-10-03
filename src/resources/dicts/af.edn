@@ -573,7 +573,6 @@
  :export/debug-transit-desc "Voer uit na 'n .transit-lêer om aan ons te stuur vir ontfouting. Enige sensitiewe data sal in die uitgevoerde lêer verwyder word."
  :export/debug-transit-file "Voer ontfoutings-transit-lêer uit"
  :export/edn-desc "Voer uit na 'n leesbare en bewerkbare .edn-lêer. Moenie hierop staatmaak as primêre rugsteun nie."
- :export/error-unexpected "'n Onverwagte fout het opgetreden tydens uitvoer. Sien die JavaScript-konsole vir besonderhede."
  :export/exporting "Voer uit"
  :export/finalizing "Finaliseer"
  :export/format-text "Teks"
@@ -1652,7 +1651,6 @@
  :sidebar.right/resize-handle "Skeiding"
  :sidebar.right/toggle "Wissel regter sypaneel"
 
- :storage/invalid-data-writing "Ongeldige gegevensschrijving."
  :storage/sqlitedb-error "SQLiteDB-fout: {1}"
  :storage/sqlitedb-import-error "SQLiteDB invoerfout: {1}"
  :storage/sqlitedb-save-error "SQLiteDB stoor fout: {1}"

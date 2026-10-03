@@ -573,7 +573,6 @@
  :export/debug-transit-desc "디버깅을 위해 .transit 파일로 내보냅니다. 민감한 데이터는 내보낸 파일에서 제거됩니다."
  :export/debug-transit-file "디버그 transit 파일 내보내기"
  :export/edn-desc "읽기 및 편집 가능한 .edn 파일로 내보냅니다. 기본 백업으로 사용하지 마세요."
- :export/error-unexpected "내보내기 중 예기치 않은 오류가 발생했습니다. 자바스크립트 콘솔에서 자세한 내용을 확인하세요."
  :export/exporting "내보내는 중"
  :export/finalizing "마무리 중"
  :export/format-text "텍스트"
@@ -1652,7 +1651,6 @@
  :sidebar.right/resize-handle "구분선"
  :sidebar.right/toggle "오른쪽 사이드바 전환"
 
- :storage/invalid-data-writing "유효하지 않은 데이터 쓰기입니다."
  :storage/sqlitedb-error "SQLiteDB 오류: {1}"
  :storage/sqlitedb-import-error "SQLiteDB 가져오기 오류: {1}"
  :storage/sqlitedb-save-error "SQLiteDB 저장 오류: {1}"

@@ -90,6 +90,60 @@
            (done))
          40)))))
 
+(deftest load-results-codes-unwraps-worker-result-map-test
+  (async done
+    (let [block {:block/uuid #uuid "00000000-0000-0000-0000-0000000000aa"
+                 :block/title "code block"}
+          results (atom {:codes {:status :idle}})
+          state {::cmdk/input (atom "println")
+                 ::cmdk/results results}
+          seen (atom [])]
+      (p/with-redefs [state/get-current-repo (constantly "repo-a")
+                      state/get-current-page (constantly nil)
+                      search/block-search
+                      (fn [_repo _q _opts]
+                        (p/resolved {:items [block] :matched-count 1}))
+                      cmdk/block-item
+                      (fn [_repo block _page-uuid _input]
+                        (swap! seen conj block)
+                        {:source-block block})]
+        (-> (cmdk/load-results :codes state)
+            (p/then
+             (fn []
+               (is (= [block] @seen)
+                   "code results must map over :items, not the {:items :matched-count} map")
+               (is (= [block] (mapv :source-block (get-in @results [:codes :items]))))
+               (is (= :success (get-in @results [:codes :status])))
+               (done)))
+            (p/catch
+             (fn [error]
+               (is false (str error))
+               (done))))))))
+
+(deftest load-results-current-page-passes-page-opt-test
+  (async done
+    (let [page-uuid #uuid "00000000-0000-0000-0000-0000000000bb"
+          captured (atom nil)
+          results (atom {:current-page {:status :idle}})
+          state {::cmdk/input (atom "shared term")
+                 ::cmdk/results results}]
+      (p/with-redefs [state/get-current-repo (constantly "repo-a")
+                      state/get-current-page (constantly page-uuid)
+                      search/block-search
+                      (fn [_repo _q opts]
+                        (reset! captured opts)
+                        (p/resolved {:items [] :matched-count 0}))]
+        (-> (cmdk/load-results :current-page state)
+            (p/then
+             (fn []
+               (is (= (str page-uuid) (:page @captured))
+                   "Search only current page must send :page to the worker search options")
+               (done)))
+            (p/catch
+             (fn [error]
+               (is false (str error))
+               (done))))))))
+
 (deftest cmdk-search-debouncer-coalesces-continuous-typing-test
   (async done
     (is (= 300 cmdk/search-debounce-ms)
