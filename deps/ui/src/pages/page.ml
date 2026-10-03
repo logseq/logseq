@@ -483,10 +483,16 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
                                                  ~attrs:
                                                    [ ( "style"
                                                      , "display: flex" ) ]
-                                                 [ (if m.editing_title then
-                                                      title_editor page
-                                                    else title_content page)
-                                                 ]
+                                                 ((if m.editing_title then
+                                                    []
+                                                  else
+                                                    [ Properties_area.title_actions
+                                                        page ])
+                                                @ [ (if m.editing_title then
+                                                       title_editor page
+                                                     else
+                                                       title_content page)
+                                                  ])
                                              ]
                                             @ title_tag_chips page)
                                         ]
@@ -497,6 +503,9 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
                     ]
                 ]
             ]
+        ; (* cljs db-properties-cp: the page properties area sits
+             inside the title's .ls-block, after .block-main-container *)
+          Properties_area.page_area page
         ]
       ]
     ; (* cljs plugin slot extension point after the title block *)
@@ -1088,6 +1097,7 @@ let journal_item ?(last = false) (m : Model.t) (p : Model.page) : t =
             ~style_class:"relative grid gap-4 sm:gap-8 page-inner mb-16"
             [ dom ~key:("jit-" ^ key) ~style_class:"flex flex-row space-between"
                 [ page_title_el m p ]
+            ; Properties_area.bidi_area p
             ; blocks_inner ?puuid:p.page_uuid ~container:false
                 p.page_blocks
             ]
@@ -1296,7 +1306,10 @@ let top_view (m : Model.t) : t =
        | _ ->
            dom ~key:"ptm" ~attrs:[ ("style", "display:contents") ]
              (breadcrumbs page.page_title
-              @ [ title_row m page ]
+              @ [ title_row m page
+                ; (* cljs bidirectional-properties-area: sibling of the
+                     blocks list inside .page-inner *)
+                  Properties_area.bidi_area page ]
               @
               if page.page_is_library then [ library_add_pages_button ]
               else []))

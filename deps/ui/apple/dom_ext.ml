@@ -66,23 +66,35 @@ let ancestors_of (el : element) : element list =
 let tag_name (el : element) : string =
   Option.value (str_prop "tag" el) ~default:""
 
+(* forward refs — the overlay table is defined below; installed there *)
+let overlay_attr_fn : (element -> string -> string option option) ref =
+  ref (fun _ _ -> None)
+
+let overlay_class_fn : (element -> string option) ref =
+  ref (fun _ -> None)
+
 let class_list (el : element) : string list =
-  match str_prop "class" el with
-  | Some s ->
-      List.filter
-        (fun c -> c <> "")
-        (String.split_on_char ' ' s)
-  | None -> []
+  let raw =
+    match !overlay_class_fn el with
+    | Some c -> c
+    | _ -> Option.value (str_prop "class" el) ~default:""
+  in
+  List.filter (fun c -> c <> "") (String.split_on_char ' ' raw)
 
 let el_id_attr (el : element) : string =
-  Option.value (str_prop "id" el) ~default:""
+  match !overlay_attr_fn el "id" with
+  | Some v -> Option.value v ~default:""
+  | None -> Option.value (str_prop "id" el) ~default:""
 
 (* duplicate of get_attribute below — the query section sits before it *)
 let el_attr (el : element) (name : string) : string option =
-  match prop "attrs" el with
-  | Js.Json.JObject kvs ->
-      Option.bind (List.assoc_opt name kvs) Js.Json.decodeString
-  | _ -> str_prop ("attr-" ^ name) el
+  match !overlay_attr_fn el name with
+  | Some verdict -> verdict
+  | None -> (
+      match prop "attrs" el with
+      | Js.Json.JObject kvs ->
+          Option.bind (List.assoc_opt name kvs) Js.Json.decodeString
+      | _ -> str_prop ("attr-" ^ name) el)
 
 let has_attr (el : element) (name : string) : bool =
   el_attr el name <> None || (name = "class" && class_list el <> [])
@@ -226,6 +238,164 @@ let closest (el : element) (sel : string) : element option =
   in
   walk (el :: ancestors_of el) []
 
+(* ---------- scoped / child-combinator selectors ----------
+
+   Element identity for :scope anchoring and `>` parent checks: prefer the
+   runtime node-id, fall back to the DOM ref. *)
+let el_key (el : element) : string =
+  match num_prop "node-id" el with
+  | Some n -> "n" ^ string_of_int (int_of_float n)
+  | None -> (
+      match str_prop "#ref" el with
+      | Some r -> "r" ^ r
+      | None -> (
+          match str_prop "ref-id" el with
+          | Some r -> "r" ^ r
+          | None -> ""))
+
+(* ---------- view-mutation overlay ----------
+
+   dom-ops (set-attr/set-class/set-text) mutate the rendered SwiftUI tree
+   but not runtime node props, so snapshot providers never see them.
+   Matching and attribute reads merge this overlay, keyed by node-id;
+   attr values are string option — None is a removal tombstone. *)
+type overlay =
+  { o_attrs : (string, string option) Hashtbl.t
+  ; mutable o_class : string option
+  ; mutable o_text : string option }
+
+let overlays : (int, overlay) Hashtbl.t = Hashtbl.create 16
+
+let node_id_of (el : element) : int option =
+  match num_prop "node-id" el with
+  | Some n -> Some (int_of_float n)
+  | None -> None
+
+let overlay_find (node : int) : overlay option =
+  Hashtbl.find_opt overlays node
+
+let overlay_get (node : int) : overlay =
+  match overlay_find node with
+  | Some o -> o
+  | None ->
+      let o =
+        { o_attrs = Hashtbl.create 8; o_class = None; o_text = None }
+      in
+      Hashtbl.replace overlays node o;
+      o
+
+let overlay_drop (node : int) : unit = Hashtbl.remove overlays node
+
+let overlay_set_attr (node : int) (k : string) (v : string) : unit =
+  Hashtbl.replace (overlay_get node).o_attrs k (Some v)
+
+let overlay_remove_attr (node : int) (k : string) : unit =
+  Hashtbl.replace (overlay_get node).o_attrs k None
+
+let overlay_set_class (node : int) (v : string) : unit =
+  (overlay_get node).o_class <- Some v
+
+let overlay_set_text (node : int) (v : string) : unit =
+  (overlay_get node).o_text <- Some v
+
+(* verdict: outer Some = overlay decides (Some v present / None removed);
+   outer None = untouched, fall through to the snapshot *)
+let overlay_attr_node (node : int) (name : string)
+    : string option option =
+  match overlay_find node with
+  | Some o -> Hashtbl.find_opt o.o_attrs name
+  | None -> None
+
+let overlay_attr (el : element) (name : string) : string option option =
+  match node_id_of el with
+  | Some n -> overlay_attr_node n name
+  | None -> None
+
+let overlay_class_of (el : element) : string option =
+  match node_id_of el with
+  | Some n -> (
+      match overlay_find n with Some o -> o.o_class | None -> None)
+  | None -> None
+
+let overlay_text_of (el : element) : string option =
+  match node_id_of el with
+  | Some n -> (
+      match overlay_find n with Some o -> o.o_text | None -> None)
+  | None -> None
+
+let () =
+  overlay_attr_fn := overlay_attr;
+  overlay_class_fn := overlay_class_of
+
+type sstep =
+  { s_comb : [ `Desc | `Child ]
+  ; s_comp : compound option (* None = :scope *) }
+
+let is_scope_token t = t = ":scope"
+
+(* split a single selector alternative into (combinator, compound) steps *)
+let parse_steps (alt : string) : sstep list =
+  alt
+  |> String.split_on_char ' '
+  |> List.filter (fun t -> t <> "")
+  |> List.fold_left
+       (fun (acc, next_comb) tok ->
+         if tok = ">" then (acc, `Child)
+         else if is_scope_token tok then
+           ({ s_comb = next_comb; s_comp = None } :: acc, `Desc)
+         else
+           ({ s_comb = next_comb; s_comp = Some (parse_compound tok) }
+              :: acc
+           , `Desc))
+       ([], `Desc)
+  |> fst
+  |> List.rev
+
+let step_matches ~scope (el : element) (step : sstep) : bool =
+  match step.s_comp with
+  | None -> el_key el = el_key scope && el_key scope <> ""
+  | Some c -> match_compound el c
+
+(* match a step chain against (el, ancestors); ancestors nearest-first *)
+let rec match_steps ~scope (steps : sstep list) (el : element)
+    (ancestors : element list) : bool =
+  match List.rev steps with
+  | [] -> false
+  | last :: rest -> (
+      if not (step_matches ~scope el last) then false
+      else
+        let rec seek steps ancestors =
+          match steps with
+          | [] -> true
+          | st :: ss -> (
+              match ancestors with
+              | [] -> false
+              | a :: tail -> (
+                  match st.s_comb with
+                  | `Child ->
+                      if step_matches ~scope a st then seek ss tail
+                      else false
+                  | `Desc ->
+                      if step_matches ~scope a st then seek ss tail
+                      else seek (st :: ss) tail))
+        in
+        seek rest ancestors)
+
+let scoped_matches ~scope (sel : string) (el : element)
+    (ancestors : element list) : bool =
+  sel
+  |> String.split_on_char ','
+  |> List.exists (fun alt ->
+         match parse_steps alt with
+         | [] -> false
+         | steps -> match_steps ~scope steps el ancestors)
+
+let query_selector_all_scoped ~(scope : element) ~(els : element list)
+    (sel : string) : element list =
+  List.filter
+    (fun el -> scoped_matches ~scope sel el (ancestors_of el))
+    els
+
 (* The apple "DOM" is the LUI extension tree — native_embed installs
    providers returning element snapshots (same shape the Swift
    LogseqDOMSnapshot emits: tag/class/id/attrs/node-id + ancestors) so the
@@ -238,23 +408,40 @@ let subtree_elements_provider : (int -> Js.Json.t list) ref =
 let query_selector (el : element) (sel : string) : element option =
   match num_prop "node-id" el with
   | Some id ->
+      let els = !subtree_elements_provider (int_of_float id) in
       List.find_opt
-        (fun el -> selector_matches sel el (ancestors_of el))
-        (!subtree_elements_provider (int_of_float id))
+        (fun e -> scoped_matches ~scope:el sel e (ancestors_of e))
+        els
   | None -> None
+
+let query_selector_all (el : element) (sel : string) : element list =
+  match num_prop "node-id" el with
+  | Some id ->
+      let els = !subtree_elements_provider (int_of_float id) in
+      query_selector_all_scoped ~scope:el ~els sel
+  | None -> []
 
 let doc_query_selector (sel : string) : element option =
   List.find_opt
-    (fun el -> selector_matches sel el (ancestors_of el))
+    (fun el -> scoped_matches ~scope:document_el sel el (ancestors_of el))
     (!doc_elements_provider ())
+
+let doc_query_selector_all (sel : string) : element list =
+  query_selector_all_scoped ~scope:document_el
+    ~els:(!doc_elements_provider ()) sel
 
 (* ---------- element state ---------- *)
 
-let get_attribute (el : element) (name : string) : string option =
+let get_attribute_raw (el : element) (name : string) : string option =
   match prop "attrs" el with
   | Js.Json.JObject kvs ->
       Option.bind (List.assoc_opt name kvs) Js.Json.decodeString
   | _ -> str_prop ("attr-" ^ name) el
+
+let get_attribute (el : element) (name : string) : string option =
+  match overlay_attr el name with
+  | Some verdict -> verdict
+  | None -> get_attribute_raw el name
 
 let value (el : element) : string =
   Option.value (str_prop "value" el) ~default:""

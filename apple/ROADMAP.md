@@ -63,6 +63,12 @@ Swift. Goal: feature parity with the Electron app.
   `graphs/<repo>/assets/` and inserts asset blocks via the same
   `insert-blocks` outliner op the web uploader uses (edit-target,
   page-target, journals fallthrough).
+- Page/block properties UI: declarative LUI components render the
+  page panel rows, block pill rows, title actions, and the 4-phase
+  "Add or change property" sheet (prop picker → type → tags → value)
+  natively. Filtering, "+ New option" create, and writes
+  (`set-block-property`/`create_property_text_block`) reach the
+  daemon, refresh the rows, and persist across relaunch.
 
 ## In progress
 
@@ -76,12 +82,15 @@ Swift. Goal: feature parity with the Electron app.
   side is incomplete.
 - Textarea polish: first keystrokes after mount can drop during the
   focus-settle window; selection/marks interplay untested.
+- Properties: `key:: value` typed in a block can't create props yet
+  (block text commit not wired on apple); `p a` hidden toggle,
+  `;;`/⌘P shortcuts, and the key-cell property menu are wired but
+  untested; some labels clip ("t-prop", "dd icon").
 - Right sidebar gaps: item reorder/drag, drop indicators, the resizer
   strip is inert (no width drag yet), item "open in sidebar" paths
   beyond the default Contents item untested.
 
 ## Remaining (Electron parity)
-- Page properties UI (property rows, value editors).
 - Views / queries / table + kanban renderers (OCaml code compiles;
   native surfaces not yet exercised end-to-end).
 - PDF annotations: PDFKit viewer opens/closes; the annotation

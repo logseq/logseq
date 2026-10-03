@@ -1,51 +1,35 @@
 (* .cp__select widget — the autocomplete select used by the property
-   picker, type picker, class picker and value pickers. DOM contract:
+   picker, type picker, class picker and value pickers, rendered as
+   cross-platform LUI components: a text field over a scrollable menu
+   item list (same input-on-top / results-below structure as web
+   master's .cp__select).
 
-     .cp__select.cp__select-main
-       .input-wrap > input.cp__select-input.w-full[placeholder]
-       .item-results-wrap
-         #ui__ac.cp__select-results
-           #ui__ac-inner.hide-scrollbar
-             .menu-link-wrap
-               a.flex.justify-between.menu-link#ac-N[tabindex=0][.chosen]
-                 span.flex-1 > item content
-
-   Keyboard: ArrowDown/Up move .chosen, Enter picks .chosen. A
-   "New option:" pseudo-item is appended while the input is non-empty
-   and doesn't exactly match an item. *)
+   Keyboard: Enter picks the current first match (native backends give
+   menu items their own arrow navigation); Escape bubbles to the global
+   property keydown handler which dismisses the owning popup. *)
 
 open Promise_ext
-open Editor_dom
-open Properties_dom
+open Lui_elements
 
 type item =
   { it_title : string
-  ; it_tip : string (* ident / sublabel, rendered as title attr *)
+  ; it_tip : string (* ident / sublabel *)
   ; it_icon : string (* tabler icon before the title, "" = none *)
   ; it_new : bool (* renders via the "New option:" affordance *)
   ; it_strong : bool (* title leaf is <strong> (cljs property select) *)
   ; on_choose : unit -> unit
   }
 
-type select_config =
-  { placeholder : string
-  ; items : item list
-  ; mutable filter : string
-  ; mutable chosen : int
-  ; new_option : (string -> unit) option (* on_new text *)
-  ; on_escape : unit -> unit
-  ; on_enter_text : (string -> unit) option (* Enter with no items *)
-  ; on_search : (string -> item list Js.Promise.t) option
-        (* async item source — bypasses the static substring filter *)
-  ; mutable searched : item list option
-  ; mutable results_inner : Editor_dom.el option
-  ; mutable results_py : Editor_dom.el option
-  }
-
 let item ?(tip = "") ?(icon = "") ?(strong = false) title on_choose =
   { it_title = title; it_tip = tip; it_icon = icon; it_new = false
   ; it_strong = strong; on_choose
   }
+
+(* submit-on-enter isn't in the apple backend's text-field prop schema
+   (native fields submit on Return regardless); web/melange needs the
+   explicit prop for Enter-to-submit *)
+let submit_on_enter_opt =
+  if Sys.backend_type = Sys.Native then None else Some true
 
 let matches needle item =
   let n = String.lowercase_ascii (String.trim needle) in
@@ -58,18 +42,17 @@ let matches needle item =
     in
     nl <= hl && go 0
 
-let visible_items cfg =
+let visible_items ~items ~filter ~searched ~new_option =
   let base =
     let matched =
-      match cfg.on_search, cfg.searched with
-      | Some _, Some items -> items
-      | _ -> List.filter (matches cfg.filter) cfg.items
+      match searched with
+      | Some found -> found
+      | None -> List.filter (matches filter) items
     in
-    let q = String.lowercase_ascii (String.trim cfg.filter) in
+    let q = String.lowercase_ascii (String.trim filter) in
     if q = "" then matched
     else
-      (* cljs fuzzy ranks exact/prefix hits first; e2e relies on #ac-0
-         being the best match *)
+      (* cljs fuzzy ranks exact/prefix hits first *)
       List.stable_sort
         (fun a b ->
           let score it =
@@ -87,23 +70,58 @@ let visible_items cfg =
     List.exists
       (fun it ->
         String.lowercase_ascii it.it_title
-        = String.lowercase_ascii (String.trim cfg.filter))
+        = String.lowercase_ascii (String.trim filter))
       base
   in
-  match cfg.new_option with
-  | Some on_new when String.trim cfg.filter <> "" && not exact ->
+  match new_option with
+  | Some on_new when String.trim filter <> "" && not exact ->
       base
-      @ [ { it_title = String.trim cfg.filter
+      @ [ { it_title = String.trim filter
           ; it_tip = ""
           ; it_icon = ""
           ; it_strong = false
           ; it_new = true
-          ; on_choose = (fun () -> on_new (String.trim cfg.filter))
+          ; on_choose = (fun () -> on_new (String.trim filter))
           }
         ]
   | _ -> base
 
-(* repaint .chosen without rebuilding (hover) *)
+(* select view state: filter text + async search results *)
+type sel_state =
+  { q : string
+  ; searched : item list option
+  }
+
+(* ---------- imperative widget (query_builder caller) ---------- *)
+
+(* The query-builder filter pickers still mount this widget inside an
+   imperative anchored popover — keep the el-based builder until that
+   surface is itself ported to LUI components. *)
+open Editor_dom
+open Properties_dom
+
+type select_config =
+  { cfg_placeholder : string
+  ; cfg_items : item list
+  ; mutable filter : string
+  ; mutable chosen : int
+  ; new_option : (string -> unit) option
+  ; on_escape : unit -> unit
+  ; on_enter_text : (string -> unit) option
+  ; on_search_cfg : (string -> item list Js.Promise.t) option
+  ; mutable searched : item list option
+  ; mutable results_inner : Editor_dom.el option
+  ; mutable results_py : Editor_dom.el option
+  }
+
+let cfg_visible cfg =
+  visible_items ~items:cfg.cfg_items ~filter:cfg.filter
+    ~searched:
+      (match cfg.on_search_cfg, cfg.searched with
+       | Some _, Some found -> Some found
+       | _ -> None)
+    ~new_option:cfg.new_option
+
 let repaint_chosen cfg =
   match cfg.results_inner with
   | None -> ()
@@ -128,8 +146,6 @@ let item_el idx cfg it =
       ~attrs:
         [ ("id", "ac-" ^ string_of_int idx); ("tabindex", "0") ]
   in
-  (* cljs item DOM: a > span.flex-1 > div.flex-row.justify-between.w-full
-     > div.flex-row.gap-1 > span[title=":ident"] > icon + strong *)
   let inner1 = mk ~cls:"menu-item-label" "span" in
   let inner2 =
     mk ~cls:("select-item-row"
@@ -140,16 +156,12 @@ let item_el idx cfg it =
     mk ~cls:"select-item-left" "span"
       ~attrs:(if it.it_tip = "" then [] else [ ("title", ":" ^ it.it_tip) ])
   in
-  (* e2e targets `span` + exact text; a leaf span keeps the deepest
-     getByText match a span *)
   let strong =
     mk ~cls:"ls-normal" (if it.it_strong then "strong" else "span")
   in
   el_set_text strong
-    (if it.it_new then I18n.t1 "select/new-option-label" it.it_title
+    (if it.it_new then I18n.t1 "select/new-option" it.it_title
      else it.it_title);
-  (* cljs property select renders a leading type icon (letter-t /
-     puzzle) inside .pt-1 as a ui/icon svg *)
   if it.it_icon <> "" then (
     let ic = mk ~cls:"ls-pt" "span" in
     el_append_child ic (ui_icon_el ~cls:"ls-icon-dim" it.it_icon);
@@ -169,18 +181,17 @@ let item_el idx cfg it =
 let rebuild_results cfg results_inner =
   cfg.results_inner <- Some results_inner;
   el_clear results_inner;
-  let vis = visible_items cfg in
+  let vis = cfg_visible cfg in
   if cfg.chosen >= List.length vis then cfg.chosen <- 0;
   List.iteri
     (fun i it -> el_append_child results_inner (item_el i cfg it))
     vis;
-  (* cljs adds the py-1 class only when there are results *)
   match cfg.results_py with
   | Some py -> el_set_class py (if vis = [] then "" else "ls-py")
   | None -> ()
 
-let pick cfg =
-  let vis = visible_items cfg in
+let pick_cfg cfg =
+  let vis = cfg_visible cfg in
   if vis = [] then (
     match cfg.on_enter_text, String.trim cfg.filter with
     | Some f, t when t <> "" -> f t
@@ -190,27 +201,24 @@ let pick cfg =
     | Some it -> it.on_choose ()
     | None -> ()
 
-let move cfg results_inner delta =
-  let n = List.length (visible_items cfg) in
+let move cfg delta =
+  let n = List.length (cfg_visible cfg) in
   if n = 0 then ()
   else (
     cfg.chosen <- (cfg.chosen + delta + n) mod n;
-    repaint_chosen cfg;
-    ignore results_inner)
+    repaint_chosen cfg)
 
-(* Creates the select element. Returns (root, input) so the caller can
-   mount the root as an overlay/inline element and el_focus the input. *)
 let create ~placeholder ?(new_option = None) ?(on_escape = fun () -> ())
     ?(on_enter_text = None) ?(on_search = None) items =
   let cfg =
-    { placeholder
-    ; items
+    { cfg_placeholder = placeholder
+    ; cfg_items = items
     ; filter = ""
     ; chosen = 0
     ; new_option
     ; on_escape
     ; on_enter_text
-    ; on_search
+    ; on_search_cfg = on_search
     ; searched = None
     ; results_inner = None
     ; results_py = None
@@ -242,13 +250,12 @@ let create ~placeholder ?(new_option = None) ?(on_escape = fun () -> ())
     (fun _ ->
       cfg.filter <- el_value input;
       cfg.chosen <- 0;
-      (match cfg.on_search with
+      (match cfg.on_search_cfg with
        | Some search ->
            let q = cfg.filter in
-           (let* items = search q in
-           (* stale guard — a later keystroke owns the list *)
+           (let* found = search q in
            if cfg.filter = q then (
-             cfg.searched <- Some items;
+             cfg.searched <- Some found;
              rebuild_results cfg results_inner);
            Js.Promise.resolve ())
            |> ignore
@@ -258,11 +265,91 @@ let create ~placeholder ?(new_option = None) ?(on_escape = fun () -> ())
   el_listen input "keydown"
     (fun ev ->
       match ev_key ev with
-      | "ArrowDown" -> prevent_default ev; move cfg results_inner 1
-      | "ArrowUp" -> prevent_default ev; move cfg results_inner (-1)
-      | "Enter" -> prevent_default ev; pick cfg
+      | "ArrowDown" -> prevent_default ev; move cfg 1
+      | "ArrowUp" -> prevent_default ev; move cfg (-1)
+      | "Enter" -> prevent_default ev; pick_cfg cfg
       | "Escape" -> prevent_default ev; cfg.on_escape ()
       | _ -> ())
     true;
   rebuild_results cfg results_inner;
   (root, input)
+
+(* Builds the select as a [t]: text_field over a scrollable list of
+   menu_items. Mounted inside the property dialog card or an anchored
+   dropdown_menu. *)
+let view ~placeholder ?new_option ?(on_enter_text = None)
+    ?(on_search = None) items : t =
+ fun context parent ->
+  let sched = context.Lui_ui.ui_scheduler in
+  let st = Signal.state sched { q = ""; searched = None } in
+  let visible () =
+    let s = Signal.get_state st in
+    visible_items ~items ~filter:s.q ~searched:s.searched ~new_option
+  in
+  let pick () =
+    let vis = visible () in
+    if vis = [] then (
+      match on_enter_text, String.trim (Signal.get_state st).q with
+      | Some f, t when t <> "" -> f t
+      | _ -> ())
+    else
+      match vis with
+      | first :: _ -> first.on_choose ()
+      | [] -> ()
+  in
+  let list_view =
+    dyn ~equal:(fun a b -> a.q = b.q && a.searched == b.searched)
+      (fun s ->
+         let vis =
+           visible_items ~items ~filter:s.q ~searched:s.searched
+             ~new_option
+         in
+         (* a native List can't size itself inside a content-sized
+            sheet — it needs an explicit height, 0 when empty so the
+            sheet still shrinks like web. Keep the node mounted across
+            filter edits (height prop, not mount churn) and give rows
+            stable keys: a drop+recreate per keystroke leaves taps
+            hitting a dead node *)
+         list ~height:(if vis = [] then 0 else 280)
+           (List.map
+              (fun it ->
+                 list_item
+                   ~key:(if it.it_new then "__new__" else it.it_title)
+                   ~text:
+                     (if it.it_new then
+                        I18n.t1 "select/new-option" it.it_title
+                      else it.it_title)
+                   ?icon:
+                     (match it.it_icon with
+                      | "" -> None
+                      | n -> Some (`app ("tabler-" ^ n)))
+                   ~on_press:(fun _ -> it.on_choose ())
+                   [])
+              vis))
+      (Signal.value st)
+  in
+  (column ~gap:2
+     [ text_field ~placeholder ~autofocus:true ?submit_on_enter:submit_on_enter_opt
+         ~on_input:(fun ev ->
+           match ev with
+           | Lui_protocol.TextChanged (_, q) ->
+               (match on_search with
+                | Some search ->
+                    (* update the filter synchronously so the client-side
+                       new-option row shows even while the async search is
+                       in flight (or rejects) *)
+                    Runtime.signal_set st { q; searched = None };
+                    ignore
+                      (let* found = search q in
+                       (* stale guard — a later keystroke owns the list *)
+                       if (Signal.get_state st).q = q then
+                         Runtime.signal_set st
+                           { q; searched = Some found };
+                       Js.Promise.resolve ())
+                | None -> Runtime.signal_set st { q; searched = None })
+           | _ -> ())
+         ~on_submit:(fun _ -> pick ())
+         []
+     ; list_view
+     ])
+    context parent

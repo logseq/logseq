@@ -930,9 +930,7 @@ let table_el inst ~refresh : D.el =
            (match p.Model.page_uuid with
             | Some uuid ->
                 D.el_add_listener btn "click" (fun _ ->
-                    let r = D.el_rect cell in
                     Properties_dialog.open_dialog
-                      ~anchor:(D.rect_left r, D.rect_bottom r +. 4.)
                       { Properties_dialog.uuid
                       ; uuids = []
                       ; db_id = p.Model.page_db_id

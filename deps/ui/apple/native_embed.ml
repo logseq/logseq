@@ -91,6 +91,9 @@ let ext_shallow_snapshot (rt : Lui_runtime.application) node : Js.Json.t =
     ; ("ref-id", Js.Json.JString dom_id)
     ; ("node-id", Js.Json.JNumber (float_of_int node))
     ; ("attrs", attrs)
+    ; ( "text"
+      , Js.Json.JString
+          (Option.value (ext_prop_string props "text") ~default:"") )
     ]
 
 let ext_snapshot (rt : Lui_runtime.application) node : Js.Json.t =
@@ -158,7 +161,6 @@ let flush () =
   | None -> ()
 
 let initialize platform_code host_code (_payload : string) : string =
-  Printexc.record_backtrace true;
   Queue.clear pending_batches;
   let os =
     match platform_code with
@@ -194,6 +196,9 @@ let initialize platform_code host_code (_payload : string) : string =
   current_app := Some app;
   Dom_ext.doc_elements_provider := collect_elements;
   Dom_ext.subtree_elements_provider := collect_subtree;
+  Vdom.init app;
+  Vdom.snapshot_of_node :=
+    (fun node -> ext_snapshot (Lui_app.runtime app) node);
   Platform.dom_parent_of :=
     (fun id ->
       match !current_app with
@@ -218,7 +223,20 @@ let initialize platform_code host_code (_payload : string) : string =
              close_out oc
            with _ -> ())
    | _ -> ());
-  let flush_app () = ignore (Lui_app.flush app) in
+  (* flush, re-run the imperative doc scans (properties mounts etc.),
+     then flush again so nodes they materialized ship in the same
+     take_patches drain *)
+  let scans_pending = ref false in
+  let rec flush_app () =
+    if not !scans_pending then begin
+      scans_pending := true;
+      ignore (Lui_app.flush app);
+      Editor_dom.run_doc_scans ();
+      ignore (Lui_app.flush app);
+      scans_pending := false
+    end
+    else ignore (Lui_app.flush app)
+  in
   Runtime.app_send :=
     (fun action ->
       let changed = Lui_app.send app action in
@@ -249,6 +267,8 @@ let dispatch_lui (event : Lui_protocol.event) : string =
   (match !current_app with
    | Some app ->
        ignore (Lui_app.dispatch_event app event);
+       ignore (Lui_app.flush app);
+       Editor_dom.run_doc_scans ();
        ignore (Lui_app.flush app)
    | None -> ());
   take_patches ()
@@ -310,6 +330,8 @@ let extension_event node name values : string =
                 (Lui_protocol.ExtensionEvent
                    (node, identifier, name,
                     decode_extension_values values)));
+           ignore (Lui_app.flush app);
+           Editor_dom.run_doc_scans ();
            ignore (Lui_app.flush app)
        | None -> ())
    | None -> ());
@@ -320,6 +342,8 @@ let extension_event node name values : string =
 let pump () : string =
   Queue.clear pending_batches;
   Host.drain ();
+  flush ();
+  Editor_dom.run_doc_scans ();
   flush ();
   take_patches ()
 
