@@ -425,6 +425,7 @@ import SwiftUI
       margin = EdgeInsets(top: 100, leading: 0, bottom: 0, trailing: 0)
     case "cp__cmdk__modal":
       fixedWidth = 620
+      centerHorizontally = true
       background = LogseqColors.gray(LogseqColors.isDark ? 2 : 1)
       cornerRadius = 8
       hasShadow = true

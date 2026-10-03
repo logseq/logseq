@@ -1133,17 +1133,19 @@ private struct LogseqStyleModifier: ViewModifier {
         }
       }
       // CSS default content alignment is start — SwiftUI's frame default
-      // is .center, which would center short text in a grown span.
+      // is .center, which would center short text in a grown span. A
+      // centerHorizontally element (dialog boxes) centers its painted box
+      // in the grown frame instead.
       .frame(
         maxWidth: (!inline || style.grow || style.fullWidth) && !anchored
           ? .infinity : nil,
         maxHeight: (style.fullHeight && !insideScroll) ? .infinity : nil,
-        alignment: .leading)
+        alignment: style.centerHorizontally ? .center : .leading)
       .frame(maxWidth: style.maxWidth, maxHeight: style.maxHeight)
       .modifier(LogseqClipper(enabled: style.clipContent))
       .frame(
         maxWidth: style.centerHorizontally ? .infinity : nil,
-        alignment: .center)
+        alignment: .top)
       .overlay {
         if style.hasBorder {
           RoundedRectangle(cornerRadius: style.cornerRadius ?? 0)
