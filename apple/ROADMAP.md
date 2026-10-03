@@ -81,11 +81,14 @@ Swift. Goal: feature parity with the Electron app.
   side is incomplete.
 - Textarea polish: first keystrokes after mount can drop during the
   focus-settle window; selection/marks interplay untested.
-- Right sidebar gaps: item reorder/drag, drop indicators, the resizer
-  strip is inert (no width drag yet), item "open in sidebar" paths
-  beyond the default Contents item untested.
-- Native sidebar gaps: graph selector row does not visibly react
-  (graphs dialog unverified), section collapse state is local
+- Right sidebar gaps: item reorder/drag, drop indicators, item "open
+  in sidebar" paths beyond the default Contents item untested.
+  (The resizer strip drags natively now — width is local view state
+  via LogseqRightSidebarLayout.)
+- Native sidebar gaps: graph selector row is a no-op OCaml-side —
+  `ls:open-dialog "graphs"` isn't in `Dialogs_state.known` (the
+  graphs-manager dialog isn't in the ported dialog set), section
+  collapse state is local
   (not persisted), favorites section untested (no data yet),
   sidebar items briefly disappear while cmdk is open.
 

@@ -463,3 +463,18 @@ behavior), `.left-sidebar-resizer`, `.cp__graphs-selector`,
   OCaml-side — `Dialogs_state.known` has no "graphs" entry; the
   graphs manager dialog doesn't exist in the ported dialog set yet.
   Same for any other dialog name not in `known`.
+
+### Right-sidebar resizer (native drag)
+- The OCaml `.resizer` element is decorative — fixed `aria-valuenow`
+  and no width model — so the width is native-only state:
+  `LogseqRightSidebarLayout.shared.width` (@Observable) read by the
+  `cp__right-sidebar` fixedWidth. Reads happen inside `style` during
+  body evaluation, so only right-sidebar elements subscribe.
+- **Hit-test pitfall**: the resizer is an out-of-flow sibling placed at
+  the container's minX, but `cp__right-sidebar-inner` covers the same
+  x-range and wins hit-testing (later sibling = topmost). The
+  interactive handle therefore renders as a `.overlay(alignment:
+  .topLeading)` on the container element, not on the resizer node.
+- New `outOfFlowFillY` style/layout key = `position:absolute; inset-y-0`:
+  OOF children were placed at their ideal height (~10px stub); the flag
+  stretches them to container height in both row and column layouts.
