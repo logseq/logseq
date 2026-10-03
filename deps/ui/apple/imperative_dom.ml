@@ -86,7 +86,13 @@ let id_of (el : el) : int option =
   match el with
   | JObject kvs -> (
       match List.assoc_opt "#new" kvs with
-      | Some v -> Option.map int_of_float (decodeNumber v)
+      (* imperative payloads always carry a "#ref"/"ref-id" handle;
+         Vdom's {"#new": vid} shells don't — the two registries mint from
+         the same int space, so without this check a vdom shell would
+         decode as (or collide with) an imperative id *)
+      | Some v
+        when List.mem_assoc "#ref" kvs || List.mem_assoc "ref-id" kvs ->
+          Option.map int_of_float (decodeNumber v)
       | None -> (
           (* snapshot payload of a materialized imperative extension node —
              resolve it back through the lui-node index *)

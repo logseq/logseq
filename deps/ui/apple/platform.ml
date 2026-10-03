@@ -194,11 +194,22 @@ type dom_handler =
   ; dh_fn : string -> string option -> unit
   }
 
-let dom_handlers : (int, dom_handler) Hashtbl.t = Hashtbl.create 256
+(* node id -> handlers; a node can carry several (declarative on_dom_event
+   plus imperative el_listen registrations share the same bubble walk) *)
+let dom_handlers : (int, dom_handler list) Hashtbl.t = Hashtbl.create 256
 
 let register_dom_handler id ~events fn =
   if events <> "" then
-    Hashtbl.replace dom_handlers id { dh_events = events; dh_fn = fn }
+    let cur = Option.value (Hashtbl.find_opt dom_handlers id) ~default:[] in
+    Hashtbl.replace dom_handlers id
+      (cur @ [ { dh_events = events; dh_fn = fn } ])
+
+let unregister_dom_handlers id = Hashtbl.remove dom_handlers id
+
+(* stopPropagation / stopImmediatePropagation: handlers flip this during
+   dispatch; the bubble walk and the document-level fan-out check it *)
+let propagation_stopped = ref false
+let request_stop () = propagation_stopped := true
 
 let dom_parent_of : (int -> int option) ref = ref (fun _ -> None)
 
@@ -210,6 +221,7 @@ let event_listed events name =
 
 (* host -> OCaml event entry; called by the bridge. *)
 let emit_event name payload =
+  propagation_stopped := false;
   !pre_dispatch_hook payload;
   (match payload with
    | Js.Json.JObject kvs -> (
@@ -220,11 +232,17 @@ let emit_event name payload =
            | Some n ->
                let payload_str = Js.Json.stringify payload in
                let rec bubble id depth =
-                 if depth < 64 then begin
+                 if depth < 64 && not !propagation_stopped then begin
                    (match Hashtbl.find_opt dom_handlers id with
-                    | Some dh when event_listed dh.dh_events name ->
-                        dh.dh_fn name (Some payload_str)
-                    | _ -> ());
+                    | Some dhs ->
+                        List.iter
+                          (fun dh ->
+                            if
+                              (not !propagation_stopped)
+                              && event_listed dh.dh_events name
+                            then dh.dh_fn name (Some payload_str))
+                          dhs
+                    | None -> ());
                    match !dom_parent_of id with
                    | Some parent -> bubble parent (depth + 1)
                    | None -> ()
@@ -233,15 +251,9 @@ let emit_event name payload =
                bubble (int_of_float n) 0)
        | None -> ())
    | _ -> ());
+  if not !propagation_stopped then
   match Hashtbl.find_opt window_listeners name with
-  | Some fns ->
-      List.iter
-        (fun f ->
-          try f payload
-          with e ->
-            Printf.eprintf "[dispatch] %s handler exn: %s\n%!" name
-              (Printexc.to_string e))
-        fns
+  | Some fns -> List.iter (fun f -> f payload) fns
   | None -> ()
 
 (* ---------- url / hash routing ---------- *)

@@ -4,21 +4,22 @@
    dead-codes unreferenced modules, so without that single call nothing
    in this directory is bundled into main.js. It sets up:
 
-   - a MutationObserver that mounts .ls-properties-area /
-     .ls-bidirectional-properties under .page-inner and
-     .ls-block-content-indent inside every .ls-block (DOM-extension
-     mount, same pattern as blocks/add_button.ml);
-   - document keydown handling: Escape pops overlays, mod+p /
+   - document keydown handling: Escape pops overlays (view overlays,
+     then the property dialog, then imperative popups), mod+p /
      Ctrl+Alt+P and `;;` open the .ls-property-dialog, `p` then `a`
          toggles hidden properties.
+
+   [overlays] mounts inside .cp__overlays — it renders the declarative
+   view-overlay stack (confirm dialogs pushed via S.push_view_overlay)
+   and the property dialog card.
 
        The `/` and `#` in-editor popups are owned by popups/popups_state.ml
        (the unified autocomplete); "Add property" there reaches the dialog
        via the ls:editor-command listener in editor/editor_commands.ml. *)
 
+open Lui_elements
 open Editor_dom
 module S = Properties_state
-module Area = Properties_area
 module Dialog = Properties_dialog
 
 (* ---------- global keys ---------- *)
@@ -31,7 +32,11 @@ let on_keydown ev =
   else
     match ev_key ev with
     | "Escape" ->
-        if S.handle_escape () then (
+        if
+          S.handle_view_escape ()
+          || Dialog.handle_escape ()
+          || S.handle_escape ()
+        then (
           prevent_default ev;
           stop_propagation ev)
     | "p" when (ev_meta ev || ev_ctrl ev) && ev_alt ev ->
@@ -56,6 +61,25 @@ let on_keydown ev =
           S.refresh_all ())
     | _ -> ()
 
+(* ---------- overlays view ---------- *)
+
+(* mounted inside .cp__overlays: the view-overlay stack (confirm
+   dialogs) plus the centered property dialog *)
+let overlays : t =
+ fun context parent ->
+  let vos = S.view_overlays context in
+  (column ~gap:0
+     [ dyn ~equal:(fun a b ->
+            List.map (fun (v : S.view_overlay) -> v.vo_key) a
+            = List.map (fun (v : S.view_overlay) -> v.vo_key) b)
+         (fun vos ->
+            column ~gap:0
+              (List.map (fun (v : S.view_overlay) -> v.vo_view) vos))
+         vos
+     ; Dialog.view
+     ])
+    context parent
+
 (* ---------- install ---------- *)
 
 let installed = ref false
@@ -65,37 +89,8 @@ let install () =
   else (
     installed := true;
     S.chain_worker ();
-    (* mutations inside our own managed areas are self-inflicted (value
-       editors, pill renders); rebuilding on them would wipe a live
-       textarea — only structural changes outside need ensure_all *)
-    (* closest() only exists on elements — start a #text mutation's walk
-       at its parent *)
-    let in_managed el =
-      match
-        if node_name el = "#text" then Properties_dom.el_parent el
-        else Some el
-      with
-      | Some el ->
-          el_closest el
-            ".ls-properties-area, .ls-bidirectional-properties"
-          <> None
-      | None -> false
-    in
-    register_doc_scan
-      ~run_if:(fun recs ->
-        Array.fold_left
-          (fun acc r -> acc || not (in_managed (rec_target r)))
-          false recs)
-      Area.ensure_all;
     document_add_listener "keydown" on_keydown true)
 
 (* Module init runs at bundle load (every module in the lib is linked
-   into js_app). The observer then keeps the mounts alive across page
-   renders — same bootstrap path as blocks/tree.ml's module init for
-   Editor_keys + Add_button. *)
+   into js_app). *)
 let () = install ()
-
-(* Public render entry points other areas can call (e.g. pages could
-   mount the page properties section into their own container instead of
-   relying on the observer). *)
-

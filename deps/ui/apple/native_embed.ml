@@ -91,6 +91,9 @@ let ext_shallow_snapshot (rt : Lui_runtime.application) node : Js.Json.t =
     ; ("ref-id", Js.Json.JString dom_id)
     ; ("node-id", Js.Json.JNumber (float_of_int node))
     ; ("attrs", attrs)
+    ; ( "text"
+      , Js.Json.JString
+          (Option.value (ext_prop_string props "text") ~default:"") )
     ]
 
 let ext_snapshot (rt : Lui_runtime.application) node : Js.Json.t =
@@ -166,7 +169,10 @@ let run_doc_scans_after_flush () =
       in
       if gen <> !last_scanned_generation then begin
         last_scanned_generation := gen;
-        Editor_dom.run_doc_scans ()
+        Editor_dom.run_doc_scans ();
+        (* scans can materialize nodes — flush again so they ship in the
+           same take_patches drain *)
+        ignore (Lui_app.flush app)
       end
   | None -> ()
 
@@ -214,6 +220,9 @@ let initialize platform_code host_code (_payload : string) : string =
   Imperative_dom.install app;
   Dom_ext.doc_elements_provider := collect_elements;
   Dom_ext.subtree_elements_provider := collect_subtree;
+  Vdom.init app;
+  Vdom.snapshot_of_node :=
+    (fun node -> ext_snapshot (Lui_app.runtime app) node);
   Platform.dom_parent_of :=
     (fun id ->
       match !current_app with
@@ -336,6 +345,8 @@ let extension_event node name values : string =
                 (Lui_protocol.ExtensionEvent
                    (node, identifier, name,
                     decode_extension_values values)));
+           ignore (Lui_app.flush app);
+           Editor_dom.run_doc_scans ();
            ignore (Lui_app.flush app)
        | None -> ())
    | None -> ());
@@ -346,6 +357,8 @@ let extension_event node name values : string =
 let pump () : string =
   Queue.clear pending_batches;
   Host.drain ();
+  flush ();
+  Editor_dom.run_doc_scans ();
   flush ();
   take_patches ()
 

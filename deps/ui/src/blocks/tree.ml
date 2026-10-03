@@ -547,6 +547,9 @@ and row_main ~editable ~library scope (b : Model.block) : t =
                                 ]
                             ]
                         ]
+                    ; (* .positioned-properties.block-left chips render
+                         inline at the end of .block-main-content *)
+                      Properties_area.block_left_chips ~uuid
                     ]
                 ]
             ; Comments_view.reactions_el uuid b.Model.block_reactions
@@ -569,6 +572,9 @@ and row_el ~depth ~editable scope ~(library : bool) (b : Model.block) : t =
     ~style_class_signal:(row_class_sig uuid blank embed b)
     ~attrs_signal_v:(row_attrs_sig ~scope ~depth uuid b)
     [ row_main ~editable ~library scope b
+    ; (* .ls-block-content-indent: block properties area + block-below
+         pills, sibling of .block-main-container *)
+      Properties_area.block_area ~uuid
     ; (if has_children && not (Comments.is_comments_area b) then
          children_el ~depth ~editable ~library uuid scope b
        else Logseq_dom.nothing)
@@ -618,6 +624,8 @@ and row_sig ~depth ~editable ~library scope
              let g, i = Render_inline.invalidation () in
              (b, g, i))
            bs (S.signal ()))
+    ; Properties_area.block_area
+        ~uuid:(Option.value b0.Model.block_uuid ~default:"")
     ; row_children ~depth ~editable ~library scope bs
     ]
 
@@ -723,11 +731,13 @@ and block_row_static ?(depth = 0) ?(library = false) (b : Model.block) : t =
                                 ]
                             ]
                         ]
+                    ; Properties_area.block_left_chips ~uuid
                     ]
                 ]
             ; Comments_view.reactions_el uuid b.Model.block_reactions
             ]
         ]
+    ; Properties_area.block_area ~uuid
     ; (if has_children then children_static_el ~depth ~library uuid b
        else Logseq_dom.nothing)
     ])

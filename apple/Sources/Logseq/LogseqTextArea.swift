@@ -144,7 +144,14 @@ struct LogseqTextArea: NSViewRepresentable {
     // MARK: LogseqElement (dom-ops)
 
     func domFocus() {
-      textView?.window?.makeFirstResponder(textView)
+      // makeFirstResponder resigns the current first responder
+      // synchronously, and its blur emit re-enters OCaml — which deadlocks
+      // when the dom-op itself runs inside an OCaml callback. Defer one
+      // runloop tick so the blur lands after the outer call returns.
+      let view = textView
+      DispatchQueue.main.async {
+        view?.window?.makeFirstResponder(view)
+      }
     }
 
     func domSetValue(_ value: String) {
@@ -294,7 +301,12 @@ struct LogseqInputField: NSViewRepresentable {
     }
 
     func domFocus() {
-      field?.window?.makeFirstResponder(field)
+      // see the textarea coordinator — resigning the first responder
+      // emits blur synchronously and would deadlock the OCaml callback
+      let input = field
+      DispatchQueue.main.async {
+        input?.window?.makeFirstResponder(input)
+      }
     }
 
     func domSetValue(_ value: String) {

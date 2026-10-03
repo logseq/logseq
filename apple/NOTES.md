@@ -539,3 +539,88 @@ behavior), `.left-sidebar-resizer`, `.cp__graphs-selector`,
   - Virtualization/pagination: the OCaml table renders all rows
     (fine for test data; no lazy windowing wired natively).
   - Sort groups submenu (multi-column grouping UI in sort popup).
+
+### devin/lui-swift-properties — page/block properties UI (LUI components milestone)
+- View layer rewritten as declarative LUI components (OCaml emits
+  semantic intent + data; Swift renders native controls — no DOM
+  class-name style mapping). All `deps/ui/src/properties` modules:
+  `properties_area` (page panel rows, block pills, title actions,
+  bidi, sidebar), `properties_dialog` (4-phase signal-driven card
+  sheet), `properties_select` (`Sel.view` filter field + `list`),
+  `properties_menu` (`menu_view` dropdown panes), `properties_value`
+  (cells + editors), `properties_state` (uuid-keyed `area_data`
+  signals + overlay stack), `properties_data` (daemon ops —
+  untouched), `properties_view` (install + overlays).
+- Verified end-to-end: page panel rows + "Add property"; "Set
+  property" → native sheet picker (21 props), live filter,
+  "+ New option" row; pick → value edit → `set-block-property`/
+  `create_property_text_block` → daemon → `refresh_all` → row
+  re-renders; quit/relaunch persistence. Alias write reaches the
+  worker and surfaces its validation error as a native banner
+  ("Alias should be a Page") — same semantics as web.
+- Native `dyn` constraint (set-prop validation): `set_prop` throws
+  `Invalid_argument("property is unsupported by node kind")` for
+  props outside the backend profile's per-kind settable set. Roots
+  mapping to the same kind across dyn branches must keep IDENTICAL
+  props — only children may differ; wrap heterogeneous branches in
+  `column ~gap:0 [match …]`. Unsupported-on-apple hits: `gap` on
+  `stack` (use `column`/`row`), `submit-on-enter` on `text-field`
+  (only `textarea` allows it; native fields submit via `.onSubmit`
+  anyway — `Sel.submit_on_enter_opt` gates it on `Sys.backend_type`),
+  `submitEnabled` isn't settable on `text-field` either →
+  Enter-to-submit can't be wired declaratively on apple (commit is
+  via row press; `on_submit` is a no-op there).
+- Silent failure mode: exceptions inside `Signal.set`→dyn→mount
+  propagate through `Signal.stabilize`→`Lui_runtime.flush`→
+  Js.Promise → silent rejection (rolled-back mount, no log).
+  Instrument `Runtime.signal_set` with `Printexc.get_backtrace`
+  when an expected patch doesn't appear.
+- Picker list on apple: SwiftUI `List` can't self-size inside a
+  content-sized `.sheet` → needs explicit `~height` (0 when empty,
+  280 otherwise — mirrors web's `max-height:280px`). `~key` must be
+  STABLE per row: a key that changes per keystroke drop+recreates
+  the node — taps then hit a dead node id (Swift `try?` swallows)
+  and the field loses first-responder mid-typing. New-option row
+  uses constant key `"__new__"`; the `list` itself stays mounted
+  across edits (height prop change, not mount churn). Same rule for
+  any per-keystroke-rebuilt list.
+- `dialog` requires `~text` (`invalidBatch("modal surface requires
+  text")` otherwise); renders as a native `.sheet`.
+- `lui_ocaml_visible_range: Invalid_argument("unknown extension
+  node")` fires when Swift queries a list mid-remount — benign
+  race; keeping the `list` node stable mostly avoids it.
+- Dump limitation: `/tmp/tree.json` only serializes `logseq-*`
+  extension nodes; LUI `column`/`row`/`list`/`menu_item` nodes are
+  invisible — debug via `[patch]` logging in `native_embed.
+  apply_batch` + screenshots.
+- Imperative ops the remaining surfaces depend on (shared with
+  parent): `doc_query "body"`, `el_append_child`/
+  `el_insert_adjacent`/`el_remove`, `el_rect`, `el_focus`/
+  `focus_end`/`active_element`/`is_editable_target`, `el_value`/
+  `el_set_value`/`el_selection_range`, `el_closest`/`el_query*`/
+  `el_query_all` + `:scope`/`,` selectors, `el_listen`/`on_click`/
+  `document_add_listener` keydown, `el_set_class`/`el_set_attr`/
+  `el_set_text`/`el_clear`/`el_first_child`/`el_inner_html`,
+  `el_is_connected`/`node_is_connected`, `set_timeout`,
+  `window_inner_height`, `Platform.set_location_hash`. Still-
+  imperative surfaces kept via the `Sel.create` el shell
+  (query_builder pickers) + `views_table`/`icon_picker`/popups
+  through the vdom bridge (`{"#new":n}` materialization in
+  `apple/vdom.ml`).
+- Gaps vs master cljs:
+  - Block-editor text commit not wired on apple (typed block text
+    never reaches the daemon — `block/title` stays ""), so
+    `key:: value` typed in a block can't create properties natively
+    yet; seed via `apply-outliner-ops`.
+  - `p a` hidden-properties toggle + `;;`/⌘P dialog shortcuts:
+    handlers wired (document keydown listener) but untested
+    end-to-end.
+  - `key_cell` property menu (`properties_menu.menu_view` panes):
+    renders as `dropdown_menu`; untested.
+  - `test-prop` renders truncated as "t-prop"; title-actions labels
+    clip ("dd icon" = "Add icon") — native chip width/truncation.
+  - `apple/properties_value.ml` is a twin of
+    `src/properties/properties_value.ml` — `cp` it after edits
+    (no dune copy rule).
+  - `appIcons` map (tabler→SF symbols) not registered; icons render
+    as placeholder glyphs in the picker.

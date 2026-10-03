@@ -550,3 +550,430 @@ let open_menu ~anchor ~owner_uuid ~owner_id ~owner_is_tag ~owner_title
   let body = menu_body ~with_title ~more_options m in
   ignore
     (Properties_popup.open_anchored ~cls:menu_root_class anchor body)
+
+(* ---------- declarative menu view ---------- *)
+
+(* The same config menu as a [Lui_elements.t]: a dropdown_menu anchored
+   under the owning row's stack, with form panes swapped in place (name
+   edit, choices list, default value) and type/ui-position as native
+   submenus. [close] releases the caller's open signal. *)
+
+open Lui_elements
+
+type menu_pane =
+  | MMain
+  | MName
+  | MChoices
+  | MDefaultValue
+  | MNodeTags
+  | MEditChoice of W.t
+
+let type_submenu m ~close =
+  submenu ~text:(I18n.t "property/type")
+    (List.map
+       (fun (ty, label_key) ->
+         menu_item ~text:(I18n.t label_key)
+           ~checked:(prop_type m = ty)
+           ~on_press:(fun _ ->
+             ignore
+               (D.upsert_property_no_name ~ident:(prop_ident m)
+                  ~schema:
+                    (W.Map
+                       [ ( W.Keyword "logseq.property/type"
+                         , W.Keyword ty )
+                       ])
+                  ());
+             S.refresh_all ();
+             close ())
+           [] )
+       type_names)
+
+let position_submenu m ~close =
+  submenu ~text:(I18n.t "property/ui-position")
+    (List.map
+       (fun (pos, label_key) ->
+         menu_item ~text:(I18n.t label_key)
+           ~on_press:(fun _ ->
+             match prop_uuid m with
+             | Some pu ->
+                 ignore
+                   (D.set_block_property ~block_uuid:pu
+                      ~ident:"logseq.property/ui-position"
+                      ~value:(W.Keyword pos));
+                 S.refresh_all ();
+                 close ()
+             | None -> ())
+           [])
+       positions)
+
+(* delete confirmation as a semantic dialog on the view-overlay stack *)
+let delete_confirm_dialog context m ~close =
+  let title = I18n.t "property/delete-from-node" in
+  let desc =
+    I18n.t1
+      (if m.owner_is_tag then "property/delete-from-tag-confirm"
+       else "property/delete-from-node-confirm")
+      (prop_title m)
+  in
+  let dismiss _ =
+    S.pop_view_overlay context
+  in
+  let confirm () =
+    S.pop_view_overlay context;
+    if D.row_is_class_schema m.row || m.owner_is_tag then
+      ignore
+        (D.class_remove_property ~class_uuid:m.owner_uuid
+           ~ident:(prop_ident m))
+    else
+      ignore
+        (D.remove_block_property ~block_uuid:m.owner_uuid
+           ~ident:(prop_ident m));
+    S.refresh_all ();
+    close ()
+  in
+  dialog ~text:title ~description:desc ~on_dismiss:dismiss
+    [ button ~text:(I18n.t "ui/cancel") ~variant:`outline
+        ~on_press:dismiss []
+    ; button ~text:(I18n.t "ui/confirm") ~variant:`destructive
+        ~on_press:(fun _ -> confirm ()) []
+    ]
+
+(* title/desc form for name pane + choice editing *)
+let text_form_view ~title_v ~desc_v ~title_placeholder ~desc_placeholder
+    on_save : t =
+ fun context parent ->
+  let sched = context.Lui_ui.ui_scheduler in
+  let title_st = Signal.state sched title_v in
+  let desc_st = Signal.state sched desc_v in
+  (column ~gap:8 ~padding:8
+    [ text_field ~placeholder:title_placeholder ~text:title_v
+        ~on_input:(fun ev ->
+          match ev with
+          | Lui_protocol.TextChanged (_, t) -> Signal.set title_st t
+          | _ -> ())
+        []
+    ; textarea ~placeholder:desc_placeholder ~text:desc_v
+        ~on_input:(fun ev ->
+          match ev with
+          | Lui_protocol.TextChanged (_, t) -> Signal.set desc_st t
+          | _ -> ())
+        []
+    ; row ~main:`end_
+        [ button ~text:(I18n.t "ui/save")
+            ~on_press:(fun _ ->
+              on_save (Signal.get_state title_st)
+                (Signal.get_state desc_st))
+            []
+        ]
+    ])
+    context parent
+
+let name_pane_view m ~close : t =
+  let desc_v =
+    match D.getf (prop_entity m) "logseq.property/description" with
+    | Some d -> D.ref_title d
+    | None -> ""
+  in
+  text_form_view ~title_v:(prop_title m) ~desc_v
+    ~title_placeholder:(I18n.t "property/name-placeholder")
+    ~desc_placeholder:(I18n.t "property/description-placeholder")
+    (fun new_name new_desc ->
+      let new_name = String.trim new_name
+      and new_desc = String.trim new_desc in
+      (if new_name <> "" && new_name <> prop_title m then
+         ignore
+           (D.upsert_property ~ident:(prop_ident m) ~schema:(W.Map [])
+              ~property_name:new_name ()));
+      (match prop_uuid m with
+       | Some pu when new_desc <> "" ->
+           ignore
+             (D.set_block_property ~block_uuid:pu
+                ~ident:"logseq.property/description"
+                ~value:(W.String new_desc))
+       | _ -> ());
+      S.refresh_all ();
+      close ())
+
+(* choices pane: scrollable list + add + per-choice edit *)
+let choices_pane_view m ~set_pane ~close : t =
+ fun context parent ->
+  let sched = context.Lui_ui.ui_scheduler in
+  let choices_st : W.t list Signal.state = Signal.state sched [] in
+  let refetch () =
+    ignore
+      (let* w = D.closed_values (W.Keyword (prop_ident m)) in
+       Runtime.signal_set choices_st (W.elems w);
+       Js.Promise.resolve ())
+  in
+  refetch ();
+  (* per-choice settings submenu (cljs "More settings" popover):
+     edit, set-as-default, tag scoping, delete *)
+  let choice_children choice =
+    let cid = D.entity_id_of choice in
+    let scoped_ids =
+      match D.getf choice "logseq.property/choice-classes" with
+      | Some w -> List.filter_map D.entity_id_of (W.elems w)
+      | None -> []
+    in
+    let owner_scoped =
+      match m.owner_id with
+      | Some oid -> List.mem oid scoped_ids
+      | None -> false
+    in
+    let scoped_elsewhere = scoped_ids <> [] && not owner_scoped in
+    [ menu_item ~text:(I18n.t "ui/edit")
+        ~on_press:(fun _ ->
+          Runtime.signal_set set_pane (MEditChoice choice))
+        []
+    ]
+    @ (match prop_type m, scoped_elsewhere, prop_uuid m, cid with
+       | ("default" | "number"), false, Some pu, Some cid ->
+           [ menu_item ~text:(I18n.t "property/set-default-choice")
+               ~on_press:(fun _ ->
+                 ignore
+                   (D.set_block_property ~block_uuid:pu
+                      ~ident:"logseq.property/default-value"
+                      ~value:(W.Int cid));
+                 S.refresh_all ();
+                 close ())
+               []
+           ]
+       | _ -> [])
+    @ (match m.owner_is_tag, m.owner_id, cid with
+       | true, Some owner_id, Some cid ->
+           [ menu_item
+               ~text:(I18n.t1 "property/hide-for-tag" m.owner_title)
+               ~on_press:(fun _ ->
+                 ignore
+                   (D.set_block_property ~block_uuid:m.owner_uuid
+                      ~ident:"logseq.property/choice-exclusions"
+                      ~value:(W.Int cid));
+                 S.refresh_all ();
+                 close ())
+               []
+           ]
+           @ (if owner_scoped then
+                [ menu_item
+                    ~text:
+                      (I18n.t1 "property/remove-scope-for-tag"
+                         m.owner_title)
+                    ~on_press:(fun _ ->
+                      ignore
+                        (D.set_choice_scope ~choice_id:cid
+                           ~class_id:owner_id ~add:false);
+                      S.refresh_all ();
+                      close ())
+                    []
+                ]
+              else if scoped_ids <> [] then
+                [ menu_item
+                    ~text:
+                      (I18n.t1 "property/use-choice-in-tag"
+                         m.owner_title)
+                    ~on_press:(fun _ ->
+                      ignore
+                        (D.set_choice_scope ~choice_id:cid
+                           ~class_id:owner_id ~add:true);
+                      S.refresh_all ();
+                      close ())
+                    []
+                ]
+              else [])
+       | _ -> [])
+    @ (match D.entity_uuid_of choice with
+       | Some cu ->
+           [ menu_item ~variant:`destructive ~text:(I18n.t "ui/delete")
+               ~on_press:(fun _ ->
+                 ignore
+                   (D.delete_closed_value ~ident:(prop_ident m)
+                      ~choice_uuid:cu);
+                 S.refresh_all ();
+                 close ())
+               []
+           ]
+       | None -> [])
+  in
+  (column ~gap:0
+     [ scroll ~max_height:240
+         [ keyed
+             ~source:(Signal.value choices_st)
+             ~key:(fun c ->
+               Option.value (D.entity_uuid_of c) ~default:(D.ref_title c))
+             ~cmp:String.compare
+             ~mount:(fun c_sig ->
+               submenu ~text:(D.ref_title (Signal.get c_sig))
+                 (choice_children (Signal.get c_sig)))
+         ]
+     ; menu_item ~icon:`plus ~text:(I18n.t "property/add-choice")
+         ~on_press:(fun _ ->
+           (* the add form replaces the pane body *)
+           Runtime.signal_set set_pane (MEditChoice (W.Map [])))
+         []
+     ])
+    context parent
+
+let edit_choice_view m choice ~set_pane ~close : t =
+  let is_add = D.entity_uuid_of choice = None in
+  let title_v = if is_add then "" else D.ref_title choice in
+  text_form_view ~title_v ~desc_v:""
+    ~title_placeholder:(I18n.t "property/title-placeholder")
+    ~desc_placeholder:(I18n.t "property/description-placeholder")
+    (fun v _d ->
+      if is_add then (
+        (* creating a choice while the owner is a tag scopes it to
+           that class (cljs ->closed-choice-scope-opts) *)
+        let scoped =
+          match m.owner_is_tag, m.owner_id with
+          | true, Some id -> Some id
+          | _ -> None
+        in
+        ignore
+          (let* _ =
+             D.upsert_closed_value ~ident:(prop_ident m) ~value:v
+               ?scoped_class_id:scoped ()
+           in
+           Js.Promise.resolve ());
+        S.refresh_all ();
+        close ())
+      else (
+        ignore
+          (let* _ =
+             D.upsert_closed_value ~ident:(prop_ident m)
+               ?choice_id:(D.entity_uuid_of choice) ~value:v ()
+           in
+           Js.Promise.resolve ());
+        S.refresh_all ();
+        Runtime.signal_set set_pane MChoices))
+
+let default_value_pane_view m ~close : t =
+ fun context parent ->
+  let sched = context.Lui_ui.ui_scheduler in
+  let editing = Signal.state sched false in
+  let buffer = Signal.state sched "" in
+  (column ~gap:0
+     [ if_ ~test:(Signal.map (fun e -> not e) (Signal.value editing))
+         (menu_item ~text:(I18n.t "property/set-default-value")
+            ~on_press:(fun _ -> Runtime.signal_set editing true) [])
+     ; if_ ~test:(Signal.value editing)
+         (text_field ~autofocus:true ?submit_on_enter:Properties_select.submit_on_enter_opt
+            ~text:""
+            ~on_input:(fun ev ->
+              match ev with
+              | Lui_protocol.TextChanged (_, t) -> Signal.set buffer t
+              | _ -> ())
+            ~on_submit:(fun _ ->
+              match prop_uuid m with
+              | Some pu ->
+                  ignore
+                    (D.create_property_text_block ~block_uuid:pu
+                       ~ident:"logseq.property/default-value"
+                       ~title:(Signal.get_state buffer)
+                       ~new_block_id:(Platform.random_uuid ()) ());
+                  S.refresh_all ();
+                  close ()
+              | None -> ())
+            [])
+     ])
+    context parent
+
+let menu_view ~owner_uuid ~owner_id ~owner_is_tag ~owner_title ~refresh
+    ~close row : t =
+ fun context parent ->
+  let sched = context.Lui_ui.ui_scheduler in
+  let pane = Signal.state sched MMain in
+  let m =
+    { owner_uuid; owner_id; owner_is_tag; owner_title; refresh; row
+    ; content = None
+    }
+  in
+  let toggle_view label ident_key =
+    let current = D.getb (prop_entity m) ident_key in
+    menu_item ~text:label ~checked:current
+      ~on_press:(fun _ ->
+        match prop_uuid m with
+        | Some pu ->
+            ignore
+              (D.set_block_property ~block_uuid:pu ~ident:ident_key
+                 ~value:(W.Bool (not current)));
+            S.refresh_all ();
+            close ()
+        | None -> ())
+      []
+  in
+  let main_items =
+    [ menu_item ~text:(I18n.t "property/name")
+        ~on_press:(fun _ -> Runtime.signal_set pane MName) []
+    ; type_submenu m ~close
+    ]
+    @ (if prop_type m = "node" then
+         [ menu_item ~text:(I18n.t "property/specify-node-tags")
+             ~on_press:(fun _ -> Runtime.signal_set pane MNodeTags) []
+         ]
+       else [])
+    @ [ menu_item ~text:(I18n.t "property/default-value")
+          ~on_press:(fun _ -> Runtime.signal_set pane MDefaultValue)
+          []
+      ; menu_item ~text:(I18n.t "property/available-choices")
+          ~on_press:(fun _ -> Runtime.signal_set pane MChoices) []
+      ; menu_item ~text:(I18n.t "property/multiple-values")
+          ~checked:(D.row_many m.row)
+          ~on_press:(fun _ ->
+            let many = D.row_many m.row in
+            ignore
+              (D.upsert_property_no_name ~ident:(prop_ident m)
+                 ~schema:
+                   (W.Map
+                      [ ( W.Keyword "db/cardinality"
+                        , W.Keyword (if many then "one" else "many") )
+                      ])
+                 ());
+            S.refresh_all ();
+            close ())
+          []
+      ; position_submenu m ~close
+      ; toggle_view (I18n.t "property/hide-by-default")
+          "logseq.property/hide?"
+      ; toggle_view (I18n.t "property/hide-empty-value")
+          "logseq.property/hide-empty-value"
+      ; menu_item ~text:(I18n.t "property/go-to-this-property")
+          ~on_press:(fun _ ->
+            (match prop_uuid m with
+             | Some u ->
+                 Runtime.mark_nav ();
+                 Platform.set_location_hash
+                   (Runtime.nav_hash ("#/page/" ^ u))
+             | None -> ());
+            close ())
+          []
+      ; menu_item ~variant:`destructive
+          ~text:
+            (I18n.t
+               (if m.owner_is_tag then "property/delete-from-tag"
+                else "property/delete-from-node"))
+          ~on_press:(fun _ ->
+            S.push_view_overlay context ~key:"property-delete"
+              ~view:(delete_confirm_dialog context m ~close)
+              ~on_escape:(fun () -> ()))
+          []
+      ]
+  in
+  (dropdown_menu ~anchor:`below ~anchor_alignment:`start
+     ~anchor_offset:4.0 ~min_width:200
+     ~on_dismiss:(fun _ -> close ())
+     [ dyn ~equal:(fun a b -> a = b)
+         (fun p ->
+            (* stable root: same-kind prop diffs across dyn branches
+               emit unsupported set-prop ops on native *)
+            column ~gap:0
+              [ (match p with
+                 | MMain -> column ~gap:0 main_items
+                 | MName -> name_pane_view m ~close
+                 | MChoices -> choices_pane_view m ~set_pane:pane ~close
+                 | MEditChoice c ->
+                     edit_choice_view m c ~set_pane:pane ~close
+                 | MDefaultValue -> default_value_pane_view m ~close
+                 | MNodeTags -> column ~gap:0 [])
+              ])
+         (Signal.value pane)
+     ])
+    context parent

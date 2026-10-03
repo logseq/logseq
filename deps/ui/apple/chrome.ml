@@ -267,6 +267,7 @@ let overlays (ms : Model.t Signal.signal) =
     ; Dialogs_view.render ms
     ; Cards_view.render ms
     ; Toasts_view.render ms
+    ; Properties_view.overlays
     ; dyn
         ~equal:(fun (a : Model.t) (b : Model.t) ->
           (* the menu reads only page scalars — comparing them skips the
