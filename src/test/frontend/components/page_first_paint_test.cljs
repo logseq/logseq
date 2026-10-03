@@ -149,6 +149,29 @@
     (is (= {:status :empty} (:paint (page-paint nil {})))
         "Non-page routes gate through the same hooks with nothing to load.")))
 
+(deftest page-render-config-uses-host-page-title-when-zoomed-test
+  (let [host-page {:block/uuid page-uuid
+                   :block/title "QA-E-Context-Zoom"
+                   :block/tags [{:db/ident :logseq.class/Page}]}
+        sidebar-page {:block/uuid page-uuid
+                      :block/title "QA-E-Context-A"
+                      :block/tags [{:db/ident :logseq.class/Page}]}
+        zoomed-block {:block/uuid parent-uuid
+                      :block/title "Milestone"
+                      :block/page {:db/id 1
+                                   :block/uuid page-uuid
+                                   :block/title "QA-E-Context-Zoom"
+                                   :block/name "qa-e-context-zoom"}}]
+    (is (= "QA-E-Context-Zoom"
+           (:current-page-title (#'page/page-render-config host-page {} false)))
+        "Page routes keep the rendered page title.")
+    (is (= "QA-E-Context-A"
+           (:current-page-title (#'page/page-render-config sidebar-page {:sidebar? true} false)))
+        "Sidebar pages still supply their own title.")
+    (is (= "QA-E-Context-Zoom"
+           (:current-page-title (#'page/page-render-config zoomed-block {} false)))
+        "Zoomed blocks use the host page, not the block title.")))
+
 (deftest only-page-routes-hold-the-previous-view-test
   (let [page-route {:path (str "/page/" page-uuid)
                     :data {:name :page}
