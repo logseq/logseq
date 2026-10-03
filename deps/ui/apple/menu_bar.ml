@@ -8,7 +8,8 @@ let install () =
   in
   route "menu-toggle-left-sidebar" Action.Toggle_left_sidebar;
   route "menu-toggle-right-sidebar" Action.Toggle_right_sidebar;
-  route "menu-toggle-search" Action.Toggle_search;
+  Platform.add_event_listener "menu-toggle-search" (fun _ ->
+      Cmdk_state.open_latest ());
   Platform.add_event_listener "menu-toggle-wide-mode" (fun _ ->
       Settings_state.toggle_wide_mode ());
   Platform.add_event_listener "menu-open-settings" (fun payload ->

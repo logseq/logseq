@@ -575,6 +575,11 @@ let rect_height (r : rect) : float =
 let window_inner_height () = Host.inner_height ()
 let window_inner_width () = Host.inner_width ()
 
+(* The semantic topbar's dots button records its resolved anchor here on
+   each press (button right edge, bottom + 4) so popups that re-anchor
+   to the same trigger (appearance) can read it without a DOM query. *)
+let toolbar_dots_pos : (float * float) option ref = ref None
+
 (* ---------- timers ---------- *)
 
 let set_timeout (f : unit -> unit) (ms : int) : unit =

@@ -85,7 +85,9 @@ private let platformRequest: PlatformRequestCallback = { data, length in
   init(extensionRegistry: LUIAppleExtensionRegistry) throws {
     platform = LogseqPlatform()
     backend = try LUIAppleBackend(
-      appIcons: [:],
+      // `app:` icon names referenced from OCaml semantic elements (the
+      // built-in icon table has no house glyph for the Home button).
+      appIcons: ["home": .systemName("house")],
       extensionRegistry: extensionRegistry
     )
     backend.onEvent = { [weak self] event in self?.handle(event) }

@@ -24,53 +24,80 @@ let skip_to_main =
   Logseq_dom.dom ~key:"skip" ~tag:"button" ~id:"skip-to-main"
     ~text:(I18n.t "nav/skip-to-main-content") []
 
-(* cljs shui/button :ghost :size :sm — tooltip-wrapped buttons carry no
-   title attr; extra classes sort alphabetically into the class list *)
-let ghost_btn_cls ?(mid = "") ?(tail = "") () =
-  "active:opacity-80 as-ghost box-content " ^ mid
-  ^ "cursor-pointer disabled:opacity-50 disabled:pointer-events-none \
-     focus-visible:outline-none focus-visible:ring-2 \
-     focus-visible:ring-offset-2 focus-visible:ring-ring font-medium gap-1 \
-     h-6 hover:bg-secondary/70 hover:text-secondary-foreground inline-flex \
-     items-center justify-center overflow-hidden p-1 ring-offset-background \
-     rounded-md select-none text-sm " ^ tail
-  ^ "transition-colors ui__button w-6 whitespace-nowrap"
+(* ---- native topbar ----
 
-let icon_btn ~key ~id ~cls ~icon ~on_click =
-  Logseq_dom.dom ~key ~tag:"button" ~id
-    ~style_class:cls
-    ~attrs:[ ("type", "button") ]
-    ~events:"click"
-    ~on_dom_event:(fun name payload -> if name = "click" then on_click payload)
-    [ Icons.icon ~size:20. ~cls:"" icon ]
+   LUI `toolbar` elements with `placement` hoist into the real macOS
+   window toolbar, where macOS 26 draws its liquid-glass items — the
+   same chrome Out gets from ToolbarItem groups. Leading (.navigation)
+   = sidebar toggle; trailing (.primary-action) = search first, then
+   home/dots/right-sidebar. The DOM .cp__header is gone; rtc/plugin
+   toolbar items keep hidden DOM mounts below so their emitters stay
+   live. *)
 
-let search_button =
-  icon_btn ~key:"search-btn" ~id:"search-button" ~cls:(ghost_btn_cls ())
-    ~icon:"search"
-    ~on_click:(fun _ -> Runtime.send Action.Toggle_search)
+let tb_btn ~key ?(acc = "") ~icon ~label on_press =
+  button ~key ~icon ~label
+    ~accessibility_identifier:(if acc = "" then key else acc)
+    ~on_press:(fun _ -> on_press ()) []
 
-let dots_button =
-  Logseq_dom.dom ~key:"dots-btn" ~tag:"button"
-    ~style_class:(ghost_btn_cls ~tail:"toolbar-dots-btn " ())
-    ~attrs:[ ("type", "button") ]
-    ~events:"click"
-    ~on_dom_event:(fun name _ ->
-      (* cljs anchors the dropdown to the trigger's right edge, not
-         the click position *)
-      if name = "click" then
-        match
-          Dom_ext.doc_query_selector ".toolbar-dots-btn"
-        with
-        | Some el ->
-            let r = Dom_ext.bounding_rect el in
-            Runtime.send
-              (Action.Page_menu_set
-                 (Some
-                    ( Dom_ext.rect_right r
-                    , Dom_ext.rect_bottom r +. 4.
-                    , true )))
-        | None -> ())
-    [ Icons.icon ~size:20. ~cls:"" "dots" ]
+let toggle_sidebar_btn =
+  tb_btn ~key:"left-menu" ~icon:`panel_left ~label:"Toggle Left Sidebar"
+    (fun () -> Runtime.send Action.Toggle_left_sidebar)
+
+(* the DOM header's search button opened via the cmdk DOM-click
+   handler; the semantic button calls the palette opener directly
+   (Action.Toggle_search is a no-op reducer on native) *)
+let search_btn =
+  tb_btn ~key:"search-btn" ~acc:"search-button" ~icon:`search
+    ~label:"Search" (fun () -> Cmdk_state.open_latest ())
+
+(* cljs anchors the dropdown to the trigger's right edge. The dots sits
+   in the hoisted window toolbar, whose items' reported frames are in
+   the toolbar's own coordinate space — unreliable — so the anchor is
+   the fixed trailing position: menu right edge just left of the last
+   button, just under the toolbar. The resolved anchor is recorded in
+   Dom_ext.toolbar_dots_pos for the appearance item, which re-anchors
+   to the same trigger. *)
+let dots_btn =
+  button ~key:"dots-btn" ~icon:`ellipsis ~label:"Page Menu"
+    ~accessibility_identifier:"toolbar-dots-btn"
+    ~on_press:(fun _ ->
+      let pos =
+        Some (Dom_ext.window_inner_width () -. 48., 48.)
+      in
+      Dom_ext.toolbar_dots_pos := pos;
+      Runtime.send
+        (Action.Page_menu_set
+           (Option.map (fun (x, y) -> (x, y, true)) pos)))
+    []
+
+(* cljs header.cljs hides home on the :home route; a toolbar can't host
+   a dyn-wrapped child (it hoists as a zero-size item), so the button
+   stays and the press no-ops there *)
+let home_btn ms =
+  button ~key:"home-btn" ~icon:(`app "home") ~label:"Home"
+    ~accessibility_identifier:"home-btn"
+    ~on_press:(fun _ ->
+      match (Signal.get ms).Model.route with
+      | Model.Home -> ()
+      | _ ->
+          Platform.set_location_hash "#/";
+          Platform.dispatch "ls:navigate" Js.Json.null)
+    []
+
+(* cljs open-right-sidebar! seeds a "contents" item when the sidebar
+   is empty (state/sidebar-add-content-when-open!) *)
+let right_toggle_btn ms =
+  tb_btn ~key:"rs-toggle" ~icon:`panel_right ~label:"Toggle Right Sidebar"
+    (fun () ->
+      Runtime.send Action.Toggle_right_sidebar;
+      Sidebar_state.ensure_contents (Sidebar_state.ensure ms))
+
+let topbar (ms : Model.t Signal.signal) : t list =
+  [ toolbar ~key:"tb-leading" ~placement:"navigation"
+      ~label:"Window Toolbar" [ toggle_sidebar_btn ]
+  ; toolbar ~key:"tb-trailing" ~placement:"primary-action"
+      ~label:"Actions" [ search_btn; home_btn ms; dots_btn; right_toggle_btn ms ]
+  ]
 
 (* components/rtc/indicator.cljs — cloud status button + hidden rtc-tx
    element the e2e reads EDN from. Visible once the worker broadcasts
@@ -119,57 +146,12 @@ let rtc_indicator (ms : Model.t Signal.signal) : t =
             ])
     (Signal.map (fun (m : Model.t) -> m.rtc) ms)
 
-let left_menu_button =
-  icon_btn ~key:"left-menu-btn" ~id:"left-menu"
-    ~cls:(ghost_btn_cls ~mid:"cp__header-left-menu " ())
-    ~icon:"menu-2"
-    ~on_click:(fun _ -> Runtime.send Action.Toggle_left_sidebar)
-
-(* cljs header.cljs: home button hidden on the :home route and on a
-   custom home page *)
-let home_button ms =
-  dyn
-    ~equal:(fun (a : Model.t) (b : Model.t) -> a.route = b.route)
-    (fun (m : Model.t) ->
-      match m.route with
-      | Model.Home -> Logseq_dom.nothing
-      | _ ->
-          icon_btn ~key:"home-btn" ~id:"" ~cls:(ghost_btn_cls ())
-            ~icon:"home" ~on_click:(fun _ ->
-              Platform.set_location_hash "#/";
-              Platform.dispatch "ls:navigate" Js.Json.null))
-    ms
-
-(* cljs open-right-sidebar! seeds a "contents" item when the sidebar
-   is empty (state/sidebar-add-content-when-open!) *)
-let right_toggle_button ms =
-  icon_btn ~key:"rs-toggle" ~id:""
-    ~cls:(ghost_btn_cls ~tail:"toggle-right-sidebar " ())
-    ~icon:"layout-sidebar-right"
-    ~on_click:(fun _ ->
-      Runtime.send Action.Toggle_right_sidebar;
-      Sidebar_state.ensure_contents (Sidebar_state.ensure ms))
-
-let header (ms : Model.t Signal.signal) =
-  Logseq_dom.dom ~key:"head" ~tag:"div" ~id:"head"
-    ~style_class:"cp__header drag-region"
-    [ Logseq_dom.dom ~key:"head-inner"
-        ~style_class:"l flex items-center drag-region"
-        [ left_menu_button; search_button ]
-    ; Logseq_dom.dom ~key:"head-r"
-        ~style_class:
-          "r flex drag-region justify-between items-center gap-2 overflow-x-hidden w-full"
-        [ Logseq_dom.dom ~key:"head-crumb" ~style_class:"flex flex-1" []
-        ; Logseq_dom.dom ~key:"head-acts" ~style_class:"flex items-center"
-            [ rtc_indicator ms
-            ; home_button ms
-            ; (* cljs header.cljs hook-ui-items :toolbar renders
-                 .ui-items-container only when a plugin actually
-                 contributes a toolbar item *)
-              Left_sidebar_view.plugins_toolbar ms
-            ; dots_button; right_toggle_button ms ]
-        ]
-    ]
+(* rtc/plugin toolbar items have no semantic topbar slots yet — keep
+   their DOM mounts hidden so emitters and the rtc-tx e2e element stay
+   alive. *)
+let hidden_chrome (ms : Model.t Signal.signal) : t =
+  Logseq_dom.dom ~key:"chrome-hidden" ~style_class:"hidden"
+    [ rtc_indicator ms; Left_sidebar_view.plugins_toolbar ms ]
 
 (* cljs right_sidebar.cljs: #right-sidebar.cp__right-sidebar.h-screen
    carries .open/.closed; only renders contents while open *)
@@ -468,7 +450,7 @@ let shell (ms : Model.t Signal.signal) : t =
               (Logseq_dom.class_signal ms (fun (m : Model.t) ->
                    if m.left_sidebar_open then "overflow-hidden"
                    else "w-full"))
-            [ header ms; main_content ms ]
+            (topbar ms @ [ hidden_chrome ms; main_content ms ])
         ; right_sidebar ms
         ; Pdf.container_el ~key:"asc" ~id:"app-single-container"
         ]

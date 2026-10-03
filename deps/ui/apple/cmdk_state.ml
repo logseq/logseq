@@ -81,11 +81,14 @@ let initial_view =
   ; recents = []; tip = 0 }
 
 let latest_vs : view Signal.signal option ref = ref None
+let latest_t : t option ref = ref None
 
 let make scheduler : t =
   let vs = Signal.state scheduler initial_view in
+  let st = { vs; gen = ref 0 } in
   latest_vs := Some vs.Signal.state_signal;
-  { vs; gen = ref 0 }
+  latest_t := Some st;
+  st
 
 let get st = Signal.get st.vs.state_signal
 
@@ -826,6 +829,11 @@ let open_palette ?(move = false) st =
         if tries > 0 then Dom_ext.set_timeout (fun () -> focus_input (tries - 1)) 20
   in
   Dom_ext.set_timeout (fun () -> focus_input 20) 0
+
+(* Semantic triggers (toolbar search button, menubar) have no DOM node
+   to click through — open the current palette instance directly. *)
+let open_latest ?(move = false) () =
+  match !latest_t with Some st -> open_palette ~move st | None -> ()
 
 let close st =
   let v = get st in
