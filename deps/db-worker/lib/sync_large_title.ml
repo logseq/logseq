@@ -295,15 +295,32 @@ let rehydrate_large_titles repo ~(graph_id : string option)
             (List.map
                (fun (e, obj_wire) ->
                   let obj_value = Ds_wire.value_of_transit obj_wire in
-                  (* cljs calls resolve-large-title-item-eid outside any
-                     try — errors propagate; only a nil result is
-                     entity-missing, and ex-data carries :obj *)
-                  let eid =
+                  (* eids must resolve on the conn the title lands on: a
+                     pending-created entity's display eid is unallocated
+                     on the server conn — writing there would
+                     materialize a phantom entity (or, worse, hit an
+                     eid a server entity took later). *)
+                  let confirmed_db =
+                    match Sync_state.confirmed_conn repo with
+                    | Some c -> Conn.db c
+                    | None -> Conn.db conn
+                  in
+                  let resolve_on (d : db) : int option =
                     match e with
-                    | Wire.Int n -> Some n
+                    | Wire.Int n -> (
+                        match Datascript.entity d (Entity_id n) with
+                        | Some _ -> Some n
+                        | None -> None)
                     | _ ->
-                        resolve_large_title_item_eid (Conn.db conn) ~e
-                          ~obj:obj_value
+                        resolve_large_title_item_eid d ~e ~obj:obj_value
+                  in
+                  let eid, server_writes =
+                    match resolve_on confirmed_db with
+                    | Some eid -> (Some eid, true)
+                    | None ->
+                        (* display-only entity — the rehydrate belongs
+                           to the projection alone *)
+                        (resolve_on (Conn.db conn), false)
                   in
                   match eid with
                   | None ->
@@ -315,17 +332,33 @@ let rehydrate_large_titles repo ~(graph_id : string option)
                   | Some eid ->
                       download_fn ~repo ~graph_id ~obj:obj_wire ~aes_key
                       >>= fun title -> (
-                      ignore
-                        (Db_transact.transact
-                           (Option.value (Sync_state.confirmed_conn repo)
-                              ~default:conn)
-                           [ Wire.Array
-                               [ Wire.Keyword "db/add"; Wire.Int eid
-                               ; Wire.Keyword "block/title"
-                               ; Wire.String title ] ]
-                           [ "rtc-tx?", Bool true
-                           ; "persist-op?", Bool false
-                           ; "op", Keyword "large-title-rehydrate" ]);
+                      let tx_data =
+                        [ Wire.Array
+                            [ Wire.Keyword "db/add"; Wire.Int eid
+                            ; Wire.Keyword "block/title"
+                            ; Wire.String title ] ]
+                      and tx_meta =
+                        [ "rtc-tx?", Bool true
+                        ; "persist-op?", Bool false
+                        ; "op", Keyword "large-title-rehydrate" ]
+                      in
+                      if server_writes then
+                        ignore
+                          (Db_transact.transact
+                             (Option.value (Sync_state.confirmed_conn repo)
+                                ~default:conn)
+                             tx_data tx_meta);
+                      (* confirmed data must also land on the display
+                         conn — the server conn's only listener is
+                         checksum, so without this the UI keeps showing
+                         the offloaded placeholder until the next remote
+                         tx rebuilds the projection *)
+                      (match Sync_state.server_conn repo with
+                       | Some _ ->
+                           ignore (Db_transact.transact conn tx_data tx_meta)
+                       | None when not server_writes ->
+                           ignore (Db_transact.transact conn tx_data tx_meta)
+                       | None -> ());
                       Db_worker_effect.pure ()))
                items)
           >>= fun _ -> Db_worker_effect.pure ())

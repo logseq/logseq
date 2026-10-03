@@ -570,6 +570,7 @@ let close_db_aux repo =
     (fun (kind, _) -> Worker_state.drop_sqlite_conn_of repo kind) conns;
   Worker_state.drop_vector_index repo;
   attempt (fun () -> Worker_state.drop_datascript_conn repo);
+  attempt (fun () -> Sync_state.drop_server_conn repo);
   Worker_state.drop_pending_local_tx_count repo;
   Endpoint_search.clear_search_index_builds repo;
   List.iter (fun (_, db) -> attempt (fun () -> Sqlite.close db)) conns;
@@ -767,16 +768,26 @@ let () =
                 in
                 let new_db = Datascript.from_serializable sdb in
                 (* cljs swaps the old conn's eavt storage onto the new db so
-                   kvs persistence keeps writing to the same sqlite file. *)
-                let new_db' =
-                  match Datascript.storage (Datascript.db conn) with
-                  | Some st -> { new_db with storage_ref = Some st }
-                  | None -> new_db
+                   kvs persistence keeps writing to the same sqlite file. On
+                   remote graphs the durable base is the server conn — reset
+                   it first, then the display (its own storage wrapper keeps
+                   it non-persistent), so the reset can't be silently
+                   reverted by the next rebuild. *)
+                let reset_to (conn' : Datascript.conn) : unit =
+                  let new_db' =
+                    match Datascript.storage (Datascript.db conn') with
+                    | Some st -> { new_db with storage_ref = Some st }
+                    | None -> new_db
+                  in
+                  ignore
+                    (Datascript.reset_conn
+                       ~tx_meta:[ "reset-conn!", Bool true ]
+                       conn' new_db')
                 in
-                ignore
-                  (Datascript.reset_conn
-                     ~tx_meta:[ "reset-conn!", Bool true ]
-                     conn new_db');
+                (match Sync_state.server_conn repo with
+                 | Some server_conn -> reset_to server_conn
+                 | None -> ());
+                reset_to conn;
                 Db_worker_effect.pure Wire.nil
             | None -> Db_worker_effect.pure Wire.nil)))
 
