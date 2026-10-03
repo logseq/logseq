@@ -4,9 +4,12 @@
             [cljs.test :refer [deftest is testing]]
             [datascript.core :as d]
             [frontend.worker.commands :as commands]
+            [frontend.worker.pipeline :as worker-pipeline]
+            [logseq.db :as ldb]
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.property.build :as db-property-build]
-            [logseq.db.test.helper :as db-test]))
+            [logseq.db.test.helper :as db-test]
+            [logseq.outliner.property :as outliner-property]))
 
 (defn- get-next-time
   "Test helper. Three-arg form uses the `:double-plus` default (preserves prior
@@ -463,3 +466,172 @@
               "tx data is returned so the property's default-value block gets written")
           (is (= 2 (count tx))
               "tx has the value block and the property-default wiring"))))))
+
+(def ^:private empty-placeholder-tz-cases
+  "Date-picker 'today, no time' values at 12:00 local, as UTC instants.
+  Matches the issue 1353 measurements in UTC and Asia/Tokyo."
+  [{:label "UTC"
+    :now (t/date-time 2026 9 27 12 0)
+    :today-ms (tc/to-long (t/date-time 2026 9 27 0 0))
+    :tomorrow-ms (tc/to-long (t/date-time 2026 9 28 0 0))}
+   {:label "Asia/Tokyo"
+    :now (t/date-time 2026 9 27 3 0)
+    :today-ms (tc/to-long (t/date-time 2026 9 26 15 0))
+    :tomorrow-ms (tc/to-long (t/date-time 2026 9 27 15 0))}])
+
+(defn- status-ident
+  [entity]
+  (:db/ident (:logseq.property/status entity)))
+
+(defn- create-repeating-task-conn
+  "Task with default daily ++ repeat. `temporal-property` is the date picker
+  that had Repeat task ticked."
+  [{:keys [deadline scheduled temporal-property]}]
+  (let [conn (db-test/create-conn-with-blocks
+              {:pages-and-blocks
+               [{:page {:block/title "Inbox"}
+                 :blocks [{:block/title "repeating task"
+                           :build/tags [:logseq.class/Task]
+                           :build/properties
+                           (cond-> {:logseq.property.repeat/repeated? true
+                                    :logseq.property.repeat/recur-frequency 1
+                                    :logseq.property.repeat/recur-unit :logseq.property.repeat/recur-unit.day
+                                    :logseq.property/status :logseq.property/status.todo}
+                             deadline (assoc :logseq.property/deadline deadline)
+                             scheduled (assoc :logseq.property/scheduled scheduled))}]}]})
+        block (db-test/find-block-by-content @conn "repeating task")]
+    (d/transact! conn [[:db/add (:db/id block)
+                        :logseq.property.repeat/repeat-type
+                        :logseq.property.repeat/repeat-type.double-plus]
+                       [:db/add (:db/id block)
+                        :logseq.property.repeat/temporal-property
+                        temporal-property]])
+    {:conn conn :block block}))
+
+(defn- run-repeat-after-done
+  "Mark the task Done and return the repeat-command tx, with `t/now` pinned."
+  [conn block now]
+  (let [report (d/transact! conn [[:db/add (:db/id block)
+                                   :logseq.property/status
+                                   :logseq.property/status.done]])]
+    (with-redefs [t/now (fn [] now)]
+      (doall (commands/run-commands report)))))
+
+(defn- complete-repeating-task-via-pipeline!
+  "Checkbox path: set-block-property status Done through the worker pipeline."
+  [conn block now]
+  (ldb/register-transact-pipeline-fn! worker-pipeline/transact-pipeline)
+  (try
+    (with-redefs [t/now (fn [] now)]
+      (outliner-property/set-block-property! conn
+                                             [:block/uuid (:block/uuid block)]
+                                             :logseq.property/status
+                                             :logseq.property/status.done))
+    (finally
+      (ldb/register-transact-pipeline-fn! identity))))
+
+(deftest get-next-time-treats-empty-placeholder-as-absent-test
+  (testing "Date-picker delete writes the placeholder, not a date"
+    (is (nil? (get-next-time :logseq.property/empty-placeholder day-unit 1))
+        "scalar datetime properties store the keyword")
+    (let [conn (db-test/create-conn)]
+      (is (nil? (get-next-time (d/entity @conn :logseq.property/empty-placeholder) day-unit 1))
+          "ref-typed values store the placeholder entity, not the keyword"))))
+
+(deftest reschedule-property-idents-skips-empty-placeholder-test
+  (testing "Companion Scheduled cleared with the trash button is absent"
+    (is (= [:logseq.property/deadline]
+           (#'commands/reschedule-property-idents
+            {:logseq.property.repeat/temporal-property {:db/ident :logseq.property/deadline}
+             :logseq.property/deadline 1
+             :logseq.property/scheduled :logseq.property/empty-placeholder}))))
+  (testing "Companion Deadline cleared with the trash button is absent"
+    (is (= [:logseq.property/scheduled]
+           (#'commands/reschedule-property-idents
+            {:logseq.property.repeat/temporal-property {:db/ident :logseq.property/scheduled}
+             :logseq.property/scheduled 1
+             :logseq.property/deadline :logseq.property/empty-placeholder}))))
+  (testing "Fallback listing also drops empty-placeholder"
+    (is (= [:logseq.property/deadline]
+           (#'commands/existing-repeat-temporal-property-idents
+            {:logseq.property/deadline 1
+             :logseq.property/scheduled :logseq.property/empty-placeholder})))))
+
+(deftest repeating-task-cleared-dates-are-absent-test
+  (doseq [{:keys [label now today-ms tomorrow-ms]} empty-placeholder-tz-cases]
+    (testing label
+      (testing "Cleared Scheduled, repeat on Deadline: Todo with Deadline tomorrow"
+        (let [{:keys [conn block]} (create-repeating-task-conn
+                                    {:deadline today-ms
+                                     :scheduled today-ms
+                                     :temporal-property :logseq.property/deadline})
+              _ (outliner-property/set-block-property! conn
+                                                       [:block/uuid (:block/uuid block)]
+                                                       :logseq.property/scheduled
+                                                       :logseq.property/empty-placeholder)
+              tx (run-repeat-after-done conn block now)]
+          (is (= tomorrow-ms
+                 (tx-add-value tx (:db/id block) :logseq.property/deadline)))
+          (is (nil? (tx-add-value tx (:db/id block) :logseq.property/scheduled))
+              "empty-placeholder Scheduled is not advanced")
+          (is (= :logseq.property/status.todo
+                 (tx-add-value tx (:db/id block) :logseq.property/status)))))
+
+      (testing "Removing Scheduled entirely matches clearing it"
+        (let [{:keys [conn block]} (create-repeating-task-conn
+                                    {:deadline today-ms
+                                     :temporal-property :logseq.property/deadline})
+              tx (run-repeat-after-done conn block now)]
+          (is (= tomorrow-ms
+                 (tx-add-value tx (:db/id block) :logseq.property/deadline)))
+          (is (= :logseq.property/status.todo
+                 (tx-add-value tx (:db/id block) :logseq.property/status)))))
+
+      (testing "Repeating Deadline itself cleared: checkbox applies, no date throw"
+        (let [{:keys [conn block]} (create-repeating-task-conn
+                                    {:deadline today-ms
+                                     :temporal-property :logseq.property/deadline})
+              _ (outliner-property/set-block-property! conn
+                                                       [:block/uuid (:block/uuid block)]
+                                                       :logseq.property/deadline
+                                                       :logseq.property/empty-placeholder)
+              tx (run-repeat-after-done conn block now)]
+          (is (nil? (tx-add-value tx (:db/id block) :logseq.property/deadline))
+              "No date to advance")
+          (is (= :logseq.property/status.todo
+                 (tx-add-value tx (:db/id block) :logseq.property/status)))))
+
+      (testing "Cleared Deadline, repeat on Scheduled: Todo with Scheduled tomorrow"
+        (let [{:keys [conn block]} (create-repeating-task-conn
+                                    {:deadline today-ms
+                                     :scheduled today-ms
+                                     :temporal-property :logseq.property/scheduled})
+              _ (outliner-property/set-block-property! conn
+                                                       [:block/uuid (:block/uuid block)]
+                                                       :logseq.property/deadline
+                                                       :logseq.property/empty-placeholder)
+              tx (run-repeat-after-done conn block now)]
+          (is (= tomorrow-ms
+                 (tx-add-value tx (:db/id block) :logseq.property/scheduled)))
+          (is (nil? (tx-add-value tx (:db/id block) :logseq.property/deadline)))
+          (is (= :logseq.property/status.todo
+                 (tx-add-value tx (:db/id block) :logseq.property/status))))))))
+
+(deftest repeating-task-checkbox-after-cleared-scheduled-test
+  (testing "Worker pipeline applies the status change instead of discarding the tx"
+    (doseq [{:keys [label now today-ms tomorrow-ms]} empty-placeholder-tz-cases]
+      (testing label
+        (let [{:keys [conn block]} (create-repeating-task-conn
+                                    {:deadline today-ms
+                                     :scheduled today-ms
+                                     :temporal-property :logseq.property/deadline})]
+          (outliner-property/set-block-property! conn
+                                                 [:block/uuid (:block/uuid block)]
+                                                 :logseq.property/scheduled
+                                                 :logseq.property/empty-placeholder)
+          (complete-repeating-task-via-pipeline! conn block now)
+          (let [task (d/entity @conn (:db/id block))]
+            (is (= :logseq.property/status.todo (status-ident task)))
+            (is (= tomorrow-ms (:logseq.property/deadline task)))
+            (is (= :logseq.property/empty-placeholder
+                   (:logseq.property/scheduled task)))))))))
