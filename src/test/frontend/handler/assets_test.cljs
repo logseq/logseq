@@ -102,6 +102,40 @@
     (is (= "assets:///C/logseq__colon/Users/charlie/graph/assets/test.png"
            (assets/normalize-asset-resource-url "C:/Users/charlie/graph/assets/test.png")))))
 
+(deftest file-path->assets-url-does-not-double-encode-percent-spaces-test
+  (with-redefs [util/electron? (constantly true)
+                config/get-repo-dir (constantly "/workspace/graph")]
+    (let [expected "assets:///workspace/shared/logseq-qa/fixtures/path%20spaces/qa%20image.png"]
+      (testing "percent-encoded absolute path encodes %20 once"
+        (is (= expected
+               (assets/file-path->assets-url
+                "/workspace/shared/logseq-qa/fixtures/path%20spaces/qa%20image.png"))))
+      (testing "literal-space absolute path encodes %20 once"
+        (is (= expected
+               (assets/file-path->assets-url
+                "/workspace/shared/logseq-qa/fixtures/path spaces/qa image.png"))))
+      (testing "percent-encoded file URL encodes %20 once"
+        (is (= expected
+               (assets/file-path->assets-url
+                "file:///workspace/shared/logseq-qa/fixtures/path%20spaces/qa%20image.png"))))
+      (testing "literal-space file URL encodes %20 once"
+        (is (= expected
+               (assets/file-path->assets-url
+                "file:///workspace/shared/logseq-qa/fixtures/path spaces/qa image.png"))))
+      (testing "already-encoded assets URL is not encoded again"
+        (is (= expected
+               (assets/file-path->assets-url expected))))
+      (testing "literal % that is not a valid escape stays literal"
+        (is (= "assets:///workspace/shared/logseq-qa/fixtures/50%25ba%25zz.png"
+               (assets/file-path->assets-url
+                "/workspace/shared/logseq-qa/fixtures/50%ba%zz.png"))))
+      (testing "file URL keeps a literal %20 filename"
+        (is (= "assets:///tmp/a%2520b.png"
+               (assets/file-path->assets-url "file:///tmp/a%2520b.png"))))
+      (testing "an undecodable filename does not block escapes in other segments"
+        (is (= "assets:///tmp/my%20photos/50%25ba.png"
+               (assets/file-path->assets-url "/tmp/my%20photos/50%ba.png")))))))
+
 (deftest make-asset-url-electron-test
   (async done
     (with-redefs [util/electron? (constantly true)
