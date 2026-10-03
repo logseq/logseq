@@ -173,7 +173,7 @@
   #{"page" "blocks" "tags" "properties" "declared" "all"})
 
 (declare page-stats-uuid-pattern page-stats-field
-         structural-property-value? query-result-rows get-block-uuids)
+         structural-property-value? query-result-rows get-block-uuids uuid-query-input)
 
     (defn inspect-page
       [api-fn args]
@@ -286,7 +286,7 @@
                  [?tag :block/uuid ?uuid]
                  [?tag :block/tags ?class]
                  [?class :db/ident :logseq.class/Tag]]"]
-            (p/let [result (api-fn "logseq.DB.datascriptQuery" [query tag-uuid])
+            (p/let [result (api-fn "logseq.DB.datascriptQuery" [query (uuid-query-input tag-uuid)])
             tags (js->clj result :keywordize-keys true)
             tags (if (and (= 1 (count tags)) (vector? (first tags)))
                (first tags)
@@ -298,9 +298,9 @@
       (let [tag-uuid (aget args "tag_uuid")
             query "[:find [(pull ?holder [:block/uuid :block/title :block/name
                                            :block/page]) ...]
-                     :in $ ?tag
-                     :where [?holder :block/tags ?tag]]"]
-        (p/let [result (api-fn "logseq.DB.datascriptQuery" [query tag-uuid])
+                     :in $ ?tag-uuid
+                     :where [?tag :block/uuid ?tag-uuid] [?holder :block/tags ?tag]]"]
+        (p/let [result (api-fn "logseq.DB.datascriptQuery" [query (uuid-query-input tag-uuid)])
                 users (js->clj result :keywordize-keys true)]
           (if (and (= 1 (count users)) (vector? (first users)))
             (first users)
@@ -309,19 +309,21 @@
     (defn get-block-uuids
       [api-fn args]
       (let [page-uuid (aget args "page_uuid")
-            query "[:find ?uuid ?title ?order
-                     :in $ ?page-uuid
-                     :where
-                     [?page :block/uuid ?page-uuid]
-                     [?block :block/parent+ ?page]
-                     [?block :block/uuid ?uuid]
-                     [?block :block/title ?title]
-                     [?block :block/order ?order]]"]
-        (p/let [result (api-fn "logseq.DB.datascriptQuery" [query page-uuid])
-                rows (js->clj result :keywordize-keys true)]
-          (mapv (fn [[uuid title order]]
-                  {:uuid uuid :title title :order order :page_uuid page-uuid})
-          rows))))
+            query (str "[:find (pull ?root [:db/id :block/uuid :block/title :block/name :block/order "
+                       "{:block/parent [:db/id :block/uuid]} {:block/page [:db/id :block/uuid]} "
+                       "{:block/_parent ...}]) . :where [?root :block/uuid " (uuid-query-input page-uuid) "]]")]
+        (p/let [result (api-fn "logseq.DB.datascriptQuery" [query])
+                root (js->clj result :keywordize-keys true)]
+          (when-not root
+            (throw (js/Error. (str "No entity exists with exact UUID " page-uuid))))
+          (when-not (or (:name root) (:block/name root))
+            (throw (js/Error. "UUID identifies a block, not a page")))
+          (letfn [(descendants [node]
+                    (mapcat (fn [child]
+                              (cons (dissoc child :_parent) (descendants child)))
+                            (:_parent node)))]
+            (mapv #(assoc % :page_uuid page-uuid)
+                  (sort-by #(str (:order %)) (descendants root)))))))
 
     (defn block-tree-result
       [block-uuid root rows max-depth max-nodes]
@@ -340,21 +342,26 @@
         :else
         (let [children (group-by :parent_uuid rows)
               count* (atom 0)
-              truncated* (atom false)]
+            truncated* (atom false)
+            visited* (atom #{})]
           (letfn [(build [node depth]
+              (when (contains? @visited* (:uuid node))
+                (throw (js/Error. "Block hierarchy contains a cycle")))
+              (swap! visited* conj (:uuid node))
                     (swap! count* inc)
                     (let [node' (dissoc node :parent_uuid)
-                          child-rows (get children (:uuid node))]
+                child-rows (sort-by #(str (:order %)) (get children (:uuid node)))]
                       (if (or (>= depth max-depth)
                               (>= @count* max-nodes))
                         (do
                           (when (seq child-rows) (reset! truncated* true))
                           (assoc node' :children []))
                         (assoc node' :children
-                               (mapv #(if (< @count* max-nodes)
-                                        (build % (inc depth))
-                                        (do (reset! truncated* true) nil))
-                                     child-rows)))))]
+                               (reduce (fn [built child]
+                                         (if (< @count* max-nodes)
+                                           (conj built (build child (inc depth)))
+                                           (do (reset! truncated* true) (reduced built))))
+                                       [] child-rows))))) ]
             {:found true
              :block_uuid block-uuid
              :block (build root 0)
@@ -366,58 +373,46 @@
       (let [block-uuid (aget args "block_uuid")
             max-depth (or (aget args "max_depth") 20)
             max-nodes (or (aget args "max_nodes") 1000)
-            root-query "[:find [(pull ?root [:block/uuid :block/title :block/name :block/order]) ...]
-                          :in $ ?uuid
-                          :where [?root :block/uuid ?uuid]]"
-            descendants-query "[:find ?uuid ?title ?order ?parent-uuid
-                                  :in $ ?root-uuid
-                                  :where
-                                  [?root :block/uuid ?root-uuid]
-                                  [?block :block/parent+ ?root]
-                                  [?block :block/uuid ?uuid]
-                                  [?block :block/title ?title]
-                                  [?block :block/order ?order]
-                                  [?block :block/parent ?parent]
-                                  [?parent :block/uuid ?parent-uuid]]"]
-        (p/let [root-result (api-fn "logseq.DB.datascriptQuery" [root-query block-uuid])
-                descendants-result (api-fn "logseq.DB.datascriptQuery"
-                                           [descendants-query block-uuid])
-                roots (js->clj root-result :keywordize-keys true)
-                rows (js->clj descendants-result :keywordize-keys true)
-                roots (if (and (= 1 (count roots)) (vector? (first roots)))
-                        (first roots)
-                        roots)
-                rows (if (and (= 1 (count rows)) (vector? (first rows)))
-                       (first rows)
-                       rows)
-                root (first roots)
-                rows (mapv (fn [[uuid title order parent-uuid]]
-                             {:uuid uuid :title title :order order
-                              :parent_uuid parent-uuid}) rows)]
-          (block-tree-result block-uuid root rows max-depth max-nodes))))
+            query (str "[:find (pull ?root [:db/id :block/uuid :block/title :block/name :block/order "
+                       "{:block/parent [:db/id :block/uuid]} {:block/page [:db/id :block/uuid]} "
+                       "{:block/_parent ...}]) . :where [?root :block/uuid " (uuid-query-input block-uuid) "]]")]
+        (when-not (and (number? max-depth) (js/Number.isInteger max-depth) (<= 0 max-depth 100))
+          (throw (js/Error. "max_depth must be an integer between 0 and 100")))
+        (when-not (and (number? max-nodes) (js/Number.isInteger max-nodes) (<= 1 max-nodes 1000))
+          (throw (js/Error. "max_nodes must be an integer between 1 and 1000")))
+        (p/let [result (api-fn "logseq.DB.datascriptQuery" [query])
+                root (js->clj result :keywordize-keys true)]
+          (letfn [(descendants [node]
+                    (mapcat (fn [child]
+                              (cons (assoc (dissoc child :_parent)
+                                           :parent_uuid (get-in child [:parent :uuid]))
+                                    (descendants child)))
+                            (:_parent node)))]
+            (block-tree-result block-uuid (when root (dissoc root :_parent))
+                               (vec (descendants root)) max-depth max-nodes)))))
 
         (defn find-backlinks
           [api-fn args]
           (let [target-uuid (aget args "target_uuid")
             holder "[:block/uuid :block/title :block/name :block/page]"
-            refs-query (str "[:find [(pull ?entity " holder ") ...] :in $ ?target"
-                " :where [?entity :block/refs ?target]]")
-            tags-query (str "[:find [(pull ?entity " holder ") ...] :in $ ?target"
-                " :where [?entity :block/tags ?target]]")
+            refs-query (str "[:find [(pull ?entity " holder ") ...] :in $ ?target-uuid"
+              " :where [?target :block/uuid ?target-uuid] [?entity :block/refs ?target]]")
+            tags-query (str "[:find [(pull ?entity " holder ") ...] :in $ ?target-uuid"
+              " :where [?target :block/uuid ?target-uuid] [?entity :block/tags ?target]]")
             values-query (str "[:find (pull ?entity " holder ") "
                   "(pull ?property [:db/ident :block/title]) "
-                  ":in $ ?target :where "
+                  ":in $ ?target-uuid :where [?target :block/uuid ?target-uuid] "
                   "[?property :db/ident ?attribute] "
                   "[?entity ?attribute ?target]]")]
-            (p/let [refs-result (api-fn "logseq.DB.datascriptQuery" [refs-query target-uuid])
-            tags-result (api-fn "logseq.DB.datascriptQuery" [tags-query target-uuid])
-            values-result (api-fn "logseq.DB.datascriptQuery" [values-query target-uuid])
+            (p/let [refs-result (api-fn "logseq.DB.datascriptQuery" [refs-query (uuid-query-input target-uuid)])
+            tags-result (api-fn "logseq.DB.datascriptQuery" [tags-query (uuid-query-input target-uuid)])
+            values-result (api-fn "logseq.DB.datascriptQuery" [values-query (uuid-query-input target-uuid)])
             refs (js->clj refs-result :keywordize-keys true)
             tagged (js->clj tags-result :keywordize-keys true)
             values (js->clj values-result :keywordize-keys true)
             refs (if (and (= 1 (count refs)) (vector? (first refs))) (first refs) refs)
             tagged (if (and (= 1 (count tagged)) (vector? (first tagged))) (first tagged) tagged)
-            values (if (and (= 1 (count values)) (vector? (first values))) (first values) values)
+            values (filterv #(not (structural-property-value? (second %))) values)
             property-values (mapv (fn [[holder property]]
                     {:holder holder :property property}) values)
             total (+ (count refs) (count tagged) (count property-values))]
@@ -443,7 +438,7 @@
                  [?block :block/parent+ ?page]
                  [?block :block/page ?stored-page]
                  (not [?stored-page :block/uuid ?page-uuid])]" ]
-    (p/let [result (api-fn "logseq.DB.datascriptQuery" [query page-uuid])
+    (p/let [result (api-fn "logseq.DB.datascriptQuery" [query (uuid-query-input page-uuid)])
             rows (js->clj result :keywordize-keys true)
             rows (if (and (= 1 (count rows)) (vector? (first rows)))
                    (first rows)
@@ -844,7 +839,7 @@
                     left (-> (p/let [_ (api-fn "logseq.DB.removeBlock" [block-uuid])
                                      entity (api-fn "logseq.DB.datascriptQuery"
                                                     ["[:find ?e . :in $ ?uuid :where [?e :block/uuid ?uuid]]"
-                                                     block-uuid])]
+                                                     (uuid-query-input block-uuid)])]
                             (when (some? entity) block-uuid))
                           (p/catch (fn [_error] block-uuid)))]
               (cond-> remaining left (conj left))))
@@ -1974,14 +1969,14 @@
     (when-not (and (string? new-title) (not (string/blank? new-title)))
       (throw (js/Error. "Expected a non-empty title")))
     (let [page-query "[:find (pull ?page [:db/id :block/uuid :block/name :block/title :logseq.property/deleted-at]) . :in $ ?uuid :where [?page :block/uuid ?uuid] [?page :block/tags ?class] [?class :db/ident :logseq.class/Page]]"]
-      (p/let [page-result (api-fn "logseq.DB.datascriptQuery" [page-query page-uuid])
+      (p/let [page-result (api-fn "logseq.DB.datascriptQuery" [page-query (uuid-query-input page-uuid)])
               page (js->clj page-result :keywordize-keys true)
               availability (is-title-available api-fn #js {"title" new-title})
               clashes (remove #(= page-uuid (or (:uuid %) (:block/uuid %)))
                               (:held_by availability))]
         (when-not page
           (throw (js/Error. (str "No live page exists with exact UUID " page-uuid))))
-        (when (:logseq.property/deleted-at page)
+        (when (recycled-entity? page)
           (throw (js/Error. (str "Page " page-uuid " is recycled and cannot be renamed"))))
         (when (seq clashes)
           (throw (js/Error. (str "An entity titled " (pr-str new-title)
@@ -1989,12 +1984,12 @@
         (p/let [response (api-fn "logseq.DB.renamePage" [page-uuid new-title])]
           (when-let [error (and response (aget response "error"))]
             (throw (js/Error. (str error))))
-          (p/let [current-result (api-fn "logseq.DB.datascriptQuery" [page-query page-uuid])
+          (p/let [current-result (api-fn "logseq.DB.datascriptQuery" [page-query (uuid-query-input page-uuid)])
                   current (js->clj current-result :keywordize-keys true)]
             (cond
               (or (nil? current) (not= new-title (or (:title current) (:block/title current)))
                   (not (or (:name current) (:block/name current)))
-                  (some? (:logseq.property/deleted-at current)))
+                  (recycled-entity? current))
               {:validation nil
                :response (js->clj response :keywordize-keys true)
                :verified_entities []
@@ -2197,17 +2192,11 @@
 (defn get-block
   [api-fn args]
   (let [block-uuid (aget args "block_uuid")
-        query "[:find [(pull ?block [:block/uuid :block/title :block/name
-                                      :block/page :block/parent]) ...]
-                 :in $ ?uuid
-                 :where [?block :block/uuid ?uuid]]"]
-    (p/let [result (api-fn "logseq.DB.datascriptQuery" [query block-uuid])
-            blocks (js->clj result :keywordize-keys true)
-            blocks (if (and (= 1 (count blocks))
-                            (vector? (first blocks)))
-                     (first blocks)
-                     blocks)]
-      (block-result block-uuid blocks))))
+    query (str "[:find (pull ?entity [*]) . :where [?entity :block/uuid "
+       (uuid-query-input block-uuid) "]]")]
+    (p/let [result (api-fn "logseq.DB.datascriptQuery" [query])
+    block (js->clj result :keywordize-keys true)]
+  (block-result block-uuid (if block [block] [])))))
 (defn list-pages
   [call-api-fn args]
   (call-api-fn "logseq.cli.listPages" [#js {:expand (aget args "expand")}]))
@@ -2242,7 +2231,7 @@
             (when-not (string? tag-uuid)
               (throw (js/Error. "Tag creation did not return an entity with a UUID")))
             (let [tag-query "[:find (pull ?tag [:db/id :db/ident :block/uuid :block/title {:block/tags [:db/ident]}]) . :in $ ?uuid :where [?tag :block/uuid ?uuid] [?tag :block/tags ?class] [?class :db/ident :logseq.class/Tag]]"]
-              (p/let [tag-result (api-fn "logseq.DB.datascriptQuery" [tag-query tag-uuid])
+              (p/let [tag-result (api-fn "logseq.DB.datascriptQuery" [tag-query (uuid-query-input tag-uuid)])
                       tag (js->clj tag-result :keywordize-keys true)]
                 (when-not tag
                   (throw (js/Error. "Tag creation reported success but the tag is not present")))
@@ -2269,7 +2258,7 @@
                    (re-matches page-stats-uuid-pattern tag-uuid))
       (throw (js/Error. "tag_uuid must be a UUID")))
     (let [tag-query "[:find (pull ?tag [*]) . :in $ ?uuid :where [?tag :block/uuid ?uuid] [?tag :block/tags ?class] [?class :db/ident :logseq.class/Tag]]"]
-      (p/let [tag-result (api-fn "logseq.DB.datascriptQuery" [tag-query tag-uuid])
+      (p/let [tag-result (api-fn "logseq.DB.datascriptQuery" [tag-query (uuid-query-input tag-uuid)])
               tag (js->clj tag-result :keywordize-keys true)]
         (when-not tag
           (throw (js/Error. (str "Tag does not exist with UUID " tag-uuid))))
@@ -2303,7 +2292,7 @@
                   (when-let [error (and response (aget response "error"))]
                     (throw (js/Error. (str error))))
                   (p/let [current-result (api-fn "logseq.DB.datascriptQuery"
-                                                 [tag-query tag-uuid])
+                                                 [tag-query (uuid-query-input tag-uuid)])
                           current (js->clj current-result :keywordize-keys true)]
                     (when current
                       (throw (js/Error. "Tag deletion was not observed; the tag is still present. This route is unverified and may require a name rather than a UUID.")))
@@ -2357,7 +2346,7 @@
               tag-class (api-fn "logseq.DB.datascriptQuery" [class-query])
               tag-query (str "[:find (pull ?tag [*]) . :in $ ?uuid ?class :where "
                              "[?tag :block/uuid ?uuid] [?tag :block/tags ?class]]")
-              tag-result (api-fn "logseq.DB.datascriptQuery" [tag-query tag-uuid tag-class])
+              tag-result (api-fn "logseq.DB.datascriptQuery" [tag-query (uuid-query-input tag-uuid) tag-class])
               tag (js->clj tag-result :keywordize-keys true)]
         (when-not target
           (throw (js/Error. (str "No entity exists with exact UUID " target-uuid))))
@@ -2409,7 +2398,7 @@
               tag-class (api-fn "logseq.DB.datascriptQuery" [class-query])
               tag-query (str "[:find (pull ?tag [*]) . :in $ ?uuid ?class :where "
                              "[?tag :block/uuid ?uuid] [?tag :block/tags ?class]]")
-              tag-result (api-fn "logseq.DB.datascriptQuery" [tag-query tag-uuid tag-class])
+              tag-result (api-fn "logseq.DB.datascriptQuery" [tag-query (uuid-query-input tag-uuid) tag-class])
               tag (js->clj tag-result :keywordize-keys true)]
         (when-not target
           (throw (js/Error. (str "No entity exists with exact UUID " target-uuid))))

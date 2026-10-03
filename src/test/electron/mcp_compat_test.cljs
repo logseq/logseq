@@ -26,6 +26,7 @@
                             :block/parent+ {:db/valueType :db.type/ref :db/cardinality :db.cardinality/many}
                             :block/refs {:db/valueType :db.type/ref :db/cardinality :db.cardinality/many}
                             :block/alias {:db/valueType :db.type/ref :db/cardinality :db.cardinality/many}
+                            :plugin.property/smoke-link {:db/valueType :db.type/ref}
                             :logseq.property/alias {:db/valueType :db.type/ref :db/cardinality :db.cardinality/many}})
         api (fn [method args]
               (swap! calls conj [method args])
@@ -36,8 +37,23 @@
                                   (map #(if (and (string? %) (string/starts-with? % "#uuid"))
                                           (reader/read-string %) %) (rest args))) false))
                 "logseq.DB.deletePage"
-                (do (d/transact! conn [{:db/id [:block/uuid (uuid (first args))]
-                                       :logseq.property/deleted-at 1}]) nil)
+                (let [entity (d/entity @conn [:block/uuid (uuid (first args))])]
+                  (if (some #(= 159 (:db/id %)) (:block/tags entity))
+                    (d/transact! conn [[:db/retractEntity (:db/id entity)]])
+                    (d/transact! conn [{:db/id (:db/id entity) :logseq.property/deleted-at 1}]))
+                  nil)
+                "logseq.DB.createTag"
+                (let [id (swap! counter inc)
+                      uuid-text (str "00000000-0000-4000-8000-000000000" id)]
+                  (d/transact! conn [{:db/id id :block/uuid (uuid uuid-text) :block/title (first args)
+                                     :db/ident (keyword "user.class" (str "smoke-" id)) :block/tags [159]}])
+                  #js {:uuid uuid-text})
+                "logseq.DB.addBlockTag"
+                (do (d/transact! conn [[:db/add [:block/uuid (uuid (first args))] :block/tags
+                                       [:block/uuid (uuid (second args))]]]) nil)
+                "logseq.DB.removeBlockTag"
+                (do (d/transact! conn [[:db/retract [:block/uuid (uuid (first args))] :block/tags
+                                       [:block/uuid (uuid (second args))]]]) nil)
                 "logseq.DB.renamePage"
                 (do (d/transact! conn [{:db/id [:block/uuid (uuid (first args))]
                                        :block/title (second args) :block/name (string/lower-case (second args))}]) nil)
@@ -78,6 +94,159 @@
                       {:db/id 161 :block/uuid (uuid block-uuid) :block/title "Content" :block/order "a0"
                        :block/parent 160 :block/parent+ [160] :block/page 160}])
     {:page-uuid page-uuid :block-uuid block-uuid :conn conn :api api :calls calls}))
+
+(deftest block-lookups-use-native-uuid-query-inputs
+  (let [{:keys [page-uuid block-uuid api]} (page-fixture)]
+    (async done
+      (-> (p/let [block (mcp-compat/get-block api #js {"block_uuid" block-uuid})
+                  blocks (mcp-compat/get-block-uuids api #js {"page_uuid" page-uuid})]
+            (is (true? (:found block)))
+            (is (= block-uuid (get-in block [:block :uuid])))
+            (is (= "Content" (get-in block [:block :title])))
+            (is (= [block-uuid] (mapv :uuid blocks)))
+            (is (= [page-uuid] (mapv :page_uuid blocks)))
+            (js/queueMicrotask done))
+          (p/catch (fn [error]
+                     (is false (str "UUID lookup regression failed: " (.-message error)))
+                     (js/queueMicrotask done)))))))
+
+(deftest block-enumeration-follows-parents-and-preserves-reference-ordering
+  (let [{:keys [page-uuid block-uuid conn api]} (page-fixture)
+        child-uuid "00000000-0000-4000-8000-000000000163"
+        missing-uuid "00000000-0000-4000-8000-000000000164"]
+    (d/transact! conn [{:db/id 162 :block/uuid (uuid "00000000-0000-4000-8000-000000000162")
+                       :block/name "other-page" :block/title "Other page"}
+                      {:db/id 163 :block/uuid (uuid child-uuid) :block/title "Nested child" :block/order "a-1"
+                       :block/parent 161 :block/page 162}])
+    (async done
+      (-> (p/let [blocks (mcp-compat/get-block-uuids api #js {"page_uuid" page-uuid})
+                  child (mcp-compat/get-block api #js {"block_uuid" child-uuid})
+                  page (mcp-compat/get-block api #js {"block_uuid" page-uuid})
+                  missing (mcp-compat/get-block api #js {"block_uuid" missing-uuid})]
+            (is (= [child-uuid block-uuid] (mapv :uuid blocks)))
+            (is (= 162 (get-in (first blocks) [:page :id])))
+            (is (= 161 (get-in (first blocks) [:parent :id])))
+            (is (not-any? #(contains? % :_parent) blocks))
+            (is (true? (:found child)))
+            (is (= 163 (get-in child [:block :id])))
+            (is (false? (:found page)))
+            (is (false? (:found missing)))
+            (js/queueMicrotask done))
+          (p/catch (fn [error]
+                     (is false (str "Parent traversal regression failed: " (.-message error)))
+                     (js/queueMicrotask done)))))))
+
+(deftest get-block-tree-finds-a-childless-uuid-with-and-without-bounds
+  (let [{:keys [block-uuid api]} (page-fixture)]
+    (async done
+      (-> (p/let [bounded (mcp-compat/get-block-tree api #js {"block_uuid" block-uuid "max_depth" 2 "max_nodes" 10})
+                  defaults (mcp-compat/get-block-tree api #js {"block_uuid" block-uuid})]
+            (doseq [result [bounded defaults]]
+              (is (true? (:found result)))
+              (is (= block-uuid (get-in result [:block :uuid])))
+              (is (= 1 (:node_count result)))
+              (is (false? (:truncated result)))
+              (is (= [] (get-in result [:block :children]))))
+            (js/queueMicrotask done))
+          (p/catch (fn [error]
+                     (is false (str "Childless tree regression failed: " (.-message error)))
+                     (js/queueMicrotask done)))))))
+
+(deftest get-block-tree-follows-nested-parents-and-handles-page-and-missing-roots
+  (let [{:keys [page-uuid block-uuid conn api]} (page-fixture)
+        child-uuid "00000000-0000-4000-8000-000000000163"
+        missing-uuid "00000000-0000-4000-8000-000000000164"]
+    (d/transact! conn [{:db/id 163 :block/uuid (uuid child-uuid) :block/title "Only child" :block/order "a1"
+                       :block/parent 161 :block/page 161}])
+    (async done
+      (-> (p/let [tree (mcp-compat/get-block-tree api #js {"block_uuid" block-uuid})
+                  root-only (mcp-compat/get-block-tree api #js {"block_uuid" block-uuid "max_depth" 0})
+                  page (mcp-compat/get-block-tree api #js {"block_uuid" page-uuid})
+                  missing (mcp-compat/get-block-tree api #js {"block_uuid" missing-uuid})]
+            (is (true? (:found tree)))
+            (is (= 2 (:node_count tree)))
+            (is (= [child-uuid] (mapv :uuid (get-in tree [:block :children]))))
+            (is (= 161 (get-in tree [:block :children 0 :page :id])))
+            (is (= 1 (:node_count root-only)))
+            (is (true? (:truncated root-only)))
+            (is (= [] (get-in root-only [:block :children])))
+            (is (false? (:found page)))
+            (is (= "target is a page, not a block" (:reason page)))
+            (is (false? (:found missing)))
+            (js/queueMicrotask done))
+          (p/catch (fn [error]
+                     (is false (str "Nested tree regression failed: " (.-message error)))
+                     (js/queueMicrotask done)))))))
+
+(deftest block-tree-result-sorts-and-truncates-without-null-children
+  (let [rows [{:uuid "late" :title "Late" :order "z" :parent_uuid "root"}
+              {:uuid "early" :title "Early" :order "a" :parent_uuid "root"}]
+        result (mcp-compat/block-tree-result "root" {:uuid "root" :title "Root"} rows 2 2)]
+    (is (= 2 (:node_count result)))
+    (is (true? (:truncated result)))
+    (is (= ["early"] (mapv :uuid (get-in result [:block :children]))))
+    (is (every? map? (get-in result [:block :children])))))
+
+(deftest rename-page-resolves-and-verifies-a-native-uuid
+  (let [{:keys [page-uuid api conn]} (page-fixture)]
+    (async done
+      (-> (p/let [result (mcp-compat/rename-page api #js {"page_uuid" page-uuid "new_title" "Renamed Fixture" "verbose" true})]
+            (is (true? (:verified result)))
+            (is (= page-uuid (get-in result [:verified_entities 0 :uuid])))
+            (is (= "Renamed Fixture" (:block/title (d/entity @conn 160))))
+            (js/queueMicrotask done))
+          (p/catch (fn [error] (is false (.-message error)) (js/queueMicrotask done)))))))
+
+(deftest uuid-tag-and-reference-queries-resolve-native-entity-ids
+  (let [{:keys [page-uuid block-uuid api conn]} (page-fixture)
+        tag-uuid "00000000-0000-4000-8000-000000000166"]
+    (d/transact! conn [{:db/id 166 :block/uuid (uuid tag-uuid) :block/title "Test Tag" :block/tags [159]}
+                      {:db/id 160 :block/tags [166]}
+                      {:db/id 168 :db/ident :plugin.property/smoke-link :block/title "Link property"}
+                      {:db/id 161 :block/refs [160] :plugin.property/smoke-link 160}])
+    (async done
+      (-> (p/let [tag (mcp-compat/get-tag api #js {"tag_uuid" tag-uuid})
+                  holders (mcp-compat/get-tag-users api #js {"tag_uuid" tag-uuid})
+                  links (mcp-compat/find-backlinks api #js {"target_uuid" page-uuid})]
+            (is (true? (:found tag)))
+            (is (= tag-uuid (:uuid tag)))
+            (is (= [page-uuid] (mapv :uuid holders)))
+            (is (= [block-uuid] (mapv :uuid (:refs links))))
+            (is (= block-uuid (get-in links [:property_values 0 :holder :uuid])))
+            (js/queueMicrotask done))
+          (p/catch (fn [error] (is false (.-message error)) (js/queueMicrotask done)))))))
+
+(deftest tag-mutations-use-native-uuid-preflights-and-readbacks
+  (let [{:keys [page-uuid api conn]} (page-fixture)]
+    (async done
+      (-> (p/let [created (mcp-compat/create-tag api #js {"title" "Audit Tag" "verbose" true})
+                  tag-uuid (get-in created [:verified_state :uuid])
+                  added (mcp-compat/add-tag api #js {"target_uuid" page-uuid "tag_uuid" tag-uuid})
+                  holders (mcp-compat/get-tag-users api #js {"tag_uuid" tag-uuid})
+                  removed (mcp-compat/remove-tag api #js {"target_uuid" page-uuid "tag_uuid" tag-uuid})
+                  deleted (mcp-compat/delete-tag api #js {"tag_uuid" tag-uuid})]
+            (is (true? (:verified created)))
+            (is (true? (:verified added)))
+            (is (= [page-uuid] (mapv :uuid holders)))
+            (is (true? (:verified removed)))
+            (is (true? (:verified deleted)))
+            (is (nil? (d/entity @conn [:block/uuid (uuid tag-uuid)])))
+            (is (= #{158} (set (map :db/id (:block/tags (d/entity @conn 160))))))
+            (js/queueMicrotask done))
+          (p/catch (fn [error] (is false (.-message error)) (js/queueMicrotask done)))))))
+
+(deftest orphan-query-uses-a-native-page-uuid
+  (let [{:keys [page-uuid api conn]} (page-fixture)
+        child-uuid "00000000-0000-4000-8000-000000000163"]
+    (d/transact! conn [{:db/id 163 :block/uuid (uuid child-uuid) :block/title "Nested" :block/order "a1"
+                       :block/parent 161 :block/parent+ [160 161] :block/page 161}])
+    (async done
+      (-> (p/let [result (mcp-compat/find-orphans api #js {"page_uuid" page-uuid})]
+            (is (= 1 (:count result)))
+            (is (= [child-uuid] (mapv :uuid (:orphans result))))
+            (is (= 161 (:db/id (:block/page (d/entity @conn 163)))))
+            (js/queueMicrotask done))
+          (p/catch (fn [error] (is false (.-message error)) (js/queueMicrotask done)))))))
 
 (deftest delete-page-verifies-recycling-with-uuid-and-content-preserved
   (let [{:keys [page-uuid block-uuid conn api]} (page-fixture)]
@@ -1167,6 +1336,7 @@
 
 (deftest delete-property-verifies-removal-and-sweeps-value-blocks
   (let [ident ":plugin.property._test_plugin/Flag"
+  value-uuid "00000000-0000-4000-8000-000000000170"
         calls (atom [])
         property-present (atom true)
         usage-reads (atom 0)
@@ -1179,7 +1349,7 @@
                 "logseq.DB.datascriptQuery"
                 (let [query (first args)]
                   (cond
-                    (string/includes? query "created-from-property") #js ["value-block"]
+                    (string/includes? query "created-from-property") #js [value-uuid]
                     (string/includes? query "pull ?holder")
                     (if (= 1 (swap! usage-reads inc))
                       #js [#js [#js {"uuid" "holder-1"} true]]
@@ -1196,6 +1366,8 @@
                 (is (string/includes? (:diagnostic result) "swept 1 orphaned value block"))
                 (is (some #(= "logseq.DB.removeProperty" (first %)) @calls))
                 (is (some #(= "logseq.DB.removeBlock" (first %)) @calls))
+                (is (some #(and (= "logseq.DB.datascriptQuery" (first %))
+                                (= (str "#uuid " (pr-str value-uuid)) (second (second %)))) @calls))
                 (done))))))
 
 (deftest delete-property-rejects-non-ident-before-querying
