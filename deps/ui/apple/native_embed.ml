@@ -96,19 +96,52 @@ let ext_shallow_snapshot (rt : Lui_runtime.application) node : Js.Json.t =
           (Option.value (ext_prop_string props "text") ~default:"") )
     ]
 
+(* Snapshot caches — collecting the doc walks every extension node and
+   parses each node's "attrs" JSON, and the query paths (selector lookups,
+   event-target resolution, shadow scope checks) each used to rebuild it
+   from scratch, which multiplied a full-tree walk per element lifecycle
+   event into a GC storm. The epoch key covers every mutation channel:
+   apply_batch bumps the generation, creates/removes change the extension
+   node count, and prop writes enqueue pending ops. *)
+let snapshot_epoch (rt : Lui_runtime.application) =
+  ( Lui_runtime.generation rt
+  , Hashtbl.length rt.Lui_runtime.runtime_extension_nodes
+  , List.length !(rt.Lui_runtime.pending_ops) )
+
+let snapshot_epoch_ref = ref (-1, -1, -1)
+let shallow_cache : (int, Js.Json.t) Hashtbl.t = Hashtbl.create 1024
+let subtree_cache : (int, Js.Json.t list) Hashtbl.t = Hashtbl.create 8
+
+let invalidate_stale_snapshots (rt : Lui_runtime.application) =
+  let epoch = snapshot_epoch rt in
+  if epoch <> !snapshot_epoch_ref then begin
+    snapshot_epoch_ref := epoch;
+    Hashtbl.reset shallow_cache;
+    Hashtbl.reset subtree_cache
+  end
+
+let shallow_of (rt : Lui_runtime.application) node : Js.Json.t =
+  match Hashtbl.find_opt shallow_cache node with
+  | Some s -> s
+  | None ->
+      let s = ext_shallow_snapshot rt node in
+      Hashtbl.replace shallow_cache node s;
+      s
+
 let ext_snapshot (rt : Lui_runtime.application) node : Js.Json.t =
+  invalidate_stale_snapshots rt;
   let ancestors =
     let rec walk n acc depth =
       if depth >= 64 then acc
       else
         match Hashtbl.find_opt rt.Lui_runtime.runtime_parents n with
         | Some parent ->
-            walk parent (ext_shallow_snapshot rt parent :: acc) (depth + 1)
+            walk parent (shallow_of rt parent :: acc) (depth + 1)
         | None -> acc
     in
     walk node [] 0
   in
-  match ext_shallow_snapshot rt node with
+  match shallow_of rt node with
   | Js.Json.JObject kvs ->
       Js.Json.JObject
         (kvs @ [ ("ancestors", Js.Json.JArray (Array.of_list ancestors)) ])
@@ -119,13 +152,20 @@ let collect_subtree (root : int) : Js.Json.t list =
   | None -> []
   | Some app ->
       let rt = Lui_app.runtime app in
-      let rec dfs node acc =
-        let acc = ext_snapshot rt node :: acc in
-        match Hashtbl.find_opt rt.Lui_runtime.runtime_children node with
-        | Some kids -> List.fold_left (fun a k -> dfs k a) acc kids
-        | None -> acc
-      in
-      List.rev (dfs root [])
+      invalidate_stale_snapshots rt;
+      (match Hashtbl.find_opt subtree_cache root with
+       | Some els -> els
+       | None ->
+           let rec dfs node acc =
+             let acc = ext_snapshot rt node :: acc in
+             match Hashtbl.find_opt rt.Lui_runtime.runtime_children node
+             with
+             | Some kids -> List.fold_left (fun a k -> dfs k a) acc kids
+             | None -> acc
+           in
+           let els = List.rev (dfs root []) in
+           Hashtbl.replace subtree_cache root els;
+           els)
 
 let collect_elements () : Js.Json.t list =
   match !current_app with
