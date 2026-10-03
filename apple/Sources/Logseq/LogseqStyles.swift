@@ -146,6 +146,11 @@ import SwiftUI
   var isItalic = false
   var isUnderline = false
   var isBold = false
+  /// Anchors that must not render link chrome (underline) — e.g. the
+  /// tag chip's `#` reads as part of the tag name on the web.
+  var suppressLinkDecoration = false
+  /// Children render in the link accent color (a.tag's span).
+  var linkColoredText = false
   var maxWidth: CGFloat?
   var maxHeight: CGFloat?
   var fixedWidth: CGFloat?
@@ -386,6 +391,10 @@ import SwiftUI
     case "font-bold", "font-semibold": isBold = true
     case "italic": isItalic = true
     case "underline": isUnderline = true
+    // lui-core.css .block-tag: `#` inherits the tag's accent color with
+    // no underline — the chip reads as one unit.
+    case "hash-symbol": suppressLinkDecoration = true
+    case "tag": linkColoredText = true
     case "font-mono", "monospace": isMono = true
     // ---- visibility ----
     case "hidden", "invisible", "sr-only", "!hidden",

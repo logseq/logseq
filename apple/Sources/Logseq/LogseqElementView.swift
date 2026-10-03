@@ -773,20 +773,31 @@ struct LogseqElementView: View {
     let href = attrs["href"] as? String ?? ""
     let children = context.childIDs
     if children.isEmpty {
-      Text(attributedText)
+      let text = Text(attributedText)
         .font(fontFor(style))
         .foregroundStyle(LogseqColors.link)
-        .underline()
-        .modifier(LogseqStyleModifier(style: style, tag: tag))
-        .contentShape(Rectangle())
-        .onTapGesture {
-          emit("click", payload: ["href": href, "button": 0])
-        }
+      if style.suppressLinkDecoration {
+        text
+          .modifier(LogseqStyleModifier(style: style, tag: tag))
+          .contentShape(Rectangle())
+          .onTapGesture {
+            emit("click", payload: ["href": href, "button": 0])
+          }
+      } else {
+        text
+          .underline()
+          .modifier(LogseqStyleModifier(style: style, tag: tag))
+          .contentShape(Rectangle())
+          .onTapGesture {
+            emit("click", payload: ["href": href, "button": 0])
+          }
+      }
     } else {
       // Links carrying block children (nav items, page refs with icons) lay
       // their content out like a normal element — the whole row is the link.
       stackBody
       .modifier(LogseqStyleModifier(style: style, tag: tag))
+      .foregroundStyle(style.linkColoredText ? LogseqColors.link : .primary)
       .contentShape(Rectangle())
       .onTapGesture {
         emit("click", payload: ["href": href, "button": 0])

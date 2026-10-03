@@ -369,7 +369,7 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
                 ~attrs:
                   [ ( "style"
                     , "margin-left: "
-                      ^ if icon_el = None then "-30px" else "-36px" )
+                      ^ if icon_el = None then "-55px" else "-61px" )
                   ]
                 ~events:"mouseenter mouseleave"
                 ~on_dom_event:(fun name _ ->
@@ -392,7 +392,7 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
                     | None -> ())
                 [ dom ~key:"pt-ctrl"
                     ~style_class:
-                      ("is-with-icon"
+                      ("is-with-icon w-6"
                       ^ (if title_collapsed then " bullet-closed" else "")
                       ^ " bullet-hidden block-control-wrap flex flex-row \
                          items-center h-6")
