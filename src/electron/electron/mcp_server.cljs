@@ -175,6 +175,20 @@
                         :title (z/string)
                         :dry_run (-> (z/boolean) .optional)
                         :verbose (-> (z/boolean) .optional)}}}
+  :moveBlock
+  {:fn mcp-compat/move-block
+   :config #js {:title "Move Block"
+            :description "Move a block subtree relative to a target and verify its parent, page, and placement."
+            :inputSchema #js {:block_uuid (z/string)
+                        :target_uuid (z/string)
+                        :placement (-> (z/enum #js ["child" "last-child" "before" "after"]) .optional)
+                        :verbose (-> (z/boolean) .optional)}}}
+  :removeBlock
+  {:fn mcp-compat/remove-block
+   :config #js {:title "Remove Block"
+            :description "Delete a block and its subtree after inventorying it, then verify every UUID is absent."
+            :inputSchema #js {:block_uuid (z/string)
+                        :verbose (-> (z/boolean) .optional)}}}
   :pageStats
   {:fn mcp-compat/page-stats
    :config #js {:title "Page Stats"

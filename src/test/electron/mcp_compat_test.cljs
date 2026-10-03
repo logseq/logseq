@@ -1037,3 +1037,99 @@
                      (is false (str "updateBlock failed: " (.-message error)))
                      (done)))))))
 
+(deftest move-block-verifies-child-placement-and-page
+  (let [block-uuid "00000000-0000-4000-8000-000000000095"
+        page-uuid "00000000-0000-4000-8000-000000000096"
+        calls (atom [])
+        moved? (atom false)
+        source (fn [] {:id 95 :uuid block-uuid :title "Source"
+                 :parent {:id (if @moved? 96 94)}
+                 :page {:id (if @moved? 96 94)}})
+        target {:id 96 :uuid page-uuid :name "target" :title "Target"}
+        api (fn [method args]
+              (swap! calls conj [method args])
+              (case method
+                "logseq.DB.moveBlock" (do (reset! moved? true) nil)
+                "logseq.DB.datascriptQuery"
+                (let [query (first args)]
+                  (cond
+                    (string/includes? query "pull ?entity")
+                    (if (= (second args) page-uuid) target (source))
+                    :else []))
+                nil))]
+    (async done
+      (-> (p/then (mcp-compat/move-block
+                   api #js {"block_uuid" block-uuid "target_uuid" page-uuid "verbose" true})
+                  (fn [result]
+                    (let [move-call (some #(when (= "logseq.DB.moveBlock" (first %)) %) @calls)
+                          options (nth (second move-call) 2)]
+                      (is @moved?)
+                      (is (true? (:verified result)))
+                      (is (= 96 (get-in result [:verified_entities 0 :parent :id])))
+                      (is (= 96 (get-in result [:verified_entities 0 :page :id])))
+                      (is (true? (aget options "children")))
+                      (done))))
+          (p/catch (fn [error]
+                     (is false (str "moveBlock failed: " (.-message error)))
+                     (done)))))))
+
+(deftest move-block-appends-after-the-current-last-child
+  (let [block-uuid "00000000-0000-4000-8000-000000000097"
+        page-uuid "00000000-0000-4000-8000-000000000098"
+        last-child-uuid "00000000-0000-4000-8000-000000000099"
+        moved? (atom false)
+        calls (atom [])
+        source (fn [] {:id 97 :uuid block-uuid :title "Source" :order (if @moved? "B" "A")
+                       :parent {:id (if @moved? 98 94)} :page {:id (if @moved? 98 94)}})
+        existing-child {:id 99 :uuid last-child-uuid :order "A"}
+        target {:id 98 :uuid page-uuid :name "target" :title "Target"}
+        api (fn [method args]
+              (swap! calls conj [method args])
+              (case method
+                "logseq.DB.moveBlock" (do (reset! moved? true) nil)
+                "logseq.DB.datascriptQuery"
+                (let [query (first args)]
+                  (cond
+                    (string/includes? query "pull ?entity")
+                    (if (= (second args) page-uuid) target (source))
+                    (string/includes? query "pull ?child")
+                    (if @moved? [existing-child (source)] [existing-child])
+                    :else []))
+                nil))]
+    (async done
+      (-> (p/then (mcp-compat/move-block
+                   api #js {"block_uuid" block-uuid "target_uuid" page-uuid "placement" "last-child"})
+                  (fn [result]
+                    (let [move-call (some #(when (= "logseq.DB.moveBlock" (first %)) %) @calls)
+                          move-args (second move-call)]
+                      (is (true? (:verified result)))
+                      (is (= last-child-uuid (second move-args)))
+                      (is (false? (aget (nth move-args 2) "before")))
+                      (done))))
+          (p/catch (fn [error]
+                     (is false (str "last-child move failed: " (.-message error)))
+                     (done)))))))
+
+(deftest move-block-refuses-a-descendant-target
+  (let [block-uuid "00000000-0000-4000-8000-000000000100"
+        target-uuid "00000000-0000-4000-8000-000000000101"
+        calls (atom [])
+        entity (fn [uuid id]
+                 {:id id :uuid uuid :title "Block" :parent {:id 90} :page {:id 90}})
+        api (fn [method args]
+              (swap! calls conj [method args])
+              (if (and (= method "logseq.DB.datascriptQuery")
+                       (string/includes? (first args) "?descendant :block/parent+"))
+                [[target-uuid]]
+                (entity (second args) (if (= (second args) block-uuid) 100 101))))]
+    (async done
+      (-> (p/then (mcp-compat/move-block
+                   api #js {"block_uuid" block-uuid "target_uuid" target-uuid})
+                  (fn [_]
+                    (is false "A descendant target should be rejected")
+                    (done)))
+          (p/catch (fn [error]
+                     (is (string/includes? (.-message error) "own subtree"))
+                     (is (not-any? #(= "logseq.DB.moveBlock" (first %)) @calls))
+                     (done)))))))
+

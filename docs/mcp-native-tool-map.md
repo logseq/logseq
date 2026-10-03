@@ -61,7 +61,7 @@ the full/terse response behavior. Batch writes remain non-atomic.
 | `createPageofBlocks` | page UUID, outline, dry-run, verbose | batch insert per parent | block adapter | native mutation |
 | `updateBlock` | block UUID, title, dry-run, verbose | `updateBlock` | compatibility adapter implemented; content and UUID read-back | native mutation |
 | `splitBlock` | UUID, exactly one offset/delimiter | create parts then update original | block adapter | native mutation |
-| `moveBlock` | UUIDs, target, placement, verbose | `moveBlock` | block adapter | native mutation |
+| `moveBlock` | UUIDs, target, placement, verbose | `moveBlock` | compatibility adapter implemented; verifies parent, page, descendants and append order | native mutation |
 | `moveBlocks` | UUID list, target, placement, rollback flag | repeated move + order verification | block adapter | native mutation |
 | `migratePage` | source/target, substring, placement, dry-run | selected `moveBlocks` | block adapter | native mutation |
 | `removeBlock` | block UUID, verbose | `removeBlock` | block adapter | native mutation |

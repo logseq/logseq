@@ -1182,6 +1182,179 @@
               (merge {:verified true :diagnostic nil :previous_count 1}
                      (entity-write-digest current)))))))))
 
+(defn move-block
+  [api-fn args]
+  (let [block-uuid (aget args "block_uuid")
+        target-uuid (aget args "target_uuid")
+        placement (or (aget args "placement") "child")
+        verbose? (not (false? (aget args "verbose")))
+        entity-query "[:find (pull ?entity [:db/id :block/uuid :block/title :block/name :block/order {:block/parent [:db/id]} {:block/page [:db/id]}]) . :in $ ?uuid :where [?entity :block/uuid ?uuid]]"]
+    (doseq [[field value] [["block_uuid" block-uuid] ["target_uuid" target-uuid]]]
+      (when-not (and (string? value) (re-matches page-stats-uuid-pattern value))
+        (throw (js/Error. (str field " must be a UUID")))))
+    (when-not (contains? #{"child" "last-child" "before" "after"} placement)
+      (throw (js/Error. "placement must be child, last-child, before, or after")))
+    (p/let [source-result (api-fn "logseq.DB.datascriptQuery" [entity-query block-uuid])
+            source (js->clj source-result :keywordize-keys true)]
+      (when-not source
+        (throw (js/Error. (str "No entity exists with exact UUID " block-uuid))))
+      (when (or (:name source) (:block/name source))
+        (throw (js/Error. "UUID identifies a page, not a block")))
+      (p/let [target-result (api-fn "logseq.DB.datascriptQuery" [entity-query target-uuid])
+              target (js->clj target-result :keywordize-keys true)]
+        (when-not target
+          (throw (js/Error. (str "No entity exists with exact UUID " target-uuid))))
+        (when (= (:id source) (:id target))
+          (throw (js/Error. "A block cannot be moved relative to itself")))
+        (when (and (contains? #{"before" "after"} placement)
+                   (or (:name target) (:block/name target)))
+          (throw (js/Error. "A page has no siblings; use child or last-child")))
+        (let [descendants-query "[:find ?uuid :in $ ?root-uuid :where [?root :block/uuid ?root-uuid] [?descendant :block/parent+ ?root] [?descendant :block/uuid ?uuid]]"]
+          (p/let [descendants-result (api-fn "logseq.DB.datascriptQuery" [descendants-query block-uuid])
+                  descendants (js->clj descendants-result :keywordize-keys true)]
+            (when (contains? (set (map first descendants)) target-uuid)
+              (throw (js/Error. "The target is inside the block's own subtree")))
+            (let [target-id (or (:id target) (:db/id target))
+                  expected-parent (if (contains? #{"child" "last-child"} placement)
+                                    target-id
+                                    (entity-ref-id (or (:parent target) (:block/parent target))))
+                  expected-page (if (or (:name target) (:block/name target))
+                                  target-id
+                                  (entity-ref-id (or (:page target) (:block/page target))))
+                  children-query "[:find (pull ?child [:db/id :block/uuid :block/order]) ...] :in $ ?parent-uuid :where [?parent :block/uuid ?parent-uuid] [?child :block/parent ?parent]]"]
+              (when-not (and expected-parent expected-page)
+                (throw (js/Error. "The target is missing the parent or page needed for placement")))
+              (p/let [before-result (if (= placement "last-child")
+                                      (api-fn "logseq.DB.datascriptQuery" [children-query target-uuid])
+                                      [])
+                      before-children (js->clj before-result :keywordize-keys true)
+                      before-children (sort-by #(str (or (:order %) (:block/order %))) before-children)
+                      source-already-last? (and (= placement "last-child")
+                                                (= block-uuid
+                                                   (or (:uuid (last before-children))
+                                                       (:block/uuid (last before-children)))))
+                      other-children (remove #(= block-uuid (or (:uuid %) (:block/uuid %)))
+                                             before-children)
+                      anchor-uuid (if (and (= placement "last-child") (seq other-children))
+                                    (or (:uuid (last other-children)) (:block/uuid (last other-children)))
+                                    target-uuid)
+                      options (cond
+                                (and (= placement "last-child") (seq other-children)) #js {:before false}
+                                (contains? #{"child" "last-child"} placement) #js {:children true}
+                                :else #js {:before (= placement "before")})]
+                (if source-already-last?
+                  {:verified true
+                   :diagnostic "No move was needed: the block is already the last child of the target."
+                   :previous_entities [source] :verified_entities [source]}
+                  (p/let [response (api-fn "logseq.DB.moveBlock" [block-uuid anchor-uuid options])
+                          current-result (api-fn "logseq.DB.datascriptQuery" [entity-query block-uuid])
+                          current (js->clj current-result :keywordize-keys true)
+                          descendants-after-result
+                          (api-fn "logseq.DB.datascriptQuery"
+                                  ["[:find (pull ?descendant [:db/id :block/uuid {:block/page [:db/id]}]) ...] :in $ ?root-uuid :where [?root :block/uuid ?root-uuid] [?descendant :block/parent+ ?root]]"
+                                   block-uuid])
+                          descendants-after (js->clj descendants-after-result :keywordize-keys true)
+                          stranded? (some #(not= expected-page
+                                                 (entity-ref-id (or (:page %) (:block/page %))))
+                                          descendants-after)
+                          after-result (if (= placement "last-child")
+                                         (api-fn "logseq.DB.datascriptQuery" [children-query target-uuid])
+                                         [])
+                          after-children (sort-by #(str (or (:order %) (:block/order %)))
+                                                  (js->clj after-result :keywordize-keys true))
+                          actual-parent (entity-ref-id (or (:parent current) (:block/parent current)))
+                          actual-page (entity-ref-id (or (:page current) (:block/page current)))
+                          response (js->clj response :keywordize-keys true)]
+                    (cond
+                      (nil? current)
+                      {:response response :verified false :verified_entities []
+                       :previous_entities [source] :diagnostic "The block disappeared during the move"}
+
+                      (not= expected-parent actual-parent)
+                      {:response response :verified false :verified_entities [current]
+                       :previous_entities [source] :observed_entities [current]
+                       :diagnostic "The move was not observed; the block still has its original parent"}
+
+                      (not= expected-page actual-page)
+                      {:response response :verified false :verified_entities [current]
+                       :previous_entities [source] :observed_entities [current]
+                       :diagnostic "The block moved but its owning page did not follow; run findOrphans"}
+
+                      stranded?
+                      {:response response :verified false :verified_entities [current]
+                       :previous_entities [source] :observed_entities descendants-after
+                       :diagnostic "The block moved but one or more descendants still belong to the old page"}
+
+                      (and (= placement "last-child")
+                           (not= block-uuid (or (:uuid (last after-children))
+                                                (:block/uuid (last after-children)))))
+                      {:response response :verified false :verified_entities [current]
+                       :previous_entities [source]
+                       :diagnostic "The block is under the requested parent but is not the last child"}
+
+                      verbose?
+                      {:response response :verified true :verified_entities [current]
+                       :previous_entities [source] :diagnostic nil}
+
+                      :else
+                      (merge {:response response :verified true :diagnostic nil :previous_count 1}
+                         (entity-write-digest current)))))))))))))
+
+(defn remove-block
+  [api-fn args]
+  (let [block-uuid (aget args "block_uuid")
+        verbose? (not (false? (aget args "verbose")))
+        entity-query "[:find (pull ?entity [:db/id :block/uuid :block/title :block/name :block/order {:block/parent [:db/id :block/uuid]} {:block/page [:db/id :block/uuid]}]) . :in $ ?uuid :where [?entity :block/uuid ?uuid]]"
+        children-query "[:find [(pull ?child [*]) ...] :in $ ?parent-id :where [?child :block/parent ?parent-id]]"]
+    (when-not (and (string? block-uuid)
+                   (re-matches page-stats-uuid-pattern block-uuid))
+      (throw (js/Error. "block_uuid must be a UUID")))
+    (p/let [root-result (api-fn "logseq.DB.datascriptQuery" [entity-query block-uuid])
+            root (js->clj root-result :keywordize-keys true)]
+      (when-not root
+        (throw (js/Error. (str "No entity exists with exact UUID " block-uuid))))
+      (when (or (:name root) (:block/name root))
+        (throw (js/Error. "UUID identifies a page, not a block")))
+      (when-not (and (or (:id root) (:db/id root))
+                     (entity-ref-id (or (:parent root) (:block/parent root)))
+                     (entity-ref-id (or (:page root) (:block/page root))))
+        (throw (js/Error. "The block is missing required id, parent, or page data")))
+      (p/let [subtree (loop [queue [root], collected [root]]
+                        (if-let [parent (first queue)]
+                          (p/let [children-result
+                                  (api-fn "logseq.DB.datascriptQuery"
+                                          [children-query (or (:id parent) (:db/id parent))])
+                                  children (js->clj children-result :keywordize-keys true)
+                                  collected (into collected children)]
+                            (when (> (count collected) 1000)
+                              (throw (js/Error. "Subtree exceeds the 1000-block safety limit")))
+                            (recur (into (subvec queue 1) children) collected))
+                          (p/resolved collected)))
+              response (api-fn "logseq.DB.removeBlock" [block-uuid])
+              remaining (loop [entities subtree, found []]
+                          (if-let [entity (first entities)]
+                            (p/let [result (api-fn "logseq.DB.datascriptQuery"
+                                                  [entity-query (:uuid entity)])
+                                    current (js->clj result :keywordize-keys true)]
+                              (recur (rest entities) (cond-> found current (conj current))))
+                            (p/resolved found)))
+              response (js->clj response :keywordize-keys true)]
+        (if (seq remaining)
+          {:response response
+           :verified false
+           :verified_entities []
+           :previous_entities subtree
+           :observed_entities remaining
+           :diagnostic (if (some #(= block-uuid (:uuid %)) remaining)
+                         "Deletion was not observed; the block is still present"
+                         "Target is absent but one or more descendants remain")}
+          (cond-> {:response response
+                   :verified true
+                   :verified_entities []
+                   :previous_count (count subtree)
+                   :diagnostic "Exact UUID and its subtree are absent after deletion"}
+            verbose? (assoc :previous_entities subtree))))))
+
 (defn create-page
   [api-fn args]
   (let [title (aget args "title")
@@ -1860,6 +2033,8 @@
    :renamePage ["logseq.DB.datascriptQuery" "logseq.DB.renamePage"]
    :createBlock ["logseq.DB.insertBlock" "logseq.DB.datascriptQuery"]
    :updateBlock ["logseq.DB.updateBlock" "logseq.DB.datascriptQuery"]
+   :moveBlock ["logseq.DB.moveBlock" "logseq.DB.datascriptQuery"]
+  :removeBlock ["logseq.DB.removeBlock" "logseq.DB.datascriptQuery"]
    :getTag ["logseq.DB.datascriptQuery"]
    :getPropertyIndent ["logseq.DB.datascriptQuery"]
    :getBlock ["logseq.DB.datascriptQuery"]
@@ -1895,8 +2070,10 @@
    "logseq.DB.upsertProperty" ["__mcp_capability_probe__/invalid" #js {}]
    "logseq.DB.createTag" ["__mcp_capability_probe__/invalid"]
    "logseq.DB.insertBlock" ["__mcp_capability_probe__" "__mcp_capability_probe__" #js {:sibling false}]
-  "logseq.DB.renamePage" ["__mcp_capability_probe__" "__mcp_capability_probe__"]
-  "logseq.DB.updateBlock" ["__mcp_capability_probe__" "__mcp_capability_probe__"]
+   "logseq.DB.renamePage" ["__mcp_capability_probe__" "__mcp_capability_probe__"]
+   "logseq.DB.updateBlock" ["__mcp_capability_probe__" "__mcp_capability_probe__"]
+  "logseq.DB.moveBlock" ["__mcp_capability_probe__" "__mcp_capability_probe__" #js {:before false}]
+  "logseq.DB.removeBlock" ["__mcp_capability_probe__"]
    "logseq.DB.deletePage" ["__mcp_capability_probe__"]
    "logseq.DB.addBlockTag" ["__mcp_capability_probe__" "__mcp_capability_probe__"]
    "logseq.DB.removeBlockTag" ["__mcp_capability_probe__" "__mcp_capability_probe__"]
