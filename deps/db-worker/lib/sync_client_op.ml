@@ -363,16 +363,32 @@ let get_pending_local_tx_ids repo : string list =
 (* queue-ordered pending rows for a known id set — confirm/reject paths
    only need the rows the server named, not a decode of the whole queue *)
 let get_pending_local_txs_in repo (tx_ids : string list) : local_tx_entry list =
-  match tx_ids with
-  | [] -> []
-  | _ ->
-      let ph = String.concat "," (List.map (fun _ -> "?") tx_ids) in
-      rows (store repo)
-        (pending_tx_select
-         ^ " and pending = 1 and tx_id in (" ^ ph
-         ^ ") order by created_at asc, id asc")
-        (List.map text tx_ids)
-      |> List.filter_map row_to_pending_local_tx
+  (* chunk the IN list — sqlite variable limits differ across builds *)
+  let rec chunks acc xs =
+    match xs with
+    | [] -> List.rev acc
+    | _ ->
+        let rec take n xs acc' =
+          match n, xs with
+          | 0, _ | _, [] -> (List.rev acc', xs)
+          | _, x :: tl -> take (n - 1) tl (x :: acc')
+        in
+        let c, rest = take 500 xs [] in
+        chunks (c :: acc) rest
+  in
+  List.concat_map
+    (fun ids ->
+       match ids with
+       | [] -> []
+       | _ ->
+           let ph = String.concat "," (List.map (fun _ -> "?") ids) in
+           rows (store repo)
+             (pending_tx_select
+              ^ " and pending = 1 and tx_id in (" ^ ph
+              ^ ") order by created_at asc, id asc")
+             (List.map text ids)
+           |> List.filter_map row_to_pending_local_tx)
+    (chunks [] tx_ids)
 
 (* ---- sync_conflicts ---- *)
 
