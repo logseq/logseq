@@ -211,6 +211,48 @@
                                   :contains (-> (z/string) .optional)
                                   :placement (-> (z/enum #js ["child" "last-child" "before" "after"]) .optional)
                                   :dry_run (-> (z/boolean) .optional)}}}
+  :deletePage
+  {:fn mcp-compat/delete-page
+   :config #js {:title "Delete Page"
+                :description "Recycle a page, requiring separate acknowledgements for inbound references and irreparable alias loss."
+                :inputSchema #js {:page_uuid (z/string)
+                                  :acknowledge_reference_rewrite (-> (z/boolean) .optional)
+                                  :acknowledge_alias_loss (-> (z/boolean) .optional)
+                                  :verbose (-> (z/boolean) .optional)}}}
+  :clearPage
+  {:fn mcp-compat/clear-page
+   :config #js {:title "Clear Page"
+                :description "Clear content while preserving page metadata and property-value subtrees; refuses nested pages."
+                :inputSchema #js {:page_uuid (z/string) :verbose (-> (z/boolean) .optional)}}}
+  :retitleOverDuplicate
+  {:fn mcp-compat/retitle-over-duplicate
+   :config #js {:title "Retitle Over Duplicate"
+                :description "Park an empty non-alias title holder, then rename the chosen page by UUID; reports partial application."
+                :inputSchema #js {:from_uuid (z/string) :to_title (z/string)
+                                  :park_suffix (-> (z/string) .optional)}}}
+  :createPageofBlocks
+  {:fn mcp-compat/create-page-of-blocks
+   :config #js {:title "Create Page Of Blocks"
+                :description "Validate an indented outline before batch insertion; verify created blocks and sibling order at each parent."
+                :inputSchema #js {:page_uuid (z/string) :outline (z/string)
+                                  :dry_run (-> (z/boolean) .optional) :verbose (-> (z/boolean) .optional)}}}
+  :importPage
+  {:fn mcp-compat/import-page
+   :config #js {:title "Import Page"
+                :description "Import Logseq bullet markdown or explicit-depth block lists; escape references and verify batches. Replace preserves the deleted inventory."
+                :inputSchema #js {:target (z/string) :markdown (z/union #js [(z/string) (z/array (z/any))])
+                                  :replace (-> (z/boolean) .optional) :dry_run (-> (z/boolean) .optional)}}}
+  :repairLinks
+  {:fn mcp-compat/repair-links
+   :config #js {:title "Repair Links"
+                :description "Resolve only import link/tag placeholders using exact live targets; missing target creation requires separate acknowledgements and caps."
+                :inputSchema #js {:page_uuid (-> (z/string) .optional)
+                                  :create_missing (-> (z/boolean) .optional)
+                                  :acknowledge_page_creation (-> (z/boolean) .optional)
+                                  :acknowledge_tag_creation (-> (z/boolean) .optional)
+                                  :max_pages_to_create (-> (z/number) .optional)
+                                  :max_tags_to_create (-> (z/number) .optional)
+                                  :include_tags (-> (z/boolean) .optional) :dry_run (-> (z/boolean) .optional)}}}
   :pageStats
   {:fn mcp-compat/page-stats
    :config #js {:title "Page Stats"

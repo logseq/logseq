@@ -118,9 +118,19 @@ sibling placement before truncating the original. `moveBlocks` preflights the
 selection, stops on failed verification, and reports best-effort rollback;
 it currently composes `moveBlock`, using more reads than the optimized reference.
 `migratePage` previews literal top-level selection and reads the source after moving.
-There are 45 registered tools: five API-backed tools and 40 compatibility data tools.
-Remaining tools: `importPage`, `repairLinks`, `retitleOverDuplicate`, `deletePage`,
-`clearPage`, and `createPageofBlocks`. Desktop smoke testing remains pending.
+There are 51 unique registered tools: all 50 Python reference names plus the
+retained native `getPage` API route (five API-backed and 46 compatibility data tools).
+The six remaining handlers are implemented: guarded recycling, metadata-preserving
+clearing, duplicate-title parking, validated outlines, escaped imports, and exact
+reference repair with independently acknowledged and capped page/tag creation.
+Native differences: `clearPage` refuses nested pages; destructive inventories and
+repair are bounded, and `repairLinks` writes resolved UUIDs instead of live names.
+Electron compilation passes. The focused suite currently reports 84 tests and
+341 assertions with one async attribution failure in
+`repair-links-dry-run-and-creation-cap-make-no-writes`; that test passes alone,
+but the full suite attributes a non-DB capability rejection to it. Desktop smoke
+testing remains blocked until this suite is green. No live-graph validation of
+the new handlers has been performed.
 `capabilities` reports inconclusive probes as `unknown`; write probes use
 invalid arguments, and `upsertNodes` is neither probed nor reported.
 Entry criteria still outstanding:

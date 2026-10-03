@@ -50,15 +50,15 @@ the full/terse response behavior. Batch writes remain non-atomic.
 
 | Tool | Inputs / key contract | API operation | First native adapter | Later candidate |
 |---|---|---|---|---|
-| `importPage` | target, markdown/list, replace, dry-run | batch insert + queries | importer adapter | native importer |
-| `repairLinks` | optional page, creation acknowledgements/caps | update blocks + page/tag creation | importer adapter | native write layer |
+| `importPage` | target, markdown/list, replace, dry-run | batch insert + queries | compatibility adapter implemented; parse-first validation, escaped references, verified batches and inventory delta | native importer |
+| `repairLinks` | optional page, creation acknowledgements/caps | update blocks + page/tag creation | compatibility adapter implemented; exact live targets, independent creation gates and reference-relation read-back | native write layer |
 | `createPage` | title, dry-run, verbose | `createPage` | compatibility adapter implemented; title preflight and UUID read-back | native mutation |
 | `renamePage` | page UUID, title, verbose | `renamePage` | compatibility adapter implemented; preflight and UUID read-back | native mutation |
-| `retitleOverDuplicate` | source UUID, title, suffix | two renames | page adapter | native mutation |
-| `deletePage` | UUID, reference/alias acknowledgements | recycle via `deletePage` | page adapter | native mutation |
-| `clearPage` | page UUID, verbose | remove top-level blocks | page/block adapter | native mutation |
+| `retitleOverDuplicate` | source UUID, title, suffix | two renames | compatibility adapter implemented; empty/non-alias holder guards, recycled-holder support and partial-application undo details | native mutation |
+| `deletePage` | UUID, reference/alias acknowledgements | recycle via `deletePage` | compatibility adapter implemented; separate alias/reference guards and exact UUID recycling verification | native mutation |
+| `clearPage` | page UUID, verbose | remove top-level blocks | compatibility adapter implemented; preserves metadata and property-value subtrees, refuses nested pages | native mutation |
 | `createBlock` | parent UUID, title, dry-run, verbose | `insertBlock` | compatibility adapter implemented; verifies parent, page and content | native mutation |
-| `createPageofBlocks` | page UUID, outline, dry-run, verbose | batch insert per parent | block adapter | native mutation |
+| `createPageofBlocks` | page UUID, outline, dry-run, verbose | batch insert per parent | compatibility adapter implemented; complete prevalidation and per-level parent/page/content/order checks | native mutation |
 | `updateBlock` | block UUID, title, dry-run, verbose | `updateBlock` | compatibility adapter implemented; content and UUID read-back | native mutation |
 | `splitBlock` | UUID, exactly one offset/delimiter | create parts then update original | compatibility adapter implemented; validates all parts and verifies tail placement before truncation | native mutation |
 | `moveBlock` | UUIDs, target, placement, verbose | `moveBlock` | compatibility adapter implemented; verifies parent, page, descendants and append order | native mutation |
