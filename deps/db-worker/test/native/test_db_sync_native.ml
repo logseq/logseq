@@ -1250,7 +1250,7 @@ let test_flush_pending_honors_stop_upload_debug_flag () =
                 tx_id ];
           (* cljs with-redefs [sync-apply/prepare-upload-tx-entries ...] *)
           Sync_apply.prepare_upload_tx_entries_fn :=
-            (fun ?repo:_repo _conn _pending ->
+            (fun ?repo:_repo ?server_db:_server_db _conn _pending ->
                incr prepare_calls;
                ([], [], []));
           ignore (Sync_apply.set_upload_stopped test_repo true);
@@ -8063,17 +8063,12 @@ let test_replay_failure_marks_failed_and_restores_server_state () =
             Option.get (Worker_state.datascript_conn test_repo)
           in
           ignore
-            (Outliner_core.insert_blocks_conn display
-               [ Block_map.of_transit
-                   (wire_map
-                      [ "block/title", Wire.String "local insert"
-                      ; "block/uuid", Wire.Uuid (fresh_uuid ()) ]) ]
-               (Block_map.of_entity
-                  (Option.get
-                     (ent_by_block_uuid (Datascript.db display)
-                        child_uuid)))
-               { Outliner_core.default_insert_opts with sibling = false }
-               Block_map.empty);
+            (Outliner_core.save_block_conn display
+               (Block_map.of_transit
+                  (wire_map
+                     [ "block/uuid", Wire.Uuid child_uuid
+                     ; "block/title", Wire.String "local edit" ]))
+               Outliner_core.default_save_opts Block_map.empty);
           let pending = Sync_apply.pending_txs test_repo () in
           check "1 pending" (List.length pending = 1);
           let tx_id = (List.hd pending).tx_id in
@@ -8485,10 +8480,16 @@ let test_ignore_missing_parent_update_after_local_delete () =
                (List.map Ds_wire.transit_of_tx_op delete_tx));
           check "child retracted"
             (ent_by_block_uuid (Datascript.db conn) child_uuid = None);
-          check "pending cleared" (Sync_apply.pending_txs test_repo () = []);
+          (* pending insert falls back to the closest surviving ancestor —
+             the op survives instead of dropping out of the projection *)
+          check "pending kept" (Sync_apply.pending_txs test_repo () <> []);
+          check "insert survives on display"
+            (Db_test_util.find_block_by_content (Datascript.db conn)
+               "child 4"
+             <> None);
           let row = client_op_tx_row ops tx_id_before in
           check "tx row kept" (row <> None);
-          check "pending flag cleared" (tx_row_int row 1 = 0)))
+          check "pending flag set" (tx_row_int row 1 = 1)))
 
 (* cljs missing-parent-after-remote-delete-removes-descendants-test *)
 let test_missing_parent_after_remote_delete_removes_descendants () =
@@ -10950,7 +10951,13 @@ let test_rebase_persisted_row_forward_and_inverse_ops () =
           | Some row ->
               check "op kept verbatim"
                 (row.outliner_op = Some "delete-blocks");
-              check "forward ops" (row.forward_outliner_ops <> []);
+              (* a successful op-path replay resolves the tx: the concrete
+                 tx data is persisted and the forward ops are consumed *)
+              check "forward ops consumed" (row.forward_outliner_ops = []);
+              check "resolved tx stored"
+                (match row.tx with
+                 | Wire.Array (_ :: _) | Wire.List (_ :: _) -> true
+                 | _ -> false);
               check "inverse ops" (row.inverse_outliner_ops <> [])
           | None -> check "pending kept" false))
 
@@ -12514,20 +12521,35 @@ let test_rebase_save_new_page_reference_and_insert_sibling () =
                                       (Datascript.entity db
                                          (Entity_id child1.id))))
                               = Some inserted_uuid);
-                           check "stored forward op kept verbatim"
+                           check "resolved tx keeps inserted uuid"
                              (match
                                 Sync_client_op.get_local_tx_entry
                                   test_repo tx_id
                               with
                               | Some e ->
-                                  wire_uuid_string
-                                    (wire_get_in [ 1; 1; 0; 0 ]
-                                       "block/uuid"
-                                       (Wire.Array e.forward_outliner_ops))
-                                  = Some
-                                      (if persisted_bad_history then
-                                         page_uuid
-                                       else inserted_uuid)
+                                  let expected =
+                                    if persisted_bad_history then page_uuid
+                                    else inserted_uuid
+                                  in
+                                  (match e.tx with
+                                   | Wire.Array items | Wire.List items ->
+                                       List.exists
+                                         (fun item ->
+                                            match item with
+                                            | Wire.Array
+                                                [ op; _e; a; Wire.Uuid u ]
+                                            | Wire.List
+                                                [ op; _e; a; Wire.Uuid u ]
+                                            | Wire.Array
+                                                [ op; _e; a; Wire.Uuid u; _ ]
+                                            | Wire.List
+                                                [ op; _e; a; Wire.Uuid u; _ ] ->
+                                                op = kw "db/add"
+                                                && a = kw "block/uuid"
+                                                && u = expected
+                                            | _ -> false)
+                                         items
+                                   | _ -> false)
                               | None -> false)
                          done;
                          check "pending still records the tx"
