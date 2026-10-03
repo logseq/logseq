@@ -55,6 +55,16 @@ struct LogseqElementView: View {
     return classes.split(separator: " ").contains { $0 == "bullet" }
   }
 
+  /// `left-sidebar-inner` div — intercepted by LogseqNativeSidebar, which
+  /// renders the subtree's data through a native macOS sidebar instead of
+  /// the web-shaped DOM.
+  private var isNativeSidebar: Bool {
+    guard tag == "div",
+      case .string(let classes) = context.property("style-class")
+    else { return false }
+    return classes.split(separator: " ").contains { $0 == "left-sidebar-inner" }
+  }
+
   /// `ti-<name>`/`tie-<name>` classes on `i`/`span` mark a tabler font icon;
   /// resolve the icon name (nil when the node isn't an icon).
   private var tablerIconName: String? {
@@ -64,6 +74,11 @@ struct LogseqElementView: View {
     for cls in classes.split(separator: " ") {
       if cls.hasPrefix("ti-") || cls.hasPrefix("tie-") {
         return String(cls.dropFirst(cls.hasPrefix("tie-") ? 4 : 3))
+      }
+      // `ui__icon ti ls-icon-*` marks the icon by name class, not ti-* —
+      // e.g. sidebar nav's ls-icon-calendar/cards/files/hierarchy.
+      if cls.hasPrefix("ls-icon-") {
+        return String(cls.dropFirst(8))
       }
     }
     return nil
@@ -118,6 +133,11 @@ struct LogseqElementView: View {
     // The HTML `hidden` attribute is display:none (e.g. the asset upload input).
     if style.isHidden || attrs["hidden"] != nil {
       EmptyView()
+
+    } else if isNativeSidebar {
+      // Out-style native sidebar — the OCaml DOM subtree serves as the data
+      // model while SwiftUI renders the native chrome.
+      LogseqNativeSidebar(context: context)
 
     } else if style.fillsOverlay && !inOverlay {
       // position:fixed layers — the web renders these at window scope; our
@@ -205,6 +225,7 @@ struct LogseqElementView: View {
         LogseqTablerIcon(
           name: icon,
           color: style.foreground ?? LogseqColors.primaryText)
+          .modifier(LogseqStyleModifier(style: style, tag: tag))
       } else {
         styledContainer
       }
@@ -314,6 +335,11 @@ struct LogseqElementView: View {
         value: (s.grow || s.fullWidth || isTextInput) ? 1 : 0)
       .layoutValue(key: LogseqGrowYKey.self, value: (s.grow || s.fullHeight) ? 1 : 0)
       .layoutValue(key: LogseqOutOfFlowKey.self, value: s.outOfFlow)
+      .layoutValue(
+        key: LogseqAnchorKey.self,
+        value: LogseqAnchor(
+          x: s.fixedX, y: s.fixedY,
+          right: s.fixedRight, bottom: s.fixedBottom))
   }
 
   /// The child layout stack (no style modifier) — used bare inside a
@@ -476,12 +502,7 @@ struct LogseqElementView: View {
     } else {
       // Links carrying block children (nav items, page refs with icons) lay
       // their content out like a normal element — the whole row is the link.
-      HStack(alignment: .center, spacing: style.stackSpacing ?? 4) {
-        if !text.isEmpty { styledText }
-        ForEach(children, id: \.self) { child in
-          context.content(for: child)
-        }
-      }
+      stackBody
       .modifier(LogseqStyleModifier(style: style, tag: tag))
       .contentShape(Rectangle())
       .onTapGesture {
@@ -609,6 +630,19 @@ private struct LogseqOutOfFlowKey: LayoutValueKey {
   static let defaultValue = false
 }
 
+/// CSS absolute-position anchors for out-of-flow children — nil fields pin
+/// that axis to the container's leading/top edge.
+private struct LogseqAnchor: Equatable {
+  var x: CGFloat?
+  var y: CGFloat?
+  var right: CGFloat?
+  var bottom: CGFloat?
+}
+
+private struct LogseqAnchorKey: LayoutValueKey {
+  static let defaultValue = LogseqAnchor()
+}
+
 /// Non-wrapping horizontal row. Implemented as a custom Layout instead of
 /// HStack: an HStack measures children through an iterative proposal
 /// negotiation that livelocks (infinite resize/re-measure, 100% CPU) when a
@@ -676,11 +710,20 @@ struct LogseqRowLayout: Layout {
     var x = bounds.minX
     for (index, subview) in subviews.enumerated() {
       if subview[LogseqOutOfFlowKey.self] {
-        // position:fixed analogue — renders at ideal size pinned top-leading.
+        // position:absolute analogue — pinned inside the container at the
+        // declared anchors (top-leading when none).
+        let anchor = subview[LogseqAnchorKey.self]
+        let w = ideals[index]
+        let h = subview.sizeThatFits(.unspecified).height
+        let px = anchor.x.map { bounds.minX + $0 }
+          ?? anchor.right.map { bounds.maxX - $0 - w }
+          ?? bounds.minX
+        let py = anchor.y.map { bounds.minY + $0 }
+          ?? anchor.bottom.map { bounds.maxY - $0 - h }
+          ?? bounds.minY
         subview.place(
-          at: CGPoint(x: bounds.minX, y: bounds.minY),
-          proposal: ProposedViewSize(
-            width: ideals[index], height: bounds.height))
+          at: CGPoint(x: px, y: py),
+          proposal: ProposedViewSize(width: w, height: h))
         continue
       }
       var w = ideals[index]
@@ -758,8 +801,17 @@ struct LogseqColumnLayout: Layout {
     var y = bounds.minY
     for (index, subview) in subviews.enumerated() {
       if subview[LogseqOutOfFlowKey.self] {
+        let anchor = subview[LogseqAnchorKey.self]
+        let w = subview.sizeThatFits(
+          ProposedViewSize(width: bounds.width, height: heights[index])).width
+        let px = anchor.x.map { bounds.minX + $0 }
+          ?? anchor.right.map { bounds.maxX - $0 - w }
+          ?? bounds.minX
+        let py = anchor.y.map { bounds.minY + $0 }
+          ?? anchor.bottom.map { bounds.maxY - $0 - heights[index] }
+          ?? bounds.minY
         subview.place(
-          at: CGPoint(x: bounds.minX, y: bounds.minY),
+          at: CGPoint(x: px, y: py),
           proposal: ProposedViewSize(
             width: bounds.width, height: heights[index]))
         continue
@@ -825,6 +877,7 @@ private struct LogseqStyleModifier: ViewModifier {
   let style: LogseqStyle
   let tag: String
   @Environment(\.insideVerticalScroll) private var insideScroll
+  @State private var hovering = false
 
   func body(content: Content) -> some View {
     // Inside a vertical ScrollView, `h-full`/`flex-1` must not become an
@@ -844,12 +897,28 @@ private struct LogseqStyleModifier: ViewModifier {
       .frame(minWidth: style.minWidth, minHeight: style.minHeight)
       .frame(width: style.fixedWidth, height: style.fixedHeight)
       .padding(style.padding ?? EdgeInsets())
-      .background(style.background ?? Color.clear)
+      .background {
+        if style.sidebarMaterial {
+          ZStack {
+            LogseqSidebarMaterial()
+            // lx-gray-02 wash over the vibrancy — keeps the Logseq tone
+            // readable over busy wallpapers while staying native.
+            LogseqColors.gray(2).opacity(0.6)
+          }
+        } else {
+          (hovering ? (style.hoverBackground ?? style.background) : style.background)
+            ?? Color.clear
+        }
+      }
       .cornerRadius(style.cornerRadius ?? 0)
+      .onHover { hovering = $0 }
+      // CSS default content alignment is start — SwiftUI's frame default
+      // is .center, which would center short text in a grown span.
       .frame(
         maxWidth: (!inline || style.grow || style.fullWidth) && !anchored
           ? .infinity : nil,
-        maxHeight: (style.fullHeight && !insideScroll) ? .infinity : nil)
+        maxHeight: (style.fullHeight && !insideScroll) ? .infinity : nil,
+        alignment: .leading)
       .frame(maxWidth: style.maxWidth, maxHeight: style.maxHeight)
       .frame(
         maxWidth: style.centerHorizontally ? .infinity : nil,
@@ -861,6 +930,20 @@ private struct LogseqStyleModifier: ViewModifier {
       .opacity(style.alpha)
       .layoutPriority(style.grow ? 1 : 0)
   }
+}
+
+/// macOS sidebar vibrancy (NSVisualEffectView `.sidebar` material) — the
+/// native translucent backdrop Out's NavigationSplitView sidebar gets for
+/// free; adapts to dark mode and window key state automatically.
+struct LogseqSidebarMaterial: NSViewRepresentable {
+  func makeNSView(context: Context) -> NSVisualEffectView {
+    let view = NSVisualEffectView()
+    view.material = .sidebar
+    view.blendingMode = .behindWindow
+    view.state = .active
+    return view
+  }
+  func updateNSView(_ nsView: NSVisualEffectView, context: Context) {}
 }
 
 /// Window-level overlay: elements styled `fillsOverlay` (position:fixed

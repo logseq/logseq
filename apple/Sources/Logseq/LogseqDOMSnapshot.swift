@@ -11,6 +11,15 @@ enum LogseqDOMSnapshot {
     element(of: context.nodeID, context: context, includeAncestors: true)
   }
 
+  /// Snapshot of any node in the tree — composite native views emit on
+  /// behalf of descendant DOM nodes (native sidebar rows), and document
+  /// listeners still need a truthful `target` for closest()/exclusions.
+  static func snapshot(of nodeID: Int, context: LUIAppleExtensionViewContext)
+    -> [String: Any]
+  {
+    element(of: nodeID, context: context, includeAncestors: true)
+  }
+
   /// Snapshot of an arbitrary node reachable from `context` (ancestors are
   /// fetched one hop at a time via `parentID(of:)`).
   private static func element(

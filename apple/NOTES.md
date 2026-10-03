@@ -414,3 +414,31 @@ behavior), `.left-sidebar-resizer`, `.cp__graphs-selector`,
 - Remaining gaps: icon/emoji picker surface (Set icon/Add
   reaction), `add-comment`/`copy-export-as` stubbed OCaml-side
   ("editor command not implemented"), hover highlight minimal.
+
+### Native sidebar (Out-style, DOM-as-model)
+- `left-sidebar-inner` renders `LogseqNativeSidebar` instead of the
+  DOM row tree: the subtree mounts invisibly (0x0, clipsToBounds)
+  so mount emitters + node models stay live, while the visible UI
+  is a native vibrancy sidebar (sections, disclosure, hover/active
+  fills, kbd chips, "…" row actions).
+- Extraction walks the subtree with the new lui context APIs
+  `childIDs(of:)` / `emit(on:name:values:)` (lui PR #94) —
+  `LUIExtensionNodeModel` is @Observable so reading children/
+  properties subscribes the view to patch updates.
+- PITFALL: an emit with no `target` snapshot IS a document click —
+  `on_doc_click` closes `open_menu` when `closest()` on the
+  exclusion selector finds no target. Every `emit(on:)` MUST carry
+  `payload.target` = `LogseqDOMSnapshot.snapshot(of:context:)` of
+  the element the user conceptually clicked (dots button →
+  `.sidebar-page-actions` matches the exclusion and the lp menu
+  stays open; plain rows → own `a` node → menus close, matching
+  web click-outside semantics).
+- `SpatialTapGesture(coordinateSpace: .named("logseqWindow"))`
+  gives the pointer in window coords for `clientX/Y` — the
+  earlier NSEvent→SwiftUI conversion produced off-window coords.
+- Dots/more use `.highPriorityGesture` so the row's tap doesn't
+  also fire.
+- Graphs selector row emits on the `a` node but no dialog
+  appears — untracked so far (may be an OCaml-side gate).
+- Transient: sidebar items vanish while cmdk is open — likely an
+  emptied intermediate patch state during modal mount.
