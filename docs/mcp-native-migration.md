@@ -105,8 +105,9 @@ clears one value with read-back verification while retaining the definition.
 many-values, and verifies the stored value. `creatTag` refuses page/tag title
 collisions and verifies the identity Logseq assigns. `deleteTag` requires
 holder-detach and child-reparent acknowledgement and verifies deletion;
-`addTag` verifies the target's tag relation and preserves page identity. There
-are 35 registered tools: five API-backed tools and 30 compatibility data tools.
+`addTag` verifies the target's tag relation and preserves page identity;
+`removeTag` verifies removal while preserving other tags and page identity.
+There are 36 registered tools: five API-backed tools and 31 compatibility data tools.
 `capabilities` reports inconclusive probes as `unknown`; write probes use
 invalid arguments, and `upsertNodes` is neither probed nor reported.
 Entry criteria still outstanding:

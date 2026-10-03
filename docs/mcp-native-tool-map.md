@@ -68,7 +68,7 @@ the full/terse response behavior. Batch writes remain non-atomic.
 | `creatTag` | title, options, verbose | `createTag` | tag adapter | native mutation |
 | `deleteTag` | UUID, detach/reparent acknowledgements | `deletePage` + reference checks | tag adapter | native mutation |
 | `addTag` | target UUID, tag UUID, verbose | `addBlockTag` | tag adapter | native mutation |
-| `removeTag` | target UUID, tag UUID, verbose | `removeBlockTag` | tag adapter | native mutation |
+| `removeTag` | target UUID, tag UUID, verbose | `removeBlockTag` | compatibility adapter implemented; relation and page identity verified | native mutation |
 | `createProperty` | title, schema, options, verbose | `upsertProperty` | property adapter | native mutation |
 | `deleteProperty` | ident, value-loss acknowledgement | `removeProperty` + value cleanup | property adapter | native mutation |
 | `addProperty` | target UUID, ident, value, options, verbose | `upsertBlockProperty` | property adapter | native mutation |

@@ -906,3 +906,47 @@
           (p/catch (fn [error]
                      (is false (str "addTag unexpectedly failed: " (.-message error)))
                      (done)))))))
+
+(deftest remove-tag-preserves-other-tags-and-page-identity
+  (let [target-uuid "00000000-0000-4000-8000-000000000071"
+        tag-uuid "00000000-0000-4000-8000-000000000072"
+        calls (atom [])
+        removed? (atom false)
+        target (fn []
+                 {:id 71 :uuid target-uuid :name "inbox" :title "Inbox"
+                  :tags (cond-> [{:id 1 :ident :logseq.class/Page}
+                                 {:id 73 :ident :plugin.class/keepme}]
+                          (not @removed?) (conj {:id 72 :ident :plugin.class/topic}))})
+        api (fn [method args]
+              (swap! calls conj [method args])
+              (case method
+                "logseq.DB.removeBlockTag" (do (reset! removed? true) nil)
+                "logseq.DB.datascriptQuery"
+                (let [query (first args)]
+                  (cond
+                    (string/includes? query "block/uuid #uuid") (target)
+                    (string/includes? query "db/ident :logseq.class/Tag") 1
+                    (string/includes? query "?tag")
+                    {:id 72 :uuid tag-uuid :ident ":plugin.class._test_plugin/topic"
+                     :title "Topic" :tags [{:id 1 :ident :logseq.class/Tag}]}
+                    :else nil))
+                nil))]
+    (is (thrown? js/Error
+                 (mcp-compat/remove-tag api #js {"target_uuid" "invalid" "tag_uuid" tag-uuid})))
+    (is (thrown? js/Error
+                 (mcp-compat/remove-tag api #js {"target_uuid" target-uuid "tag_uuid" "invalid"})))
+    (is (empty? @calls))
+    (async done
+      (-> (p/then (mcp-compat/remove-tag api #js {"target_uuid" target-uuid "tag_uuid" tag-uuid
+                                                   "verbose" true})
+                  (fn [result]
+                    (let [tag-ids (set (map :id (get-in result [:verified_state :tags])))]
+                      (is (true? (:verified result)))
+                      (is (= "inbox" (get-in result [:verified_state :name])))
+                      (is (not (contains? tag-ids 72)))
+                      (is (contains? tag-ids 73))
+                      (is (some #(= "logseq.DB.removeBlockTag" (first %)) @calls)))
+                    (done)))
+          (p/catch (fn [error]
+                     (is false (str "removeTag unexpectedly failed: " (.-message error)))
+                     (done)))))))

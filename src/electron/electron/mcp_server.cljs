@@ -188,6 +188,13 @@
             :inputSchema #js {:target_uuid (z/string)
                         :tag_uuid (z/string)
                         :verbose (-> (z/boolean) .optional)}}}
+  :removeTag
+  {:fn mcp-compat/remove-tag
+   :config #js {:title "Remove Tag"
+            :description "Detach one tag from a page or block, preserve other tags and page identity, and verify the relation is gone."
+            :inputSchema #js {:target_uuid (z/string)
+                        :tag_uuid (z/string)
+                        :verbose (-> (z/boolean) .optional)}}}
    :getPropertyIndent
    {:fn mcp-compat/get-property-ident
     :config #js {:title "Get Property Ident"
