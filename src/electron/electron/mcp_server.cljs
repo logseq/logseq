@@ -180,6 +180,14 @@
             :inputSchema #js {:title (z/string)
                         :options (-> (z/object #js {}) .passthrough .optional)
                         :verbose (-> (z/boolean) .optional)}}}
+  :deleteTag
+  {:fn mcp-compat/delete-tag
+   :config #js {:title "Delete Tag"
+            :description "Delete a tag only after acknowledging child-tag reparenting and/or detaching current holders; verify deletion and dangling references."
+            :inputSchema #js {:tag_uuid (z/string)
+                        :acknowledge_child_reparent (-> (z/boolean) .optional)
+                        :acknowledge_detach (-> (z/boolean) .optional)
+                        :verbose (-> (z/boolean) .optional)}}}
    :getPropertyIndent
    {:fn mcp-compat/get-property-ident
     :config #js {:title "Get Property Ident"

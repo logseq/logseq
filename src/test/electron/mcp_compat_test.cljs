@@ -797,3 +797,73 @@
                      (is (string/includes? (.-message error) "already exists"))
                      (is (= 1 (count @calls)))
                      (done)))))))
+
+(deftest delete-tag-requires-detach-acknowledgement-before-writing
+  (let [tag-uuid "00000000-0000-4000-8000-000000000051"
+        calls (atom [])
+        api (fn [method args]
+              (swap! calls conj [method args])
+              (let [query (first args)]
+                (cond
+                  (string/includes? query "pull ?tag")
+                  {:id 51 :uuid tag-uuid :ident ":plugin.class._test_plugin/Topic"
+                   :title "Topic"}
+                  (string/includes? query "pull ?child") []
+                  (string/includes? query "pull ?holder")
+                  [{:uuid "holder-1" :title "Uses Topic"}]
+                  :else [])))]
+    (async done
+      (p/then (mcp-compat/delete-tag api #js {"tag_uuid" tag-uuid})
+              (fn [result]
+                (is (false? (:verified result)))
+                (is (string/includes? (:diagnostic result) "acknowledge_detach=true"))
+                (is (some? (:previous_state result)))
+                (is (not-any? #(= "logseq.DB.deletePage" (first %)) @calls))
+                (done))))))
+
+(deftest delete-tag-requires-child-reparent-acknowledgement
+  (let [tag-uuid "00000000-0000-4000-8000-000000000052"
+        api (fn [_method args]
+              (let [query (first args)]
+                (if (string/includes? query "pull ?tag")
+                  {:id 52 :uuid tag-uuid :ident ":plugin.class._test_plugin/Parent"
+                   :title "Parent"}
+                  [{:uuid "child-tag" :title "Child"}])))]
+    (async done
+      (-> (p/then (mcp-compat/delete-tag api #js {"tag_uuid" tag-uuid})
+                  (fn [_]
+                    (is false "deleteTag should require child reparent acknowledgement")
+                    (done)))
+          (p/catch (fn [error]
+                     (is (string/includes? (.-message error) "acknowledge_child_reparent=true"))
+                     (done)))))))
+
+(deftest delete-tag-verifies-deletion-and-reference-cleanup
+  (let [tag-uuid "00000000-0000-4000-8000-000000000053"
+        calls (atom [])
+        present? (atom true)
+        api (fn [method args]
+              (swap! calls conj [method args])
+              (case method
+                "logseq.DB.deletePage" (do (reset! present? false) nil)
+                "logseq.DB.datascriptQuery"
+                (let [query (first args)]
+                  (cond
+                    (string/includes? query "pull ?tag")
+                    (when @present?
+                      {:id 53 :uuid tag-uuid :ident ":plugin.class._test_plugin/Leaf"
+                       :title "Leaf"})
+                    (string/includes? query "pull ?child") []
+                    :else []))
+                nil))]
+    (async done
+      (p/then (mcp-compat/delete-tag
+               api #js {"tag_uuid" tag-uuid
+                        "acknowledge_child_reparent" true
+                        "acknowledge_detach" true
+                        "verbose" false})
+              (fn [result]
+                (is (true? (:verified result)))
+                (is (= tag-uuid (:uuid result)))
+                (is (some #(= "logseq.DB.deletePage" (first %)) @calls))
+                (done))))))

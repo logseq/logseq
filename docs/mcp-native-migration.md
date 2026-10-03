@@ -103,8 +103,9 @@ verifies removal before sweeping orphaned value blocks. `removeProperty`
 clears one value with read-back verification while retaining the definition.
 `addProperty` checks the writable namespace and type, deduplicates repeated
 many-values, and verifies the stored value. `creatTag` refuses page/tag title
-collisions and verifies the identity Logseq assigns. There are 34 registered
-tools: six API-backed tools and 28 compatibility data tools.
+collisions and verifies the identity Logseq assigns. `deleteTag` requires
+holder-detach and child-reparent acknowledgement and verifies deletion. There
+are 35 registered tools: six API-backed tools and 29 compatibility data tools.
 `capabilities` reports inconclusive probes as `unknown`; write probes use
 invalid arguments, and `upsertNodes` is neither probed nor reported.
 Entry criteria still outstanding:

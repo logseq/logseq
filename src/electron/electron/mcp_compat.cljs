@@ -1175,6 +1175,79 @@
                    :ident (or (:ident tag) (:db/ident tag))
                    :diagnostic nil})))))))))
 
+(defn delete-tag
+  [api-fn args]
+  (let [tag-uuid (aget args "tag_uuid")
+        acknowledge-child-reparent? (true? (aget args "acknowledge_child_reparent"))
+        acknowledge-detach? (true? (aget args "acknowledge_detach"))
+        verbose? (not (false? (aget args "verbose")))]
+    (when-not (and (string? tag-uuid)
+                   (re-matches page-stats-uuid-pattern tag-uuid))
+      (throw (js/Error. "tag_uuid must be a UUID")))
+    (let [tag-query "[:find (pull ?tag [*]) . :in $ ?uuid :where [?tag :block/uuid ?uuid] [?tag :block/tags ?class] [?class :db/ident :logseq.class/Tag]]"]
+      (p/let [tag-result (api-fn "logseq.DB.datascriptQuery" [tag-query tag-uuid])
+              tag (js->clj tag-result :keywordize-keys true)]
+        (when-not tag
+          (throw (js/Error. (str "Tag does not exist with UUID " tag-uuid))))
+        (let [tag-id (or (:id tag) (:db/id tag))
+              previous (fn [holders children]
+                         {:tag tag :holders holders :child_tags children})]
+          (p/let [children-result (api-fn "logseq.DB.datascriptQuery"
+                                          ["[:find [(pull ?child [:db/id :db/ident :block/uuid :block/title]) ...] :in $ ?parent :where [?child :logseq.property.class/extends ?parent]]"
+                                           tag-id])
+                  children (query-result-rows children-result)]
+            (when (and (seq children) (not acknowledge-child-reparent?))
+              (throw (js/Error. "Deleting this tag will reparent its child tags; set acknowledge_child_reparent=true to proceed")))
+            (p/let [holders (get-tag-users api-fn #js {"tag_uuid" tag-uuid})]
+              (if (and (seq holders) (not acknowledge-detach?))
+                (let [diagnostic (str (count holders) " pages or blocks carry this tag and will lose it. Set acknowledge_detach=true to proceed.")]
+                  (if verbose?
+                    {:response nil
+                     :verified_state nil
+                     :recovered_after_timeout false
+                     :previous_state (previous holders children)
+                     :diagnostic diagnostic
+                     :verified false
+                     :observed_state holders}
+                    {:verified false
+                     :uuid tag-uuid
+                     :parent nil
+                     :page nil
+                     :diagnostic diagnostic
+                     :observed (mapv (fn [holder] (entity-write-digest holder)) holders)}))
+                (p/let [response (api-fn "logseq.DB.deletePage" [tag-uuid])]
+                  (when-let [error (and response (aget response "error"))]
+                    (throw (js/Error. (str error))))
+                  (p/let [current-result (api-fn "logseq.DB.datascriptQuery"
+                                                 [tag-query tag-uuid])
+                          current (js->clj current-result :keywordize-keys true)]
+                    (when current
+                      (throw (js/Error. "Tag deletion was not observed; the tag is still present. This route is unverified and may require a name rather than a UUID.")))
+                    (p/let [tag-holders-result (api-fn "logseq.DB.datascriptQuery"
+                                                       ["[:find [?entity ...] :in $ ?target :where [?entity :block/tags ?target]]"
+                                                        tag-id])
+                            refs-result (api-fn "logseq.DB.datascriptQuery"
+                                                ["[:find [?entity ...] :in $ ?target :where [?entity :block/refs ?target]]"
+                                                 tag-id])
+                            dangling (into (set (js->clj tag-holders-result))
+                                           (js->clj refs-result))]
+                      (when (seq dangling)
+                        (throw (js/Error. (str "Tag deletion left dangling references on entities " (pr-str (sort dangling))))))
+                      (let [diagnostic (str "Deleted " tag-uuid)]
+                        (if verbose?
+                          {:response (js->clj response :keywordize-keys true)
+                           :verified_state nil
+                           :recovered_after_timeout false
+                           :previous_state (previous holders children)
+                           :diagnostic diagnostic
+                           :verified true
+                           :observed_state nil}
+                          {:verified true
+                           :uuid tag-uuid
+                           :parent nil
+                           :page nil
+                           :diagnostic diagnostic})))))))))))))
+
 (defn- count-index
   [result]
   (let [rows (js->clj result :keywordize-keys true)]
@@ -1375,7 +1448,8 @@
    :pageStats ["logseq.DB.datascriptQuery"]
    :inspectPage ["logseq.DB.datascriptQuery"]
    :getTagUUID ["logseq.DB.getTagsByName"]
-  :creatTag ["logseq.DB.createTag"]
+   :creatTag ["logseq.DB.createTag"]
+   :deleteTag ["logseq.DB.deletePage" "logseq.DB.datascriptQuery"]
    :getTag ["logseq.DB.datascriptQuery"]
    :getPropertyIndent ["logseq.DB.datascriptQuery"]
    :getBlock ["logseq.DB.datascriptQuery"]
@@ -1410,6 +1484,7 @@
   "logseq.cli.getPageData" ["__mcp_capability_probe__"]
   "logseq.DB.upsertProperty" ["__mcp_capability_probe__/invalid" #js {}]
   "logseq.DB.createTag" ["__mcp_capability_probe__/invalid"]
+  "logseq.DB.deletePage" ["__mcp_capability_probe__"]
   "logseq.DB.upsertBlockProperty" ["__mcp_capability_probe__"
                                     "__mcp_capability_probe__"
                                     "__mcp_capability_probe__"]
