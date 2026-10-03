@@ -677,12 +677,30 @@ let server_upload_bang (server : server) (t_before : int)
   (!accepted, server.srv_counter)
 
 (* cljs build-upload-plan *)
-let build_upload_plan (conn : conn) (pending : Sync_client_op.local_tx_entry list)
-    : Wire.t list * string list =
-  let tx_entries, drop_tx_ids, _drop_txs =
-    Sync_apply.prepare_upload_tx_entries (Some conn) pending
+let build_upload_plan ~(repo : string) ~(server : server) (conn : conn)
+    (pending : Sync_client_op.local_tx_entry list)
+    : Wire.t list * Wire.t list =
+  let tx_entries, _drop_tx_ids, drop_txs =
+    Sync_apply.prepare_upload_tx_entries ~repo
+      ~server_db:(Conn.db server.srv_conn) (Some conn) pending
   in
-  (tx_entries, drop_tx_ids)
+  (tx_entries, drop_txs)
+
+(* split drop_txs into (failed, benign) tx-id lists by reason *)
+let partition_drops (drop_txs : Wire.t list) : string list * string list =
+  List.fold_left
+    (fun (failed, benign) d ->
+       let id =
+         match Wire.get "tx-id" d with
+         | Some (Wire.String s) -> Some s
+         | _ -> None
+       in
+       match (Wire.get "reason" d, id) with
+       | Some (Wire.Keyword "missing-block-entity"), Some s ->
+           (s :: failed, benign)
+       | _, Some s -> (failed, s :: benign)
+       | _ -> (failed, benign))
+    ([], []) drop_txs
 
 (* cljs sync-client! *)
 type sim_client =
@@ -715,9 +733,13 @@ let sync_client_bang ?(upload = server_upload_bang) (server : server)
     let local_tx' = Option.value (Sync_client_op.get_local_tx repo) ~default:0 in
     let server_t' = server.srv_counter in
     (if pending <> [] && local_tx' = server_t' then begin
-       let tx_entries, drop_tx_ids = build_upload_plan c.conn pending in
-       (if drop_tx_ids <> [] then begin
-          ignore (Sync_apply.mark_pending_txs_false repo drop_tx_ids);
+       let tx_entries, drop_txs =
+         build_upload_plan ~repo ~server c.conn pending
+       in
+       (if drop_txs <> [] then begin
+          let failed_ids, benign_ids = partition_drops drop_txs in
+          ignore (Sync_apply.mark_failed_txs repo failed_ids);
+          ignore (Sync_apply.mark_pending_txs_false repo benign_ids);
           progress := true
         end);
        (if tx_entries <> [] then begin
@@ -4549,6 +4571,180 @@ let test_two_clients_a_wins_b_overlap_rebase_3_tries () =
               assert_no_invalid_tx_bang seed history repro)))
     [ 301; 302; 303 ]
 
+(* Pending replay onto a server base where remote deletes removed op
+   targets: insert ops fall back to the closest surviving ancestor (page
+   root at worst), value-position refs to deleted uuids drop, while
+   entity-position refs and move ops still fail. *)
+let test_pending_replay_deleted_target_fallbacks () =
+  let seed = Option.value (env_seed ()) ~default:default_seed in
+  let rng = make_rng seed in
+  let gen_uuid () = rng_uuid rng in
+  let base_uuid = gen_uuid () in
+  let conn_a = create_remote_conn ()
+  and conn_b = create_remote_conn () in
+  let ops_a = new_client_ops_db ()
+  and ops_b = new_client_ops_db () in
+  let client_a = make_client repo_a
+  and client_b = make_client repo_b in
+  let server = make_server () in
+  let history = ref [] in
+  let uuid_p = gen_uuid ()
+  and uuid_s = gen_uuid ()
+  and uuid_p2 = gen_uuid ()
+  and uuid_r = gen_uuid ()
+  and uuid_x = gen_uuid ()
+  and uuid_mv = gen_uuid ()
+  and uuid_bx = gen_uuid ()
+  and uuid_by = gen_uuid () in
+  with_test_repos
+    [ repo_a, { conn = conn_a; ops_conn = Some ops_a }
+    ; repo_b, { conn = conn_b; ops_conn = Some ops_b } ]
+    (fun () ->
+      let { repro = _; restore } = install_invalid_tx_repro_bang seed history in
+      Fun.protect
+        ~finally:restore
+        (fun () ->
+          Hashtbl.reset Sync_apply.repo_latest_remote_tx;
+          record_meta_bang history
+            [ "seed", Wire.Int seed; "base-uuid", Wire.Uuid base_uuid
+            ; "phase", kw "pending-replay-deleted-targets" ];
+          List.iter
+            (fun c -> ensure_base_page_bang c base_uuid)
+            [ conn_a; conn_b ];
+          List.iter
+            (fun repo -> Sync_client_op.update_local_tx repo 0)
+            [ repo_a; repo_b ];
+          let clients =
+            [ { repo = repo_a; conn = conn_a; client = client_a
+              ; online = true; gen_uuid = Some gen_uuid }
+            ; { repo = repo_b; conn = conn_b; client = client_b
+              ; online = true; gen_uuid = Some gen_uuid } ]
+          in
+          (* A seeds: base -> {p -> s}, p2, r, x, mv *)
+          (match ent_at_uuid (db_of_conn conn_a) base_uuid with
+           | Some base ->
+               create_block_bang conn_a base "p" uuid_p;
+               (match ent_at_uuid (db_of_conn conn_a) uuid_p with
+                | Some p -> create_block_bang conn_a p "s" uuid_s
+                | None -> ());
+               create_block_bang conn_a base "p2" uuid_p2;
+               create_block_bang conn_a base "r" uuid_r;
+               create_block_bang conn_a base "x" uuid_x;
+               create_block_bang conn_a base "mv" uuid_mv
+           | None -> ());
+          sync_loop_bang server clients;
+          (* B queues pending ops while offline *)
+          let db_b = db_of_conn conn_b in
+          let s_b = ent_at_uuid db_b uuid_s
+          and p2_b = ent_at_uuid db_b uuid_p2
+          and mv_b = ent_at_uuid db_b uuid_mv in
+          let tx_meta =
+            [ "client-id", String repo_b
+            ; "local-tx?", Bool true ]
+          in
+          let ops_opts =
+            wire_map
+              [ "client-id", Wire.String repo_b
+              ; "local-tx?", Wire.Bool true ]
+          in
+          (match s_b with
+           | Some s ->
+               (* insert after s — sibling target remote deletes *)
+               ignore
+                 (apply_ops_bang conn_b
+                    (edn_wire
+                       (Printf.sprintf
+                          "[[:insert-blocks [[{:block/uuid %s :block/title \
+                           \"bx\"}] %d {:sibling? true :keep-uuid? \
+                           true}]]]"
+                          (uuid_lit uuid_bx) s.id))
+                    ops_opts);
+               (* move mv after s — no page-root fallback for move ops *)
+               (match mv_b with
+                | Some mv ->
+                    ignore
+                      (apply_ops_bang conn_b
+                         (edn_wire
+                            (Printf.sprintf
+                               "[[:move-blocks [[%d] %d {:sibling? \
+                                true}]]]"
+                               mv.id s.id))
+                         ops_opts)
+                | None -> ())
+           | None -> ());
+          (* insert under p2 — parent target remote deletes *)
+          (match p2_b with
+           | Some p2 ->
+               ignore
+                 (apply_ops_bang conn_b
+                    (edn_wire
+                       (Printf.sprintf
+                          "[[:insert-blocks [[{:block/uuid %s :block/title \
+                           \"by\"}] %d {:sibling? false :keep-uuid? \
+                           true}]]]"
+                          (uuid_lit uuid_by) p2.id))
+                    ops_opts)
+           | None -> ());
+          (* raw tx: value-position ref to r — dropped on replay *)
+          ignore
+            (Db_transact.transact conn_b
+               [ Wire.List
+                   [ kw "db/add"
+                   ; Wire.List [ kw "block/uuid"; Wire.Uuid uuid_x ]
+                   ; kw "block/refs"
+                   ; Wire.List [ kw "block/uuid"; Wire.Uuid uuid_r ] ] ]
+               tx_meta);
+          (* raw tx: entity-position ref to r — fails, marked failed *)
+          ignore
+            (Db_transact.transact conn_b
+               [ Wire.List
+                   [ kw "db/add"
+                   ; Wire.List [ kw "block/uuid"; Wire.Uuid uuid_r ]
+                   ; kw "block/title"; Wire.String "dead" ] ]
+               tx_meta);
+          check "pending queued on B"
+            (List.length (Sync_apply.pending_txs repo_b ()) >= 5);
+          (* A deletes p (cascades s), p2 and r while B is offline *)
+          delete_block_bang conn_a uuid_p;
+          delete_block_bang conn_a uuid_p2;
+          delete_block_bang conn_a uuid_r;
+          let clients_a_only =
+            [ { repo = repo_a; conn = conn_a; client = client_a
+              ; online = true; gen_uuid = Some gen_uuid } ]
+          in
+          sync_loop_bang server clients_a_only;
+          (* B reconnects: remote deletes apply, pending replays *)
+          sync_loop_bang server clients;
+          sync_loop_bang server clients;
+          let db_b = db_of_conn conn_b in
+          let parent_uuid_of u =
+            match ent_at_uuid db_b u with
+            | Some e -> (
+                match Ldb.ref_ent e "block/parent" with
+                | Some p -> ent_uuid p
+                | None -> None)
+            | None -> None
+          in
+          check "insert-after-deleted-sibling lands at page root"
+            (parent_uuid_of uuid_bx = Some base_uuid);
+          check "insert-under-deleted-parent lands at page root"
+            (parent_uuid_of uuid_by = Some base_uuid);
+          check "entity whose ref dropped still exists"
+            (ent_at_uuid db_b uuid_x <> None);
+          let failed_count =
+            match
+              Sqlite.query ops_b
+                ~sql:"select count(*) from client_ops where failed = 1"
+                ~bind:[||]
+            with
+            | [| Sqlite.Integer n |] :: _ -> Int64.to_int n
+            | _ -> -1
+          in
+          check "move + entity-position-ref txs marked failed"
+            (failed_count = 2);
+          check "pending queue drained"
+            (Sync_apply.pending_txs repo_b () = [])))
+
 (* deftest three-clients-single-repo-sim-test *)
 let test_three_clients_single_repo_sim () =
   let seed = Option.value (env_seed ()) ~default:default_seed in
@@ -4769,5 +4965,8 @@ let () =
         ; Alcotest.test_case
             "two-clients-a-wins-b-overlap-rebase-3-tries-test" `Quick
             test_two_clients_a_wins_b_overlap_rebase_3_tries
+        ; Alcotest.test_case
+            "pending-replay-deleted-target-fallbacks-test" `Quick
+            test_pending_replay_deleted_target_fallbacks
         ; Alcotest.test_case "three-clients-single-repo-sim-test" `Quick
             test_three_clients_single_repo_sim ] ) ]

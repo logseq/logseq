@@ -322,6 +322,17 @@ let upsert_local_tx_entry repo ~(tx_id : string)
     ];
   { created_at = created_at'; should_inc_pending = should_inc_pending }
 
+(* After an op-path replay succeeds the resolved, canonical tx replaces
+   the stored one and the forward ops are consumed — later rebuilds,
+   uploads, and confirms all see the same concrete tx data. *)
+let update_local_tx_resolved repo (tx_id : string)
+    (normalized_tx_data : Wire.t) : unit =
+  run (store repo)
+    "update client_ops set normalized_tx_data = ?, forward_outliner_ops = ? where kind = 'tx' and tx_id = ?"
+    [ text (write_transit normalized_tx_data)
+    ; text (write_transit (Wire.Array []))
+    ; text tx_id ]
+
 let get_local_tx_entry repo (tx_id : string) : local_tx_entry option =
   if not (Sync_state.uuid_string tx_id) then None
   else

@@ -918,20 +918,204 @@ let cap_upload_request_tx_entries repo (db : db)
   in
   loop tx_entries [] 0
 
-let prepare_upload_tx_entries ?repo (conn : conn option)
+(* Pending replay on a server base where the remote side may have deleted
+   entities a queued tx references. Entity-position refs that are gone mean
+   the op's target is gone — the tx fails and is marked failed (server
+   wins on the entity). A missing ref in *value* position drops just that
+   datom: the ref is meaningless once its target is deleted, but the rest
+   of the tx still applies. *)
+(* uuids created or retracted by a tx's own items — used to thread the
+   server-visible uuid set across an ordered pending queue. *)
+let pending_tx_uuid_delta (items : Wire.t list) : SSet.t * SSet.t =
+  List.fold_left
+    (fun (created, retracted) item ->
+       match item with
+       | (Wire.Array l | Wire.List l)
+         when List.length l >= 4 && List.nth l 0 = kw "db/add" -> (
+           (* an e-position [:block/uuid u] upserts u on the server even
+              when the tx doesn't assert block/uuid explicitly *)
+           let created =
+             match List.nth l 1 with
+             | Wire.Array [ a; Wire.Uuid u ] | Wire.List [ a; Wire.Uuid u ]
+               when a = kw "block/uuid" -> SSet.add u created
+             | _ -> created
+           in
+           match List.nth l 2 = kw "block/uuid", List.nth l 3 with
+           | true, Wire.Uuid u -> (SSet.add u created, retracted)
+           | _ -> (created, retracted))
+       | (Wire.Array l | Wire.List l)
+         when List.length l >= 4 && List.nth l 0 = kw "db/retract" -> (
+           match List.nth l 2 = kw "block/uuid", List.nth l 3 with
+           | true, Wire.Uuid u -> (created, SSet.add u retracted)
+           | _ -> (created, retracted))
+       | (Wire.Array [ op; e ] | Wire.List [ op; e ])
+         when op = kw "db/retractEntity" -> (
+           match e with
+           | Wire.Array [ a; Wire.Uuid u ] | Wire.List [ a; Wire.Uuid u ]
+             when a = kw "block/uuid" -> (created, SSet.add u retracted)
+           | _ -> (created, retracted))
+       | _ -> (created, retracted))
+    (SSet.empty, SSet.empty)
+    items
+
+(* an attr ident is "live" on a db when it resolves to an entity — an
+   attr deleted on the new server base resolves nowhere. *)
+let attr_resolves (d : db) (a : Wire.t) : bool =
+  match a with
+  | Wire.Keyword s | Wire.String s ->
+      Datascript.entity d (Ident s) <> None
+  | Wire.Int id -> Datascript.entity d (Entity_id id) <> None
+  | _ -> true
+
+let sanitize_pending_tx_refs ?uuid_exists ?(attr_live = fun _ -> true)
+    (db : db) (tx_data : Wire.t list) : Wire.t list =
+  let created = fst (pending_tx_uuid_delta tx_data) in
+  let entity_exists =
+    match uuid_exists with
+    | Some f -> f
+    | None -> (fun uuid_str -> Outliner_op.entity_of_uuid db uuid_str <> None)
+  in
+  let missing uuid_str =
+    (not (SSet.mem uuid_str created)) && not (entity_exists uuid_str)
+  in
+  let missing_uuid_of w =
+    match w with
+    | Wire.String s when Sync_state.uuid_string s -> (
+        let u = Datascript.Util.uuid_canonicalize s in
+        if missing u then Some u else None)
+    | Wire.Uuid u -> if missing u then Some u else None
+    | Wire.Array [ Wire.Keyword "block/uuid"; Wire.Uuid u ]
+    | Wire.List [ Wire.Keyword "block/uuid"; Wire.Uuid u ] ->
+        if missing u then Some u else None
+    | _ -> None
+  in
+  let is_missing_ref w = missing_uuid_of w <> None in
+  List.filter_map
+    (fun item ->
+       match item with
+       | Wire.Array l | Wire.List l when List.length l >= 4 -> (
+           let e = List.nth l 1 and a = List.nth l 2 and v = List.nth l 3 in
+           match missing_uuid_of e with
+           | Some u ->
+               failwith ("pending tx references missing block " ^ u)
+           | None ->
+               (* property-pair drop: a user/logseq property attr that
+                  resolves nowhere on the new base was remotely deleted —
+                  keep everything else (schema attrs like block/name have
+                  no ident entity to resolve against). *)
+               let dead_property_attr =
+                 match a with
+                 | Wire.Keyword a' | Wire.String a' ->
+                     Db_property.property a' && not (attr_live a)
+                 | _ -> false
+               in
+               if dead_property_attr then None
+               else (
+                 match a with
+                 | Wire.Keyword a'
+                   when ref_attr db a' && is_missing_ref v -> None
+                 | _ -> Some item))
+       | _ -> Some item)
+    tx_data
+
+let prepare_upload_tx_entries ?repo ?server_db (conn : conn option)
     (pending : Sync_client_op.local_tx_entry list) :
     Wire.t list * string list * Wire.t list =
+  let e_missing_tx_ids = ref [] in
+  let srv_db =
+    match server_db with
+    | Some d -> Some d
+    | None -> (
+        match repo with
+        | Some r -> (
+            match Sync_state.server_conn r with
+            | Some c -> Some (Conn.db c)
+            | None -> None)
+        | None -> None)
+  in
+  (* the server sees entries applied in queue order, so a pending ref is
+     uploadable exactly when its uuid is visible on the server conn or
+     will be created (and not retracted) by an earlier pending entry —
+     never by display-only state. *)
+  let available =
+    match srv_db with
+    | Some d ->
+        let t = Hashtbl.create 4096 in
+        Datascript.datoms d Avet ~a:"block/uuid" ()
+        |> Seq.iter (fun (x : datom) ->
+               match x.v with
+               | Uuid u -> Hashtbl.replace t u ()
+               | _ -> ());
+        Some t
+    | None -> None
+  in
+  let attr_live =
+    match srv_db, conn with
+    | Some srv, Some c ->
+        fun a -> attr_resolves srv a || attr_resolves (Conn.db c) a
+    | None, Some c -> fun a -> attr_resolves (Conn.db c) a
+    | _, None -> fun _ -> true
+  in
   let entries =
-    List.map
+    List.filter_map
       (fun (e : Sync_client_op.local_tx_entry) ->
-         Wire.Map
-           [ kw "tx-id", Wire.String e.tx_id
-           ; kw "outliner-op"
-           , (match e.outliner_op with
-              | Some op -> kw op
-              | None -> Wire.Nil)
-           ; kw "tx-data", e.tx ])
+         let tx_data =
+           match conn, available with
+           | Some c, Some avail -> (
+               let uuid_exists u = Hashtbl.mem avail u in
+               try
+                 Some
+                   (sanitize_pending_tx_refs ~uuid_exists ~attr_live
+                      (Conn.db c) (tx_items_of e.tx))
+               with ex ->
+                 Worker_log.warn "db-sync/upload-sanitize-failed"
+                   [ ( "repo", Option.value repo ~default:"-" )
+                   ; "tx-id", e.tx_id
+                   ; "error", Printexc.to_string ex ];
+                 None)
+           | Some c, None -> (
+               try
+                 Some
+                   (sanitize_pending_tx_refs ~attr_live (Conn.db c)
+                      (tx_items_of e.tx))
+               with ex ->
+                 Worker_log.warn "db-sync/upload-sanitize-failed"
+                   [ ( "repo", Option.value repo ~default:"-" )
+                   ; "tx-id", e.tx_id
+                   ; "error", Printexc.to_string ex ];
+                 None)
+           | None, _ -> Some (tx_items_of e.tx)
+         in
+         match tx_data with
+         | Some items ->
+             (match available with
+              | Some avail ->
+                  let created', retracted' =
+                    pending_tx_uuid_delta (tx_items_of e.tx)
+                  in
+                  SSet.iter (fun u -> Hashtbl.replace avail u ()) created';
+                  SSet.iter (fun u -> Hashtbl.remove avail u) retracted'
+              | None -> ());
+             Some
+               (Wire.Map
+                  [ kw "tx-id", Wire.String e.tx_id
+                  ; kw "outliner-op"
+                  , (match e.outliner_op with
+                     | Some op -> kw op
+                     | None -> Wire.Nil)
+                  ; kw "tx-data", Wire.Array items ])
+         | None ->
+             e_missing_tx_ids := e.tx_id :: !e_missing_tx_ids;
+             None)
       pending
+  in
+  let e_missing_drops =
+    List.map
+      (fun tx_id ->
+         Wire.Map
+           [ kw "tx-id", Wire.String tx_id
+           ; kw "reason", kw "missing-block-entity" ])
+      (List.rev !e_missing_tx_ids)
   in
   let empty_tx_ids =
     List.filter_map
@@ -972,7 +1156,9 @@ let prepare_upload_tx_entries ?repo (conn : conn option)
     | Some r, Some c -> cap_upload_request_tx_entries r (Conn.db c) tx_entries
     | _ -> tx_entries
   in
-  (tx_entries, empty_tx_ids, drop_txs)
+  ( tx_entries
+  , empty_tx_ids @ List.rev !e_missing_tx_ids
+  , drop_txs @ e_missing_drops )
 
 let clear_large_upload_progress repo (tx_ids : string list) : unit =
   List.iter
@@ -1201,9 +1387,46 @@ let rebase_target_ref (target_id : Wire.t) : Wire.t =
       | _ -> target_id)
   | _ -> target_id
 
-let rebase_resolve_target_and_sibling (current_db : db)
-    (rebase_db_before : db option) (target_id : Wire.t) (sibling : bool)
-    : (entity * bool) option =
+(* Walks a deleted target's ancestor chain on db_before: the closest
+   ancestor still present on current_db becomes the insert parent, and
+   falling off the top lands on the target's own block/page entity. *)
+let resolve_ancestor_or_page (db_before : db) (current_db : db)
+    (tb : entity) : entity option =
+  let entity_on_current (e : entity) : entity option =
+    match Datascript.entity_attr e "block/uuid" with
+    | Some (One_value (Uuid u)) ->
+        Datascript.entity current_db (Lookup_ref ("block/uuid", Uuid u))
+    | _ -> None
+  in
+  let parent_on (d : db) (e : entity) : entity option =
+    match Datascript.entity_attr e "block/parent" with
+    | Some (One_entity pe) ->
+        Option.bind pe.db_id (fun r ->
+            try Datascript.entity d r with _ -> None)
+    | _ -> None
+  in
+  let rec up (e : entity) : entity option =
+    match parent_on db_before e with
+    | Some p -> (
+        match entity_on_current p with
+        | Some cur -> Some cur
+        | None -> up p)
+    | None -> (
+        match Datascript.entity_attr e "block/page" with
+        | Some (One_entity pe) -> (
+            match
+              Option.bind pe.db_id (fun r ->
+                  try Datascript.entity db_before r with _ -> None)
+            with
+            | Some page -> entity_on_current page
+            | None -> None)
+        | _ -> None)
+  in
+  up tb
+
+let rebase_resolve_target_and_sibling ?(page_root_fallback = false)
+    (current_db : db) (rebase_db_before : db option) (target_id : Wire.t)
+    (sibling : bool) : (entity * bool) option =
   let target_ref = rebase_target_ref target_id in
   let target = entity_of_wire_ref current_db target_ref in
   let target_before, parent_uuid =
@@ -1227,21 +1450,35 @@ let rebase_resolve_target_and_sibling (current_db : db)
           | None -> None ))
     | None -> (None, None)
   in
-  match target with
-  | Some t -> Some (t, sibling)
-  | None -> (
-      match (target_before, parent_uuid, sibling) with
-      | Some tb, Some puuid, true -> (
-          match rebase_find_existing_left_sibling current_db tb with
-          | Some s -> Some (s, true)
-          | None -> (
-              match
-                Datascript.entity current_db
-                  (Lookup_ref ("block/uuid", Uuid puuid))
-              with
-              | Some parent -> Some (parent, false)
-              | None -> None))
-      | _ -> None)
+  let page_root tb =
+    if page_root_fallback then
+      match rebase_db_before with
+      | Some db ->
+          Option.map
+            (fun e -> (e, false))
+            (resolve_ancestor_or_page db current_db tb)
+      | None -> None
+    else None
+  in
+  let r =
+    match target with
+    | Some t -> Some (t, sibling)
+    | None -> (
+        match (target_before, parent_uuid, sibling) with
+        | Some tb, Some puuid, true -> (
+            match rebase_find_existing_left_sibling current_db tb with
+            | Some s -> Some (s, true)
+            | None -> (
+                match
+                  Datascript.entity current_db
+                    (Lookup_ref ("block/uuid", Uuid puuid))
+                with
+                | Some parent -> Some (parent, false)
+                | None -> page_root tb))
+        | Some tb, _, _ -> page_root tb
+        | _ -> None)
+  in
+  r
 
 let template_parent_ref (parent : Wire.t) : Wire.t =
   match parent with
@@ -1377,7 +1614,7 @@ let rec replay_canonical_outliner_op (conn : conn) (op_entry : Wire.t)
       in
       (match
          rebase_resolve_target_and_sibling db rebase_db_before target_id
-           sibling
+           ~page_root_fallback:true sibling
        with
        | Some (target, sibling') -> (
            let blocks' =
@@ -1416,7 +1653,7 @@ let rec replay_canonical_outliner_op (conn : conn) (op_entry : Wire.t)
       in
       let resolved =
         rebase_resolve_target_and_sibling db rebase_db_before target_id'
-          sibling
+          ~page_root_fallback:true sibling
       in
       let template_ent = entity_of_wire_ref db template_id' in
       match (template_ent, resolved) with
@@ -2150,85 +2387,104 @@ let transact_remote_txs ?(display_db : db option) (conn : conn)
 
 (* ---- pending replay / display rebuild ---- *)
 
-(* Every uuid ref a pending tx uses must resolve on the target conn or be
-   created by the same tx; otherwise the op is stale and fails rather than
-   upserting a zombie stub entity. *)
-let check_pending_tx_refs (db : db) (tx_data : Wire.t list) : unit =
-  let created =
-    List.fold_left
-      (fun s item ->
+
+(* Forward replay of one queued local tx onto the display conn: the
+   canonical outliner ops re-execute the op semantics against the new
+   server base. Entries without forward ops (raw transacts) fall back to
+   replaying the queued tx data verbatim. *)
+let replay_pending_entry (repo : string) (conn : conn)
+    (rebase_db_before : db option)
+    (local_tx : Sync_client_op.local_tx_entry) : unit =
+  let db = Conn.db conn in
+  (* idempotent replay: a queued op may re-run against a newer base (e.g.
+     its own ack echo rebuilt the display while the entry was still
+     pending). When every block/uuid the tx creates already exists, the
+     op's effects are already materialized — replaying it again would
+     fail resolving targets that no longer exist even on db_before. *)
+  let created_uuids =
+    List.filter_map
+      (fun item ->
          match item with
          | Wire.Array l | Wire.List l
            when List.length l >= 4
                 && List.nth l 0 = kw "db/add"
                 && List.nth l 2 = kw "block/uuid" -> (
              match List.nth l 3 with
-             | Wire.Uuid u -> SSet.add u s
-             | _ -> s)
-         | _ -> s)
-      SSet.empty tx_data
+             | Wire.Uuid u -> Some u
+             | _ -> None)
+         | _ -> None)
+      (tx_items_of local_tx.tx)
   in
-  let missing uuid_str =
-    (not (SSet.mem uuid_str created))
-    && Outliner_op.entity_of_uuid db uuid_str = None
+  let already_materialized =
+    created_uuids <> []
+    && List.for_all
+         (fun u -> Outliner_op.entity_of_uuid db u <> None)
+         created_uuids
   in
-  List.iter
-    (fun item ->
-       match item with
-       | Wire.Array l | Wire.List l when List.length l >= 4 ->
-           let e = List.nth l 1 and a = List.nth l 2 and v = List.nth l 3 in
-           let check_pos w =
-             match w with
-             | Wire.String s when Sync_state.uuid_string s ->
-                 if missing (Datascript.Util.uuid_canonicalize s) then
-                   failwith ("pending tx references missing block " ^ s)
-             | Wire.Uuid u when missing u ->
-                 failwith ("pending tx references missing block " ^ u)
-             | Wire.Array [ Wire.Keyword "block/uuid"; Wire.Uuid u ]
-               when missing u ->
-                 failwith ("pending tx references missing block " ^ u)
-             | _ -> ()
-           in
-           check_pos e;
-           (match a with
-            | Wire.Keyword a' when ref_attr db a' -> check_pos v
-            | _ -> ())
-       | _ -> ())
-    tx_data
-
-(* Forward replay of one queued local tx onto the display conn: the
-   canonical outliner ops re-execute the op semantics against the new
-   server base. Entries without forward ops (raw transacts) fall back to
-   replaying the queued tx data verbatim. *)
-let replay_pending_entry (conn : conn)
-    (local_tx : Sync_client_op.local_tx_entry) : unit =
-  match local_tx.forward_outliner_ops with
-  | _ :: _ as forward_ops ->
-      let ops =
-        Outliner_op_construct.canonicalize_insert_ops (Conn.db conn)
-          (Wire.as_seq local_tx.tx) forward_ops
-      in
-      List.iter
-        (fun op -> ignore (replay_canonical_outliner_op conn op None))
-        ops
-  | [] -> (
-      match normalize_tx_data_for_rebase local_tx.tx with
-      | _ :: _ as tx_data ->
-          let db = Conn.db conn in
-          check_pending_tx_refs db tx_data;
-          let tx_data = List.map (resolve_temp_id db) tx_data in
-          ignore
-            (Db_transact.transact conn tx_data
-               [ ( "outliner-op"
-                 , match local_tx.outliner_op with
-                   | Some o -> Keyword o
-                   | None -> Nil ) ])
-      | [] -> ())
+  if already_materialized then ()
+  else
+    match local_tx.forward_outliner_ops with
+    | _ :: _ as forward_ops ->
+        let db_before_apply = Conn.db conn in
+        let ops =
+          Outliner_op_construct.canonicalize_insert_ops (Conn.db conn)
+            (Wire.as_seq local_tx.tx) forward_ops
+        in
+        (* capture the datoms this entry's ops produce: on success the
+           resolved, canonical tx replaces the stored op so subsequent
+           rebuilds/upload/confirm replay the same concrete tx data. *)
+        let reports = ref [] in
+        let lid =
+          Datascript.listen conn "pending-resolve-collect"
+            (fun r -> reports := r :: !reports)
+        in
+        (try
+           List.iter
+             (fun op ->
+                ignore
+                  (replay_canonical_outliner_op conn op rebase_db_before))
+             ops
+         with e ->
+           Datascript.unlisten conn lid;
+           raise e);
+        Datascript.unlisten conn lid;
+        let datoms =
+          List.concat_map
+            (fun (r : tx_report) -> r.tx_data)
+            (List.rev !reports)
+        in
+        if datoms <> [] then
+          let resolved =
+            normalize_tx_data (Conn.db conn) db_before_apply datoms
+          in
+          Sync_client_op.update_local_tx_resolved repo local_tx.tx_id
+            (Wire.Array resolved)
+    | [] -> (
+        match normalize_tx_data_for_rebase local_tx.tx with
+        | _ :: _ as tx_data ->
+            let attr_live (a : Wire.t) : bool =
+              attr_resolves db a
+              || (match rebase_db_before with
+                  | Some b -> not (attr_resolves b a)
+                  | None -> true)
+            in
+            let tx_data =
+              sanitize_pending_tx_refs ~attr_live db tx_data
+            in
+            let tx_data = List.map (resolve_temp_id db) tx_data in
+            ignore
+              (Db_transact.transact conn tx_data
+                 [ ( "outliner-op"
+                   , match local_tx.outliner_op with
+                     | Some o -> Keyword o
+                     | None -> Nil ) ])
+        | [] -> ())
 
 (* Replays the pending queue in order. A replay failure marks the entry
    failed — the server stays authoritative and the op leaves the
    projection. *)
-let replay_pending_txs repo (conn : conn) : unit =
+let replay_pending_txs repo (conn : conn)
+    (rebase_db_before : db option) : unit =
   let pending = pending_txs repo () in
   if pending <> [] then begin
     Sync_state.pending_replay := true;
@@ -2236,7 +2492,7 @@ let replay_pending_txs repo (conn : conn) : unit =
        List.iter
          (fun (local_tx : Sync_client_op.local_tx_entry) ->
             try
-              replay_pending_entry conn local_tx
+              replay_pending_entry repo conn rebase_db_before local_tx
             with e ->
               Worker_log.warn "db-sync/pending-replay-failed"
                 [ "repo", repo
@@ -2285,7 +2541,7 @@ let rebuild_display repo ~(jump_tx_data : datom list) : unit =
           (fun r -> replay_reports := r :: !replay_reports)
       in
       (try
-         replay_pending_txs repo display_conn
+         replay_pending_txs repo display_conn (Some db_before)
        with e ->
          Datascript.unlisten display_conn lid;
          raise e);
@@ -2326,25 +2582,40 @@ let confirm_pending_txs repo (tx_ids : string list) : unit =
              List.mem local_tx.tx_id tx_ids)
           (pending_txs repo ())
       in
-      match
-        List.concat_map
-          (fun (local_tx : Sync_client_op.local_tx_entry) ->
-             normalize_tx_data_for_rebase local_tx.tx)
-          entries
-      with
-      | [] -> ()
-      | tx_data ->
-          let db = Conn.db server_conn in
-          let tx_data =
-            List.map (resolve_temp_id db) tx_data
-            |> fun items ->
-               List.map Ds_wire.value_of_transit items
-               |> Db_sync_tx_sanitize.sanitize_tx db
-               |> List.map Ds_wire.transit_of_value
-          in
-          ignore
-            (Db_transact.transact server_conn tx_data
-               [ "rtc-tx?", Bool true ]))
+
+      (* apply each confirmed entry in queue order, sanitized the same
+         way the upload was — refs to uuids the remote side deleted are
+         dropped in value position so the server conn mirrors what the
+         server actually accepted. An entity-position miss means the
+         upload never happened (marked failed earlier), so keep the tx
+         verbatim and let transact surface it. *)
+      List.iter
+        (fun (local_tx : Sync_client_op.local_tx_entry) ->
+           match normalize_tx_data_for_rebase local_tx.tx with
+           | [] -> ()
+           | tx_data ->
+               let db = Conn.db server_conn in
+               let tx_data =
+                 (try sanitize_pending_tx_refs db tx_data
+                  with _ -> tx_data)
+                 |> List.map (resolve_temp_id db)
+                 |> fun items ->
+                    List.map Ds_wire.value_of_transit items
+                    |> Db_sync_tx_sanitize.sanitize_tx db
+                    |> List.map Ds_wire.transit_of_value
+               in
+               if tx_data <> [] then
+                 try
+                   ignore
+                     (Db_transact.transact server_conn tx_data
+                        [ "rtc-tx?", Bool true ])
+                 with e ->
+                   ignore (mark_failed_txs repo [ local_tx.tx_id ]);
+                   Worker_log.warn "db-sync/confirm-tx-failed"
+                     [ "repo", repo
+                     ; "tx-id", local_tx.tx_id
+                     ; "error", Printexc.to_string e ])
+        entries)
 
 (* Remote graphs keep two conns: the storage-backed conn registered at
    open becomes the server conn holding only confirmed state (restored
@@ -2370,7 +2641,7 @@ let split_off_server_if_remote repo : unit =
         let display = display_conn_from_server db in
         Worker_state.set_datascript_conn repo display;
         Db_listener.listen_db_changes repo display;
-        replay_pending_txs repo display
+        replay_pending_txs repo display None
       end
 
 (* ---- handle-local-tx! (forward decl via ref) ---- *)
@@ -2513,13 +2784,31 @@ let upload_pending_batch repo (client : Sync_state.client) (conn : conn)
   | [] -> Db_worker_effect.pure ()
   | batch ->
       let tx_entries, drop_tx_ids, drop_txs =
-        !prepare_upload_tx_entries_fn ~repo (Some conn) batch
+        !prepare_upload_tx_entries_fn ~repo
+          ?server_db:(Option.map Conn.db (Sync_state.server_conn repo))
+          (Some conn) batch
       in
       if drop_tx_ids <> [] then begin
         Worker_log.info "db-sync/drop-tx-ids"
           [ "tx-ids", String.concat "," drop_tx_ids
           ; "drops", Transit_codec.to_string (Wire.Array drop_txs) ];
-        ignore (mark_pending_txs_false repo drop_tx_ids)
+        let failed_ids, benign_ids =
+          List.partition_map
+            (fun d ->
+               match Wire.get "reason" d with
+               | Some (Wire.Keyword "missing-block-entity") -> (
+                   match Wire.get "tx-id" d with
+                   | Some (Wire.String id) -> Either.Left id
+                   | _ -> Either.Right "")
+               | _ -> (
+                   match Wire.get "tx-id" d with
+                   | Some (Wire.String id) -> Either.Right id
+                   | _ -> Either.Right ""))
+            drop_txs
+        in
+        ignore (mark_failed_txs repo (List.filter (( <> ) "") failed_ids));
+        ignore
+          (mark_pending_txs_false repo (List.filter (( <> ) "") benign_ids))
       end;
       Db_worker_effect.catch
         (upload_aes_key repo tx_entries >>= fun aes_key ->
@@ -2815,6 +3104,7 @@ let apply_remote_txs_once repo (_client : Sync_state.client)
           Sync_client_op.add_sync_conflicts repo conflicts;
           broadcast_sync_conflicts repo conflicts
         end;
+
         let tx_report =
           batch_transact_with_temp_conn conn tx_meta
             (fun c ->
