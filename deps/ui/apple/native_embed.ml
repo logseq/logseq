@@ -394,6 +394,7 @@ let platform_event payload =
                 | None -> ())
             | None -> ())
         | _ -> ())
+      else if name = "node-rect" then Dom_ext.note_node_rect json
       else Host.enqueue (fun () -> Platform.emit_event name json)
   | None -> ()
 

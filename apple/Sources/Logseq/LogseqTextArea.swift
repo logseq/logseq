@@ -103,6 +103,13 @@ struct LogseqTextArea: NSViewRepresentable {
       ])
     }
 
+    /// True while the autocomplete popup is mounted — OCaml's document
+    /// listeners own ArrowUp/ArrowDown then (item navigation), so the
+    /// native caret move must be suppressed like Enter/Tab/Escape.
+    private var autocompleteOpen: Bool {
+      LogseqElementRegistry.shared.element("ui__ac-inner") != nil
+    }
+
     func textView(
       _ textView: NSTextView, doCommandBy commandSelector: Selector
     ) -> Bool {
@@ -110,27 +117,53 @@ struct LogseqTextArea: NSViewRepresentable {
       // For keys the editor owns (Enter/Tab/Escape) swallow the command so
       // AppKit doesn't also insert a newline/indent — OCaml's keymap runs
       // the outliner op and the textarea updates from patches.
-      let key: String
-      var shift = false
+      var key: String?
       var which = 0
+      var swallow = true
       switch commandSelector {
       case #selector(NSResponder.insertNewline(_:)):
         key = "Enter"; which = 13
-      case #selector(NSResponder.insertTab(_:)):
+      case #selector(NSResponder.insertTab(_:)),
+           #selector(NSResponder.insertBacktab(_:)):
         key = "Tab"; which = 9
-      case #selector(NSResponder.insertBacktab(_:)):
-        key = "Tab"; which = 9; shift = true
       case #selector(NSResponder.cancelOperation(_:)):
         key = "Escape"; which = 27
+      case #selector(NSResponder.moveUp(_:)),
+           #selector(NSResponder.moveUpAndModifySelection(_:)):
+        // Ctrl+P also arrives here (Emacs binding) — carry the real key so
+        // the AC's ctrl+p nav binding fires like the web's.
+        let chars = NSApp.currentEvent?.charactersIgnoringModifiers
+        key = chars == "p" ? "p" : "ArrowUp"; which = chars == "p" ? 80 : 38
+        swallow = autocompleteOpen
+      case #selector(NSResponder.moveDown(_:)),
+           #selector(NSResponder.moveDownAndModifySelection(_:)):
+        let chars = NSApp.currentEvent?.charactersIgnoringModifiers
+        key = chars == "n" ? "n" : "ArrowDown"; which = chars == "n" ? 78 : 40
+        swallow = autocompleteOpen
+      case #selector(NSResponder.moveLeft(_:)),
+           #selector(NSResponder.moveLeftAndModifySelection(_:)),
+           #selector(NSResponder.moveBackward(_:)),
+           #selector(NSResponder.moveBackwardAndModifySelection(_:)):
+        key = "ArrowLeft"; which = 37
+        swallow = false
+      case #selector(NSResponder.moveRight(_:)),
+           #selector(NSResponder.moveRightAndModifySelection(_:)),
+           #selector(NSResponder.moveForward(_:)),
+           #selector(NSResponder.moveForwardAndModifySelection(_:)):
+        key = "ArrowRight"; which = 39
+        swallow = false
       default:
         return false
       }
+      let flags = NSApp.currentEvent?.modifierFlags ?? []
       emit("keydown", payload: [
-        "key": key, "which": which,
-        "shiftKey": shift,
-        "metaKey": false, "ctrlKey": false, "altKey": false,
+        "key": key!, "which": which,
+        "shiftKey": flags.contains(.shift),
+        "metaKey": flags.contains(.command),
+        "ctrlKey": flags.contains(.control),
+        "altKey": flags.contains(.option),
       ])
-      return true
+      return swallow
     }
 
     func textDidBeginEditing(_ notification: Notification) {
@@ -176,6 +209,35 @@ struct LogseqTextArea: NSViewRepresentable {
       textView?.scrollRangeToVisible(textView?.selectedRange() ?? NSRange())
     }
 
+    /// The selection-start caret rect in the `.named("logseqWindow")`
+    /// top-left space the frame store reports in — the anchor the web
+    /// autocomplete popup positions itself at (mock-textarea span rect).
+    /// `firstRect(forCharacterRange:)` is the IME caret rect (screen
+    /// space); flip it into the frame-store coordinate space.
+    private func caretRectSnapshot() -> [String: Any]? {
+      guard let textView, let window = textView.window,
+        let contentView = window.contentView
+      else { return nil }
+      let sel = textView.selectedRange()
+      guard sel.location != NSNotFound else { return nil }
+      let caret = textView.firstRect(
+        forCharacterRange: NSRange(location: sel.location, length: 0),
+        actualRange: nil)
+      let winRect = window.convertFromScreen(caret)
+      let viewRect = contentView.convert(winRect, from: nil)
+      let bottom = contentView.isFlipped
+        ? viewRect.maxY
+        : contentView.bounds.height - viewRect.minY
+      return [
+        "left": Double(viewRect.minX),
+        "top": Double(bottom - viewRect.height),
+        "right": Double(viewRect.minX + viewRect.width),
+        "bottom": Double(bottom),
+        "width": Double(viewRect.width),
+        "height": Double(viewRect.height),
+      ]
+    }
+
     // MARK: emission
 
     func emit(_ name: String, payload: [String: Any] = [:]) {
@@ -185,6 +247,7 @@ struct LogseqTextArea: NSViewRepresentable {
       var enriched = payload
       enriched["nodeId"] = owner.context.nodeID
       var target = LogseqDOMSnapshot.snapshot(for: owner.context)
+      if let caret = caretRectSnapshot() { target["caretRect"] = caret }
       // OCaml's el_value reads "value" off the target snapshot — carry the
       // live string so on_input sees the current buffer, not the last patch.
       target["value"] = textView?.string ?? ""

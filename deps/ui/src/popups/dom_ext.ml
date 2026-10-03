@@ -134,8 +134,12 @@ let graphemes_pos s from_index =
 ;;
 
 external bounding_rect : element -> rect = "getBoundingClientRect" [@@mel.send]
-external window_inner_height : float = "innerHeight" [@@mel.scope "window"]
-external window_inner_width : float = "innerWidth" [@@mel.scope "window"]
+(* function form: the apple twin reads host-pushed size at call time *)
+external inner_height : float = "innerHeight" [@@mel.scope "window"]
+external inner_width : float = "innerWidth" [@@mel.scope "window"]
+
+let window_inner_height () = inner_height
+let window_inner_width () = inner_width
 external rect_left : rect -> float = "left" [@@mel.get]
 external rect_top : rect -> float = "top" [@@mel.get]
 external rect_right : rect -> float = "right" [@@mel.get]
