@@ -2,8 +2,9 @@
 
 This is the Stage 0 map from the Python reference server to the current Logseq
 architecture. `compat` means the first native implementation should call the
-existing Logseq API through an adapter. `native-read` and `native-write` are
-later candidates, not current implementations.
+existing Logseq API through an adapter. Native candidates remain unregistered
+until their differential and live validation gates pass. Application APIs are
+preferred over direct DB reads and mutations.
 
 ## Meta and reads
 
@@ -16,7 +17,7 @@ later candidates, not current implementations.
 | `inspectPage` | page UUID, `detail` | detail-specific queries | query adapter | DB read |
 | `pageStats` | page UUID | fixed count queries | query adapter | DB read |
 | `getBlockUUID` | page UUID | query | query adapter | DB read |
-| `getBlock` | block UUID | `getBlock` | API block lookup | DB read |
+| `getBlock` | block UUID | exact entity query | compatibility query remains registered | application `Editor.getBlock` candidate implemented; local differential tests pass, live validation pending |
 | `searchBlocks` | text, page scope, regex, limit | predicate query + separate count | query adapter, single attempt | DB read/query |
 | `getBlockTree` | block UUID, depth/node caps | parent traversal query | query adapter | DB read |
 | `findBacklinks` | target UUID | reference/tag/property queries | query adapter | DB read |

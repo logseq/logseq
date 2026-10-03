@@ -1007,11 +1007,15 @@
     (or (:id value) (:db/id value))
     value))
 
-(defn- uuid-query-input
+(defn validated-uuid
   [value]
   (when-not (and (string? value) (re-matches page-stats-uuid-pattern value))
     (throw (js/Error. "Entity query requires a UUID")))
-  (str "#uuid " (pr-str value)))
+  value)
+
+(defn- uuid-query-input
+  [value]
+  (str "#uuid " (pr-str (validated-uuid value))))
 
 (defn- content-loss
   [sent stored]

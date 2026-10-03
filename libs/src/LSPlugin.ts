@@ -806,7 +806,7 @@ export interface IEditorProxy extends Record<string, any> {
 
   getBlock: (
     srcBlock: BlockIdentity | EntityID,
-    opts?: Partial<{ includeChildren: boolean }>
+    opts?: Partial<{ includeChildren: boolean; camelCase: boolean }>
   ) => Promise<BlockEntity | null>
 
   setBlockCollapsed: (

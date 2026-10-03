@@ -4,6 +4,9 @@
             [cljs.test :refer [async deftest is]]
             [datascript.core :as d]
             [electron.mcp-compat :as mcp-compat]
+            [electron.mcp-native :as mcp-native]
+            [frontend.db.async :as db-async]
+            [logseq.api.block :as api-block]
             [logseq.sdk.utils :as sdk-utils]
             [promesa.core :as p]))
 
@@ -325,6 +328,83 @@
                     (is @written?)
                     (js/queueMicrotask done)))
           (p/catch (fn [error] (is false (.-message error)) (js/queueMicrotask done)))))))
+
+(deftest native-block-read-matches-compatibility-through-the-application-api
+  (let [{:keys [page-uuid block-uuid conn api]} (page-fixture)
+        child-uuid "00000000-0000-4000-8000-000000000163"
+        missing-uuid "00000000-0000-4000-8000-000000000164"
+        calls (atom [])
+        native-api (fn [method args]
+                     (swap! calls conj [method args])
+                     (api-block/get_block (first args) (second args)))
+        get-block (fn [_graph id-or-uuid _opts]
+                    (p/resolved (d/pull @conn '[*] (if (uuid? id-or-uuid) [:block/uuid id-or-uuid] id-or-uuid))))
+        get-children (fn [_graph uuid]
+                       (p/resolved (d/q '[:find [(pull ?child [*]) ...] :in $ ?uuid
+                                           :where [?parent :block/uuid ?uuid] [?child :block/parent ?parent]] @conn uuid)))]
+    (d/transact! conn [{:db/id 163 :block/uuid (uuid child-uuid) :block/title "Nested block" :block/order "a1"
+                       :block/parent 161 :block/page 160 :block/collapsed? true}
+                      {:db/id 161 :plugin.property/smoke-link 160}])
+    (async done
+      (-> (p/with-redefs [db-async/<get-block get-block
+                         db-async/<get-block-immediate-children get-children]
+            (p/let [results (p/all (map (fn [uuid]
+                                         (p/let [compatibility (mcp-compat/get-block api #js {"block_uuid" uuid})
+                                                 native (mcp-native/get-block native-api #js {"block_uuid" uuid})]
+                                           [compatibility native]))
+                                       [block-uuid child-uuid page-uuid missing-uuid]))]
+              (doseq [[compatibility native] results]
+                (is (= compatibility native)))
+              (is (every? #(= "logseq.Editor.getBlock" (first %)) @calls))
+              (is (= 4 (count @calls)))
+              (is (every? #(false? (aget (second (second %)) "camelCase")) @calls))))
+          (p/then (fn [_] (js/queueMicrotask done)))
+          (p/catch (fn [error] (is false (.-message error)) (js/queueMicrotask done)))))))
+
+(deftest application-block-api-preserves-default-casing-with-opt-in-raw-keys
+  (let [{:keys [block-uuid conn]} (page-fixture)
+        get-block (fn [_graph id-or-uuid _opts]
+                    (p/resolved (d/pull @conn '[*] [:block/uuid id-or-uuid])))
+        get-children (fn [& _] (p/resolved []))]
+    (async done
+      (-> (p/with-redefs [db-async/<get-block get-block
+                         db-async/<get-block-immediate-children get-children]
+            (p/let [default-result (api-block/get_block block-uuid #js {})
+                    raw-result (api-block/get_block block-uuid #js {:camelCase false})
+                    default-block (js->clj default-result :keywordize-keys true)
+                    raw-block (js->clj raw-result :keywordize-keys true)]
+              (is (= "Content" (:fullTitle default-block)))
+              (is (not (contains? default-block :full-title)))
+              (is (= "Content" (:full-title raw-block)))
+              (is (not (contains? raw-block :fullTitle)))
+              (is (= (:uuid default-block) (:uuid raw-block)))))
+          (p/then (fn [_] (js/queueMicrotask done)))
+          (p/catch (fn [error] (is false (.-message error)) (js/queueMicrotask done)))))))
+
+(deftest native-block-read-preserves-application-errors
+  (let [block-uuid "00000000-0000-4000-8000-000000000161"]
+    (async done
+      (-> (p/then (mcp-native/get-block (fn [& _] #js {"error" "Application read failed"})
+                                       #js {"block_uuid" block-uuid})
+                  (fn [_] (is false "API errors must reject") (js/queueMicrotask done)))
+          (p/catch (fn [error]
+                     (is (= "Application read failed" (.-message error)))
+                     (js/queueMicrotask done)))))))
+
+(deftest native-block-read-refuses-a-different-entity-uuid
+  (async done
+    (-> (p/then (mcp-native/get-block (fn [& _] #js {"uuid" "00000000-0000-4000-8000-000000000162"})
+                                     #js {"block_uuid" "00000000-0000-4000-8000-000000000161"})
+                (fn [_] (is false "Wrong UUID must reject") (js/queueMicrotask done)))
+        (p/catch (fn [error]
+                   (is (string/includes? (.-message error) "different UUID"))
+                   (js/queueMicrotask done))))))
+
+(deftest native-block-read-validates-uuid-before-calling-the-application-api
+  (let [calls (atom [])]
+    (is (thrown-with-msg? js/Error #"UUID"
+                         (mcp-native/get-block (recording-api calls nil) #js {"block_uuid" "invalid"})))
+    (is (empty? @calls))))
 
 (deftest delete-page-verifies-recycling-with-uuid-and-content-preserved
   (let [{:keys [page-uuid block-uuid conn api]} (page-fixture)]

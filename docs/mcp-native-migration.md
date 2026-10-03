@@ -124,13 +124,22 @@ The six remaining handlers are implemented: guarded recycling, metadata-preservi
 clearing, duplicate-title parking, validated outlines, escaped imports, and exact
 reference repair with independently acknowledged and capped page/tag creation.
 Native differences: `clearPage` refuses nested pages; destructive inventories and
-repair are bounded, and `repairLinks` writes resolved UUIDs instead of live names.
-Electron compilation passes. The focused suite currently reports 84 tests and
-341 assertions with one async attribution failure in
-`repair-links-dry-run-and-creation-cap-make-no-writes`; that test passes alone,
-but the full suite attributes a non-DB capability rejection to it. Desktop smoke
-testing remains blocked until this suite is green. No live-graph validation of
-the new handlers has been performed.
+repair are bounded.
+For repair text, page links use UUIDs while tags use verified existing titles;
+tag relations are then verified by UUID, allowing native text normalization.
+Electron compilation passes with zero warnings. On 2026-10-03 the focused
+compatibility suite passes 99 tests and 431 assertions with zero failures/errors.
+The previous misattributed non-DB rejection was traced to Promesa 11.0.678:
+an exception in one handler on its shared resolved-null promise contaminates
+later queued handlers. `capabilities` now returns explicit rejected promises
+for unsupported/non-DB graphs instead of throwing in that shared callback path.
+A concurrent rejection/independent-read regression covers this mitigation.
+The dependency itself has not been globally patched or upgraded; other throwing
+handlers sharing a promise remain a dependency-level risk for follow-up.
+The user reports the live tools are working. Live verification is performed by
+Claude Desktop separately from this local suite; retain its report and ledger
+as evidence. Passing this gate does not automatically complete the broader
+Stage 1 matrix or advance the migration plan.
 `capabilities` reports inconclusive probes as `unknown`; write probes use
 invalid arguments, and `upsertNodes` is neither probed nor reported.
 Entry criteria still outstanding:
@@ -147,11 +156,35 @@ Exit criteria:
 - native unit and live graph tests pass
 - no Python process or external relay is required
 
-### Stage 2: native reads
+### Stage 2: API-backed native reads
 
-Not started. Migrate one read at a time using differential compatibility versus
-native results on the same graph, normalizing only ordering and transient
-identity differences.
+First candidate implemented; production routing is unchanged. Follow the final
+Application API First clarification in `plan.md`, not the earlier suggestion
+to read the worker database directly from MCP.
+
+`electron.mcp-native/get-block` calls the existing `logseq.Editor.getBlock`
+application API with `includeChildren: false`, `includePage: true`, and the new
+opt-in `camelCase: false` setting. Existing API callers retain camel-cased
+output by default. The candidate removes the API-added child view to retain
+the existing single-block envelope, shares UUID validation, and preserves
+not-found/page distinctions and application errors. It does not issue a
+DataScript query or perform mutations.
+
+Differential tests invoke the real application getter and the compatibility
+reader against the same in-memory DataScript fixture. Exact result equality
+covers regular and nested blocks, collapsed metadata, plugin reference values,
+page UUIDs and missing UUIDs; additional tests cover casing defaults, invalid
+UUIDs, application errors, and mismatched response UUIDs. Current checks:
+
+- `electron.mcp-compat-test`: 104 tests, 447 assertions, zero failures/errors.
+- `logseq.api-test`: 2 tests, 9 assertions, zero failures/errors.
+- SDK `tsc --noEmit`: blocked by missing `deepmerge`, `change-case` and
+  `lodash-es` imports in untouched SDK files; no dependency changes made.
+
+`mcp_server.cljs` still registers `mcp-compat/get-block`; no native route or
+new MCP tool is exposed yet. Live same-graph differential evidence and the SDK
+typecheck remain required before switching this tool. Other reads, writes,
+caching, batching and compatibility removal are not part of this candidate.
 
 ### Stage 3: native writes
 
