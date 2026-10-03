@@ -1967,3 +1967,36 @@
       (assert/assert-is-visible
        (loc/filter ".ls-page-blocks .block-title-wrap" :has-text marker))
       (is (some #(string/starts-with? % marker) (util/get-page-blocks-contents))))))
+
+(deftest page-title-slash-validation-keeps-title-editable-test
+  (testing "after a slash page-name error, letters can still be typed without reload"
+    (let [page-name (str "slash-title-" (random-uuid))
+          other-page (str "slash-title-other-" (random-uuid))
+          toast (loc/filter ".ui__toast.warning" :has-text "Page name can't include")]
+      (p/new-page page-name)
+      (w/click "div[data-testid='page title'] .block-title-wrap")
+      (assert/assert-editor-mode)
+      (util/move-cursor-to-end)
+      (util/press-seq "/bad")
+      (k/enter)
+      (assert/assert-is-visible toast)
+      (assert/assert-editor-mode)
+      ;; Keep typing in the still-focused title. Dismissing the toast first
+      ;; moves focus to the close button and is not the reported stuck-letter path.
+      (util/press-seq "z")
+      (is (string/includes? (util/get-edit-content) "z")
+          "letters must still be accepted in this page title after the slash error")
+      (util/get-editor)
+      (util/move-cursor-to-end)
+      (util/press-seq "y")
+      (is (string/includes? (util/get-edit-content) "y")
+          "letters still work after the toast remains visible")
+      (w/fill util/editor-q (str page-name "-fixed"))
+      (util/exit-edit)
+      (p/new-page other-page)
+      (w/click "div[data-testid='page title'] .block-title-wrap")
+      (assert/assert-editor-mode)
+      (util/move-cursor-to-end)
+      (util/press-seq "abc")
+      (is (string/includes? (util/get-edit-content) "abc")
+          "other page titles must stay editable after the slash error"))))

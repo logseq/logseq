@@ -209,6 +209,118 @@
       (is (= [:prevent-default :escape-editing] @calls)
           "Enter on a page title must save and exit without splitting the page entity."))))
 
+(deftest enter-on-page-title-uses-dom-container-when-config-is-stale-test
+  (let [target #js {:value "Title/bad"
+                    :selectionStart 9}
+        calls (atom [])
+        event #js {:target target
+                   :preventDefault (fn []
+                                     (swap! calls conj :prevent-default))}]
+    (with-redefs [editor/get-state (constantly {:block {:db/id 1
+                                                        :block/uuid #uuid "11111111-1111-1111-1111-111111111111"
+                                                        :block/title "Title/bad"}
+                                                :config {}
+                                                :node target
+                                                :value "Title/bad"
+                                                :pos 9})
+                  editor/inside-of-editor-block (constantly true)
+                  editor/pending-new-block? (constantly false)
+                  state/doc-mode-enter-for-new-line? (constantly false)
+                  editor/inside-of-single-block (constantly false)
+                  dom/closest (fn [el selector]
+                                (when (and (= el target) (= selector ".ls-page-title"))
+                                  #js {:className "ls-page-title"}))
+                  editor/escape-editing (fn [& _args]
+                                          (swap! calls conj :escape-editing))
+                  editor/keydown-new-block (fn [_state]
+                                             (swap! calls conj :new-block))]
+      (editor/keydown-new-block-handler event)
+      (is (= [:prevent-default :escape-editing] @calls)
+          "Enter in .ls-page-title must not start a pending insert when editor args lack :page-title?"))))
+
+(deftest escape-editing-recovers-after-rejected-page-title-save-test
+  (async done
+         (let [cleared-edit? (atom false)
+               prev-pending (state/get-state :editor/pending-new-block)
+               prev-action (state/get-editor-action)]
+           (state/set-state! :editor/pending-new-block {:typed-text "x"})
+           (state/set-editor-action! :commands)
+           (-> (p/with-redefs [editor/save-current-block! (fn [& _]
+                                                            (p/rejected (ex-info "Page name can't include \"/\"."
+                                                                                 {:type :notification})))
+                               state/clear-edit! (fn [& _]
+                                                   (reset! cleared-edit? true))]
+                 (editor/escape-editing))
+               (p/then (fn [_]
+                         (is (false? @cleared-edit?)
+                             "Stay in the title editor after a refused page-title save")
+                         (is (nil? (state/get-state :editor/pending-new-block))
+                             "Pending-new-block must not keep capturing letters after a refused save")
+                         (is (nil? (state/get-editor-action))
+                             "Slash/command action must close after a refused save")
+                         (done)))
+               (p/catch (fn [error]
+                          (is false (str error))
+                          (done)))
+               (p/finally (fn []
+                            (state/set-state! :editor/pending-new-block prev-pending)
+                            (state/set-editor-action! prev-action)))))))
+
+(deftest keydown-not-matched-handler-releases-page-title-when-pending-new-block-test
+  (let [stopped? (atom false)
+        appended (atom [])
+        input #js {:id "edit-block-test"
+                   :value "Title/bad"}
+        event #js {:key "a"
+                   :ctrlKey false
+                   :metaKey false}
+        prev-pending (state/get-state :editor/pending-new-block)]
+    (state/set-state! :editor/pending-new-block {:typed-text ""})
+    (try
+      (with-redefs [state/get-edit-input-id (constantly "edit-block-test")
+                    state/get-input (constantly input)
+                    state/get-editor-action (constantly nil)
+                    editor/get-state (constantly {:config {:page-title? true}})
+                    util/stop (fn [_] (reset! stopped? true))
+                    editor/append-pending-new-block-text! (fn [text]
+                                                            (swap! appended conj text))
+                    cursor/pos (constantly 9)]
+        ((editor/keydown-not-matched-handler :markdown) event nil)
+        (is (false? @stopped?)
+            "Page-title letter keys must reach the textarea after a refused save")
+        (is (empty? @appended)
+            "Page-title letters must not be captured as pending new-block text")
+        (is (nil? (state/get-state :editor/pending-new-block))
+            "Pending-new-block is cleared so later page titles stay editable"))
+      (finally
+        (state/set-state! :editor/pending-new-block prev-pending)))))
+
+(deftest keydown-not-matched-handler-still-captures-letters-for-pending-block-test
+  (let [stopped? (atom false)
+        appended (atom [])
+        input #js {:id "edit-block-test"
+                   :value "block"}
+        event #js {:key "a"
+                   :ctrlKey false
+                   :metaKey false}
+        prev-pending (state/get-state :editor/pending-new-block)]
+    (state/set-state! :editor/pending-new-block {:typed-text ""})
+    (try
+      (with-redefs [state/get-edit-input-id (constantly "edit-block-test")
+                    state/get-input (constantly input)
+                    state/get-editor-action (constantly nil)
+                    editor/get-state (constantly {:config {}})
+                    util/stop (fn [_] (reset! stopped? true))
+                    editor/append-pending-new-block-text! (fn [text]
+                                                            (swap! appended conj text))
+                    cursor/pos (constantly 5)]
+        ((editor/keydown-not-matched-handler :markdown) event nil)
+        (is (true? @stopped?)
+            "Pending new-block inserts must still capture letters")
+        (is (= ["a"] @appended)))
+      (finally
+        (state/set-state! :editor/pending-new-block prev-pending)))))
+
 (deftest keydown-new-block-keeps-the-keydown-editor-state-test
   (let [block {:db/id 1
                :block/uuid #uuid "11111111-1111-1111-1111-111111111111"
@@ -412,6 +524,40 @@
              :editor-action :property-input
              :flush-input? true}))
         "Flushing the input persists an unsaved suffix while the property/date picker is active")))
+
+(deftest save-current-block-clears-pending-new-block-on-rejected-save-test
+  (async done
+         (let [block-uuid #uuid "44444444-4444-4444-4444-444444444444"
+               block {:db/id 1
+                      :block/uuid block-uuid
+                      :block/title "Old"}
+               input #js {:value "Old/bad"}
+               prev-pending (state/get-state :editor/pending-new-block)]
+           (state/set-state! :editor/pending-new-block {:typed-text "x"})
+           (-> (p/with-redefs [state/editor-in-composition? (constantly false)
+                               state/get-editor-action (constantly nil)
+                               state/get-current-repo (constantly "pending-save-repo")
+                               state/get-edit-input-id (constantly "editor")
+                               state/get-edit-block (constantly block)
+                               gdom/getElement (constantly input)
+                               db-subs/block-snapshot (constantly {:status :ready :value block})
+                               conn/get-db (constantly nil)
+                               editor/wrap-parse-block identity
+                               frontend-outliner-op/save-block! (constantly nil)
+                               db-transact/apply-outliner-ops
+                               (fn [_ _ _]
+                                 (p/rejected (ex-info "Page name can't include \"/\"."
+                                                      {:type :notification})))]
+                 (editor/save-current-block!))
+               (p/then (fn [_]
+                         (is false "A refused page-title save must reject")
+                         (done)))
+               (p/catch (fn [_error]
+                          (is (nil? (state/get-state :editor/pending-new-block))
+                              "A refused save must stop pending-new-block letter capture")
+                          (done)))
+               (p/finally (fn []
+                            (state/set-state! :editor/pending-new-block prev-pending)))))))
 
 (deftest save-block-does-not-drop-a-revert-while-the-previous-save-is-pending-test
   (let [block-uuid #uuid "22222222-2222-2222-2222-222222222222"

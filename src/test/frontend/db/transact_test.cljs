@@ -379,6 +379,78 @@
           (p/finally
            done)))))
 
+(deftest apply-outliner-ops-clears-pending-new-block-when-editor-callback-is-skipped-test
+  (async done
+    (let [repo (atom "old-repo")
+          route (atom {:data {:name :page}
+                       :path-params {:name "old-page"}})
+          worker-result (p/deferred)
+          callback-calls (atom 0)
+          prev-pending (state/get-state :editor/pending-new-block)
+          insert-id (random-uuid)]
+      (state/set-state! :editor/pending-new-block {:id insert-id :typed-text "draft"})
+      (-> (p/with-redefs [util/node-test? false
+                          state/get-current-repo #(deref repo)
+                          state/get-route-match #(deref route)
+                          state/get-editor-info (constantly nil)
+                          state/<invoke-db-worker
+                          (fn [_api & _args]
+                            worker-result)]
+            (let [result (db-transact/apply-outliner-ops
+                          nil
+                          [[:insert-blocks [[{:block/uuid (random-uuid)}] nil {}]]]
+                          {:editor/edit-block-fn (fn [_rows] (swap! callback-calls inc))})]
+              (reset! repo "new-repo")
+              (reset! route {:data {:name :home}})
+              (p/resolve! worker-result {:result ::persisted})
+              (p/let [value result]
+                (is (= ::persisted value))
+                (is (zero? @callback-calls)
+                    "A stale route must not run the insert editor callback")
+                (is (nil? (state/get-state :editor/pending-new-block))
+                    "Skipping the insert callback must release pending letter capture"))))
+          (p/finally
+           (fn []
+             (state/set-state! :editor/pending-new-block prev-pending)
+             (done)))))))
+
+(deftest apply-outliner-ops-does-not-clear-a-newer-pending-insert-on-stale-response-test
+  (async done
+    (let [repo (atom "old-repo")
+          route (atom {:data {:name :page}
+                       :path-params {:name "old-page"}})
+          worker-result (p/deferred)
+          callback-calls (atom 0)
+          prev-pending (state/get-state :editor/pending-new-block)
+          stale-id (random-uuid)
+          later-id (random-uuid)
+          later-pending {:id later-id :typed-text "hello"}]
+      (state/set-state! :editor/pending-new-block {:id stale-id :typed-text ""})
+      (-> (p/with-redefs [util/node-test? false
+                          state/get-current-repo #(deref repo)
+                          state/get-route-match #(deref route)
+                          state/get-editor-info (constantly nil)
+                          state/<invoke-db-worker
+                          (fn [_api & _args]
+                            worker-result)]
+            (let [result (db-transact/apply-outliner-ops
+                          nil
+                          [[:insert-blocks [[{:block/uuid (random-uuid)}] nil {}]]]
+                          {:editor/edit-block-fn (fn [_rows] (swap! callback-calls inc))})]
+              (reset! repo "new-repo")
+              (reset! route {:data {:name :home}})
+              (state/set-state! :editor/pending-new-block later-pending)
+              (p/resolve! worker-result {:result ::persisted})
+              (p/let [value result]
+                (is (= ::persisted value))
+                (is (zero? @callback-calls))
+                (is (= later-pending (state/get-state :editor/pending-new-block))
+                    "A stale insert must not drop letters buffered for a later insert"))))
+          (p/finally
+           (fn []
+             (state/set-state! :editor/pending-new-block prev-pending)
+             (done)))))))
+
 (deftest apply-outliner-ops-does-not-run-editor-callback-on-worker-failure-test
   (async done
     (let [callback-called? (atom false)]
