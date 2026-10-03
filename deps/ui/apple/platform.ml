@@ -384,4 +384,16 @@ let selected_block_uuids () = []
 
 let get_element_by_id (_id : string) : Webapi.Dom.Element.t option = None
 
-let get_attribute (_el : 'a) (_name : string) : string option = None
+(* native elements are Json snapshots — attrs ride the "attrs" object the
+   Swift host attaches, same decode as Dom_ext.el_attr *)
+let get_attribute (el : Js.Json.t) (name : string) : string option =
+  match el with
+  | Js.Json.JObject kvs -> (
+      match List.assoc_opt "attrs" kvs with
+      | Some (Js.Json.JObject attrs) ->
+          Option.bind (List.assoc_opt name attrs) Js.Json.decodeString
+      | _ -> (
+          match List.assoc_opt ("attr-" ^ name) kvs with
+          | Some v -> Js.Json.decodeString v
+          | None -> None))
+  | _ -> None

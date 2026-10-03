@@ -162,7 +162,7 @@ struct LogseqElementView: View {
         .frame(width: 14, height: 14)
         .contentShape(Rectangle())
         .onTapGesture { emit("click", payload: ["button": 0]) }
-    } else if children.isEmpty && html.isEmpty && text.isEmpty {
+    } else if children.isEmpty && html.isEmpty && effectiveText.isEmpty {
       // An empty DOM element occupies zero height — rendering Text("") would
       // give it a phantom ~14pt line.
       EmptyView()
@@ -228,7 +228,7 @@ struct LogseqElementView: View {
     Group {
       if inline {
         LogseqFlowLayout {
-          if !text.isEmpty { styledText }
+          if !effectiveText.isEmpty { styledText }
           if !html.isEmpty { htmlText }
           ForEach(children, id: \.self) { child in
             childView(child)
@@ -236,7 +236,7 @@ struct LogseqElementView: View {
         }
       } else if style.isRow {
         LogseqRowLayout(nodeID: context.nodeID, spacing: style.stackSpacing ?? 0) {
-          if !text.isEmpty { styledText }
+          if !effectiveText.isEmpty { styledText }
           if !html.isEmpty { htmlText }
           ForEach(children, id: \.self) { child in
             childView(child)
@@ -244,7 +244,7 @@ struct LogseqElementView: View {
         }
       } else {
         LogseqColumnLayout(nodeID: context.nodeID, spacing: style.stackSpacing ?? 0) {
-          if !text.isEmpty { styledText }
+          if !effectiveText.isEmpty { styledText }
           if !html.isEmpty { htmlText }
           ForEach(children, id: \.self) { child in
             childView(child)
@@ -304,14 +304,20 @@ struct LogseqElementView: View {
     }
   }
 
+  /// Text prop — or, for <raw-text> placeholders, the attr carrying the
+  /// text. OCaml's `txt` mounts a placeholder whose real DOM text node a
+  /// web MutationObserver swaps in; on native the attr IS the text.
+  /// (`nothing` carries an empty string and still renders nil.)
+  private var effectiveText: String {
+    if !text.isEmpty { return text }
+    if tag == "raw-text" { return attrs["data-raw-text"] as? String ?? "" }
+    return ""
+  }
+
   private var attributedText: AttributedString {
-    var base = text
-    if base.isEmpty {
-      switch tag {
-      case "em-emoji":
-        base = (attrs["data-emoji"] as? String) ?? (attrs["emoji"] as? String) ?? ""
-      default: break
-      }
+    var base = effectiveText
+    if base.isEmpty && tag == "em-emoji" {
+      base = (attrs["data-emoji"] as? String) ?? (attrs["emoji"] as? String) ?? ""
     }
     var result = AttributedString(base)
     let s = style

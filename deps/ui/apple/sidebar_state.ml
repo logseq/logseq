@@ -65,7 +65,7 @@ let jbool name j =
       | _ -> false)
   | None -> false
 
-let closest (_ : Js.Json.t) (_ : string) : Js.Json.t option = None
+let closest = Dom_ext.closest
 
 let prevent_default (_ : Js.Json.t) : unit = ()
 
