@@ -63,19 +63,29 @@
           (when (valid-type-for-sort? v)
             v))))))
 
-(defn- by-one-sorting
-  [{:keys [asc? get-value]}]
-  (let [cmp (if asc? compare #(compare %2 %1))]
-    (fn [a b]
-      (cmp (get-value a) (get-value b)))))
+(defn- compare-sort-values
+  [va vb asc?]
+  (cond
+    (and (nil? va) (nil? vb)) 0
+    (nil? va) 1
+    (nil? vb) -1
+    :else (let [c (compare va vb)]
+            (if asc? c (- c)))))
+
+(defn- by-sorting
+  [sorting]
+  (fn [a b]
+    (reduce
+     (fn [order {:keys [get-value asc?]}]
+       (if (zero? order)
+         (compare-sort-values (get-value a) (get-value b) asc?)
+         (reduced order)))
+     0 sorting)))
 
 (defn- sort-ref-entities-by-single-property
   "get all entities sorted by `major-sorting`"
   [entities {:keys [_id asc?]} get-value-fn]
-  (let [sorting {:asc? asc?
-                 :get-value get-value-fn}
-        sort-cmp (by-one-sorting sorting)]
-    (sort sort-cmp entities)))
+  (sort (by-sorting [{:asc? asc? :get-value get-value-fn}]) entities))
 
 (defn- sort-by-single-property
   [db {:keys [id asc?] :as sorting} entities partition?]
@@ -126,7 +136,7 @@
                  {:asc? asc?
                   :get-value (memoize (get-value-for-sort property))}))
              minor-sorting)
-        sort-cmp (common-util/by-sorting sorting)]
+        sort-cmp (by-sorting sorting)]
     (mapcat (fn [entities] (sort sort-cmp entities)) partitioned-entities-by-major-sorting)))
 
 (defn sort-entities
@@ -576,15 +586,6 @@
 
         :else
         (first vs))))))
-
-(defn- compare-sort-values
-  [va vb asc?]
-  (cond
-    (and (nil? va) (nil? vb)) 0
-    (nil? va) 1
-    (nil? vb) -1
-    :else (let [c (compare va vb)]
-            (if asc? c (- c)))))
 
 (def ^:private avet-first-window-sort-attrs
   #{:block/updated-at :block/created-at :block/title :block/name})
