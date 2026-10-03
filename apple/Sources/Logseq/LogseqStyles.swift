@@ -264,7 +264,13 @@ import SwiftUI
       case "height": fixedHeight = px.map { CGFloat($0) }
       case "min-height": minHeight = px.map { CGFloat($0) }
       case "max-height": maxHeight = px.map { CGFloat($0) }
-      case "width": fixedWidth = px.map { CGFloat($0) }
+      case "width":
+        // `width:100%` has no px value — the web reads it as "fill the
+        // row", which is what .block-content relies on to keep empty
+        // blocks clickable; without it the element collapses to zero
+        // width and hit-testing falls through to the row.
+        if value == "100%" { fullWidth = true }
+        else { fixedWidth = px.map { CGFloat($0) } }
       case "min-width": minWidth = px.map { CGFloat($0) }
       case "max-width": maxWidth = px.map { CGFloat($0) }
       case "overflow", "overflow-y":

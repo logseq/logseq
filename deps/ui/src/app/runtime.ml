@@ -237,6 +237,34 @@ let track action =
 
 let flush () = !app_flush ()
 
+(* doc-scan scheduling — the native host re-runs registered doc scans
+   after a flush only when the tree changed structurally or enough time
+   passed since the last scan; prop-only generations coalesce to at most
+   one scan per [scan_gate_interval] seconds (MutationObserver batches
+   the same way). Every scan walks the whole tree, so running per
+   keystroke is what made input lag — this policy is regression-tested
+   in test_main. *)
+type scan_gate =
+  { mutable sg_last_gen : int
+  ; mutable sg_structural : bool
+  ; mutable sg_last_time : float
+  }
+
+let scan_gate_interval = 0.1
+
+let scan_gate () = { sg_last_gen = -1; sg_structural = false; sg_last_time = 0. }
+
+let scan_gate_note_structural g = g.sg_structural <- true
+
+let scan_gate_should g ~gen ~now =
+  g.sg_structural
+  || (gen <> g.sg_last_gen && now -. g.sg_last_time >= scan_gate_interval)
+
+let scan_gate_mark g ~gen ~now =
+  g.sg_structural <- false;
+  g.sg_last_gen <- gen;
+  g.sg_last_time <- now
+
 let send action =
   (match action with
    | Action.Navigate_to _ -> Platform.perf_mark "action:navigate"

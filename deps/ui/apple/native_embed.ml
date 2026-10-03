@@ -213,13 +213,9 @@ let decode_extension_values payload =
    natively we re-run them after every flush that produced a new tree
    generation, so views mounts (query shells, object views) see fresh
    elements. Running every scan on every generation is O(scans x tree)
-   per keystroke — coalesce: structural ops (mount/unmount/move) run
-   them immediately, prop-only generations at most once per
-   scan_min_interval. *)
-let last_scanned_generation = ref (-1)
-let structural_since_scan = ref false
-let last_scan_time = ref 0.
-let scan_min_interval = 0.1
+   per keystroke — the Runtime.scan_gate policy coalesces prop-only
+   generations (see runtime.ml). *)
+let scan_gate = Runtime.scan_gate ()
 
 let run_doc_scans_after_flush () =
   match !current_app with
@@ -228,14 +224,9 @@ let run_doc_scans_after_flush () =
         !((Lui_app.runtime app).Lui_runtime.runtime_generation)
       in
       let now = Unix.gettimeofday () in
-      if
-        !structural_since_scan
-        || gen <> !last_scanned_generation
-           && now -. !last_scan_time >= scan_min_interval
+      if Runtime.scan_gate_should scan_gate ~gen ~now
       then begin
-        structural_since_scan := false;
-        last_scanned_generation := gen;
-        last_scan_time := now;
+        Runtime.scan_gate_mark scan_gate ~gen ~now;
         Editor_dom.run_doc_scans ();
         (* scans can materialize nodes — flush again so they ship in the
            same take_patches drain *)
@@ -281,7 +272,7 @@ let initialize platform_code host_code (_payload : string) : string =
                 | SetProp _ | RemoveProp _ | SetExtensionProp _
                 | RemoveExtensionProp _ -> false)
               batch.Lui_protocol.ops
-          then structural_since_scan := true;
+          then Runtime.scan_gate_note_structural scan_gate;
           let json = Lui_wire.encode_batch batch in
           Queue.add json pending_batches;
           true)

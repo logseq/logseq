@@ -33,6 +33,42 @@ import AppKit
   func zoomReset() { zoomLevel = 1.0 }
 }
 
+/// LOGSEQ_PERF=1: CADisplayLink frame sampler — logs rolling fps + the
+/// worst frame delta every 2s to stderr so 60/120fps claims can be
+/// verified on real hardware. Offline by default; zero cost when unset.
+@MainActor final class LogseqPerfMonitor {
+  static let shared = LogseqPerfMonitor()
+  private var link: CADisplayLink?
+  private var last: CFTimeInterval = 0
+  private var deltas: [CFTimeInterval] = []
+
+  func start() {
+    guard ProcessInfo.processInfo.environment["LOGSEQ_PERF"] != nil, link == nil
+    else { return }
+    guard
+      let l = NSScreen.main?.displayLink(
+        target: self, selector: #selector(tick(_:)))
+    else { return }
+    l.add(to: .main, forMode: .common)
+    link = l
+  }
+
+  @objc private func tick(_ link: CADisplayLink) {
+    if last > 0 { deltas.append(link.timestamp - last) }
+    last = link.timestamp
+    let interval = max(link.targetTimestamp - link.timestamp, 0.001)
+    guard deltas.count >= Int(2.0 / interval) else { return }
+    let fps = 1.0 / (deltas.reduce(0, +) / Double(deltas.count))
+    let worst = deltas.max() ?? 0
+    FileHandle.standardError.write(
+      String(
+        format: "PERF fps=%.1f worst=%.1fms frames=%d\n",
+        fps, worst * 1000, deltas.count
+      ).data(using: .utf8)!)
+    deltas.removeAll(keepingCapacity: true)
+  }
+}
+
 @main struct LogseqApplication: App {
   @NSApplicationDelegateAdaptor(LogseqApplicationDelegate.self) private var delegate
   @StateObject private var appState = LogseqAppState.shared
@@ -249,6 +285,7 @@ private struct LogseqRuntimeHost: View {
   func applicationDidFinishLaunching(_ notification: Notification) {
     NSApplication.shared.activate()
     NSApplication.shared.windows.first?.makeKeyAndOrderFront(nil)
+    LogseqPerfMonitor.shared.start()
   }
 
   func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }

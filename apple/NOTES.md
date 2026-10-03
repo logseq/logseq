@@ -1045,3 +1045,36 @@ Documentation → docs.logseq.com).
   not focus a caret — clicks on rendered block text work, empty rows
   don't mount an editable surface. Keystrokes typed before a focused
   textarea exists are still dropped by AppKit.
+
+## Keystroke drop on remount (fixed)
+
+`LogseqBlockTextView.viewWillMove(toWindow:)` resigns first-responder
+when the view leaves a window: AppKit does NOT resign a detached
+textview, so keys typed while a remount swap is in flight kept landing
+in an invisible view whose delegate is gone — they died silently.
+Resigning lets keys fall through to the window-level key monitor, which
+routes them to OCaml's pending-focus machinery (they buffer and commit
+into the incoming block once it mounts).
+
+## Relaunch blank flake — narrowed to post-apply recompose
+
+Boot chain always completes (all `[boot]` stderr marks reach
+`get-bidirectional-properties`) AND the patch pipeline delivers every
+batch: LOGSEQ_DUMP_PATCHES shows gens 1-4 reaching `apply` with zero
+`LUI patch apply failed` messages, on frozen and healthy launches
+alike. So the freeze is downstream of `backend.apply` — the LUI
+backend has the journal nodes but SwiftUI never recomposes the page
+subtree. Repro ~= 1-2/8 launches; a frozen instance also swallows
+further interaction patches the same way (typing commits to the graph
+but never appears). Instrumentation to catch it live:
+`LOGSEQ_PERF=1` (stderr `PERF fps=` sampler), `LOGSEQ_DUMP_PATCHES=path`
+(batch dump), `[boot]` stderr marks in daemon_client.
+
+## scan_gate
+
+Doc-scan coalescing policy lives in `src/app/runtime.ml`
+(`Runtime.scan_gate*`): native_embed.ml records structural patch ops
+(create/drop/insert/remove/move) and runs `Editor_dom.run_doc_scans`
+either immediately (structural) or at most once per 100ms window
+(prop-only generations). Same source compiles into the melange lib and
+the native lib; covered by `test_scan_gate` in test_main.js.
