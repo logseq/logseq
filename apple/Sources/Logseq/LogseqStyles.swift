@@ -101,6 +101,12 @@ import SwiftUI
   var fontDesign: Font.Design?
   var foreground: Color?
   var background: Color?
+  /// Fill applied while the pointer hovers (web `:hover` rules — e.g.
+  /// sidebar `a.item:hover` gets lx-gray-04).
+  var hoverBackground: Color?
+  /// Render the native macOS sidebar vibrancy material instead of a flat
+  /// color (adapts to dark mode + window focus automatically).
+  var sidebarMaterial = false
   var padding: EdgeInsets?
   var margin: EdgeInsets?
   var cornerRadius: CGFloat?
@@ -140,6 +146,9 @@ import SwiftUI
   var overlayZ = 0
   /// justify-content: space-between on a row container.
   var spaceBetween = false
+  /// element carried the `item` class — gates `.active` fill to sidebar
+  /// rows (the class means other things elsewhere in the tree).
+  var inItem = false
   /// position:fixed anchor offsets (dropdown/context menus).
   var fixedX: CGFloat?
   var fixedY: CGFloat?
@@ -463,8 +472,62 @@ import SwiftUI
     case "cp__sidebar-main-content":
       grow = true; maxWidth = 960; centerHorizontally = true
     case "cp__header": isRow = true; fullWidth = true
-    case "left-sidebar-inner": fullHeight = true
-    case "item", "block-row", "block-main-container", "block-control-wrap":
+    // lui-core.css: sidebar bg is --lx-gray-02 with a 1px trailing
+    // separator; a.item rows are text-sm rounded-md and fill gray-04
+    // when .active (also on hover, which we can't express).
+    case "left-sidebar-inner":
+      fullHeight = true
+      sidebarMaterial = true
+    // .sidebar-navigations rows are mt-1 items (journals/flashcards/…)
+    case "sidebar-navigations": stackSpacing = 4
+    // lui-core.css: a.item { display:flex; align-items:center; height:2rem }
+    // with .ui__icon fixed at 16px, margin-right .5rem, opacity .7.
+    case "item":
+      isRow = true
+      if fontSize == nil { fontSize = 13 }
+      cornerRadius = cornerRadius ?? 6
+      fixedHeight = 32
+      padding = padding ?? EdgeInsets(top: 0, leading: 6, bottom: 0, trailing: 2)
+      hoverBackground = LogseqColors.gray(4)
+      inItem = true
+    case "ui__icon":
+      fixedWidth = 16
+      alpha = 0.7
+      margin = EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 8)
+    case "page-icon": fixedWidth = 16
+    case "page-title": grow = true
+    // .hd — sticky section header rows (Navigations/Favorites/Recent):
+    // flex justify-between h-8, wrap-th is 14px medium at 50% opacity
+    case "hd":
+      isRow = true; spaceBetween = true; fixedHeight = 32
+      padding = padding ?? EdgeInsets(top: 0, leading: 8, bottom: 0, trailing: 4)
+    case "wrap-th":
+      if fontSize == nil { fontSize = 14 }
+      alpha = 0.5
+    // a.link-item flows icon+title inline with the page-actions button
+    // position:absolute right-0 top-0 — class-position props map to the
+    // overlay anchor like the inline `position` attr does.
+    case "link-item":
+      isRow = true
+      if fontSize == nil { fontSize = 13 }
+      cornerRadius = cornerRadius ?? 6
+      hoverBackground = LogseqColors.gray(4)
+      padding = padding ?? EdgeInsets(top: 4, leading: 6, bottom: 4, trailing: 6)
+    case "absolute": outOfFlow = true
+    case "right-0": fixedRight = 0
+    case "top-0": fixedY = 0
+    case "left-0": fixedX = 0
+    case "bottom-0": fixedBottom = 0
+    case "keyboard-shortcut", "kbd", "shui-shortcut-key":
+      if fontSize == nil { fontSize = 10 }
+      isMono = true
+      foreground = LogseqColors.secondaryText
+    case "active":
+      if inItem {
+        background = LogseqColors.gray(4)
+        cornerRadius = cornerRadius ?? 6
+      }
+    case "block-row", "block-main-container", "block-control-wrap":
       isRow = true
     // lui-core.css: .block-children-container { margin-left:29px; padding-top:
     // .125rem; margin-bottom:-.125rem } — child-block indentation

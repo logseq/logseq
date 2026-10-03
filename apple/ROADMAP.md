@@ -10,7 +10,12 @@ Swift. Goal: feature parity with the Electron app.
 - App shell: launch → spawn `deps/db-worker/bin/main.exe` daemon →
   `create-or-open-db` → search index → boot → render.
 - Sidebar: navigations (journals/flashcards/pages/graph view),
-  favorites, recent, tag titles — live data.
+  favorites, recent, tag titles — live data. Renders as an
+  Out-style native sidebar (vibrancy material, collapsible
+  sections, hover/active fills, kbd hints, row "…" actions);
+  clicks re-emit onto the hidden DOM item nodes so all OCaml
+  handlers/menus run unchanged (navigation, lp menu →
+  open-in-sidebar, nav-edit menu verified).
 - Page view: outliner tree with bullets, indentation
   (`block-children-container` margin), page title, journal date,
   block-collapse carets, Tabler icons, dark-mode aware tokens.
@@ -79,6 +84,10 @@ Swift. Goal: feature parity with the Electron app.
 - Right sidebar gaps: item reorder/drag, drop indicators, the resizer
   strip is inert (no width drag yet), item "open in sidebar" paths
   beyond the default Contents item untested.
+- Native sidebar gaps: graph selector row does not visibly react
+  (graphs dialog unverified), section collapse state is local
+  (not persisted), favorites section untested (no data yet),
+  sidebar items briefly disappear while cmdk is open.
 
 ## Remaining (Electron parity)
 - Page properties UI (property rows, value editors).
