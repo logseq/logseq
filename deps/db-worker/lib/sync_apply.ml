@@ -1669,14 +1669,13 @@ let rec replay_canonical_outliner_op (conn : conn) (op_entry : Wire.t)
              (Wire.Map [ kw "args", Wire.Array args ]))
   | "apply-template", [ template_id; target_id; opts ] -> (
       let template_id' = replay_entity_id_value db template_id in
-      let target_id' = replay_entity_id_value db target_id in
       let sibling =
         match Wire.get "sibling?" (opts_wire_map opts) with
         | Some (Wire.Bool b) -> b
         | _ -> false
       in
       let resolved =
-        rebase_resolve_target_and_sibling db rebase_db_before target_id'
+        rebase_resolve_target_and_sibling db rebase_db_before target_id
           ~page_root_fallback:true sibling
       in
       let template_ent = entity_of_wire_ref db template_id' in
@@ -1760,7 +1759,6 @@ let rec replay_canonical_outliner_op (conn : conn) (op_entry : Wire.t)
                ; kw "reason", kw "missing-template-or-target-block" ]))
   | "move-blocks", [ ids; target_id; opts ] -> (
       let ids' = replay_entity_id_coll db ids in
-      let target_id' = replay_entity_id_value db target_id in
       let blocks = List.filter_map (entity_of_wire_ref db) ids' in
       let sibling =
         match Wire.get "sibling?" (opts_wire_map opts) with
@@ -1768,7 +1766,7 @@ let rec replay_canonical_outliner_op (conn : conn) (op_entry : Wire.t)
         | _ -> false
       in
       let resolved =
-        rebase_resolve_target_and_sibling db rebase_db_before target_id'
+        rebase_resolve_target_and_sibling db rebase_db_before target_id
           sibling
       in
       match (blocks, resolved) with
