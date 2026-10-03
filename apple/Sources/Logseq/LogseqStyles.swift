@@ -709,8 +709,8 @@ import SwiftUI
       padding = EdgeInsets(top: 1, leading: 4, bottom: 1, trailing: 4)
     case "bottom-property-content": isRow = true; stackSpacing = 4
     case "ls-page-title-actions":
-      isRow = true; stackSpacing = 4
-      margin = EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0)
+      isRow = true; stackSpacing = 8
+      margin = EdgeInsets(top: 0, leading: 0, bottom: 2, trailing: 0)
     case "bottom-property-action-icon": foreground = LogseqColors.gray(9)
     // ---- property dialog / add-property row ----
     case "ls-property-dialog": minWidth = 280; stackSpacing = 4
@@ -934,6 +934,12 @@ import SwiftUI
       }
     case "block-row", "block-main-container", "block-control-wrap":
       isRow = true
+    // page.ml gives the title row `margin-left:-30px` (-36px with icon) to
+    // hang the page title in the bullet gutter — but the column bounds
+    // clip it, eating the first glyph of "Add icon"/title. Counter it so
+    // the row's content stays inside the bounds.
+    case "is-page-title-row":
+      padding = EdgeInsets(top: 0, leading: 30, bottom: 0, trailing: 0)
     // lui-core.css: .block-children-container { margin-left:29px; padding-top:
     // .125rem; margin-bottom:-.125rem } — child-block indentation
     case "block-children-container":
@@ -942,7 +948,14 @@ import SwiftUI
                           trailing: margin?.trailing ?? 0)
     // the indent-guide strip is a 4px absolute element — collapse it
     case "block-children-left-border": isHidden = true
-    case "block-main-content", "block-content", "block-content-inner",
+    // .ls-block is the row container — block-level on the web, so the
+    // row band spans the page width for hit-testing (empty space to the
+    // right of short text still selects the block)
+    case "ls-block": fullWidth = true
+    // .block-content carries the text — minHeight keeps empty/near-empty
+    // blocks tappable; the web gets the same from line-height
+    case "block-content": grow = true; fullWidth = true; minHeight = 20
+    case "block-main-content", "block-content-inner",
          "block-content-or-editor-inner", "page-blocks-inner",
          "ls-page-blocks", "cp__page-inner-wrap", "page", "page-inner":
       grow = true

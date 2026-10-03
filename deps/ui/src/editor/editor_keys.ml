@@ -298,41 +298,73 @@ let on_pending_focus_key ev e caret =
      outpace e.buffer while a refresh rewrites it — clamp before any
      String.sub *)
   let caret = max 0 (min caret len) in
-  let queue f = S.pending_focus_actions := f :: !S.pending_focus_actions in
-  let patch buf' caret' =
+  (* structural ops must run before keys that arrive after them — the
+     queue pops oldest-first, so append (a racing replay can have later
+     keystrokes already sitting in front) *)
+  let queue f =
+    S.pending_focus_actions := !S.pending_focus_actions @ [f]
+  in
+  (* set_silent stages its update until the next flush — a burst of keys
+     landing before that flush must transform the *staged* buffer inside
+     the update (f sees it); reading the captured e.buffer collapses the
+     burst to the last key *)
+  let patch f =
+    let out = ref None in
     S.set_silent (fun st ->
-        { st with S.editing = Some { e with S.buffer = buf' } });
-    (* the textarea can already be mounted when pending was lost mid-
-       remount — mirror the buffer into it so the DOM doesn't diverge *)
-    (match D.textarea_of e.S.uuid with
-     | Some el ->
-         D.el_set_value el buf';
-         D.el_set_selection_range el caret' caret'
-     | None -> ());
-    S.pending_focus := Some (e.S.uuid, caret', !S.last_edit_input_ms)
+        match st.S.editing with
+        | Some cur when cur.S.uuid = e.S.uuid ->
+            let buf', caret' = f cur.S.buffer in
+            out := Some (buf', caret');
+            { st with S.editing = Some { cur with S.buffer = buf' } }
+        | _ -> st);
+    match !out with
+    | None -> ()
+    | Some (buf', caret') ->
+        (* the textarea can already be mounted when pending was lost mid-
+           remount — mirror the buffer into it so the DOM doesn't diverge *)
+        (match D.textarea_of e.S.uuid with
+         | Some el ->
+             D.el_set_value el buf';
+             D.el_set_selection_range el caret' caret'
+         | None -> ());
+        S.pending_focus := Some (e.S.uuid, caret', !S.last_edit_input_ms)
+  in
+  let patch_at f =
+    patch (fun b ->
+        (* a caret at the committed end means "append" — extend to the
+           staged end so a burst keeps its order *)
+        let c =
+          if caret >= len then String.length b
+          else max 0 (min caret (String.length b))
+        in
+        f b c)
   in
   let insert s =
-    patch
-      (String.sub buf 0 caret ^ s ^ String.sub buf caret (len - caret))
-      (caret + String.length s)
+    patch_at (fun b c ->
+        ( String.sub b 0 c ^ s ^ String.sub b c (String.length b - c)
+        , c + String.length s ))
   in
   (match D.ev_key ev with
   | "Backspace" ->
       D.prevent_default ev;
-      if caret = 0 then queue (fun () -> A.merge_prev e.S.uuid)
-      else
-        patch
-          (String.sub buf 0 (caret - 1)
-          ^ String.sub buf caret (len - caret))
-          (caret - 1)
+      patch_at (fun b c ->
+          if c = 0 then (
+            queue (fun () -> A.merge_prev e.S.uuid);
+            (b, c))
+          else
+            ( String.sub b 0 (c - 1)
+            ^ String.sub b c (String.length b - c)
+            , c - 1 ))
   | "Delete" ->
       D.prevent_default ev;
-      if caret = len then queue (fun () -> A.merge_next e.S.uuid)
-      else
-        patch
-          (String.sub buf 0 caret
-          ^ String.sub buf (caret + 1) (len - caret - 1))
-          caret
+      patch_at (fun b c ->
+          if c = String.length b then (
+            queue (fun () -> A.merge_next e.S.uuid);
+            (b, c))
+          else
+            ( String.sub b 0 c
+            ^ String.sub b (c + 1) (String.length b - c - 1)
+            , c ))
   | "Enter" ->
       D.prevent_default ev;
       if D.ev_shift ev then insert "\n"
@@ -386,6 +418,34 @@ let on_pending_focus_key ev e caret =
      past same-task readers *)
   A.drain_pending_focus_actions 0
 
+(* .block-content blockid under the latest primary mousedown + when it
+   landed. The click that runs enter_edit dispatches asynchronously, so a
+   key typed in that gap falls to on_normal_key and dies — on the web the
+   click handler enters edit synchronously first. Keys that outrun the
+   pending edit replay into the landed block instead. *)
+let last_block_mousedown : (string * float) ref = ref ("", 0.0)
+
+let racing_edit_uuid () =
+  let (u, t) = !last_block_mousedown in
+  if u <> "" && Platform.date_now_ms () -. t < 5000.0 then Some u
+  else None
+
+(* replay [ev] through the remount-window handler once the mousedown's
+   own enter_edit lands. The queued action re-queues itself while the
+   click is still racing so an unrelated drain can't drop it; a click
+   that never enters edit (drag, non-editing row) lets the window
+   expire and the key is dropped like a normal-mode shortcut miss. *)
+let queue_racing_key ev uuid =
+  let rec action () =
+    match S.editing () with
+    | Some e when e.S.uuid = uuid || uuid = "*" ->
+        on_pending_focus_key ev e (String.length e.S.buffer)
+    | _ ->
+        if Option.is_some (racing_edit_uuid ()) then
+          S.pending_focus_actions := action :: !S.pending_focus_actions
+  in
+  S.pending_focus_actions := action :: !S.pending_focus_actions
+
 let on_keydown ev =
   if S.ready () then begin
     if Editor_commands.popup_key ev then ()
@@ -406,26 +466,52 @@ let on_keydown ev =
           match (S.editing (), !S.pending_focus) with
           | Some e, Some (uuid, caret, _)
             when e.S.uuid = uuid
-                 && not (targets_block_editor uuid target) ->
-              on_pending_focus_key ev e caret
+                 && not (targets_block_editor uuid target) -> (
+              match (D.ev_key ev, racing_edit_uuid ()) with
+              | key, Some u
+                when u <> e.S.uuid
+                     && (String.length key = 1 || key = "Enter"
+                         || key = "Backspace" || key = "Tab")
+                     && (not (D.ev_composing ev))
+                     && not (mods ev || D.ev_alt ev) ->
+                  (* a click on a different block is mid-dispatch: the
+                     press belongs to the block being entered, not the
+                     one still marked editing *)
+                  D.prevent_default ev;
+                  queue_racing_key ev u
+              | _ -> on_pending_focus_key ev e caret)
           | Some e, _
             when (not (targets_block_editor e.S.uuid target))
                  && (is_other_block_editor e.S.uuid target
-                    || not (D.is_editable_target target)) ->
-              (* pending_focus was consumed on a node the following
-                 refresh replaced (or focus otherwise failed to land):
-                 editing still says mid-edit but the press arrived at
-                 <body>. Re-arm pending focus on the editing block and
-                 route the key through the remount-window handler. *)
-              let caret =
-                match D.textarea_of e.S.uuid with
-                | Some el -> D.el_selection_start el
-                | None -> String.length e.S.buffer
-              in
-              S.pending_focus :=
-                Some (e.S.uuid, caret, !S.last_edit_input_ms);
-              D.set_timeout A.apply_focus 0;
-              on_pending_focus_key ev e caret
+                    || not (D.is_editable_target target)) -> (
+              match (D.ev_key ev, racing_edit_uuid ()) with
+              | key, Some u
+                when u <> e.S.uuid
+                     && (String.length key = 1 || key = "Enter"
+                         || key = "Backspace" || key = "Tab")
+                     && (not (D.ev_composing ev))
+                     && not (mods ev || D.ev_alt ev) ->
+                  (* a click on a different block is mid-dispatch: the
+                     press belongs to the block being entered, not the
+                     one still marked editing *)
+                  D.prevent_default ev;
+                  queue_racing_key ev u
+              | _ ->
+                  (* pending_focus was consumed on a node the following
+                     refresh replaced (or focus otherwise failed to
+                     land): editing still says mid-edit but the press
+                     arrived at <body>. Re-arm pending focus on the
+                     editing block and route the key through the
+                     remount-window handler. *)
+                  let caret =
+                    match D.textarea_of e.S.uuid with
+                    | Some el -> D.el_selection_start el
+                    | None -> String.length e.S.buffer
+                  in
+                  S.pending_focus :=
+                    Some (e.S.uuid, caret, !S.last_edit_input_ms);
+                  D.set_timeout A.apply_focus 0;
+                  on_pending_focus_key ev e caret)
           | _ -> (
           match
             (S.editing_uuid (), D.closest_sel ".editor-wrapper" target)
@@ -464,7 +550,16 @@ let on_keydown ev =
               in
               if stale_block_editor then on_normal_key ev
               else if D.is_editable_target target then ()
-              else on_normal_key ev)))
+              else
+                (match (D.ev_key ev, racing_edit_uuid ()) with
+                | key, Some u
+                  when (String.length key = 1 || key = "Enter"
+                          || key = "Backspace" || key = "Tab")
+                       && (not (D.ev_composing ev))
+                       && not (mods ev || D.ev_alt ev) ->
+                    D.prevent_default ev;
+                    queue_racing_key ev u
+                | _ -> on_normal_key ev))))
   end
 
 (* -- input: keep the editing buffer in sync (silently) -- *)
@@ -710,7 +805,44 @@ let on_editor_insert ev =
    autocomplete/context-menu popups keep editing — the apply action
    refocuses the textarea (cljs keeps the block in edit mode) *)
 let on_mousedown ev =
-  if S.ready () && S.editing () <> None then
+  if S.ready () then begin
+    (* record which block's content the pointer went down on — including
+       outside any block (clears the record). Mirrors the interactive
+       exclusions on_click applies before enter_edit. *)
+    last_block_mousedown :=
+      (match
+         D.closest_sel
+           "button, a, input, audio, video, details, summary, \
+            sup.fn, [contenteditable=true], .cloze, \
+            .cloze-revealed, .query-table, .image-resize, \
+            .view-action-type, .ui-fenced-code-editor"
+           (D.ev_target ev)
+       with
+       | Some _ -> ("", Platform.date_now_ms ())
+       | None -> (
+           match D.closest_sel ".block-content" (D.ev_target ev) with
+           | Some el -> (
+               Option.value (D.el_get_attr el "blockid") ~default:""
+               , Platform.date_now_ms ())
+           | None -> (
+               (* the add-block row appends a block then enters edit —
+                  its uuid doesn't exist yet, so record a wildcard that
+                  replays into the next edit landing *)
+               match D.closest_sel ".block-add-button" (D.ev_target ev)
+               with
+               | Some _ -> ("*", Platform.date_now_ms ())
+               | None -> (
+                   (* row padding lands inside .ls-block but outside
+                      .block-content — the block it belongs to is still
+                      the edit the click is about to start *)
+                   match D.closest_sel ".ls-block" (D.ev_target ev) with
+                   | Some el ->
+                       ( Option.value
+                           (uuid_of_prefixed "ls-block-" (D.el_id el))
+                           ~default:""
+                       , Platform.date_now_ms () )
+                   | None -> ("", Platform.date_now_ms ())))));
+    if S.editing () <> None then
     match
       D.closest_sel ".editor-wrapper, .ui-fenced-code-editor"
         (D.ev_target ev)
@@ -730,6 +862,7 @@ let on_mousedown ev =
         | None ->
             if Editor_commands.click_guard (D.ev_target ev) then ()
             else A.schedule_blur_commit ())
+  end
 
 (* -- drag & drop (cljs components/block.cljs on-drag-start/
    block-drag-over/block-drop) -- *)

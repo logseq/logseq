@@ -4,6 +4,37 @@ import Highlightr
 import LUIAppleBackend
 import SwiftUI
 
+/// NSTextView with reliable responder-transition reporting. AppKit posts
+/// `textDidBeginEditing` lazily — only on the first text change — so a
+/// view that gained first responder but hasn't been typed into never
+/// emits a DOM `focus`, leaving OCaml's pending-focus loop (which waits
+/// for `document.activeElement` to match) spinning and its queued keys
+/// dropped. Announcing focus/blur on the responder transition itself
+/// lets that loop converge on the first landing like the web's
+/// `el.focus()` does.
+final class LogseqBlockTextView: NSTextView {
+  /// The element's coordinator — notified on responder transitions so it
+  /// can emit `focus`/`blur` dom-events (deduped against the delegate
+  /// notifications, which still fire for real editing sessions).
+  weak var coordinator: LogseqTextArea.Coordinator?
+  /// The element's DOM `id` (`edit-block-<uuid>`) — the key monitor
+  /// compares it against the pending focus request to route keys away
+  /// from a textview that is about to be replaced.
+  var domID: String?
+
+  override func becomeFirstResponder() -> Bool {
+    let ok = super.becomeFirstResponder()
+    if ok { coordinator?.noteFocused() }
+    return ok
+  }
+
+  override func resignFirstResponder() -> Bool {
+    let ok = super.resignFirstResponder()
+    if ok { coordinator?.noteResigned() }
+    return ok
+  }
+}
+
 /// NSTextView-backed `logseq-textarea`. This is the block editor surface: the
 /// OCaml editor drives it through `text` prop updates and imperative dom-ops
 /// (set-value, set-selection-range, focus), and every edit/keypress goes back
@@ -19,7 +50,11 @@ struct LogseqTextArea: NSViewRepresentable {
 
   func makeNSView(context: NSViewRepresentableContext<Self>) -> NSScrollView {
     let scrollView = NSTextView.scrollableTextView()
-    let textView = scrollView.documentView as! NSTextView
+    let textView = LogseqBlockTextView()
+    scrollView.documentView = textView
+    textView.autoresizingMask = [.width]
+    textView.coordinator = context.coordinator
+    textView.domID = domID
     textView.delegate = context.coordinator
     textView.isRichText = false
     textView.allowsUndo = true
@@ -60,6 +95,7 @@ struct LogseqTextArea: NSViewRepresentable {
   }
 
   func updateNSView(_ scrollView: NSScrollView, context: NSViewRepresentableContext<Self>) {
+    (scrollView.documentView as? LogseqBlockTextView)?.domID = domID
     let textView = scrollView.documentView as! NSTextView
     context.coordinator.owner = self
     // While the view has focus, the user's typing is authoritative: a
@@ -101,6 +137,28 @@ struct LogseqTextArea: NSViewRepresentable {
         "selectionEnd": textView.selectedRange().location
           + textView.selectedRange().length,
       ])
+    }
+
+    /// Route pastes through OCaml's paste pipeline (web `paste` dom-event →
+    /// `paste_blocks`), which splits multi-line text into blocks, converts
+    /// HTML to markdown, and splices inline text at the caret. A raw
+    /// NSTextView insert would dump the clipboard into one block — and the
+    /// remount on the first newline loses the rest. A paste is detected by
+    /// the replacement equalling the general pasteboard's plain text (covers
+    /// both ⌘V and Edit ▸ Paste).
+    func textView(
+      _ textView: NSTextView,
+      shouldChangeTextIn affectedCharRange: NSRange,
+      replacementString: String?
+    ) -> Bool {
+      guard let text = replacementString, !text.isEmpty,
+        let plain = NSPasteboard.general.string(forType: .string),
+        plain == text
+      else { return true }
+      emit("paste", payload: [
+        "clipboardData": ["text": plain],
+      ])
+      return false
     }
 
     /// True while the autocomplete popup is mounted — OCaml's document
@@ -167,10 +225,29 @@ struct LogseqTextArea: NSViewRepresentable {
     }
 
     func textDidBeginEditing(_ notification: Notification) {
-      emit("focus")
+      noteFocused()
     }
 
     func textDidEndEditing(_ notification: Notification) {
+      noteResigned()
+    }
+
+    /// `focus`/`blur` announcements deduped across both sources:
+    /// responder transitions (LogseqBlockTextView, fires on programmatic
+    /// makeFirstResponder) and editing notifications (fires on real
+    /// edits). OCaml needs exactly one pair per responder cycle — its
+    /// activeElement tracking only sees the first.
+    private var focusAnnounced = false
+
+    func noteFocused() {
+      guard !focusAnnounced else { return }
+      focusAnnounced = true
+      emit("focus")
+    }
+
+    func noteResigned() {
+      guard focusAnnounced else { return }
+      focusAnnounced = false
       emit("blur")
     }
 
@@ -242,7 +319,8 @@ struct LogseqTextArea: NSViewRepresentable {
 
     func emit(_ name: String, payload: [String: Any] = [:]) {
       guard let owner else { return }
-      guard owner.wired.contains(name) || ["input", "keydown", "focus", "blur"].contains(name)
+      guard owner.wired.contains(name)
+        || ["input", "keydown", "focus", "blur", "paste", "copy", "cut"].contains(name)
       else { return }
       var enriched = payload
       enriched["nodeId"] = owner.context.nodeID

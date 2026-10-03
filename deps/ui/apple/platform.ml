@@ -219,8 +219,21 @@ let event_listed events name =
     (String.split_on_char ' ' events
     |> List.concat_map (String.split_on_char ','))
 
+(* the leftMouseUp monitor emits "click" for every hit (DOM parity —
+   taps on views without their own gesture would otherwise never reach
+   document click listeners), while elements with their own tap gesture
+   also emit one. The monitor defers a runloop tick so the element emit
+   wins; drop the duplicate inside a coalescing window far shorter than
+   a human double-click. *)
+let last_click_ms = ref (-1.)
+
 (* host -> OCaml event entry; called by the bridge. *)
 let emit_event name payload =
+  let now = date_now_ms () in
+  if name = "click" && now -. !last_click_ms < 60. then
+    ()
+  else begin
+  if name = "click" then last_click_ms := now;
   propagation_stopped := false;
   !pre_dispatch_hook payload;
   (match payload with
@@ -255,6 +268,7 @@ let emit_event name payload =
   match Hashtbl.find_opt window_listeners name with
   | Some fns -> List.iter (fun f -> f payload) fns
   | None -> ()
+  end
 
 (* ---------- url / hash routing ---------- *)
 
