@@ -15,6 +15,11 @@ struct LogseqNativeSidebar: View {
   /// doesn't drive collapse (web's `.hd` has no click handler), so this is
   /// view-local like a macOS sidebar's own expand memory.
   @State private var collapsed: Set<Int> = []
+  /// List selection doubles as the active-row highlight (system pill);
+  /// synced from the DOM `active` class and cleared nowhere — re-taps
+  /// re-emit are not needed since navigating to the current page is a
+  /// no-op upstream.
+  @State private var selection: Int?
 
   private struct Item: Identifiable {
     let nodeID: Int
@@ -37,7 +42,27 @@ struct LogseqNativeSidebar: View {
 
   var body: some View {
     let model = read()
-    VStack(alignment: .leading, spacing: 0) {
+    let activeID =
+      model.sections.lazy.flatMap(\.items).first(where: \.active)?.nodeID
+    List(selection: $selection) {
+      SwiftUI.Section {
+        graphRow(model)
+      }
+      ForEach(model.sections) { section in
+        SwiftUI.Section {
+          if !collapsed.contains(section.nodeID) {
+            ForEach(section.items) { item in
+              SidebarItemRow(item: item, context: context)
+                .tag(item.nodeID)
+            }
+          }
+        } header: {
+          sectionHeader(section)
+        }
+      }
+    }
+    .listStyle(.sidebar)
+    .background {
       // Mount the DOM subtree invisibly: mount/unmount emitters still fire
       // and node models stay live for emits — the tree is the data source.
       VStack(spacing: 0) {
@@ -50,25 +75,35 @@ struct LogseqNativeSidebar: View {
       .clipped()
       .allowsHitTesting(false)
       .accessibilityHidden(true)
-
-      graphRow(model)
-      Divider().opacity(0.4).padding(.vertical, 4)
-      ScrollView(.vertical, showsIndicators: false) {
-        LazyVStack(alignment: .leading, spacing: 10) {
-          ForEach(model.sections) { section in
-            sectionView(section)
-          }
-        }
-        .padding(.horizontal, 8)
-        .padding(.bottom, 12)
-      }
     }
-    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-    .background {
-      ZStack {
-        LogseqSidebarMaterial()
-        LogseqColors.gray(2).opacity(0.6)
-      }
+    .onChange(of: activeID) { _, new in
+      selection = new
+    }
+    .onChange(of: selection) { _, sel in
+      // Arrow keys and clicks both land here (native List selection);
+      // skip the emit when selection is the already-active page.
+      guard let sel, sel != activeID else { return }
+      emitClick(
+        sel,
+        extra: ["shiftKey": NSEvent.modifierFlags.contains(.shift)])
+    }
+  }
+
+  /// ls-icon/tabler names -> SF symbols (Out's vocabulary).
+  private func sfSymbol(for icon: String) -> String {
+    switch icon {
+    case "calendar": return "calendar"
+    case "cards": return "rectangle.on.rectangle"
+    case "files": return "doc.text"
+    case "hierarchy", "topology-star":
+      return "point.3.connected.trianglepath.dotted"
+    case "pin", "pinned": return "pin"
+    case "circle-check", "checkbox": return "checkmark.square"
+    case "photo", "asset": return "photo"
+    case "hash", "tag": return "number"
+    case "star": return "star"
+    case "search": return "magnifyingglass"
+    default: return "doc.text"
     }
   }
 
@@ -203,76 +238,61 @@ struct LogseqNativeSidebar: View {
 
   // MARK: - rows
 
+  /// Out-style graph switcher row: secondary SF icon + headline title +
+  /// switch chevron; the whole row emits on the DOM graphs-selector
+  /// anchor (upstream opens the graphs dialog).
   private func graphRow(_ m: Model) -> some View {
-    Button {
-      if let id = m.graphNodeID { emitClick(id) }
-    } label: {
-      HStack(spacing: 6) {
-        LogseqTablerIcon(name: "topology-star", size: 15)
-        Text(m.graphTitle).font(.system(size: 13, weight: .semibold))
-          .lineLimit(1)
-        Image(systemName: "chevron.down").font(.system(size: 9))
-          .foregroundStyle(.secondary)
-        Spacer(minLength: 0)
-      }
-      .padding(.horizontal, 10)
-      .padding(.vertical, 8)
-      .contentShape(Rectangle())
+    HStack(spacing: 6) {
+      Image(systemName: "point.3.connected.trianglepath.dotted")
+        .foregroundStyle(.secondary)
+      Text(m.graphTitle).font(.headline).lineLimit(1)
+      Spacer(minLength: 0)
+      Image(systemName: "chevron.up.chevron.down")
+        .foregroundStyle(.secondary)
     }
-    .buttonStyle(.plain)
+    .contentShape(Rectangle())
+    .onTapGesture {
+      if let id = m.graphNodeID { emitClick(id) }
+    }
   }
 
-  @ViewBuilder private func sectionView(_ s: Section) -> some View {
-    VStack(alignment: .leading, spacing: 2) {
-      HStack(spacing: 4) {
-        if s.collapsible {
-          Image(
-            systemName: collapsed.contains(s.nodeID)
-              ? "chevron.right" : "chevron.down"
-          )
-          .font(.system(size: 8, weight: .bold))
+  /// Out's CollapsibleHeader: plain title, trailing chevron (rotates on
+  /// collapse); the optional "…" sits before it (nav-edit menu anchor).
+  private func sectionHeader(_ s: Section) -> some View {
+    HStack(spacing: 4) {
+      Text(s.title)
+      Spacer(minLength: 0)
+      if let more = s.moreNodeID {
+        Image(systemName: "ellipsis")
+          .font(.system(size: 11))
           .foregroundStyle(.secondary)
-          .frame(width: 10)
-        }
-        Text(s.title)
-          .font(.system(size: 12, weight: .medium))
-          .foregroundStyle(.secondary)
-        Spacer(minLength: 0)
-        if let more = s.moreNodeID {
-          Image(systemName: "ellipsis")
-            .font(.system(size: 11))
-            .foregroundStyle(.secondary)
-            .frame(width: 18, height: 18)
-            .contentShape(Rectangle())
-            .highPriorityGesture(
-              SpatialTapGesture(coordinateSpace: .named("logseqWindow"))
-                .onEnded { v in
-                  emitClick(
-                    more,
-                    extra: [
-                      "clientX": Double(v.location.x),
-                      "clientY": Double(v.location.y),
-                    ])
-                })
-        }
+          .frame(width: 18, height: 18)
+          .contentShape(Rectangle())
+          .highPriorityGesture(
+            SpatialTapGesture(coordinateSpace: .named("logseqWindow"))
+              .onEnded { v in
+                emitClick(
+                  more,
+                  extra: [
+                    "clientX": Double(v.location.x),
+                    "clientY": Double(v.location.y),
+                  ])
+              })
       }
-      .padding(.horizontal, 4)
-      .frame(height: 22)
-      .contentShape(Rectangle())
-      .onTapGesture {
-        if s.collapsible {
-          if collapsed.contains(s.nodeID) {
-            collapsed.remove(s.nodeID)
-          } else {
-            collapsed.insert(s.nodeID)
-          }
-        }
+      if s.collapsible {
+        Image(systemName: "chevron.down")
+          .font(.caption2.weight(.bold))
+          .rotationEffect(
+            .degrees(collapsed.contains(s.nodeID) ? -90 : 0))
       }
-
-      if !collapsed.contains(s.nodeID) {
-        ForEach(s.items) { item in
-          SidebarItemRow(item: item, context: context)
-        }
+    }
+    .contentShape(Rectangle())
+    .onTapGesture {
+      guard s.collapsible else { return }
+      if collapsed.contains(s.nodeID) {
+        collapsed.remove(s.nodeID)
+      } else {
+        collapsed.insert(s.nodeID)
       }
     }
   }
@@ -283,14 +303,8 @@ struct LogseqNativeSidebar: View {
     @State private var hovering = false
 
     var body: some View {
-      HStack(spacing: 8) {
-        if !item.icon.isEmpty {
-          LogseqTablerIcon(name: item.icon, size: 15)
-            .opacity(0.7)
-            .frame(width: 16)
-        }
-        Text(item.title)
-          .font(.system(size: 13))
+      HStack(spacing: 0) {
+        Label(item.title, systemImage: sfSymbol(for: item.icon))
           .lineLimit(1)
           .truncationMode(.tail)
         Spacer(minLength: 4)
@@ -319,18 +333,24 @@ struct LogseqNativeSidebar: View {
                 })
         }
       }
-      .padding(.leading, 8)
-      .padding(.trailing, 4)
-      .frame(height: 30)
-      .background {
-        RoundedRectangle(cornerRadius: 6)
-          .fill(item.active || hovering ? LogseqColors.gray(4) : .clear)
-      }
-      .contentShape(Rectangle())
-      .onTapGesture {
-        emit(extra: ["shiftKey": NSEvent.modifierFlags.contains(.shift)])
-      }
       .onHover { hovering = $0 }
+    }
+
+    private func sfSymbol(for icon: String) -> String {
+      switch icon {
+      case "calendar": return "calendar"
+      case "cards": return "rectangle.on.rectangle"
+      case "files": return "doc.text"
+      case "hierarchy", "topology-star":
+        return "point.3.connected.trianglepath.dotted"
+      case "pin", "pinned": return "pin"
+      case "circle-check", "checkbox": return "checkmark.square"
+      case "photo", "asset": return "photo"
+      case "hash", "tag": return "number"
+      case "star": return "star"
+      case "search": return "magnifyingglass"
+      default: return "doc.text"
+      }
     }
 
     private func emit(target targetNodeID: Int? = nil, extra: [String: Any]) {

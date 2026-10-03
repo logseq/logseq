@@ -442,3 +442,24 @@ behavior), `.left-sidebar-resizer`, `.cp__graphs-selector`,
   appears — untracked so far (may be an OCaml-side gate).
 - Transient: sidebar items vanish while cmdk is open — likely an
   emptied intermediate patch state during modal mount.
+
+### Icon font + Out-style sidebar polish
+- Icons render through the real bundled fonts now: `tabler-icons.ttf`
+  (4962 `ti-` glyphs) + `tabler-icons-extension.ttf` (31 `tie-` glyphs,
+  converted from the shipped woff2 with fontTools). Name -> codepoint
+  tables are generated from the web css (tabler-icons.min.css /
+  tabler-extension.css) into Resources/*.json. The old SVG-path
+  renderer (LogseqSVGPath over tabler-children.json) stayed as the
+  fallback for uncovered names.
+- Sidebar switched to `List` + `.listStyle(.sidebar)` like Out's
+  AppEntry.swift: system selection pill (synced to the DOM `active`
+  class via a selection binding — clicks AND arrow keys both emit),
+  plain/section headers with trailing disclosure chevrons, `Label`
+  rows with SF symbols (ls-icon name -> SF map), graph switcher row
+  (point.3.connected.trianglepath.dotted + headline + up/down chevron).
+- The `a.as-edit` "…" section affordance and row `sidebar-page-actions`
+  "…" still emit with SpatialTapGesture coords + target snapshots.
+- `ls:open-dialog "graphs"` (graph selector click) is a no-op
+  OCaml-side — `Dialogs_state.known` has no "graphs" entry; the
+  graphs manager dialog doesn't exist in the ported dialog set yet.
+  Same for any other dialog name not in `known`.

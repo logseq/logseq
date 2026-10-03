@@ -66,19 +66,23 @@ struct LogseqElementView: View {
   }
 
   /// `ti-<name>`/`tie-<name>` classes on `i`/`span` mark a tabler font icon;
-  /// resolve the icon name (nil when the node isn't an icon).
-  private var tablerIconName: String? {
+  /// resolve the icon name + whether it's the extension font (nil when the
+  /// node isn't an icon).
+  private var tablerIconName: (name: String, ext: Bool)? {
     guard tag == "i" || tag == "span" else { return nil }
     guard case .string(let classes) = context.property("style-class")
     else { return nil }
     for cls in classes.split(separator: " ") {
-      if cls.hasPrefix("ti-") || cls.hasPrefix("tie-") {
-        return String(cls.dropFirst(cls.hasPrefix("tie-") ? 4 : 3))
+      if cls.hasPrefix("tie-") {
+        return (String(cls.dropFirst(4)), true)
+      }
+      if cls.hasPrefix("ti-") {
+        return (String(cls.dropFirst(3)), false)
       }
       // `ui__icon ti ls-icon-*` marks the icon by name class, not ti-* —
       // e.g. sidebar nav's ls-icon-calendar/cards/files/hierarchy.
       if cls.hasPrefix("ls-icon-") {
-        return String(cls.dropFirst(8))
+        return (String(cls.dropFirst(8)), false)
       }
     }
     return nil
@@ -223,7 +227,7 @@ struct LogseqElementView: View {
           .modifier(LogseqStyleModifier(style: style, tag: tag))
       } else if let icon = tablerIconName {
         LogseqTablerIcon(
-          name: icon,
+          name: icon.name, ext: icon.ext, size: style.fontSize ?? 16,
           color: style.foreground ?? LogseqColors.primaryText)
           .modifier(LogseqStyleModifier(style: style, tag: tag))
       } else {
