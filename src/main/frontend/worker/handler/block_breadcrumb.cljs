@@ -2,7 +2,8 @@
   "Canonical breadcrumb payloads shared by block loads and search results."
   (:require [datascript.core :as d]
             [datascript.impl.entity :as de]
-            [logseq.db :as ldb]))
+            [logseq.db :as ldb]
+            [logseq.db.frontend.content :as db-content]))
 
 (def ^:private load-depth 16)
 
@@ -212,6 +213,54 @@
     (assoc :block/refs
            (mapv #(shallow-ref-identity db %)
                  (:block/refs entity)))))
+
+(defn breadcrumb-ref-titles
+  "Ref uuid -> title for every :block/refs target plus every [[uuid]] found
+   inside entity titles. Id refs nested in a title (e.g. [[<uuid>]] inside a
+   page-ref name) are not covered by :block/refs, so they are resolved
+   directly and followed transitively through their own titles."
+  [db entities]
+  (let [ref-titles
+        (into {}
+              (comp
+               (mapcat :block/refs)
+               (keep (fn [ref]
+                       (when-let [ref-uuid (:block/uuid ref)]
+                         (let [title (:block/title ref)]
+                           (when-not (string? title)
+                             (fail! "Invalid breadcrumb reference title"
+                                    {:ref-uuid ref-uuid
+                                     :title title}))
+                           [ref-uuid title])))))
+              entities)
+        title-ref-uuids (fn [entity]
+                          (when-let [title (:block/title entity)]
+                            (db-content/get-matched-ids title)))]
+    ;; Seed from ref titles too: a [[uuid]] nested inside a ref's own title
+    ;; (e.g. a block ref whose title is itself an id ref) is not reachable
+    ;; from the ancestor titles alone.
+    (loop [frontier (into []
+                          (comp
+                           (mapcat (fn [entity]
+                                     (into (title-ref-uuids entity)
+                                           (mapcat #(title-ref-uuids %)
+                                                   (:block/refs entity)))))
+                           (remove nil?))
+                          entities)
+           seen (into #{} (keys ref-titles))
+           titles ref-titles]
+      (if-let [ref-uuid (first frontier)]
+        (if (contains? seen ref-uuid)
+          (recur (subvec frontier 1) seen titles)
+          (let [ref (d/entity db [:block/uuid ref-uuid])
+                title (:block/title ref)]
+            (if (string? title)
+              (recur (into (subvec frontier 1)
+                           (db-content/get-matched-ids title))
+                     (conj seen ref-uuid)
+                     (assoc titles ref-uuid title))
+              (recur (subvec frontier 1) (conj seen ref-uuid) titles))))
+        titles))))
 
 (defn block-breadcrumb
   ([db block]

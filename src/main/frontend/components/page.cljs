@@ -683,7 +683,9 @@
        :page (cond-> page
                breadcrumb-key
                (assoc :block.temp/breadcrumb
-                      (breadcrumb-model/resource-ancestors breadcrumb-data)))})))
+                      (breadcrumb-model/resource-ancestors breadcrumb-data)
+                      :block.temp/breadcrumb-ref-titles
+                      (:ref-titles breadcrumb-data)))})))
 
 (hsx/defc page-aux
   [option {:keys [status page]}]

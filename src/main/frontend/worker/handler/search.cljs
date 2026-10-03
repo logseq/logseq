@@ -15,7 +15,7 @@
 (def search-db-version
   "Current search index version, stored in PRAGMA user_version.
   Bump to force a rebuild when the index format changes."
-  5)
+  6)
 
 (def ^:private fts-id-keyed-search-db-version
   "The last version whose blocks_fts rows have rowids unrelated to their
