@@ -1,6 +1,7 @@
 (* frontend.worker.sync.apply-txs — pending tx persistence, remote tx
-   application (reverse + transact remote + rebase), upload flush, and
-   undo/redo history actions.
+   application on the server conn plus pending replay on the display
+   projection (no reverse/rebase), upload flush, and undo/redo history
+   actions.
 
    Cross-package deps via Sync_deps:
      - gen_undo_ops / clear_history (frontend.worker.undo-redo)
@@ -1022,7 +1023,7 @@ let sanitize_pending_tx_refs ?uuid_exists ?(attr_live = fun _ -> true)
 let prepare_upload_tx_entries ?repo ?server_db (conn : conn option)
     (pending : Sync_client_op.local_tx_entry list) :
     Wire.t list * string list * Wire.t list =
-  let e_missing_tx_ids = ref [] in
+  let missing_entity_tx_ids = ref [] in
   let srv_db =
     match server_db with
     | Some d -> Some d
@@ -1038,17 +1039,28 @@ let prepare_upload_tx_entries ?repo ?server_db (conn : conn option)
      uploadable exactly when its uuid is visible on the server conn or
      will be created (and not retracted) by an earlier pending entry —
      never by display-only state. *)
-  let available =
+  (* uuid availability accumulates as entries survive sanitizing: a ref
+     is uploadable when its uuid is on the server conn, or will be
+     created (and not retracted) by an earlier surviving entry. Resolve
+     lazily — only the uuids the batch actually references get a storage
+     seek; never seed from a whole-index walk. *)
+  let created_delta = ref SSet.empty in
+  let retracted_delta = ref SSet.empty in
+  let srv_uuid_memo = Hashtbl.create 64 in
+  let uuid_available =
     match srv_db with
     | Some d ->
-        let t = Hashtbl.create 4096 in
-        Datascript.datoms d Avet ~a:"block/uuid" ()
-        |> Seq.iter (fun (x : datom) ->
-               match x.v with
-               | Uuid u -> Hashtbl.replace t u ()
-               | _ -> ());
-        Some t
-    | None -> None
+        fun u ->
+          SSet.mem u !created_delta
+          || ((not (SSet.mem u !retracted_delta))
+              &&
+              match Hashtbl.find_opt srv_uuid_memo u with
+              | Some b -> b
+              | None ->
+                  let b = Outliner_op.entity_of_uuid d u <> None in
+                  Hashtbl.replace srv_uuid_memo u b;
+                  b)
+    | None -> fun _ -> true
   in
   let attr_live =
     match srv_db, conn with
@@ -1061,9 +1073,15 @@ let prepare_upload_tx_entries ?repo ?server_db (conn : conn option)
     List.filter_map
       (fun (e : Sync_client_op.local_tx_entry) ->
          let tx_data =
-           match conn, available with
-           | Some c, Some avail -> (
-               let uuid_exists u = Hashtbl.mem avail u in
+           match conn with
+           | Some c -> (
+               let uuid_exists =
+                 match srv_db with
+                 | Some _ -> uuid_available
+                 | None ->
+                     (fun u ->
+                        Outliner_op.entity_of_uuid (Conn.db c) u <> None)
+               in
                try
                  Some
                    (sanitize_pending_tx_refs ~uuid_exists ~attr_live
@@ -1074,30 +1092,19 @@ let prepare_upload_tx_entries ?repo ?server_db (conn : conn option)
                    ; "tx-id", e.tx_id
                    ; "error", Printexc.to_string ex ];
                  None)
-           | Some c, None -> (
-               try
-                 Some
-                   (sanitize_pending_tx_refs ~attr_live (Conn.db c)
-                      (tx_items_of e.tx))
-               with ex ->
-                 Worker_log.warn "db-sync/upload-sanitize-failed"
-                   [ ( "repo", Option.value repo ~default:"-" )
-                   ; "tx-id", e.tx_id
-                   ; "error", Printexc.to_string ex ];
-                 None)
-           | None, _ -> Some (tx_items_of e.tx)
+           | None -> Some (tx_items_of e.tx)
          in
          match tx_data with
          | Some items ->
-             (match available with
-              | Some avail when items <> [] ->
+             (match srv_db with
+              | Some _ when items <> [] ->
                   (* availability must track what actually uploads — the
                      sanitized items, and only while the entry survives;
                      a uuid whose creation was sanitized out of an
                      emptied entry never reaches the server *)
                   let created', retracted' = pending_tx_uuid_delta items in
-                  SSet.iter (fun u -> Hashtbl.replace avail u ()) created';
-                  SSet.iter (fun u -> Hashtbl.remove avail u) retracted'
+                  created_delta := SSet.union created' !created_delta;
+                  retracted_delta := SSet.union retracted' !retracted_delta
               | _ -> ());
              Some
                (Wire.Map
@@ -1108,17 +1115,17 @@ let prepare_upload_tx_entries ?repo ?server_db (conn : conn option)
                      | None -> Wire.Nil)
                   ; kw "tx-data", Wire.Array items ])
          | None ->
-             e_missing_tx_ids := e.tx_id :: !e_missing_tx_ids;
+             missing_entity_tx_ids := e.tx_id :: !missing_entity_tx_ids;
              None)
       pending
   in
-  let e_missing_drops =
+  let missing_entity_drops =
     List.map
       (fun tx_id ->
          Wire.Map
            [ kw "tx-id", Wire.String tx_id
            ; kw "reason", kw "missing-block-entity" ])
-      (List.rev !e_missing_tx_ids)
+      (List.rev !missing_entity_tx_ids)
   in
   let empty_tx_ids =
     List.filter_map
@@ -1160,8 +1167,8 @@ let prepare_upload_tx_entries ?repo ?server_db (conn : conn option)
     | _ -> tx_entries
   in
   ( tx_entries
-  , empty_tx_ids @ List.rev !e_missing_tx_ids
-  , drop_txs @ e_missing_drops )
+  , empty_tx_ids @ List.rev !missing_entity_tx_ids
+  , drop_txs @ missing_entity_drops )
 
 let clear_large_upload_progress repo (tx_ids : string list) : unit =
   List.iter
@@ -1201,7 +1208,7 @@ let pending_tx_by_id repo tx_id : Sync_client_op.local_tx_entry option =
    entries must re-project the display conn *)
 let rebuild_display_fn : (string -> unit) ref = ref (fun _ -> ())
 
-let mark_failed_txs repo (tx_ids : string list) : int =
+let mark_failed_txs ?(rebuild = true) repo (tx_ids : string list) : int =
   match tx_ids with
   | [] -> 0
   | _ ->
@@ -1212,13 +1219,16 @@ let mark_failed_txs repo (tx_ids : string list) : int =
         (* dropping pending entries must re-project the display conn —
            during replay the rebuild in progress already drops them,
            and replay_pending_txs rebinds once more when any entry
-           failed mid-apply *)
-        if not !Sync_state.pending_replay then !rebuild_display_fn repo
+           failed mid-apply. Batch callers pass ~rebuild:false and
+           rebuild once after all drops. *)
+        if rebuild && not !Sync_state.pending_replay then
+          !rebuild_display_fn repo
       end;
       broadcast_rtc_state (current_client repo);
       removed
 
-let mark_pending_txs_false repo (tx_ids : string list) : int =
+let mark_pending_txs_false ?(rebuild = true) repo (tx_ids : string list)
+    : int =
   match tx_ids with
   | [] -> 0
   | _ ->
@@ -1226,7 +1236,7 @@ let mark_pending_txs_false repo (tx_ids : string list) : int =
       let removed = Sync_client_op.mark_pending_txs_false repo tx_ids in
       if removed > 0 then begin
         Sync_client_op.adjust_pending_local_tx_count repo (-removed);
-        !rebuild_display_fn repo
+        if rebuild then !rebuild_display_fn repo
       end;
       broadcast_rtc_state (current_client repo);
       removed
@@ -2291,7 +2301,7 @@ let rewrite_missing_uuid_refs ?(display_db : db option) (db : db)
   let rewrite_pos w =
     let uuid_of_ref_pos w =
       match block_uuid_lookup_ref_value w with
-      | Some _ -> Some (Datascript.Util.uuid_canonicalize (Option.get (block_uuid_lookup_ref_value w)))
+      | Some s -> Some (Datascript.Util.uuid_canonicalize s)
       | None -> (
           match w with
           | Wire.String s when Sync_state.uuid_string s ->
@@ -2564,7 +2574,11 @@ let replay_pending_txs repo (conn : conn)
    pending data only ever lives in memory. *)
 let display_storage (db : db) : storage option =
   Option.map
-    (fun (s : storage) -> { s with storage_store = (fun _ -> ()) })
+    (fun (s : storage) ->
+       (* reads stay live — shared index pages are the point — but the
+          projection may never write or delete durable rows *)
+       { s with storage_store = (fun _ -> ())
+              ; storage_delete = (fun _ -> ()) })
     db.storage_ref
 
 let display_conn_from_server (server_db : db) : conn =
@@ -2640,10 +2654,7 @@ let confirm_pending_txs repo (tx_ids : string list) : unit =
   | None -> ()
   | Some server_conn -> (
       let entries =
-        List.filter
-          (fun (local_tx : Sync_client_op.local_tx_entry) ->
-             List.mem local_tx.tx_id tx_ids)
-          (pending_txs repo ())
+        Sync_client_op.get_pending_local_txs_in repo tx_ids
       in
 
       (* apply each confirmed entry in queue order, sanitized the same
@@ -2716,6 +2727,11 @@ let split_off_server_if_remote repo : unit =
          && Ldb.get_key_value db "logseq.kv/graph-remote?"
             = Some (Bool true)
       then begin
+        (* the pipeline-updates listener maintains new-db-graph-refs on
+           the UI-visible conn (CLI path attaches it at init) — move it
+           onto the display conn so local ops keep feeding it; the
+           server conn must not take its writes *)
+        let had_pipeline = Outliner_db_pipeline.has_listener conn in
         Datascript.unlisten conn "listen-db-changes!";
         Datascript.unlisten conn "pipeline-updates";
         Sync_state.set_server_conn repo conn;
@@ -2723,6 +2739,7 @@ let split_off_server_if_remote repo : unit =
         let display = display_conn_from_server db in
         Worker_state.set_datascript_conn repo display;
         Db_listener.listen_db_changes repo display;
+        if had_pipeline then Outliner_db_pipeline.add_listener display;
         let failed = replay_pending_txs repo display None in
         if failed > 0 then begin
           Conn.update_db display (fun _ ->
@@ -2742,13 +2759,13 @@ let handle_local_tx repo tx_report = !handle_local_tx_ref repo tx_report
    conn, so rejection only marks the ops failed and drops them from the
    projection. *)
 let fail_pending_txs repo (tx_ids : string list) : unit =
-  ignore (mark_failed_txs repo tx_ids);
-  rebuild_display repo ~jump_tx_data:[]
+  (* mark_failed already re-projects once — no second rebuild *)
+  ignore (mark_failed_txs repo tx_ids)
 
 
 let clear_pending_txs repo : int =
-  let ids = pending_tx_ids (pending_txs repo ()) in
-  (* snapshot upload already carried these to the server ��� confirm them
+  let ids = Sync_client_op.get_pending_local_tx_ids repo in
+  (* snapshot upload already carried these to the server — confirm them
      into the server conn before un-pending *)
   confirm_pending_txs repo ids;
   mark_pending_txs_false repo ids
@@ -2893,9 +2910,17 @@ let upload_pending_batch repo (client : Sync_state.client) (conn : conn)
                    | _ -> Either.Right ""))
             drop_txs
         in
-        ignore (mark_failed_txs repo (List.filter (( <> ) "") failed_ids));
-        ignore
-          (mark_pending_txs_false repo (List.filter (( <> ) "") benign_ids))
+        (* one rebuild for the whole drop batch, not one per marker *)
+        let dropped_failed =
+          mark_failed_txs ~rebuild:false repo
+            (List.filter (( <> ) "") failed_ids)
+        in
+        let dropped_benign =
+          mark_pending_txs_false ~rebuild:false repo
+            (List.filter (( <> ) "") benign_ids)
+        in
+        if dropped_failed + dropped_benign > 0 then
+          rebuild_display repo ~jump_tx_data:[]
       end;
       Db_worker_effect.catch
         (upload_aes_key repo tx_entries >>= fun aes_key ->

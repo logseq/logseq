@@ -20,8 +20,17 @@ let invoke_hooks (conn : conn) (tx_report : tx_report) : unit =
     ignore (Outliner_pipeline.transact_new_db_graph_refs conn tx_report)
   end
 
+(* conn is abstract — track which conns carry the listener so the
+   server/display split can move it onto the projection *)
+let listener_conns : conn list ref = ref []
+
+let has_listener (conn : conn) : bool =
+  List.exists (fun c -> c == conn) !listener_conns
+
 (* cljs add-listener — d/listen! conn :pipeline-updates *)
 let add_listener (conn : conn) : unit =
+  if not (has_listener conn) then
+    listener_conns := conn :: !listener_conns;
   ignore
     (Datascript.listen conn "pipeline-updates" (fun tx_report ->
          invoke_hooks conn tx_report))

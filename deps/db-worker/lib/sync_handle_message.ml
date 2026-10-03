@@ -273,12 +273,17 @@ let handle_tx_reject repo (client : Sync_state.client) (message : Wire.t)
        in
        if success_tx_ids <> None || failed_tx_id <> None then begin
          (* confirm the accepted ids into the server conn first, then
-            drop the rejected one from the projection *)
+            drop the rejected one from the projection — one rebuild total *)
          Sync_apply.confirm_pending_txs repo successful_tx_ids;
-         ignore (Sync_apply.mark_pending_txs_false repo successful_tx_ids);
-         match failed_tx_id' with
-         | Some id -> Sync_apply.fail_pending_txs repo [ id ]
-         | None -> ()
+         let unpended =
+           Sync_apply.mark_pending_txs_false ~rebuild:false repo
+             successful_tx_ids
+         in
+         (match failed_tx_id' with
+          | Some id -> Sync_apply.fail_pending_txs repo [ id ]
+          | None ->
+              if unpended > 0 then
+                Sync_apply.rebuild_display repo ~jump_tx_data:[])
        end
        else
          Sync_apply.fail_pending_txs repo inflight;
