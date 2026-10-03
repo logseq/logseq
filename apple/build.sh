@@ -97,6 +97,9 @@ cp "$product_dir/Logseq" "$app_dir/Contents/MacOS/Logseq"
 db_worker="$repo_root/deps/db-worker/_build/default/bin/main.exe"
 if [[ -f $db_worker ]]; then
   cp "$db_worker" "$app_dir/Contents/Resources/logseq-db-worker"
+  # arm64 requires at least an adhoc (linker) signature — a truncated copy
+  # loses it and posix_spawn fails with EBADMACHO, so verify loudly.
+  codesign -v "$app_dir/Contents/Resources/logseq-db-worker"
 fi
 
 # tabler icon table: the OCaml twin (deps/ui/apple/icon_tabler_data.ml) reads
