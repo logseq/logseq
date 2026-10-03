@@ -48,6 +48,17 @@
                   (d/transact! conn [{:db/id id :block/uuid (uuid uuid-text) :block/title (first args)
                                      :db/ident (keyword "user.class" (str "smoke-" id)) :block/tags [159]}])
                   #js {:uuid uuid-text})
+                  "logseq.DB.upsertProperty"
+                  (let [id (swap! counter inc)
+                      title (string/replace (first args) #"\s+" "")
+                      schema (second args)
+                      ident (keyword "plugin.property._test_plugin" title)
+                      uuid-text (str "00000000-0000-4000-8000-000000000" id)]
+                    (d/transact! conn [{:db/id id :db/ident ident :block/uuid (uuid uuid-text)
+                             :block/title title :block/tags [157]
+                             :logseq.property/type (keyword (aget schema "type"))
+                             :db/cardinality (keyword "db.cardinality" (or (aget schema "cardinality") "one"))}])
+                    #js {:ident (str ident) :uuid uuid-text})
                 "logseq.DB.addBlockTag"
                 (do (d/transact! conn [[:db/add [:block/uuid (uuid (first args))] :block/tags
                                        [:block/uuid (uuid (second args))]]]) nil)
@@ -67,10 +78,22 @@
                 "logseq.DB.updateBlock"
                 (let [text (second args)
                       links (map second (re-seq #"(?<!#)\[\[([a-fA-F0-9-]+)\]\]" text))
-                      tags (map second (re-seq #"#\[\[([a-fA-F0-9-]+)\]\]" text))
+                    tag-names (map second (re-seq #"#\[\[([^\]]+)\]\]" text))
+                    tags (mapv (fn [title]
+                           (or (d/q '[:find ?tag . :in $ ?title :where
+                                 [?tag :block/title ?title] [?tag :block/tags 159]] @conn title)
+                             (let [id (swap! counter inc)
+                               tag-uuid (str "00000000-0000-4000-8000-000000000" id)]
+                             (d/transact! conn [{:db/id id :block/uuid (uuid tag-uuid)
+                                      :block/title title :block/tags [159]}])
+                             id))) tag-names)
+                    stored-text (reduce (fn [content [title tag-id]]
+                              (string/replace content (str "#[[" title "]]")
+                                      (str "#[[" (:block/uuid (d/entity @conn tag-id)) "]]")))
+                              text (map vector tag-names tags))
                       ids (fn [uuids] (mapv #(:db/id (d/entity @conn [:block/uuid (uuid %)])) uuids))]
                   (d/transact! conn [{:db/id [:block/uuid (uuid (first args))]
-                                     :block/title text :block/refs (ids links) :block/tags (ids tags)}])
+                           :block/title stored-text :block/refs (ids links) :block/tags tags}])
                   nil)
                 "logseq.DB.removeBlock"
                 (do (d/transact! conn [[:db/retractEntity [:block/uuid (uuid (first args))]]]) nil)
@@ -88,7 +111,8 @@
                             {:uuid uuid-text})) (array-seq (second args)))]
                   (clj->js created))
                 nil))))]
-    (d/transact! conn [{:db/id 158 :db/ident :logseq.class/Page}
+    (d/transact! conn [{:db/id 157 :db/ident :logseq.class/Property}
+              {:db/id 158 :db/ident :logseq.class/Page}
               {:db/id 159 :db/ident :logseq.class/Tag}
               {:db/id 160 :block/uuid (uuid page-uuid) :block/name "fixture" :block/title "Fixture" :block/tags [158]}
                       {:db/id 161 :block/uuid (uuid block-uuid) :block/title "Content" :block/order "a0"
@@ -248,6 +272,60 @@
             (js/queueMicrotask done))
           (p/catch (fn [error] (is false (.-message error)) (js/queueMicrotask done)))))))
 
+(deftest create-property-verifies-sdk-metadata-and-reports-normalized-title
+  (let [{:keys [api]} (page-fixture)]
+    (async done
+      (-> (p/let [result (mcp-compat/create-property api #js {"title" "MCP Smoke Prop"
+                                                             "schema" #js {"type" "default" "cardinality" "one"}})
+                  lookup (mcp-compat/get-property-ident api #js {"title" (get-in result [:verified_state :title])})]
+            (is (true? (:verified result)))
+            (is (= "MCPSmokeProp" (get-in result [:verified_state :title])))
+            (is (= ":plugin.property._test_plugin/MCPSmokeProp" (:ident result)))
+            (is (string/includes? (:diagnostic result) "normalized the title"))
+            (is (true? (:found lookup)))
+            (is (= ":plugin.property._test_plugin/MCPSmokeProp" (:ident lookup)))
+            (is (= "default" (:type lookup)))
+            (js/queueMicrotask done))
+          (p/catch (fn [error] (is false (.-message error)) (js/queueMicrotask done)))))))
+
+(deftest create-property-still-rejects-a-genuine-serialized-type-mismatch
+  (let [{:keys [api conn]} (page-fixture)
+        wrapped-api (fn [method args]
+                      (api method (if (= method "logseq.DB.upsertProperty")
+                                    (assoc args 1 #js {"type" "default"}) args)))]
+    (async done
+      (-> (p/then (mcp-compat/create-property wrapped-api #js {"title" "Wrong Type" "schema" #js {"type" "number"}})
+                  (fn [_] (is false "A genuine type mismatch must be rejected") (js/queueMicrotask done)))
+          (p/catch (fn [error]
+                     (is (string/includes? (.-message error) "not the requested"))
+                     (is (string/includes? (.-message error) "default"))
+                     (is (= :default (:logseq.property/type (d/entity @conn 201))))
+                     (js/queueMicrotask done)))))))
+
+(deftest add-property-verifies-a-serialized-false-value
+  (let [target-uuid "00000000-0000-4000-8000-000000000021"
+        ident ":plugin.property._test_plugin/Flag"
+        written? (atom false)
+        api (fn [method args]
+              (case method
+                "logseq.DB.upsertBlockProperty" (do (reset! written? true) nil)
+                "logseq.DB.datascriptQuery"
+                (let [query (first args)]
+                  (cond
+                    (string/includes? query "block/uuid #uuid")
+                    (clj->js (cond-> {"id" 10 "uuid" target-uuid "title" "Target"}
+                               @written? (assoc ident {:id 55})))
+                    (string/includes? query "?e ?a _") #js [#js {"id" 55 ":logseq.property/value" false}]
+                    :else #js {"id" 20 "ident" ident "title" "Flag" ":logseq.property/type" "default"}))
+                nil))]
+    (async done
+      (-> (p/then (mcp-compat/add-property api #js {"target_uuid" target-uuid "property_ident" ident "value" false})
+                  (fn [result]
+                    (is (true? (:verified result)))
+                    (is @written?)
+                    (js/queueMicrotask done)))
+          (p/catch (fn [error] (is false (.-message error)) (js/queueMicrotask done)))))))
+
 (deftest delete-page-verifies-recycling-with-uuid-and-content-preserved
   (let [{:keys [page-uuid block-uuid conn api]} (page-fixture)]
     (async done
@@ -403,6 +481,18 @@
   (doseq [input ["discard me\n- block" [{:text "Skipped" :depth 1}] ["first\n- truncated"]]]
     (is (try (mcp-compat/parse-import input) false (catch :default _ true)))))
 
+(deftest import-parser-distinguishes-markdown-and-verbatim-blank-lines
+  (let [text "Multiline first line\nsecond line of same block\n\nthird line after blank"
+        markdown (mcp-compat/parse-import (str "- " text))
+        block-list (mcp-compat/parse-import #js [#js {"text" text "depth" 0}])
+        encoded-list (mcp-compat/parse-import (js/JSON.stringify #js [#js {"text" text "depth" 0}]))]
+    (is (= "Multiline first line\nsecond line of same block\nthird line after blank"
+           (get-in markdown [:entries 0 :title])))
+    (is (false? (get-in markdown [:entries 0 :verbatim])))
+    (is (= text (get-in block-list [:entries 0 :title])))
+    (is (true? (get-in block-list [:entries 0 :verbatim])))
+    (is (= text (get-in encoded-list [:entries 0 :title])))))
+
 (deftest import-page-verifies-verbatim-content-and-inventory-delta
   (let [{:keys [page-uuid api conn]} (page-fixture)]
     (async done
@@ -448,6 +538,30 @@
                     (is (= #{167} (set (map :db/id (:block/tags (d/entity @conn 161))))))
                     (done)))
           (p/catch (fn [error] (is false (.-message error)) (done)))))))
+
+(deftest repair-links-uses-tag-titles-without-minting-uuid-named-tags
+  (let [{:keys [page-uuid conn api calls]} (page-fixture)
+        tag-uuid "00000000-0000-4000-8000-000000000167"
+        tag-title "Multi Word Ref Tag"]
+    (d/transact! conn [{:db/id 167 :block/uuid (uuid tag-uuid) :block/title tag-title :block/tags [159]}
+                      {:db/id 161 :block/title (str "{{tag:" tag-title "}}") }])
+    (async done
+      (-> (p/let [result (mcp-compat/repair-links api #js {"page_uuid" page-uuid "include_tags" true "create_missing" false})
+                  tag-count (d/q '[:find (count ?tag) . :where [?tag :block/tags 159]] @conn)
+                  writes (filter #(= "logseq.DB.updateBlock" (first %)) @calls)
+                  _ (reset! calls [])
+                  rerun (mcp-compat/repair-links api #js {"page_uuid" page-uuid "include_tags" true "create_missing" false})]
+            (is (true? (:verified result)))
+            (is (= 1 (:blocks_updated result)))
+            (is (= "#[[Multi Word Ref Tag]]" (second (second (first writes)))))
+            (is (= #{167} (set (map :db/id (:block/tags (d/entity @conn 161))))))
+            (is (= 1 tag-count))
+            (is (nil? (d/q '[:find ?tag . :in $ ?title :where [?tag :block/title ?title]] @conn tag-uuid)))
+            (is (true? (:verified rerun)))
+            (is (= 0 (:blocks_updated rerun)))
+            (is (every? #(= "logseq.DB.datascriptQuery" (first %)) @calls))
+            (js/queueMicrotask done))
+          (p/catch (fn [error] (is false (.-message error)) (js/queueMicrotask done)))))))
 
 (deftest repair-links-page-approval-does-not-approve-missing-tags
   (let [{:keys [page-uuid conn api calls]} (page-fixture)]
@@ -702,6 +816,7 @@
                     (is (true? (:verified result)))
                     (is (= 3 (:parts result)))
                     (is (= 2 (count (:created result))))
+                    (is (every? #(= 90 (:parent %)) (:created result)))
                     (is (= "head" (:title (get @entities root_uuid))))
                     (is (every? #(= 90 (get-in % [:parent :id])) (vals @entities)))
                     (let [writes (filter #(not= "logseq.DB.datascriptQuery" (first %)) @calls)]
@@ -1444,11 +1559,11 @@
                   (cond
                     (string/includes? query "block/uuid #uuid") (clj->js (target))
                     (string/includes? query "?e ?a _")
-                    #js [#js {"id" 55 "logseq.property/value" 5}]
+                    #js [#js {"id" 55 ":logseq.property/value" 5}]
                     (string/includes? query ":db/ident")
                     #js {"id" 20 "ident" ident "title" "Score"
-                         "logseq.property/type" "number"
-                         "db/cardinality" "db.cardinality/one"}
+                         ":logseq.property/type" "number"
+                         ":db/cardinality" "db.cardinality/one"}
                     :else nil))
                 nil))]
     (async done
@@ -1484,11 +1599,11 @@
                    #js {"id" 10 "uuid" target-uuid "title" "Target"
                      ":plugin.property._test_plugin/Labels" #js {"id" 55}}
                    (string/includes? query "?e ?a _")
-                   #js [#js {"id" 55 "logseq.property/value" "alpha"}]
+                   #js [#js {"id" 55 ":logseq.property/value" "alpha"}]
                    (string/includes? query "db/ident")
                    #js {"id" 20 "ident" ident "title" "Labels"
-                     "logseq.property/type" "default"
-                     "db/cardinality" "db.cardinality/many"}
+                     ":logseq.property/type" "default"
+                     ":db/cardinality" "db.cardinality/many"}
                    :else nil)))]
     (async done
       (-> (p/then (mcp-compat/add-property api

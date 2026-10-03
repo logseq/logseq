@@ -2,6 +2,8 @@
   (:require [clojure.string :as string]
             [promesa.core :as p]))
 
+(declare property-entity-value property-type)
+
 (defn get-page
   [call-api-fn args]
   (call-api-fn "logseq.cli.getPageData" [(aget args "pageName")]))
@@ -60,8 +62,7 @@
       (= 1 (count properties)) {:found true :title title
                                 :ident (or (:ident (first properties))
                                            (:db/ident (first properties)))
-                                :type (or (:type (first properties))
-                                          (:logseq.property/type (first properties)))}
+                                :type (property-type (first properties))}
       :else {:found false :title title :ident nil
              :reason (str (count properties) " properties share this title")
              :candidates (mapv #(or (:ident %) (:db/ident %)) properties)})))
@@ -703,7 +704,7 @@
              (conj orphans
                    {:ident ident
                     :title (:title entry)
-                    :type (:logseq.property/type entry)})))
+                    :type (property-type entry)})))
          orphans-p))
      (p/resolved [])
      properties)))
@@ -798,8 +799,9 @@
             (when-not property
               (throw (js/Error. "Property creation reported success but the property is absent")))
             (let [requested-type (when schema (aget schema "type"))
-                  actual-type (or (:logseq.property/type property) (:type property))
-                  actual-type (if (keyword? actual-type) (name actual-type) actual-type)]
+              actual-type (property-type property)
+              cardinality (or (property-entity-value property ":db/cardinality") (:cardinality property))
+              value-type (or (property-entity-value property ":db/valueType") (:valueType property))]
               (when (and requested-type (not= requested-type actual-type))
                 (throw (js/Error. (str "Property " ident " was created with type "
                                        (pr-str actual-type) ", not the requested "
@@ -811,16 +813,17 @@
                                        " to " (pr-str (:title property))
                                        "; use the exact ident " (pr-str ident) " for later operations"))
 
-                            (or (:db/cardinality property) (:cardinality property))
-                            (conj (str "cardinality is "
-                                       (or (:db/cardinality property) (:cardinality property))))
+                            cardinality
+                            (conj (str "cardinality is " cardinality))
 
-                            (:db/valueType property)
-                            (conj (str "values are stored as " (:db/valueType property)
+                            value-type
+                            (conj (str "values are stored as " value-type
                                        " -- a write supplies a literal and Logseq mints the value entity")))
                     diagnostic (when (seq notes) (string/join "; " notes))]
                 (if verbose?
                   {:response response-map
+                   :ident ident
+                   :title (:title property)
                    :verified_state property
                    :recovered_after_timeout false
                    :previous_state nil
@@ -829,6 +832,7 @@
                    :observed_state nil}
                   (merge {:verified true
                           :ident ident
+                      :title (:title property)
                           :diagnostic diagnostic}
                      (property-digest property)))))))))))
 
@@ -966,9 +970,9 @@
        (mapcat (fn [value]
                  (let [value-id (property-value-id value)
                        entity (when (number? value-id) (get entities value-id))
-                       resolved (or (:logseq.property/value entity)
-                                    (:value entity)
-                                    (:title entity))]
+                       resolved (if-some [stored (property-entity-value entity ":logseq.property/value")]
+                                  stored
+                                  (or (:value entity) (:title entity)))]
                    (cond-> []
                      (some? value-id) (conj value-id)
                      (some? resolved) (conj resolved)
@@ -978,10 +982,15 @@
 (defn- property-entity-value
   [entity ident]
   (let [bare-ident (subs ident 1)]
-    (some (fn [[key value]]
+    (first (some (fn [[key value]]
             (when (= bare-ident (string/replace-first (str key) #"^:+" ""))
-              value))
-          entity)))
+          [value]))
+        entity))))
+
+(defn- property-type
+  [property]
+  (let [value (or (property-entity-value property ":logseq.property/type") (:type property))]
+    (if (keyword? value) (name value) value)))
 
 (defn- entity-write-digest
   [entity]
@@ -1506,14 +1515,15 @@
                         (create-tails (rest remaining) (conj created (first (:verified_entities outcome))))
                         {:created created :failure (:diagnostic outcome)}))
                     (p/resolved {:created created})))
-                (place-tails [remaining anchor]
+                (place-tails [remaining anchor placed]
                   (if-let [tail (first remaining)]
                     (p/let [outcome (move-block api-fn #js {"block_uuid" (:uuid tail)
-                                                           "target_uuid" anchor "placement" "after"})]
+                                                           "target_uuid" anchor "placement" "after" "verbose" true})]
                       (if (:verified outcome)
-                        (place-tails (rest remaining) (:uuid tail))
-                        {:failure (:diagnostic outcome)}))
-                    (p/resolved {})))
+                        (place-tails (rest remaining) (:uuid tail)
+                               (conj placed (first (:verified_entities outcome))))
+                        {:failure (:diagnostic outcome) :placed placed}))
+                      (p/resolved {:placed placed})))
                 (report [created verified diagnostic]
                   {:block_uuid block-uuid :parts (count parts)
                    :created (mapv entity-write-digest created)
@@ -1522,7 +1532,8 @@
                   created (:created creation)]
             (if (:failure creation)
               (report created false (str "Tail creation failed; original text is unchanged. " (:failure creation)))
-              (p/let [placement (place-tails created block-uuid)]
+                    (p/let [placement (place-tails created block-uuid [])
+                      created (into (:placed placement) (drop (count (:placed placement)) created))]
                 (if (:failure placement)
                   (report created false (str "Tail placement failed; original text is unchanged. " (:failure placement)))
                   (p/let [current-result (api-fn "logseq.DB.datascriptQuery" [query (uuid-query-input block-uuid)])
@@ -2103,15 +2114,14 @@
           (throw (js/Error. (str "No entity exists with exact UUID " target-uuid))))
         (when-not property
           (throw (js/Error. (str "No property exists with exact ident " ident))))
-        (let [type (or (:logseq.property/type property) (:type property))
-              type (if (keyword? type) (name type) type)
+          (let [type (property-type property)
               value-id (property-value-id value)]
           (when (and (contains? reference-property-types type)
                      (not (valid-reference-property-value? value)))
             (throw (js/Error. (str ident " is a " (pr-str type)
                                    " property, so its value must be an entity id"))))
-          (let [many? (string/ends-with? (str (:db/cardinality property)
-                                               (:cardinality property)) "/many")
+              (let [cardinality (or (property-entity-value property ":db/cardinality") (:cardinality property))
+                many? (= "many" (last (string/split (string/replace-first (str cardinality) #"^:" "") #"/")))
                 previous-value (property-entity-value target ident)]
             (p/let [previous-values (resolve-property-values api-fn previous-value)]
               (if (and many? (some #(= value-id %) previous-values))
@@ -2674,7 +2684,11 @@
                       text (string/replace original pattern
                                            (fn [[full kind name]]
                                              (if-let [uuid (get (if (= kind "link") links tags) name)]
-                                               (str (when (= kind "tag") "#") "[[" uuid "]]") full)))]
+                                               (if (= kind "tag") (str "#[[" name "]]") (str "[[" uuid "]]")) full)))
+                      normalized-text (string/replace original pattern
+                                                      (fn [[full kind name]]
+                                                        (if-let [uuid (get (if (= kind "link") links tags) name)]
+                                                          (str (when (= kind "tag") "#") "[[" uuid "]]") full)))]
                   (if (= original text)
                     (rewrite (rest remaining) links tags updated unverified)
                     (p/let [outcome (-> (p/then (p/resolved nil)
@@ -2683,7 +2697,7 @@
                             result (api-fn "logseq.DB.datascriptQuery" [entity-query (uuid-query-input (:uuid block))])
                             current (js->clj result :keywordize-keys true)
                             verified? (and (:verified outcome)
-                                           (= text (:title current))
+                                           (contains? #{text normalized-text} (:title current))
                                            (every? (fn [[kind uuid]]
                                                      (some #(= uuid (:uuid %)) (get current (if (= kind "link") :refs :tags)))) resolved))]
                       (rewrite (rest remaining) links tags (if verified? (inc updated) updated)
