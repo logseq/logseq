@@ -33,6 +33,21 @@ final class LogseqBlockTextView: NSTextView {
     if ok { coordinator?.noteResigned() }
     return ok
   }
+
+  // A detached textview keeps the first responder (AppKit does not resign
+  // it on removal), so keys typed while a remount swap is in flight land
+  // in an invisible view whose delegate is gone — the keystrokes die
+  // silently. Resign on detach so they fall through to the window-level
+  // key monitor, which routes them to OCaml's pending-focus machinery.
+  override func viewWillMove(toWindow newWindow: NSWindow?) {
+    if newWindow == nil,
+      let window = self.window,
+      window.firstResponder === self
+    {
+      window.makeFirstResponder(nil)
+    }
+    super.viewWillMove(toWindow: newWindow)
+  }
 }
 
 /// NSTextView-backed `logseq-textarea`. This is the block editor surface: the

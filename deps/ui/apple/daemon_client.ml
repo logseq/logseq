@@ -209,6 +209,7 @@ let kill_all () =
    to publish its port. Returns base-url. Blocking — caller runs this on
    a systhread. *)
 let spawn_daemon (repo : string) : string =
+  prerr_endline ("[boot] spawn_daemon " ^ repo);
   mkdir_p (graphs_dir ());
   ensure_graph_created repo;
   let bin = daemon_bin () in
@@ -241,7 +242,11 @@ let spawn_daemon (repo : string) : string =
   let deadline = Unix.gettimeofday () +. 15. in
   let rec poll () =
     match port_for_pid pid with
-    | Some port -> "http://127.0.0.1:" ^ string_of_int port
+    | Some port ->
+        prerr_endline
+          ("[boot] daemon up pid=" ^ string_of_int pid ^ " port="
+          ^ string_of_int port);
+        "http://127.0.0.1:" ^ string_of_int port
     | None ->
         if Unix.gettimeofday () > deadline then
           failwith
@@ -274,9 +279,11 @@ let ipc (args : Wire.t list) : Wire.t Js.Promise.t =
     try
       match args with
       | [ Wire.String "getGraphs" ] ->
+          prerr_endline "[boot] ipc getGraphs";
           Host.enqueue (fun () ->
               resolve (Wire.Array (list_repo_names ())))
       | [ Wire.String "db-worker-runtime"; Wire.String repo; _ ] ->
+          prerr_endline ("[boot] ipc db-worker-runtime " ^ repo);
           (* re-use a live daemon for the repo when we have one *)
           let base =
             match Hashtbl.find_opt spawned repo with
@@ -451,11 +458,13 @@ let post_invoke (base_url : string) (name : string) (args : Wire.t list)
         [ "method", `String name
         ; "argsTransit", `String (Transit.to_string (Wire.Array args)) ])
   in
+  prerr_endline ("[boot] invoke " ^ name);
   ignore
     (Thread.create
        (fun () ->
          try
            let _status, resp = http_post ~host ~port ~path:"/v1/invoke" ~body in
+           prerr_endline ("[boot] invoke " ^ name ^ " done");
            let j = Js.Json.parseExn resp in
            let ok =
              match json_field "ok" j with
@@ -545,6 +554,7 @@ let attach (t : transport) (repo : string) (base_url : string) : unit =
   t.sse <- Some state;
   t.base_url <- base_url;
   t.repo <- repo;
+  prerr_endline ("[boot] sse attach " ^ repo);
   ignore (Thread.create (fun () -> sse_thread t host port state) ())
 
 let list_graphs () : Wire.t Js.Promise.t =
