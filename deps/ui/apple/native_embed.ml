@@ -356,15 +356,34 @@ let initialize platform_code host_code (_payload : string) : string =
   run_doc_scans_after_flush ();
   take_patches ()
 
+let perf_log =
+  lazy (match Sys.getenv_opt "LOGSEQ_PERF" with Some _ -> true | None -> false)
+
+let perf_ms () = Unix.gettimeofday () *. 1000.
+
+let perf_mark name t0 =
+  if Lazy.force perf_log
+  then Printf.eprintf "[perf] %s %.1fms\n%!" name (perf_ms () -. t0)
+
 let dispatch_lui (event : Lui_protocol.event) : string =
+  let t0 = perf_ms () in
   Queue.clear pending_batches;
   (match !current_app with
    | Some app ->
        ignore (Lui_app.dispatch_event app event);
+       perf_mark "dispatch_event" t0;
+       let t1 = perf_ms () in
        ignore (Lui_app.flush app);
-       run_doc_scans_after_flush ()
+       perf_mark "flush" t1;
+       let t2 = perf_ms () in
+       run_doc_scans_after_flush ();
+       perf_mark "scans" t2
    | None -> ());
-  take_patches ()
+  let t3 = perf_ms () in
+  let out = take_patches () in
+  perf_mark "take_patches" t3;
+  perf_mark "total" t0;
+  out
 
 let appear node = dispatch_lui (Lui_protocol.Appear node)
 let press node = dispatch_lui (Lui_protocol.Press node)
@@ -433,12 +452,23 @@ let extension_event node name values : string =
 (* drain the Host mailbox on the app thread; called via the wakeup the
    OCaml side fired when async work completed *)
 let pump () : string =
+  let t0 = perf_ms () in
   Queue.clear pending_batches;
   Host.drain ();
-  flush ();
-  Editor_dom.run_doc_scans ();
-  flush ();
-  take_patches ()
+  perf_mark "pump.drain" t0;
+  let t1 = perf_ms () in
+  (match !current_app with
+   | Some app -> ignore (Lui_app.flush app)
+   | None -> ());
+  perf_mark "pump.flush" t1;
+  let t2 = perf_ms () in
+  run_doc_scans_after_flush ();
+  perf_mark "pump.scans" t2;
+  let t3 = perf_ms () in
+  let out = take_patches () in
+  perf_mark "pump.take" t3;
+  perf_mark "pump.total" t0;
+  out
 
 let platform_event payload =
   (* Swift -> OCaml event channel (window resize, appearance change,

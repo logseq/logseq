@@ -1011,3 +1011,37 @@ Documentation → docs.logseq.com).
   stop-the-world collection every few thousand allocations.
 - Fix 3 (native_embed.ml): attrs_parse_cache keyed by node + raw JSON
   string so snapshot rebuilds skip parseExn for unchanged attrs.
+
+## Perf pass 2 — OCaml off the main thread (uncommitted→this batch)
+
+- Root cause of residual jank after the GC fixes: every interaction ran
+  the full OCaml pipeline (dispatch → flush → doc scans → patch encode)
+  synchronously on the main thread, and `onFramesReport` fired the FULL
+  nodeFrames table per layout tick (~30 platform events/sec during the
+  sidebar animation), each enqueuing a pump.
+- Fix: `OCamlWorker` (pinned Thread, runloop-driven, NSLock FIFO) owns
+  the OCaml runtime — `lui_ocaml_start/stop/pump/platform_event` and all
+  `lui_ocaml_*` dispatch entries run as queued work items there. Main
+  thread only decodes + applies patches. OCaml→Swift callbacks marshal
+  back: patches append under `patchQueueLock` + one
+  `DispatchQueue.main.async` drain per burst; platform requests →
+  main.async; wakeup → straight back onto the worker queue.
+- TRAP: closures formed inside @MainActor methods stay MainActor-bound
+  and trap (`_swift_task_checkIsolatedSwift`) when invoked on the worker
+  thread — every worker-item closure must be built inside a
+  `nonisolated private func` helper. `let ocaml` itself is
+  `nonisolated(unsafe)` (immutable after init) so nonisolated helpers
+  can touch it.
+- Rects flood fix: `reportImperativeRects` keeps the latest frames and
+  schedules a 120ms `asyncAfter` flush; `flushRectsDiff` sends only
+  changed rects plus `"drop":[ids]` for removed nodes —
+  `imperative_dom.ml` drops those ids from its rects table.
+- `LogseqLUIEvents` was `@MainActor enum` for no reason (stateless C
+  adapter) — unmarked so `dispatch` can run on the worker.
+- Verify: LOGSEQ_PERF=1 prints [perf] pump.drain/flush/scans/take/total —
+  ~0-4ms per pump on the worker (39ms once at startup), 432+ pumps over
+  a typing+toggle session, zero main-thread OCaml calls.
+- Remaining known quirk (not perf): clicking an empty bullet row does
+  not focus a caret — clicks on rendered block text work, empty rows
+  don't mount an editable surface. Keystrokes typed before a focused
+  textarea exists are still dropped by AppKit.
