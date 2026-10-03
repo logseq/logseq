@@ -271,11 +271,16 @@ let order_list_index (block : entity) (target_type : string) : Wire.t option =
     else
       []
   in
+  (* visited guards :block/parent cycles — a malformed cyclic chain must
+     not hang the index walk. *)
+  let visited = Hashtbl.create 8 in
   let rec order_parent_list b =
-    if order_block b then
+    if order_block b && not (Hashtbl.mem visited b.id) then begin
+      Hashtbl.add visited b.id ();
       match Ldb.ref_ent b "block/parent" with
       | Some p -> b :: order_parent_list p
       | None -> [ b ]
+    end
     else
       []
   in

@@ -212,9 +212,30 @@ let with_test_repos (repos : (string * repo_conns) list) (f : unit -> 'a) :
   let prev_history_provider = !Undo_redo.history_action_ops_provider in
   let prev_gen_undo_ops = !Sync_deps.gen_undo_ops in
   let prev_clear_history = !Sync_deps.clear_history in
+  let prev_update_checksum = !Db_listener.update_checksum in
+  (* production wires this in Sync_client's module init, which the test
+     binary never links; bind it the same way for the run *)
+  Db_listener.update_checksum := Sync_client.update_local_sync_checksum;
   let listeners = ref [] in
   List.iter
     (fun (repo, { conn; _ }) -> Worker_state.set_datascript_conn repo conn)
+    repos;
+  (* pending-model split (production split_off_server_if_remote): on a
+     remote-marked graph the test's conn stays the display projection —
+     local ops and asserts keep hitting datascript_conn — while a
+     detached copy becomes the server conn that only remote applies and
+     acked uploads mutate *)
+  List.iter
+    (fun (repo, { conn; _ }) ->
+      if
+        Ldb.get_key_value (db_of conn) "logseq.kv/graph-remote?"
+        = Some (Bool true)
+      then begin
+        let srv = conn_from_db (db_of conn) in
+        Sync_state.set_server_conn repo srv;
+        Db_listener.listen_db_checksum repo srv;
+        Conn.update_db conn (fun d -> { d with storage_ref = None })
+      end)
     repos;
   Hashtbl.reset Sync_state.client_ops_conns;
   List.iter
@@ -250,7 +271,10 @@ let with_test_repos (repos : (string * repo_conns) list) (f : unit -> 'a) :
                    | None -> ("local-tx?", Bool true) :: tx_meta
                    | Some _ -> tx_meta
                  in
-                 Sync_apply.enqueue_local_tx repo { r with tx_meta }));
+                 (* mirrors handle_local_tx_impl: replay txs from
+                    rebuild_display must not re-enter the queue *)
+                 if not !Sync_state.pending_replay then
+                   Sync_apply.enqueue_local_tx repo { r with tx_meta }));
           listeners := (conn, key) :: !listeners
       | None -> ())
     repos;
@@ -266,6 +290,10 @@ let with_test_repos (repos : (string * repo_conns) list) (f : unit -> 'a) :
       List.iter
         (fun (repo, _) -> Worker_state.drop_datascript_conn repo)
         repos;
+      List.iter
+        (fun (repo, _) -> Sync_state.drop_server_conn repo)
+        repos;
+      Db_listener.update_checksum := prev_update_checksum;
       List.iter
         (fun (repo, prev) ->
           match prev with
@@ -291,6 +319,13 @@ let make_client repo : Sync_state.client = Sync_state.new_client repo
 (* ---------- small entity/wire helpers ---------- *)
 
 let db_of_conn = db_of
+
+(* the stored checksum tracks the server conn only; seeds must be computed
+   from it (the display conn can carry unconfirmed local state) *)
+let srv_db_or_display repo conn =
+  match Sync_state.server_conn repo with
+  | Some sc -> db_of_conn sc
+  | None -> db_of_conn conn
 
 let ent_at_uuid db u = entity_at_uuid db u
 
@@ -696,6 +731,9 @@ let sync_client_bang ?(upload = server_upload_bang) (server : server)
               tx_entries
           in
           (if accepted then begin
+             (* mirrors sync_handle_message tx-batch-ok: confirmed txs
+                land on the server conn before the queue drops them *)
+             Sync_apply.confirm_pending_txs repo tx_ids;
              ignore (Sync_apply.mark_pending_txs_false repo tx_ids);
              (if tx_ids <> [] then begin
                 Sync_client_op.update_local_tx repo t;
@@ -2625,14 +2663,6 @@ let ensure_op_recorded_bang (rng : unit -> float) (ctx : run_ctx)
 
 let op_runs = 200
 
-(* cljs update-local-checksum-listener *)
-let update_local_checksum_listener (repo : string) (conn : conn)
-    (listener_key : string) : unit =
-  ignore
-    (Datascript.listen conn listener_key (fun (r : tx_report) ->
-       if (not (Db_tx.flags_of conn).Db_tx.batch_tx) && r.tx_data <> [] then
-         Sync_client.update_local_sync_checksum repo r))
-
 (* cljs undo-all! / redo-all! *)
 let undo_all (repo : string) (max_steps : int) : int =
   let rec loop count =
@@ -2702,9 +2732,9 @@ let assert_synced_attrs_bang (seed : int) (history : history)
     (attrs_a : block_attrs UuidMap.t) (attrs_b : block_attrs UuidMap.t)
     (attrs_c : block_attrs UuidMap.t) : unit =
   let eq = UuidMap.equal (fun a b -> a = b) in
-  (if not (eq attrs_a attrs_b) || not (eq attrs_a attrs_c) then
-     report_history_bang seed history
-       (Some [ "type", kw "attrs-mismatch" ]));
+  if not (eq attrs_a attrs_b) || not (eq attrs_a attrs_c) then
+    report_history_bang seed history
+      (Some [ "type", kw "attrs-mismatch" ]);
   check "attrs-a = attrs-b" (eq attrs_a attrs_b);
   check "attrs-a = attrs-c" (eq attrs_a attrs_c)
 
@@ -2730,7 +2760,7 @@ let assert_checksum_cache_aligned_bang (seed : int) (server : server)
     List.map
       (fun (repo, conn) ->
         ( repo
-        , Db_sync_checksum.recompute_checksum (db_of_conn conn)
+        , Db_sync_checksum.recompute_checksum (srv_db_or_display repo conn)
         , Sync_client_op.get_local_checksum repo ))
       repo_conns
   in
@@ -3027,15 +3057,8 @@ let test_two_clients_offline_concurrent_undo_redo_merge_sim () =
     ; repo_b, { conn = conn_b; ops_conn = Some ops_b } ]
     (fun () ->
       let { repro; restore } = install_invalid_tx_repro_bang seed history in
-      let listener_a = "checksum-sync-a"
-      and listener_b = "checksum-sync-b" in
-      update_local_checksum_listener repo_a conn_a listener_a;
-      update_local_checksum_listener repo_b conn_b listener_b;
       Fun.protect
-        ~finally:(fun () ->
-          Datascript.unlisten conn_a listener_a;
-          Datascript.unlisten conn_b listener_b;
-          restore ())
+        ~finally:(fun () -> restore ())
         (fun () ->
           Hashtbl.reset Sync_apply.repo_latest_remote_tx;
           record_meta_bang history
@@ -3047,11 +3070,13 @@ let test_two_clients_offline_concurrent_undo_redo_merge_sim () =
             (fun repo -> Sync_client_op.update_local_tx repo 0)
             [ repo_a; repo_b ];
           Sync_client_op.update_local_checksum repo_a
-            (Db_sync_checksum.recompute_checksum (db_of_conn conn_a))
-            (db_of_conn conn_a).max_tx;
+            (Db_sync_checksum.recompute_checksum
+               (srv_db_or_display repo_a conn_a))
+            (srv_db_or_display repo_a conn_a).max_tx;
           Sync_client_op.update_local_checksum repo_b
-            (Db_sync_checksum.recompute_checksum (db_of_conn conn_b))
-            (db_of_conn conn_b).max_tx;
+            (Db_sync_checksum.recompute_checksum
+               (srv_db_or_display repo_b conn_b))
+            (srv_db_or_display repo_b conn_b).max_tx;
           (* Seed stable anchors (non-empty titles) that A won't touch. *)
           let anchor_uuids =
             List.init 10 (fun i ->
@@ -3180,12 +3205,12 @@ let test_two_clients_offline_concurrent_undo_redo_merge_sim () =
           check "db B issues empty" (issues_b = []);
           assert_synced_attrs_bang seed history attrs_a attrs_b attrs_b;
           check "checksum A == cached A"
-            (Db_sync_checksum.recompute_checksum (db_of_conn conn_a)
+            (Db_sync_checksum.recompute_checksum (srv_db_or_display repo_a conn_a)
              = Option.value
                  (Sync_client_op.get_local_checksum repo_a)
                  ~default:"");
           check "checksum B == cached B"
-            (Db_sync_checksum.recompute_checksum (db_of_conn conn_b)
+            (Db_sync_checksum.recompute_checksum (srv_db_or_display repo_b conn_b)
              = Option.value
                  (Sync_client_op.get_local_checksum repo_b)
                  ~default:"");
@@ -3229,28 +3254,20 @@ let test_two_clients_rebase_keeps_local_title_after_reverse_tx () =
     [ repo_a, { conn = conn_a; ops_conn = Some ops_a }
     ; repo_b, { conn = conn_b; ops_conn = Some ops_b } ]
     (fun () ->
-      let listener_a = "checksum-sync-a"
-      and listener_b = "checksum-sync-b" in
-      let update_local_checksum_bang repo conn =
-        update_local_checksum_listener repo conn
-          (if repo = repo_a then listener_a else listener_b)
-      in
-      update_local_checksum_bang repo_a conn_a;
-      update_local_checksum_bang repo_b conn_b;
       Fun.protect
-        ~finally:(fun () ->
-          Datascript.unlisten conn_a listener_a;
-          Datascript.unlisten conn_b listener_b)
+        ~finally:(fun () -> ())
         (fun () ->
           Hashtbl.reset Sync_apply.repo_latest_remote_tx;
           Sync_client_op.update_local_tx repo_a 0;
           Sync_client_op.update_local_tx repo_b 0;
           Sync_client_op.update_local_checksum repo_a
-            (Db_sync_checksum.recompute_checksum (db_of_conn conn_a))
-            (db_of_conn conn_a).max_tx;
+            (Db_sync_checksum.recompute_checksum
+               (srv_db_or_display repo_a conn_a))
+            (srv_db_or_display repo_a conn_a).max_tx;
           Sync_client_op.update_local_checksum repo_b
-            (Db_sync_checksum.recompute_checksum (db_of_conn conn_b))
-            (db_of_conn conn_b).max_tx;
+            (Db_sync_checksum.recompute_checksum
+               (srv_db_or_display repo_b conn_b))
+            (srv_db_or_display repo_b conn_b).max_tx;
           ensure_base_page_bang conn_a base_uuid;
           (match ent_at_uuid (db_of_conn conn_a) base_uuid with
            | Some base ->
@@ -3289,12 +3306,12 @@ let test_two_clients_rebase_keeps_local_title_after_reverse_tx () =
               | None -> None)
              = Some "test");
           check "checksum A == cached A"
-            (Db_sync_checksum.recompute_checksum (db_of_conn conn_a)
+            (Db_sync_checksum.recompute_checksum (srv_db_or_display repo_a conn_a)
              = Option.value
                  (Sync_client_op.get_local_checksum repo_a)
                  ~default:"");
           check "checksum B == cached B"
-            (Db_sync_checksum.recompute_checksum (db_of_conn conn_b)
+            (Db_sync_checksum.recompute_checksum (srv_db_or_display repo_b conn_b)
              = Option.value
                  (Sync_client_op.get_local_checksum repo_b)
                  ~default:"")))
@@ -3603,10 +3620,6 @@ let test_two_clients_offline_insert_delete_indent_undo_redo_checksum () =
     [ repo_a, { conn = conn_a; ops_conn = Some ops_a }
     ; repo_b, { conn = conn_b; ops_conn = Some ops_b } ]
     (fun () ->
-      let listener_a = "checksum-sync-a"
-      and listener_b = "checksum-sync-b" in
-      update_local_checksum_listener repo_a conn_a listener_a;
-      update_local_checksum_listener repo_b conn_b listener_b;
       let run_offline_seq repo conn label_prefix =
         match ent_at_uuid (db_of_conn conn) base_uuid with
         | Some base -> (
@@ -3635,9 +3648,7 @@ let test_two_clients_offline_insert_delete_indent_undo_redo_checksum () =
         | None -> ()
       in
       Fun.protect
-        ~finally:(fun () ->
-          Datascript.unlisten conn_a listener_a;
-          Datascript.unlisten conn_b listener_b)
+        ~finally:(fun () -> ())
         (fun () ->
           Hashtbl.reset Sync_apply.repo_latest_remote_tx;
           List.iter
@@ -3650,11 +3661,13 @@ let test_two_clients_offline_insert_delete_indent_undo_redo_checksum () =
             ; { repo = repo_b; conn = conn_b; client = client_b
               ; online = true; gen_uuid = None } ];
           Sync_client_op.update_local_checksum repo_a
-            (Db_sync_checksum.recompute_checksum (db_of_conn conn_a))
-            (db_of_conn conn_a).max_tx;
+            (Db_sync_checksum.recompute_checksum
+               (srv_db_or_display repo_a conn_a))
+            (srv_db_or_display repo_a conn_a).max_tx;
           Sync_client_op.update_local_checksum repo_b
-            (Db_sync_checksum.recompute_checksum (db_of_conn conn_b))
-            (db_of_conn conn_b).max_tx;
+            (Db_sync_checksum.recompute_checksum
+               (srv_db_or_display repo_b conn_b))
+            (srv_db_or_display repo_b conn_b).max_tx;
           run_offline_seq repo_a conn_a "a";
           run_offline_seq repo_b conn_b "b";
           let rounds =
@@ -3667,9 +3680,9 @@ let test_two_clients_offline_insert_delete_indent_undo_redo_checksum () =
           in
           check "sync became idle" (rounds < 300);
           let checksum_a =
-            Db_sync_checksum.recompute_checksum (db_of_conn conn_a)
+            Db_sync_checksum.recompute_checksum (srv_db_or_display repo_a conn_a)
           and checksum_b =
-            Db_sync_checksum.recompute_checksum (db_of_conn conn_b)
+            Db_sync_checksum.recompute_checksum (srv_db_or_display repo_b conn_b)
           and cached_a = Sync_client_op.get_local_checksum repo_a
           and cached_b = Sync_client_op.get_local_checksum repo_b in
           check "checksum A == checksum B" (checksum_a = checksum_b);
@@ -3693,14 +3706,9 @@ let test_two_clients_empty_child_undo_redo_reconnect_checksum () =
     [ repo_a, { conn = conn_a; ops_conn = Some ops_a }
     ; repo_b, { conn = conn_b; ops_conn = Some ops_b } ]
     (fun () ->
-      let listener_a = "checksum-sync-a"
-      and listener_b = "checksum-sync-b" in
-      update_local_checksum_listener repo_a conn_a listener_a;
-      update_local_checksum_listener repo_b conn_b listener_b;
       Fun.protect
         ~finally:(fun () ->
-          Datascript.unlisten conn_a listener_a;
-          Datascript.unlisten conn_b listener_b)
+          ())
         (fun () ->
           Hashtbl.reset Sync_apply.repo_latest_remote_tx;
           List.iter
@@ -3720,11 +3728,13 @@ let test_two_clients_empty_child_undo_redo_reconnect_checksum () =
                  ; online = true; gen_uuid = None } ]
                128);
           Sync_client_op.update_local_checksum repo_a
-            (Db_sync_checksum.recompute_checksum (db_of_conn conn_a))
-            (db_of_conn conn_a).max_tx;
+            (Db_sync_checksum.recompute_checksum
+               (srv_db_or_display repo_a conn_a))
+            (srv_db_or_display repo_a conn_a).max_tx;
           Sync_client_op.update_local_checksum repo_b
-            (Db_sync_checksum.recompute_checksum (db_of_conn conn_b))
-            (db_of_conn conn_b).max_tx;
+            (Db_sync_checksum.recompute_checksum
+               (srv_db_or_display repo_b conn_b))
+            (srv_db_or_display repo_b conn_b).max_tx;
           (* A stays online and adds an empty child under block 1. *)
           (match ent_at_uuid (db_of_conn conn_a) root_uuid with
            | Some root_a ->
@@ -3759,9 +3769,9 @@ let test_two_clients_empty_child_undo_redo_reconnect_checksum () =
           in
           check "sync became idle" (rounds < 300);
           let checksum_a =
-            Db_sync_checksum.recompute_checksum (db_of_conn conn_a)
+            Db_sync_checksum.recompute_checksum (srv_db_or_display repo_a conn_a)
           and checksum_b =
-            Db_sync_checksum.recompute_checksum (db_of_conn conn_b)
+            Db_sync_checksum.recompute_checksum (srv_db_or_display repo_b conn_b)
           and checksum_server =
             Db_sync_checksum.recompute_checksum
               (db_of_conn server.srv_conn)
@@ -4366,8 +4376,8 @@ let test_two_clients_a_wins_b_overlap_rebase_3_tries () =
       let gen_uuid () = rng_uuid rng in
       let scenario_runs = 90 in
       let base_uuid = gen_uuid () in
-      let conn_a = create_conn ()
-      and conn_b = create_conn () in
+      let conn_a = create_remote_conn ()
+      and conn_b = create_remote_conn () in
       let ops_a = new_client_ops_db ()
       and ops_b = new_client_ops_db () in
       let client_a = make_client repo_a
@@ -4523,7 +4533,7 @@ let test_two_clients_a_wins_b_overlap_rebase_3_tries () =
               let issues_a = db_issues (db_of_conn conn_a)
               and issues_b = db_issues (db_of_conn conn_b) in
               let checksum_a =
-                Db_sync_checksum.recompute_checksum (db_of_conn conn_a)
+                Db_sync_checksum.recompute_checksum (srv_db_or_display repo_a conn_a)
               and checksum_server =
                 Db_sync_checksum.recompute_checksum
                   (db_of_conn server.srv_conn)
@@ -4567,21 +4577,11 @@ let test_three_clients_single_repo_sim () =
     ; repo_b, { conn = conn_b; ops_conn = Some ops_b }
     ; repo_c, { conn = conn_c; ops_conn = Some ops_c } ]
     (fun () ->
-      let listener_a = "checksum-sync-a"
-      and listener_b = "checksum-sync-b"
-      and listener_c = "checksum-sync-c" in
-      update_local_checksum_listener repo_a conn_a listener_a;
-      update_local_checksum_listener repo_b conn_b listener_b;
-      update_local_checksum_listener repo_c conn_c listener_c;
       let { repro = _; restore } =
         install_invalid_tx_repro_bang seed history
       in
       Fun.protect
-        ~finally:(fun () ->
-          restore ();
-          Datascript.unlisten conn_a listener_a;
-          Datascript.unlisten conn_b listener_b;
-          Datascript.unlisten conn_c listener_c)
+        ~finally:(fun () -> restore ())
         (fun () ->
           Hashtbl.reset Sync_apply.repo_latest_remote_tx;
           record_meta_bang history
@@ -4595,8 +4595,9 @@ let test_three_clients_single_repo_sim () =
           List.iter
             (fun (repo, conn) ->
               Sync_client_op.update_local_checksum repo
-                (Db_sync_checksum.recompute_checksum (db_of_conn conn))
-                (db_of_conn conn).max_tx)
+                (Db_sync_checksum.recompute_checksum
+                   (srv_db_or_display repo conn))
+                (srv_db_or_display repo conn).max_tx)
             [ repo_a, conn_a; repo_b, conn_b; repo_c, conn_c ];
           let clients =
             [ { repo = repo_a; conn = conn_a; client = client_a

@@ -458,16 +458,26 @@ let initialize_db ~ensure_open args =
                  | None ->
                      maybe_enqueue_built_in_sync_repair repo conn None
                        initial_data_exists);
-                Endpoint_transaction.maybe_run_recycle_gc conn
+                Endpoint_transaction.maybe_run_recycle_gc repo
               end);
              (* cljs (when initial-tx-report (db-sync/handle-local-tx! repo
                 initial-tx-report)). *)
              (match initial_tx_report with
               | Some report -> Sync_apply.handle_local_tx repo report
               | None -> ());
-             (* cljs (db-sync/reconcile-local-checksum! repo conn) *)
+             (* cljs (db-sync/reconcile-local-checksum! repo conn) — conn
+                stays the server conn for remote graphs (checksums track
+                confirmed state) *)
              Sync_client.reconcile_local_checksum repo conn;
-             Db_listener.listen_db_changes repo conn;
+             (* remote graphs split here: conn becomes the server conn
+                (confirmed state only); datascript_conn becomes the
+                storage-less display projection replaying pending ops. *)
+             Sync_apply.split_off_server_if_remote repo;
+             (* the split helper already moved the listener onto the
+                display conn when it swapped; only a non-remote conn
+                still needs it attached here *)
+             (if Sync_state.server_conn repo = None then
+                Db_listener.listen_db_changes repo conn);
              match Worker_state.datascript_conn repo with
              | Some conn ->
                  Db_worker_effect.pure
@@ -787,7 +797,9 @@ let () =
            Graph_gc.gc_kvs_table ~full_gc:true db;
            Sqlite.exec db ~sql:"VACUUM" ~bind:[||];
            ignore
-             (Db_transact.transact conn
+             (Db_transact.transact
+                (Option.value (Sync_state.confirmed_conn repo)
+                   ~default:conn)
                 [ Wire.Map
                     [ ( Wire.Keyword "db/ident"
                       , Wire.Keyword "logseq.kv/graph-last-gc-at" )

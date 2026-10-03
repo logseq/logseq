@@ -316,7 +316,9 @@ let rehydrate_large_titles repo ~(graph_id : string option)
                       download_fn ~repo ~graph_id ~obj:obj_wire ~aes_key
                       >>= fun title -> (
                       ignore
-                        (Db_transact.transact conn
+                        (Db_transact.transact
+                           (Option.value (Sync_state.confirmed_conn repo)
+                              ~default:conn)
                            [ Wire.Array
                                [ Wire.Keyword "db/add"; Wire.Int eid
                                ; Wire.Keyword "block/title"

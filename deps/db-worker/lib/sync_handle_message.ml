@@ -272,13 +272,16 @@ let handle_tx_reject repo (client : Sync_state.client) (message : Wire.t)
                  | None -> None) ])
        in
        if success_tx_ids <> None || failed_tx_id <> None then begin
+         (* confirm the accepted ids into the server conn first, then
+            drop the rejected one from the projection *)
+         Sync_apply.confirm_pending_txs repo successful_tx_ids;
          ignore (Sync_apply.mark_pending_txs_false repo successful_tx_ids);
          match failed_tx_id' with
-         | Some id -> Sync_apply.rollback_and_mark_failed_txs repo [ id ]
+         | Some id -> Sync_apply.fail_pending_txs repo [ id ]
          | None -> ()
        end
        else
-         Sync_apply.rollback_and_mark_failed_txs repo inflight;
+         Sync_apply.fail_pending_txs repo inflight;
        client.inflight := [];
        broadcast_rtc_state client;
        Sync_log_and_state.add_rtc_log "rtc.log/tx-rejected" rejected_data;
@@ -356,6 +359,9 @@ let handle_tx_batch_ok repo (client : Sync_state.client) remote_tx
   let next_local_tx = max current_local_tx remote_tx_n in
   Sync_client_op.update_local_tx repo next_local_tx;
   Sync_util.clear_last_sync_error client;
+  (* confirmed by the server: fold their normalized tx data into the
+     server conn, then un-pend so the next projection matches the base *)
+  Sync_apply.confirm_pending_txs repo !(client.inflight);
   ignore (Sync_apply.mark_pending_txs_false repo !(client.inflight));
   client.inflight := [];
   broadcast_rtc_state client;

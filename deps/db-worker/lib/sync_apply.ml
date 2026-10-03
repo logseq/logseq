@@ -26,8 +26,6 @@ let repo_upload_stopped : (string, bool) Hashtbl.t = Hashtbl.create 7
 let repo_large_upload_progress : ((string * string), int) Hashtbl.t =
   Hashtbl.create 17
 
-let max_remote_apply_snapshot_retries = 3
-let remote_apply_snapshot_retry_delay_ms = 50
 let upload_response_timeout_ms = 120_000
 
 (* cljs def max-upload-request-datoms — a var so tests can rebind it
@@ -344,17 +342,6 @@ let semantic_outliner_op (op : Wire.t) : bool =
 (* cljs rebase-history-ops: forward ops are canonicalized so replay
    preserves the inserted block identities (op-construct/canonicalize-
    insert-ops on the pre-rebase db). *)
-let rebase_history_ops (local_tx : Sync_client_op.local_tx_entry)
-    (rebase_db_before : db option) : Wire.t list * Wire.t list =
-  let forward =
-    match rebase_db_before with
-    | Some db ->
-        Outliner_op_construct.canonicalize_insert_ops db
-          (Wire.as_seq local_tx.tx) local_tx.forward_outliner_ops
-    | None -> local_tx.forward_outliner_ops
-  in
-  (forward, local_tx.inverse_outliner_ops)
-
 let normalize_tx_data_for_rebase (tx_data : Wire.t) : Wire.t list =
   let items =
     match tx_data with
@@ -537,12 +524,16 @@ let tx_item_missing_deleted_block_ref (db : db) (deleted : SSet.t)
        && Outliner_op.entity_of_uuid db block_uuid = None)
     (tx_item_ref_block_uuids item)
 
-let tx_item_missing_block_ref (db : db) (created : SSet.t) (item : Wire.t)
-    : bool =
+let tx_item_missing_block_ref ?(display_db : db option) (db : db)
+    (created : SSet.t) (item : Wire.t) : bool =
   List.exists
     (fun block_uuid ->
        (not (SSet.mem block_uuid created))
-       && Outliner_op.entity_of_uuid db block_uuid = None)
+       && Outliner_op.entity_of_uuid db block_uuid = None
+       &&
+       match display_db with
+       | Some ddb -> Outliner_op.entity_of_uuid ddb block_uuid = None
+       | None -> true)
     (tx_item_ref_block_uuids item)
 
 let tx_item_entity_block_uuid ?(temp_id_uuid = Hashtbl.create 0)
@@ -599,7 +590,8 @@ let drop_stale_deleted_block_ref_ops (db : db) (deleted : SSet.t)
        | None -> true)
     tx_data
 
-let drop_missing_block_ref_ops (db : db) (tx_data : Wire.t list) : Wire.t list =
+let drop_missing_block_ref_ops ?(display_db : db option) (db : db)
+    (tx_data : Wire.t list) : Wire.t list =
   let temp_id_uuid = tx_temp_id_uuid tx_data in
   let created =
     Hashtbl.fold (fun _ u acc -> SSet.add u acc) temp_id_uuid SSet.empty
@@ -607,7 +599,7 @@ let drop_missing_block_ref_ops (db : db) (tx_data : Wire.t list) : Wire.t list =
   let stale_entity_uuids =
     List.filter_map
       (fun item ->
-         if tx_item_missing_block_ref db created item then
+         if tx_item_missing_block_ref ?display_db db created item then
            tx_item_entity_block_uuid ~temp_id_uuid db item
          else None)
       tx_data
@@ -616,7 +608,7 @@ let drop_missing_block_ref_ops (db : db) (tx_data : Wire.t list) : Wire.t list =
   List.filter
     (fun item ->
        not
-         (tx_item_missing_block_ref db created item
+         (tx_item_missing_block_ref ?display_db db created item
           ||
           match tx_item_entity_block_uuid ~temp_id_uuid db item with
           | Some u -> SSet.mem u stale_entity_uuids
@@ -630,34 +622,6 @@ let entity_block_uuid (db : db) (eid : int) : string option =
       | Some (One_value (Uuid s)) -> Some s
       | _ -> None)
   | None -> None
-
-let drop_local_reversal_stale_target_ops (db_before_local_reversal : db)
-    (db : db) (tx_data : Wire.t list) : Wire.t list =
-  let recreated_eids =
-    List.filter_map
-      (fun item ->
-         if tx_item_add item && tx_item_attr item = kw "block/uuid" then
-           match tx_item_entity item with
-           | Wire.Int n -> Some n
-           | _ -> None
-         else None)
-      tx_data
-  in
-  let recreated_eids =
-    List.fold_left (fun s e -> Int_set.add e s) Int_set.empty
-      recreated_eids
-  in
-  List.filter
-    (fun item ->
-       match tx_item_entity item with
-       | Wire.Int eid ->
-           if Int_set.mem eid recreated_eids then true
-           else
-             (match entity_block_uuid db_before_local_reversal eid with
-              | Some _ -> entity_block_uuid db eid <> None
-              | None -> true)
-       | _ -> true)
-    tx_data
 
 let drop_stale_adds_after_remote_entity_delete (tx_data : Wire.t list)
     : Wire.t list =
@@ -1044,17 +1008,6 @@ let pending_txs repo ?limit () : Sync_client_op.local_tx_entry list =
 let pending_tx_by_id repo tx_id : Sync_client_op.local_tx_entry option =
   Sync_client_op.get_local_tx_entry repo tx_id
 
-let mark_pending_txs_false repo (tx_ids : string list) : int =
-  match tx_ids with
-  | [] -> 0
-  | _ ->
-      clear_large_upload_progress repo tx_ids;
-      let removed = Sync_client_op.mark_pending_txs_false repo tx_ids in
-      if removed > 0 then
-        Sync_client_op.adjust_pending_local_tx_count repo (-removed);
-      broadcast_rtc_state (current_client repo);
-      removed
-
 let mark_failed_txs repo (tx_ids : string list) : int =
   match tx_ids with
   | [] -> 0
@@ -1066,11 +1019,22 @@ let mark_failed_txs repo (tx_ids : string list) : int =
       broadcast_rtc_state (current_client repo);
       removed
 
-let local_tx_has_replay_data (local_tx : Sync_client_op.local_tx_entry) : bool =
-  tx_items_of local_tx.tx <> []
-  || tx_items_of local_tx.reversed_tx <> []
-  || local_tx.forward_outliner_ops <> []
-  || local_tx.inverse_outliner_ops <> []
+(* forward-ref to rebuild_display (defined below) — dropping pending
+   entries must re-project the display conn *)
+let rebuild_display_fn : (string -> unit) ref = ref (fun _ -> ())
+
+let mark_pending_txs_false repo (tx_ids : string list) : int =
+  match tx_ids with
+  | [] -> 0
+  | _ ->
+      clear_large_upload_progress repo tx_ids;
+      let removed = Sync_client_op.mark_pending_txs_false repo tx_ids in
+      if removed > 0 then begin
+        Sync_client_op.adjust_pending_local_tx_count repo (-removed);
+        !rebuild_display_fn repo
+      end;
+      broadcast_rtc_state (current_client repo);
+      removed
 
 let invalid_rebase_op op data : 'a =
   let data' =
@@ -1787,10 +1751,22 @@ and expand_block_retracts_to_descendants (db : db) (tx_data : Wire.t list)
       tx_data
   in
   (* cljs block-descendants: (sort-by :block/order (:block/_raw-parent b))
-     — raw children incl. closed-value/created-from-property, order-sorted *)
+     — raw children incl. closed-value/created-from-property, order-sorted.
+     visited guards parent cycles (a moved block can temporarily close a
+     loop while an ancestor is selected). *)
+  let visited = Hashtbl.create 16 in
   let rec descendants (block : entity) : entity list =
     Ldb.sort_by_order (Ldb.ref_ents block "block/_parent")
-    |> List.concat_map (fun child -> child :: descendants child)
+    |> List.concat_map (fun child ->
+           if Hashtbl.mem visited child.id then []
+           else begin
+             Hashtbl.add visited child.id ();
+             child :: descendants child
+           end)
+  in
+  let descendants block =
+    Hashtbl.add visited block.id ();
+    descendants block
   in
   List.concat_map
     (fun item ->
@@ -1823,101 +1799,26 @@ let resolve_temp_id (db : db) (datom_v : Wire.t) : Wire.t =
   let replace v =
     match v with
     | Wire.String s when Sync_state.uuid_string s -> (
+        let u = Datascript.Util.uuid_canonicalize s in
         match
-          Datascript.entity db
-            (Lookup_ref
-               ("block/uuid", Uuid (Datascript.Util.uuid_canonicalize s)))
+          Datascript.entity db (Lookup_ref ("block/uuid", Uuid u))
         with
         | Some e -> Wire.Int e.id
         | None -> v)
     | _ -> v
   in
   match datom_v with
-  | Wire.Array [ op; e; a; v; t ] | Wire.List [ op; e; a; v; t ]
-    when op = kw "db/add" ->
+  | Wire.Array (op :: e :: a :: v :: rest)
+  | Wire.List (op :: e :: a :: v :: rest)
+    when op = kw "db/add" || op = kw "db/retract" ->
       let e' = replace e in
       let v' =
         match a with
         | Wire.Keyword attr when ref_attr db attr -> replace v
         | _ -> v
       in
-      Wire.Array [ op; e'; a; v'; t ]
+      Wire.Array (op :: e' :: a :: v' :: rest)
   | _ -> datom_v
-
-(* cljs reverse-history-action! — returns the ldb/transact! report (truthy,
-   kept by reverse-local-txs!) or nil for a no-op :fix row (dropped). Some
-   (report option) = keep; None = drop *)
-let reverse_history_action (conn : conn)
-    (local_tx : Sync_client_op.local_tx_entry) : tx_report option option =
-  let tx_data = tx_items_of local_tx.reversed_tx in
-  match tx_data with
-  | [] ->
-      if local_tx.outliner_op <> Some "fix" then
-        invalid_rebase_op (kw "reverse-history-action")
-          (Wire.Map
-             [ kw "reason", kw "missing-reversed-tx-data"
-             ; kw "tx-id", Wire.String local_tx.tx_id
-             ; kw "outliner-op"
-             , (match local_tx.outliner_op with
-                | Some o -> kw o
-                | None -> Wire.Nil) ]);
-      None
-  | tx_data ->
-      let db = Conn.db conn in
-      let tx_data' =
-        tx_data
-        |> List.map (resolve_temp_id db)
-        |> fun xs -> Wire.Array xs
-        |> normalize_tx_data_for_rebase
-      in
-      let tx_data' =
-        if local_tx.outliner_op = Some "insert-blocks" then
-          expand_block_retracts_to_descendants db tx_data'
-        else tx_data'
-      in
-      Some
-        (Db_transact.transact conn tx_data'
-           [ ( "outliner-op"
-             , match local_tx.outliner_op with
-               | Some o -> Keyword o
-               | None -> Nil )
-           ; "reverse?", Bool true
-           ; "skip-validate-db?", Bool true ])
-
-let expected_stale_reverse_skip (_repo : string) (e : exn) : bool =
-  expected_stale_rebase_error e
-
-type reverse_local_tx_result =
-  | Reversed of tx_report option
-  | Reverse_failed of string
-
-let reverse_local_txs (conn : conn)
-    (local_txs : Sync_client_op.local_tx_entry list)
-    : reverse_local_tx_result list =
-  List.rev local_txs
-  |> List.mapi (fun index local_tx ->
-         try
-           match reverse_history_action conn local_tx with
-           | Some r -> Some (Reversed r)
-           | None -> None
-         with e ->
-           if expected_stale_rebase_error e then begin
-             Worker_log.info "db-sync/skip-stale-reverse-local-tx"
-               [ "index", string_of_int index
-               ; "tx-id", local_tx.tx_id
-               ; "outliner-op"
-               , Option.value local_tx.outliner_op ~default:""
-               ; "error", Printexc.to_string e ];
-             Some (Reverse_failed local_tx.tx_id)
-           end
-           else begin
-             Worker_log.error "reverse-local-tx-error"
-               [ "index", string_of_int index
-               ; "tx-id", local_tx.tx_id
-               ; "error", Printexc.to_string e ];
-             raise e
-           end)
-  |> List.filter_map Fun.id
 
 let inline_history_action (tx_meta : tx_meta)
     : (value option * Wire.t list * Wire.t list) option =
@@ -2082,29 +1983,8 @@ let sync_fix_tx_meta () : tx_meta =
   ; "gen-undo-ops?", Bool false
   ; "db-sync/tx-id", Uuid (Uuid_gen.uuid ()) ]
 
-let repair_applied_txs (conn : conn) (tx_report : tx_report option) : unit =
-  match tx_report with
-  | Some r when r.tx_data <> [] -> fix_tx conn r (sync_fix_tx_meta ())
-  | _ -> ()
-
 let pending_tx_ids (local_txs : Sync_client_op.local_tx_entry list) =
   List.map (fun (t : Sync_client_op.local_tx_entry) -> t.tx_id) local_txs
-
-let pending_tx_snapshot_changed repo local_txs : bool =
-  pending_tx_ids local_txs <> pending_tx_ids (pending_txs repo ())
-
-let fail_if_pending_tx_snapshot_changed repo local_txs : unit =
-  if pending_tx_snapshot_changed repo local_txs then
-    raise
-      (Sync_util.ex_info "pending local tx snapshot changed during remote apply"
-         [ kw "code", kw "pending-tx-snapshot-changed"
-         ; kw "repo", Wire.String repo
-         ; kw "local-tx-ids"
-         , Wire.Array (List.map (fun s -> Wire.String s)
-                         (pending_tx_ids local_txs))
-         ; kw "current-local-tx-ids"
-         , Wire.Array (List.map (fun s -> Wire.String s)
-                         (pending_tx_ids (pending_txs repo ()))) ])
 
 let tx_meta_get name (tx_meta : tx_meta) =
   List.assoc_opt name tx_meta
@@ -2118,9 +1998,98 @@ let remote_txs_retract_entity_block_uuid_suffixes_fn =
 let drop_stale_deleted_block_ref_ops_fn = ref drop_stale_deleted_block_ref_ops
 let drop_missing_block_ref_ops_fn = ref drop_missing_block_ref_ops
 
-let transact_remote_txs (conn : conn) (remote_txs : Wire.t list)
-    ?db_before_local_reversal ()
-    : (Wire.t list * tx_report option) list =
+(* Remote txs reference entities by [:block/uuid u] lookup-refs, which the
+   transact layer resolves strictly — it never upserts a missing ref.
+   When the uuid is absent from the server conn, rewrite the ref:
+   - u created inside this tx (a remote "new entity"): every
+     [:block/uuid u] ref becomes a shared tempid so the tempid path
+     materializes the entity;
+   - u only on the display conn (a pending-local entity the remote op now
+     touches): the same tempid rewrite plus an injected
+     [:db/add tempid "block/uuid" u] stub — the uuid merge lands the
+     remote data on the entity the confirm later completes;
+   - u nowhere: leave the lookup-ref so drop_missing_block_ref_ops drops
+     the item. *)
+let rewrite_missing_uuid_refs ?(display_db : db option) (db : db)
+    (tx_data : Wire.t list) : Wire.t list =
+  (* uuid -> the e-position tempid its block/uuid add uses in this tx;
+     refs to a created uuid must reuse that tempid — a bare uuid string
+     would register a *different* tempid appearing only as a value *)
+  let created : (string, Wire.t) Hashtbl.t = Hashtbl.create 8 in
+  List.iter
+    (fun item ->
+       match item with
+       | Wire.Array (op :: e :: a :: v :: _)
+       | Wire.List (op :: e :: a :: v :: _)
+         when op = kw "db/add" && a = kw "block/uuid" -> (
+           match uuid_str_of_wire v with
+           | Some u ->
+               let u = Datascript.Util.uuid_canonicalize u in
+               if not (Hashtbl.mem created u) then
+                 Hashtbl.replace created u e
+           | None -> ())
+       | _ -> ())
+    tx_data;
+  let on_srv u = Outliner_op.entity_of_uuid db u <> None in
+  let on_display u =
+    match display_db with
+    | Some ddb -> Outliner_op.entity_of_uuid ddb u <> None
+    | None -> false
+  in
+  let display_only = ref SSet.empty in
+  let rewrite_pos w =
+    let uuid_of_ref_pos w =
+      match block_uuid_lookup_ref_value w with
+      | Some _ -> Some (Datascript.Util.uuid_canonicalize (Option.get (block_uuid_lookup_ref_value w)))
+      | None -> (
+          match w with
+          | Wire.String s when Sync_state.uuid_string s ->
+              Some (Datascript.Util.uuid_canonicalize s)
+          | Wire.Uuid s -> Some (Datascript.Util.uuid_canonicalize s)
+          | _ -> None)
+    in
+    match uuid_of_ref_pos w with
+    | Some u -> (
+        if on_srv u then w
+        else
+          match Hashtbl.find_opt created u with
+          | Some t -> t
+          | None ->
+              if on_display u then begin
+                display_only := SSet.add u !display_only;
+                Wire.String u
+              end
+              else w)
+    | None -> w
+  in
+  let tx_data =
+    List.map
+      (fun item ->
+         match item with
+         | Wire.Array (op :: e :: a :: v :: rest)
+         | Wire.List (op :: e :: a :: v :: rest)
+           when op = kw "db/add" || op = kw "db/retract" ->
+             let e' = rewrite_pos e in
+             let v' =
+               match a with
+               | Wire.Keyword attr when ref_attr db attr -> rewrite_pos v
+               | _ -> v
+             in
+             Wire.Array (op :: e' :: a :: v' :: rest)
+         | _ -> item)
+      tx_data
+  in
+  List.rev_append
+    (SSet.fold
+       (fun u acc ->
+          Wire.Array
+            [ kw "db/add"; Wire.String u; kw "block/uuid"; Wire.Uuid u ]
+          :: acc)
+       !display_only [])
+    tx_data
+
+let transact_remote_txs ?(display_db : db option) (conn : conn)
+    (remote_txs : Wire.t list) () : (Wire.t list * tx_report option) list =
   let deleted_suffixes =
     !remote_txs_retract_entity_block_uuid_suffixes_fn remote_txs
   in
@@ -2141,11 +2110,12 @@ let transact_remote_txs (conn : conn) (remote_txs : Wire.t list)
         in
         let tx_data =
           raw_tx_data
-          |> List.map (resolve_temp_id db)
           |> fun items ->
              List.map Ds_wire.value_of_transit items
              |> Db_sync_tx_sanitize.sanitize_tx db
              |> List.map Ds_wire.transit_of_value
+          |> rewrite_missing_uuid_refs ?display_db db
+          |> List.map (resolve_temp_id db)
           |> drop_stale_adds_after_remote_entity_delete
         in
         let tx_data =
@@ -2160,13 +2130,8 @@ let transact_remote_txs (conn : conn) (remote_txs : Wire.t list)
             else tx_data
           in
           if has_uuid_ref then
-            !drop_missing_block_ref_ops_fn db d
+            !drop_missing_block_ref_ops_fn ?display_db db d
           else d
-        in
-        let tx_data =
-          match db_before_local_reversal with
-          | Some db_before -> drop_local_reversal_stale_target_ops db_before db tx_data
-          | None -> tx_data
         in
         let report =
           match tx_data with
@@ -2183,70 +2148,230 @@ let transact_remote_txs (conn : conn) (remote_txs : Wire.t list)
   in
   loop remote_txs deleted_suffixes []
 
-(* ---- rebase-local-op! / rebase-local-txs! ---- *)
+(* ---- pending replay / display rebuild ---- *)
 
-let rebase_local_op (_repo : string) (conn : conn)
-    (local_tx : Sync_client_op.local_tx_entry) (rebase_db_before : db option)
-    : string * string =
-  if local_tx.outliner_op = Some "fix" then (local_tx.tx_id, "kept")
-  else
-    let forward_ops, inverse_ops =
-      rebase_history_ops local_tx rebase_db_before
-    in
-    let tx_meta : tx_meta =
-      [ "outliner-op", Keyword "rebase"
-      ; ( "original-outliner-op"
-        , match local_tx.outliner_op with
-          | Some o -> Keyword o
-          | None -> Nil )
-      ; "db-sync/rebased-local?", Bool true
-      ; "db-sync/tx-id", Uuid local_tx.tx_id
-      ; "db-sync/forward-outliner-ops"
-      , Vector (List.map Ds_wire.value_of_transit forward_ops)
-      ; "db-sync/inverse-outliner-ops"
-      , Vector (List.map Ds_wire.value_of_transit inverse_ops) ]
-    in
-    let forward_ops' =
-      match forward_ops with
-      | _ :: _ -> forward_ops
-      | [] ->
-          let tx_data = normalize_tx_data_for_rebase local_tx.tx in
-          [ Wire.Array
-              [ kw "transact"
-              ; Wire.Array
-                  [ Wire.Array tx_data
-                  ; Ds_wire.transit_of_tx_meta
-                      (tx_meta
-                       @ [ ( "db-sync/suppress-stale-rebase-transact-failed-log?"
-                           , Bool true ) ]) ] ] ]
-    in
-    try
-      let report =
-        batch_transact_with_temp_conn conn tx_meta (fun c ->
-             List.iter
-               (fun op ->
-                  ignore (replay_canonical_outliner_op c op rebase_db_before))
-               forward_ops') ()
+(* Every uuid ref a pending tx uses must resolve on the target conn or be
+   created by the same tx; otherwise the op is stale and fails rather than
+   upserting a zombie stub entity. *)
+let check_pending_tx_refs (db : db) (tx_data : Wire.t list) : unit =
+  let created =
+    List.fold_left
+      (fun s item ->
+         match item with
+         | Wire.Array l | Wire.List l
+           when List.length l >= 4
+                && List.nth l 0 = kw "db/add"
+                && List.nth l 2 = kw "block/uuid" -> (
+             match List.nth l 3 with
+             | Wire.Uuid u -> SSet.add u s
+             | _ -> s)
+         | _ -> s)
+      SSet.empty tx_data
+  in
+  let missing uuid_str =
+    (not (SSet.mem uuid_str created))
+    && Outliner_op.entity_of_uuid db uuid_str = None
+  in
+  List.iter
+    (fun item ->
+       match item with
+       | Wire.Array l | Wire.List l when List.length l >= 4 ->
+           let e = List.nth l 1 and a = List.nth l 2 and v = List.nth l 3 in
+           let check_pos w =
+             match w with
+             | Wire.String s when Sync_state.uuid_string s ->
+                 if missing (Datascript.Util.uuid_canonicalize s) then
+                   failwith ("pending tx references missing block " ^ s)
+             | Wire.Uuid u when missing u ->
+                 failwith ("pending tx references missing block " ^ u)
+             | Wire.Array [ Wire.Keyword "block/uuid"; Wire.Uuid u ]
+               when missing u ->
+                 failwith ("pending tx references missing block " ^ u)
+             | _ -> ()
+           in
+           check_pos e;
+           (match a with
+            | Wire.Keyword a' when ref_attr db a' -> check_pos v
+            | _ -> ())
+       | _ -> ())
+    tx_data
+
+(* Forward replay of one queued local tx onto the display conn: the
+   canonical outliner ops re-execute the op semantics against the new
+   server base. Entries without forward ops (raw transacts) fall back to
+   replaying the queued tx data verbatim. *)
+let replay_pending_entry (conn : conn)
+    (local_tx : Sync_client_op.local_tx_entry) : unit =
+  match local_tx.forward_outliner_ops with
+  | _ :: _ as forward_ops ->
+      let ops =
+        Outliner_op_construct.canonicalize_insert_ops (Conn.db conn)
+          (Wire.as_seq local_tx.tx) forward_ops
       in
-      (local_tx.tx_id, (match report with Some _ -> "rebased" | None -> "no-op"))
-    with e ->
-      (if not (expected_stale_rebase_error e) then
-         Worker_log.warn "db-sync/drop-op-driven-pending-tx"
-           [ "tx-id", local_tx.tx_id
-           ; "outliner-op", Option.value local_tx.outliner_op ~default:""
-           ; "undo?"
-           , (match local_tx.undo_redo with
-              | Some "undo" -> "true"
-              | _ -> "false")
-           ; "redo?"
-           , (match local_tx.undo_redo with
-              | Some "redo" -> "true"
-              | _ -> "false")
-           ; "error", Printexc.to_string e ]);
-      (local_tx.tx_id, "failed")
+      List.iter
+        (fun op -> ignore (replay_canonical_outliner_op conn op None))
+        ops
+  | [] -> (
+      match normalize_tx_data_for_rebase local_tx.tx with
+      | _ :: _ as tx_data ->
+          let db = Conn.db conn in
+          check_pending_tx_refs db tx_data;
+          let tx_data = List.map (resolve_temp_id db) tx_data in
+          ignore
+            (Db_transact.transact conn tx_data
+               [ ( "outliner-op"
+                 , match local_tx.outliner_op with
+                   | Some o -> Keyword o
+                   | None -> Nil ) ])
+      | [] -> ())
 
-let rebase_local_txs repo conn local_txs rebase_db_before =
-  List.map (fun lt -> rebase_local_op repo conn lt rebase_db_before) local_txs
+(* Replays the pending queue in order. A replay failure marks the entry
+   failed — the server stays authoritative and the op leaves the
+   projection. *)
+let replay_pending_txs repo (conn : conn) : unit =
+  let pending = pending_txs repo () in
+  if pending <> [] then begin
+    Sync_state.pending_replay := true;
+    (try
+       List.iter
+         (fun (local_tx : Sync_client_op.local_tx_entry) ->
+            try
+              replay_pending_entry conn local_tx
+            with e ->
+              Worker_log.warn "db-sync/pending-replay-failed"
+                [ "repo", repo
+                ; "tx-id", local_tx.tx_id
+                ; "outliner-op"
+                , Option.value local_tx.outliner_op ~default:""
+                ; "error", Printexc.to_string e ];
+              ignore (mark_failed_txs repo [ local_tx.tx_id ]))
+         pending
+     with e ->
+       Sync_state.pending_replay := false;
+       raise e);
+    Sync_state.pending_replay := false
+  end
+
+(* Display conns share the server conn's storage for lazy index reads but
+   can never persist: the wrapper no-ops the store entry points, so
+   pending data only ever lives in memory. *)
+let display_storage (db : db) : storage option =
+  Option.map
+    (fun (s : storage) -> { s with storage_store = (fun _ -> ()) })
+    db.storage_ref
+
+let display_conn_from_server (server_db : db) : conn =
+  Datascript.conn_from_db
+    { server_db with storage_ref = display_storage server_db }
+
+let display_db_from_server (server_db : db) : db =
+  { server_db with storage_ref = display_storage server_db }
+
+(* Rebinds the display projection onto the server conn's confirmed state
+   and replays pending ops forward. jump_tx_data carries the datoms the
+   server conn just committed (remote apply / confirm batch) so the UI
+   gets one delta for the jump; replayed ops emit their own deltas. *)
+let rebuild_display repo ~(jump_tx_data : datom list) : unit =
+  match
+    (Sync_state.server_conn repo, Worker_state.datascript_conn repo)
+  with
+  | Some server_conn, Some display_conn ->
+      let db_before = Conn.db display_conn in
+      Conn.update_db display_conn (fun _ ->
+          display_db_from_server (Conn.db server_conn));
+      let replay_reports = ref [] in
+      let lid =
+        Datascript.listen display_conn "pending-replay-collect"
+          (fun r -> replay_reports := r :: !replay_reports)
+      in
+      (try
+         replay_pending_txs repo display_conn
+       with e ->
+         Datascript.unlisten display_conn lid;
+         raise e);
+      Datascript.unlisten display_conn lid;
+      let replayed =
+        List.concat_map
+          (fun (r : tx_report) -> r.tx_data)
+          (List.rev !replay_reports)
+      in
+      let tx_data = jump_tx_data @ replayed in
+      if tx_data <> [] then begin
+        let report =
+          { db_before
+          ; db_after = Conn.db display_conn
+          ; tx_data
+          ; tempids = []
+          ; tx_meta = [ "rtc-tx?", Bool true ] }
+        in
+        Db_listener.commit_synthesized_report repo display_conn report;
+        fix_tx display_conn report (sync_fix_tx_meta ())
+      end
+  | _ -> ()
+
+let () =
+  rebuild_display_fn :=
+    (fun repo -> rebuild_display repo ~jump_tx_data:[])
+
+(* Marks queued txs confirmed: the exact normalized tx data that was
+   uploaded is applied to the server conn in queue order, so the
+   projection base converges with what the server accepted. *)
+let confirm_pending_txs repo (tx_ids : string list) : unit =
+  match Sync_state.server_conn repo with
+  | None -> ()
+  | Some server_conn -> (
+      let entries =
+        List.filter
+          (fun (local_tx : Sync_client_op.local_tx_entry) ->
+             List.mem local_tx.tx_id tx_ids)
+          (pending_txs repo ())
+      in
+      match
+        List.concat_map
+          (fun (local_tx : Sync_client_op.local_tx_entry) ->
+             normalize_tx_data_for_rebase local_tx.tx)
+          entries
+      with
+      | [] -> ()
+      | tx_data ->
+          let db = Conn.db server_conn in
+          let tx_data =
+            List.map (resolve_temp_id db) tx_data
+            |> fun items ->
+               List.map Ds_wire.value_of_transit items
+               |> Db_sync_tx_sanitize.sanitize_tx db
+               |> List.map Ds_wire.transit_of_value
+          in
+          ignore
+            (Db_transact.transact server_conn tx_data
+               [ "rtc-tx?", Bool true ]))
+
+(* Remote graphs keep two conns: the storage-backed conn registered at
+   open becomes the server conn holding only confirmed state (restored
+   snapshot + remote txs + acked local txs); datascript_conn becomes a
+   storage-less display projection replaying the pending queue forward.
+   The commit listener moves to the display conn — server-conn transacts
+   drive checksum and the synthesized jump report explicitly. *)
+let split_off_server_if_remote repo : unit =
+  match Worker_state.datascript_conn repo with
+  | None -> ()
+  | Some conn ->
+      let db = Conn.db conn in
+      (* server_conn absent means this conn was never split — the display
+         projection only exists once a server conn is registered *)
+      if Sync_state.server_conn repo = None
+         && Ldb.get_key_value db "logseq.kv/graph-remote?"
+            = Some (Bool true)
+      then begin
+        Datascript.unlisten conn "listen-db-changes!";
+        Datascript.unlisten conn "pipeline-updates";
+        Sync_state.set_server_conn repo conn;
+        Db_listener.listen_db_checksum repo conn;
+        let display = display_conn_from_server db in
+        Worker_state.set_datascript_conn repo display;
+        Db_listener.listen_db_changes repo display;
+        replay_pending_txs repo display
+      end
 
 (* ---- handle-local-tx! (forward decl via ref) ---- *)
 
@@ -2255,91 +2380,21 @@ let handle_local_tx_ref : (string -> tx_report -> unit) ref =
 
 let handle_local_tx repo tx_report = !handle_local_tx_ref repo tx_report
 
-let rollback_and_mark_failed_txs repo (tx_ids : string list) : unit =
-  let rejected_tx_ids =
-    List.filter (fun id -> Sync_state.uuid_string id) tx_ids
-  in
-  match rejected_tx_ids with
-  | [] -> ()
-  | _ ->
-      (match Worker_state.datascript_conn repo with
-       | Some conn -> (
-           let pending = pending_txs repo () in
-           let rec drop_until acc l =
-             match l with
-             | [] -> List.rev acc
-             | (e : Sync_client_op.local_tx_entry) :: rest ->
-                 if List.mem e.tx_id rejected_tx_ids then
-                   List.rev_append acc (e :: rest)
-                 else drop_until (e :: acc) rest
-           in
-           let rejected_and_after = drop_until [] pending in
-           match rejected_and_after with
-           | [] -> ()
-           | _ ->
-               let rebase_db_before = Conn.db conn in
-               let rebase_txs =
-                 List.filter
-                   (fun (e : Sync_client_op.local_tx_entry) ->
-                      not (List.mem e.tx_id rejected_tx_ids))
-                   rejected_and_after
-               in
-               let rebase_tx_reports = ref [] in
-               let rebase_results = ref [] in
-               (try
-                  let tx_report =
-                    batch_transact_with_temp_conn conn
-                      [ "rtc-tx?", Bool true
-                      ; "tx-reject-rollback?", Bool true ]
-                      ~listen_db:(fun report ->
-                         let meta = report.tx_meta in
-                         (match
-                            ( tx_meta_get "outliner-op" meta
-                            , tx_meta_get "db-sync/rebased-local?" meta )
-                          with
-                          | Some (Keyword "rebase"), Some (Bool true)
-                            when report.tx_data <> [] ->
-                             rebase_tx_reports := report :: !rebase_tx_reports
-                          | _ -> ()))
-                      (fun c ->
-                         ignore (reverse_local_txs c rejected_and_after);
-                         rebase_results :=
-                           rebase_local_txs repo c rebase_txs
-                             (Some rebase_db_before))
-                      ()
-                  in
-                  List.iter (handle_local_tx repo) (List.rev !rebase_tx_reports);
-                  repair_applied_txs conn tx_report;
-                  let replay_tx_ids =
-                    List.filter_map
-                      (fun (t : Sync_client_op.local_tx_entry) ->
-                         if local_tx_has_replay_data t then Some t.tx_id
-                         else None)
-                      rebase_txs
-                  in
-                  let stale_tx_ids =
-                    !rebase_results
-                    |> List.filter (fun (_, status) ->
-                           status = "failed" || status = "no-op")
-                    |> List.map fst
-                    |> List.filter (fun id -> List.mem id replay_tx_ids)
-                    |> List.sort_uniq compare
-                  in
-                  ignore (mark_pending_txs_false repo stale_tx_ids)
-                with e ->
-                  (match !Sync_deps.clear_history with
-                   | Some f -> f repo
-                   | None -> ());
-                  raise e);
-               (match !Sync_deps.clear_history with
-                | Some f -> f repo
-                | None -> ()))
-       | None -> ());
-      ignore (mark_failed_txs repo tx_ids)
+(* Server reject / sync failure: nothing pending lives in the server
+   conn, so rejection only marks the ops failed and drops them from the
+   projection. *)
+let fail_pending_txs repo (tx_ids : string list) : unit =
+  ignore (mark_failed_txs repo tx_ids);
+  rebuild_display repo ~jump_tx_data:[]
+
 
 let clear_pending_txs repo : int =
-  mark_pending_txs_false repo
-    (pending_tx_ids (pending_txs repo ()))
+  let ids = pending_tx_ids (pending_txs repo ()) in
+  (* snapshot upload already carried these to the server ��� confirm them
+     into the server conn before un-pending *)
+  confirm_pending_txs repo ids;
+  mark_pending_txs_false repo ids
+
 
 (* ---- flush-pending! ---- *)
 
@@ -2665,101 +2720,6 @@ let broadcast_sync_conflicts repo conflicts : unit =
 
 (* ---- apply-remote-txs! ---- *)
 
-let apply_remote_tx_with_local_changes repo conn local_txs remote_txs
-    db_migrate skip_final_validate
-    : (Wire.t list * tx_report option) list Db_worker_effect.t =
-  let tx_meta =
-    [ "rtc-tx?", Bool true; "with-local-changes?", Bool true ]
-    @ (if db_migrate then
-         [ "db-migrate?", Bool true; "outliner-op", Keyword "db-migrate" ]
-       else [])
-    @ (if skip_final_validate then
-         [ "skip-validate-db?", Bool true ]
-       else [])
-  in
-  let rebase_tx_reports = ref [] in
-  let rebase_results = ref [] in
-  let remote_tx_results = ref [] in
-  let rebase_db_before = Conn.db conn in
-  let outcome =
-    try
-      let conflicts =
-        remote_sync_conflicts rebase_db_before local_txs remote_txs
-      in
-      if conflicts <> [] then begin
-        Sync_client_op.add_sync_conflicts repo conflicts;
-        broadcast_sync_conflicts repo conflicts
-      end;
-      let tx_report =
-        batch_transact_with_temp_conn conn tx_meta
-          ~listen_db:(fun report ->
-             match
-               ( tx_meta_get "outliner-op" report.tx_meta
-               , tx_meta_get "db-sync/rebased-local?" report.tx_meta )
-             with
-             | Some (Keyword "rebase"), Some (Bool true)
-               when report.tx_data <> [] ->
-                 rebase_tx_reports := report :: !rebase_tx_reports
-             | _ -> ())
-          ~before_commit:(fun () ->
-             fail_if_pending_tx_snapshot_changed repo local_txs)
-          (fun c ->
-             ignore (reverse_local_txs c local_txs);
-             remote_tx_results :=
-               transact_remote_txs c remote_txs
-                 ~db_before_local_reversal:rebase_db_before ();
-             rebase_results :=
-               rebase_local_txs repo c local_txs (Some rebase_db_before))
-          ()
-      in
-      List.iter (handle_local_tx repo) (List.rev !rebase_tx_reports);
-      repair_applied_txs conn tx_report;
-      (* Mark only explicitly stale rebases as non-pending — cljs
-         apply-remote-tx-with-local-changes! *)
-      let stale_tx_ids =
-        !rebase_results
-        |> List.filter (fun (_, s) -> s = "failed" || s = "no-op")
-        |> List.map fst |> List.sort_uniq compare
-      in
-      ignore (mark_pending_txs_false repo stale_tx_ids);
-      `Ok !remote_tx_results
-    with e ->
-      Worker_log.error "db-sync/apply-remote-txs-inner-error"
-        [ "repo", repo; "error", Printexc.to_string e ];
-      `Exn e
-  in
-  (* cljs finally: reset atoms + clear-history! on every path *)
-  rebase_tx_reports := [];
-  rebase_results := [];
-  (match !Sync_deps.clear_history with
-   | Some f -> f repo
-   | None -> ());
-  match outcome with
-  | `Ok results -> Db_worker_effect.pure results
-  | `Exn e -> raise e
-
-let apply_remote_tx_without_local_changes repo conn local_txs remote_txs
-    db_migrate skip_final_validate
-    : (Wire.t list * tx_report option) list Db_worker_effect.t =
-  let tx_meta =
-    [ "rtc-tx?", Bool true; "without-local-changes?", Bool true ]
-    @ (if db_migrate then
-         [ "db-migrate?", Bool true; "outliner-op", Keyword "db-migrate" ]
-       else [])
-    @ (if skip_final_validate then
-         [ "skip-validate-db?", Bool true ]
-       else [])
-  in
-  let remote_tx_results = ref [] in
-  let tx_report =
-    batch_transact_with_temp_conn conn tx_meta
-      ~before_commit:(fun () ->
-         fail_if_pending_tx_snapshot_changed repo local_txs)
-      (fun c -> remote_tx_results := transact_remote_txs c remote_txs ())
-      ()
-  in
-  repair_applied_txs conn tx_report;
-  Db_worker_effect.pure !remote_tx_results
 
 let report_apply_remote_txs_error (_error : exn) has_local_changes remote_count
     local_count : unit =
@@ -2817,77 +2777,66 @@ let finish_apply_remote_txs repo (client : Sync_state.client)
   >>= fun () ->
   download_missing_remote_assets_for_owner repo client remote_asset_tx_data
 
-let rec apply_remote_txs_once repo (_client : Sync_state.client)
+(* Remote txs land on the server conn only; the display projection is
+   then rebuilt from confirmed state with the pending queue replayed
+   forward. No reverse step — nothing local ever enters the base. *)
+let apply_remote_txs_once repo (_client : Sync_state.client)
     (remote_txs : Wire.t list)
-    : (Wire.t list * tx_report option) list Db_worker_effect.t =
+    : (Wire.t list * tx_report option) list =
   match Worker_state.datascript_conn repo with
   | None ->
       Sync_util.fail_fast "db-sync/missing-db"
         (Wire.Map
            [ kw "repo", Wire.String repo
            ; kw "op", kw "apply-remote-txs" ])
-  | Some conn ->
+  | Some display_conn -> (
+      let conn =
+        Option.value (Sync_state.server_conn repo) ~default:display_conn
+      in
       let local_txs = pending_txs repo () in
-      let has_local_changes = local_txs <> [] in
       let db_migrate = remote_txs_db_migrate remote_txs in
-      let skip_final_validate = db_migrate in
-      if has_local_changes then
-        apply_remote_tx_with_local_changes repo conn local_txs remote_txs
-          db_migrate skip_final_validate
-      else
-        apply_remote_tx_without_local_changes repo conn local_txs remote_txs
-          db_migrate skip_final_validate
+      let tx_meta =
+        [ "rtc-tx?", Bool true ]
+        @ (if local_txs <> []
+           then [ "with-local-changes?", Bool true ]
+           else [ "without-local-changes?", Bool true ])
+        @ (if db_migrate then
+             [ "db-migrate?", Bool true
+             ; "outliner-op", Keyword "db-migrate"
+             ; "skip-validate-db?", Bool true ]
+           else [])
+      in
+      let remote_tx_results = ref [] in
+      try
+        let conflicts =
+          remote_sync_conflicts (Conn.db display_conn) local_txs remote_txs
+        in
+        if conflicts <> [] then begin
+          Sync_client_op.add_sync_conflicts repo conflicts;
+          broadcast_sync_conflicts repo conflicts
+        end;
+        let tx_report =
+          batch_transact_with_temp_conn conn tx_meta
+            (fun c ->
+               remote_tx_results :=
+                 transact_remote_txs
+                   ~display_db:(Conn.db display_conn) c remote_txs ())
+            ()
+        in
+        rebuild_display repo
+          ~jump_tx_data:
+            (match tx_report with
+             | Some r -> r.tx_data
+             | None -> []);
+        !remote_tx_results
+      with e ->
+        Worker_log.error "db-sync/apply-remote-txs-inner-error"
+          [ "repo", repo; "error", Printexc.to_string e ];
+        (match !Sync_deps.clear_history with
+         | Some f -> f repo
+         | None -> ());
+        raise e)
 
-and apply_remote_txs_with_retry repo (client : Sync_state.client)
-    (remote_txs : Wire.t list) (snapshot_retry_count : int)
-    : (Wire.t list * tx_report option) list Db_worker_effect.t =
-  let local_txs = pending_txs repo () in
-  (* bind (pure ()) defers the synchronous apply body into the task so a
-     raise (e.g. pending-tx-snapshot-changed) becomes a Rejected task that
-     this catch can retry — a plain argument would be evaluated eagerly
-     and escape before catch is installed *)
-  Db_worker_effect.catch
-    (Db_worker_effect.bind (Db_worker_effect.pure ()) (fun () ->
-         apply_remote_txs_once repo client remote_txs))
-    (fun error ->
-       let snapshot_changed =
-         (match error with
-          | Dispatcher.Exn_info (_, kvs) ->
-              List.assoc_opt (Wire.Keyword "code") kvs
-              = Some (kw "pending-tx-snapshot-changed")
-          | _ -> false)
-         || pending_tx_snapshot_changed repo local_txs
-       in
-       if snapshot_changed then begin
-         Worker_log.warn
-           (if snapshot_retry_count < max_remote_apply_snapshot_retries
-            then "db-sync/retry-remote-apply-after-local-tx-snapshot-drift"
-            else "db-sync/delay-remote-apply-after-local-tx-snapshot-drift")
-           [ "repo", repo
-           ; "snapshot-retry-count", string_of_int snapshot_retry_count
-           ; "remote-tx-count", string_of_int (List.length remote_txs)
-           ; "error", Printexc.to_string error ];
-         if snapshot_retry_count < max_remote_apply_snapshot_retries then
-           apply_remote_txs_with_retry repo client remote_txs
-             (snapshot_retry_count + 1)
-         else
-           Db_worker_effect.sleep
-             (float_of_int remote_apply_snapshot_retry_delay_ms /. 1000.)
-           >>= fun () ->
-           apply_remote_txs_with_retry repo client remote_txs 0
-       end
-       else begin
-         let has_local_changes = local_txs <> [] in
-         Worker_log.error "db-sync/apply-remote-txs-failed"
-           [ "repo", repo
-           ; "has-local-changes?", string_of_bool has_local_changes
-           ; "remote-tx-count", string_of_int (List.length remote_txs)
-           ; "local-tx-count", string_of_int (List.length local_txs)
-           ; "error", Printexc.to_string error ];
-         report_apply_remote_txs_error error has_local_changes
-           (List.length remote_txs) (List.length local_txs);
-         Db_worker_effect.error error
-       end)
 
 let apply_remote_txs repo (client : Sync_state.client)
     (remote_txs : Wire.t list) : unit Db_worker_effect.t =
@@ -2898,7 +2847,25 @@ let apply_remote_txs repo (client : Sync_state.client)
            (Option.value (Wire.get "tx-data" tx) ~default:(Wire.Array [])))
       remote_txs
   in
-  apply_remote_txs_with_retry repo client remote_txs 0
+  (* bind (pure ()) defers the synchronous apply body into the task so a
+     raise becomes a Rejected task the catch can report — a plain
+     argument would be evaluated eagerly and escape before catch is
+     installed *)
+  Db_worker_effect.catch
+    (Db_worker_effect.bind (Db_worker_effect.pure ()) (fun () ->
+         Db_worker_effect.pure
+           (apply_remote_txs_once repo client remote_txs)))
+    (fun error ->
+       let local_txs = pending_txs repo () in
+       Worker_log.error "db-sync/apply-remote-txs-failed"
+         [ "repo", repo
+         ; "has-local-changes?", string_of_bool (local_txs <> [])
+         ; "remote-tx-count", string_of_int (List.length remote_txs)
+         ; "local-tx-count", string_of_int (List.length local_txs)
+         ; "error", Printexc.to_string error ];
+       report_apply_remote_txs_error error (local_txs <> [])
+         (List.length remote_txs) (List.length local_txs);
+       Db_worker_effect.error error)
   >>= fun remote_tx_results ->
   let remote_asset_tx_data =
     List.concat_map
@@ -2995,8 +2962,7 @@ let persistable_local_tx_meta (tx_meta : tx_meta) : bool =
   && not (flag "transact-remote?" false)
   && not (flag "sync-download-graph?" false)
   && flag "persist-op?" true
-  && (tx_meta_get "outliner-op" tx_meta <> Some (Keyword "rebase")
-      || flag "db-sync/rebased-local?" false)
+  && tx_meta_get "outliner-op" tx_meta <> Some (Keyword "rebase")
 
 let enqueue_local_tx repo (tx_report : tx_report) : unit =
   match Worker_state.datascript_conn repo with
@@ -3006,17 +2972,15 @@ let enqueue_local_tx repo (tx_report : tx_report) : unit =
       let batch_tx_report =
         tx_meta_get "batch-tx-report?" tx_meta = Some (Bool true)
       in
-      let is_rebase =
-        tx_meta_get "outliner-op" tx_meta = Some (Keyword "rebase")
-      in
       if persistable_local_tx_meta tx_meta
-         && not (batch_tx_report && not is_rebase)
+         && not batch_tx_report
          && tx_meta_get "reverse?" tx_meta <> Some (Bool true)
          && tx_report.tx_data <> [] then
         ignore (enqueue_local_tx_aux repo tx_report)
 
 let handle_local_tx_impl repo (tx_report : tx_report) : unit =
   if tx_report.tx_data <> [] && persistable_local_tx_meta tx_report.tx_meta
+     && not !Sync_state.pending_replay
   then begin
     enqueue_local_tx repo tx_report;
     Sync_asset_db_listener.generate_asset_ops repo ~db_after:tx_report.db_after
