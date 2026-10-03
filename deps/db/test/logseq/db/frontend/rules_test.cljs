@@ -11,7 +11,7 @@
        (rules/extract-rules rules/db-query-dsl-rules)))
 
 (deftest get-full-deps
-  (let [property-value-deps #{:ref->val :class-extends :object-has-class-property :property-missing-value :ref-property-value :ref-property-value-with-default}
+  (let [property-value-deps #{:ref->val :class-extends :class-instance :object-has-class-property :property-missing-value :ref-property-value :ref-property-value-with-default}
         property-deps (conj property-value-deps :ref-property-with-default)
         task-deps (conj property-deps :task)
         priority-deps (conj property-deps :priority)
@@ -270,10 +270,13 @@
               {:pages-and-blocks
                [{:page {:block/title "Page1"}
                  :blocks [{:block/title "doing task"
+                           :build/tags [:logseq.class/Task]
                            :build/properties {:logseq.property/status :logseq.property/status.doing}}
                           {:block/title "review task"
+                           :build/tags [:logseq.class/Task]
                            :build/properties {:logseq.property/status :logseq.property/status.in-review}}
                           {:block/title "waiting task"
+                           :build/tags [:logseq.class/Task]
                            :build/properties {:logseq.property/status [:build/page {:block/title "QA Ready"}]}}
                           {:block/title "urgent task"
                            :build/properties {:logseq.property/priority [:build/page {:block/title "Very High"}]}}]}]})
@@ -297,3 +300,34 @@
              (titles '[:find (pull ?b [:block/title]) :where (priority ?b #{"Very High"})])))
       (is (= ["urgent task"]
              (titles '[:find (pull ?b [:block/title]) :where (priority ?b #{"very high"})]))))))
+
+(deftest task-rule-requires-task-class
+  (let [conn (db-test/create-conn-with-blocks
+              {:classes {:Projekt {:build/class-properties [:logseq.property/status]}
+                         :Work {:build/class-extends [:logseq.class/Task]}}
+               :pages-and-blocks
+               [{:page {:block/title "Projekt page" :build/tags [:Projekt]}}
+                {:page {:block/title "Page1"}
+                 :blocks [{:block/title "explicit todo task"
+                           :build/tags [:logseq.class/Task]
+                           :build/properties {:logseq.property/status :logseq.property/status.todo}}
+                          {:block/title "implicit todo task"
+                           :build/tags [:logseq.class/Task]}
+                          {:block/title "work subclass task"
+                           :build/tags [:Work]}
+                          {:block/title "projekt default status"
+                           :build/tags [:Projekt]}
+                          {:block/title "projekt explicit todo"
+                           :build/tags [:Projekt]
+                           :build/properties {:logseq.property/status :logseq.property/status.todo}}
+                          {:block/title "priority only"
+                           :build/properties {:logseq.property/priority :logseq.property/priority.high}}]}]})
+        titles (fn [q] (->> (q-with-rules q @conn)
+                            (map (comp :block/title first))
+                            set))]
+    (is (= #{"explicit todo task" "implicit todo task" "work subclass task"}
+           (titles '[:find (pull ?b [:block/title]) :where (task ?b #{"Todo"})]))
+        "task rule matches Task and Task subclasses, not a non-Task class that declares Status default Todo")
+    (is (= #{"priority only"}
+           (titles '[:find (pull ?b [:block/title]) :where (priority ?b #{"High"})]))
+        "priority still matches Priority-only blocks that are not tagged Task")))
