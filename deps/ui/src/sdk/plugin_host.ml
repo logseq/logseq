@@ -667,6 +667,7 @@ let fire_route_changed (route : Model.route) =
     | Model.Library -> "library"
     | Model.All_pages -> "all-pages"
     | Model.All_graphs -> "graphs"
+    | Model.Graph_view -> "graph"
     | Model.Import -> "import"
     | Model.Settings -> "settings"
     | Model.Not_found _ -> "not-found"

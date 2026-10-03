@@ -38,6 +38,7 @@ let parse_path (p : string) : Model.route =
           | "all-journals" -> Model.Journals
           | "all-pages" -> Model.All_pages
           | "graphs" -> Model.All_graphs
+          | "graph" -> Model.Graph_view
           | "import" -> Model.Import
           | "settings" -> Model.Settings
           | _ -> Model.Not_found p)
@@ -46,6 +47,7 @@ let parse_path (p : string) : Model.route =
           | "all-journals" -> Model.Journals
           | "all-pages" -> Model.All_pages
           | "graphs" -> Model.All_graphs
+          | "graph" -> Model.Graph_view
           | "import" -> Model.Import
           | "settings" -> Model.Settings
           | "page" | "block" -> Model.Not_found p
@@ -488,8 +490,8 @@ let load_route (route : Model.route) =
    | Model.Library ->
        Runtime.reload_current_view :=
          (fun () -> load_page_ref route (Wire.String "Library"))
-   | Model.All_pages | Model.All_graphs | Model.Import | Model.Not_found _
-   | Model.Settings ->
+   | Model.All_pages | Model.All_graphs | Model.Graph_view | Model.Import
+   | Model.Not_found _ | Model.Settings ->
        Runtime.reload_current_view := (fun () -> Js.Promise.resolve ()));
   match route with
   | Model.Home -> ignore (load_home ())
@@ -499,8 +501,8 @@ let load_route (route : Model.route) =
   | Model.Journals -> ignore (load_journals ())
   | Model.Library ->
       ignore (load_page_ref route (Wire.String "Library"))
-  | Model.All_pages | Model.All_graphs | Model.Import | Model.Not_found _
-  | Model.Settings ->
+  | Model.All_pages | Model.All_graphs | Model.Graph_view | Model.Import
+  | Model.Not_found _ | Model.Settings ->
       ()
 
 let resolve () =

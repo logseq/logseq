@@ -223,6 +223,8 @@ let track action =
            Browser_ui.set_document_title (I18n.t "nav.all-pages/title")
        | Model.All_graphs ->
            Browser_ui.set_document_title (I18n.t "mobile.tab/graphs")
+       | Model.Graph_view ->
+           Browser_ui.set_document_title (I18n.t "nav/graph-view")
        | Model.Settings ->
            Browser_ui.set_document_title (I18n.t "nav/settings")
        | Model.Import ->

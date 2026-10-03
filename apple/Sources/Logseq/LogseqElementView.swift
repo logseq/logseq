@@ -18,6 +18,9 @@ struct LogseqElementView: View {
   /// down through this env so the AC list caps at
   /// `min(avail − chrome, cap)` like the web.
   @Environment(\.acInnerMaxHeight) private var acInnerMaxHeight
+  /// Theme flips bump appearanceVersion — style parse reads isDark for
+  /// `dark:` rules and step picks, so the body must re-eval then.
+  @ObservedObject private var appState = LogseqAppState.shared
 
   private var attrs: [String: Any] {
     guard case .string(let json) = context.property("attrs"),
@@ -1148,7 +1151,8 @@ private struct LogseqStyleModifier: ViewModifier {
       .modifier(LogseqClipper(enabled: style.clipContent))
       .frame(
         maxWidth: style.centerHorizontally ? .infinity : nil,
-        alignment: .top)
+        maxHeight: style.centerVertically ? .infinity : nil,
+        alignment: style.centerVertically ? .center : .top)
       .overlay {
         if style.hasBorder {
           RoundedRectangle(cornerRadius: style.cornerRadius ?? 0)

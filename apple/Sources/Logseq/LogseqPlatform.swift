@@ -464,7 +464,23 @@ final class NSReferenceBox {
       NSPasteboard.general.clearContents()
       NSPasteboard.general.setString(payload, forType: .string)
     case "ui-state":
-      break // reserved: renderer ui-state broadcast
+      // OCaml mirrors the web's <html>/<body> document state here;
+      // data.theme is the settings-page theme choice. Map it onto the
+      // app appearance override so NSApp.effectiveAppearance (what every
+      // LogseqColors.isDark read keys off) follows the setting instead
+      // of only the system mode. Bumping appearanceVersion re-runs the
+      // root view body — the palette is computed per body eval.
+      let dict = jsonDict(payload)
+      if let data = dict["data"] as? [String: Any],
+        let theme = data["theme"] as? String
+      {
+        switch theme {
+        case "dark": NSApp.appearance = NSAppearance(named: .darkAqua)
+        case "light": NSApp.appearance = NSAppearance(named: .aqua)
+        default: NSApp.appearance = nil
+        }
+        LogseqAppState.shared.appearanceVersion += 1
+      }
     default:
       logger.debug("unhandled platform op: \(op)")
     }

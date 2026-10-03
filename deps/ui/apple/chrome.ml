@@ -398,7 +398,17 @@ let help_area (ms : Model.t Signal.signal) : t =
     ; dyn
         ~equal:(fun (a : Model.t) (b : Model.t) -> a.help_open = b.help_open)
         (fun (m : Model.t) ->
-          if m.help_open then help_menu_popup
+          if m.help_open then
+            Logseq_dom.fragment
+              [ Logseq_dom.dom ~key:"help-dismiss"
+                  ~style_class:"cp__cmdk-dismiss"
+                  ~attrs:[ ("role", "presentation") ]
+                  ~events:"click"
+                  ~on_dom_event:(fun n _ ->
+                    if n = "click" then (
+                      Runtime.send Action.Help_toggle; Runtime.flush ()))
+                  []
+              ; help_menu_popup ]
           else Logseq_dom.nothing)
         ms
     ]

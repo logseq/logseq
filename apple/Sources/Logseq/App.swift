@@ -15,6 +15,11 @@ import AppKit
     }
   }
 
+  /// Incremented when the OCaml ui-state broadcast changes the app
+  /// appearance override — the root view reads this so every
+  /// LogseqColors.isDark-derived color recomputes on theme flips.
+  @Published var appearanceVersion = 0
+
   static let zoomSteps: [Double] = [0.5, 0.67, 0.8, 0.9, 1.0, 1.1, 1.25, 1.5, 1.75, 2.0]
 
   func zoomIn() {

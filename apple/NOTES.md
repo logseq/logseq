@@ -922,3 +922,30 @@ Documentation → docs.logseq.com).
   fine in LogseqTextArea.swift — don't copy calls between files.
 - Screen coordinates ≈ ×1.57 the point space — never infer element
   positions from screenshot pixels; verify via frame dumps.
+
+## Theme / dialogs / menus (audit fixes)
+
+- `ui-state` op carries `data.theme` ("dark"/"light"/"") — the native
+  side must apply it (`NSApp.appearance` override) AND bump
+  `LogseqAppState.appearanceVersion`; views that read `dark:` style
+  rules observe `appState` and re-resolve. One-shot `isDark` colors
+  freeze at mount — use `LogseqColors.dyn*`/`grayPair` (NSColor
+  dynamicProvider re-resolves per draw) instead of baking a resolved
+  Color into a style.
+- `enter_edit` seeds `S.editing`'s buffer ASYNC (promise), so a key
+  replayed into a record whose `base="" && buffer=""` while the
+  display title is non-empty must be DROPPED, not written — writing
+  `""+key` wipes the title. `last_block_mousedown` is a 3-tuple
+  `(uuid|"*"|"", ts, stale_editing_uuid)`; `"*"` replays only into a
+  record whose uuid ≠ stale (else it writes into the DYING record).
+- Web dialog chrome `left-[50%] top-[50%] translate(-50%,-50%)` —
+  the style parser ignores transform/percent offsets, so
+  `ui__dialog-content` uses `centerVertically` in the grown overlay
+  frame. Any element relying on translate-centering collapses to
+  top-left without it.
+- `cp__cmdk-dismiss` is the generic full-window click catcher
+  (overlayZ -2, clear fill) — reuse it for any popup needing
+  outside-click dismiss; popup's own fillsOverlay (z 0) stays tappable.
+- i18n fallback returns the raw key — `t` of a key absent from
+  en.edn renders `key` literally in the UI (seen as
+  "view|loading-label" leak; use existing dict keys).
