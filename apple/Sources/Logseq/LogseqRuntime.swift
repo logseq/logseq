@@ -261,10 +261,28 @@ private let platformRequest: PlatformRequestCallback = { data, length in
         try backend.apply(json: batch)
         rootID = backend.rootIDs.first
         appliedPatches += 1
+        if Self.perfLogging {
+          let gen = Self.batchGeneration(batch)
+          FileHandle.standardError.write(
+            "PERF apply gen=\(gen) t=\(String(format: "%.3f", Date().timeIntervalSince1970)) \(backend.debugModelCounts) root=\(rootID ?? -1)\n"
+              .data(using: .utf8)!)
+        }
       } catch {
         NSLog("LUI patch apply failed: \(error)")
       }
     }
+  }
+
+  private static let perfLogging =
+    ProcessInfo.processInfo.environment["LOGSEQ_PERF"] != nil
+
+  private static func batchGeneration(_ json: String) -> Int {
+    guard let range = json.range(of: "\"generation\":"),
+      let end = json[range.upperBound...].firstIndex(where: {
+        !$0.isNumber
+      })
+    else { return -1 }
+    return Int(json[range.upperBound..<end]) ?? -1
   }
 
   /// Reentrancy no longer exists: every Swift->OCaml call is a queued

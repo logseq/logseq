@@ -1078,3 +1078,23 @@ Doc-scan coalescing policy lives in `src/app/runtime.ml`
 either immediately (structural) or at most once per 100ms window
 (prop-only generations). Same source compiles into the melange lib and
 the native lib; covered by `test_scan_gate` in test_main.js.
+
+## Blank-journal freeze root cause — GeometryReader zero latch
+
+Live-debugging a frozen instance proved every patch generation was
+applied, the main thread was idle, and the LUI tree was complete
+(714 nodes under root 1) — yet the detail pane stayed blank for
+minutes. Resizing the window by hand made the journal appear
+instantly: the content was mounted all along, laid out at 0x0.
+
+`App.swift`'s detail column wrapped `LUISwiftUIRoot` in a
+`GeometryReader` solely for zoom scaling. When the view evaluated
+before `NavigationSplitView` finished proposing column sizes, the
+reader returned 0x0 and SwiftUI never re-proposed afterward, leaving
+a permanently clipped, empty surface. Sidebar (native List) and
+toolbar items (hoisted NSToolbarItems) are independent layout
+channels, which is why they still rendered.
+
+Fix: skip the GeometryReader when `zoomLevel == 1.0` (the common
+case) and give the root `.frame(maxWidth/maxHeight: .infinity)`. The
+zoom!=1 path keeps the reader since it needs the container size.
