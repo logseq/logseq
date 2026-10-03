@@ -368,3 +368,35 @@ struct LogseqNativeSidebar: View {
     }
   }
 }
+
+/// Right sidebar `.resizer` — the OCaml element is a static separator
+/// (aria-valuenow is fixed); the web stores width client-side, so the drag
+/// lives in native view state (LogseqRightSidebarLayout) and the sidebar's
+/// fixedWidth reads it back.
+struct LogseqSidebarResizer: View {
+  @State private var dragStart: CGFloat?
+
+  var body: some View {
+    Rectangle()
+      .fill(LogseqColors.border)
+      .frame(width: 3)
+      .frame(maxHeight: .infinity)
+      .padding(.trailing, 7)
+      .contentShape(Rectangle())
+      .onHover { inside in
+        if inside { NSCursor.resizeLeftRight.push() } else { NSCursor.pop() }
+      }
+      .gesture(
+        DragGesture()
+          .onChanged { value in
+            let start = dragStart ?? {
+              dragStart = LogseqRightSidebarLayout.shared.width
+              return LogseqRightSidebarLayout.shared.width
+            }()
+            let limit = (NSApp.keyWindow?.frame.width ?? 1200) * 0.7
+            LogseqRightSidebarLayout.shared.width =
+              min(max(start - value.translation.width, 240), limit)
+          }
+          .onEnded { _ in dragStart = nil })
+  }
+}
