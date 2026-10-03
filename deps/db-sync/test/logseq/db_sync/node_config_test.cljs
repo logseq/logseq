@@ -9,12 +9,19 @@
     (catch :default _ true)))
 
 (deftest normalize-config-drops-unknown-keys-test
-  (let [cfg (config/normalize-config {:port 7777
+  (let [cfg (config/normalize-config {:host "127.0.0.2"
+                                      :port 7777
                                       :unknown-key "value"
                                       :legacy-auth-key "value"})]
+    (is (= "127.0.0.2" (:host cfg)))
     (is (= 7777 (:port cfg)))
     (is (nil? (:unknown-key cfg)))
     (is (nil? (:legacy-auth-key cfg)))))
+
+(deftest normalize-config-defaults-test
+  (let [cfg (config/normalize-config {})]
+    (is (nil? (:host cfg)))
+    (is (= 8080 (:port cfg)))))
 
 (deftest normalize-config-storage-driver-test
   (testing "sqlite storage driver accepted"

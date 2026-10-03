@@ -1,0 +1,1145 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+readonly script_dir
+checkout_root="$(cd -- "$script_dir/../../.." 2>/dev/null && pwd || true)"
+readonly checkout_root
+resolved_script_path="$(readlink -f -- "${BASH_SOURCE[0]}" 2>/dev/null || true)"
+inferred_home=""
+if [[ "$resolved_script_path" == */bin/logseq-sync-native ]]; then
+  inferred_home="${resolved_script_path%/bin/logseq-sync-native}"
+fi
+readonly sync_home="${LOGSEQ_SYNC_HOME:-${inferred_home:-/opt/logseq-sync}}"
+readonly install_root="$sync_home"
+readonly bin_dir="$sync_home/bin"
+readonly config_dir="$sync_home/config"
+readonly data_dir="$sync_home/data"
+readonly systemd_dir="${LOGSEQ_SYNC_SYSTEMD_DIR:-/etc/systemd/system}"
+readonly caddy_data_dir="$sync_home/caddy-data"
+readonly releases_dir="$install_root/releases"
+readonly manager_path="${LOGSEQ_SYNC_MANAGER_PATH:-/usr/local/bin/logseq-sync-native}"
+readonly canonical_manager_path="$bin_dir/logseq-sync-native"
+readonly caddy_path="$bin_dir/caddy"
+readonly caddy_metadata_path="$bin_dir/caddy.metadata"
+readonly sync_service="logseq-sync.service"
+readonly proxy_service="logseq-sync-caddy.service"
+readonly default_public_port="443"
+readonly default_internal_port="10011"
+readonly default_release_repository="logseq/logseq"
+readonly default_release_tag="db-sync-native"
+readonly default_caddy_version="2.11.4"
+readonly default_cognito_issuer="https://cognito-idp.us-east-1.amazonaws.com/us-east-1_dtagLnju8"
+readonly default_cognito_client_id="69cs1lgme7p8kbgld8n5kseii6"
+readonly default_cognito_jwks_url="${default_cognito_issuer}/.well-known/jwks.json"
+
+configured_public_port="$(sed -n 's/^LOGSEQ_SYNC_PUBLIC_PORT=//p' "$config_dir/sync.env" 2>/dev/null || true)"
+configured_internal_port="$(sed -n 's/^DB_SYNC_PORT=//p' "$config_dir/sync.env" 2>/dev/null || true)"
+configured_release_repository="$(sed -n 's/^LOGSEQ_SYNC_RELEASE_REPOSITORY=//p' "$config_dir/sync.env" 2>/dev/null || true)"
+configured_release_tag="$(sed -n 's/^LOGSEQ_SYNC_RELEASE_TAG=//p' "$config_dir/sync.env" 2>/dev/null || true)"
+public_port="${configured_public_port:-$default_public_port}"
+internal_port="${configured_internal_port:-$default_internal_port}"
+release_repository="${LOGSEQ_SYNC_RELEASE_REPOSITORY:-$configured_release_repository}"
+release_tag="${LOGSEQ_SYNC_RELEASE_TAG:-${configured_release_tag:-$default_release_tag}}"
+installed_release_dir=""
+runtime_changed="true"
+assume_yes="${LOGSEQ_SYNC_ASSUME_YES:-false}"
+temporary_paths=()
+
+register_temporary_path() {
+  temporary_paths+=("$1")
+}
+
+cleanup_temporary_paths() {
+  local path
+  for path in "${temporary_paths[@]-}"; do
+    case "$path" in
+      /tmp/logseq-sync-runtime.*)
+        [[ -d "$path" ]] && rm -rf -- "$path"
+        ;;
+      /tmp/logseq-sync-caddy.*)
+        if [[ -d "$path" ]]; then
+          rm -rf -- "$path"
+        elif [[ -f "$path" ]]; then
+          rm -f -- "$path"
+        fi
+        ;;
+      /tmp/logseq-sync-config.*)
+        [[ -d "$path" ]] && rm -rf -- "$path"
+        ;;
+    esac
+  done
+  return 0
+}
+
+trap cleanup_temporary_paths EXIT
+
+die() {
+  printf 'Error: %s\n' "$*" >&2
+  exit 1
+}
+
+require_linux() {
+  [[ "$(uname -s)" == "Linux" ]] || die "Native deployment requires Linux."
+}
+
+require_root() {
+  [[ "${LOGSEQ_SYNC_TEST_MODE:-false}" == "true" ]] && return 0
+  (( EUID == 0 )) || die "Run this command with sudo."
+}
+
+require_commands() {
+  local command_name
+  for command_name in curl tar sha256sum sha512sum systemctl getent awk sed install mktemp readlink stat; do
+    command -v "$command_name" >/dev/null 2>&1 \
+      || die "Required base command is missing: $command_name"
+  done
+}
+
+canonicalize_target_path() {
+  local path="$1"
+  local existing_path="$path"
+  local suffix=""
+  local resolved_path
+  while [[ ! -e "$existing_path" && ! -L "$existing_path" ]]; do
+    suffix="/$(basename -- "$existing_path")${suffix}"
+    existing_path="$(dirname -- "$existing_path")"
+  done
+  resolved_path="$(readlink -f -- "$existing_path" 2>/dev/null)" || return 1
+  if [[ "$resolved_path" == "/" ]]; then
+    printf '/%s' "${suffix#/}"
+  else
+    printf '%s%s' "$resolved_path" "$suffix"
+  fi
+}
+
+safe_deployment_path() {
+  local path="$1"
+  [[ "$path" =~ ^/[A-Za-z0-9._/-]+$ \
+     && ! "$path" =~ (^|/)\.{1,2}(/|$) ]] || return 1
+  case "$path" in
+    /|/bin|/boot|/dev|/etc|/home|/lib|/lib64|/opt|/proc|/root|/run|/sbin|/srv|/sys|/tmp|/usr|/usr/local|/var|/var/lib)
+      return 1
+      ;;
+  esac
+}
+
+validate_releases_boundary() {
+  local resolved_install_root resolved_releases_dir
+  resolved_install_root="$(canonicalize_target_path "$install_root")" || return 1
+  resolved_releases_dir="$(canonicalize_target_path "$releases_dir")" || return 1
+  [[ "$resolved_releases_dir" == "${resolved_install_root%/}/releases" ]]
+}
+
+release_path_within_boundary() {
+  local release_path="$1"
+  local resolved_release_path resolved_releases_dir
+  [[ ! -L "$release_path" ]] || return 1
+  resolved_release_path="$(canonicalize_target_path "$release_path")" || return 1
+  resolved_releases_dir="$(canonicalize_target_path "$releases_dir")" || return 1
+  [[ "$(dirname -- "$resolved_release_path")" == "$resolved_releases_dir" ]]
+}
+
+trusted_release_directory() {
+  local release_path="$1"
+  local metadata owner group mode
+  [[ "${LOGSEQ_SYNC_TEST_MODE:-false}" == "true" ]] && return 0
+  metadata="$(stat -c '%U:%G:%a' "$release_path" 2>/dev/null)" || return 1
+  IFS=: read -r owner group mode <<< "$metadata"
+  [[ "$owner" == "root" && "$group" == "root" && "$mode" =~ ^[0-7]{3,4}$ ]] \
+    && (( (8#$mode & 8#022) == 0 ))
+}
+
+validate_install_paths() {
+  local path resolved_path
+  for path in "$sync_home" "$bin_dir" "$config_dir" "$data_dir" "$systemd_dir" \
+    "$caddy_data_dir" "$releases_dir" "$manager_path"; do
+    safe_deployment_path "$path" || die "Unsafe deployment path: $path"
+    resolved_path="$(canonicalize_target_path "$path")" \
+      || die "Deployment path cannot be resolved safely: $path"
+    safe_deployment_path "$resolved_path" \
+      || die "Deployment path resolves to an unsafe location: $path -> $resolved_path"
+  done
+  validate_releases_boundary \
+    || die "The runtime releases directory escapes the Sync installation home."
+}
+
+validate_existing_configuration() {
+  [[ -f "$config_dir/sync.env" ]] || return 0
+  local configured_base_url configured_domain configured_url_port
+  local configured_home configured_data_dir configured_host
+  local configured_storage_driver configured_assets_driver configured_log_level
+  local configured_node_env
+  local configured_issuer configured_client_id configured_jwks_url
+  if [[ -z "$configured_public_port" ]] \
+     || ! valid_port "$configured_public_port"; then
+    die "The existing public HTTPS port is missing or invalid."
+  fi
+  if [[ -z "$configured_internal_port" ]] \
+     || ! valid_port "$configured_internal_port" \
+     || (( 10#$configured_internal_port < 1024 )); then
+    die "The existing private Sync port is missing or invalid."
+  fi
+  [[ "$configured_public_port" != "$configured_internal_port" ]] \
+    || die "The existing public and private Sync ports must be different."
+  configured_base_url="$(read_env_value DB_SYNC_BASE_URL)"
+  if [[ "$configured_base_url" =~ ^https://([^:/]+)(:([0-9]+))?$ ]]; then
+    configured_domain="${BASH_REMATCH[1]}"
+    configured_url_port="${BASH_REMATCH[3]:-443}"
+  else
+    die "The existing public Sync URL is missing or invalid."
+  fi
+  valid_domain "$configured_domain" \
+    || die "The existing public Sync URL contains an invalid domain."
+  [[ "$configured_url_port" == "$configured_public_port" \
+     && "$(https_url "$configured_domain" "$configured_public_port")" == "$configured_base_url" ]] \
+    || die "The existing public Sync URL and HTTPS port are inconsistent."
+  configured_home="$(read_env_value LOGSEQ_SYNC_HOME)"
+  configured_data_dir="$(read_env_value DB_SYNC_DATA_DIR)"
+  configured_host="$(read_env_value DB_SYNC_HOST)"
+  [[ "$(readlink -f -- "$configured_home" 2>/dev/null || true)" \
+     == "$(readlink -f -- "$sync_home" 2>/dev/null || true)" ]] \
+    || die "The existing Sync home does not match this installation."
+  [[ "$(readlink -f -- "$configured_data_dir" 2>/dev/null || true)" \
+     == "$(readlink -f -- "$data_dir" 2>/dev/null || true)" ]] \
+    || die "The existing Sync data directory does not match this installation."
+  [[ "$configured_host" == "127.0.0.1" ]] \
+    || die "The existing private Sync host must be 127.0.0.1."
+  [[ "$configured_release_repository" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] \
+    || die "The existing native runtime repository is missing or invalid."
+  [[ "$configured_release_tag" =~ ^db-sync-native(-v[0-9A-Za-z._-]+)?$ ]] \
+    || die "The existing native runtime release tag is missing or invalid."
+  configured_storage_driver="$(read_env_value DB_SYNC_STORAGE_DRIVER)"
+  configured_assets_driver="$(read_env_value DB_SYNC_ASSETS_DRIVER)"
+  configured_log_level="$(read_env_value DB_SYNC_LOG_LEVEL)"
+  configured_node_env="$(read_env_value NODE_ENV)"
+  [[ "$configured_storage_driver" == "sqlite" \
+     && "$configured_assets_driver" == "filesystem" \
+     && "$configured_log_level" == "info" \
+     && "$configured_node_env" == "production" ]] \
+    || die "The existing native storage configuration is missing or invalid."
+  configured_issuer="$(read_env_value COGNITO_ISSUER)"
+  configured_client_id="$(read_env_value COGNITO_CLIENT_ID)"
+  configured_jwks_url="$(read_env_value COGNITO_JWKS_URL)"
+  [[ "$configured_issuer" == "$default_cognito_issuer" \
+     && "$configured_client_id" == "$default_cognito_client_id" \
+     && "$configured_jwks_url" == "$default_cognito_jwks_url" ]] \
+    || die "The existing authentication configuration is missing or invalid."
+}
+
+set_owner() {
+  [[ "${LOGSEQ_SYNC_TEST_MODE:-false}" == "true" ]] && return 0
+  chown "$@"
+}
+
+confirm() {
+  local prompt="$1"
+  local default_answer="${2:-no}"
+  local answer
+  if [[ "$assume_yes" == "true" ]]; then
+    return 0
+  fi
+  if [[ "$default_answer" == "yes" ]]; then
+    printf '%s [Y/n]: ' "$prompt" >&2
+    read -r answer || answer=""
+    [[ -z "$answer" || "$answer" == "y" || "$answer" == "Y" ]]
+  else
+    printf '%s [y/N]: ' "$prompt" >&2
+    read -r answer || answer=""
+    [[ "$answer" == "y" || "$answer" == "Y" ]]
+  fi
+}
+
+read_value() {
+  local prompt="$1"
+  local default_value="${2:-}"
+  local value
+  if [[ -n "$default_value" ]]; then
+    printf '%s [%s]: ' "$prompt" "$default_value" >&2
+    read -r value || value=""
+    printf '%s' "${value:-$default_value}"
+  else
+    printf '%s: ' "$prompt" >&2
+    read -r value || value=""
+    printf '%s' "$value"
+  fi
+}
+
+valid_port() {
+  [[ "$1" =~ ^[0-9]+$ ]] && (( 10#$1 >= 1 && 10#$1 <= 65535 ))
+}
+
+valid_domain() {
+  [[ ${#1} -le 253 \
+     && "$1" =~ ^([A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z]{2,63}$ ]]
+}
+
+https_url() {
+  local domain="$1"
+  local port="$2"
+  if [[ "$port" == "443" ]]; then
+    printf 'https://%s' "$domain"
+  else
+    printf 'https://%s:%s' "$domain" "$port"
+  fi
+}
+
+read_env_value() {
+  local key="$1"
+  [[ -f "$config_dir/sync.env" ]] || return 0
+  sed -n "s/^${key}=//p" "$config_dir/sync.env"
+}
+
+backup_file() {
+  local path="$1"
+  local timestamp backup suffix=0
+  [[ -e "$path" || -L "$path" ]] || return 0
+  timestamp="$(date +%Y%m%d%H%M%S)"
+  backup="${path}.backup-${timestamp}"
+  while [[ -e "$backup" ]]; do
+    suffix=$((suffix + 1))
+    backup="${path}.backup-${timestamp}-${suffix}"
+  done
+  cp -a -- "$path" "$backup"
+}
+
+write_private_file() {
+  local path="$1"
+  shift
+  umask 077
+  printf '%s' "$*" > "$path"
+}
+
+architecture() {
+  case "$(uname -m)" in
+    x86_64) printf 'x64' ;;
+    aarch64|arm64) printf 'arm64' ;;
+    *) die "Only x86_64 and arm64 Linux hosts are currently supported." ;;
+  esac
+}
+
+caddy_architecture() {
+  case "$(uname -m)" in
+    x86_64) printf 'amd64' ;;
+    aarch64|arm64) printf 'arm64' ;;
+    *) die "Only x86_64 and arm64 Linux hosts are currently supported." ;;
+  esac
+}
+
+detect_checkout_repository() {
+  local remote repository=""
+  [[ -d "$checkout_root/.git" ]] || return 0
+  remote="$(git -C "$checkout_root" config --get remote.origin.url 2>/dev/null || true)"
+  case "$remote" in
+    https://github.com/*) repository="${remote#https://github.com/}" ;;
+    git@github.com:*) repository="${remote#git@github.com:}" ;;
+    ssh://git@github.com/*) repository="${remote#ssh://git@github.com/}" ;;
+  esac
+  repository="${repository%.git}"
+  [[ "$repository" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] && printf '%s' "$repository"
+}
+
+select_release_source() {
+  if [[ -z "$release_repository" ]]; then
+    release_repository="$(detect_checkout_repository)"
+  fi
+  release_repository="${release_repository:-$default_release_repository}"
+  [[ "$release_repository" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] \
+    || die "Invalid GitHub release repository: $release_repository"
+  [[ "$release_tag" =~ ^db-sync-native(-v[0-9A-Za-z._-]+)?$ ]] \
+    || die "Invalid native runtime release tag: $release_tag"
+}
+
+ensure_service_users() {
+  [[ "${LOGSEQ_SYNC_TEST_MODE:-false}" == "true" ]] && return 0
+  if ! getent group logseq-sync >/dev/null; then
+    groupadd --system logseq-sync
+  fi
+  if ! id logseq-sync >/dev/null 2>&1; then
+    useradd --system --gid logseq-sync --home-dir "$data_dir" --no-create-home \
+      --shell /usr/sbin/nologin logseq-sync
+  fi
+  if ! getent group caddy >/dev/null; then
+    groupadd --system caddy
+  fi
+  if ! id caddy >/dev/null 2>&1; then
+    useradd --system --gid caddy --home-dir "$caddy_data_dir" --no-create-home \
+      --shell /usr/sbin/nologin caddy
+  fi
+}
+
+replace_current_release() {
+  local release_dir="$1"
+  [[ ! -e "$install_root/current" || -L "$install_root/current" ]] \
+    || die "$install_root/current must be a symbolic link."
+  ln -sfn "$release_dir" "$install_root/current.new"
+  if mv -Tf "$install_root/current.new" "$install_root/current" 2>/dev/null; then
+    return 0
+  fi
+  [[ -L "$install_root/current" ]] && unlink "$install_root/current"
+  mv -f "$install_root/current.new" "$install_root/current"
+}
+
+release_ready() {
+  local release_dir="$1"
+  release_path_within_boundary "$release_dir" \
+    && trusted_release_directory "$release_dir" \
+    && [[ -x "$release_dir/node/bin/node" \
+     && -f "$release_dir/app/node-adapter.js" \
+     && -d "$release_dir/app/node_modules" \
+     && -f "$release_dir/VERSION" \
+     && -f "$release_dir/ARCHITECTURE" \
+     && -f "$release_dir/ARCHIVE_SHA256" ]] \
+    && [[ "$(<"$release_dir/ARCHITECTURE")" == "$(architecture)" ]] \
+    && [[ "$(<"$release_dir/ARCHIVE_SHA256")" =~ ^[0-9a-f]{64}$ ]] \
+    && "$release_dir/node/bin/node" --version >/dev/null 2>&1 \
+    && (cd "$release_dir/app" \
+      && ../node/bin/node -e 'require("better-sqlite3")' >/dev/null 2>&1)
+}
+
+runtime_ready() {
+  local current_release
+  [[ -L "$install_root/current" ]] || return 1
+  current_release="$(readlink -f -- "$install_root/current" 2>/dev/null)" || return 1
+  release_path_within_boundary "$current_release" && release_ready "$current_release"
+}
+
+download_file() {
+  local source="$1"
+  local destination="$2"
+  if [[ "$source" == /* ]]; then
+    cp -a -- "$source" "$destination"
+  else
+    curl --fail --location --show-error "$source" -o "$destination"
+  fi
+}
+
+install_runtime() {
+  local runtime_arch asset release_base archive_source checksum_source
+  local temp_dir archive checksum_file expected_checksum actual_checksum
+  local extracted_dir version release_id release_dir
+  runtime_arch="$(architecture)"
+  asset="logseq-sync-runtime-linux-${runtime_arch}.tar.gz"
+  release_base="${LOGSEQ_SYNC_RELEASE_BASE_URL:-https://github.com/${release_repository}/releases/download/${release_tag}}"
+  archive_source="${LOGSEQ_SYNC_RUNTIME_ARCHIVE:-${release_base}/${asset}}"
+  checksum_source="${LOGSEQ_SYNC_RUNTIME_CHECKSUM:-${archive_source}.sha256}"
+  temp_dir="$(mktemp -d /tmp/logseq-sync-runtime.XXXXXX)"
+  register_temporary_path "$temp_dir"
+  archive="$temp_dir/$asset"
+  checksum_file="$temp_dir/$asset.sha256"
+  printf 'Checking the current Sync runtime for Linux %s from %s (%s).\n' \
+    "$runtime_arch" "$release_repository" "$release_tag"
+  download_file "$checksum_source" "$checksum_file"
+  expected_checksum="$(awk -v asset="$asset" '$2 == asset || $2 == "*" asset {print $1; exit}' "$checksum_file")"
+  [[ "$expected_checksum" =~ ^[0-9a-fA-F]{64}$ ]] \
+    || die "The runtime checksum file is invalid."
+  expected_checksum="$(printf '%s' "$expected_checksum" | awk '{print tolower($0)}')"
+  if runtime_ready \
+     && [[ "$(<"$install_root/current/ARCHIVE_SHA256")" == "$expected_checksum" ]]; then
+    installed_release_dir="$(readlink -f -- "$install_root/current")"
+    runtime_changed="false"
+    printf 'The installed Sync runtime is already current (%s).\n' \
+      "$(<"$install_root/current/VERSION")"
+    return 0
+  fi
+  printf 'Downloading prebuilt Sync runtime for Linux %s.\n' "$runtime_arch"
+  download_file "$archive_source" "$archive"
+  actual_checksum="$(sha256sum "$archive" | awk '{print $1}')"
+  [[ "$actual_checksum" == "$expected_checksum" ]] \
+    || die "The downloaded Sync runtime failed checksum verification."
+  while IFS= read -r archive_entry; do
+    case "$archive_entry" in
+      logseq-sync-runtime|logseq-sync-runtime/*)
+        [[ "$archive_entry" != *'/../'* && "$archive_entry" != '../'* ]] \
+          || die "The downloaded Sync runtime contains an unsafe path."
+        ;;
+      *) die "The downloaded Sync runtime contains an unexpected path." ;;
+    esac
+  done < <(tar -tzf "$archive")
+  mkdir -p "$temp_dir/extracted"
+  tar --no-same-owner --no-same-permissions -xzf "$archive" -C "$temp_dir/extracted"
+  extracted_dir="$temp_dir/extracted/logseq-sync-runtime"
+  [[ -x "$extracted_dir/node/bin/node" \
+     && -f "$extracted_dir/app/node-adapter.js" \
+     && -d "$extracted_dir/app/node_modules" \
+     && -x "$extracted_dir/bin/logseq-sync-native" \
+     && -f "$extracted_dir/VERSION" \
+     && -f "$extracted_dir/ARCHITECTURE" ]] \
+    || die "The downloaded Sync runtime is incomplete."
+  [[ "$(<"$extracted_dir/ARCHITECTURE")" == "$runtime_arch" ]] \
+    || die "The downloaded Sync runtime architecture does not match this server."
+  "$extracted_dir/node/bin/node" --version >/dev/null 2>&1 \
+    || die "The bundled Node.js runtime cannot run on this server."
+  (cd "$extracted_dir/app" \
+    && ../node/bin/node -e 'require("better-sqlite3")' >/dev/null 2>&1) \
+    || die "The bundled SQLite module cannot run on this server. GLIBC 2.29 or newer is required."
+  version="$(<"$extracted_dir/VERSION")"
+  [[ "$version" =~ ^[A-Za-z0-9._+-]+$ ]] || die "The runtime version is invalid."
+  printf '%s\n' "$actual_checksum" > "$extracted_dir/ARCHIVE_SHA256"
+  release_id="${version}-${runtime_arch}-${actual_checksum:0:12}"
+  release_dir="$releases_dir/$release_id"
+  validate_releases_boundary \
+    || die "The runtime releases directory escapes the Sync installation home."
+  mkdir -p "$releases_dir"
+  release_path_within_boundary "$release_dir" \
+    || die "Refusing to use an unsafe runtime path: $release_dir"
+  if [[ -e "$release_dir" ]] \
+     && { ! release_ready "$release_dir" \
+          || [[ "$(<"$release_dir/ARCHIVE_SHA256")" != "$actual_checksum" ]]; }; then
+    release_path_within_boundary "$release_dir" \
+      || die "Refusing to replace an unsafe runtime path: $release_dir"
+    rm -rf -- "$release_dir"
+  fi
+  if [[ ! -d "$release_dir" ]]; then
+    mv "$extracted_dir" "$release_dir"
+    set_owner -R root:root "$release_dir"
+  fi
+  installed_release_dir="$release_dir"
+  runtime_changed="true"
+  printf 'Prepared Sync runtime %s with bundled %s.\n' \
+    "$version" "$("$release_dir/node/bin/node" --version)"
+}
+
+install_caddy() {
+  local caddy_arch asset archive_source expected_checksum
+  local temp_dir archive actual_checksum archive_entry binary_checksum
+  local installed_version installed_archive_checksum installed_binary_checksum
+  caddy_arch="$(caddy_architecture)"
+  asset="caddy_${default_caddy_version}_linux_${caddy_arch}.tar.gz"
+  archive_source="${LOGSEQ_SYNC_CADDY_ARCHIVE:-https://github.com/caddyserver/caddy/releases/download/v${default_caddy_version}/${asset}}"
+  case "$caddy_arch" in
+    amd64)
+      expected_checksum="8220d1f013b6f27510247b2360c9e0ca9f018feebd82515f07635318b34ff9777ccc8fd0b6e6f2486ce3a33fe389fbb7db12d05baa474f4587509fb4f5ebf1c9"
+      ;;
+    arm64)
+      expected_checksum="d5a7c423853c24a799765e0e8210d5c7c22a8f56ed37a3cae2fb9f58be138853c02b4efd6b59d576e6d8c7c0d30b9c1592deeaa6a536ff69bcca23b8c1ea709c"
+      ;;
+    *) die "Unsupported Caddy architecture: $caddy_arch" ;;
+  esac
+  expected_checksum="${LOGSEQ_SYNC_CADDY_SHA512:-$expected_checksum}"
+  [[ "$expected_checksum" =~ ^[0-9a-fA-F]{128}$ ]] \
+    || die "The configured Caddy checksum is invalid."
+  expected_checksum="$(printf '%s' "$expected_checksum" | awk '{print tolower($0)}')"
+  if [[ -x "$caddy_path" && -f "$caddy_metadata_path" ]]; then
+    installed_version="$(sed -n 's/^VERSION=//p' "$caddy_metadata_path")"
+    installed_archive_checksum="$(sed -n 's/^ARCHIVE_SHA512=//p' "$caddy_metadata_path")"
+    installed_binary_checksum="$(sed -n 's/^BINARY_SHA512=//p' "$caddy_metadata_path")"
+    binary_checksum="$(sha512sum "$caddy_path" | awk '{print $1}')"
+    if [[ "$installed_version" == "$default_caddy_version" \
+       && "$installed_archive_checksum" == "$expected_checksum" \
+       && "$installed_binary_checksum" =~ ^[0-9a-f]{128}$ \
+       && "$installed_binary_checksum" == "$binary_checksum" ]]; then
+      return 0
+    fi
+    printf 'The installed Caddy binary does not match the pinned release; replacing it.\n'
+  fi
+  temp_dir="$(mktemp -d /tmp/logseq-sync-caddy.XXXXXX)"
+  register_temporary_path "$temp_dir"
+  archive="$temp_dir/$asset"
+  printf 'Downloading checksum-pinned Caddy %s for automatic HTTPS.\n' \
+    "$default_caddy_version"
+  download_file "$archive_source" "$archive"
+  actual_checksum="$(sha512sum "$archive" | awk '{print $1}')"
+  [[ "$actual_checksum" == "$expected_checksum" ]] \
+    || die "The downloaded Caddy archive failed checksum verification."
+  while IFS= read -r archive_entry; do
+    case "$archive_entry" in
+      caddy|LICENSE|README.md) ;;
+      *) die "The downloaded Caddy archive contains an unexpected path." ;;
+    esac
+  done < <(tar -tzf "$archive")
+  tar --no-same-owner --no-same-permissions -xzf "$archive" -C "$temp_dir" caddy
+  [[ -x "$temp_dir/caddy" ]] || die "The downloaded Caddy archive is incomplete."
+  "$temp_dir/caddy" version >/dev/null 2>&1 \
+    || die "The downloaded Caddy binary cannot run on this server."
+  binary_checksum="$(sha512sum "$temp_dir/caddy" | awk '{print $1}')"
+  mkdir -p "$bin_dir"
+  install -m 0755 "$temp_dir/caddy" "${caddy_path}.new" \
+    || die "The verified Caddy binary could not be staged."
+  write_private_file "${caddy_metadata_path}.new" "VERSION=${default_caddy_version}
+ARCHIVE_SHA512=${expected_checksum}
+BINARY_SHA512=${binary_checksum}
+" || die "The verified Caddy metadata could not be staged."
+  chmod 0644 "${caddy_metadata_path}.new" \
+    || die "The verified Caddy metadata permissions could not be set."
+  mv -f -- "${caddy_path}.new" "$caddy_path" \
+    || die "The verified Caddy binary could not be activated."
+  mv -f -- "${caddy_metadata_path}.new" "$caddy_metadata_path" \
+    || die "The verified Caddy metadata could not be activated."
+}
+
+verify_service_runtime() {
+  local release_dir="${1:-$install_root/current}"
+  [[ "${LOGSEQ_SYNC_TEST_MODE:-false}" == "true" ]] && return 0
+  runuser -u logseq-sync -- "$release_dir/node/bin/node" --version >/dev/null 2>&1 \
+    || die "The bundled runtime is not executable by the logseq-sync service user."
+}
+
+install_manager() {
+  local manager_source="$install_root/current/bin/logseq-sync-native"
+  local staged_manager="${canonical_manager_path}.new"
+  local canonical_manager_identity
+  [[ -f "$manager_source" ]] || manager_source="${BASH_SOURCE[0]}"
+  mkdir -p "$bin_dir" "$(dirname -- "$manager_path")" || return 1
+  canonical_manager_identity="$(cd -- "$(dirname -- "$canonical_manager_path")" \
+    && printf '%s/%s' "$(pwd -P)" "$(basename -- "$canonical_manager_path")")"
+  if [[ "$manager_path" != "$canonical_manager_path" ]] \
+     && { [[ ! -L "$manager_path" ]] \
+          || [[ "$(readlink -f -- "$manager_path" 2>/dev/null || true)" != "$canonical_manager_identity" ]]; }; then
+    backup_file "$manager_path" || return 1
+    if [[ -e "$manager_path" || -L "$manager_path" ]]; then
+      unlink "$manager_path" || return 1
+    fi
+    ln -s "$canonical_manager_path" "$manager_path" || return 1
+  fi
+  if [[ ! -e "$canonical_manager_path" ]] \
+    || ! cmp -s "$manager_source" "$canonical_manager_path"; then
+    backup_file "$canonical_manager_path" || return 1
+    install -m 0755 "$manager_source" "$staged_manager" || return 1
+    mv -f -- "$staged_manager" "$canonical_manager_path" || return 1
+  fi
+  if [[ "$manager_path" == "$canonical_manager_path" ]]; then
+    return 0
+  fi
+  [[ -L "$manager_path" \
+     && "$(readlink -f -- "$manager_path" 2>/dev/null || true)" == "$canonical_manager_identity" ]]
+}
+
+bootstrap() {
+  require_linux
+  require_root
+  validate_install_paths
+  require_commands
+  validate_existing_configuration
+  select_release_source
+  printf 'The installer will download a prebuilt Sync runtime and Caddy.\n'
+  printf 'It will not install or use system Node.js, Java, Clojure, or build tools.\n'
+  confirm 'Download the runtime components?' yes || die "Download cancelled."
+  ensure_service_users
+  install_runtime
+  replace_current_release "$installed_release_dir"
+  install_caddy
+  verify_service_runtime
+  install_manager
+  printf 'Runtime components are ready.\n'
+}
+
+ensure_runtime_components() {
+  require_commands
+  select_release_source
+  ensure_service_users
+  if ! runtime_ready; then
+    install_runtime
+    replace_current_release "$installed_release_dir"
+  else
+    printf 'Using installed prebuilt Sync runtime %s.\n' "$(<"$install_root/current/VERSION")"
+  fi
+  install_caddy
+  verify_service_runtime
+}
+
+write_configuration() {
+  local domain="$1"
+  local public_url
+  local staged_env="$config_dir/sync.env.new"
+  local staged_caddyfile="$config_dir/Caddyfile.new"
+  local staged_sync_service="$systemd_dir/${sync_service}.new"
+  local staged_proxy_service="$systemd_dir/${proxy_service}.new"
+  public_url="$(https_url "$domain" "$public_port")"
+  if ! mkdir -p "$config_dir" "$data_dir" "$caddy_data_dir" "$systemd_dir" \
+     || ! set_owner logseq-sync:logseq-sync "$data_dir" \
+     || ! set_owner caddy:caddy "$caddy_data_dir" \
+     || ! set_owner root:caddy "$config_dir" \
+     || ! chmod 0750 "$config_dir" "$data_dir" "$caddy_data_dir"; then
+    return 1
+  fi
+  if ! write_private_file "$staged_env" "NODE_ENV=production
+LOGSEQ_SYNC_RELEASE_REPOSITORY=${release_repository}
+LOGSEQ_SYNC_RELEASE_TAG=${release_tag}
+LOGSEQ_SYNC_HOME=${sync_home}
+LOGSEQ_SYNC_PUBLIC_PORT=${public_port}
+DB_SYNC_HOST=127.0.0.1
+DB_SYNC_PORT=${internal_port}
+DB_SYNC_BASE_URL=${public_url}
+DB_SYNC_DATA_DIR=${data_dir}
+DB_SYNC_STORAGE_DRIVER=sqlite
+DB_SYNC_ASSETS_DRIVER=filesystem
+DB_SYNC_LOG_LEVEL=info
+COGNITO_ISSUER=${default_cognito_issuer}
+COGNITO_CLIENT_ID=${default_cognito_client_id}
+COGNITO_JWKS_URL=${default_cognito_jwks_url}
+"; then
+    return 1
+  fi
+  if ! set_owner root:logseq-sync "$staged_env" \
+     || ! chmod 0640 "$staged_env" \
+     || ! printf '%s\n' "${public_url} {" \
+    $'\t'"reverse_proxy 127.0.0.1:${internal_port}" \
+    $'\ttls {' \
+    $'\t\tissuer acme {' \
+    $'\t\t\tdisable_tlsalpn_challenge' \
+    $'\t\t}' \
+    $'\t}' \
+    '}' > "$staged_caddyfile" \
+     || ! set_owner root:caddy "$staged_caddyfile" \
+     || ! chmod 0640 "$staged_caddyfile"; then
+    rm -f -- "$staged_env" "$staged_caddyfile"
+    return 1
+  fi
+  if ! write_private_file "$staged_sync_service" "[Unit]
+Description=Logseq Sync Node adapter
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=logseq-sync
+Group=logseq-sync
+WorkingDirectory=${install_root}/current/app
+EnvironmentFile=${config_dir}/sync.env
+ExecStart=${install_root}/current/node/bin/node ${install_root}/current/app/node-adapter.js
+Restart=on-failure
+RestartSec=5s
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=${data_dir}
+
+[Install]
+WantedBy=multi-user.target
+" || ! chmod 0644 "$staged_sync_service"; then
+    rm -f -- "$staged_env" "$staged_caddyfile" "$staged_sync_service"
+    return 1
+  fi
+  if ! write_private_file "$staged_proxy_service" "[Unit]
+Description=Logseq Sync HTTPS proxy
+After=network-online.target ${sync_service}
+Wants=network-online.target ${sync_service}
+
+[Service]
+Type=notify
+User=caddy
+Group=caddy
+Environment=XDG_DATA_HOME=${caddy_data_dir}
+Environment=XDG_CONFIG_HOME=${caddy_data_dir}
+ExecStart=${caddy_path} run --environ --config ${config_dir}/Caddyfile
+ExecReload=${caddy_path} reload --config ${config_dir}/Caddyfile --force
+TimeoutStopSec=5s
+LimitNOFILE=1048576
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=${caddy_data_dir}
+
+[Install]
+WantedBy=multi-user.target
+" || ! chmod 0644 "$staged_proxy_service"; then
+    rm -f -- "$staged_env" "$staged_caddyfile" \
+      "$staged_sync_service" "$staged_proxy_service"
+    return 1
+  fi
+  if ! backup_file "$config_dir/sync.env" \
+     || ! backup_file "$config_dir/Caddyfile" \
+     || ! backup_file "$systemd_dir/$sync_service" \
+     || ! backup_file "$systemd_dir/$proxy_service" \
+     || ! mv -f -- "$staged_env" "$config_dir/sync.env" \
+     || ! mv -f -- "$staged_caddyfile" "$config_dir/Caddyfile" \
+     || ! mv -f -- "$staged_sync_service" "$systemd_dir/$sync_service" \
+     || ! mv -f -- "$staged_proxy_service" "$systemd_dir/$proxy_service"; then
+    rm -f -- "$staged_env" "$staged_caddyfile" \
+      "$staged_sync_service" "$staged_proxy_service"
+    return 1
+  fi
+}
+
+snapshot_configuration() {
+  local snapshot_dir="$1"
+  local path index=0
+  for path in "$config_dir/sync.env" "$config_dir/Caddyfile" \
+    "$systemd_dir/$sync_service" "$systemd_dir/$proxy_service"; do
+    if [[ -e "$path" || -L "$path" ]]; then
+      cp -a -- "$path" "$snapshot_dir/$index"
+      : > "$snapshot_dir/$index.present"
+    fi
+    index=$((index + 1))
+  done
+}
+
+restore_configuration() {
+  local snapshot_dir="$1"
+  local path index=0
+  for path in "$config_dir/sync.env" "$config_dir/Caddyfile" \
+    "$systemd_dir/$sync_service" "$systemd_dir/$proxy_service"; do
+    if [[ -e "$path" || -L "$path" ]]; then
+      rm -f -- "$path" || return 1
+    fi
+    if [[ -f "$snapshot_dir/$index.present" ]]; then
+      cp -a -- "$snapshot_dir/$index" "$path" || return 1
+    fi
+    index=$((index + 1))
+  done
+}
+
+restart_restored_configuration() {
+  local restored_internal_port restored_public_url
+  restored_internal_port="$(read_env_value DB_SYNC_PORT)"
+  restored_public_url="$(read_env_value DB_SYNC_BASE_URL)"
+  "$caddy_path" validate --config "$config_dir/Caddyfile" \
+    && systemctl daemon-reload \
+    && systemctl restart "$sync_service" \
+    && wait_for_url "http://127.0.0.1:${restored_internal_port}" 30 2 \
+      "the restored private Sync health check at 127.0.0.1:${restored_internal_port}" \
+    && systemctl restart "$proxy_service" \
+    && wait_for_url "$restored_public_url" 24 5 \
+      "the restored public HTTPS health check at ${restored_public_url}"
+}
+
+wait_for_url() {
+  local url="$1"
+  local attempts="$2"
+  local delay="$3"
+  local description="${4:-$url}"
+  local body
+  printf 'Waiting for %s' "$description"
+  while (( attempts > 0 )); do
+    body="$(curl --fail --silent --show-error --max-time 5 "$url/health" 2>/dev/null || true)"
+    if [[ "$body" == '{"ok":true}' ]]; then
+      printf ' ready.\n'
+      return 0
+    fi
+    attempts=$((attempts - 1))
+    printf '.'
+    (( attempts > 0 )) && sleep "$delay"
+  done
+  printf '\n'
+  return 1
+}
+
+start_services() {
+  local public_url="$1"
+  if ! "$caddy_path" validate --config "$config_dir/Caddyfile"; then
+    printf 'Caddy configuration validation failed.\n' >&2
+    return 1
+  fi
+  systemctl daemon-reload
+  systemctl enable "$sync_service" "$proxy_service" >/dev/null
+  printf 'Starting Sync Node on 127.0.0.1:%s.\n' "$internal_port"
+  systemctl restart "$sync_service"
+  if ! wait_for_url "http://127.0.0.1:${internal_port}" 30 2 \
+    "the private Sync health check at 127.0.0.1:${internal_port}"; then
+    journalctl -u "$sync_service" --no-pager -n 30 >&2 || true
+    printf 'Sync did not become healthy.\n' >&2
+    return 1
+  fi
+  printf 'Starting Caddy on public HTTPS port %s.\n' "$public_port"
+  printf 'Caddy will obtain or renew the TLS certificate automatically; this can take a few minutes.\n'
+  systemctl restart "$proxy_service"
+  if ! wait_for_url "$public_url" 24 5 \
+    "the public HTTPS health check at ${public_url}"; then
+    journalctl -u "$proxy_service" --no-pager -n 30 >&2 || true
+    printf 'HTTPS did not become reachable. Confirm DNS and inbound TCP ports 80 and %s.\n' \
+      "$public_port" >&2
+    return 1
+  fi
+}
+
+setup() {
+  local domain=""
+  local requested_port=""
+  local requested_internal_port=""
+  local internal_port_default
+  local previous_url previous_domain="" previous_port="" public_url resolved_ips
+  local configuration_snapshot="" had_existing_configuration="false"
+  while (( $# > 0 )); do
+    case "$1" in
+      --domain)
+        (( $# >= 2 )) || die "--domain requires a value."
+        domain="$2"
+        shift 2
+        ;;
+      --domain=*) domain="${1#--domain=}"; shift ;;
+      --public-port)
+        (( $# >= 2 )) || die "--public-port requires a value."
+        requested_port="$2"
+        shift 2
+        ;;
+      --public-port=*) requested_port="${1#--public-port=}"; shift ;;
+      --internal-port)
+        (( $# >= 2 )) || die "--internal-port requires a value."
+        requested_internal_port="$2"
+        shift 2
+        ;;
+      --internal-port=*) requested_internal_port="${1#--internal-port=}"; shift ;;
+      --yes|-y) assume_yes="true"; shift ;;
+      --help|-h) usage; return 0 ;;
+      *) die "Unknown setup option: $1. Use --domain, --public-port, --internal-port, or --yes." ;;
+    esac
+  done
+  require_linux
+  require_root
+  validate_install_paths
+  require_commands
+  validate_existing_configuration
+  if [[ "$assume_yes" != "true" ]]; then
+    printf '\nLogseq Sync setup\n'
+    printf 'This wizard will configure a prebuilt Sync runtime, Caddy, automatic HTTPS, and systemd.\n'
+    printf 'You only need a domain name, public HTTPS port, and private Sync port.\n\n'
+  fi
+  previous_url="$(read_env_value DB_SYNC_BASE_URL)"
+  if [[ "$previous_url" =~ ^https://([^:/]+)(:([0-9]+))?$ ]]; then
+    previous_domain="${BASH_REMATCH[1]}"
+    previous_port="${BASH_REMATCH[3]:-443}"
+  fi
+  if [[ -z "$domain" ]]; then
+    printf 'Domain requirements:\n'
+    printf '  - Enter a hostname only, for example sync.example.com (no https:// or path).\n'
+    printf '  - Its public A/AAAA record must already resolve to this server.\n'
+    printf '  - Wait for DNS propagation before continuing.\n\n'
+    domain="$(read_value 'Step 1/3 - Sync domain name' "$previous_domain")"
+  fi
+  valid_domain "$domain" || die "Enter a valid DNS domain name, not an IP address."
+  resolved_ips="$(getent ahosts "$domain" \
+    | awk '!seen[$1]++ {printf "%s%s", separator, $1; separator=", "}' || true)"
+  [[ -n "$resolved_ips" ]] \
+    || die "The domain does not currently resolve. Create its DNS record before setup."
+  if [[ -n "$requested_port" ]]; then
+    public_port="$requested_port"
+  else
+    printf '\nPublic HTTPS port:\n'
+    printf '  - Logseq clients connect here using HTTPS and secure WebSockets.\n'
+    printf '  - Allow this TCP port in the cloud security group and server firewall.\n'
+    printf '  - TCP 80 must also be reachable for automatic certificate validation.\n\n'
+    public_port="$(read_value 'Step 2/3 - Public HTTPS port' "${previous_port:-$default_public_port}")"
+  fi
+  valid_port "$public_port" || die "Public HTTPS port must be between 1 and 65535."
+  [[ "$public_port" != "80" ]] \
+    || die "Public HTTPS port 80 is reserved for automatic certificate validation."
+  internal_port_default="$internal_port"
+  if [[ "$public_port" == "$internal_port_default" ]]; then
+    if (( 10#$public_port < 65535 )); then
+      internal_port_default="$((10#$public_port + 1))"
+    else
+      internal_port_default="$((10#$public_port - 1))"
+    fi
+  fi
+  if [[ -n "$requested_internal_port" ]]; then
+    internal_port="$requested_internal_port"
+  else
+    printf '\nPrivate Sync port:\n'
+    printf '  - Sync Node listens on 127.0.0.1 only; Caddy forwards requests here.\n'
+    printf '  - Do not expose or allow this port in the public firewall.\n\n'
+    internal_port="$(read_value 'Step 3/3 - Private Sync port' "$internal_port_default")"
+  fi
+  valid_port "$internal_port" || die "Private Sync port must be between 1024 and 65535."
+  (( 10#$internal_port >= 1024 )) \
+    || die "Private Sync port must be between 1024 and 65535."
+  [[ "$public_port" != "$internal_port" ]] \
+    || die "Public HTTPS port and private Sync port must be different."
+  select_release_source
+  public_url="$(https_url "$domain" "$public_port")"
+  printf '\nDeployment plan:\n'
+  printf '  DNS: %s -> %s\n' "$domain" "$resolved_ips"
+  printf '  Public endpoint (enter in Logseq): %s\n' "$public_url"
+  printf '  Public inbound TCP: 80 (certificate), %s (HTTPS/WSS)\n' "$public_port"
+  printf '  Private adapter: 127.0.0.1:%s (local only, do not expose)\n' "$internal_port"
+  printf '  Runtime: prebuilt Linux %s package from %s (%s)\n' \
+    "$(architecture)" "$release_repository" "$release_tag"
+  printf '  Home: %s\n' "$sync_home"
+  printf '  Data: %s\n' "$data_dir"
+  printf '  Services: Sync Node + Caddy (systemd)\n\n'
+  confirm 'Download and start Logseq Sync?' yes || die "Setup cancelled."
+  ensure_runtime_components
+  install_manager
+  configuration_snapshot="$(mktemp -d /tmp/logseq-sync-config.XXXXXX)"
+  register_temporary_path "$configuration_snapshot"
+  snapshot_configuration "$configuration_snapshot"
+  if [[ -f "$config_dir/sync.env" ]]; then
+    had_existing_configuration="true"
+  fi
+  if ! write_configuration "$domain"; then
+    if [[ "$had_existing_configuration" == "true" ]]; then
+      if restore_configuration "$configuration_snapshot" \
+         && restart_restored_configuration; then
+        die "Setup could not write the new configuration; the previous working configuration was restored."
+      fi
+      die "Setup could not write the new configuration, and the previous configuration could not be restarted. Check the service logs and the timestamped configuration backups."
+    fi
+    restore_configuration "$configuration_snapshot" \
+      || die "Setup could not write or clean up the configuration. Check the timestamped configuration backups."
+    die "Setup could not write the configuration. No services were started."
+  fi
+  if ! start_services "$public_url"; then
+    if [[ "$had_existing_configuration" == "true" ]]; then
+      if restore_configuration "$configuration_snapshot" \
+         && restart_restored_configuration; then
+        die "Setup did not complete; the previous working configuration was restored."
+      fi
+      die "Setup failed, and the previous configuration could not be restarted. Check the service logs and the timestamped configuration backups."
+    fi
+    die "Setup did not complete. Generated configuration and data were preserved."
+  fi
+  printf '\nLogseq Sync is ready. Enter this URL in Logseq → Settings → Advanced → Sync Server URL:\n'
+  printf '  %s\n' "$public_url"
+  printf 'Manage it later with: sudo %s status\n' "$manager_path"
+}
+
+rollback_update() {
+  local previous_release="$1"
+  replace_current_release "$previous_release"
+  if systemctl restart "$sync_service" \
+     && wait_for_url "http://127.0.0.1:${internal_port}" 30 2 \
+       "the restored private Sync health check at 127.0.0.1:${internal_port}"; then
+    return 0
+  fi
+  journalctl -u "$sync_service" --no-pager -n 30 >&2 || true
+  return 1
+}
+
+prune_releases() {
+  local active_release="$1"
+  local previous_release="$2"
+  local candidate
+  shopt -s nullglob
+  validate_releases_boundary \
+    || die "The runtime releases directory escapes the Sync installation home."
+  for candidate in "$releases_dir"/*; do
+    [[ -d "$candidate" ]] || continue
+    [[ "$candidate" == "$active_release" || "$candidate" == "$previous_release" ]] \
+      && continue
+    release_path_within_boundary "$candidate" \
+      || die "Refusing to prune an unsafe runtime path: $candidate"
+    rm -rf -- "$candidate"
+  done
+  shopt -u nullglob
+}
+
+update() {
+  local public_url previous_release active_release
+  require_linux
+  require_root
+  validate_install_paths
+  require_commands
+  [[ -f "$config_dir/sync.env" ]] || die "Run setup first."
+  validate_existing_configuration
+  select_release_source
+  ensure_service_users
+  public_url="$(read_env_value DB_SYNC_BASE_URL)"
+  previous_release="$(readlink "$install_root/current" 2>/dev/null || true)"
+  [[ -n "$previous_release" && -d "$previous_release" ]] \
+    || die "The current adapter release is missing. Run setup to repair it."
+  release_path_within_boundary "$previous_release" \
+    || die "The current adapter release is outside the managed releases directory."
+  printf 'Checking the current prebuilt runtime; configuration and data will be preserved.\n'
+  install_runtime
+  if [[ "$runtime_changed" == "false" ]]; then
+    printf 'Logseq Sync is already up to date: %s\n' "$public_url"
+    return 0
+  fi
+  install_caddy
+  verify_service_runtime "$installed_release_dir"
+  replace_current_release "$installed_release_dir"
+  if ! systemctl restart "$sync_service"; then
+    rollback_update "$previous_release" \
+      || die "The update failed and the previous release could not be restarted."
+    die "The update failed to restart Sync; the previous release was restored."
+  fi
+  if ! wait_for_url "http://127.0.0.1:${internal_port}" 30 2 \
+    "the private Sync health check at 127.0.0.1:${internal_port}"; then
+    journalctl -u "$sync_service" --no-pager -n 30 >&2 || true
+    rollback_update "$previous_release" \
+      || die "The update failed and the previous release could not be restored."
+    die "Updated Sync process did not become healthy; the previous release was restored."
+  fi
+  if ! wait_for_url "$public_url" 6 2 \
+    "the public HTTPS health check at ${public_url}"; then
+    journalctl -u "$proxy_service" --no-pager -n 30 >&2 || true
+    rollback_update "$previous_release" \
+      || die "The public endpoint failed and the previous release could not be restored."
+    die "Updated public endpoint is unavailable; the previous release was restored."
+  fi
+  if ! install_manager; then
+    rollback_update "$previous_release" \
+      || die "The manager update failed and the previous release could not be restored."
+    die "The manager update failed; the previous release was restored."
+  fi
+  active_release="$(readlink "$install_root/current")"
+  prune_releases "$active_release" "$previous_release"
+  printf 'Logseq Sync was updated successfully: %s\n' "$public_url"
+}
+
+status() {
+  local public_url internal_body public_body runtime_version
+  require_root
+  validate_install_paths
+  [[ -f "$config_dir/sync.env" ]] || die "No native deployment configuration found."
+  validate_existing_configuration
+  public_url="$(read_env_value DB_SYNC_BASE_URL)"
+  runtime_version="$(<"$install_root/current/VERSION")"
+  systemctl --no-pager --full status "$sync_service" "$proxy_service" || true
+  internal_body="$(curl --fail --silent --max-time 3 "http://127.0.0.1:${internal_port}/health" 2>/dev/null || true)"
+  public_body="$(curl --fail --silent --max-time 5 "$public_url/health" 2>/dev/null || true)"
+  printf 'Runtime version: %s\n' "$runtime_version"
+  printf 'Sync Server URL: %s\n' "$public_url"
+  [[ "$internal_body" == '{"ok":true}' ]] || die "The private Sync health check failed."
+  [[ "$public_body" == '{"ok":true}' ]] || die "The public HTTPS health check failed."
+  printf 'Health: ok\n'
+}
+
+logs() {
+  local follow="" unit="$sync_service"
+  require_root
+  validate_install_paths
+  while (( $# > 0 )); do
+    case "$1" in
+      --follow|-f) follow="--follow" ;;
+      sync) unit="$sync_service" ;;
+      proxy|caddy) unit="$proxy_service" ;;
+      *) die "Unknown logs option: $1" ;;
+    esac
+    shift
+  done
+  journalctl -u "$unit" --no-pager -n 200 $follow
+}
+
+usage() {
+  cat <<'EOF'
+Usage:
+  sudo logseq-sync-native setup
+  sudo logseq-sync-native setup --domain <domain> --public-port <port> \
+    --internal-port <port> [--yes]
+  sudo logseq-sync-native update
+  sudo logseq-sync-native bootstrap
+  sudo logseq-sync-native status
+  sudo logseq-sync-native logs [--follow] [sync|proxy]
+
+The server downloads a checksum-verified, prebuilt Linux x64 or arm64 runtime.
+It does not need system Node.js, Java, Clojure, pnpm, Python, or a compiler.
+
+Advanced release overrides:
+  LOGSEQ_SYNC_RELEASE_REPOSITORY=<owner/repository>
+  LOGSEQ_SYNC_RELEASE_TAG=<db-sync-native or versioned tag>
+
+Advanced install location override (first setup only):
+  LOGSEQ_SYNC_HOME=/srv/logseq-sync
+EOF
+}
+
+main() {
+  local command="${1:-help}"
+  (( $# > 0 )) && shift
+  case "$command" in
+    setup) setup "$@" ;;
+    update) update "$@" ;;
+    bootstrap) bootstrap "$@" ;;
+    status) status "$@" ;;
+    logs) logs "$@" ;;
+    help|--help|-h) usage ;;
+    *) usage >&2; die "Unknown command: $command" ;;
+  esac
+}
+
+main "$@"

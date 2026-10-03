@@ -103,6 +103,11 @@ It requires typing `DELETE` as confirmation.
 
 ### Node.js Adapter (self-hosted)
 
+For the guided native systemd setup, including automatic HTTPS, persistent
+storage, and day-two management commands, follow the
+[deployment manager quickstart](deploy/README.md). The commands below are the
+manual developer workflow.
+
 Build the adapter:
 
 ```bash
@@ -114,6 +119,7 @@ Run the adapter with Cognito auth:
 
 ```bash
 DB_SYNC_PORT=8787 \
+DB_SYNC_HOST=127.0.0.1 \
 COGNITO_ISSUER=https://cognito-idp.us-east-1.amazonaws.com/us-east-1_dtagLnju8 \
 COGNITO_CLIENT_ID=69cs1lgme7p8kbgld8n5kseii6 \
 COGNITO_JWKS_URL=https://cognito-idp.us-east-1.amazonaws.com/us-east-1_dtagLnju8/.well-known/jwks.json \
@@ -133,6 +139,7 @@ pnpm test:node-adapter
 
 | Variable | Purpose |
 | --- | --- |
+| DB_SYNC_HOST | HTTP server bind address (uses the Node.js all-interface default when omitted) |
 | DB_SYNC_PORT | HTTP server port |
 | DB_SYNC_BASE_URL | External base URL for asset links |
 | DB_SYNC_ADMIN_TOKEN | Admin-only token for operator graph deletion endpoints |

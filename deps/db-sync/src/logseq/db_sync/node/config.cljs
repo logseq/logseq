@@ -11,7 +11,8 @@
 
 (defn config-from-env []
   (let [env (.-env js/process)]
-    {:port (when-let [v (env-value env "DB_SYNC_PORT")] (parse-int v 8080))
+    {:host (env-value env "DB_SYNC_HOST")
+     :port (when-let [v (env-value env "DB_SYNC_PORT")] (parse-int v 8080))
      :base-url (env-value env "DB_SYNC_BASE_URL")
      :data-dir (or (env-value env "DB_SYNC_DATA_DIR") "data/db-sync")
      :storage-driver (or (env-value env "DB_SYNC_STORAGE_DRIVER") "sqlite")
@@ -22,7 +23,7 @@
      :cognito-jwks-url (env-value env "COGNITO_JWKS_URL")}))
 
 (def ^:private allowed-config-keys
-  [:port :base-url :data-dir :storage-driver :assets-driver :log-level
+  [:host :port :base-url :data-dir :storage-driver :assets-driver :log-level
    :cognito-issuer :cognito-client-id :cognito-jwks-url])
 
 (defn normalize-config [overrides]
@@ -31,7 +32,8 @@
                   :storage-driver "sqlite"
                   :assets-driver "filesystem"
                   :log-level "info"}
-        merged (merge defaults (config-from-env) overrides)
+        env-config (into {} (remove (comp nil? val)) (config-from-env))
+        merged (merge defaults env-config overrides)
         storage-driver (string/lower-case (:storage-driver merged))
         assets-driver (string/lower-case (:assets-driver merged))]
     (when-not (#{"sqlite"} storage-driver)
