@@ -21,6 +21,10 @@ let document_add_listener (name : string) (f : ev -> unit)
    queries for the same DOM id must return the same allocation *)
 let el_cache : (string, el) Hashtbl.t = Hashtbl.create 64
 
+(* document_element / document.body are {#ref:0}/{#ref:-1} placeholder
+   refs — the host key classification turns them into scope/body roots *)
+let document_element : el = Js.Json.JObject [("#ref", Js.Json.JNumber 0.)]
+
 (* ids of elements the host has told us are mounted — element-mount /
    element-unmount dom-events keep this truthful, so DOM probes like
    `get_element_by_id "ui__ac-inner"` (is the autocomplete popup open?)
@@ -48,18 +52,111 @@ let get_element_by_id (id : string) : el option =
            Hashtbl.replace el_cache id el;
            el)
 
-let query_selector (_ : string) : el option = None
-let query_selector_all (_ : string) : node_list = Js.Json.array [||]
+(* ---------- element queries (LUI subtree + {#new} shadow registry) ---------- *)
 
-let node_list_iter (_ : node_list) (_ : el -> unit) : unit = ()
+(* A query scope: roots lacking a node-id/#new (document_element, body)
+   mean the whole document; otherwise matches are limited to the LUI
+   subtree(s) plus shadow descendants attached inside them. *)
+type query_scope =
+  | Everywhere
+  | Scoped of (int, unit) Hashtbl.t * (int, unit) Hashtbl.t
+
+let scope_of_roots (roots : el list) : query_scope =
+  let lui = Hashtbl.create 16 and sh = Hashtbl.create 8 in
+  let unscoped = ref false in
+  List.iter
+    (fun r ->
+      match Shadow_dom.id_of r with
+      | Some id ->
+          List.iter (fun i -> Hashtbl.replace sh i ())
+            (Shadow_dom.descendant_ids id)
+      | None -> (
+          match Dom_ext.num_prop "node-id" r with
+          | Some nid ->
+              (* shadow children attach directly under the root, so the
+                 root id itself is in scope even if the provider's
+                 subtree excludes it *)
+              Hashtbl.replace lui (int_of_float nid) ();
+              List.iter
+                (fun e ->
+                  match Dom_ext.num_prop "node-id" e with
+                  | Some n -> Hashtbl.replace lui (int_of_float n) ()
+                  | None -> ())
+                (!Dom_ext.subtree_elements_provider (int_of_float nid))
+          | None -> unscoped := true))
+    roots;
+  if !unscoped then Everywhere else Scoped (lui, sh)
+
+let shadow_in_scope scope (n : Shadow_dom.node) : bool =
+  match scope with
+  | Everywhere -> n.Shadow_dom.s_parent <> None
+  | Scoped (lui, sh) -> (
+      if Hashtbl.mem sh n.Shadow_dom.s_id then true
+      else
+        match n.Shadow_dom.s_parent with
+        | Some p -> (
+            match Shadow_dom.host_ref_of p with
+            | Shadow_dom.Host_node nid -> Hashtbl.mem lui nid
+            | Shadow_dom.Host_dom_id d -> (
+                match !Shadow_dom.lui_snapshot_by_dom_id d with
+                | Some s -> (
+                    match Dom_ext.num_prop "node-id" s with
+                    | Some nid -> Hashtbl.mem lui (int_of_float nid)
+                    | None -> false)
+                | None -> false)
+            | _ -> false)
+        | None -> false)
+
+(* shadow els match on their synthesized snapshot but the call sites get
+   the stable {#new:n} payload back *)
+let shadow_query scope sel : el list =
+  Shadow_dom.fold
+    (fun _id n acc ->
+      if shadow_in_scope scope n then begin
+        let snap = Shadow_dom.snapshot n in
+        if Dom_ext.selector_matches sel snap (Dom_ext.ancestors_of snap)
+        then Shadow_dom.payload n :: acc
+        else acc
+      end
+      else acc)
+    []
+
+let query_in_roots (roots : el list) (sel : string) : el list =
+  let scope = scope_of_roots roots in
+  let lui_hits =
+    List.filter
+      (fun el ->
+        (match scope with
+         | Everywhere -> true
+         | Scoped (lui, _) -> (
+             match Dom_ext.num_prop "node-id" el with
+             | Some n -> Hashtbl.mem lui (int_of_float n)
+             | None -> false))
+        && Dom_ext.selector_matches sel el (Dom_ext.ancestors_of el))
+      (!Dom_ext.doc_elements_provider ())
+  in
+  lui_hits @ shadow_query scope sel
+
+let query_selector (sel : string) : el option =
+  match query_in_roots [ document_element ] sel with
+  | h :: _ -> Some h
+  | [] -> None
+
+let query_selector_all (sel : string) : node_list =
+  Js.Json.JArray (Array.of_list (query_in_roots [ document_element ] sel))
+
+let node_list_iter (nl : node_list) (f : el -> unit) : unit =
+  match nl with
+  | Js.Json.JArray a -> Array.iter f a
+  | _ -> ()
 
 let el_of_json (j : Js.Json.t) : el = j
 
-let create_element (tag : string) : el =
-  Js.Json.JObject [ ("tag", Js.Json.JString tag) ]
+(* view DOM builders — {#new} shadow nodes so attrs/children/read-backs
+   resolve OCaml-side and the Swift store can materialize them *)
+let create_element (tag : string) : el = Shadow_dom.register ~tag ()
 
-let create_text_node (text : string) : el =
-  Js.Json.JObject [ ("#text", Js.Json.JString text) ]
+let create_text_node (text : string) : el = Shadow_dom.create_text text
 
 (* ---------- events ---------- *)
 
@@ -76,8 +173,17 @@ let ev_target (ev : ev) : el option =
   | Js.Json.JObject _ as el -> Some el
   | _ -> None
 
-let prevent_default (_ : ev) : unit = ()
-let stop_propagation (_ : ev) : unit = ()
+(* shadow-dispatch events carry "##dispatch"; a stop/prevent marks the
+   flags table so the shadow dispatcher halts the remaining chain *)
+let prevent_default (ev : ev) : unit =
+  match Dom_ext.num_prop "##dispatch" ev with
+  | Some d -> Shadow_dom.mark_prevented d
+  | None -> ()
+
+let stop_propagation (ev : ev) : unit =
+  match Dom_ext.num_prop "##dispatch" ev with
+  | Some d -> Shadow_dom.mark_stopped d
+  | None -> ()
 
 let ev_buttons (ev : ev) : int =
   match json_prop "buttons" ev with
@@ -86,58 +192,237 @@ let ev_buttons (ev : ev) : int =
 
 (* ---------- element ops ---------- *)
 
-let el_get_attr (el : el) (name : string) : string option =
-  match el with
-  | Js.Json.JObject kvs -> (
-      match List.assoc_opt ("attr-" ^ name) kvs with
-      | Some v -> Js.Json.decodeString v
+(* attrs set on mounted (LUI) elements via el_set_attr — the host can't
+   mutate post-mount, but callers read them back (view-mount idempotency
+   marks like data-views-inst), so they persist OCaml-side keyed by the
+   element's identity *)
+let attr_overrides : (string, (string, string) Hashtbl.t) Hashtbl.t =
+  Hashtbl.create 16
+
+let override_key (el : el) : string option =
+  match Dom_ext.num_prop "node-id" el with
+  | Some n -> Some ("node-" ^ string_of_int (int_of_float n))
+  | None -> (
+      match Dom_ext.str_prop "#ref" el with
+      | Some s -> Some ("dom:" ^ s)
       | None -> (
-          match List.assoc_opt "attrs" kvs with
-          | Some (Js.Json.JObject attrs) ->
-              Option.bind (List.assoc_opt name attrs) Js.Json.decodeString
-          | _ -> (
-              (* snapshots carry the DOM class under "class", not attrs *)
-              match name with
-              | "class" ->
-                  Option.bind (List.assoc_opt "class" kvs)
-                    Js.Json.decodeString
-              | _ -> None)))
-  | _ -> None
+          match Dom_ext.str_prop "ref-id" el with
+          | Some s -> Some ("dom:" ^ s)
+          | None -> None))
+
+let record_attr_override (el : el) (name : string) (v : string) : unit =
+  match override_key el with
+  | Some k ->
+      let t =
+        match Hashtbl.find_opt attr_overrides k with
+        | Some t -> t
+        | None ->
+            let t = Hashtbl.create 8 in
+            Hashtbl.replace attr_overrides k t;
+            t
+      in
+      Hashtbl.replace t name v
+  | None -> ()
+
+let remove_attr_override (el : el) (name : string) : unit =
+  match override_key el with
+  | Some k -> (
+      match Hashtbl.find_opt attr_overrides k with
+      | Some t -> Hashtbl.remove t name
+      | None -> ())
+  | None -> ()
+
+let el_get_attr (el : el) (name : string) : string option =
+  match Shadow_dom.id_of el with
+  | Some id -> (
+      match Shadow_dom.get id with
+      | Some n -> Shadow_dom.get_attr n name
+      | None -> None)
+  | None -> (
+      let overridden =
+        match override_key el with
+        | Some k -> (
+            match Hashtbl.find_opt attr_overrides k with
+            | Some t -> Hashtbl.find_opt t name
+            | None -> None)
+        | None -> None
+      in
+      match overridden with
+      | Some _ -> overridden
+      | None -> (
+          match el with
+          | Js.Json.JObject kvs -> (
+              match List.assoc_opt ("attr-" ^ name) kvs with
+              | Some v -> Js.Json.decodeString v
+              | None -> (
+                  match List.assoc_opt "attrs" kvs with
+                  | Some (Js.Json.JObject attrs) ->
+                      Option.bind (List.assoc_opt name attrs)
+                        Js.Json.decodeString
+                  | _ -> (
+                      (* snapshots carry the DOM class under "class", not
+                         attrs *)
+                      match name with
+                      | "class" ->
+                          Option.bind (List.assoc_opt "class" kvs)
+                            Js.Json.decodeString
+                      | _ -> None)))
+          | _ -> None))
+
+let el_has_attr (el : el) (name : string) : bool =
+  el_get_attr el name <> None
 
 let el_set_attr (el : el) (name : string) (v : string) : unit =
+  (match Shadow_dom.id_of el with
+   | Some id -> (
+       match Shadow_dom.get id with
+       | Some n -> Shadow_dom.set_attr n name v
+       | None -> ())
+   | None -> record_attr_override el name v);
   Host.dom_op "set-attr"
     (Js.Json.stringify
-       (Js.Json.JObject [("ref", el); ("name", Js.Json.JString name); ("value", Js.Json.JString v)]))
+       (Js.Json.JObject
+          ([ ("ref", el); ("name", Js.Json.JString name)
+           ; ("value", Js.Json.JString v) ]
+          @ Shadow_dom.shadow_field el)))
 
 let el_remove_attr (el : el) (name : string) : unit =
+  (match Shadow_dom.id_of el with
+   | Some id -> (
+       match Shadow_dom.get id with
+       | Some n -> Shadow_dom.remove_attr n name
+       | None -> ())
+   | None -> remove_attr_override el name);
   Host.dom_op "remove-attr"
-    (Js.Json.stringify (Js.Json.JObject [("ref", el); ("name", Js.Json.JString name)]))
+    (Js.Json.stringify
+       (Js.Json.JObject
+          ([ ("ref", el); ("name", Js.Json.JString name) ]
+          @ Shadow_dom.shadow_field el)))
 
-let el_append_child (_ : el) (_ : el) : unit = ()
-let el_contains (_ : el) (_ : el) : bool = false
+let el_append_child (parent : el) (child : el) : unit =
+  Shadow_dom.append_child parent child
+
+(* LUI-snapshot lookups for Shadow_dom's ancestor splicing — resolved
+   against the element providers native_embed installs *)
+let () =
+  Shadow_dom.lui_snapshot_by_node_id :=
+    (fun n ->
+      List.find_opt
+        (fun el ->
+          Dom_ext.num_prop "node-id" el = Some (Float.of_int n))
+        (!Dom_ext.doc_elements_provider ()));
+  Shadow_dom.lui_snapshot_by_dom_id :=
+    (fun dom_id ->
+      List.find_opt
+        (fun el ->
+          (match Dom_ext.str_prop "#ref" el with
+           | Some s -> s = dom_id
+           | None -> false)
+          ||
+          (match Dom_ext.str_prop "id" el with
+           | Some s -> s = dom_id
+           | None -> false))
+        (!Dom_ext.doc_elements_provider ()))
+
+(* element identity keys shared by snapshots and synth shadow snapshots *)
+let identity_keys (el : el) (t : (string, unit) Hashtbl.t) =
+  (match Shadow_dom.id_of el with
+   | Some i -> Hashtbl.replace t ("new-" ^ string_of_int i) ()
+   | None -> ());
+  (match el with
+   | Js.Json.JObject kvs -> (
+       match List.assoc_opt "#shadow" kvs with
+       | Some v -> (
+           match Js.Json.decodeNumber v with
+           | Some n ->
+               Hashtbl.replace t ("new-" ^ string_of_int (int_of_float n)) ()
+           | None -> ())
+       | None -> ())
+   | _ -> ());
+  (match Dom_ext.num_prop "node-id" el with
+   | Some n -> Hashtbl.replace t ("node-" ^ string_of_int (int_of_float n)) ()
+   | None -> ());
+  (match Dom_ext.str_prop "#ref" el with
+   | Some s -> Hashtbl.replace t ("dom:" ^ s) ()
+   | None -> ());
+  match Dom_ext.str_prop "id" el with
+  | Some s when s <> "" -> Hashtbl.replace t ("dom:" ^ s) ()
+  | _ -> ()
+
+let ids_of (el : el) : (string, unit) Hashtbl.t =
+  let t = Hashtbl.create 16 in
+  identity_keys el t;
+  let ancestors =
+    match Shadow_dom.id_of el with
+    | Some id -> (
+        match Shadow_dom.snapshot_of_id id with
+        | Some s -> Dom_ext.ancestors_of s
+        | None -> [])
+    | None -> Dom_ext.ancestors_of el
+  in
+  List.iter (fun a -> identity_keys a t) ancestors;
+  t
+
+let el_contains (a : el) (b : el) : bool =
+  let ia = ids_of a and ib = ids_of b in
+  Hashtbl.fold (fun k _ acc -> acc || Hashtbl.mem ib k) ia false
 
 let el_focus (el : el) : unit =
-  Host.dom_op "focus" (Js.Json.stringify (Js.Json.JObject [("ref", el)]))
+  Host.dom_op "focus"
+    (Js.Json.stringify
+       (Js.Json.JObject ([ ("ref", el) ] @ Shadow_dom.shadow_field el)))
 
 let el_scroll_into_view (el : el) : unit =
   Host.dom_op "scroll-into-view"
-    (Js.Json.stringify (Js.Json.JObject [("ref", el)]))
+    (Js.Json.stringify
+       (Js.Json.JObject ([ ("ref", el) ] @ Shadow_dom.shadow_field el)))
 
 let el_class_add (el : el) (c : string) : unit =
+  (match Shadow_dom.id_of el with
+   | Some id -> (
+       match Shadow_dom.get id with
+       | Some n ->
+           Shadow_dom.set_attr n "class"
+             (String.trim (n.Shadow_dom.s_cls ^ " " ^ c))
+       | None -> ())
+   | None -> ());
   Host.dom_op "class-add"
-    (Js.Json.stringify (Js.Json.JObject [("ref", el); ("class", Js.Json.JString c)]))
+    (Js.Json.stringify
+       (Js.Json.JObject
+          ([ ("ref", el); ("class", Js.Json.JString c) ]
+          @ Shadow_dom.shadow_field el)))
 
 let el_class_remove (el : el) (c : string) : unit =
+  (match Shadow_dom.id_of el with
+   | Some id -> (
+       match Shadow_dom.get id with
+       | Some n ->
+           Shadow_dom.set_attr n "class"
+             (String.concat " "
+                (List.filter
+                   (fun t -> t <> "" && t <> c)
+                   (String.split_on_char ' ' n.Shadow_dom.s_cls)))
+       | None -> ())
+   | None -> ());
   Host.dom_op "class-remove"
-    (Js.Json.stringify (Js.Json.JObject [("ref", el); ("class", Js.Json.JString c)]))
+    (Js.Json.stringify
+       (Js.Json.JObject
+          ([ ("ref", el); ("class", Js.Json.JString c) ]
+          @ Shadow_dom.shadow_field el)))
 
 let snapshot_value (el : el) : string =
-  match el with
-  | Js.Json.JObject kvs -> (
-      match List.assoc_opt "value" kvs with
-      | Some v -> Option.value (Js.Json.decodeString v) ~default:""
+  match Shadow_dom.id_of el with
+  | Some id -> (
+      match Shadow_dom.get id with
+      | Some n -> n.Shadow_dom.s_value
       | None -> "")
-  | _ -> ""
+  | None -> (
+      match el with
+      | Js.Json.JObject kvs -> (
+          match List.assoc_opt "value" kvs with
+          | Some v -> Option.value (Js.Json.decodeString v) ~default:""
+          | None -> "")
+      | _ -> "")
 
 let el_dom_id (el : el) : string option =
   match Dom_ext.str_prop "id" el with
@@ -158,14 +443,28 @@ let set_live_value (id : string) (v : string) : unit =
   | None -> Hashtbl.replace live_fields id (v, 0, 0)
 
 let el_set_value (el : el) (v : string) : unit =
-  (match el_dom_id el with
-   | Some id -> set_live_value id v
-   | None -> ());
+  (match Shadow_dom.id_of el with
+   | Some id -> (
+       match Shadow_dom.get id with
+       | Some n -> n.Shadow_dom.s_value <- v
+       | None -> ())
+   | None -> (
+       match el_dom_id el with
+       | Some id -> set_live_value id v
+       | None -> ()));
   Host.dom_op "set-value"
-    (Js.Json.stringify (Js.Json.JObject [("ref", el); ("value", Js.Json.JString v)]))
+    (Js.Json.stringify
+       (Js.Json.JObject
+          ([ ("ref", el); ("value", Js.Json.JString v) ]
+          @ Shadow_dom.shadow_field el)))
 
 let el_closest (el : el) (sel : string) : el option =
-  Dom_ext.closest el sel
+  match Shadow_dom.id_of el with
+  | Some id -> (
+      match Shadow_dom.snapshot_of_id id with
+      | Some s -> Dom_ext.closest s sel
+      | None -> None)
+  | None -> Dom_ext.closest el sel
 
 let el_tag (el : el) : string =
   String.uppercase_ascii
@@ -208,11 +507,36 @@ let is_editable_target target =
   | None -> false
 
 let el_set_class (el : el) (c : string) : unit =
+  (match Shadow_dom.id_of el with
+   | Some id -> (
+       match Shadow_dom.get id with
+       | Some n -> Shadow_dom.set_attr n "class" c
+       | None -> ())
+   | None -> ());
   Host.dom_op "set-class"
     (Js.Json.stringify
-       (Js.Json.JObject [("ref", el); ("class", Js.Json.JString c)]))
+       (Js.Json.JObject
+          ([ ("ref", el); ("class", Js.Json.JString c) ]
+          @ Shadow_dom.shadow_field el)))
 
-let el_query_all (_ : el) (_ : string) : node_list = Js.Json.JArray [||]
+let el_query (root : el) (sel : string) : el option =
+  (* querySelector excludes the root element itself *)
+  let hits = query_in_roots [ root ] sel in
+  let excluded =
+    match Shadow_dom.id_of root with
+    | Some i -> fun el -> Shadow_dom.id_of el = Some i
+    | None -> (
+        match Dom_ext.num_prop "node-id" root with
+        | Some n ->
+            fun el -> Dom_ext.num_prop "node-id" el = Some n
+        | None -> fun _ -> false)
+  in
+  match List.filter (fun el -> not (excluded el)) hits with
+  | h :: _ -> Some h
+  | [] -> None
+
+let el_query_all (root : el) (sel : string) : node_list =
+  Js.Json.JArray (Array.of_list (query_in_roots [ root ] sel))
 
 let node_list_length (nl : node_list) : int =
   match nl with Js.Json.JArray a -> Array.length a | _ -> 0
@@ -257,15 +581,15 @@ let ui_icon_el ?(size = 18.) ?(cls = "") (name : string) : el =
       el_set_class i ("ti ti-" ^ name ^ (if cls = "" then "" else " " ^ cls));
       i
 
-(* doc-scan selectors run against the Swift element registry — not
-   ported yet; callbacks simply never fire *)
-let for_each_selector (_sel : string) (_f : el -> unit) : unit = ()
+(* doc-scan selectors run against the Swift element registry plus the
+   {#new} shadow registry — the scan covers mounted LUI elements and
+   view-built shadow elements alike *)
+let for_each_selector (sel : string) (f : el -> unit) : unit =
+  List.iter f (query_in_roots [ document_element ] sel)
 
-let for_each_touched (_roots : 'a) (sel : string) (f : el -> unit)
+let for_each_touched (roots : el list) (sel : string) (f : el -> unit)
     : unit =
-  for_each_selector sel f
-
-let el_query (_ : el) (_ : string) : el option = None
+  List.iter f (query_in_roots roots sel)
 
 type doc_scan =
   { ds_run_if : mutation_record array -> bool
@@ -274,7 +598,13 @@ type doc_scan =
 
 let doc_scans : doc_scan list ref = ref []
 
-let document_element : el = Js.Json.JObject [("#ref", Js.Json.JNumber 0.)]
+(* native embed runs this after each flush that changed the LUI tree —
+   stands in for the web MutationObserver feed *)
+let run_doc_scans () : unit =
+  List.iter
+    (fun ds ->
+      if ds.ds_run_if [||] then ds.ds_scan [ document_element ])
+    !doc_scans
 
 let register_doc_scan ?(run_if = fun _ -> true) ?(sync = false)
     (scan : el list -> unit) : unit =
@@ -358,9 +688,17 @@ let () =
     | _ -> ()
 
 let el_set_text_content (el : el) (v : string) : unit =
+  (match Shadow_dom.id_of el with
+   | Some id -> (
+       match Shadow_dom.get id with
+       | Some n -> n.Shadow_dom.s_text <- v
+       | None -> ())
+   | None -> ());
   Host.dom_op "set-text-content"
     (Js.Json.stringify
-       (Js.Json.JObject [("ref", el); ("text", Js.Json.JString v)]))
+       (Js.Json.JObject
+          ([ ("ref", el); ("text", Js.Json.JString v) ]
+          @ Shadow_dom.shadow_field el)))
 
 (* native text views auto-size — keep the call as a no-op *)
 let autosize_textarea (_ : el) : unit = ()
@@ -375,9 +713,10 @@ let el_set_selection_range (el : el) (s : int) (e : int) : unit =
   Host.dom_op "set-selection-range"
     (Js.Json.stringify
        (Js.Json.JObject
-          [ ("ref", el)
-          ; ("start", Js.Json.JNumber (Float.of_int s))
-          ; ("end", Js.Json.JNumber (Float.of_int e)) ]))
+          ([ ("ref", el)
+           ; ("start", Js.Json.JNumber (Float.of_int s))
+           ; ("end", Js.Json.JNumber (Float.of_int e)) ]
+          @ Shadow_dom.shadow_field el)))
 
 let el_selection_start (el : el) : int =
   match el_dom_id el with
@@ -474,7 +813,7 @@ let json_of_el (e : el) : Js.Json.t = e
 let el_id (el : el) : string =
   Option.value (Dom_ext.str_prop "id" el) ~default:""
 
-let stop_immediate (_ : ev) : unit = ()
+let stop_immediate (ev : ev) : unit = stop_propagation ev
 
 type data_transfer = Js.Json.t
 let ev_data_transfer (e : ev) : data_transfer option =
