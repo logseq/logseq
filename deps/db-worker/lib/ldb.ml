@@ -48,22 +48,16 @@ let reverse_attr_values (db : db) (id : entity_id) (a : attr) : value list =
   |> List.of_seq
   |> List.sort Util.compare_value
 
-(* cljs (get entity attr) over forward and :_reverse attrs. entity_attr
-   materializes ref values into tx_entities — unwrap their :db/id back to
-   Ref so ref attrs keep working (cljs yields {:db/id ...} maps). *)
+(* cljs (get entity attr) over forward and :_reverse attrs. Uses
+   entity_attr_raw: entity_attr would materialize every ref value into a
+   full tx_entity (a whole-entity scan per ref) only for the caller to
+   unwrap :db/id back to a Ref — the raw tx_value already carries it. *)
 let values (e : entity) (a : attr) : value list =
-  let db_id_ref (te : tx_entity) =
-    match te.db_id with
-    | Some (Entity_id id) -> Some (Ref id)
-    | _ -> None
-  in
   if is_reverse_ref a then reverse_attr_values e.db e.id a
   else
-    match entity_attr e a with
+    match Entity.entity_attr_raw e a with
     | Some (One_value v) -> [ v ]
     | Some (Many_values vs) -> vs
-    | Some (One_entity te) -> List.filter_map Fun.id [ db_id_ref te ]
-    | Some (Many_entities tes) -> List.filter_map db_id_ref tes
     | _ -> []
 
 let value (e : entity) (a : attr) : value option =

@@ -175,8 +175,9 @@ let kvs_wire_rows_of_conn conn =
       (try Sys.remove path with _ -> ()))
     (fun () ->
       Graph_store.create_kvs_table db;
-      Datascript.store ~storage:(Graph_store.storage db)
-        (Datascript.Conn.db conn);
+      ignore
+        (Datascript.store ~storage:(Graph_store.storage db)
+           (Datascript.Conn.db conn));
       List.map
         (fun (row : Sqlite.row) ->
            let addr =

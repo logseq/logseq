@@ -29,3 +29,22 @@ opam pin add -y -n angstrom git+https://github.com/logseq/angstrom#fork
 opam pin add -y -n xmlm git+https://github.com/logseq/xmlm#master
 opam pin add -y -n mldoc git+https://github.com/logseq/mldoc#master
 opam install . --deps-only --with-test --yes
+
+# Windows: the libsqlite3-0.dll bundled with the opam cygwin sysroot is
+# built without JSON1/FTS5 (blocks_fts + json_each fail), so swap in the
+# upstream prebuilt DLL — same soname and export set, pinned + hashed.
+# `opam exec` puts this dir on PATH, so dune-built exes pick it up, and
+# the release job also copies it next to main.exe for packaging.
+if [ "${OS:-}" = "Windows_NT" ] || uname -s 2>/dev/null | grep -qiE 'mingw|msys|cygwin_nt'; then
+  SQLITE_ZIP=sqlite-dll-win-x64-3500400.zip
+  SQLITE_SHA256=56b8751cdbf6dcd8ac9a35508039e456692a402bc5ddf576c2b0eddb0fed8536
+  SQLITE_BIN="$(opam var root)/.cygwin/root/usr/x86_64-w64-mingw32/sys-root/mingw/bin"
+  if [ -d "$SQLITE_BIN" ]; then
+    SQLITE_TMP="$(mktemp -d)"
+    curl -fsSL -o "$SQLITE_TMP/$SQLITE_ZIP" "https://sqlite.org/2025/$SQLITE_ZIP"
+    echo "$SQLITE_SHA256  $SQLITE_TMP/$SQLITE_ZIP" | sha256sum -c -
+    (cd "$SQLITE_TMP" && tar -xf "$SQLITE_ZIP")
+    cp "$SQLITE_TMP/sqlite3.dll" "$SQLITE_BIN/libsqlite3-0.dll"
+    rm -rf "$SQLITE_TMP"
+  fi
+fi

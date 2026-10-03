@@ -6,34 +6,54 @@ type 'a state =
 type 'a t =
   { mutable state : 'a state
   ; mutable callbacks : ('a state -> unit) Rrbvec.t
+  ; mutex : Mutex.t
   }
 
 type 'a resolver = 'a t
 
-let pure value = { state = Resolved value; callbacks = Rrbvec.empty }
-let error exn = { state = Rejected exn; callbacks = Rrbvec.empty }
+(* Connection threads resolve tasks while worker threads attach
+   continuations — state transitions and callback attachment must
+   serialize on the task's mutex or a wakeup racing an on_state can
+   strand a callback that is never invoked. *)
+let make state = { state; callbacks = Rrbvec.empty; mutex = Mutex.create () }
+
+let pure value = make (Resolved value)
+let error exn = make (Rejected exn)
 
 let is_pending task = match task.state with Pending -> true | _ -> false
 
 let wait () =
-  let task = { state = Pending; callbacks = Rrbvec.empty } in
+  let task = make Pending in
   (task, task)
 
 let notify task state =
-  if is_pending task then begin
-    task.state <- state;
-    let callbacks = Rrbvec.rev task.callbacks in
-    task.callbacks <- Rrbvec.empty;
-    Rrbvec.iter (fun callback -> callback state) callbacks
-  end
+  Mutex.lock task.mutex;
+  let callbacks =
+    match task.state with
+    | Pending ->
+        task.state <- state;
+        let cbs = Rrbvec.rev task.callbacks in
+        task.callbacks <- Rrbvec.empty;
+        cbs
+    | _ -> Rrbvec.empty
+  in
+  Mutex.unlock task.mutex;
+  Rrbvec.iter (fun callback -> callback state) callbacks
 
 let wakeup resolver value = notify resolver (Resolved value)
 let reject resolver exn = notify resolver (Rejected exn)
 
 let on_state task callback =
-  match task.state with
-  | Pending -> task.callbacks <- Rrbvec.push_front task.callbacks callback
-  | state -> callback state
+  Mutex.lock task.mutex;
+  let run_now =
+    match task.state with
+    | Pending ->
+        task.callbacks <- Rrbvec.push_front task.callbacks callback;
+        false
+    | _ -> true
+  in
+  Mutex.unlock task.mutex;
+  if run_now then callback task.state
 
 let bind task f =
   let result, resolver = wait () in
@@ -64,8 +84,15 @@ let all tasks_list =
   let result, resolver = wait () in
   let pending = ref (Rrbvec.length tasks) in
   let values = Array.make (Rrbvec.length tasks) None in
+  (* [on_state] callbacks fire on whichever thread resolves each task, so
+     the shared countdown must be serialized — a lost decrement would
+     leave the aggregate pending forever. *)
+  let count_mutex = Mutex.create () in
   let finish_if_ready () =
-    if !pending = 0 && is_pending result then
+    Mutex.lock count_mutex;
+    let ready = !pending = 0 in
+    Mutex.unlock count_mutex;
+    if ready && is_pending result then
       wakeup resolver (Array.map Option.get values |> Array.to_list)
   in
   Rrbvec.iteri
@@ -73,8 +100,10 @@ let all tasks_list =
        on_state task (function
          | Pending -> ()
          | Resolved value ->
+             Mutex.lock count_mutex;
              values.(index) <- Some value;
              decr pending;
+             Mutex.unlock count_mutex;
              finish_if_ready ()
          | Rejected exn -> if is_pending result then reject resolver exn))
     tasks;
@@ -125,10 +154,20 @@ let sleep span =
   ignore (Unix.select [] [] [] (span /. 1000.));
   pure ()
 
-let timeout task _ms =
-  (* No event loop on native — a still-pending task can never settle,
-     so it always times out like p/timeout would. *)
+let timeout task ms =
+  (* Handlers run on per-connection threads, so blocking until the task
+     settles or the deadline passes matches promesa p/timeout. *)
   match task.state with
   | Resolved value -> pure value
   | Rejected exn -> error exn
-  | Pending -> error (Failure "timeout")
+  | Pending ->
+      let deadline = Unix.gettimeofday () +. (ms /. 1000.) in
+      while
+        is_pending task && Unix.gettimeofday () < deadline
+      do
+        ignore (Unix.select [] [] [] 0.005)
+      done;
+      (match task.state with
+       | Resolved value -> pure value
+       | Rejected exn -> error exn
+       | Pending -> error (Failure "timeout"))

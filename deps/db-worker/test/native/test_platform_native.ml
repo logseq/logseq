@@ -385,8 +385,15 @@ let test_storage_list_graphs_ignores_backup_root () =
       with_env "LOGSEQ_WORKER_DB_DIR" (Some root) (fun () ->
           List.iter
             (fun d ->
-               ignore
-                 (File_sys.mkdir_p (Filename.concat root d) |> await))
+               (* win32 cannot create a dir named only spaces; trailing
+                  space/dot dirs also normalize away, but those land as
+                  non-canonical names and still exercise the filter *)
+               try
+                 ignore
+                   (File_sys.mkdir_p (Filename.concat root d) |> await)
+               with
+                 Unix.Unix_error (Unix.EEXIST, _, _)
+                 when Sys.os_type = "Win32" -> ())
             [ "alpha"; "backup"; " alpha "; " padded-only "; "   "
             ; "~20encoded-leading"; "encoded-trailing~20" ];
           match await (Dispatcher.invoke "thread-api/list-db" []) with

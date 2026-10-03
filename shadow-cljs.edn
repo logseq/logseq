@@ -1,7 +1,7 @@
 ;; shadow-cljs configuration
 {:deps true
  :nrepl {:port 8701}
- :source-paths ["src/main" "src/electron" "src/resources"]
+ :source-paths ["src/main" "src/resources"]
 
  :ssl {:enabled #shadow/env ["LOGSEQ_SHADOW_HTTPS" :as :bool :default false]
        :keystore "ssl/mobile-dev/keystore.jks"
@@ -86,23 +86,6 @@
                       :preloads [devtools.preload
                                  shadow.remote.runtime.cljs.browser]
                       :loader-mode :eval}}
-  :electron {:target :node-script
-             :output-to "static/electron.js"
-             :main electron.core/main
-             :devtools {:before-load electron.core/stop
-                        :after-load electron.core/start}
-             :build-hooks [(shadow.hooks/build-metadata-hook "--long --always --dirty")]
-             :compiler-options {:infer-externs :auto
-                                :source-map true
-                                :source-map-include-sources-content true
-                                :source-map-detail-level :all
-
-                                :externs ["datascript/externs.js"
-                                          "externs.js"]
-                                :warnings {:fn-deprecated false
-                                           :redef false}}
-             :closure-defines {goog.debug.LOGGING_ENABLED true}}
-
   :test {:target :node-test
          :output-to "static/tests.js"
          :build-hooks [(shadow.hooks/build-metadata-hook

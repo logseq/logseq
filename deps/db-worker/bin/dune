@@ -1,0 +1,5 @@
+(executable
+ (name main)
+ (public_name db-worker-node)
+ (modes native)
+ (libraries logseq_db_worker logseq_db_worker_platform_native))

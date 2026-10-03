@@ -2,6 +2,7 @@
  (name logseq_db_worker_platform_native)
  (implements logseq_db_worker_platform_spec)
  (modes native byte)
+ (foreign_stubs (language c) (names node_process_stubs))
  (libraries
   mldoc
   angstrom
@@ -23,4 +24,17 @@
   mirage-crypto-rng.unix
   mirage-crypto-pk
   kdf.pbkdf
-  x509))
+  x509
+  eio
+  eio.unix
+  httpun
+  httpun-ws
+  tls-eio
+  ca-certs-nss
+  domain-name
+  bigstringaf
+  faraday
+  cstruct
+  (select eio_run.ml from
+   (eio_windows -> eio_run.eio_windows.ml)
+   (eio_posix -> eio_run.eio_posix.ml))))
