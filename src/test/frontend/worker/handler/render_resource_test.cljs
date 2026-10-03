@@ -1924,6 +1924,51 @@
       (is (= {:partition :flat :count 0 :rows []}
              (get-in batch [:slots [:resource resource-key] :value]))))))
 
+(deftest query-view-data-skips-stale-query-row-uuids-test
+  (when-let [api (render-resource-api)]
+    (let [{:keys [conn view-row resource-block other-view]}
+          (render-resource-fixture)
+          query-view (add-view! conn :query-result)
+          resource-key [:view-data query-view
+                        {:feature-type :query-result
+                         :sorting [{:id :block/title :asc? true}]
+                         :query-row-uuids [view-row resource-block]}]
+          linked-key [:view-data other-view
+                      {:feature-type :linked-references
+                       :sorting [{:id :block/title :asc? true}]}]
+          live (call-resource api conn resource-key)
+          _ (is (= #{view-row resource-block}
+                   (set (get-in live [:value :rows])))
+                "The live query view must return both rows before delete.")
+          _ (d/transact! conn [[:db/retractEntity [:block/uuid view-row]]])
+          stale (try
+                  (call-resource-raw api conn resource-key)
+                  (catch :default error
+                    error))
+          batch (try
+                  (render-engine/render-snapshots
+                   @conn
+                   {:blocks []
+                    :children []
+                    :resources [resource-key linked-key]}
+                   {})
+                  (catch :default error
+                    error))]
+      (is (map? stale)
+          (str "A stale query-row UUID must not throw, got: "
+               (ex-message stale)))
+      (is (= [resource-block] (get-in stale [:value :rows]))
+          "A deleted query-row UUID must drop out of a live view.")
+      (is (= 1 (get-in stale [:value :count])))
+      (is (= :flat (get-in stale [:value :partition])))
+      (is (map? batch)
+          (str "A stale query-row UUID must not reject the snapshot batch, got: "
+               (ex-message batch)))
+      (is (map? (get-in batch [:slots [:resource linked-key] :value]))
+          "A stale query-row UUID must not fail sibling view-data in the same batch.")
+      (is (= [resource-block]
+             (get-in batch [:slots [:resource resource-key] :value :rows]))))))
+
 (deftest all-pages-view-data-returns-the-first-window-ids-without-row-snapshots-test
   (when-let [api (render-resource-api)]
     (let [{:keys [conn]} (render-resource-fixture)
