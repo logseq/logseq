@@ -57,8 +57,14 @@ Swift. Goal: feature parity with the Electron app.
   open-in-sidebar → sidebar verified). Outside click dismisses;
   `mousemove` emits at node granularity for submenu hovers.
 - Inline components: PDF asset blocks render `ls-pdf-asset` links;
-  click opens a PDFKit `logseq-pdf` viewer in a right-side pane
-  (title toolbar + close, container collapses on close). LaTeX
+  click opens a native PDFKit `logseq-pdf` viewer in a right-side
+  pane (OCaml emits semantic attrs only — hls/page/scale/modes/flags;
+  toolbar, find bar, outline+highlights sidebar, settings menu,
+  context menus and area capture are all native SwiftUI/PDFKit).
+  Annotation layer: text/area highlights persist as `hls__` blocks
+  under the asset block (P<n> ref prefix), color/delete/copy-ref/
+  go-to-block via ctx menu, sidebar click scrolls to the region,
+  last-visited page persists. LaTeX
   `$$...$$`/inline renders via SwiftMath (MTMathUILabel). Fenced
   code blocks render the `ui-fenced-code-editor` tree with a
   Highlightr-backed NSTextView (atom-one light/dark themes,
@@ -114,8 +120,10 @@ Swift. Goal: feature parity with the Electron app.
   `{{query}}` block mounts, tag/property objects pages, inline cell
   editing, add-row, column reorder/pin, view tab context menu, menu
   keyboard nav, virtualization. Kanban and graph view out of scope.
-- PDF annotations: PDFKit viewer opens/closes; the annotation
-  layer (highlight areas, sidebar notes) is not yet wired.
+- PDF annotations: PDFKit viewer + annotation layer (highlight areas,
+  outline/highlights sidebar, doc-info popover) merged; remaining
+  gaps per NOTES (zotero links, hl truncation, dark-canvas inversion
+  differences).
 - Code editor polish: actions bar renders in-flow (web overlays
   top-right on hover); multi-line code sizes by line count, no
   horizontal soft-scroll parity yet.
