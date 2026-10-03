@@ -24,24 +24,22 @@ let skip_to_main =
   Logseq_dom.dom ~key:"skip" ~tag:"button" ~id:"skip-to-main"
     ~text:(I18n.t "nav/skip-to-main-content") []
 
-(* ---- native topbar ----
+(* ---- native topbar (Out parity) ----
 
    LUI `toolbar` elements with `placement` hoist into the real macOS
    window toolbar, where macOS 26 draws its liquid-glass items — the
    same chrome Out gets from ToolbarItem groups. Leading (.navigation)
-   = sidebar toggle; trailing (.primary-action) = search first, then
-   home/dots/right-sidebar. The DOM .cp__header is gone; rtc/plugin
-   toolbar items keep hidden DOM mounts below so their emitters stay
-   live. *)
+   matches Out: sidebar toggle, back/forward, home, then the "›"
+   breadcrumb + current page title. Trailing (.primary-action) is
+   search first, then page-menu dots and the right-sidebar toggle
+   (Out's Aa font menu has no Logseq counterpart). The DOM .cp__header
+   is gone; rtc/plugin toolbar items keep hidden DOM mounts below so
+   their emitters stay live. *)
 
 let tb_btn ~key ?(acc = "") ~icon ~label on_press =
   button ~key ~icon ~label
     ~accessibility_identifier:(if acc = "" then key else acc)
     ~on_press:(fun _ -> on_press ()) []
-
-let toggle_sidebar_btn =
-  tb_btn ~key:"left-menu" ~icon:`panel_left ~label:"Toggle Left Sidebar"
-    (fun () -> Runtime.send Action.Toggle_left_sidebar)
 
 (* the DOM header's search button opened via the cmdk DOM-click
    handler; the semantic button calls the palette opener directly
@@ -70,6 +68,27 @@ let dots_btn =
            (Option.map (fun (x, y) -> (x, y, true)) pos)))
     []
 
+(* Out puts back/forward in the navigation group; the native hash
+   router keeps a real in-memory stack (platform.ml) so these are
+   functional — disabled at the stack edges. *)
+let back_btn ms =
+  button ~key:"nav-back" ~icon:`chevron_left ~label:"Go Back"
+    ~accessibility_identifier:"nav-back"
+    ~disabled_signal:
+      (Signal.map
+         (fun (_ : Model.t) -> not (Platform.can_history_back ()))
+         ms)
+    ~on_press:(fun _ -> Platform.history_back ()) []
+
+let forward_btn ms =
+  button ~key:"nav-fwd" ~icon:`chevron_right ~label:"Go Forward"
+    ~accessibility_identifier:"nav-fwd"
+    ~disabled_signal:
+      (Signal.map
+         (fun (_ : Model.t) -> not (Platform.can_history_forward ()))
+         ms)
+    ~on_press:(fun _ -> Platform.history_forward ()) []
+
 (* cljs header.cljs hides home on the :home route; a toolbar can't host
    a dyn-wrapped child (it hoists as a zero-size item), so the button
    stays and the press no-ops there *)
@@ -84,6 +103,35 @@ let home_btn ms =
           Platform.dispatch "ls:navigate" Js.Json.null)
     []
 
+(* Out's breadcrumb: "›" + current page/collection title inside the
+   navigation group. A toolbar child must be a concrete element (a dyn
+   hoists zero-size), so the text rides a reactive text signal. *)
+let crumb_title ms =
+  Logseq_dom.dom ~key:"tb-crumb" ~tag:"span"
+    ~style_class:"ls-tb-crumb"
+    ~text_signal:
+      (Logseq_dom.reactive_text
+         (fun (m : Model.t) ->
+           let label =
+             match m.route_page with
+             | Some p when p.Model.page_title <> "" -> p.page_title
+             | _ -> (
+               match m.route with
+               | Model.Home -> I18n.t "nav/home"
+               | Model.Journals -> I18n.t "nav/journals"
+               | Model.All_pages -> I18n.t "nav.all-pages/title"
+               | Model.Settings -> I18n.t "nav/settings"
+               | Model.Graph_view -> I18n.t "nav/graph-view"
+               | Model.All_graphs -> I18n.t "graph/all-graphs"
+               | Model.Library -> I18n.t "library/title"
+               | Model.Import -> I18n.t "import/title"
+               | Model.Not_found _ -> I18n.t "page/not-found-title"
+               | Model.Page _ | Model.Block_zoom _ -> "")
+           in
+           if label = "" then "" else "›  " ^ label)
+         ms)
+    []
+
 (* cljs open-right-sidebar! seeds a "contents" item when the sidebar
    is empty (state/sidebar-add-content-when-open!) *)
 let right_toggle_btn ms =
@@ -92,11 +140,14 @@ let right_toggle_btn ms =
       Runtime.send Action.Toggle_right_sidebar;
       Sidebar_state.ensure_contents (Sidebar_state.ensure ms))
 
+(* Out's navigation group: system sidebar toggle (NavigationSplitView
+   supplies it), ‹ › nav, home, › + title. *)
 let topbar (ms : Model.t Signal.signal) : t list =
   [ toolbar ~key:"tb-leading" ~placement:"navigation"
-      ~label:"Window Toolbar" [ toggle_sidebar_btn ]
+      ~label:"Window Toolbar"
+      [ back_btn ms; forward_btn ms; home_btn ms; crumb_title ms ]
   ; toolbar ~key:"tb-trailing" ~placement:"primary-action"
-      ~label:"Actions" [ search_btn; home_btn ms; dots_btn; right_toggle_btn ms ]
+      ~label:"Actions" [ search_btn; dots_btn; right_toggle_btn ms ]
   ]
 
 (* components/rtc/indicator.cljs — cloud status button + hidden rtc-tx

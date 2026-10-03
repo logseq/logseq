@@ -317,11 +317,25 @@ final class NSReferenceBox {
 
   private static func emitContextMenu(nodeID: Int, point: CGPoint) {
     if ProcessInfo.processInfo.environment["LOGSEQ_DUMP"] != nil {
-      try? JSONSerialization.data(withJSONObject: [
+      var dbg: [String: Any] = [
         "nodeId": nodeID, "x": point.x, "y": point.y,
         "hasContext": LogseqElementRegistry.shared.context(forNode: nodeID)
           != nil,
-      ]).write(to: URL(fileURLWithPath: "/tmp/cm-hit.json"))
+      ]
+      if let f = LogseqFrameStore.entries[nodeID] {
+        dbg["frame"] = [
+          f.rect.origin.x, f.rect.origin.y,
+          f.rect.width, f.rect.height,
+        ]
+      }
+      if let ctx = LogseqElementRegistry.shared.context(forNode: nodeID),
+        case .string(let cls) = ctx.childProperty(
+          node: nodeID, "style-class")
+      {
+        dbg["cls"] = cls
+      }
+      try? JSONSerialization.data(withJSONObject: dbg)
+        .write(to: URL(fileURLWithPath: "/tmp/cm-hit.json"))
     }
     guard let context = LogseqElementRegistry.shared.context(forNode: nodeID)
     else { return }
@@ -336,6 +350,9 @@ final class NSReferenceBox {
       let data = try? JSONSerialization.data(withJSONObject: payload),
       let json = String(data: data, encoding: .utf8)
     else { return }
+    if ProcessInfo.processInfo.environment["LOGSEQ_DUMP"] != nil {
+      try? data.write(to: URL(fileURLWithPath: "/tmp/cm-target.json"))
+    }
     try? context.emit(
       name: "dom-event",
       values: ["name": .string("contextmenu"), "payload": .string(json)])
@@ -344,6 +361,25 @@ final class NSReferenceBox {
   private static func emitMouseMove(
     context: LUIAppleExtensionViewContext, nodeID: Int, point: CGPoint
   ) {
+    if ProcessInfo.processInfo.environment["LOGSEQ_DUMP"] != nil {
+      var dbg: [String: Any] = [
+        "nodeId": nodeID, "x": point.x, "y": point.y,
+      ]
+      if let f = LogseqFrameStore.entries[nodeID] {
+        dbg["frame"] = [
+          f.rect.origin.x, f.rect.origin.y,
+          f.rect.width, f.rect.height,
+        ]
+        dbg["z"] = f.z
+      }
+      if case .string(let cls) = context.childProperty(
+        node: nodeID, "style-class")
+      {
+        dbg["cls"] = cls
+      }
+      try? JSONSerialization.data(withJSONObject: dbg)
+        .write(to: URL(fileURLWithPath: "/tmp/mm-hit.json"))
+    }
     var payload: [String: Any] = [
       "clientX": Double(point.x),
       "clientY": Double(point.y),

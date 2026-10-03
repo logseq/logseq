@@ -50,6 +50,22 @@ let install () =
     mart_init (Js.Json.object_ opts)
   end
 
+(* mart id -> native glyph (skins[0].native). The native apple twin reads
+   the same field from its generated table; DOM renderers pass it as
+   data-emoji so non-web platforms can draw the emoji without emoji-mart. *)
+let emoji_char (id : string) : string option =
+  match Js.Json.decodeObject (Lazy.force mart_emojis) with
+  | Some dict -> (
+      match Js.Dict.get dict id with
+      | Some j -> (
+          (* skins is an array of {native} — read [0].native *)
+          match Js.Json.decodeArray (Platform.json_prop j "skins") with
+          | Some arr when Array.length arr > 0 ->
+              Js.Json.decodeString (Platform.json_prop arr.(0) "native")
+          | _ -> None)
+      | None -> None)
+  | None -> None
+
 (* frontend.reaction/emoji-id-valid? *)
 let emoji_id_valid (id : string) : bool =
   id <> ""

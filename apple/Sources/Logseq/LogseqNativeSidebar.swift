@@ -3,6 +3,50 @@ import Foundation
 import LUIAppleBackend
 import SwiftUI
 
+/// Bridge between the DOM sidebar subtree and the window's
+/// NavigationSplitView column: `left-sidebar-inner` registers its context
+/// here (LogseqSidebarMount) and its `cp__sidebar-left-layout` parent
+/// drives `open` from the DOM `is-open` class. The App-level split view
+/// renders LogseqNativeSidebar in the column from this store.
+@MainActor final class LogseqSidebarStore: ObservableObject {
+  static let shared = LogseqSidebarStore()
+  @Published var context: LUIAppleExtensionViewContext?
+  @Published var open = false
+}
+
+/// Zero-size mount for `left-sidebar-inner` inside the detail pane — the
+/// real sidebar renders in the split-view column; this keeps the DOM
+/// subtree's emitters live and registers the context for the column.
+struct LogseqSidebarMount: View {
+  let context: LUIAppleExtensionViewContext
+
+  var body: some View {
+    VStack(spacing: 0) {
+      ForEach(context.childIDs, id: \.self) { childID in
+        context.content(for: childID)
+      }
+    }
+    .frame(width: 0, height: 0)
+    .opacity(0)
+    .clipped()
+    .allowsHitTesting(false)
+    .accessibilityHidden(true)
+    .onAppear {
+      LogseqSidebarStore.shared.context = context
+      if ProcessInfo.processInfo.environment["LOGSEQ_DUMP"] != nil {
+        try? "{\"nodeID\":\(context.nodeID)}".write(
+          toFile: "/tmp/sidebar-mount.json", atomically: true,
+          encoding: .utf8)
+      }
+    }
+    .onDisappear {
+      if LogseqSidebarStore.shared.context?.nodeID == context.nodeID {
+        LogseqSidebarStore.shared.context = nil
+      }
+    }
+  }
+}
+
 /// Out-style native sidebar. The OCaml view emits `left-sidebar-inner` with
 /// the same DOM tree web/electron render; that subtree doubles as the data
 /// model (item node ids, classes, attrs stay intact) while the render here
@@ -28,7 +72,6 @@ struct LogseqNativeSidebar: View {
     let nodeID: Int
     let title: String
     let icon: String
-    let shortcuts: [String]
     let active: Bool
     let actionsNodeID: Int?
     var id: Int { nodeID }
@@ -65,20 +108,6 @@ struct LogseqNativeSidebar: View {
       }
     }
     .listStyle(.sidebar)
-    .background {
-      // Mount the DOM subtree invisibly: mount/unmount emitters still fire
-      // and node models stay live for emits — the tree is the data source.
-      VStack(spacing: 0) {
-        ForEach(context.childIDs, id: \.self) { childID in
-          context.content(for: childID)
-        }
-      }
-      .frame(width: 0, height: 0)
-      .opacity(0)
-      .clipped()
-      .allowsHitTesting(false)
-      .accessibilityHidden(true)
-    }
     .onChange(of: activeID) { _, new in
       selection = new
     }
@@ -200,9 +229,8 @@ struct LogseqNativeSidebar: View {
               hasClass($0, "page-title") || hasClass($0, "flex-1")
             }).map(textProp) ?? ""
           let icon = ad.lazy.map(iconName).first(where: { !$0.isEmpty }) ?? ""
-          let shortcuts = ad.filter { tag($0) == "kbd" }.map(textProp)
           return Item(
-            nodeID: a, title: title, icon: icon, shortcuts: shortcuts,
+            nodeID: a, title: title, icon: icon,
             active: hasClass(a, "active"),
             actionsNodeID: ad.first(where: {
               hasClass($0, "sidebar-page-actions")
@@ -311,11 +339,6 @@ struct LogseqNativeSidebar: View {
           .lineLimit(1)
           .truncationMode(.tail)
         Spacer(minLength: 4)
-        ForEach(item.shortcuts, id: \.self) { key in
-          Text(key)
-            .font(.system(size: 10, design: .monospaced))
-            .foregroundStyle(.secondary)
-        }
         if let actionsID = item.actionsNodeID, hovering {
           Image(systemName: "ellipsis")
             .font(.system(size: 11))

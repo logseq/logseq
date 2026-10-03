@@ -274,6 +274,13 @@ let emit_event name payload =
 
 let hash_ref = ref ""
 
+(* in-memory navigation history — the native app has no browser
+   history, so back/forward is a pair of hash stacks. [set_location_hash]
+   pushes the previous hash; back/forward swap stacks and re-notify. *)
+let back_stack : string list ref = ref []
+
+let fwd_stack : string list ref = ref []
+
 let hash_change_fns : (unit -> unit) list ref = ref []
 
 let notify_hash () = List.iter (fun f -> f ()) !hash_change_fns
@@ -282,9 +289,16 @@ let location_hash () = !hash_ref
 
 let set_location_hash s =
   if s <> !hash_ref then begin
+    (* the pre-route empty hash is not a destination — never push it *)
+    if !hash_ref <> "" then back_stack := !hash_ref :: !back_stack;
+    fwd_stack := [];
     hash_ref := s;
     notify_hash ()
   end
+
+let can_history_back () = !back_stack <> []
+
+let can_history_forward () = !fwd_stack <> []
 
 let search_ref = ref ""
 let location_search () = !search_ref
@@ -329,8 +343,24 @@ let hash_query_param name =
     | None -> None
 
 let replace_url_fragment hash = hash_ref := hash
-let history_back () = emit_event "logseq-history-back" Js.Json.null
-let history_forward () = ()
+
+let history_back () =
+  match !back_stack with
+  | [] -> ()
+  | h :: t ->
+      fwd_stack := !hash_ref :: !fwd_stack;
+      back_stack := t;
+      hash_ref := h;
+      notify_hash ()
+
+let history_forward () =
+  match !fwd_stack with
+  | [] -> ()
+  | h :: t ->
+      back_stack := !hash_ref :: !back_stack;
+      fwd_stack := t;
+      hash_ref := h;
+      notify_hash ()
 
 (* ---------- clipboard ---------- *)
 

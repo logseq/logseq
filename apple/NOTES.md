@@ -949,3 +949,28 @@ Documentation → docs.logseq.com).
 - i18n fallback returns the raw key — `t` of a key absent from
   en.edn renders `key` literally in the UI (seen as
   "view|loading-label" leak; use existing dict keys).
+
+## Audit round 2 (Oct 3)
+
+- `open-icon-picker` was a logged no-op dom-op — the native icon/emoji
+  picker never existed. Ported `src/icon/icon_picker.ml` to the apple
+  twin (imperative DOM via Editor_dom/Properties_dom, mounted through
+  `Properties_popup.open_anchored(_right)` which hoists to the window
+  overlay). Emoji table is generated into `apple/emoji_mart.ml` (1870
+  rows from resources/js/emoji-data.js) because dune file edits are
+  forbidden — new modules can't be added to the apple lib.
+- `em-emoji` elements render via `attrs["data-emoji"]` Swift-side;
+  elements carrying only `("id", mart-id)` render empty. Both emoji_mart
+  twins expose `emoji_char id`; `tree.ml` icon_el + picker em_emoji_el
+  emit `data-emoji`.
+- `LogseqFlowLayout` does NOT honor LogseqOutOfFlowKey/LogseqAnchorKey —
+  out-of-flow children inside inline/flowWrap containers render in flow.
+- `apple/code_mirror.ml` was a stub: "Choose language"/"Copy" buttons
+  rendered but dead. Native impl writes clipboard via
+  `Platform.copy_to_clipboard` and the lang property via
+  `Outliner_ops.set_block_property "logseq.property.code/lang"`.
+- Toasts on native: `Dom_ext.dispatch_custom "ls:toast"` with
+  {msg, cls} JSON — there is no Runtime.send Action.Toast_push path.
+- CGEvent helpers take REAL screen pixels (~1.36-1.57× the 1024×768
+  tool space — verify per display); the computer tool's left_click
+  maps scaled coords itself.

@@ -241,9 +241,11 @@ let on_normal_key ev =
           D.prevent_default ev;
           A.toggle_children_collapse ()
       | "," when mods ev && not shift ->
-          (* cljs zoom-out outside edit mode is history.back *)
+          (* keymap ui/toggle-settings (mod+,) owns this chord outside
+             edit mode — cljs editor/zoom-out only applies while a block
+             is being edited (handled above) *)
           D.prevent_default ev;
-          Platform.history_back ()
+          Runtime.send (Action.Navigate_to Model.Settings)
       | "z" when mods ev ->
           D.prevent_default ev;
           if shift then A.redo () else A.undo ()

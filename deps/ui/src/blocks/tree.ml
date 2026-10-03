@@ -176,7 +176,12 @@ let icon_el uuid (icon : Model.icon) : t =
   if icon.icon_kind = "emoji" then
     dom ~key:("ic-" ^ uuid) ~tag:"span" ~style_class:"ui__icon"
       [ dom ~key:("ice-" ^ uuid) ~tag:"em-emoji"
-          ~attrs:[ ("id", icon.icon_id) ] []
+          ~attrs:
+            [ ("id", icon.icon_id)
+            ; ( "data-emoji"
+              , Option.value ~default:""
+                  (Emoji_mart.emoji_char icon.icon_id) ) ]
+          []
       ]
   else
     dom ~key:("ic-" ^ uuid) ~tag:"span"

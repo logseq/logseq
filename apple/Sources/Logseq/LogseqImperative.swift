@@ -31,6 +31,7 @@ struct LogseqImperativeLayer: View {
     if let context = LogseqElementRegistry.shared.eventAnchor {
       ForEach(store.attached, id: \.self) { nodeID in
         context.content(for: nodeID)
+          .environment(\.logseqInImperative, true)
       }
     }
   }

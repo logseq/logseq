@@ -137,21 +137,37 @@ private struct LogseqRuntimeHost: View {
   @State private var runtime: LogseqRuntime?
   @ObservedObject private var appState = LogseqAppState.shared
 
+  @ObservedObject private var sidebarStore = LogseqSidebarStore.shared
+  @State private var columnVis: NavigationSplitViewVisibility = .all
+
   var body: some View {
     Group {
       if let runtime, let rootID = runtime.rootID {
-        GeometryReader { geo in
-          LUISwiftUIRoot(backend: runtime.backend, rootID: rootID)
-            // Electron zoomin/zoomout semantics: the LUI surface lays out
-            // on a smaller/larger logical area, then magnifies.
-            .frame(
-              width: geo.size.width / appState.zoomLevel,
-              height: geo.size.height / appState.zoomLevel)
-            .scaleEffect(appState.zoomLevel, anchor: .topLeading)
-            .frame(width: geo.size.width, height: geo.size.height, alignment: .topLeading)
-            .clipped()
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        // Out parity: the sidebar is a real NavigationSplitView column —
+        // macOS then supplies the system toggle button, translucent
+        // sidebar material, native resize/collapse, and the leading
+        // toolbar section the .navigation items need.
+        NavigationSplitView(columnVisibility: $columnVis) {
+          Group {
+            if let ctx = sidebarStore.context {
+              LogseqNativeSidebar(context: ctx)
+                .id(ctx.nodeID)
+            }
+          }
+          .navigationSplitViewColumnWidth(min: 200, ideal: 246, max: 400)
+        } detail: {
+          GeometryReader { geo in
+            LUISwiftUIRoot(backend: runtime.backend, rootID: rootID)
+              // Electron zoomin/zoomout semantics: the LUI surface lays out
+              // on a smaller/larger logical area, then magnifies.
+              .frame(
+                width: geo.size.width / appState.zoomLevel,
+                height: geo.size.height / appState.zoomLevel)
+              .scaleEffect(appState.zoomLevel, anchor: .topLeading)
+              .frame(width: geo.size.width, height: geo.size.height, alignment: .topLeading)
+              .clipped()
+          }
+          .frame(maxWidth: .infinity, maxHeight: .infinity)
           .overlay(alignment: .topLeading) {
             ZStack(alignment: .topLeading) {
               LogseqOverlayLayer()
@@ -191,6 +207,21 @@ private struct LogseqRuntimeHost: View {
             }
             return true
           }
+        }
+        .onAppear {
+          columnVis = sidebarStore.open ? .all : .detailOnly
+        }
+        .onChange(of: sidebarStore.open) { _, open in
+          columnVis = open ? .all : .detailOnly
+        }
+        .onChange(of: columnVis) { _, vis in
+          // User toggled via the system button / drag — mirror the DOM
+          // model through the same platform event the menu item sends.
+          if (vis != .detailOnly) != sidebarStore.open {
+            runtime.sendPlatformEvent(
+              name: "menu-toggle-left-sidebar", json: "{}")
+          }
+        }
       } else {
         ProgressView("Opening Logseq")
       }

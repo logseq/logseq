@@ -141,7 +141,7 @@ let calc_results_el code =
 let code_block_actions ~self lang =
   D.el ~key:"cba" ~tag:"div" ~style_class:"code-block-actions"
     [ D.el ~key:"sl" ~tag:"button"
-        ~style_class:"select-language"
+        ~style_class:"select-language ls-code-action"
         ~attrs:[ ("type", "button"); ("blockid", self) ]
         ~events:"click"
         ~on_dom_event:(fun name _ ->
@@ -154,6 +154,7 @@ let code_block_actions ~self lang =
         ; Icons.icon ~size:14. "chevron-down"
         ]
     ; D.el ~key:"cp" ~tag:"button"
+        ~style_class:"ls-code-action"
         ~attrs:[ ("type", "button") ]
         ~events:"click"
         ~on_dom_event:(fun name _ ->
