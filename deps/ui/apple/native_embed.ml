@@ -152,9 +152,29 @@ let decode_extension_values payload =
         Lui_protocol.String_map.empty fields
   | _ -> Lui_protocol.String_map.empty
 
+(* The web runtime feeds registered doc scans from a MutationObserver;
+   natively we re-run them after every flush that produced a new tree
+   generation, so views mounts (query shells, object views) see fresh
+   elements. *)
+let last_scanned_generation = ref (-1)
+
+let run_doc_scans_after_flush () =
+  match !current_app with
+  | Some app ->
+      let gen =
+        !((Lui_app.runtime app).Lui_runtime.runtime_generation)
+      in
+      if gen <> !last_scanned_generation then begin
+        last_scanned_generation := gen;
+        Editor_dom.run_doc_scans ()
+      end
+  | None -> ()
+
 let flush () =
   match !current_app with
-  | Some app -> ignore (Lui_app.flush app)
+  | Some app ->
+      ignore (Lui_app.flush app);
+      run_doc_scans_after_flush ()
   | None -> ()
 
 let initialize platform_code host_code (_payload : string) : string =
@@ -218,7 +238,10 @@ let initialize platform_code host_code (_payload : string) : string =
              close_out oc
            with _ -> ())
    | _ -> ());
-  let flush_app () = ignore (Lui_app.flush app) in
+  let flush_app () =
+    ignore (Lui_app.flush app);
+    run_doc_scans_after_flush ()
+  in
   Runtime.app_send :=
     (fun action ->
       let changed = Lui_app.send app action in
@@ -235,6 +258,7 @@ let initialize platform_code host_code (_payload : string) : string =
   Platform.host_request := platform_request;
   ignore (Lui_app.start app);
   ignore (Lui_app.flush app);
+  run_doc_scans_after_flush ();
   Sdk_api.install ();
   Properties_view.install ();
   Editor_commands.install ();
@@ -242,6 +266,7 @@ let initialize platform_code host_code (_payload : string) : string =
   Router.init ();
   Rtc_flows.init ();
   ignore (Boot.run ());
+  run_doc_scans_after_flush ();
   take_patches ()
 
 let dispatch_lui (event : Lui_protocol.event) : string =
@@ -249,7 +274,8 @@ let dispatch_lui (event : Lui_protocol.event) : string =
   (match !current_app with
    | Some app ->
        ignore (Lui_app.dispatch_event app event);
-       ignore (Lui_app.flush app)
+       ignore (Lui_app.flush app);
+       run_doc_scans_after_flush ()
    | None -> ());
   take_patches ()
 
