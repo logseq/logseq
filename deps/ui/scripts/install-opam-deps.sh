@@ -8,4 +8,7 @@ opam pin add -y -n rrbvec git+https://github.com/logseq/rrbvec.git#main
 opam pin add -y -n melange-transit-core git+https://github.com/logseq/melange-transit.git#main
 opam pin add -y -n melange-transit-melange git+https://github.com/logseq/melange-transit.git#main
 opam pin add -y -n melange-transit-native git+https://github.com/logseq/melange-transit.git#main
-opam install . --deps-only --with-test --yes 2>/dev/null || opam install lui ocaml-signal melange-webapi melange-fetch -y
+opam pin add -y -n melange-edn-core git+https://github.com/logseq/melange-edn.git#main
+opam pin add -y -n melange-edn-melange git+https://github.com/logseq/melange-edn.git#main
+opam pin add -y -n melange-edn-native git+https://github.com/logseq/melange-edn.git#main
+opam install . --deps-only --with-test --yes 2>/dev/null || opam install lui ocaml-signal rrbvec melange-webapi melange-fetch melange-transit-core melange-transit-melange melange-transit-native melange-edn-core melange-edn-melange melange-edn-native digestif -y
