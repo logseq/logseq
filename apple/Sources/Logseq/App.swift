@@ -54,7 +54,12 @@ private struct LogseqRuntimeHost: View {
       if let runtime, let rootID = runtime.rootID {
         LUISwiftUIRoot(backend: runtime.backend, rootID: rootID)
           .frame(maxWidth: .infinity, maxHeight: .infinity)
-          .overlay(alignment: .topLeading) { LogseqOverlayLayer() }
+          .overlay(alignment: .topLeading) {
+            ZStack(alignment: .topLeading) {
+              LogseqOverlayLayer()
+              LogseqImperativeLayer()
+            }
+          }
           .coordinateSpace(name: "logseqWindow")
           .onPreferenceChange(LogseqFrameKey.self) {
             LogseqFrameStore.entries = $0

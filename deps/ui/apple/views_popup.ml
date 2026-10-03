@@ -8,7 +8,10 @@
 module D = Views_dom
 module I = I18n
 
-let document_body : D.el = Js.Json.object_ (Js.Dict.empty ())
+(* document.body — popup roots mount under the top-level app element so
+   position:fixed lifts them into the window-level overlay layer (see
+   Views_dom.document_body) *)
+let document_body : D.el = D.document_body
 
 (* -- popup stack management -- *)
 
@@ -35,7 +38,9 @@ let on_doc_keydown ev =
   end
 
 let install_listeners () =
-  Overlay.on_document_press "pointerdown"
+  (* natively the press event Swift forwards is mousedown, not
+     pointerdown — the dismissal semantics are the same *)
+  Overlay.on_document_press "mousedown"
     ~els:(fun () -> !open_popups)
     ~on_hit:(function
       | None -> close_all ()
@@ -57,16 +62,30 @@ let position_content ~anchor ~content ~align_end ~submenu =
         when it would overflow the viewport bottom, and caps its height
         at the viewport so every option stays inside *)
      let h = D.rect_height (D.el_rect content) in
+     (* the panel's own frame isn't reported until the next flush — fall
+        back to the trigger's width so the flip check still works *)
+     let w =
+       Float.max
+         (D.rect_width (D.el_rect content))
+         (D.rect_width r)
+     in
      let top =
        Float.max 8.
          (Float.min (D.rect_top r -. 4.)
             (D.window_inner_height -. 8. -. h))
      in
+     (* opens right of the item; flips left when the panel would overflow
+        the viewport (radix side-flip) *)
+     let left = D.rect_left r +. D.rect_width r -. 4. in
+     let left =
+       if left +. w > D.window_inner_width -. 8. then
+         Float.max 8. (D.rect_left r -. w +. 4.)
+       else left
+     in
      style := !style
        ^ Printf.sprintf
            "left:%.0fpx;top:%.0fpx;max-height:%.0fpx;overflow-y:auto;"
-           (D.rect_left r +. D.rect_width r -. 4.) top
-           (D.window_inner_height -. 16.)
+           left top (D.window_inner_height -. 16.)
    end
    else begin
      (* radix mounts below but flips when the list would overflow the
@@ -84,9 +103,11 @@ let position_content ~anchor ~content ~align_end ~submenu =
        else (Printf.sprintf "top:%.0fpx" (D.rect_bottom r +. 4.), below)
      in
      let horiz =
+       (* translateX(-100%) is unparsed natively — right: gives the same
+          end-anchored placement through the overlay's trailing anchor *)
        if align_end then
-         Printf.sprintf "left:%.0fpx;transform:translateX(-100%%);"
-           (D.rect_left r +. D.rect_width r)
+         Printf.sprintf "right:%.0fpx;"
+           (D.window_inner_width -. (D.rect_left r +. D.rect_width r))
        else Printf.sprintf "left:%.0fpx;" (D.rect_left r)
      in
      style := !style

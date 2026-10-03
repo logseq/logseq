@@ -478,3 +478,64 @@ behavior), `.left-sidebar-resizer`, `.cp__graphs-selector`,
 - New `outOfFlowFillY` style/layout key = `position:absolute; inset-y-0`:
   OOF children were placed at their ideal height (~10px stub); the flag
   stretches them to container height in both row and column layouts.
+
+### devin/lui-swift-views — views (table/list/gallery) + popup layer
+
+- Views are fully in the declarative LUI tree natively; the OCaml
+  `deps/ui/src/views/*` layer is reused unchanged (table, list, gallery,
+  view tabs, headers, row cells). Mount paths: `#/page/all` (All Pages)
+  mounts via `Views_mount.ensure_all_pages`; the same mount machinery
+  drives `{{query}}` blocks (.custom-query-results), tag/class pages and
+  property objects pages (see untested list below).
+- Imp views are native twins in `deps/ui/apple/views_dom.ml` /
+  `views_popup.ml` — thin shims over `imperative_dom.ml` that keep the
+  same DOM-shaped contract as `views/dom.cljs` (el records, query
+  selectors, el_rect, document listeners) so `src/views` code paths run
+  unchanged.
+- Imperative elements (menus/popups/toasts) attach to the runtime tree
+  through `Imperative_dom.attach_runtime`: host refs resolve to a LUI
+  node (`Host_node`), a dom-id (`Host_dom_id` via
+  `Editor_dom.lui_node_by_dom_id` snapshot walk), or body
+  (`Host_body` → #app-container). Children of `position:fixed`/`absolute`
+  nodes render in `LogseqOverlayLayer` at window scope — this is what
+  puts menus/dropdowns above the table.
+- `id_of` resolves a *snapshot* element back to its imperative node via
+  `node-id` → `lui_index` — required for `el_remove` to detach mounted
+  popup children (route leaks fixed).
+- Popup dismissal is wired from `Views_mount.install` →
+  `Views_popup.install_listeners`: Escape → `document_add_listener
+  "keydown"` → `close_top`; outside press → `Overlay.on_document_press
+  "mousedown"` → `close_all`. (Event name is `"mousedown"` — Swift
+  forwards that, not `"pointerdown"`.)
+- Popup positioning: `align_end` uses `right:` insets (Swift parses
+  them to `fixedRight`) instead of `transform: translateX(-100%)`
+  (unparsed natively). Submenus flip to the anchor's left edge when
+  they'd overflow the window (`window_inner_width`); a fresh node's
+  frame is 0 until the next rects flush, so width falls back to the
+  anchor's width.
+- Fixed elements need a `top`/`right` inset or the overlay anchor
+  defaults to topLeading — `right:Npx` alone places correctly via
+  `fixedRight`→topTrailing.
+- Verified in GUI on this branch (All Pages):
+  table render + headers + zebra rows; header-click sort menu
+  (asc/desc applies + indicator); sort/filter/search toolbar popups;
+  search input live-filters rows ("zzz" → "No matched result");
+  display-type menu switches Table ↔ List ↔ Gallery; ⋯ menu →
+  Columns visibility checks live-hide columns (persisted across
+  restart); Group by submenu; Export EDN (toast fires); "+" adds a
+  view tab; row click → navigates to page; Escape and outside-press
+  both close popups; submenus flip left instead of clipping.
+- Not verified / not ported (kanban & graph view excluded per user):
+  - `{{query}}` block mount (.custom-query-results) — same
+    ensure_mounts machinery, not exercised in GUI.
+  - Tag/class + property objects pages — share `Views_view.mount`;
+    the tag chip doesn't hit-test at its rendered offset (~8px off,
+    same family as clipped page title) so the page can't be opened.
+  - Inline cell editing, add-row (+ on tag objects pages only),
+    column reorder/pin, view rename/delete tab context menu —
+    OCaml emits the affordances; not exercised or no-ops untested.
+  - Menu keyboard nav (Home/arrows/Enter): `el_focus` on a div is a
+    no-op natively, so arrow-key nav in menus likely doesn't engage.
+  - Virtualization/pagination: the OCaml table renders all rows
+    (fine for test data; no lazy windowing wired natively).
+  - Sort groups submenu (multi-column grouping UI in sort popup).

@@ -94,8 +94,12 @@ Swift. Goal: feature parity with the Electron app.
 
 ## Remaining (Electron parity)
 - Page properties UI (property rows, value editors).
-- Views / queries / table + kanban renderers (OCaml code compiles;
-  native surfaces not yet exercised end-to-end).
+- Views / queries: table + list + gallery render natively on All Pages
+  (sort/filter/search popups, column visibility, group-by, display-type
+  switch, row navigation, export EDN verified). Unported/untested:
+  `{{query}}` block mounts, tag/property objects pages, inline cell
+  editing, add-row, column reorder/pin, view tab context menu, menu
+  keyboard nav, virtualization. Kanban and graph view out of scope.
 - PDF annotations: PDFKit viewer opens/closes; the annotation
   layer (highlight areas, sidebar notes) is not yet wired.
 - Code editor polish: actions bar renders in-flow (web overlays

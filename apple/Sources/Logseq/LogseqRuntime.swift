@@ -83,6 +83,13 @@ private let platformRequest: PlatformRequestCallback = { data, length in
       extensionRegistry: extensionRegistry
     )
     backend.onEvent = { [weak self] event in self?.handle(event) }
+    // Node frames feed OCaml's imperative-rects channel — imperative_dom
+    // reads them for popup anchoring and element measurements where the
+    // web would use getBoundingClientRect.
+    backend.onFramesReport = { [weak self] frames in
+      self?.reportImperativeRects(frames)
+    }
+    backend.frameReportingEnabled = true
     platform.runtime = self
   }
 
@@ -181,5 +188,19 @@ private let platformRequest: PlatformRequestCallback = { data, length in
   private func handle(_ event: LUIEvent) {
     guard started else { return }
     _ = LogseqLUIEvents.dispatch(event)
+  }
+
+  /// The backend's coalesced node-id → frame table, forwarded as the
+  /// {rects:{nodeId:{left,top,right,bottom}}} payload imperative_dom's
+  /// "imperative-rects" listener stores for rect lookups.
+  private func reportImperativeRects(_ frames: [Int: CGRect]) {
+    guard started else { return }
+    let parts = frames.map { id, rect in
+      "\"\(id)\":{\"left\":\(rect.minX),\"top\":\(rect.minY)"
+        + ",\"right\":\(rect.maxX),\"bottom\":\(rect.maxY)}"
+    }
+    sendPlatformEvent(
+      name: "imperative-rects",
+      json: "{\"rects\":{" + parts.joined(separator: ",") + "}}")
   }
 }

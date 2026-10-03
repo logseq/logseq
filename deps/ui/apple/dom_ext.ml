@@ -66,14 +66,6 @@ let ancestors_of (el : element) : element list =
 let tag_name (el : element) : string =
   Option.value (str_prop "tag" el) ~default:""
 
-let class_list (el : element) : string list =
-  match str_prop "class" el with
-  | Some s ->
-      List.filter
-        (fun c -> c <> "")
-        (String.split_on_char ' ' s)
-  | None -> []
-
 let el_id_attr (el : element) : string =
   Option.value (str_prop "id" el) ~default:""
 
@@ -83,6 +75,20 @@ let el_attr (el : element) (name : string) : string option =
   | Js.Json.JObject kvs ->
       Option.bind (List.assoc_opt name kvs) Js.Json.decodeString
   | _ -> str_prop ("attr-" ^ name) el
+
+(* the snapshot "class" prop mirrors style-class; elements that declare
+   their class inside attrs keep it there instead — DOM semantics treat
+   both as the same class list *)
+let class_list (el : element) : string list =
+  let words =
+    match str_prop "class" el with
+    | Some s when s <> "" -> s
+    | _ -> (
+        match el_attr el "class" with
+        | Some s -> s
+        | None -> "")
+  in
+  List.filter (fun c -> c <> "") (String.split_on_char ' ' words)
 
 let has_attr (el : element) (name : string) : bool =
   el_attr el name <> None || (name = "class" && class_list el <> [])

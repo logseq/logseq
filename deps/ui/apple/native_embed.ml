@@ -178,7 +178,6 @@ let flush () =
   | None -> ()
 
 let initialize platform_code host_code (_payload : string) : string =
-  Printexc.record_backtrace true;
   Queue.clear pending_batches;
   let os =
     match platform_code with
@@ -212,6 +211,7 @@ let initialize platform_code host_code (_payload : string) : string =
       Update.update View.view
   in
   current_app := Some app;
+  Imperative_dom.install app;
   Dom_ext.doc_elements_provider := collect_elements;
   Dom_ext.subtree_elements_provider := collect_subtree;
   Platform.dom_parent_of :=

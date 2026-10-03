@@ -478,6 +478,81 @@ import SwiftUI
     case "ls-dots-menu": fixedWidth = 256
     case "cp__right-sidebar-settings":
       isRow = true; stackSpacing = 4
+    // ---- views / query results (lui-overlay.css view-head + filters rules)
+    // .ls-view-head: flex flex-1 items-center justify-between gap-1
+    // (cljs view-head div carries the utilities; the stylesheet rule set
+    //  covers only the helpers)
+    case "ls-view-head":
+      isRow = true; centerContent = true; spaceBetween = true
+      grow = true; fullWidth = true
+      stackSpacing = stackSpacing ?? 4
+    case "ls-view-head-left":
+      isRow = true; centerContent = true
+      stackSpacing = stackSpacing ?? 8
+    case "views":
+      isRow = true; centerContent = true
+      stackSpacing = stackSpacing ?? 4
+    case "view-actions":
+      isRow = true; centerContent = true
+      stackSpacing = stackSpacing ?? 4
+    case "view-action-search": isRow = true; centerContent = true
+    case "ls-icon-color-wrap", "ls-drag-row":
+      isRow = true; centerContent = true
+    case "ls-icon-btn":
+      isRow = true; centerContent = true
+      foreground = LogseqColors.secondaryText
+    case "ls-count":
+      fontSize = fontSize ?? 12
+      foreground = LogseqColors.secondaryText
+    case "ls-add-view":
+      padding = padding ?? EdgeInsets(top: 0, leading: 4, bottom: 0, trailing: 4)
+      foreground = LogseqColors.secondaryText
+    case "ls-view-tab":
+      fontSize = fontSize ?? 14
+      fixedHeight = 24
+    case "ls-dim": alpha = 0.75
+    case "ls-lit": alpha = 1
+    case "ls-query-count":
+      fontSize = fontSize ?? 14
+      alpha = 0.5
+    case "ls-view-order-setting":
+      isRow = true; centerContent = true; spaceBetween = true
+      stackSpacing = stackSpacing ?? 8
+      padding = padding ?? EdgeInsets(top: 0, leading: 8, bottom: 0, trailing: 8)
+    case "ls-xs", "ls-op-label":
+      fontSize = fontSize ?? 12
+    case "ls-vf-col":
+      stackSpacing = stackSpacing ?? 4
+      fontSize = fontSize ?? 14
+    case "ls-op-btn":
+      isRow = true
+      fontSize = fontSize ?? 14
+      padding = padding ?? EdgeInsets(top: 4, leading: 8, bottom: 4, trailing: 8)
+    case "ls-search-input":
+      fixedHeight = 28
+      fontSize = fontSize ?? 14
+    case "ls-vf-chip":
+      isRow = true; centerContent = true
+      cornerRadius = cornerRadius ?? 4
+    case "ls-vf-chips":
+      isRow = true; centerContent = true
+      stackSpacing = stackSpacing ?? 8
+    case "filters-row":
+      isRow = true; centerContent = true; spaceBetween = true
+      fullWidth = true
+      stackSpacing = stackSpacing ?? 16
+      padding = padding ?? EdgeInsets(top: 8, leading: 0, bottom: 8, trailing: 0)
+    case "ls-vf-logic":
+      alpha = 0.75
+      fixedHeight = 24
+      fontSize = fontSize ?? 14
+      padding = padding ?? EdgeInsets(top: 0, leading: 8, bottom: 0, trailing: 8)
+    case "ls-table-header":
+      isRow = true; fullWidth = true
+    // ui.cljs foldable: the header wraps caret + title and fills the
+    // .foldable-title row so a flex-1 title (view head) stretches
+    case "ls-foldable-header":
+      grow = true; fullWidth = true
     case "cp__sidebar-main-layout": isRow = true; grow = true
     case "cp__sidebar-main-content":
       grow = true; maxWidth = 960; centerHorizontally = true
