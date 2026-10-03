@@ -32,22 +32,25 @@ let ensure_all_pages roots =
   match !Runtime.current_route with
   | Some Model.All_pages ->
       Ed.for_each_touched roots ".cp__sidebar-main-content > .mx-auto" (fun main ->
-          match Ed.el_query main ".ls-all-pages" with
-          | Some _ -> ()
-          | None ->
-              let container =
-                D.h ~cls:"ls-all-pages w-full mx-auto" ()
-              in
+          match
+            (Ed.el_query main ".ls-all-pages", Ed.el_closest main ".ls-all-pages")
+          with
+          | Some _, _ | _, Some _ -> ()
+          | None, None ->
+              (* no mx-auto here — the anchor wrapper already centers, and
+                 under the native engine's descendant-style '>' matching an
+                 mx-auto container would re-match the anchor selector *)
+              let container = D.h ~cls:"ls-all-pages w-full" () in
               D.el_append_child main container;
               ignore
                 (Views_view.mount ~kind:V.KAllPages
                    ~owner:(W.String "$$$views") ~container)
       )
-  | _ -> (
+  | _ ->
       (* route left all-pages: drop the container if LUI kept it *)
-      match Ed.el_query Ed.document_element ".ls-all-pages" with
-      | Some el -> D.el_remove el
-      | None -> ())
+      (match Ed.el_query Ed.document_element ".ls-all-pages" with
+       | Some el -> D.el_remove el
+       | None -> ())
 
 (* right-sidebar items render their own .page-inner (data-sb-inner);
    their objects view mounts into the emitted .ml-1 host off
@@ -283,5 +286,6 @@ let install () =
   if not !installed then begin
     installed := true;
     Ed.document_add_listener "click" on_document_click false;
+    Views_popup.install_listeners ();
     Ed.register_doc_scan scan
   end

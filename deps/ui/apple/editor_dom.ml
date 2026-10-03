@@ -66,10 +66,10 @@ let scope_of_roots (roots : el list) : query_scope =
   let unscoped = ref false in
   List.iter
     (fun r ->
-      match Shadow_dom.id_of r with
+      match Imperative_dom.id_of r with
       | Some id ->
           List.iter (fun i -> Hashtbl.replace sh i ())
-            (Shadow_dom.descendant_ids id)
+            (Imperative_dom.descendant_ids id)
       | None -> (
           match Dom_ext.num_prop "node-id" r with
           | Some nid ->
@@ -87,18 +87,18 @@ let scope_of_roots (roots : el list) : query_scope =
     roots;
   if !unscoped then Everywhere else Scoped (lui, sh)
 
-let shadow_in_scope scope (n : Shadow_dom.node) : bool =
+let shadow_in_scope scope (n : Imperative_dom.node) : bool =
   match scope with
-  | Everywhere -> n.Shadow_dom.s_parent <> None
+  | Everywhere -> n.Imperative_dom.s_parent <> None
   | Scoped (lui, sh) -> (
-      if Hashtbl.mem sh n.Shadow_dom.s_id then true
+      if Hashtbl.mem sh n.Imperative_dom.s_id then true
       else
-        match n.Shadow_dom.s_parent with
+        match n.Imperative_dom.s_parent with
         | Some p -> (
-            match Shadow_dom.host_ref_of p with
-            | Shadow_dom.Host_node nid -> Hashtbl.mem lui nid
-            | Shadow_dom.Host_dom_id d -> (
-                match !Shadow_dom.lui_snapshot_by_dom_id d with
+            match Imperative_dom.host_ref_of p with
+            | Imperative_dom.Host_node nid -> Hashtbl.mem lui nid
+            | Imperative_dom.Host_dom_id d -> (
+                match !Imperative_dom.lui_snapshot_by_dom_id d with
                 | Some s -> (
                     match Dom_ext.num_prop "node-id" s with
                     | Some nid -> Hashtbl.mem lui (int_of_float nid)
@@ -110,12 +110,12 @@ let shadow_in_scope scope (n : Shadow_dom.node) : bool =
 (* shadow els match on their synthesized snapshot but the call sites get
    the stable {#new:n} payload back *)
 let shadow_query scope sel : el list =
-  Shadow_dom.fold
+  Imperative_dom.fold
     (fun _id n acc ->
       if shadow_in_scope scope n then begin
-        let snap = Shadow_dom.snapshot n in
+        let snap = Imperative_dom.snapshot n in
         if Dom_ext.selector_matches sel snap (Dom_ext.ancestors_of snap)
-        then Shadow_dom.payload n :: acc
+        then Imperative_dom.payload n :: acc
         else acc
       end
       else acc)
@@ -154,9 +154,9 @@ let el_of_json (j : Js.Json.t) : el = j
 
 (* view DOM builders — {#new} shadow nodes so attrs/children/read-backs
    resolve OCaml-side and the Swift store can materialize them *)
-let create_element (tag : string) : el = Shadow_dom.register ~tag ()
+let create_element (tag : string) : el = Imperative_dom.register ~tag ()
 
-let create_text_node (text : string) : el = Shadow_dom.create_text text
+let create_text_node (text : string) : el = Imperative_dom.create_text text
 
 (* ---------- events ---------- *)
 
@@ -177,12 +177,12 @@ let ev_target (ev : ev) : el option =
    flags table so the shadow dispatcher halts the remaining chain *)
 let prevent_default (ev : ev) : unit =
   match Dom_ext.num_prop "##dispatch" ev with
-  | Some d -> Shadow_dom.mark_prevented d
+  | Some d -> Imperative_dom.mark_prevented d
   | None -> ()
 
 let stop_propagation (ev : ev) : unit =
   match Dom_ext.num_prop "##dispatch" ev with
-  | Some d -> Shadow_dom.mark_stopped d
+  | Some d -> Imperative_dom.mark_stopped d
   | None -> ()
 
 let ev_buttons (ev : ev) : int =
@@ -233,10 +233,10 @@ let remove_attr_override (el : el) (name : string) : unit =
   | None -> ()
 
 let el_get_attr (el : el) (name : string) : string option =
-  match Shadow_dom.id_of el with
+  match Imperative_dom.id_of el with
   | Some id -> (
-      match Shadow_dom.get id with
-      | Some n -> Shadow_dom.get_attr n name
+      match Imperative_dom.get id with
+      | Some n -> Imperative_dom.get_attr n name
       | None -> None)
   | None -> (
       let overridden =
@@ -273,10 +273,10 @@ let el_has_attr (el : el) (name : string) : bool =
   el_get_attr el name <> None
 
 let el_set_attr (el : el) (name : string) (v : string) : unit =
-  (match Shadow_dom.id_of el with
+  (match Imperative_dom.id_of el with
    | Some id -> (
-       match Shadow_dom.get id with
-       | Some n -> Shadow_dom.set_attr n name v
+       match Imperative_dom.get id with
+       | Some n -> Imperative_dom.set_attr n name v
        | None -> ())
    | None -> record_attr_override el name v);
   Host.dom_op "set-attr"
@@ -284,34 +284,34 @@ let el_set_attr (el : el) (name : string) (v : string) : unit =
        (Js.Json.JObject
           ([ ("ref", el); ("name", Js.Json.JString name)
            ; ("value", Js.Json.JString v) ]
-          @ Shadow_dom.shadow_field el)))
+          @ Imperative_dom.shadow_field el)))
 
 let el_remove_attr (el : el) (name : string) : unit =
-  (match Shadow_dom.id_of el with
+  (match Imperative_dom.id_of el with
    | Some id -> (
-       match Shadow_dom.get id with
-       | Some n -> Shadow_dom.remove_attr n name
+       match Imperative_dom.get id with
+       | Some n -> Imperative_dom.remove_attr n name
        | None -> ())
    | None -> remove_attr_override el name);
   Host.dom_op "remove-attr"
     (Js.Json.stringify
        (Js.Json.JObject
           ([ ("ref", el); ("name", Js.Json.JString name) ]
-          @ Shadow_dom.shadow_field el)))
+          @ Imperative_dom.shadow_field el)))
 
 let el_append_child (parent : el) (child : el) : unit =
-  Shadow_dom.append_child parent child
+  Imperative_dom.append_child parent child
 
 (* LUI-snapshot lookups for Shadow_dom's ancestor splicing — resolved
    against the element providers native_embed installs *)
 let () =
-  Shadow_dom.lui_snapshot_by_node_id :=
+  Imperative_dom.lui_snapshot_by_node_id :=
     (fun n ->
       List.find_opt
         (fun el ->
           Dom_ext.num_prop "node-id" el = Some (Float.of_int n))
         (!Dom_ext.doc_elements_provider ()));
-  Shadow_dom.lui_snapshot_by_dom_id :=
+  Imperative_dom.lui_snapshot_by_dom_id :=
     (fun dom_id ->
       List.find_opt
         (fun el ->
@@ -322,11 +322,19 @@ let () =
           (match Dom_ext.str_prop "id" el with
            | Some s -> s = dom_id
            | None -> false))
-        (!Dom_ext.doc_elements_provider ()))
+        (!Dom_ext.doc_elements_provider ()));
+  Imperative_dom.lui_node_by_dom_id :=
+    (fun dom_id ->
+      match !Imperative_dom.lui_snapshot_by_dom_id dom_id with
+      | Some snap -> (
+          match Dom_ext.num_prop "node-id" snap with
+          | Some n -> Some (int_of_float n)
+          | None -> None)
+      | None -> None)
 
 (* element identity keys shared by snapshots and synth shadow snapshots *)
 let identity_keys (el : el) (t : (string, unit) Hashtbl.t) =
-  (match Shadow_dom.id_of el with
+  (match Imperative_dom.id_of el with
    | Some i -> Hashtbl.replace t ("new-" ^ string_of_int i) ()
    | None -> ());
   (match el with
@@ -353,9 +361,9 @@ let ids_of (el : el) : (string, unit) Hashtbl.t =
   let t = Hashtbl.create 16 in
   identity_keys el t;
   let ancestors =
-    match Shadow_dom.id_of el with
+    match Imperative_dom.id_of el with
     | Some id -> (
-        match Shadow_dom.snapshot_of_id id with
+        match Imperative_dom.snapshot_of_id id with
         | Some s -> Dom_ext.ancestors_of s
         | None -> [])
     | None -> Dom_ext.ancestors_of el
@@ -370,51 +378,51 @@ let el_contains (a : el) (b : el) : bool =
 let el_focus (el : el) : unit =
   Host.dom_op "focus"
     (Js.Json.stringify
-       (Js.Json.JObject ([ ("ref", el) ] @ Shadow_dom.shadow_field el)))
+       (Js.Json.JObject ([ ("ref", el) ] @ Imperative_dom.shadow_field el)))
 
 let el_scroll_into_view (el : el) : unit =
   Host.dom_op "scroll-into-view"
     (Js.Json.stringify
-       (Js.Json.JObject ([ ("ref", el) ] @ Shadow_dom.shadow_field el)))
+       (Js.Json.JObject ([ ("ref", el) ] @ Imperative_dom.shadow_field el)))
 
 let el_class_add (el : el) (c : string) : unit =
-  (match Shadow_dom.id_of el with
+  (match Imperative_dom.id_of el with
    | Some id -> (
-       match Shadow_dom.get id with
+       match Imperative_dom.get id with
        | Some n ->
-           Shadow_dom.set_attr n "class"
-             (String.trim (n.Shadow_dom.s_cls ^ " " ^ c))
+           Imperative_dom.set_attr n "class"
+             (String.trim (n.Imperative_dom.s_cls ^ " " ^ c))
        | None -> ())
    | None -> ());
   Host.dom_op "class-add"
     (Js.Json.stringify
        (Js.Json.JObject
           ([ ("ref", el); ("class", Js.Json.JString c) ]
-          @ Shadow_dom.shadow_field el)))
+          @ Imperative_dom.shadow_field el)))
 
 let el_class_remove (el : el) (c : string) : unit =
-  (match Shadow_dom.id_of el with
+  (match Imperative_dom.id_of el with
    | Some id -> (
-       match Shadow_dom.get id with
+       match Imperative_dom.get id with
        | Some n ->
-           Shadow_dom.set_attr n "class"
+           Imperative_dom.set_attr n "class"
              (String.concat " "
                 (List.filter
                    (fun t -> t <> "" && t <> c)
-                   (String.split_on_char ' ' n.Shadow_dom.s_cls)))
+                   (String.split_on_char ' ' n.Imperative_dom.s_cls)))
        | None -> ())
    | None -> ());
   Host.dom_op "class-remove"
     (Js.Json.stringify
        (Js.Json.JObject
           ([ ("ref", el); ("class", Js.Json.JString c) ]
-          @ Shadow_dom.shadow_field el)))
+          @ Imperative_dom.shadow_field el)))
 
 let snapshot_value (el : el) : string =
-  match Shadow_dom.id_of el with
+  match Imperative_dom.id_of el with
   | Some id -> (
-      match Shadow_dom.get id with
-      | Some n -> n.Shadow_dom.s_value
+      match Imperative_dom.get id with
+      | Some n -> n.Imperative_dom.s_value
       | None -> "")
   | None -> (
       match el with
@@ -443,10 +451,10 @@ let set_live_value (id : string) (v : string) : unit =
   | None -> Hashtbl.replace live_fields id (v, 0, 0)
 
 let el_set_value (el : el) (v : string) : unit =
-  (match Shadow_dom.id_of el with
+  (match Imperative_dom.id_of el with
    | Some id -> (
-       match Shadow_dom.get id with
-       | Some n -> n.Shadow_dom.s_value <- v
+       match Imperative_dom.get id with
+       | Some n -> n.Imperative_dom.s_value <- v
        | None -> ())
    | None -> (
        match el_dom_id el with
@@ -456,12 +464,12 @@ let el_set_value (el : el) (v : string) : unit =
     (Js.Json.stringify
        (Js.Json.JObject
           ([ ("ref", el); ("value", Js.Json.JString v) ]
-          @ Shadow_dom.shadow_field el)))
+          @ Imperative_dom.shadow_field el)))
 
 let el_closest (el : el) (sel : string) : el option =
-  match Shadow_dom.id_of el with
+  match Imperative_dom.id_of el with
   | Some id -> (
-      match Shadow_dom.snapshot_of_id id with
+      match Imperative_dom.snapshot_of_id id with
       | Some s -> Dom_ext.closest s sel
       | None -> None)
   | None -> Dom_ext.closest el sel
@@ -507,24 +515,24 @@ let is_editable_target target =
   | None -> false
 
 let el_set_class (el : el) (c : string) : unit =
-  (match Shadow_dom.id_of el with
+  (match Imperative_dom.id_of el with
    | Some id -> (
-       match Shadow_dom.get id with
-       | Some n -> Shadow_dom.set_attr n "class" c
+       match Imperative_dom.get id with
+       | Some n -> Imperative_dom.set_attr n "class" c
        | None -> ())
    | None -> ());
   Host.dom_op "set-class"
     (Js.Json.stringify
        (Js.Json.JObject
           ([ ("ref", el); ("class", Js.Json.JString c) ]
-          @ Shadow_dom.shadow_field el)))
+          @ Imperative_dom.shadow_field el)))
 
 let el_query (root : el) (sel : string) : el option =
   (* querySelector excludes the root element itself *)
   let hits = query_in_roots [ root ] sel in
   let excluded =
-    match Shadow_dom.id_of root with
-    | Some i -> fun el -> Shadow_dom.id_of el = Some i
+    match Imperative_dom.id_of root with
+    | Some i -> fun el -> Imperative_dom.id_of el = Some i
     | None -> (
         match Dom_ext.num_prop "node-id" root with
         | Some n ->
@@ -653,6 +661,7 @@ let () =
      emit_event, before any listener — add_event_listener prepends, so
      a plain listener could race a stale el_value read. *)
   Platform.pre_dispatch_hook := fun ev ->
+    Imperative_dom.note_dispatch ();
     match Dom_ext.prop "target" ev with
     | Js.Json.JObject _ as t -> (
         let id =
@@ -688,17 +697,17 @@ let () =
     | _ -> ()
 
 let el_set_text_content (el : el) (v : string) : unit =
-  (match Shadow_dom.id_of el with
+  (match Imperative_dom.id_of el with
    | Some id -> (
-       match Shadow_dom.get id with
-       | Some n -> n.Shadow_dom.s_text <- v
+       match Imperative_dom.get id with
+       | Some n -> n.Imperative_dom.s_text <- v
        | None -> ())
    | None -> ());
   Host.dom_op "set-text-content"
     (Js.Json.stringify
        (Js.Json.JObject
           ([ ("ref", el); ("text", Js.Json.JString v) ]
-          @ Shadow_dom.shadow_field el)))
+          @ Imperative_dom.shadow_field el)))
 
 (* native text views auto-size — keep the call as a no-op *)
 let autosize_textarea (_ : el) : unit = ()
@@ -716,7 +725,7 @@ let el_set_selection_range (el : el) (s : int) (e : int) : unit =
           ([ ("ref", el)
            ; ("start", Js.Json.JNumber (Float.of_int s))
            ; ("end", Js.Json.JNumber (Float.of_int e)) ]
-          @ Shadow_dom.shadow_field el)))
+          @ Imperative_dom.shadow_field el)))
 
 let el_selection_start (el : el) : int =
   match el_dom_id el with

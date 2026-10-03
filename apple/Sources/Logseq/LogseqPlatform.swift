@@ -85,6 +85,7 @@ final class NSWeakReferenceBox {
   private var keyMonitor: Any?
   private var contextMenuMonitor: Any?
   private var mouseMonitor: Any?
+  private var mouseDownMonitor: Any?
   private var lastMouseHitNode: Int?
   private let logger = Logger(subsystem: "com.logseq.native", category: "platform")
 
@@ -158,6 +159,21 @@ final class NSWeakReferenceBox {
       LogseqPlatform.emitMouseMove(context: context, nodeID: hit.nodeID, point: point)
       return event
     }
+    // DOM mousedown: web dismisses popups/menus on a document mousedown
+    // outside them, so emit through the hit node's context the same way
+    // contextmenu does. The event is never consumed — SwiftUI still
+    // delivers the click itself.
+    mouseDownMonitor = NSEvent.addLocalMonitorForEvents(matching: .leftMouseDown) {
+      event in
+      guard let window = event.window, let contentView = window.contentView
+      else { return event }
+      let point = LogseqPlatform.windowPoint(event, in: contentView)
+      guard let hit = LogseqFrameStore.hitTest(point),
+        let context = LogseqElementRegistry.shared.context(forNode: hit.nodeID)
+      else { return event }
+      LogseqPlatform.emitMouseDown(context: context, nodeID: hit.nodeID, point: point)
+      return event
+    }
   }
 
   func detach() {
@@ -174,6 +190,10 @@ final class NSWeakReferenceBox {
     if let mouseMonitor {
       NSEvent.removeMonitor(mouseMonitor)
       self.mouseMonitor = nil
+    }
+    if let mouseDownMonitor {
+      NSEvent.removeMonitor(mouseDownMonitor)
+      self.mouseDownMonitor = nil
     }
   }
 
@@ -231,6 +251,25 @@ final class NSWeakReferenceBox {
     try? context.emit(
       name: "dom-event",
       values: ["name": .string("mousemove"), "payload": .string(json)])
+  }
+
+  private static func emitMouseDown(
+    context: LUIAppleExtensionViewContext, nodeID: Int, point: CGPoint
+  ) {
+    var payload: [String: Any] = [
+      "clientX": Double(point.x),
+      "clientY": Double(point.y),
+      "button": 0,
+      "nodeId": nodeID,
+    ]
+    payload["target"] = LogseqDOMSnapshot.snapshot(for: context)
+    guard
+      let data = try? JSONSerialization.data(withJSONObject: payload),
+      let json = String(data: data, encoding: .utf8)
+    else { return }
+    try? context.emit(
+      name: "dom-event",
+      values: ["name": .string("mousedown"), "payload": .string(json)])
   }
 
   private func sendKeyDown(_ event: NSEvent) {
@@ -375,6 +414,16 @@ final class NSWeakReferenceBox {
       }
     case "remove":
       target(dict)?.domRemove()
+    case "imperative-attach":
+      // OCaml imperative_dom materialized a popup/menu node that has no
+      // in-tree parent — render it in the window-level imperative layer.
+      if let nodeID = (dict["nodeId"] as? NSNumber)?.intValue {
+        LogseqImperativeStore.shared.attach(nodeID)
+      }
+    case "imperative-detach":
+      if let nodeID = (dict["nodeId"] as? NSNumber)?.intValue {
+        LogseqImperativeStore.shared.detach(nodeID)
+      }
     case "download-text", "download-binary", "save-file":
       saveFile(name: name, dict: dict)
     case "dump-frames":

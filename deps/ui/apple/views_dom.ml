@@ -1,7 +1,9 @@
 (* Native twin of views/views_dom.ml — imperative el creation registers a
-   {#new:n} node in Shadow_dom; the Swift shadow store materializes it from
-   the dom-op channel under the classified host element (an LUI node, a
-   dom-id anchor, or document.body). *)
+   {#new:n} node in Imperative_dom, which materializes it as a
+   `logseq-<tag>` extension node inside the LUI runtime tree (or the
+   imperative body overlay for document.body appends). Mutations push
+   extension props through the normal patch flush; only live-element ops
+   (focus/selection/scroll/value) still use the dom-op channel. *)
 
 open Js.Json
 
@@ -9,66 +11,60 @@ type el = Js.Json.t
 type ev = Js.Json.t
 type rect = Js.Json.t
 
-let new_el ?(tag = "div") () = Shadow_dom.register ~tag ()
+let new_el ?(tag = "div") () = Imperative_dom.register ~tag ()
 
-let doc_op = Shadow_dom.doc_op
-let host_fields = Shadow_dom.host_fields
-let shadow_field = Shadow_dom.shadow_field
-let attach_child = Shadow_dom.attach_child
-let detach_child = Shadow_dom.detach_child
+let doc_op = Imperative_dom.doc_op
+let shadow_field = Imperative_dom.shadow_field
+let detach_child = Imperative_dom.detach_child
 
 (* ---------- element lifecycle ops ---------- *)
 
 let el_remove (el : el) : unit =
-  detach_child el;
-  (match Shadow_dom.id_of el with
-   | Some id -> Shadow_dom.remove id
-   | None -> ());
-  doc_op "remove" (JObject ([ ("ref", el) ] @ shadow_field el))
+  match Imperative_dom.id_of el with
+  | Some id -> Imperative_dom.remove id
+  | None -> ()
 
 let el_replace_children (el : el) : unit =
-  (match Shadow_dom.id_of el with
-   | Some id -> (
-       match Shadow_dom.get id with
-       | Some n ->
-           List.iter
-             (fun c ->
-               match Shadow_dom.id_of c with
-               | Some cid -> Shadow_dom.remove cid
-               | None -> ())
-             n.Shadow_dom.s_children;
-           n.Shadow_dom.s_children <- []
-       | None -> ())
-   | None -> ());
-  doc_op "replace-children"
-    (JObject ([ ("ref", el) ] @ shadow_field el @ host_fields el))
+  match Imperative_dom.id_of el with
+  | Some id -> (
+      match Imperative_dom.get id with
+      | Some n ->
+          List.iter
+            (fun c ->
+              match Imperative_dom.id_of c with
+              | Some cid -> Imperative_dom.remove cid
+              | None -> ())
+            n.Imperative_dom.s_children;
+          n.Imperative_dom.s_children <- []
+      | None -> ())
+  | None -> ()
 
 let el_children (el : el) : Js.Json.t =
-  match Shadow_dom.id_of el with
+  match Imperative_dom.id_of el with
   | Some id -> (
-      match Shadow_dom.get id with
-      | Some n -> JArray (Array.of_list n.Shadow_dom.s_children)
+      match Imperative_dom.get id with
+      | Some n -> JArray (Array.of_list n.Imperative_dom.s_children)
       | None -> JArray [||])
   | None -> JArray [||]
 
 let el_parent (el : el) : el option =
-  match Shadow_dom.id_of el with
+  match Imperative_dom.id_of el with
   | Some id -> (
-      match Shadow_dom.get id with
-      | Some n -> n.Shadow_dom.s_parent
+      match Imperative_dom.get id with
+      | Some n -> n.Imperative_dom.s_parent
       | None -> None)
   | None -> None
 
 let el_is_connected (el : el) : bool =
-  match Shadow_dom.id_of el with
+  match Imperative_dom.id_of el with
   | Some _ -> el_parent el <> None
   | None -> true (* mounted snapshots are connected *)
 
 let el_text_content (el : el) : string =
-  match Shadow_dom.id_of el with
+  match Imperative_dom.id_of el with
   | Some id -> (
-      match Shadow_dom.get id with
-      | Some n -> n.Shadow_dom.s_text
+      match Imperative_dom.get id with
+      | Some n -> n.Imperative_dom.s_text
       | None -> "")
   | None -> (
       match el with
@@ -78,22 +74,20 @@ let el_text_content (el : el) : string =
       | _ -> "")
 
 let el_set_text_content (el : el) (v : string) : unit =
-  (match Shadow_dom.id_of el with
-   | Some id -> (
-       match Shadow_dom.get id with
-       | Some n ->
-           List.iter
-             (fun c ->
-               match Shadow_dom.id_of c with
-               | Some cid -> Shadow_dom.remove cid
-               | None -> ())
-             n.Shadow_dom.s_children;
-           n.Shadow_dom.s_children <- [];
-           n.Shadow_dom.s_text <- v
-       | None -> ())
-   | None -> ());
-  doc_op "set-text-content"
-    (JObject ([ ("ref", el); ("text", JString v) ] @ shadow_field el))
+  match Imperative_dom.id_of el with
+  | Some id -> (
+      match Imperative_dom.get id with
+      | Some n ->
+          List.iter
+            (fun c ->
+              match Imperative_dom.id_of c with
+              | Some cid -> Imperative_dom.remove cid
+              | None -> ())
+            n.Imperative_dom.s_children;
+          n.Imperative_dom.s_children <- [];
+          Imperative_dom.set_text n v
+      | None -> ())
+  | None -> ()
 
 let el_insert_adjacent_text (el : el) (pos : string) (v : string) : unit =
   doc_op "insert-adjacent-text"
@@ -101,203 +95,27 @@ let el_insert_adjacent_text (el : el) (pos : string) (v : string) : unit =
        ([ ("ref", el); ("pos", JString pos); ("text", JString v) ]
        @ shadow_field el))
 
-(* ---------- shadow event dispatch ---------- *)
+(* ---------- imperative event dispatch ---------- *)
 
-(* The Swift host posts ONE "shadow-event" per UI interaction on a shadow
-   node: {name, target:<shadow-id>, ...fields}. Listeners registered on
-   the target and its shadow ancestors run in bubble order (respecting
-   stopPropagation via the ##dispatch tag), then the event continues into
-   the LUI host: the recorded parent host's node-id drives emit_event's
-   LUI bubble + window/document listeners so document-level handlers
-   (outside-click dismissals, a.page-ref navigation) see shadow events
-   like real DOM events. *)
+(* Host events on imperative elements arrive through the extension
+   dom-event channel; Imperative_dom unwraps them and re-dispatches via
+   Platform.emit_event, which bubbles the runtime tree (imperative and
+   declarative ancestors) into the per-node dom_handlers entries and ends
+   at window/document listeners. Programmatic clicks take the same path
+   through Imperative_dom.dispatch. *)
 
-let collect_shadow_chain (el : el) : Shadow_dom.node list =
-  let rec walk el acc =
-    match Shadow_dom.id_of el with
-    | Some id -> (
-        match Shadow_dom.get id with
-        | Some n -> (
-            match n.Shadow_dom.s_parent with
-            | Some p -> walk p (n :: acc)
-            | None -> n :: acc)
-        | None -> acc)
-    | None -> acc
-  in
-  walk el []
-
-let dispatch_shadow (name : string) (target_id : int)
-    (fields : (string * Js.Json.t) list) : unit =
-  match Shadow_dom.get target_id with
-  | None -> ()
-  | Some target ->
-      Shadow_dom.prune_flags ();
-      let did = Shadow_dom.begin_dispatch () in
-      (* refresh live value/checked on the shadow from the event payload *)
-      (match List.assoc_opt "value" fields with
-       | Some v -> (
-           match decodeString v with
-           | Some s -> target.Shadow_dom.s_value <- s
-           | None -> ())
-       | None -> ());
-      (match List.assoc_opt "checked" fields with
-       | Some v -> (
-           match decodeBoolean v with
-           | Some b -> target.Shadow_dom.s_checked <- b
-           | None -> ())
-       | None -> ());
-      let ev =
-        JObject
-          ([ ("name", JString name)
-           ; ("target", Shadow_dom.snapshot target)
-           ; ("##dispatch", JNumber did) ]
-          @ fields)
-      in
-      (* bubble through the shadow chain, target first *)
-      List.iter
-        (fun n ->
-          if not (Shadow_dom.is_stopped did) then
-            List.iter
-              (fun f ->
-                try f ev
-                with e ->
-                  Printf.eprintf "[shadow %s] handler exn: %s\n%!" name
-                    (Printexc.to_string e))
-              (Shadow_dom.listeners_of n.Shadow_dom.s_id name))
-        (List.rev
-           (collect_shadow_chain
-              (JObject [ ("#new", JNumber (Float.of_int target_id)) ])));
-      (* default action: a[href^="#"] navigates like a real link *)
-      if
-        name = "click"
-        && (not (Shadow_dom.is_prevented did))
-        && (not (Shadow_dom.is_stopped did))
-      then begin
-        let rec find_href (el : el) : string option =
-          match Shadow_dom.id_of el with
-          | Some id -> (
-              match Shadow_dom.get id with
-              | Some n ->
-                  if n.Shadow_dom.s_tag = "a" then
-                    match Shadow_dom.get_attr n "href" with
-                    | Some h -> Some h
-                    | None -> (
-                        match n.Shadow_dom.s_parent with
-                        | Some p -> find_href p
-                        | None -> None)
-                  else (
-                    match n.Shadow_dom.s_parent with
-                    | Some p -> find_href p
-                    | None -> None)
-              | None -> None)
-          | None -> None
-        in
-        match
-          find_href (JObject [ ("#new", JNumber (Float.of_int target_id)) ])
-        with
-        | Some href when String.length href > 0 && href.[0] = '#' ->
-            Runtime.mark_nav ();
-            Platform.set_location_hash (Runtime.nav_hash href)
-        | _ -> ()
-      end;
-      (* continue into the host unless stopped *)
-      if not (Shadow_dom.is_stopped did) then begin
-        let host =
-          match target.Shadow_dom.s_parent with
-          | Some p -> Shadow_dom.host_ref_of p
-          | None -> Shadow_dom.Host_body
-        in
-        let fields' =
-          match host with
-          | Shadow_dom.Host_node n ->
-              [ ("nodeId", JNumber (Float.of_int n)) ]
-          | Shadow_dom.Host_dom_id s -> (
-              match
-                Option.bind
-                  ((!Shadow_dom.lui_snapshot_by_dom_id) s)
-                  (fun snap ->
-                    match snap with
-                    | JObject kvs -> (
-                        match List.assoc_opt "node-id" kvs with
-                        | Some v -> decodeNumber v
-                        | None -> None)
-                    | _ -> None)
-              with
-              | Some n -> [ ("nodeId", JNumber n) ]
-              | None -> [])
-          | _ -> []
-        in
-        let payload =
-          match ev with
-          | JObject kvs -> JObject (kvs @ fields')
-          | other -> other
-        in
-        Platform.emit_event name payload
-      end
-
-(* posted once at module init; the Swift store's emit() lands here *)
-let () =
-  Platform.add_event_listener "shadow-event" (fun payload ->
-      match payload with
-      | JObject kvs -> (
-          match
-            ( List.assoc_opt "name" kvs
-            , List.assoc_opt "target" kvs )
-          with
-          | Some name_j, Some target_j -> (
-              match (decodeString name_j, decodeNumber target_j) with
-              | Some name, Some t ->
-                  let fields =
-                    List.filter
-                      (fun (k, _) -> k <> "name" && k <> "target")
-                      kvs
-                  in
-                  dispatch_shadow name (int_of_float t) fields
-              | _ -> ())
-          | _ -> ())
-      | _ -> ());
-  (* host frame push: {frames:{<id>:{left,top,right,bottom}}} *)
-  Platform.add_event_listener "shadow-frames" (fun payload ->
-      match payload with
-      | JObject kvs -> (
-          match List.assoc_opt "frames" kvs with
-          | Some (JObject frames) ->
-              List.iter
-                (fun (k, v) ->
-                  match int_of_string_opt k with
-                  | Some id -> (
-                      let f key =
-                        match v with
-                        | JObject kvs ->
-                            Option.bind (List.assoc_opt key kvs)
-                              decodeNumber
-                        | _ -> None
-                      in
-                      match
-                        (f "left", f "top", f "right", f "bottom")
-                      with
-                      | Some l, Some t, Some r, Some b ->
-                          Shadow_dom.set_rect id l t r b
-                      | _ -> ())
-                  | None -> ())
-                frames
-          | _ -> ())
-      | _ -> ())
-
-(* programmatic click → dispatch a click through the shadow listener
-   chain (DOM .click() semantics: listeners fire, host continues) *)
 let el_click (el : el) : unit =
-  match Shadow_dom.id_of el with
-  | Some id -> dispatch_shadow "click" id []
+  match Imperative_dom.id_of el with
+  | Some id -> Imperative_dom.dispatch id "click" []
   | None -> ()
 
 let el_blur (_ : el) : unit = ()
 
 let el_checked (el : el) : bool =
-  match Shadow_dom.id_of el with
+  match Imperative_dom.id_of el with
   | Some id -> (
-      match Shadow_dom.get id with
-      | Some n -> n.Shadow_dom.s_checked
+      match Imperative_dom.get id with
+      | Some n -> n.Imperative_dom.s_checked
       | None -> false)
   | None -> (
       match el with
@@ -307,28 +125,28 @@ let el_checked (el : el) : bool =
       | _ -> false)
 
 let el_set_checked (el : el) (b : bool) : unit =
-  (match Shadow_dom.id_of el with
-   | Some id -> (
-       match Shadow_dom.get id with
-       | Some n -> n.Shadow_dom.s_checked <- b
-       | None -> ())
-   | None -> ());
-  doc_op "set-checked"
-    (JObject ([ ("ref", el); ("checked", JBoolean b) ] @ shadow_field el))
+  match Imperative_dom.id_of el with
+  | Some id -> (
+      match Imperative_dom.get id with
+      | Some n ->
+          if b then Imperative_dom.set_attr n "checked" ""
+          else Imperative_dom.remove_attr n "checked"
+      | None -> ())
+  | None -> ()
 
 (* ---------- tree mutation ops ---------- *)
 
 let el_insert_before (parent : el) (child : el) (before : el option) : unit =
-  Shadow_dom.insert_before parent child before
+  Imperative_dom.insert_before parent child before
 
 let el_append_child (parent : el) (child : el) : unit =
-  Shadow_dom.append_child parent child
+  Imperative_dom.append_child parent child
 
 (* ---------- listeners ---------- *)
 
 let el_add_listener (el : el) (name : string) (f : ev -> unit) : unit =
-  match Shadow_dom.id_of el with
-  | Some id -> Shadow_dom.add_listener id name f
+  match Imperative_dom.id_of el with
+  | Some id -> Imperative_dom.add_listener id name f
   | None -> Platform.add_event_listener name f
 
 let el_add_listener_capture (el : el) (name : string) (f : ev -> unit)
@@ -336,8 +154,8 @@ let el_add_listener_capture (el : el) (name : string) (f : ev -> unit)
   el_add_listener el name f
 
 let el_remove_listener (el : el) (name : string) (f : ev -> unit) : unit =
-  match Shadow_dom.id_of el with
-  | Some id -> Shadow_dom.remove_listener id name f
+  match Imperative_dom.id_of el with
+  | Some id -> Imperative_dom.remove_listener id name f
   | None -> ()
 
 let el_contains (a : el) (b : el) : bool = Editor_dom.el_contains a b
@@ -345,26 +163,18 @@ let el_contains (a : el) (b : el) : bool = Editor_dom.el_contains a b
 (* ---------- attrs ---------- *)
 
 let el_placeholder (el : el) (v : string) : unit =
-  doc_op "set-attr"
-    (JObject
-       ([ ("ref", el); ("name", JString "placeholder"); ("value", JString v) ]
-       @ shadow_field el));
-  match Shadow_dom.id_of el with
+  match Imperative_dom.id_of el with
   | Some id -> (
-      match Shadow_dom.get id with
-      | Some n -> Shadow_dom.set_attr n "placeholder" v
+      match Imperative_dom.get id with
+      | Some n -> Imperative_dom.set_attr n "placeholder" v
       | None -> ())
   | None -> ()
 
 let el_type (el : el) (v : string) : unit =
-  doc_op "set-attr"
-    (JObject
-       ([ ("ref", el); ("name", JString "type"); ("value", JString v) ]
-       @ shadow_field el));
-  match Shadow_dom.id_of el with
+  match Imperative_dom.id_of el with
   | Some id -> (
-      match Shadow_dom.get id with
-      | Some n -> Shadow_dom.set_attr n "type" v
+      match Imperative_dom.get id with
+      | Some n -> Imperative_dom.set_attr n "type" v
       | None -> ())
   | None -> ()
 
@@ -372,53 +182,47 @@ let el_scroll_into_view (el : el) : unit =
   doc_op "scroll-into-view" (JObject ([ ("ref", el) ] @ shadow_field el))
 
 let el_has_attr (el : el) (name : string) : bool =
-  match Shadow_dom.id_of el with
+  match Imperative_dom.id_of el with
   | Some id -> (
-      match Shadow_dom.get id with
-      | Some n -> Shadow_dom.get_attr n name <> None
+      match Imperative_dom.get id with
+      | Some n -> Imperative_dom.get_attr n name <> None
       | None -> false)
   | None -> Editor_dom.el_has_attr el name
 
 let el_get_attr (el : el) (name : string) : string option =
-  match Shadow_dom.id_of el with
+  match Imperative_dom.id_of el with
   | Some id -> (
-      match Shadow_dom.get id with
-      | Some n -> Shadow_dom.get_attr n name
+      match Imperative_dom.get id with
+      | Some n -> Imperative_dom.get_attr n name
       | None -> None)
   | None -> Editor_dom.el_get_attr el name
 
 let el_set_attr (el : el) (name : string) (v : string) : unit =
-  (match Shadow_dom.id_of el with
-   | Some id -> (
-       match Shadow_dom.get id with
-       | Some n -> Shadow_dom.set_attr n name v
-       | None -> ())
-   | None -> Editor_dom.record_attr_override el name v);
-  doc_op "set-attr"
-    (JObject
-       ([ ("ref", el); ("name", JString name); ("value", JString v) ]
-       @ shadow_field el))
+  match Imperative_dom.id_of el with
+  | Some id -> (
+      match Imperative_dom.get id with
+      | Some n -> Imperative_dom.set_attr n name v
+      | None -> ())
+  | None -> Editor_dom.record_attr_override el name v
 
 let el_set_class (el : el) (c : string) : unit = el_set_attr el "class" c
 
 let el_remove_attr (el : el) (name : string) : unit =
-  (match Shadow_dom.id_of el with
-   | Some id -> (
-       match Shadow_dom.get id with
-       | Some n -> Shadow_dom.remove_attr n name
-       | None -> ())
-   | None -> Editor_dom.remove_attr_override el name);
-  doc_op "remove-attr"
-    (JObject ([ ("ref", el); ("name", JString name) ] @ shadow_field el))
+  match Imperative_dom.id_of el with
+  | Some id -> (
+      match Imperative_dom.get id with
+      | Some n -> Imperative_dom.remove_attr n name
+      | None -> ())
+  | None -> Editor_dom.remove_attr_override el name
 
 let el_scroll_top (_ : el) : float = 0.
 let el_scroll_height (_ : el) : float = 0.
 let el_client_height (_ : el) : float = 0.
 let el_client_width (_ : el) : float = 0.
 
-let el_inner_html_set (el : el) (v : string) : unit =
-  doc_op "set-inner-html"
-    (JObject ([ ("ref", el); ("html", JString v) ] @ shadow_field el))
+(* innerHTML is not ported: the logseq-* element family renders text via
+   the "text" prop only — callers use el_set_text_content. *)
+let el_inner_html_set (_ : el) (_ : string) : unit = ()
 
 let el_query_all (el : el) (sel : string) : Js.Json.t =
   Editor_dom.el_query_all el sel
@@ -426,13 +230,18 @@ let el_query_all (el : el) (sel : string) : Js.Json.t =
 let el_focus (el : el) : unit =
   doc_op "focus" (JObject ([ ("ref", el) ] @ shadow_field el))
 
-let document_body : el = JObject [ ("#ref", JNumber (-1.)) ]
+(* document.body — floating elements (menus/popups) mount at the top of
+   the tree so position:fixed lifts them into the window-level overlay
+   layer; #app-container is the topmost app element, the body analogue *)
+let document_body : el = JObject [ ("#ref", JString "app-container") ]
 let window_inner_height : float = Host.inner_height ()
 
+let window_inner_width : float = Host.inner_width ()
+
 let el_rect (el : el) : rect =
-  match Shadow_dom.id_of el with
+  match Imperative_dom.id_of el with
   | Some id -> (
-      match Shadow_dom.rect_of id with
+      match Imperative_dom.rect_of id with
       | Some (l, t, r, b) ->
           JObject
             [ ("left", JNumber l); ("top", JNumber t); ("right", JNumber r)
@@ -485,16 +294,16 @@ let h ?(tag = "div") ?(cls = "") ?(attrs = []) ?text ?title_ ?on_click
     | None -> attrs
   in
   let j =
-    Shadow_dom.register ~tag ~cls ~attrs
+    Imperative_dom.register ~tag ~cls ~attrs
       ~text:(Option.value ~default:"" text)
       ()
   in
   let id =
-    match Shadow_dom.id_of j with Some i -> i | None -> assert false
+    match Imperative_dom.id_of j with Some i -> i | None -> assert false
   in
   let reg (name : string) (f : (ev -> unit) option) =
     match f with
-    | Some g -> Shadow_dom.add_listener id name g
+    | Some g -> Imperative_dom.add_listener id name g
     | None -> ()
   in
   reg "click" on_click;
@@ -575,15 +384,15 @@ let button_cls_str ?(variant = "") ?(size = "") (extra : string) : string =
 (* focus + caret at end — the query source editor positions the caret
    after text injection *)
 let focus_end (el : el) : unit =
-  (match Shadow_dom.id_of el with
+  (match Imperative_dom.id_of el with
    | Some id -> (
-       match Shadow_dom.get id with
+       match Imperative_dom.get id with
        | Some n ->
            doc_op "focus"
              (JObject
                 ([ ("ref", el)
-                 ; ("selectionStart", JNumber (Float.of_int (String.length n.Shadow_dom.s_value)))
-                 ; ("selectionEnd", JNumber (Float.of_int (String.length n.Shadow_dom.s_value))) ]
+                 ; ("selectionStart", JNumber (Float.of_int (String.length n.Imperative_dom.s_value)))
+                 ; ("selectionEnd", JNumber (Float.of_int (String.length n.Imperative_dom.s_value))) ]
                 @ shadow_field el))
        | None -> ())
    | None -> ());
@@ -593,37 +402,35 @@ let query_inside (root : el) (sel : string) : el option =
   Editor_dom.el_query root sel
 
 let el_class_add (el : el) (c : string) : unit =
-  (match Shadow_dom.id_of el with
-   | Some id -> (
-       match Shadow_dom.get id with
-       | Some n ->
-           Shadow_dom.set_attr n "class"
-             (String.trim (n.Shadow_dom.s_cls ^ " " ^ c))
-       | None -> ())
-   | None -> ());
-  doc_op "class-add"
-    (JObject ([ ("ref", el); ("class", JString c) ] @ shadow_field el))
+  match Imperative_dom.id_of el with
+  | Some id -> (
+      match Imperative_dom.get id with
+      | Some n ->
+          Imperative_dom.set_attr n "class"
+            (String.trim (n.Imperative_dom.s_cls ^ " " ^ c))
+      | None -> ())
+  | None -> ()
 
 let el_class_remove (el : el) (c : string) : unit =
-  (match Shadow_dom.id_of el with
-   | Some id -> (
-       match Shadow_dom.get id with
-       | Some n ->
-           Shadow_dom.set_attr n "class"
-             (String.concat " "
-                (List.filter
-                   (fun t -> t <> "" && t <> c)
-                   (String.split_on_char ' ' n.Shadow_dom.s_cls)))
-       | None -> ())
-   | None -> ());
-  doc_op "class-remove"
-    (JObject ([ ("ref", el); ("class", JString c) ] @ shadow_field el))
+  match Imperative_dom.id_of el with
+  | Some id -> (
+      match Imperative_dom.get id with
+      | Some n ->
+          Imperative_dom.set_attr n "class"
+            (String.concat " "
+               (List.filter
+                  (fun t -> t <> "" && t <> c)
+                  (String.split_on_char ' ' n.Imperative_dom.s_cls)))
+      | None -> ())
+  | None -> ()
 
 let el_set_value (el : el) (v : string) : unit =
-  (match Shadow_dom.id_of el with
+  (match Imperative_dom.id_of el with
    | Some id -> (
-       match Shadow_dom.get id with
-       | Some n -> n.Shadow_dom.s_value <- v
+       match Imperative_dom.get id with
+       | Some n ->
+           n.Imperative_dom.s_value <- v;
+           Imperative_dom.push_text n
        | None -> ())
    | None -> ());
   doc_op "set-value"
@@ -635,10 +442,10 @@ let ev_detail (e : ev) : Js.Json.t option =
   | _ -> None
 
 let el_value (el : el) : string =
-  match Shadow_dom.id_of el with
+  match Imperative_dom.id_of el with
   | Some id -> (
-      match Shadow_dom.get id with
-      | Some n -> n.Shadow_dom.s_value
+      match Imperative_dom.get id with
+      | Some n -> n.Imperative_dom.s_value
       | None -> "")
   | None -> (
       match el with
