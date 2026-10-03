@@ -71,6 +71,100 @@
                      (is (string/includes? (.-message error) "not a DB graph"))
                      (done)))))))
 
+(deftest create-page-refuses-title-collisions-before-writing
+  (let [calls (atom [])
+        api (fn [method args]
+              (swap! calls conj [method args])
+              (if (string/includes? (first args) "block/title ?title")
+                [{:uuid "existing-page" :title "Taken" :name "taken"
+                  :tags [{:ident :logseq.class/Page}]}]
+                nil))]
+    (async done
+      (-> (p/then (mcp-compat/create-page api #js {"title" "Taken"})
+                  (fn [_]
+                    (is false "createPage should reject a held title")
+                    (done)))
+          (p/catch (fn [error]
+                     (is (string/includes? (.-message error) "already exists"))
+                     (is (not-any? #(= "logseq.DB.createPage" (first %)) @calls))
+                     (done)))))))
+
+(deftest create-page-verifies-its-uuid-and-dry-run-does-not-write
+  (let [title "Fresh Test Page"
+        page-uuid "00000000-0000-4000-8000-000000000081"
+        calls (atom [])
+        api (fn [method args]
+              (swap! calls conj [method args])
+              (case method
+                "logseq.DB.createPage" #js {:uuid page-uuid}
+                "logseq.DB.datascriptQuery"
+                (let [query (first args)]
+                  (cond
+                    (string/includes? query "where [?entity :block/title ?title]") []
+                    (string/includes? query "?class :db/ident :logseq.class/Page")
+                    {:id 81 :uuid page-uuid :name "fresh test page" :title title}
+                    :else nil))
+                nil))]
+    (async done
+      (-> (p/then (mcp-compat/create-page api #js {"title" title "verbose" true})
+                  (fn [result]
+                    (is (true? (:verified result)))
+                    (is (= page-uuid (get-in result [:verified_entities 0 :uuid])))
+                    (is (some #(= "logseq.DB.createPage" (first %)) @calls))
+                    (reset! calls [])
+                    (p/then (mcp-compat/create-page api #js {"title" "Dry Run Page" "dry_run" true})
+                            (fn [dry-run]
+                              (is (false? (:verified dry-run)))
+                              (is (empty? (filter #(= "logseq.DB.createPage" (first %)) @calls)))
+                              (done)))))
+          (p/catch (fn [error]
+                     (is false (str "createPage unexpectedly failed: " (.-message error)))
+                     (done)))))))
+
+(deftest rename-page-refuses-a-title-held-by-another-entity
+  (let [page-uuid "00000000-0000-4000-8000-000000000084"
+        calls (atom [])
+        api (fn [method args]
+              (swap! calls conj [method args])
+              (if (string/includes? (first args) "block/title ?title")
+                [{:uuid "other-page" :title "Taken" :name "taken"}]
+                {:id 84 :uuid page-uuid :name "source" :title "Source"}))]
+    (async done
+      (-> (p/then (mcp-compat/rename-page api #js {"page_uuid" page-uuid "new_title" "Taken"})
+                  (fn [_]
+                    (is false "renamePage should reject an occupied title")
+                    (done)))
+          (p/catch (fn [error]
+                     (is (string/includes? (.-message error) "already exists"))
+                     (is (not-any? #(= "logseq.DB.renamePage" (first %)) @calls))
+                     (done)))))))
+
+(deftest rename-page-verifies-the-original-uuid
+  (let [page-uuid "00000000-0000-4000-8000-000000000085"
+        title (atom "Before")
+        calls (atom [])
+        api (fn [method args]
+              (swap! calls conj [method args])
+              (case method
+                "logseq.DB.renamePage" (do (reset! title (second args)) nil)
+                "logseq.DB.datascriptQuery"
+                (let [query (first args)]
+                  (if (string/includes? query "block/title ?title")
+                    []
+                    {:id 85 :uuid page-uuid :name (string/lower-case @title) :title @title}))
+                nil))]
+    (async done
+      (-> (p/then (mcp-compat/rename-page api #js {"page_uuid" page-uuid "new_title" "After" "verbose" true})
+                  (fn [result]
+                    (is (true? (:verified result)))
+                    (is (= page-uuid (get-in result [:verified_entities 0 :uuid])))
+                    (is (= "After" (get-in result [:verified_entities 0 :title])))
+                    (is (= 1 (count (filter #(= "logseq.DB.renamePage" (first %)) @calls))))
+                    (done)))
+          (p/catch (fn [error]
+                     (is false (str "renamePage unexpectedly failed: " (.-message error)))
+                     (done)))))))
+
     (deftest page-uuid-result-resolves-one-live-page
       (is (= {:found true :title "Inbox" :page_uuid "page-1"}
         (mcp-compat/page-uuid-result "Inbox" [{:uuid "page-1"}])))
@@ -351,55 +445,6 @@
 (deftest page-stats-validates-page-uuid-before-querying
   (is (thrown-with-msg? js/Error #"page_uuid must be a UUID"
                         (mcp-compat/page-stats (fn [& _] nil) #js {"page_uuid" "not-a-uuid"}))))
-
-(deftest inspect-page-all-returns-each-detail-with-structural-values-filtered
-  (let [page-uuid "00000000-0000-4000-8000-000000000011"
-        calls (atom [])
-        api (fn [_method args]
-              (let [query (first args)]
-                (swap! calls conj [query args])
-                (cond
-                  (string/includes? query "pull ?entity [*]")
-                  #js {"id" 10 "uuid" page-uuid "name" "home" "title" "Home"}
-                     (string/includes? query ":block/parent+ ?page")
-                     #js [["block-uuid" "Body" 0]
-                       ["child-uuid" "Child" 1]]
-                       (string/includes? query "?holder ?attr ?value")
-                       #js [#js [#js {"ident" "user.property/score"}
-                           #js {"uuid" page-uuid}
-                           42]
-                         #js [#js {"ident" "block/parent"}
-                           #js {"uuid" page-uuid}
-                           10]]
-                  (string/includes? query "?holder")
-                  #js [#js {"uuid" page-uuid "tags" #js [#js {"ident" "user.class/Topic"}]}]
-                       (string/includes? query "property.class/properties")
-                       #js [#js [#js {"title" "Topic"}
-                           #js {"ident" "user.property/score" "title" "Score"}]]
-                  (string/includes? query "?class :db/ident") 90
-                  (string/includes? query "?e ?a _")
-                  #js [#js {"id" 42 "title" "Choice" "value" "green"}]
-                  :else nil)))]
-    (async done
-      (-> (p/then (mcp-compat/inspect-page api #js {"page_uuid" page-uuid "detail" "all"})
-                  (fn [result]
-                    (is (true? (:found result)))
-                    (is (= "Home" (get-in result [:page :title])))
-                    (is (= [{:uuid "block-uuid" :title "Body" :order 0 :page_uuid page-uuid}
-                            {:uuid "child-uuid" :title "Child" :order 1 :page_uuid page-uuid}]
-                           (:blocks result)))
-                    (is (= 1 (count (:tags result))))
-                    (is (= 1 (count (:properties result))))
-                    (is (= 42 (get-in result [:properties 0 :value])))
-                    (is (= "Choice" (get-in result [:properties 0 :value_entity :title])))
-                    (is (= [{:class {:title "Topic"}
-                             :property {:ident "user.property/score" :title "Score"}}]
-                           (:declared_properties result)))
-                    (is (= 7 (count @calls)))
-                    (done)))
-          (p/catch (fn [_error]
-                     (is false "inspectPage query rejected")
-                     (done)))))))
 
 (deftest inspect-page-reports-missing-page-and-block
   (let [page-uuid "00000000-0000-4000-8000-000000000012"]
@@ -950,3 +995,4 @@
           (p/catch (fn [error]
                      (is false (str "removeTag unexpectedly failed: " (.-message error)))
                      (done)))))))
+

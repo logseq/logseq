@@ -107,7 +107,10 @@ collisions and verifies the identity Logseq assigns. `deleteTag` requires
 holder-detach and child-reparent acknowledgement and verifies deletion;
 `addTag` verifies the target's tag relation and preserves page identity;
 `removeTag` verifies removal while preserving other tags and page identity.
-There are 36 registered tools: five API-backed tools and 31 compatibility data tools.
+`createPage` checks title availability before writing and verifies the created
+page by UUID. `createBlock` verifies its parent, owning page and stored content.
+There are 38 registered tools: five API-backed tools and 33 compatibility data
+tools.
 `capabilities` reports inconclusive probes as `unknown`; write probes use
 invalid arguments, and `upsertNodes` is neither probed nor reported.
 Entry criteria still outstanding:

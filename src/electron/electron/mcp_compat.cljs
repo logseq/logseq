@@ -997,6 +997,231 @@
                    (if (map? page) (:id page) page))}
     (some? (:order entity)) (assoc :order (:order entity))))
 
+(defn- entity-ref-id
+  [value]
+  (if (map? value)
+    (or (:id value) (:db/id value))
+    value))
+
+(defn- content-loss
+  [sent stored]
+  (let [sent (string/replace sent #"\s+$" "")
+        stored (string/replace stored #"\s+$" "")
+        sent-lines (string/split sent #"\n" -1)
+        stored-lines (string/split stored #"\n" -1)
+        last-line (string/trim (last sent-lines))]
+    (cond
+      (not= (count sent-lines) (count stored-lines))
+      (str (count sent-lines) " line(s) sent, " (count stored-lines)
+           " stored -- content was dropped on write")
+
+      (and (not (string/blank? last-line))
+           (not (string/includes? last-line "[["))
+           (not (string/includes? last-line "#"))
+           (not (string/ends-with? stored last-line)))
+      "The stored text does not end with the last line sent"
+
+      :else nil)))
+
+(defn create-block
+  [api-fn args]
+  (let [parent-uuid (aget args "parent_uuid")
+        title (aget args "title")
+        dry-run? (true? (aget args "dry_run"))
+        verbose? (not (false? (aget args "verbose")))]
+    (when-not (and (string? parent-uuid)
+                   (re-matches page-stats-uuid-pattern parent-uuid))
+      (throw (js/Error. "parent_uuid must be a UUID")))
+    (when-not (and (string? title) (not (string/blank? title)))
+      (throw (js/Error. "Expected a non-empty title")))
+    (when (re-find #"(?m)^[\t ]*-\s" title)
+      (throw (js/Error. "title: a line begins with '- '; Logseq truncates the block there")))
+    (let [parent-query (str "[:find (pull ?parent [:db/id :block/uuid :block/name :block/title "
+                            "{:block/page [:db/id]}]) . :where "
+                            "[?parent :block/uuid #uuid \"" parent-uuid "\"]]")
+          children-query "[:find [(pull ?child [:db/id :block/uuid :block/title :block/order {:block/parent [:db/id]} {:block/page [:db/id]}]) ...] :in $ ?parent-id :where [?child :block/parent ?parent-id]]"]
+      (p/let [parent-result (api-fn "logseq.DB.datascriptQuery" [parent-query])
+              parent (js->clj parent-result :keywordize-keys true)]
+        (when-not parent
+          (throw (js/Error. (str "No entity exists with exact UUID " parent-uuid))))
+        (let [parent-id (or (:id parent) (:db/id parent))
+              page? (boolean (or (:name parent) (:block/name parent)))
+              expected-page-id (if page? parent-id (entity-ref-id (or (:page parent) (:block/page parent))))]
+          (if dry-run?
+            {:validation {:parent parent :title title}
+             :response nil
+             :verified_entities []
+             :recovered_after_timeout false
+             :verified false
+             :diagnostic "Dry run: nothing was written, so verified is false by design. The parent exists and the title is usable."}
+            (p/let [before-result (api-fn "logseq.DB.datascriptQuery" [children-query parent-id])
+                    before-rows (js->clj before-result :keywordize-keys true)
+                    before-children (if (and (= 1 (count before-rows)) (vector? (first before-rows)))
+                                      (first before-rows)
+                                      before-rows)
+                    before-ids (set (keep #(or (:id %) (:db/id %)) before-children))
+                    response (api-fn "logseq.DB.insertBlock" [parent-uuid title #js {:sibling false}])
+                    response-map (js->clj response :keywordize-keys true)]
+              (when-let [error (and response (aget response "error"))]
+                (throw (js/Error. (str error))))
+              (let [created-uuid (or (:uuid response-map) (:block/uuid response-map))]
+                (p/let [after-result (api-fn "logseq.DB.datascriptQuery" [children-query parent-id])
+                        after-rows (js->clj after-result :keywordize-keys true)
+                        after-children (if (and (= 1 (count after-rows)) (vector? (first after-rows)))
+                                         (first after-rows)
+                                         after-rows)
+                        created (or (some #(when (= created-uuid (or (:uuid %) (:block/uuid %))) %) after-children)
+                                    (first (filter #(and (not (contains? before-ids (or (:id %) (:db/id %))))
+                                                         (= title (or (:title %) (:block/title %))))
+                                           after-children)))]
+                  (if-not created
+                    {:validation nil
+                     :response response-map
+                     :verified_entities []
+                     :previous_entities [parent]
+                     :recovered_after_timeout false
+                     :verified false
+                     :diagnostic "The block was not observed under the requested parent"}
+                    (let [block-uuid (or (:uuid created) (:block/uuid created))
+                          block-query "[:find (pull ?block [:db/id :block/uuid :block/title :block/order {:block/parent [:db/id]} {:block/page [:db/id]}]) . :in $ ?uuid :where [?block :block/uuid ?uuid]]"]
+                      (p/let [block-result (api-fn "logseq.DB.datascriptQuery" [block-query block-uuid])
+                              block (js->clj block-result :keywordize-keys true)
+                              actual-parent-id (entity-ref-id (or (:parent block) (:block/parent block)))
+                              actual-page-id (entity-ref-id (or (:page block) (:block/page block)))
+                              loss (content-loss title (or (:title block) (:block/title block) ""))]
+                        (cond
+                          (not= actual-parent-id parent-id)
+                          {:validation nil :response response-map :verified_entities [block]
+                           :previous_entities [parent] :observed_entities [block]
+                           :recovered_after_timeout false :verified false
+                           :diagnostic "The block was created under the wrong parent"}
+
+                          (not= actual-page-id expected-page-id)
+                          {:validation nil :response response-map :verified_entities [block]
+                           :previous_entities [parent] :observed_entities [block]
+                           :recovered_after_timeout false :verified false
+                           :diagnostic "The block's owning page is wrong; run findOrphans and remove it"}
+
+                          loss
+                          {:validation nil :response response-map :verified_entities [block]
+                           :previous_entities [parent] :observed_entities [block]
+                           :recovered_after_timeout false :verified false
+                           :diagnostic (str "The block was created in the right place but its content differs. " loss)}
+
+                          verbose?
+                          {:validation nil :response response-map :verified_entities [block]
+                           :previous_entities [parent] :recovered_after_timeout false
+                           :verified true :diagnostic nil}
+
+                          :else
+                          (merge {:verified true :diagnostic nil}
+                                 (entity-write-digest block)))))))))))))))
+
+(defn create-page
+  [api-fn args]
+  (let [title (aget args "title")
+        dry-run? (true? (aget args "dry_run"))
+        verbose? (not (false? (aget args "verbose")))]
+    (when-not (and (string? title) (not (string/blank? title)))
+      (throw (js/Error. "Expected a non-empty title")))
+    (p/let [availability (is-title-available api-fn #js {"title" title})]
+      (when-not (:available availability)
+        (let [kinds (->> (:held_by availability) (map :kind) distinct (string/join ", "))]
+          (throw (js/Error. (str "An entity titled " (pr-str title)
+                                 " already exists (" kinds "). Pages, tags and blocks share a title space.")))))
+      (if dry-run?
+        {:validation {:title title :checked "locally"}
+         :response nil
+         :verified_entities []
+         :recovered_after_timeout false
+         :verified false
+         :diagnostic (str "Dry run: nothing was written, so verified is false by design. "
+                          "This checks the title locally; createPage has no server-side dry run.")}
+        (p/let [response (api-fn "logseq.DB.createPage" [title])
+                response-map (js->clj response :keywordize-keys true)]
+          (when-let [error (and response (aget response "error"))]
+            (throw (js/Error. (str error))))
+          (let [created-uuid (or (:uuid response-map) (:block/uuid response-map))
+                by-uuid-query "[:find (pull ?page [:db/id :block/uuid :block/name :block/title]) . :in $ ?uuid :where [?page :block/uuid ?uuid] [?page :block/tags ?class] [?class :db/ident :logseq.class/Page]]"]
+            (p/let [page-result (if created-uuid
+                                  (api-fn "logseq.DB.datascriptQuery"
+                                          [by-uuid-query created-uuid])
+                                  nil)
+                    page-from-uuid (js->clj page-result :keywordize-keys true)
+                    page (or page-from-uuid
+                             (first (query-pages api-fn page-title-query title)))]
+              (if-not (and page (or (:name page) (:block/name page)))
+                {:validation nil
+                 :response response-map
+                 :verified_entities []
+                 :recovered_after_timeout false
+                 :verified false
+                 :diagnostic (str "No page titled " (pr-str title) " is present after the write.")}
+                (if verbose?
+                  {:validation nil
+                   :response response-map
+                   :verified_entities [page]
+                   :recovered_after_timeout false
+                   :verified true
+                   :diagnostic "createPage creates the page with one empty block; later block counts include it."}
+                  (merge {:verified true
+                          :diagnostic "createPage creates the page with one empty block; later block counts include it."}
+                         (entity-write-digest page)))))))))))
+
+(defn rename-page
+  [api-fn args]
+  (let [page-uuid (aget args "page_uuid")
+        new-title (aget args "new_title")
+        verbose? (not (false? (aget args "verbose")))]
+    (when-not (and (string? page-uuid)
+                   (re-matches page-stats-uuid-pattern page-uuid))
+      (throw (js/Error. "page_uuid must be a UUID")))
+    (when-not (and (string? new-title) (not (string/blank? new-title)))
+      (throw (js/Error. "Expected a non-empty title")))
+    (let [page-query "[:find (pull ?page [:db/id :block/uuid :block/name :block/title :logseq.property/deleted-at]) . :in $ ?uuid :where [?page :block/uuid ?uuid] [?page :block/tags ?class] [?class :db/ident :logseq.class/Page]]"]
+      (p/let [page-result (api-fn "logseq.DB.datascriptQuery" [page-query page-uuid])
+              page (js->clj page-result :keywordize-keys true)
+              availability (is-title-available api-fn #js {"title" new-title})
+              clashes (remove #(= page-uuid (or (:uuid %) (:block/uuid %)))
+                              (:held_by availability))]
+        (when-not page
+          (throw (js/Error. (str "No live page exists with exact UUID " page-uuid))))
+        (when (:logseq.property/deleted-at page)
+          (throw (js/Error. (str "Page " page-uuid " is recycled and cannot be renamed"))))
+        (when (seq clashes)
+          (throw (js/Error. (str "An entity titled " (pr-str new-title)
+                                 " already exists; renaming onto it would make the two indistinguishable"))))
+        (p/let [response (api-fn "logseq.DB.renamePage" [page-uuid new-title])]
+          (when-let [error (and response (aget response "error"))]
+            (throw (js/Error. (str error))))
+          (p/let [current-result (api-fn "logseq.DB.datascriptQuery" [page-query page-uuid])
+                  current (js->clj current-result :keywordize-keys true)]
+            (cond
+              (or (nil? current) (not= new-title (or (:title current) (:block/title current)))
+                  (not (or (:name current) (:block/name current)))
+                  (some? (:logseq.property/deleted-at current)))
+              {:validation nil
+               :response (js->clj response :keywordize-keys true)
+               :verified_entities []
+               :recovered_after_timeout false
+               :verified false
+               :previous_entities [page]
+               :observed_entities (if current [current] [])
+               :diagnostic "Rename was not observed on the original page UUID."}
+
+              verbose?
+              {:validation nil
+               :response (js->clj response :keywordize-keys true)
+               :verified_entities [current]
+               :recovered_after_timeout false
+               :verified true
+               :previous_entities [page]
+               :diagnostic nil}
+
+              :else
+              (merge {:verified true :diagnostic nil :previous_count 1}
+                     (entity-write-digest current)))))))))
+
 (defn add-property
   [api-fn args]
   (let [target-uuid (aget args "target_uuid")
@@ -1565,7 +1790,10 @@
    :creatTag ["logseq.DB.createTag"]
    :deleteTag ["logseq.DB.deletePage" "logseq.DB.datascriptQuery"]
    :addTag ["logseq.DB.addBlockTag" "logseq.DB.datascriptQuery"]
-  :removeTag ["logseq.DB.removeBlockTag" "logseq.DB.datascriptQuery"]
+   :removeTag ["logseq.DB.removeBlockTag" "logseq.DB.datascriptQuery"]
+   :createPage ["logseq.DB.datascriptQuery" "logseq.DB.createPage"]
+  :renamePage ["logseq.DB.datascriptQuery" "logseq.DB.renamePage"]
+   :createBlock ["logseq.DB.insertBlock" "logseq.DB.datascriptQuery"]
    :getTag ["logseq.DB.datascriptQuery"]
    :getPropertyIndent ["logseq.DB.datascriptQuery"]
    :getBlock ["logseq.DB.datascriptQuery"]
@@ -1597,18 +1825,20 @@
    "logseq.cli.listPages" [#js {}]
    "logseq.cli.listTags" [#js {}]
    "logseq.cli.listProperties" [#js {}]
-  "logseq.cli.getPageData" ["__mcp_capability_probe__"]
-  "logseq.DB.upsertProperty" ["__mcp_capability_probe__/invalid" #js {}]
-  "logseq.DB.createTag" ["__mcp_capability_probe__/invalid"]
-  "logseq.DB.deletePage" ["__mcp_capability_probe__"]
-  "logseq.DB.addBlockTag" ["__mcp_capability_probe__" "__mcp_capability_probe__"]
-  "logseq.DB.removeBlockTag" ["__mcp_capability_probe__" "__mcp_capability_probe__"]
-  "logseq.DB.upsertBlockProperty" ["__mcp_capability_probe__"
+   "logseq.cli.getPageData" ["__mcp_capability_probe__"]
+   "logseq.DB.upsertProperty" ["__mcp_capability_probe__/invalid" #js {}]
+   "logseq.DB.createTag" ["__mcp_capability_probe__/invalid"]
+   "logseq.DB.insertBlock" ["__mcp_capability_probe__" "__mcp_capability_probe__" #js {:sibling false}]
+  "logseq.DB.renamePage" ["__mcp_capability_probe__" "__mcp_capability_probe__"]
+   "logseq.DB.deletePage" ["__mcp_capability_probe__"]
+   "logseq.DB.addBlockTag" ["__mcp_capability_probe__" "__mcp_capability_probe__"]
+   "logseq.DB.removeBlockTag" ["__mcp_capability_probe__" "__mcp_capability_probe__"]
+   "logseq.DB.upsertBlockProperty" ["__mcp_capability_probe__"
                                     "__mcp_capability_probe__"
                                     "__mcp_capability_probe__"]
-  "logseq.DB.removeBlockProperty" ["__mcp_capability_probe__" "__mcp_capability_probe__"]
-  "logseq.DB.removeProperty" ["__mcp_capability_probe__"]
-  "logseq.DB.removeBlock" ["__mcp_capability_probe__"]
+   "logseq.DB.removeBlockProperty" ["__mcp_capability_probe__" "__mcp_capability_probe__"]
+   "logseq.DB.removeProperty" ["__mcp_capability_probe__"]
+   "logseq.DB.removeBlock" ["__mcp_capability_probe__"]
    "logseq.app.search" ["__mcp_capability_probe__" #js {:enable-snippet? false}]})
 
 (def ^:private capability-absent-markers
@@ -1646,12 +1876,17 @@
 
 (defn- probe-capability-method
   [api-fn method]
-  (-> (p/let [result (api-fn method (get capability-probe-args method))
-              error-message (when (and result (object? result))
-                              (or (aget result "error") (get result "error")))]
-        (capability-finding method error-message result))
-      (p/catch (fn [error]
-                 (capability-finding method (.-message error) nil)))))
+  (if (= method "logseq.DB.createPage")
+    (p/resolved {:method method
+                 :state "unknown"
+                 :basis "not-probed"
+                 :detail "Skipped because probing createPage could create a graph page."})
+    (-> (p/let [result (api-fn method (get capability-probe-args method))
+                error-message (when (and result (object? result))
+                                (or (aget result "error") (get result "error")))]
+          (capability-finding method error-message result))
+        (p/catch (fn [error]
+                   (capability-finding method (.-message error) nil))))))
 
 (defn- capability-tool-status
   [tool findings]

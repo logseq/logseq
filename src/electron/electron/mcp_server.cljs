@@ -145,6 +145,28 @@
          :config #js {:title "Capabilities"
                   :description "Report which registered MCP tools are available on the current DB graph, with optional probe diagnostics."
                   :inputSchema #js {:include_diagnostics (-> (z/boolean) .optional)}}}
+  :createPage
+  {:fn mcp-compat/create-page
+   :config #js {:title "Create Page"
+            :description "Create one uniquely titled page and verify it by UUID."
+            :inputSchema #js {:title (z/string)
+                        :dry_run (-> (z/boolean) .optional)
+                        :verbose (-> (z/boolean) .optional)}}}
+  :renamePage
+  {:fn mcp-compat/rename-page
+   :config #js {:title "Rename Page"
+            :description "Rename a page by UUID, refuse title collisions, and verify the same page identity remains."
+            :inputSchema #js {:page_uuid (z/string)
+                        :new_title (z/string)
+                        :verbose (-> (z/boolean) .optional)}}}
+  :createBlock
+  {:fn mcp-compat/create-block
+   :config #js {:title "Create Block"
+            :description "Create a block under a page or block and verify its parent, owning page, and content."
+            :inputSchema #js {:parent_uuid (z/string)
+                        :title (z/string)
+                        :dry_run (-> (z/boolean) .optional)
+                        :verbose (-> (z/boolean) .optional)}}}
   :pageStats
   {:fn mcp-compat/page-stats
    :config #js {:title "Page Stats"

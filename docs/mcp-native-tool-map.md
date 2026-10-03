@@ -52,12 +52,12 @@ the full/terse response behavior. Batch writes remain non-atomic.
 |---|---|---|---|---|
 | `importPage` | target, markdown/list, replace, dry-run | batch insert + queries | importer adapter | native importer |
 | `repairLinks` | optional page, creation acknowledgements/caps | update blocks + page/tag creation | importer adapter | native write layer |
-| `createPage` | title, dry-run, verbose | `createPage` | page adapter | native mutation |
+| `createPage` | title, dry-run, verbose | `createPage` | compatibility adapter implemented; title preflight and UUID read-back | native mutation |
 | `renamePage` | page UUID, title, verbose | `renamePage` | page adapter | native mutation |
 | `retitleOverDuplicate` | source UUID, title, suffix | two renames | page adapter | native mutation |
 | `deletePage` | UUID, reference/alias acknowledgements | recycle via `deletePage` | page adapter | native mutation |
 | `clearPage` | page UUID, verbose | remove top-level blocks | page/block adapter | native mutation |
-| `createBlock` | parent UUID, title, dry-run, verbose | `insertBlock` | block adapter | native mutation |
+| `createBlock` | parent UUID, title, dry-run, verbose | `insertBlock` | compatibility adapter implemented; verifies parent, page and content | native mutation |
 | `createPageofBlocks` | page UUID, outline, dry-run, verbose | batch insert per parent | block adapter | native mutation |
 | `updateBlock` | block UUID, title, dry-run, verbose | `updateBlock` | block adapter | native mutation |
 | `splitBlock` | UUID, exactly one offset/delimiter | create parts then update original | block adapter | native mutation |
