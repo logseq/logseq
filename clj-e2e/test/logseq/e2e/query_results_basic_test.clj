@@ -14,9 +14,9 @@
 
 (defn- edit-query!
   [query]
-  (when-not (w/visible? "pre.CodeMirror-line")
+  (when-not (w/visible? ".cm-line")
     (w/click ".ls-query-setting"))
-  (w/click (.first (w/-query "pre.CodeMirror-line")))
+  (w/click (.first (w/-query ".cm-line")))
   (k/press "ControlOrMeta+a")
   (util/input query)
   (k/esc))
@@ -119,7 +119,7 @@
    "{:query [:find (pull ?p [:block/journal-day]) :where [?p :block/journal-day ?day] [(contains? #{ 20200101 20200102} ?day)]]}")
   (is (nil? (ls-api-call! :editor.getTag "{"))
       "Saving a Clojure set literal must not create a tag")
-  (assert/assert-is-visible ".CodeMirror")
+  (assert/assert-is-visible ".cm-editor")
   (assert-query-count! 2)
   (edit-query!
    "{:query [:find (pull ?p [:block/journal-day]) :where [?p :block/journal-day ?day] [(contains? #{20200103} ?day)]]}")

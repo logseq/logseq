@@ -8,6 +8,7 @@
             [frontend.components.svg :as svg]
             [frontend.config :as config]
             [frontend.context.i18n :refer [interpolate-rich-text interpolate-rich-text-node t]]
+            [frontend.extensions.code :as code-editor]
             [frontend.handler.common.plugin :as plugin-common-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.notification :as notification]
@@ -1559,7 +1560,7 @@
 
   (let [[content1 set-content1!] (hooks/use-state content)
         [editor-active? set-editor-active!] (hooks/use-state (string/blank? content))
-        *cm (hooks/use-ref nil)
+        *editor (hooks/use-ref nil)
         *el (hooks/use-ref nil)]
 
     (hooks/use-effect!
@@ -1574,26 +1575,40 @@
                (#(if editor-active?
                    (.add % "is-active")
                    (.remove % "is-active"))))
-       (when-let [^js cm (hooks/deref *cm)]
-         (.refresh cm)
-         (.focus cm)
-         (.setCursor cm (.lineCount cm) (count (.getLine cm (.lastLine cm))))))
+       (when-let [editor (hooks/deref *editor)]
+         (code-editor/request-measure! editor)
+         (code-editor/focus! editor)
+         (let [last-line (code-editor/last-line editor)]
+           (code-editor/set-cursor! editor {:line last-line
+                                            :ch (count (code-editor/line-text editor last-line))}))))
      [editor-active?])
 
     (hooks/use-effect!
      (fn []
-       (let [t (js/setTimeout
-                #(let [^js el (hooks/deref *el)
-                       ^js wrapper (when el (.closest el ".ui-fenced-code-wrap"))
-                       ^js cm-element (when wrapper (.querySelector wrapper ".CodeMirror"))
-                       ^js cm (when cm-element (.-CodeMirror cm-element))]
-                   (when cm
-                     (hooks/set-ref! *cm cm)
-                     (.on cm "change" (fn []
-                                        (some-> cm (.getDoc) (.getValue) (set-content1!))))))
-                  ;; wait for the cm loaded
-                1000)]
-         #(js/clearTimeout t)))
+       (let [*dispose! (atom nil)
+             attach-listener! (fn []
+                                (let [editor (some-> (hooks/deref *el)
+                                                     (.closest ".ui-fenced-code-wrap")
+                                                     util/get-code-editor-context)]
+                                  (when-not (identical? editor (hooks/deref *editor))
+                                    (when-let [dispose! @*dispose!]
+                                      (dispose!))
+                                    (hooks/set-ref! *editor editor)
+                                    (reset! *dispose! (when editor
+                                                        (code-editor/add-change-listener! editor set-content1!))))))
+             wrapper (some-> (hooks/deref *el) (.closest ".ui-fenced-code-wrap"))
+             ;; The editor component mounts lazily once in view and a new
+             ;; context replaces it after each remount; keep observing the
+             ;; wrapper and re-attach whenever the context identity changes.
+             observer (when (and wrapper (exists? js/MutationObserver))
+                        (js/MutationObserver. (fn [_mutations _observer]
+                                                (attach-listener!))))]
+         (attach-listener!)
+         (some-> observer (.observe wrapper #js {:childList true :subtree true}))
+         #(do
+            (some-> observer .disconnect)
+            (when-let [dispose! @*dispose!]
+              (dispose!)))))
      [])
 
     [:div.ui-fenced-code-result

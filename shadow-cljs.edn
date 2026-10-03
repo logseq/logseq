@@ -20,7 +20,7 @@
         :modules       {:main
                         {:init-fn frontend.core/init}
                         :code-editor
-                        {:entries [frontend.extensions.code]
+                        {:entries [frontend.extensions.code.editor]
                          :depends-on #{:main}}}
 
         :output-dir       "./static/js"
@@ -99,7 +99,7 @@
            :modules       {:main
                            {:init-fn mobile.core/init}
                            :code-editor
-                           {:entries [frontend.extensions.code]
+                           {:entries [frontend.extensions.code.editor]
                             :depends-on #{:main}}}
 
            :output-dir       "./static/mobile/js"
@@ -187,7 +187,7 @@
                :modules {:main
                          {:init-fn frontend.publishing/init}
                          :code-editor
-                         {:entries [frontend.extensions.code]
+                         {:entries [frontend.extensions.code.editor]
                           :depends-on #{:main}}}
 
                :output-dir "./static/js/publishing"

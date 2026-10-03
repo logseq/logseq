@@ -591,12 +591,24 @@ Enhance host libraries such as KaTeX.
 
 ```text
 registerExtensionsEnhancer(
-  type: 'katex' | 'codemirror',
+  type: 'katex' | 'codemirror-6',
   enhancer: (value: any) => Promise<any>
 ): any
 ```
 
 For `katex`, the host immediately invokes the enhancer if KaTeX is already present.
+
+For `codemirror-6`, the enhancer runs for every code editor mount and
+receives a CodeMirror 6 payload (not the legacy `window.CodeMirror`
+object): `{ apiVersion, enhancerType, capabilities, blockUuid, editorId,
+view, state, language, dispatch, getLanguage, registerExtension,
+registerLanguage }`. To install CM6 behavior into that editor, call
+`payload.registerExtension(key, extension)` with a CM6 `Extension` (or
+array); to provide a language, call `payload.registerLanguage(descriptor)`. Language
+descriptors must resolve to real support: pass `source: 'plugin'` with a
+CM6 `LanguageSupport`/`Extension` on `descriptor.support` or an async
+`descriptor.load()` returning one. Legacy `type: 'codemirror'`
+enhancers are skipped with an error.
 
 ```typescript
 logseq.Experiments.registerExtensionsEnhancer('katex', async (katex) => {
