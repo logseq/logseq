@@ -109,3 +109,28 @@
                (p/finally (fn []
                             (reset! worker-state/*db-sync-config config-prev)
                             (done)))))))
+
+(deftest fetch-pull-failure-emits-completed-log-and-stage-test
+  (async done
+         (let [config-prev @worker-state/*db-sync-config
+               log-events (atom [])]
+           (reset! worker-state/*db-sync-config {:http-base "https://sync.example.test"})
+           (-> (p/with-redefs [sync-download/fetch-json (fn [_url _opts schema]
+                                                          (if (= schema :sync/pull)
+                                                            (p/rejected (js/TypeError. "fetch failed"))
+                                                            (p/rejected (ex-info "unexpected schema" {:schema schema}))))
+                               rtc-log-and-state/rtc-log (fn [type payload]
+                                                           (swap! log-events conj (assoc payload :type type))
+                                                           nil)]
+                 (sync-download/download-graph-by-id! "repo" "graph-1" false))
+               (p/then (fn [_]
+                         (is false "expected download failure")))
+               (p/catch (fn [error]
+                          (is (= "db-sync download failed" (ex-message error)))
+                          (is (= :fetch-pull (:stage (ex-data error))))
+                          (is (= "fetch failed" (:error-message (ex-data error))))
+                          (is (= [:download-progress :download-completed]
+                                 (mapv :sub-type @log-events)))))
+               (p/finally (fn []
+                            (reset! worker-state/*db-sync-config config-prev)
+                            (done)))))))
