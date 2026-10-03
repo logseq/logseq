@@ -13,6 +13,10 @@ struct LogseqSVGView: View {
   let context: LUIAppleExtensionViewContext
 
   var body: some View {
+    // Same tracked-read contract as LogseqElementView — child/property
+    // lookups are untracked backend reads; subscribe via revision so a
+    // skipped parent re-render can't leave a stale glyph mounted.
+    let _ = context.revision
     switch tag {
     case "svg": svgRoot
     case "g", "defs": group

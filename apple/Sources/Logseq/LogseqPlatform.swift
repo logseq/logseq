@@ -82,11 +82,16 @@ extension LogseqElement {
   /// (right-click → contextmenu) can emit through the hit node's context.
   private var contexts: [Int: LUIAppleExtensionViewContext] = [:]
 
+  /// dom-op dispatch hooks this so ops parked on an unmounted ref fire the
+  /// moment the element registers (instead of a timer retry loop).
+  var onElementRegistered: ((String) -> Void)?
+
   func register(_ id: String, _ element: LogseqElement) {
     if element.isPlaceholder, let existing = elements[id]?.object, !existing.isPlaceholder {
       return
     }
     elements[id] = NSReferenceBox(element)
+    onElementRegistered?(id)
   }
 
   func registerAnchor(_ id: String, _ context: LUIAppleExtensionViewContext) {
@@ -159,6 +164,9 @@ final class NSReferenceBox {
   func attach() {
     pushAppearance()
     pushWindowSize()
+    LogseqElementRegistry.shared.onElementRegistered = { [weak self] id in
+      self?.drainPendingDomOps(id)
+    }
     appearanceObservation = NSApp.observe(\.effectiveAppearance) { [weak self] _, _ in
       Task { @MainActor in self?.pushAppearance() }
     }
@@ -556,17 +564,36 @@ final class NSReferenceBox {
     return LogseqElementRegistry.shared.element(id)
   }
 
-  private func domOp(name: String, json: String, attempt: Int = 0) {
-    let dict = jsonDict(json)
-    // Element-targeted ops can arrive before SwiftUI mounts the fresh
-    // node — commit happens synchronously in OCaml but makeNSView
-    // registration lands on a later runloop turn. Retry briefly rather
-    // than dropping the op (on the web the node always exists already).
-    if attempt < 40, dict["ref"] != nil, refID(dict) != nil,
-      target(dict) == nil
-    {
-      DispatchQueue.main.asyncAfter(deadline: .now() + 0.02) {
-        self.domOp(name: name, json: json, attempt: attempt + 1)
+  /// Element-targeted ops can arrive before SwiftUI mounts the fresh
+  /// node — commit happens synchronously in OCaml but makeNSView
+  /// registration lands on a later runloop turn. Ops whose ref isn't
+  /// registered yet park here; `register()` drains them the moment the
+  /// element exists (plus one timer fallback for stragglers). Queued by
+  /// ref id so a batch of ops doesn't each spin a retry loop on the
+  /// main queue.
+  private var pendingDomOps: [String: [(name: String, dict: [String: Any])]] = [:]
+
+  private func domOp(name: String, json: String) {
+    domOpDict(name: name, dict: jsonDict(json))
+  }
+
+  private func drainPendingDomOps(_ id: String) {
+    guard let ops = pendingDomOps.removeValue(forKey: id), !ops.isEmpty else {
+      return
+    }
+    for op in ops {
+      domOpDict(name: op.name, dict: op.dict, attempt: 1)
+    }
+  }
+
+  private func domOpDict(name: String, dict: [String: Any], attempt: Int = 0) {
+    if dict["ref"] != nil, let id = refID(dict), target(dict) == nil {
+      pendingDomOps[id, default: []].append((name, dict))
+      if attempt == 0 {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+          // Elements that never materialized (stale refs) drop here.
+          _ = self.pendingDomOps.removeValue(forKey: id)
+        }
       }
       return
     }

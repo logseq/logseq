@@ -1128,3 +1128,23 @@ zoom!=1 path keeps the reader since it needs the container size.
   Enter/op = 1 apply-outliner-ops invoke + splice, e2e ~8ms; no
   get-latest-journals/tree/refs after ops. Typing commits still ride the
   750ms edit-input debounce (local echo is immediate).
+- White-screen flake (intermittent, resize-revives): NOT a data problem —
+  patches apply fully, all models exist, ext views re-eval on revision.
+  Evidence (LOGSEQ_PERF probes): `LUIExtensionNodeView(141)` re-evaluated
+  `backend.extensionView(141)` -> `AnyView(LogseqElementView)` after the
+  gen2 commit, but `LogseqElementView.body` never ran again; the stale
+  rendered copy kept `children=[142]` (dropped Loading node -> EmptyView)
+  -> 140/141 laid out at height 0 -> whole detail pane white. Frames
+  confirmed 960x0 until a resize forced re-layout. The `AnyView` swap
+  produced by an invalidated extension body can get lost in SwiftUI's
+  update coalescing; the element's own rendered node persists, so the
+  fix is to subscribe inside it: `LUIAppleExtensionViewContext.revision`
+  (lui) + `let _ = context.revision` at the top of `LogseqElementView.body`
+  — the element rides the same `model.revision` invalidation that provably
+  fires, and re-evals with fresh `context.childIDs` even when the parent
+  AnyView swap never commits. Same subscription added to
+  `LogseqSidebarMount`, `LogseqNativeSidebar`, `LogseqSVGView`.
+  Verified: 12 consecutive launches all eval `kids=[183]` and report real
+  heights (140/141 = 770px). (LogseqElementView's `context.*` reads are
+  live backend lookups — every extension view that renders backend state
+  must subscribe to `context.revision` or accept staleness.)

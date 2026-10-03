@@ -21,6 +21,7 @@ struct LogseqSidebarMount: View {
   let context: LUIAppleExtensionViewContext
 
   var body: some View {
+    let _ = context.revision
     VStack(spacing: 0) {
       ForEach(context.childIDs, id: \.self) { childID in
         context.content(for: childID)
@@ -87,6 +88,9 @@ struct LogseqNativeSidebar: View {
   }
 
   var body: some View {
+    // Keep the model reads below subscribed on their own — the DOM subtree
+    // lookup is untracked, so a dropped parent re-render must not strand us.
+    let _ = context.revision
     let model = read()
     let activeID =
       model.sections.lazy.flatMap(\.items).first(where: \.active)?.nodeID
