@@ -51,6 +51,18 @@ Swift. Goal: feature parity with the Electron app.
   dispatch (`ls:editor-command` → copy-ref → clipboard,
   open-in-sidebar → sidebar verified). Outside click dismisses;
   `mousemove` emits at node granularity for submenu hovers.
+- Inline components: PDF asset blocks render `ls-pdf-asset` links;
+  click opens a PDFKit `logseq-pdf` viewer in a right-side pane
+  (title toolbar + close, container collapses on close). LaTeX
+  `$$...$$`/inline renders via SwiftMath (MTMathUILabel). Fenced
+  code blocks render the `ui-fenced-code-editor` tree with a
+  Highlightr-backed NSTextView (atom-one light/dark themes,
+  `data-lang` → language).
+- File upload: native `onDrop` of files onto the window emits a
+  `file-drop` platform event → `asset_dom.upload_paths` writes
+  `graphs/<repo>/assets/` and inserts asset blocks via the same
+  `insert-blocks` outliner op the web uploader uses (edit-target,
+  page-target, journals fallthrough).
 
 ## In progress
 
@@ -72,10 +84,11 @@ Swift. Goal: feature parity with the Electron app.
 - Page properties UI (property rows, value editors).
 - Views / queries / table + kanban renderers (OCaml code compiles;
   native surfaces not yet exercised end-to-end).
-- PDF annotations: PDFKit-backed `logseq-pdf` extension component
-  (mature-lib choice per Tienson).
-- LaTeX: SwiftMath rendering for `$$...$$` blocks.
-- Code highlight: Highlightr in the code editor component.
+- PDF annotations: PDFKit viewer opens/closes; the annotation
+  layer (highlight areas, sidebar notes) is not yet wired.
+- Code editor polish: actions bar renders in-flow (web overlays
+  top-right on hover); multi-line code sizes by line count, no
+  horizontal soft-scroll parity yet.
 - Whiteboards, graph view (canvas), plugins, RTC/sync UI, settings
   pages, export (assets/filesystem flows partially stubbed).
 - Slash menu, block refs/page-refs autocomplete positioning,

@@ -480,6 +480,14 @@ import SwiftUI
       grow = true
     case "ls-page-title", "title":
       if fontSize == nil { fontSize = 18 }; isBold = true
+    // fenced code block — lui-core.css: wrap is width:100%, the
+    // duplicated lang label is display:none (lang shows in the
+    // actions bar instead)
+    case "ls-code-editor-wrap": fullWidth = true
+    case "extensions__code-lang": isHidden = true
+    // lui-core.css: .block-head-wrap { display:flex; flex:1; width:100% }
+    // — takes the row's leftover inside justify-between content-inner
+    case "block-head-wrap": isRow = true; grow = true; fullWidth = true
     case let c where c.hasPrefix("w-"):
       let v = String(c.dropFirst(2))
       if v == "screen" || v == "full" { fullWidth = true }

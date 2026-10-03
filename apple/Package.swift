@@ -28,12 +28,16 @@ let package = Package(
         // basename differs (e.g. a _build/lui-apple-backend symlink) — else
         // SwiftPM merges the identities and the product lookup fails.
         .package(path: luiPackagePath),
+        .package(url: "https://github.com/mgriebling/SwiftMath", from: "1.7.3"),
+        .package(url: "https://github.com/raspu/Highlightr", from: "2.3.0"),
     ],
     targets: [
         .executableTarget(
             name: "Logseq",
             dependencies: [
                 .product(name: "LUIAppleBackendStatic", package: "lui-apple-backend"), // dep identity = path basename
+                .product(name: "SwiftMath", package: "SwiftMath"),
+                .product(name: "Highlightr", package: "Highlightr"),
             ],
             path: "Sources/Logseq",
             resources: [.process("Resources")],

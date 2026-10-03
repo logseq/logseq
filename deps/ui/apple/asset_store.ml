@@ -58,6 +58,14 @@ let sha256_hex (u8 : Js.Typed_array.Uint8Array.t) : string Js.Promise.t =
 
 let make_url (_ : Webapi.Blob.t) : string = ""
 
+let write_asset ~repo ~name ~u8 =
+  let path = Filename.concat (asset_dir repo) name in
+  Daemon_client.mkdir_p (Filename.dirname path);
+  let oc = open_out_bin path in
+  output_bytes oc u8;
+  close_out oc;
+  Js.Promise.resolve ()
+
 let delete_asset ~(repo : string) ~(name : string) : unit Js.Promise.t =
   let path = Filename.concat (asset_dir repo) name in
   (try Sys.remove path with _ -> ());

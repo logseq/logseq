@@ -65,6 +65,7 @@ enum LogseqExtensionFingerprint {
     "aside", "footer", "details", "summary", "u", "mark", "b", "i",
     "svg", "path", "circle", "rect", "line", "polyline", "polygon", "g",
     "defs", "use", "ellipse", "tspan", "sup", "em-emoji", "raw-text",
+    "pdf",
   ]
 
   static let identifiers = tags.map { "logseq-" + $0 }

@@ -334,9 +334,53 @@ lui-core.css needs a manual Swift mapping. Remaining unmapped:
 `.cp__sidebar-left-layout` (left sidebar is position:fixed on web —
 we render it in-flow, visually equivalent but no overlay-slide
 behavior), `.left-sidebar-resizer`, `.cp__graphs-selector`,
-`.sidebar-drop-indicator`, `.ls-page-title-actions`,
-`.extensions__code-lang`. The sidebar `.resizer` and
-`.block-children-left-border` are mapped/hidden.
+`.sidebar-drop-indicator`, `.ls-page-title-actions`. The sidebar
+`.resizer` and `.block-children-left-border` are mapped/hidden;
+`.extensions__code-lang` is hidden per web `display:none`.
+
+### Inline components (PDF / LaTeX / code highlight milestone)
+- `.ui-fenced-code-editor` rendered INVISIBLE then narrow —
+  three stacked layout bugs, all in our CSS-faithful mapping:
+  (1) `.ls-code-editor-wrap` has no utility classes, so it kept
+  its 45pt ideal width inside the `flex w-full` row — web CSS gives
+  it `width:100%`. (2) `.block-head-wrap` kept ideal width inside
+  `justify-between` because the row layout sent ALL leftover into
+  gaps when `spaceBetween`, skipping flex-grow children — CSS
+  resolves flex-grow BEFORE justify-content, so grow children must
+  absorb leftover first (gaps only when nothing grows).
+  (3) `.extensions__code-lang` is `display:none` in web CSS — our
+  duplicate lang label rendered.
+- NSScrollView-wrapped NSTextView has no useful intrinsic content
+  height — code textareas approximate `field-sizing:content` via
+  line-count min-height (20pt/line). Long-term a content-sized
+  representable would be truer.
+- Highlightr works through `layoutManager?.replaceTextStorage
+  (CodeAttributedString())` on the SAME scrollableTextView used
+  for block editing; theme flips with appearance
+  (`atom-one-dark`/`atom-one-light`), `data-lang` attr →
+  `codeStorage.language`.
+- PDF: declarative `logseq-pdf` element inside
+  `#app-single-container` (runtime_parents chain, so a `grow`
+  style class expands the pane); `pdf-close` dom-event clears
+  `Pdf_state.current`. `Pdf_assets.open_pdf_file` resolves
+  `asset_dir/uuid.ext` — same path the web asset click takes.
+- Seeding a pdf asset block for testing is easiest through the
+  daemon's own wire (`/v1/invoke` `thread-api/apply-outliner-ops`
+  `insert-blocks`, transit-encoded asset block map) — typing
+  `#+begin_src` etc. through the UI hits a db-worker bug instead.
+- FILE-DROP: no DOM `drop`/file-input — `onDrop(of:[.fileURL])`
+  on the LUI root sends a `file-drop` platform event with dropped
+  paths; `asset_dom.upload_paths` mirrors `db-based-save-assets!`
+  (checksum dedup, `Asset_store.write_asset`, `insert-blocks`).
+
+### Worker-side bug (flagged, not ours)
+- Tag creation through the UI writes FLOAT `block/created-at`/
+  `block/updated-at` datoms — the schema wants `:int`, so the tx
+  is rejected (`ui/save-changes-error`, `Db_tx.Invalid_tx("DB
+  write failed with invalid data")`) and stray `user.class/
+  +begin_src-*` entities appear. Repro: type a `#` tag in a
+  journal block. Workaround for tests: seed via `insert-blocks`
+  (raw titles store verbatim).
 
 ### Context menus + CustomEvent detail (right-click milestone)
 - No SwiftUI right-click gesture: `.rightMouseDown` NSEvent monitor
