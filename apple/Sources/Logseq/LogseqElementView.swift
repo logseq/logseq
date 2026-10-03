@@ -312,10 +312,79 @@ struct LogseqElementView: View {
           name: icon.name, ext: icon.ext, size: style.fontSize ?? 16,
           color: style.foreground ?? LogseqColors.primaryText)
           .modifier(LogseqStyleModifier(style: style, tag: tag))
+      } else if classSet.contains("ui__switch") {
+        // shui Switch -> native toggle; the click wires the OCaml handler
+        // which re-renders aria-checked (thumb child is not rendered)
+        switchBody
+      } else if classSet.contains("ui__checkbox") {
+        checkboxBody
+      } else if let theme = themePreviewMode {
+        themePreviewBody(theme)
       } else {
         styledContainer
       }
     }
+  }
+
+  /// style-class set for the component-level branches (switch, checkbox,
+  /// theme preview) — tag dispatch can't see class semantics otherwise.
+  private var classSet: Set<String> {
+    guard case .string(let classes) = context.property("style-class")
+    else { return [] }
+    return Set(classes.split(separator: " ").map(String.init))
+  }
+
+  /// `i.mode-light/dark/system` — the theme preview thumbnails bundled
+  /// from resources/img (copied to Contents/Resources by build.sh).
+  private var themePreviewMode: String? {
+    for mode in ["light", "dark", "system"] where classSet.contains("mode-" + mode) {
+      return mode
+    }
+    return nil
+  }
+
+  @ViewBuilder private func themePreviewBody(_ mode: String) -> some View {
+    if let url = Bundle.main.url(forResource: mode + "-theme", withExtension: "png"),
+       let img = NSImage(contentsOf: url) {
+      Image(nsImage: img)
+        .resizable()
+        .aspectRatio(contentMode: .fill)
+        .modifier(LogseqStyleModifier(style: style, tag: tag))
+        .clipped()
+    } else {
+      Color.clear.modifier(LogseqStyleModifier(style: style, tag: tag))
+    }
+  }
+
+  /// span.ui__switch[role=switch][aria-checked] -> Toggle(.switch). The
+  /// setter emits click instead of mutating: OCaml owns the state and
+  /// re-renders the attribute.
+  @ViewBuilder private var switchBody: some View {
+    let on = attrs["aria-checked"] as? String == "true"
+      || attrs["data-checked"] != nil
+    Toggle(
+      "",
+      isOn: Binding(
+        get: { on },
+        set: { _ in emit("click", payload: ["button": 0]) }))
+    .labelsHidden()
+    .toggleStyle(.switch)
+    .modifier(LogseqStyleModifier(style: style, tag: tag))
+  }
+
+  /// button.ui__checkbox[role=checkbox][aria-checked] -> Toggle(.checkbox);
+  /// same emit-on-set contract, check svg child stays unrendered.
+  @ViewBuilder private var checkboxBody: some View {
+    let on = attrs["aria-checked"] as? String == "true"
+      || attrs["data-checked"] != nil
+    Toggle(
+      "",
+      isOn: Binding(
+        get: { on },
+        set: { _ in emit("click", payload: ["button": 0]) }))
+    .labelsHidden()
+    .toggleStyle(.checkbox)
+    .modifier(LogseqStyleModifier(style: style, tag: tag))
   }
 
   /// `.latex`/`.latex-inline` elements carry the raw TeX in a
@@ -436,7 +505,7 @@ struct LogseqElementView: View {
     let children = context.childIDs
     let inline = isInlineTag
     Group {
-      if inline {
+      if inline || style.flowWrap {
         LogseqFlowLayout {
           if !effectiveText.isEmpty { styledText }
           if !html.isEmpty { htmlText }
@@ -658,9 +727,15 @@ struct LogseqElementView: View {
       } else {
         label = v
       }
-      return (v, label)
+      // option value attr wins like HTML; options without one submit
+      // their text (the date-format rows carry no value attr)
+      return (v.isEmpty ? label : v, label)
     }
-    Picker("", selection: .constant(attrs["value"] as? String ?? "")) {
+    Picker(
+      "",
+      selection: Binding(
+        get: { attrs["value"] as? String ?? "" },
+        set: { emit("change", payload: ["value": $0]) })) {
       ForEach(options, id: \.0) { option in
         Text(option.1).tag(option.0)
       }
@@ -699,6 +774,13 @@ struct LogseqElementView: View {
     var enriched = payload
     enriched["nodeId"] = context.nodeID
     if let id = attrs["id"] as? String { enriched["targetId"] = id }
+    // DOM-shaped fields document listeners read (overlay-click checks
+    // targetClass for its own class, target for closest() walking).
+    if case .string(let classes) = context.childProperty(
+      node: context.nodeID, "style-class")
+    {
+      enriched["targetClass"] = classes
+    }
     // Document listeners decode `target` for closest()/scope resolution.
     enriched["target"] = LogseqDOMSnapshot.snapshot(for: context)
     guard let data = try? JSONSerialization.data(withJSONObject: enriched),
@@ -1024,6 +1106,8 @@ private struct LogseqStyleModifier: ViewModifier {
     let anchored = style.fixedX != nil || style.fixedY != nil
       || style.fixedRight != nil || style.fixedBottom != nil
     return content
+      .frame(
+        maxWidth: style.alignTrailing ? .infinity : nil, alignment: .trailing)
       .frame(minWidth: style.minWidth, minHeight: style.minHeight)
       .frame(width: style.fixedWidth, height: style.fixedHeight)
       .padding(style.padding ?? EdgeInsets())
@@ -1042,6 +1126,12 @@ private struct LogseqStyleModifier: ViewModifier {
       }
       .cornerRadius(style.cornerRadius ?? 0)
       .onHover { hovering = $0 }
+      .overlay {
+        if let borderColor = style.borderColor, style.borderWidth > 0 {
+          RoundedRectangle(cornerRadius: style.cornerRadius ?? 0)
+            .strokeBorder(borderColor, lineWidth: style.borderWidth)
+        }
+      }
       // CSS default content alignment is start — SwiftUI's frame default
       // is .center, which would center short text in a grown span.
       .frame(

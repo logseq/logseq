@@ -1,9 +1,16 @@
 /Users/devin/repos/logseq-swift/apple/Sources/Logseq/App.swift
+/Users/devin/repos/logseq-swift/apple/Sources/Logseq/LogseqDOMSnapshot.swift
 /Users/devin/repos/logseq-swift/apple/Sources/Logseq/LogseqElementView.swift
 /Users/devin/repos/logseq-swift/apple/Sources/Logseq/LogseqExtensions.swift
+/Users/devin/repos/logseq-swift/apple/Sources/Logseq/LogseqImperative.swift
 /Users/devin/repos/logseq-swift/apple/Sources/Logseq/LogseqLUIEvents.swift
+/Users/devin/repos/logseq-swift/apple/Sources/Logseq/LogseqLatex.swift
+/Users/devin/repos/logseq-swift/apple/Sources/Logseq/LogseqNativeSidebar.swift
+/Users/devin/repos/logseq-swift/apple/Sources/Logseq/LogseqPDF.swift
 /Users/devin/repos/logseq-swift/apple/Sources/Logseq/LogseqPlatform.swift
 /Users/devin/repos/logseq-swift/apple/Sources/Logseq/LogseqRuntime.swift
 /Users/devin/repos/logseq-swift/apple/Sources/Logseq/LogseqSVG.swift
 /Users/devin/repos/logseq-swift/apple/Sources/Logseq/LogseqStyles.swift
+/Users/devin/repos/logseq-swift/apple/Sources/Logseq/LogseqTablerIcons.swift
 /Users/devin/repos/logseq-swift/apple/Sources/Logseq/LogseqTextArea.swift
+/Users/devin/repos/logseq-swift/apple/.build/arm64-apple-macosx/debug/Logseq.build/DerivedSources/resource_bundle_accessor.swift

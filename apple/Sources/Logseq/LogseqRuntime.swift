@@ -39,6 +39,12 @@ extension LogseqRuntime {
   /// onDisappear, so the delegate stops the runtime here — this also
   /// SIGTERMs the spawned db-worker daemon so it releases the repo lock.
   @MainActor static func terminateActive() { activeRuntime?.stop() }
+
+  /// Menu-command entry point: posts a "<name>\n<json>" platform event to
+  /// the live runtime, matching OCaml's "menu-*" listeners.
+  @MainActor static func postPlatformEvent(name: String, json: String) {
+    activeRuntime?.sendPlatformEvent(name: name, json: json)
+  }
 }
 
 /// OCaml only invokes the patch callback from entries the host runs on the main

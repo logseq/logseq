@@ -73,6 +73,21 @@ let overlay_attr_fn : (element -> string -> string option option) ref =
 let overlay_class_fn : (element -> string option) ref =
   ref (fun _ -> None)
 
+let el_id_attr (el : element) : string =
+  match !overlay_attr_fn el "id" with
+  | Some v -> Option.value v ~default:""
+  | None -> Option.value (str_prop "id" el) ~default:""
+
+(* duplicate of get_attribute below — the query section sits before it *)
+let el_attr (el : element) (name : string) : string option =
+  match !overlay_attr_fn el name with
+  | Some verdict -> verdict
+  | None -> (
+      match prop "attrs" el with
+      | Js.Json.JObject kvs ->
+          Option.bind (List.assoc_opt name kvs) Js.Json.decodeString
+      | _ -> str_prop ("attr-" ^ name) el)
+
 (* the snapshot "class" prop mirrors style-class; elements that declare
    their class inside attrs keep it there instead — DOM semantics treat
    both as the same class list; dom-op mutations live in the overlay *)
@@ -89,21 +104,6 @@ let class_list (el : element) : string list =
             | None -> ""))
   in
   List.filter (fun c -> c <> "") (String.split_on_char ' ' words)
-
-let el_id_attr (el : element) : string =
-  match !overlay_attr_fn el "id" with
-  | Some v -> Option.value v ~default:""
-  | None -> Option.value (str_prop "id" el) ~default:""
-
-(* duplicate of get_attribute below — the query section sits before it *)
-let el_attr (el : element) (name : string) : string option =
-  match !overlay_attr_fn el name with
-  | Some verdict -> verdict
-  | None -> (
-      match prop "attrs" el with
-      | Js.Json.JObject kvs ->
-          Option.bind (List.assoc_opt name kvs) Js.Json.decodeString
-      | _ -> str_prop ("attr-" ^ name) el)
 
 let has_attr (el : element) (name : string) : bool =
   el_attr el name <> None || (name = "class" && class_list el <> [])
