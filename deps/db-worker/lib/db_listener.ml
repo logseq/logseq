@@ -520,7 +520,12 @@ let listen_db_checksum repo conn =
             r.tx_data <> []
             && (tx_meta_bool r "batch-final-tx-report?"
                 || not (tx_meta_bool r "batch-tx-report?"))
-          then !update_checksum repo r))
+          then
+            (* wrap like process_committed_tx — a checksum failure must
+               not escape notify_listeners and report a committed tx
+               as failed *)
+            run_post_commit repo r.tx_meta "update-checksum" (fun () ->
+                !update_checksum repo r)))
 
 (* built-in deferred listeners — mirror queues jobs with debounce *)
 let () =
