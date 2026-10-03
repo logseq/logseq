@@ -42,6 +42,9 @@ import AppKit
       LogseqHost()
         .frame(minWidth: 480, minHeight: 360)
     }
+    // No titlebar text — the toolbar breadcrumb carries the page name;
+    // "Logseq" stays only in the Window menu.
+    .windowToolbarStyle(.unified(showsTitle: false))
     .defaultSize(width: 1200, height: 800)
     .commands {
       // macOS convention places Settings in the app menu; the web app

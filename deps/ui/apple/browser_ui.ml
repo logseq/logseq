@@ -28,8 +28,10 @@ let value (_ : el) : string = ""
 let set_value (_ : el) (_ : string) : unit = ()
 let click (_ : el) : unit = ()
 
-let set_document_title (t : string) : unit =
-  Host.dom_op "document-title" t
+(* The macOS shell shows no window title — the breadcrumb carries the
+   page name in the toolbar. Keep the dom-op out so "Logseq" never
+   renders in the titlebar. *)
+let set_document_title (_ : string) : unit = ()
 
 let add_listener (_ : el) (name : string) (f : Js.Json.t -> unit)
     : unit =

@@ -974,3 +974,19 @@ Documentation → docs.logseq.com).
 - CGEvent helpers take REAL screen pixels (~1.36-1.57× the 1024×768
   tool space — verify per display); the computer tool's left_click
   maps scaled coords itself.
+- macOS honors only ONE `.navigation` ToolbarItem — LUI merges a
+  navigation-placement group's segments into one item; capsule segments
+  expand to bare children inside it so controls render as separate
+  buttons, not a fused ControlGroup. Separate `primary-action` `toolbar`
+  elements hoist as separate items.
+- `Window("Logseq")` puts the app name in the titlebar —
+  `.windowToolbarStyle(.unified(showsTitle: false))` hides it while
+  keeping the Window menu entry; `Browser_ui.set_document_title` is a
+  no-op on apple (page name lives in the toolbar crumb).
+- `.environment` writes on `core` do NOT reliably reach extension
+  children (they resolve through `context.content(for:)` AnyView
+  snapshots). Hover-reveal uses `LogseqTitleHoverStore` instead: the
+  `block-content-wrapper` ancestor records its nodeID on `.onHover` and
+  `ls-page-title-actions` walks `context.parentID(of:)` to check.
+- Relaunch flake: the journal page sometimes renders blank for ~60s;
+  opening cmdk/search nudges it (runtime is alive — page fetch lag).
