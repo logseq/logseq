@@ -838,3 +838,42 @@ Documentation → docs.logseq.com).
   - zotero links, unbounded-name hl truncation, theme "dark" canvas
     inversion differences vs pdf.js rendering, Alt+mouseup
     fresh-selection menu (path exists, untested — modifier synth).
+
+### Native topbar (LUI semantic toolbar, liquid glass)
+- `chrome.ml`'s DOM `cp__header` is gone; the chrome is two LUI
+  `toolbar` elements — `~placement:"navigation"` (leading: panel-left
+  sidebar toggle) and `~placement:"primary-action"` (trailing: search,
+  home, dots, right-sidebar). `LUIToolbarGroupAnchor` hoists them into
+  the real macOS window toolbar where macOS 26 draws liquid-glass
+  items — same chrome Out gets from `ToolbarItemGroup`.
+- `toolbar` **requires** `~label` (accessibility) — a missing label
+  rejects the whole batch (`invalidBatch("toolbar requires an
+  accessibility label")`) and poisons the generation counter.
+- Toolbar children must be direct interactive nodes: a `dyn`-wrapped
+  child hoists as a zero-size `ToolbarItem` (AppKit "ambiguous width"
+  warnings, invisible button). Home therefore emits always and no-ops
+  its press on `Model.Home`.
+- `app:` icons resolve through `LogseqRuntime`'s `appIcons` dict —
+  `"home" → .systemName("house")` is registered there (the builtin
+  icon table has no house glyph).
+- Hoisted `ToolbarItem` frames report in the toolbar's own coordinate
+  space — `Imperative_dom.rect_of_node_id` is NOT usable for menu
+  anchoring on toolbar children. The dots menu anchors to the fixed
+  trailing position (`inner_width - 48, 48`) and stores it in
+  `Dom_ext.toolbar_dots_pos` for the appearance popup, which cljs also
+  re-anchors to the dots trigger.
+- `Action.Toggle_search` is a no-op reducer on native (search opens
+  via the cmdk DOM-click path or the mod+k keydown handler). Semantic
+  triggers call `Cmdk_state.open_latest ()` directly — the search
+  toolbar button and `menu-toggle-search` both use it now (the menu
+  item previously dead-ended through the no-op action).
+- `Host.inner_width ()` must be called at use time, not bound at
+  module init — `page_menu.ml`/`settings_page.ml` previously froze the
+  1440 default before the `window-size` push arrived, mis-anchoring
+  right-aligned popups ~190pt off.
+- rtc/plugin toolbar items have no semantic topbar slots — their DOM
+  mounts live in a hidden `chrome-hidden` wrapper so emitters and the
+  `rtc-tx` e2e element stay alive.
+- `install-opam-deps.sh` (db-worker) restores the native daemon dep
+  set (eio/httpun/tls/datascript #main + pset 695223e) on a fresh
+  switch; `dune build bin/main.exe` then bundles via build.sh.

@@ -928,7 +928,7 @@ let modal_body (_ms : Model.t Signal.signal) : t =
     in
     node ctx parent
 
-let inner_width : float = Host.inner_width ()
+let inner_width () : float = Host.inner_width ()
 
 (* cljs settings.cljs appearance(): the header dots "Appearance" item opens
    a compact popup (id appearance_settings) anchored under
@@ -953,7 +953,7 @@ let appearance_rows ctx =
 let appearance_body (x, y) : t =
  fun ctx parent ->
   S.ensure ctx;
-  let right = Float.max 8. (inner_width -. x) in
+  let right = Float.max 8. (inner_width () -. x) in
   let node =
     dom ~key:"appearance-popup" ~tag:"div"
       [ (* cljs shui popup-show! dismisses on outside click — the

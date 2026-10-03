@@ -122,13 +122,11 @@ let global_items () =
   ; icon_item "appearance" I18n.appearance "color-swatch" (fun () ->
         close ();
         (* cljs :ui/toggle-appearance anchors the appearance popup to the
-           dots trigger, same as the menu itself *)
-        match Dom_ext.doc_query_selector ".toolbar-dots-btn" with
-        | Some el ->
-            let r = Dom_ext.bounding_rect el in
-            Runtime.send
-              (Action.Appearance_set
-                 (Some (Dom_ext.rect_right r, Dom_ext.rect_bottom r +. 4.)))
+           dots trigger — the semantic topbar's dots press recorded the
+           anchor when the menu opened *)
+        match !Dom_ext.toolbar_dots_pos with
+        | Some (x, y) ->
+            Runtime.send (Action.Appearance_set (Some (x, y)))
         | None -> ())
   ; icon_item "recycle" I18n.recycle "trash" (fun () ->
         close ();
@@ -145,7 +143,7 @@ let global_items () =
         Sidebar_state.open_dialog "login")
   ]
 
-let inner_width : float = Host.inner_width ()
+let inner_width () : float = Host.inner_width ()
 
 let view (x, y, with_app_items) (p : Model.page option) =
   let style =
@@ -155,7 +153,7 @@ let view (x, y, with_app_items) (p : Model.page option) =
       Printf.sprintf
         "position:fixed;right:%.0fpx;top:%.0fpx;--available-height:\
          calc(100vh - %.0fpx)"
-        (Float.max 8. (inner_width -. x))
+        (Float.max 8. (inner_width () -. x))
         y (y +. 8.)
     else
       Printf.sprintf
@@ -163,7 +161,7 @@ let view (x, y, with_app_items) (p : Model.page option) =
          calc(100vh - %.0fpx)"
         (* cljs anchors a 1px point at the click; the 280px
            ls-context-menu-content centers on it *)
-        (Float.max 8. (Float.min (x -. 140.) (inner_width -. 288.)))
+        (Float.max 8. (Float.min (x -. 140.) (inner_width () -. 288.)))
         y (y +. 8.)
   in
   dom ~key:"page-menu" ~tag:"div"
