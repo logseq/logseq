@@ -469,7 +469,7 @@ let shell (ms : Model.t Signal.signal) : t =
                    else "w-full"))
             [ header ms; main_content ms ]
         ; right_sidebar ms
-        ; Logseq_dom.dom ~key:"asc" ~id:"app-single-container" []
+        ; Pdf.container_el ~key:"asc" ~id:"app-single-container"
         ]
     ; overlays ms
     ; export_anchors

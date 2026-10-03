@@ -59,6 +59,35 @@ private struct LogseqRuntimeHost: View {
           .onPreferenceChange(LogseqFrameKey.self) {
             LogseqFrameStore.entries = $0
           }
+          // File drop → asset upload: OCaml's window "file-drop"
+          // listener mirrors the web file-picker path
+          // (db-based-save-assets! writes assets/<uuid>.<ext> +
+          // insert-blocks).
+          .onDrop(of: [.fileURL], isTargeted: nil) { providers in
+            let group = DispatchGroup()
+            let lock = NSLock()
+            var paths: [String] = []
+            for provider in providers {
+              group.enter()
+              _ = provider.loadObject(ofClass: URL.self) { url, _ in
+                if let url {
+                  lock.lock()
+                  paths.append(url.path)
+                  lock.unlock()
+                }
+                group.leave()
+              }
+            }
+            group.notify(queue: .main) {
+              guard !paths.isEmpty,
+                let data = try? JSONSerialization.data(
+                  withJSONObject: ["paths": paths]),
+                let json = String(data: data, encoding: .utf8)
+              else { return }
+              runtime.sendPlatformEvent(name: "file-drop", json: json)
+            }
+            return true
+          }
       } else {
         ProgressView("Opening Logseq")
       }

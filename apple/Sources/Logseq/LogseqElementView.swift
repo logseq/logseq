@@ -157,10 +157,17 @@ struct LogseqElementView: View {
     switch tag {
     // ---- text inputs ----
     case "textarea":
+      // Code editors (data-lang) approximate CSS `field-sizing: content`
+      // — size to the code's line count instead of a fixed one-liner.
+      let codeMinHeight: CGFloat =
+        (attrs["data-lang"] as? String).map { _ in
+          max(24, CGFloat(text.split(
+            separator: "\n", omittingEmptySubsequences: false).count) * 20)
+        } ?? 24
       LogseqTextArea(
         context: context, attrs: attrs, style: style,
         wired: wiredEvents, text: text, domID: domID)
-        .frame(minHeight: 24)
+        .frame(minHeight: codeMinHeight)
         .frame(maxWidth: .infinity)
     case "input":
       LogseqInputField(
@@ -174,6 +181,8 @@ struct LogseqElementView: View {
     // ---- media ----
     case "img":
       imageBody
+    case "pdf":
+      LogseqPDFView(context: context, attrs: attrs)
     // ---- svg family ----
     case "svg", "path", "circle", "rect", "line", "polyline", "polygon", "g",
          "defs", "use", "ellipse", "tspan":
@@ -187,7 +196,12 @@ struct LogseqElementView: View {
     case "select":
       selectBody
     default:
-      if let icon = tablerIconName {
+      if let latex = latexInfo {
+        LogseqLatexView(
+          tex: latex.tex, displayMode: latex.display,
+          fontSize: style.fontSize ?? defaultFontSize)
+          .modifier(LogseqStyleModifier(style: style, tag: tag))
+      } else if let icon = tablerIconName {
         LogseqTablerIcon(
           name: icon,
           color: style.foreground ?? LogseqColors.primaryText)
@@ -195,6 +209,24 @@ struct LogseqElementView: View {
         styledContainer
       }
     }
+  }
+
+  /// `.latex`/`.latex-inline` elements carry the raw TeX in a
+  /// `span.opacity-0` child's `text` prop (the web katex scan renders it
+  /// into the element; natively SwiftMath does).
+  private var latexInfo: (tex: String, display: Bool)? {
+    guard case .string(let classes) = context.property("style-class")
+    else { return nil }
+    let set = Set(classes.split(separator: " ").map(String.init))
+    let isInline = set.contains("latex-inline")
+    guard isInline || set.contains("latex") else { return nil }
+    var tex = ""
+    if let child = context.childIDs.first,
+      case .string(let t) = context.childProperty(node: child, "text")
+    {
+      tex = t
+    }
+    return (tex, !isInline)
   }
 
   // MARK: - leaf + inline rendering
@@ -634,10 +666,11 @@ struct LogseqRowLayout: Layout {
       total += w
     }
     let leftover = bounds.width - total
-    // justify-content: space-between — leftover goes into the gaps
-    // between in-flow children instead of grow-weighted children.
+    // CSS resolves flex-grow before justify-content: grow-weighted
+    // children absorb the leftover first; space-between only spreads
+    // gaps when no child grows.
     var gap = spacing
-    if spaceBetween && flowIndex > 1 {
+    if spaceBetween && flowIndex > 1 && totalWeight == 0 {
       gap = spacing + max(0, leftover) / CGFloat(flowIndex - 1)
     }
     var x = bounds.minX
@@ -651,7 +684,7 @@ struct LogseqRowLayout: Layout {
         continue
       }
       var w = ideals[index]
-      if totalWeight > 0 && !spaceBetween {
+      if totalWeight > 0 {
         // grow-weighted children absorb both the positive leftover
         // (flex-grow) and the deficit (flex-shrink defaults to 1) so a
         // flex-1 sibling yields to fixed-width siblings.

@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import Highlightr
 import LUIAppleBackend
 import SwiftUI
 
@@ -35,6 +36,16 @@ struct LogseqTextArea: NSViewRepresentable {
     scrollView.hasHorizontalScroller = false
     scrollView.drawsBackground = false
     scrollView.borderType = .noBorder
+    // Code blocks (.code-editor textarea[data-lang]) get highlight.js
+    // syntax coloring via Highlightr's JSC-backed text storage — the
+    // native counterpart of the web's hljs scan over pre.CodeMirror-line.
+    if let lang = attrs["data-lang"] as? String, !lang.isEmpty {
+      let codeStorage = CodeAttributedString()
+      _ = codeStorage.highlightr.setTheme(
+        to: LogseqColors.isDark ? "atom-one-dark" : "atom-one-light")
+      textView.layoutManager?.replaceTextStorage(codeStorage)
+      codeStorage.language = lang.lowercased()
+    }
     context.coordinator.textView = textView
     context.coordinator.owner = self
     // Elements without a DOM id are still addressable by node ref —
