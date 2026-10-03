@@ -27,14 +27,29 @@
   (state/pub-event! [:editor/hide-action-bar])
   (editor-handler/show-action-bar! {:delay 50}))
 
+(defn- property-action-selected-blocks
+  "Blocks to pin on :editor/new-property.
+   The outliner toolbar must not snapshot async-loaded entities: Shift+Up/Down
+   can change the live selection while this bar stays mounted, and the load
+   effect can lag. Views keep their explicit row list."
+  [outliner? selected-blocks]
+  (when-not outliner?
+    selected-blocks))
+
+(defn- new-property-event
+  [target outliner? selected-blocks extra]
+  [:editor/new-property (cond-> (merge {:target target
+                                        :on-dialog-close restore-action-bar}
+                                       extra)
+                          (some? (property-action-selected-blocks outliner? selected-blocks))
+                          (assoc :selected-blocks selected-blocks))])
+
 (defn- unset-property-event
-  [target selected-blocks view-parent]
-  [:editor/new-property {:target target
-                         :selected-blocks selected-blocks
-                         :view-parent view-parent
-                         :remove-property? true
-                         :select-opts {:show-new-when-not-exact-match? false}
-                         :on-dialog-close restore-action-bar}])
+  [target outliner? selected-blocks view-parent]
+  (new-property-event target outliner? selected-blocks
+                      {:view-parent view-parent
+                       :remove-property? true
+                       :select-opts {:show-new-when-not-exact-match? false}}))
 
 (hsx/defc action-group
   [{:keys [on-cut on-copy selected-blocks hide-dots? button-border? view-parent outliner?]
@@ -72,10 +87,10 @@
          (assoc button-opts
                 :on-pointer-down (fn [e]
                                    (util/stop e)
-                                   (state/pub-event! [:editor/new-property {:target (.-currentTarget e)
-                                                                            :selected-blocks selected-blocks
-                                                                            :property-key "Tags"
-                                                                            :on-dialog-close restore-action-bar}])))
+                                   (state/pub-event! (new-property-event (.-currentTarget e)
+                                                                         outliner?
+                                                                         selected-blocks
+                                                                         {:property-key "Tags"}))))
          (ui/tooltip (ui/icon "hash" {:size 13}) (t :property/set-tags)
                      {:trigger-props {:class "flex"}}))
         (when (show-comment-action? outliner? comment-targets)
@@ -98,15 +113,17 @@
          (assoc button-opts
                 :on-pointer-down (fn [e]
                                    (util/stop e)
-                                   (state/pub-event! [:editor/new-property {:target (.-currentTarget e)
-                                                                            :selected-blocks selected-blocks
-                                                                            :on-dialog-close restore-action-bar}])))
+                                   (state/pub-event! (new-property-event (.-currentTarget e)
+                                                                         outliner?
+                                                                         selected-blocks
+                                                                         {}))))
          (t :property/set-property))
         (shui/toolbar-button
          (assoc button-opts
                 :on-pointer-down (fn [e]
                                    (util/stop e)
                                    (state/pub-event! (unset-property-event (.-target e)
+                                                                          outliner?
                                                                           selected-blocks
                                                                           view-parent))))
          (t :property/unset-property))
