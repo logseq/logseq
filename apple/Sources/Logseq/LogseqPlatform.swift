@@ -261,6 +261,13 @@ final class NSWeakReferenceBox {
       target(dict)?.domRemove()
     case "download-text", "download-binary", "save-file":
       saveFile(name: name, dict: dict)
+    case "dump-frames":
+      let parts = LogseqFrameStore.frames.sorted(by: { $0.key < $1.key }).map {
+        "\"\($0.key)\":[\($0.value.origin.x),\($0.value.origin.y),\($0.value.width),\($0.value.height)]"
+      }
+      let out = "{" + parts.joined(separator: ",") + "}"
+      try? out.write(
+        toFile: "/tmp/frames.json", atomically: true, encoding: .utf8)
     case "open-icon-picker", "katex-pending", "hljs-pending":
       logger.debug("dom-op pending implementation: \(name)")
     default:

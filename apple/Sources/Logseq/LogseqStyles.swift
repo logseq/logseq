@@ -122,6 +122,13 @@ import SwiftUI
   /// Stacking order inside LogseqOverlayLayer — dismiss/scrim layers go
   /// below the dialog content (mount order alone is not reliable).
   var overlayZ = 0
+  /// justify-content: space-between on a row container.
+  var spaceBetween = false
+  /// position:fixed anchor offsets (dropdown/context menus).
+  var fixedX: CGFloat?
+  var fixedY: CGFloat?
+  var fixedRight: CGFloat?
+  var fixedBottom: CGFloat?
 
   private static let spacingUnit: CGFloat = 4 // tailwind spacing scale unit
 
@@ -155,7 +162,13 @@ import SwiftUI
       case "opacity":
         if let v = px { alpha = v }
       case "position":
-        if value == "fixed" || value == "absolute" { outOfFlow = true }
+        if value == "fixed" { outOfFlow = true; fillsOverlay = true }
+        else if value == "absolute" { outOfFlow = true }
+      case "left": fixedX = px.map { CGFloat($0) }
+      case "top": fixedY = px.map { CGFloat($0) }
+      case "right": fixedRight = px.map { CGFloat($0) }
+      case "bottom": fixedBottom = px.map { CGFloat($0) }
+      case "z-index": overlayZ = Int(px ?? 0)
       case "height": fixedHeight = px.map { CGFloat($0) }
       case "min-height": minHeight = px.map { CGFloat($0) }
       case "max-height": maxHeight = px.map { CGFloat($0) }
@@ -272,6 +285,7 @@ import SwiftUI
          "overflow-y-scroll":
       isScrollable = true
     case "items-center", "justify-center": centerContent = true
+    case "justify-between": spaceBetween = true
     case "truncate", "whitespace-nowrap": lineLimitOne = true
     // ---- Logseq theme classes (compiled-CSS selectors in resources/css)
     case "closed": isHidden = true
@@ -285,8 +299,30 @@ import SwiftUI
     // Overlay layer (cmdk, popups, dialogs, toasts) and other
     // `position:fixed` elements: children render but the element itself
     // must not consume layout space.
-    case "cp__overlays", "cp__sidebar-help-btn":
+    case "cp__overlays":
       outOfFlow = true
+    // Floating help button + its popup — CSS positions them
+    // position:fixed bottom-right; port the same anchor.
+    case "cp__sidebar-help-btn":
+      outOfFlow = true; fillsOverlay = true
+      fixedRight = 16; fixedBottom = 16
+    case "cp__sidebar-help-menu-popup":
+      outOfFlow = true; fillsOverlay = true
+      fixedRight = 16; fixedBottom = 56
+      fixedWidth = 220
+      background = LogseqColors.gray(LogseqColors.isDark ? 3 : 1)
+      cornerRadius = 8; hasShadow = true
+      padding = EdgeInsets(top: 8, leading: 8, bottom: 8, trailing: 8)
+    case "it":
+      isRow = true; fullWidth = true; stackSpacing = 8
+      padding = EdgeInsets(top: 6, leading: 8, bottom: 6, trailing: 8)
+      cornerRadius = 4
+    case "ls-hm-icon": foreground = LogseqColors.gray(10)
+    case "ls-hm-hr":
+      margin = EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0)
+    case "ls-hm-meta":
+      if fontSize == nil { fontSize = 11 }
+      foreground = LogseqColors.gray(9)
     // ---- shui dialog / cmdk modal shell (ui__dialog markup) ----
     // These escape to the window-level overlay layer; the modal panel is
     // centered horizontally and dropped ~100pt like the web cmdk.
@@ -330,6 +366,55 @@ import SwiftUI
     case "search-results":
       isScrollable = true; maxHeight = 460
       padding = EdgeInsets(top: 0, leading: 4, bottom: 0, trailing: 4)
+    // ---- right sidebar (#right-sidebar.cp__right-sidebar.open/closed;
+    // the .closed class already collapses it via isHidden) ----
+    case "cp__right-sidebar":
+      fixedWidth = 420; fullHeight = true
+      background = LogseqColors.gray(LogseqColors.isDark ? 2 : 1)
+    case "cp__right-sidebar-scrollable":
+      isScrollable = true; grow = true; fullHeight = true
+    case "cp__right-sidebar-inner":
+      grow = true; fullWidth = true; fullHeight = true
+      background = LogseqColors.gray(LogseqColors.isDark ? 2 : 1)
+    case "cp__right-sidebar-topbar":
+      isRow = true; fullWidth = true; fixedHeight = 48
+      background = LogseqColors.gray(LogseqColors.isDark ? 2 : 1)
+      padding = EdgeInsets(top: 0, leading: 4, bottom: 0, trailing: 4)
+    case "sidebar-drop-indicator": fixedHeight = 8; fullWidth = true
+    case "sidebar-item-list": grow = true; fullWidth = true
+    case "sidebar-item":
+      grow = true; fullWidth = true
+      minHeight = 100
+      background = LogseqColors.gray(LogseqColors.isDark ? 3 : 1)
+      cornerRadius = cornerRadius ?? 8
+      margin = EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0)
+    case "sidebar-item-header": isRow = true; fullWidth = true
+    case "item-actions": isRow = true
+    case "resizer":
+      outOfFlow = true; fixedWidth = 3; fullHeight = true
+      background = LogseqColors.border
+    case "breadcrumb": isRow = true
+      if fontSize == nil { fontSize = 12 }
+      foreground = LogseqColors.gray(10)
+    case "page-tabs": isRow = true; fullWidth = true
+    // ---- dropdown / context menus (position:fixed anchored) ----
+    case "ui__dropdown-menu-content":
+      minWidth = 160
+      background = LogseqColors.gray(LogseqColors.isDark ? 3 : 1)
+      cornerRadius = cornerRadius ?? 6
+      hasShadow = true
+      padding = EdgeInsets(top: 4, leading: 4, bottom: 4, trailing: 4)
+    case "ui__dropdown-menu-item":
+      isRow = true; fullWidth = true
+      if fontSize == nil { fontSize = 13 }
+      padding = EdgeInsets(top: 6, leading: 8, bottom: 6, trailing: 8)
+      cornerRadius = 4
+    case "menu-separator", "ui__dropdown-menu-separator":
+      margin = EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0)
+    case "ls-context-menu-content": fixedWidth = 280
+    case "ls-dots-menu": fixedWidth = 256
+    case "cp__right-sidebar-settings":
+      isRow = true; stackSpacing = 4
     case "cp__sidebar-main-layout": isRow = true; grow = true
     case "cp__sidebar-main-content":
       grow = true; maxWidth = 960; centerHorizontally = true
@@ -435,6 +520,8 @@ import SwiftUI
       let v = spacingValue(cls.dropFirst(3))
       padding = EdgeInsets(top: padding?.top ?? 0, leading: v,
                            bottom: padding?.bottom ?? 0, trailing: padding?.trailing ?? 0)
+    case let c where c.hasPrefix("shadow"):
+      hasShadow = true
     case let c where c.hasPrefix("rounded"):
       cornerRadius = cls == "rounded" ? 4
         : cls == "rounded-md" ? 6

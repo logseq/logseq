@@ -194,6 +194,30 @@ let initialize platform_code host_code (_payload : string) : string =
   current_app := Some app;
   Dom_ext.doc_elements_provider := collect_elements;
   Dom_ext.subtree_elements_provider := collect_subtree;
+  Platform.dom_parent_of :=
+    (fun id ->
+      match !current_app with
+      | Some app ->
+          Hashtbl.find_opt
+            (Lui_app.runtime app).Lui_runtime.runtime_parents id
+      | None -> None);
+  (match Sys.getenv_opt "LOGSEQ_DUMP" with
+   | Some _ ->
+       Platform.add_document_listener "click" (fun payload ->
+           Host.dom_op "dump-frames" "{}";
+           (try
+              let oc = open_out "/tmp/click.json" in
+              output_string oc (Js.Json.stringify payload);
+              close_out oc
+            with _ -> ());
+           try
+             let oc = open_out "/tmp/tree.json" in
+             output_string oc
+               (Js.Json.stringify
+                  (Js.Json.array (Array.of_list (collect_elements ()))));
+             close_out oc
+           with _ -> ())
+   | _ -> ());
   let flush_app () = ignore (Lui_app.flush app) in
   Runtime.app_send :=
     (fun action ->

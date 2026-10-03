@@ -172,10 +172,15 @@ let dom ?key ?(tag = "div") ?(attrs = []) ?(events = "")
       (StringValue id);
   if text <> "" then
     Lui_ui.extension_property context node "text" (StringValue text);
-  (* every dom-event fans out to the document-level listeners first
-     (capture order, like the browser), then to the element's own
-     on_dom_event. The payload carries "target" — an element snapshot with
-     an ancestor chain — so closest()/scope resolution work natively. *)
+  (* every dom-event fans out to the document-level listeners and, for
+     events carrying a nodeId, bubbles the event up the extension tree —
+     Platform.emit_event invokes each ancestor's registered handler, so
+     on_dom_event behaves like a DOM listener. The payload carries
+     "target" — an element snapshot with an ancestor chain — so
+     closest()/scope resolution work natively. *)
+  Option.iter
+    (fun handler -> Platform.register_dom_handler node ~events handler)
+    on_dom_event;
   Lui_ui.on_event context node (fun raw ->
       match raw with
       | ExtensionEvent (_, ident, "dom-event", values)
@@ -191,8 +196,7 @@ let dom ?key ?(tag = "div") ?(attrs = []) ?(events = "")
                try
                  Platform.emit_event name (Js.Json.parseExn p)
                with _ -> Platform.emit_event name Js.Json.null)
-           | None -> Platform.emit_event name Js.Json.null);
-          Option.iter (fun handler -> handler name payload) on_dom_event
+           | None -> Platform.emit_event name Js.Json.null)
       | _ -> ());
   (match parent with
    | Some parent -> Lui_ui.append context parent node

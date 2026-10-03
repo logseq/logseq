@@ -91,6 +91,13 @@ struct LogseqElementView: View {
   var body: some View {
     content
       .id(context.nodeID)
+      .background(
+        GeometryReader { g in
+          Color.clear.preference(
+            key: LogseqFrameKey.self,
+            value: LogseqFrameStore.enabled
+              ? [context.nodeID: g.frame(in: .named("logseqWindow"))] : [:])
+        })
       .onAppear {
         // OCaml's get_element_by_id only resolves elements that have
         // announced themselves — its DOM probes (e.g. #ui__ac-inner for an
@@ -111,13 +118,35 @@ struct LogseqElementView: View {
     // The HTML `hidden` attribute is display:none (e.g. the asset upload input).
     if style.isHidden || attrs["hidden"] != nil {
       EmptyView()
+
     } else if style.fillsOverlay && !inOverlay {
-      // position:fixed full-viewport layer — the web renders these at
-      // window scope; our collapsed overlay containers can't give them
-      // bounds, so the element re-renders in LogseqOverlayLayer instead.
+      // position:fixed layers — the web renders these at window scope; our
+      // collapsed overlay containers can't give them bounds, so the element
+      // re-renders in LogseqOverlayLayer instead.
       LogseqOverlayPresenter(nodeID: context.nodeID, priority: style.overlayZ) {
-        LogseqElementView(tag: tag, context: context, inOverlay: true)
-          .frame(maxWidth: .infinity, maxHeight: .infinity)
+        if style.fixedX != nil || style.fixedY != nil || style.fixedRight != nil
+          || style.fixedBottom != nil {
+          // Anchored element (dropdown/context menus, corner popups):
+          // size-to-content at the fixed offsets, like CSS left/top/
+          // right/bottom. .fixedSize() stops the alignment frame's
+          // full-window proposal from expanding fill-style layouts —
+          // CSS position:fixed elements shrink-wrap their content.
+          let alignment: Alignment =
+            style.fixedBottom != nil
+            ? (style.fixedRight != nil ? .bottomTrailing : .bottomLeading)
+            : (style.fixedRight != nil ? .topTrailing : .topLeading)
+          LogseqElementView(tag: tag, context: context, inOverlay: true)
+            .fixedSize()
+            .padding(.leading, style.fixedX ?? 0)
+            .padding(.trailing, style.fixedRight ?? 0)
+            .padding(.top, style.fixedY ?? 0)
+            .padding(.bottom, style.fixedBottom ?? 0)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: alignment)
+        } else {
+          // Full-viewport layer (dialog scrims, dismiss surfaces).
+          LogseqElementView(tag: tag, context: context, inOverlay: true)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
       }
     } else {
       contentBody
@@ -149,6 +178,7 @@ struct LogseqElementView: View {
     case "svg", "path", "circle", "rect", "line", "polyline", "polygon", "g",
          "defs", "use", "ellipse", "tspan":
       LogseqSVGView(tag: tag, attrs: attrs, context: context)
+        .modifier(LogseqStyleModifier(style: style, tag: tag))
     // ---- misc ----
     case "br":
       Text("\n")
@@ -190,7 +220,9 @@ struct LogseqElementView: View {
         // Painted surface (dialog scrim/dismiss layer, divider). It fills
         // its proposal, so a plain tap gesture doubles as the click target
         // the OCaml document listener uses for outside-click dismissal.
-        Rectangle().fill(bg).opacity(style.alpha)
+        Rectangle().fill(bg)
+          .frame(width: style.fixedWidth, height: style.fixedHeight)
+          .opacity(style.alpha)
           .contentShape(Rectangle())
           .onTapGesture {
             emit("click", payload: ["button": 0])
@@ -267,7 +299,9 @@ struct LogseqElementView: View {
           }
         }
       } else if style.isRow {
-        LogseqRowLayout(nodeID: context.nodeID, spacing: style.stackSpacing ?? 0) {
+        LogseqRowLayout(
+          nodeID: context.nodeID, spacing: style.stackSpacing ?? 0,
+          spaceBetween: style.spaceBetween) {
           if !effectiveText.isEmpty { styledText }
           if !html.isEmpty { htmlText }
           ForEach(children, id: \.self) { child in
@@ -428,12 +462,7 @@ struct LogseqElementView: View {
     Button(action: {
       emit("click", payload: ["button": 0])
     }) {
-      VStack(alignment: .leading, spacing: 0) {
-        if !text.isEmpty { styledText }
-        ForEach(context.childIDs, id: \.self) { child in
-          context.content(for: child)
-        }
-      }
+      stackBody
     }
     .buttonStyle(.plain)
     .modifier(LogseqStyleModifier(style: style, tag: tag))
@@ -557,6 +586,7 @@ private struct LogseqOutOfFlowKey: LayoutValueKey {
 struct LogseqRowLayout: Layout {
   var nodeID: Int = 0
   var spacing: CGFloat = 0
+  var spaceBetween = false
 
   func sizeThatFits(
     proposal: ProposedViewSize, subviews: Subviews, cache: inout ()
@@ -603,7 +633,13 @@ struct LogseqRowLayout: Layout {
       totalWeight += weight
       total += w
     }
-    let leftover = max(0, bounds.width - total)
+    let leftover = bounds.width - total
+    // justify-content: space-between — leftover goes into the gaps
+    // between in-flow children instead of grow-weighted children.
+    var gap = spacing
+    if spaceBetween && flowIndex > 1 {
+      gap = spacing + max(0, leftover) / CGFloat(flowIndex - 1)
+    }
     var x = bounds.minX
     for (index, subview) in subviews.enumerated() {
       if subview[LogseqOutOfFlowKey.self] {
@@ -615,13 +651,17 @@ struct LogseqRowLayout: Layout {
         continue
       }
       var w = ideals[index]
-      if totalWeight > 0 {
+      if totalWeight > 0 && !spaceBetween {
+        // grow-weighted children absorb both the positive leftover
+        // (flex-grow) and the deficit (flex-shrink defaults to 1) so a
+        // flex-1 sibling yields to fixed-width siblings.
         w += leftover * CGFloat(weights[index]) / CGFloat(totalWeight)
       }
+      w = max(0, w)
       subview.place(
         at: CGPoint(x: x, y: bounds.minY),
         proposal: ProposedViewSize(width: w, height: bounds.height))
-      x += w + spacing
+      x += w + gap
     }
   }
 }
@@ -681,7 +721,7 @@ struct LogseqColumnLayout: Layout {
       totalWeight += weight
       total += h
     }
-    let leftover = max(0, bounds.height - total)
+    let leftover = bounds.height - total
     var y = bounds.minY
     for (index, subview) in subviews.enumerated() {
       if subview[LogseqOutOfFlowKey.self] {
@@ -695,6 +735,7 @@ struct LogseqColumnLayout: Layout {
       if totalWeight > 0 {
         h += leftover * CGFloat(weights[index]) / CGFloat(totalWeight)
       }
+      h = max(0, h)
       subview.place(
         at: CGPoint(x: bounds.minX, y: y),
         proposal: ProposedViewSize(width: bounds.width, height: h))
@@ -714,6 +755,21 @@ extension EnvironmentValues {
   }
 }
 
+/// Frame bookkeeping for debugging + future bounding_rect support:
+/// every element reports its window-space frame through a preference;
+/// `dump-frames` serializes the collected map.
+@MainActor enum LogseqFrameStore {
+  static let enabled = ProcessInfo.processInfo.environment["LOGSEQ_DUMP"] != nil
+  static var frames: [Int: CGRect] = [:]
+}
+
+struct LogseqFrameKey: PreferenceKey {
+  static let defaultValue: [Int: CGRect] = [:]
+  static func reduce(value: inout [Int: CGRect], nextValue: () -> [Int: CGRect]) {
+    value.merge(nextValue()) { _, new in new }
+  }
+}
+
 /// Applies the parsed style-class hints that map to native modifiers.
 private struct LogseqStyleModifier: ViewModifier {
   let style: LogseqStyle
@@ -729,6 +785,11 @@ private struct LogseqStyleModifier: ViewModifier {
     // CSS `display: block` (width: auto → 100%); only inline tags stay
     // shrink-wrapped unless w-full/grow is set.
     let inline = LogseqElementView.inlineTags.contains(tag)
+    // Anchored overlays (position:fixed with left/top/right/bottom) must
+    // size to content — a fill frame would expand them to the window and
+    // re-center their fixed-width box instead of pinning the anchor.
+    let anchored = style.fixedX != nil || style.fixedY != nil
+      || style.fixedRight != nil || style.fixedBottom != nil
     return content
       .frame(minWidth: style.minWidth, minHeight: style.minHeight)
       .frame(width: style.fixedWidth, height: style.fixedHeight)
@@ -736,7 +797,8 @@ private struct LogseqStyleModifier: ViewModifier {
       .background(style.background ?? Color.clear)
       .cornerRadius(style.cornerRadius ?? 0)
       .frame(
-        maxWidth: (!inline || style.grow || style.fullWidth) ? .infinity : nil,
+        maxWidth: (!inline || style.grow || style.fullWidth) && !anchored
+          ? .infinity : nil,
         maxHeight: (style.fullHeight && !insideScroll) ? .infinity : nil)
       .frame(maxWidth: style.maxWidth, maxHeight: style.maxHeight)
       .frame(
