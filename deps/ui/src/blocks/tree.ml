@@ -316,6 +316,7 @@ let content_el uuid (b : Model.block) : t =
              else
                [ dom ~key:("bt-" ^ uuid) ~style_class:"inline w-full"
                    (Render.title_block ~self:uuid
+                      ~annot:true
                       ~resolved:(S.title_for uuid b.block_title)
                       b)
                ])

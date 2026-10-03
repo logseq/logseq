@@ -414,3 +414,68 @@ behavior), `.left-sidebar-resizer`, `.cp__graphs-selector`,
 - Remaining gaps: icon/emoji picker surface (Set icon/Add
   reaction), `add-comment`/`copy-export-as` stubbed OCaml-side
   ("editor command not implemented"), hover highlight minimal.
+
+### pdf-annotations (PDFKit annotation layer)
+- Architecture per Tienson's guidance: `deps/ui/apple/pdf.ml` is the
+  native twin — it emits ONLY semantic data on the `logseq-pdf`
+  element (`path`/`filename`/`hls`/`page`/`scale`/`ref_hl`/`theme`/
+  `dashed`/`colored`/`automenu`/`hl_mode`/`area_mode`) and receives
+  annotation events. All chrome (toolbar, find bar, floating sidebar
+  with outline+highlights, settings menu, doc-info popover, context
+  menus, area-capture overlay) is rendered natively by
+  `LogseqPDFView`/PDFKit — no web DOM structure is emulated.
+  `deps/ui/apple/pdf_assets.ml` is the native twin for persistence
+  (annotation blocks under the asset block, `insert-blocks` +
+  `apply_and_refresh`).
+- Events Swift→OCaml: `pdf-close`, `pdf-hl-add` (text hl),
+  `pdf-hl-area` (area capture w/ rendered PNG bytes + page rect),
+  `pdf-hl-del`, `pdf-hl-color`, `pdf-hl-ref` (copy ((uuid))),
+  `pdf-hl-link` (linked-ref goto), `pdf-annots`, `pdf-page` (debounced
+  last-visit persist), `pdf-scale`, `pdf-flag` (theme/dashed/colored/
+  automenu storage), `pdf-mode` (hl/area toggle). The `hls` attr is a
+  JSON array the coordinator diffs by signature to add/remove
+  PDFAnnotations.
+- Native `q`/`invoke2` wire returns Datascript `:find` results as
+  `W.Set`, not `W.Array|W.List` — decoding rows must use `W.elems`.
+  First symptom: hls silently reloaded as `[]` on reopen.
+- PDFKit `page.annotation(at:)` does NOT hit-test custom PDFAnnotation
+  subclasses — the ctx-menu handler hit-tests the `applied` registry
+  (page-identity + bounds inflated 4pt for line gaps).
+- Local NSEvent monitors see every click in the window: SwiftUI chrome
+  overlays the same region, so menu hit-testing must first check the
+  TOPMOST view at the point is inside the PDFView
+  (`contentView.hitTest` + `isDescendant`) — otherwise sidebar taps
+  pop canvas menus.
+- `PDFViewPageChanged` + `PDFViewSelectionChanged` (not
+  `PDFViewChangedSelection` — wrong name compiles, never fires).
+  `NSMenu.popUp(positioning: nil, at: viewPoint, in: view)` works for
+  the context menus.
+- pdf.js → PDFKit coords: `pdfkit_y = pageHeight - pdfjs_y - h`
+  (rects stored in pdf.js top-left space, matching cljs hl-value).
+- Area capture: overlay NSView drag → page-space rect → PNG render of
+  the page region → `pdf-hl-area` carries base64 bytes; OCaml writes
+  `assets/<uuid>.png` + a collapsed `hl-type :area`/`hl-image` block.
+  The annotation ref renders the image via `pdf_annotation.ml`'s
+  prefix (`.prefix-link > .hl-page` + resolved asset path).
+- Verified end-to-end: hl-mode+select → yellow lines + annotation
+  block (`P<n>` prefix) live in the journal; persisted across reopen;
+  sidebar lists hls sorted by page; item click scrolls to the page
+  region; ctx menu on canvas annotations (colors/copy-ref/copy-text/
+  go-to-block/delete); color change + delete round-trip to canvas,
+  sidebar AND journal block; area capture → dashed yellow box +
+  collapsed image block; settings flags + theme storage; annots page
+  navigation; ref (`P1` prefix) click re-opens the viewer at the hl.
+- Unported (master surface audit, reasons):
+  - interact.js region resize/move of annotations — no drag handles in
+    PDFKit; would need a custom drag layer per annotation.
+  - image lightbox + image-to-clipboard button in area annotation
+    blocks — no `preview_images`/`clipboard_image` host op natively.
+  - dragstart `[[id]]` on the hl ref icon — outliner DnD infra not
+    ported.
+  - file-graph `.edn` metadata files — db-graph only (native test
+    graph is db-graph; cljs keeps hls only in db on db-graphs too).
+  - "Open in external window" opens the file in the system viewer via
+    `NSWorkspace` (no second native viewer window).
+  - zotero links, unbounded-name hl truncation, theme "dark" canvas
+    inversion differences vs pdf.js rendering, Alt+mouseup
+    fresh-selection menu (path exists, untested — modifier synth).
