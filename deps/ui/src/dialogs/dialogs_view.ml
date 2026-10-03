@@ -18,17 +18,22 @@ let content_cls = "ui__dialog-content"
 
 let btn_style = "ui__button ls-btn"
 
+(* The deepest tapped element's own class identifies the backdrop: on
+   native, .ui__dialog-content fills the window (fillsOverlay), so taps
+   outside the card report the content class rather than the overlay's.
+   Deeper card children emit their own classes, so a direct
+   ui__dialog-content hit is still a backdrop click. *)
 let is_overlay_click payload =
-  String.length
-    (Platform.payload_str payload "targetClass")
-  > 0
-  && let tc = Platform.payload_str payload "targetClass" in
-     let needle = "ui__dialog-overlay" in
-     let ln = String.length needle and lt = String.length tc in
-     let rec go i =
-       i + ln <= lt && (String.sub tc i ln = needle || go (i + 1))
-     in
-     go 0
+  let tc = Platform.payload_str payload "targetClass" in
+  tc <> ""
+  && List.exists
+       (fun needle ->
+         let ln = String.length needle and lt = String.length tc in
+         let rec go i =
+           i + ln <= lt && (String.sub tc i ln = needle || go (i + 1))
+         in
+         go 0)
+       [ "ui__dialog-overlay"; "ui__dialog-content" ]
 
 let close_btn =
   dom ~key:"dlg-close" ~tag:"button"

@@ -6,7 +6,7 @@ import SwiftUI
 /// app ships (resources/css). Light = Radix light gray scale; dark = Radix
 /// dark gray scale; accent = blue scale Logseq uses for links.
 @MainActor enum LogseqColors {
-  private static func hex(_ value: UInt32) -> Color {
+  static func hex(_ value: UInt32) -> Color {
     Color(
       .sRGB,
       red: Double((value >> 16) & 0xff) / 255,
@@ -145,6 +145,15 @@ import SwiftUI
   var fixedY: CGFloat?
   var fixedRight: CGFloat?
   var fixedBottom: CGFloat?
+  /// text-align:right cell content (settings shortcut rows' kbd cell).
+  var alignTrailing = false
+  /// Borders drawn as a stroked rounded-rect overlay (shui trigger/field
+  /// chrome, active font button).
+  var borderColor: Color?
+  var borderWidth: CGFloat = 0
+  /// Block container that wraps children like inline flow (accent
+  /// swatch grid — CSS grid without fixed cell positions).
+  var flowWrap = false
 
   private static let spacingUnit: CGFloat = 4 // tailwind spacing scale unit
 
@@ -180,6 +189,10 @@ import SwiftUI
       case "position":
         if value == "fixed" { outOfFlow = true; fillsOverlay = true }
         else if value == "absolute" { outOfFlow = true }
+      case "clip-path":
+        // visually-hidden a11y inputs (clip-path: inset(50%)) — the web
+        // clips them to zero; treat as display:none
+        if value.hasPrefix("inset") { isHidden = true }
       case "left": fixedX = px.map { CGFloat($0) }
       case "top": fixedY = px.map { CGFloat($0) }
       case "right": fixedRight = px.map { CGFloat($0) }
@@ -223,6 +236,14 @@ import SwiftUI
         if value == "bold" || (px ?? 0) >= 600 { isBold = true }
       case "background-color":
         if let c = parseCSSColor(value) { background = c }
+      case "color":
+        if let c = parseCSSColor(value) { foreground = c }
+      case "outline-color":
+        if let c = parseCSSColor(value) { borderColor = c }
+      case "outline-width":
+        borderWidth = px.map { CGFloat($0) } ?? 0
+      case "outline-style":
+        if value != "solid" { borderWidth = 0 }
       default:
         break
       }
@@ -415,6 +436,132 @@ import SwiftUI
       if fontSize == nil { fontSize = 12 }
       foreground = LogseqColors.gray(10)
     case "page-tabs": isRow = true; fullWidth = true
+    // ---- settings dialog + panes (cljs settings.css / lui-overlay.css) ----
+    // .ui__dialog-content[label=app-settings] -> width min(1024px,
+    // 100vw-2rem) centered; the box IS settings-modal (cljs gives it a
+    // -1.5rem margin to undo dialog padding; ui__dialog-main-content's
+    // 100pt top margin already provides the vertical offset).
+    case "settings-modal":
+      let winW = NSApp.mainWindow?.frame.width ?? 1000
+      let winH = NSApp.mainWindow?.frame.height ?? 660
+      fixedWidth = min(1024, max(360, winW - 32))
+      fixedHeight = min(560, winH * 0.75)
+      background = LogseqColors.gray(LogseqColors.isDark ? 2 : 1)
+      cornerRadius = 12
+      hasShadow = true
+      centerHorizontally = true
+    case "cp__settings-inner": isRow = true; fullWidth = true; fullHeight = true
+    case "settings-aside":
+      fixedWidth = 224; fullHeight = true
+      background = LogseqColors.gray(3)
+      padding = EdgeInsets(top: 16, leading: 16, bottom: 16, trailing: 16)
+    case "cp__settings-header": isRow = true; stackSpacing = 8
+    case "cp__settings-modal-title":
+      if fontSize == nil { fontSize = 24 }
+      isBold = true
+    case "cp__settings-category-title":
+      if fontSize == nil { fontSize = 20 }
+    case "settings-menu":
+      margin = EdgeInsets(top: 16, leading: 0, bottom: 0, trailing: 0)
+    case "settings-menu-item":
+      cornerRadius = 4
+      margin = EdgeInsets(top: 6, leading: 0, bottom: 6, trailing: 0)
+    case "active":
+      // .settings-menu-item.active / .ui__dropdown-menu-item.active /
+      // theme-mode li.active — the shared "selected row" background
+      background = LogseqColors.isDark
+        ? Color.white.opacity(0.08) : Color.black.opacity(0.1)
+    case "settings-menu-link":
+      isRow = true; fullWidth = true; stackSpacing = 4
+      if fontSize == nil { fontSize = 14 }
+      padding = EdgeInsets(top: 6, leading: 8, bottom: 6, trailing: 8)
+    case "cp__settings-article":
+      grow = true; fullHeight = true; isScrollable = true
+      padding = EdgeInsets(top: 4, leading: 16, bottom: 16, trailing: 16)
+    case "panel-wrap":
+      stackSpacing = 16
+      padding = EdgeInsets(top: 4, leading: 4, bottom: 4, trailing: 4)
+    case "ls-label", "ls-it-label-col":
+      fixedWidth = 170
+      if fontSize == nil { fontSize = 14 }
+      if alpha == 1 { alpha = 0.7 }
+    case "ls-it-value": grow = true
+    case "ls-it-actions": isRow = true; stackSpacing = 8; grow = true
+    case "ls-switch-wrap": isRow = true; stackSpacing = 16
+    case "ls-switch-narrow": maxWidth = 320
+    case "ls-it-side":
+      isRow = true
+      if fontSize == nil { fontSize = 14 }
+    case "ls-it-desc", "it-desc":
+      if fontSize == nil { fontSize = 12 }
+      foreground = LogseqColors.gray(10)
+    case "ls-kbd-cell": grow = true; alignTrailing = true
+    case "ls-select-wrap": maxWidth = 320
+    case "ls-select-md": fixedWidth = 256; fixedHeight = 32
+    case "form-select", "form-input":
+      minWidth = 140; maxWidth = 220
+      if fontSize == nil { fontSize = 13 }
+    case "ui__select-trigger":
+      isRow = true; spaceBetween = true; stackSpacing = 4
+      padding = EdgeInsets(top: 6, leading: 12, bottom: 6, trailing: 12)
+      cornerRadius = 6
+      borderColor = LogseqColors.border; borderWidth = 1
+      if fontSize == nil { fontSize = 14 }
+    case "ui__select-icon": foreground = LogseqColors.gray(10)
+    case "ui__select-content":
+      minWidth = 160; maxHeight = 280; isScrollable = true
+    case "ls-popup-backdrop":
+      outOfFlow = true; fillsOverlay = true; overlayZ = 40
+      background = Color.clear
+    // the dialog's absolute corner X — the content column spans the
+    // window here (fillsOverlay), so the X can't anchor to the card;
+    // overlay-click and Escape close dialogs instead
+    case "ui__dialog-close": isHidden = true
+    // settings panes' rows/controls
+    case "cp__theme-modes-options": isRow = true; stackSpacing = 12
+    case "mode-light", "mode-dark", "mode-system":
+      fixedWidth = 92; fixedHeight = 63; cornerRadius = 4
+      background = LogseqColors.gray(4)
+    // li.active>i ring — the OCaml emits mode-active on the i itself
+    case "mode-active":
+      borderColor = LogseqColors.link; borderWidth = 2
+    case "ls-font-btn":
+      fixedHeight = 40
+      padding = EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16)
+      if fontSize == nil { fontSize = 14 }
+    case "ls-active":
+      borderColor = LogseqColors.blue(9); borderWidth = 2
+    case "ls-font-global":
+      padding = EdgeInsets(top: 12, leading: 0, bottom: 0, trailing: 0)
+    case "ls-check-row": isRow = true; fullWidth = true; stackSpacing = 4
+    case "ls-check-label":
+      if fontSize == nil { fontSize = 14 }
+      alpha = 0.7
+    case "cp__accent-colors-list-wrap":
+      flowWrap = true; stackSpacing = 8; maxWidth = 260
+    case "ls-swatch": fixedWidth = 20; fixedHeight = 20; cornerRadius = 10
+    case "ls-swatch-dot": fixedWidth = 8; fixedHeight = 8; cornerRadius = 4
+    case "ls-swatch-none": fixedHeight = 2; background = .red
+    case "ls-ver-wrap": isRow = true; stackSpacing = 16
+    case "ls-ver-text":
+      if fontSize == nil { fontSize = 14 }
+    case "fade-link":
+      if fontSize == nil { fontSize = 14 }
+      isUnderline = true; alpha = 0.7
+    case "text-muted": foreground = LogseqColors.gray(10)
+    case "ctls", "ls-row": isRow = true
+    case "ls-row-gap", "ls-toolbar-gap": isRow = true; stackSpacing = 8
+    case "ls-mb":
+      margin = EdgeInsets(top: 0, leading: 0, bottom: 32, trailing: 0)
+    case "ls-desc":
+      if fontSize == nil { fontSize = 14 }
+      alpha = 0.5
+    case "keyboard-shortcut": isRow = true; stackSpacing = 4
+    case "ls-btn-label":
+      padding = EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 4)
+    case "ls-kbd-label":
+      padding = EdgeInsets(top: 0, leading: 4, bottom: 0, trailing: 4)
+    case "ls-it-top": break // grid align-items:start; rows are top-aligned already
     // ---- dropdown / context menus (position:fixed anchored) ----
     case "ui__dropdown-menu-content":
       minWidth = 160
@@ -584,6 +731,37 @@ import SwiftUI
     }
   }
 
+  /// radix color scale step-9 hues — the OCaml inlines accent swatches as
+  /// `var(--rx-<name>-<step>)`; steps 6-9 all read as the same hue family.
+  static func radixColor(_ name: String) -> Color? {
+    let hex = LogseqColors.hex
+    switch name {
+    case "tomato": return hex(0xe54d2e)
+    case "red": return hex(0xe5484d)
+    case "crimson": return hex(0xe93d82)
+    case "pink": return hex(0xd6409f)
+    case "plum": return hex(0xab4aba)
+    case "purple": return hex(0x8e4ec6)
+    case "violet": return hex(0x6e56cf)
+    case "indigo": return hex(0x5b5bd6)
+    case "blue": return hex(0x0091ff)
+    case "cyan": return hex(0x00a2c7)
+    case "teal": return hex(0x12a594)
+    case "green": return hex(0x30a46c)
+    case "grass": return hex(0x46a758)
+    case "orange": return hex(0xf76b15)
+    case "yellow": return hex(0xffc53d)
+    case "amber": return hex(0xffb224)
+    case "bronze": return hex(0xa18072)
+    case "gold": return hex(0x978365)
+    case "brown": return hex(0xad7f58)
+    case "mauve", "slate", "gray": return LogseqColors.gray(9)
+    case "logseq": return hex(0x85c942)
+    case "none": return LogseqColors.gray(9)
+    default: return nil
+    }
+  }
+
   /// tailwind size scale -> points (spacing scale, plus the common named
   /// widths). Arbitrary values like `w-[240px]`/`w-64` both land here.
   private func dimensionValue(_ s: String) -> CGFloat? {
@@ -684,7 +862,7 @@ import SwiftUI
   private func parseCSSColor(_ value: String) -> Color? {
     var v = value
     if v.hasPrefix("var(--"), let close = v.firstIndex(of: ")") {
-      let name = String(v[v.index(v.startIndex, offsetBy: 5)..<close])
+      let name = String(v[v.index(v.startIndex, offsetBy: 6)..<close])
       // --color-<hue>-<step> tailwind-style palette vars
       let parts = name.split(separator: "-")
       if parts.first == "color", let hue = parts.dropFirst().first {
@@ -750,6 +928,11 @@ import SwiftUI
          let step = Int(last) {
         if name.contains("blue") || name.contains("accent") { return LogseqColors.blue(step) }
         return LogseqColors.gray(step)
+      }
+      // --rx-<color>-<step> radix accent vars (settings swatches)
+      if name.hasPrefix("rx-") {
+        let colorName = name.dropFirst(3).split(separator: "-").first.map(String.init) ?? ""
+        return Self.radixColor(colorName)
       }
       return nil
     }

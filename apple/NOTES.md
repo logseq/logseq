@@ -414,3 +414,87 @@ behavior), `.left-sidebar-resizer`, `.cp__graphs-selector`,
 - Remaining gaps: icon/emoji picker surface (Set icon/Add
   reaction), `add-comment`/`copy-export-as` stubbed OCaml-side
   ("editor command not implemented"), hover highlight minimal.
+
+### Settings pages (native milestone)
+
+Master's cljs settings dialog (settings.cljs) has panes:
+account* / general / editor / keymap / ai / advanced / features /
+collaboration / encryption / plugins-setting. The OCaml port emits
+general / editor / keymap / advanced / features — the web-parity
+subset (account/ai/collaboration/encryption/plugins panes don't
+exist in the OCaml source yet, not a native-layer gap).
+
+- The dialog opens via `Dialogs_state.open_ "settings"` (left-nav
+  gear and App → Settings… both route there) and renders through the
+  shared `ui__dialog-overlay` overlay layer.
+- Migrated the pane emitters to LUI cross-platform semantic
+  elements per Tienson's guidance (semantic intent over DOM mimic):
+  `ui__switch`/`ui__checkbox` rows → `Lui_elements.switch_`/
+  `checkbox` (native Toggle; other `ui__switch` emitters outside
+  settings keep the old switchBody/checkboxBody — plugins_view,
+  views_table, export_view belong to sibling tasks).
+- Language picker: `<select>`-style trigger → `Lui_elements.select`
+  + `Lui_elements.dropdown_menu` + `menu_item`s (native anchored
+  popover, checkmark on the selected item, dismiss on outside
+  click). Real `<select>` tag emitters still use the Picker
+  selectBody (date-format row works as-is).
+- Style mappings added for the emitted classes: cp__settings-*
+  shell, mode-* theme previews (bundled light/dark/system pngs —
+  build.sh copies resources/img/*-theme.png into the .app), accent
+  palette dots, ls-select-wrap/trigger, ui__dropdown-menu-content.
+- Persistence verified: toggles write through
+  `Sdk_config.write_config` into the graph db kvs (e.g.
+  `logical-outdenting?`), language/theme choices re-render in the
+  new language and survive relaunch.
+- Unported vs master (recorded, with reasons): spell-check toggle,
+  auto-update row, markdown-mirror/http-server/semantic-search
+  toggles, proxy row, auto-chmod — none exist in the OCaml settings
+  emitters (they're cljs/Electron-only surfaces); account/RTC
+  panes need sync backends not in this runtime.
+
+### macOS menu bar (native milestone)
+
+Mirrors master's Electron menu (src/electron/electron/core.cljs):
+App (about/services/hide/hideOthers/unhide/quit — all system),
+Settings… ⌘, (SwiftUI `CommandGroup(replacing: .appSettings)`),
+File (Close Window ⌘W via `.newItem` replacement — the system
+supplies Close/Close All in a non-document Window app; a bare
+`.closeItem` group renders NO File menu at all), Edit (standard
+system group — Undo/Redo/Cut/Copy/Paste/Select All act on the
+focused NSTextView automatically), View (Toggle Left Sidebar ⇧⌘L,
+Toggle Right Sidebar ⇧⌘R, Toggle Wide Mode, Zoom In ⌘= / Zoom
+Out ⌘- / Actual Size ⌘0, Always on Top, Enter Full Screen — lands
+via `after: .sidebar` / `before: .windowList`), Window (standard),
+Help (Keyboard Shortcuts → settings keymap tab; Logseq
+Documentation → docs.logseq.com).
+
+- View/sidebar/settings items post `sendPlatformEvent` (added
+  `LogseqRuntime.postPlatformEvent(name:json:)`) into OCaml;
+  `deps/ui/apple/menu_bar.ml` installs `Platform.add_event_listener`
+  routes: `menu-toggle-left-sidebar`/`menu-toggle-right-sidebar`/
+  `menu-toggle-search` → existing `Action.Toggle_*` reducers,
+  `menu-toggle-wide-mode` → `Settings_state.toggle_wide_mode`,
+  `menu-open-settings` → `Dialogs_state.open_` + optional
+  `{"tab":"keymap"}` payload.
+- Pre-mount settings tabs: `menu-open-settings` with a tab payload
+  before the pane has ever mounted crashed on `state()` — added
+  `Settings_state.request_tab/clear_pending_tab` (pending slot
+  consumed by `activate()` on mount; direct `set_tab` path when
+  already mounted).
+- Zoom is native: `.scaleEffect` + GeometryReader resize in
+  LogseqRuntimeHost (zoomSteps 0.5–2.0), not routed to OCaml.
+- Edit menu needs no code — SwiftUI's default `.pasteboard`/undo
+  groups drive the focused NSTextView; verified Select All / Copy /
+  Paste / Undo end-to-end through menu clicks.
+- Unported vs Electron (recorded, with reasons): File→New Window
+  (single-runtime single-window architecture), View→Reload/Force
+  Reload/Toggle DevTools (no renderer — native views), the
+  windowMenu role's per-doc semantics (no documents), Services
+  submenu entries (system-provided), Electron's zoomin Cmd+= hack.
+- Shared-layer fixes that dialogs elsewhere also needed: `emit()`
+  now sends `targetClass` (style-class of the deepest tapped node)
+  — `is_overlay_click`/`is_overlay_root` read it; and dialog
+  backdrop taps hit `ui__dialog-content` (it fills the window via
+  fillsOverlay), not the overlay element, so `is_overlay_click`
+  accepts both classes as backdrop. Verified: Settings… opens,
+  backdrop click dismisses.

@@ -329,7 +329,7 @@ let fetch_blocks (p : Model.page) =
 let open_dialog name =
   let o = Js.Dict.empty () in
   Js.Dict.set o "name" (Js.Json.string name);
-  Platform.dispatch "ls:open-dialog" (Sdk_convert.json_obj o)
+  Platform.dispatch "ls:open-dialog" (Js.Json.object_ o)
 
 let open_cards () = Platform.dispatch "ls:open-cards" Js.Json.null
 
