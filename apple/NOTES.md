@@ -218,3 +218,26 @@ view/model stack via the LUI Apple backend).
   `applicationWillTerminate` now calls `LogseqRuntime.terminateActive()`
   → `lui_ocaml_dispose` → `Daemon_client.kill_all` SIGTERMs every
   spawned pid.
+
+### Page-ref navigation (fixed)
+Two apple-twin stubs blocked every `closest`-based document listener:
+- `Platform.get_attribute` returned `None` — broke `data-ref`/`data-uuid`
+  reads in `on_doc_click`. Now decodes the snapshot `attrs` dict (and
+  `attr-*` props).
+- `apple/sidebar_state.ml` had its own `let closest _ _ = None` shadowing
+  `Dom_ext.closest`. One-line fix; verify other apple twins don't
+  shadow Dom_ext helpers the same way.
+
+### FLAG — DOM semantics a native extension can't honor verbatim
+`D.txt` (render_dom.ml) mounts `<logseq-raw-text data-raw-text="…">` as a
+*placeholder*: on web a MutationObserver swaps the element's textContent
+in post-commit. On apple the observer is a no-op, so the Swift extension
+renders the `data-raw-text` attr itself (`effectiveText`). Any future
+"placeholder node filled by observer" pattern will need the same
+attr-driven fallback — there is no MutationObserver on the native side.
+
+### Stale caret → split at position 0
+`live_fields` in editor_dom.ml only refreshed from emit payloads; native
+caret moves (Cmd+Right etc.) never reached OCaml, so split/merge used a
+stale selection. LogseqTextArea now injects `selectionStart`/
+`selectionEnd` into every dom-event payload.
