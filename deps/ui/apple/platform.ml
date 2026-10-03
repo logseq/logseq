@@ -182,9 +182,57 @@ let on_document_event name f = add_document_listener name f
    of registration order *)
 let pre_dispatch_hook : (Js.Json.t -> unit) ref = ref (fun _ -> ())
 
+(* DOM-style event bubbling: the host posts a dom-event only to the
+   deepest hit node, so element-level handlers registered on ancestors
+   would never run natively. Views register their per-element handlers
+   here keyed by extension node id; emit_event walks the hit node and
+   its parents (runtime_parents, installed by the embed layer) and
+   invokes each registered handler whose `events` list contains the
+   event name — mirroring a browser's bubble phase. *)
+type dom_handler =
+  { dh_events : string
+  ; dh_fn : string -> string option -> unit
+  }
+
+let dom_handlers : (int, dom_handler) Hashtbl.t = Hashtbl.create 256
+
+let register_dom_handler id ~events fn =
+  if events <> "" then
+    Hashtbl.replace dom_handlers id { dh_events = events; dh_fn = fn }
+
+let dom_parent_of : (int -> int option) ref = ref (fun _ -> None)
+
+let event_listed events name =
+  List.exists
+    (fun e -> e = name)
+    (String.split_on_char ' ' events
+    |> List.concat_map (String.split_on_char ','))
+
 (* host -> OCaml event entry; called by the bridge. *)
 let emit_event name payload =
   !pre_dispatch_hook payload;
+  (match payload with
+   | Js.Json.JObject kvs -> (
+       match List.assoc_opt "nodeId" kvs with
+       | Some v -> (
+           match Js.Json.decodeNumber v with
+           | None -> ()
+           | Some n ->
+               let payload_str = Js.Json.stringify payload in
+               let rec bubble id depth =
+                 if depth < 64 then begin
+                   (match Hashtbl.find_opt dom_handlers id with
+                    | Some dh when event_listed dh.dh_events name ->
+                        dh.dh_fn name (Some payload_str)
+                    | _ -> ());
+                   match !dom_parent_of id with
+                   | Some parent -> bubble parent (depth + 1)
+                   | None -> ()
+                 end
+               in
+               bubble (int_of_float n) 0)
+       | None -> ())
+   | _ -> ());
   match Hashtbl.find_opt window_listeners name with
   | Some fns ->
       List.iter

@@ -279,3 +279,61 @@ the click falls through to a page element and `handle_click` closes when
 `closest .cp__cmdk__modal` is None. Gap vs web: the underlying element's
 own click handler also fires (e.g. clicking a dimmed link would navigate
 as well as close). Flagged for the backend.
+
+### DOM event bubbling (major fix)
+The host posts a `dom-event` only to the deepest hit node — element
+handlers registered on ancestors (button clicks whose content is a
+span/svg) never ran natively, so most buttons were dead. Views now
+register per-element handlers in `Platform.dom_handlers` keyed by
+extension node id; `Platform.emit_event` walks `payload.nodeId` up
+`runtime_parents` (installed by native_embed) invoking each handler
+whose `events` list contains the name — the DOM bubble phase, before
+`window_listeners`. `logseq_dom.dom` registers `on_dom_event` into it.
+This globally fixed buttons hit via inner content (sidebar toggle,
+item headers, menu items).
+- Known gap: `dom_handlers` entries for removed extension nodes linger
+  (Hashtbl.replace only overwrites same-id re-renders) — memory growth
+  over long sessions; needs a removal hook from the runtime later.
+
+### Right sidebar milestone fixes
+- `buttonBody` used a hardcoded `VStack` ignoring `style.isRow` —
+  every flex-row button (item headers, menus) stacked children
+  vertically and inflated. Now reuses `stackBody`.
+- `LogseqRowLayout`/`LogseqColumnLayout` had no flex-shrink: with the
+  420px sidebar sibling the row overflowed the window (left-container
+  stayed 850). Grow-weighted children now absorb a negative leftover
+  too (flex-shrink:1 semantics).
+- `cp__sidebar-help-btn` is `position:fixed` in the web stylesheet;
+  mapped to `fillsOverlay` + fixedRight/Bottom it rendered at full
+  window bounds — its `.inner` stretched and swallowed every click
+  (the invisible-fullscreen-hitbox bug). Anchored overlay elements now
+  get `.fixedSize()` so the alignment frame's full-window proposal
+  can't expand them — CSS fixed elements shrink-wrap content.
+- `LogseqSVGView` never applied `LogseqStyleModifier` — class sizes
+  like `h-4 w-4` were ignored, so chevron svgs ballooned (~192x512)
+  and inflated their ancestor rows. Modifier applied for the whole
+  svg family.
+- `sidebar-item-header`/`item-actions`/`resizer`/topbar/item classes
+  mapped to native styles (resizer `outOfFlow`; web positions it
+  `absolute` inside the item row).
+- Painted-surface Rectangle branch ignored fixed sizes — applies
+  `.frame(width:fixedWidth,height:fixedHeight)` now.
+
+### Frame instrumentation (LOGSEQ_DUMP)
+`LogseqFrameStore` + `LogseqFrameKey` PreferenceKey report each
+element's frame in the `logseqWindow` coordinate space; the
+`dump-frames` dom-op writes `/tmp/frames.json` (`{nodeId:[x,y,w,h]}`),
+and the env-gated document click listener in native_embed writes
+`/tmp/click.json` (event payload) + `/tmp/tree.json` (extension tree
+snapshot). Used to debug every layout bug above — keep, env-gated.
+Caveat: frames persist for removed/hidden nodes (stale values).
+
+### FLAG — stylesheet-declared positioning is invisible to the parser
+OCaml emits only class names; any `position:fixed`/`absolute` in
+lui-core.css needs a manual Swift mapping. Remaining unmapped:
+`.cp__sidebar-left-layout` (left sidebar is position:fixed on web —
+we render it in-flow, visually equivalent but no overlay-slide
+behavior), `.left-sidebar-resizer`, `.cp__graphs-selector`,
+`.sidebar-drop-indicator`, `.ls-page-title-actions`,
+`.extensions__code-lang`. The sidebar `.resizer` and
+`.block-children-left-border` are mapped/hidden.

@@ -55,6 +55,10 @@ private struct LogseqRuntimeHost: View {
         LUISwiftUIRoot(backend: runtime.backend, rootID: rootID)
           .frame(maxWidth: .infinity, maxHeight: .infinity)
           .overlay(alignment: .topLeading) { LogseqOverlayLayer() }
+          .coordinateSpace(name: "logseqWindow")
+          .onPreferenceChange(LogseqFrameKey.self) {
+            LogseqFrameStore.frames = $0
+          }
       } else {
         ProgressView("Opening Logseq")
       }
