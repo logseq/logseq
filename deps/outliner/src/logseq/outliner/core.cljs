@@ -1203,6 +1203,17 @@
                                    (:block/order (second top-level-blocks))) 0))]
     (if reversed? (reverse top-level-blocks) top-level-blocks)))
 
+(defn- top-level-blocks-in-page-order
+  "Top-level blocks in page/document order, independent of selection/click order."
+  [db blocks]
+  (let [top-level-blocks (filter-top-level-blocks db blocks)
+        non-consecutive? (and (> (count top-level-blocks) 1)
+                              (seq (ldb/get-non-consecutive-blocks db top-level-blocks)))
+        top-level-blocks (get-top-level-blocks top-level-blocks non-consecutive?)]
+    (if non-consecutive?
+      (sort-non-consecutive-blocks db top-level-blocks)
+      top-level-blocks)))
+
 (def ^:private comments-tag-ident :logseq.class/Comments)
 (def ^:private comment-tag-ident :logseq.class/Comment)
 (def ^:private comments-blocks-property :logseq.property.comments/blocks)
@@ -1470,7 +1481,7 @@
   [conn blocks up?]
   {:pre [(seq blocks) (boolean? up?)]}
   (let [db @conn
-        top-level-blocks (filter-top-level-blocks db blocks)
+        top-level-blocks (top-level-blocks-in-page-order db blocks)
         opts {:outliner-op :move-blocks-up-down}]
     (if up?
       (let [first-block (d/entity db (:db/id (first top-level-blocks)))
@@ -1500,8 +1511,8 @@
         (when (and right
                    (not (and (:logseq.property/created-from-property last-top-block)
                              (nil? last-top-block-right))))
-          (move-blocks conn blocks right (merge opts {:sibling? sibling?
-                                                      :up? up?})))))))
+          (move-blocks conn top-level-blocks right (merge opts {:sibling? sibling?
+                                                                :up? up?})))))))
 
 (defn- ^:large-vars/cleanup-todo indent-outdent-blocks
   "Indent or outdent `blocks`."

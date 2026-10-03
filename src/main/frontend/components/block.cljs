@@ -2908,6 +2908,32 @@
           {:client-x (.-clientX e)
            :client-y (.-clientY e)}))
 
+(defn- toggle-meta-selection-block!
+  "Ctrl/Cmd+click: persist the current edit, then toggle the clicked block."
+  [e block-dom-element selection-blocks]
+  (util/stop e)
+  (let [editing-el (state/get-editor-block-container)]
+    (when editing-el
+      (state/clear-editor-action!)
+      (editor-handler/save-current-block!)
+      (state/exit-editing-and-set-selected-blocks!
+       (if (some #(= editing-el %) selection-blocks)
+         (state/get-selection-blocks)
+         (into [editing-el] selection-blocks))
+       :down))
+    (cond
+      (= block-dom-element editing-el)
+      nil
+
+      (some #(= block-dom-element %) (state/get-selection-blocks))
+      (state/drop-selection-block! block-dom-element)
+
+      :else
+      (state/conj-selection-block! block-dom-element :down)))
+  (if (empty? (state/get-selection-blocks))
+    (state/clear-selection!)
+    (state/set-selection-start-block! block-dom-element)))
+
 (defn- block-content-on-pointer-down
   [e block block-id edit-input-id content config]
   (when-not (state/get-state :ui/scrolling?)
@@ -2957,14 +2983,7 @@
                   (editor-handler/highlight-selection-area! block-id block-dom-element {:append? true}))
 
                 meta?
-                (do
-                  (util/stop e)
-                  (if (some #(= block-dom-element %) selection-blocks)
-                    (state/drop-selection-block! block-dom-element)
-                    (state/conj-selection-block! block-dom-element :down))
-                  (if (empty? (state/get-selection-blocks))
-                    (state/clear-selection!)
-                    (state/set-selection-start-block! block-dom-element)))
+                (toggle-meta-selection-block! e block-dom-element selection-blocks)
 
                 (and shift? starting-block)
                 (do

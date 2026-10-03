@@ -9,10 +9,12 @@
    [logseq.e2e.graph :as graph]
    [logseq.e2e.keyboard :as k]
    [logseq.e2e.page :as p]
+   [logseq.e2e.locator :as loc]
    [logseq.e2e.util :as util]
    [wally.main :as w])
   (:import
-   (com.microsoft.playwright Locator$DragToOptions)))
+   (com.microsoft.playwright Locator$ClickOptions Locator$DragToOptions)
+   (com.microsoft.playwright.options KeyboardModifier)))
 
 (use-fixtures :once fixtures/open-page)
 (use-fixtures :each
@@ -242,6 +244,69 @@
 
 (deftest move-up-down-test
   (move-up-down))
+
+(defn- ctrl-click-block!
+  [title]
+  (let [modifier (if util/mac? KeyboardModifier/META KeyboardModifier/CONTROL)]
+    (.click
+     (.first (loc/filter ".ls-page-blocks .ls-block .block-content"
+                         :has-text title))
+     (doto (Locator$ClickOptions.)
+       (.setModifiers [modifier])))))
+
+(defn- selected-block-titles
+  []
+  (mapv string/trim
+        (w/all-text-contents
+         ".ls-page-blocks .ls-block.selected .block-title-wrap")))
+
+(defn- move-up-down-shortcut
+  [up?]
+  (k/press (str (if util/mac? "Meta" "Alt")
+                "+Shift+"
+                (if up? "ArrowUp" "ArrowDown"))))
+
+(defn- edit-block!
+  [title]
+  (util/exit-edit)
+  (b/jump-to-block title)
+  (util/wait-editor-visible)
+  (is (= title (util/get-edit-content))))
+
+(defn move-up-down-ctrl-click
+  []
+  (testing "Ctrl/Cmd+click bottom-first on a,b,c moves b and c up together"
+    (b/new-blocks ["a" "b" "c"])
+    (util/wait-editor-visible)
+    (is (= "c" (util/get-edit-content)))
+    (ctrl-click-block! "b")
+    (util/wait-timeout 200)
+    (assert/assert-have-count ".ls-page-blocks .ls-block.selected" 2)
+    (is (= #{"b" "c"} (set (selected-block-titles))))
+    (move-up-down-shortcut true)
+    (util/wait-timeout 200)
+    (is (= ["b" "c" "a"] (util/get-page-blocks-contents))))
+
+  (testing "Ctrl/Cmd+click c then b on a,b,c,d moves like Shift+click of the same blocks"
+    (p/new-page "ctrl click move abcd")
+    (b/new-blocks ["a" "b" "c" "d"])
+    (edit-block! "c")
+    (ctrl-click-block! "b")
+    (util/wait-timeout 200)
+    (assert/assert-have-count ".ls-page-blocks .ls-block.selected" 2)
+    (is (= #{"b" "c"} (set (selected-block-titles))))
+    (move-up-down-shortcut true)
+    (util/wait-timeout 200)
+    (is (= ["b" "c" "a" "d"] (util/get-page-blocks-contents)))
+    (move-up-down-shortcut false)
+    (util/wait-timeout 200)
+    (is (= ["a" "b" "c" "d"] (util/get-page-blocks-contents)))
+    (move-up-down-shortcut false)
+    (util/wait-timeout 200)
+    (is (= ["a" "d" "b" "c"] (util/get-page-blocks-contents)))))
+
+(deftest move-up-down-ctrl-click-test
+  (move-up-down-ctrl-click))
 
 (deftest delete-test
   (delete))
