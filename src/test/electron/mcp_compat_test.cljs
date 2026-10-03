@@ -902,6 +902,27 @@
                      (is (string/includes? (.-message error) "not a DB graph"))
                      (done)))))))
 
+(deftest capability-rejection-does-not-contaminate-an-independent-read
+  (let [{:keys [block-uuid api]} (page-fixture)
+        denied-calls (atom [])
+        denied-api (fn [method args]
+                     (swap! denied-calls conj [method args])
+                     (case method
+                       "logseq.App.getAppInfo" #js {"version" "2.0.1" "supportDb" true}
+                       "logseq.App.checkCurrentIsDbGraph" false
+                       nil))]
+    (async done
+      (-> (p/let [results (p/all [(p/catch (mcp-compat/capabilities denied-api #js {})
+                                          (fn [error] (.-message error)))
+                                  (mcp-compat/get-block api #js {"block_uuid" block-uuid})])]
+            (is (string/includes? (first results) "not a DB graph"))
+            (is (true? (:found (second results))))
+            (is (= block-uuid (get-in (second results) [:block :uuid])))
+            (is (= ["logseq.App.getAppInfo" "logseq.App.checkCurrentIsDbGraph"]
+                   (mapv first @denied-calls)))
+            (js/queueMicrotask done))
+          (p/catch (fn [error] (is false (.-message error)) (js/queueMicrotask done)))))))
+
 (deftest create-page-refuses-title-collisions-before-writing
   (let [calls (atom [])
         api (fn [method args]

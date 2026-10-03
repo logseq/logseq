@@ -2893,10 +2893,14 @@
   (p/let [info-result (api-fn "logseq.App.getAppInfo" [])
           graph-result (api-fn "logseq.App.checkCurrentIsDbGraph" [])
           info (js->clj info-result :keywordize-keys true)]
-    (when-not (true? (:supportDb info))
-      (throw (js/Error. "Connected Logseq instance does not report DB support")))
-    (when-not (true? graph-result)
-      (throw (js/Error. "The current Logseq graph is not a DB graph")))
+    (cond
+      (not (true? (:supportDb info)))
+      (p/rejected (js/Error. "Connected Logseq instance does not report DB support"))
+
+      (not (true? graph-result))
+      (p/rejected (js/Error. "The current Logseq graph is not a DB graph"))
+
+      :else
     (p/let [probe-methods (->> capability-tool-routes vals (apply concat) distinct sort)
             findings (p/all (map #(probe-capability-method api-fn %) probe-methods))
             findings-by-method (into {} (map (juxt :method identity) findings))
@@ -2928,4 +2932,4 @@
                                                              [(name tool) routes]))
                                                       capability-tool-routes)
                                         :method_findings (vec (sort-by :method findings))}))]
-      body)))
+      body))))
