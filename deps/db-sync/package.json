@@ -43,7 +43,8 @@
     "shadow-cljs": "^3.4.4",
     "transit-js": "^0.8.874",
     "ws": "^8.19.0",
-    "zod": "^4.4.3"
+    "zod": "^4.4.3",
+    "mldoc": "^1.5.9"
   },
   "devDependencies": {
     "@redocly/cli": "^2.38.0",
@@ -51,7 +52,8 @@
   },
   "pnpm": {
     "onlyBuiltDependencies": [
-      "better-sqlite3"
+      "better-sqlite3",
+      "mldoc"
     ]
   }
 }
