@@ -288,22 +288,76 @@
         title (common-util/remove-boundary-slashes title)]
     title))
 
-(defn- get-page-by-parent-name
-  [db parent-title child-title class?]
-  (some->>
-   (d/q
-    '[:find [?b ...]
-      :in $ ?attribute ?parent-name ?child-name
-      :where
-      [?b ?attribute ?p]
-      [?b :block/name ?child-name]
-      [?p :block/name ?parent-name]]
-    db
-    (if class? :logseq.property.class/extends :block/parent)
-    (common-util/page-name-sanity-lc parent-title)
-    (common-util/page-name-sanity-lc child-title))
-   first
-   (d/entity db)))
+(defn- class-namespace-root?
+  "A tag is a namespace root when it only extends Root Tag (or has no extends)."
+  [entity]
+  (let [extends (:logseq.property.class/extends entity)]
+    (or (empty? extends)
+        (every? (fn [parent]
+                  (= :logseq.class/Root (:db/ident parent)))
+                extends))))
+
+(defn- page-namespace-root?
+  "A page can be the first segment of a page namespace when it is top-level
+   (Library or no parent). Classes and properties are included so create can
+   reject them as parents."
+  [library entity]
+  (cond
+    (ldb/internal-page? entity)
+    (let [parent (:block/parent entity)]
+      (or (nil? parent)
+          (= (:db/id parent) (:db/id library))))
+
+    (ldb/class? entity)
+    (class-namespace-root? entity)
+
+    (ldb/property? entity)
+    true
+
+    :else false))
+
+(defn- get-namespace-root
+  "Resolve the first namespace segment to a top-level page or tag.
+   Nested children that share the name (Bar/Foo when creating Foo/Baz) are ignored."
+  [db title class?]
+  (let [library (ldb/get-built-in-page db common-config/library-page-name)
+        by-name (->> (entity-util/get-pages-by-name db title)
+                     (sort-by :e)
+                     (keep (fn [d]
+                             (let [e (d/entity db (:e d))]
+                               (when (page-namespace-root? library e)
+                                 e)))))]
+    (if class?
+      (or (->> (d/datoms db :avet :block/title title)
+               (sort-by :e)
+               (some (fn [d]
+                       (let [e (d/entity db (:e d))]
+                         (when (and (ldb/class? e)
+                                    (class-namespace-root? e))
+                           e)))))
+          ;; Top-level page/property with this name, so create can reject mixed parents
+          (some (fn [e]
+                  (when-not (ldb/class? e) e))
+                by-name))
+      (first by-name))))
+
+(defn- get-namespace-child
+  "Look up a namespace child under the already-resolved parent entity.
+   Parent name is not used, so Bar/Foo and top-level Foo stay distinct."
+  [parent child-title class?]
+  (when (de/entity? parent)
+    (let [children (if class?
+                     (:logseq.property.class/_extends parent)
+                     (:block/_parent parent))
+          child-name (when-not class?
+                       (common-util/page-name-sanity-lc child-title))]
+      (some (fn [child]
+              (when (and (if class? (ldb/class? child) (ldb/internal-page? child))
+                         (if class?
+                           (= child-title (:block/title child))
+                           (= child-name (:block/name child))))
+                child))
+            children))))
 
 (defn- page-with-parent-and-order
   "Apply to namespace pages"
@@ -322,22 +376,24 @@
      (if (and (or (entity-util/class? page)
                   (entity-util/page? page))
               (ns-util/namespace-page? title))
-       (let [class? (entity-util/class? page)
+       (let [class? (or create-class? (entity-util/class? page))
              parts (->> (string/split title ns-util/parent-re)
                         (map string/trim)
                         (remove string/blank?))
-             pages (map-indexed
-                    (fn [idx part]
-                      (let [last-part? (= idx (dec (count parts)))
-                            page (if (zero? idx)
-                                   (ldb/get-page db part)
-                                   (get-page-by-parent-name db (nth parts (dec idx)) part create-class?))
-                            result (or page
+             pages (reduce
+                    (fn [acc part]
+                      (let [idx (count acc)
+                            last-part? (= idx (dec (count parts)))
+                            existing (if (zero? idx)
+                                       (get-namespace-root db part class?)
+                                       (get-namespace-child (peek acc) part class?))
+                            result (or existing
                                        (gp-block/page-name->map part db true date-formatter
                                                                 {:page-uuid (when last-part? block-uuid)
                                                                  :skip-existing-page-check? true
                                                                  :class? class?}))]
-                        result))
+                        (conj acc result)))
+                    []
                     parts)]
          (cond
            (and (not class?) (not (every? ldb/internal-page? pages)))
@@ -363,7 +419,9 @@
                 (if class?
                   (cond
                     (and (de/entity? page) (ldb/class? page))
-                    (assoc page :logseq.property.class/extends parent-eid)
+                    (if parent-eid
+                      (assoc page :logseq.property.class/extends parent-eid)
+                      page)
 
                     (de/entity? page) ; page exists but not a class, avoid converting here because this could be troublesome.
                     nil

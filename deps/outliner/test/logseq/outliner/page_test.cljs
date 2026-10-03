@@ -91,6 +91,140 @@
            (outliner-page/create! conn "property1/class" {:split-namespace? true :class? true}))
           "Class can't have a property parent"))))
 
+(defn- library-child-pages
+  [db]
+  (let [library (ldb/get-built-in-page db common-config/library-page-name)]
+    (filter ldb/internal-page? (:block/_parent library))))
+
+(defn- library-child
+  [db title]
+  (some (fn [page]
+          (when (= title (:block/title page))
+            page))
+        (library-child-pages db)))
+
+(defn- class-by-title
+  [db title]
+  (some (fn [eid]
+          (let [e (d/entity db eid)]
+            (when (ldb/class? e) e)))
+        (d/q '[:find [?e ...] :in $ ?title :where [?e :block/title ?title]] db title)))
+
+(defn- extends-titles
+  [class]
+  (set (map :block/title (:logseq.property.class/extends class))))
+
+(defn- extends-idents
+  [class]
+  (set (map :db/ident (:logseq.property.class/extends class))))
+
+(deftest create-namespace-pages-root-is-order-independent
+  (testing "Bar/Foo then Foo/Baz creates a top-level Foo, not Bar/Foo/Baz"
+    (let [conn (db-test/create-conn)
+          [_ foo-uuid] (outliner-page/create! conn "Bar/Foo" {:split-namespace? true})
+          [_ baz-uuid] (outliner-page/create! conn "Foo/Baz" {:split-namespace? true})
+          foo-under-bar (d/entity @conn [:block/uuid foo-uuid])
+          baz (d/entity @conn [:block/uuid baz-uuid])
+          top-foo (library-child @conn "Foo")
+          top-bar (library-child @conn "Bar")]
+      (is (= #{"Bar" "Foo"} (set (map :block/title (library-child-pages @conn))))
+          "Library holds both Bar and a top-level Foo")
+      (is (some? top-foo))
+      (is (some? top-bar))
+      (is (= (:db/id top-bar) (:db/id (:block/parent foo-under-bar))))
+      (is (= (:db/id top-foo) (:db/id (:block/parent baz)))
+          "Baz is under top-level Foo, not Bar/Foo")
+      (is (not= (:db/id foo-under-bar) (:db/id top-foo))
+          "Bar/Foo is a different page from top-level Foo")
+      (is (nil? (:errors (db-validate/validate-db @conn))))))
+
+  (testing "Foo/Baz then Bar/Foo is the same two trees"
+    (let [conn (db-test/create-conn)
+          [_ baz-uuid] (outliner-page/create! conn "Foo/Baz" {:split-namespace? true})
+          [_ foo-uuid] (outliner-page/create! conn "Bar/Foo" {:split-namespace? true})
+          foo-under-bar (d/entity @conn [:block/uuid foo-uuid])
+          baz (d/entity @conn [:block/uuid baz-uuid])
+          top-foo (library-child @conn "Foo")
+          top-bar (library-child @conn "Bar")]
+      (is (= #{"Bar" "Foo"} (set (map :block/title (library-child-pages @conn)))))
+      (is (= (:db/id top-bar) (:db/id (:block/parent foo-under-bar))))
+      (is (= (:db/id top-foo) (:db/id (:block/parent baz))))
+      (is (not= (:db/id foo-under-bar) (:db/id top-foo)))
+      (is (nil? (:errors (db-validate/validate-db @conn))))))
+
+  (testing "Existing standalone Foo is reused as the Foo/Baz root"
+    (let [conn (db-test/create-conn)
+          [_ foo-uuid] (outliner-page/create! conn "Foo" {})
+          [_ baz-uuid] (outliner-page/create! conn "Foo/Baz" {:split-namespace? true})
+          foo (d/entity @conn [:block/uuid foo-uuid])
+          baz (d/entity @conn [:block/uuid baz-uuid])]
+      (is (= (:db/id foo) (:db/id (:block/parent baz)))
+          "Standalone Foo becomes the namespace root")
+      (is (= 1 (count (d/q '[:find [?e ...] :where [?e :block/title "Foo"]] @conn)))
+          "A second Foo page is not created")
+      (is (nil? (:errors (db-validate/validate-db @conn))))))
+
+  (testing "Foo/Baz/Qux after Bar/Foo/Baz does not attach Qux under Bar/Foo"
+    (let [conn (db-test/create-conn)
+          [_ nested-baz-uuid] (outliner-page/create! conn "Bar/Foo/Baz" {:split-namespace? true})
+          [_ qux-uuid] (outliner-page/create! conn "Foo/Baz/Qux" {:split-namespace? true})
+          nested-baz (d/entity @conn [:block/uuid nested-baz-uuid])
+          qux (d/entity @conn [:block/uuid qux-uuid])
+          top-foo (library-child @conn "Foo")]
+      (is (some? top-foo)
+          "A top-level Foo is created for Foo/Baz/Qux")
+      (is (= (:db/id top-foo) (:db/id (:block/parent (:block/parent qux))))
+          "Qux sits under top-level Foo/Baz")
+      (is (not= (:db/id nested-baz) (:db/id (:block/parent qux)))
+          "Qux is not nested under Bar/Foo/Baz")
+      (is (nil? (:errors (db-validate/validate-db @conn)))))))
+
+(deftest create-namespace-tags-root-is-case-and-order-independent
+  (testing "foo/bar then Bar/Foo creates a new top-level Bar, not foo/bar/Foo"
+    (let [conn (db-test/create-conn)
+          [_ bar-uuid] (outliner-page/create! conn "foo/bar" {:split-namespace? true :class? true})
+          [_ Foo-uuid] (outliner-page/create! conn "Bar/Foo" {:split-namespace? true :class? true})
+          bar (d/entity @conn [:block/uuid bar-uuid])
+          Foo (d/entity @conn [:block/uuid Foo-uuid])
+          foo-class (class-by-title @conn "foo")
+          Bar-class (class-by-title @conn "Bar")]
+      (is (contains? (extends-idents foo-class) :logseq.class/Root))
+      (is (contains? (extends-idents Bar-class) :logseq.class/Root))
+      (is (= #{"foo"} (extends-titles bar)))
+      (is (= #{"Bar"} (extends-titles Foo))
+          "Foo extends the new top-level Bar, not foo/bar")
+      (is (not= (:db/id bar) (:db/id Bar-class))
+          "bar and Bar are distinct tags")
+      (is (nil? (:errors (db-validate/validate-db @conn))))))
+
+  (testing "Bar/Foo then foo/bar is the same two tag trees"
+    (let [conn (db-test/create-conn)
+          [_ Foo-uuid] (outliner-page/create! conn "Bar/Foo" {:split-namespace? true :class? true})
+          [_ bar-uuid] (outliner-page/create! conn "foo/bar" {:split-namespace? true :class? true})
+          bar (d/entity @conn [:block/uuid bar-uuid])
+          Foo (d/entity @conn [:block/uuid Foo-uuid])
+          foo-class (class-by-title @conn "foo")
+          Bar-class (class-by-title @conn "Bar")]
+      (is (contains? (extends-idents foo-class) :logseq.class/Root))
+      (is (contains? (extends-idents Bar-class) :logseq.class/Root))
+      (is (= #{"foo"} (extends-titles bar)))
+      (is (= #{"Bar"} (extends-titles Foo)))
+      (is (not= (:db/id bar) (:db/id Bar-class)))
+      (is (nil? (:errors (db-validate/validate-db @conn))))))
+
+  (testing "foo/bar then foo/baz reuses the same top-level foo"
+    (let [conn (db-test/create-conn)
+          [_ bar-uuid] (outliner-page/create! conn "foo/bar" {:split-namespace? true :class? true})
+          [_ baz-uuid] (outliner-page/create! conn "foo/baz" {:split-namespace? true :class? true})
+          bar (d/entity @conn [:block/uuid bar-uuid])
+          baz (d/entity @conn [:block/uuid baz-uuid])]
+      (is (= (set (map :db/id (:logseq.property.class/extends bar)))
+             (set (map :db/id (:logseq.property.class/extends baz))))
+          "Both children extend the same foo")
+      (is (= #{"foo"} (extends-titles bar)))
+      (is (= 1 (count (d/q '[:find [?e ...] :where [?e :block/title "foo"]] @conn))))
+      (is (nil? (:errors (db-validate/validate-db @conn)))))))
+
 (deftest create-page
   (let [conn (db-test/create-conn)
         [_ page-uuid] (outliner-page/create! conn "fooz" {})]
