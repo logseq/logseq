@@ -668,7 +668,7 @@ let cm_popover (st : S.t) : t =
                           base-ui dropdown centers the 280px content on it *)
                        (Float.max 8.
                           (Float.min (m.S.cx -. 140.)
-                             (Dom_ext.window_inner_width -. 288.)))
+                             (Dom_ext.window_inner_width () -. 288.)))
                        m.S.cy (m.S.cy +. 8.) )
                  ; ("role", "menu") ]
            | None -> attrs_v [])
