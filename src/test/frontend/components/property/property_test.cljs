@@ -14,8 +14,10 @@
             [frontend.handler.db-based.property :as db-property-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.property :as property-handler]
+            [frontend.rfx :as rfx]
             [frontend.state :as state]
             [goog.object :as gobj]
+            [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]))
 
@@ -311,3 +313,84 @@
       "Tag dialog can add properties")
   (is (false? (#'property-component/page-title-property-surface? {:in-block-container? true}))
       "A page nested in the outliner cannot add properties"))
+
+(defn- render-properties-area
+  [block opts display & {:keys [current-page]}]
+  (with-redefs [db-hooks/use-resource (fn [_] display)
+                rfx/use-sub (fn [_] {:mode :global :show? false :ids #{}})
+                state/get-current-page (fn [] current-page)
+                property-component/hidden-properties-toggle-button
+                (fn [_block _opts]
+                  [:button.hidden-properties-toggle-key
+                   "Show hidden properties"])
+                property-component/bidirectional-properties-area
+                (fn [_block _opts] nil)
+                hooks/use-ref (fn [_] #js {:current nil})
+                hooks/use-memo (fn [f _deps] (f))
+                hooks/use-atom (fn [a] [@a (fn [_])])
+                hooks/use-state (fn [init] [init (fn [_])])
+                hooks/use-effect! (fn [_f _deps] nil)]
+    (render-static
+     (property-component/properties-area
+      block
+      (merge {:skip-bidirectional-properties? true}
+             opts)))))
+
+(deftest hidden-only-properties-area-shows-toggle-on-page-surfaces-test
+  ;; db-test#1288: a tagged page whose tag properties are all hide-empty and
+  ;; empty must still offer "Show hidden properties", and mount
+  ;; ls-properties-area so the toggle can be clicked.
+  (let [page-uuid #uuid "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+        hidden-prop {:property-id :user.property/secret
+                     :property-ident :user.property/secret
+                     :property-uuid #uuid "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+                     :value nil}
+        page {:block/uuid page-uuid
+              :block/title "Tagged page"
+              :block/tags [{:db/ident :logseq.class/Page}]}
+        display {:full-properties []
+                 :hidden-properties [hidden-prop]
+                 :description-property-uuid nil
+                 :class-properties-property-uuid nil}]
+    (let [markup (render-properties-area page {:page-title? true} display
+                                         :current-page (str page-uuid))]
+      (is (string/includes? markup "Show hidden properties")
+          "The current route's tagged page still offers Show hidden properties")
+      (is (string/includes? markup "ls-properties-area")
+          "The page properties area must mount so the toggle can be clicked"))
+    (is (string/includes?
+         (render-properties-area page {:page-title? true} display
+                                 :current-page "a-different-page")
+         "Show hidden properties")
+        "A page-title surface shows the toggle even when the route is another page")
+    (is (string/includes?
+         (render-properties-area page {:sidebar-properties? true} display
+                                 :current-page "a-different-page")
+         "Show hidden properties")
+        "Sidebar page properties can reveal hidden properties")
+    (is (= ""
+           (render-properties-area page {:page-title? true}
+                                   (assoc display :hidden-properties [])
+                                   :current-page (str page-uuid)))
+        "No hidden properties means no toggle and no properties area")))
+
+(deftest nested-block-with-only-hidden-properties-still-omits-properties-area-test
+  (let [block-uuid #uuid "cccccccc-cccc-cccc-cccc-cccccccccccc"
+        hidden-prop {:property-id :user.property/secret
+                     :property-ident :user.property/secret
+                     :property-uuid #uuid "dddddddd-dddd-dddd-dddd-dddddddddddd"
+                     :value nil}
+        block {:block/uuid block-uuid
+               :block/title "nested block"}
+        markup (render-properties-area
+                block
+                {:page-title? false
+                 :id "some-other-root"}
+                {:full-properties []
+                 :hidden-properties [hidden-prop]
+                 :description-property-uuid nil
+                 :class-properties-property-uuid nil}
+                :current-page "some-other-page")]
+    (is (not (string/includes? markup "Show hidden properties"))
+        "Nested outliner blocks with only hidden properties still omit the properties area")
+    (is (not (string/includes? markup "ls-properties-area")))))
