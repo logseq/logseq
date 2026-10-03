@@ -188,6 +188,13 @@
                         :acknowledge_child_reparent (-> (z/boolean) .optional)
                         :acknowledge_detach (-> (z/boolean) .optional)
                         :verbose (-> (z/boolean) .optional)}}}
+  :addTag
+  {:fn mcp-compat/add-tag
+   :config #js {:title "Add Tag"
+            :description "Attach an existing tag to a page or block and verify the relation."
+            :inputSchema #js {:target_uuid (z/string)
+                        :tag_uuid (z/string)
+                        :verbose (-> (z/boolean) .optional)}}}
    :getPropertyIndent
    {:fn mcp-compat/get-property-ident
     :config #js {:title "Get Property Ident"

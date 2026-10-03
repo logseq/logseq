@@ -1248,6 +1248,64 @@
                            :page nil
                            :diagnostic diagnostic})))))))))))))
 
+(defn- entity-reference-id
+  [value]
+  (if (map? value)
+    (or (:id value) (:db/id value))
+    value))
+
+(defn add-tag
+  [api-fn args]
+  (let [target-uuid (aget args "target_uuid")
+        tag-uuid (aget args "tag_uuid")
+        verbose? (not (false? (aget args "verbose")))]
+    (when-not (and (string? target-uuid)
+                   (re-matches page-stats-uuid-pattern target-uuid))
+      (throw (js/Error. "target_uuid must be a UUID")))
+    (when-not (and (string? tag-uuid)
+                   (re-matches page-stats-uuid-pattern tag-uuid))
+      (throw (js/Error. "tag_uuid must be a UUID")))
+    (let [target-query (str "[:find (pull ?target [*]) . :where "
+                            "[?target :block/uuid #uuid \"" target-uuid "\"]]")
+          class-query "[:find ?class . :where [?class :db/ident :logseq.class/Tag]]"]
+      (p/let [target-result (api-fn "logseq.DB.datascriptQuery" [target-query])
+              target (js->clj target-result :keywordize-keys true)
+              tag-class (api-fn "logseq.DB.datascriptQuery" [class-query])
+              tag-query (str "[:find (pull ?tag [*]) . :in $ ?uuid ?class :where "
+                             "[?tag :block/uuid ?uuid] [?tag :block/tags ?class]]")
+              tag-result (api-fn "logseq.DB.datascriptQuery" [tag-query tag-uuid tag-class])
+              tag (js->clj tag-result :keywordize-keys true)]
+        (when-not target
+          (throw (js/Error. (str "No entity exists with exact UUID " target-uuid))))
+        (when-not tag
+          (throw (js/Error. (str "UUID " tag-uuid " does not identify a tag"))))
+        (let [tag-id (or (:id tag) (:db/id tag))
+              previous-page? (boolean (or (:name target) (:block/name target)))]
+          (p/let [response (api-fn "logseq.DB.addBlockTag" [target-uuid tag-uuid])]
+            (when-let [error (and response (aget response "error"))]
+              (throw (js/Error. (str error))))
+            (p/let [current-result (api-fn "logseq.DB.datascriptQuery" [target-query])
+                    current (js->clj current-result :keywordize-keys true)]
+              (when-not current
+                (throw (js/Error. (str "Target " target-uuid " disappeared during tag addition"))))
+              (let [tags (or (:tags current) (:block/tags current) [])
+                    tag-present? (contains? (set (keep entity-reference-id tags)) tag-id)]
+                (when-not tag-present?
+                  (throw (js/Error. "Tag addition was not observed on the target")))
+                (when (and previous-page?
+                           (not (or (:name current) (:block/name current))))
+                  (throw (js/Error. "Target lost its page identity during the tag change")))
+                (if verbose?
+                  {:response (js->clj response :keywordize-keys true)
+                   :verified_state current
+                   :recovered_after_timeout false
+                   :previous_state target
+                   :diagnostic nil
+                   :verified true
+                   :observed_state current}
+                  (merge {:verified true :diagnostic nil}
+                        (entity-write-digest current)))))))))))
+
 (defn- count-index
   [result]
   (let [rows (js->clj result :keywordize-keys true)]
@@ -1450,6 +1508,7 @@
    :getTagUUID ["logseq.DB.getTagsByName"]
    :creatTag ["logseq.DB.createTag"]
    :deleteTag ["logseq.DB.deletePage" "logseq.DB.datascriptQuery"]
+   :addTag ["logseq.DB.addBlockTag" "logseq.DB.datascriptQuery"]
    :getTag ["logseq.DB.datascriptQuery"]
    :getPropertyIndent ["logseq.DB.datascriptQuery"]
    :getBlock ["logseq.DB.datascriptQuery"]
@@ -1485,6 +1544,7 @@
   "logseq.DB.upsertProperty" ["__mcp_capability_probe__/invalid" #js {}]
   "logseq.DB.createTag" ["__mcp_capability_probe__/invalid"]
   "logseq.DB.deletePage" ["__mcp_capability_probe__"]
+  "logseq.DB.addBlockTag" ["__mcp_capability_probe__" "__mcp_capability_probe__"]
   "logseq.DB.upsertBlockProperty" ["__mcp_capability_probe__"
                                     "__mcp_capability_probe__"
                                     "__mcp_capability_probe__"]

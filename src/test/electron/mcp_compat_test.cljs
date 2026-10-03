@@ -867,3 +867,42 @@
                 (is (= tag-uuid (:uuid result)))
                 (is (some #(= "logseq.DB.deletePage" (first %)) @calls))
                 (done))))))
+
+(deftest add-tag-verifies-the-tag-relation-and-preserves-page-identity
+  (let [target-uuid "00000000-0000-4000-8000-000000000061"
+        tag-uuid "00000000-0000-4000-8000-000000000062"
+        calls (atom [])
+        added? (atom false)
+        target (fn []
+                 {:id 61 :uuid target-uuid :name "inbox" :title "Inbox"
+                  :tags (cond-> [{:id 1 :ident :logseq.class/Page}]
+                          @added? (conj {:id 62 :ident :plugin.class/topic}))})
+        api (fn [method args]
+              (swap! calls conj [method args])
+              (case method
+                "logseq.DB.addBlockTag" (do (reset! added? true) nil)
+                "logseq.DB.datascriptQuery"
+                (let [query (first args)]
+                  (cond
+                    (string/includes? query "block/uuid #uuid") (target)
+                    (string/includes? query "db/ident :logseq.class/Tag") 1
+                    (string/includes? query "?tag")
+                    {:id 62 :uuid tag-uuid :ident ":plugin.class._test_plugin/topic"
+                     :title "Topic" :tags [{:id 1 :ident :logseq.class/Tag}]}
+                    :else nil))
+                nil))]
+            (is (thrown? js/Error
+                   (mcp-compat/add-tag api #js {"target_uuid" "invalid" "tag_uuid" tag-uuid})))
+            (is (thrown? js/Error
+                   (mcp-compat/add-tag api #js {"target_uuid" target-uuid "tag_uuid" "invalid"})))
+            (is (empty? @calls))
+    (async done
+      (-> (p/then (mcp-compat/add-tag api #js {"target_uuid" target-uuid "tag_uuid" tag-uuid})
+                  (fn [result]
+                    (is (true? (:verified result)))
+                    (is (= "inbox" (get-in result [:verified_state :name])))
+                    (is (some #(= "logseq.DB.addBlockTag" (first %)) @calls))
+                    (done)))
+          (p/catch (fn [error]
+                     (is false (str "addTag unexpectedly failed: " (.-message error)))
+                     (done)))))))
