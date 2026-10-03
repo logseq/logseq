@@ -441,6 +441,24 @@ let doc_query_selector_all (sel : string) : element list =
 
 (* ---------- element state ---------- *)
 
+(* live (value, selectionStart, selectionEnd) per DOM id — element
+   snapshots carry event-time values, but a browser's el.value tracks
+   typing. Editor_dom's pre_dispatch_hook refreshes these from event
+   payloads; readers fall back to the snapshot prop when no live field
+   is recorded (e.g. a snapshot stored across later keystrokes). *)
+let live_fields : (string, string * int * int) Hashtbl.t =
+  Hashtbl.create 16
+
+let dom_id_of (el : element) : string option =
+  match str_prop "id" el with
+  | Some id when id <> "" -> Some id
+  | _ -> str_prop "ref-id" el
+
+let live_field (el : element) : (string * int * int) option =
+  match dom_id_of el with
+  | Some id -> Hashtbl.find_opt live_fields id
+  | None -> None
+
 let get_attribute_raw (el : element) (name : string) : string option =
   match prop "attrs" el with
   | Js.Json.JObject kvs ->
@@ -453,22 +471,42 @@ let get_attribute (el : element) (name : string) : string option =
   | None -> get_attribute_raw el name
 
 let value (el : element) : string =
-  Option.value (str_prop "value" el) ~default:""
+  match live_field el with
+  | Some (v, _, _) -> v
+  | None -> Option.value (str_prop "value" el) ~default:""
 
 let set_value (el : element) (v : string) : unit =
+  (match dom_id_of el with
+   | Some id -> (
+       match Hashtbl.find_opt live_fields id with
+       | Some (_, s, e) -> Hashtbl.replace live_fields id (v, s, e)
+       | None -> Hashtbl.replace live_fields id (v, 0, 0))
+   | None -> ());
   Host.dom_op "set-value" (Js.Json.stringify (Js.Json.JObject [("ref", el); ("value", Js.Json.JString v)]))
 
 let selection_start (el : element) : int =
-  Option.value
-    (Option.map int_of_float (num_prop "selectionStart" el))
-    ~default:0
+  match live_field el with
+  | Some (_, s, _) -> s
+  | None ->
+      Option.value
+        (Option.map int_of_float (num_prop "selectionStart" el))
+        ~default:0
 
 let selection_end (el : element) : int =
-  Option.value
-    (Option.map int_of_float (num_prop "selectionEnd" el))
-    ~default:0
+  match live_field el with
+  | Some (_, _, e) -> e
+  | None ->
+      Option.value
+        (Option.map int_of_float (num_prop "selectionEnd" el))
+        ~default:0
 
 let set_selection_range (el : element) (s : int) (e : int) : unit =
+  (match dom_id_of el with
+   | Some id -> (
+       match Hashtbl.find_opt live_fields id with
+       | Some (v, _, _) -> Hashtbl.replace live_fields id (v, s, e)
+       | None -> Hashtbl.replace live_fields id ("", s, e))
+   | None -> ());
   Host.dom_op "set-selection-range"
     (Js.Json.stringify
        (Js.Json.JObject [("ref", el); ("start", Js.Json.JNumber (Float.of_int s)); ("end", Js.Json.JNumber (Float.of_int e))]))
@@ -489,7 +527,35 @@ let segment _ (_ : segmenter) : string array = [||]
 
 (* ---------- rects ---------- *)
 
-let bounding_rect (el : element) : rect = prop "rect" el
+(* Document-tree snapshots carry no "rect" — the host measures on demand:
+   bounding_rect fires a "measure-node" dom-op; the Swift host replies
+   with a "node-rect" event whose rect lands here. Retry loops (popup
+   flip measurement) see the fresh value on their next tick. *)
+let rect_store : (int, Js.Json.t) Hashtbl.t = Hashtbl.create 32
+
+let note_node_rect (j : Js.Json.t) : unit =
+  match Option.map int_of_float (num_prop "nodeId" j) with
+  | Some id -> (
+      match prop "rect" j with
+      | Js.Json.JObject _ as r -> Hashtbl.replace rect_store id r
+      | _ -> Hashtbl.remove rect_store id)
+  | None -> ()
+
+let bounding_rect (el : element) : rect =
+  match prop "rect" el with
+  | Js.Json.JObject _ as r -> r
+  | _ -> (
+      (match num_prop "node-id" el with
+       | Some _ ->
+           Host.dom_op "measure-node"
+             (Js.Json.stringify (Js.Json.JObject [("ref", el)]))
+       | None -> ());
+      match Option.map int_of_float (num_prop "node-id" el) with
+      | Some id -> (
+          match Hashtbl.find_opt rect_store id with
+          | Some r -> r
+          | None -> Js.Json.JObject [])
+      | None -> Js.Json.JObject [])
 
 let rect_left (r : rect) : float =
   Option.value (num_prop "left" r) ~default:0.
@@ -506,8 +572,8 @@ let rect_bottom (r : rect) : float =
 let rect_height (r : rect) : float =
   Option.value (num_prop "height" r) ~default:0.
 
-let window_inner_height : float = 900.
-let window_inner_width : float = 1440.
+let window_inner_height () = Host.inner_height ()
+let window_inner_width () = Host.inner_width ()
 
 (* ---------- timers ---------- *)
 
@@ -530,13 +596,27 @@ let style_set_property (el : element) (name : string) (v : string) : unit =
   Host.dom_op "style-set-property"
     (Js.Json.stringify
        (Js.Json.JObject
-          [("ref", el); ("name", Js.Json.JString name); ("value", Js.Json.JString v)]))
+          [("ref", el); ("property", Js.Json.JString name); ("value", Js.Json.JString v)]))
 
-let scroll_row_into_view ~scroller:_ ~row:_ = ()
+(* The host owns layout — ask its ScrollView to bring the row into view
+   (the web twin computes the minimal scroll delta itself). *)
+let scroll_row_into_view ~scroller ~row =
+  Host.dom_op "scroll-row-into-view"
+    (Js.Json.stringify
+       (Js.Json.JObject [("scroller", scroller); ("row", row)]))
 
+(* cljs editor.cljs popup pos: x = caret.left - 20, y = caret line
+   bottom, also returning the caret line top for flip-above math.
+   Textarea event targets carry "caretRect" (the IME caret rect in
+   window top-left space); snapshots without it fall back to the
+   element's bottom-left corner. *)
 let caret_popup_pos el =
-  let r = bounding_rect el in
-  (rect_left r, rect_bottom r +. 4., 0.)
+  match prop "caretRect" el with
+  | Js.Json.JObject _ as r ->
+      (rect_left r -. 20., rect_bottom r, rect_top r)
+  | _ ->
+      let r = bounding_rect el in
+      (rect_left r -. 20., rect_bottom r +. 4., 0.)
 
 (* ---------- imperative el ops used by popups/views (D alias) ---------- *)
 

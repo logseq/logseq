@@ -162,9 +162,22 @@ private let platformRequest: PlatformRequestCallback = { data, length in
     }
   }
 
+  /// The OCaml runtime lock is not re-entrant: a Swift->OCaml call made
+  /// while OCaml is already running on this thread (e.g. a blur emit
+  /// raised by a focus dom-op inside a pump) blocks on the runtime lock
+  /// the outer call holds — a self-deadlock. Defer such events to the
+  /// next main-loop turn instead.
+  private var ocamlCallDepth = 0
+
+  private func inOCaml<T>(_ body: () -> T) -> T {
+    ocamlCallDepth += 1
+    defer { ocamlCallDepth -= 1 }
+    return body()
+  }
+
   func pump() {
     guard started else { return }
-    _ = luiOCamlPump()
+    _ = inOCaml { luiOCamlPump() }
   }
 
   /// "<op>\n<payload>" envelopes from OCaml's Host.host_op.
@@ -179,15 +192,28 @@ private let platformRequest: PlatformRequestCallback = { data, length in
   /// Pushes one host-originated "<name>\n<json>" envelope to OCaml.
   func sendPlatformEvent(name: String, json: String) {
     guard started else { return }
+    if ocamlCallDepth > 0 {
+      // A Task hops to the MainActor like the pump wakeup does; a plain
+      // DispatchQueue.main.async block loses every main-queue slot to the
+      // next pump task and the event lands only after retry loops give up.
+      Task { [weak self] in
+        self?.sendPlatformEvent(name: name, json: json)
+      }
+      return
+    }
     let envelope = name + "\n" + json
     envelope.withCString { pointer in
-      _ = luiOCamlPlatformEvent(pointer, Int32(envelope.utf8.count))
+      _ = inOCaml { luiOCamlPlatformEvent(pointer, Int32(envelope.utf8.count)) }
     }
   }
 
   private func handle(_ event: LUIEvent) {
     guard started else { return }
-    _ = LogseqLUIEvents.dispatch(event)
+    if ocamlCallDepth > 0 {
+      Task { [weak self] in self?.handle(event) }
+      return
+    }
+    _ = inOCaml { LogseqLUIEvents.dispatch(event) }
   }
 
   /// The backend's coalesced node-id → frame table, forwarded as the

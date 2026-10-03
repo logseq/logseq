@@ -624,3 +624,68 @@ behavior), `.left-sidebar-resizer`, `.cp__graphs-selector`,
     (no dune copy rule).
   - `appIcons` map (tabler→SF symbols) not registered; icons render
     as placeholder glyphs in the picker.
+
+### devin/lui-swift-ac — autocomplete / slash popups (ac milestone)
+- Emitted DOM matches master: `.ui__popover-content > #ui__ac >
+  #ui__ac-inner > [.ui__ac-group-name] .menu-link-wrap > a#ac-<i>
+  .menu-link[.chosen]` — shared selectors (`closest "#ui__ac-inner
+  a.menu-link"`, `doc_query_selector "#ui__ac-inner"`) work verbatim.
+- Caret anchor: the focused NSTextView snapshots its caret rect
+  (layoutManager boundingRect → window coords) into the snapshot's
+  `rect` on each keydown; `open_ac` reads it for x = caret.left-20,
+  y = caret.bottom + 4 (master: PopoverContent anchors caret.bottom).
+- Flip: `measure` lifts `--available-height` to 2000px, reads the real
+  rendered height via `measure-node`/`node-rect`, flips iff
+  `h > below && above > below` (below = innerH - a.y - 8, above =
+  a.cy - 8), then commits `{a with flip = Some (top', avail)}` →
+  popover re-emits `top:top'px; data-side="top"`. The lift must stay
+  the last style override during retries — the rect reads back
+  asynchronously, so writing the clamp after the lift masks it.
+- Registry fix (shared, affects every dom-op):
+  `LogseqElementRegistry` held `NSWeakReferenceBox`; nothing else
+  retains the default handle, so `element("node-N")` went nil within
+  a turn and the dom-op retry gate stalled ~800ms. Strong
+  `NSReferenceBox`; unregister still drops on unmount.
+- Deferred-event starvation: `DispatchQueue.main.async` re-dispatch
+  of platform events queued behind MainActor `pump` wakeups and
+  batched after retry loops ended; `Task { [weak self] in ... }`
+  hops the same actor and interleaves correctly.
+- Overlay anchors must be reactive: `LogseqOverlayPresenter`
+  evaluated the body once, baking `style.fixedY`; flip's new
+  `top:4px`/`data-side=top` never moved the frame. Anchor paddings/
+  fill frame now apply inside `LogseqElementView.body` under
+  `inOverlay` so they re-read `style` each render. Presenter passes
+  a bare `LogseqElementView(inOverlay: true)`.
+- Verified in GUI: `/` opens at caret with groups+icons+chosen;
+  typing filters (`/cod`, `/img`); Enter commits (`[[Journal]]`);
+  `/code` inserts a code block; `[[` autopairs `]]` + date presets +
+  "New page X"; `((` block-search popup; `#` class list + Cmd+Enter
+  tag pill; mouse click applies; Escape dismisses; nav wraps.
+- LUI semantic check (per Tienson's direction): `dropdown_menu`
+  anchors to a trigger element by side (`above`/`below`/`left`/
+  `right`), `combobox` owns its own text field, `overlay` carries no
+  coordinates — none expresses "panel at a caret rect", so the
+  DOM-shaped emission stays for now. Planned migration: Tienson's
+  shared imperative element layer (`deps/ui/apple/imperative_dom.ml`
+  + `apple/Sources/Logseq/LogseqImperative.swift`) — pending els
+  serialize on append-child, Swift mounts them in the window
+  overlay, frames return via `imperative-rects`, mousedown/click/
+  mousemove emit DOM-shaped targets. The AC flip algorithm and
+  caret anchor are unchanged by the swap; integration branch owns it.
+- Unported / known gaps:
+  * `ctrl+p`/`ctrl+n` item nav (emacs-style) — untested, likely
+    unhandled by the keymap.
+  * Web scrolls the chosen row with `.center`-ish heading reveal;
+    `scroll-row-into-view` uses nearest-edge (visual difference in
+    long lists only).
+  * `block search` (`((`) returns empty against this test graph —
+    search plumbing works, fixture has no matching blocks.
+  * Alias → source-class resolution and the focus-only reopen path
+    (clicking back into the textarea re-opens at the same trigger)
+    not exercised.
+  * `.cp__commands-slash .ui__icon` opacity .7 styling nicety not
+    mapped (icons render full-strength).
+  * macOS Cmd+Left/Right line-nav and End-key semantics differ from
+    web inside textareas (platform quirk, not AC-specific).
+  * `/quote` + Enter-split writes don't persist — daemon write-path
+    bug (`save_block_parsed`), out of AC scope.

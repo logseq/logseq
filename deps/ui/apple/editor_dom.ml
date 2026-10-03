@@ -33,9 +33,10 @@ let live_ids : (string, unit) Hashtbl.t = Hashtbl.create 64
 
 (* live (value, selectionStart, selectionEnd) per DOM id — the cached
    element snapshots only carry mount-time values, but a browser's
-   el.value tracks typing. Input events keep this truthful. *)
-let live_fields : (string, string * int * int) Hashtbl.t =
-  Hashtbl.create 16
+   el.value tracks typing. Input events keep this truthful. The table
+   lives in Dom_ext so popup code reading snapshot elements sees the
+   same live state. *)
+let live_fields = Dom_ext.live_fields
 
 (* two registries mint {#new: n} els: Imperative_dom's carry a
    "#ref"/"ref-id" handle, Vdom's shells only carry "tag" — route on that
@@ -490,10 +491,7 @@ let el_dom_id (el : el) : string option =
             | Some node -> Some (Printf.sprintf "node-%d" node)
             | None -> None))
     | None -> None)
-  else
-    match Dom_ext.str_prop "id" el with
-    | Some id when id <> "" -> Some id
-    | _ -> Dom_ext.str_prop "ref-id" el
+  else Dom_ext.dom_id_of el
 
 let el_value (el : el) : string =
   match el_dom_id el with

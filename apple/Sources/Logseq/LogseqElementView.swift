@@ -13,6 +13,11 @@ struct LogseqElementView: View {
   /// Rendered by the window-level overlay layer rather than inline —
   /// skips the presenter branch so the element draws normally.
   var inOverlay = false
+  /// lui-overlay.css's `#ui__ac-inner` max-height: the enclosing
+  /// `data-editor-popup-ref` popover pushes its --available-height budget
+  /// down through this env so the AC list caps at
+  /// `min(avail − chrome, cap)` like the web.
+  @Environment(\.acInnerMaxHeight) private var acInnerMaxHeight
 
   private var attrs: [String: Any] {
     guard case .string(let json) = context.property("attrs"),
@@ -46,7 +51,47 @@ struct LogseqElementView: View {
       s.background = LogseqColors.gray(4)
       if s.cornerRadius == nil { s.cornerRadius = 6 }
     }
+    // lui-overlay.css attr rules for editor popovers:
+    // [data-editor-popup-ref] → p-1.5 w-72; the search kinds widen to 32rem.
+    if attrs["data-editor-popup-ref"] is String {
+      s.padding = EdgeInsets(top: 6, leading: 6, bottom: 6, trailing: 6)
+      switch attrs["data-editor-popup-ref"] as? String {
+      case "page-search", "block-search", "page-search-hashtag":
+        s.fixedWidth = 512
+      case "datepicker":
+        break // width: auto
+      default:
+        s.fixedWidth = 288
+      }
+      // .ui__popover-content[data-side=top] { top: -18px } — the flipped
+      // positioner nudges the popup up to clear the caret line.
+      if (attrs["data-side"] as? String) == "top" {
+        s.fixedY = (s.fixedY ?? 0) - 18
+      }
+    }
+    for decl in LogseqStyleOverrides.shared.liveDecls(
+      for: context.nodeID, emitted: attrs["style"] as? String ?? "")
+    {
+      s.applyInline(decl)
+    }
     return s
+  }
+
+  private func hasClass(_ cls: String) -> Bool {
+    guard case .string(let classes) = context.property("style-class")
+    else { return false }
+    return classes.split(separator: " ").contains { $0 == cls }
+  }
+
+  /// The popover's remaining vertical budget for a descendant
+  /// `#ui__ac-inner` (the CSS `min(--available-height - chrome, cap)`).
+  private var acPopupAvail: CGFloat? {
+    guard hasClass("ui__popover-content"),
+      attrs["data-editor-popup-ref"] is String
+    else { return nil }
+    let top = (attrs["data-side"] as? String) == "top"
+    let avail = style.maxHeight ?? 480
+    return min(avail - (top ? 60 : 20), top ? 460 : 480)
   }
 
   private var isBullet: Bool {
@@ -125,14 +170,49 @@ struct LogseqElementView: View {
   }
 
   var body: some View {
+    if inOverlay {
+      // Anchor/sizing for the overlay copy is applied here — inside the
+      // element's own body — so it re-reads `style` on every prop change.
+      // The store's AnyView snapshot can only freeze the placeholder, not
+      // this body's modifiers (AC flip repositions must be live).
+      if style.fixedX != nil || style.fixedY != nil || style.fixedRight != nil
+        || style.fixedBottom != nil {
+        let alignment: Alignment =
+          style.fixedBottom != nil
+          ? (style.fixedRight != nil ? .bottomTrailing : .bottomLeading)
+          : (style.fixedRight != nil ? .topTrailing : .topLeading)
+        core
+          .fixedSize()
+          .padding(.leading, style.fixedX ?? 0)
+          .padding(.trailing, style.fixedRight ?? 0)
+          .padding(.top, style.fixedY ?? 0)
+          .padding(.bottom, style.fixedBottom ?? 0)
+          .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: alignment)
+      } else {
+        // Full-viewport layer (dialog scrims, dismiss surfaces).
+        core.frame(maxWidth: .infinity, maxHeight: .infinity)
+      }
+    } else {
+      core
+    }
+  }
+
+  private var core: some View {
     content
       .id(context.nodeID)
       .background(
-        GeometryReader { g in
-          Color.clear.preference(
-            key: LogseqFrameKey.self,
-            value: [context.nodeID: LogseqFrameEntry(
-              rect: g.frame(in: .named("logseqWindow")), tag: tag)])
+        Group {
+          // The fillsOverlay presenter is a 0x0 placeholder — only the
+          // in-overlay re-render may report this node's frame, else the
+          // placeholder stomps the real rect (AC flip measurement).
+          if !style.fillsOverlay || inOverlay {
+            GeometryReader { g in
+              Color.clear.preference(
+                key: LogseqFrameKey.self,
+                value: [context.nodeID: LogseqFrameEntry(
+                  rect: g.frame(in: .named("logseqWindow")), tag: tag)])
+            }
+          }
         })
       .onAppear {
         // OCaml's get_element_by_id only resolves elements that have
@@ -169,31 +249,10 @@ struct LogseqElementView: View {
     } else if style.fillsOverlay && !inOverlay {
       // position:fixed layers — the web renders these at window scope; our
       // collapsed overlay containers can't give them bounds, so the element
-      // re-renders in LogseqOverlayLayer instead.
+      // re-renders in LogseqOverlayLayer instead. The anchor/sizing lives in
+      // the overlay copy's own body so it stays reactive to style changes.
       LogseqOverlayPresenter(nodeID: context.nodeID, priority: style.overlayZ) {
-        if style.fixedX != nil || style.fixedY != nil || style.fixedRight != nil
-          || style.fixedBottom != nil {
-          // Anchored element (dropdown/context menus, corner popups):
-          // size-to-content at the fixed offsets, like CSS left/top/
-          // right/bottom. .fixedSize() stops the alignment frame's
-          // full-window proposal from expanding fill-style layouts —
-          // CSS position:fixed elements shrink-wrap their content.
-          let alignment: Alignment =
-            style.fixedBottom != nil
-            ? (style.fixedRight != nil ? .bottomTrailing : .bottomLeading)
-            : (style.fixedRight != nil ? .topTrailing : .topLeading)
-          LogseqElementView(tag: tag, context: context, inOverlay: true)
-            .fixedSize()
-            .padding(.leading, style.fixedX ?? 0)
-            .padding(.trailing, style.fixedRight ?? 0)
-            .padding(.top, style.fixedY ?? 0)
-            .padding(.bottom, style.fixedBottom ?? 0)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: alignment)
-        } else {
-          // Full-viewport layer (dialog scrims, dismiss surfaces).
-          LogseqElementView(tag: tag, context: context, inOverlay: true)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-        }
+        LogseqElementView(tag: tag, context: context, inOverlay: true)
       }
     } else {
       contentBody
@@ -412,13 +471,28 @@ struct LogseqElementView: View {
       // ScrollView must sit OUTSIDE the flex-height frame: inside it, a
       // `h-full` descendant would expand to the scroll area's unbounded
       // height proposal. The env flag suppresses flex height in there.
-      ScrollView {
-        elementBody
+      ScrollViewReader { proxy in
+        ScrollView {
+          elementBody
+            .scrollTargetLayout()
+        }
+        .scrollIndicators(style.hideScrollIndicators ? .never : .automatic)
+        .onAppear {
+          LogseqScrollProxyStore.shared.set(context.nodeID, proxy)
+        }
+        .onDisappear {
+          LogseqScrollProxyStore.shared.set(context.nodeID, nil)
+        }
       }
       .environment(\.insideVerticalScroll, true)
       .frame(
         maxWidth: .infinity,
-        maxHeight: (style.fullHeight || style.grow) ? .infinity : nil)
+        maxHeight: acInnerMaxHeight
+          ?? ((style.fullHeight || style.grow) ? .infinity : nil))
+    } else if let acAvail = acPopupAvail {
+      // Editor popover — give a descendant #ui__ac-inner its height cap.
+      elementBody
+        .environment(\.acInnerMaxHeight, acAvail)
     } else {
       elementBody
     }
@@ -873,10 +947,26 @@ private struct InsideVerticalScrollKey: EnvironmentKey {
   static let defaultValue = false
 }
 
+private struct ACInnerMaxHeightKey: EnvironmentKey {
+  static let defaultValue: CGFloat? = nil
+}
+
 extension EnvironmentValues {
   var insideVerticalScroll: Bool {
     get { self[InsideVerticalScrollKey.self] }
     set { self[InsideVerticalScrollKey.self] = newValue }
+  }
+  var acInnerMaxHeight: CGFloat? {
+    get { self[ACInnerMaxHeightKey.self] }
+    set { self[ACInnerMaxHeightKey.self] = newValue }
+  }
+}
+
+/// `.clipped()` under a style flag (popover overflow bounds).
+private struct LogseqClipper: ViewModifier {
+  let enabled: Bool
+  func body(content: Content) -> some View {
+    if enabled { content.clipped() } else { content }
   }
 }
 
@@ -960,9 +1050,16 @@ private struct LogseqStyleModifier: ViewModifier {
         maxHeight: (style.fullHeight && !insideScroll) ? .infinity : nil,
         alignment: .leading)
       .frame(maxWidth: style.maxWidth, maxHeight: style.maxHeight)
+      .modifier(LogseqClipper(enabled: style.clipContent))
       .frame(
         maxWidth: style.centerHorizontally ? .infinity : nil,
         alignment: .center)
+      .overlay {
+        if style.hasBorder {
+          RoundedRectangle(cornerRadius: style.cornerRadius ?? 0)
+            .stroke(LogseqColors.border, lineWidth: 1)
+        }
+      }
       .shadow(
         color: style.hasShadow ? Color.black.opacity(0.3) : .clear,
         radius: style.hasShadow ? 16 : 0, y: style.hasShadow ? 8 : 0)
@@ -1080,6 +1177,7 @@ private struct LogseqElementRegistration: View {
   private func unregister() {
     LogseqElementRegistry.shared.unregister("node-\(context.nodeID)")
     LogseqElementRegistry.shared.unregisterContext(context.nodeID)
+    LogseqStyleOverrides.shared.clear(context.nodeID)
     guard !id.isEmpty else { return }
     LogseqElementRegistry.shared.unregister(id)
   }
@@ -1090,4 +1188,5 @@ private struct LogseqElementRegistration: View {
 private final class LogseqElementHandle: LogseqElement {
   let nodeID: Int
   init(nodeID: Int) { self.nodeID = nodeID }
+
 }

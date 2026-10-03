@@ -27,8 +27,12 @@ let caret_span el =
    key with no visible item picked *)
 let ac_popup_open () = Popups_state.ac_attached ()
 
+(* keys the open autocomplete consumes — master's auto-complete map
+   (enter/up/ctrl+p/down/ctrl+n/shift+enter/mod+enter/escape). Tab is
+   deliberately absent: master leaves it bound to :editor/indent while
+   the popup is open *)
 let ac_owned_key = function
-  | "Enter" | "Tab" | "Escape" | "ArrowUp" | "ArrowDown" -> true
+  | "Enter" | "Escape" | "ArrowUp" | "ArrowDown" -> true
   | _ -> false
 
 (* -- editor-mode keys -- *)

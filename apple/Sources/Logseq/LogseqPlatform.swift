@@ -2,6 +2,7 @@ import AppKit
 import Foundation
 import LUIAppleBackend
 import OSLog
+import SwiftUI
 
 /// One live native view backing an OCaml-side DOM element. Views register
 /// themselves by their DOM `id` attr so imperative dom-ops (focus, set-value,
@@ -32,9 +33,39 @@ extension LogseqElement {
   func domRemove() {}
 }
 
+/// Runtime `style` mutations from dom-ops (`element.style.setProperty` on
+/// the web). OCaml re-emits the `style` attr on its own schedule; these
+/// declarations merge on top of it at render time, exactly where the
+/// popup flip's --available-height lift lands. A re-emitted `style` attr
+/// supersedes earlier mutations — web/React writes the new inline style
+/// over them — so decls are keyed to the emitted style they were added on.
+@Observable @MainActor final class LogseqStyleOverrides {
+  static let shared = LogseqStyleOverrides()
+  private(set) var decls: [Int: [String]] = [:]
+  private var signatures: [Int: String] = [:]
+
+  func add(nodeID: Int, emitted: String, _ decl: String) {
+    if signatures[nodeID] != emitted {
+      decls[nodeID] = []
+      signatures[nodeID] = emitted
+    }
+    decls[nodeID, default: []].append(decl)
+  }
+
+  func liveDecls(for nodeID: Int, emitted: String) -> [String] {
+    guard signatures[nodeID] == emitted else { return [] }
+    return decls[nodeID] ?? []
+  }
+
+  func clear(_ nodeID: Int) {
+    decls[nodeID] = nil
+    signatures[nodeID] = nil
+  }
+}
+
 @MainActor final class LogseqElementRegistry {
   static let shared = LogseqElementRegistry()
-  private var elements: [String: NSWeakReferenceBox] = [:]
+  private var elements: [String: NSReferenceBox] = [:]
   /// A long-lived extension context used to emit lifecycle events for
   /// nodes whose own context is already dead (drop-node during reconcile).
   /// `app-container` is the stable root — it outlives everything below it.
@@ -44,7 +75,7 @@ extension LogseqElement {
   private var contexts: [Int: LUIAppleExtensionViewContext] = [:]
 
   func register(_ id: String, _ element: LogseqElement) {
-    elements[id] = NSWeakReferenceBox(element)
+    elements[id] = NSReferenceBox(element)
   }
 
   func registerAnchor(_ id: String, _ context: LUIAppleExtensionViewContext) {
@@ -72,9 +103,28 @@ extension LogseqElement {
   }
 }
 
-final class NSWeakReferenceBox {
-  weak var object: LogseqElement?
+/// Holds the dom-op handle strongly: default `LogseqElementHandle`s have no
+/// other owner, so a weak box leaves `element(_:)` returning nil almost
+/// immediately after registration. Unmount `unregister` drops the entry.
+final class NSReferenceBox {
+  var object: LogseqElement?
   init(_ object: LogseqElement) { self.object = object }
+}
+
+/// Live `ScrollViewReader` proxies keyed by the scrollable element's node
+/// id, so dom-ops can scroll a child row into view (AC chosen-item
+/// scroll). Scrollable elements register their proxy in `styledContainer`.
+@MainActor final class LogseqScrollProxyStore {
+  static let shared = LogseqScrollProxyStore()
+  private var proxies: [Int: ScrollViewProxy] = [:]
+
+  func set(_ nodeID: Int, _ proxy: ScrollViewProxy?) {
+    proxies[nodeID] = proxy
+  }
+
+  func proxy(for nodeID: Int) -> ScrollViewProxy? {
+    proxies[nodeID]
+  }
 }
 
 /// Handles "<op>\n<payload>" envelopes from OCaml's Host.host_op plus
@@ -404,13 +454,53 @@ final class NSWeakReferenceBox {
       if let cls = dict["class"] as? String { target(dict)?.domSetClass(cls) }
     case "scroll-into-view":
       target(dict)?.domScrollIntoView()
+    case "scroll-row-into-view":
+      // AC chosen-item scroll: `{scroller: el, row: el}` element
+      // snapshots — scroll the row node inside the scroller's ScrollView.
+      if let scroller = dict["scroller"] as? [String: Any],
+        let scrollerID = (scroller["node-id"] as? NSNumber)?.intValue,
+        let row = dict["row"] as? [String: Any],
+        let rowID = (row["node-id"] as? NSNumber)?.intValue,
+        let proxy = LogseqScrollProxyStore.shared.proxy(for: scrollerID)
+      {
+        proxy.scrollTo(rowID, anchor: .center)
+      }
+    case "measure-node":
+      // Document-tree element snapshots carry no rect; OCaml's popup
+      // flip/clamp measurements ask for the frame on demand and read the
+      // pushed "node-rect" event on their next retry.
+      if let ref = dict["ref"] as? [String: Any],
+        let nodeID = (ref["node-id"] as? NSNumber)?.intValue
+      {
+        var body: [String: Any] = ["nodeId": nodeID]
+        if let entry = LogseqFrameStore.entries[nodeID] {
+          let r = entry.rect
+          body["rect"] = [
+            "left": Double(r.minX), "top": Double(r.minY),
+            "right": Double(r.maxX), "bottom": Double(r.maxY),
+            "width": Double(r.width), "height": Double(r.height),
+          ]
+        }
+        if let data = try? JSONSerialization.data(withJSONObject: body),
+          let json = String(data: data, encoding: .utf8)
+        {
+          runtime?.sendPlatformEvent(name: "node-rect", json: json)
+        }
+      }
     case "set-selection-range":
       let start = (dict["start"] as? NSNumber)?.intValue ?? 0
       let end = (dict["end"] as? NSNumber)?.intValue ?? start
       target(dict)?.domSetSelectionRange(start, end)
     case "style-set-property":
-      if let prop = dict["property"] as? String {
-        target(dict)?.domSetAttribute("style:" + prop, dict["value"] as? String)
+      if let ref = dict["ref"] as? [String: Any],
+        let nodeID = (ref["node-id"] as? NSNumber)?.intValue,
+        let prop = dict["property"] as? String,
+        let value = dict["value"] as? String
+      {
+        let emitted =
+          (ref["attrs"] as? [String: Any])?["style"] as? String ?? ""
+        LogseqStyleOverrides.shared.add(
+          nodeID: nodeID, emitted: emitted, "\(prop):\(value)")
       }
     case "remove":
       target(dict)?.domRemove()
