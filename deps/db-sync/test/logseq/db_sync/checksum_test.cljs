@@ -516,10 +516,14 @@
                                        :block/parent 1
                                        :block/page 1}]))
           original-parent-uuid (:block/uuid (d/entity db1 3))
-          tx-data [(d/datom 3 :block/uuid original-parent-uuid 200 false)
-                   (d/datom 5 :block/uuid shared-uuid 200 false)
-                   (d/datom 3 :block/uuid shared-uuid 200 true)
-                   (d/datom 3 :block/order "a9" 200 true)]
+          ;; a real tx id: a datom whose tx is below tx0 (200 here before)
+          ;; is missed by (d/datoms db :eavt 3) and d/entity, and returned
+          ;; by a walk of the whole :eavt index or of :block/uuid in :avet
+          tx (inc (:max-tx db1))
+          tx-data [(d/datom 3 :block/uuid original-parent-uuid tx false)
+                   (d/datom 5 :block/uuid shared-uuid tx false)
+                   (d/datom 3 :block/uuid shared-uuid tx true)
+                   (d/datom 3 :block/order "a9" tx true)]
           tx-report (d/with db1 tx-data)
           db-before (:db-before tx-report)
           checksum-before (checksum/recompute-checksum db-before)
@@ -568,3 +572,140 @@
         "An invalid initial checksum is still repaired")
     (assert-incremental=full! db checksum-before
                               (conj tx [:db/add 3 :block/title "Changed title"]))))
+
+;; A reference recompute written from the definition, independent of the
+;; production code paths: for each :block/uuid datom (avet order), when its
+;; entity is eligible, the set of its [uuid attr value] tuples, parent and page
+;; as their uuids; each tuple digested as FNV-1a and djb2 over
+;; "<uuid>\u001f<attr>\u001f<value>", the digests summed mod 2^32.
+(defn- reference-fold
+  [[fnv djb] s]
+  (reduce (fn [[fnv djb] i]
+            (let [code (.charCodeAt s i)]
+              [(bit-or (js/Math.imul (bit-xor fnv code) 16777619) 0)
+               (bit-or (+ (js/Math.imul djb 33) code) 0)]))
+          [fnv djb]
+          (range (count s))))
+
+(defn- reference-checksum
+  [db]
+  (let [e2ee? (ldb/get-graph-rtc-e2ee? db)
+        attrs (cond-> #{:block/uuid :block/parent :block/page :block/order}
+                (not e2ee?) (into #{:block/title :block/name}))
+        tag-eids (set (keep #(d/entid db %)
+                            [:logseq.class/Page :logseq.class/Journal :logseq.class/Tag :logseq.class/Property]))
+        first-v (fn [eid attr] (:v (first (d/datoms db :eavt eid attr))))
+        eligible? (fn [eid]
+                    (and (uuid? (first-v eid :block/uuid))
+                         (not (first-v eid :logseq.property/built-in?))
+                         (or (some #(contains? tag-eids (:v %)) (d/datoms db :eavt eid :block/tags))
+                             (seq (d/datoms db :eavt eid :block/page))
+                             (seq (d/datoms db :eavt eid :block/name)))))
+        tuples (fn [eid]
+                 (let [entity-uuid (first-v eid :block/uuid)]
+                   (->> (d/datoms db :eavt eid)
+                        (filter #(contains? attrs (:a %)))
+                        (map (fn [{:keys [a v]}]
+                               [entity-uuid a (if (contains? #{:block/parent :block/page} a)
+                                                (first-v v :block/uuid)
+                                                v)]))
+                        set)))
+        digest (fn [[entity-uuid a v]]
+                 (-> [2166136261 5381]
+                     (reference-fold (str entity-uuid))
+                     (reference-fold "\u001f")
+                     (reference-fold (str a))
+                     (reference-fold "\u001f")
+                     (reference-fold (if (some? v) (str v) ""))))
+        [fnv djb] (->> (d/datoms db :avet :block/uuid)
+                       (mapcat (fn [{:keys [e]}] (when (eligible? e) (tuples e))))
+                       (map digest)
+                       (reduce (fn [[a b] [c d]] [(bit-or (+ a c) 0) (bit-or (+ b d) 0)])
+                               [0 0]))
+        hex (fn [n] (.padStart (.toString (unsigned-bit-shift-right n 0) 16) 8 "0"))]
+    (str (hex fnv) (hex djb))))
+
+(defn- edge-case-db
+  "Fixed uuids: pages by name and by tag only, built-in pages (true and
+  false), blocks whose parent or page has no uuid, an entity with a uuid and
+  nothing else, an entity without a uuid, and a non-page tag."
+  []
+  (let [u #(uuid (str "00000000-0000-4000-8000-" (.padStart (str %) 12 "0")))]
+    (-> (d/empty-db db-schema/schema)
+        (d/db-with [{:db/id 100 :db/ident :logseq.class/Page}
+                    {:db/id 101 :db/ident :logseq.class/Tag}
+                    {:db/id 102 :db/ident :logseq.class/Journal}
+                    {:db/id 1 :block/uuid (u 1) :block/name "page-a" :block/title "Page A"}
+                    {:db/id 2 :block/uuid (u 2) :block/title "Tag-only page" :block/tags [100]}
+                    {:db/id 3 :block/uuid (u 3) :block/title "Journal" :block/tags [102 1]}
+                    {:db/id 4 :block/uuid (u 4) :block/title "Other tag" :block/tags [1]}
+                    {:db/id 5 :block/uuid (u 5) :block/name "built-in" :logseq.property/built-in? true}
+                    {:db/id 6 :block/uuid (u 6) :block/name "not built-in" :logseq.property/built-in? false}
+                    {:db/id 7 :block/title "no uuid" :block/name "no-uuid"}
+                    {:db/id 8 :block/uuid (u 8) :block/order "a0"}
+                    {:db/id 9 :block/uuid (u 9) :block/title "Block" :block/parent 1 :block/page 1 :block/order "a1"}
+                    {:db/id 10 :block/uuid (u 10) :block/title "Orphan" :block/parent 7 :block/page 7 :block/order "a2"}
+                    {:db/id 11 :block/uuid (u 11) :block/title "" :block/parent 9 :block/page 1 :block/order "a3"}
+                    {:db/id 12 :block/uuid (u 12) :block/title "Class" :block/tags [101]
+                     :block/parent 5 :block/order "a4"}]))))
+
+(defn- generated-db
+  "A random graph of n entities from seed: some without uuids, pages, blocks
+  under random parents and pages (some without uuids, some themselves),
+  tags, built-in flags."
+  [seed n]
+  (let [state (volatile! (bit-or seed 0))
+        rand-int* (fn [k]
+                    (vswap! state #(bit-or (+ (js/Math.imul % 1103515245) 12345) 0))
+                    (mod (unsigned-bit-shift-right @state 8) k))
+        chance? (fn [pct] (< (rand-int* 100) pct))
+        eid #(+ 1 (rand-int* n))
+        classes [100 101 102 103]]
+    (-> (d/empty-db db-schema/schema)
+        (d/db-with (concat
+                    [{:db/id 100 :db/ident :logseq.class/Page}
+                     {:db/id 101 :db/ident :logseq.class/Tag}
+                     {:db/id 102 :db/ident :logseq.class/Journal}
+                     {:db/id 103 :db/ident :logseq.class/Property}]
+                    (for [i (range 1 (inc n))]
+                      (cond-> {:db/id i}
+                        (chance? 90) (assoc :block/uuid (uuid (str "00000000-0000-4000-8000-"
+                                                                   (.padStart (str seed "0" i) 12 "0"))))
+                        (chance? 25) (assoc :block/name (str "page " i))
+                        (chance? 70) (assoc :block/title (str "title " (rand-int* 1000)))
+                        (chance? 50) (assoc :block/page (eid))
+                        (chance? 50) (assoc :block/parent (eid))
+                        (chance? 50) (assoc :block/order (str "a" (rand-int* 50)))
+                        (chance? 20) (assoc :block/tags [(nth classes (rand-int* 4))])
+                        (chance? 10) (update :block/tags conj (eid))
+                        (chance? 8) (assoc :logseq.property/built-in? (chance? 70)))))))))
+
+(defn- repeated-attribute-db
+  "edge-case-db plus datoms that bypass cardinality and uniqueness: an entity
+  with 2 uuids, a second entity holding page-a's uuid, and an entity with 2
+  titles and 2 parents whose uuids are equal (page-a and that second entity),
+  so 2 of its datoms give the same checksum tuple."
+  []
+  (let [u #(uuid (str "00000000-0000-4000-8000-" (.padStart (str %) 12 "0")))]
+    (d/init-db (concat (d/datoms (edge-case-db) :eavt)
+                       [(d/datom 9 :block/title "Block, second title")
+                        (d/datom 11 :block/uuid (u 99))
+                        (d/datom 13 :block/uuid (u 1))
+                        (d/datom 13 :block/page 1)
+                        (d/datom 9 :block/parent 13)])
+               db-schema/schema)))
+
+(deftest recompute-checksum-matches-reference-test
+  (testing "recompute-checksum equals the reference definition"
+    (let [e2ee (fn [db] (d/db-with db [{:db/ident :logseq.kv/graph-rtc-e2ee? :kv/value true}]))
+          {:keys [db-before db-after]} (load-rebased-retract-checksum-fixture)
+          fixture-2 (load-parent-order-rebase-checksum-fixture)
+          dbs (concat [(edge-case-db) (e2ee (edge-case-db)) (sample-db) (repeated-attribute-db)
+                       db-before db-after (:db-before fixture-2) (:db-after fixture-2)]
+                      (map #(generated-db % 80) (range 1 25))
+                      (map #(e2ee (generated-db % 80)) (range 25 30)))]
+      (doseq [[i db] (map-indexed vector dbs)]
+        (is (= (reference-checksum db) (checksum/recompute-checksum db))
+            (str "db " i)))))
+  (testing "the value on a fixed graph does not move"
+    (is (= "9d3658dc39402220" (checksum/recompute-checksum (edge-case-db))))))
