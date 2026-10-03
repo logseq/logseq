@@ -478,7 +478,8 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
                                                flex-row gap-1 items-center"
                                             ([ dom ~key:"pt-cw"
                                                  ~style_class:
-                                                   "flex flex-1 w-full \
+                                                   "flex flex-col flex-1 \
+                                                    w-full \
                                                     block-content-wrapper"
                                                  ~attrs:
                                                    [ ( "style"

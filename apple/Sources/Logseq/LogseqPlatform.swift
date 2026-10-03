@@ -133,9 +133,15 @@ final class NSReferenceBox {
   weak var runtime: LogseqRuntime?
   private var appearanceObservation: NSKeyValueObservation?
   private var keyMonitor: Any?
+  /// DOM id of the most recently focus-op'ed element + when. While a
+  /// `LogseqBlockTextView` that isn't this one still holds first
+  /// responder, plain keys belong to the block OCaml is focusing — the
+  /// stale textview would eat them during a split/remount gap.
+  static var lastFocusRequest: (id: String, at: Date)?
   private var contextMenuMonitor: Any?
   private var mouseMonitor: Any?
   private var mouseDownMonitor: Any?
+  private var mouseUpMonitor: Any?
   private var lastMouseHitNode: Int?
   private let logger = Logger(subsystem: "com.logseq.native", category: "platform")
 
@@ -165,7 +171,21 @@ final class NSReferenceBox {
       let chord =
         event.modifierFlags.contains(.command)
         || event.modifierFlags.contains(.control)
-      if editing && !chord { return event }
+      if editing && !chord {
+        // A different block's textview still owns the first responder
+        // while OCaml's focus request lands — route the key through the
+        // platform path so it reaches the block being entered instead
+        // of dying in the stale view.
+        if let tv = event.window?.firstResponder as? LogseqBlockTextView,
+          let req = LogseqPlatform.lastFocusRequest,
+          Date().timeIntervalSince(req.at) < 0.5,
+          tv.domID != req.id
+        {
+          self.sendKeyDown(event)
+          return nil
+        }
+        return event
+      }
       let char = (event.charactersIgnoringModifiers ?? "").lowercased()
       // Clipboard/edit/quit chords stay native; forwarding them would
       // swallow AppKit behavior the OCaml side does not reproduce.
@@ -218,10 +238,31 @@ final class NSReferenceBox {
       guard let window = event.window, let contentView = window.contentView
       else { return event }
       let point = LogseqPlatform.windowPoint(event, in: contentView)
-      guard let hit = LogseqFrameStore.hitTest(point),
+      let hit = LogseqFrameStore.hitTest(point)
+      guard let hit,
         let context = LogseqElementRegistry.shared.context(forNode: hit.nodeID)
       else { return event }
       LogseqPlatform.emitMouseDown(context: context, nodeID: hit.nodeID, point: point)
+      return event
+    }
+    // DOM click: SwiftUI taps only emit from views carrying their own
+    // gesture, so clicks on plain content (block text, empty rows,
+    // container padding) never reach the document click listeners the
+    // web relies on — a leftMouseUp over a hit emits "click" for every
+    // element. Deferred one runloop tick so an element's own gesture
+    // emit lands first and wins OCaml's click coalescing. The event is
+    // never consumed.
+    mouseUpMonitor = NSEvent.addLocalMonitorForEvents(matching: .leftMouseUp) {
+      event in
+      guard let window = event.window, let contentView = window.contentView
+      else { return event }
+      let point = LogseqPlatform.windowPoint(event, in: contentView)
+      guard let hit = LogseqFrameStore.hitTest(point),
+        let context = LogseqElementRegistry.shared.context(forNode: hit.nodeID)
+      else { return event }
+      DispatchQueue.main.async {
+        LogseqPlatform.emitClick(context: context, nodeID: hit.nodeID, point: point)
+      }
       return event
     }
   }
@@ -244,6 +285,10 @@ final class NSReferenceBox {
     if let mouseDownMonitor {
       NSEvent.removeMonitor(mouseDownMonitor)
       self.mouseDownMonitor = nil
+    }
+    if let mouseUpMonitor {
+      NSEvent.removeMonitor(mouseUpMonitor)
+      self.mouseUpMonitor = nil
     }
   }
 
@@ -301,6 +346,41 @@ final class NSReferenceBox {
     try? context.emit(
       name: "dom-event",
       values: ["name": .string("mousemove"), "payload": .string(json)])
+  }
+
+  private static func emitClick(
+    context: LUIAppleExtensionViewContext, nodeID: Int, point: CGPoint
+  ) {
+    // Mirrors the element emit()'s enrichment so a monitor-sourced click
+    // is interchangeable with a gesture-sourced one.
+    var payload: [String: Any] = [
+      "clientX": Double(point.x),
+      "clientY": Double(point.y),
+      "button": 0,
+      "nodeId": nodeID,
+    ]
+    if case .string(let classes) = context.childProperty(
+      node: nodeID, "style-class")
+    {
+      payload["targetClass"] = classes
+    }
+    if case .string(let rawAttrs) = context.childProperty(
+      node: nodeID, "attrs"),
+      let attrsData = rawAttrs.data(using: .utf8),
+      let attrsDict = try? JSONSerialization.jsonObject(with: attrsData)
+        as? [String: Any],
+      let targetId = attrsDict["id"] as? String
+    {
+      payload["targetId"] = targetId
+    }
+    payload["target"] = LogseqDOMSnapshot.snapshot(for: context)
+    guard
+      let data = try? JSONSerialization.data(withJSONObject: payload),
+      let json = String(data: data, encoding: .utf8)
+    else { return }
+    try? context.emit(
+      name: "dom-event",
+      values: ["name": .string("click"), "payload": .string(json)])
   }
 
   private static func emitMouseDown(
@@ -433,6 +513,9 @@ final class NSReferenceBox {
         NSApp.windows.first?.title = title
       }
     case "focus":
+      if let id = refID(dict) {
+        LogseqPlatform.lastFocusRequest = (id, Date())
+      }
       target(dict)?.domFocus()
     case "set-value":
       if let value = dict["value"] as? String { target(dict)?.domSetValue(value) }

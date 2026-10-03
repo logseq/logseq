@@ -877,3 +877,48 @@ Documentation → docs.logseq.com).
 - `install-opam-deps.sh` (db-worker) restores the native daemon dep
   set (eio/httpun/tls/datascript #main + pset 695223e) on a fresh
   switch; `dune build bin/main.exe` then bundles via build.sh.
+
+## Block-editor input pipeline (click→type burst correctness)
+
+- Clicks on block text/empty rows never emitted "click": SwiftUI taps
+  only emit from views carrying their own gesture. Fixed with a
+  `leftMouseUp` NSEvent monitor + `emitClick` (same enrichment as the
+  element emit), and a 60ms "click" coalescing window in
+  `Platform.emit_event` so the element's own gesture emit wins over
+  the deferred monitor emit instead of double-firing.
+- Hit misses: `.ls-block` had no width and `.block-content` no height,
+  so `hitTest` fell through to outer containers. LogseqStyles maps
+  `ls-block → fullWidth`, `block-content → grow+fullWidth+minHeight 20`.
+- `path` elements report their viewBox literally — rotating_arrow's
+  `0 0 192 512` path registered a 192×512 frame that swallowed
+  hit-tests. `path` is excluded from `LogseqFrameKey` reporting (the
+  parent svg already reports the region).
+- The add-block row (`.ls-block.block-add-button`, `id:""`) has no
+  uuid — mousedown records wildcard `"*"` which replays into the next
+  edit landing regardless of uuid.
+- `S.set_silent` STAGES its update (`Signal.update`, no flush) —
+  `S.editing()` reads the committed record, so a burst of keys that
+  lands inside one flush must transform `st.editing` inside the update
+  fn; writing `{e with buffer}` from the captured `e` collapses the
+  burst to the last key.
+- `pending_focus_actions` pops OLDEST-first: a structural op queued
+  during a replay (Enter→split) must be appended to the tail, not
+  prepended, or keys typed after it replay first and land in the
+  pre-split block.
+- NSTextView posts `textDidBeginEditing` lazily (first text change),
+  so programmatic `makeFirstResponder` never emitted focus — OCaml's
+  pending-focus loop spun and dropped queued keys. `LogseqBlockTextView`
+  announces focus/blur on the responder transition itself.
+- Keys typed in the split/remount gap (stale textview still first
+  responder) were eaten natively. `LogseqPlatform.lastFocusRequest`
+  records the focus dom-op target; the key monitor forwards plain keys
+  to OCaml while FR is a different `LogseqBlockTextView` (≤0.5s).
+- Racing keys (typed before the mousedown's enter_edit lands) queue in
+  `pending_focus_actions` and replay via `on_pending_focus_key`;
+  window is 5s — shorter drops keys when the pump is backlogged.
+- `build.sh` prints "built:" even after a swift compile error —
+  verify a new binary with `strings <bin> | grep -c <symbol>`.
+- `fputs` is unresolved in LogseqPlatform.swift (needs `Darwin.`),
+  fine in LogseqTextArea.swift — don't copy calls between files.
+- Screen coordinates ≈ ×1.57 the point space — never infer element
+  positions from screenshot pixels; verify via frame dumps.

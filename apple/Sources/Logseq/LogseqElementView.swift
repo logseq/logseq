@@ -205,7 +205,10 @@ struct LogseqElementView: View {
           // The fillsOverlay presenter is a 0x0 placeholder — only the
           // in-overlay re-render may report this node's frame, else the
           // placeholder stomps the real rect (AC flip measurement).
-          if !style.fillsOverlay || inOverlay {
+          // `path` elements draw their viewBox literally (a 0 0 192 512
+          // arrow reports a 192x512 frame) and swallow monitor hit-tests —
+          // their parent svg/a already reports the same region.
+          if (!style.fillsOverlay || inOverlay) && tag != "path" {
             GeometryReader { g in
               Color.clear.preference(
                 key: LogseqFrameKey.self,
