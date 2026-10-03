@@ -227,6 +227,12 @@ input[type='range'] {
     transition: opacity 200ms ease-in-out, transform 200ms ease-in-out;
   }
 
+  /* Hidden overflow is required for the 0fr collapse animation, but it
+     clips the table's horizontal scrollbar on first paint. */
+  &:not(.is-collapsed):has(.ls-table-rows) .ls-foldable-content-inner {
+    overflow: visible;
+  }
+
   &.is-collapsed {
     grid-template-rows: 0fr;
 
