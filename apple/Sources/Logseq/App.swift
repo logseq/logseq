@@ -296,6 +296,26 @@ private struct LogseqRuntimeHost: View {
     NSApplication.shared.activate()
     NSApplication.shared.windows.first?.makeKeyAndOrderFront(nil)
     LogseqPerfMonitor.shared.start()
+    if ProcessInfo.processInfo.environment["LOGSEQ_DEBUG_VIEWS"] != nil {
+      for delay in [2.0, 8.0] {
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+          guard let w = NSApplication.shared.windows.first else { return }
+          FileHandle.standardError.write(
+            "PERF views t=\(delay)s window=\(w.frame)\n".data(using: .utf8)!)
+          Self.dumpView(w.contentView, depth: 0)
+        }
+      }
+    }
+  }
+
+  private static func dumpView(_ v: NSView?, depth: Int) {
+    guard let v, depth < 14 else { return }
+    let cls = String(describing: type(of: v))
+      .replacingOccurrences(of: #"<.+?>"#, with: "<T>", options: .regularExpression)
+    FileHandle.standardError.write(
+      "PERF view-tree \(String(repeating: " ", count: depth))\(cls) \(v.frame) hidden=\(v.isHidden)\n"
+        .data(using: .utf8)!)
+    for sub in v.subviews { dumpView(sub, depth: depth + 1) }
   }
 
   func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }

@@ -409,6 +409,15 @@ private let platformRequest: PlatformRequestCallback = { data, length in
     }
     lastReportedRects = frames
     guard !changed.isEmpty || !drop.isEmpty else { return }
+    if Self.perfLogging {
+      let interesting = frames.filter { $0.key >= 139 && $0.key <= 270 }
+        .sorted { $0.key < $1.key }
+        .map { "\($0.key):\(Int($0.value.width))x\(Int($0.value.height))@\(Int($0.value.minY))" }
+        .joined(separator: " ")
+      FileHandle.standardError.write(
+        "PERF rects n=\(changed.count) drop=\(removed.count) [\(interesting)]\n"
+          .data(using: .utf8)!)
+    }
     sendPlatformEvent(
       name: "imperative-rects",
       json: "{\"rects\":{" + changed.joined(separator: ",") + "}" + drop + "}")

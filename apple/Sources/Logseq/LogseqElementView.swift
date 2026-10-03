@@ -223,7 +223,24 @@ struct LogseqElementView: View {
     return ""
   }
 
+  private func perfProbe() -> Int {
+    guard ProcessInfo.processInfo.environment["LOGSEQ_PERF"] != nil else { return 0 }
+    var s = ""
+    if case .string(let v) = context.property("accessibility-identifier") { s = v }
+    guard s.hasPrefix("journal") || context.nodeID < 700 else { return 0 }
+    let kids = context.childIDs.prefix(6).map(String.init).joined(separator: ",")
+    FileHandle.standardError.write(
+      "PERF view id=\(context.nodeID) a=\(s) kids=[\(kids)] t=\(CFAbsoluteTimeGetCurrent())\n"
+        .data(using: .utf8)!)
+    return 1
+  }
+
   var body: some View {
+    // Subscribe to this node's model revision: childIDs/property reads are
+    // untracked backend lookups, so the element must invalidate on its own
+    // or a skipped parent re-render leaves it stale (white screen flake).
+    let _ = context.revision
+    let _ = perfProbe()
     if inOverlay {
       // Anchor/sizing for the overlay copy is applied here — inside the
       // element's own body — so it re-reads `style` on every prop change.
@@ -510,8 +527,19 @@ struct LogseqElementView: View {
 
   // MARK: - leaf + inline rendering
 
+  private func perfBody(_ children: [Int]) -> Int {
+    guard ProcessInfo.processInfo.environment["LOGSEQ_PERF"] != nil,
+          (context.nodeID >= 139 && context.nodeID <= 141)
+            || (context.nodeID >= 183 && context.nodeID <= 184) else { return 0 }
+    FileHandle.standardError.write(
+      "PERF ebody id=\(context.nodeID) hidden=\(style.isHidden) kids=\(children.count) text=\(!effectiveText.isEmpty) scroll=\(style.isScrollable)\n"
+        .data(using: .utf8)!)
+    return 1
+  }
+
   @ViewBuilder private var elementBody: some View {
     let children = context.childIDs
+    let _ = perfBody(children)
     if style.isHidden {
       EmptyView()
     } else if isBullet {
@@ -1047,6 +1075,15 @@ struct LogseqRowLayout: Layout {
     in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews,
     cache: inout ()
   ) {
+    if ProcessInfo.processInfo.environment["LOGSEQ_PERF"] != nil,
+       nodeID >= 1 && nodeID <= 270 {
+      let ws = subviews.map {
+        "\(Int($0.sizeThatFits(.unspecified).width))/\($0[LogseqGrowXKey.self])"
+      }.joined(separator: ",")
+      FileHandle.standardError.write(
+        "PERF row-place id=\(nodeID) n=\(subviews.count) b=\(Int(bounds.minX)),\(Int(bounds.minY)) \(Int(bounds.width))x\(Int(bounds.height)) w=[\(ws)]\n"
+          .data(using: .utf8)!)
+    }
     // Ideal widths first; leftover goes to grow-weighted children (flex-grow),
     // matching CSS — plain block children keep their ideal width.
     var ideals = [CGFloat]()
@@ -1157,7 +1194,14 @@ struct LogseqColumnLayout: Layout {
     // Report the offered height when bounded — a bounded proposal comes from
     // a flex frame or a slice in placeSubviews, and the column must accept it
     // so leftover distribution can reach grow-weighted children.
-    return CGSize(width: width, height: proposal.height ?? height)
+    let out = CGSize(width: width, height: proposal.height ?? height)
+    if ProcessInfo.processInfo.environment["LOGSEQ_PERF"] != nil,
+       nodeID >= 1 && nodeID <= 270 {
+      FileHandle.standardError.write(
+        "PERF col-measure id=\(nodeID) n=\(subviews.count) ideal=\(Int(height)) prop=\(proposal.height.map { "\(Int($0))" } ?? "nil") out=\(Int(out.height))\n"
+          .data(using: .utf8)!)
+    }
+    return out
   }
 
   func placeSubviews(
@@ -1186,6 +1230,19 @@ struct LogseqColumnLayout: Layout {
     }
     let leftover = bounds.height - total
     var y = bounds.minY
+    if ProcessInfo.processInfo.environment["LOGSEQ_PERF"] != nil,
+       nodeID >= 1 && nodeID <= 270 {
+      let hs = heights.map { "\(Int($0))" }.joined(separator: ",")
+      FileHandle.standardError.write(
+        "PERF col-place id=\(nodeID) n=\(subviews.count) b=\(Int(bounds.minX)),\(Int(bounds.minY)) \(Int(bounds.width))x\(Int(bounds.height)) heights=[\(hs)] tw=\(totalWeight)\n"
+          .data(using: .utf8)!)
+      if nodeID == 1 && bounds.width < 10 && !LogseqLayoutProbeDumped.shared.done {
+        LogseqLayoutProbeDumped.shared.done = true
+        let stack = Thread.callStackSymbols.prefix(40).joined(separator: "\n")
+        FileHandle.standardError.write(
+          "PERF col-place-zero-STACK\n\(stack)\n".data(using: .utf8)!)
+      }
+    }
     if centerMain && totalWeight == 0 {
       y += max(0, leftover) / 2
     }
@@ -1233,6 +1290,11 @@ struct LogseqColumnLayout: Layout {
       y += h + spacing
     }
   }
+}
+
+final class LogseqLayoutProbeDumped: @unchecked Sendable {
+  static let shared = LogseqLayoutProbeDumped()
+  var done = false
 }
 
 private struct InsideVerticalScrollKey: EnvironmentKey {
