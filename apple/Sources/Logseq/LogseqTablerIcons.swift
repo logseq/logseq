@@ -1,15 +1,51 @@
+import CoreText
 import Foundation
 import SwiftUI
 
-/// Renders `ti ti-<name>` / `tie tie-<name>` font-icon elements natively. The
-/// web paints them through the tabler icon font; here each name resolves to its
-/// SVG `path` children from `tabler-children.json` (generated from
-/// resources/js/icon-data.js — the same table the OCaml twin reads) and draws
-/// them in the standard 24x24 viewBox.
+/// Renders `ti ti-<name>` / `tie tie-<name>` font-icon elements natively via
+/// the real icon fonts bundled in resources/css/fonts (`tabler-icons.ttf`,
+/// `tabler-icons-extension.ttf` converted from the shipped woff2). Name ->
+/// codepoint tables come from the css the web uses (tabler-icons.min.css /
+/// tabler-extension.css), so glyphs match web/electron exactly. SVG `path`
+/// children from `tabler-children.json` remain as a fallback for names the
+/// fonts don't cover.
 enum LogseqTablerIcons {
+  static let codepoints = loadCodepoints("tabler-codepoints")
+  static let extCodepoints = loadCodepoints("tabler-ext-codepoints")
+
+  /// Registers the bundled icon fonts once; the family names match the CSS
+  /// @font-face declarations ("tabler-icons", "tabler-icons-extension").
+  static let fontsRegistered: Bool = {
+    for name in ["tabler-icons", "tabler-icons-extension"] {
+      guard
+        let url = Bundle.module.url(forResource: name, withExtension: "ttf")
+      else { continue }
+      CTFontManagerRegisterFontsForURL(url as CFURL, .process, nil)
+    }
+    return true
+  }()
+
+  private static func loadCodepoints(_ resource: String)
+    -> [String: UInt32]
+  {
+    guard
+      let url = Bundle.module.url(forResource: resource, withExtension: "json"),
+      let data = try? Data(contentsOf: url),
+      let raw = try? JSONSerialization.jsonObject(with: data)
+        as? [String: String]
+    else { return [:] }
+    var out: [String: UInt32] = [:]
+    out.reserveCapacity(raw.count)
+    for (name, hex) in raw {
+      out[name] = UInt32(hex, radix: 16)
+    }
+    return out
+  }
+
   private static let table: [String: [[String: String]]] = {
     guard
-      let url = Bundle.module.url(forResource: "tabler-children", withExtension: "json"),
+      let url = Bundle.module.url(
+        forResource: "tabler-children", withExtension: "json"),
       let data = try? Data(contentsOf: url),
       let raw = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
     else { return [:] }
@@ -38,11 +74,24 @@ enum LogseqTablerIcons {
 
 struct LogseqTablerIcon: View {
   let name: String
+  /// True for `tie-*` (logseq's tabler extension font); false for `ti-*` /
+  /// `ls-icon-*` names.
+  var ext = false
   var size: CGFloat = 16
   var color: Color = .primary
 
   var body: some View {
-    if let children = LogseqTablerIcons.paths(for: name), !children.isEmpty {
+    let _ = LogseqTablerIcons.fontsRegistered
+    let table =
+      ext ? LogseqTablerIcons.extCodepoints : LogseqTablerIcons.codepoints
+    if let cp = table[name], let scalar = Unicode.Scalar(cp) {
+      Text(String(Character(scalar)))
+        .font(.custom(ext ? "tabler-icons-extension" : "tabler-icons",
+          size: size))
+        .foregroundStyle(color)
+    } else if let children = LogseqTablerIcons.paths(for: name),
+      !children.isEmpty
+    {
       Canvas { ctx, canvasSize in
         let scale = min(canvasSize.width, canvasSize.height) / 24
         for child in children {
