@@ -246,20 +246,18 @@
                  (entity-util/page? ref)))
     [(str block-uuid) title]))
 
-(defn- title-block-ref-entities
-  "((uuid)) refs are self-contained in the title, so their targets can be
-   resolved directly without relying on :block/refs being up to date."
+(defn- title-ref-entities
+  "Id refs are self-contained in the title, so their targets can be resolved
+   directly without relying on :block/refs being up to date."
   [ent]
   (when (de/entity? ent)
-    (->> (:block/title ent)
-         (re-seq id-block-ref-pattern)
-         (map (comp uuid second))
-         (keep #(d/entity (.-db ent) [:block/uuid %])))))
+    (keep #(d/entity (.-db ent) [:block/uuid %])
+          (get-matched-ids (:block/title ent)))))
 
 (defn- block-ref-id->title
   [ent max-depth replace-block-refs?]
   (loop [frontier (into (set (:block/refs ent))
-                        (title-block-ref-entities ent))
+                        (title-ref-entities ent))
          seen-ids #{}
          id->title {}
          depth 0]
@@ -278,7 +276,7 @@
             next-frontier (->> new-refs
                                (mapcat (fn [ref]
                                          (concat (:block/refs ref)
-                                                 (title-block-ref-entities ref))))
+                                                 (title-ref-entities ref))))
                                (filter ref-entity?)
                                set)]
         (recur next-frontier seen-ids' id->title' (inc depth))))))
