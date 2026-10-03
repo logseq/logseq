@@ -469,17 +469,43 @@ import SwiftUI
       padding = EdgeInsets(top: 10, leading: 12, bottom: 10, trailing: 12)
     case "cp__cmdk-search-input":
       if fontSize == nil { fontSize = 15 }
-    case "cp__cmdk-group-title", "cp__cmdk-group-header":
+    // group header row: title + count + flexible spacer + show-more link
+    case "cp__cmdk-group-header":
+      isRow = true; centerCross = true; stackSpacing = 6
       if fontSize == nil { fontSize = 11 }
       foreground = LogseqColors.gray(10)
       padding = EdgeInsets(top: 8, leading: 10, bottom: 4, trailing: 10)
-    case "cp__cmdk-tip", "cp__cmdk-hints", "cp__cmdk-hint",
-         "cp__cmdk-item-info", "cp__cmdk-empty", "cp__cmdk-search-only",
-         "cp__cmdk-group-count":
+    case "cp__cmdk-group-title":
+      if fontSize == nil { fontSize = 11 }
+      foreground = LogseqColors.gray(10)
+    case "cp__cmdk-group-count":
+      if fontSize == nil { fontSize = 11 }
+      foreground = LogseqColors.gray(10)
+    case "cp__cmdk-group-spacer": grow = true
+    case "cp__cmdk-group-more-inner": isRow = true; centerCross = true
+      stackSpacing = 4
+    case "cp__cmdk-item-info", "cp__cmdk-empty", "cp__cmdk-search-only":
       if fontSize == nil { fontSize = 12 }
       foreground = LogseqColors.gray(10)
-    case "cp__cmdk-hints", "cp__cmdk-tip":
+    // tips/hints footer — "Tip: Press / to filter" is one inline row of
+    // label + kbd cells; web lays it out with flex, and the previous
+    // duplicate case labels meant this styling never applied at all.
+    case "cp__cmdk-hints":
+      isRow = true; centerCross = true; stackSpacing = 8
+      if fontSize == nil { fontSize = 12 }
+      foreground = LogseqColors.gray(10)
       padding = EdgeInsets(top: 8, leading: 10, bottom: 8, trailing: 10)
+    case "cp__cmdk-hints-row":
+      isRow = true; centerCross = true; stackSpacing = 6
+    case "cp__cmdk-tip":
+      isRow = true; centerCross = true; stackSpacing = 4
+      if fontSize == nil { fontSize = 12 }
+      foreground = LogseqColors.gray(10)
+      padding = EdgeInsets(top: 8, leading: 10, bottom: 8, trailing: 10)
+    case "cp__cmdk-hint":
+      isRow = true; centerCross = true; stackSpacing = 4
+      if fontSize == nil { fontSize = 12 }
+      foreground = LogseqColors.gray(10)
     case "cmdk-item-main":
       isRow = true; fullWidth = true
       padding = EdgeInsets(top: 6, leading: 8, bottom: 6, trailing: 8)
@@ -996,6 +1022,13 @@ import SwiftUI
       grow = true
     case "ls-page-title", "title":
       if fontSize == nil { fontSize = 18 }; isBold = true
+    // .block-title-wrap text leaf inside .ls-page-title — the container's
+    // `title` case cannot reach it (styles don't cascade), so the view marks
+    // the title's own element with this hook (web ignores it: no CSS rule).
+    // lui page titles render ~30px semibold.
+    case "ls-title-text":
+      if fontSize == nil { fontSize = 30 }
+      fontWeight = .semibold; isBold = true
     // fenced code block — lui-core.css: wrap is width:100%, the
     // duplicated lang label is display:none (lang shows in the
     // actions bar instead)

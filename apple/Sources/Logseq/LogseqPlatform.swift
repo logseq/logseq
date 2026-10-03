@@ -8,6 +8,13 @@ import SwiftUI
 /// themselves by their DOM `id` attr so imperative dom-ops (focus, set-value,
 /// class toggles) can reach them.
 @MainActor protocol LogseqElement: AnyObject {
+  /// Placeholder handles (the per-element registration's default
+  /// `LogseqElementHandle`) may fill an empty slot but never replace a
+  /// handle that implements real dom-ops — mount order between the
+  /// registration view's onAppear and NSViewRepresentable makeNSView is
+  /// not guaranteed, and the placeholder would otherwise clobber the
+  /// coordinator the ops are meant to reach.
+  var isPlaceholder: Bool { get }
   func domFocus()
   func domSetValue(_ value: String)
   func domSetTextContent(_ text: String)
@@ -21,6 +28,7 @@ import SwiftUI
 }
 
 extension LogseqElement {
+  var isPlaceholder: Bool { false }
   func domFocus() {}
   func domSetValue(_ value: String) {}
   func domSetTextContent(_ text: String) {}
@@ -75,6 +83,9 @@ extension LogseqElement {
   private var contexts: [Int: LUIAppleExtensionViewContext] = [:]
 
   func register(_ id: String, _ element: LogseqElement) {
+    if element.isPlaceholder, let existing = elements[id]?.object, !existing.isPlaceholder {
+      return
+    }
     elements[id] = NSReferenceBox(element)
   }
 
