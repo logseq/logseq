@@ -164,6 +164,12 @@ struct LogseqTextArea: NSViewRepresentable {
       // OCaml's el_value reads "value" off the target snapshot — carry the
       // live string so on_input sees the current buffer, not the last patch.
       target["value"] = textView?.string ?? ""
+      // live_fields only updates from event payloads — carry the caret on
+      // every event so arrow/Cmd-movement between events can't leave a
+      // stale position for the next split/merge op.
+      let sel = textView?.selectedRange() ?? NSRange()
+      enriched["selectionStart"] = sel.location
+      enriched["selectionEnd"] = sel.location + sel.length
       enriched["target"] = target
       guard let data = try? JSONSerialization.data(withJSONObject: enriched),
         let json = String(data: data, encoding: .utf8)
