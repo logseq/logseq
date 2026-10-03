@@ -41,6 +41,12 @@ let ext_prop_string props name =
   | Some (Lui_protocol.StringValue s) -> Some s
   | _ -> None
 
+(* Parsed-attrs cache keyed by the raw JSON string — snapshot rebuilds
+   after every mutation used to parseExn each node's attrs JSON, which
+   was the single biggest allocation source on the main thread. *)
+let attrs_parse_cache : (int, string * Js.Json.t) Hashtbl.t =
+  Hashtbl.create 1024
+
 let ext_shallow_snapshot (rt : Lui_runtime.application) node : Js.Json.t =
   let props =
     match
@@ -60,7 +66,15 @@ let ext_shallow_snapshot (rt : Lui_runtime.application) node : Js.Json.t =
   in
   let attrs =
     match ext_prop_string props "attrs" with
-    | Some json -> (try Js.Json.parseExn json with _ -> Js.Json.JObject [])
+    | Some json -> (
+        match Hashtbl.find_opt attrs_parse_cache node with
+        | Some (raw, parsed) when raw = json -> parsed
+        | _ ->
+            let parsed =
+              try Js.Json.parseExn json with _ -> Js.Json.JObject []
+            in
+            Hashtbl.replace attrs_parse_cache node (json, parsed);
+            parsed)
     | None -> Js.Json.JObject []
   in
   let acc_id =
@@ -198,8 +212,14 @@ let decode_extension_values payload =
 (* The web runtime feeds registered doc scans from a MutationObserver;
    natively we re-run them after every flush that produced a new tree
    generation, so views mounts (query shells, object views) see fresh
-   elements. *)
+   elements. Running every scan on every generation is O(scans x tree)
+   per keystroke — coalesce: structural ops (mount/unmount/move) run
+   them immediately, prop-only generations at most once per
+   scan_min_interval. *)
 let last_scanned_generation = ref (-1)
+let structural_since_scan = ref false
+let last_scan_time = ref 0.
+let scan_min_interval = 0.1
 
 let run_doc_scans_after_flush () =
   match !current_app with
@@ -207,8 +227,15 @@ let run_doc_scans_after_flush () =
       let gen =
         !((Lui_app.runtime app).Lui_runtime.runtime_generation)
       in
-      if gen <> !last_scanned_generation then begin
+      let now = Unix.gettimeofday () in
+      if
+        !structural_since_scan
+        || gen <> !last_scanned_generation
+           && now -. !last_scan_time >= scan_min_interval
+      then begin
+        structural_since_scan := false;
         last_scanned_generation := gen;
+        last_scan_time := now;
         Editor_dom.run_doc_scans ();
         (* scans can materialize nodes — flush again so they ship in the
            same take_patches drain *)
@@ -245,6 +272,16 @@ let initialize platform_code host_code (_payload : string) : string =
     { Lui_protocol.backend_profile = Lui_protocol.profile os host_kind
     ; apply_batch =
         (fun batch ->
+          if
+            List.exists
+              (function
+                | Lui_protocol.CreateNode _ | CreateExtension _
+                | DropNode _ | InsertChild _ | RemoveChild _
+                | MoveChild _ -> true
+                | SetProp _ | RemoveProp _ | SetExtensionProp _
+                | RemoveExtensionProp _ -> false)
+              batch.Lui_protocol.ops
+          then structural_since_scan := true;
           let json = Lui_wire.encode_batch batch in
           Queue.add json pending_batches;
           true)

@@ -990,3 +990,24 @@ Documentation → docs.logseq.com).
   `ls-page-title-actions` walks `context.parentID(of:)` to check.
 - Relaunch flake: the journal page sometimes renders blank for ~60s;
   opening cmdk/search nudges it (runtime is alive — page fetch lag).
+
+## Performance (2026-10-03)
+
+- "所有操作都很卡/打字都好慢" root cause: `run_doc_scans_after_flush` fired
+  `Editor_dom.run_doc_scans` on EVERY runtime generation bump — including a
+  single SetProp text update. Each registered scan (~5: add_button,
+  render_libs, views_mount, editor_dom, code_mirror) ran
+  `query_in_roots` → `collect_subtree` over the whole doc, and the epoch
+  cache was invalidated by every pending-op, so each flush rebuilt every
+  node's shallow snapshot (parseExn of attrs JSON + JObject allocs) → GC
+  storm on the main thread. Sample showed `stw_empty_minor_heap` +
+  `major_collection_slice` dominating.
+- Fix 1 (native_embed.ml): doc scans now run immediately only when the
+  flush contained structural ops (CreateNode/CreateExtension/DropNode/
+  InsertChild/RemoveChild/MoveChild — flagged inside apply_batch); prop-only
+  generations coalesce to at most one scan per 100ms.
+- Fix 2 (logseq_lui_bridge.c): setenv OCAMLRUNPARAM "s=16M" before
+  caml_startup (respects user override) — default 256KB minor heap caused a
+  stop-the-world collection every few thousand allocations.
+- Fix 3 (native_embed.ml): attrs_parse_cache keyed by node + raw JSON
+  string so snapshot rebuilds skip parseExn for unchanged attrs.

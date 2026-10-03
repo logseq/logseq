@@ -65,6 +65,12 @@ LUI_EXPORT int32_t lui_ocaml_start(lui_patch_callback callback,
   wakeup_callback = wakeup_cb;
   platform_request_callback = platform_request_cb;
   if (!runtime_started) {
+    /* The default 256KB minor heap forces a stop-the-world collection
+       every few thousand allocations — typing bursts allocate heavily
+       (snapshot rebuilds, JSON) and stall the main thread. 16MB moves
+       collection pressure off the interaction path. Only set when the
+       user hasn't provided their own OCAMLRUNPARAM. */
+    setenv("OCAMLRUNPARAM", "s=16M", 0);
     char *arguments[] = {"logseq_lui_ocaml", NULL};
     caml_startup(arguments);
     runtime_started = 1;
