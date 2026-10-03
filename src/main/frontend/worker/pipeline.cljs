@@ -542,7 +542,11 @@
         display-blocks-tx-data (add-missing-properties-to-typed-display-blocks db-after tx-data tx-meta)
         ensure-query-tx-data (ensure-query-property-on-tag-additions tx-report)
         ensure-comments-tx-data (ensure-comments-blocks-property-on-tag-additions tx-report)
+        ;; Undo/redo replay already includes repeating-task side effects
+        ;; (reschedule + status reset). Re-running commands on redo advances
+        ;; Scheduled/Deadline a second interval.
         commands-tx (when-not (or (:undo? tx-meta)
+                                  (:redo? tx-meta)
                                   (= :rebase (:outliner-op tx-meta))
                                   (rtc-tx-or-download-graph? tx-meta))
                       (commands/run-commands tx-report))
