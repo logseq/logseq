@@ -121,13 +121,13 @@ for theme_png in light-theme.png dark-theme.png system-theme.png; do
   [[ -f $src_png ]] && cp "$src_png" "$app_dir/Contents/Resources/$theme_png"
 done
 
-# SwiftPM resource bundles (Bundle.module): the generated
-# resource_bundle_accessor also searches Contents/Resources — bundles at
-# the .app root count as unsealed contents and break the signature
-# (Gatekeeper reports the app as "damaged").
+# SwiftPM resource bundles (Bundle.module): the generated accessor only
+# checks <AppRoot>/<Pkg>.bundle and the dev .build path — NOT
+# Contents/Resources — so a shipped .app must carry them at its root.
+# Root-level extras are unsealed but do not invalidate the signature of
+# the sealed parts (codesign prints a warning only).
 for bundle in "$product_dir"/*.bundle; do
-  [[ -d $bundle ]] && cp -R "$bundle" "$app_dir/Contents/Resources/"
+  [[ -d $bundle ]] && cp -R "$bundle" "$app_dir/"
 done
 
-codesign --force --sign - --timestamp=none "$app_dir" || true
 echo "built: $app_dir"
