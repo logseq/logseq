@@ -1286,6 +1286,7 @@ and run_command st repo (cid : string) =
   | "go/home" -> nav "#/" Model.Home
   | "go/journals" -> nav "#/" Model.Home
   | "go/all-graphs" -> nav "#/graphs" Model.All_graphs
+  | "go/graph-view" -> nav "#/graph" Model.Graph_view
   | "go/all-pages" -> nav "#/all-pages" Model.All_pages
   | "ui/toggle-settings" -> nav "#/settings" Model.Settings
   | "sidebar/open-today-page" ->

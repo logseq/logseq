@@ -46,14 +46,33 @@ import SwiftUI
     0x205d9e, 0x2870bd, 0x0090ff, 0x3b9eff, 0x70b8ff, 0xc2e6ff,
   ]
 
+  /// Dynamic pair: resolves per draw under the effectiveAppearance in
+  /// force, so an NSApp.appearance override (or system dark mode) flips
+  /// the palette without any view invalidation.
+  private static func dynPair(_ light: UInt32, _ dark: UInt32) -> Color {
+    Color(
+      nsColor: NSColor(name: nil, dynamicProvider: { appearance in
+        appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+          ? hexNS(dark) : hexNS(light)
+      }))
+  }
+
   static func gray(_ step: Int) -> Color {
-    let palette = isDark ? darkGray : lightGray
-    return hex(palette[min(max(step - 1, 0), 11)])
+    let i = min(max(step - 1, 0), 11)
+    return dynPair(lightGray[i], darkGray[i])
+  }
+
+  /// Different scale steps per appearance (e.g. surfaces that sit at
+  /// gray-1 light / gray-3 dark) — still a single dynamic color.
+  static func grayPair(light lightStep: Int, dark darkStep: Int) -> Color {
+    let l = min(max(lightStep - 1, 0), 11)
+    let d = min(max(darkStep - 1, 0), 11)
+    return dynPair(lightGray[l], darkGray[d])
   }
 
   static func blue(_ step: Int) -> Color {
-    let palette = isDark ? darkBlue : lightBlue
-    return hex(palette[min(max(step - 1, 0), 11)])
+    let i = min(max(step - 1, 0), 11)
+    return dynPair(lightBlue[i], darkBlue[i])
   }
 
   /// Tailwind-style named hues used by `--color-<name>-<step>` vars
@@ -73,13 +92,19 @@ import SwiftUI
   }
 
   static func grayNS(_ step: Int) -> NSColor {
-    let palette = isDark ? darkGray : lightGray
-    return hexNS(palette[min(max(step - 1, 0), 11)])
+    let i = min(max(step - 1, 0), 11)
+    return NSColor(name: nil) { appearance in
+      appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+        ? hexNS(darkGray[i]) : hexNS(lightGray[i])
+    }
   }
 
   static func blueNS(_ step: Int) -> NSColor {
-    let palette = isDark ? darkBlue : lightBlue
-    return hexNS(palette[min(max(step - 1, 0), 11)])
+    let i = min(max(step - 1, 0), 11)
+    return NSColor(name: nil) { appearance in
+      appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+        ? hexNS(darkBlue[i]) : hexNS(lightBlue[i])
+    }
   }
 
   static var primaryText: Color { gray(12) }
@@ -143,6 +168,9 @@ import SwiftUI
   var wantsOpen = false
   var hasIsOpen = false
   var centerHorizontally = false
+  /// Also center vertically in the grown frame (web's `top-1/2
+  /// translate(-50%,-50%)` dialog chrome — transforms aren't parsed).
+  var centerVertically = false
   var outOfFlow = false
   /// position:absolute inset-y-0 — out-of-flow child stretched to the
   /// container's full height (the right-sidebar resize handle).
@@ -395,7 +423,7 @@ import SwiftUI
       outOfFlow = true; fillsOverlay = true
       fixedRight = 16; fixedBottom = 56
       fixedWidth = 220
-      background = LogseqColors.gray(LogseqColors.isDark ? 3 : 1)
+      background = LogseqColors.grayPair(light: 1, dark: 3)
       cornerRadius = 8; hasShadow = true
       padding = EdgeInsets(top: 8, leading: 8, bottom: 8, trailing: 8)
     case "it":
@@ -421,12 +449,13 @@ import SwiftUI
       background = Color.black.opacity(0.35)
     case "ui__dialog-content":
       outOfFlow = true; fillsOverlay = true; centerHorizontally = true
+      centerVertically = true
     case "ui__dialog-main-content":
       margin = EdgeInsets(top: 100, leading: 0, bottom: 0, trailing: 0)
     case "cp__cmdk__modal":
       fixedWidth = 620
       centerHorizontally = true
-      background = LogseqColors.gray(LogseqColors.isDark ? 2 : 1)
+      background = LogseqColors.grayPair(light: 1, dark: 2)
       cornerRadius = 8
       hasShadow = true
       padding = EdgeInsets(top: 6, leading: 0, bottom: 6, trailing: 0)
@@ -456,22 +485,22 @@ import SwiftUI
     // the .closed class already collapses it via isHidden) ----
     case "cp__right-sidebar":
       fixedWidth = LogseqRightSidebarLayout.shared.width; fullHeight = true
-      background = LogseqColors.gray(LogseqColors.isDark ? 2 : 1)
+      background = LogseqColors.grayPair(light: 1, dark: 2)
     case "cp__right-sidebar-scrollable":
       isScrollable = true; grow = true; fullHeight = true
     case "cp__right-sidebar-inner":
       grow = true; fullWidth = true; fullHeight = true
-      background = LogseqColors.gray(LogseqColors.isDark ? 2 : 1)
+      background = LogseqColors.grayPair(light: 1, dark: 2)
     case "cp__right-sidebar-topbar":
       isRow = true; fullWidth = true; fixedHeight = 48
-      background = LogseqColors.gray(LogseqColors.isDark ? 2 : 1)
+      background = LogseqColors.grayPair(light: 1, dark: 2)
       padding = EdgeInsets(top: 0, leading: 4, bottom: 0, trailing: 4)
     case "sidebar-drop-indicator": fixedHeight = 8; fullWidth = true
     case "sidebar-item-list": grow = true; fullWidth = true
     case "sidebar-item":
       grow = true; fullWidth = true
       minHeight = 100
-      background = LogseqColors.gray(LogseqColors.isDark ? 3 : 1)
+      background = LogseqColors.grayPair(light: 1, dark: 3)
       cornerRadius = cornerRadius ?? 8
       margin = EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0)
     case "sidebar-item-header": isRow = true; fullWidth = true
@@ -493,7 +522,7 @@ import SwiftUI
       let winH = NSApp.mainWindow?.frame.height ?? 660
       fixedWidth = min(1024, max(360, winW - 32))
       fixedHeight = min(560, winH * 0.75)
-      background = LogseqColors.gray(LogseqColors.isDark ? 2 : 1)
+      background = LogseqColors.grayPair(light: 1, dark: 2)
       cornerRadius = 12
       hasShadow = true
       centerHorizontally = true
@@ -612,7 +641,7 @@ import SwiftUI
     // ---- dropdown / context menus (position:fixed anchored) ----
     case "ui__dropdown-menu-content":
       minWidth = 160
-      background = LogseqColors.gray(LogseqColors.isDark ? 3 : 1)
+      background = LogseqColors.grayPair(light: 1, dark: 3)
       cornerRadius = cornerRadius ?? 6
       hasShadow = true
       padding = EdgeInsets(top: 4, leading: 4, bottom: 4, trailing: 4)
@@ -630,7 +659,7 @@ import SwiftUI
       cornerRadius = 4
     case "ui__dropdown-menu-sub-content":
       minWidth = 160
-      background = LogseqColors.gray(LogseqColors.isDark ? 3 : 1)
+      background = LogseqColors.grayPair(light: 1, dark: 3)
       cornerRadius = 6
       hasShadow = true
       padding = EdgeInsets(top: 4, leading: 4, bottom: 4, trailing: 4)
@@ -640,7 +669,7 @@ import SwiftUI
     case "ui__popover-content":
       minWidth = 128
       isScrollable = true
-      background = LogseqColors.gray(LogseqColors.isDark ? 3 : 1)
+      background = LogseqColors.grayPair(light: 1, dark: 3)
       cornerRadius = 6
       hasShadow = true
       padding = EdgeInsets(top: 4, leading: 4, bottom: 4, trailing: 4)
@@ -757,7 +786,7 @@ import SwiftUI
     case "ui__popover-content":
       // lui-overlay.css .ui__popover-content — popover bg, border, shadow.
       minWidth = 128
-      background = LogseqColors.gray(LogseqColors.isDark ? 2 : 1)
+      background = LogseqColors.grayPair(light: 1, dark: 2)
       cornerRadius = cornerRadius ?? 6
       hasBorder = true
       hasShadow = true

@@ -1429,6 +1429,21 @@ let region (ms : Model.t Signal.signal) : t =
           dom ~key:"journals-root"
             [ journals_view m m.journals; Selection_bar.view () ]
       | Model.Ready, Model.Not_found n -> not_found_view n
+      | Model.Ready, Model.Graph_view ->
+          (* the link-graph canvas isn't ported to the native renderer
+             yet — an explicit empty state instead of the 404 chrome *)
+          dom ~key:"gv" ~style_class:"page"
+            [ box ~key:"gv-inner"
+                ~style_class:"flex flex-col items-center justify-center py-32"
+                [ box ~key:"gv-i" ~style_class:"text-gray-9 mb-4"
+                    [ Icons.icon ~size:48. "hierarchy" ]
+                ; text ~key:"gv-t" ~value:(I18n.t "nav/graph-view")
+                    ~style_class:"text-2xl font-semibold text-gray-12 mb-2" []
+                ; text ~key:"gv-d"
+                    ~value:"Graph view isn't available in this app yet."
+                    ~style_class:"text-gray-10" []
+                ]
+            ]
       | Model.Ready, (Model.All_graphs | Model.All_pages) ->
           box ~key:"graphs-view" [] (* renders via its own view *)
       | Model.Ready, Model.Settings -> Settings_page.view m

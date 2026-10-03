@@ -419,27 +419,43 @@ let on_pending_focus_key ev e caret =
   A.drain_pending_focus_actions 0
 
 (* .block-content blockid under the latest primary mousedown + when it
-   landed. The click that runs enter_edit dispatches asynchronously, so a
-   key typed in that gap falls to on_normal_key and dies — on the web the
-   click handler enters edit synchronously first. Keys that outrun the
-   pending edit replay into the landed block instead. *)
-let last_block_mousedown : (string * float) ref = ref ("", 0.0)
+   landed + the editing uuid that mousedown replaced. The click that
+   runs enter_edit dispatches asynchronously, so a key typed in that gap
+   falls to on_normal_key and dies — on the web the click handler
+   enters edit synchronously first. Keys that outrun the pending edit
+   replay into the landed block instead. *)
+let last_block_mousedown : (string * float * string) ref = ref ("", 0.0, "")
 
 let racing_edit_uuid () =
-  let (u, t) = !last_block_mousedown in
+  let (u, t, _) = !last_block_mousedown in
   if u <> "" && Platform.date_now_ms () -. t < 5000.0 then Some u
   else None
 
 (* replay [ev] through the remount-window handler once the mousedown's
-   own enter_edit lands. The queued action re-queues itself while the
-   click is still racing so an unrelated drain can't drop it; a click
-   that never enters edit (drag, non-editing row) lets the window
-   expire and the key is dropped like a normal-mode shortcut miss. *)
+   own enter_edit lands. A specific-uuid replay waits for that uuid;
+   the add-button wildcard ("*") waits for an edit on ANY block other
+   than the one the mousedown blurred — replaying into the dying record
+   would write keystrokes over a block the user never opened. A record
+   that never seeded its buffer (title_for_edit still pending) shows
+   base=buffer="" while the model holds a title — replaying into it
+   would commit the bare key over the block's real text, so drop the
+   key instead. The queued action re-queues itself while the click is
+   still racing so an unrelated drain can't drop it; a click that
+   never enters edit lets the window expire and the key is dropped
+   like a normal-mode shortcut miss. *)
 let queue_racing_key ev uuid =
+  let (_, _, stale) = !last_block_mousedown in
+  let replay e =
+    if
+      e.S.base = "" && e.S.buffer = ""
+      && String.trim (A.display_title e.S.uuid) <> ""
+    then () (* unseeded record — dropping beats corrupting the title *)
+    else on_pending_focus_key ev e (String.length e.S.buffer)
+  in
   let rec action () =
     match S.editing () with
-    | Some e when e.S.uuid = uuid || uuid = "*" ->
-        on_pending_focus_key ev e (String.length e.S.buffer)
+    | Some e when e.S.uuid = uuid -> replay e
+    | Some e when uuid = "*" && e.S.uuid <> stale -> replay e
     | _ ->
         if Option.is_some (racing_edit_uuid ()) then
           S.pending_focus_actions := action :: !S.pending_focus_actions
@@ -807,8 +823,14 @@ let on_editor_insert ev =
 let on_mousedown ev =
   if S.ready () then begin
     (* record which block's content the pointer went down on — including
-       outside any block (clears the record). Mirrors the interactive
-       exclusions on_click applies before enter_edit. *)
+       outside any block (clears the record) — and the editing uuid the
+       mousedown is about to replace, so wildcard replays never write
+       into that dying record. Mirrors the interactive exclusions
+       on_click applies before enter_edit. *)
+    let stale =
+      match S.editing () with Some e -> e.S.uuid | None -> ""
+    in
+    let now = Platform.date_now_ms () in
     last_block_mousedown :=
       (match
          D.closest_sel
@@ -818,19 +840,19 @@ let on_mousedown ev =
             .view-action-type, .ui-fenced-code-editor"
            (D.ev_target ev)
        with
-       | Some _ -> ("", Platform.date_now_ms ())
+       | Some _ -> ("", now, stale)
        | None -> (
            match D.closest_sel ".block-content" (D.ev_target ev) with
-           | Some el -> (
-               Option.value (D.el_get_attr el "blockid") ~default:""
-               , Platform.date_now_ms ())
+           | Some el ->
+               ( Option.value (D.el_get_attr el "blockid") ~default:""
+               , now, stale )
            | None -> (
                (* the add-block row appends a block then enters edit —
                   its uuid doesn't exist yet, so record a wildcard that
                   replays into the next edit landing *)
                match D.closest_sel ".block-add-button" (D.ev_target ev)
                with
-               | Some _ -> ("*", Platform.date_now_ms ())
+               | Some _ -> ("*", now, stale)
                | None -> (
                    (* row padding lands inside .ls-block but outside
                       .block-content — the block it belongs to is still
@@ -840,8 +862,8 @@ let on_mousedown ev =
                        ( Option.value
                            (uuid_of_prefixed "ls-block-" (D.el_id el))
                            ~default:""
-                       , Platform.date_now_ms () )
-                   | None -> ("", Platform.date_now_ms ())))));
+                       , now, stale )
+                   | None -> ("", now, stale)))));
     if S.editing () <> None then
     match
       D.closest_sel ".editor-wrapper, .ui-fenced-code-editor"

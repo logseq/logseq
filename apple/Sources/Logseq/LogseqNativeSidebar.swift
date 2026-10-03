@@ -21,6 +21,9 @@ struct LogseqNativeSidebar: View {
   /// no-op upstream.
   @State private var selection: Int?
 
+  /// Theme flips bump appearanceVersion — colors resolve per body eval.
+  @ObservedObject private var appState = LogseqAppState.shared
+
   private struct Item: Identifiable {
     let nodeID: Int
     let title: String
