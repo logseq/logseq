@@ -115,6 +115,13 @@ import SwiftUI
   var hasIsOpen = false
   var centerHorizontally = false
   var outOfFlow = false
+  /// position:fixed full-viewport layer — escapes the collapsed overlay
+  /// containers and renders in the window-level overlay z-stack instead.
+  var fillsOverlay = false
+  var hasShadow = false
+  /// Stacking order inside LogseqOverlayLayer — dismiss/scrim layers go
+  /// below the dialog content (mount order alone is not reliable).
+  var overlayZ = 0
 
   private static let spacingUnit: CGFloat = 4 // tailwind spacing scale unit
 
@@ -280,6 +287,49 @@ import SwiftUI
     // must not consume layout space.
     case "cp__overlays", "cp__sidebar-help-btn":
       outOfFlow = true
+    // ---- shui dialog / cmdk modal shell (ui__dialog markup) ----
+    // These escape to the window-level overlay layer; the modal panel is
+    // centered horizontally and dropped ~100pt like the web cmdk.
+    case "cp__cmdk-dismiss":
+      outOfFlow = true; fillsOverlay = true; overlayZ = -2
+      // Full-window click catcher — clear fill keeps it invisible while
+      // the leaf-empty branch renders it as a tappable Rectangle.
+      background = Color.clear
+    case "ui__dialog-overlay":
+      outOfFlow = true; fillsOverlay = true; overlayZ = -1
+      background = Color.black.opacity(0.35)
+    case "ui__dialog-content":
+      outOfFlow = true; fillsOverlay = true; centerHorizontally = true
+    case "ui__dialog-main-content":
+      margin = EdgeInsets(top: 100, leading: 0, bottom: 0, trailing: 0)
+    case "cp__cmdk__modal":
+      fixedWidth = 620
+      background = LogseqColors.gray(LogseqColors.isDark ? 2 : 1)
+      cornerRadius = 8
+      hasShadow = true
+      padding = EdgeInsets(top: 6, leading: 0, bottom: 6, trailing: 0)
+    case "cp__cmdk-input-row":
+      padding = EdgeInsets(top: 10, leading: 12, bottom: 10, trailing: 12)
+    case "cp__cmdk-search-input":
+      if fontSize == nil { fontSize = 15 }
+    case "cp__cmdk-group-title", "cp__cmdk-group-header":
+      if fontSize == nil { fontSize = 11 }
+      foreground = LogseqColors.gray(10)
+      padding = EdgeInsets(top: 8, leading: 10, bottom: 4, trailing: 10)
+    case "cp__cmdk-tip", "cp__cmdk-hints", "cp__cmdk-hint",
+         "cp__cmdk-item-info", "cp__cmdk-empty", "cp__cmdk-search-only",
+         "cp__cmdk-group-count":
+      if fontSize == nil { fontSize = 12 }
+      foreground = LogseqColors.gray(10)
+    case "cp__cmdk-hints", "cp__cmdk-tip":
+      padding = EdgeInsets(top: 8, leading: 10, bottom: 8, trailing: 10)
+    case "cmdk-item-main":
+      isRow = true; fullWidth = true
+      padding = EdgeInsets(top: 6, leading: 8, bottom: 6, trailing: 8)
+      cornerRadius = 6
+    case "search-results":
+      isScrollable = true; maxHeight = 460
+      padding = EdgeInsets(top: 0, leading: 4, bottom: 0, trailing: 4)
     case "cp__sidebar-main-layout": isRow = true; grow = true
     case "cp__sidebar-main-content":
       grow = true; maxWidth = 960; centerHorizontally = true

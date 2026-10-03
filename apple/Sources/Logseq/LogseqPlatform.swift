@@ -67,6 +67,7 @@ final class NSWeakReferenceBox {
 @MainActor final class LogseqPlatform {
   weak var runtime: LogseqRuntime?
   private var appearanceObservation: NSKeyValueObservation?
+  private var keyMonitor: Any?
   private let logger = Logger(subsystem: "com.logseq.native", category: "platform")
 
   func attach() {
@@ -80,11 +81,75 @@ final class NSWeakReferenceBox {
     ) { [weak self] _ in
       Task { @MainActor in self?.pushWindowSize() }
     }
+    // Document-level keydown: web dispatches DOM keydown to document
+    // listeners for every key; the native side only emits from the text
+    // controls while they are first responder. Forward window-level keys
+    // the same way so global handlers (cmdk open, Escape menus, mod
+    // chords) fire regardless of focus. Chords the OS/editing owns are
+    // left alone; plain keys while a text control is focused also stay
+    // local to avoid double-dispatch with the field's own emit path.
+    keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) {
+      [weak self] event in
+      guard let self else { return event }
+      let editing = event.window?.firstResponder is NSTextView
+        || event.window?.firstResponder is NSTextField
+      let chord =
+        event.modifierFlags.contains(.command)
+        || event.modifierFlags.contains(.control)
+      if editing && !chord { return event }
+      let char = (event.charactersIgnoringModifiers ?? "").lowercased()
+      // Clipboard/edit/quit chords stay native; forwarding them would
+      // swallow AppKit behavior the OCaml side does not reproduce.
+      if chord && ["q", "w", "c", "v", "x", "a", "z", "h"].contains(char) {
+        return event
+      }
+      self.sendKeyDown(event)
+      return chord ? nil : event
+    }
   }
 
   func detach() {
     appearanceObservation?.invalidate()
     appearanceObservation = nil
+    if let keyMonitor {
+      NSEvent.removeMonitor(keyMonitor)
+      self.keyMonitor = nil
+    }
+  }
+
+  private func sendKeyDown(_ event: NSEvent) {
+    var key = event.charactersIgnoringModifiers?.lowercased() ?? ""
+    var which = Int(event.keyCode)
+    switch event.keyCode {
+    case 36: key = "Enter"; which = 13
+    case 48: key = "Tab"; which = 9
+    case 51: key = "Backspace"; which = 8
+    case 53: key = "Escape"; which = 27
+    case 49: key = " "; which = 32
+    case 117: key = "Delete"; which = 46
+    case 115: key = "Home"; which = 36
+    case 116: key = "End"; which = 35
+    case 123: key = "ArrowLeft"; which = 37
+    case 124: key = "ArrowRight"; which = 39
+    case 125: key = "ArrowDown"; which = 40
+    case 126: key = "ArrowUp"; which = 38
+    default: break
+    }
+    let flags = event.modifierFlags
+    let json =
+      "{\"key\":\(jsonString(key)),\"which\":\(which)"
+      + ",\"metaKey\":\(flags.contains(.command))"
+      + ",\"ctrlKey\":\(flags.contains(.control))"
+      + ",\"shiftKey\":\(flags.contains(.shift))"
+      + ",\"altKey\":\(flags.contains(.option))}"
+    runtime?.sendPlatformEvent(name: "keydown", json: json)
+  }
+
+  private func jsonString(_ s: String) -> String {
+    let escaped = s
+      .replacingOccurrences(of: "\\", with: "\\\\")
+      .replacingOccurrences(of: "\"", with: "\\\"")
+    return "\"\(escaped)\""
   }
 
   private func pushAppearance() {
@@ -143,8 +208,20 @@ final class NSWeakReferenceBox {
     return LogseqElementRegistry.shared.element(id)
   }
 
-  private func domOp(name: String, json: String) {
+  private func domOp(name: String, json: String, attempt: Int = 0) {
     let dict = jsonDict(json)
+    // Element-targeted ops can arrive before SwiftUI mounts the fresh
+    // node — commit happens synchronously in OCaml but makeNSView
+    // registration lands on a later runloop turn. Retry briefly rather
+    // than dropping the op (on the web the node always exists already).
+    if attempt < 40, dict["ref"] != nil, refID(dict) != nil,
+      target(dict) == nil
+    {
+      DispatchQueue.main.asyncAfter(deadline: .now() + 0.02) {
+        self.domOp(name: name, json: json, attempt: attempt + 1)
+      }
+      return
+    }
     switch name {
     case "document-title":
       if let title = dict["title"] as? String {

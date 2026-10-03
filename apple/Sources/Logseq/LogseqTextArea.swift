@@ -37,6 +37,10 @@ struct LogseqTextArea: NSViewRepresentable {
     scrollView.borderType = .noBorder
     context.coordinator.textView = textView
     context.coordinator.owner = self
+    // Elements without a DOM id are still addressable by node ref —
+    // OCaml's doc_query_selector emits "#ref": "node-<id>" for them.
+    LogseqElementRegistry.shared.register(
+      "node-\(self.context.nodeID)", context.coordinator)
     if !domID.isEmpty {
       LogseqElementRegistry.shared.register(domID, context.coordinator)
     }
@@ -61,6 +65,8 @@ struct LogseqTextArea: NSViewRepresentable {
                 length: min(selected.length, length - selected.location)))
       context.coordinator.suppressEvents = false
     }
+    LogseqElementRegistry.shared.register(
+      "node-\(self.context.nodeID)", context.coordinator)
     if !domID.isEmpty {
       LogseqElementRegistry.shared.register(domID, context.coordinator)
     }
@@ -202,6 +208,8 @@ struct LogseqInputField: NSViewRepresentable {
     field.stringValue = text
     context.coordinator.field = field
     context.coordinator.owner = self
+    LogseqElementRegistry.shared.register(
+      "node-\(self.context.nodeID)", context.coordinator)
     if !domID.isEmpty {
       LogseqElementRegistry.shared.register(domID, context.coordinator)
     }
@@ -224,6 +232,41 @@ struct LogseqInputField: NSViewRepresentable {
     weak var field: NSTextField?
     var owner: LogseqInputField?
 
+    func control(
+      _ control: NSControl, textView: NSTextView,
+      doCommandBy commandSelector: Selector
+    ) -> Bool {
+      // DOM-shaped keydown for navigation keys — cmdk/list keymaps on the
+      // OCaml side decide semantics. Swallow Enter/Escape so the field's
+      // default action/abortEditing doesn't fire alongside.
+      let key: String
+      var which = 0
+      var swallow = false
+      switch commandSelector {
+      case #selector(NSResponder.insertNewline(_:)):
+        key = "Enter"; which = 13; swallow = true
+      case #selector(NSResponder.moveUp(_:)):
+        key = "ArrowUp"; which = 38
+      case #selector(NSResponder.moveDown(_:)):
+        key = "ArrowDown"; which = 40
+      case #selector(NSResponder.cancelOperation(_:)):
+        key = "Escape"; which = 27; swallow = true
+      case #selector(NSResponder.insertTab(_:)):
+        key = "Tab"; which = 9
+      case #selector(NSResponder.insertBacktab(_:)):
+        key = "Tab"; which = 9
+      default:
+        return false
+      }
+      let shift = commandSelector == #selector(NSResponder.insertBacktab(_:))
+      emit("keydown", payload: [
+        "key": key, "which": which,
+        "shiftKey": shift,
+        "metaKey": false, "ctrlKey": false, "altKey": false,
+      ])
+      return swallow
+    }
+
     func controlTextDidChange(_ notification: Notification) {
       guard let field else { return }
       emit("input", payload: ["value": field.stringValue])
@@ -245,6 +288,11 @@ struct LogseqInputField: NSViewRepresentable {
 
     func domSetValue(_ value: String) {
       field?.stringValue = value
+    }
+
+    func domSetSelectionRange(_ start: Int, _ end: Int) {
+      field?.currentEditor()?.selectedRange =
+        NSRange(location: start, length: max(0, end - start))
     }
 
     func emit(_ name: String, payload: [String: Any] = [:]) {
