@@ -293,7 +293,7 @@ let segment _ (_ : segmenter) : string array = [||]
 
 (* ---------- rects ---------- *)
 
-let bounding_rect (_ : element) : rect = prop "rect" Js.Json.null
+let bounding_rect (el : element) : rect = prop "rect" el
 
 let rect_left (r : rect) : float =
   Option.value (num_prop "left" r) ~default:0.

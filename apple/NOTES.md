@@ -337,3 +337,36 @@ behavior), `.left-sidebar-resizer`, `.cp__graphs-selector`,
 `.sidebar-drop-indicator`, `.ls-page-title-actions`,
 `.extensions__code-lang`. The sidebar `.resizer` and
 `.block-children-left-border` are mapped/hidden.
+
+### Context menus + CustomEvent detail (right-click milestone)
+- No SwiftUI right-click gesture: `.rightMouseDown` NSEvent monitor
+  hit-tests `LogseqFrameStore.entries` (always-on frame registry,
+  smallest-area-wins) and emits `contextmenu` with clientX/Y +
+  target snapshot through the hit node's extension context
+  (nodeID -> context map in LogseqElementRegistry). Textareas/
+  inputs pass through for the native edit menu.
+- `NSEvent.locationInWindow` is bottom-left-origin but
+  `contentView.convert` already returns top-left coords when the
+  hosting view is flipped — flipping again put every contextmenu
+  hit ~500px off (menu opened at the wrong spot / wrong node).
+  `windowPoint` flips only when `!contentView.isFlipped`.
+- `Platform.dispatch` emitted the raw detail; web `dispatch` wraps
+  it in `new CustomEvent(name, {detail})` so every listener reads
+  `json_field "detail"`. Without the wrapper ALL ls:* CustomEvent
+  dispatches silently died — ls:editor-command (context menu,
+  slash commands), ls:open-right-sidebar, ls:toast, ls:navigate.
+- `Platform.host_request` was never wired — `clipboard-write`,
+  `ui-state` requests hit the default no-op. Now set to the same
+  `platform_request` external as `Host.set_host_op`.
+- Snapshots carry `rect` (from the frame store) + `node-id`, so
+  `Dom_ext.bounding_rect` now returns real geometry for event
+  targets and their `closest()` ancestors (cm submenu anchors).
+- `mousemove` emits only on entered-node change (listeners do
+  `closest()` checks, no per-pixel need); submenus open on hover
+  via `bounding_rect` of the trigger.
+- Menu styling mapped: dropdown-menu-item/sub-trigger/sub-content,
+  heading row, color swatches (`var(--color-*-500)` resolved by
+  parseCSSColor → namedHue), shortcut hints.
+- Remaining gaps: icon/emoji picker surface (Set icon/Add
+  reaction), `add-comment`/`copy-export-as` stubbed OCaml-side
+  ("editor command not implemented"), hover highlight minimal.

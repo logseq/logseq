@@ -57,7 +57,7 @@ private struct LogseqRuntimeHost: View {
           .overlay(alignment: .topLeading) { LogseqOverlayLayer() }
           .coordinateSpace(name: "logseqWindow")
           .onPreferenceChange(LogseqFrameKey.self) {
-            LogseqFrameStore.frames = $0
+            LogseqFrameStore.entries = $0
           }
       } else {
         ProgressView("Opening Logseq")

@@ -230,6 +230,9 @@ let initialize platform_code host_code (_payload : string) : string =
   Host.set_wakeup (fun () -> wakeup ());
   Host.set_host_op (fun name payload ->
       platform_request (name ^ "\n" ^ payload));
+  (* Platform's request channel ("<op>\n<payload>") shares the same wire
+     as Host's — clipboard-write, ui-state, etc. *)
+  Platform.host_request := platform_request;
   ignore (Lui_app.start app);
   ignore (Lui_app.flush app);
   Sdk_api.install ();

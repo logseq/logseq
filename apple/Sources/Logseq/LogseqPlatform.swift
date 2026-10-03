@@ -39,6 +39,9 @@ extension LogseqElement {
   /// nodes whose own context is already dead (drop-node during reconcile).
   /// `app-container` is the stable root — it outlives everything below it.
   var eventAnchor: LUIAppleExtensionViewContext?
+  /// Live nodeID → extension context, so window-level hit resolution
+  /// (right-click → contextmenu) can emit through the hit node's context.
+  private var contexts: [Int: LUIAppleExtensionViewContext] = [:]
 
   func register(_ id: String, _ element: LogseqElement) {
     elements[id] = NSWeakReferenceBox(element)
@@ -46,6 +49,18 @@ extension LogseqElement {
 
   func registerAnchor(_ id: String, _ context: LUIAppleExtensionViewContext) {
     if id == "app-container" || eventAnchor == nil { eventAnchor = context }
+  }
+
+  func registerContext(_ context: LUIAppleExtensionViewContext) {
+    contexts[context.nodeID] = context
+  }
+
+  func unregisterContext(_ nodeID: Int) {
+    contexts[nodeID] = nil
+  }
+
+  func context(forNode nodeID: Int) -> LUIAppleExtensionViewContext? {
+    contexts[nodeID]
   }
 
   func unregister(_ id: String) {
@@ -68,6 +83,9 @@ final class NSWeakReferenceBox {
   weak var runtime: LogseqRuntime?
   private var appearanceObservation: NSKeyValueObservation?
   private var keyMonitor: Any?
+  private var contextMenuMonitor: Any?
+  private var mouseMonitor: Any?
+  private var lastMouseHitNode: Int?
   private let logger = Logger(subsystem: "com.logseq.native", category: "platform")
 
   func attach() {
@@ -106,6 +124,40 @@ final class NSWeakReferenceBox {
       self.sendKeyDown(event)
       return chord ? nil : event
     }
+    // DOM contextmenu: SwiftUI has no right-click gesture, so resolve the
+    // hit from the frame registry and emit through the hit node's context —
+    // OCaml's document listener does closest(.ls-block/.block-tag) on the
+    // payload's ancestor chain and opens its own menu at clientX/Y.
+    // The event is consumed (no default menu) except over text inputs,
+    // where the NSTextView edit menu still applies.
+    contextMenuMonitor = NSEvent.addLocalMonitorForEvents(matching: .rightMouseDown) {
+      event in
+      guard let window = event.window, let contentView = window.contentView
+      else { return event }
+      let point = LogseqPlatform.windowPoint(event, in: contentView)
+      guard let hit = LogseqFrameStore.hitTest(point) else { return event }
+      if hit.tag == "textarea" || hit.tag == "input" { return event }
+      LogseqPlatform.emitContextMenu(nodeID: hit.nodeID, point: point)
+      return nil
+    }
+    // DOM mousemove at node granularity — the OCaml listeners only need
+    // which element the pointer is over (context-menu submenu hovers,
+    // ref preview arming), so emit once per entered node rather than per
+    // pixel. The event is never consumed.
+    mouseMonitor = NSEvent.addLocalMonitorForEvents(matching: .mouseMoved) {
+      [weak self] event in
+      guard let self,
+        let window = event.window, let contentView = window.contentView
+      else { return event }
+      let point = LogseqPlatform.windowPoint(event, in: contentView)
+      guard let hit = LogseqFrameStore.hitTest(point),
+        let context = LogseqElementRegistry.shared.context(forNode: hit.nodeID)
+      else { return event }
+      if hit.nodeID == lastMouseHitNode { return event }
+      lastMouseHitNode = hit.nodeID
+      LogseqPlatform.emitMouseMove(context: context, nodeID: hit.nodeID, point: point)
+      return event
+    }
   }
 
   func detach() {
@@ -115,6 +167,70 @@ final class NSWeakReferenceBox {
       NSEvent.removeMonitor(keyMonitor)
       self.keyMonitor = nil
     }
+    if let contextMenuMonitor {
+      NSEvent.removeMonitor(contextMenuMonitor)
+      self.contextMenuMonitor = nil
+    }
+    if let mouseMonitor {
+      NSEvent.removeMonitor(mouseMonitor)
+      self.mouseMonitor = nil
+    }
+  }
+
+  /// `event.locationInWindow` into the top-left-origin space the frame
+  /// store reports in (`.named("logseqWindow")`). `convert(_:from:)`
+  /// honors the content view's flippedness — flip only when it doesn't.
+  private static func windowPoint(_ event: NSEvent, in contentView: NSView)
+    -> CGPoint
+  {
+    let p = contentView.convert(event.locationInWindow, from: nil)
+    return contentView.isFlipped
+      ? CGPoint(x: p.x, y: p.y)
+      : CGPoint(x: p.x, y: contentView.bounds.height - p.y)
+  }
+
+  private static func emitContextMenu(nodeID: Int, point: CGPoint) {
+    if ProcessInfo.processInfo.environment["LOGSEQ_DUMP"] != nil {
+      try? JSONSerialization.data(withJSONObject: [
+        "nodeId": nodeID, "x": point.x, "y": point.y,
+        "hasContext": LogseqElementRegistry.shared.context(forNode: nodeID)
+          != nil,
+      ]).write(to: URL(fileURLWithPath: "/tmp/cm-hit.json"))
+    }
+    guard let context = LogseqElementRegistry.shared.context(forNode: nodeID)
+    else { return }
+    var payload: [String: Any] = [
+      "clientX": Double(point.x),
+      "clientY": Double(point.y),
+      "button": 2,
+      "nodeId": nodeID,
+    ]
+    payload["target"] = LogseqDOMSnapshot.snapshot(for: context)
+    guard
+      let data = try? JSONSerialization.data(withJSONObject: payload),
+      let json = String(data: data, encoding: .utf8)
+    else { return }
+    try? context.emit(
+      name: "dom-event",
+      values: ["name": .string("contextmenu"), "payload": .string(json)])
+  }
+
+  private static func emitMouseMove(
+    context: LUIAppleExtensionViewContext, nodeID: Int, point: CGPoint
+  ) {
+    var payload: [String: Any] = [
+      "clientX": Double(point.x),
+      "clientY": Double(point.y),
+      "nodeId": nodeID,
+    ]
+    payload["target"] = LogseqDOMSnapshot.snapshot(for: context)
+    guard
+      let data = try? JSONSerialization.data(withJSONObject: payload),
+      let json = String(data: data, encoding: .utf8)
+    else { return }
+    try? context.emit(
+      name: "dom-event",
+      values: ["name": .string("mousemove"), "payload": .string(json)])
   }
 
   private func sendKeyDown(_ event: NSEvent) {
@@ -262,8 +378,9 @@ final class NSWeakReferenceBox {
     case "download-text", "download-binary", "save-file":
       saveFile(name: name, dict: dict)
     case "dump-frames":
-      let parts = LogseqFrameStore.frames.sorted(by: { $0.key < $1.key }).map {
-        "\"\($0.key)\":[\($0.value.origin.x),\($0.value.origin.y),\($0.value.width),\($0.value.height)]"
+      let parts = LogseqFrameStore.entries.sorted(by: { $0.key < $1.key }).map {
+        let r = $0.value.rect
+        return "\"\($0.key)\":[\(r.origin.x),\(r.origin.y),\(r.width),\(r.height)]"
       }
       let out = "{" + parts.joined(separator: ",") + "}"
       try? out.write(
