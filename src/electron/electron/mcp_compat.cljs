@@ -1065,6 +1065,51 @@
                       (merge {:verified true :diagnostic nil}
                          (entity-write-digest current)))))))))))))
 
+(defn remove-property
+  [api-fn args]
+  (let [target-uuid (aget args "target_uuid")
+        ident (query-ident (aget args "property_ident"))
+        verbose? (not (false? (aget args "verbose")))]
+    (when-not (and (string? target-uuid)
+                   (re-matches page-stats-uuid-pattern target-uuid))
+      (throw (js/Error. "target_uuid must be a UUID")))
+    (when-not ident
+      (throw (js/Error. "Expected an exact namespaced property ident")))
+    (when-not (string/starts-with? (subs ident 1) "plugin.property.")
+      (throw (js/Error. (str "Property " ident " is outside this caller's namespace"))))
+    (let [target-query (str "[:find (pull ?target [*]) . :where "
+                            "[?target :block/uuid #uuid \"" target-uuid "\"]]")
+          property-query (str "[:find (pull ?property [*]) . :where "
+                              "[?property :db/ident " ident "]]" )]
+      (p/let [target-result (api-fn "logseq.DB.datascriptQuery" [target-query])
+              target (js->clj target-result :keywordize-keys true)
+              property-result (api-fn "logseq.DB.datascriptQuery" [property-query])
+              property (js->clj property-result :keywordize-keys true)]
+        (when-not target
+          (throw (js/Error. (str "No entity exists with exact UUID " target-uuid))))
+        (when-not property
+          (throw (js/Error. (str "No property exists with exact ident " ident))))
+        (let [previous (property-entity-value target ident)]
+          (p/let [response (api-fn "logseq.DB.removeBlockProperty" [target-uuid ident])]
+            (when-let [error (and response (aget response "error"))]
+              (throw (js/Error. (str error))))
+            (p/let [current-result (api-fn "logseq.DB.datascriptQuery" [target-query])
+                    current (js->clj current-result :keywordize-keys true)]
+              (when-not current
+                (throw (js/Error. (str "Target " target-uuid " disappeared during property removal"))))
+              (when (some? (property-entity-value current ident))
+                (throw (js/Error. (str "Property " ident " is still set on the target"))))
+              (if verbose?
+                {:response (js->clj response :keywordize-keys true)
+                 :verified_state current
+                 :recovered_after_timeout false
+                 :previous_state target
+                 :diagnostic nil
+                 :verified true
+                 :observed_state nil}
+                (merge {:verified true :diagnostic nil}
+                  (entity-write-digest current))))))))))
+
 (defn get-block
   [api-fn args]
   (let [block-uuid (aget args "block_uuid")
@@ -1302,6 +1347,7 @@
    :findDuplicateTitles ["logseq.DB.datascriptQuery"]
    :getProperyUsers ["logseq.DB.datascriptQuery"]
    :createProperty ["logseq.DB.upsertProperty"]
+   :removeProperty ["logseq.DB.datascriptQuery" "logseq.DB.removeBlockProperty"]
    :addProperty ["logseq.DB.datascriptQuery" "logseq.DB.upsertBlockProperty"]
    :deleteProperty ["logseq.DB.datascriptQuery"
               "logseq.DB.removeProperty"
@@ -1325,6 +1371,7 @@
   "logseq.DB.upsertBlockProperty" ["__mcp_capability_probe__"
                                     "__mcp_capability_probe__"
                                     "__mcp_capability_probe__"]
+  "logseq.DB.removeBlockProperty" ["__mcp_capability_probe__" "__mcp_capability_probe__"]
   "logseq.DB.removeProperty" ["__mcp_capability_probe__"]
   "logseq.DB.removeBlock" ["__mcp_capability_probe__"]
    "logseq.app.search" ["__mcp_capability_probe__" #js {:enable-snippet? false}]})

@@ -54,7 +54,7 @@
                     (done)))
           (p/catch (fn [error]
                      (is false (str error))
-                     (done)))))))
+                    (done)))))))
 
 (deftest capabilities-refuses-non-db-graphs
   (let [api (fn [method _args]
@@ -631,6 +631,55 @@
                            (fn [method args] (swap! calls conj [method args]))
                            #js {"property_ident" "Flag"})))
     (is (empty? @calls))))
+
+(deftest remove-property-clears-only-the-target-value-and-verifies
+  (let [target-uuid "00000000-0000-4000-8000-000000000031"
+        ident ":plugin.property._test_plugin/Score"
+        calls (atom [])
+        present? (atom true)
+        api (fn [method args]
+              (swap! calls conj [method args])
+              (case method
+                "logseq.DB.removeBlockProperty" (do (reset! present? false) nil)
+                "logseq.DB.datascriptQuery"
+                (let [query (first args)]
+                  (cond
+                    (string/includes? query "block/uuid #uuid")
+                    (cond-> {:id 10 :uuid target-uuid :title "Target"}
+                      @present? (assoc (keyword ident) 7))
+                    (string/includes? query "db/ident")
+                    {:id 20 :ident ident :title "Score"}
+                    :else nil))
+                nil))]
+    (async done
+      (-> (p/then (mcp-compat/remove-property api
+                                             #js {"target_uuid" target-uuid
+                                                  "property_ident" ident})
+                  (fn [result]
+                    (is (true? (:verified result)))
+                    (is (= target-uuid (get-in result [:verified_state :uuid])))
+                    (is (some #(= "logseq.DB.removeBlockProperty" (first %)) @calls))))
+          (p/catch (fn [error]
+                     (is false (str error))))
+          (p/finally done)))))
+
+(deftest remove-property-reports-a-no-op-removal
+  (let [target-uuid "00000000-0000-4000-8000-000000000032"
+        ident ":plugin.property._test_plugin/Score"
+        api (fn [_method args]
+              (if (string/includes? (first args) "db/ident")
+                {:id 20 :ident ident :title "Score"}
+                (assoc {:id 10 :uuid target-uuid :title "Target"}
+                       (keyword ident) 7)))]
+    (async done
+      (-> (p/then (mcp-compat/remove-property api
+                                             #js {"target_uuid" target-uuid
+                                                  "property_ident" ident})
+                  (fn [_]
+                    (is false "removeProperty should fail when the value remains")))
+          (p/catch (fn [error]
+                     (is (string/includes? (.-message error) "still set on the target"))))
+          (p/finally done)))))
 
 (deftest add-property-verifies-a-materialized-literal-value
   (let [target-uuid "00000000-0000-4000-8000-000000000021"

@@ -207,6 +207,13 @@
             :inputSchema #js {:property_ident (z/string)
                         :acknowledge_value_loss (-> (z/boolean) .optional)
                         :verbose (-> (z/boolean) .optional)}}}
+  :removeProperty
+  {:fn mcp-compat/remove-property
+   :config #js {:title "Remove Property Value"
+            :description "Clear one property value from a page or block while leaving the property definition and other values intact."
+            :inputSchema #js {:target_uuid (z/string)
+                        :property_ident (z/string)
+                        :verbose (-> (z/boolean) .optional)}}}
    :getBlock
    {:fn mcp-compat/get-block
     :config #js {:title "Get Block"
