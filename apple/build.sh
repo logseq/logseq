@@ -121,5 +121,12 @@ for theme_png in light-theme.png dark-theme.png system-theme.png; do
   [[ -f $src_png ]] && cp "$src_png" "$app_dir/Contents/Resources/$theme_png"
 done
 
+# SwiftPM resource bundles (Bundle.module): the generated
+# resource_bundle_accessor only falls back to the .build path in a dev
+# checkout — a shipped .app must carry them at its root.
+for bundle in "$product_dir"/*.bundle; do
+  [[ -d $bundle ]] && cp -R "$bundle" "$app_dir/"
+done
+
 codesign --force --sign - --timestamp=none "$app_dir" || true
 echo "built: $app_dir"
