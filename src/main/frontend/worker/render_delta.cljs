@@ -65,20 +65,68 @@
     (fail! "Block cannot be replaced and deleted"
            {:block-uuid block-uuid})))
 
+(defn- eavt-scalar
+  [db eid attr]
+  (some-> (first (d/datoms db :eavt eid attr)) :v))
+
+(defn- recycled-chain?
+  "Whether the entity or any ancestor is marked deleted. Matches
+   frontend.worker.handler.block/direct-children-membership so incremental
+   patches hide and restore the same rows as a full children-slot load."
+  [db entity-id]
+  (loop [eid entity-id
+         seen #{}]
+    (cond
+      (nil? eid) false
+      (contains? seen eid) false
+      (some? (eavt-scalar db eid :logseq.property/deleted-at)) true
+      :else (recur (eavt-scalar db eid :block/parent) (conj seen eid)))))
+
+(defn- child-entity-ids
+  [db parent-id]
+  (map :e (d/datoms db :avet :block/parent parent-id)))
+
+(defn- descendant-entity-ids
+  [db root-id]
+  (loop [pending (vec (child-entity-ids db root-id))
+         seen #{}]
+    (if-let [id (peek pending)]
+      (if (contains? seen id)
+        (recur (pop pending) seen)
+        (recur (into (pop pending) (child-entity-ids db id))
+               (conj seen id)))
+      seen)))
+
+(defn- recycle-chain-flipped?
+  [db-before db-after entity-id]
+  (not= (recycled-chain? db-before entity-id)
+        (recycled-chain? db-after entity-id)))
+
 (defn- structural-entity-ids
-  [tx-data]
-  (into #{}
-        (keep (fn [datom]
-                (when (contains? membership-affecting-attrs (:a datom))
-                  (:e datom))))
-        tx-data))
+  "Entities whose own membership-affecting attrs changed, plus descendants of
+   any such entity whose recycle-chain visibility flipped. Children membership
+   hides every node under a recycled ancestor, so restoring, recycling, or
+   moving a node across that boundary must refresh already-open descendant
+   children slots. Live-to-live parent moves do not walk descendants."
+  [{:keys [db-before db-after tx-data]}]
+  (let [direct (into #{}
+                     (keep (fn [datom]
+                             (when (contains? membership-affecting-attrs (:a datom))
+                               (:e datom))))
+                     tx-data)]
+    (into direct
+          (mapcat (fn [entity-id]
+                    (concat (descendant-entity-ids db-before entity-id)
+                            (descendant-entity-ids db-after entity-id))))
+          (filter #(recycle-chain-flipped? db-before db-after %)
+                  direct))))
 
 (defn- membership-at
   [db entity-id]
   (when-let [entity (d/entity db entity-id)]
     (when-not (or (:block/closed-value-property entity)
                   (:logseq.property/created-from-property entity)
-                  (:logseq.property/deleted-at entity))
+                  (recycled-chain? db entity-id))
       (when-let [parent (:block/parent entity)]
         (let [block-uuid (:block/uuid entity)
               parent-uuid (:block/uuid parent)
@@ -104,7 +152,7 @@
     operations))
 
 (defn- membership-operations
-  [{:keys [db-before db-after tx-data]}]
+  [{:keys [db-before db-after] :as tx-report}]
   (reduce
    (fn [operations entity-id]
      (let [before (membership-at db-before entity-id)
@@ -115,7 +163,7 @@
              (append-membership-op :remove before)
              (append-membership-op :upsert after)))))
    {}
-   (structural-entity-ids tx-data)))
+   (structural-entity-ids tx-report)))
 
 (defn- ordered-operations
   [operations]
