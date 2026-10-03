@@ -99,8 +99,10 @@ page handling. `getProperyUsers` reports literal and resolved property values
 for an exact ident. `createProperty` verifies the returned ident and stored
 type; its capability probe uses a namespace-invalid title that is rejected
 before any write. `deleteProperty` requires value-loss acknowledgement and
-verifies removal before sweeping orphaned value blocks. There are 30
-registered tools: six API-backed tools and 24 compatibility data tools.
+verifies removal before sweeping orphaned value blocks. `addProperty` checks
+the writable namespace and type, deduplicates repeated many-values, and
+verifies the stored value. There are 31 registered tools: six API-backed
+tools and 25 compatibility data tools.
 `capabilities` reports inconclusive probes as `unknown`; write probes use
 invalid arguments, and `upsertNodes` is neither probed nor reported.
 Entry criteria still outstanding:

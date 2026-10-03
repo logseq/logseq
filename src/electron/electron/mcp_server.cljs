@@ -191,6 +191,15 @@
                         :schema (-> (z/object #js {}) .passthrough)
                         :options (-> (z/object #js {}) .passthrough .optional)
                         :verbose (-> (z/boolean) .optional)}}}
+    :addProperty
+    {:fn mcp-compat/add-property
+     :config #js {:title "Add Property"
+              :description "Set a property value on a page or block, validating its namespace/type and verifying the stored value."
+              :inputSchema #js {:target_uuid (z/string)
+                          :property_ident (z/string)
+                          :value (z/any)
+                          :options (-> (z/object #js {}) .passthrough .optional)
+                          :verbose (-> (z/boolean) .optional)}}}
   :deleteProperty
   {:fn mcp-compat/delete-property
    :config #js {:title "Delete Property"

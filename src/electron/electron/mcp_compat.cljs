@@ -926,6 +926,145 @@
                          :page nil
                          :diagnostic diagnostic}))))))))))))
 
+(def ^:private reference-property-types
+  #{"node" "page" "class" "property"})
+
+(defn- property-value-id
+  [value]
+  (if (map? value)
+    (or (:db/id value) (:id value))
+    value))
+
+(defn valid-reference-property-value?
+  [value]
+  (let [value-id (property-value-id value)]
+    (and (number? value-id)
+         (js/Number.isInteger value-id)
+          (not (boolean? value-id)))))
+
+(defn- held-property-values
+  [value]
+  (cond
+    (nil? value) []
+    (sequential? value) (vec value)
+    :else [value]))
+
+(defn- resolve-property-values
+  [api-fn held]
+  (let [held (held-property-values held)
+        entity-ids (->> held
+                        (map property-value-id)
+                        (filter #(and (number? %) (js/Number.isInteger %)
+                                      (not (boolean? %))))
+                        set)
+        resolve-query "[:find [(pull ?e [:db/id :db/ident :block/title :logseq.property/value]) ...] :in $ [?e ...] :where [?e ?a _]]"]
+    (p/let [entities-result (if (seq entity-ids)
+                              (api-fn "logseq.DB.datascriptQuery"
+                                      [resolve-query (clj->js (vec entity-ids))])
+                              [])
+            entities (into {}
+                           (keep (fn [entity]
+                                   (let [id (or (:id entity) (:db/id entity))]
+                                     (when (some? id) [id entity]))))
+                           (query-result-rows entities-result))]
+      (vec
+       (mapcat (fn [value]
+                 (let [value-id (property-value-id value)
+                       entity (when (number? value-id) (get entities value-id))
+                       resolved (or (:logseq.property/value entity)
+                                    (:value entity)
+                                    (:title entity))]
+                   (cond-> []
+                     (some? value-id) (conj value-id)
+                     (some? resolved) (conj resolved)
+                     (nil? value-id) (conj value))))
+               held)))))
+
+(defn- property-entity-value
+  [entity ident]
+  (let [bare-ident (subs ident 1)]
+    (some (fn [[key value]]
+            (when (= bare-ident (string/replace-first (str key) #"^:+" ""))
+              value))
+          entity)))
+
+(defn- entity-write-digest
+  [entity]
+  (cond-> {:uuid (:uuid entity)
+           :parent (let [parent (:parent entity)]
+                     (if (map? parent) (:id parent) parent))
+           :page (let [page (:page entity)]
+                   (if (map? page) (:id page) page))}
+    (some? (:order entity)) (assoc :order (:order entity))))
+
+(defn add-property
+  [api-fn args]
+  (let [target-uuid (aget args "target_uuid")
+        ident (query-ident (aget args "property_ident"))
+        value-js (aget args "value")
+        value (js->clj value-js :keywordize-keys true)
+        options (or (aget args "options") #js {})
+        verbose? (not (false? (aget args "verbose")))]
+    (when-not (and (string? target-uuid)
+                   (re-matches page-stats-uuid-pattern target-uuid))
+      (throw (js/Error. "target_uuid must be a UUID")))
+    (when-not ident
+      (throw (js/Error. "Expected an exact namespaced property ident")))
+    (when-not (string/starts-with? (subs ident 1) "plugin.property.")
+      (throw (js/Error. (str "Property " ident " is outside this caller's namespace"))))
+    (let [target-query (str "[:find (pull ?target [*]) . :where "
+                            "[?target :block/uuid #uuid \"" target-uuid "\"]]")
+          property-query (str "[:find (pull ?property [*]) . :where "
+                              "[?property :db/ident " ident "]]" )]
+      (p/let [target-result (api-fn "logseq.DB.datascriptQuery" [target-query])
+              target (js->clj target-result :keywordize-keys true)
+              property-result (api-fn "logseq.DB.datascriptQuery" [property-query])
+              property (js->clj property-result :keywordize-keys true)]
+        (when-not target
+          (throw (js/Error. (str "No entity exists with exact UUID " target-uuid))))
+        (when-not property
+          (throw (js/Error. (str "No property exists with exact ident " ident))))
+        (let [type (or (:logseq.property/type property) (:type property))
+              type (if (keyword? type) (name type) type)
+              value-id (property-value-id value)]
+          (when (and (contains? reference-property-types type)
+                     (not (valid-reference-property-value? value)))
+            (throw (js/Error. (str ident " is a " (pr-str type)
+                                   " property, so its value must be an entity id"))))
+          (let [many? (string/ends-with? (str (:db/cardinality property)
+                                               (:cardinality property)) "/many")
+                previous-value (property-entity-value target ident)]
+            (p/let [previous-values (resolve-property-values api-fn previous-value)]
+              (if (and many? (some #(= value-id %) previous-values))
+                (let [diagnostic (str ident " already holds this value and is cardinality-many; writing again would add a duplicate rather than replace it, so nothing was sent.")]
+                  (if verbose?
+                    {:response nil :verified_state target :recovered_after_timeout false
+                     :previous_state target :diagnostic diagnostic :verified true
+                     :observed_state nil}
+                    (merge {:verified true :diagnostic diagnostic}
+                           (entity-write-digest target))))
+                (p/let [response (api-fn "logseq.DB.upsertBlockProperty"
+                                          [target-uuid ident value-js options])]
+                  (when-let [error (and response (aget response "error"))]
+                    (throw (js/Error. (str error))))
+                  (p/let [current-result (api-fn "logseq.DB.datascriptQuery" [target-query])
+                          current (js->clj current-result :keywordize-keys true)
+                          held-values (resolve-property-values api-fn
+                                                               (property-entity-value current ident))]
+                    (when-not current
+                      (throw (js/Error. (str "Target " target-uuid " disappeared during property write"))))
+                    (when-not (some #(= value-id %) held-values)
+                      (if (some? (property-entity-value current ident))
+                        (throw (js/Error. (str "Property " ident " was set but its stored value does not match the requested value")))
+                        (throw (js/Error. (str "Property " ident " was not set on the target")))))
+                    (if verbose?
+                      {:response (js->clj response :keywordize-keys true)
+                       :verified_state current :recovered_after_timeout false
+                       :previous_state target :diagnostic nil :verified true
+                       :observed_state current}
+                      (merge {:verified true :diagnostic nil}
+                         (entity-write-digest current)))))))))))))
+
 (defn get-block
   [api-fn args]
   (let [block-uuid (aget args "block_uuid")
@@ -1163,6 +1302,7 @@
    :findDuplicateTitles ["logseq.DB.datascriptQuery"]
    :getProperyUsers ["logseq.DB.datascriptQuery"]
    :createProperty ["logseq.DB.upsertProperty"]
+   :addProperty ["logseq.DB.datascriptQuery" "logseq.DB.upsertBlockProperty"]
    :deleteProperty ["logseq.DB.datascriptQuery"
               "logseq.DB.removeProperty"
               "logseq.DB.removeBlock"]
@@ -1182,6 +1322,9 @@
    "logseq.cli.listProperties" [#js {}]
   "logseq.cli.getPageData" ["__mcp_capability_probe__"]
   "logseq.DB.upsertProperty" ["__mcp_capability_probe__/invalid" #js {}]
+  "logseq.DB.upsertBlockProperty" ["__mcp_capability_probe__"
+                                    "__mcp_capability_probe__"
+                                    "__mcp_capability_probe__"]
   "logseq.DB.removeProperty" ["__mcp_capability_probe__"]
   "logseq.DB.removeBlock" ["__mcp_capability_probe__"]
    "logseq.app.search" ["__mcp_capability_probe__" #js {:enable-snippet? false}]})

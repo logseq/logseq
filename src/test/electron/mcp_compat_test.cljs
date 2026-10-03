@@ -631,3 +631,80 @@
                            (fn [method args] (swap! calls conj [method args]))
                            #js {"property_ident" "Flag"})))
     (is (empty? @calls))))
+
+(deftest add-property-verifies-a-materialized-literal-value
+  (let [target-uuid "00000000-0000-4000-8000-000000000021"
+        ident ":plugin.property._test_plugin/Score"
+        calls (atom [])
+        written? (atom false)
+        target (fn []
+                 (cond-> {"id" 10 "uuid" target-uuid "title" "Target"}
+                   @written? (assoc ident {:id 55})))
+        api (fn [method args]
+              (swap! calls conj [method args])
+              (case method
+                "logseq.DB.upsertBlockProperty" (do (reset! written? true) #js {"ok" true})
+                "logseq.DB.datascriptQuery"
+                (let [query (first args)]
+                  (cond
+                    (string/includes? query "block/uuid #uuid") (clj->js (target))
+                    (string/includes? query "?e ?a _")
+                    #js [#js {"id" 55 "logseq.property/value" 5}]
+                    (string/includes? query ":db/ident")
+                    #js {"id" 20 "ident" ident "title" "Score"
+                         "logseq.property/type" "number"
+                         "db/cardinality" "db.cardinality/one"}
+                    :else nil))
+                nil))]
+    (async done
+            (-> (p/then (mcp-compat/add-property api
+                   #js {"target_uuid" target-uuid
+                        "property_ident" ident
+                        "value" 5})
+              (fn [result]
+                (is (true? (:verified result)))
+                (is (= target-uuid (get-in result [:verified_state :uuid])))
+                (is (= "logseq.DB.upsertBlockProperty"
+                  (first (nth @calls 2))))
+                (done)))
+           (p/catch (fn [error]
+            (is false (str error))
+            (done)))))))
+
+(deftest reference-property-values-must-be-entity-ids
+  (is (false? (mcp-compat/valid-reference-property-value? "not-an-entity")))
+  (is (true? (mcp-compat/valid-reference-property-value? 859)))
+  (is (true? (mcp-compat/valid-reference-property-value? {:id 859})))
+  (is (false? (mcp-compat/valid-reference-property-value? true))))
+
+(deftest add-property-skips-a-duplicate-many-value
+  (let [target-uuid "00000000-0000-4000-8000-000000000023"
+        ident ":plugin.property._test_plugin/Labels"
+        calls (atom [])
+        api (fn [method args]
+              (swap! calls conj [method args])
+                  (let [query (first args)]
+                 (cond
+                   (string/includes? query "block/uuid #uuid")
+                   #js {"id" 10 "uuid" target-uuid "title" "Target"
+                     ":plugin.property._test_plugin/Labels" #js {"id" 55}}
+                   (string/includes? query "?e ?a _")
+                   #js [#js {"id" 55 "logseq.property/value" "alpha"}]
+                   (string/includes? query "db/ident")
+                   #js {"id" 20 "ident" ident "title" "Labels"
+                     "logseq.property/type" "default"
+                     "db/cardinality" "db.cardinality/many"}
+                   :else nil)))]
+    (async done
+      (-> (p/then (mcp-compat/add-property api
+                                           #js {"target_uuid" target-uuid
+                                                "property_ident" ident
+                                                "value" "alpha"})
+                  (fn [result]
+                    (is (true? (:verified result)))
+                    (is (string/includes? (:diagnostic result) "duplicate"))
+                    (is (not-any? #(= "logseq.DB.upsertBlockProperty" (first %)) @calls))
+                    (done)))
+          (p/catch (fn [error]
+                     (is false (str error))
+                     (done)))))))
