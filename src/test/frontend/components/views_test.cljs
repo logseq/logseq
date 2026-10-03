@@ -8,6 +8,7 @@
             [frontend.components.all-pages :as all-pages]
             [frontend.components.property.value :as property-value]
             [frontend.components.views :as views]
+            [frontend.context.i18n :refer [t]]
             [frontend.db.async :as db-async]
             [frontend.db.hooks :as db-hooks]
             [frontend.db.subs :as subs]
@@ -193,16 +194,18 @@
       (is (= view-parent-uuid (:view-parent-uuid @view-opts)))
       (is (= :all-pages (:view-feature-type @view-opts))))))
 
+(defn- render-all-pages-title-cell
+  [row]
+  (let [title-cell (:cell (first (#'all-pages/columns)))]
+    (with-redefs [rfe/href (fn [_route params]
+                             (str "#/page/" (get params :name)))]
+      (title-cell nil row nil))))
+
 (deftest all-pages-title-cell-keeps-table-row-alignment-test
-  (let [title-cell (:cell (first (#'all-pages/columns)))
-        page-uuid (random-uuid)
+  (let [page-uuid (random-uuid)
         [wrapper-tag [link-tag attrs title]]
-        (with-redefs [rfe/href (fn [_route params]
-                                 (str "#/page/" (get params :name)))]
-          (title-cell nil
-                      {:block/title "Aligned page"
-                       :block/uuid page-uuid}
-                      nil))]
+        (render-all-pages-title-cell {:block/title "Aligned page"
+                                      :block/uuid page-uuid})]
     (is (string/includes? (name wrapper-tag) "h-full"))
     (is (string/includes? (name wrapper-tag) "items-center"))
     (is (string/includes? (name link-tag) "truncate"))
@@ -212,6 +215,22 @@
     (is (not (string/includes? (name link-tag) "page-reference"))
         "All Pages cells use a plain page link, not page-cp preview DOM.")))
 
+(deftest all-pages-title-cell-keeps-untitled-pages-openable-test
+  (let [page-uuid (random-uuid)
+        untitled (t :ui/untitled)]
+    (doseq [row [{:block/title ""
+                  :block/uuid page-uuid}
+                 {:block/title nil
+                  :block/uuid page-uuid}
+                 {:block/title (str page-uuid)
+                  :block/uuid page-uuid}]]
+      (let [[_wrapper [_link attrs title]] (render-all-pages-title-cell row)]
+        (is (= untitled title)
+            "Blank and UUID titles stay labeled so the table cell is clickable.")
+        (is (string/includes? (str (:href attrs)) (str page-uuid))
+            "Untitled rows keep a page href so All Pages can open them.")
+        (is (= (str page-uuid) (:data-ref attrs))
+            "Untitled rows expose a non-empty data-ref for the page identity.")))))
 
 (deftest groups-sort-order-selection-only-writes-selected-choice-test
   (is (true? (#'views/effective-groups-sort-desc? nil))
