@@ -10,6 +10,9 @@ import SwiftUI
 struct LogseqElementView: View {
   let tag: String
   let context: LUIAppleExtensionViewContext
+  /// Rendered by the window-level overlay layer rather than inline —
+  /// skips the presenter branch so the element draws normally.
+  var inOverlay = false
 
   private var attrs: [String: Any] {
     guard case .string(let json) = context.property("attrs"),
@@ -34,6 +37,14 @@ struct LogseqElementView: View {
     }
     if let inline = attrs["style"] as? String {
       s.applyInline(inline)
+    }
+    // cmdk rows signal the keyboard/mouse highlight via data-* attrs —
+    // the web stylesheet paints the row bg from them.
+    if (attrs["data-highlighted"] as? String) == "true"
+      || (attrs["data-kb-highlighted"] as? String) == "true"
+    {
+      s.background = LogseqColors.gray(4)
+      if s.cornerRadius == nil { s.cornerRadius = 6 }
     }
     return s
   }
@@ -100,6 +111,14 @@ struct LogseqElementView: View {
     // The HTML `hidden` attribute is display:none (e.g. the asset upload input).
     if style.isHidden || attrs["hidden"] != nil {
       EmptyView()
+    } else if style.fillsOverlay && !inOverlay {
+      // position:fixed full-viewport layer — the web renders these at
+      // window scope; our collapsed overlay containers can't give them
+      // bounds, so the element re-renders in LogseqOverlayLayer instead.
+      LogseqOverlayPresenter(nodeID: context.nodeID, priority: style.overlayZ) {
+        LogseqElementView(tag: tag, context: context, inOverlay: true)
+          .frame(maxWidth: .infinity, maxHeight: .infinity)
+      }
     } else {
       contentBody
     }
@@ -164,9 +183,22 @@ struct LogseqElementView: View {
         .onTapGesture { emit("click", payload: ["button": 0]) }
     } else if children.isEmpty && html.isEmpty && effectiveText.isEmpty {
       // An empty DOM element occupies zero height — rendering Text("") would
-      // give it a phantom ~14pt line.
-      EmptyView()
-        .modifier(LogseqStyleModifier(style: style, tag: tag))
+      // give it a phantom ~14pt line. A background-colored element is a
+      // painted surface instead (dialog scrims, dividers): .background on a
+      // zero-size EmptyView draws nothing, so fill directly.
+      if let bg = style.background {
+        // Painted surface (dialog scrim/dismiss layer, divider). It fills
+        // its proposal, so a plain tap gesture doubles as the click target
+        // the OCaml document listener uses for outside-click dismissal.
+        Rectangle().fill(bg).opacity(style.alpha)
+          .contentShape(Rectangle())
+          .onTapGesture {
+            emit("click", payload: ["button": 0])
+          }
+      } else {
+        EmptyView()
+          .modifier(LogseqStyleModifier(style: style, tag: tag))
+      }
     } else if children.isEmpty && html.isEmpty {
       styledText
     } else {
@@ -710,9 +742,79 @@ private struct LogseqStyleModifier: ViewModifier {
       .frame(
         maxWidth: style.centerHorizontally ? .infinity : nil,
         alignment: .center)
+      .shadow(
+        color: style.hasShadow ? Color.black.opacity(0.3) : .clear,
+        radius: style.hasShadow ? 16 : 0, y: style.hasShadow ? 8 : 0)
       .padding(style.margin ?? EdgeInsets())
       .opacity(style.alpha)
       .layoutPriority(style.grow ? 1 : 0)
+  }
+}
+
+/// Window-level overlay: elements styled `fillsOverlay` (position:fixed
+/// viewport layers — dialog overlays, dismiss surfaces) register here and
+/// render above the app content at full window bounds, preserving DOM tree
+/// order as z-order.
+@MainActor final class LogseqOverlayStore: ObservableObject {
+  static let shared = LogseqOverlayStore()
+  @Published private(set) var order: [Int] = []
+  private var views: [Int: AnyView] = [:]
+  private var keys: [Int: (priority: Int, seq: Int)] = [:]
+  private var seq = 0
+
+  func present(_ id: Int, _ view: AnyView, priority: Int) {
+    if keys[id] == nil {
+      seq += 1
+      keys[id] = (priority, seq)
+    }
+    views[id] = view
+    order = keys.keys.sorted {
+      let a = keys[$0]!, b = keys[$1]!
+      return (a.priority, a.seq) < (b.priority, b.seq)
+    }
+  }
+
+  func dismiss(_ id: Int) {
+    views[id] = nil
+    keys[id] = nil
+    order.removeAll { $0 == id }
+  }
+
+  func view(for id: Int) -> AnyView { views[id] ?? AnyView(EmptyView()) }
+}
+
+struct LogseqOverlayLayer: View {
+  @ObservedObject private var store = LogseqOverlayStore.shared
+
+  var body: some View {
+    ZStack(alignment: .topLeading) {
+      ForEach(store.order, id: \.self) { id in
+        store.view(for: id)
+      }
+    }
+  }
+}
+
+/// Placeholder left in the normal layout flow; the real render happens in
+/// LogseqOverlayLayer.
+private struct LogseqOverlayPresenter<Content: View>: View {
+  let nodeID: Int
+  let priority: Int
+  let body_: () -> Content
+
+  init(nodeID: Int, priority: Int, @ViewBuilder content: @escaping () -> Content) {
+    self.nodeID = nodeID
+    self.priority = priority
+    body_ = content
+  }
+
+  var body: some View {
+    Color.clear
+      .frame(width: 0, height: 0)
+      .onAppear {
+        LogseqOverlayStore.shared.present(nodeID, AnyView(body_()), priority: priority)
+      }
+      .onDisappear { LogseqOverlayStore.shared.dismiss(nodeID) }
   }
 }
 
@@ -730,12 +832,17 @@ private struct LogseqElementRegistration: View {
   }
 
   private func register() {
+    // Elements without a DOM id are still addressable by node ref —
+    // OCaml's doc_query_selector emits "#ref": "node-<id>" for them.
+    let handle = LogseqElementHandle(nodeID: context.nodeID)
+    LogseqElementRegistry.shared.register("node-\(context.nodeID)", handle)
     guard !id.isEmpty else { return }
-    LogseqElementRegistry.shared.register(id, LogseqElementHandle(nodeID: context.nodeID))
+    LogseqElementRegistry.shared.register(id, handle)
     LogseqElementRegistry.shared.registerAnchor(id, context)
   }
 
   private func unregister() {
+    LogseqElementRegistry.shared.unregister("node-\(context.nodeID)")
     guard !id.isEmpty else { return }
     LogseqElementRegistry.shared.unregister(id)
   }

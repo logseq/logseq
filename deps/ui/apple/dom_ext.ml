@@ -226,8 +226,27 @@ let closest (el : element) (sel : string) : element option =
   in
   walk (el :: ancestors_of el) []
 
-let query_selector (_ : element) (_ : string) : element option = None
-let doc_query_selector (_ : string) : element option = None
+(* The apple "DOM" is the LUI extension tree — native_embed installs
+   providers returning element snapshots (same shape the Swift
+   LogseqDOMSnapshot emits: tag/class/id/attrs/node-id + ancestors) so the
+   selector engine works unchanged. *)
+let doc_elements_provider : (unit -> Js.Json.t list) ref =
+  ref (fun () -> [])
+let subtree_elements_provider : (int -> Js.Json.t list) ref =
+  ref (fun _ -> [])
+
+let query_selector (el : element) (sel : string) : element option =
+  match num_prop "node-id" el with
+  | Some id ->
+      List.find_opt
+        (fun el -> selector_matches sel el (ancestors_of el))
+        (!subtree_elements_provider (int_of_float id))
+  | None -> None
+
+let doc_query_selector (sel : string) : element option =
+  List.find_opt
+    (fun el -> selector_matches sel el (ancestors_of el))
+    (!doc_elements_provider ())
 
 (* ---------- element state ---------- *)
 

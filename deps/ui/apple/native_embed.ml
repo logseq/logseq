@@ -30,6 +30,105 @@ let take_patches () : string =
   end
 let current_app : (Model.t, Action.t) Lui_app.reducer_app option ref = ref None
 
+(* ---------- document queries over the LUI extension tree ----------
+
+   Element snapshots carry the same shape the Swift LogseqDOMSnapshot
+   emits so Dom_ext's selector engine treats them identically. "#ref" is
+   the DOM id when present, else a node-<id> handle the Swift registry
+   resolves for dom-ops. *)
+let ext_prop_string props name =
+  match Lui_protocol.String_map.find_opt name props with
+  | Some (Lui_protocol.StringValue s) -> Some s
+  | _ -> None
+
+let ext_shallow_snapshot (rt : Lui_runtime.application) node : Js.Json.t =
+  let props =
+    match
+      Hashtbl.find_opt rt.Lui_runtime.runtime_extension_properties node
+    with
+    | Some p -> p
+    | None -> Lui_protocol.String_map.empty
+  in
+  let tag =
+    match Hashtbl.find_opt rt.Lui_runtime.runtime_extension_nodes node with
+    | Some ident ->
+        if String.starts_with ~prefix:"logseq-" ident
+        then
+          String.sub ident 7 (String.length ident - 7)
+        else ident
+    | None -> "div"
+  in
+  let attrs =
+    match ext_prop_string props "attrs" with
+    | Some json -> (try Js.Json.parseExn json with _ -> Js.Json.JObject [])
+    | None -> Js.Json.JObject []
+  in
+  let acc_id =
+    Option.value
+      (ext_prop_string props "accessibility-identifier")
+      ~default:""
+  in
+  let dom_id =
+    match attrs with
+    | Js.Json.JObject kvs -> (
+        match List.assoc_opt "id" kvs with
+        | Some v ->
+            Option.value (Js.Json.decodeString v) ~default:acc_id
+        | None -> acc_id)
+    | _ -> acc_id
+  in
+  Js.Json.JObject
+    [ ("tag", Js.Json.JString tag)
+    ; ( "class"
+      , Js.Json.JString
+          (Option.value (ext_prop_string props "style-class") ~default:"")
+      )
+    ; ("id", Js.Json.JString dom_id)
+    ; ( "#ref"
+      , Js.Json.JString
+          (if dom_id <> "" then dom_id
+           else Printf.sprintf "node-%d" node) )
+    ; ("ref-id", Js.Json.JString dom_id)
+    ; ("node-id", Js.Json.JNumber (float_of_int node))
+    ; ("attrs", attrs)
+    ]
+
+let ext_snapshot (rt : Lui_runtime.application) node : Js.Json.t =
+  let ancestors =
+    let rec walk n acc depth =
+      if depth >= 64 then acc
+      else
+        match Hashtbl.find_opt rt.Lui_runtime.runtime_parents n with
+        | Some parent ->
+            walk parent (ext_shallow_snapshot rt parent :: acc) (depth + 1)
+        | None -> acc
+    in
+    walk node [] 0
+  in
+  match ext_shallow_snapshot rt node with
+  | Js.Json.JObject kvs ->
+      Js.Json.JObject
+        (kvs @ [ ("ancestors", Js.Json.JArray (Array.of_list ancestors)) ])
+  | el -> el
+
+let collect_subtree (root : int) : Js.Json.t list =
+  match !current_app with
+  | None -> []
+  | Some app ->
+      let rt = Lui_app.runtime app in
+      let rec dfs node acc =
+        let acc = ext_snapshot rt node :: acc in
+        match Hashtbl.find_opt rt.Lui_runtime.runtime_children node with
+        | Some kids -> List.fold_left (fun a k -> dfs k a) acc kids
+        | None -> acc
+      in
+      List.rev (dfs root [])
+
+let collect_elements () : Js.Json.t list =
+  match !current_app with
+  | None -> []
+  | Some app -> collect_subtree (Lui_app.root_node app)
+
 let decode_extension_values payload =
   let json = try Yojson.Safe.from_string payload with _ -> `Null in
   match json with
@@ -93,6 +192,8 @@ let initialize platform_code host_code (_payload : string) : string =
       Update.update View.view
   in
   current_app := Some app;
+  Dom_ext.doc_elements_provider := collect_elements;
+  Dom_ext.subtree_elements_provider := collect_subtree;
   let flush_app () = ignore (Lui_app.flush app) in
   Runtime.app_send :=
     (fun action ->

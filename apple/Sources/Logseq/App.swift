@@ -54,6 +54,7 @@ private struct LogseqRuntimeHost: View {
       if let runtime, let rootID = runtime.rootID {
         LUISwiftUIRoot(backend: runtime.backend, rootID: rootID)
           .frame(maxWidth: .infinity, maxHeight: .infinity)
+          .overlay(alignment: .topLeading) { LogseqOverlayLayer() }
       } else {
         ProgressView("Opening Logseq")
       }

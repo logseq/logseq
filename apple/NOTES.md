@@ -241,3 +241,41 @@ attr-driven fallback — there is no MutationObserver on the native side.
 caret moves (Cmd+Right etc.) never reached OCaml, so split/merge used a
 stale selection. LogseqTextArea now injects `selectionStart`/
 `selectionEnd` into every dom-event payload.
+
+### cmdk palette (working)
+Full loop verified: Cmd+K opens, input autofocuses with last query
+restored, arrows/Enter/Ctrl-N/P navigate+run, Esc clears-then-closes
+(cljs semantics), Cmd+K toggles, outside click closes, row clicks run
+items, create-page works, live results across groups.
+
+Native fixes this needed:
+- `Dom_ext.doc_query_selector`/`query_selector` were `None` stubs —
+  implemented OCaml-side by walking the live LUI extension tree
+  (`Lui_app.runtime` tables: `runtime_extension_nodes`/
+  `runtime_extension_properties`/`runtime_children`/`runtime_parents`)
+  and emitting snapshots in the Swift LogseqDOMSnapshot shape so the
+  existing selector engine works unchanged. Elements without a DOM id
+  get a `node-<id>` `#ref`; the Swift registry resolves those for
+  dom-ops. This is THE answer for every DOM query semantic —
+  `querySelector` on the web ↔ "walk the extension tree" here.
+- Element-targeted dom-ops can land before SwiftUI mounts the node
+  (commit is synchronous in OCaml; makeNSView registers on a later
+  runloop turn). domOp retries unresolved refs 40×20ms.
+
+### position:fixed / dialog shell → window overlay layer
+Elements styled `position:fixed` (cp__cmdk-dismiss, ui__dialog-overlay,
+ui__dialog-content) can't size through the collapsed out-of-flow
+`cp__overlays` container — they now register into LogseqOverlayStore and
+render in a window-level ZStack (`.overlay` on LUISwiftUIRoot). Z-order
+is explicit (`LogseqStyle.overlayZ`: dismiss -2, scrim -1, content 0) —
+mount order alone put the dismiss layer on top.
+
+### FLAG — scrim doesn't swallow outside clicks
+The dismiss/scrim Rectangles paint full-window but don't hit-test
+outside the panel area (the overlay ZStack's hit path seems confined to
+where content views have real frames — needs investigation in the LUI
+backend's overlay hit-testing). Outside-click close still works because
+the click falls through to a page element and `handle_click` closes when
+`closest .cp__cmdk__modal` is None. Gap vs web: the underlying element's
+own click handler also fires (e.g. clicking a dimmed link would navigate
+as well as close). Flagged for the backend.
