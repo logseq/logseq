@@ -16,7 +16,7 @@
        (the unified autocomplete); "Add property" there reaches the dialog
        via the ls:editor-command listener in editor/editor_commands.ml. *)
 
-open Editor_dom
+open Web_dom
 module S = Properties_state
 module Area = Properties_area
 module Dialog = Properties_dialog
@@ -31,19 +31,19 @@ let on_keydown ev =
     match ev_key ev with
     | "Escape" ->
         if S.handle_escape () then (
-          prevent_default ev;
-          stop_propagation ev)
+          ev_prevent_default ev;
+          ev_stop_propagation ev)
     | "p" when (ev_meta ev || ev_ctrl ev) && ev_alt ev ->
-        prevent_default ev;
+        ev_prevent_default ev;
         Dialog.open_for_current ()
     | "p" when ev_meta ev || ev_ctrl ev ->
-        prevent_default ev;
+        ev_prevent_default ev;
         Dialog.open_for_current ()
     | ";" when is_editable_target (ev_target ev) ->
         let t = Js.Date.now () in
         if t -. !last_semi < 500.0 then (
           last_semi := 0.0;
-          prevent_default ev;
+          ev_prevent_default ev;
           Dialog.open_for_current ())
         else last_semi := t
     (* selection-mode `p <key>` sequences are owned by the chord layer in
@@ -68,7 +68,7 @@ let install () =
        at its parent *)
     let in_managed el =
       match
-        if node_name el = "#text" then Properties_dom.el_parent el
+        if el_node_name el = "#text" then Web_dom.el_parent el
         else Some el
       with
       | Some el ->
@@ -83,7 +83,7 @@ let install () =
           (fun acc r -> acc || not (in_managed (rec_target r)))
           false recs)
       Area.ensure_all;
-    document_add_listener "keydown" on_keydown true)
+    add_document_listener "keydown" on_keydown true)
 
 (* Module init runs at bundle load (every module in the lib is linked
    into js_app). The observer then keeps the mounts alive across page

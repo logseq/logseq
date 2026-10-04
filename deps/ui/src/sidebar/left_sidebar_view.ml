@@ -269,7 +269,7 @@ let nav_route ~class_ ~active ~title ~icon_name ?shortcut hash =
     ~on_click:(fun name _ ->
       if name = "click" then (
         Platform.set_location_hash (Runtime.nav_hash hash);
-        Platform.dispatch "ls:navigate" Js.Json.null))
+        Web_dom.dispatch_custom "ls:navigate" Js.Json.null))
     ()
 
 let tag_nav ~active_route class_ label titles =
@@ -349,7 +349,7 @@ let nav_group ms st =
                          if name = "click" then (
                            Platform.set_location_hash
                              (Runtime.nav_hash "#/");
-                           Platform.dispatch "ls:navigate" Js.Json.null))
+                           Web_dom.dispatch_custom "ls:navigate" Js.Json.null))
                        ())
                     :: nav_items ~active_route:route (checked, tag_titles)
                   ))

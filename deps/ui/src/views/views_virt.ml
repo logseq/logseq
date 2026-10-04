@@ -8,16 +8,7 @@
    instances are pruned when their list el leaves the document. *)
 
 module V = Virtualizer
-module D = Views_dom
-module Ed = Editor_dom
-
-external el_to_json : D.el -> V.element = "%identity"
-
-external el_query_all : D.el -> string -> Ed.node_list = "querySelectorAll"
-  [@@mel.send]
-
-external disconnect : Ed.mutation_observer -> unit = "disconnect"
-  [@@mel.send]
+module D = Web_dom
 
 let id_counter = ref 0
 
@@ -28,10 +19,10 @@ let next_id () =
 (* measure every mounted [data-index] row, debounced — row content edits
    (editor textContent syncs) mutate the subtree per keystroke *)
 let measure_rows list_el (v : V.t) =
-  let nl = el_query_all list_el "[data-index]" in
-  for i = 0 to Ed.node_list_length nl - 1 do
-    match Ed.node_list_item nl i with
-    | Some el -> V.measure_element v (Js.Nullable.return (el_to_json el))
+  let nl = D.el_query_all list_el "[data-index]" in
+  for i = 0 to D.nl_length nl - 1 do
+    match D.nl_item nl i with
+    | Some el -> V.measure_element v (Js.Nullable.return el)
     | None -> ()
   done;
   V.measure_element v Js.Nullable.null
@@ -98,18 +89,18 @@ let render_rows ~margin ~cache ~spacer ~data ~render_el (v : V.t) =
 let attach ~list_id ~scroll_parent_id ~data ~key_of ~overscan ~estimate_size
     ~render_el ~margin ~cache ~spacer =
   match
-    (Ed.get_element_by_id list_id, Ed.get_element_by_id scroll_parent_id)
+    (D.get_element_by_id list_id, D.get_element_by_id scroll_parent_id)
   with
   | Some list_el, Some scroll_el ->
       margin :=
-        D.rect_top (D.el_rect list_el)
-        -. D.rect_top (D.el_rect scroll_el)
+        D.rect_top (D.el_bounding_rect list_el)
+        -. D.rect_top (D.el_bounding_rect scroll_el)
         +. D.el_scroll_top scroll_el;
       let v =
         V.make
           (V.options ~count:(Array.length data)
              ~getScrollElement:(fun () ->
-               Js.Nullable.return (el_to_json scroll_el))
+               Js.Nullable.return scroll_el)
              ~estimateSize:estimate_size ~scrollToFn:V.element_scroll
              ~observeElementRect:V.observe_element_rect
              ~observeElementOffset:V.observe_element_offset
@@ -123,15 +114,15 @@ let attach ~list_id ~scroll_parent_id ~data ~key_of ~overscan ~estimate_size
       render_rows ~margin ~cache ~spacer ~data ~render_el v;
       let debounced_measure = D.debounce 50 in
       let obs =
-        Ed.new_observer (fun () ->
+        D.new_observer (fun () ->
             debounced_measure (fun () -> measure_rows list_el v))
       in
-      Ed.observe obs list_el (Ed.observe_opts ~childList:true ~subtree:true);
+      D.obs_observe obs list_el (D.mo_opts ~childList:true ~subtree:true);
       measure_rows list_el v;
       live :=
         ( list_el
         , fun () ->
-            disconnect obs;
+            D.obs_disconnect obs;
             v_cleanup () )
         :: !live
   | _ -> ()
@@ -150,7 +141,7 @@ let rows ?(scroll_parent_id = "main-content-container") ?(overscan = 5)
     D.h ~cls:"ls-virt-list" ~attrs:[ ("id", list_id) ] ~children:[ spacer ]
       ()
   in
-  Ed.set_timeout
+  D.set_timeout
     (fun () ->
       attach ~list_id ~scroll_parent_id ~data ~key_of ~overscan
         ~estimate_size ~render_el ~margin ~cache ~spacer)

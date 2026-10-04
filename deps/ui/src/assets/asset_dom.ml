@@ -5,12 +5,10 @@
    delete-asset-of-block!. *)
 
 open Promise_ext
-module E = Webapi.Dom.Element
 module S = Editor_state
 module W = Wire
-module B = Browser_ui
 module A = Asset_store
-module D = Views_dom
+module D = Web_dom
 
 open Lui_elements
 
@@ -18,32 +16,6 @@ let dom = Logseq_dom.dom
 let repo = Runtime.repo
 
 (* ---------- raw externals ---------- *)
-
-external file_size : Js.Json.t -> float = "size" [@@mel.get]
-external el_of_json : Js.Json.t -> E.t = "%identity"
-external json_of_el : E.t -> Js.Json.t = "%identity"
-external el_to_dom : E.t -> D.el = "%identity"
-
-external get_attr
-  :  E.t
-  -> string
-  -> string Js.Nullable.t = "getAttribute" [@@mel.send]
-
-external nat_w : E.t -> float = "naturalWidth" [@@mel.get]
-external nat_h : E.t -> float = "naturalHeight" [@@mel.get]
-external offset_w : E.t -> float = "offsetWidth" [@@mel.get]
-
-external win_on : string -> (Js.Json.t -> unit) -> unit =
-  "addEventListener" [@@mel.scope "window"]
-
-external win_off : string -> (Js.Json.t -> unit) -> unit =
-  "removeEventListener" [@@mel.scope "window"]
-
-let root_add_class : string -> unit =
-  [%mel.raw "function (c) { document.documentElement.classList.add(c) }"]
-
-let root_rm_class : string -> unit =
-  [%mel.raw "function (c) { document.documentElement.classList.remove(c) }"]
 
 type lightbox
 
@@ -66,7 +38,7 @@ let qs_all sel =
     [%mel.raw
       "function (s) { return Array.from(document.querySelectorAll(s)) }"]
   in
-  Array.map el_of_json (f sel)
+  f sel
 
 (* ---------- upload pipeline ---------- *)
 
@@ -114,12 +86,11 @@ let clear_slash_text () =
   match S.editing () with
   | None -> ()
   | Some e -> (
-      match B.qs ("#edit-block-" ^ e.S.uuid) with
+      match Web_dom.query_selector ("#edit-block-" ^ e.S.uuid) with
       | None -> ()
       | Some ta ->
-          let ta = json_of_el ta in
-          let v = Dom_ext.value ta in
-          let pos = min (Dom_ext.selection_start ta) (String.length v) in
+                    let v = Web_dom.el_value ta in
+          let pos = min (Web_dom.el_selection_start ta) (String.length v) in
           (match String.rindex_opt (String.sub v 0 pos) '/' with
            | None -> ()
            | Some i ->
@@ -127,8 +98,8 @@ let clear_slash_text () =
                  String.sub v 0 i
                  ^ String.sub v pos (String.length v - pos)
                in
-               Dom_ext.set_value ta nv;
-               Dom_ext.set_selection_range ta i i;
+               Web_dom.el_set_value ta nv;
+               Web_dom.el_set_selection_range ta i i;
                S.set_silent (fun st ->
                    { st with
                      S.editing = Some { e with S.buffer = nv } })))
@@ -169,15 +140,15 @@ let asset_block_map ~block_id ~title ~ext ~size ~checksum =
    reuses the editing block's uuid when its content is empty
    (cljs empty-target?) *)
 let asset_of_file ~idx ~edit_uuid ~empty_target f =
-  let name = B.file_name f in
+  let name = Web_dom.file_name f in
   let ext = ext_of_name name in
   let title = title_of_name name ext in
-  let size = file_size f in
+  let size = Web_dom.file_size f in
   if ext = "" then (
     Toast.error (I18n.tf "asset/invalid-ext-error" [ name ]);
     Js.Promise.resolve None)
   else
-    let* buf = B.file_buffer f in
+    let* buf = Web_dom.file_buffer f in
     let u8 = Js.Typed_array.Uint8Array.fromBuffer buf () in
     let* checksum = A.sha256_hex u8 in
     find_by_checksum checksum (function
@@ -299,11 +270,11 @@ let upload_input key : t =
         ~events:"change"
         ~on_dom_event:(fun name _ ->
           if name = "change" then
-            match B.qs "#upload-file" with
+            match Web_dom.query_selector "#upload-file" with
             | Some el ->
-                upload_files (B.files_of el);
+                upload_files (Web_dom.el_files el);
                 (* allow picking the same file twice in a row *)
-                Dom_ext.set_value (json_of_el el) ""
+                Web_dom.el_set_value el ""
             | None -> ())
         [] ]
 
@@ -315,10 +286,10 @@ let preview_images items =
   | None -> ()
   | Some m ->
       let opts =
-        B.json_props
+        Web_dom.json_props
           [ "dataSource", Js.Json.array items
           ; "pswpModule", m
-          ; "showHideAnimationType", B.str_to_json "fade" ]
+          ; "showHideAnimationType", Js.Json.string "fade" ]
       in
       let lb = new_lightbox opts in
       set_photo_lightbox lb;
@@ -332,8 +303,8 @@ let open_lightbox clicked =
     let rec find i =
       if i >= n then 0
       else if
-        Js.Nullable.return (get_attr imgs.(i) "id")
-        = Js.Nullable.return (get_attr clicked "id")
+        Web_dom.el_get_attr imgs.(i) "id"
+        = Web_dom.el_get_attr clicked "id"
       then i
       else find (i + 1)
     in
@@ -343,13 +314,13 @@ let open_lightbox clicked =
           let img = imgs.((idx + j) mod n) in
           let src =
             Option.value
-              (Js.Nullable.toOption (get_attr img "src"))
+              (Web_dom.el_get_attr img "src")
               ~default:""
           in
-          B.json_props
-            [ "src", B.str_to_json src
-            ; "w", B.str_to_json (Printf.sprintf "%.0f" (nat_w img))
-            ; "h", B.str_to_json (Printf.sprintf "%.0f" (nat_h img)) ])
+          Web_dom.json_props
+            [ "src", Js.Json.string src
+            ; "w", Js.Json.string (Printf.sprintf "%.0f" (Web_dom.el_nat_width img))
+            ; "h", Js.Json.string (Printf.sprintf "%.0f" (Web_dom.el_nat_height img)) ])
     in
     preview_images items
   end
@@ -357,7 +328,7 @@ let open_lightbox clicked =
 (* ---------- resize ---------- *)
 
 let finish_drag uuid w =
-  root_rm_class "is-resizing-buf";
+  Web_dom.doc_rm_class "is-resizing-buf";
   ignore
     (Outliner_ops.apply_and_refresh
        ~opts:(Outliner_ops.op_opts "set-block-property")
@@ -369,29 +340,29 @@ let finish_drag uuid w =
    .ls-resize-image offsetWidth, live-updates the img width attr on move
    and writes logseq.property.asset/resize-metadata {:width} on end *)
 let start_drag ~side ~uuid ~start_x =
-  match B.qs ("#ls-block-" ^ uuid) with
+  match Web_dom.query_selector ("#ls-block-" ^ uuid) with
   | None -> ()
   | Some row -> (
-      match B.qs_in row ".ls-resize-image", B.qs_in row "img" with
+      match Web_dom.el_query row ".ls-resize-image", Web_dom.el_query row "img" with
       | Some box, Some img ->
-          let start_w = offset_w box in
-          root_add_class "is-resizing-buf";
+          let start_w = Web_dom.el_offset_width box in
+          Web_dom.doc_add_class "is-resizing-buf";
           let rec on_move ev =
             let dx =
-              if side = `Left then start_x -. Dom_ext.client_x ev
-              else Dom_ext.client_x ev -. start_x
+              if side = `Left then start_x -. Web_dom.ev_client_x ev
+              else Web_dom.ev_client_x ev -. start_x
             in
             let w = start_w +. dx in
             if w > 60. || dx > 0. then
-              B.set_attr img "width"
+              Web_dom.el_set_attr img "width"
                 (string_of_int (int_of_float w))
           and on_up _ev =
-            win_off "pointermove" on_move;
-            win_off "pointerup" on_up;
-            finish_drag uuid (offset_w box)
+            Web_dom.remove_window_listener "pointermove" on_move;
+            Web_dom.remove_window_listener "pointerup" on_up;
+            finish_drag uuid (Web_dom.el_offset_width box)
           in
-          win_on "pointermove" on_move;
-          win_on "pointerup" on_up
+          Web_dom.add_window_listener "pointermove" on_move;
+          Web_dom.add_window_listener "pointerup" on_up
       | _ -> ())
 
 (* ---------- action menu + delete ---------- *)
@@ -455,9 +426,9 @@ let action_bar uuid b : t =
         ~events:"click"
         ~on_dom_event:(fun name _ ->
           if name = "click" then
-            match B.qs ("#asset-menu-btn-" ^ uuid) with
+            match Web_dom.query_selector ("#asset-menu-btn-" ^ uuid) with
             | Some el ->
-                Views_popup.show_menu ~anchor:(el_to_dom el)
+                Views_popup.show_menu ~anchor:el
                   (menu_items uuid b)
             | None -> ())
         [ dom ~key:("aabi-" ^ uuid) ~tag:"i"
@@ -554,16 +525,16 @@ let measure_on_load uuid (b : Model.block) =
   match b.Model.block_asset_width, b.Model.block_asset_height with
   | Some _, Some _ -> ()
   | _ -> (
-      match B.qs ("#asset-img-" ^ uuid) with
-      | Some img when nat_w img > 0. && nat_h img > 0. ->
+      match Web_dom.query_selector ("#asset-img-" ^ uuid) with
+      | Some img when Web_dom.el_nat_width img > 0. && Web_dom.el_nat_height img > 0. ->
           ignore
             (Outliner_ops.apply
                [ Outliner_ops.set_block_property uuid
                    "logseq.property.asset/width"
-                   (W.Int (int_of_float (nat_w img)))
+                   (W.Int (int_of_float (Web_dom.el_nat_width img)))
                ; Outliner_ops.set_block_property uuid
                    "logseq.property.asset/height"
-                   (W.Int (int_of_float (nat_h img))) ])
+                   (W.Int (int_of_float (Web_dom.el_nat_height img))) ])
       | _ -> ())
 
 let asset_img uuid (b : Model.block) file : t =
@@ -604,7 +575,7 @@ let asset_container uuid (b : Model.block) : t =
            String.length s >= 10 && String.sub s 0 10 = "asset-img-"
          in
          if name = "click" && on_img then
-           match B.qs ("#asset-img-" ^ uuid) with
+           match Web_dom.query_selector ("#asset-img-" ^ uuid) with
            | Some img -> open_lightbox img
            | None -> ())
        [ dyn ~equal:(=) (fun r -> if r then asset_img uuid b file else asset_placeholder)
@@ -740,17 +711,17 @@ let file_cell (w : W.t) : D.el =
 (* slash "Upload an asset" emits ls:editor-command {command} — cljs
    :editor/click-hidden-file-input clicks the hidden input *)
 let install () =
-  Platform.on_document_event "ls:editor-command" (fun ev ->
+  Web_dom.on_document_event "ls:editor-command" (fun ev ->
       match
-        Js.Json.decodeObject (Platform.json_prop ev "detail")
+        Js.Json.decodeObject (Web_dom.js_get ev "detail")
       with
       | Some d -> (
           match
             Option.bind (Js.Dict.get d "command") Js.Json.decodeString
           with
           | Some "upload" -> (
-              match B.qs "#upload-file" with
-              | Some el -> B.click el
+              match Web_dom.query_selector "#upload-file" with
+              | Some el -> Web_dom.el_click el
               | None -> ())
           | _ -> ())
       | None -> ())

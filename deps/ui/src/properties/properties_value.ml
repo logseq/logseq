@@ -16,8 +16,7 @@
    delete-property-value to clear. *)
 
 open Promise_ext
-open Editor_dom
-open Properties_dom
+open Web_dom
 module D = Properties_data
 module S = Properties_state
 module W = Wire
@@ -242,7 +241,7 @@ let block_frame ?(blank = true) u cell wrap =
   el_append_child cell blk
 
 let edit_text_cell ?(steal = false) ctx row cell initial =
-  el_clear cell;
+  el_replace_children cell;
   let u = ctx.block_uuid in
   (* the editor edits the value block, so its edit-block ids must resolve
      to the value block's uuid — carrying the owner's makes document-level
@@ -307,13 +306,14 @@ let edit_text_cell ?(steal = false) ctx row cell initial =
            (cljs keeps a single editing surface) *)
         let value = el_value ta in
         let h = el_client_height cell in
-        el_clear cell;
+        el_replace_children cell;
         (* repaint the committed value now and pin the row's geometry —
            an empty/shrinking cell shifts the layout and a click already
            in flight (blur -> commit between mousedown and mouseup)
            retargets onto whatever moved under the pointer *)
-        if h > 0 then
-          set_style cell ("min-height:" ^ string_of_int h ^ "px");
+        if h > 0. then
+          set_style cell
+            ("min-height:" ^ string_of_int (int_of_float h) ^ "px");
         ignore (child_text "span" "block-title-wrap" value cell);
         if save then commit_or_cancel ctx row value else ctx.refresh ()))
   in
@@ -322,12 +322,12 @@ let edit_text_cell ?(steal = false) ctx row cell initial =
     (fun ev ->
       match ev_key ev with
       | "Enter" ->
-          prevent_default ev;
-          stop_propagation ev;
+          ev_prevent_default ev;
+          ev_stop_propagation ev;
           done_ true
       | "Escape" ->
-          prevent_default ev;
-          stop_propagation ev;
+          ev_prevent_default ev;
+          ev_stop_propagation ev;
           (* cljs exit-edit saves — Escape commits like Enter *)
           done_ true
       | _ -> ())
@@ -391,7 +391,7 @@ let number_cell ctx row =
   let value = D.row_value row in
   let cell = mk ~cls:"ls-number jtrigger" "div" in
   if not (D.value_empty_p value) then
-    el_set_text cell (D.value_display value);
+    el_set_text_content cell (D.value_display value);
   on_click cell (fun _ ->
       edit_text_cell ~steal:true ctx row cell (D.value_display value));
   cell
@@ -413,7 +413,7 @@ let checkbox_cell ctx row =
         ]
       ~cls:"jtrigger"
   in
-  if checked then el_set_text btn "✓";
+  if checked then el_set_text_content btn "✓";
   if checked then el_set_attr btn "data-checked" "true";
   on_click btn (fun _ ->
       let ident = D.row_ident row |> Option.value ~default:"" in
@@ -507,12 +507,12 @@ let date_picker ?(uuids = []) ctx row anchor =
     (fun ev ->
       match ev_key ev with
       | "Enter" ->
-          prevent_default ev;
+          ev_prevent_default ev;
           commit_date_input ~uuids ctx ident ~is_datetime input;
           S.pop_overlay ()
       | "Escape" ->
-          prevent_default ev;
-          stop_propagation ev;
+          ev_prevent_default ev;
+          ev_stop_propagation ev;
           S.pop_overlay ()
       | _ -> ())
     true
@@ -541,7 +541,7 @@ let datetime_content cell ~y ~m ~d =
       ~attrs:
         [ ("data-ref", String.lowercase_ascii title); ("tabindex", "0") ]
   in
-  el_set_text a (Render_inline.date_label y m d);
+  el_set_text_content a (Render_inline.date_label y m d);
   el_append_child inner a;
   el_append_child wrap inner;
   el_append_child cell wrap
@@ -564,7 +564,7 @@ let date_cell ctx row =
   if not (D.value_empty_p value) then
     (match D.row_type row = "datetime", ymd_of_datetime_value value with
      | true, Some (y, m, d) -> datetime_content cell ~y ~m ~d
-     | _ -> el_set_text cell (D.value_display value));
+     | _ -> el_set_text_content cell (D.value_display value));
   on_click cell (fun _ -> date_picker ctx row cell);
   cell
 
@@ -764,7 +764,7 @@ let closed_value_cell ?(icon_only = false) ctx row anchor =
         in
         el_set_attr wrap "style"
           ("color:" ^ Option.value color ~default:"inherit");
-        el_append_child wrap (Views_dom.icon id);
+        el_append_child wrap (Web_dom.icon id);
         el_append_child item wrap;
         el_append_child cell item;
         Some ())
@@ -776,7 +776,7 @@ let closed_value_cell ?(icon_only = false) ctx row anchor =
        (match closed_value_icon_id value with
         | Some id ->
             let item = mk ~cls:"select-item" "div" in
-            el_append_child item (Views_dom.icon id);
+            el_append_child item (Web_dom.icon id);
             el_append_child cell item
         | None ->
             if D.value_empty_p value then (
@@ -785,7 +785,7 @@ let closed_value_cell ?(icon_only = false) ctx row anchor =
                 mk ~cls:"empty-btn" "button"
                   ~attrs:[ ("type", "button") ]
               in
-              el_append_child btn (Views_dom.icon "line-dashed");
+              el_append_child btn (Web_dom.icon "line-dashed");
               el_append_child item btn;
               el_append_child cell item));
        let txt = D.value_display value in
@@ -858,7 +858,7 @@ let node_cell ctx row =
       in
       (* the ref is a real link — don't let the cell's click open the
          value editor *)
-      el_listen a "click" (fun ev -> stop_propagation ev) true;
+      el_listen a "click" (fun ev -> ev_stop_propagation ev) true;
       ignore (child_text "span" "" t a);
       el_append_child item a;
       el_append_child cell item)
@@ -910,7 +910,7 @@ let node_cell ctx row =
     (fun ev ->
       match ev_key ev with
       | "Enter" ->
-          prevent_default ev;
+          ev_prevent_default ev;
           open_values ()
       | _ -> ())
     true;
@@ -981,7 +981,7 @@ let open_extends_menu ctx ~ident row anchor =
         in
         let menu = mk ~cls:"ui__dropdown-menu" "div" in
         let rec rebuild () =
-          el_clear menu;
+          el_replace_children menu;
           List.iter
             (fun o ->
               match D.entity_id_of o with
@@ -1067,7 +1067,7 @@ let editing_cell ctx row inner =
       | Some target -> (
           match el_closest target "textarea, input, a, button" with
           | Some _ -> ()
-          | None -> prevent_default ev)
+          | None -> ev_prevent_default ev)
       | None -> ())
     true;
   el_append_child inner cell;
@@ -1147,7 +1147,7 @@ let render ?(icon_only = false) ctx row =
               in
               on_click empty (fun _ ->
                   let cell = text_cell ctx row in
-                  el_clear leaf;
+                  el_replace_children leaf;
                   el_append_child leaf cell;
                   el_click cell);
               empty)

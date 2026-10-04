@@ -48,7 +48,7 @@ let poke () =
 let repo = Runtime.repo
 
 let set_tab tab =
-  Platform.body_set_data "settingsTab" tab;
+  Web_dom.body_set_data "settingsTab" tab;
   set (fun s -> { s with tab })
 
 (* common-util/page-name-sanity-lc approximation: lowercase + strip boundary
@@ -115,12 +115,12 @@ let load () =
    Uses Signal.set (no flush) — called during mount, the pending render
    picks up the fresh value. *)
 let activate () =
-  Platform.body_set_data "settingsTab" "general";
+  Web_dom.body_set_data "settingsTab" "general";
   if ready () then (
     Signal.set (state ()) { (value ()) with tab = "general" };
     load ())
 
-let deactivate () = Platform.body_rm_data "settingsTab"
+let deactivate () = Web_dom.body_rm_data "settingsTab"
 
 (* ---- config.edn accessors ---- *)
 
@@ -213,8 +213,8 @@ let toggle_wide_mode () =
   let v = not (storage_bool "wide-mode" ~default:false) in
   storage_set_bool "wide-mode" v;
   poke ();
-  match Browser_ui.qs "#app-container-wrapper" with
-  | Some el -> (if v then Browser_ui.add_class else Browser_ui.rm_class) el "ls-wide-mode"
+  match Web_dom.query_selector "#app-container-wrapper" with
+  | Some el -> (if v then Web_dom.el_class_add else Web_dom.el_class_remove) el "ls-wide-mode"
   | None -> ()
 
 let toggle_shortcut_tooltip () =
@@ -255,7 +255,7 @@ let current_accent () =
 
 let set_accent name =
   Platform.local_storage_set "radix-color" (Settings_view.quoted (":" ^ name));
-  Platform.document_set_data "color" name;
+  Web_dom.doc_set_data "color" name;
   poke ()
 
 (* ---- editor font (state/set-editor-font! + theme.cljs effect) ---- *)
@@ -293,8 +293,8 @@ let write_editor_font cfg =
              [ (Wire.Keyword "type", Wire.String cfg.ftype)
              ; (Wire.Keyword "global", Wire.Bool cfg.fglobal)
              ])));
-  Platform.document_set_data "font" cfg.ftype;
-  Platform.document_set_data "font-global"
+  Web_dom.doc_set_data "font" cfg.ftype;
+  Web_dom.doc_set_data "font-global"
     (if cfg.fglobal then "true" else "false");
   poke ()
 

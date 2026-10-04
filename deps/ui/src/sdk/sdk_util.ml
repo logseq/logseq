@@ -3,12 +3,8 @@
 open Promise_ext
 let repo = Runtime.repo
 
-external as_undefined : Js.Json.t -> Js.Json.t Js.Undefined.t
-  = "%identity"
-
 (* api args arrive positionally; absent slots are undefined/null *)
-let arg_is_nil j =
-  Js.Undefined.toOption (as_undefined j) = None || j == Js.Json.null
+let arg_is_nil j = Js.typeof j = "undefined" || j == Js.Json.null
 
 let arg_wire j = if arg_is_nil j then Wire.Nil else Sdk_convert.wire_of_json j
 

@@ -10,12 +10,9 @@
    enumerated from the loaded tabler-icons.min.css selectors — the font
    already ships every glyph, so `ti ti-<name>` renders them all. *)
 
-module D = struct
-  include Editor_dom
-  include Properties_dom
-end
+module D = Web_dom
 
-module E = Editor_dom
+module E = Web_dom
 module I = I18n
 
 type choice = Emoji of string | Tabler of (string * string option) | Remove
@@ -28,7 +25,7 @@ let em_emoji_el ?(cls = "") (id : string) : E.el =
 let icon_el ?(size = 18.) ?(cls = "") (ty, id) : E.el =
   match ty with
   | "emoji" -> em_emoji_el ~cls id
-  | _ -> D.ui_icon_el ~size ~cls id
+  | _ -> D.icon ~size ~cls id
 
 (* cljs ui__button base + variant/size classes (shui/button) *)
 let btn_base = "ui__button"
@@ -171,7 +168,7 @@ let all_emojis () : (string * string) list =
                  Some
                    ( id
                    , Option.value ~default:id
-                       (Js.Json.decodeString (Platform.json_prop j "name")) )
+                       (Js.Json.decodeString (Web_dom.js_get j "name")) )
              | None -> None)
   | None -> []
 
@@ -279,7 +276,7 @@ let pane_section ?(virtual_list = false) ?(searching = false) label
 
 let clear_pane (p : picker) =
   match p.pane with
-  | Some pane -> D.el_clear pane
+  | Some pane -> D.el_replace_children pane
   | None -> ()
 
 let used_section_items (p : picker) : E.el list =
@@ -364,7 +361,7 @@ let render_search (p : picker) =
       in
       let fill emojis =
         if gen = p.gen then (
-          D.el_clear wrap;
+          D.el_replace_children wrap;
           let items =
             List.map (fun (id, name) -> Emoji_item (id, name)) emojis
             @ icons
@@ -401,14 +398,14 @@ let set_tab (p : picker) (t : tab) =
        (* the cljs class token is ",tab-item" / "active,tab-item" (comma
           joined) so ".tab-item" never matches; use the substring form *)
        let nl = D.el_query_all root "[class*='tab-item']" in
-       let n = D.node_list_length nl in
+       let n = D.nl_length nl in
        for i = 0 to n - 1 do
-         match D.node_list_item nl i with
+         match D.nl_item nl i with
          | Some b -> D.el_set_class b (tab_item_cls false)
          | None -> ()
        done;
        match
-         D.node_list_item nl
+         D.nl_item nl
            (match t with Tab_all -> 0 | Tab_emoji -> 1 | Tab_icon -> 2)
        with
        | Some b -> D.el_set_class b (tab_item_cls true)
@@ -425,7 +422,7 @@ let set_tab (p : picker) (t : tab) =
              | Some ft -> (
                  (* keep the cljs order: tabs, color picker, del *)
                  match D.el_query ft "button[data-action='del']" with
-                 | Some del -> D.el_insert_before ft pal_wrap del
+                 | Some del -> D.el_insert_before ft pal_wrap (Some del)
                  | None -> D.el_append_child ft pal_wrap)
              | None -> ()))
    | _ -> ());
@@ -469,7 +466,7 @@ let presets_popover (p : picker) (anchor_btn : E.el) : E.el =
           D.el_remove pop);
       D.el_append_child pop b)
     preset_colors;
-  let l, _t, _r, btm, _w = D.el_rect anchor_btn in
+  let l, _t, _r, btm, _w = D.bounding_rect_fields anchor_btn in
   D.set_style pop
     (Printf.sprintf "position:fixed;left:%.0fpx;top:%.0fpx;z-index:10000" l
        (btm +. 4.));
@@ -483,7 +480,7 @@ let view (p : picker) : E.el =
   D.el_listen root "keydown"
     (fun ev ->
       match D.ev_key ev with
-      | "ArrowLeft" | "ArrowRight" -> D.stop_propagation ev
+      | "ArrowLeft" | "ArrowRight" -> D.ev_stop_propagation ev
       | _ -> ())
     true;
   let hd = D.mk ~cls:"hd" "div" in
@@ -516,7 +513,7 @@ let view (p : picker) : E.el =
     (fun ev ->
       match D.ev_key ev with
       | "Escape" ->
-          D.prevent_default ev;
+          D.ev_prevent_default ev;
           if p.q = "" then close () else reset_q p
       | _ -> ())
     true;
@@ -566,7 +563,7 @@ let view (p : picker) : E.el =
       | None ->
           let pop = presets_popover p pal_wrap in
           pop_ref := Some pop;
-          (match D.doc_query "body" with
+          (match D.query_selector "body" with
            | Some body -> D.el_append_child body pop
            | None -> ()));
   (match p.tab with

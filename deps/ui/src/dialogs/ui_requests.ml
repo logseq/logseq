@@ -49,8 +49,8 @@ let handle (w : Wire.t) =
 (* -- e2ee password modal (components/e2ee.cljs) -- *)
 
 let input_value sel =
-  match Browser_ui.qs (".e2ee-password-modal-content " ^ sel) with
-  | Some el -> Browser_ui.value el
+  match Web_dom.query_selector (".e2ee-password-modal-content " ^ sel) with
+  | Some el -> Web_dom.el_value el
   | None -> ""
 
 let submit r two warn =

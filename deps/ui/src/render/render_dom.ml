@@ -35,7 +35,7 @@ let el ?key ~tag ?(attrs = []) ?(events = "") ?(style_class = "")
    Editor_dom swaps it for a real text node. *)
 let txt (s : string) : t =
  fun context parent ->
-  Editor_dom.ensure_raw_text_observer ();
+  Web_dom.ensure_raw_text_observer ();
   Logseq_dom.dom ~tag:"raw-text" ~attrs:[ ("data-raw-text", s) ] []
     context parent
 

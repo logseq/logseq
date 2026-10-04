@@ -6,7 +6,7 @@
    raw-text fixup) calls the libs on fresh elements before paint. *)
 
 open Promise_ext
-module D = Editor_dom
+module D = Web_dom
 
 external el_text_content : D.el -> string = "textContent" [@@mel.get]
 
@@ -184,8 +184,8 @@ let on_doc_click ev =
   | Some t -> (
       match D.el_closest t "a.youtube-timestamp" with
       | Some anchor ->
-          D.prevent_default ev;
-          D.stop_propagation ev;
+          D.ev_prevent_default ev;
+          D.ev_stop_propagation ev;
           yt_seek anchor
       | None -> ())
   | None -> ()
@@ -196,4 +196,4 @@ let ensure () =
   if not !installed then (
     installed := true;
     D.register_doc_scan ~sync:true render_scan;
-    D.document_add_listener "click" on_doc_click true)
+    D.add_document_listener "click" on_doc_click true)

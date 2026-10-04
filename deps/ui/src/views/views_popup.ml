@@ -4,7 +4,7 @@
    .cp__select*.cp__select-input + .cp__select-results a.menu-link selects,
    and .ui__dialog-content confirm dialogs. *)
 
-module D = Views_dom
+module D = Web_dom
 module I = I18n
 
 external document_body : D.el = "document.body"
@@ -27,9 +27,9 @@ let close_all () =
   open_popups := []
 
 let on_doc_keydown ev =
-  if Editor_dom.ev_key ev = "Escape" && !open_popups <> [] then begin
-    Editor_dom.stop_propagation ev;
-    Editor_dom.prevent_default ev;
+  if Web_dom.ev_key ev = "Escape" && !open_popups <> [] then begin
+    Web_dom.ev_stop_propagation ev;
+    Web_dom.ev_prevent_default ev;
     close_top ()
   end
 
@@ -39,7 +39,7 @@ let install_listeners () =
     ~on_hit:(function
       | None -> close_all ()
       | Some _ -> ());
-  Editor_dom.document_add_listener "keydown" on_doc_keydown true
+  Web_dom.add_document_listener "keydown" on_doc_keydown true
 
 let push_popup el = open_popups := el :: !open_popups
 
@@ -49,36 +49,36 @@ let pop_popup el =
 (* -- positioning: fixed, anchored below trigger -- *)
 
 let position_content ~anchor ~content ~align_end ~submenu =
-  let r = D.el_rect anchor in
+  let r = D.el_bounding_rect anchor in
   let style = ref "position:fixed;z-index:50;" in
   (if submenu then begin
      (* opens right of the item, top-aligned; radix shifts the panel up
         when it would overflow the viewport bottom, and caps its height
         at the viewport so every option stays inside *)
-     let h = D.rect_height (D.el_rect content) in
+     let h = D.rect_height (D.el_bounding_rect content) in
      let top =
        Float.max 8.
          (Float.min (D.rect_top r -. 4.)
-            (D.window_inner_height -. 8. -. h))
+            (D.win_inner_height -. 8. -. h))
      in
      style := !style
        ^ Printf.sprintf
            "left:%.0fpx;top:%.0fpx;max-height:%.0fpx;overflow-y:auto;"
            (D.rect_left r +. D.rect_width r -. 4.) top
-           (D.window_inner_height -. 16.)
+           (D.win_inner_height -. 16.)
    end
    else begin
      (* radix mounts below but flips when the list would overflow the
         viewport and there is more room above; cap the height at the
         space on the chosen side so every option stays inside the
         viewport (radix's available-height behaviour) *)
-     let below = D.window_inner_height -. (D.rect_bottom r +. 4.) -. 8. in
+     let below = D.win_inner_height -. (D.rect_bottom r +. 4.) -. 8. in
      let above = (D.rect_top r -. 4.) -. 8. in
      let open_above = below < 280. && above > below in
      let pos, avail =
        if open_above then
          ( Printf.sprintf "bottom:%.0fpx"
-             (D.window_inner_height -. (D.rect_top r -. 4.))
+             (D.win_inner_height -. (D.rect_top r -. 4.))
          , above )
        else (Printf.sprintf "top:%.0fpx" (D.rect_bottom r +. 4.), below)
      in
@@ -121,10 +121,10 @@ let focus_item (items : D.el array) idx =
 let focusable_items content : D.el array =
   let nl = D.el_query_all content "[role=menuitem],[role=menuitemcheckbox]"
   in
-  let n = Editor_dom.node_list_length nl in
+  let n = Web_dom.nl_length nl in
   Array.of_list
     (List.filter_map
-       (fun i -> Editor_dom.node_list_item nl i)
+       (fun i -> Web_dom.nl_item nl i)
        (List.init n Fun.id))
 
 let focused_idx items =
@@ -156,7 +156,7 @@ let rec menu_items_el ?(cls_prefix = "") (items : menu_item list) : D.el =
           in
           D.el_append_child el
             (D.h ~tag:"span" ~cls:"menu-item-label" ~text:label ());
-          D.el_add_listener el "click" (fun _ ->
+          D.el_on el "click" (fun _ ->
               close_all ();
               on ());
           D.el_append_child content el
@@ -177,14 +177,14 @@ let rec menu_items_el ?(cls_prefix = "") (items : menu_item list) : D.el =
           in
           (if checked then
              let c = D.icon "check" in
-             Editor_dom.el_set_class c
+             Web_dom.el_set_class c
                "ui__icon ti ls-icon-check";
              D.el_append_child ind c);
           D.el_append_child el ind;
           D.el_append_child el
             (D.h ~tag:"span" ~cls:"menu-item-label" ~text:label ());
-          D.el_add_listener el "click" (fun ev ->
-              Editor_dom.stop_propagation ev;
+          D.el_on el "click" (fun ev ->
+              Web_dom.ev_stop_propagation ev;
               on (not checked);
               (* refresh check state in place — menu stays open *)
               D.el_set_attr el "aria-checked"
@@ -208,9 +208,9 @@ let rec menu_items_el ?(cls_prefix = "") (items : menu_item list) : D.el =
           D.el_append_child el
             (D.h ~tag:"span" ~cls:"menu-item-label" ~text:label ());
           (* cljs renders the raw tabler svg for submenu chevrons *)
-          (match Editor_dom.tabler_svg_el "chevron-right" with
+          (match Web_dom.tabler_svg_el "chevron-right" with
            | Some svg ->
-               Editor_dom.el_set_attr svg "class"
+               Web_dom.el_set_attr svg "class"
                  "ls-menu-chevron tabler-icon tabler-icon-chevron-right";
                D.el_append_child el svg
            | None ->
@@ -222,7 +222,7 @@ let rec menu_items_el ?(cls_prefix = "") (items : menu_item list) : D.el =
             if not !sub_open then begin
               sub_open := true;
               let sc = menu_items_el ~cls_prefix sub in
-              Editor_dom.el_set_class sc
+              Web_dom.el_set_class sc
                 (cls_prefix ^ "ui__dropdown-menu-sub-content");
               D.el_append_child document_body sc;
               position_content ~anchor:el ~content:sc ~align_end:false
@@ -230,41 +230,41 @@ let rec menu_items_el ?(cls_prefix = "") (items : menu_item list) : D.el =
               push_popup sc
             end
           in
-          D.el_add_listener el "click" (fun ev ->
-              Editor_dom.stop_propagation ev;
+          D.el_on el "click" (fun ev ->
+              Web_dom.ev_stop_propagation ev;
               open_sub ());
-          D.el_add_listener el "mouseenter" (fun _ -> open_sub ());
+          D.el_on el "mouseenter" (fun _ -> open_sub ());
           D.el_append_child content el)
     items;
-  D.el_add_listener content "keydown" (fun ev ->
-      let k = Editor_dom.ev_key ev in
+  D.el_on content "keydown" (fun ev ->
+      let k = Web_dom.ev_key ev in
       let items = focusable_items content in
       let idx = focused_idx items in
       (* inputs inside MCustom panes (view rename box) type freely — menu
          keys must not preventDefault their characters *)
-      if Editor_dom.is_editable_target (Editor_dom.ev_target ev) then ()
+      if Web_dom.is_editable_target (Web_dom.ev_target ev) then ()
       else
       match k with
       | "Home" ->
-          Editor_dom.prevent_default ev;
+          Web_dom.ev_prevent_default ev;
           focus_item items 0
       | "End" ->
-          Editor_dom.prevent_default ev;
+          Web_dom.ev_prevent_default ev;
           focus_item items (Array.length items - 1)
       | "ArrowDown" ->
-          Editor_dom.prevent_default ev;
+          Web_dom.ev_prevent_default ev;
           focus_item items (idx + 1)
       | "ArrowUp" ->
-          Editor_dom.prevent_default ev;
+          Web_dom.ev_prevent_default ev;
           focus_item items (idx - 1)
       | "ArrowRight" ->
-          Editor_dom.prevent_default ev;
+          Web_dom.ev_prevent_default ev;
           if idx >= 0 && idx < Array.length items then D.el_click items.(idx)
       | "Enter" | " " ->
-          Editor_dom.prevent_default ev;
+          Web_dom.ev_prevent_default ev;
           if idx >= 0 && idx < Array.length items then D.el_click items.(idx)
       | "Escape" ->
-          Editor_dom.prevent_default ev;
+          Web_dom.ev_prevent_default ev;
           close_top ()
       | _ -> ());
   content
@@ -333,7 +333,7 @@ let show_select ~anchor ~items ~placeholder ?(multiple = false)
     List.filter (fun it -> Fuzzy.score !query it.si_label > 0.) items
   in
   let rec rerender () =
-    D.clear results;
+    D.el_replace_children results;
     let its = filtered () in
     (match its with
      | [] ->
@@ -363,21 +363,21 @@ let show_select ~anchor ~items ~placeholder ?(multiple = false)
                     [ select_item_row it (i = !chosen_idx) multiple
                         !sel_values ]
                   ());
-             D.el_add_listener a "click" (fun ev ->
-                 Editor_dom.stop_propagation ev;
-                 Editor_dom.prevent_default ev;
+             D.el_on a "click" (fun ev ->
+                 Web_dom.ev_stop_propagation ev;
+                 Web_dom.ev_prevent_default ev;
                  choose it);
              D.el_append_child link_wrap a;
              D.el_append_child ac_inner link_wrap)
            its);
     (if multiple then begin
-       D.clear apply_wrap;
+       D.el_replace_children apply_wrap;
        let btn =
          D.h ~tag:"button"
            ~cls:"ui__button ls-btn-outline"
            ~text:I.apply ()
        in
-       D.el_add_listener btn "click" (fun _ ->
+       D.el_on btn "click" (fun _ ->
            close_all ();
            on_apply !sel_values);
        D.el_append_child apply_wrap btn
@@ -408,29 +408,29 @@ let show_select ~anchor ~items ~placeholder ?(multiple = false)
       w
     end
   in
-  D.el_add_listener input "input" (fun _ ->
-      query := Editor_dom.el_value input;
+  D.el_on input "input" (fun _ ->
+      query := Web_dom.el_value input;
       chosen_idx := 0;
       rerender ());
-  D.el_add_listener input "keydown" (fun ev ->
-      match Editor_dom.ev_key ev with
+  D.el_on input "keydown" (fun ev ->
+      match Web_dom.ev_key ev with
       | "ArrowDown" ->
-          Editor_dom.prevent_default ev;
+          Web_dom.ev_prevent_default ev;
           let its = filtered () in
           chosen_idx := min (!chosen_idx + 1) (List.length its - 1);
           rerender ()
       | "ArrowUp" ->
-          Editor_dom.prevent_default ev;
+          Web_dom.ev_prevent_default ev;
           chosen_idx := max (!chosen_idx - 1) 0;
           rerender ()
       | "Enter" ->
-          Editor_dom.prevent_default ev;
+          Web_dom.ev_prevent_default ev;
           (match List.nth_opt (filtered ()) !chosen_idx with
            | Some it -> choose it
            | None -> ())
       | "Escape" ->
-          Editor_dom.prevent_default ev;
-          Editor_dom.stop_propagation ev;
+          Web_dom.ev_prevent_default ev;
+          Web_dom.ev_stop_propagation ev;
           close_top ()
       | _ -> ());
   D.el_append_child inner input_wrap;
@@ -439,7 +439,7 @@ let show_select ~anchor ~items ~placeholder ?(multiple = false)
   D.el_append_child document_body wrap;
   position_content ~anchor ~content:wrap ~align_end:false ~submenu:false;
   push_popup wrap;
-  Editor_dom.set_timeout (fun () -> Editor_dom.el_focus input) 0
+  Web_dom.set_timeout (fun () -> Web_dom.el_focus input) 0
 
 (* -- confirm dialog -- *)
 

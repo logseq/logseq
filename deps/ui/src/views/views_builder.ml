@@ -3,7 +3,7 @@
    clauses; serialized to dsl text and saved into the
    logseq.property/query value block's title. *)
 
-module D = Views_dom
+module D = Web_dom
 module V = Views_state
 module W = Wire
 module Wr = Views_wire
@@ -307,7 +307,7 @@ let rec property_picker inst ~tree ~loc ~anchor ~refresh ~include_builtin =
             ~cls:"flex flex-row justify-between gap-1 items-center px-1 pb-1 border-b"
             ~children:[ lab; cb ] ()
         in
-        D.el_add_listener cb "change" (fun _ ->
+        D.el_on cb "change" (fun _ ->
             property_picker inst ~tree ~loc ~anchor ~refresh
               ~include_builtin:(D.el_checked cb));
         if include_builtin then D.el_set_checked cb true;
@@ -438,10 +438,10 @@ let full_text_picker inst ~tree ~loc ~anchor:_ ~refresh =
   let wrap = D.h ~cls:"query-builder-picker" ~children:[ input ] () in
   D.el_append_child D.document_body wrap;
   P.push_popup wrap;
-  D.el_add_listener input "keydown" (fun ev ->
-      match Editor_dom.ev_key ev with
+  D.el_on input "keydown" (fun ev ->
+      match Web_dom.ev_key ev with
       | "Enter" ->
-          let v = String.trim (Editor_dom.el_value input) in
+          let v = String.trim (Web_dom.el_value input) in
           if v <> "" then begin
             P.close_all ();
             tree := append_at !tree loc (CText v);
@@ -449,7 +449,7 @@ let full_text_picker inst ~tree ~loc ~anchor:_ ~refresh =
           end
       | "Escape" -> P.close_all ()
       | _ -> ());
-  Editor_dom.set_timeout (fun () -> Editor_dom.el_focus input) 0
+  Web_dom.set_timeout (fun () -> Web_dom.el_focus input) 0
 
 let sample_picker inst ~tree ~loc ~anchor ~refresh =
   ignore
@@ -567,7 +567,7 @@ let rec clause_el inst ~tree ~loc ~refresh (c : clause) : D.el =
          D.h ~tag:"a" ~cls:"flex query-clause"
            ~text:(clause_label inst c) ()
        in
-       D.el_add_listener a "click" (fun _ ->
+       D.el_on a "click" (fun _ ->
            clause_popup inst ~tree ~loc ~anchor:a ~is_op_clause:false ~refresh);
        D.el_append_child btn a;
        D.el_append_child wrap btn);
@@ -578,7 +578,7 @@ and op_label_el inst ~tree ~loc ~refresh kind : D.el =
     D.h ~tag:"a" ~cls:"flex text-sm query-clause"
       ~text:(String.uppercase_ascii kind) ()
   in
-  D.el_add_listener a "click" (fun _ ->
+  D.el_on a "click" (fun _ ->
       clause_popup inst ~tree ~loc ~anchor:a ~is_op_clause:true ~refresh);
   a
 
@@ -592,9 +592,9 @@ and add_filter_btn inst ~tree ~loc ~refresh ~with_label : D.el =
   (* cljs emits the "filter" label as a direct text node — playwright
      :text() only matches own text, not descendant elements *)
   if with_label then
-    D.el_append_child b (Editor_dom.create_text_node I.filter);
-  D.el_add_listener b "mousedown" (fun ev -> Editor_dom.stop_propagation ev);
-  D.el_add_listener b "click" (fun _ ->
+    D.el_append_child b (Web_dom.create_text_node I.filter);
+  D.el_on b "mousedown" (fun ev -> Web_dom.ev_stop_propagation ev);
+  D.el_on b "click" (fun _ ->
       picker inst ~tree ~loc ~anchor:b ~refresh);
   b
 

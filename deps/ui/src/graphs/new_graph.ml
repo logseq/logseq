@@ -35,8 +35,8 @@ let checkbox ~key ~id ~checked ~on_click =
            []) ]
 
 let name_input () =
-  match Browser_ui.qs ".new-graph input" with
-  | Some el -> Browser_ui.value el |> String.trim
+  match Web_dom.query_selector ".new-graph input" with
+  | Some el -> Web_dom.el_value el |> String.trim
   | None -> ""
 
 let invalid_name name = Graphs_ops.invalid_chars name <> []
@@ -147,10 +147,10 @@ let body (_ms : Model.t Signal.signal) : t =
       ]
   in
   ignore
-    (Browser_ui.set_timeout
+    (Web_dom.set_timeout_id
        (fun () ->
-         match Browser_ui.qs ".new-graph input" with
-         | Some el -> Browser_ui.focus el
+         match Web_dom.query_selector ".new-graph input" with
+         | Some el -> Web_dom.el_focus el
          | None -> ())
        32);
   node ctx parent

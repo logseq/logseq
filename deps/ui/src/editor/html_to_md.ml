@@ -4,7 +4,7 @@
    directly (DOMParser output is already entity-decoded, so the cljs
    html-decode-hiccup pass is unnecessary). *)
 
-module D = Editor_dom
+module D = Web_dom
 
 type dom_parser
 
@@ -13,10 +13,6 @@ external new_dom_parser : unit -> dom_parser = "DOMParser" [@@mel.new]
 external parse_from_string : dom_parser -> string -> string -> D.el
   = "parseFromString" [@@mel.send]
 
-external doc_body : D.el -> D.el = "body" [@@mel.get]
-external child_nodes : D.el -> D.node_list = "childNodes" [@@mel.get]
-external node_text : D.el -> string = "textContent" [@@mel.get]
-external el_outer_html : D.el -> string = "outerHTML" [@@mel.get]
 
 (* markdown emphasis markers (config/get-* for :markdown) *)
 let pat_bold = "**"
@@ -166,11 +162,11 @@ type ctx = { level : int; in_table : bool }
 
 (* one DOM node -> markdown fragment *)
 let rec node_to_md (ctx : ctx) (node : D.el) : string =
-  match D.node_type node with
+  match D.el_node_type node with
   | 8 -> "" (* comments *)
   | 3 ->
       (* text *)
-      let t = node_text node in
+      let t = D.el_text_content node in
       if !inside_pre then t else normalize_text t
   | 1 -> (
       let tag = String.lowercase_ascii (D.el_tag node) in
@@ -200,7 +196,7 @@ let rec node_to_md (ctx : ctx) (node : D.el) : string =
                 if D.el_query node "img" <> None then
                   (* cljs exports the raw hiccup for linked images; the DOM
                      equivalent is the element's own html *)
-                  "#+BEGIN_EXPORT html\n" ^ el_outer_html node
+                  "#+BEGIN_EXPORT html\n" ^ D.el_outer_html node
                   ^ "\n#+END_EXPORT"
                 else
                   "["
@@ -242,7 +238,7 @@ let rec node_to_md (ctx : ctx) (node : D.el) : string =
             if !inside_pre then map_join children
             else (
               match children with
-              | first :: _ when D.node_type first = 3 ->
+              | first :: _ when D.el_node_type first = 3 ->
                   pat_code ^ map_join children ^ pat_code
               | _ -> map_join children)
         | "pre" ->
@@ -269,7 +265,7 @@ let rec node_to_md (ctx : ctx) (node : D.el) : string =
                   List.length
                     (List.filter
                        (fun c ->
-                         D.node_type c = 1
+                         D.el_node_type c = 1
                          && (let t = String.lowercase_ascii (D.el_tag c) in
                              t = "td" || t = "th"))
                        (children_of tr))
@@ -298,13 +294,13 @@ let rec node_to_md (ctx : ctx) (node : D.el) : string =
   | _ -> ""
 
 and children_of node : D.el list =
-  let nl = child_nodes node in
-  let n = D.node_list_length nl in
+  let nl = D.el_child_nodes node in
+  let n = D.nl_length nl in
   let rec go i acc =
     if i < 0 then acc
     else
       go (i - 1)
-        (match D.node_list_item nl i with
+        (match D.nl_item nl i with
          | Some c -> c :: acc
          | None -> acc)
   in
@@ -314,7 +310,9 @@ let convert html =
   if String.trim html = "" then None
   else
     let doc = parse_from_string (new_dom_parser ()) html "text/html" in
-    let body = doc_body doc in
+    let body =
+      match D.el_body doc with Some b -> b | None -> doc
+    in
     let s =
       String.concat ""
         (List.map (node_to_md { level = 0; in_table = false })

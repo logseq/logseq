@@ -13,59 +13,12 @@ module K = Dnd_kit
 module S = Editor_state
 module A = Editor_actions
 
-type element = Js.Json.t
-
-(* ---------- DOM externals ---------- *)
-
-external qsa : string -> Js.Json.t = "querySelectorAll"
-  [@@mel.scope "document"]
-
-external to_array : Js.Json.t -> element array = "from"
-  [@@mel.scope "Array"]
-
-external document_el : element = "documentElement" [@@mel.scope "document"]
-
-external el_attr : element -> string -> string option = "getAttribute"
-  [@@mel.send] [@@mel.return nullable]
-
-external el_parent : element -> element option = "parentElement"
-  [@@mel.get] [@@mel.return nullable]
-
-external el_matches : element -> string -> bool = "matches" [@@mel.send]
-external el_connected : element -> bool = "isConnected" [@@mel.get]
-external el_rect : element -> Js.Json.t = "getBoundingClientRect"
-  [@@mel.send]
-external rect_top : Js.Json.t -> float = "top" [@@mel.get]
-external rect_left : Js.Json.t -> float = "left" [@@mel.get]
-external scroll_x : float = "scrollX" [@@mel.scope "window"]
-
-type js_map
-
-external new_map : unit -> js_map = "Map" [@@mel.new]
-external map_has : js_map -> element -> bool = "has" [@@mel.send]
-external map_set : js_map -> element -> 'a -> unit = "set" [@@mel.send]
-external map_del : js_map -> element -> unit = "delete" [@@mel.send]
-
-external map_each : js_map -> ('a -> element -> unit) -> unit = "forEach"
-  [@@mel.send]
-
-type mutation_observer
-type observe_opts
-
-external new_observer : (unit -> unit) -> mutation_observer
-  = "MutationObserver" [@@mel.new]
-
-external observe_opts :
-  childList:bool -> subtree:bool -> observe_opts = "" [@@mel.obj]
-
-external observe :
-  mutation_observer -> element -> observe_opts -> unit = "observe"
-  [@@mel.send]
+type element = Web_dom.el
 
 (* ---------- registration ---------- *)
 
-let draggables : js_map = new_map ()
-let droppables : js_map = new_map ()
+let draggables : Web_dom.js_map = Web_dom.new_js_map ()
+let droppables : Web_dom.js_map = Web_dom.new_js_map ()
 let uid = ref 0
 
 let next_id prefix =
@@ -76,13 +29,13 @@ let next_id prefix =
    collision priority so the innermost candidate wins, mirroring
    el.closest('.ls-block') on the native path *)
 let rec block_depth acc el =
-  match el_parent el with
-  | Some p -> block_depth (acc + if el_matches p ".ls-block" then 1 else 0) p
+  match Web_dom.el_parent el with
+  | Some p -> block_depth (acc + if Web_dom.el_matches p ".ls-block" then 1 else 0) p
   | None -> acc
 
 let register_source m el =
-  if not (map_has draggables el) then
-    match el_attr el "blockid" with
+  if not (Web_dom.js_map_has draggables el) then
+    match Web_dom.el_get_attr el "blockid" with
     | Some u ->
         let d =
           K.new_draggable
@@ -90,12 +43,12 @@ let register_source m el =
                ~data:(K.uuid_data ~uuid:u ()) ())
             m
         in
-        map_set draggables el d
+        Web_dom.js_map_set draggables el d
     | None -> ()
 
 let register_target m el =
-  if not (map_has droppables el) then
-    match el_attr el "blockid" with
+  if not (Web_dom.js_map_has droppables el) then
+    match Web_dom.el_get_attr el "blockid" with
     | Some u ->
         let dp =
           K.new_droppable
@@ -105,20 +58,20 @@ let register_target m el =
                ())
             m
         in
-        map_set droppables el dp
+        Web_dom.js_map_set droppables el dp
     | None -> ()
 
 let sweep map destroy =
-  map_each map (fun entity el ->
-      if not (el_connected el) then begin
+  Web_dom.js_map_each map (fun entity el ->
+      if not (Web_dom.el_is_connected el) then begin
         destroy entity;
-        map_del map el
+        Web_dom.js_map_del map el
       end)
 
 let scan m =
   Array.iter (register_source m)
-    (to_array (qsa ".bullet-container[blockid]"));
-  Array.iter (register_target m) (to_array (qsa ".ls-block[blockid]"));
+    (Web_dom.query_selector_all_arr ".bullet-container[blockid]");
+  Array.iter (register_target m) (Web_dom.query_selector_all_arr ".ls-block[blockid]");
   sweep draggables K.destroy_draggable;
   sweep droppables K.destroy_droppable
 
@@ -143,22 +96,22 @@ let coords_of ev op =
   | Some nev -> (K.page_x nev, K.client_y nev)
   | None -> (
       match K.pos_current (K.op_position op) with
-      | Some pt -> (K.pt_x pt +. scroll_x, K.pt_y pt)
+      | Some pt -> (K.pt_x pt +. Web_dom.win_scroll_x, K.pt_y pt)
       | None -> (0.0, 0.0))
 
 (* cljs block-drag-over: near the top of the first block -> :top; deep
    indent (x-offset > 50) -> :nested; else :sibling *)
 let update_drop_target src tgt_el page_x client_y =
-  match el_attr tgt_el "blockid" with
+  match Web_dom.el_get_attr tgt_el "blockid" with
   | Some tgt when tgt <> src && not (A.is_descendant tgt src) ->
-      let rect = el_rect tgt_el in
+      let rect = Web_dom.el_bounding_rect tgt_el in
       let first =
         match S.find_parent tgt with
         | Some (_, idx) -> idx = 0
         | None -> false
       in
-      let near_top = Float.abs (client_y -. rect_top rect) <= 16.0 in
-      let x_off = page_x -. rect_left rect in
+      let near_top = Float.abs (client_y -. Web_dom.rect_top rect) <= 16.0 in
+      let x_off = page_x -. Web_dom.rect_left rect in
       let move_to =
         if first && near_top then "top"
         else if x_off > 50.0 then "nested"
@@ -223,6 +176,6 @@ let install () =
     K.on mon "dragover" (fun ev _ -> update_from_event ev) ();
     K.on mon "dragend" on_drag_end ();
     scan m;
-    let obs = new_observer (fun () -> scan m) in
-    observe obs document_el (observe_opts ~childList:true ~subtree:true)
+    let obs = Web_dom.new_observer (fun () -> scan m) in
+    Web_dom.obs_observe obs Web_dom.document_element (Web_dom.mo_opts ~childList:true ~subtree:true)
   end

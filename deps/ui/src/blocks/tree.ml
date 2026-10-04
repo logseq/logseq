@@ -279,18 +279,18 @@ let arrow_hover ~scope ~uuid ~(b : Model.block) name _payload =
   in
   if not (collapsable || collapsed) then ()
   else
-    match Browser_ui.qs ("#ctrlspan-" ^ scope ^ "-" ^ uuid) with
+    match Web_dom.query_selector ("#ctrlspan-" ^ scope ^ "-" ^ uuid) with
     | None -> ()
     | Some el -> (
         match name with
         | "mouseenter" ->
-            Browser_ui.rm_class el "control-hide";
-            Browser_ui.add_class el "control-show";
-            Browser_ui.add_class el "cursor-pointer"
+            Web_dom.el_class_remove el "control-hide";
+            Web_dom.el_class_add el "control-show";
+            Web_dom.el_class_add el "cursor-pointer"
         | "mouseleave" ->
-            Browser_ui.add_class el "control-hide";
-            Browser_ui.rm_class el "control-show";
-            Browser_ui.rm_class el "cursor-pointer"
+            Web_dom.el_class_add el "control-hide";
+            Web_dom.el_class_remove el "control-show";
+            Web_dom.el_class_remove el "cursor-pointer"
         | _ -> ())
 
 (* -- content vs editor -- *)
@@ -421,15 +421,15 @@ let content_or_editor ~editable uuid scope (b : Model.block) : t =
    removes the tag value off the owner entity (block or page). Private
    tags never show the x. *)
 let tag_hover hid xid name _payload =
-  match Browser_ui.qs ("#" ^ hid), Browser_ui.qs ("#" ^ xid) with
+  match Web_dom.query_selector ("#" ^ hid), Web_dom.query_selector ("#" ^ xid) with
   | Some h, Some x -> (
       match name with
       | "mouseenter" ->
-          Browser_ui.add_class h "hidden";
-          Browser_ui.rm_class x "hidden"
+          Web_dom.el_class_add h "hidden";
+          Web_dom.el_class_remove x "hidden"
       | "mouseleave" ->
-          Browser_ui.rm_class h "hidden";
-          Browser_ui.add_class x "hidden"
+          Web_dom.el_class_remove h "hidden";
+          Web_dom.el_class_add x "hidden"
       | _ -> ())
   | _ -> ()
 
@@ -521,7 +521,7 @@ let () =
   Editor_keys.install_once ();
   Add_button.install ();
   Asset_dom.install ();
-  Editor_dom.ensure_raw_text_observer ()
+  Web_dom.ensure_raw_text_observer ()
 
 let rec block_row
     ?(depth = 0) ?(scope = "main") ?(editable = true) ?(library = false)
@@ -800,7 +800,7 @@ let embed_chained = ref false
 
 (* a broadcast can arrive per applied op — coalesce embed refetches into
    one fan-out per burst so N embeds issue N fetches, not N x ops *)
-let debounced_embed_refresh = Editor_dom.debounce 150
+let debounced_embed_refresh = Web_dom.debounce 150
 
 let chain_embed_worker () =
   if not !embed_chained then begin

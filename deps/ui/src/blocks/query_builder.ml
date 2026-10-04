@@ -10,7 +10,7 @@
    only has to keep .cp__query-builder out of the enter_edit path. *)
 
 open Promise_ext
-module D = Properties_dom
+module D = Web_dom
 module S = Properties_state
 module I18n = I18n
 module W = Wire
@@ -47,7 +47,7 @@ let save_dsl uuid dsl =
 let open_select ~anchor ~placeholder items =
   let root, input = Properties_select.create ~placeholder items in
   ignore (Properties_popup.open_anchored anchor root);
-  Editor_dom.el_focus input
+  Web_dom.el_focus input
 
 (* class picker after choosing "tags" — cljs lists all classes by
    title *)
@@ -107,7 +107,7 @@ let block_el uuid (_b : Model.block) : Lui_elements.t =
             ~events:"click"
             ~on_dom_event:(fun name _ ->
               if name = "click" then
-                match D.doc_query ("#qb-" ^ uuid) with
+                match D.query_selector ("#qb-" ^ uuid) with
                 | Some btn -> open_filter_picker ~anchor:btn uuid
                 | None -> ())
             ~text:(I18n.t "query.builder/filter")

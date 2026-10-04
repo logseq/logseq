@@ -21,7 +21,7 @@ let apply_storage_env () =
     | Some v -> unquote v
     | None -> "en"
   in
-  Platform.document_set_lang lang;
+  Web_dom.doc_set_lang lang;
   let system =
     (* cljs state.cljs :ui/system-theme? defaults to true *)
     match Platform.local_storage_get "system-theme?" with
@@ -29,7 +29,7 @@ let apply_storage_env () =
     | None -> true
   in
   let theme =
-    if system then if Browser_ui.prefers_dark () then "dark" else "light"
+    if system then if Web_dom.prefers_dark () then "dark" else "light"
     else
       match Platform.local_storage_get "theme" with
       | Some v -> unquote v
@@ -46,18 +46,18 @@ let apply_storage_env () =
         else v)
     | None -> "logseq"
   in
-  Platform.document_set_data "color" accent;
+  Web_dom.doc_set_data "color" accent;
   (match Platform.local_storage_get "editor-font" with
    | Some v -> (
        match Edn.parse (unquote v) with
        | Wire.Map kvs ->
            let m = Wire.Map kvs in
            (match Wire.get m "type" with
-            | Some (Wire.String t) -> Platform.document_set_data "font" t
+            | Some (Wire.String t) -> Web_dom.doc_set_data "font" t
             | _ -> ());
            (match Wire.get m "global" with
             | Some (Wire.Bool g) ->
-                Platform.document_set_data "font-global"
+                Web_dom.doc_set_data "font-global"
                   (if g then "true" else "false")
             | _ -> ())
        | _ -> ())
@@ -68,8 +68,8 @@ let apply_storage_env () =
     | None -> false
   in
   if wide then
-    match Browser_ui.qs "#app-container-wrapper" with
-    | Some el -> Browser_ui.add_class el "ls-wide-mode"
+    match Web_dom.query_selector "#app-container-wrapper" with
+    | Some el -> Web_dom.el_class_add el "ls-wide-mode"
     | None -> ()
 
 (* pick the graph to open (cljs graph/resolve-startup-repo): the repo a

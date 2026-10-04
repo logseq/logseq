@@ -156,7 +156,7 @@ let close_prompt () = set (fun d -> { d with prompt = None })
 
 let detail_field ev key =
   Js.Json.decodeString
-    (Platform.json_prop (Platform.json_prop ev "detail") key)
+    (Web_dom.js_get (Web_dom.js_get ev "detail") key)
   |> Option.value ~default:""
 
 let init_done = ref false
@@ -172,11 +172,11 @@ let init () =
   if !init_done then ()
   else (
     init_done := true;
-    Platform.on_document_event "ls:open-dialog" (fun ev ->
+    Web_dom.on_document_event "ls:open-dialog" (fun ev ->
         match detail_field ev "name" with
         | "" -> ()
         | name -> if known name then open_ name);
-    Platform.on_document_event "ls:close-dialog" (fun _ -> close_top ());
-    Browser_ui.on_document "keydown" (fun ev ->
+    Web_dom.on_document_event "ls:close-dialog" (fun _ -> close_top ());
+    Web_dom.on_document_event "keydown" (fun ev ->
         if Platform.event_str ev "key" = "Escape" && ready () then
           close_top ()))

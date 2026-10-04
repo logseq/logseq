@@ -90,7 +90,7 @@ let run ~command ~block ~value =
   | Some uuid -> (
       match command with
       | "open-in-sidebar" ->
-          Platform.dispatch "ls:open-right-sidebar"
+          Web_dom.dispatch_custom "ls:open-right-sidebar"
             (Js.Json.object_
                (Js.Dict.fromList [ ("uuid", Js.Json.string uuid) ]))
       | "copy-ref" ->

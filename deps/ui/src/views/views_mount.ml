@@ -3,10 +3,10 @@
    a MutationObserver watches for them and attaches view instances, like
    blocks/add_button.ml does. js_app/main.ml must call [install]. *)
 
-module D = Views_dom
+module D = Web_dom
 module V = Views_state
 module W = Wire
-module Ed = Editor_dom
+module Ed = Web_dom
 
 let next_id = ref 0
 
@@ -258,7 +258,7 @@ let on_document_click (ev : Ed.ev) =
       match Ed.el_closest target ".ls-query-setting" with
       | None -> ()
       | Some btn -> (
-          Ed.stop_propagation ev;
+          Ed.ev_stop_propagation ev;
           match Ed.el_closest btn ".custom-query-results" with
           | None -> ()
           | Some shell -> (
@@ -282,6 +282,6 @@ let on_document_click (ev : Ed.ev) =
 let install () =
   if not !installed then begin
     installed := true;
-    Ed.document_add_listener "click" on_document_click false;
+    Ed.add_document_listener "click" on_document_click false;
     Ed.register_doc_scan scan
   end

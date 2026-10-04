@@ -4,7 +4,7 @@
    inside .editor-wrapper -> editing mode, else normal (block-select) mode. *)
 
 module S = Editor_state
-module D = Editor_dom
+module D = Web_dom
 module A = Editor_actions
 
 let ( let* ) p f = Js.Promise.then_ f p
@@ -209,13 +209,13 @@ let on_editor_arrows ev uuid el =
   let up = key = "ArrowUp" in
   let shift = D.ev_shift ev and alt = D.ev_alt ev and meta = D.ev_meta ev in
   if (alt || meta) && shift then (
-    D.prevent_default ev;
+    D.ev_prevent_default ev;
     ignore
       (Outliner_ops.apply_and_refresh
          [ Outliner_ops.move_up_down [ uuid ] up ]))
   else if mods ev then (
     (* cljs mod+up / mod+down collapse/expand the block's children *)
-    D.prevent_default ev;
+    D.ev_prevent_default ev;
     A.collapse_expand ~collapse:up ())
   else
     let v = D.el_value el in
@@ -235,15 +235,15 @@ let on_editor_arrows ev uuid el =
          second press can land on the textarea before the DOM flush removes
          it, so extend when editing was already cleared *)
       (if (up && first_line) || ((not up) && last_line) then (
-         D.prevent_default ev;
+         D.ev_prevent_default ev;
          match S.editing () with
          | Some _ -> A.exit_edit ~select:true
          | None -> A.extend_selection up))
     else if up && first_line then (
-      D.prevent_default ev;
+      D.ev_prevent_default ev;
       A.arrow_nav uuid true)
     else if (not up) && last_line then (
-      D.prevent_default ev;
+      D.ev_prevent_default ev;
       A.arrow_nav uuid false)
 
 let on_editor_key ev uuid el =
@@ -255,26 +255,26 @@ let on_editor_key ev uuid el =
     match key with
     | "Enter" when mods ev && not shift ->
         (* cljs editor/cycle-todo — mod+enter never splits *)
-        D.prevent_default ev;
+        D.ev_prevent_default ev;
         Editor_commands.cycle_todo uuid
     | "Enter" when not shift ->
-        D.prevent_default ev;
+        D.ev_prevent_default ev;
         A.split_at_cursor uuid
     | "Tab" ->
-        D.prevent_default ev;
+        D.ev_prevent_default ev;
         A.indent_or_outdent ~indent:(not shift)
     | "Escape" ->
-        D.prevent_default ev;
+        D.ev_prevent_default ev;
         A.exit_edit ~select:true
     | "Backspace" ->
         let s, e = caret_span el in
         if s = 0 && e = 0 then (
-          D.prevent_default ev;
+          D.ev_prevent_default ev;
           A.merge_prev uuid)
     | "Delete" ->
         let s, e = caret_span el in
         if s = e && e = String.length (D.el_value el) then (
-          D.prevent_default ev;
+          D.ev_prevent_default ev;
           A.merge_next uuid)
     | "ArrowUp" | "ArrowDown" -> on_editor_arrows ev uuid el
     | "]" | ")" -> (
@@ -284,15 +284,15 @@ let on_editor_key ev uuid el =
         let s = D.el_selection_start el in
         let c = if key = "]" then ']' else ')' in
         if s < String.length v && String.get v s = c then (
-          D.prevent_default ev;
+          D.ev_prevent_default ev;
           D.el_set_selection_range el (s + 1) (s + 1)))
     | _ -> (
         match shortcut_key ev with
         | "z" when mods ev ->
-            D.prevent_default ev;
+            D.ev_prevent_default ev;
             if shift then A.redo () else A.undo ()
         | "y" when mods ev ->
-            D.prevent_default ev;
+            D.ev_prevent_default ev;
             A.redo ()
         | "a" when mods ev && not shift -> (
             (* cljs editor/select-parent — only when the whole textarea
@@ -303,65 +303,65 @@ let on_editor_key ev uuid el =
               && D.el_selection_start el = 0
               && D.el_selection_end el = String.length v
             then (
-              D.prevent_default ev;
+              D.ev_prevent_default ev;
               A.exit_edit ~select:true))
         | "b" when mods ev && not shift ->
-            D.prevent_default ev;
+            D.ev_prevent_default ev;
             A.wrap_selection uuid "**"
         | "b" when D.ev_ctrl ev && shift ->
-            D.prevent_default ev;
+            D.ev_prevent_default ev;
             move_word uuid false
         | "i" when mods ev && not shift ->
-            D.prevent_default ev;
+            D.ev_prevent_default ev;
             A.wrap_selection uuid "*"
         | "s" when mods ev && shift ->
-            D.prevent_default ev;
+            D.ev_prevent_default ev;
             A.wrap_selection uuid "~~"
         | ";" when mods ev && not shift ->
-            D.prevent_default ev;
+            D.ev_prevent_default ev;
             A.toggle_children_collapse ()
         | "," when mods ev && not shift ->
-            D.prevent_default ev;
+            D.ev_prevent_default ev;
             A.zoom_out ()
         | "h" when mods ev && shift ->
-            D.prevent_default ev;
+            D.ev_prevent_default ev;
             A.wrap_selection uuid "=="
         | "e" when D.ev_meta ev && not shift -> A.quick_add ()
         | "e" when mods ev && shift ->
             (* cljs editor/copy-embed *)
-            D.prevent_default ev;
+            D.ev_prevent_default ev;
             Platform.copy_to_clipboard ("{{embed ((" ^ uuid ^ "))}}")
         | "." when mods ev && shift ->
-            D.prevent_default ev;
+            D.ev_prevent_default ev;
             A.zoom_to uuid
         | "l" when D.ev_meta ev && not shift ->
             (* cljs editor/insert-link *)
-            D.prevent_default ev;
+            D.ev_prevent_default ev;
             Editor_commands.open_link_form false uuid
               (D.el_selection_start el)
         | "l" when D.ev_ctrl ev && not shift ->
             (* cljs editor/clear-block (macOS ctrl+l) *)
-            D.prevent_default ev;
+            D.ev_prevent_default ev;
             set_buffer uuid "" 0
         | "o" when mods ev ->
-            D.prevent_default ev;
+            D.ev_prevent_default ev;
             follow_link uuid shift
         | "u" when D.ev_ctrl ev && not shift ->
-            D.prevent_default ev;
+            D.ev_prevent_default ev;
             kill_line_before uuid
         | "w" when D.ev_ctrl ev && not shift ->
-            D.prevent_default ev;
+            D.ev_prevent_default ev;
             forward_kill_word uuid
         | "f" when D.ev_ctrl ev && shift ->
-            D.prevent_default ev;
+            D.ev_prevent_default ev;
             move_word uuid true
         | "c" when mods ev && shift ->
             (* cljs editor/copy-text — the block's text to clipboard *)
-            D.prevent_default ev;
+            D.ev_prevent_default ev;
             Platform.copy_to_clipboard (D.el_value el)
         | "v" when mods ev && shift ->
             (* cljs editor/paste-text-in-one-block-at-point *)
-            D.prevent_default ev;
+            D.ev_prevent_default ev;
             paste_text_at_caret uuid
         | _ -> ())
 
@@ -506,7 +506,7 @@ let on_global_key ev =
           in
           let dispatch cid =
             if chord_may_run editing cid then begin
-              D.prevent_default ev;
+              D.ev_prevent_default ev;
               Cmdk_state.dispatch_id cid
             end
           in
@@ -559,49 +559,49 @@ let on_normal_key ev =
   let selected () = S.selection_active () in
   match key with
   | "Backspace" | "Delete" when selected () ->
-      D.prevent_default ev;
+      D.ev_prevent_default ev;
       A.delete_selection ()
   | "ArrowUp" when (meta || alt) && shift ->
-      D.prevent_default ev;
+      D.ev_prevent_default ev;
       A.move_blocks_up_down true
   | "ArrowDown" when (meta || alt) && shift ->
-      D.prevent_default ev;
+      D.ev_prevent_default ev;
       A.move_blocks_up_down false
   | "ArrowUp" when mods ev && not shift ->
       (* cljs mod+up collapses one level / the selection *)
-      D.prevent_default ev;
+      D.ev_prevent_default ev;
       A.collapse_expand ~collapse:true ()
   | "ArrowDown" when mods ev && not shift ->
       (* cljs mod+down expands one level / the selection *)
-      D.prevent_default ev;
+      D.ev_prevent_default ev;
       A.collapse_expand ~collapse:false ()
   | "ArrowUp" when shift ->
-      D.prevent_default ev;
+      D.ev_prevent_default ev;
       A.extend_selection true
   | "ArrowDown" when shift ->
-      D.prevent_default ev;
+      D.ev_prevent_default ev;
       A.extend_selection false
   | "ArrowUp" when selected () ->
-      D.prevent_default ev;
+      D.ev_prevent_default ev;
       A.move_selection_focus true
   | "ArrowDown" when selected () ->
-      D.prevent_default ev;
+      D.ev_prevent_default ev;
       A.move_selection_focus false
   | "Tab" when selected () ->
-      D.prevent_default ev;
+      D.ev_prevent_default ev;
       A.indent_or_outdent ~indent:(not shift)
   | "Enter" when mods ev ->
-      D.prevent_default ev;
+      D.ev_prevent_default ev;
       List.iter Editor_commands.cycle_todo (A.selected_uuids ())
   | "Enter" when not shift -> (
       match D.closest_sel ".block-add-button" (D.ev_target ev) with
       | Some btn ->
-          D.prevent_default ev;
+          D.ev_prevent_default ev;
           A.append_block ?for_page:(D.el_get_attr btn "parentblockid") ()
       | None -> (
           match S.anchor () with
           | Some u when selected () ->
-              D.prevent_default ev;
+              D.ev_prevent_default ev;
               A.enter_edit u 0
           | _ -> ()))
   | "Escape" ->
@@ -612,34 +612,34 @@ let on_normal_key ev =
   | "?" ->
       (* cljs shift+/ (:ui/toggle-help, global-non-editing-only) toggles
          the help menu popup *)
-      D.prevent_default ev;
+      D.ev_prevent_default ev;
       Runtime.send Action.Help_toggle
   | _ -> (
       match shortcut_key ev with
       | "a" when mods ev && shift ->
           (* cljs mod+shift+a = select-all-blocks *)
-          D.prevent_default ev;
+          D.ev_prevent_default ev;
           A.select_all ()
       | "a" when mods ev ->
           (* cljs mod+a = select-parent *)
-          D.prevent_default ev;
+          D.ev_prevent_default ev;
           A.select_parent ()
       | ";" when mods ev && not shift ->
-          D.prevent_default ev;
+          D.ev_prevent_default ev;
           A.toggle_children_collapse ()
       | "," when mods ev && not shift ->
           (* cljs zoom-out outside edit mode is history.back *)
-          D.prevent_default ev;
+          D.ev_prevent_default ev;
           Platform.history_back ()
       | "z" when mods ev ->
-          D.prevent_default ev;
+          D.ev_prevent_default ev;
           if shift then A.redo () else A.undo ()
       | "y" when mods ev ->
-          D.prevent_default ev;
+          D.ev_prevent_default ev;
           A.redo ()
       | "e" when mods ev ->
           (* cljs mod+e quick-add also fires outside edit mode *)
-          D.prevent_default ev;
+          D.ev_prevent_default ev;
           A.quick_add ()
       | _ -> ())
 
@@ -705,7 +705,7 @@ let on_pending_focus_key ev e caret =
   in
   (match D.ev_key ev with
   | "Backspace" ->
-      D.prevent_default ev;
+      D.ev_prevent_default ev;
       if caret = 0 then queue (fun () -> A.merge_prev e.S.uuid)
       else
         patch
@@ -713,7 +713,7 @@ let on_pending_focus_key ev e caret =
           ^ String.sub buf caret (len - caret))
           (caret - 1)
   | "Delete" ->
-      D.prevent_default ev;
+      D.ev_prevent_default ev;
       if caret = len then queue (fun () -> A.merge_next e.S.uuid)
       else
         patch
@@ -721,25 +721,25 @@ let on_pending_focus_key ev e caret =
           ^ String.sub buf (caret + 1) (len - caret - 1))
           caret
   | "Enter" ->
-      D.prevent_default ev;
+      D.ev_prevent_default ev;
       if D.ev_shift ev then insert "\n"
       else queue (fun () -> A.split_at_cursor e.S.uuid)
   | "Tab" ->
-      D.prevent_default ev;
+      D.ev_prevent_default ev;
       queue (fun () ->
           A.indent_or_outdent ~indent:(not (D.ev_shift ev)))
   | "Escape" ->
-      D.prevent_default ev;
+      D.ev_prevent_default ev;
       A.exit_edit ~select:true
   | ("ArrowUp" | "ArrowDown") as key when D.ev_shift ev ->
-      D.prevent_default ev;
+      D.ev_prevent_default ev;
       queue (fun () -> A.shift_arrow_select (key = "ArrowUp"))
   | ("ArrowUp" | "ArrowDown") as key
     when not (mods ev || D.ev_alt ev) ->
       (* mirror on_editor_arrows: a plain arrow only leaves the block when
          the caret sits on a boundary line; mid-buffer arrows just prevent
          the browser default while the textarea is remounting *)
-      D.prevent_default ev;
+      D.ev_prevent_default ev;
       let up = key = "ArrowUp" in
       let first_line =
         (match String.index_opt (String.sub buf 0 caret) '\n' with
@@ -764,9 +764,9 @@ let on_pending_focus_key ev e caret =
     when String.length key = 1
          && (not (D.ev_composing ev))
          && not (mods ev || D.ev_alt ev) ->
-      D.prevent_default ev;
+      D.ev_prevent_default ev;
       insert key
-  | _ -> D.prevent_default ev);
+  | _ -> D.ev_prevent_default ev);
   (* run the op this key just queued right away (and any already queued):
      ops read S.editing/model state, not the landed textarea, and
      deferring them to the next focus landing delays their outliner ops
@@ -904,8 +904,8 @@ let on_copy ev =
         match (D.textarea_of e.uuid, D.ev_clipboard ev) with
         | Some el, Some clip ->
             if D.el_selection_start el = D.el_selection_end el then (
-              D.clipboard_set_text clip "text/plain" ("[[" ^ e.uuid ^ "]]");
-              D.prevent_default ev)
+              D.cd_set_data clip "text/plain" ("[[" ^ e.uuid ^ "]]");
+              D.ev_prevent_default ev)
         | _ -> ())
     | None -> A.copy_selection ev
 
@@ -947,7 +947,7 @@ let on_click ev =
                            hash navigation would push a second history
                            entry, leaving history.back() stuck on the
                            zoom route *)
-                        D.prevent_default ev;
+                        D.ev_prevent_default ev;
                         A.zoom_to u
                     | None -> ())
                 | None -> (
@@ -1135,22 +1135,22 @@ let on_mousedown ev =
 let on_dragstart ev =
   match D.closest_sel ".bullet-container" (D.ev_target ev) with
   | Some _ ->
-      D.prevent_default ev;
-      D.stop_immediate ev
+      D.ev_prevent_default ev;
+      D.ev_stop_immediate ev
   | None -> ()
 
 let files_of ev =
   match D.ev_data_transfer ev with
-  | Some dt -> D.dt_files dt
+  | Some dt -> D.cd_files dt
   | None -> [||]
 
 let on_file_dragover ev =
-  if Array.length (files_of ev) > 0 then D.prevent_default ev
+  if Array.length (files_of ev) > 0 then D.ev_prevent_default ev
 
 let on_file_drop ev =
   let files = files_of ev in
   if Array.length files > 0 then begin
-    D.prevent_default ev;
+    D.ev_prevent_default ev;
     Asset_dom.upload_files files
   end
 
@@ -1159,21 +1159,21 @@ let installed = ref false
 let install_once () =
   if not !installed then begin
     installed := true;
-    D.document_add_listener "keydown" on_keydown true;
-    D.document_add_listener "keydown" on_global_key true;
-    D.document_add_listener "input" on_input true;
-    D.document_add_listener "paste" on_paste true;
-    D.document_add_listener "copy" on_copy true;
-    D.document_add_listener "cut" on_cut true;
-    D.document_add_listener "click" on_click true;
-    D.document_add_listener "mousedown" on_mousedown true;
-    D.document_add_listener "ls:editor-insert" on_editor_insert true;
-    D.document_add_listener "dragstart" on_dragstart true;
-    D.document_add_listener "dragover" on_file_dragover true;
-    D.document_add_listener "drop" on_file_drop true;
+    D.add_document_listener "keydown" on_keydown true;
+    D.add_document_listener "keydown" on_global_key true;
+    D.add_document_listener "input" on_input true;
+    D.add_document_listener "paste" on_paste true;
+    D.add_document_listener "copy" on_copy true;
+    D.add_document_listener "cut" on_cut true;
+    D.add_document_listener "click" on_click true;
+    D.add_document_listener "mousedown" on_mousedown true;
+    D.add_document_listener "ls:editor-insert" on_editor_insert true;
+    D.add_document_listener "dragstart" on_dragstart true;
+    D.add_document_listener "dragover" on_file_dragover true;
+    D.add_document_listener "drop" on_file_drop true;
     Block_dnd.install ();
     (* pointer-driven range selection (cljs block/selection.cljs) *)
-    D.document_add_listener "pointerdown"
+    D.add_document_listener "pointerdown"
       (fun ev ->
         if
           S.ready ()
@@ -1184,7 +1184,7 @@ let install_once () =
              = None
         then Block_selection.pointerdown ev)
       true;
-    D.document_add_listener "pointerup"
+    D.add_document_listener "pointerup"
       (fun _ev -> Block_selection.pointerup ())
       true
   end

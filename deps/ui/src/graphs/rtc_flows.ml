@@ -66,10 +66,10 @@ let start repo =
 let emit repo =
   if logged_in () then begin
     (match !emit_timeout with
-     | Some id -> Browser_ui.clear_timeout id
+     | Some id -> Web_dom.clear_timeout id
      | None -> ());
     emit_timeout :=
-      Some (Browser_ui.set_timeout (fun () -> start repo) 50)
+      Some (Web_dom.set_timeout_id (fun () -> start repo) 50)
   end
 
 (* cljs current-login-user watch -> [:login] *)
@@ -91,7 +91,7 @@ let trigger_start repo = emit (Some repo)
 (* cljs document-visibility-state watch ->
    :document-visible&rtc-not-running *)
 let on_visible () =
-  if Platform.document_visible () then emit None
+  if Web_dom.document_visible () then emit None
 
 (* cljs network-online? watch -> :network-online&rtc-not-running *)
 let on_online () = if Platform.online () then emit None
@@ -105,6 +105,6 @@ let () =
   Runtime.rtc_graph_ready := notify_repo_switch
 
 let init () =
-  Platform.add_event_listener "online" (fun _ -> on_online ());
-  Platform.add_document_listener "visibilitychange" (fun _ ->
+  Web_dom.add_window_listener "online" (fun _ -> on_online ());
+  Web_dom.on_document_event "visibilitychange" (fun _ ->
       on_visible ())

@@ -5,7 +5,7 @@
    subtree mounts/remounts and it's missing. Clicks are delegated to
    Editor_keys' document-level listener (closest .block-add-button). *)
 
-open Editor_dom
+open Web_dom
 
 (* attr writes queue a mutation record even when the value is unchanged;
    the sync doc scan revisits this button on every flush, so only write

@@ -5,8 +5,7 @@
    delete-from-node. *)
 
 open Promise_ext
-open Editor_dom
-open Properties_dom
+open Web_dom
 module D = Properties_data
 module S = Properties_state
 module W = Wire
@@ -19,7 +18,7 @@ type menu_ctx =
   ; owner_title : string
   ; refresh : unit -> unit
   ; row : W.t
-  ; mutable content : Editor_dom.el option (* current dropdown body *)
+  ; mutable content : Web_dom.el option (* current dropdown body *)
   }
 
 let menuitem ?(cls = "") ?icon label act =
@@ -37,12 +36,12 @@ let menuitem ?(cls = "") ?icon label act =
         | None -> el_append_child s (mk ~cls:("ti ti-" ^ name) "i"));
        el_append_child inner s;
        let t = mk "div" in
-       el_set_text t label;
+       el_set_text_content t label;
        el_append_child inner t;
        el_append_child el inner
    | None ->
        let t = mk "div" in
-       el_set_text t label;
+       el_set_text_content t label;
        el_append_child el t);
   on_click el (fun _ -> act ());
   el
@@ -58,7 +57,7 @@ let closed_values m = D.row_closed_values m.row
 
 let swap_content m el =
   match m.content with
-  | Some body -> el_clear body; el_append_child body el
+  | Some body -> el_replace_children body; el_append_child body el
   | None -> ()
 
 let menu_root_class =
@@ -96,13 +95,13 @@ let alertdialog ~title ~desc ~confirm_label on_confirm =
       ~cls:
         "ui__button ls-btn-outline"
   in
-  el_set_text cancel_btn (I18n.t "ui/cancel");
+  el_set_text_content cancel_btn (I18n.t "ui/cancel");
   let confirm_btn =
     mk "button"
       ~cls:
         "ui__button ls-btn-primary"
   in
-  el_set_text confirm_btn confirm_label;
+  el_set_text_content confirm_btn confirm_label;
   el_append_child footer cancel_btn;
   el_append_child footer confirm_btn;
   el_append_child dlg footer;
@@ -133,7 +132,7 @@ let name_pane m =
    | Some d -> el_set_value desc (D.ref_title d)
    | None -> ());
   let save_btn = mk "button" ~cls:"ui__button" in
-  el_set_text save_btn (I18n.t "ui/save");
+  el_set_text_content save_btn (I18n.t "ui/save");
   el_append_child pane input_wrap;
   el_append_child pane desc;
   el_append_child pane save_btn;
@@ -308,7 +307,7 @@ let base_edit_form ~title_v ~desc_v on_save =
   in
   if desc_v <> "" then el_set_value desc desc_v;
   let save_btn = mk "button" ~cls:"ui__button" in
-  el_set_text save_btn (I18n.t "ui/save");
+  el_set_text_content save_btn (I18n.t "ui/save");
   el_append_child form input;
   el_append_child form desc;
   el_append_child form save_btn;
@@ -322,12 +321,12 @@ let choice_li m choice rebuild =
   let li = mk "li" in
   let title = D.ref_title choice in
   let strong = mk "strong" ~attrs:[ ("title", title) ] in
-  el_set_text strong title;
+  el_set_text_content strong title;
   el_append_child li strong;
   let more =
     mk "button" ~attrs:[ ("title", I18n.t "property/more-settings") ]
   in
-  el_set_text more "...";
+  el_set_text_content more "...";
   el_append_child li more;
   on_click strong (fun _ ->
       let form, input =
@@ -356,7 +355,7 @@ let choices_pane m =
      after add/edit/delete *)
   let rec build () =
     (let* w = D.closed_values (W.Keyword (prop_ident m)) in
-    el_clear pane;
+    el_replace_children pane;
     let ul = mk ~cls:"choices-list" "ul" in
     (* must overflow-scroll: e2e asserts scrollHeight > clientHeight *)
     set_style ul "max-height:240px;overflow-y:auto";
@@ -400,7 +399,7 @@ let default_value_pane m =
   let pane = mk ~cls:"ls-property-default-value-pane" "div" in
   let btn =
     menuitem (I18n.t "property/set-default-value") (fun () ->
-        el_clear pane;
+        el_replace_children pane;
         let wrap = mk ~cls:"editor-wrapper" "div" in
         let inner =
           mk ~cls:"editor-inner block-editor" "div"
@@ -417,7 +416,7 @@ let default_value_pane m =
           (fun ev ->
             match ev_key ev with
             | "Enter" -> (
-                prevent_default ev;
+                ev_prevent_default ev;
                 match prop_uuid m with
                 | Some pu ->
                     ignore
@@ -426,7 +425,7 @@ let default_value_pane m =
                          ~title:(el_value ta)
                          ~new_block_id:(Platform.random_uuid ()) ());
                     (* show the created value block in the pane *)
-                    el_clear pane;
+                    el_replace_children pane;
                     let b = mk ~cls:"ls-block" "div" in
                     ignore
                       (child_text "span" "block-title-wrap"
@@ -434,7 +433,7 @@ let default_value_pane m =
                     el_append_child pane b;
                     S.refresh_all ()
                 | None -> ())
-            | "Escape" -> prevent_default ev; stop_propagation ev
+            | "Escape" -> ev_prevent_default ev; ev_stop_propagation ev
             | _ -> ())
           true)
   in
@@ -478,7 +477,7 @@ let menu_body ~with_title ~more_options m =
   m.content <- Some body;
   (if with_title then begin
      let h3 = mk ~cls:"ls-menu-h3" "h3" in
-     el_set_text h3 (I18n.t "ui/configure");
+     el_set_text_content h3 (I18n.t "ui/configure");
      el_append_child body h3
    end);
   List.iter (el_append_child body) more_options;

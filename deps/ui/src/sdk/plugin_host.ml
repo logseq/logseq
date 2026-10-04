@@ -16,13 +16,15 @@ external new_ee3 : unit -> Js.Json.t = "EventEmitter3"
 external ls_remove : string -> unit = "removeItem"
   [@@mel.scope "localStorage"]
 
-external as_promise : Js.Json.t -> Js.Json.t Js.Promise.t = "%identity"
-external as_any : 'a -> Js.Json.t = "%identity"
 external getf : Js.Json.t -> string -> Js.Json.t = "" [@@mel.get_index]
 external setf : Js.Json.t -> string -> Js.Json.t -> unit = ""
   [@@mel.set_index]
 external reflect_apply :
   Js.Json.t -> Js.Json.t -> Js.Json.t array -> Js.Json.t = "apply"
+  [@@mel.scope "Reflect"]
+
+external reflect_apply_promise :
+  Js.Json.t -> Js.Json.t -> Js.Json.t array -> 'a Js.Promise.t = "apply"
   [@@mel.scope "Reflect"]
 external del_prop : Js.Json.t -> string -> bool = "deleteProperty"
   [@@mel.scope "Reflect"]
@@ -30,10 +32,13 @@ external del_prop : Js.Json.t -> string -> bool = "deleteProperty"
 let jstr o k = Option.value ~default:"" (Js.Json.decodeString (getf o k))
 let jbool o k = Option.value ~default:false (Js.Json.decodeBoolean (getf o k))
 let meth o m args : Js.Json.t = reflect_apply (getf o m) o args
+
+let meth_promise o m args =
+  reflect_apply_promise (getf o m) o args
 let lsplugin () = getf window_ "LSPlugin"
 let core () = getf window_ "LSPluginCore"
 
-let jobj pairs = Sdk_convert.json_obj (Js.Dict.fromList pairs)
+let jobj pairs = Js.Json.object_ (Js.Dict.fromList pairs)
 let jstr_ s = Js.Json.string s
 
 (* ---------- persistent stores (localStorage mirrors cljs idb) *)
@@ -54,7 +59,7 @@ let read_dict key =
 
 let write_dict key d =
   Platform.local_storage_set key
-    (Js.Json.stringify (Sdk_convert.json_obj d))
+    (Js.Json.stringify (Js.Json.object_ d))
 
 (* ---------- in-memory host state ---------- *)
 
@@ -112,7 +117,7 @@ let inject_toolbar_ui () =
     (fun it ->
       match
         ( Js.Dict.get installed it.it_pid
-        , Platform.get_element_by_id (slot_id it) )
+        , Web_dom.get_element_by_id (slot_id it) )
       with
       | Some pl, Some _ ->
           let opts =
@@ -129,7 +134,7 @@ let inject_toolbar_ui () =
 (* after a dirty bump re-renders the open menu, slots are recreated
    empty — re-inject on the next tick *)
 let schedule_inject () =
-  ignore (Browser_ui.set_timeout (fun () -> inject_toolbar_ui ()) 0)
+  ignore (Web_dom.set_timeout_id (fun () -> inject_toolbar_ui ()) 0)
 
 
 (* ---------- installed-plugin tracking ---------- *)
@@ -160,10 +165,10 @@ let clear_pid pid =
   bump ()
 
 let unlink_pid pid =
-  ignore (del_prop (Sdk_convert.json_obj installed) pid);
+  ignore (del_prop (Js.Json.object_ installed) pid);
   items := List.filter (fun it -> it.it_pid <> pid) !items;
   (let m = read_dict store_key in
-   ignore (del_prop (Sdk_convert.json_obj m) pid);
+   ignore (del_prop (Js.Json.object_ m) pid);
    write_dict store_key m);
   ls_remove (settings_key pid);
   bump ()
@@ -185,7 +190,7 @@ let on_lsp_update (e : Js.Json.t) =
         | Some pl ->
             (* already installed -> update path (cljs): pl.reload(),
                then refresh the saved manifest's version/webPkg *)
-            ignore (as_promise (meth pl "reload" [||]));
+            ignore (meth_promise pl "reload" [||]);
             (match Js.Json.classify (getf pl "options") with
              | Js.Json.JSONObject _ ->
                  setf (getf pl "options") "version"
@@ -205,7 +210,7 @@ let on_lsp_update (e : Js.Json.t) =
                 ]
             in
             ignore
-              (as_promise (meth (core ()) "register" [| entry |])))
+              (meth_promise (core ()) "register" [| entry |]))
   | _ -> ()
 
 (* ---------- boot ---------- *)
@@ -219,11 +224,10 @@ let boot_register () =
   in
   if plugins <> [] then
     ignore
-      (as_promise
-         (meth (core ()) "register"
-            [| Sdk_convert.json_arr (Array.of_list plugins)
-             ; Js.Json.boolean true
-            |]))
+      (meth_promise (core ()) "register"
+         [| Js.Json.array (Array.of_list plugins)
+          ; Js.Json.boolean true
+         |])
 
 
 
@@ -247,7 +251,7 @@ let toggle_pinned pkey =
   in
   let d = read_dict prefs_key in
   Js.Dict.set d "pinnedToolbarItems"
-    (Sdk_convert.json_arr
+    (Js.Json.array
        (Array.of_list (List.map jstr_ next)));
   write_dict prefs_key d;
   bump ()
@@ -256,10 +260,9 @@ let toggle_pinned pkey =
 
 let set_plugin_disabled pid disabled =
   ignore
-    (as_promise
-       (meth (core ())
-          (if disabled then "disable" else "enable")
-          [| jstr_ pid |]))
+    (meth_promise (core ())
+       (if disabled then "disable" else "enable")
+       [| jstr_ pid |])
 
 let plugin_disabled (pl : Js.Json.t) = jbool pl "disabled"
 
@@ -290,7 +293,7 @@ let marketplace_pkgs owner =
         let pkgs = List.filter web_ok pkgs in
         bump ();
         Js.Promise.resolve
-          (Sdk_convert.json_arr (Array.of_list pkgs)))
+          (Js.Json.array (Array.of_list pkgs)))
       in
       marketplace := Some p;
       ignore (dirty_signal owner);
@@ -512,7 +515,7 @@ let exec_simple_command ?args pid key =
                    Js.Dict.set payload "uuid" (jstr_ u);
                    Js.Dict.set payload "format" (jstr_ "markdown")
                | None -> ());
-              hook_editor sc.sc_event (as_any payload) (jstr_ pid)))
+              hook_editor sc.sc_event (Js.Json.object_ payload) (jstr_ pid)))
 
 (* palette id is "plugin.<pid>/<key>" — cljs plugin-command-id *)
 let exec_palette_command (cid : string) =
@@ -590,7 +593,7 @@ let exec_slash_command ?insert pid tag =
                               | Some u -> u
                               | None -> ""));
                         Js.Dict.set payload "format" (jstr_ "markdown");
-                        hook_editor ev (as_any payload) (jstr_ pid)
+                        hook_editor ev (Js.Json.object_ payload) (jstr_ pid)
                     | None -> ())
                 | _ -> ())
             | _ -> ()
@@ -641,7 +644,7 @@ let fire_db_hooks (payload : Wire.t) =
           (Js.Json.array (Array.of_list (List.map jstr_ deleted)));
         Js.Dict.set p "txData" (Js.Json.array [||]);
         Js.Dict.set p "txMeta" tx_meta_j;
-        hook_db "changed" (as_any p) Js.Json.null;
+        hook_db "changed" (Js.Json.object_ p) Js.Json.null;
         List.iter
           (fun (k, b) ->
             match k with
@@ -651,7 +654,7 @@ let fire_db_hooks (payload : Wire.t) =
                   (Sdk_convert.json_of_wire ~camel:true b);
                 Js.Dict.set bp "txData" (Js.Json.array [||]);
                 Js.Dict.set bp "txMeta" tx_meta_j;
-                hook_db ("block:" ^ u) (as_any bp) Js.Json.null
+                hook_db ("block:" ^ u) (Js.Json.object_ bp) Js.Json.null
             | _ -> ())
           blocks))
   | _ -> ()
@@ -675,7 +678,7 @@ let fire_route_changed (route : Model.route) =
   Js.Dict.set p "template" (jstr_ template);
   Js.Dict.set p "path" (jstr_ (Platform.location_hash ()));
   Js.Dict.set p "parameters" (Js.Json.object_ (Js.Dict.empty ()));
-  hook_app "route-changed" (as_any p) Js.Json.null
+  hook_app "route-changed" (Js.Json.object_ p) Js.Json.null
 
 (* cljs theme-selected listener: apply the selected mode (document
    data-theme + localStorage ui/theme like set-theme-mode!) then
@@ -683,7 +686,7 @@ let fire_route_changed (route : Model.route) =
 let apply_theme_mode (theme : Js.Json.t) =
   (match Js.Json.decodeString (getf theme "mode") with
    | Some m when m <> "" ->
-       Platform.document_set_data "theme" m;
+       Web_dom.doc_set_data "theme" m;
        Platform.local_storage_set "ui/theme" ("\"" ^ m ^ "\"");
        (* cljs state/set-custom-theme! — mode -> theme under one key *)
        Platform.local_storage_set "ui/custom-theme"
@@ -992,7 +995,7 @@ let installed_version pid =
   | None -> ""
 
 let toast msg cls =
-  Platform.dispatch "ls:toast"
+  Web_dom.dispatch_custom "ls:toast"
     (jobj [ ("msg", jstr_ msg); ("cls", jstr_ cls) ])
 
 (* ---------- plugin host api fns ---------- *)
@@ -1025,10 +1028,10 @@ let uninstall_plugin_hook_fn a b _c _d =
 
 (* the core's _hook compat path reads this synchronously via
    invokeHostExportedApi and tests its truthiness — must be a plain
-   boolean, not a Promise (as_promise is an identity cast; returning the
-   raw bool is still fine for every async caller since they await it) *)
+   boolean, not a Promise (awaiting a plain value is still fine for
+   every async caller) *)
 let should_exec_plugin_hook_fn a b _c _d =
-  as_promise
+  Js.Promise.resolve
     (Js.Json.boolean
        (match arg_string a, arg_string b with
         | Some pid, Some key -> hook_installed pid key
@@ -1156,7 +1159,7 @@ let update_plugin_info_fn a b c _d =
   resolved_nil
 
 let load_installed_plugins _a _b _c _d =
-  resolved (Sdk_convert.json_obj (read_dict store_key))
+  resolved (Js.Json.object_ (read_dict store_key))
 
 let save_installed_plugin a _b _c _d =
   let key = jstr a "key" in
@@ -1172,7 +1175,7 @@ let unlink_installed_plugin a _b _c _d =
   in
   if key <> "" then (
     let m = read_dict store_key in
-    ignore (del_prop (Sdk_convert.json_obj m) key);
+    ignore (del_prop (Js.Json.object_ m) key);
     write_dict store_key m);
   resolved_nil
 
@@ -1187,7 +1190,7 @@ let load_plugin_settings a _b _c _d =
         | _ -> jobj []
       in
       resolved
-        (Sdk_convert.json_arr [| jstr_ path; data |])
+        (Js.Json.array [| jstr_ path; data |])
 
 let save_plugin_settings a b _c _d =
   (match arg_string a with
@@ -1275,7 +1278,7 @@ let get_user_configs _a _b _c _d =
 
 (* LSPluginCore event wiring (cljs init-plugins! doto block). *)
 let core_listeners (core : Js.Json.t) =
-  let on name f = ignore (meth core "on" [| jstr_ name; as_any f |]) in
+  let on name f = ignore (Web_dom.js_call2 core "on" (jstr_ name) f) in
   on "registered" (fun pl -> track pl);
   on "reloaded" (fun pl -> track pl);
   on "unregistered" (fun pid ->
@@ -1337,8 +1340,8 @@ let setup () =
        |]);
   core_listeners (core ());
   ignore
-    (meth (getf window_ "apis") "addListener"
-       [| jstr_ "lsp-updates"; as_any on_lsp_update |]);
+    (Web_dom.js_call2 (getf window_ "apis") "addListener"
+       (jstr_ "lsp-updates") on_lsp_update);
   boot_register ();
   host_mounted ()
 

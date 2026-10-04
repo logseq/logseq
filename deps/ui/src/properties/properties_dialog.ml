@@ -14,8 +14,7 @@
    class-add-property instead of taking a value. *)
 
 open Promise_ext
-open Editor_dom
-open Properties_dom
+open Web_dom
 module D = Properties_data
 module S = Properties_state
 module Sel = Properties_select
@@ -39,9 +38,9 @@ type phase =
 type dlg =
   { target : target
   ; mutable phase : phase
-  ; mutable body : Editor_dom.el option
+  ; mutable body : Web_dom.el option
   ; mutable pending_type : string option
-  ; mutable select_overlay : Editor_dom.el option
+  ; mutable select_overlay : Web_dom.el option
   ; remove : bool (* cljs :editor/new-property remove-property? — the
                      picker removes the chosen property instead of
                      setting a value *)
@@ -207,7 +206,7 @@ and render (d : dlg) =
       (match d.select_overlay with
        | Some el -> S.remove_overlay_el el; d.select_overlay <- None
        | None -> ());
-      el_clear body;
+      el_replace_children body;
       match d.phase with
       | Prop_select -> render_prop_select d body
       | Type_select name -> render_type_select d body name
@@ -272,17 +271,17 @@ and select_content_cls =
 (* portaled type dropdown under the trigger (cljs shui select-content *
    auto-opens via :default-open in the new-property flow) *)
 and open_type_menu d name trigger =
-  let l, t, _r, b, _w = el_rect trigger in
+  let l, t, _r, b, _w = bounding_rect_fields trigger in
   (* radix mounts below but flips when the list would overflow the
      viewport and there is more room above; cap the height at the space
      on the chosen side so every option stays inside the viewport
      (radix's available-height behaviour) *)
-  let below = window_inner_height -. (b +. 4.) -. 8. in
+  let below = win_inner_height -. (b +. 4.) -. 8. in
   let above = (t -. 4.) -. 8. in
   let open_above = below < 280. && above > below in
   let pos, avail =
     if open_above then
-      ( Printf.sprintf "bottom:%.0fpx" (window_inner_height -. (t -. 4.))
+      ( Printf.sprintf "bottom:%.0fpx" (win_inner_height -. (t -. 4.))
       , above )
     else (Printf.sprintf "top:%.0fpx" (b +. 4.), below)
   in
@@ -352,7 +351,7 @@ and render_type_select d body name =
   el_append_child bullet (mk ~cls:"bullet" "span");
   el_append_child key bullet;
   let label = mk "div" in
-  el_set_text label name;
+  el_set_text_content label name;
   el_append_child key label;
   el_append_child wrap key;
   let row = mk ~cls:"ls-pd-row" "div" in
@@ -543,7 +542,7 @@ and render_value_edit d body prop =
       (fun ev ->
         match ev_key ev with
         | "Enter" ->
-            prevent_default ev;
+            ev_prevent_default ev;
             let ctx : V.ctx =
               { block_uuid = d.target.uuid; block_id = d.target.db_id
               ; refresh = (fun () -> ()); is_page = false
@@ -553,7 +552,7 @@ and render_value_edit d body prop =
             V.commit_date_input ~uuids:d.target.uuids ctx (ident_of prop)
               ~is_datetime:(ty = "datetime") input;
             close_dlg d
-        | "Escape" -> prevent_default ev; stop_propagation ev; close ()
+        | "Escape" -> ev_prevent_default ev; ev_stop_propagation ev; close ()
         | _ -> ())
       true)
   else (
@@ -700,7 +699,7 @@ let current_target () : target option =
       Some { uuid = u; uuids = []; db_id = None; is_tag = false
            ; title = "" }
   | None -> (
-      match Platform.selected_block_uuids () with
+      match Web_dom.selected_block_uuids () with
       | u :: _ as us ->
           Some { uuid = u; uuids = us; db_id = None; is_tag = false
                ; title = "" }
@@ -722,12 +721,12 @@ let current_target () : target option =
 let block_anchor uuid =
   match get_element_by_id ("edit-block-" ^ uuid) with
   | Some ta ->
-      let l, _t, _r, b, _w = el_rect ta in
+      let l, _t, _r, b, _w = bounding_rect_fields ta in
       Some (l -. 4., b)
   | None -> (
       match get_element_by_id ("ls-block-" ^ uuid) with
       | Some blk ->
-          let l, _t, _r, b, _w = el_rect blk in
+          let l, _t, _r, b, _w = bounding_rect_fields blk in
           Some (l, b)
       | None -> None)
 
@@ -741,7 +740,7 @@ let open_for_block ?anchor uuid =
 
 (* open anchored under a DOM element (its bottom-left corner) *)
 let open_for_block_at el uuid =
-  let l, _t, _r, b, _w = el_rect el in
+  let l, _t, _r, b, _w = bounding_rect_fields el in
   open_for_block ~anchor:(l, b +. 4.) uuid
 
 (* cljs :editor/new-property {:property-key ident}: the dialog jumps

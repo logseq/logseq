@@ -3,7 +3,7 @@
    `refresh : inst -> unit` is threaded through instead of referencing
    Views_view to keep modules acyclic. *)
 
-module D = Views_dom
+module D = Web_dom
 module I = I18n
 module V = Views_state
 module Wr = Views_wire
@@ -272,8 +272,8 @@ let checkbox_btn ~jtrigger ~checked ~id ~aria_label ~on_toggle : D.el =
   in
   if checked then D.el_set_attr btn "data-checked" ""
   else D.el_set_attr btn "data-unchecked" "";
-  D.el_add_listener btn "click" (fun ev ->
-      Editor_dom.stop_propagation ev;
+  D.el_on btn "click" (fun ev ->
+      Web_dom.ev_stop_propagation ev;
       let on = not checked in
       D.el_set_attr btn "aria-checked" (if on then "true" else "false");
       if on then begin
@@ -326,10 +326,10 @@ let select_cell inst ~refresh ~row_uuid ~blk : D.el =
         [ ("for", dbid ^ "-checkbox"); ("data-table-row-select", "true") ]
       ~children:[ cb; checkbox_hidden_input () ] ()
   in
-  D.el_add_listener label "mouseover" (fun _ ->
-      Editor_dom.el_set_class cb (checkbox_cls ~jtrigger:true true));
-  D.el_add_listener label "mouseout" (fun _ ->
-      Editor_dom.el_set_class cb (checkbox_cls ~jtrigger:true (checked ())));
+  D.el_on label "mouseover" (fun _ ->
+      Web_dom.el_set_class cb (checkbox_cls ~jtrigger:true true));
+  D.el_on label "mouseout" (fun _ ->
+      Web_dom.el_set_class cb (checkbox_cls ~jtrigger:true (checked ())));
   D.el_append_child inner label;
   inner
 
@@ -358,7 +358,7 @@ let title_cell inst ~row_uuid ~blk (c : V.column) : D.el =
        (* cljs table-block-title: flex row of text + hover "Open" ghost
           button (.-right-1.absolute) that opens the row in the sidebar *)
        let open_sidebar () =
-         Platform.dispatch "ls:open-right-sidebar"
+         Web_dom.dispatch_custom "ls:open-right-sidebar"
            (Js.Json.object_
               (Js.Dict.fromList [ ("uuid", Js.Json.string row_uuid) ]))
        in
@@ -374,16 +374,16 @@ let title_cell inst ~row_uuid ~blk (c : V.column) : D.el =
            ~attrs:[ ("type", "button"); ("title", I.open_) ]
            ~children:[ D.icon "arrow-right" ] ()
        in
-       D.el_add_listener open_btn "click" (fun ev ->
-           Editor_dom.stop_propagation ev;
+       D.el_on open_btn "click" (fun ev ->
+           Web_dom.ev_stop_propagation ev;
            open_sidebar ());
        let sidebar_btn =
          D.h ~tag:"button" ~cls:open_btn_cls
            ~attrs:[ ("type", "button"); ("title", I.open_in_sidebar) ]
            ~children:[ D.icon "layout-sidebar-right" ] ()
        in
-       D.el_add_listener sidebar_btn "click" (fun ev ->
-           Editor_dom.stop_propagation ev;
+       D.el_on sidebar_btn "click" (fun ev ->
+           Web_dom.ev_stop_propagation ev;
            open_sidebar ());
        let div =
          D.h
@@ -399,8 +399,8 @@ let title_cell inst ~row_uuid ~blk (c : V.column) : D.el =
                  () ]
            ()
        in
-       D.el_add_listener div "click" (fun ev ->
-           Editor_dom.stop_propagation ev;
+       D.el_on div "click" (fun ev ->
+           Web_dom.ev_stop_propagation ev;
            open_sidebar ());
        D.el_append_child inner div);
   inner
@@ -459,7 +459,7 @@ let prop_cell ~blk (c : V.column) : D.el =
            end
            else begin
              if i > 0 then
-               D.el_append_child box (Editor_dom.create_text_node ",");
+               D.el_append_child box (Web_dom.create_text_node ",");
              let href = Option.value (Wr.ref_uuid x) ~default:t in
              D.el_append_child box
                (D.h
@@ -478,7 +478,7 @@ let prop_cell ~blk (c : V.column) : D.el =
        D.el_append_child inner cb
    | v ->
        D.el_append_child inner
-         (Editor_dom.create_text_node (fmt_cell_value c v)));
+         (Web_dom.create_text_node (fmt_cell_value c v)));
   inner
 
 (* cljs title attr on cells = the string cell value only — numeric and
@@ -556,10 +556,10 @@ let header_select_cell inst ~refresh cell =
       ~attrs:[ ("for", "header-checkbox") ]
       ~children:[ cb; checkbox_hidden_input () ] ()
   in
-  D.el_add_listener label "mouseover" (fun _ ->
-      Editor_dom.el_set_class cb (checkbox_cls ~jtrigger:false true));
-  D.el_add_listener label "mouseout" (fun _ ->
-      Editor_dom.el_set_class cb (checkbox_cls ~jtrigger:false (checked ())));
+  D.el_on label "mouseover" (fun _ ->
+      Web_dom.el_set_class cb (checkbox_cls ~jtrigger:false true));
+  D.el_on label "mouseout" (fun _ ->
+      Web_dom.el_set_class cb (checkbox_cls ~jtrigger:false (checked ())));
   D.el_append_child cell label
 
 (* cljs header-cp: text-variant button holding the title span and a sort
@@ -696,12 +696,12 @@ let header_cell inst ~refresh (c : V.column) : D.el =
        D.el_append_child cell (header_button inst c);
        (match c.V.c_prop, sortable c with
         | Some p, _ ->
-            D.el_add_listener cell "click" (fun _ ->
+            D.el_on cell "click" (fun _ ->
                 open_property_menu inst ~refresh ~anchor:cell c p)
         | None, true ->
             (* built-in columns get only the sort options, still inside
                .ls-property-dropdown *)
-            D.el_add_listener cell "click" (fun _ ->
+            D.el_on cell "click" (fun _ ->
                 ignore
                   (P.show_menu ~anchor:cell
                      ~cls_prefix:"ls-property-dropdown "
@@ -779,7 +779,7 @@ let action_bar inst ~refresh : D.el option =
            rounded-md text-sm font-medium transition-colors h-8 w-8"
         ~children:[ D.icon "trash" ] ()
     in
-    D.el_add_listener del "click" (fun _ -> delete_selected inst ~refresh ());
+    D.el_on del "click" (fun _ -> delete_selected inst ~refresh ());
     D.el_append_child actions del;
     D.el_append_child bar actions;
     Some bar
@@ -919,11 +919,11 @@ let table_el inst ~refresh : D.el =
                ~children:[ D.icon "plus" ] ()
            in
            D.el_append_child btn
-             (Editor_dom.create_text_node I.new_property);
+             (Web_dom.create_text_node I.new_property);
            (match p.Model.page_uuid with
             | Some uuid ->
-                D.el_add_listener btn "click" (fun _ ->
-                    let r = D.el_rect cell in
+                D.el_on btn "click" (fun _ ->
+                    let r = D.el_bounding_rect cell in
                     Properties_dialog.open_dialog
                       ~anchor:(D.rect_left r, D.rect_bottom r +. 4.)
                       { Properties_dialog.uuid
@@ -987,7 +987,7 @@ let table_el inst ~refresh : D.el =
            ~children:[ D.icon "plus"; D.h ~text:I.new_ () ]
            ()
        in
-       D.el_add_listener row "click" (fun _ ->
+       D.el_on row "click" (fun _ ->
            (V.ops ()).V.o_add_object inst);
        D.el_append_child footer row;
        D.el_append_child rel footer
@@ -1057,7 +1057,7 @@ let caret_arrow ~collapsed : D.el =
       ~cls:("rotating-arrow" ^ if collapsed then " collapsed" else " not-collapsed")
       ()
   in
-  D.el_inner_html_set arrow
+  D.el_set_inner_html arrow
     "<svg class=\"h-4 w-4\" aria-hidden=\"true\" version=\"1.1\" \
      viewBox=\"0 0 192 512\" fill=\"currentColor\" \
      display=\"inline-block\" style=\"margin-left: \
@@ -1083,8 +1083,8 @@ let foldable inst ~refresh ~key ~title_el ~(body : unit -> D.el) : D.el =
       ~attrs:[ ("style", "width:14px;height:16px") ]
       ~children:[ ctrl_wrap ] ()
   in
-  D.el_add_listener ctrl "pointerdown" (fun ev ->
-      Editor_dom.stop_propagation ev;
+  D.el_on ctrl "pointerdown" (fun ev ->
+      Web_dom.ev_stop_propagation ev;
       if collapsed then
         inst.V.collapsed_groups <- V.Sset.remove key inst.V.collapsed_groups
       else
@@ -1097,13 +1097,13 @@ let foldable inst ~refresh ~key ~title_el ~(body : unit -> D.el) : D.el =
             ~children:[ ctrl; title_el ] () ]
       ()
   in
-  D.el_add_listener fold_title "mouseover" (fun _ ->
+  D.el_on fold_title "mouseover" (fun _ ->
       if not collapsed then begin
         D.el_class_remove ctrl_wrap "control-hide";
         D.el_class_add ctrl_wrap "control-show";
         D.el_class_add ctrl_wrap "cursor-pointer"
       end);
-  D.el_add_listener fold_title "mouseout" (fun _ ->
+  D.el_on fold_title "mouseout" (fun _ ->
       if not collapsed then begin
         D.el_class_remove ctrl_wrap "control-show";
         D.el_class_remove ctrl_wrap "cursor-pointer";

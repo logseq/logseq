@@ -16,10 +16,10 @@ let set_anchor uuid =
   S.set (fun st -> { st with S.anchor = Some uuid })
 
 let pointerdown ev =
-  if Editor_dom.ev_buttons ev = 1 then
-    match Editor_dom.closest_sel ".ls-block" (Editor_dom.ev_target ev) with
+  if Web_dom.ev_buttons ev = 1 then
+    match Web_dom.closest_sel ".ls-block" (Web_dom.ev_target ev) with
     | Some block_el -> (
-        match Editor_dom.el_get_attr block_el "blockid" with
+        match Web_dom.el_get_attr block_el "blockid" with
         | Some uuid ->
             down := true;
             set_anchor uuid

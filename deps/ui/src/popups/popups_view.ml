@@ -55,7 +55,7 @@ let text_span ~key s = Logseq_dom.dom ~key ~tag:"span" ~text:s [];;
    and the MutationObserver in Editor_dom swaps it for a text node *)
 let bare_text (s : string) : t =
  fun context parent ->
-  Editor_dom.ensure_raw_text_observer ();
+  Web_dom.ensure_raw_text_observer ();
   Logseq_dom.dom ~tag:"raw-text" ~attrs:[ ("data-raw-text", s) ] []
     context parent
 ;;
@@ -668,7 +668,7 @@ let cm_popover (st : S.t) : t =
                           base-ui dropdown centers the 280px content on it *)
                        (Float.max 8.
                           (Float.min (m.S.cx -. 140.)
-                             (Dom_ext.window_inner_width -. 288.)))
+                             (Web_dom.win_inner_width -. 288.)))
                        m.S.cy (m.S.cy +. 8.) )
                  ; ("role", "menu") ]
            | None -> attrs_v [])
@@ -691,7 +691,7 @@ let cm_popover (st : S.t) : t =
 (* -- delegated listeners --------------------------------------------- *)
 
 let in_popups el =
-  Dom_ext.closest el
+  Web_dom.el_closest el
     ".ui__popover-content, .ls-context-menu-content, .ls-preview-popup"
   <> None
 ;;
@@ -699,7 +699,7 @@ let in_popups el =
 (* the icon/emoji picker mounts as an overlay outside the menu DOM —
    track it so closing the sub or the whole menu removes it like the
    base-ui sub-content *)
-let cm_picker_el : Editor_dom.el option ref = ref None
+let cm_picker_el : Web_dom.el option ref = ref None
 
 let close_cm_picker () =
   match !cm_picker_el with
@@ -709,20 +709,20 @@ let close_cm_picker () =
   | None -> ()
 
 (* base-ui sets data-highlighted on the hovered item (bg-muted) *)
-let cm_hi_el : Editor_dom.el option ref = ref None
+let cm_hi_el : Web_dom.el option ref = ref None
 
-let cm_highlight (el : Dom_ext.element) =
+let cm_highlight (el : Web_dom.el) =
   (match !cm_hi_el with
-   | Some e -> Editor_dom.el_remove_attr e "data-highlighted"
+   | Some e -> Web_dom.el_remove_attr e "data-highlighted"
    | None -> ());
   cm_hi_el :=
-    (match Dom_ext.closest el "[role=menuitem]" with
+    (match Web_dom.el_closest el "[role=menuitem]" with
      | Some it when
-         Dom_ext.closest it
+         Web_dom.el_closest it
            ".ls-context-menu-content, .ui__dropdown-menu-sub-content"
          <> None ->
-         let e = Editor_dom.el_of_json it in
-         Editor_dom.el_set_attr e "data-highlighted" "";
+         let e = it in
+         Web_dom.el_set_attr e "data-highlighted" "";
          Some e
      | _ -> None)
 
@@ -742,11 +742,11 @@ let run_cm_heading st l = close_cm_picker (); S.run_cm_heading st l
 
 let pv_show_id : int option ref = ref None
 let pv_hide_id : int option ref = ref None
-let pv_pending : Dom_ext.element option ref = ref None
+let pv_pending : Web_dom.el option ref = ref None
 
 let pv_cancel_show () =
   (match !pv_show_id with
-   | Some id -> Dom_ext.clear_timeout id
+   | Some id -> Web_dom.clear_timeout id
    | None -> ());
   pv_show_id := None;
   pv_pending := None
@@ -754,21 +754,21 @@ let pv_cancel_show () =
 let pv_cancel_hide () =
   match !pv_hide_id with
   | Some id ->
-      Dom_ext.clear_timeout id;
+      Web_dom.clear_timeout id;
       pv_hide_id := None
   | None -> ()
 
-let pv_open st (wrap : Dom_ext.element) =
+let pv_open st (wrap : Web_dom.el) =
   pv_pending := Some wrap;
   match
     Option.bind
-      (Dom_ext.query_selector wrap "a[data-ref]")
-      (fun a -> Dom_ext.get_attribute a "data-ref")
+      (Web_dom.el_query wrap "a[data-ref]")
+      (fun a -> Web_dom.el_get_attr a "data-ref")
   with
   | None -> ()
   | Some name ->
-      let r = Dom_ext.bounding_rect wrap in
-      let x = Dom_ext.rect_left r and y = Dom_ext.rect_bottom r +. 8.0 in
+      let r = Web_dom.el_bounding_rect wrap in
+      let x = Web_dom.rect_left r and y = Web_dom.rect_bottom r +. 8.0 in
       ignore
         (let* (title, blocks) = S.fetch_preview (Router.repo ()) name in
         (match !pv_pending with
@@ -784,11 +784,11 @@ let pv_open st (wrap : Dom_ext.element) =
         Js.Promise.resolve ())
 
 let pv_track st el =
-  if Dom_ext.closest el ".ls-preview-popup" <> None then (
+  if Web_dom.el_closest el ".ls-preview-popup" <> None then (
     pv_cancel_show ();
     pv_cancel_hide ())
   else
-    match Dom_ext.closest el ".preview-ref-link" with
+    match Web_dom.el_closest el ".preview-ref-link" with
     | Some wrap -> (
         pv_cancel_hide ();
         match !pv_pending with
@@ -798,14 +798,14 @@ let pv_track st el =
             pv_pending := Some wrap;
             pv_show_id :=
               Some
-                (Dom_ext.set_timeout_id (fun () -> pv_open st wrap) 1000))
+                (Web_dom.set_timeout_id (fun () -> pv_open st wrap) 1000))
     | None -> (
         pv_cancel_show ();
         match (S.get st).S.pv, !pv_hide_id with
         | Some _, None ->
             pv_hide_id :=
               Some
-                (Dom_ext.set_timeout_id (fun () -> S.close_pv st) 400)
+                (Web_dom.set_timeout_id (fun () -> S.close_pv st) 400)
         | _ -> ())
 
 let pv_popover (p : S.pv) : t =
@@ -855,93 +855,93 @@ let pv_dyn (st : S.t) : t =
         st.S.vs.Signal.state_signal))
     context parent
 
-let handle_input st (ev : Dom_ext.event) =
-  match Dom_ext.target ev with
+let handle_input st (ev : Web_dom.ev) =
+  match Web_dom.ev_target ev with
   | Some el -> (
-      match Dom_ext.closest el ".editor-wrapper textarea" with
+      match Web_dom.el_closest el ".editor-wrapper textarea" with
       | Some ta ->
           (* the page-title editor is not an outliner block editor: cljs
              never opens /, [[, (( or # autocompletes there *)
-          if Dom_ext.closest el "#page-title" = None then
+          if Web_dom.el_closest el "#page-title" = None then
             S.on_editor_input st ta ev
       | None -> ())
   | None -> ()
 ;;
 
-let handle_keydown st (ev : Dom_ext.event) =
+let handle_keydown st (ev : Web_dom.ev) =
   if S.ac_keydown st ev then (
-    Dom_ext.prevent_default ev;
+    Web_dom.ev_prevent_default ev;
     (* stopImmediate: same-target listeners registered later (the editor's
        own keydown) must not also react to the key the popup consumed *)
-    Dom_ext.stop_immediate_propagation ev)
+    Web_dom.ev_stop_immediate ev)
   else
-    match Dom_ext.key_ ev with
-    | Some "Escape" when (S.get st).S.cm <> None -> close_cm st
+    match Web_dom.ev_key ev with
+    | "Escape" when (S.get st).S.cm <> None -> close_cm st
     | _ -> ()
 ;;
 
-let handle_contextmenu st (ev : Dom_ext.event) =
-  match Dom_ext.target ev with
+let handle_contextmenu st (ev : Web_dom.ev) =
+  match Web_dom.ev_target ev with
   | None -> ()
   | Some el -> (
-      match Dom_ext.closest el ".block-tag[data-tag-uuid]" with
+      match Web_dom.el_closest el ".block-tag[data-tag-uuid]" with
       | Some chip -> (
           (* cljs block-tag popup: its own menu, not the block/page menu *)
           match
-            ( Dom_ext.get_attribute chip "data-tag-uuid"
+            ( Web_dom.el_get_attr chip "data-tag-uuid"
             , Option.bind
-                (Dom_ext.get_attribute chip "data-tag-id")
+                (Web_dom.el_get_attr chip "data-tag-id")
                 int_of_string_opt
-            , Dom_ext.get_attribute chip "data-tag-priv"
-            , Dom_ext.closest el
+            , Web_dom.el_get_attr chip "data-tag-priv"
+            , Web_dom.el_closest el
                 ".bullet-container[blockid], .ls-block[blockid]" )
           with
           | Some tuuid, Some tid, priv, Some blk
             when tuuid <> "" -> (
-              match Dom_ext.get_attribute blk "blockid" with
+              match Web_dom.el_get_attr blk "blockid" with
               | Some bid ->
-                  Dom_ext.prevent_default ev;
-                  Dom_ext.stop_propagation ev;
+                  Web_dom.ev_prevent_default ev;
+                  Web_dom.ev_stop_propagation ev;
                   close_cm_picker ();
                   let title =
-                    match Dom_ext.get_attribute chip "data-tag-title" with
+                    match Web_dom.el_get_attr chip "data-tag-title" with
                     | Some r -> r
                     | None -> tuuid
                   in
-                  S.open_cm_tag st ~x:(Dom_ext.client_x ev)
-                    ~y:(Dom_ext.client_y ev) ~block_id:bid
+                  S.open_cm_tag st ~x:(Web_dom.ev_client_x ev)
+                    ~y:(Web_dom.ev_client_y ev) ~block_id:bid
                     ~tag_uuid:tuuid ~tag_id:tid ~tag_title:title
                     ~priv:(priv = Some "true")
               | None -> ())
           | _ -> ())
       | None ->
-      if Dom_ext.closest el ".ls-page-title" <> None then ()
+      if Web_dom.el_closest el ".ls-page-title" <> None then ()
       else
       match
-        Dom_ext.closest el ".bullet-container[blockid], .ls-block[blockid]"
+        Web_dom.el_closest el ".bullet-container[blockid], .ls-block[blockid]"
       with
       | Some blk -> (
-          match Dom_ext.get_attribute blk "blockid" with
+          match Web_dom.el_get_attr blk "blockid" with
           | Some id ->
-              Dom_ext.prevent_default ev;
-              Dom_ext.stop_propagation ev;
+              Web_dom.ev_prevent_default ev;
+              Web_dom.ev_stop_propagation ev;
               (* cljs block-content contextmenu selects the block it
                  opened on, unless it is already in a multi-selection *)
               if not (Editor_state.is_selected id) then
                 Editor_actions.select_single id;
               close_cm_picker ();
-              S.open_cm st ~x:(Dom_ext.client_x ev)
-                ~y:(Dom_ext.client_y ev) ~block_id:id
-                ~multi:(List.length (Platform.selected_block_uuids ()) >= 2)
+              S.open_cm st ~x:(Web_dom.ev_client_x ev)
+                ~y:(Web_dom.ev_client_y ev) ~block_id:id
+                ~multi:(List.length (Web_dom.selected_block_uuids ()) >= 2)
           | None -> ())
       | None -> ())
 ;;
 
 (* run f with the value of attr on the closest matching ancestor *)
 let with_data_attr el attr f =
-  match Dom_ext.closest el ("[" ^ attr ^ "]") with
+  match Web_dom.el_closest el ("[" ^ attr ^ "]") with
   | Some el2 ->
-      Option.iter f (Dom_ext.get_attribute el2 attr)
+      Option.iter f (Web_dom.el_get_attr el2 attr)
   | None -> ()
 ;;
 
@@ -951,26 +951,26 @@ let ac_index_of_id id =
   else None
 ;;
 
-let handle_click st (ev : Dom_ext.event) =
-  match Dom_ext.target ev with
+let handle_click st (ev : Web_dom.ev) =
+  match Web_dom.ev_target ev with
   | None -> ()
   | Some el ->
       if not (in_popups el) then (S.close_ac st; close_cm st; S.close_pv st)
       else (
-        Dom_ext.prevent_default ev;
-        if Dom_ext.closest el "[data-cm-color]" <> None then
+        Web_dom.ev_prevent_default ev;
+        if Web_dom.el_closest el "[data-cm-color]" <> None then
           with_data_attr el "data-cm-color" (run_cm_color st)
-        else if Dom_ext.closest el "[data-cm-heading]" <> None then
+        else if Web_dom.el_closest el "[data-cm-heading]" <> None then
           with_data_attr el "data-cm-heading" (run_cm_heading st)
-        else if Dom_ext.closest el "[data-cm-item]" <> None then
+        else if Web_dom.el_closest el "[data-cm-item]" <> None then
           with_data_attr el "data-cm-item" (run_cm_item st)
         else
-          match Dom_ext.closest el "#ui__ac-inner a.menu-link" with
+          match Web_dom.el_closest el "#ui__ac-inner a.menu-link" with
           | Some lnk ->
               Option.iter
                 (fun i -> S.apply_index st i)
                 (Option.bind
-                   (Dom_ext.get_attribute lnk "id")
+                   (Web_dom.el_get_attr lnk "id")
                    ac_index_of_id)
           | None -> ())
 ;;
@@ -979,13 +979,13 @@ let handle_click st (ev : Dom_ext.event) =
    right of the menu (base-ui inline-end placement); the choice applies
    to every selected block for the multi-select menu *)
 let open_cm_picker (st : S.t) (pk : S.cm_picker)
-    (anchor : Dom_ext.element) (cm : S.cm) =
+    (anchor : Web_dom.el) (cm : S.cm) =
   let uuids =
-    if cm.S.multi && Platform.selected_block_uuids () <> [] then
-      Platform.selected_block_uuids ()
+    if cm.S.multi && Web_dom.selected_block_uuids () <> [] then
+      Web_dom.selected_block_uuids ()
     else [ cm.S.block_id ]
   in
-  let anchor = Editor_dom.el_of_json anchor in
+  let anchor = anchor in
   close_cm_picker ();
   match pk with
   | S.Picker_icon ->
@@ -1012,19 +1012,19 @@ let open_cm_picker (st : S.t) (pk : S.cm_picker)
 ;;
 
 let cm_hover st el =
-  match Dom_ext.closest el "[data-cm-sub]" with
+  match Web_dom.el_closest el "[data-cm-sub]" with
   | Some trg -> (
-      match Dom_ext.get_attribute trg "data-cm-sub" with
+      match Web_dom.el_get_attr trg "data-cm-sub" with
       | Some s -> (
           match int_of_string_opt s, (S.get st).S.cm with
           | Some idx, Some cm when cm.S.sub_open <> idx -> (
               close_cm_picker ();
               match S.cm_sub_at st idx with
               | Some (S.Sub_menu _) ->
-                  let r = Dom_ext.bounding_rect trg in
+                  let r = Web_dom.el_bounding_rect trg in
                   S.open_cm_sub st ~index:idx
-                    ~x:(Dom_ext.rect_right r -. 4.)
-                    ~y:(Dom_ext.rect_top r -. 4.)
+                    ~x:(Web_dom.rect_right r -. 4.)
+                    ~y:(Web_dom.rect_top r -. 4.)
               | Some (S.Sub_picker pk) ->
                   S.open_cm_sub st ~index:idx ~x:0. ~y:0.;
                   open_cm_picker st pk trg cm
@@ -1034,20 +1034,20 @@ let cm_hover st el =
   | None ->
       (* hovering a regular item inside the menu closes the open submenu *)
       if (S.get st).S.cm <> None
-         && Dom_ext.closest el ".ls-context-menu-content" <> None
-         && Dom_ext.closest el ".ui__dropdown-menu-sub-content" = None then (
+         && Web_dom.el_closest el ".ls-context-menu-content" <> None
+         && Web_dom.el_closest el ".ui__dropdown-menu-sub-content" = None then (
         S.close_cm_sub st;
         close_cm_picker ())
 ;;
 
-let handle_mousemove st (ev : Dom_ext.event) =
-  match Dom_ext.target ev with
+let handle_mousemove st (ev : Web_dom.ev) =
+  match Web_dom.ev_target ev with
   | Some el -> (
       cm_hover st el;
       cm_highlight el;
-      (match Dom_ext.closest el ".menu-link-wrap" with
+      (match Web_dom.el_closest el ".menu-link-wrap" with
        | Some wrap -> (
-           match Dom_ext.query_selector wrap "a.menu-link" with
+           match Web_dom.el_query wrap "a.menu-link" with
            | Some lnk -> S.ac_mousemove st lnk
            | None -> ())
        | None -> ());
@@ -1058,18 +1058,18 @@ let handle_mousemove st (ev : Dom_ext.event) =
 (* preventDefault on popup mousedown so clicking a menu item never
    steals focus from the editor textarea (cljs behaves this way — the
    editor keeps focus while the autocomplete/page-ref popup is open) *)
-let handle_mousedown _st (ev : Dom_ext.event) =
-  match Dom_ext.target ev with
-  | Some el when in_popups el -> Dom_ext.prevent_default ev
+let handle_mousedown _st (ev : Web_dom.ev) =
+  match Web_dom.ev_target ev with
+  | Some el when in_popups el -> Web_dom.ev_prevent_default ev
   | _ -> ()
 
 let install_listeners st =
-  Dom_ext.add_document_listener "input" (handle_input st) true;
-  Dom_ext.add_document_listener "keydown" (handle_keydown st) true;
-  Dom_ext.add_document_listener "contextmenu" (handle_contextmenu st) true;
-  Dom_ext.add_document_listener "click" (handle_click st) true;
-  Dom_ext.add_document_listener "mousedown" (handle_mousedown st) true;
-  Dom_ext.add_document_listener "mousemove" (handle_mousemove st) false;
+  Web_dom.add_document_listener "input" (handle_input st) true;
+  Web_dom.add_document_listener "keydown" (handle_keydown st) true;
+  Web_dom.add_document_listener "contextmenu" (handle_contextmenu st) true;
+  Web_dom.add_document_listener "click" (handle_click st) true;
+  Web_dom.add_document_listener "mousedown" (handle_mousedown st) true;
+  Web_dom.add_document_listener "mousemove" (handle_mousemove st) false;
   (* the preview survives its trigger element (popup lives in the overlay
      layer); navigation must drop it like cljs' tippy instance dying with
      the reference node *)

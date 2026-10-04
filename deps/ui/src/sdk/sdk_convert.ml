@@ -3,9 +3,6 @@
    keyword -> camelCase name when ns in {block,db,file} or unqualified,
    otherwise ":ns/name"; uuid -> string; sets -> arrays. *)
 
-external json_obj : 'a Js.Dict.t -> Js.Json.t = "%identity"
-external json_arr : Js.Json.t array -> Js.Json.t = "%identity"
-
 let is_ns_kept ns = not (ns = "block" || ns = "db" || ns = "file")
 
 let split_ns s =
@@ -81,7 +78,7 @@ and json_of_wire ?(camel = true) (w : Wire.t) : Js.Json.t =
   | Wire.Symbol s -> Js.Json.string s
   | Wire.Tagged (_, v) -> json_of_wire ~camel v
   | Wire.Array xs | Wire.List xs | Wire.Set xs ->
-      json_arr (Array.of_list (List.map (json_of_wire ~camel) xs))
+      Js.Json.array (Array.of_list (List.map (json_of_wire ~camel) xs))
   | Wire.Map kvs ->
       let obj = Js.Dict.empty () in
       List.iter
@@ -90,7 +87,7 @@ and json_of_wire ?(camel = true) (w : Wire.t) : Js.Json.t =
             Js.Dict.set obj (map_key_json ~camel k) (json_of_wire ~camel v))
         kvs;
       with_content_alias w obj;
-      json_obj obj
+      Js.Json.object_ obj
 
 (* sdk-utils/property-refs->ids: on every map node, values under keys
    that are :block/tags or keep-json-keyword? (ns not in {block,db,file},

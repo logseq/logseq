@@ -3,7 +3,7 @@
    and implements view CRUD / object creation / export. *)
 
 open Promise_ext
-module D = Views_dom
+module D = Web_dom
 module V = Views_state
 module Wr = Views_wire
 module W = Wire
@@ -98,9 +98,9 @@ let rec hiccup_els inst (w : W.t) : D.el list =
           () ]
   | W.Array xs | W.List xs | W.Set xs ->
       List.concat_map (hiccup_els inst) xs
-  | W.String s -> [ Editor_dom.create_text_node s ]
-  | W.Uuid u -> [ Editor_dom.create_text_node (title_of_uuid inst u) ]
-  | w -> [ Editor_dom.create_text_node (Edn.to_string w) ]
+  | W.String s -> [ Web_dom.create_text_node s ]
+  | W.Uuid u -> [ Web_dom.create_text_node (title_of_uuid inst u) ]
+  | w -> [ Web_dom.create_text_node (Edn.to_string w) ]
 
 (* ---------- render ---------- *)
 
@@ -108,7 +108,7 @@ let rec render inst =
   match inst.V.kind with
   | V.KQuery _ -> render_query inst
   | _ ->
-      D.clear inst.V.container;
+      D.el_replace_children inst.V.container;
       let refresh = (V.ops ()).V.o_refresh in
       (* cljs views.cljs view: .flex.flex-col.gap-2.grid with filters-row
          as first child of .ls-view-body *)
@@ -131,7 +131,7 @@ let rec render inst =
            ())
 
 and render_query inst =
-  D.clear inst.V.container;
+  D.el_replace_children inst.V.container;
   let refresh = (V.ops ()).V.o_refresh in
   (* dsl queries (and blank ones) get the builder panel; datalog don't *)
   let src_kind = Views_query.parse_src inst.V.qsrc in
@@ -400,15 +400,15 @@ let rename_view inst (v : Wr.view_ent) anchor =
   D.el_set_value input v.Wr.vtitle;
   let wrap = D.h ~cls:"block-title-wrap p-2" ~children:[ input ] () in
   let commit () =
-    let t = Editor_dom.el_value input in
+    let t = Web_dom.el_value input in
     P.close_all ();
     Db.save_block_title v.Wr.vu t (fun () ->
         load_views inst ~on_done:(fun () -> refresh inst))
   in
-  D.el_add_listener input "keydown" (fun ev ->
-      match Editor_dom.ev_key ev with
+  D.el_on input "keydown" (fun ev ->
+      match Web_dom.ev_key ev with
       | "Enter" ->
-          Editor_dom.prevent_default ev;
+          Web_dom.ev_prevent_default ev;
           commit ()
       | "Escape" -> P.close_all ()
       | _ -> ());
@@ -422,7 +422,7 @@ let export_edn inst =
     |> String.concat "\n"
   in
   ignore
-    (let* () = D.clipboard_write s in
+    (let* () = Platform.clipboard_write_text s in
      Runtime.send
        (A.Toast_push
           { M.toast_id = 0; toast_key = None; toast_text = I.copied_view_nodes
@@ -443,11 +443,11 @@ let add_new_object inst =
             if n <= 0 then ()
             else
               match
-                Editor_dom.get_element_by_id ("ls-block-" ^ uuid)
+                Web_dom.get_element_by_id ("ls-block-" ^ uuid)
               with
               | Some _ -> Editor_actions.enter_edit ~scope:"sidebar" uuid 0
               | None ->
-                  Editor_dom.set_timeout (fun () -> try_edit (n - 1)) 100
+                  Web_dom.set_timeout (fun () -> try_edit (n - 1)) 100
           in
           try_edit 20))
   | _ -> ()
@@ -479,7 +479,7 @@ let install_ops () =
         (fun inst v ->
           let anchor =
             match
-              D.query_inside inst.V.container
+              D.el_query inst.V.container
                 ("[data-view-tab-id='view-tab-" ^ v.Wr.vu ^ "']")
             with
             | Some a -> a

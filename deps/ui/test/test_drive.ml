@@ -432,10 +432,6 @@ let test_not_found () =
 (* Views render imperatively into a DOM container and emit nothing into
    the LUI tree -- Drive.Model can't see them. We mount a real instance
    against the stub DOM and check the produced element structure there. *)
-(* the views layer drives the DOM directly; the stub element is a plain
-   JS object, so the container crosses via a marked identity cast *)
-external el_of_json : Js.Json.t -> Editor_dom.el = "%identity"
-
 let view_uuid = "11111111-2222-3333-4444-555555555555"
 let row_uuid_1 = "aaaaaaaa-0000-0000-0000-000000000001"
 let row_uuid_2 = "aaaaaaaa-0000-0000-0000-000000000002"
@@ -446,7 +442,7 @@ let views_container : Js.Json.t option ref = ref None
 
 let test_views_table () =
   let container_j = Stub_dom.make_element "div" in
-  let container = el_of_json container_j in
+  let container = container_j in
   let inst =
     Views_view.mount ~kind:Views_state.KAllPages
       ~owner:(W.String "$$$views") ~container

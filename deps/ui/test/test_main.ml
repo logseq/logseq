@@ -2175,7 +2175,7 @@ let test_views_db () =
 
 (* ---- views_state codecs + query ---- *)
 
-external stub_el : Views_dom.el = "null"
+external stub_el : Web_dom.el = "null"
 
 let mk_view_inst feature =
   Views_state.make ~kind:(Views_state.KQuery { block_uuid = "b1" })
@@ -3222,7 +3222,7 @@ let test_decode7 () =
 let json_obj kvs =
   let d = Js.Dict.empty () in
   List.iter (fun (k, v) -> Js.Dict.set d k v) kvs;
-  Sdk_convert.json_obj d
+  Js.Json.object_ d
 
 let test_sdk_convert2 () =
   (* entity maps with uuid+title gain content/fullTitle aliases *)

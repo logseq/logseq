@@ -145,8 +145,8 @@ let confirm_view (c : Dialogs_state.confirm) =
 
 let prompt_view (p : Dialogs_state.prompt) =
   let submit () =
-    match Browser_ui.qs ".ui__dialog-content .form-input" with
-    | Some el -> Dialogs_state.submit_prompt (Browser_ui.value el)
+    match Web_dom.query_selector ".ui__dialog-content .form-input" with
+    | Some el -> Dialogs_state.submit_prompt (Web_dom.el_value el)
     | None -> ()
   in
   let input_events name payload =

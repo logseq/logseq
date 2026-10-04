@@ -64,8 +64,8 @@ let url_editor_body ~key ~storage_key ~title ~desc ~placeholder
  fun ctx parent ->
   let url = Signal.state ctx.ui_scheduler (Option.value (get_url storage_key) ~default:"") in
   let read_input () =
-    match Browser_ui.qs ("#" ^ key ^ "-input") with
-    | Some el -> Browser_ui.value el
+    match Web_dom.query_selector ("#" ^ key ^ "-input") with
+    | Some el -> Web_dom.el_value el
     | None -> Signal.get_state url
   in
   let reset () =

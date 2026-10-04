@@ -2,7 +2,7 @@
    .filters-row chips. Mirrors views.cljs view-head / views-tab /
    filters-row. *)
 
-module D = Views_dom
+module D = Web_dom
 module I = I18n
 module V = Views_state
 module Wr = Views_wire
@@ -53,7 +53,7 @@ let view_tab inst ~refresh (v : Wr.view_ent) : D.el =
   let children =
     [ D.h ~tag:"span" ~cls:"ls-icon-color-wrap"
         ~children:[ D.icon (view_type_icon v) ] ()
-    ; Editor_dom.create_text_node (V.display_title v) ]
+    ; Web_dom.create_text_node (V.display_title v) ]
     @ (if is_current && inst.V.feature <> "query-result" && count > 0
        then
          [ D.h ~tag:"span" ~cls:"ls-count"
@@ -72,7 +72,7 @@ let view_tab inst ~refresh (v : Wr.view_ent) : D.el =
         [ ("type", "button"); ("data-view-tab-id", "view-tab-" ^ v.Wr.vu) ]
       ~children ()
   in
-  D.el_add_listener b "click" (fun _ ->
+  D.el_on b "click" (fun _ ->
       if is_current then
         P.show_menu ~anchor:b
           [ P.MItem
@@ -111,7 +111,7 @@ let tabs_el inst ~refresh ~opacity : D.el * D.el =
       ~attrs:[ ("type", "button"); ("title", I.add_new_view) ]
       ~children:[ D.icon "plus" ] ()
   in
-  D.el_add_listener add "click" (fun _ -> (V.ops ()).o_create_view inst);
+  D.el_on add "click" (fun _ -> (V.ops ()).o_create_view inst);
   D.el_append_child wrap add;
   (wrap, add)
 
@@ -225,7 +225,7 @@ let filter_value_phase inst ~refresh ~anchor (c : V.column) =
       D.el_append_child inner
         (D.h ~cls:"item-results-wrap" ~children:[ results ] ());
       let render_items q =
-        D.clear results;
+        D.el_replace_children results;
         List.iter
           (fun it ->
             if Fuzzy.score q it.P.si_label > 0. then begin
@@ -236,7 +236,7 @@ let filter_value_phase inst ~refresh ~anchor (c : V.column) =
                     [ D.h ~tag:"span" ~cls:"menu-item-label" ~text:it.P.si_label () ]
                   ()
               in
-              D.el_add_listener a "click" (fun _ ->
+              D.el_on a "click" (fun _ ->
                   P.close_all ();
                   set_filters inst ~refresh
                     (inst.V.filters
@@ -252,8 +252,8 @@ let filter_value_phase inst ~refresh ~anchor (c : V.column) =
           items
       in
       render_items "";
-      D.el_add_listener inp "input" (fun _ ->
-          render_items (Editor_dom.el_value inp));
+      D.el_on inp "input" (fun _ ->
+          render_items (Web_dom.el_value inp));
       D.el_append_child content inner;
       (if ident <> "block/created-at" && ident <> "block/updated-at" then begin
          let mk label op =
@@ -266,7 +266,7 @@ let filter_value_phase inst ~refresh ~anchor (c : V.column) =
                      ~text:label () ]
                ()
            in
-           D.el_add_listener b "click" (fun _ ->
+           D.el_on b "click" (fun _ ->
                P.close_all ();
                set_filters inst ~refresh
                  (inst.V.filters
@@ -287,7 +287,7 @@ let filter_value_phase inst ~refresh ~anchor (c : V.column) =
       D.el_append_child P.document_body pop;
       P.position_content ~anchor ~content:pop ~align_end:true ~submenu:false;
       P.push_popup pop;
-      Editor_dom.set_timeout (fun () -> Editor_dom.el_focus inp) 0)
+      Web_dom.set_timeout (fun () -> Web_dom.el_focus inp) 0)
 
 let filter_popup inst ~refresh anchor =
   let items =
@@ -327,7 +327,7 @@ let search_el inst ~refresh : D.el =
   let wrap = D.h ~cls:"view-action-search" () in
   let inner = D.h ~cls:"ls-row" () in
   let btn = ghost_btn "search" in
-  D.el_add_listener btn "click" (fun _ ->
+  D.el_on btn "click" (fun _ ->
       if not inst.V.search_open then begin
         inst.V.search_open <- true;
         refresh inst
@@ -345,15 +345,15 @@ let search_el inst ~refresh : D.el =
     in
     D.el_set_attr inp "value" inst.V.input;
     let deb = D.debounce 300 in
-    D.el_add_listener inp "input" (fun _ ->
-        let v = Editor_dom.el_value inp in
+    D.el_on inp "input" (fun _ ->
+        let v = Web_dom.el_value inp in
         deb (fun () ->
             inst.V.input <- v;
             refresh inst));
-    D.el_add_listener inp "keydown" (fun ev ->
-        match Editor_dom.ev_key ev with
+    D.el_on inp "keydown" (fun ev ->
+        match Web_dom.ev_key ev with
         | "Escape" ->
-            Editor_dom.stop_propagation ev;
+            Web_dom.ev_stop_propagation ev;
             inst.V.input <- "";
             inst.V.search_open <- false;
             refresh inst
@@ -362,13 +362,13 @@ let search_el inst ~refresh : D.el =
       D.h ~tag:"button" ~cls:"ls-icon-btn"
         ~children:[ D.icon "x" ] ()
     in
-    D.el_add_listener xbtn "click" (fun _ ->
+    D.el_on xbtn "click" (fun _ ->
         inst.V.input <- "";
         inst.V.search_open <- false;
         refresh inst);
     D.el_append_child inner inp;
     D.el_append_child inner xbtn;
-    Editor_dom.set_timeout (fun () -> Editor_dom.el_focus inp) 0
+    Web_dom.set_timeout (fun () -> Web_dom.el_focus inp) 0
   end;
   D.el_append_child wrap inner;
   wrap
@@ -409,7 +409,7 @@ let groupable_columns inst =
 let rec more_actions inst ~refresh : D.el =
   let btn = ghost_btn "dots" in
   D.el_set_attr btn "aria-expanded" "false";
-  D.el_add_listener btn "click" (fun _ ->
+  D.el_on btn "click" (fun _ ->
       let gcs = groupable_columns inst in
       let subs =
         List.concat
@@ -504,7 +504,7 @@ let display_type_el inst ~refresh : D.el =
             () ]
       ()
   in
-  D.el_add_listener inner "click" (fun _ ->
+  D.el_on inner "click" (fun _ ->
       let set dt =
         inst.V.display_type <- dt;
         V.persist_display_type inst;
@@ -557,7 +557,7 @@ let filter_chip inst ~refresh idx (f : V.filter_clause) : D.el =
         [ D.h ~tag:"span" ~cls:"ls-xs" ~text:(I.operator_text f.V.c_op) () ]
       ()
   in
-  D.el_add_listener op_btn "click" (fun _ ->
+  D.el_on op_btn "click" (fun _ ->
       let prop =
         match
           List.find_opt (fun c -> c.V.c_id = f.V.c_prop) inst.V.columns
@@ -603,7 +603,7 @@ let filter_chip inst ~refresh idx (f : V.filter_clause) : D.el =
     D.h ~tag:"button" ~cls:"ls-vf-chip-x"
       ~children:[ D.icon "x" ] ()
   in
-  D.el_add_listener x "click" (fun _ ->
+  D.el_on x "click" (fun _ ->
       inst.V.filters <-
         List.filteri (fun i _ -> i <> idx) inst.V.filters;
       V.persist_filters inst;
@@ -640,8 +640,8 @@ let filters_row inst ~refresh : D.el option =
            [ ("and", I.match_all); ("or", I.match_any) ];
          D.el_set_attr sel "value"
            (if inst.V.filters_or then "or" else "and");
-         D.el_add_listener sel "change" (fun _ ->
-             inst.V.filters_or <- Editor_dom.el_value sel = "or";
+         D.el_on sel "change" (fun _ ->
+             inst.V.filters_or <- Web_dom.el_value sel = "or";
              V.persist_filters inst;
              refresh inst);
          D.el_append_child row (D.h ~children:[ sel ] ()));
@@ -669,8 +669,8 @@ let render_head inst ~refresh : D.el =
         end)
       !fade_targets
   in
-  D.el_add_listener head "mouseover" (fun _ -> set_opacity true);
-  D.el_add_listener head "mouseout" (fun _ ->
+  D.el_on head "mouseover" (fun _ -> set_opacity true);
+  D.el_on head "mouseout" (fun _ ->
       if !P.open_popups = [] then set_opacity false);
   let left = D.h ~cls:"ls-view-head-left" () in
   (match inst.V.kind with
@@ -691,12 +691,12 @@ let render_head inst ~refresh : D.el =
   fade_targets := actions :: !fade_targets;
   (if inst.V.sorting <> [] then begin
      let sbtn = ghost_btn "arrows-up-down" in
-     D.el_add_listener sbtn "click" (fun _ ->
+     D.el_on sbtn "click" (fun _ ->
          sorting_popup inst ~refresh sbtn);
      D.el_append_child actions sbtn
    end);
   let fbtn = ghost_btn "filter" in
-  D.el_add_listener fbtn "click" (fun _ -> filter_popup inst ~refresh fbtn);
+  D.el_on fbtn "click" (fun _ -> filter_popup inst ~refresh fbtn);
   D.el_append_child actions fbtn;
   D.el_append_child actions (search_el inst ~refresh);
   D.el_append_child actions (display_type_el inst ~refresh);
@@ -708,8 +708,8 @@ let render_head inst ~refresh : D.el =
        match !Runtime.current_page with
        | Some p when p.Model.page_add_object ->
            let plus = ghost_btn "plus" in
-           Editor_dom.el_set_attr plus "title" I.new_node;
-           D.el_add_listener plus "click" (fun _ ->
+           Web_dom.el_set_attr plus "title" I.new_node;
+           D.el_on plus "click" (fun _ ->
                (V.ops ()).o_add_object inst);
            D.el_append_child actions plus
        | _ -> ())

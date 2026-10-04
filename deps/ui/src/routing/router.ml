@@ -84,9 +84,9 @@ let route_anchor () =
 let anchor_timer = ref 0
 
 let rec poll_anchor anchor n =
-  match Editor_dom.get_element_by_id anchor with
+  match Web_dom.get_element_by_id anchor with
   | Some el ->
-      Editor_dom.el_scroll_into_view el;
+      Web_dom.el_scroll_into_view el;
       if String.length anchor > 36 then
         let tail =
           String.sub anchor (String.length anchor - 36) 36
@@ -94,20 +94,20 @@ let rec poll_anchor anchor n =
         if Wire.is_uuid_string tail then
           Editor_actions.select_single tail
         else (
-          Editor_dom.el_class_add el "block-highlight";
+          Web_dom.el_class_add el "block-highlight";
           anchor_timer :=
-            Editor_dom.set_timeout_id
+            Web_dom.set_timeout_id
               (fun () ->
-                Editor_dom.el_class_remove el "block-highlight")
+                Web_dom.el_class_remove el "block-highlight")
               4000)
   | None ->
       if n < 120 then
         anchor_timer :=
-          Editor_dom.set_timeout_id (fun () -> poll_anchor anchor (n + 1))
+          Web_dom.set_timeout_id (fun () -> poll_anchor anchor (n + 1))
             50
 
 let jump_to_anchor anchor =
-  Editor_dom.clear_timeout !anchor_timer;
+  Web_dom.clear_timeout !anchor_timer;
   poll_anchor anchor 0
 
 let fetch_blocks (p : Model.page) =
@@ -543,9 +543,9 @@ let reload_timer = ref 0
 
 let reload () =
   Platform.perf_mark "router:reload";
-  Editor_dom.clear_timeout !reload_timer;
+  Web_dom.clear_timeout !reload_timer;
   reload_timer :=
-    Editor_dom.set_timeout_id
+    Web_dom.set_timeout_id
       (fun () ->
         match !Runtime.current_route with
         | Some r -> load_route r
@@ -586,8 +586,8 @@ let init () =
                   ("journal refs refresh failed", e);
                 Js.Promise.resolve ())));
   Platform.on_hash_change resolve;
-  Platform.on_document_event "ls:navigate" (fun _ -> resolve ());
-  Platform.add_document_listener "keydown" (fun ev ->
+  Web_dom.on_document_event "ls:navigate" (fun _ -> resolve ());
+  Web_dom.on_document_event "keydown" (fun ev ->
       if Platform.event_str ev "key" = "Escape" then (
         Runtime.send Action.Dismiss_all;
         Runtime.flush ()))

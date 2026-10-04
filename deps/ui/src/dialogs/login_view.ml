@@ -19,8 +19,8 @@ let client_id = Rtc_ops.client_id
 let oauth_token_url = Rtc_ops.oauth_token_url
 
 let field_value name =
-  match Browser_ui.qs (".cp__user-login input[name=" ^ name ^ "]") with
-  | Some el -> Browser_ui.value el
+  match Web_dom.query_selector (".cp__user-login input[name=" ^ name ^ "]") with
+  | Some el -> Web_dom.el_value el
   | None -> ""
 
 let json_str s = Js.Json.string s
@@ -164,12 +164,12 @@ let body (_ms : Model.t Signal.signal) : t =
       ]
   in
   ignore
-    (Browser_ui.set_timeout
+    (Web_dom.set_timeout_id
        (fun () ->
          match
-           Browser_ui.qs ".cp__user-login input[name=username]"
+           Web_dom.query_selector ".cp__user-login input[name=username]"
          with
-         | Some el -> Browser_ui.focus el
+         | Some el -> Web_dom.el_focus el
          | None -> ())
        32);
   node ctx parent

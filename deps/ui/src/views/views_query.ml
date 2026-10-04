@@ -4,7 +4,7 @@
    decodes rows, and implements the query source editor shell
    (.ls-query-setting → fake CodeMirror editing). *)
 
-module D = Views_dom
+module D = Web_dom
 module V = Views_state
 module W = Wire
 module Wr = Views_wire
@@ -340,7 +340,7 @@ let open_editor inst (shell : D.el) =
       ~text:cur ()
   in
   let cm = D.h ~cls:"CodeMirror" ~children:[ line ] () in
-  (match D.query_inside shell ".CodeMirror" with
+  (match D.el_query shell ".CodeMirror" with
    | Some old -> D.el_remove old
    | None -> ());
   D.el_append_child shell cm;
@@ -350,14 +350,14 @@ let open_editor inst (shell : D.el) =
      immediately on input (the spec carries the source; it does not wait
      for the save to land) and persist the title on a debounce *)
   let autosave = D.debounce 300 in
-  D.el_add_listener line "input" (fun _ ->
+  D.el_on line "input" (fun _ ->
       let src = D.el_text_content line |> String.trim in
       (V.ops ()).V.o_refresh_src inst src;
       autosave (fun () -> save_src inst src));
-  D.el_add_listener line "keydown" (fun ev ->
-      match Editor_dom.ev_key ev with
+  D.el_on line "keydown" (fun ev ->
+      match Web_dom.ev_key ev with
       | "Escape" ->
-          Editor_dom.prevent_default ev;
+          Web_dom.ev_prevent_default ev;
           let src = D.el_text_content line |> String.trim in
           (* cljs keeps the editor open after Esc commits; the next tx
              broadcast re-renders the shell anyway. The eval already ran
@@ -367,7 +367,7 @@ let open_editor inst (shell : D.el) =
           save_src inst src
       | "Enter" ->
           (* single-line editor contract *)
-          Editor_dom.prevent_default ev
+          Web_dom.ev_prevent_default ev
       | _ -> ())
 
 (* toggle the raw-source editor for `inst` inside `shell` — called from
@@ -379,12 +379,12 @@ let toggle_source_editor inst (shell : D.el) =
     if D.el_is_connected shell then shell
     else
       match
-        Editor_dom.el_closest inst.V.container ".custom-query-results"
+        Web_dom.el_closest inst.V.container ".custom-query-results"
       with
       | Some live -> live
       | None -> shell
   in
-  match D.query_inside shell ".CodeMirror" with
+  match D.el_query shell ".CodeMirror" with
   | Some cm ->
       D.el_remove cm;
       inst.V.query_editor_open <- false

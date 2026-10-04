@@ -58,15 +58,15 @@ let dots_button =
          the click position *)
       if name = "click" then
         match
-          Dom_ext.doc_query_selector ".toolbar-dots-btn"
+          Web_dom.query_selector ".toolbar-dots-btn"
         with
         | Some el ->
-            let r = Dom_ext.bounding_rect el in
+            let r = Web_dom.el_bounding_rect el in
             Runtime.send
               (Action.Page_menu_set
                  (Some
-                    ( Dom_ext.rect_right r
-                    , Dom_ext.rect_bottom r +. 4.
+                    ( Web_dom.rect_right r
+                    , Web_dom.rect_bottom r +. 4.
                     , true )))
         | None -> ())
     [ Icons.icon ~size:20. ~cls:"" "dots" ]
@@ -136,7 +136,7 @@ let home_button ms =
           icon_btn ~key:"home-btn" ~id:"" ~cls:(ghost_btn_cls ())
             ~icon:"home" ~on_click:(fun _ ->
               Platform.set_location_hash "#/";
-              Platform.dispatch "ls:navigate" Js.Json.null))
+              Web_dom.dispatch_custom "ls:navigate" Js.Json.null))
     ms
 
 (* cljs open-right-sidebar! seeds a "contents" item when the sidebar

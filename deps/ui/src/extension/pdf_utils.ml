@@ -1,7 +1,7 @@
 (* pdfjs FFI + position math — ports of extensions/pdf/utils.js +
    utils.cljs. The viewer handle is opaque (Pdf_state.viewer). *)
 
-module D = Dom_ext
+module D = Web_dom
 
 type viewer = Pdf_state.viewer
 
@@ -9,9 +9,9 @@ type viewer = Pdf_state.viewer
 
 external event_bus : viewer -> Js.Json.t = "eventBus" [@@mel.get]
 
-external viewer_el : viewer -> D.element = "viewer" [@@mel.get]
+external viewer_el : viewer -> D.el = "viewer" [@@mel.get]
 
-external container_el : viewer -> D.element = "container" [@@mel.get]
+external container_el : viewer -> D.el = "container" [@@mel.get]
 
 external pdf_document : viewer -> Js.Json.t = "pdfDocument" [@@mel.get]
 
@@ -59,11 +59,11 @@ external pv_viewport : Js.Json.t -> Js.Json.t = "viewport" [@@mel.get]
 
 external pv_text_layer : Js.Json.t -> Js.Json.t = "textLayer" [@@mel.get]
 
-external tl_div : Js.Json.t -> D.element = "div" [@@mel.get]
+external tl_div : Js.Json.t -> D.el = "div" [@@mel.get]
 
-external pv_canvas : Js.Json.t -> D.element = "canvas" [@@mel.get]
+external pv_canvas : Js.Json.t -> D.el = "canvas" [@@mel.get]
 
-external pv_div : Js.Json.t -> D.element = "div" [@@mel.get]
+external pv_div : Js.Json.t -> D.el = "div" [@@mel.get]
 
 external vp_width : Js.Json.t -> float = "width" [@@mel.get]
 
@@ -109,15 +109,14 @@ external range_client_rects : Js.Json.t -> D.rect array = "getClientRects"
 external el_contains : Js.Json.t -> Js.Json.t -> bool = "contains"
   [@@mel.send]
 
-external parent_element : Js.Json.t -> D.element option = "parentElement"
+external parent_element : Js.Json.t -> D.el option = "parentElement"
   [@@mel.get] [@@mel.return nullable]
 
-external dataset_page_number : D.element -> string option = "pageNumber"
+external dataset_page_number : D.el -> string option = "pageNumber"
   [@@mel.get] [@@mel.scope "dataset"] [@@mel.return nullable]
 
-external scroll_left : D.element -> float = "scrollLeft" [@@mel.get]
 
-external set_scroll_left : D.element -> float -> unit = "scrollLeft"
+external set_scroll_left : D.el -> float -> unit = "scrollLeft"
   [@@mel.set]
 
 external win_inner_height : float = "innerHeight" [@@mel.scope "window"]
@@ -302,8 +301,8 @@ done;
 
 let clear_all_selection () = sel_remove_all (get_selection ())
 
-let get_page_from_el (el : D.element) =
-  match D.closest el ".page" with
+let get_page_from_el (el : D.el) =
+  match D.el_closest el ".page" with
   | Some page_el -> (
       match dataset_page_number page_el with
       | Some n -> (try Some (int_of_string n, page_el) with _ -> None)
@@ -318,11 +317,11 @@ let get_page_from_range (r : Js.Json.t) =
       | None -> None)
   | None -> None
 
-let get_range_rects (r : Js.Json.t) (page_cnt : D.element)
+let get_range_rects (r : Js.Json.t) (page_cnt : D.el)
     : Model.hl_rect list =
-  let cnt = D.bounding_rect page_cnt in
-  let st = D.scroll_top page_cnt in
-  let sl = scroll_left page_cnt in
+  let cnt = D.el_bounding_rect page_cnt in
+  let st = D.el_scroll_top page_cnt in
+  let sl = Web_dom.el_scroll_left page_cnt in
   range_client_rects r
   |> Array.to_list
   |> List.filter_map (fun rect ->
@@ -395,17 +394,7 @@ let fix_selection_text_breakline (text : string) =
     Buffer.contents b
 
 (* cljs scrollToHighlight — scroll the page + flash the hl element *)
-external scroll_into_view_opts : D.element -> Js.Json.t -> unit
-  = "scrollIntoView" [@@mel.send]
 
-external class_add : D.element -> string -> unit = "add"
-  [@@mel.scope "classList"] [@@mel.send]
-
-external class_remove : D.element -> string -> unit = "remove"
-  [@@mel.scope "classList"] [@@mel.send]
-
-external get_el_by_id : string -> D.element option = "getElementById"
-  [@@mel.scope "document"] [@@mel.return nullable]
 
 let scroll_to_highlight (viewer : viewer) (hl : Model.hl) =
   match get_page_view viewer (hl.hl_page - 1) with
@@ -415,7 +404,7 @@ let scroll_to_highlight (viewer : viewer) (hl : Model.hl) =
       let bvw = scaled_to_viewport hl.hl_bounding vp in
       let container = container_el viewer in
       let pts =
-        vp_to_pdf_point vp (scroll_left container) (bvw.hl_y1 -. 200.)
+        vp_to_pdf_point vp (Web_dom.el_scroll_left container) (bvw.hl_y1 -. 200.)
       in
       let get i =
         if i < Array.length pts then pts.(i) else 0.
@@ -437,11 +426,11 @@ let scroll_to_highlight (viewer : viewer) (hl : Model.hl) =
       scroll_page_into_view viewer (Js.Json.object_ opts);
       let id = Option.value hl.hl_id ~default:"" in
       ignore
-        (Browser_ui.set_timeout
+        (Web_dom.set_timeout_id
            (fun () ->
-             match get_el_by_id ("hl_" ^ id) with
+             match Web_dom.get_element_by_id ("hl_" ^ id) with
              | Some el ->
-                 let r = D.bounding_rect el in
+                 let r = D.el_bounding_rect el in
                  let in_vp =
                    D.rect_bottom r >= 0.
                    && D.rect_top r <= win_inner_height
@@ -452,11 +441,11 @@ let scroll_to_highlight (viewer : viewer) (hl : Model.hl) =
                    let o = Js.Dict.empty () in
                    Js.Dict.set o "block" (Js.Json.string "center");
                    Js.Dict.set o "inline" (Js.Json.string "nearest");
-                   scroll_into_view_opts el (Js.Json.object_ o));
-                 class_add el "hl-flash";
+                   Web_dom.el_scroll_into_view_opts el (Js.Json.object_ o));
+                 Web_dom.el_class_add el "hl-flash";
                  ignore
-                   (Browser_ui.set_timeout
-                      (fun () -> class_remove el "hl-flash")
+                   (Web_dom.set_timeout_id
+                      (fun () -> Web_dom.el_class_remove el "hl-flash")
                       1200)
              | None -> ())
            200)
@@ -491,9 +480,9 @@ let adjust_viewer_size (viewer : viewer) =
 let reset_viewer_auto (viewer : viewer) = set_scale_value viewer "auto"
 
 (* cljs calc-delta-rect-offset — clamp popup into scroller *)
-let calc_delta_rect_offset (target : D.rect) (scroller : D.element)
+let calc_delta_rect_offset (target : D.rect) (scroller : D.el)
     : float * float =
-  let cr = D.bounding_rect scroller in
+  let cr = D.el_bounding_rect scroller in
   let dy = D.rect_bottom cr -. D.rect_bottom target in
   let dx = D.rect_right cr -. D.rect_right target in
   ( (if dx < 0. then dx +. 5. else 0.)
@@ -504,113 +493,6 @@ let gen_uuid () = Platform.random_uuid ()
 
 (* ---------- imperative element helpers (Js.Json.t based) ---------- *)
 
-external create_el : string -> D.element = "createElement"
-  [@@mel.scope "document"]
-
-external append_el : D.element -> D.element -> unit = "appendChild"
-  [@@mel.send]
-
-external remove_el : D.element -> unit = "remove" [@@mel.send]
-
-external el_class : D.element -> string = "className" [@@mel.get]
-
-external set_class : D.element -> string -> unit = "className" [@@mel.set]
-
-external set_attr : D.element -> string -> string -> unit
-  = "setAttribute" [@@mel.send]
-
-external get_attr : D.element -> string -> string option = "getAttribute"
-  [@@mel.send] [@@mel.return nullable]
-
-external rm_attr : D.element -> string -> unit = "removeAttribute"
-  [@@mel.send]
-
-external set_text : D.element -> string -> unit = "textContent"
-  [@@mel.set]
-
-external inner_text : D.element -> string = "innerText" [@@mel.get]
-
-external inner_html_set : D.element -> string -> unit = "innerHTML"
-  [@@mel.set]
-
-external qs_in : D.element -> string -> D.element option = "querySelector"
-  [@@mel.send] [@@mel.return nullable]
-
-external qs_all_in : D.element -> string -> D.element array
-  = "querySelectorAll" [@@mel.send]
-
-external qs_all_doc : string -> D.element array = "querySelectorAll"
-  [@@mel.scope "document"]
-
-external on : D.element -> string -> (D.event -> unit) -> unit
-  = "addEventListener" [@@mel.send]
-
-external off : D.element -> string -> (D.event -> unit) -> unit
-  = "removeEventListener" [@@mel.send]
-
-let on_once : D.element -> string -> (D.event -> unit) -> unit =
-  [%mel.raw
-    "function (el, n, f) { el.addEventListener(n, f, {once: true}) }"]
-
-external style_set : D.element -> string -> string -> unit
-  = "setProperty" [@@mel.send] [@@mel.scope "style"]
-
-external style_get : D.element -> string -> string
-  = "getPropertyValue" [@@mel.send] [@@mel.scope "style"]
-
-external focus_el : D.element -> unit = "focus" [@@mel.send]
-
-external el_value : D.element -> string = "value" [@@mel.get]
-
-external set_el_value : D.element -> string -> unit = "value" [@@mel.set]
-
-external select_el : D.element -> unit = "select" [@@mel.send]
-
-external el_contains_el : D.element -> D.element -> bool = "contains"
-  [@@mel.send]
-
-let dataset_set : D.element -> string -> string -> unit =
-  [%mel.raw "function (e, k, v) { e.dataset[k] = v }"]
-
-let dataset_get_raw : D.element -> string -> string Js.Undefined.t =
-  [%mel.raw "function (e, k) { return e.dataset[k] }"]
-
-let dataset_get (el : D.element) (k : string) : string option =
-  Js.Undefined.toOption (dataset_get_raw el k)
-
-let dataset_del : D.element -> string -> unit =
-  [%mel.raw "function (e, k) { delete e.dataset[k] }"]
-
-external offset_top : D.element -> float = "offsetTop" [@@mel.get]
-
-external offset_left : D.element -> float = "offsetLeft" [@@mel.get]
-
-external win_on : string -> (D.event -> unit) -> unit
-  = "addEventListener" [@@mel.scope "window"]
-
-external win_off : string -> (D.event -> unit) -> unit
-  = "removeEventListener" [@@mel.scope "window"]
-
-external request_animation_frame : (unit -> unit) -> unit
-  = "requestAnimationFrame" [@@mel.scope "window"]
-
-external event_key_code : D.event -> int = "keyCode" [@@mel.get]
-
-external event_which : D.event -> int = "which" [@@mel.get]
-
-external event_page_x : D.event -> float = "pageX" [@@mel.get]
-
-external event_page_y : D.event -> float = "pageY" [@@mel.get]
-
-external event_delta_y : D.event -> float = "deltaY" [@@mel.get]
-
-let event_target_title_raw : D.event -> string Js.Undefined.t =
-  [%mel.raw
-    "function (e) { var t = e.target; return (t && t.title) || \
-     undefined }"]
-
-let event_target_title (e : D.event) : string option =
-  Js.Undefined.toOption (event_target_title_raw e)
 
 let active_keystroke_raw : unit -> string Js.Undefined.t =
   [%mel.raw
@@ -619,40 +501,22 @@ let active_keystroke_raw : unit -> string Js.Undefined.t =
 let active_keystroke () : string option =
   Js.Undefined.toOption (active_keystroke_raw ())
 
-external doc_element : D.element = "documentElement"
-  [@@mel.scope "document"]
-
-external doc_el_style_set : string -> string -> unit = "setProperty"
-  [@@mel.send] [@@mel.scope "document.documentElement.style"]
-
-external doc_el_class_add : string -> unit = "add"
-  [@@mel.send] [@@mel.scope "document.documentElement.classList"]
-
-external doc_el_class_rm : string -> unit = "remove"
-  [@@mel.send] [@@mel.scope "document.documentElement.classList"]
-
-external doc_el_client_width : float = "clientWidth"
-  [@@mel.scope "document.documentElement"]
-
-external scroll_width : D.element -> float = "scrollWidth" [@@mel.get]
-
-external scroll_height : D.element -> float = "scrollHeight" [@@mel.get]
 
 (* cljs resolve-hls-layer! — create/get the hl layer inside a textLayer
    div *)
-let resolve_hls_layer (viewer : viewer) page : D.element option =
+let resolve_hls_layer (viewer : viewer) page : D.el option =
   match get_page_view viewer (page - 1) with
   | Some pv -> (
       let tl = pv_text_layer pv in
       match Js.Json.decodeObject tl with
       | Some _ -> (
           let cnt = tl_div tl in
-          match qs_in cnt ".extensions__pdf-hls-layer" with
+          match Web_dom.el_query cnt ".extensions__pdf-hls-layer" with
           | Some l -> Some l
           | None ->
-              let layer = create_el "div" in
-              set_class layer "extensions__pdf-hls-layer";
-              append_el cnt layer;
+              let layer = Web_dom.create_element "div" in
+              Web_dom.el_set_class layer "extensions__pdf-hls-layer";
+              Web_dom.el_append_child cnt layer;
               Some layer)
       | None -> None)
   | None -> None
@@ -666,15 +530,15 @@ let resolve_hls_layer (viewer : viewer) page : D.element option =
 external interact_unset : Js.Json.t -> unit = "unset" [@@mel.send]
 
 let float_attr el name =
-  match get_attr el name with
+  match Web_dom.el_get_attr el name with
   | Some s -> (try Some (float_of_string s) with _ -> None)
   | None -> None
 
-let interact_resizable ~(el : D.element) ~(on_start : unit -> unit)
-    ~(on_move : D.element -> float -> float -> float -> float -> unit)
+let interact_resizable ~(el : D.el) ~(on_start : unit -> unit)
+    ~(on_move : D.el -> float -> float -> float -> float -> unit)
     ~(on_end : unit -> unit) : Js.Json.t option =
-  let f : D.element -> (unit -> unit)
-      -> (D.element -> float -> float -> float -> float -> unit)
+  let f : D.el -> (unit -> unit)
+      -> (D.el -> float -> float -> float -> float -> unit)
       -> (unit -> unit) -> Js.Json.t Js.Undefined.t =
     [%mel.raw
       "function (el, onStart, onMove, onEnd) {
@@ -705,10 +569,10 @@ let interact_resizable ~(el : D.element) ~(on_start : unit -> unit)
   in
   Js.Undefined.toOption (f el on_start on_move on_end)
 
-let interact_draggable_resizer ~(el : D.element)
+let interact_draggable_resizer ~(el : D.el)
     ~(on_move : float -> unit) ~(on_start : unit -> unit)
     ~(on_end : unit -> unit) : Js.Json.t option =
-  let f : D.element -> (float -> unit) -> (unit -> unit)
+  let f : D.el -> (float -> unit) -> (unit -> unit)
       -> (unit -> unit) -> Js.Json.t Js.Undefined.t =
     [%mel.raw
       "function (el, onMove, onStart, onEnd) {
@@ -725,27 +589,9 @@ let interact_draggable_resizer ~(el : D.element)
   Js.Undefined.toOption (f el on_move on_start on_end)
 
 (* body.classList toggles used by cljs playground-effects *)
-external body_class_add : string -> unit = "add"
-  [@@mel.send] [@@mel.scope "document.body.classList"]
 
-external body_class_rm : string -> unit = "remove"
-  [@@mel.send] [@@mel.scope "document.body.classList"]
-
-external el_class_add : D.element -> string -> unit = "add"
-  [@@mel.send] [@@mel.scope "classList"]
-
-external el_class_rm : D.element -> string -> unit = "remove"
-  [@@mel.send] [@@mel.scope "classList"]
-
-external el_class_toggle : D.element -> string -> bool -> unit
-  = "toggle" [@@mel.send] [@@mel.scope "classList"]
-
-external el_class_contains : D.element -> string -> bool = "contains"
-  [@@mel.send] [@@mel.scope "classList"]
 
 (* document listener removal (dom_ext only ships the add side) *)
-external off_document : string -> (D.event -> unit) -> bool -> unit
-  = "removeEventListener" [@@mel.scope "document"]
 
 (* ---------- toolbar/linkService/outline externals ---------- *)
 

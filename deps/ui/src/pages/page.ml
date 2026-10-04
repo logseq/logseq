@@ -117,7 +117,7 @@ let set_page_icon (page : Model.page) (c : Icon_picker.choice) =
   | Some u -> set_icon u c
 
 let page_icon_picker (page : Model.page) (anchor : string) =
-  match Properties_dom.doc_query anchor with
+  match Web_dom.query_selector anchor with
   | None -> ()
   | Some anchor ->
       Icon_picker.open_picker ~anchor
@@ -241,12 +241,12 @@ let title_content (page : Model.page) : t =
                 (* autofocus doesn't re-fire on remount — focus explicitly
                    so Enter/Escape reach the textarea *)
                 match
-                  Dom_ext.doc_query_selector ".ls-page-title textarea"
+                  Web_dom.query_selector ".ls-page-title textarea"
                 with
                 | Some el ->
-                    Dom_ext.focus el;
-                    let n = String.length (Dom_ext.value el) in
-                    Dom_ext.set_selection_range el n n
+                    Web_dom.el_focus el;
+                    let n = String.length (Web_dom.el_value el) in
+                    Web_dom.el_set_selection_range el n n
                 | None -> ())) )
   in
   dom ~key:"pt-content" ~style_class:"block-content inline !cursor-pointer"
@@ -310,9 +310,9 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
     page.Model.page_db_collapsable || page.Model.page_is_tag
     || title_collapsed
     ||
-    (match Browser_ui.qs ".ls-page-title .ls-block" with
+    (match Web_dom.query_selector ".ls-page-title .ls-block" with
      | Some tb ->
-         Browser_ui.get_attr tb "data-db-collapsable" = Some "true"
+         Web_dom.el_get_attr tb "data-db-collapsable" = Some "true"
      | None -> false)
   in
   let body =
@@ -354,17 +354,17 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
                      titles *)
                   if collapsable_title () then
                     match
-                      Browser_ui.qs ".ls-page-title .block-control > span"
+                      Web_dom.query_selector ".ls-page-title .block-control > span"
                     with
                     | Some el ->
                         if name = "mouseenter" then (
-                          Browser_ui.rm_class el "control-hide";
-                          Browser_ui.add_class el "control-show";
-                          Browser_ui.add_class el "cursor-pointer")
+                          Web_dom.el_class_remove el "control-hide";
+                          Web_dom.el_class_add el "control-show";
+                          Web_dom.el_class_add el "cursor-pointer")
                         else (
-                          Browser_ui.add_class el "control-hide";
-                          Browser_ui.rm_class el "control-show";
-                          Browser_ui.rm_class el "cursor-pointer")
+                          Web_dom.el_class_add el "control-hide";
+                          Web_dom.el_class_remove el "control-show";
+                          Web_dom.el_class_remove el "cursor-pointer")
                     | None -> ())
                 [ dom ~key:"pt-ctrl"
                     ~style_class:
@@ -520,11 +520,11 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
             Runtime.flush ();
             (* autofocus doesn't re-fire on remount — focus explicitly so
                Enter/Escape reach the textarea *)
-            match Dom_ext.doc_query_selector ".ls-page-title textarea" with
+            match Web_dom.query_selector ".ls-page-title textarea" with
             | Some el ->
-                Dom_ext.focus el;
-                let n = String.length (Dom_ext.value el) in
-                Dom_ext.set_selection_range el n n
+                Web_dom.el_focus el;
+                let n = String.length (Web_dom.el_value el) in
+                Web_dom.el_set_selection_range el n n
             | None -> ())
       | _ -> open_menu name payload)
     body

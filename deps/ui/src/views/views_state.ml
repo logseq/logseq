@@ -36,7 +36,7 @@ type inst =
   ; kind : inst_kind
   ; feature : feature
   ; owner : W.t (* [:views] resource owner lookup *)
-  ; mutable container : Views_dom.el (* .ls-view-body mount point *)
+  ; mutable container : Web_dom.el (* .ls-view-body mount point *)
   ; mutable view_uuid : string (* selected view entity uuid *)
   ; mutable views : Views_wire.view_ent list
   ; mutable view_ent : Views_wire.view_ent option
@@ -209,7 +209,7 @@ let ctx_of inst : W.t =
     match inst.feature, inst.group_by with
     | ("all-pages" | "class-objects"), None ->
         let n =
-          Views_dom.window_inner_height /. 33.
+          Web_dom.win_inner_height /. 33.
           |> max 0. |> ceil |> int_of_float |> max 1 |> min 1000
         in
         base @ [ (W.kw "initial-row-count", W.Int n) ]

@@ -8,8 +8,6 @@ open Lui_elements
 
 let dom = Logseq_dom.dom
 module W = Wire
-module B = Browser_ui
-
 type pst = {
   page_uuid : string option;
   page_db_id : int option;
@@ -65,7 +63,7 @@ let trim s =
   if !b < !a then "" else String.sub s !a (!b - !a + 1)
 
 (* cljs util/time-ms *)
-let now_ms () = B.now_ms () |> int_of_float |> string_of_int
+let now_ms () = Platform.date_now_ms () |> int_of_float |> string_of_int
 
 let json_str b k v =
   Buffer.add_string b (Printf.sprintf "\"%s\":\"%s\"," k v)
@@ -119,7 +117,7 @@ let post_payload ~(st : pst) payload ~graph_uuid ~page_uuid ~block_count
     W.Map items
   in
   let body = Transit.to_string body_wire in
-  let* content_hash = Asset_store.sha256_hex (B.binary_to_u8 body) in
+  let* content_hash = Asset_store.sha256_hex (Web_dom.binary_to_u8 body) in
   let meta =
     meta_json ~graph_uuid ~page_uuid ~block_count ~schema_version
       ~content_hash ~content_len:(String.length body)
@@ -140,7 +138,7 @@ let post_payload ~(st : pst) payload ~graph_uuid ~page_uuid ~block_count
                 , W.Int (String.length body))
               ; (W.kw "owner_sub", W.Nil)
               ; (W.kw "owner_username", W.Nil)
-              ; (W.kw "created_at", W.Int (B.now_ms () |> int_of_float)) ] ) ])
+              ; (W.kw "created_at", W.Int (Platform.date_now_ms () |> int_of_float)) ] ) ])
   in
   let headers =
     [| ("content-type", "application/transit+json")

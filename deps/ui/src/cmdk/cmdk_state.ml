@@ -820,18 +820,18 @@ let open_palette ?(move = false) st =
    | Some repo -> load_recents st repo
    | None -> ());
   let rec focus_input tries =
-    match Dom_ext.doc_query_selector ".cp__cmdk-search-input" with
+    match Web_dom.query_selector ".cp__cmdk-search-input" with
     | Some el ->
-        Dom_ext.focus el;
+        Web_dom.el_focus el;
         if q <> "" then (
-          Dom_ext.set_value el q;
+          Web_dom.el_set_value el q;
           (* cljs mounts with the restored query fully selected
              (core.cljs (.select el)) so typing replaces it *)
-          Dom_ext.set_selection_range el 0 (String.length q))
+          Web_dom.el_set_selection_range el 0 (String.length q))
     | None ->
-        if tries > 0 then Dom_ext.set_timeout (fun () -> focus_input (tries - 1)) 20
+        if tries > 0 then Web_dom.set_timeout (fun () -> focus_input (tries - 1)) 20
   in
-  Dom_ext.set_timeout (fun () -> focus_input 20) 0
+  Web_dom.set_timeout (fun () -> focus_input 20) 0
 
 let close st =
   let v = get st in
@@ -852,8 +852,8 @@ let clear_or_close st =
   else if v.filter <> None && not v.move_mode then (clear_filter st; true)
   else if v.input <> "" then (
     set_in st (fun v -> { v with input = "" });
-    (match Dom_ext.doc_query_selector ".cp__cmdk-search-input" with
-     | Some el -> Dom_ext.set_value el ""
+    (match Web_dom.query_selector ".cp__cmdk-search-input" with
+     | Some el -> Web_dom.el_set_value el ""
      | None -> ());
     refresh st;
     true)
@@ -874,13 +874,13 @@ let move_hl st dir =
       else ((v.hl + dir) mod n + n) mod n
     in
     set_in st (fun v -> { v with hl = i; mouse = false });
-    (match Dom_ext.doc_query_selector ".cp__cmdk .cp__cmdk-scroller" with
+    (match Web_dom.query_selector ".cp__cmdk .cp__cmdk-scroller" with
      | Some scroller -> (
          match
-           Dom_ext.query_selector scroller
+           Web_dom.el_query scroller
              (Printf.sprintf "[data-item-index=\"%d\"]" i)
          with
-         | Some row -> Dom_ext.scroll_row_into_view ~scroller ~row
+         | Some row -> Web_dom.scroll_row_into_view ~scroller ~row
          | None -> ())
      | None -> ())
 
@@ -900,7 +900,7 @@ let toast msg cls =
   let d = Js.Dict.empty () in
   Js.Dict.set d "msg" (Js.Json.string msg);
   Js.Dict.set d "cls" (Js.Json.string cls);
-  Dom_ext.dispatch_custom "ls:toast" (Js.Json.object_ d)
+  Web_dom.dispatch_custom "ls:toast" (Js.Json.object_ d)
 
 let goto_page _repo uuid =
   (* navigation intent: commit and close any in-progress edit so the old
@@ -1035,7 +1035,7 @@ let run_add_reaction st =
   | uuids -> (
       let anchor =
         match uuids with
-        | u :: _ -> Properties_dom.doc_query ("[blockid='" ^ u ^ "']")
+        | u :: _ -> Web_dom.query_selector ("[blockid='" ^ u ^ "']")
         | [] -> None
       in
       match anchor with
@@ -1086,7 +1086,7 @@ let run_add_property_icon st =
   | uuids -> (
       let anchor =
         match uuids with
-        | u :: _ -> Properties_dom.doc_query ("[blockid='" ^ u ^ "']")
+        | u :: _ -> Web_dom.query_selector ("[blockid='" ^ u ^ "']")
         | [] -> None
       in
       match anchor with
@@ -1265,8 +1265,8 @@ let rec run_item st it =
    | Set_filter gid ->
        set_in st (fun v ->
            { v with filter = Some gid; input = "" });
-       (match Dom_ext.doc_query_selector ".cp__cmdk-search-input" with
-        | Some el -> Dom_ext.set_value el ""
+       (match Web_dom.query_selector ".cp__cmdk-search-input" with
+        | Some el -> Web_dom.el_set_value el ""
         | None -> ());
        refresh st
    | Run cid -> run_command st repo cid
@@ -1347,23 +1347,23 @@ and run_command st repo (cid : string) =
          the palette to the nodes group — no recents/filters *)
       set_in st (fun v ->
           { v with move_mode = true; filter = Some G_nodes; input = "" });
-      (match Dom_ext.doc_query_selector ".cp__cmdk-search-input" with
-       | Some el -> Dom_ext.set_value el ""; Dom_ext.focus el
+      (match Web_dom.query_selector ".cp__cmdk-search-input" with
+       | Some el -> Web_dom.el_set_value el ""; Web_dom.el_focus el
        | None -> ());
       refresh st
   | "go/search" -> () (* keep palette open on the input *)
   | "go/search-in-page" ->
       set_in st (fun v ->
           { v with filter = Some G_current_page; input = "" });
-      (match Dom_ext.doc_query_selector ".cp__cmdk-search-input" with
-       | Some el -> Dom_ext.set_value el ""
+      (match Web_dom.query_selector ".cp__cmdk-search-input" with
+       | Some el -> Web_dom.el_set_value el ""
        | None -> ());
       refresh st
   | "go/search-themes" ->
       set_in st (fun v ->
           { v with filter = Some G_themes; input = "" });
-      (match Dom_ext.doc_query_selector ".cp__cmdk-search-input" with
-       | Some el -> Dom_ext.set_value el ""
+      (match Web_dom.query_selector ".cp__cmdk-search-input" with
+       | Some el -> Web_dom.el_set_value el ""
        | None -> ());
       refresh st
   | "go/home" -> nav "#/" Model.Home

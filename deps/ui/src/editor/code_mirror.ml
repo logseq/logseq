@@ -12,8 +12,8 @@
    modes/addons whose registration happens on require). *)
 
 open Promise_ext
-module D = Editor_dom
-module V = Views_dom
+module D = Web_dom
+module V = Web_dom
 module S = Editor_state
 module A = Editor_actions
 module Ops = Outliner_ops
@@ -23,7 +23,7 @@ type t
 
 external raw_require : string -> Js.Json.t = "require"
 
-external cm_module_of_json : Js.Json.t -> cm_module = "%identity"
+external require_cm : string -> cm_module = "require"
 
 (* codemirror.js and every mode/addon touch `document` at load time, so
    they must not require under the node test runner — the whole ui lib is
@@ -36,7 +36,7 @@ let cm () : cm_module =
   match !cm_cache with
   | Some m -> m
   | None ->
-      let m = cm_module_of_json (raw_require "codemirror") in
+      let m = require_cm "codemirror" in
       cm_cache := Some m;
       m
 
@@ -135,8 +135,6 @@ external mode_infos : cm_module -> Js.Json.t array = "modeInfo"
 external next_sibling : D.el -> D.el option = "nextElementSibling"
   [@@mel.get] [@@mel.return nullable]
 
-external json_of_fn : (t -> unit) -> Js.Json.t = "%identity"
-external json_of_cm : cm_module -> Js.Json.t = "%identity"
 external window_obj : Js.Json.t = "window"
   [@@mel.scope "globalThis"]
 
@@ -266,7 +264,7 @@ let update_calc c =
   | Some wrap -> (
       match D.el_query wrap ".extensions__code-calc" with
       | Some res ->
-          V.clear res;
+          V.el_replace_children res;
           List.iter
             (fun line ->
               D.el_append_child res
@@ -327,8 +325,8 @@ let wrapper_keydown uuid c ev =
   | _, true, _ -> (
       match ev_code ev with
       | "BracketLeft" | "BracketRight" ->
-          D.stop_propagation ev;
-          D.prevent_default ev
+          D.ev_stop_propagation ev;
+          D.ev_prevent_default ev
       | _ -> ())
   | "ArrowLeft", false, false -> if at_start c then A.arrow_nav uuid true
   | "ArrowRight", false, false ->
@@ -340,7 +338,7 @@ let wrapper_keydown uuid c ev =
 (* cljs pointerdown on the wrapper: stop propagation + clear the
    block-range selection *)
 let wrapper_pointerdown _uuid ev =
-  D.stop_propagation ev;
+  D.ev_stop_propagation ev;
   if S.selection_active () then
     S.set (fun st ->
         { st with
@@ -353,8 +351,8 @@ let wrapper_pointerdown _uuid ev =
 let make_options ~uuid ~lang ~mode =
   let extra_keys =
     Js.Dict.fromList
-      [ ("Esc", json_of_fn (fun _ -> on_escape uuid))
-      ; ("Shift-Enter", json_of_fn (fun _ -> on_shift_enter uuid))
+      [ ("Esc", fun _ -> on_escape uuid)
+      ; ("Shift-Enter", fun _ -> on_shift_enter uuid)
       ]
   in
   let opts =
@@ -367,13 +365,15 @@ let make_options ~uuid ~lang ~mode =
       ; ("mode", Js.Json.string mode)
       ; (* do not accept TAB-in, since TAB is bound globally (cljs) *)
         ("tabIndex", Js.Json.number (-1.))
-      ; ("extraKeys", Js.Json.object_ extra_keys)
       ]
   in
+  Web_dom.js_set (Js.Json.object_ opts) "extraKeys" extra_keys;
   if lang = "calc" then
     (* cljs: calc editors expand to the whole buffer *)
     Js.Dict.set opts "viewportMargin" (Js.Json.number Float.infinity);
-  Js.Json.object_ opts
+  let o = Js.Json.object_ opts in
+  Web_dom.js_set o "extraKeys" extra_keys;
+  o
 
 (* fromTextArea leaves the textarea in place (hidden) and inserts the
    .CodeMirror wrapper right after it *)
@@ -398,8 +398,8 @@ let mount uuid textarea =
   on_event c "change" (fun c -> on_change uuid c);
   on_event c "blur" (fun _ -> on_cm_blur uuid);
   on_event c "focus" (fun _ -> on_cm_focus uuid);
-  V.el_add_listener (get_wrapper c) "keydown" (wrapper_keydown uuid c);
-  V.el_add_listener (get_wrapper c) "pointerdown" (wrapper_pointerdown uuid);
+  V.el_on (get_wrapper c) "keydown" (wrapper_keydown uuid c);
+  V.el_on (get_wrapper c) "pointerdown" (wrapper_pointerdown uuid);
   (* cljs .save()/.refresh() right after mount: textarea value -> doc
      state, then a layout pass while the container is on screen *)
   save c;
@@ -498,7 +498,7 @@ let open_lang_picker uuid =
             ("#ls-block-" ^ uuid ^ " .select-language") )
       with
       | Some host, Some button ->
-          let r = V.el_rect button in
+          let r = V.el_bounding_rect button in
           let menu =
             V.h ~cls:"ls-code-lang-picker" ~attrs:[ ("role", "menu") ] ()
           in
@@ -528,7 +528,7 @@ let copy_button uuid =
   match instance uuid with
   | Some c ->
       ignore
-        (let* () = V.clipboard_write (get_value c) in
+        (let* () = Platform.clipboard_write_text (get_value c) in
          Runtime.send
            (Action.Toast_push
               { Model.toast_id = 0
@@ -550,8 +550,8 @@ let install () =
     S.code_focus := focus_block;
     (* cljs exposes the module on window (used by extensions and dev
        helpers) *)
-    Platform.set_prop window_obj "CodeMirror" (json_of_cm (cm ()));
-    D.document_add_listener "mousedown"
+    Web_dom.js_set window_obj "CodeMirror" (cm ());
+    D.add_document_listener "mousedown"
       (fun ev ->
         match
           ( !picker

@@ -812,7 +812,7 @@ let save_timer = ref 0
 let pending_save : (string * string) option ref = ref None
 
 let cancel_pending_save () =
-  Editor_dom.clear_timeout !save_timer;
+  Web_dom.clear_timeout !save_timer;
   pending_save := None
 
 let rec apply ?(opts = Wire.Map []) ops : unit Js.Promise.t =
@@ -826,7 +826,7 @@ let rec apply ?(opts = Wire.Map []) ops : unit Js.Promise.t =
       let* () = apply [ sop ] in
       apply ~opts ops
   | None -> (
-      Editor_dom.clear_timeout !save_timer;
+      Web_dom.clear_timeout !save_timer;
       match !Runtime.current_repo with
       | None -> Js.Promise.resolve ()
       | Some repo ->
@@ -905,7 +905,7 @@ let rec apply_result ?(opts = Wire.Map []) ops : Wire.t option Js.Promise.t
       let* () = apply [ sop ] in
       apply_result ~opts ops
   | None -> (
-      Editor_dom.clear_timeout !save_timer;
+      Web_dom.clear_timeout !save_timer;
       match !Runtime.current_repo with
       | None -> Js.Promise.resolve None
       | Some repo ->
@@ -1178,7 +1178,7 @@ let schedule_save uuid title =
   cancel_pending_save ();
   pending_save := Some (uuid, title);
   save_timer :=
-    Editor_dom.set_timeout_id
+    Web_dom.set_timeout_id
       (fun () ->
         pending_save := None;
         ignore
@@ -1309,8 +1309,8 @@ let resync_open_editor ?(force = false) () : unit Js.Promise.t =
                        { e' with S.buffer = title; base = title }
                     }
                 | _ -> st);
-            match Editor_dom.textarea_of e.uuid with
-            | Some el -> Editor_dom.el_set_value el title
+            match Web_dom.textarea_of e.uuid with
+            | Some el -> Web_dom.el_set_value el title
             | None -> ()
           end;
           Js.Promise.resolve ()
