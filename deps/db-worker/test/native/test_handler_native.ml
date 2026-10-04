@@ -2246,27 +2246,6 @@ let test_delete_comment_keeps_thread_when_another_reply_exists () =
   check "only the selected reply is recycled"
     (ent_uuid db (uuid_of first_reply) = None)
 
-(* (deftest get-comment-thread-block-uuids-finds-comment-targets ...) *)
-let test_get_comment_thread_block_uuids_finds_comment_targets () =
-  let conn = conn_with_multi_comment_thread () in
-  register_conn conn;
-  let db = db_of conn in
-  let first_block = block_by_content db "First" in
-  let second_block = block_by_content db "Second" in
-  let result =
-    await
-      (Dispatcher.invoke "thread-api/get-comment-thread-block-uuids"
-         [ Wire.String test_repo
-         ; Wire.List
-             [ Wire.Uuid (uuid_of first_block)
-             ; Wire.Uuid (uuid_of second_block) ] ])
-  in
-  check "comment targets"
-    (List.sort_uniq String.compare
-       (List.filter_map Wire.as_string (wseq result))
-     = List.sort_uniq String.compare
-         [ uuid_of first_block; uuid_of second_block ])
-
 (* (deftest get-comment-threads-for-block-loads-thread-blocks ...) *)
 let test_get_comment_threads_for_block_loads_thread_blocks () =
   let conn = conn_with_single_comment_thread () in
@@ -2307,8 +2286,6 @@ let comments_cases =
       `Quick test_delete_comment_removes_thread_when_deleting_last_reply
   ; Alcotest.test_case "delete-comment-keeps-thread-when-another-reply-exists"
       `Quick test_delete_comment_keeps_thread_when_another_reply_exists
-  ; Alcotest.test_case "get-comment-thread-block-uuids-finds-comment-targets"
-      `Quick test_get_comment_thread_block_uuids_finds_comment_targets
   ; Alcotest.test_case "get-comment-threads-for-block-loads-thread-blocks"
       `Quick test_get_comment_threads_for_block_loads_thread_blocks ]
 

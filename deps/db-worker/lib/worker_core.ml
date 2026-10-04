@@ -9,7 +9,6 @@ let init () =
     ignore Endpoint_state.cancel_ui_requests;
     ignore Endpoint_import.import_file_graph;
     ignore Endpoint_markdown.set_enabled;
-    ignore Endpoint_markdown.flush;
     ignore Endpoint_markdown.regenerate;
     ignore Endpoint_read.get_journal_page_by_day;
     ignore Endpoint_read.get_block_source;
@@ -19,7 +18,6 @@ let init () =
     ignore Endpoint_read.get_block_refs;
     ignore Endpoint_read.get_page_blocks_tree;
     ignore Endpoint_comment.get_comment_threads_for_block;
-    ignore Endpoint_comment.get_comment_thread_block_uuids;
     ignore Endpoint_cli.cli_list_properties;
     ignore Endpoint_cli.api_get_page_data;
     ignore Endpoint_view.get_view_filter_data;

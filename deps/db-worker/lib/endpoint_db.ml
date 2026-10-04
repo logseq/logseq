@@ -227,37 +227,7 @@ let pull args =
 
 let () = Dispatcher.register "thread-api/pull" pull
 
-(* :thread-api/pull-many [repo selector ids] *)
-let pull_many args =
-  let repo = require_repo args in
-  (match Worker_state.datascript_conn repo with
-   | None -> Db_worker_effect.pure Wire.nil
-   | Some conn ->
-       let selector_edn = Ds_wire.edn_text_of_arg (List.nth args 1) in
-       let ids = List.map Ds_wire.entity_ref_of_transit (Wire.as_seq (List.nth args 2)) in
-       let pulled = Datascript.pull_many_string (Datascript.db conn) selector_edn ids in
-       Db_worker_effect.pure
-         (Wire.Array
-            (List.map (function Some p -> Ds_wire.transit_of_pulled p | None -> Wire.nil) pulled)))
-
-let () = Dispatcher.register "thread-api/pull-many" pull_many
-
 (* :thread-api/transact lives in endpoint_transaction.ml *)
-
-(* :thread-api/entity [repo eid] -> tagged entity map *)
-let entity args =
-  let repo = require_repo args in
-  (match Worker_state.datascript_conn repo with
-   | None -> Db_worker_effect.pure Wire.nil
-   | Some conn ->
-       let eref = Ds_wire.entity_ref_of_transit (List.nth args 1) in
-       (match Datascript.entity (Datascript.db conn) eref with
-        | None -> Db_worker_effect.pure Wire.nil
-        | Some e ->
-            Db_worker_effect.pure
-              (Wire.Tagged ("datascript/Entity", Ds_wire.entity_map_wire e))))
-
-let () = Dispatcher.register "thread-api/entity" entity
 
 (* :thread-api/db [repo] -> tagged datascript/DB *)
 let db args =

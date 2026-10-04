@@ -584,29 +584,6 @@ let get_page_route_info args =
 
 let () = Dispatcher.register "thread-api/get-page-route-info" get_page_route_info
 
-(* :thread-api/get-block-by-page-name-and-block-route-name
-   [repo page-id-name-or-uuid route-name] — {:block/uuid} only. *)
-let get_block_by_page_name_and_block_route_name args =
-  with_conn args (fun db ->
-      let ref_v = Option.map Ds_wire.value_of_transit (arg args 1) in
-      let route_name = Option.bind (arg args 2) Wire.as_string in
-      Db_worker_effect.pure
-        (match ref_v, route_name with
-         | Some v, Some route_name ->
-             (match Db_content.block_route_resolution db v route_name with
-              | Some { Db_content.block = Some b; _ } ->
-                  Wire.Map
-                    [ ( kw "block/uuid",
-                        Ds_wire.transit_of_value
-                          (Option.value (Ldb.value b "block/uuid") ~default:Nil) )
-                    ]
-              | _ -> Wire.nil)
-         | _ -> Wire.nil))
-
-let () =
-  Dispatcher.register "thread-api/get-block-by-page-name-and-block-route-name"
-    get_block_by_page_name_and_block_route_name
-
 (* :thread-api/get-block-refs — [:db/id? eid] → plain ref block maps *)
 let get_block_refs args =
   with_conn args (fun db ->

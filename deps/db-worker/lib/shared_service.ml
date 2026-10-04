@@ -540,9 +540,3 @@ let create_service ~service_name ~target ~on_become_master_handler
           { proxy; status_ready = ready; client_id = cid })
   end
 
-(* cljs broadcast-to-clients! — Broadcast.to_clients covers the
-   self.postMessage / node event-fn halves and the extra_poster relay
-   registered by create_service covers the common-channel broadcast
-   (browser slave forwarding). *)
-let broadcast_to_clients ~(kind : string) ~(transit_payload : string) : unit =
-  Broadcast.to_clients ~kind ~transit_payload

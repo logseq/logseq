@@ -100,64 +100,9 @@ let get_comment_threads_for_block args =
                   rows)
          | None -> Wire.nil))
 
-(* :thread-api/get-comment-thread-block-uuids *)
-let get_comment_thread_block_uuids args =
-  with_conn args (fun db ->
-      let uuids =
-        match arg args 1 with
-        | Some (Wire.List vs) -> vs
-        | Some (Wire.Set vs) -> vs
-        | Some (Wire.Array vs) -> vs
-        | _ -> []
-      in
-      let id_uuid : (entity_id * string) list =
-        List.filter_map
-          (fun t ->
-            match block_ref_entity db (Ds_wire.value_of_transit t) with
-            | Some b ->
-                (match Ldb.value b "block/uuid" with
-                 | Some (Uuid u) -> Some (b.id, u)
-                 | _ -> None)
-            | None -> None)
-          uuids
-      in
-      let result =
-        List.concat_map
-          (fun (block_id, uuid_str) ->
-            List.of_seq
-              (datoms db Avet ~a:comments_blocks_property ~v:(Ref block_id) ())
-            |> List.filter_map (fun (d : datom) ->
-                   match entity db (Entity_id d.e) with
-                   | Some area ->
-                       let tagged =
-                         List.mem comments_tag_ident
-                           (List.filter_map Ldb.ident_of
-                              (Ldb.ref_ents area "block/tags"))
-                       in
-                       let not_parent =
-                         match Ldb.ref_ent area "block/parent" with
-                         | Some p -> p.id <> block_id
-                         | None -> true
-                       in
-                       let live =
-                         not
-                           (Ldb.truthy
-                              (Ldb.value area
-                                 "logseq.property/deleted-at"))
-                       in
-                       if tagged && not_parent && live then
-                         Some (Wire.String uuid_str)
-                       else None
-                   | None -> None))
-          id_uuid
-      in
-      Db_worker_effect.pure (Wire.List result))
-
 let () =
   Dispatcher.register "thread-api/get-comment-threads-for-block"
-    get_comment_threads_for_block;
-  Dispatcher.register "thread-api/get-comment-thread-block-uuids"
-    get_comment_thread_block_uuids
+    get_comment_threads_for_block
 
 (* ---- write side: ensure-comments-area / delete-comment ---- *)
 

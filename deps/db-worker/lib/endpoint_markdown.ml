@@ -18,12 +18,6 @@ let set_enabled args =
 
 let () = Dispatcher.register "thread-api/markdown-mirror-set-enabled" set_enabled
 
-let flush args =
-  let repo = require_repo args in
-  Markdown_mirror.flush_repo repo Markdown_mirror.default_opts
-
-let () = Dispatcher.register "thread-api/markdown-mirror-flush" flush
-
 let regenerate args =
   let repo = require_repo args in
   match Worker_state.datascript_conn repo with
