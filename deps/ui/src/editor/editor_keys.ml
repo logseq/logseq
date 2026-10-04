@@ -934,6 +934,17 @@ let on_keydown ev =
                     | _ -> on_editor_key ev uuid el
                   else on_editor_key ev uuid el)
               | _ -> ())
+          | Some uuid, None -> (
+              (* the window-level keyMonitor forwards editing-mode chords
+                 with no target (AppKit never maps mod+. etc. to a
+                 doCommandBy selector, so the textview's own emit path
+                 never sees them). While a block is being edited they
+                 still belong to the editor handler — route them through
+                 the block's textarea so editing-only chords (mod+.,
+                 mod+l, ctrl+l/u/w, ...) fire *)
+              match D.textarea_of uuid with
+              | Some el -> on_editor_key ev uuid el
+              | None -> on_normal_key ev)
           | _ ->
               (* an editing textarea that was unmounted by the previous key
                  (e.g. Shift+Arrow exiting edit mode) can still receive the
