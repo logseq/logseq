@@ -729,12 +729,14 @@ let download_graph_by_id repo graph_id graph_e2ee : Wire.t Db_worker_effect.t =
               finalize_import repo graph_id remote_tx import_id
           | None -> Db_worker_effect.pure ())
          >>= fun () ->
+         (* clear before the fresh-image anchor lands: dying in between
+            leaves flag=0 + the old checksum, which reconcile-on-open
+            recomputes into the right value — clearing after would pin
+            flag=1 to a fresh image and silence heal/drift forever *)
+         Sync_client_op.clear_checksum_exempted repo;
          (match Sync_state.confirmed_conn repo with
           | Some conn -> set_graph_sync_metadata conn graph_id graph_e2ee
           | None -> ());
-         (* fresh server image: any checksum divergence recorded by an
-            earlier exempted gc no longer applies *)
-         Sync_client_op.clear_checksum_exempted repo;
          (* the graph-remote marker just landed: split server/display
             conns now so subsequent remote writes go to the base *)
          Sync_apply.split_off_server_if_remote repo;

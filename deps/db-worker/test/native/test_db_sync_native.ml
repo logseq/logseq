@@ -13954,6 +13954,102 @@ let test_pending_unapply_done_skips_split () =
                (Lookup_ref ("block/uuid", Uuid (wire_uuid_str c1_u)))
              = None)))
 
+(* the exempt flag is a persisted client_ops meta: set once by an
+   exempt gc purge, it must survive reads until a fresh server-image
+   anchor clears it *)
+let test_checksum_exempted_flag_lifecycle () =
+  preserve_state (fun () ->
+      let ops = new_client_ops_db () in
+      Hashtbl.replace Sync_state.client_ops_conns test_repo ops;
+      Fun.protect
+        ~finally:(fun () ->
+          Hashtbl.remove Sync_state.client_ops_conns test_repo)
+        (fun () ->
+          check "absent key reads unexempted"
+            (not (Sync_client_op.checksum_exempted test_repo));
+          Sync_client_op.mark_checksum_exempted test_repo;
+          check "mark persists exempted"
+            (Sync_client_op.checksum_exempted test_repo);
+          Sync_client_op.clear_checksum_exempted test_repo;
+          check "clear re-arms checks"
+            (not (Sync_client_op.checksum_exempted test_repo))))
+
+(* a pending attr-retract's reversed restore applies only while the
+   attr is still absent: a forward db/retract writes nothing, so the
+   forward-value guard must not demand the conn hold the removed value
+   (that would drop the legit restore); a confirmed rewrite after the
+   retract must still win *)
+let test_unapply_forward_retract_restores () =
+  preserve_state (fun () ->
+      let conn, ops, _parent, c1, _c2, c3 = setup_parent_child () in
+      let c1_u = entity_block_uuid c1 in
+      let c3_u = entity_block_uuid c3 in
+      Worker_state.set_datascript_conn test_repo conn;
+      Hashtbl.replace Sync_state.client_ops_conns test_repo ops;
+      Sync_client_op.update_local_tx test_repo 0;
+      mark_graph_remote conn;
+      (* old-model persisted forward state: both titles retracted; c3's
+         was then re-written by a confirmed tx *)
+      ignore
+        (Db_transact.transact conn
+           [ db_retract (block_uuid_lookup c1_u) "block/title"
+               (Wire.String "child 1")
+           ; db_retract (block_uuid_lookup c3_u) "block/title"
+               (Wire.String "child 3") ]
+           [ "skip-validate-db?", Bool true ]);
+      ignore
+        (Db_transact.transact conn
+           [ db_add (block_uuid_lookup c3_u) "block/title"
+               (Wire.String "confirmed") ]
+           []);
+      seed_client_op_txs test_repo
+        [ seed_tx ~created_at:1
+            ~tx_data_v:
+              (Wire.Array
+                 [ db_retract (block_uuid_lookup c1_u) "block/title"
+                     (Wire.String "child 1") ])
+            ~reversed_tx_data:
+              (Wire.Array
+                 [ db_add (block_uuid_lookup c1_u) "block/title"
+                     (Wire.String "child 1") ])
+            "tx-retract-c1"
+        ; seed_tx ~created_at:2
+            ~tx_data_v:
+              (Wire.Array
+                 [ db_retract (block_uuid_lookup c3_u) "block/title"
+                     (Wire.String "child 3") ])
+            ~reversed_tx_data:
+              (Wire.Array
+                 [ db_add (block_uuid_lookup c3_u) "block/title"
+                     (Wire.String "child 3") ])
+            "tx-retract-c3" ];
+      Fun.protect
+        ~finally:(fun () ->
+          Sync_state.drop_server_conn test_repo;
+          Hashtbl.remove Sync_state.client_ops_conns test_repo)
+        (fun () ->
+          Sync_apply.split_off_server_if_remote test_repo;
+          let server =
+            match Sync_state.server_conn test_repo with
+            | Some c -> c
+            | None -> failwith "no server conn after split"
+          in
+          let title_on u =
+            match
+              Datascript.entity (Conn.db server)
+                (Lookup_ref ("block/uuid", Uuid (wire_uuid_str u)))
+            with
+            | Some e -> (
+                match Datascript.entity_attr e "block/title" with
+                | Some (One_value (String s)) -> Some s
+                | _ -> None)
+            | None -> None
+          in
+          check "retracted value restored while attr absent"
+            (title_on c1_u = Some "child 1");
+          check "confirmed rewrite wins over restore"
+            (title_on c3_u = Some "confirmed")))
+
 let () =
   Alcotest.run "db-sync-native"
     [ ( "db-sync"
@@ -14683,6 +14779,12 @@ let () =
         ; Alcotest.test_case
             "pending-unapply-done-skips-split-test" `Quick
             test_pending_unapply_done_skips_split
+        ; Alcotest.test_case
+            "unapply-forward-retract-restores-test" `Quick
+            test_unapply_forward_retract_restores
+        ; Alcotest.test_case
+            "checksum-exempted-flag-lifecycle-test" `Quick
+            test_checksum_exempted_flag_lifecycle
         ] )
     ; ( "db-sync-upload"
       , Test_db_sync_upload_native.cases ) ]

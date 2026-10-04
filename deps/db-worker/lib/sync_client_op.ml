@@ -386,7 +386,10 @@ let get_pending_local_txs repo ?(limit : int option) () : local_tx_entry list =
 
 (* rows whose forward datoms may still be persisted on the conn under
    the old single-conn model: pending (awaiting server) and failed
-   (rejected/dropped — never un-applied anywhere else) *)
+   (rejected/dropped). Failed rows were usually already un-applied by
+   the old rollback path, but rows whose rollback hit Reverse_failed
+   were not — include them all and let the stale-restore guards make
+   the second un-apply a no-op for cleanly rolled-back rows *)
 let get_unconfirmed_local_txs repo : local_tx_entry list =
   rows (store repo)
     (pending_tx_select
