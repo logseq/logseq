@@ -2,22 +2,30 @@
 
 This is the Stage 0 map from the Python reference server to the current Logseq
 architecture. `compat` means the first native implementation should call the
-existing Logseq API through an adapter. Native candidates remain unregistered
-until their differential and live validation gates pass. Application APIs are
-preferred over direct DB reads and mutations.
+existing Logseq API through an adapter. Candidates remain off the default
+production route until their differential and live validation gates pass. The governing rule in
+`plan.md` requires all MCP Logseq calls to use `logseq.DB.*`; DB-owned aliases
+may temporarily delegate to Editor/OG implementations internally.
+
+All Stage 2 rows require a defined raw/expanded output contract, current DB
+schema and canonical entity-classification coverage, namespace-aware dispatch,
+focused local checks, and read-only live same-graph parity checks through Claude
+Desktop or an explicitly authorized direct MCP client.
+Candidate implementation, local validation, live validation, and production
+switching are separate statuses; getBlock evidence does not validate other rows.
 
 ## Meta and reads
 
 | Tool | Inputs / key contract | Current reference route | First native route | Later candidate |
 |---|---|---|---|---|
 | `capabilities` | `include_diagnostics?` | capability probes | adapter capability probe | native capability probe |
-| `getPageUUID` | title | `getPage`, query | API page lookup | DB read |
+| `getPageUUID` | title | `getPage`, query | existing `DB.datascriptQuery` compatibility lookup | use existing APIs behind DB aliases; duplicate `getPagesByTitle` implementation removed |
 | `isTitleAvailable` | title | title-holder query | query adapter | DB read |
 | `findDuplicateTitles` | `normalize`, `include_recycled` | queries + grouping | query adapter | DB read |
 | `inspectPage` | page UUID, `detail` | detail-specific queries | query adapter | DB read |
 | `pageStats` | page UUID | fixed count queries | query adapter | DB read |
 | `getBlockUUID` | page UUID | query | query adapter | DB read |
-| `getBlock` | block UUID | exact entity query | compatibility query remains registered | application `Editor.getBlock` candidate implemented; local differential tests pass, live validation pending |
+| `getBlock` | block UUID | exact entity query | single MCP adapter calls `logseq.DB.getBlock` using the existing Editor implementation and standard dispatch | no duplicate getter, special resolver, native module, or comparison switch; local tests pass; current smoke test pending |
 | `searchBlocks` | text, page scope, regex, limit | predicate query + separate count | query adapter, single attempt | DB read/query |
 | `getBlockTree` | block UUID, depth/node caps | parent traversal query | query adapter | DB read |
 | `findBacklinks` | target UUID | reference/tag/property queries | query adapter | DB read |

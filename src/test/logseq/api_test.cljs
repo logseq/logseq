@@ -7,11 +7,16 @@
             [frontend.db.conn :as conn]
             [frontend.db.utils :as db-utils]
             [frontend.test.helper :as test-helper]
+            [logseq.api :as api]
             [logseq.api.block :as api-block]
+            [logseq.api.editor :as api-editor]
             [promesa.core :as p]))
 
 (use-fixtures :each {:before #(test-helper/start-test-db! {:build-init-data? false})
                      :after test-helper/destroy-test-db!})
+
+(deftest block-read-uses-existing-shared-export
+  (is (identical? api-editor/get_block api/get_block)))
 
 (def ^:private block-pull-selector
   '[:db/id

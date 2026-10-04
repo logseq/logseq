@@ -158,33 +158,116 @@ Exit criteria:
 
 ### Stage 2: API-backed native reads
 
-First candidate implemented; production routing is unchanged. Follow the final
-Application API First clarification in `plan.md`, not the earlier suggestion
-to read the worker database directly from MCP.
+Scope correction: MCP must call `logseq.DB.*`, but existing Editor APIs are
+valid implementations behind that namespace. This project must not duplicate
+or optimize existing Logseq getters. The custom raw block query and duplicate
+`getPagesByTitle` API, exports, SDK entry, candidate, comparison flag, and
+implementation-only tests have been removed. Useful compatibility-reader
+regression coverage remains.
 
-`electron.mcp-native/get-block` calls the existing `logseq.Editor.getBlock`
-application API with `includeChildren: false`, `includePage: true`, and the new
-opt-in `camelCase: false` setting. Existing API callers retain camel-cased
-output by default. The candidate removes the API-added child view to retain
-the existing single-block envelope, shares UUID validation, and preserves
-not-found/page distinctions and application errors. It does not issue a
-DataScript query or perform mutations.
+There are no changes to the existing getter, DB API implementation, API export
+registry, or SDK proxy mechanism. The SDK interface exposes `DB.getBlock` with
+the existing Editor signature; standard dispatch reaches the existing
+`get_block` export. No special resolver, duplicate export, or custom SDK wrapper
+is needed.
 
-Differential tests invoke the real application getter and the compatibility
-reader against the same in-memory DataScript fixture. Exact result equality
-covers regular and nested blocks, collapsed metadata, plugin reference values,
-page UUIDs and missing UUIDs; additional tests cover casing defaults, invalid
-UUIDs, application errors, and mismatched response UUIDs. Current checks:
+The single `electron.mcp-compat/get-block` adapter calls `logseq.DB.getBlock` with a validated UUID and
+`includeChildren: false`, `includePage: true`. It retains the Editor response,
+including default casing and child references, inside the MCP found/page/missing
+envelope. It does not strip fields or change the underlying API to force parity.
+Tests exercise the existing getter with DataScript-backed worker read stubs
+and retain identifier/error/mismatched-UUID checks. The separate native module,
+query-based getBlock implementation, and comparison switch have been removed.
+The old comparison-launch instructions are superseded; the tool now has one
+registered implementation and does not inspect `LOGSEQ_MCP_COMPARE_GETBLOCK`.
 
-- `electron.mcp-compat-test`: 104 tests, 447 assertions, zero failures/errors.
-- `logseq.api-test`: 2 tests, 9 assertions, zero failures/errors.
-- SDK `tsc --noEmit`: blocked by missing `deepmerge`, `change-case` and
-  `lodash-es` imports in untouched SDK files; no dependency changes made.
+Local checks passed 107 MCP tests / 472 assertions after the cleanup. Current
+live smoke testing remains pending; the historical raw-prototype results below
+do not validate this integration. No new graph writes or desktop restart were
+performed during this cleanup. Other Stage 2 reads retain their existing
+implementations; do not advance to another tool before the getBlock smoke test.
 
-`mcp_server.cljs` still registers `mcp-compat/get-block`; no native route or
-new MCP tool is exposed yet. Live same-graph differential evidence and the SDK
-typecheck remain required before switching this tool. Other reads, writes,
-caching, batching and compatibility removal are not part of this candidate.
+#### Historical Raw-Prototype Evidence: 2026-10-03
+
+The results below describe the removed raw getter, not the current Editor alias.
+Its former promotion and benchmark are superseded and must not be used as
+validation or performance evidence for the alias. The ledger is retained because
+the user-approved graph fixtures still exist; cleanup was not authorized.
+
+The rebuilt desktop had DB graph `logseq_db_test` open and
+`LOGSEQ_MCP_COMPARE_GETBLOCK=1`. Direct MCP initialization succeeded with the
+normal 51-tool inventory and no `upsertNodes`. Direct SDK checks passed twice;
+the user then supplied matching Claude results after reconnecting. No graph
+writes were performed by these checks.
+
+| Case | Ledger UUID / input | Result |
+|---|---|---|
+| Top-level childless marker | `6ac118d5-c740-4ec5-a529-4984cdeead35` | PASS: expected content; parent/page id 201 |
+| Nested block `one` | `6ac12669-2335-4f23-b85d-0b5f8a81899b` | PASS: expected content; parent id 210, page id 201 |
+| Top-level parent with children | `6ac12678-47c8-4013-972e-799b6a8911e2` | PASS: expected content; parent/page id 201 |
+| Fixture page | `6ac118d2-4349-4903-8dee-b83ec2131cad` | PASS: found false, block null, page-not-block reason |
+| Previously verified deleted block | `6ac11e38-f4a9-4679-83d2-674b9e8de7a5` | PASS: found false, block null, no page reason |
+| Malformed input | `not-a-uuid` | PASS: `Unexpected API error: Entity query requires a UUID` |
+| Collapsed block | `6ac1b92b-2864-4816-bb94-51501e1e2139` | PASS: collapsed true; parent/page id 201 |
+| Property-bearing block | `6ac1b92c-35dc-414f-a5e5-1aedaecb1df8` | PASS: parent id 256, page id 201; raw value reference and independently resolved value |
+
+Successful valid reads in comparison mode establish complete-envelope equality
+for those cases. Returned block fields, ordering, parent and page references
+matched the ledger. Children are deliberately not expanded; a parent-block
+response alone does not independently prove its child inventory.
+
+Earlier connector errors were connection blockers, not read mismatches: the
+running server received stale-session requests while it had no initialized MCP
+transports. A fresh direct session worked, and Claude subsequently reconnected.
+The collapsed/property cases were initially blocked. The user subsequently
+approved two new blocks and, after property discovery found no reusable plugin
+definition, separately approved one new test property. All new entities are
+retained; no existing block/page was edited or deleted and no cleanup occurred.
+
+Approved fixture ledger:
+
+- Collapsed parent: `6ac1b92b-2864-4816-bb94-51501e1e2139`, entity id 256.
+- Property-bearing child: `6ac1b92c-35dc-414f-a5e5-1aedaecb1df8`, entity id 257,
+  parent id 256; its value entity is id 258.
+- Property definition: `:plugin.property._test_plugin/MCPGetBlockProperty20261004022547531`,
+  entity id 255; verified value `mcp-getblock-property-20261004022547531`.
+
+The existing collapse API did not persist a flag for the off-screen fixture
+because its collapsability check depends on rendered child-state. Only the
+new fixture was then collapsed through Logseq's standard outliner operation,
+not a direct DataScript write. Read-back confirmed the stored flag before the
+comparison passed. This setup finding was not repaired as part of getBlock.
+
+Raw DB API output retains the namespaced property key; the existing MCP
+serialization emits its short name. Both compatibility and native MCP reads
+match that representation. The property value was independently resolved with
+`getProperyUsers` using the full ident. Namespace preservation in MCP output is
+a separate contract issue, not silently changed by this promotion.
+
+After the former raw-getter promotion, the full MCP suite passed 109 tests / 486 assertions and
+Electron compiled without warnings. The registered native handler and
+`LOGSEQ_MCP_COMPARE_GETBLOCK=0` were verified in the live Electron runtime;
+fresh MCP sessions then passed all eight cases on the native-only route.
+The flag was changed in the then-current process without a desktop restart.
+These checks do not validate the subsequent Editor alias. Current routing is
+described above; the former native-only launch instructions no longer apply.
+
+A separate read-only local benchmark checked equal raw responses over the shared
+HTTP `/api` renderer/worker bridge, using three warm-up pairs and twenty measured
+alternating pairs per block across three existing blocks. Across sixty measured
+reads per implementation, median latency was 6.73 ms for `DB.getBlock` versus
+14.37 ms for the compatibility query; p95 was 9.45 ms versus 21.33 ms. This is
+local warmed API latency, not full MCP latency or a production performance
+guarantee. Comparison mode still runs both reads.
+
+The Stage 2 acceptance rules in `plan.md` apply to every read candidate:
+verify the current DB model, define raw versus expanded output and value/reference
+semantics, preserve identifiers/order/bounds/false values, test namespace-aware
+DB dispatch and errors, and require focused local and live parity evidence.
+Existing suitable DB APIs need validation rather than automatic rewrites.
+Other reads have not been validated by the getBlock tests; they remain pending
+their own evidence. Writes, caching, batching, and compatibility removal remain
+outside this candidate.
 
 ### Stage 3: native writes
 

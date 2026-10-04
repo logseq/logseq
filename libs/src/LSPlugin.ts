@@ -970,6 +970,8 @@ export interface IDBProxy {
    */
   datascriptQuery: <T = any>(query: string, ...inputs: Array<any>) => Promise<T>
 
+  getBlock: IEditorProxy['getBlock']
+
   /**
    * Hook all transaction data of DB.
    *

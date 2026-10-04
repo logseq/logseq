@@ -2205,12 +2205,19 @@
 
 (defn get-block
   [api-fn args]
-  (let [block-uuid (aget args "block_uuid")
-    query (str "[:find (pull ?entity [*]) . :where [?entity :block/uuid "
-       (uuid-query-input block-uuid) "]]")]
-    (p/let [result (api-fn "logseq.DB.datascriptQuery" [query])
-    block (js->clj result :keywordize-keys true)]
-  (block-result block-uuid (if block [block] [])))))
+  (let [block-uuid (validated-uuid (aget args "block_uuid"))]
+    (p/let [response (api-fn "logseq.DB.getBlock"
+                            [block-uuid #js {:includeChildren false :includePage true}])
+            block (js->clj response :keywordize-keys true)]
+      (cond
+        (and response (aget response "error"))
+        (p/rejected (js/Error. (str (aget response "error"))))
+
+        (and block (not= block-uuid (:uuid block)))
+        (p/rejected (js/Error. "Application block API returned a different UUID"))
+
+        :else
+        (block-result block-uuid (if block [block] []))))))
 (defn list-pages
   [call-api-fn args]
   (call-api-fn "logseq.cli.listPages" [#js {:expand (aget args "expand")}]))

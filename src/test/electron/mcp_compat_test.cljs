@@ -4,9 +4,12 @@
             [cljs.test :refer [async deftest is]]
             [datascript.core :as d]
             [electron.mcp-compat :as mcp-compat]
-            [electron.mcp-native :as mcp-native]
+            [electron.mcp-server :as mcp-server]
             [frontend.db.async :as db-async]
-            [logseq.api.block :as api-block]
+            [frontend.state :as state]
+            [logseq.api.editor :as api-editor]
+            [logseq.db.frontend.entity-util :as entity-util]
+            [logseq.db.frontend.schema :as db-schema]
             [logseq.sdk.utils :as sdk-utils]
             [promesa.core :as p]))
 
@@ -22,7 +25,7 @@
         block-uuid "00000000-0000-4000-8000-000000000161"
         calls (atom [])
         counter (atom 200)
-        conn (d/create-conn {:block/uuid {:db/unique :db.unique/identity}
+        conn (d/create-conn (merge db-schema/schema {:block/uuid {:db/unique :db.unique/identity}
                             :block/parent {:db/valueType :db.type/ref}
                             :block/page {:db/valueType :db.type/ref}
                             :block/tags {:db/valueType :db.type/ref :db/cardinality :db.cardinality/many}
@@ -30,7 +33,7 @@
                             :block/refs {:db/valueType :db.type/ref :db/cardinality :db.cardinality/many}
                             :block/alias {:db/valueType :db.type/ref :db/cardinality :db.cardinality/many}
                             :plugin.property/smoke-link {:db/valueType :db.type/ref}
-                            :logseq.property/alias {:db/valueType :db.type/ref :db/cardinality :db.cardinality/many}})
+                            :logseq.property/alias {:db/valueType :db.type/ref :db/cardinality :db.cardinality/many}}))
         api (fn [method args]
               (swap! calls conj [method args])
             (.then (js/Promise.resolve nil) (fn [_] (case method
@@ -39,6 +42,9 @@
                            (apply d/q (reader/read-string (first args)) @conn
                                   (map #(if (and (string? %) (string/starts-with? % "#uuid"))
                                           (reader/read-string %) %) (rest args))) false))
+                              "logseq.DB.getBlock"
+                              (clj->js (sdk-utils/normalize-keyword-for-json
+                                   (d/pull @conn '[*] [:block/uuid (uuid (first args))]) true))
                 "logseq.DB.deletePage"
                 (let [entity (d/entity @conn [:block/uuid (uuid (first args))])]
                   (if (some #(= 159 (:db/id %)) (:block/tags entity))
@@ -329,82 +335,146 @@
                     (js/queueMicrotask done)))
           (p/catch (fn [error] (is false (.-message error)) (js/queueMicrotask done)))))))
 
-(deftest native-block-read-matches-compatibility-through-the-application-api
-  (let [{:keys [page-uuid block-uuid conn api]} (page-fixture)
+(deftest page-title-read-preserves-compatibility-selection
+  (let [{:keys [conn api page-uuid]} (page-fixture)
+        page-id (fn [entity-id]
+                  (uuid (str "00000000-0000-4000-8000-000000000" entity-id)))]
+    (d/transact! conn [{:db/id 156 :db/ident :logseq.class/Journal}
+                      {:db/id 162 :block/uuid (page-id 162) :block/title "Exact Title"
+                       :block/name "fallback-name" :block/tags [158]}
+                      {:db/id 163 :block/uuid (page-id 163) :block/title "Duplicate"
+                       :block/name "duplicate-one" :block/tags [158]}
+                      {:db/id 164 :block/uuid (page-id 164) :block/title "Duplicate"
+                       :block/name "duplicate-two" :block/tags [158]}
+                      {:db/id 165 :block/uuid (page-id 165) :block/title "Block only"
+                       :block/parent 160 :block/page 160}
+                      {:db/id 166 :block/uuid (page-id 166) :block/title "Fixture"
+                       :block/name "fixture" :block/tags [158] :logseq.property/deleted-at 1}
+                      {:db/id 167 :block/uuid (page-id 167) :block/title "Journal only"
+                       :block/name "journal only" :block/tags [156]}
+                      {:db/id 168 :block/uuid (page-id 168) :block/title "Class only"
+                       :block/name "class only" :block/tags [159]}
+                      {:db/id 169 :block/uuid (page-id 169) :block/title "Property only"
+                       :block/name "property only" :block/tags [157]}])
+    (async done
+      (-> (p/let [results (p/all
+                             (map (fn [title]
+                                    (mcp-compat/get-page-uuid api #js {"title" title}))
+                                  ["Fixture" "Exact Title" "FALLBACK-NAME" "Duplicate" "Missing"
+                                   "Block only" "Journal only" "Class only" "Property only" ""]))]
+              (is (= page-uuid (:page_uuid (first results))))
+              (is (= (str (page-id 162)) (:page_uuid (nth results 1))))
+              (is (= (str (page-id 162)) (:page_uuid (nth results 2))))
+              (is (= 2 (count (:candidates (nth results 3)))))
+              (is (false? (:found (nth results 3))))
+              (is (every? #(false? (:found %)) (drop 4 results))))
+          (p/then (fn [_] (js/queueMicrotask done)))
+          (p/catch (fn [error] (is false (.-message error)) (js/queueMicrotask done)))))))
+
+(deftest block-read-uses-existing-db-api
+  (let [{:keys [page-uuid block-uuid conn]} (page-fixture)
         child-uuid "00000000-0000-4000-8000-000000000163"
         missing-uuid "00000000-0000-4000-8000-000000000164"
         calls (atom [])
         native-api (fn [method args]
                      (swap! calls conj [method args])
-                     (api-block/get_block (first args) (second args)))
-        get-block (fn [_graph id-or-uuid _opts]
-                    (p/resolved (d/pull @conn '[*] (if (uuid? id-or-uuid) [:block/uuid id-or-uuid] id-or-uuid))))
-        get-children (fn [_graph uuid]
+                     (apply api-editor/get_block args))
+        get-block (fn [_graph id _opts]
+                    (p/resolved (d/pull @conn '[*] (if (number? id) id [:block/uuid (if (uuid? id) id (uuid id))]))))
+        get-children (fn [_graph parent-uuid]
                        (p/resolved (d/q '[:find [(pull ?child [*]) ...] :in $ ?uuid
-                                           :where [?parent :block/uuid ?uuid] [?child :block/parent ?parent]] @conn uuid)))]
+                                         :where [?parent :block/uuid ?uuid] [?child :block/parent ?parent]]
+                                       @conn parent-uuid)))]
     (d/transact! conn [{:db/id 163 :block/uuid (uuid child-uuid) :block/title "Nested block" :block/order "a1"
                        :block/parent 161 :block/page 160 :block/collapsed? true}
                       {:db/id 161 :plugin.property/smoke-link 160}])
     (async done
-      (-> (p/with-redefs [db-async/<get-block get-block
+      (-> (p/with-redefs [state/get-current-repo (constantly "fixture")
+                         db-async/<get-block get-block
                          db-async/<get-block-immediate-children get-children]
             (p/let [results (p/all (map (fn [uuid]
-                                         (p/let [compatibility (mcp-compat/get-block api #js {"block_uuid" uuid})
-                                                 native (mcp-native/get-block native-api #js {"block_uuid" uuid})]
-                                           [compatibility native]))
+                                         (mcp-compat/get-block native-api #js {"block_uuid" uuid}))
                                        [block-uuid child-uuid page-uuid missing-uuid]))]
-              (doseq [[compatibility native] results]
-                (is (= compatibility native)))
-              (is (every? #(= "logseq.Editor.getBlock" (first %)) @calls))
+              (is (true? (:found (first results))))
+              (is (= block-uuid (get-in (first results) [:block :uuid])))
+              (is (= "Content" (get-in (first results) [:block :fullTitle])))
+              (is (contains? (:block (first results)) :children))
+              (is (true? (get-in (nth results 1) [:block :collapsed?])))
+              (is (= "target is a page, not a block" (:reason (nth results 2))))
+              (is (false? (:found (nth results 3))))
+              (is (every? #(= "logseq.DB.getBlock" (first %)) @calls))
               (is (= 4 (count @calls)))
-              (is (every? #(false? (aget (second (second %)) "camelCase")) @calls))))
+              (is (every? #(= 2 (count (second %))) @calls))
+              (is (every? #(= {:includeChildren false :includePage true}
+                             (js->clj (second (second %)) :keywordize-keys true)) @calls))))
           (p/then (fn [_] (js/queueMicrotask done)))
           (p/catch (fn [error] (is false (.-message error)) (js/queueMicrotask done)))))))
 
-(deftest application-block-api-preserves-default-casing-with-opt-in-raw-keys
-  (let [{:keys [block-uuid conn]} (page-fixture)
-        get-block (fn [_graph id-or-uuid _opts]
-                    (p/resolved (d/pull @conn '[*] [:block/uuid id-or-uuid])))
-        get-children (fn [& _] (p/resolved []))]
+(deftest block-read-preserves-db-page-classification-and-tagged-blocks
+  (let [{:keys [page-uuid block-uuid conn api]} (page-fixture)
+        journal-uuid "00000000-0000-4000-8000-000000000165"
+        class-uuid "00000000-0000-4000-8000-000000000166"
+        property-uuid "00000000-0000-4000-8000-000000000167"]
+    (d/transact! conn [{:db/id 156 :db/ident :logseq.class/Journal}
+                      {:db/id 165 :block/uuid (uuid journal-uuid) :block/title "Oct 3, 2026"
+                       :block/name "oct 3, 2026" :block/journal-day 20261003 :block/tags [156]}
+                      {:db/id 166 :block/uuid (uuid class-uuid) :block/title "Project"
+                       :block/name "project" :db/ident :user.class/Project :block/tags [159]}
+                      {:db/id 167 :block/uuid (uuid property-uuid) :block/title "Priority"
+                       :block/name "priority" :db/ident :user.property/Priority :block/tags [157]}
+                      {:db/id 161 :block/tags [166] :user.property/Priority false}])
     (async done
-      (-> (p/with-redefs [db-async/<get-block get-block
-                         db-async/<get-block-immediate-children get-children]
-            (p/let [default-result (api-block/get_block block-uuid #js {})
-                    raw-result (api-block/get_block block-uuid #js {:camelCase false})
-                    default-block (js->clj default-result :keywordize-keys true)
-                    raw-block (js->clj raw-result :keywordize-keys true)]
-              (is (= "Content" (:fullTitle default-block)))
-              (is (not (contains? default-block :full-title)))
-              (is (= "Content" (:full-title raw-block)))
-              (is (not (contains? raw-block :fullTitle)))
-              (is (= (:uuid default-block) (:uuid raw-block)))))
+      (-> (p/let [pages (p/all (map (fn [page-id]
+                                       (is (entity-util/page? (d/entity @conn [:block/uuid (uuid page-id)])))
+                                       (mcp-compat/get-block api #js {"block_uuid" page-id}))
+                                     [page-uuid journal-uuid class-uuid property-uuid]))
+                    block (mcp-compat/get-block api #js {"block_uuid" block-uuid})]
+              (doseq [page pages]
+                (is (false? (:found page)))
+                (is (= "target is a page, not a block" (:reason page))))
+              (is (not (entity-util/page? (d/entity @conn [:block/uuid (uuid block-uuid)]))))
+              (is (true? (:found block)))
+              (is (= [{:id 166}] (get-in block [:block :tags])))
+              (is (false? (get-in block [:block (keyword ":user.property/Priority")]))))
           (p/then (fn [_] (js/queueMicrotask done)))
           (p/catch (fn [error] (is false (.-message error)) (js/queueMicrotask done)))))))
 
-(deftest native-block-read-preserves-application-errors
+(deftest block-read-preserves-application-errors
   (let [block-uuid "00000000-0000-4000-8000-000000000161"]
     (async done
-      (-> (p/then (mcp-native/get-block (fn [& _] #js {"error" "Application read failed"})
+      (-> (p/then (mcp-compat/get-block (fn [& _] #js {"error" "Application read failed"})
                                        #js {"block_uuid" block-uuid})
                   (fn [_] (is false "API errors must reject") (js/queueMicrotask done)))
           (p/catch (fn [error]
                      (is (= "Application read failed" (.-message error)))
                      (js/queueMicrotask done)))))))
 
-(deftest native-block-read-refuses-a-different-entity-uuid
+(deftest block-read-refuses-a-different-entity-uuid
   (async done
-    (-> (p/then (mcp-native/get-block (fn [& _] #js {"uuid" "00000000-0000-4000-8000-000000000162"})
+    (-> (p/then (mcp-compat/get-block (fn [& _] #js {"uuid" "00000000-0000-4000-8000-000000000162"})
                                      #js {"block_uuid" "00000000-0000-4000-8000-000000000161"})
                 (fn [_] (is false "Wrong UUID must reject") (js/queueMicrotask done)))
         (p/catch (fn [error]
                    (is (string/includes? (.-message error) "different UUID"))
                    (js/queueMicrotask done))))))
 
-(deftest native-block-read-validates-uuid-before-calling-the-application-api
+(deftest block-read-validates-uuid-before-calling-the-application-api
   (let [calls (atom [])]
     (is (thrown-with-msg? js/Error #"UUID"
-                         (mcp-native/get-block (recording-api calls nil) #js {"block_uuid" "invalid"})))
+                         (mcp-compat/get-block (recording-api calls nil) #js {"block_uuid" "invalid"})))
     (is (empty? @calls))))
+
+(deftest block-read-is-registered-with-the-other-adapters
+  (is (= mcp-compat/get-block (get-in mcp-server/data-tools [:getBlock :fn])))
+  (is (= mcp-compat/get-page-uuid (get-in mcp-server/data-tools [:getPageUUID :fn])))
+  (is (= mcp-compat/update-block (get-in mcp-server/data-tools [:updateBlock :fn]))))
+
+(deftest mcp-server-starts-with-default-settings
+  (let [server (mcp-server/create-mcp-api-server (fn [& _] nil))]
+    (is (some? server))
+    (async done
+      (-> (p/then (.close server) (fn [_] (js/queueMicrotask done)))
+          (p/catch (fn [error] (is false (.-message error)) (js/queueMicrotask done)))))))
 
 (deftest delete-page-verifies-recycling-with-uuid-and-content-preserved
   (let [{:keys [page-uuid block-uuid conn api]} (page-fixture)]

@@ -345,7 +345,7 @@
                         :property_ident (z/string)
                         :verbose (-> (z/boolean) .optional)}}}
    :getBlock
-   {:fn mcp-compat/get-block
+  {:fn mcp-compat/get-block
     :config #js {:title "Get Block"
                  :description "Read one exact non-page block by UUID."
                  :inputSchema #js {:block_uuid (z/string)}}}
@@ -433,8 +433,9 @@
   (McpServer. #js {:name "Logseq MCP Server"
                    :version "0.1.0"}))
 
-(defn create-mcp-api-server [api-fn]
-  (let [mcp-server (create-mcp-server)]
+(defn create-mcp-api-server
+  [api-fn]
+   (let [mcp-server (create-mcp-server)]
     (doseq [[k v] api-tools]
       (.registerTool mcp-server
                      (name k)
@@ -444,5 +445,6 @@
       (.registerTool mcp-server
                      (name k)
                      (:config v)
-                     (partial api-data-tool api-fn (:fn v))))
+                     (partial api-data-tool api-fn
+                              (:fn v))))
     mcp-server))
