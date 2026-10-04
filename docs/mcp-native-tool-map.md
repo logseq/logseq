@@ -22,7 +22,7 @@ switching are separate statuses; getBlock evidence does not validate other rows.
 | `getPageUUID` | title | `getPage`, query | existing `DB.datascriptQuery` compatibility lookup | use existing APIs behind DB aliases; duplicate `getPagesByTitle` implementation removed |
 | `isTitleAvailable` | title | title-holder query | query adapter | DB read |
 | `findDuplicateTitles` | `normalize`, `include_recycled` | queries + grouping | query adapter | DB read |
-| `inspectPage` | page UUID, `detail` | detail-specific queries | query adapter | DB read |
+| `inspectPage` | page UUID, `detail` | page plus selected blocks, tags, properties, or declarations | dedicated `logseq.DB.inspectPage` API; retains the detail envelope and query-shaped entity keys | API implemented; local DB, MCP, and capability tests pass; live validation pending |
 | `pageStats` | page UUID | fixed count queries | query adapter | DB read |
 | `getBlockUUID` | page UUID | query | query adapter | DB read |
 | `getBlock` | block UUID | exact entity query | single MCP adapter calls `logseq.DB.getBlock` using the existing Editor implementation and standard dispatch | production route switched; local tests pass; six read-only smoke cases pass; collapsed and property-bearing cases remain blocked pending live reads |

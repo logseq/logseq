@@ -973,6 +973,10 @@ export interface IDBProxy {
   getBlock: IEditorProxy['getBlock']
   getTag: IEditorProxy['getTag']
   getTagUsers: (tagUuid: BlockUUID) => Promise<Array<BlockEntity | PageEntity>>
+  inspectPage: (
+    pageUuid: BlockUUID,
+    detail?: 'page' | 'blocks' | 'tags' | 'properties' | 'declared' | 'all'
+  ) => Promise<Record<string, any>>
   addBlockTag: (blockId: BlockIdentity, tagId: BlockIdentity) => Promise<BlockEntity | null>
   listTags: (options?: Partial<{ expand: boolean }>) => Promise<Array<Record<string, any>>>
   listProperties: (options?: Partial<{ expand: boolean }>) => Promise<Array<Record<string, any>>>

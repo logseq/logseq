@@ -175,85 +175,17 @@
 
 (declare page-stats-uuid-pattern page-stats-field
          structural-property-value? query-result-rows get-block-uuids uuid-query-input)
-
-    (defn inspect-page
-      [api-fn args]
-      (let [page-uuid (aget args "page_uuid")
-      detail (or (aget args "detail") "page")]
-        (when-not (and (string? page-uuid)
-           (re-matches page-stats-uuid-pattern page-uuid))
-          (throw (js/Error. "page_uuid must be a UUID")))
-        (when-not (contains? page-details detail)
-          (throw (js/Error. "detail must be one of: page, blocks, tags, properties, declared, all")))
-        (let [page-query (str "[:find (pull ?entity [*]) . :where "
-            "[?entity :block/uuid #uuid \"" page-uuid "\"]]")]
-          (p/let [page-result (api-fn "logseq.DB.datascriptQuery" [page-query])
-            page (js->clj page-result :keywordize-keys true)]
-      (cond
-        (nil? page)
-        {:found false :page_uuid page-uuid :page nil}
-
-        (not (page-stats-field page :name))
-        {:found false :page_uuid page-uuid :page nil
-         :reason "target is a block, not a page"}
-
-        :else
-        (let [page-id (page-stats-field page :id)
-        with-blocks? (contains? #{"blocks" "all"} detail)
-        with-tags? (contains? #{"tags" "all"} detail)
-        with-properties? (contains? #{"properties" "all"} detail)
-        with-declared? (contains? #{"declared" "all"} detail)]
-          (p/let [blocks (when with-blocks?
-               (get-block-uuids api-fn #js {"page_uuid" page-uuid}))
-            tags-result (when with-tags?
-              (api-fn "logseq.DB.datascriptQuery"
-                ["[:find [(pull ?holder [:db/id :block/uuid :block/title :block/name {:block/tags [:db/id :db/ident :block/title]}]) ...] :in $ ?page :where (or-join [?page ?holder] [(identity ?page) ?holder] [?holder :block/page ?page]) [?holder :block/tags _]]" page-id]))
-            property-class (when with-properties?
-                 (api-fn "logseq.DB.datascriptQuery"
-                   ["[:find ?class . :where [?class :db/ident :logseq.class/Property]]"]))
-            property-rows-result (when with-properties?
-                 (api-fn "logseq.DB.datascriptQuery"
-                   ["[:find (pull ?prop [:db/id :db/ident :block/title]) (pull ?holder [:db/id :block/uuid :block/title :block/name]) ?value :in $ ?page ?class :where (or-join [?page ?holder] [(identity ?page) ?holder] [?holder :block/page ?page]) [?prop :block/tags ?class] [?prop :db/ident ?attr] [?holder ?attr ?value]]" page-id property-class]))
-            declared-result (when with-declared?
-                  (api-fn "logseq.DB.datascriptQuery"
-                    ["[:find (pull ?class [:db/ident :block/title]) (pull ?prop [:db/id :db/ident :block/uuid :block/title :logseq.property/type]) :in $ ?page :where [?page :block/tags ?class] [?class :logseq.property.class/properties ?prop]]" page-id]))
-            tags (when with-tags? (query-result-rows tags-result))
-            properties (if with-properties?
-             (let [rows (filterv #(and (vector? %) (= 3 (count %))
-                     (not (structural-property-value? (first %))))
-                     (js->clj property-rows-result :keywordize-keys true))
-                   entity-ids (->> rows
-                       (keep #(nth % 2))
-                       (filter #(and (number? %) (not (boolean? %))))
-                       set)
-                   resolved-query "[:find [(pull ?e [:db/id :db/ident :block/title :logseq.property/value]) ...] :in $ [?e ...] :where [?e ?a _]]"]
-               (p/let [resolved-result (if (seq entity-ids)
-                       (api-fn "logseq.DB.datascriptQuery"
-                         [resolved-query (clj->js (vec entity-ids))])
-                       [])
-                 resolved (into {}
-                    (keep (fn [entity]
-                      (let [id (page-stats-field entity :id)]
-                        (when (some? id) [id entity]))))
-                    (query-result-rows resolved-result))]
-                 (mapv (fn [[property holder value]]
-                   {:property property
-                    :holder holder
-                    :value value
-                    :value_entity (when (and (number? value)
-                           (not (boolean? value)))
-                        (get resolved value))})
-                 rows)))
-             nil)
-            declared (when with-declared?
-                 (mapv (fn [[class property]]
-                   {:class class :property property})
-                 (js->clj declared-result :keywordize-keys true)))]
-            (cond-> {:found true :page_uuid page-uuid :page page}
-        with-blocks? (assoc :blocks blocks)
-        with-tags? (assoc :tags tags)
-        with-properties? (assoc :properties properties)
-        with-declared? (assoc :declared_properties declared)))))))))
+(defn inspect-page
+  [api-fn args]
+  (let [page-uuid (aget args "page_uuid")
+        detail (or (aget args "detail") "page")]
+    (when-not (and (string? page-uuid)
+                   (re-matches page-stats-uuid-pattern page-uuid))
+      (throw (js/Error. "page_uuid must be a UUID")))
+    (when-not (contains? page-details detail)
+      (throw (js/Error. "detail must be one of: page, blocks, tags, properties, declared, all")))
+    (p/let [result (api-fn "logseq.DB.inspectPage" [page-uuid detail])]
+      (js->clj result :keywordize-keys true))))
 (defn- query-pages
   [api-fn query value]
   (p/let [result (api-fn "logseq.DB.datascriptQuery" [query value])
@@ -2749,11 +2681,11 @@
    :listJournals ["logseq.DB.datascriptQuery"]
    :getPage ["logseq.cli.getPageData"]
    :searchBlocks ["logseq.app.search"]
-  :listTags ["logseq.DB.listTags"]
-  :listProperties ["logseq.DB.listProperties"]
+   :listTags ["logseq.DB.listTags"]
+   :listProperties ["logseq.DB.listProperties"]
    :getPageUUID ["logseq.DB.datascriptQuery"]
    :pageStats ["logseq.DB.datascriptQuery"]
-   :inspectPage ["logseq.DB.datascriptQuery"]
+   :inspectPage ["logseq.DB.inspectPage"]
    :getTagUUID ["logseq.DB.getTagsByName"]
    :creatTag ["logseq.DB.createTag"]
    :deleteTag ["logseq.DB.deletePage" "logseq.DB.datascriptQuery"]
@@ -2800,19 +2732,20 @@
 
 (def ^:private capability-probe-args
   {"logseq.DB.datascriptQuery" ["[:find ?e . :where [?e :block/uuid]]"]
-  "logseq.DB.getBlock" ["__mcp_capability_probe__" #js {:includeChildren false :includePage true}]
-  "logseq.DB.getTag" ["__mcp_capability_probe__"]
-  "logseq.DB.getTagUsers" ["00000000-0000-4000-8000-000000000999"]
+   "logseq.DB.getBlock" ["__mcp_capability_probe__" #js {:includeChildren false :includePage true}]
+   "logseq.DB.getTag" ["__mcp_capability_probe__"]
+   "logseq.DB.getTagUsers" ["00000000-0000-4000-8000-000000000999"]
+   "logseq.DB.inspectPage" ["00000000-0000-4000-8000-000000000999" "page"]
    "logseq.DB.getTagsByName" ["__mcp_capability_probe__"]
    "logseq.DB.getAllProperties" []
-  "logseq.DB.listPages" [#js {:expand false}]
-  "logseq.DB.listTags" [#js {:expand false}]
-  "logseq.DB.listProperties" [#js {:expand false}]
+   "logseq.DB.listPages" [#js {:expand false}]
+   "logseq.DB.listTags" [#js {:expand false}]
+   "logseq.DB.listProperties" [#js {:expand false}]
    "logseq.cli.getPageData" ["__mcp_capability_probe__"]
    "logseq.DB.upsertProperty" ["__mcp_capability_probe__/invalid" #js {}]
    "logseq.DB.createTag" ["__mcp_capability_probe__/invalid"]
    "logseq.DB.insertBlock" ["__mcp_capability_probe__" "__mcp_capability_probe__" #js {:sibling false}]
-  "logseq.DB.insertBatchBlock" ["__mcp_capability_probe__" #js [] #js {}]
+   "logseq.DB.insertBatchBlock" ["__mcp_capability_probe__" #js [] #js {}]
    "logseq.DB.renamePage" ["__mcp_capability_probe__" "__mcp_capability_probe__"]
    "logseq.DB.updateBlock" ["__mcp_capability_probe__" "__mcp_capability_probe__"]
    "logseq.DB.moveBlock" ["__mcp_capability_probe__" "__mcp_capability_probe__" #js {:before false}]

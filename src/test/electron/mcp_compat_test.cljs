@@ -1065,6 +1065,7 @@
                     (is (some #(= "logseq.DB.listPages" (first %)) @calls))
                     (is (some #(= "logseq.DB.listTags" (first %)) @calls))
                     (is (some #(= "logseq.DB.listProperties" (first %)) @calls))
+                    (is (some #(= "logseq.DB.inspectPage" (first %)) @calls))
                     (is (not (contains? (:tools result) :upsertNodes)))
                     (is (not (contains? (get-in result [:diagnostics :routes]) "upsertNodes")))
                     (is (not-any? #(= "logseq.cli.upsertNodes" (first %)) @calls))
@@ -1472,16 +1473,25 @@
                         (mcp-compat/page-stats (fn [& _] nil) #js {"page_uuid" "not-a-uuid"}))))
 
 (deftest inspect-page-reports-missing-page-and-block
-  (let [page-uuid "00000000-0000-4000-8000-000000000012"]
+  (let [page-uuid "00000000-0000-4000-8000-000000000012"
+        calls (atom [])
+        responses (atom [#js {"found" false "page_uuid" page-uuid "page" nil}
+                         #js {"found" false "page_uuid" page-uuid "page" nil
+                              "reason" "target is a block, not a page"}])
+        api (fn [method args]
+              (swap! calls conj [method args])
+              (let [result (first @responses)]
+                (swap! responses subvec 1)
+                result))]
     (async done
-      (-> (p/let [missing (mcp-compat/inspect-page (fn [& _] nil) #js {"page_uuid" page-uuid})
-                  block (mcp-compat/inspect-page (fn [& _]
-                                                  #js {"id" 12 "uuid" page-uuid "title" "Block"})
-                                                #js {"page_uuid" page-uuid})]
+      (-> (p/let [missing (mcp-compat/inspect-page api #js {"page_uuid" page-uuid})
+                  block (mcp-compat/inspect-page api #js {"page_uuid" page-uuid})]
             [missing block])
           (p/then (fn [[missing block]]
                     (is (= {:found false :page_uuid page-uuid :page nil} missing))
                     (is (= "target is a block, not a page" (:reason block)))
+                    (is (every? #(= "logseq.DB.inspectPage" (first %)) @calls))
+                    (is (every? #(= [page-uuid "page"] (second %)) @calls))
                     (done)))
           (p/catch (fn [_error]
                      (is false "inspectPage lookup rejected")

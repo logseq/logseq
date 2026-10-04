@@ -340,6 +340,151 @@
                                tag-uuid)]
       (sdk-utils/result->js users))))
 
+(def ^:private inspect-page-details
+  #{"page" "blocks" "tags" "properties" "declared" "all"})
+
+(def ^:private inspect-page-structural-properties
+  #{"parent" "page" "order" "title" "name" "uuid" "ident"
+    "content" "full-title" "raw-title" "refs" "path-refs"
+    "tx-id" "created-at" "updated-at" "format" "collapsed?"
+    "journal-day" "journal?" "left"})
+
+(defn- inspect-page-field [entity field]
+  (or (get entity field)
+      (case field
+        :id (:db/id entity)
+        :uuid (:block/uuid entity)
+        :name (:block/name entity)
+        :title (:block/title entity)
+        :page (:block/page entity)
+        :_parent (:block/_parent entity)
+        nil)))
+
+(defn- inspect-page-query-rows [result]
+  (if (and (= 1 (count result)) (vector? (first result)))
+    (first result)
+    result))
+
+(defn- inspect-page-structural-property? [property]
+  (let [ident (or (:ident property) (:db/ident property))
+        bare (some-> ident (string/replace-first #"^:" ""))]
+    (or (and bare (or (string/starts-with? bare "block/")
+                      (string/starts-with? bare "db/")))
+        (and bare
+             (not (string/includes? bare "/"))
+             (contains? inspect-page-structural-properties bare)))))
+
+(defn- <inspect-page-query [repo query & inputs]
+  (p/let [result (apply db-async/<q
+                        repo
+                        {:transact-db? false}
+                        (cljs.reader/read-string query)
+                        inputs)]
+    (-> result
+        (sdk-utils/normalize-keyword-for-json false)
+        bean/->js
+        (js->clj :keywordize-keys true))))
+
+(defn- <inspect-page-block-uuids [repo page-uuid]
+  (let [tree-query "[:find (pull ?root [:db/id :block/uuid :block/title :block/name :block/order {:block/parent [:db/id :block/uuid]} {:block/page [:db/id :block/uuid]} {:block/_parent ...}]) . :in $ ?uuid :where [?root :block/uuid ?uuid]]"]
+    (p/let [root (<inspect-page-query repo tree-query page-uuid)]
+      (when-not root
+        (throw (js/Error. (str "No entity exists with exact UUID " page-uuid))))
+      (when-not (or (:name root) (:block/name root))
+        (throw (js/Error. "UUID identifies a block, not a page")))
+      (letfn [(descendants [node]
+                (mapcat (fn [child]
+                          (cons (dissoc child :_parent :block/_parent)
+                                (descendants child)))
+                        (or (:_parent node) (:block/_parent node) [])))]
+        (mapv #(assoc % :page_uuid (str page-uuid))
+              (sort-by #(str (or (:order %) (:block/order %)))
+                       (descendants root)))))))
+
+(defn inspect-page [page-uuid detail]
+  (let [detail (or detail "page")]
+    (when-not (util/uuid-string? page-uuid)
+      (throw (js/Error. "page_uuid must be a UUID")))
+    (when-not (contains? inspect-page-details detail)
+      (throw (js/Error. "detail must be one of: page, blocks, tags, properties, declared, all")))
+    (let [repo (state/get-current-repo)
+          page-uuid (sdk-utils/uuid-or-throw-error page-uuid)
+          page-query "[:find (pull ?entity [*]) . :in $ ?uuid :where [?entity :block/uuid ?uuid]]"]
+      (p/let [page (<inspect-page-query repo page-query page-uuid)]
+        (cond
+          (nil? page)
+          #js {:found false :page_uuid (str page-uuid) :page nil}
+
+          (not (inspect-page-field page :name))
+          #js {:found false :page_uuid (str page-uuid) :page nil
+               :reason "target is a block, not a page"}
+
+          :else
+          (let [page-id (inspect-page-field page :id)
+                with-blocks? (contains? #{"blocks" "all"} detail)
+                with-tags? (contains? #{"tags" "all"} detail)
+                with-properties? (contains? #{"properties" "all"} detail)
+                with-declared? (contains? #{"declared" "all"} detail)]
+            (p/let [blocks (when with-blocks?
+                             (<inspect-page-block-uuids repo page-uuid))
+                    tags-result (when with-tags?
+                                  (<inspect-page-query
+                                   repo
+                                   "[:find [(pull ?holder [:db/id :block/uuid :block/title :block/name {:block/tags [:db/id :db/ident :block/title]}]) ...] :in $ ?page :where (or-join [?page ?holder] [(identity ?page) ?holder] [?holder :block/page ?page]) [?holder :block/tags _]]"
+                                   page-id))
+                    property-class (when with-properties?
+                                     (<inspect-page-query
+                                      repo
+                                      "[:find ?class . :where [?class :db/ident :logseq.class/Property]]"))
+                    property-rows-result (when with-properties?
+                                           (<inspect-page-query
+                                            repo
+                                            "[:find (pull ?prop [:db/id :db/ident :block/title]) (pull ?holder [:db/id :block/uuid :block/title :block/name]) ?value :in $ ?page ?class :where (or-join [?page ?holder] [(identity ?page) ?holder] [?holder :block/page ?page]) [?prop :block/tags ?class] [?prop :db/ident ?attr] [?holder ?attr ?value]]"
+                                            page-id property-class))
+                    declared-result (when with-declared?
+                                      (<inspect-page-query
+                                       repo
+                                       "[:find (pull ?class [:db/ident :block/title]) (pull ?prop [:db/id :db/ident :block/uuid :block/title :logseq.property/type]) :in $ ?page :where [?page :block/tags ?class] [?class :logseq.property.class/properties ?prop]]"
+                                       page-id))
+                    tags (when with-tags?
+                           (inspect-page-query-rows tags-result))
+                    properties (if with-properties?
+                                 (let [rows (filterv #(and (vector? %) (= 3 (count %))
+                                                           (not (inspect-page-structural-property? (first %))))
+                                                     (js->clj property-rows-result :keywordize-keys true))
+                                       entity-ids (->> rows
+                                                       (keep #(nth % 2))
+                                                       (filter #(and (number? %) (not (boolean? %))))
+                                                       set)
+                                       resolved-query "[:find [(pull ?e [:db/id :db/ident :block/title :logseq.property/value]) ...] :in $ [?e ...] :where [?e ?a _]]"]
+                                   (p/let [resolved-result (if (seq entity-ids)
+                                                             (<inspect-page-query repo resolved-query (vec entity-ids))
+                                                             [])
+                                           resolved (into {}
+                                                          (keep (fn [entity]
+                                                                  (let [id (inspect-page-field entity :id)]
+                                                                    (when (some? id) [id entity]))))
+                                                          (inspect-page-query-rows resolved-result))]
+                                     (mapv (fn [[property holder value]]
+                                             {:property property
+                                              :holder holder
+                                              :value value
+                                              :value_entity (when (and (number? value)
+                                                                       (not (boolean? value)))
+                                                              (get resolved value))})
+                                           rows)))
+                                 nil)
+                    declared (when with-declared?
+                               (mapv (fn [[class property]]
+                                       {:class class :property property})
+                                     (js->clj declared-result :keywordize-keys true)))]
+              (bean/->js
+               (cond-> {:found true :page_uuid (str page-uuid) :page page}
+                 with-blocks? (assoc :blocks blocks)
+                 with-tags? (assoc :tags tags)
+                 with-properties? (assoc :properties properties)
+                 with-declared? (assoc :declared_properties declared))))))))))
+
 (defn get-tags-by-name [name]
   (p/let [tags (get-tags name)]
     (sdk-utils/result->js tags)))

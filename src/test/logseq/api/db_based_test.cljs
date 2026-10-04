@@ -121,6 +121,56 @@
                    (is false (str error))))
         (p/finally done))))
 
+(deftest inspect-page-api-preserves-detail-contract
+  (test-helper/load-test-files
+   [{:page {:block/title "Inspect API Page"}
+     :blocks [{:block/title "Inspect API Block"}]}])
+  (async done
+    (-> (api-test/with-plugin-api
+          (fn []
+            (let [page (test-helper/find-page-by-title "Inspect API Page")
+                  block (test-helper/find-block-by-content "Inspect API Block")
+                  page-uuid (str (:block/uuid page))
+                block-uuid (str (:block/uuid block))]
+                    (p/let [tag (db-based-api/create-tag "Inspect API Tag" nil)
+                      property (db-based-api/upsert-property "inspect-score" #js {:type "default"} nil)
+                      property-map (api-test/js->clj-kw property)
+                      property-ident (keyword (subs (:ident property-map) 1))
+                  _ (db-based-api/add-block-tag page-uuid (aget tag "uuid"))
+                  _ (db-based-api/add-block-tag block-uuid (aget tag "uuid"))
+                  _ (db-based-api/tag-add-property (aget tag "uuid") "inspect-score")
+                      _ (db-property-handler/set-block-property! (:db/id block) property-ident "zero")
+                  page-only (db-based-api/inspect-page page-uuid "page")
+                      all-details (db-based-api/inspect-page page-uuid "all")
+                      missing (db-based-api/inspect-page "00000000-0000-4000-8000-000000000999" "page")
+                      non-page (db-based-api/inspect-page block-uuid "page")
+                      page-only (api-test/js->clj-kw page-only)
+                      all-details (api-test/js->clj-kw all-details)
+                      missing (api-test/js->clj-kw missing)
+                      non-page (api-test/js->clj-kw non-page)]
+                (is (true? (:found page-only)))
+                (is (= page-uuid (:page_uuid page-only)))
+                (is (= "Inspect API Page" (get-in page-only [:page :title])))
+                (is (not (contains? page-only :blocks)))
+                (is (true? (:found all-details)))
+                (is (some #(= "Inspect API Block" (:title %)) (:blocks all-details)))
+                (is (some #(= "zero" (:title %)) (:blocks all-details)))
+                (is (some (fn [holder]
+                            (some #(= "Inspect API Tag" (:title %)) (:tags holder)))
+                          (:tags all-details)))
+                (is (contains? all-details :properties))
+                    (is (some #(and (= "inspect-score" (get-in % [:property :title]))
+                                    (= "zero" (get-in % [:value_entity :title])))
+                      (:properties all-details)))
+                (is (some #(= "inspect-score" (get-in % [:property :title]))
+                          (:declared_properties all-details)))
+                (is (= {:found false :page_uuid "00000000-0000-4000-8000-000000000999" :page nil}
+                       missing))
+                (is (= "target is a block, not a page" (:reason non-page)))))))
+        (p/catch (fn [error]
+                   (is false (str error))))
+        (p/finally done))))
+
 (deftest tag-properties-and-node-tags
   (async done
     (-> (api-test/with-plugin-api
