@@ -88,7 +88,7 @@ external reader_read :
 let request_init (req : request) =
   let body =
     Option.map
-      (fun bytes -> body_init_of_u8 (U8a.of_string bytes))
+      (fun payload -> body_init_of_u8 (U8a.of_string payload))
       req.body
   in
   Fetch.RequestInit.make ~method_:(method_of_string req.method_)

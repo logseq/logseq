@@ -156,17 +156,17 @@ let read_bytes ~repo ~name =
           (task_of_promise (pfs_read pfs (browser_path ~repo ~name))))
   else File_sys.read_binary (path ~repo ~name)
 
-let write_bytes ~repo ~name bytes =
+let write_bytes ~repo ~name payload =
   if is_browser () then
     Db_worker_effect.bind (browser_pfs ()) (fun pfs ->
         let file_path = browser_path ~repo ~name in
         Db_worker_effect.bind
           (ensure_pfs_dir pfs (pfs_parent file_path))
-          (fun () -> task_of_promise (pfs_write pfs file_path (U8a.of_string bytes))))
+          (fun () -> task_of_promise (pfs_write pfs file_path (U8a.of_string payload))))
   else begin
     let p = path ~repo ~name in
     Db_worker_effect.bind (File_sys.mkdir_p (Filename.dirname p)) (fun () ->
-        File_sys.write_binary p bytes)
+        File_sys.write_binary p payload)
   end
 
 let exists ~repo ~name =
