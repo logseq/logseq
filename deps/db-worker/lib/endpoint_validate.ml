@@ -44,7 +44,7 @@ let checksum_diagnostics repo =
     | None -> Wire.Nil
   in
   let remote =
-    match Hashtbl.find_opt Sync_apply.repo_latest_remote_checksum repo with
+    match Sync_apply.latest_remote_checksum repo with
     | Some s -> Wire.String s
     | None -> Wire.Nil
   in

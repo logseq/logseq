@@ -878,7 +878,7 @@ let test_sync_temp_batch_connection_lifetime mode () =
   let conn = create_conn () in
   check_connections_released (fun remember ->
       try
-        ignore (Sync_apply.batch_transact_with_temp_conn_impl conn []
+        ignore (Sync_replay.batch_transact_with_temp_conn_impl conn []
                   ?before_commit:(if mode = "before-commit-failure" then
                                     Some (fun () -> raise Batch_lifetime_failure)
                                   else None)

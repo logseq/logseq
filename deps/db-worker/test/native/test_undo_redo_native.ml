@@ -115,7 +115,7 @@ let apply_history_action_adapter repo tx_id_opt undo pairs =
       pairs
   in
   (match
-     Sync_apply.apply_history_action repo
+     Sync_replay.apply_history_action repo
        (Option.value ~default:"" tx_id_opt)
        undo tx_meta
    with
@@ -2207,7 +2207,7 @@ let test_replay_create_page_titled_like_property_creates_page () =
            "[[:upsert-property [:user.property/undo-replay-rating {:logseq.property/type :number} {:property-name \"undo replay rating\"}]]]");
       let page_uuid = Uuid_gen.uuid () in
       let result =
-        Sync_apply.replay_canonical_outliner_op conn
+        Sync_replay.replay_canonical_outliner_op conn
           (Wire.Array
              [ Wire.Keyword "create-page"
              ; Wire.Array
