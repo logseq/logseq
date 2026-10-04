@@ -496,6 +496,7 @@ let gc (conn : conn) ?(now_ms : Time.epoch_ms option) () : bool =
   | tx_data ->
     ignore
       (Db_tx.transact
-         ~tx_meta:[ "outliner-op", Keyword "recycle-gc"; "persist-op?", Bool false ]
+         ~tx_meta:[ "outliner-op", Keyword "recycle-gc"
+                  ; "persist-op?", Bool false; "checksum-exempt?", Bool true ]
          conn tx_data);
     true

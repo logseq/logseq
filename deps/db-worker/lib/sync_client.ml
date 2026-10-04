@@ -28,7 +28,17 @@ let graph_remote (db : db) : bool =
 
 (* update-local-sync-checksum! *)
 let update_local_sync_checksum repo (tx_report : tx_report) : unit =
-  if Sync_state.has_client_ops_conn repo && graph_remote tx_report.db_after
+  (* checksum-exempt? marks local-only maintenance writes that never
+     upload (recycle-gc purges): the stored checksum tracks the server
+     image, so their deltas are skipped — the server keeps entities the
+     local gc retracted. The tx still runs through the normal update so
+     covered_tx advances and reopen doesn't trigger a heal recompute. *)
+  let checksum_exempt =
+    Db_tx.tx_meta_flag tx_report.tx_meta "checksum-exempt?"
+  in
+  if checksum_exempt then Sync_state.mark_checksum_exempt repo;
+  if
+    Sync_state.has_client_ops_conn repo && graph_remote tx_report.db_after
   then begin
     (* cljs reads the stored checksum only when the graph was already
        remote, so a graph that just became remote anchors on a full
@@ -42,7 +52,7 @@ let update_local_sync_checksum repo (tx_report : tx_report) : unit =
       Db_sync_checksum.update_checksum
         (Option.value current_checksum ~default:"")
         ~db_before:tx_report.db_before ~db_after:tx_report.db_after
-        ~tx_data:tx_report.tx_data
+        ~tx_data:(if checksum_exempt then [] else tx_report.tx_data)
     in
     (match Runtime_env.env "LOGSEQ_CHECKSUM_ASSERT" with
      | Some "1" ->
@@ -50,14 +60,21 @@ let update_local_sync_checksum repo (tx_report : tx_report) : unit =
            Db_sync_checksum.recompute_checksum tx_report.db_after
          in
          if new_checksum <> recomputed then begin
-           Worker_log.error "db-sync/checksum-incremental-drift"
+           (* exempt writes (gc purges) legitimately diverge the stored
+              server-image checksum from a local recompute — after one,
+              drift here is expected, so demote raise to warn *)
+           let exempted = Sync_state.checksum_exempted repo in
+           Worker_log.error
+             (if exempted then "db-sync/checksum-drift-after-exempt"
+              else "db-sync/checksum-incremental-drift")
              [ "repo", repo
              ; "current-checksum", Option.value current_checksum ~default:""
              ; "incremental-checksum", new_checksum
              ; "recomputed-checksum", recomputed
              ; "tx-count", string_of_int (List.length tx_report.tx_data) ];
-           raise
-             (Sync_util.ex_info "Incremental checksum drift"
+           if not exempted then
+             raise
+               (Sync_util.ex_info "Incremental checksum drift"
                 [ kw "repo", Wire.String repo
                 ; ( kw "current-checksum"
                   , match current_checksum with
