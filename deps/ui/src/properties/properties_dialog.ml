@@ -550,7 +550,8 @@ and render_value_edit d body prop =
               ; class_schema = false
               }
             in
-            V.commit_date_input ctx (ident_of prop) ~is_datetime:(ty = "datetime") input;
+            V.commit_date_input ~uuids:d.target.uuids ctx (ident_of prop)
+              ~is_datetime:(ty = "datetime") input;
             close_dlg d
         | "Escape" -> prevent_default ev; stop_propagation ev; close ()
         | _ -> ())
@@ -637,9 +638,9 @@ and render_value_edit d body prop =
 
 (* cljs pops the input under the invoking control (popup-show! on the
    click target); callers without an anchor get the centered fallback *)
-let open_dialog ?(remove = false) ?anchor target =
+let open_dialog ?(remove = false) ?anchor ?(phase = Prop_select) target =
   let d =
-    { target; phase = Prop_select; body = None; pending_type = None
+    { target; phase; body = None; pending_type = None
     ; select_overlay = None; remove
     }
   in
@@ -715,26 +716,25 @@ let current_target () : target option =
                   }
           | None -> None))
 
-(* open the dialog for a specific block uuid (slash command path). cljs
-   anchors the popover on the editing textarea (#edit-block-<uuid>)
-   with align:start — bottom-left corner, 4px left *)
+(* cljs anchors the popover on the editing textarea
+   (#edit-block-<uuid>) with align:start — bottom-left corner, 4px
+   left; the block element when no editor is live *)
+let block_anchor uuid =
+  match get_element_by_id ("edit-block-" ^ uuid) with
+  | Some ta ->
+      let l, _t, _r, b, _w = el_rect ta in
+      Some (l -. 4., b)
+  | None -> (
+      match get_element_by_id ("ls-block-" ^ uuid) with
+      | Some blk ->
+          let l, _t, _r, b, _w = el_rect blk in
+          Some (l, b)
+      | None -> None)
+
+(* open the dialog for a specific block uuid (slash command path) *)
 let open_for_block ?anchor uuid =
   let anchor =
-    match anchor with
-    | Some _ -> anchor
-    | None -> (
-        match get_element_by_id ("edit-block-" ^ uuid) with
-        | Some ta ->
-            let l, _t, _r, b, _w = el_rect ta in
-            Some (l -. 4., b)
-        | None -> (
-            (* no live editor: cljs anchors on the block element itself
-               (selection path) — bottom-left of .ls-block *)
-            match get_element_by_id ("ls-block-" ^ uuid) with
-            | Some blk ->
-                let l, _t, _r, b, _w = el_rect blk in
-                Some (l, b)
-            | None -> None))
+    match anchor with Some _ -> anchor | None -> block_anchor uuid
   in
   open_dialog ?anchor
     { uuid; uuids = []; db_id = None; is_tag = false; title = "" }
@@ -743,6 +743,25 @@ let open_for_block ?anchor uuid =
 let open_for_block_at el uuid =
   let l, _t, _r, b, _w = el_rect el in
   open_for_block ~anchor:(l, b +. 4.) uuid
+
+(* cljs :editor/new-property {:property-key ident}: the dialog jumps
+   straight to the value-editing phase for the named property — a
+   dedicated picker (date input, closed-value select, node select) —
+   across the whole block selection *)
+let open_for_block_with_property ?anchor ~uuids uuid ~ident =
+  (let* prop =
+    D.entity (W.List [ W.Keyword "db/ident"; W.Keyword ident ])
+  in
+  (match D.untag prop with
+   | W.Map _ as p ->
+       let anchor =
+         match anchor with Some _ -> anchor | None -> block_anchor uuid
+       in
+       open_dialog ?anchor ~phase:(Value_edit p)
+         { uuid; uuids; db_id = None; is_tag = false; title = "" }
+   | _ -> ());
+  Js.Promise.resolve ())
+  |> ignore
 
 let open_for_current () =
   match current_target () with Some t -> open_dialog t | None -> ()

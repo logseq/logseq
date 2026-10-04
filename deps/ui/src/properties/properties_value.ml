@@ -417,19 +417,39 @@ let set_date ctx ident day =
   Js.Promise.resolve ())
   |> ignore
 
-let commit_date_input ctx ident ~is_datetime input =
+(* ?uuids >1 -> cljs batch-set-property! over the block selection *)
+let commit_date_input ?(uuids = []) ctx ident ~is_datetime input =
+  let set_many value =
+    D.batch_set_property ~block_uuids:uuids ~ident ~value |> ignore;
+    S.refresh_all ()
+  in
   let v = String.trim (el_value input) in
   if is_datetime then
     let ms =
       if v = "" then now_ms () else parse_ms v
     in
     (* NaN parse -> no write *)
-    if ms = ms then set_scalar ctx ~ident ~value:(W.Float ms)
+    if ms = ms then
+      (match uuids with
+       | [ _ ] | [] -> set_scalar ctx ~ident ~value:(W.Float ms)
+       | _ -> set_many (W.Float ms))
   else
-    let day = if v = "" then today_day () else Option.value (parse_date v) ~default:(-1) in
-    if day > 0 then set_date ctx ident day
+    let day =
+      if v = "" then today_day ()
+      else Option.value (parse_date v) ~default:(-1)
+    in
+    if day > 0 then
+      (match uuids with
+       | [ _ ] | [] -> set_date ctx ident day
+       | _ ->
+           (let* w = D.journal_page_by_day day in
+            (match D.geti w "db/id" with
+             | Some id -> set_many (W.Int id)
+             | None -> ());
+            Js.Promise.resolve ())
+           |> ignore)
 
-let date_picker ctx row anchor =
+let date_picker ?(uuids = []) ctx row anchor =
   let ident = D.row_ident row |> Option.value ~default:"" in
   let is_datetime = D.row_type row = "datetime" in
   let picker =
@@ -457,7 +477,7 @@ let date_picker ctx row anchor =
       match ev_key ev with
       | "Enter" ->
           prevent_default ev;
-          commit_date_input ctx ident ~is_datetime input;
+          commit_date_input ~uuids ctx ident ~is_datetime input;
           S.pop_overlay ()
       | "Escape" ->
           prevent_default ev;

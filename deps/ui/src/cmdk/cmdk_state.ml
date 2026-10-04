@@ -1041,18 +1041,23 @@ let run_add_reaction st =
       match anchor with
       | None -> ()
       | Some anchor ->
-          Icon_picker.open_picker ~anchor ~del:false ~on_chosen:(fun c ->
-              match c with
-              | Icon_picker.Emoji emoji_id ->
-                  ignore
-                    (Outliner_ops.apply_and_refresh
-                       (List.map
-                          (fun u ->
-                            Outliner_ops.op "toggle-reaction"
-                              [ Wire.Uuid u; Wire.String emoji_id
-                              ; Wire.Nil ])
-                          uuids))
-              | _ -> ()))
+          (* cljs icon-search {:tabs [[:emoji]] :default-tab :emoji} —
+             the reaction picker is emoji-only *)
+          ignore
+            (Icon_picker.open_picker_with_opts ~anchor ~del:false
+               ~opts:{ Icon_picker.emoji_only = true; sub = false }
+               ~on_chosen:(fun c ->
+                 match c with
+                 | Icon_picker.Emoji emoji_id ->
+                     ignore
+                       (Outliner_ops.apply_and_refresh
+                          (List.map
+                             (fun u ->
+                               Outliner_ops.op "toggle-reaction"
+                                 [ Wire.Uuid u; Wire.String emoji_id
+                                 ; Wire.Nil ])
+                             uuids))
+                 | _ -> ())))
 
 (* :editor/add-comment — ensure-comments-area-for-blocks over the block
    selection (or the edited block); the area renders once the refresh
@@ -1070,6 +1075,67 @@ let run_add_comment repo st =
         in
         Outliner_ops.refresh_page ())
   | _ -> ()
+
+(* :editor/add-property-icon — cljs opens the property dialog on
+   :logseq.property/icon, whose editing cell is the icon picker; LUI
+   opens the same picker chrome directly on the anchored block *)
+let run_add_property_icon st =
+  close st;
+  match target_uuids () with
+  | [] -> ()
+  | uuids -> (
+      let anchor =
+        match uuids with
+        | u :: _ -> Properties_dom.doc_query ("[blockid='" ^ u ^ "']")
+        | [] -> None
+      in
+      match anchor with
+      | None -> ()
+      | Some anchor -> (
+          (let* first =
+             match uuids with
+             | u :: _ -> Properties_data.entity_by_uuid u
+             | [] -> Js.Promise.resolve Wire.Nil
+           in
+           let has_icon =
+             Properties_data.getf (Properties_data.untag first)
+               "logseq.property/icon"
+             <> None
+           in
+           Icon_picker.open_picker ~anchor ~del:has_icon
+             ~on_chosen:(fun c ->
+               let op_for u =
+                 match c with
+                 | Icon_picker.Remove ->
+                     Outliner_ops.op "remove-block-property"
+                       [ Wire.Uuid u
+                       ; Wire.Keyword "logseq.property/icon" ]
+                 | Icon_picker.Emoji id ->
+                     Outliner_ops.op "set-block-property"
+                       [ Wire.Uuid u
+                       ; Wire.Keyword "logseq.property/icon"
+                       ; Wire.Map
+                           [ Wire.Keyword "type", Wire.Keyword "emoji"
+                           ; Wire.Keyword "id", Wire.String id ] ]
+                 | Icon_picker.Tabler (id, color) ->
+                     Outliner_ops.op "set-block-property"
+                       [ Wire.Uuid u
+                       ; Wire.Keyword "logseq.property/icon"
+                       ; Wire.Map
+                           ([ Wire.Keyword "type"
+                            , Wire.Keyword "tabler-icon"
+                            ; Wire.Keyword "id", Wire.String id ]
+                           @ (match color with
+                              | Some c ->
+                                  [ Wire.Keyword "color"
+                                  , Wire.String c ]
+                              | None -> [])) ]
+               in
+               ignore
+                 (Outliner_ops.apply_and_refresh
+                    (List.map op_for uuids)));
+           Js.Promise.resolve ())
+          |> ignore))
 
 let with_sidebar f () =
   match !Sidebar_state.st_ref with
@@ -1346,13 +1412,30 @@ and run_command st repo (cid : string) =
   | "ui/toggle-theme" ->
       close st;
       Settings_view.toggle_theme ()
-  | "editor/add-property" | "editor/add-property-deadline"
-  | "editor/add-property-status" | "editor/add-property-priority"
-  | "editor/add-property-icon" ->
+  | "editor/add-property" ->
       close st;
       (match target_uuids () with
        | u :: _ -> Properties_dialog.open_for_block u
        | [] -> ())
+  (* cljs :editor/new-property {:property-key _} — the named property's
+     dedicated picker, not the generic property sheet *)
+  | "editor/add-property-deadline" | "editor/add-property-status"
+  | "editor/add-property-priority" | "editor/set-tags" ->
+      close st;
+      (match target_uuids () with
+       | u :: _ as uuids ->
+           Properties_dialog.open_for_block_with_property ~uuids u
+             ~ident:
+               (match cid with
+                | "editor/add-property-deadline" ->
+                    "logseq.property/deadline"
+                | "editor/add-property-status" ->
+                    "logseq.property/status"
+                | "editor/add-property-priority" ->
+                    "logseq.property/priority"
+                | _ -> "block/tags")
+       | [] -> ())
+  | "editor/add-property-icon" -> run_add_property_icon st
   | "editor/add-reaction" -> run_add_reaction st
   | "editor/add-comment" -> run_add_comment repo st
   | _ -> (
