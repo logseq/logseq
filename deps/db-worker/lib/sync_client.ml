@@ -4,7 +4,6 @@
 open Datascript
 open Db_worker_effect.Infix
 
-let kw s = Wire.Keyword s
 
 let reconnect_base_delay_ms = 1000
 let reconnect_max_delay_ms = 30000
@@ -82,14 +81,14 @@ let update_local_sync_checksum repo (tx_report : tx_report) : unit =
            if not exempted then
              raise
                (Sync_util.ex_info "Incremental checksum drift"
-                [ kw "repo", Wire.String repo
-                ; ( kw "current-checksum"
+                [ Wire.keyword "repo", Wire.String repo
+                ; ( Wire.keyword "current-checksum"
                   , match current_checksum with
                     | Some c -> Wire.String c
                     | None -> Wire.Nil )
-                ; kw "incremental-checksum", Wire.String new_checksum
-                ; kw "recomputed-checksum", Wire.String recomputed
-                ; kw "tx-count", Wire.Int (List.length tx_report.tx_data) ])
+                ; Wire.keyword "incremental-checksum", Wire.String new_checksum
+                ; Wire.keyword "recomputed-checksum", Wire.String recomputed
+                ; Wire.keyword "tx-count", Wire.Int (List.length tx_report.tx_data) ])
          end
      | _ -> ());
     Sync_client_op.update_local_checksum repo new_checksum
@@ -238,8 +237,8 @@ let update_presence (editing_block_uuid : Wire.t) : unit =
           Db_worker_effect.async (fun () ->
                send ws
                  (Wire.Map
-                    [ kw "type", Wire.String "presence"
-                    ; kw "editing-block-uuid", editing_block_uuid ]))
+                    [ Wire.keyword "type", Wire.String "presence"
+                    ; Wire.keyword "editing-block-uuid", editing_block_uuid ]))
       | None -> ())
   | None -> ()
 
@@ -400,8 +399,8 @@ and connect repo (client : Sync_state.client) (url : string)
                      | Some ws ->
                          send ws
                            (Wire.Map
-                              [ kw "type", Wire.String "hello"
-                              ; kw "client", Wire.String repo ])
+                              [ Wire.keyword "type", Wire.String "hello"
+                              ; Wire.keyword "client", Wire.String repo ])
                      | None -> Db_worker_effect.pure ())
                     >>= fun () ->
                     Db_worker_effect.pure

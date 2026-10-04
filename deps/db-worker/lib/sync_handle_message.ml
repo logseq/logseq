@@ -2,7 +2,6 @@
 
 open Db_worker_effect.Infix
 
-let kw s = Wire.Keyword s
 
 let fail_fast = Sync_util.fail_fast
 
@@ -17,7 +16,7 @@ let broadcast_rtc_state (client : Sync_state.client) : unit =
     ~transit_payload:
       (Transit_codec.to_string
          (Wire.Array
-            [ kw "rtc-sync-state"
+            [ Wire.keyword "rtc-sync-state"
             ; Sync_presence.rtc_state_payload ~sync_counts client ]))
 
 let update_online_users (client : Sync_state.client) (users : Wire.t list) =
@@ -56,10 +55,10 @@ let current_client repo : Sync_state.client option =
 let context ~repo ~typ ?field () : Wire.t =
   Wire.Map
     (List.filter_map Fun.id
-       [ Some (kw "repo", Wire.String repo)
-       ; Some (kw "type", Wire.String typ)
+       [ Some (Wire.keyword "repo", Wire.String repo)
+       ; Some (Wire.keyword "type", Wire.String typ)
        ; (match field with
-          | Some f -> Some (kw "field", kw f)
+          | Some f -> Some (Wire.keyword "field", Wire.keyword f)
           | None -> None) ])
 
 let require_number (value : Wire.t) (context : Wire.t) =
@@ -121,8 +120,8 @@ let request_pull (client : Sync_state.client) (since : int) : unit =
                  client.pending_pull_since := Some since;
                  send ws
                    (Wire.Map
-                      [ kw "type", Wire.String "pull"
-                      ; kw "since", Wire.Int since ])
+                      [ Wire.keyword "type", Wire.String "pull"
+                      ; Wire.keyword "since", Wire.Int since ])
                end;
                Db_worker_effect.pure ()
            | _ -> Db_worker_effect.pure ())
@@ -162,12 +161,12 @@ let verify_sync_checksum repo (client : Sync_state.client) local_tx remote_tx
             let mismatch =
               Wire.Map
                 (Wire.as_map context
-                 @ [ kw "type", kw "db-sync/checksum-mismatch"
-                   ; kw "repo", Wire.String repo
-                   ; kw "local-tx", Wire.Int local_tx
-                   ; kw "remote-tx", Wire.Int remote_tx
-                   ; kw "local-checksum", local_w
-                   ; kw "remote-checksum"
+                 @ [ Wire.keyword "type", Wire.keyword "db-sync/checksum-mismatch"
+                   ; Wire.keyword "repo", Wire.String repo
+                   ; Wire.keyword "local-tx", Wire.Int local_tx
+                   ; Wire.keyword "remote-tx", Wire.Int remote_tx
+                   ; Wire.keyword "local-checksum", local_w
+                   ; Wire.keyword "remote-checksum"
                    , (match rc with Some w -> w | None -> Wire.Nil) ])
             in
             Sync_log_and_state.add_rtc_log "rtc.log/checksum-mismatch"
@@ -248,27 +247,27 @@ let handle_tx_reject repo (client : Sync_state.client) (message : Wire.t)
        let rejected_data =
          Wire.Map
            (List.filter_map Fun.id
-              [ Some (kw "type", kw "db-sync/tx-rejected")
-              ; Some (kw "repo", Wire.String repo)
-              ; Some (kw "message-type", Wire.String "tx/reject")
-              ; Some (kw "reason", Option.get reason)
+              [ Some (Wire.keyword "type", Wire.keyword "db-sync/tx-rejected")
+              ; Some (Wire.keyword "repo", Wire.String repo)
+              ; Some (Wire.keyword "message-type", Wire.String "tx/reject")
+              ; Some (Wire.keyword "reason", Option.get reason)
               ; (match remote_t with
-                 | Some t -> Some (kw "t", t)
+                 | Some t -> Some (Wire.keyword "t", t)
                  | None -> None)
               ; (match successful_tx_ids with
                  | [] -> None
                  | ids ->
                      Some
-                       ( kw "success-tx-ids"
+                       ( Wire.keyword "success-tx-ids"
                        , Wire.Array (List.map (fun s -> Wire.Uuid s) ids) ))
               ; (match failed_tx_id' with
-                 | Some id -> Some (kw "failed-tx-id", Wire.Uuid id)
+                 | Some id -> Some (Wire.keyword "failed-tx-id", Wire.Uuid id)
                  | None -> None)
               ; (match missing_block_uuids with
-                 | Some us -> Some (kw "missing-block-uuids", us)
+                 | Some us -> Some (Wire.keyword "missing-block-uuids", us)
                  | None -> None)
               ; (match data with
-                 | Some d -> Some (kw "data", d)
+                 | Some d -> Some (Wire.keyword "data", d)
                  | None -> None) ])
        in
        if success_tx_ids <> None || failed_tx_id <> None then begin
@@ -431,9 +430,9 @@ let validate_local_tx repo (message : Wire.t) (local_tx : int option) =
     if not valid then
       raise
         (Sync_util.ex_info "Invalid local tx"
-           [ kw "repo", Wire.String repo
-           ; kw "message-type", Wire.String message_type
-           ; kw "local-tx"
+           [ Wire.keyword "repo", Wire.String repo
+           ; Wire.keyword "message-type", Wire.String message_type
+           ; Wire.keyword "local-tx"
            , (match local_tx with
               | Some n -> Wire.Int n
               | None -> Wire.Nil) ])
@@ -465,12 +464,12 @@ let handle_pull_ok repo (client : Sync_state.client) (local_tx : int option)
              Wire.Map
                (List.filter_map Fun.id
                   [ (match Wire.get "t" data with
-                     | Some t -> Some (kw "t", t)
+                     | Some t -> Some (Wire.keyword "t", t)
                      | None -> None)
                   ; (match Wire.get "outliner-op" data with
-                     | Some o -> Some (kw "outliner-op", o)
+                     | Some o -> Some (Wire.keyword "outliner-op", o)
                      | None -> None)
-                  ; Some (kw "tx-data", tx_data) ]))
+                  ; Some (Wire.keyword "tx-data", tx_data) ]))
     in
     match remote_txs with
     | [] -> Db_worker_effect.pure ()
@@ -512,7 +511,7 @@ let handle_pull_ok repo (client : Sync_state.client) (local_tx : int option)
                               (Wire.Map
                                  (List.map
                                     (fun (k, v) ->
-                                       if k = kw "tx-data" then
+                                       if k = Wire.keyword "tx-data" then
                                          (k, Wire.Array tx_data')
                                        else (k, v))
                                     (Wire.as_map remote_tx)))

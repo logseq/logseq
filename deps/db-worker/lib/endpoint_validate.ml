@@ -8,7 +8,6 @@
      Endpoint_validate.validate_db_endpoint
      Endpoint_validate.recompute_checksum_diagnostics *)
 
-let kw s = Wire.Keyword s
 
 let arg args i = List.nth_opt args i
 
@@ -27,7 +26,7 @@ let validate_db_endpoint args =
       let fix =
         match arg args 1 with
         | Some (Wire.Map kvs) ->
-            (match List.assoc_opt (kw "fix") kvs with
+            (match List.assoc_opt (Wire.keyword "fix") kvs with
              | Some (Wire.Bool b) -> b
              | _ -> true)
         | _ -> true
@@ -69,7 +68,7 @@ let recompute_checksum_diagnostics args =
       in
       let recomputed =
         match result with
-        | Wire.Map kvs -> List.assoc_opt (kw "recomputed-checksum") kvs
+        | Wire.Map kvs -> List.assoc_opt (Wire.keyword "recomputed-checksum") kvs
         | _ -> None
       in
       (match recomputed with
@@ -92,7 +91,7 @@ let recompute_checksum_diagnostics args =
                  Wire.Map
                    (List.map
                       (fun (k, v) ->
-                        if k = kw "local-checksum" then
+                        if k = Wire.keyword "local-checksum" then
                           (k, Option.get recomputed)
                         else (k, v))
                       kvs)

@@ -5,7 +5,6 @@ open Db_worker_effect.Infix
 
 let ex_info msg kvs = Dispatcher.Exn_info (msg, kvs)
 
-let kw s = Wire.Keyword s
 
 let kw_name k =
   match String.rindex_opt k '/' with
@@ -104,7 +103,7 @@ let error_to_diagnostic (e : exn) : Wire.t =
          | None -> "exception")
   in
   Wire.kw_map
-    [ "code", kw code
+    [ "code", Wire.keyword code
     ; "message", Wire.String (ex_message e)
     ; "at", Wire.Float (Time.epoch_ms_to_float (Time.now ()))
     ; "data", (if Wire.as_map data = [] then Wire.Nil else data)
@@ -135,7 +134,7 @@ let with_client_revision schema_key (body : Wire.t) : Wire.t =
                   (fun (k, _) -> Wire.key_matches "client-revision" k)
                   kvs) ->
         Wire.Map
-          (kvs @ [ (kw "client-revision", Wire.String (build_revision ())) ])
+          (kvs @ [ (Wire.keyword "client-revision", Wire.String (build_revision ())) ])
     | _ -> body
   else body
 
@@ -176,9 +175,9 @@ let fetch_json_default url ?(meth = "GET") ?(headers = []) ?body
          | None ->
              Db_worker_effect.error
                (ex_info "db-sync invalid response"
-                  [ kw "status", Wire.Int resp.status
-                  ; kw "url", Wire.String url
-                  ; kw "body", data ]))
+                  [ Wire.keyword "status", Wire.Int resp.status
+                  ; Wire.keyword "url", Wire.String url
+                  ; Wire.keyword "body", data ]))
     | None -> Db_worker_effect.pure data
   else
     let body =
@@ -188,9 +187,9 @@ let fetch_json_default url ?(meth = "GET") ?(headers = []) ?body
     in
     Db_worker_effect.error
       (ex_info "db-sync request failed"
-         [ kw "status", Wire.Int resp.status
-         ; kw "url", Wire.String url
-         ; kw "body", body ])
+         [ Wire.keyword "status", Wire.Int resp.status
+         ; Wire.keyword "url", Wire.String url
+         ; Wire.keyword "body", body ])
 
 let fetch_json url ?(meth = "GET") ?(headers = []) ?body ?response_schema
     ?(error_schema = "error") () : Wire.t Db_worker_effect.t =
