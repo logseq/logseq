@@ -3827,6 +3827,48 @@ let paste_copied_tree_bang conn (copied : Block_map.t list)
   insert_blocks_bang conn copied (target_bm target)
     ~opts:{ opts with sibling = true; outliner_op = Some "paste" } ()
 
+(* paste-copied-blocks onto an empty tail sibling (the e2e paste path):
+   :replace-empty-target? must consume the empty target block. *)
+let test_paste_copied_blocks_consumes_empty_target () =
+  let conn =
+    Db_test_util.create_conn_with_blocks
+      ~pages_and_blocks:
+        [ { page = { default_page with pg_title = Some "p" }
+          ; blocks =
+              [ { default_block with b_title = Some "b1" }
+              ; { default_block with b_title = Some "b2" }
+              ; { default_block with b_title = Some "" } ] } ]
+      ()
+  in
+  let db = db_of conn in
+  let empty_target = Option.get (find_block_by_content db "") in
+  let empty_uuid = uuid_of empty_target in
+  let copied =
+    List.concat_map
+      (fun b ->
+        List.map (clipboard_block db)
+          (Ldb.get_block_and_children db ~include_property_block:true
+             (uuid_of b)))
+      [ Option.get (find_block_by_content db "b1")
+      ; Option.get (find_block_by_content db "b2") ]
+  in
+  insert_blocks_bang conn copied (target_bm empty_target)
+    ~opts:
+      { Outliner_core.default_insert_opts with
+        sibling = true; outliner_op = Some "paste"
+      ; replace_empty_target = true; replace_empty_target_specified = true }
+    ();
+  let db = db_of conn in
+  let page = Option.get (Ldb.get_page db (String "p")) in
+  let top = Ldb.sort_by_order (Ldb.ref_ents page "block/_parent") in
+  check "empty target consumed"
+    (List.filter_map ent_title top = [ "b1"; "b2"; "b1"; "b2" ]);
+  check "no blank block remains" (find_block_by_content db "" = None);
+  check "pasted first block reuses target uuid"
+    (match entity_by_uuid conn empty_uuid with
+     | Some e -> ent_title e = Some "b1"
+     | None -> false)
+
 (* (deftest copy-paste-keeps-original-children-when-uuids-still-exist) *)
 let test_copy_paste_keeps_original_children_when_uuids_still_exist () =
   let conn = nested_copy_conn () in
@@ -4092,7 +4134,8 @@ let copy_paste_cases : unit Alcotest.test_case list =
     Alcotest.test_case "cut-paste-moves-nested-tree" `Quick test_cut_paste_moves_nested_tree;
     Alcotest.test_case "non-paste-keep-uuid-reuses-live-child-identities" `Quick test_non_paste_keep_uuid_reuses_live_child_identities;
     Alcotest.test_case "undo-restore-keeps-live-child-uuid" `Quick test_undo_restore_keeps_live_child_uuid;
-    Alcotest.test_case "paste-page-entity-links-to-existing-page" `Quick test_paste_page_entity_links_to_existing_page ]
+    Alcotest.test_case "paste-page-entity-links-to-existing-page" `Quick test_paste_page_entity_links_to_existing_page;
+    Alcotest.test_case "paste-copied-blocks-consumes-empty-target" `Quick test_paste_copied_blocks_consumes_empty_target ]
 
 (* ---------- cut_paste_property_test.cljs ---------- *)
 
