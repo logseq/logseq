@@ -155,26 +155,43 @@
      ;; :double-plus or unknown fallback
      (advance-until-future now datetime recur-unit period-f frequency))))
 
+(defn- empty-placeholder-value?
+  "Date-picker delete keeps the property on the block and writes
+  `:logseq.property/empty-placeholder` — the keyword for scalar :datetime
+  values, the placeholder entity for ref-typed values. `:db/ident` reads
+  through a datascript Entity; `map?` would miss it (Entity is not IMap)."
+  [value]
+  (= :logseq.property/empty-placeholder
+     (or (:db/ident value) value)))
+
+(defn- present-date-value
+  "A real date/datetime occurrence, or nil when the property is unset or cleared."
+  [value]
+  (when-not (empty-placeholder-value? value)
+    value))
+
 (defn- get-next-time
   "The next occurrence, in milliseconds, of a repeat whose current value is
   `current-value` (milliseconds). `now` defaults to the current time; a date
-  repeat passes today's UTC midnight so that it computes in whole UTC days."
+  repeat passes today's UTC midnight so that it computes in whole UTC days.
+  Empty-placeholder is absent — `tc/to-date-time` has no method for that keyword."
   ([current-value unit frequency repeat-type]
    (get-next-time current-value unit frequency repeat-type (t/now)))
   ([current-value unit frequency repeat-type now]
-   (let [current-date-time (tc/to-date-time current-value)
-         [recur-unit period-f] (case (:db/ident unit)
-                                 :logseq.property.repeat/recur-unit.minute [t/minutes t/in-minutes]
-                                 :logseq.property.repeat/recur-unit.hour [t/hours t/in-hours]
-                                 :logseq.property.repeat/recur-unit.day [t/days t/in-days]
-                                 :logseq.property.repeat/recur-unit.week [t/weeks t/in-weeks]
-                                 :logseq.property.repeat/recur-unit.month [t/months t/in-months]
-                                 :logseq.property.repeat/recur-unit.year [t/years t/in-years]
-                                 nil)]
-     ;; Guard against frequency <= 0: `advance-until-future` would infinite-loop
-     ;; on zero-length intervals, and the other variants produce nonsense.
-     (when (and recur-unit (pos? frequency))
-       (tc/to-long (repeat-next-timestamp current-date-time recur-unit period-f frequency repeat-type now))))))
+   (when-let [current-date-time (some-> (present-date-value current-value)
+                                        tc/to-date-time)]
+     (let [[recur-unit period-f] (case (:db/ident unit)
+                                   :logseq.property.repeat/recur-unit.minute [t/minutes t/in-minutes]
+                                   :logseq.property.repeat/recur-unit.hour [t/hours t/in-hours]
+                                   :logseq.property.repeat/recur-unit.day [t/days t/in-days]
+                                   :logseq.property.repeat/recur-unit.week [t/weeks t/in-weeks]
+                                   :logseq.property.repeat/recur-unit.month [t/months t/in-months]
+                                   :logseq.property.repeat/recur-unit.year [t/years t/in-years]
+                                   nil)]
+       ;; Guard against frequency <= 0: `advance-until-future` would infinite-loop
+       ;; on zero-length intervals, and the other variants produce nonsense.
+       (when (and recur-unit (pos? frequency))
+         (tc/to-long (repeat-next-timestamp current-date-time recur-unit period-f frequency repeat-type now)))))))
 
 (defn- resolve-recur-frequency
   "Returns `[frequency default-value-tx-data]` for a recurring task entity:
@@ -208,10 +225,10 @@
                         :logseq.property.repeat/repeat-type.double-plus)
         property (d/entity db property-ident)
         date? (= :date (:logseq.property/type property))
-        current-value (cond->
-                       (get entity property-ident)
-                        date?
-                        (#(date-time-util/journal-day->ms (:block/journal-day %))))
+        current-value (when-let [raw (present-date-value (get entity property-ident))]
+                        (if date?
+                          (date-time-util/journal-day->ms (:block/journal-day raw))
+                          raw))
         ;; A :date value is a day, carried here as its UTC midnight. It is
         ;; advanced in whole UTC days against today's UTC midnight and read
         ;; back as a UTC day; read in the local zone, UTC midnight is the
@@ -243,7 +260,7 @@
 
 (defn- existing-repeat-temporal-property-idents
   [entity]
-  (filterv #(some? (get entity %)) repeat-temporal-property-idents))
+  (filterv #(present-date-value (get entity %)) repeat-temporal-property-idents))
 
 (defn- reschedule-property-idents
   [entity]
@@ -251,11 +268,11 @@
     (if explicit-property-ident
       (let [other-property-idents (case explicit-property-ident
                                    :logseq.property/scheduled
-                                   (when (:logseq.property/deadline entity)
+                                   (when (present-date-value (:logseq.property/deadline entity))
                                      [:logseq.property/deadline])
 
                                    :logseq.property/deadline
-                                   (when (:logseq.property/scheduled entity)
+                                   (when (present-date-value (:logseq.property/scheduled entity))
                                      [:logseq.property/scheduled])
 
                                    nil)]
