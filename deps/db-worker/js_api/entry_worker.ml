@@ -26,23 +26,6 @@ let set_post_fn f = Broadcast.set_post_fn f
 
 (* ==== standalone browser worker ==== *)
 
-module U8 = Js.Typed_array.Uint8Array
-
-external new_u8a : int -> U8.t = "Uint8Array" [@@mel.new]
-external u8a_get : U8.t -> int -> int = "" [@@mel.get_index]
-external u8a_set : U8.t -> int -> int -> unit = "" [@@mel.set_index]
-external u8a_length : U8.t -> int = "length" [@@mel.get]
-external u8a_buffer : U8.t -> Js.Typed_array.ArrayBuffer.t = "buffer"
-  [@@mel.get]
-
-let string_of_u8a a =
-  String.init (u8a_length a) (fun i -> Char.chr (u8a_get a i))
-
-let u8a_of_string s =
-  let a = new_u8a (String.length s) in
-  String.iteri (fun i c -> u8a_set a i (Char.code c)) s;
-  a
-
 (* Dedicated-worker globals: importScripts exists in a worker scope
    but not on the window main thread; Comlink.expose installs the
    remote-call endpoint on self; Comlink.transfer marks a value's
@@ -128,15 +111,15 @@ let remote_invoke_binary_js =
         Db_worker_effect.on_any
           (Worker_core.remote_invoke_binary name repo
              (match Js.Undefined.toOption payload with
-              | Some a -> Some (string_of_u8a a)
+              | Some a -> Some (U8a.to_string a)
               | None -> None))
           (fun result ->
             match result with
             | Wire.Binary s ->
-                let a = u8a_of_string s in
+                let a = U8a.of_string s in
                 resolve
                   (Js.Nullable.return
-                     (comlink_transfer a [| u8a_buffer a |]))
+                     (comlink_transfer a [| U8a.buffer a |]))
                   [@u]
             | Wire.Nil -> resolve Js.Nullable.null [@u]
             | _ ->

@@ -59,7 +59,6 @@ external get_random_values : T.Uint8Array.t -> T.Uint8Array.t = "getRandomValues
 external new_u8a : int -> T.Uint8Array.t = "Uint8Array" [@@mel.new]
 external u8a_of_buffer : array_buffer -> T.Uint8Array.t = "Uint8Array" [@@mel.new]
 external u8a_get : T.Uint8Array.t -> int -> int = "" [@@mel.get_index]
-external u8a_set : T.Uint8Array.t -> int -> int -> unit = "" [@@mel.set_index]
 external u8a_length : T.Uint8Array.t -> int = "length" [@@mel.get]
 
 external error_name : Js.Promise.error -> string option = "name" [@@mel.get]
@@ -68,13 +67,8 @@ external error_name : Js.Promise.error -> string option = "name" [@@mel.get]
 external error_message : Js.Promise.error -> string option = "message" [@@mel.get]
   [@@mel.return { undefined_to_opt }]
 
-let string_of_u8a a = String.init (u8a_length a) (fun i -> Char.chr (u8a_get a i))
-let string_of_buffer b = string_of_u8a (u8a_of_buffer b)
-
-let u8a_of_string s =
-  let a = new_u8a (String.length s) in
-  String.iteri (fun i c -> u8a_set a i (Char.code c)) s;
-  a
+let string_of_buffer b = U8a.to_string (u8a_of_buffer b)
+let u8a_of_string = U8a.of_string
 
 (* Promise -> effect, preserving the DOMException name so OperationError
    maps to Operation_error instead of collapsing to Failure. *)
@@ -112,7 +106,7 @@ let sha256_hex s =
   task_of_promise (digest subtle "SHA-256" (u8a_of_string s))
   |> Db_worker_effect.map (fun buffer -> hex_of_u8a (u8a_of_buffer buffer))
 
-let random_bytes n = string_of_u8a (get_random_values (new_u8a n))
+let random_bytes n = U8a.to_string (get_random_values (new_u8a n))
 
 module Aes_gcm = struct
   (* raw 32-byte key material; imported per op so the spec type can be

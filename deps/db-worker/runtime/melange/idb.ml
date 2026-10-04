@@ -178,18 +178,6 @@ let store_state kvs =
      so a failed write cannot truncate the previous typed values. *)
   File_sys.write_text_atomic (kv_path ()) (Transit_codec.to_string (Wire.Map kvs))
 
-let u8_of_string s =
-  let n = String.length s in
-  let a = Js.Typed_array.Uint8Array.fromLength n in
-  for i = 0 to n - 1 do
-    Js.Typed_array.Uint8Array.unsafe_set a i (Char.code (String.unsafe_get s i))
-  done;
-  a
-
-let string_of_u8 a =
-  let n = Js.Typed_array.Uint8Array.length a in
-  String.init n (fun i -> Char.chr (Js.Typed_array.Uint8Array.unsafe_get a i))
-
 (* transit "uint8array" tag — node.cljs kv-transit-writer encodes
    Uint8Array as a tagged vector of byte ints. *)
 let wire_of_bytes s =
@@ -288,7 +276,7 @@ let classify_result (r : Idb_db.request) : stored_value =
          | Some s -> Stored_string s
          | None -> Stored_none)
       else if Idb_db.is_view v then
-        Stored_binary (string_of_u8 (Idb_db.u8_of_any v))
+        Stored_binary (U8a.to_string (Idb_db.u8_of_any v))
       else Stored_none
 
 (* ---------- spec ops ---------- *)
@@ -387,7 +375,7 @@ let get_binary key =
 
 let set_binary key value =
   if is_browser () then
-    with_store (fun os -> Idb_db.store_put os (u8_of_string value) key)
+    with_store (fun os -> Idb_db.store_put os (U8a.of_string value) key)
   else
     Db_worker_effect.bind (load_state ()) (fun kvs ->
         let kvs = List.remove_assoc (Wire.String key) kvs in
