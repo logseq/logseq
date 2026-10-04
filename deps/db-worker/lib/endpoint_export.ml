@@ -212,13 +212,7 @@ let import_db_binary args =
        tolerate vectors of ints too (import-file-payload convention). *)
     match Ds_wire.value_of_transit (Option.value ~default:Wire.Nil (arg args 1)) with
     | String s -> s
-    | Vector vs | List vs | Set vs ->
-        String.init (List.length vs) (fun i ->
-            Char.chr
-              (match List.nth_opt vs i with
-               | Some (Int64 n) -> Int64.to_int (Int64.logand n 255L)
-               | Some (Float f) -> int_of_float f land 0xff
-               | _ -> 0))
+    | Vector vs | List vs | Set vs -> Ds_wire.bytes_of_values vs
     | _ -> invalid_arg "import-db-binary: missing data arg"
   in
   if Unicode.trim repo = "" then Db_worker_effect.pure Wire.Nil
