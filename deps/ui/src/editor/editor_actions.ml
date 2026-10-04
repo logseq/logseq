@@ -1613,9 +1613,19 @@ let wrap_selection uuid marker =
 (* ArrowUp past the first block lands in the page title — cljs
    move-cross-boundary-up-down treats .ls-page-title as a block *)
 let focus_page_title () =
-  match D.query_selector ".ls-page-title" with
-  | None -> ()
-  | Some _ -> (
+  (* cljs journal titles aren't editable (protected attrs — a save tx
+     throws journal-page-protected-attr-updated) *)
+  let journal_title =
+    match !Runtime.current_route with
+    | Some (Model.Journals | Model.Home) -> true
+    | _ -> (
+        match !Runtime.current_page with
+        | Some p -> p.Model.page_journal_day <> None
+        | None -> false)
+  in
+  match journal_title, D.query_selector ".ls-page-title" with
+  | true, _ | _, None -> ()
+  | false, Some _ -> (
       Runtime.send Action.Title_edit_start;
       Runtime.flush ();
       match D.query_selector ".ls-page-title textarea" with

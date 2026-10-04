@@ -562,6 +562,29 @@ let init () =
       fetch_refs ~stale p;
       Outliner_ops.fetch_unlinked_refs ~stale p;
       Outliner_ops.fetch_unlinked_exists ~stale p);
+  (* delta-spliced journals update: the owning journal's linked refs
+     still need their cheap refresh (a block-title edit can create or
+     remove a mention) — refetch just that page's refs and republish *)
+  Runtime.refresh_journal_side :=
+    (fun p ->
+      ignore
+        ((let* refs = fetch_refs_blocks p in
+          Js.Promise.resolve
+            (match !Runtime.current_route with
+             | Some (Model.Journals | Model.Home) ->
+                 Runtime.send
+                   (Action.Journals_spliced
+                      (List.map
+                         (fun (j : Model.page) ->
+                           if j.Model.page_uuid = p.Model.page_uuid then
+                             { j with Model.page_linked_refs = refs }
+                           else j)
+                         !Runtime.current_journals))
+             | _ -> ()))
+         |> Js.Promise.catch (fun e ->
+                Platform.console_error
+                  ("journal refs refresh failed", e);
+                Js.Promise.resolve ())));
   Platform.on_hash_change resolve;
   Platform.on_document_event "ls:navigate" (fun _ -> resolve ());
   Platform.add_document_listener "keydown" (fun ev ->

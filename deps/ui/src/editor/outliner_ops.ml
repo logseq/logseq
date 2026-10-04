@@ -994,10 +994,118 @@ let apply_queued _page delta =
           Js.Promise.resolve (a, touched))
       | None -> Js.Promise.resolve (None, touched))
 
+(* Journals/Home counterpart of apply_queued: each delta belongs to
+   the journal page whose tree consumes it. The owner is found via a
+   uuid -> journal index over the delta's address keys (canon rows,
+   tombstones, membership-patch parents) — a non-owner journal can't
+   consume the patches and apply_to_page fails on it, so candidates
+   are tried in order. Fold + publish inside the apply queue, like
+   apply_queued. Returns false when any delta can't splice — the
+   caller falls back to a full reload *)
+let splice_journals ?(strict = false) (deltas : Wire.t list) :
+    bool Js.Promise.t =
+  let deltas = Page_delta.drain_deferred () @ deltas in
+  let touched = List.concat_map Page_delta.delta_uuids deltas in
+  let build_index (js : Model.page list) =
+    let idx = Hashtbl.create 512 in
+    List.iteri
+      (fun i (p : Model.page) ->
+        (match p.Model.page_uuid with
+         | Some u -> Hashtbl.replace idx u i
+         | None -> ());
+        let rec walk (b : Model.block) =
+          (match b.Model.block_uuid with
+           | Some u -> Hashtbl.replace idx u i
+           | None -> ());
+          List.iter walk b.Model.block_children;
+          List.iter walk b.Model.block_embed_children
+        in
+        List.iter walk p.Model.page_blocks)
+      js;
+    idx
+  in
+  Page_delta.with_apply_queue (fun () ->
+      let base = !Runtime.current_journals in
+      match base with
+      | [] -> Js.Promise.resolve false
+      | _ ->
+          let arr = Array.of_list base in
+          let idx = ref (build_index base) in
+          let owners = ref [] in
+          let rec fold_delta ~retried d =
+            if Page_delta.delta_already_applied d then
+              Js.Promise.resolve `Applied
+            else
+              let cands =
+                List.sort_uniq compare
+                  (List.filter_map
+                     (fun k -> Hashtbl.find_opt !idx k)
+                     (Page_delta.delta_keys d))
+              in
+              let rec try_cands = function
+                | [] ->
+                    if retried then Js.Promise.resolve `Unmatched
+                    else (
+                      (* a uuid an earlier delta in this batch created
+                         isn't in the index yet — rebuild and retry *)
+                      idx := build_index (Array.to_list arr);
+                      fold_delta ~retried:true d)
+                | i :: rest -> (
+                    let j = arr.(i) in
+                    let* applied =
+                      Page_delta.apply_to_page ~strict (delta_helpers j)
+                        j d
+                    in
+                    match applied with
+                    | Some j' when j' != j ->
+                        arr.(i) <- j';
+                        owners := j' :: !owners;
+                        Js.Promise.resolve `Applied
+                    | _ -> try_cands rest)
+              in
+              try_cands cands
+          in
+          let rec fold = function
+            | [] -> Js.Promise.resolve true
+            | d :: rest -> (
+                let* r = fold_delta ~retried:false d in
+                match r with
+                | `Applied -> fold rest
+                | `Unmatched -> Js.Promise.resolve false)
+          in
+          let* ok = fold deltas in
+          (if ok then
+             match !Runtime.current_journals with
+             | cur when cur == base ->
+                 if !owners <> [] then begin
+                   (* fold and publish inside the apply queue so a
+                      racing arm can't interleave between our splice
+                      and our publish *)
+                   Runtime.send
+                     (Action.Journals_spliced (Array.to_list arr));
+                   S.prune_overrides touched;
+                   List.iter
+                     (fun p -> !Runtime.refresh_journal_side p)
+                     !owners
+                 end
+             | _ -> ());
+          Js.Promise.resolve ok)
+
 let refresh_via_delta (resp : Wire.t option) : unit Js.Promise.t =
   match
     (Option.bind resp (fun r -> Wire.get r "delta"), !Runtime.current_page)
   with
+  | Some delta, None -> (
+      match !Runtime.current_route with
+      | Some (Model.Journals | Model.Home) -> (
+          let* ok = splice_journals [ delta ] in
+          if ok then (
+            (* property areas hold worker data outside the spliced
+               model — refresh them like the page-route path *)
+            ignore (!Runtime.refresh_property_areas ());
+            Js.Promise.resolve ())
+          else refresh_page ())
+      | _ -> refresh_page ())
   | Some delta, Some page -> (
       let route_at_start = !Runtime.current_route in
       let* applied, touched = apply_queued page delta in
