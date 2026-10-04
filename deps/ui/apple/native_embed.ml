@@ -421,6 +421,7 @@ let picked node payload =
   dispatch_lui (Lui_protocol.ExtensionEvent (node, "picked", "", m))
 
 let extension_event node name values : string =
+  let t0 = perf_ms () in
   Queue.clear pending_batches;
   (match !current_app with
    | Some app -> (
@@ -433,14 +434,23 @@ let extension_event node name values : string =
                 (Lui_protocol.ExtensionEvent
                    (node, identifier, name,
                     decode_extension_values values)));
+           perf_mark "ext.dispatch" t0;
+           let t1 = perf_ms () in
            ignore (Lui_app.flush app);
+           perf_mark "ext.flush" t1;
+           let t2 = perf_ms () in
            (* Route through the scan gate: extension events are often
               prop-only bursts (visible-range, scroll) and must not pay
               a full-doc scan per event *)
-           run_doc_scans_after_flush ()
+           run_doc_scans_after_flush ();
+           perf_mark "ext.scans" t2
        | None -> ())
    | None -> ());
-  take_patches ()
+  let t3 = perf_ms () in
+  let out = take_patches () in
+  perf_mark "ext.take" t3;
+  perf_mark "ext.total" t0;
+  out
 
 (* drain the Host mailbox on the app thread; called via the wakeup the
    OCaml side fired when async work completed *)
