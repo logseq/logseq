@@ -150,8 +150,10 @@ let right_toggle_button ms =
       Sidebar_state.ensure_contents (Sidebar_state.ensure ms))
 
 let header (ms : Model.t Signal.signal) =
+  (* cljs header.cljs sets inline fontSize:50 on .cp__header *)
   Logseq_dom.dom ~key:"head" ~tag:"div" ~id:"head"
     ~style_class:"cp__header drag-region"
+    ~attrs:[ ("style", "font-size: 50px") ]
     [ Logseq_dom.dom ~key:"head-inner"
         ~style_class:"l flex items-center drag-region"
         [ left_menu_button; search_button ]
@@ -511,7 +513,9 @@ let shell (ms : Model.t Signal.signal) : t =
         [ Logseq_dom.dom ~key:"left-container" ~id:"left-container"
             ~style_class_signal:
               (Logseq_dom.class_signal ms (fun (m : Model.t) ->
-                   if m.left_sidebar_open then "overflow-hidden"
+                   (* cljs container.cljs: overflow-hidden while RIGHT
+                      sidebar is open *)
+                   if m.right_sidebar_open then "overflow-hidden"
                    else "w-full"))
             [ header ms; main_content ms ]
         ; right_sidebar ms
