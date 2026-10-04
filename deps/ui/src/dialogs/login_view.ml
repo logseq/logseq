@@ -129,16 +129,68 @@ let set_tab ctx tab =
 
 let fail ctx msg = set_auth ctx (fun a -> { a with err = msg })
 
-let error_message (json : Js.Json.t) =
+(* cognito's REST __type may carry a namespace prefix
+   (com.amazon.coral.service#NotAuthorizedException); cljs reads the
+   amplify error's bare name/code *)
+let error_name_of (json : Js.Json.t) =
   match Js.Json.decodeObject json with
   | Some o -> (
-      match dict_str o "message" with
-      | Some m -> m
-      | None -> (
-          match dict_str o "__type" with
-          | Some m -> m
-          | None -> T.login_failed))
+      match dict_str o "__type" with
+      | Some t -> (
+          let short_after pred s =
+            match String.rindex_opt s pred with
+            | Some i -> String.sub s (i + 1) (String.length s - i - 1)
+            | None -> s
+          in
+          Some (short_after '.' (short_after '#' t)))
+      | None -> None)
+  | None -> None
+
+(* cljs login.cljs auth-error-message — cognito exception name ->
+   i18n copy; unknown errors get the generic message *)
+let error_message (json : Js.Json.t) =
+  let key name =
+    match name with
+    | "UserNotFoundException" -> "account/auth-error-user-not-found"
+    | "NotAuthorizedException" -> "account/auth-error-invalid-credentials"
+    | "UserNotConfirmedException" -> "account/auth-error-user-not-confirmed"
+    | "UsernameExistsException" -> "account/auth-error-username-exists"
+    | "InvalidPasswordException" -> "account/password-policy-tip"
+    | "CodeMismatchException" -> "account/auth-error-code-mismatch"
+    | "ExpiredCodeException" -> "account/auth-error-code-expired"
+    | "LimitExceededException" | "TooManyRequestsException" ->
+        "account/auth-error-too-many-requests"
+    | "TooManyFailedAttemptsException" ->
+        "account/auth-error-too-many-attempts"
+    | "CodeDeliveryFailureException" ->
+        "account/auth-error-code-delivery-failed"
+    | "UserAlreadyAuthenticatedException" ->
+        "account/auth-error-already-authenticated"
+    | "InvalidParameterException" -> "account/auth-error-invalid-parameter"
+    | _ -> "account/auth-error-generic"
+  in
+  match error_name_of json with
+  | Some n -> I18n.t (key n)
   | None -> T.login_failed
+
+(* cljs login.cljs validate-password! — client-side policy check before
+   the signup / confirm-reset calls *)
+let valid_password pw =
+  let has pred =
+    let rec go i = i < String.length pw && (pred pw.[i] || go (i + 1)) in
+    go 0
+  in
+  let is_lower c = c >= 'a' && c <= 'z' in
+  let is_upper c = c >= 'A' && c <= 'Z' in
+  let sym = "!@#$%^&*()_+-=[]{};':\"\\|,.<>/?~`" in
+  String.length pw >= 8 && has is_lower && has is_upper
+  && has (fun c -> String.contains sym c)
+
+let validate_password ctx pw =
+  if valid_password pw then true
+  else (
+    fail ctx (I18n.t "account/password-policy-tip");
+    false)
 
 let cognito_call ctx target payload f_ok =
   let init =
@@ -202,6 +254,7 @@ let signup_submit ctx =
   and pass = field_value "password"
   and confirm = field_value "confirm-password" in
   if user = "" || pass = "" || email = "" then ()
+  else if not (validate_password ctx pass) then ()
   else if pass <> confirm then
     fail ctx (I18n.t "account/passwords-do-not-match")
   else
@@ -252,6 +305,7 @@ let reset_submit ctx user =
   and pass = field_value "password"
   and confirm = field_value "confirm-password" in
   if code = "" || pass = "" then ()
+  else if not (validate_password ctx pass) then ()
   else if pass <> confirm then
     fail ctx (I18n.t "account/passwords-do-not-match")
   else
@@ -283,49 +337,11 @@ let confirm_submit ctx user _next_step =
         Js.Promise.resolve ())
 
 let sign_out ctx =
-  Platform.local_storage_remove "id-token";
-  Platform.local_storage_remove "access-token";
-  Platform.local_storage_remove "refresh-token";
-  ignore
-    (Runtime.invoke1 "thread-api/sync-app-state"
-       (Wire.Map
-          [ (Wire.kw "auth/id-token", Wire.String "")
-          ; (Wire.kw "auth/access-token", Wire.String "")
-          ; (Wire.kw "auth/refresh-token", Wire.String "")
-          ]));
+  Rtc_flows.sign_out ();
   set_auth ctx (fun _ -> { tab = Login; err = ""; session_user = None })
 
-external atob_ : string -> string = "atob" [@@mel.scope "window"]
-
-(* id-token payload is the middle base64url segment; its
-   cognito:username claim is the signed-in user *)
-let session_username () =
-  match Platform.local_storage_get "id-token" with
-  | None -> None
-  | Some tok -> (
-      match String.split_on_char '.' tok with
-      | [ _; payload; _ ] -> (
-          let b64 =
-            String.map
-              (fun c -> match c with '-' -> '+' | '_' -> '/' | c -> c)
-              payload
-          in
-          let pad =
-            match String.length b64 mod 4 with
-            | 2 -> "==" | 3 -> "=" | _ -> ""
-          in
-          try
-            match Js.Json.decodeObject (Js.Json.parseExn (atob_ (b64 ^ pad))) with
-            | Some o -> (
-                match Js.Dict.get o "cognito:username" with
-                | Some v -> Js.Json.decodeString v
-                | None -> (
-                    match Js.Dict.get o "username" with
-                    | Some v -> Js.Json.decodeString v
-                    | None -> None))
-            | None -> None
-          with _ -> None)
-      | _ -> None)
+(* cljs user.cljs username — the id-token's cognito:username claim *)
+let session_username = Rtc_flows.username
 
 let input_row ~key ~id ~name ~type_ ~label ~autocomplete ?(autofocus = false) () =
   dom ~key ~style_class:"relative w-full flex flex-col gap-3 pb-1"
@@ -494,8 +510,16 @@ let panel ctx (a : auth_ui) : t =
        ~text:title []
      :: (if a.err = "" then []
          else
+           (* cljs shui/alert {:variant :destructive :class "mb-4"} +
+              alert-description *)
            [ dom ~key:"err" ~tag:"div"
-               ~style_class:"ui__alert ls-login-error" ~text:a.err [] ])
+               ~style_class:
+                 "ui__alert relative w-full rounded-lg border p-4 mb-4"
+               ~attrs:[ ("variant", "destructive") ]
+               [ dom ~key:"err-d" ~tag:"div"
+                   ~style_class:
+                     "ui__alert-description text-sm [&_p]:leading-relaxed"
+                   ~text:a.err [] ] ])
      @ inner)
 
 let body (_ms : Model.t Signal.signal) : t =
