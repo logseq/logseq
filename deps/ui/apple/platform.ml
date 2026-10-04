@@ -369,6 +369,7 @@ let copy_to_clipboard s = request_host "clipboard-write" s
 (* ---------- misc ---------- *)
 
 let decode_uri = Uri.pct_decode
+let encode_uri_component s = Uri.pct_encode ~component:`Query_value s
 let js_escape s = s
 let utf8 s = s (* OCaml strings are already UTF-8 bytes *)
 

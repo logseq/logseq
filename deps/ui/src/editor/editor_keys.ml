@@ -48,8 +48,32 @@ let shortcut_key ev =
   | "%" -> "5" | "^" -> "6" | "&" -> "7" | "*" -> "8" | "(" -> "9"
   | ")" -> "0" | k -> k
 
+(* route through the hash so the router runs its full pipeline —
+   Navigate_to + load_route + history. A bare Navigate_to commit skips
+   the fetch (empty Journals/All-pages) and loses the history entry *)
+let encode_uri_component = Platform.encode_uri_component
+
 let nav r =
-  Runtime.send (Action.Navigate_to r);
+  let h =
+    match r with
+    | Model.Home -> "#/"
+    | Model.Journals -> "#/all-journals"
+    | Model.All_pages -> "#/all-pages"
+    | Model.All_graphs -> "#/graphs"
+    | Model.Graph_view -> "#/graph"
+    | Model.Settings -> "#/settings"
+    | Model.Import -> "#/import"
+    | Model.Page t -> "#/page/" ^ encode_uri_component t
+    | Model.Block_zoom u -> "#/block/" ^ u
+    | Model.Library -> "#/page/Library"
+    | Model.Not_found _ -> ""
+  in
+  if h <> "" then (
+    Runtime.mark_nav ();
+    Platform.set_location_hash (Runtime.nav_hash h);
+    (* an identical hash fires no hashchange — still let resolve run so
+       the same-route refresh path loads data *)
+    Platform.dispatch "ls:navigate" Js.Json.null);
   true
 
 (* dispatch through the shared command table (cljs :shortcut handler
@@ -75,9 +99,8 @@ let journal_delta d =
       ~month:(float_of_int ((base / 100) mod 100 - 1))
       ~date:(float_of_int (base mod 100)) ()
   in
-  Runtime.send
-    (Action.Navigate_to
-       (Model.Page (Dates.journal_title_of (Dates.add_days dt d))))
+  ignore
+    (nav (Model.Page (Dates.journal_title_of (Dates.add_days dt d))))
 
 (* cljs :separate two-key sequences — prefix held for 1.5 s *)
 let seq_pending : (string * float) option ref = ref None
@@ -270,7 +293,7 @@ let link_at_caret buf pos =
 let follow_link el ~sidebar =
   match link_at_caret (D.el_value el) (D.el_selection_start el) with
   | Some (`Page t) ->
-      if not sidebar then Runtime.send (Action.Navigate_to (Model.Page t))
+      if not sidebar then ignore (nav (Model.Page t))
       (* sidebar open needs the page uuid; the page-by-title worker
          lookup isn't there yet — plain open only *)
   | Some (`Uuid u) ->
@@ -278,7 +301,7 @@ let follow_link el ~sidebar =
         match !Sidebar_state.st_ref with
         | Some sst -> Sidebar_state.open_uuid sst u
         | None -> ())
-      else Runtime.send (Action.Navigate_to (Model.Block_zoom u))
+      else ignore (nav (Model.Block_zoom u))
   | Some (`Url u) -> Browser_ui.open_url u
   | None -> ()
 
@@ -597,7 +620,7 @@ let on_normal_key ev =
              edit mode — cljs editor/zoom-out only applies while a block
              is being edited (handled above) *)
           D.prevent_default ev;
-          Runtime.send (Action.Navigate_to Model.Settings)
+          ignore (nav Model.Settings)
       | "z" when mods ev ->
           D.prevent_default ev;
           if shift then A.redo () else A.undo ()

@@ -183,6 +183,8 @@ let on_document_event name f = add_document_listener name f
 
 external decode_uri : string -> string = "decodeURIComponent"
 
+external encode_uri_component : string -> string = "encodeURIComponent"
+
 external js_escape : string -> string = "escape"
 
 (* OCaml source literals hold UTF-8 bytes; Melange hands them to JS as a
