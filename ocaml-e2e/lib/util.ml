@@ -54,7 +54,9 @@ let exit_edit env =
           | Some _ -> Keyboard.esc env
           | None -> Js.Promise.resolve ())
    | None -> Js.Promise.resolve ())
-  |> Js.Promise.then_ (fun () -> E2e_assert.non_editor_mode env)
+  |> Js.Promise.then_ (fun () ->
+         let* _ = E2e_assert.non_editor_mode env in
+         Js.Promise.resolve ())
 
 let double_esc env =
   let popups =
@@ -138,6 +140,15 @@ let get_edit_content env =
   match editor with
   | Some e -> Js.Promise.then_ (fun v -> Js.Promise.resolve (Some v)) (Pw.input_value_l e)
   | None -> Js.Promise.resolve None
+
+(** [edit_content]: the focused editor's value as a plain string — clj's
+    [(util/get-edit-content)] = [(.inputValue (util/get-editor))], which fails
+    when no editor is open. *)
+let edit_content env =
+  let* editor = get_editor env in
+  match editor with
+  | Some e -> Pw.input_value_l e
+  | None -> Js.Promise.reject (Failure "edit_content: no editor open")
 
 (** waits until the editing textarea's content equals [expected] *)
 let wait_edit_content env expected =
@@ -244,3 +255,36 @@ let set_tag ?(hidden = false) env tag =
 let query_last env q = Playwright.locator_last (Pw.q env q)
 
 let get_by_text env text exact = Pw.get_by_text env ~exact text
+
+(** [String.contains] is not enough for substrings; melange lacks [Str]. *)
+let contains_sub haystack needle =
+  let n = String.length needle and h = String.length haystack in
+  if n = 0 then true
+  else
+    let rec go i =
+      i + n <= h
+      && (String.sub haystack i n = needle || go (i + 1))
+    in
+    go 0
+
+external crypto_random_uuid : unit -> string = "randomUUID"
+  [@@mel.scope "crypto"]
+
+let random_uuid = crypto_random_uuid
+
+let clipboard_text env = Pw.eval_js env "navigator.clipboard.readText()"
+
+let clipboard_write env text =
+  let* _ = Pw.eval_js_arg env "text => navigator.clipboard.writeText(text)" text in
+  Js.Promise.resolve ()
+
+let is_mac () = [%raw "process.platform === 'darwin'"]
+
+(** [is_main name] is true when the file [name] (e.g. "test_editor_basic.js")
+    was loaded as node --test's entry point rather than `require`d by another
+    test module. Test files that also export reusable scenario functions guard
+    their [Fest.Promise.test] registrations with it so importing modules does
+    not re-register tests. *)
+let is_main (name : string) : bool =
+  let argv1 : string = [%raw "process.argv[1] || ''"] in
+  Filename.check_suffix argv1 name

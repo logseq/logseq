@@ -16,7 +16,8 @@ let sub_first loc selector = Playwright.locator_first (sub loc selector)
 (* {2 Actions} *)
 
 let click env selector = Playwright.click (q env selector)
-let click_l ?button ?timeout loc = Playwright.click ?button ?timeout loc
+let click_l ?button ?timeout ?modifiers loc =
+  Playwright.click ?button ?timeout ?modifiers loc
 let click_right env selector = click_l ~button:"right" (q env selector)
 let dblclick env selector = Playwright.dblclick (q env selector)
 let fill env selector value = Playwright.fill (q env selector) value
@@ -66,6 +67,7 @@ let bounding_xy_l loc =
 let navigate env url = Playwright.goto (page env) url
 let refresh env = Playwright.reload (page env)
 let go_back env = Playwright.go_back (page env)
+let go_forward env = Playwright.go_forward (page env)
 let url env = Playwright.page_url (page env)
 let wait_timeout env ms = Playwright.wait_for_timeout (page env) ms
 
@@ -95,7 +97,27 @@ let get_by_role env ?name role = Playwright.get_by_role ?name (page env) role
 (* {2 JS evaluation} *)
 
 let eval_js env js = Playwright.evaluate (page env) js
-let eval_js_arg env js arg = Playwright.evaluate_arg (page env) js arg
+
+external json_stringify : 'a -> string = "stringify" [@@mel.scope "JSON"]
+
+(** Playwright's [evaluate] never invokes a string that merely evaluates to a
+    function, even when an arg is passed — wally's [eval-js] semantics are
+    recovered by inlining the JSON-encoded arg: [(fn)(arg)]. *)
+let eval_js_arg env js arg =
+  let call =
+    Printf.sprintf "(%s)(%s)" js (json_stringify arg)
+  in
+  Playwright.evaluate (page env) call
+
+(** [eval_on_element env selector js]: [js] is an element function body like
+    [wally]'s [eval-js] on a locator — e.g. ["element => element.id"]. Locator
+    [evaluate] never invokes a function string (it serializes the function
+    object itself, returning undefined), so we evaluate at page level against
+    the first element matching [selector]. *)
+let eval_on_element env selector js =
+  eval_js_arg env
+    (Printf.sprintf "sel => { const element = document.querySelector(sel); return (%s)(element); }" js)
+    selector
 
 (* {2 Misc} *)
 
@@ -143,3 +165,6 @@ let find_one_by_text env selector text =
       else go (i + 1)
   in
   go 0
+
+let drag_to ?target_x ?target_y ?steps source_l target_l =
+  Playwright.drag_to ?target_x ?target_y ?steps source_l target_l

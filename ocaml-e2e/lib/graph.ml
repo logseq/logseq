@@ -160,7 +160,7 @@ let validate_graph env =
   let* () = Pw.wait_for env ~timeout:30000. success_toast in
   let* () =
     Pw.eval_js env
-      "() => document.querySelectorAll('.ui__toast.success button')\
-       .forEach((button) => button.click())"
+      "(() => document.querySelectorAll('.ui__toast.success button')\
+       .forEach((button) => button.click()))()"
   in
   Js.Promise.resolve { valid = true }
