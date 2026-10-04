@@ -992,6 +992,24 @@ let sanitize_pending_tx_refs ?uuid_exists ?(attr_live = fun _ -> true)
     | _ -> None
   in
   let is_missing_ref w = missing_uuid_of w <> None in
+  (* e-position key -> page ref: a block/parent ref whose target was
+     remotely deleted falls back to the page root — the same endpoint
+     the semantic replay's ancestor fallback converges on. The page ref
+     is taken from a sibling block/page add in this very tx so the
+     entity key form (tempid string vs lookup-ref) always matches. *)
+  let page_ref_of : (string, Wire.t) Hashtbl.t = Hashtbl.create 8 in
+  List.iter
+    (fun item ->
+       match item with
+       | Wire.Array (op :: e :: a :: v :: _)
+       | Wire.List (op :: e :: a :: v :: _)
+         when op = kw "db/add" && a = kw "block/page"
+              && not (is_missing_ref v) ->
+           let k = Transit_codec.to_string e in
+           if not (Hashtbl.mem page_ref_of k) then
+             Hashtbl.replace page_ref_of k v
+       | _ -> ())
+    tx_data;
   List.filter_map
     (fun item ->
        match item with
@@ -1014,6 +1032,27 @@ let sanitize_pending_tx_refs ?uuid_exists ?(attr_live = fun _ -> true)
                if dead_property_attr then None
                else (
                  match a with
+                 | Wire.Keyword "block/parent" when is_missing_ref v -> (
+                     match
+                       Hashtbl.find_opt page_ref_of
+                         (Transit_codec.to_string e)
+                     with
+                     | Some pv -> (
+                         match item with
+                         | Wire.Array l ->
+                             Some
+                               (Wire.Array
+                                  (List.mapi
+                                     (fun i x -> if i = 3 then pv else x)
+                                     l))
+                         | Wire.List l ->
+                             Some
+                               (Wire.List
+                                  (List.mapi
+                                     (fun i x -> if i = 3 then pv else x)
+                                     l))
+                         | _ -> Some item)
+                     | None -> None)
                  | Wire.Keyword a'
                    when ref_attr db a' && is_missing_ref v -> None
                  | _ -> Some item))
@@ -2427,11 +2466,26 @@ let transact_remote_txs ?(display_db : db option) (conn : conn)
           | Some xs -> tx_items_of xs
           | None -> []
         in
+        (* cljs sanitize-tx-entry flags keyed on the entry's outliner-op —
+           remote delete/fix ops must cascade the same way they did on the
+           server or descendants diverge *)
+        let remote_op =
+          match Wire.get "outliner-op" remote_tx with
+          | Some (Wire.Keyword s) -> s
+          | _ -> ""
+        in
+        let remote_delete_op =
+          remote_op = "delete-blocks" || remote_op = "delete-page"
+        in
         let tx_data =
           raw_tx_data
           |> fun items ->
              List.map Ds_wire.value_of_transit items
              |> Db_sync_tx_sanitize.sanitize_tx db
+                  ~drop_missing_retract_ops:
+                    (remote_delete_op || remote_op = "fix")
+                  ~drop_ops_targeting_retracted_entities:remote_delete_op
+                  ~retract_touched_descendants:remote_delete_op
              |> List.map Ds_wire.transit_of_value
           |> rewrite_missing_uuid_refs ?display_db db
           |> List.map (resolve_temp_id db)
@@ -2560,6 +2614,16 @@ let replay_pending_entry (repo : string) (conn : conn)
             (fun (r : tx_report) -> r.tx_data)
             (List.rev !reports)
         in
+        if datoms = [] && ops <> [] then
+          (* every canonical op re-executed to nothing — validation
+             rejected them on the new base (e.g. a move whose resolved
+             target is now inside the moved subtree). Without a failure
+             the stale verbatim .tx would still upload and confirm,
+             applying exactly what the rebase rejected *)
+          invalid_rebase_op (kw "replay-no-effect")
+            (Wire.Map
+               [ kw "tx-id", Wire.String local_tx.tx_id
+               ; kw "reason", kw "ops-produced-no-datoms" ]);
         if datoms <> [] then
           let resolved =
             normalize_tx_data (Conn.db conn) db_before_apply datoms
@@ -2607,6 +2671,10 @@ let replay_pending_txs repo (conn : conn)
   if pending = [] then 0
   else begin
     let failed = ref 0 in
+    (* nested replay (a failed entry's mark_failed rebuilds and replays
+       again) must not clear the flag for the outer pass — a leaked
+       false would let replay txs re-enter the client-ops queue *)
+    let prev_replay = !Sync_state.pending_replay in
     Sync_state.pending_replay := true;
     let pending_attrs = pending_property_attrs pending in
     (try
@@ -2626,9 +2694,9 @@ let replay_pending_txs repo (conn : conn)
               ignore (mark_failed_txs repo [ local_tx.tx_id ]))
          pending
      with e ->
-       Sync_state.pending_replay := false;
+       Sync_state.pending_replay := prev_replay;
        raise e);
-    Sync_state.pending_replay := false;
+    Sync_state.pending_replay := prev_replay;
     !failed
   end
 
@@ -2747,6 +2815,16 @@ let confirm_pending_txs repo (tx_ids : string list) : unit =
                        | Some display -> attr_resolves (Conn.db display) a
                        | None -> true)
                  in
+                 (* cljs sanitize-tx-entry: the server applies the same
+                    sanitize with flags derived from the entry's
+                    outliner-op — mirror them here so the server conn
+                    ends with what the server accepted *)
+                 let delete_op =
+                   match local_tx.outliner_op with
+                   | Some ("delete-blocks" | "delete-page") -> true
+                   | _ -> false
+                 in
+                 let fix_op = local_tx.outliner_op = Some "fix" in
                  let tx_data =
                    (try
                       sanitize_pending_tx_refs ~uuid_exists ~attr_live db
@@ -2756,6 +2834,9 @@ let confirm_pending_txs repo (tx_ids : string list) : unit =
                    |> fun items ->
                       List.map Ds_wire.value_of_transit items
                       |> Db_sync_tx_sanitize.sanitize_tx db
+                           ~drop_missing_retract_ops:(delete_op || fix_op)
+                           ~drop_ops_targeting_retracted_entities:delete_op
+                           ~retract_touched_descendants:delete_op
                       |> List.map Ds_wire.transit_of_value
                  in
                  if tx_data <> [] then
