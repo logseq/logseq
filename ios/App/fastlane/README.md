@@ -15,6 +15,14 @@ For _fastlane_ installation instructions, see [Installing _fastlane_](https://do
 
 ## iOS
 
+### ios certificates
+
+```sh
+[bundle exec] fastlane ios certificates
+```
+
+Renew and sync App Store signing credentials using the Apple account password
+
 ### ios beta
 
 ```sh

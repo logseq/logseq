@@ -400,7 +400,49 @@ let test_recur_replace_uuid_in_block_title () =
          (Regexp.test Db_content.id_ref_re result);
        check "recur-replace max-depth stops"
          (not (contains_sub ~sub:"Too Deep" result))
-   | None -> check "recur-replace max-depth" false)
+   | None -> check "recur-replace max-depth" false);
+  let b =
+    content_entity ~block_title:(Printf.sprintf "see ((%s))" uuid_a)
+      ~block_refs:[ uuid_a ]
+      ~entities:[ uuid_a, "Target block", [] ]
+  in
+  check "recur-replace leaves ((uuid)) alone"
+    (Db_content.recur_replace_uuid_in_block_title b
+     = Some (Printf.sprintf "see ((%s))" uuid_a))
+
+(* recur-replace-uuid-in-block-title-db-test — resolves [[uuid]] from db
+   when :block/refs is missing. *)
+let test_recur_replace_uuid_in_block_title_db () =
+  let conn = create_conn () in
+  let target_uuid = "44444444-4444-4444-4444-444444444444" in
+  let ref_uuid = "55555555-5555-5555-5555-555555555555" in
+  let page_uuid = "66666666-6666-6666-6666-666666666666" in
+  ignore
+    (transact_conn_string conn
+       (Printf.sprintf
+          "[{:db/id -1 :block/name \"p1\" :block/title \"p1\" :block/uuid #uuid \"%s\"}
+            {:db/id -2 :block/title \"Target block\" :block/uuid #uuid \"%s\" :block/page -1 :block/parent -1 :block/order \"a\"}
+            {:db/id -3 :block/title \"see [[%s]]\" :block/uuid #uuid \"%s\" :block/page -1 :block/parent -1 :block/order \"b\"}]"
+          page_uuid target_uuid target_uuid ref_uuid));
+  let db = db_of conn in
+  match
+    find_block_by_content db (Printf.sprintf "see [[%s]]" target_uuid)
+  with
+  | None -> check "ref block exists" false
+  | Some b ->
+      check "resolves [[uuid]] from db when :block/refs is missing"
+        (Db_content.recur_replace_uuid_in_block_title b
+         = Some "see [[Target block]]")
+
+(* get-matched-ids-test — extracts [[uuid]] node refs only; ((uuid)) is
+   unsupported. *)
+let test_get_matched_ids () =
+  let uuid_a = "11111111-1111-1111-1111-111111111111" in
+  let uuid_b = "22222222-2222-2222-2222-222222222222" in
+  check "get-matched-ids extracts [[uuid]] only"
+    (Db_content.get_matched_ids
+       (Printf.sprintf "a ((%s)) b [[%s]]" uuid_a uuid_b)
+     = [ uuid_b ])
 
 (* (deftest replace-tags-with-page-refs ...) — cljs passes extracted ref
    maps; OCaml takes the (attr * value) pair lists directly. *)
@@ -1285,6 +1327,8 @@ let cases : unit Alcotest.test_case list =
     Alcotest.test_case "sort-properties" `Quick test_sort_properties;
     Alcotest.test_case "asset-entity-validator" `Quick test_asset_entity_validator;
     Alcotest.test_case "recur-replace-uuid-in-block-title-test" `Quick test_recur_replace_uuid_in_block_title;
+    Alcotest.test_case "recur-replace-uuid-in-block-title-db-test" `Quick test_recur_replace_uuid_in_block_title_db;
+    Alcotest.test_case "get-matched-ids-test" `Quick test_get_matched_ids;
     Alcotest.test_case "replace-tags-with-page-refs" `Quick test_replace_tags_with_page_refs;
     Alcotest.test_case "title-ref->id-ref" `Quick test_title_ref_to_id_ref;
     Alcotest.test_case "reaction-entity-valid" `Quick test_reaction_entity_valid;

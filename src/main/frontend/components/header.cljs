@@ -483,8 +483,11 @@
   (let [page (db-hooks/use-block page-uuid)
         breadcrumb-data (db-hooks/use-resource [:block-breadcrumb page-uuid 16])
         page-with-breadcrumb (when (and page breadcrumb-data)
-                               (assoc page :block.temp/breadcrumb
-                                      (breadcrumb-model/resource-ancestors breadcrumb-data)))]
+                               (assoc page
+                                      :block.temp/breadcrumb
+                                      (breadcrumb-model/resource-ancestors breadcrumb-data)
+                                      :block.temp/breadcrumb-ref-titles
+                                      (:ref-titles breadcrumb-data)))]
     (when (and page-with-breadcrumb
                (entity/page? page-with-breadcrumb)
                (:block/parent page-with-breadcrumb))

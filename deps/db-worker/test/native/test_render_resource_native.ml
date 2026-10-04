@@ -1216,6 +1216,125 @@ let test_block_breadcrumb_resource_includes_ref_titles () =
    | Some (Wire.String "Updated title") -> check "updated ref title" true
    | _ -> check "updated ref title" false)
 
+(* block-breadcrumb-resource-resolves-title-only-uuid-refs-test *)
+let test_block_breadcrumb_resource_resolves_title_only_uuid_refs () =
+  let conn, u = render_resource_fixture () in
+  let leaf_uuid = next_uuid () in
+  let inner_uuid = next_uuid () in
+  let parent_uuid = next_uuid () in
+  let nested_parent_uuid = next_uuid () in
+  let target_uuid = next_uuid () in
+  tx conn
+    (Printf.sprintf
+       "[{:db/id -110 :block/uuid %s :block/tx-id 21 :block/title \"foo\"}
+         {:db/id -111 :block/uuid %s :block/tx-id 21 :block/title \"[[%s]] bar\" :block/refs -110}
+         {:db/id -112 :block/uuid %s :block/tx-id 21 :block/title \"[[[[%s]] bar]] nested\" :block/page %s :block/parent %s :block/order \"n0\" :block/refs -111}
+         {:db/id -113 :block/uuid %s :block/tx-id 21 :block/title \"[[%s]] deeper\" :block/page %s :block/parent -112 :block/order \"n1\" :block/refs -111}
+         {:db/id -114 :block/uuid %s :block/tx-id 21 :block/title \"Target\" :block/page %s :block/parent -113 :block/order \"n2\"}]"
+       (quid leaf_uuid) (quid inner_uuid) leaf_uuid (quid parent_uuid)
+       leaf_uuid (uref (u "page")) (uref (u "page"))
+       (quid nested_parent_uuid) inner_uuid (uref (u "page"))
+       (quid target_uuid) (uref (u "page")));
+  let db = db_of conn in
+  let resource_key =
+    wkey [ kw "block-breadcrumb"; wu target_uuid; Wire.Int 16 ]
+  in
+  let target_block =
+    Option.get
+      (Datascript.entity db (Lookup_ref ("block/uuid", Uuid target_uuid)))
+  in
+  let ancestors =
+    Block_breadcrumb.block_breadcrumb ~depth:16 db
+      (Entity_view.of_entity target_block)
+  in
+  let expected =
+    Wire.Map
+      [ kw "target-uuid", wu target_uuid
+      ; ( kw "ancestor-uuids"
+        , Wire.Array
+            [ wu (u "page"); wu parent_uuid; wu nested_parent_uuid ] )
+      ; kw "ancestors", crumbs_wire ancestors
+      ; ( kw "ref-titles"
+        , Wire.Map
+            [ wu leaf_uuid, Wire.String "foo"
+            ; wu inner_uuid, Wire.String (Printf.sprintf "[[%s]] bar" leaf_uuid) ] ) ]
+  in
+  assert_resource_envelope db resource_key
+    [ wkey [ kw "entity"; wu target_uuid ]
+    ; wkey [ kw "entity"; wu (u "page") ]
+    ; wkey [ kw "entity"; wu parent_uuid ]
+    ; wkey [ kw "entity"; wu nested_parent_uuid ]
+    ; wkey [ kw "entity"; wu leaf_uuid ]
+    ; wkey [ kw "entity"; wu inner_uuid ] ]
+    expected (call_resource db resource_key)
+
+(* block-breadcrumb-resource-resolves-uuids-inside-ref-titles-test *)
+let test_block_breadcrumb_resource_resolves_uuids_inside_ref_titles () =
+  let conn, u = render_resource_fixture () in
+  let leaf_uuid = next_uuid () in
+  let ref_uuid = next_uuid () in
+  let ancestor_uuid = next_uuid () in
+  let target_uuid = next_uuid () in
+  tx conn
+    (Printf.sprintf
+       "[{:db/id -110 :block/uuid %s :block/tx-id 21 :block/title \"foo\"}
+         {:db/id -111 :block/uuid %s :block/tx-id 21 :block/title \"[[%s]] bar\" :block/refs -110}
+         {:db/id -112 :block/uuid %s :block/tx-id 21 :block/title \"[[%s]] nested\" :block/page %s :block/parent %s :block/order \"n0\" :block/refs -111}
+         {:db/id -113 :block/uuid %s :block/tx-id 21 :block/title \"Target\" :block/page %s :block/parent -112 :block/order \"n1\"}]"
+       (quid leaf_uuid) (quid ref_uuid) leaf_uuid (quid ancestor_uuid)
+       ref_uuid (uref (u "page")) (uref (u "page")) (quid target_uuid)
+       (uref (u "page")));
+  let db = db_of conn in
+  let resource_key =
+    wkey [ kw "block-breadcrumb"; wu target_uuid; Wire.Int 16 ]
+  in
+  let target_block =
+    Option.get
+      (Datascript.entity db (Lookup_ref ("block/uuid", Uuid target_uuid)))
+  in
+  let ancestors =
+    Block_breadcrumb.block_breadcrumb ~depth:16 db
+      (Entity_view.of_entity target_block)
+  in
+  let expected =
+    Wire.Map
+      [ kw "target-uuid", wu target_uuid
+      ; ( kw "ancestor-uuids"
+        , Wire.Array [ wu (u "page"); wu ancestor_uuid ] )
+      ; kw "ancestors", crumbs_wire ancestors
+      ; ( kw "ref-titles"
+        , Wire.Map
+            [ wu leaf_uuid, Wire.String "foo"
+            ; wu ref_uuid, Wire.String (Printf.sprintf "[[%s]] bar" leaf_uuid) ] ) ]
+  in
+  assert_resource_envelope db resource_key
+    [ wkey [ kw "entity"; wu target_uuid ]
+    ; wkey [ kw "entity"; wu (u "page") ]
+    ; wkey [ kw "entity"; wu ancestor_uuid ]
+    ; wkey [ kw "entity"; wu leaf_uuid ]
+    ; wkey [ kw "entity"; wu ref_uuid ] ]
+    expected (call_resource db resource_key)
+
+(* page-identity-resource-resolves-names-containing-uuid-refs-test *)
+let test_page_identity_resource_resolves_names_containing_uuid_refs () =
+  let conn = seeded_conn () in
+  let leaf_uuid = next_uuid () in
+  let inner_uuid = next_uuid () in
+  (* nested page-ref names keep their inner ref uuid-substituted:
+     "[[foo]] bar" is stored as "[[<leaf-uuid>]] bar". *)
+  tx conn
+    (Printf.sprintf
+       "[{:db/id -1 :block/uuid %s :block/tx-id 1 :block/title \"foo\" :block/name \"foo\"}
+         {:db/id -2 :block/uuid %s :block/tx-id 1 :block/title \"[[%s]] bar\" :block/name \"[[%s]] bar\" :block/refs -1}]"
+       (quid leaf_uuid) (quid inner_uuid) leaf_uuid leaf_uuid);
+  let db = db_of conn in
+  let name = Printf.sprintf "[[%s]] bar" leaf_uuid in
+  let resource_key = wkey [ kw "page-identity"; Wire.String name ] in
+  assert_resource_envelope db resource_key
+    [ wkey [ kw "page-lookup"; Wire.String name ] ]
+    (wu inner_uuid)
+    (call_resource db resource_key)
+
 (* block-breadcrumb-resource-returns-empty-payload-for-missing-blocks-test *)
 let test_block_breadcrumb_resource_returns_empty_payload_for_missing () =
   let conn, _ = render_resource_fixture () in
@@ -3423,6 +3542,12 @@ let cases : unit Alcotest.test_case list =
       test_block_breadcrumb_resource_honors_requested_depth
   ; Alcotest.test_case "block-breadcrumb-resource-includes-ref-titles-and-exact-watch-keys-test" `Quick
       test_block_breadcrumb_resource_includes_ref_titles
+  ; Alcotest.test_case "block-breadcrumb-resource-resolves-title-only-uuid-refs-test" `Quick
+      test_block_breadcrumb_resource_resolves_title_only_uuid_refs
+  ; Alcotest.test_case "block-breadcrumb-resource-resolves-uuids-inside-ref-titles-test" `Quick
+      test_block_breadcrumb_resource_resolves_uuids_inside_ref_titles
+  ; Alcotest.test_case "page-identity-resource-resolves-names-containing-uuid-refs-test" `Quick
+      test_page_identity_resource_resolves_names_containing_uuid_refs
   ; Alcotest.test_case "block-breadcrumb-resource-returns-empty-payload-for-missing-blocks-test" `Quick
       test_block_breadcrumb_resource_returns_empty_payload_for_missing
   ; Alcotest.test_case "block-breadcrumb-keeps-root-first-order-when-zoomed-into-nested-page-block-test" `Quick

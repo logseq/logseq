@@ -16,6 +16,27 @@
 default_platform(:ios)
 
 platform :ios do
+  desc "Renew and sync App Store signing credentials using the Apple account password"
+  lane :certificates do
+    credential_variables = %w[
+      SIGH_API_KEY SIGH_API_KEY_PATH
+      APP_STORE_CONNECT_API_KEY APP_STORE_CONNECT_API_KEY_PATH
+      FASTLANE_PASSWORD FASTLANE_DONT_STORE_PASSWORD
+    ]
+    previous_credentials = credential_variables.to_h { |name| [name, ENV[name]] }
+
+    begin
+      credential_variables.each { |name| ENV.delete(name) }
+      ENV["FASTLANE_PASSWORD"] = UI.password("Apple account password for dev@logseq.com: ")
+      UI.user_error!("Password must not be empty") if ENV["FASTLANE_PASSWORD"].to_s.empty?
+      ENV["FASTLANE_DONT_STORE_PASSWORD"] = "1"
+
+      sync_code_signing(type: "appstore", readonly: false)
+    ensure
+      previous_credentials.each { |name, value| ENV[name] = value }
+    end
+  end
+
   desc "Push a new beta build to TestFlight"
   lane :beta do
     setup_ci
@@ -28,8 +49,7 @@ platform :ios do
 
     sync_code_signing(
       type: "appstore",
-      readonly: false,
-      renew_expired_certs: true
+      readonly: is_ci
     )
 
     version_number = get_version_number(
