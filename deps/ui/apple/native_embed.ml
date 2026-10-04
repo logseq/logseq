@@ -282,6 +282,7 @@ let perf_mark name t0 =
   then Printf.eprintf "[perf] %s %.1fms\n%!" name (perf_ms () -. t0)
 
 let initialize platform_code host_code (_payload : string) : string =
+  Printexc.record_backtrace true;
   Queue.clear pending_batches;
   let os =
     match platform_code with

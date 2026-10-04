@@ -582,6 +582,11 @@ final class NSReferenceBox {
       + ",\"ctrlKey\":\(flags.contains(.control))"
       + ",\"shiftKey\":\(flags.contains(.shift))"
       + ",\"altKey\":\(flags.contains(.option))}"
+    if LogseqRuntime.perfLogging {
+      FileHandle.standardError.write(
+        "PERF keydown t=\(CFAbsoluteTimeGetCurrent()) key=\(key)\n"
+          .data(using: .utf8)!)
+    }
     runtime?.sendPlatformEvent(name: "keydown", json: json)
   }
 

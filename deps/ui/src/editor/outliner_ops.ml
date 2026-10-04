@@ -962,6 +962,10 @@ let delta_helpers (page : Model.page) : Page_delta.helpers =
 let apply_queued _page delta =
   let deltas = Page_delta.drain_deferred () @ [ delta ] in
   let touched = List.concat_map Page_delta.delta_uuids deltas in
+  let perf =
+    match Sys.getenv_opt "LOGSEQ_PERF" with Some _ -> true | None -> false
+  in
+  let ms () = Platform.date_now_ms () in
   (* fold and publish inside the apply queue so a racing arm can't
      interleave between our splice and our publish — canon rows replace
      block fields wholesale, so a stale arm publishing last would blank
@@ -973,9 +977,13 @@ let apply_queued _page delta =
           let rec go page = function
             | [] -> Js.Promise.resolve (Some page)
             | d :: rest -> (
+                let t0 = ms () in
                 let* applied =
                   Page_delta.apply_to_page ~strict:false h page d
                 in
+                if perf then
+                  Printf.eprintf "[perf] op.apply_to_page %.1fms\n%!"
+                    (ms () -. t0);
                 match applied with
                 | Page_delta.Applied page' -> go page' rest
                 | Page_delta.Unchanged -> go page rest
@@ -989,7 +997,10 @@ let apply_queued _page delta =
                   (match !Runtime.current_page with
                    | Some c -> c == base
                    | None -> false) ->
-               Runtime.send (Action.Page_loaded p')
+               let t0 = ms () in
+               Runtime.send (Action.Page_loaded p');
+               if perf then
+                 Printf.eprintf "[perf] op.send %.1fms\n%!" (ms () -. t0)
            | _ -> ());
           Js.Promise.resolve (a, touched))
       | None -> Js.Promise.resolve (None, touched))

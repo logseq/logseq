@@ -75,6 +75,31 @@ let clear_pending_deltas () =
   pending_deltas := [];
   pending_unknown_delta := false
 
+let perf_enabled =
+  lazy (match Sys.getenv_opt "LOGSEQ_PERF" with Some _ -> true | None -> false)
+
+let perf_time name f =
+  if Lazy.force perf_enabled
+  then begin
+    let t0 = Platform.date_now_ms () in
+    let r = f () in
+    Printf.eprintf "[perf] subs.%s %.1fms\n%!" name
+      (Platform.date_now_ms () -. t0);
+    r
+  end
+  else f ()
+
+let perf_time_p name p =
+  if Lazy.force perf_enabled
+  then begin
+    let t0 = Platform.date_now_ms () in
+    let* r = p in
+    Printf.eprintf "[perf] subs.%s %.1fms\n%!" name
+      (Platform.date_now_ms () -. t0);
+    Js.Promise.resolve r
+  end
+  else p
+
 let rec schedule_reload () =
   reload_last_ms := Platform.date_now_ms ();
   if !reload_first_ms = 0.0 then reload_first_ms := !reload_last_ms;
@@ -110,8 +135,8 @@ and apply_pending () : unit Js.Promise.t =
   let unknown = !pending_unknown_delta in
   clear_pending_deltas ();
   let finish () =
-    h.after_apply ();
-    Subs_state.run_sync_subs ()
+    perf_time "after_apply" h.after_apply;
+    perf_time "sync_subs" Subs_state.run_sync_subs
   in
   (* sync subs (sidebar recents/favorites, views queries, embed
      refresh) are graph-wide — a delta that touches no mounted page can
@@ -138,8 +163,9 @@ and apply_pending () : unit Js.Promise.t =
                   | [] -> Js.Promise.resolve (Page_delta.Applied p)
                   | d :: rest -> (
                       let* applied =
-                        Page_delta.apply_to_page ~strict:true
-                          (h.helpers_of p) p d
+                        perf_time_p "apply_to_page"
+                          (Page_delta.apply_to_page ~strict:true
+                             (h.helpers_of p) p d)
                       in
                       match applied with
                       | Page_delta.Applied p' -> fold p' rest
@@ -154,8 +180,9 @@ and apply_pending () : unit Js.Promise.t =
                         (match !Subs_state.current_page with
                          | Some c -> c == base
                          | None -> false) ->
-                     h.publish_page p';
-                     h.refresh_page_side p'
+                     perf_time "publish_page" (fun () -> h.publish_page p');
+                     perf_time "refresh_side" (fun () ->
+                         h.refresh_page_side p')
                  | _ -> ());
                 Js.Promise.resolve m)
             | None -> Js.Promise.resolve Page_delta.Failed)

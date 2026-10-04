@@ -256,7 +256,8 @@ let emit_event name payload =
                             then
                               try dh.dh_fn name (Some payload_str)
                               with e ->
-                                Printf.eprintf "DBG dh THREW id=%d ev=%s: %s\n%!"
+                                Printf.eprintf
+                                  "[emit_event] handler threw id=%d ev=%s: %s\n%!"
                                   id name (Printexc.to_string e))
                           dhs
                     | None -> ());
@@ -275,7 +276,7 @@ let emit_event name payload =
         (fun f ->
           try f payload
           with e ->
-            Printf.eprintf "DBG listener THREW ev=%s: %s\n%!" name
+            Printf.eprintf "[emit_event] listener threw ev=%s: %s\n%!" name
               (Printexc.to_string e))
         fns
   | None -> ()
