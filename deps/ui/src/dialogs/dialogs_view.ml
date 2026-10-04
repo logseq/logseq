@@ -64,6 +64,7 @@ let label_of = function
   | "settings" -> Some "app-settings"
   | "plugins" -> Some "plugins-dashboard"
   | "plugin-readme" -> Some "plugin-readme"
+  | "login" -> Some "user-login"
   | _ -> None
 let dialog_view name (ms : Model.t Signal.signal) : t =
   let is_settings = name = "settings" in
@@ -214,7 +215,27 @@ let render (ms : Model.t Signal.signal) : t =
     [ keyed ~source:dialogs_sig ~key:(fun n -> n) ~cmp:String.compare
         ~mount:(fun name_sig ->
           (* name is stable per key — sample once *)
-          dialog_view (Signal.get name_sig) ms)
+          let v = dialog_view (Signal.get name_sig) ms in
+          (* radix Dialog focuses the dialog's [autofocus] element on open
+             when it has one, else the close button *)
+          (try
+             ignore
+               (Browser_ui.set_timeout
+                  (fun () ->
+                    match
+                      Browser_ui.qs ".ui__dialog-content [autofocus]"
+                    with
+                    | Some el -> Browser_ui.focus el
+                    | None -> (
+                        match
+                          Browser_ui.qs
+                            ".ui__dialog-content .ui__dialog-close"
+                        with
+                        | Some el -> Browser_ui.focus el
+                        | None -> ()))
+                  16)
+           with _ -> ());
+          v)
     ; dyn ~equal:( == ) (fun c ->
           match c with
           | Some c -> confirm_view c
