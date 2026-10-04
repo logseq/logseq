@@ -34,7 +34,23 @@ let journals_sig scheduler : Model.page array Signal.state =
 
 let push_journals_items (js : Model.page list) =
   match !journals_items with
-  | Some s -> Signal.set s (Array.of_list js)
+  | Some s ->
+      let arr = Array.of_list js in
+      (* a delta splice republishes the whole journals list on every op,
+         but the stream only needs a top-level set when the day sequence
+         itself changes (pagination append, removal); a spliced day's
+         blocks reach the mounted item through journal_page_sig. A full
+         republish forces the dyn over the array to rebuild every item
+         descriptor, ~20-35ms per outliner op. *)
+      let old = Signal.get_state s in
+      let same_seq =
+        Array.length old = Array.length arr
+        && List.for_all2
+             (fun (a : Model.page) (b : Model.page) ->
+               journal_item_key a = journal_item_key b)
+             (Array.to_list old) (Array.to_list arr)
+      in
+      if not same_seq then Signal.set s arr
   | None -> ()
 
 (* items signals for mounted virtual lists — a spliced block array is

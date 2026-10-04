@@ -1083,7 +1083,32 @@ let is_today_page (m : Model.t) (page : Model.page) : bool =
   | Some d -> d = Dates.today_journal_day () && m.route <> Model.Home
   | None -> false
 
-let journal_item_inner (m : Model.t) (p : Model.page) : t =
+(* delta splices produce a fresh page record whose page_blocks changed;
+   the item shell only re-mounts when non-block fields change, while rows
+   repaint through the keyed collection — an outliner op on one row no
+   longer rebuilds the whole day *)
+let journal_meta_equal (a : Model.page) (b : Model.page) : bool =
+  a.page_title = b.page_title
+  && a.page_uuid = b.page_uuid
+  && a.page_db_id = b.page_db_id
+  && a.page_is_tag = b.page_is_tag
+  && a.page_is_property = b.page_is_property
+  && a.page_icon = b.page_icon
+  && a.page_journal_day = b.page_journal_day
+  && a.page_is_library = b.page_is_library
+  && a.page_internal = b.page_internal
+  && a.page_built_in = b.page_built_in
+  && a.page_add_object = b.page_add_object
+  && a.page_tags = b.page_tags
+  && a.page_tag_idents = b.page_tag_idents
+  && a.page_tag_uuids = b.page_tag_uuids
+  && a.page_tag_db_ids = b.page_tag_db_ids
+  && a.page_linked_refs == b.page_linked_refs
+  && a.page_parents == b.page_parents
+  && a.page_db_collapsable = b.page_db_collapsable
+
+let journal_item_inner (m : Model.t)
+    ~(blocks_sig : Model.block list Signal.signal) (p : Model.page) : t =
   let key = Runtime.journal_item_key p in
   dom ~key:("jiw-" ^ key)
         ~style_class:
@@ -1096,9 +1121,14 @@ let journal_item_inner (m : Model.t) (p : Model.page) : t =
             ; Properties_area.bidi_area p
             ; (* cljs journals: the day inner block list is eager — only
                  the outer days list is windowed (:virtualize? is set on
-                 the standalone page route only) *)
-              blocks_inner ?puuid:p.page_uuid ~virtualize:false
-                ~container:false p.page_blocks
+                 the standalone page route only). Every row stays mounted
+                 (keyed, not windowed) so a splice republishes only the
+                 touched rows. *)
+              dom ~key:"blw" ~style_class:"blocks-list-wrap"
+                ~attrs:[ ("data-level", "0") ]
+                [ Logseq_dom.keyed ~source:blocks_sig ~key:Tree.block_key
+                    ~cmp:String.compare
+                    ~mount:(Tree.block_row_sig ~scope:"main") ]
             ]
         ; dom ~key:("jrefs-w-" ^ key) ~style_class:"flex flex-col gap-8 ml-1"
             (* cljs journal-page: #today-queries div on the today item,
@@ -1125,9 +1155,14 @@ let journal_item ?(last = false) (m : Model.t) (p : Model.page) : t =
            only that day remounts; the outer journals list (and other
            days' DOM) survives *)
         let p_sig = Runtime.journal_page_sig ctx.Lui_ui.ui_scheduler p in
-        (Logseq_dom.dyn
-           ~equal:(fun (a : Model.page) b -> a == b)
-           (fun (p' : Model.page) -> journal_item_inner m p')
+        let blocks_sig =
+          Signal.map
+            (fun (p' : Model.page) -> p'.page_blocks)
+            (Signal.value p_sig)
+        in
+        (Logseq_dom.dyn ~equal:journal_meta_equal
+           (fun (p' : Model.page) ->
+             journal_item_inner m ~blocks_sig p')
            (Signal.value p_sig))
           ctx parent)
     ]
