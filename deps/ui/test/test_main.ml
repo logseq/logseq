@@ -3864,17 +3864,13 @@ let test_props_value () =
   check "parse_date pad" (Properties_value.parse_date "2026-9-27" = None);
   check "ms_of_value int" (Properties_value.ms_of_value (Wire.Int 5) = Some 5.);
   check "ms_of_value no" (Properties_value.ms_of_value (Wire.String "x") = None);
-  (* journal-day map -> utc midnight of that day *)
-  let ms =
-    Properties_value.ms_of_datetime_value
-      (wmap [ ("block/journal-day", Wire.Int 20260927) ])
-  in
-  check "ms_of_datetime_value journal-day"
-    (ms = Some (Js.Date.utc ~year:2026. ~month:8. ~date:27. ()));
-  check "ms_of_datetime_value raw"
-    (Properties_value.ms_of_datetime_value (Wire.Int 9) = Some 9.);
-  check "ms_of_datetime_value none"
-    (Properties_value.ms_of_datetime_value (wmap []) = None)
+  (* journal-day map -> the day itself, no tz round-trip *)
+  check "ymd_of_datetime_value journal-day"
+    (Properties_value.ymd_of_datetime_value
+       (wmap [ ("block/journal-day", Wire.Int 20260927) ])
+    = Some (2026, 9, 27));
+  check "ymd_of_datetime_value none"
+    (Properties_value.ymd_of_datetime_value (wmap []) = None)
 
 let test_props_value2 () =
   let mkchoice classes =

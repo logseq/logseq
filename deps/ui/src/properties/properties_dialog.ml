@@ -606,6 +606,13 @@ and render_value_edit d body prop =
                in
                close_dlg d;
                Js.Promise.resolve ()))
+      else if ty = "string" || ty = "json" then
+        (* non-ref scalar types validate value_is_string — set the raw
+           string, no value block *)
+        Some
+          (fun text ->
+            write_prop_value d prop (Some (W.String text));
+            close_dlg d)
       else
         Some
           (fun text ->

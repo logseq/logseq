@@ -129,6 +129,14 @@ let commit_or_cancel ctx row value =
       match Float.of_string_opt (String.trim value) with
       | Some n -> set_scalar ctx ~ident ~value:(W.Float n)
       | None -> ())
+  | "string" | "json" ->
+      (* non-ref scalar types: set/remove the raw string — no value
+         block (cljs single-string-input) *)
+      if String.trim value = "" then (
+        D.remove_block_property ~block_uuid:ctx.block_uuid ~ident
+        |> ignore;
+        S.refresh_all ())
+      else set_scalar ctx ~ident ~value:(W.String value)
   | _ -> save_text_value ctx row value;
   ctx.refresh ()
 
@@ -343,7 +351,7 @@ let text_cell ctx row =
              cell))
       (D.value_elems value);
   on_click cell (fun _ ->
-      edit_text_cell ~steal:true ctx row cell (D.ref_title value));
+      edit_text_cell ~steal:true ctx row cell (D.value_display value));
   cell
 
 (* ---------- number ---------- *)
@@ -473,14 +481,8 @@ let ms_of_value = function
 
 (* datetime cell: .ls-datetime > span.inline-flex > a.page-ref "Today" —
    cljs datetime-value markup *)
-let datetime_content cell ms =
-  let y, m, d = ymd_of_ms ms in
-  let title =
-    Dates.journal_title_of
-      (Js.Date.fromFloat
-         (Js.Date.utc ~year:(float y) ~month:(float (m - 1))
-            ~date:(float d) ()))
-  in
+let datetime_content cell ~y ~m ~d =
+  let title = Dates.journal_title_ymd ~y ~m ~d in
   let wrap = mk ~cls:"ls-datetime" "div" in
   let inner = mk ~cls:"inline-flex" "span" in
   let a =
@@ -494,25 +496,23 @@ let datetime_content cell ms =
   el_append_child cell wrap
 
 (* datetime values arrive as journal-page ref summaries — the day is
-   block/journal-day (yyyymmdd); fall back to a raw ms number *)
-let ms_of_datetime_value (v : W.t) : float option =
+   block/journal-day (yyyymmdd); fall back to a raw ms number. The
+   journal day must render as-is: routing it through a UTC-ms epoch
+   and local getters would shift the day in timezones behind UTC *)
+let ymd_of_datetime_value (v : W.t) : (int * int * int) option =
   match ms_of_value v with
-  | Some ms -> Some ms
+  | Some ms -> Some (ymd_of_ms ms)
   | None -> (
       match W.get v "block/journal-day" with
-      | Some (W.Int d) ->
-          let y = d / 10000 and m = d mod 10000 / 100 and dd = d mod 100 in
-          Some
-            (Js.Date.utc ~year:(float y) ~month:(float (m - 1))
-               ~date:(float dd) ())
+      | Some (W.Int d) -> Some (d / 10000, d mod 10000 / 100, d mod 100)
       | _ -> None)
 
 let date_cell ctx row =
   let value = D.row_value row in
   let cell = mk ~cls:"jtrigger" "div" in
   if not (D.value_empty_p value) then
-    (match D.row_type row = "datetime", ms_of_datetime_value value with
-     | true, Some ms -> datetime_content cell ms
+    (match D.row_type row = "datetime", ymd_of_datetime_value value with
+     | true, Some (y, m, d) -> datetime_content cell ~y ~m ~d
      | _ -> el_set_text cell (D.value_display value));
   on_click cell (fun _ -> date_picker ctx row cell);
   cell

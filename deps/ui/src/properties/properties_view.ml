@@ -48,12 +48,24 @@ let on_keydown ev =
           Dialog.open_for_current ())
         else last_semi := t
     | "p" when not (is_editable_target (ev_target ev)) ->
-        last_p := Js.Date.now ()
+        (* a second p inside the window completes the p p sequence *)
+        if Js.Date.now () -. !last_p < 800.0 then (
+          last_p := 0.0;
+          Dialog.open_for_current ())
+        else last_p := Js.Date.now ()
     | "a" when not (is_editable_target (ev_target ev)) ->
         if Js.Date.now () -. !last_p < 800.0 then (
           last_p := 0.0;
           S.toggle_hidden ();
           S.refresh_all ())
+    (* cljs p t/d/s/p/i selection-mode sequences open the property
+       sheet on the current target *)
+    | ("t" | "d" | "s" | "i") as k
+      when not (is_editable_target (ev_target ev)) ->
+        if Js.Date.now () -. !last_p < 800.0 then (
+          last_p := 0.0;
+          ignore k;
+          Dialog.open_for_current ())
     | _ -> ()
 
 (* ---------- install ---------- *)

@@ -381,17 +381,14 @@ let day_diff ~y ~m ~d =
   int_of_float ((t1 -. t0) /. 86400000. +. 0.5)
 
 let date_label y m d =
-  let dt =
-    Js.Date.fromFloat (Js.Date.utc ~year:(float y) ~month:(float (m - 1)) ~date:(float d) ())
-  in
   match day_diff ~y ~m ~d with
   | 0 -> "Today"
   | -1 -> "Yesterday"
   | 1 -> "Tomorrow"
-  | _ -> Dates.journal_title_of dt
+  | _ -> Dates.journal_title_ymd ~y ~m ~d
 
 let datetime_el ~y ~m ~d =
-  let title = Dates.journal_title_of (Js.Date.fromFloat (Js.Date.utc ~year:(float y) ~month:(float (m - 1)) ~date:(float d) ())) in
+  let title = Dates.journal_title_ymd ~y ~m ~d in
   D.el ~tag:"span" ~style_class:"ls-datetime flex flex-row gap-1 items-center"
     [ D.el ~tag:"a" ~style_class:"relative page-ref"
         ~attrs:[ ("data-ref", String.lowercase_ascii title); ("tabindex", "0") ]
