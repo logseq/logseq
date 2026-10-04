@@ -177,6 +177,12 @@ let on_page_loaded uuid f = after_page_load := Some (uuid, f)
    section being open *)
 let unlinked_open = ref true
 
+(* root element of the editor's inline popup (date picker / link form),
+   mounted under <body> by editor_commands — exposed here so
+   Popups_state can hit-test it without an Editor_commands dependency
+   (which would cycle through Cmdk_state) *)
+let editor_popup_root : Editor_dom.el option ref = ref None
+
 let track action =
   match action with
   | Action.Boot_graph_ready repo ->

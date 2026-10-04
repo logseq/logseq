@@ -101,6 +101,11 @@ let open_signal () =
   | Some vs -> Some (Signal.map (fun v -> v.open_) vs)
   | None -> None
 
+let is_open () =
+  match open_signal () with
+  | Some s -> Signal.get s
+  | None -> false
+
 (* View-derived flags are baked into every item and group at publish
    time so keyed rows never subscribe the view signal themselves: a row
    removed mid-flush would otherwise re-mount its branch and emit DOM

@@ -64,6 +64,11 @@ let close_overlays () =
 
 let overlay_open () = !overlays <> []
 
+(* hit-test against mounted overlay roots — registered state, no
+   selector list *)
+let overlay_contains el =
+  List.exists (fun o -> el_contains o.el el) !overlays
+
 (* Escape pops the top overlay; the global keydown handler installs this. *)
 let handle_escape () =
   if overlay_open () then (pop_overlay (); true) else false

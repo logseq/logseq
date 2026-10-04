@@ -205,6 +205,29 @@ let ac_open () =
   | Some t -> (get t).ac <> None
   | None -> false
 
+(* THE "is the pointer over popup UI" check — hit-tests mounted roots
+   rather than enumerating selector lists: every popup mounts either
+   inside the .cp__overlays chrome container (ac/cm/pv, cmdk, dialogs,
+   toasts, page menu) or registers a body-level root it owns
+   (Properties_state overlays, Editor_commands inline popups) *)
+let inside el =
+  Editor_dom.el_closest el ".cp__overlays" <> None
+  || Properties_state.overlay_contains el
+  ||
+  (match !Runtime.editor_popup_root with
+   | Some root -> Editor_dom.el_contains root el
+   | None -> false)
+
+(* whether any popup layer is up, for code paths that only need the
+   boolean (the per-layer popup_signal above drives reactive chrome) *)
+let any_open () =
+  (match popup_signal () with
+   | Some s -> Signal.get s
+   | None -> false)
+  || Cmdk_state.is_open ()
+  || Properties_state.overlay_open ()
+  || !Runtime.editor_popup_root <> None
+
 (* popup bound to the block currently being edited (unanchored popups
    like cmdk-spawned search count as attached too) *)
 let ac_attached () =

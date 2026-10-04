@@ -1104,17 +1104,9 @@ let on_mousedown ev =
     with
     | Some _ -> ()
     | None -> (
-            (* .cp__overlays hosts the cmdk/autocomplete/context-menu popups;
-               .ui__popover-content/.ls-context-menu-content cover anchored
-               property popups and cmdk/dialog portals mount outside the
-               overlays container under body *)
-            match
-              D.closest_sel
-                ".cp__overlays, .cp__cmdk__modal, .ui__popover-content, .ls-context-menu-content, #date-time-picker, .ls-editor-link-form"
-                (D.ev_target ev)
-            with
-        | Some _ -> ()
-        | None ->
+        match D.ev_target ev with
+        | Some el when Popups_state.inside el -> ()
+        | _ ->
             if Editor_commands.click_guard (D.ev_target ev) then ()
             else A.schedule_blur_commit ())
 
