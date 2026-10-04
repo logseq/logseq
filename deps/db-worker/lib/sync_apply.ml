@@ -2844,24 +2844,19 @@ let replay_pending_txs repo (conn : conn)
     !failed
   end
 
-(* Display conns share the server conn's storage for lazy index reads but
-   can never persist: the wrapper no-ops the store entry points, so
-   pending data only ever lives in memory. *)
-let display_storage (db : db) : storage option =
-  Option.map
-    (fun (s : storage) ->
-       (* reads stay live — shared index pages are the point — but the
-          projection may never write or delete durable rows *)
-       { s with storage_store = (fun _ -> ())
-              ; storage_delete = (fun _ -> ()) })
-    db.storage_ref
+(* Display conns read shared index pages through each PSet's own
+   set_storage (a read path independent of db.storage_ref), so the db's
+   storage_ref must be None: any conn-level store path — transact/apply_report
+   tail compaction, batch_transact's reset_schema epilogue, conn_from_db —
+   would run context.store, which writes pending-mixed index nodes into the
+   real durable pages via the set's own storage (a no-op storage wrapper
+   cannot intercept that write) and re-adopts the indexes as deferred roots
+   over phantom addresses. *)
+let display_db_from_server (server_db : db) : db =
+  { server_db with storage_ref = None }
 
 let display_conn_from_server (server_db : db) : conn =
-  Datascript.conn_from_db
-    { server_db with storage_ref = display_storage server_db }
-
-let display_db_from_server (server_db : db) : db =
-  { server_db with storage_ref = display_storage server_db }
+  Datascript.conn_from_db (display_db_from_server server_db)
 
 (* Rebinds the display projection onto the server conn's confirmed state
    and replays pending ops forward. jump_tx_data carries the datoms the
