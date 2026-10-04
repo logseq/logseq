@@ -48,6 +48,290 @@ let shortcut_key ev =
   | "%" -> "5" | "^" -> "6" | "&" -> "7" | "*" -> "8" | "(" -> "9"
   | ")" -> "0" | k -> k
 
+let nav r =
+  Runtime.send (Action.Navigate_to r);
+  true
+
+(* dispatch through the shared command table (cljs :shortcut handler
+   :f functions) so palette and keymap stay on one code path *)
+let run_cid cid =
+  match Cmdk_state.shortcut_action cid with
+  | Some f -> f ()
+  | None -> ()
+
+(* journal day nav: g n / g p move relative to the journal page being
+   viewed, falling back to today when the current route isn't a journal *)
+let journal_delta d =
+  let base =
+    match !Runtime.current_page with
+    | Some p -> (
+        match p.Model.page_journal_day with
+        | Some day -> day
+        | None -> Dates.today_journal_day ())
+    | None -> Dates.today_journal_day ()
+  in
+  let dt =
+    Js.Date.make ~year:(float_of_int (base / 10000))
+      ~month:(float_of_int ((base / 100) mod 100 - 1))
+      ~date:(float_of_int (base mod 100)) ()
+  in
+  Runtime.send
+    (Action.Navigate_to
+       (Model.Page (Dates.journal_title_of (Dates.add_days dt d))))
+
+(* cljs :separate two-key sequences — prefix held for 1.5 s *)
+let seq_pending : (string * float) option ref = ref None
+let seq_window_ms = 1500.
+
+let seq_second prefix key =
+  match (prefix, key) with
+  | "g", "a" -> nav Model.All_pages
+  | "g", "G" -> nav Model.All_graphs
+  | "g", "g" -> nav Model.Graph_view
+  | "g", "h" -> nav Model.Home
+  | "g", "j" -> nav Model.Journals
+  | "g", "s" ->
+      Settings_state.request_tab "keymap";
+      Dialogs_state.open_ "settings";
+      true
+  | "g", "f" -> Sidebar_state.open_cards (); true
+  | "g", "n" -> journal_delta 1; true
+  | "g", "p" -> journal_delta (-1); true
+  | "g", "t" ->
+      nav
+        (Model.Page
+           (Dates.journal_title_of (Dates.add_days (Dates.date_now ()) 1)))
+  | "t", "l" -> Runtime.send Action.Toggle_left_sidebar; true
+  | "t", "r" -> Runtime.send Action.Toggle_right_sidebar; true
+  | "t", "s" -> nav Model.Settings
+  | "t", "t" -> Settings_view.toggle_theme (); true
+  | "t", "w" -> Settings_state.toggle_wide_mode (); true
+  | "t", "o" -> A.toggle_open_blocks (); true
+  | "t", "b" ->
+      Settings_state.config_toggle "ui/show-brackets?" ~default:true;
+      true
+  | "t", "n" ->
+      List.iter (fun u -> Editor_commands.toggle_own_list u 0)
+        (A.selected_uuids ());
+      true
+  | "t", "c" -> Sidebar_state.open_cards (); true
+  | "p", ("d" | "i" | "p" | "s" | "r" | "t") ->
+      (* cljs opens the property picker pre-focused on the named
+         property; the dialog exposes the same editors *)
+      (match A.selected_uuids () with
+       | u :: _ -> Properties_dialog.open_for_block u
+       | [] -> ());
+      true
+  | "p", "a" -> run_cid "editor/toggle-display-hidden-properties"; true
+  | "c", "c" -> run_cid "ui/customize-appearance"; true
+  | "c", "t" -> run_cid "sidebar/close-top"; true
+  | _ -> false
+
+let seq_prefix ev key =
+  match key with
+  | ("g" | "t" | "p" | "c") when not (D.ev_shift ev) ->
+      seq_pending := Some (key, Platform.date_now_ms ());
+      D.prevent_default ev;
+      true
+  | _ -> false
+
+(* returns true when the key was consumed as a sequence prefix or
+   second key; only plain single chars participate *)
+let seq_key ev =
+  let key = D.ev_key ev in
+  if mods ev || D.ev_alt ev || String.length key <> 1 then (
+    seq_pending := None;
+    false)
+  else
+    match !seq_pending with
+    | Some (prefix, t0) ->
+        seq_pending := None;
+        if
+          Platform.date_now_ms () -. t0 <= seq_window_ms
+          && seq_second prefix key
+        then (
+          D.prevent_default ev;
+          true)
+        else seq_prefix ev key
+    | None -> seq_prefix ev key
+
+(* global chords (cljs #global-prevent-default): fire in every mode —
+   editing, selection, popups aside — before the editing/normal split *)
+let global_chord ev =
+  let shift = D.ev_shift ev and alt = D.ev_alt ev in
+  let meta = D.ev_meta ev in
+  match shortcut_key ev with
+  | "k" when meta && not shift ->
+      D.prevent_default ev;
+      Cmdk_state.open_latest ();
+      true
+  | "p" when meta && shift ->
+      D.prevent_default ev;
+      Cmdk_state.open_latest ();
+      true
+  | "m" when meta && shift ->
+      D.prevent_default ev;
+      Cmdk_state.open_latest ~move:true ();
+      true
+  | "p" when meta ->
+      D.prevent_default ev;
+      (match A.selected_uuids () with
+       | u :: _ -> Properties_dialog.open_for_block u
+       | [] -> Properties_dialog.open_for_current ());
+      true
+  | "[" when meta ->
+      D.prevent_default ev;
+      Platform.history_back ();
+      true
+  | "]" when meta ->
+      D.prevent_default ev;
+      Platform.history_forward ();
+      true
+  | "f" when meta && shift -> run_cid "page/toggle-favorite"; true
+  | "g" when alt && shift && not meta ->
+      nav Model.All_graphs
+  | "c" when alt && shift && not meta ->
+      run_cid "ui/toggle-contents";
+      true
+  | _ -> false
+
+(* editor/follow-link: the link construct around the caret — [[title]],
+   ((uuid)), [text](url) or a bare http(s):// token *)
+let link_at_caret buf pos =
+  let n = String.length buf in
+  let index_from pat from =
+    let pl = String.length pat in
+    let rec go i =
+      if i + pl > n then -1
+      else if String.sub buf i pl = pat then i
+      else go (i + 1)
+    in
+    if from > n then -1 else go (max from 0)
+  in
+  let rindex pat from =
+    let pl = String.length pat in
+    let rec go i =
+      if i < 0 then -1
+      else if String.sub buf i pl = pat then i
+      else go (i - 1)
+    in
+    go (min from (n - pl))
+  in
+  (* inner text of the nearest open..close pair bracketing the caret *)
+  let between openp closep =
+    match rindex openp pos with
+    | o when o < 0 -> None
+    | o -> (
+        let c = index_from closep (o + String.length openp) in
+        if c >= 0 && pos <= c + String.length closep then
+          Some
+            (String.trim
+               (String.sub buf (o + String.length openp)
+                  (c - o - String.length openp)))
+        else None)
+  in
+  match between "[[" "]]" with
+  | Some t when t <> "" -> Some (`Page t)
+  | _ -> (
+      match between "((" "))" with
+      | Some u when u <> "" -> Some (`Uuid u)
+      | _ -> (
+          let md =
+            match rindex "[" pos with
+            | o when o < 0 -> None
+            | o -> (
+                let p_open = index_from "](" o in
+                if p_open >= 0 && pos <= index_from ")" p_open + 1 then
+                  let c = index_from ")" (p_open + 2) in
+                  if c >= 0 then
+                    Some (String.sub buf (p_open + 2) (c - p_open - 2))
+                  else None
+                else None)
+          in
+          match md with
+          | Some u when u <> "" -> Some (`Url u)
+          | _ -> (
+              let is_break c = c = ' ' || c = '\n' || c = '\t' in
+              let l = ref pos and r = ref pos in
+              while !l > 0 && not (is_break buf.[!l - 1]) do
+                decr l
+              done;
+              while !r < n && not (is_break buf.[!r]) do
+                incr r
+              done;
+              let tok = String.sub buf !l (!r - !l) in
+              if
+                String.length tok > 8
+                && (String.sub tok 0 7 = "http://"
+                   || String.sub tok 0 8 = "https://")
+              then Some (`Url tok)
+              else None)))
+
+let follow_link el ~sidebar =
+  match link_at_caret (D.el_value el) (D.el_selection_start el) with
+  | Some (`Page t) ->
+      if not sidebar then Runtime.send (Action.Navigate_to (Model.Page t))
+      (* sidebar open needs the page uuid; the page-by-title worker
+         lookup isn't there yet — plain open only *)
+  | Some (`Uuid u) ->
+      if sidebar then (
+        match !Sidebar_state.st_ref with
+        | Some sst -> Sidebar_state.open_uuid sst u
+        | None -> ())
+      else Runtime.send (Action.Navigate_to (Model.Block_zoom u))
+  | Some (`Url u) -> Browser_ui.open_url u
+  | None -> ()
+
+(* kill-ring style ops work on the live textarea + synced buffer *)
+let replace_buffer el uuid s pos =
+  D.el_set_value el s;
+  D.el_set_selection_range el pos pos;
+  A.sync_buffer uuid s
+
+let kill_line_before el uuid =
+  let v = D.el_value el and p = D.el_selection_start el in
+  let ls =
+    (try String.rindex_from v (p - 1) '\n' with Not_found -> -1) + 1
+  in
+  replace_buffer el uuid
+    (String.sub v 0 ls ^ String.sub v p (String.length v - p))
+    ls
+
+let kill_word_back el uuid =
+  let v = D.el_value el and p = D.el_selection_start el in
+  let is_sep c = c = ' ' || c = '\n' || c = '\t' in
+  let i = ref p in
+  while !i > 0 && is_sep v.[!i - 1] do
+    decr i
+  done;
+  while !i > 0 && not (is_sep v.[!i - 1]) do
+    decr i
+  done;
+  replace_buffer el uuid
+    (String.sub v 0 !i ^ String.sub v p (String.length v - p))
+    !i
+
+let move_word el dir =
+  let v = D.el_value el in
+  let is_sep c = c = ' ' || c = '\n' || c = '\t' in
+  let i = ref (D.el_selection_start el) in
+  if dir < 0 then (
+    while !i > 0 && is_sep v.[!i - 1] do
+      decr i
+    done;
+    while !i > 0 && not (is_sep v.[!i - 1]) do
+      decr i
+    done)
+  else (
+    let n = String.length v in
+    while !i < n && not (is_sep v.[!i]) do
+      incr i
+    done;
+    while !i < n && is_sep v.[!i] do
+      incr i
+    done);
+  D.el_set_selection_range el !i !i
+
 let perf_keys =
   lazy
     (match Sys.getenv_opt "LOGSEQ_PERF" with Some _ -> true | None -> false)
@@ -138,6 +422,34 @@ let on_editor_key ev uuid el =
           D.el_set_selection_range el (s + 1) (s + 1)))
     | _ -> (
         match shortcut_key ev with
+        (* ctrl edit keys — before the mod cases: mods ⊃ ctrl *)
+        | "l" when D.ev_ctrl ev && not (D.ev_meta ev) ->
+            (* editor/clear-block *)
+            D.prevent_default ev;
+            replace_buffer el uuid "" 0
+        | "u" when D.ev_ctrl ev && not (D.ev_meta ev) ->
+            (* editor/kill-line-before *)
+            D.prevent_default ev;
+            kill_line_before el uuid
+        | "w" when D.ev_ctrl ev && not (D.ev_meta ev) ->
+            (* editor/forward-kill-word — cljs names it forward but it
+               deletes the word behind the caret *)
+            D.prevent_default ev;
+            kill_word_back el uuid
+        | "b" when D.ev_ctrl ev && shift && not (D.ev_meta ev) ->
+            (* editor/backward-word *)
+            D.prevent_default ev;
+            move_word el (-1)
+        | "f" when D.ev_ctrl ev && shift && not (D.ev_meta ev) ->
+            (* editor/forward-word *)
+            D.prevent_default ev;
+            move_word el 1
+        | "n" when D.ev_ctrl ev && not (D.ev_meta ev) ->
+            D.prevent_default ev;
+            A.arrow_nav uuid false
+        | "p" when D.ev_ctrl ev && not (D.ev_meta ev) ->
+            D.prevent_default ev;
+            A.arrow_nav uuid true
         | "z" when mods ev ->
             D.prevent_default ev;
             if shift then A.redo () else A.undo ()
@@ -162,10 +474,30 @@ let on_editor_key ev uuid el =
         | "h" when mods ev && shift ->
             D.prevent_default ev;
             A.wrap_selection uuid "=="
+        | "e" when D.ev_meta ev && shift ->
+            (* editor/copy-embed *)
+            D.prevent_default ev;
+            Platform.copy_to_clipboard
+              (Printf.sprintf "{{embed ((%s))}}" uuid)
         | "e" when D.ev_meta ev -> A.quick_add ()
-        | "." when mods ev && shift ->
+        | "." when D.ev_meta ev ->
+            (* editor/zoom-in: meta+. and meta+shift+. both zoom *)
             D.prevent_default ev;
             A.zoom_to uuid
+        | "a" when D.ev_meta ev && shift ->
+            D.prevent_default ev;
+            A.select_all ()
+        | "a" when D.ev_meta ev ->
+            D.prevent_default ev;
+            A.select_parent ()
+        | "o" when D.ev_meta ev ->
+            D.prevent_default ev;
+            follow_link el ~sidebar:shift
+        | "l" when D.ev_meta ev && not shift ->
+            (* editor/insert-link *)
+            D.prevent_default ev;
+            Editor_commands.open_link_form false uuid
+              (D.el_selection_start el)
         | _ -> ())
 
 (* -- normal-mode keys (block selection) -- *)
@@ -176,10 +508,24 @@ let on_normal_key ev =
   and alt = D.ev_alt ev
   and meta = D.ev_meta ev in
   let selected () = S.selection_active () in
+  if seq_key ev then ()
+  else
   match key with
   | "Backspace" | "Delete" when selected () ->
       D.prevent_default ev;
       A.delete_selection ()
+  | " " when D.ev_ctrl ev ->
+      (* cljs ctrl+space add-comment (block-selection mode) *)
+      D.prevent_default ev;
+      Comments.add_comment ()
+  | "ArrowUp" when alt && not shift ->
+      (* editor/select-block-up *)
+      D.prevent_default ev;
+      A.move_selection_focus true
+  | "ArrowDown" when alt && not shift ->
+      (* editor/select-block-down *)
+      D.prevent_default ev;
+      A.move_selection_focus false
   | "ArrowUp" when (meta || alt) && shift ->
       D.prevent_default ev;
       A.move_blocks_up_down true
@@ -262,6 +608,13 @@ let on_normal_key ev =
           (* cljs mod+e quick-add also fires outside edit mode *)
           D.prevent_default ev;
           A.quick_add ()
+      | "c" when D.ev_meta ev ->
+          (* editor/copy and copy-text share the text-copy path *)
+          D.prevent_default ev;
+          run_cid "editor/copy"
+      | "x" when D.ev_meta ev && not shift ->
+          D.prevent_default ev;
+          run_cid "editor/cut"
       | _ -> ())
 
 (* while an autocomplete popup is open its own document listener
@@ -479,6 +832,7 @@ let on_keydown ev =
     if Editor_commands.popup_key ev then
       (if Lazy.force perf_keys then
          Printf.eprintf "PERF kdown-ate popup_key key=%s\n%!" (D.ev_key ev))
+    else if global_chord ev then ()
     else
       let target = D.ev_target ev in
       (* CodeMirror surfaces (fenced-code editor, query source editor)
