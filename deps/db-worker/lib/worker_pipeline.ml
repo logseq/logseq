@@ -1345,10 +1345,14 @@ let transact_pipeline (tx_report : tx_report) : tx_report =
   let deleted_blocks =
     Outliner_pipeline.filter_deleted_blocks tx_report'.tx_data
   in
-  let deleted_block_ids = List.map fst deleted_blocks in
+  let deleted_block_ids =
+    List.fold_left
+      (fun s (id, _) -> Db_reference.IdSet.add id s)
+      Db_reference.IdSet.empty deleted_blocks
+  in
   let surviving_blocks =
     List.filter
-      (fun (b : entity) -> not (List.mem b.id deleted_block_ids))
+      (fun (b : entity) -> not (Db_reference.IdSet.mem b.id deleted_block_ids))
       blocks
   in
   let block_refs =
@@ -1364,7 +1368,7 @@ let transact_pipeline (tx_report : tx_report) : tx_report =
     List.filter_map
       (fun db_id ->
         if
-          not (List.mem db_id deleted_block_ids)
+          not (Db_reference.IdSet.mem db_id deleted_block_ids)
           && (match entity db_after (Entity_id db_id) with
               | Some e -> Ldb.value e "block/uuid" <> None
               | None -> false)
