@@ -420,6 +420,15 @@ let el_focus (el : el) : unit =
   Host.dom_op "focus"
     (Js.Json.stringify (Js.Json.JObject (ref_pairs el)))
 
+(* Focus by DOM id before the element mounts: the host queues the op per
+   ref id and applies it the moment the textarea registers, so the
+   responder lands on attach instead of a later poll tick. *)
+let focus_dom_id (id : string) : unit =
+  Host.dom_op "focus"
+    (Js.Json.stringify
+       (Js.Json.JObject
+          [ ("ref", Js.Json.JObject [ ("#ref", Js.Json.JString id) ]) ]))
+
 let el_scroll_into_view (el : el) : unit =
   Host.dom_op "scroll-into-view"
     (Js.Json.stringify (Js.Json.JObject (ref_pairs el)))

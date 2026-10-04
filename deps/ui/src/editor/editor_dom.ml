@@ -134,6 +134,13 @@ external el_set_class : el -> string -> unit = "className" [@@mel.set]
 external el_focus : el -> unit = "focus" [@@mel.send]
 external el_scroll_into_view : el -> unit = "scrollIntoView" [@@mel.send]
 
+(* Focus by DOM id; on the web the element either exists (real DOM) or
+   the pending-focus poll picks it up next tick — no host-side queue. *)
+let focus_dom_id (id : string) : unit =
+  match get_element_by_id id with
+  | Some el -> el_focus el
+  | None -> ()
+
 let el_class_add : el -> string -> unit =
   [%mel.raw "function (e, c) { e.classList.add(c) }"]
 

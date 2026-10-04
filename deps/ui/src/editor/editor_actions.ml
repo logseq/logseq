@@ -138,7 +138,16 @@ let rec apply_focus () =
                     | None -> "none"));
               flush stderr;
               retry_focus ())
-      | None -> retry_focus ())
+      | None ->
+          (* emit the focus op by dom id even before the textarea mounts —
+             the host queues it per ref and applies on registration, so
+             responder lands at attach rather than the next poll tick *)
+          let key = "edit-block-" ^ uuid in
+          if Some key <> !last_focus_emitted then begin
+            D.focus_dom_id key;
+            last_focus_emitted := Some key
+          end;
+          retry_focus ())
 
 and retry_focus () =
   incr focus_attempts;
@@ -155,7 +164,7 @@ and retry_focus () =
               top-level key like the nested list had *)
            !(S.scroll_key_into_view) u
        | None -> ());
-    D.set_timeout apply_focus 40
+    D.set_timeout apply_focus 12
   end
   else (
     S.pending_focus := None;
