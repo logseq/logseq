@@ -22,9 +22,11 @@ module Model = struct
   type t =
     { nodes : (int, node) Hashtbl.t
     ; mutable generation : int
+    ; mutable ops_applied : int (* patch ops replayed — repaint-granularity checks *)
     }
 
-  let create () = { nodes = Hashtbl.create 64; generation = 0 }
+  let create () =
+    { nodes = Hashtbl.create 64; generation = 0; ops_applied = 0 }
   let node_count t = Hashtbl.length t.nodes
   let generation t = t.generation
 
@@ -93,6 +95,7 @@ module Model = struct
 
   let apply_batch t (batch : patch_batch) =
     t.generation <- batch.generation;
+    t.ops_applied <- t.ops_applied + List.length batch.ops;
     List.iter (apply_op t) batch.ops
 
   (* ---------- queries ---------- *)

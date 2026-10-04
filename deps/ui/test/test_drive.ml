@@ -659,6 +659,139 @@ let async_checks () =
         (Stub_dom.query_selector_all c ".sticky-columns" <> [])
   | None -> ()
 
+(* ---------------- outliner-op repaint granularity ----------------
+
+   Every outliner op (collapse/indent/outdent/delete/move/title edit)
+   reaches the UI as a delta spliced into the page model and republished
+   via Journals_loaded / Page_loaded. These tests pin row-level repaint:
+   a regression back to whole-day / whole-list remounts blows the patch-
+   op budget (a day remount is hundreds of ops; a row repaint is a
+   handful) and churns untouched rows' node ids. *)
+
+let ops_now () = Drive.Model.((tree ()).ops_applied)
+
+let block_row_ids uuids =
+  List.map
+    (fun u ->
+      match find_block u with Some n -> Some n.M.id | None -> None)
+    uuids
+
+let show_ids ids =
+  String.concat ","
+    (List.map (function Some i -> string_of_int i | None -> "-") ids)
+
+let journal_day ?(uuid = "jd1") blocks : Model.page =
+  { (page blocks) with
+    Model.page_uuid = Some uuid
+  ; page_journal_day = Some 20261004
+  ; page_title = "Oct 4th, 2026" }
+
+let test_journal_splice_row_level () =
+  (* eager journal items: the virt scroller needs real layout, absent
+     in the drive harness *)
+  Stub_dom.set_rtc_test_mode ();
+  send (Action.Navigate_to Model.Home);
+  let b1 = block "j1" "first" in
+  let b2 = block "j2" "parent" ~children:[ block "j2c" "kid" ] in
+  let b3 = block "j3" "third" in
+  let b4 = block "j4" "fourth" in
+  let b5 = block "j5" "fifth" in
+  let b6 = block "j6" "sixth" in
+  let b7 = block "j7" "seventh" in
+  let b8 = block "j8" "eighth" in
+  let day1 = [ b1; b2; b3; b4; b5; b6; b7; b8 ] in
+  send (Action.Journals_loaded [ journal_day day1 ]);
+  flush ();
+  check "journal day rows mounted" (find_block "j8" <> None);
+  let before =
+    block_row_ids [ "j1"; "j2"; "j2c"; "j3"; "j4"; "j5"; "j6"; "j7"; "j8" ]
+  in
+  (* content splice — title/property edits repaint one row only *)
+  let ops0 = ops_now () in
+  send
+    (Action.Journals_loaded
+       [ journal_day
+           (List.map
+              (fun (b : Model.block) ->
+                if b.block_uuid = Some "j3" then
+                  { b with Model.block_title = "third EDITED" }
+                else b)
+              day1) ]);
+  flush ();
+  let content_ops = ops_now () - ops0 in
+  check "journal content splice repaints row-level"
+    (content_ops > 0 && content_ops < 40);
+  eq "content splice keeps row node ids" before
+    (block_row_ids [ "j1"; "j2"; "j2c"; "j3"; "j4"; "j5"; "j6"; "j7"; "j8" ])
+    show_ids;
+  has "text:third EDITED";
+  (* structural splice — delete/indent-out drops a row; survivors keep
+     their mounted rows *)
+  let ops1 = ops_now () in
+  send
+    (Action.Journals_loaded
+       [ journal_day (List.filter (fun (b : Model.block) ->
+                b.block_uuid <> Some "j3") day1) ]);
+  flush ();
+  let remove_ops = ops_now () - ops1 in
+  check "journal structural splice stays bounded"
+    (remove_ops > 0 && remove_ops < 100);
+  check "removed row unmounted" (find_block "j3" = None);
+  eq "untouched rows survive structural splice"
+    (block_row_ids [ "j1"; "j2"; "j2c"; "j4"; "j5"; "j6"; "j7"; "j8" ])
+    (List.filteri (fun i _ -> i <> 3) before)
+    show_ids;
+  (* structural splice — insert a row mid-list (new-block/indent-in) —
+     bounded well under a whole-day remount (~8 rows x ~60 ops) *)
+  let ops2 = ops_now () in
+  send
+    (Action.Journals_loaded
+       [ journal_day
+           [ b1; block "j9" "inserted"; b2; b4; b5; b6; b7; b8 ] ]);
+  flush ();
+  let insert_ops = ops_now () - ops2 in
+  check "journal row-insert splice stays bounded"
+    (insert_ops > 0 && insert_ops < 150);
+  check "inserted row mounted" (find_block "j9" <> None);
+  eq "surrounding rows survive insert splice"
+    (block_row_ids [ "j1"; "j2"; "j2c"; "j4"; "j5"; "j6"; "j7"; "j8" ])
+    (List.filteri (fun i _ -> i <> 3) before)
+    show_ids
+
+let test_page_splice_row_level () =
+  load_test_page ();
+  flush ();
+  check "page rows mounted" (find_block "b2c" <> None);
+  let before = block_row_ids [ "b1"; "b2"; "b2c" ] in
+  let ops0 = ops_now () in
+  send
+    (Action.Page_loaded
+       (page
+          [ block "b1" "First block"
+          ; block "b2" "Parent EDITED"
+              ~children:[ block "b2c" "Child block" ] ]));
+  flush ();
+  let content_ops = ops_now () - ops0 in
+  check "page content splice repaints row-level"
+    (content_ops > 0 && content_ops < 40);
+  eq "page splice keeps row node ids" before
+    (block_row_ids [ "b1"; "b2"; "b2c" ]) show_ids;
+  has "text:Parent EDITED";
+  let ops1 = ops_now () in
+  send
+    (Action.Page_loaded
+       (page
+          [ block "b1" "First block"
+          ; block "b2" "Parent EDITED" ]));
+  flush ();
+  let remove_ops = ops_now () - ops1 in
+  check "page child-removal splice stays bounded"
+    (remove_ops > 0 && remove_ops < 100);
+  check "removed child row unmounted" (find_block "b2c" = None);
+  eq "untouched page rows survive removal splice"
+    (block_row_ids [ "b1"; "b2" ]) [ List.hd before; List.nth before 1 ]
+    show_ids
+
 (* ---------------- runner ---------------- *)
 
 let run ~finish =
@@ -681,6 +814,8 @@ let run ~finish =
   test_not_found ();
   test_views_table ();
   test_render_libs_dom ();
+  test_journal_splice_row_level ();
+  test_page_splice_row_level ();
   (* worker-fed assertions must run after promise microtasks drain --
      the views chain is ~2 ticks per invoke: snapshots -> get-blocks ->
      snapshots(view-data) -> get-blocks -> get-all-properties -> render *)

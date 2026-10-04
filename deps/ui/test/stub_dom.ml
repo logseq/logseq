@@ -549,6 +549,13 @@ let location_obj () =
     ];
   l
 
+(* rtc-test opt-in: Virt_list disables windowing under rtc-test mode
+   (Platform.rtc_test_mode reads location.search) so lists mount eagerly
+   in the drive harness, which has no scroll/layout machinery *)
+let set_rtc_test_mode () : unit =
+  set_field (get_field global "location") "search"
+    (json_of "?rtc-test=true")
+
 let history_obj () =
   let h = Js.Json.object_ (Js.Dict.empty ()) in
   set_field h "pushState" (fun _a _b _c -> ());
