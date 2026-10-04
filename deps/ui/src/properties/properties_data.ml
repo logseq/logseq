@@ -62,7 +62,17 @@ let tag_idents entity =
 (* A row is Map {property-id: kw, property: display-map, value}. *)
 let row_ident row = Option.bind (getf row "property-id") W.as_keyword
 let row_prop row = Option.value ~default:W.Nil (getf row "property")
-let row_value row = Option.value ~default:W.Nil (getf row "value")
+
+(* scalar property values (number/date/datetime/checkbox) arrive as a
+   value-entity map whose scalar lives under logseq.property/value —
+   same unwrap as positioned_rows. Node refs carry block/title instead
+   and pass through. *)
+let row_value row =
+  match getf row "value" with
+  | Some (W.Map _ as m) ->
+      Option.value ~default:m (getf m "logseq.property/value")
+  | Some v -> v
+  | None -> W.Nil
 let row_title row =
   gets (row_prop row) "block/title" |> Option.value ~default:""
 

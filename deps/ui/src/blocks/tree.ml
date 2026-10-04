@@ -314,7 +314,13 @@ let content_el uuid (b : Model.block) : t =
         [ dom ~key:("bh-" ^ uuid) ~style_class:"block-head-wrap"
             (if b.Model.block_is_query then [ Query_builder.block_el uuid b ]
              else
-               [ dom ~key:("bt-" ^ uuid) ~style_class:"inline w-full"
+               (* cljs block-title-aux: the title wrapper is .inline-flex
+                  only for class-Query blocks (title + setting button);
+                  everything else stays .w-full.inline *)
+               [ dom ~key:("bt-" ^ uuid)
+                   ~style_class:
+                     (if Render.is_query_block b then "inline-flex"
+                      else "inline w-full")
                    (Render.title_block ~self:uuid
                       ~resolved:(S.title_for uuid b.block_title)
                       b)
@@ -606,6 +612,10 @@ and row_el ~depth ~editable scope ~(library : bool) (b : Model.block) : t =
     ~style_class_signal:(row_class_sig uuid blank embed b)
     ~attrs_signal_v:(row_attrs_sig ~scope ~depth uuid b)
     [ row_main ~editable ~library scope b
+    ; (* cljs custom-query* — the live query shell sits below
+         .block-main-container, not inside the title row *)
+      (if Render.is_query_block b then Render.query_below_el uuid
+       else Logseq_dom.nothing)
     ; (if has_children && not (Comments.is_comments_area b) then
          children_el ~depth ~editable ~library uuid scope b
        else Logseq_dom.nothing)
@@ -655,6 +665,10 @@ and row_sig ~depth ~editable ~library scope
              let g, i = Render_inline.invalidation () in
              (b, g, i))
            bs (S.signal ()))
+    ; (if Render.is_query_block b0 then
+         Render.query_below_el
+           (Option.value b0.Model.block_uuid ~default:"")
+       else Logseq_dom.nothing)
     ; row_children ~depth ~editable ~library scope bs
     ]
 

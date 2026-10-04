@@ -281,6 +281,46 @@ let query_shell =
         ~attrs:[ ("type", "button"); ("title", I18n.t "block/set-query") ] []
     ]
 
+(* cljs block-title-aux query-setting: class-Query blocks get a ghost
+   settings button next to the title (opacity-0 until the head row is
+   hovered) that toggles the query source editor — the delegated click
+   handler in Views_mount resolves the shell inside the same .ls-block *)
+let query_setting_el =
+  D.el ~key:"qs" ~tag:"button"
+    ~style_class:
+      "ls-query-setting ls-small-icon text-muted-foreground ml-2 w-6 h-6 \
+       transition-opacity ease-in duration-300 opacity-0"
+    ~attrs:[ ("type", "button"); ("title", I18n.t "block/set-query") ]
+    [ Icons.icon ~size:14. "settings" ]
+
+(* cljs cards-block?: logseq.class/Cards tag adds a "Practice" ghost
+   button next to the title that opens the flashcards modal
+   ([:modal/show-cards] -> ls:open-cards) *)
+let practice_el =
+  D.el ~key:"pr" ~tag:"button"
+    ~style_class:"!px-1 text-xs text-muted-foreground"
+    ~attrs:
+      [ ("type", "button"); ("title", I18n.t "block/practice-cards") ]
+    ~events:"click"
+    ~on_dom_event:(fun name _ ->
+      if name = "click" then Platform.dispatch "ls:open-cards" Js.Json.null)
+    [ D.el ~tag:"span" ~text:(I18n.t "block/practice") [] ]
+
+let is_query_block (b : Model.block) =
+  List.mem "logseq.class/Query" b.Model.block_tag_idents
+
+let is_cards_block (b : Model.block) =
+  List.mem "logseq.class/Cards" b.Model.block_tag_idents
+
+(* cljs custom-query*: class-Query blocks render their live query inside
+   .custom-query > .bd > .custom-query-results BELOW .block-main-container
+   (a sibling inside .ls-block); Views_mount.ensure_query_shells mounts
+   the query-result view into it *)
+let query_below_el uuid =
+  D.el ~key:("cq-" ^ uuid) ~tag:"div" ~style_class:"custom-query"
+    [ D.el ~tag:"div" ~style_class:"bd"
+        [ D.el ~tag:"div" ~style_class:"custom-query-results" [] ] ]
+
 (* content for a (possibly quoted) body — headings nest inside quote *)
 let content ?(heading : int option) ?(self = "") ?(wrap_attrs = [])
     ?(prefix : t option = None) s =
@@ -314,9 +354,10 @@ let html_body s =
 
 (* self: uuid of the block whose title this is — seeds the ref chain
    (cljs :ref-set) that suppresses self/cycle references. is_query:
-   query blocks render the .custom-query-results shell instead of
-   inline content (cljs query view). *)
-let title ?heading ?(is_query = false) ?(self = "")
+   class-Query blocks keep their title and append the query-setting
+   ghost button; the live query shell lives below the block row
+   (query_below_el). is_cards: class-Cards blocks append "Practice". *)
+let title ?heading ?(is_query = false) ?(is_cards = false) ?(self = "")
     ?(wrap_attrs = []) ?(prefix : t option = None) (s : string) : t list =
   match html_body s with
   | Some frag -> Render_html.els_of_string frag
@@ -331,16 +372,21 @@ let title ?heading ?(is_query = false) ?(self = "")
           match src_block s with
           | Some (lang, code) -> [ code_block ~self lang code ]
           | None -> (
-              if is_whole_query s || is_query then [ wrap ""; query_shell ]
+              if is_whole_query s then [ wrap ""; query_shell ]
               else
+                let tail =
+                  (if is_query then [ query_setting_el ] else [])
+                  @ if is_cards then [ practice_el ] else []
+                in
                 match ordered_prefix s with
                 | Some (num, rest) ->
                     [ D.el ~key:"rc-typed-list" ~tag:"span"
                         ~style_class:"typed-list"
                         [ D.el ~tag:"label" ~text:num [] ]
                     ; content ?heading ~self ~wrap_attrs ~prefix rest ]
+                    @ tail
                 | None ->
-                    [ content ?heading ~self ~wrap_attrs ~prefix s ])))
+                    [ content ?heading ~self ~wrap_attrs ~prefix s ] @ tail)))
 
 (* display-type/heading aware variant — the block model carries
    logseq.property.node/display-type + logseq.property/heading.
@@ -377,7 +423,7 @@ let title_block ?(self = "") ?resolved ?(annot = false)
                 [ src_eval_el ~code
                     ~uuid:(Option.value b.Model.block_uuid ~default:"") ] ]
       | None ->
-          title ?heading
-            ~is_query:(List.mem "logseq.class/Query" b.Model.block_tag_idents)
-            ~self ~wrap_attrs ~prefix (Option.value resolved ~default:s))
+          title ?heading ~is_query:(is_query_block b)
+            ~is_cards:(is_cards_block b) ~self ~wrap_attrs ~prefix
+            (Option.value resolved ~default:s))
 

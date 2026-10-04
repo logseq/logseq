@@ -4303,6 +4303,19 @@ select.form-select {
   opacity: 1;
 }
 
+/* cljs ls-view-head: count/tabs left, view-actions right on one row
+   (flex flex-1 flex-nowrap items-center justify-between gap-1) */
+.ls-view-head {
+  display: flex;
+  flex: 1 1 0%;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.25rem;
+  overflow: hidden;
+  min-width: 0;
+}
+
 .ls-view-head-left {
   display: flex;
   flex-direction: row;

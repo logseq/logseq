@@ -340,16 +340,33 @@ let text_cell ctx row =
     mk ~cls:"property-block-container content jtrigger" "div"
       ~attrs:[ ("tabindex", "-1") ]
   in
-  if not (D.value_empty_p value) then
+  (* cljs renders the scalar value as a nested ls-block whose own bullet
+     leads the cell — mirror that leading bullet for non-empty rows
+     (empty rows already get .property-panel-bullet from row_el) *)
+  if not (D.value_empty_p value) then (
+    let bc = mk ~cls:"bullet-container" "span" in
+    el_append_child bc (mk ~cls:"bullet" "span");
+    el_append_child cell bc;
     List.iter
       (fun v ->
-        ignore
-          (child_text "span" "block-title-wrap"
-             (match v with
-              | W.String s -> s
-              | other -> D.ref_title other)
-             cell))
-      (D.value_elems value);
+        let text =
+          match v with
+          | W.String s -> s
+          | other -> D.ref_title other
+        in
+        if D.row_type row = "url" && String.length text > 0 then
+          let wrap = mk ~cls:"block-title-wrap" "span" in
+          let a =
+            mk "a"
+              ~cls:"external-link"
+              ~attrs:[ ("target", "_blank"); ("href", text) ]
+          in
+          el_set_text a text;
+          el_append_child wrap a;
+          el_append_child cell wrap
+        else
+          ignore (child_text "span" "block-title-wrap" text cell))
+      (D.value_elems value));
   on_click cell (fun _ ->
       edit_text_cell ~steal:true ctx row cell (D.value_display value));
   cell
@@ -358,7 +375,7 @@ let text_cell ctx row =
 
 let number_cell ctx row =
   let value = D.row_value row in
-  let cell = mk ~cls:"ls-number jtrigger" "div" in
+  let cell = mk ~cls:"ls-number flex flex-1 jtrigger" "div" in
   if not (D.value_empty_p value) then
     el_set_text cell (D.value_display value);
   on_click cell (fun _ ->
@@ -367,27 +384,47 @@ let number_cell ctx row =
 
 (* ---------- checkbox ---------- *)
 
+(* cljs shui/checkbox: label.as-scalar-value-wrap > button.ui__checkbox
+   (+ check svg indicator when checked) *)
 let checkbox_cell ctx row =
   let value = D.row_value row in
   let checked = match value with W.Bool b -> b | _ -> false in
+  let label =
+    mk ~cls:
+      "flex w-full items-center as-scalar-value-wrap cursor-pointer"
+      "label"
+  in
   let btn =
     mk "button"
       ~attrs:
         [ ("role", "checkbox")
         ; ("aria-checked", string_of_bool checked)
+        ; ("tabindex", "0")
         ; ("type", "button")
-        ; ( "style"
-          , "width:16px;height:16px;border:1px solid \
-             var(--border-color,#888);border-radius:3px" )
-        ]
-      ~cls:"jtrigger"
+        ; ("style", "width: 16px; min-width: 16px") ]
+      ~cls:
+        "ui__checkbox peer h-4 w-4 shrink-0 cursor-pointer rounded-sm \
+         border border-primary ring-offset-background \
+         focus-visible:outline-none focus-visible:ring-2 \
+         focus-visible:ring-ring focus-visible:ring-offset-2 \
+         disabled:cursor-not-allowed disabled:opacity-50 \
+         data-[checked]:bg-primary data-[checked]:text-primary-foreground \
+         jtrigger flex flex-row items-center"
   in
-  if checked then el_set_text btn "✓";
-  if checked then el_set_attr btn "data-checked" "true";
+  if checked then (
+    el_set_attr btn "data-checked" "";
+    let ind = mk "span" ~attrs:[ ("data-checked", "") ] in
+    (match tabler_svg_el ~size:16. "check" with
+     | Some svg ->
+         el_set_attr svg "class" "tabler-icon tabler-icon-check h-4 w-4";
+         el_append_child ind svg
+     | None -> ());
+    el_append_child btn ind);
   on_click btn (fun _ ->
       let ident = D.row_ident row |> Option.value ~default:"" in
       set_scalar ctx ~ident ~value:(W.Bool (not checked)));
-  btn
+  el_append_child label btn;
+  label
 
 (* ---------- date / datetime ---------- *)
 
