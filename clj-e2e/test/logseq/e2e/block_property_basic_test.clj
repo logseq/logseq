@@ -286,6 +286,11 @@
         (ls-api-call! :editor.upsertProperty property-name {:type "url"})
         (ls-api-call! :editor.upsertBlockProperty uuid property-name initial-value)
         (is (= initial-value (block-value uuid property-name)))
+        ;; Linked-refs list-view rows mount collapsed; the property panel is
+        ;; only reachable once the row is expanded.
+        (when (w/eval-js (str "() => !!document.querySelector('#ls-block-"
+                              uuid " .block-control .rotating-arrow.collapsed')"))
+          (w/click (loc/filter (format "#ls-block-%s .block-control" uuid))))
         (let [property-row
               (loc/filter (format "#ls-block-%s .property-pair" uuid)
                           :has-text property-name)]
