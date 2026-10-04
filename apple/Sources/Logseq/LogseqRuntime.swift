@@ -278,7 +278,7 @@ private func postWakeup() {
   // turns, the queued mach msg runs our order-0 source → drain.
   let now = CFAbsoluteTimeGetCurrent()
   runOnMainLock.lock()
-  let stale = now - wakePostedAt > 1.0
+  let stale = now - wakePostedAt > 0.5
   let inFlight = wakeInFlight && !stale
   if !inFlight {
     wakeInFlight = true
@@ -317,7 +317,11 @@ private func postWakeup() {
   // A fresh CGEvent's flags snapshot the live HID modifier state — copy
   // them so the synthesized flagsChanged is a real no-op.
   event.flags = CGEvent(source: nil)?.flags ?? []
-  event.post(tap: .cghidEventTap)
+  // Post straight to our pid's event queue — it always lands on the event
+  // connection _DPSNextEvent waits on, regardless of which window the
+  // cursor is over or whether we hold key focus (cghidEventTap routing
+  // depends on both, and consecutive flagsChanged can coalesce).
+  event.postToPid(getpid())
 }
 
 func runOnMain(_ work: @escaping () -> Void) {
