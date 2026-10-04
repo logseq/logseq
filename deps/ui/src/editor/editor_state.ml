@@ -49,7 +49,7 @@ let pending_focus : (string * int * float) option ref = ref None
 
 (* editing keys that arrive while a structure op's textarea is still
    remounting (keydown landed on <body>): queued here and replayed by
-   apply_focus once the refreshed model and DOM exist *)
+   focus_pending once the refreshed model and DOM exist *)
 let pending_focus_actions : (unit -> unit) list ref = ref []
 
 (* wall-clock of the last editing-textarea key/input event; worker_events

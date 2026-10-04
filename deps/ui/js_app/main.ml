@@ -64,7 +64,11 @@ let main root =
     (fun () ->
       Platform.perf_time "flush" (fun () ->
           ignore (Lui_app.flush app);
-          Virtual_scroll.sync ()));
+          Virtual_scroll.sync ();
+          (* one focus pass per flush — a pending arm (or keys queued
+             during the remount window) progresses as the DOM
+             re-patches *)
+          Editor_actions.focus_pending ()));
   ignore
     (Lui_web.set_event_handler renderer (fun event ->
          Platform.perf_time "event" (fun () ->

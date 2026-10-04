@@ -40,7 +40,10 @@ let mount () =
       let changed = Lui_app.send s.S.app a in
       ignore (Lui_app.flush s.S.app);
       changed);
-  Runtime.app_flush := (fun () -> ignore (Lui_app.flush s.S.app));
+  Runtime.app_flush :=
+    (fun () ->
+      ignore (Lui_app.flush s.S.app);
+      Editor_actions.focus_pending ());
   session_ref := Some s;
   s
 
