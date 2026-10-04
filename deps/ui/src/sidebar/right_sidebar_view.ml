@@ -182,8 +182,9 @@ let item_title (it : Sidebar_state.item) =
             [ dom ~key:"pt-ti"
                 ~style_class:"text-md icon-cp-container flex items-center"
                 ~attrs:[ "style", "color: inherit" ]
-                [ if is_class then Icons.icon ~size:14. ~cls:"text-md" "hash"
-                  else Icons.icon ~size:16. "file"
+                [ (* cljs get-node-icon-cp merges {:size 14} for all icons *)
+                  if is_class then Icons.icon ~size:14. ~cls:"text-md" "hash"
+                  else Icons.icon ~size:14. "file"
                 ]
             ]
       in

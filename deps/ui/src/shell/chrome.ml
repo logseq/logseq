@@ -511,7 +511,12 @@ let shell (ms : Model.t Signal.signal) : t =
     [ skip_to_main
     ; Logseq_dom.dom ~key:"app" ~id:"app-container"
         [ Logseq_dom.dom ~key:"left-container" ~id:"left-container"
-            ~style_class:"w-full"
+            ~style_class_signal:
+              (Logseq_dom.class_signal ms (fun (m : Model.t) ->
+                   (* cljs container.cljs: overflow-hidden while RIGHT
+                      sidebar is open *)
+                   if m.right_sidebar_open then "overflow-hidden"
+                   else "w-full"))
             [ header ms; main_content ms ]
         ; right_sidebar ms
         ; Logseq_dom.dom ~key:"asc" ~id:"app-single-container" []

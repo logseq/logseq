@@ -424,12 +424,24 @@ let page_item_el st (p : Model.page) ~li_class ~recent ~key =
         (* cljs .sidebar-page-actions dots button inside .link-item *)
         ; dom ~tag:"button"
             ~style_class:
-              "sidebar-page-actions absolute !bg-transparent right-0 top-0 \
-               px-1.5 scale-75 opacity-40 hover:opacity-80 \
-               active:opacity-100"
+              (* cljs shui/button :size :sm :variant :ghost + the
+                 sidebar-page-actions tail classes *)
+              "active:opacity-80 as-ghost cursor-pointer \
+               disabled:pointer-events-none disabled:opacity-50 \
+               focus-visible:outline-none focus-visible:ring-2 \
+               focus-visible:ring-ring focus-visible:ring-offset-2 \
+               font-medium gap-1 h-7 hover:bg-secondary/70 \
+               hover:text-secondary-foreground inline-flex items-center \
+               justify-center py-1 ring-offset-background rounded \
+               rounded-md select-none sidebar-page-actions absolute \
+               !bg-transparent right-0 top-0 px-1.5 scale-75 \
+               opacity-40 hover:opacity-80 active:opacity-100 text-sm \
+               transition-colors ui__button whitespace-nowrap"
+            (* cljs [:i.relative {:style {:top "4px"}} (tabler-icon "dots")] —
+               tabler-icon default size 18 *)
             [ dom ~tag:"i" ~style_class:"relative"
                 ~attrs:[ ("style", "top: 4px") ]
-                [ icon "dots" ] ] ]
+                [ Icons.icon ~size:18. "dots" ] ] ]
     ]
 
 (* cljs sidebar-content-group: .bd renders only when the group supplies a

@@ -846,8 +846,9 @@ blockquote {
     max-width: 60vw;
   }
 
+  /* cljs container.css: @apply mt-0 mx-3 my-5 */
   .page {
-    margin: 0.5rem 0.75rem 1.25rem;
+    margin: 0 0.75rem 1.25rem;
   }
 
   /* cljs wraps the page in .mt-2 and renders no empty grid rows; the LUI
@@ -869,9 +870,9 @@ blockquote {
     height: calc(100vh - 48px);
   }
 
+  /* cljs right_sidebar.css: @apply pt-2 only (no mb) */
   .sidebar-panel-content {
     padding-top: 0.5rem;
-    margin-bottom: 1.25rem;
   }
 
   /* cljs page.cljs renders .ls-page-blocks with margin-left: -20 on desktop */
@@ -985,6 +986,26 @@ blockquote {
   svg,
   button {
     -webkit-app-region: no-drag;
+  }
+}
+
+/* cljs container.css dark block — right-sidebar card + shade-mask */
+html[data-theme='dark'] {
+  #left-sidebar {
+    > .shade-mask {
+      background-color: rgba(0, 0, 0, .15);
+    }
+  }
+
+  .cp__right-sidebar {
+    .cp__right-sidebar-inner,
+    .cp__right-sidebar-topbar {
+      background-color: var(--lx-gray-02, var(--ls-secondary-background-color, var(--rx-gray-01)));
+    }
+
+    .sidebar-item {
+      background-color: var(--lx-gray-03, var(--ls-secondary-background-color, var(--rx-gray-03)));
+    }
   }
 }
 
