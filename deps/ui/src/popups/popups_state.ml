@@ -130,6 +130,9 @@ type cm =
   ; tag : (string * int * bool) option
     (* Some (uuid, db/id, private?) => block-tag chip menu, not the
        block context menu *)
+  ; hl : int
+    (* index into the active list — sub items while a Sub_menu is open,
+       entries otherwise; -1 = none *)
   }
 
 type pv =
@@ -1385,10 +1388,10 @@ let apply_template t ac uuid =
       let buf = Dom_ext.value ac.editor in
       close_ac t;
       ignore
-        (let* sop = Outliner_ops.save_block_parsed buuid buf in
+        (let* sops = Outliner_ops.save_block_parsed buuid buf in
          Outliner_ops.apply_and_refresh
            ~opts:(Outliner_ops.op_opts "apply-template")
-           [ sop; Outliner_ops.apply_template uuid buuid ])
+           (sops @ [ Outliner_ops.apply_template uuid buuid ]))
 (* cljs run-query-command! / advanced-query-steps: save the current
    block, tag it logseq.class/Query, create the hidden
    logseq.property/query value block and copy the current title into it
@@ -1405,17 +1408,17 @@ let run_query t ac ~advanced =
       Editor_actions.exit_edit ~select:false;
       let repo_v = repo () in
       ignore
-        (let* sop = Outliner_ops.save_block_parsed buuid title in
+        (let* sops = Outliner_ops.save_block_parsed buuid title in
         let* _ =
            Outliner_ops.apply
-             [ sop
-             ; Outliner_ops.op "create-property-text-block"
+             (sops
+             @ [ Outliner_ops.op "create-property-text-block"
                  [ Wire.Uuid buuid
                  ; Wire.Keyword "logseq.property/query"
                  ; Wire.String ""
                  ; Wire.Map
                      [ (Wire.Keyword "set-block-property?", Wire.Bool true) ] ]
-             ]
+             ])
          in
          let* w =
           Runtime.invoke2 "thread-api/get-blocks" (Wire.String repo_v)
@@ -1710,7 +1713,7 @@ let open_cm t ~x ~y ~block_id ~multi =
   set_cm t
     (Some
        { cx = x; cy = y; block_id; multi; entries; sub_open = -1
-       ; sub_xy = (0., 0.); tag = None })
+       ; sub_xy = (0., 0.); tag = None; hl = -1 })
 ;;
 
 (* cljs block-tag popup (block.cljs): Go to #tag (mod+click) / Open in
@@ -1735,20 +1738,21 @@ let open_cm_tag t ~x ~y ~block_id ~tag_uuid ~tag_id ~tag_title ~priv =
        { cx = x; cy = y; block_id; multi = false
        ; entries = tag_entries ~title:tag_title ~priv
        ; sub_open = -1; sub_xy = (0., 0.)
-       ; tag = Some (tag_uuid, tag_id, priv) })
+       ; tag = Some (tag_uuid, tag_id, priv); hl = -1 })
 ;;
 
 let open_cm_sub t ~index ~x ~y =
   match (get t).cm with
   | Some cm when cm.sub_open <> index ->
-      set_cm t (Some { cm with sub_open = index; sub_xy = (x, y) })
+      set_cm t
+        (Some { cm with sub_open = index; sub_xy = (x, y); hl = -1 })
   | _ -> ()
 ;;
 
 let close_cm_sub t =
   match (get t).cm with
   | Some cm when cm.sub_open <> -1 ->
-      set_cm t (Some { cm with sub_open = -1 })
+      set_cm t (Some { cm with sub_open = -1; hl = cm.sub_open })
   | _ -> ()
 ;;
 
@@ -1759,6 +1763,56 @@ let cm_sub_at t index =
       | Some (Ci_sub (_, sub)) -> Some sub
       | _ -> None)
   | None -> None
+;;
+
+(* arrow-key navigation: hl walks the actionable entries (items and
+   sub-triggers) of the active list — the open Sub_menu's items, or the
+   top-level entries *)
+let cm_actionable = function
+  | Ci_item _ | Ci_sub _ -> true
+  | Ci_sep | Ci_colors | Ci_headings -> false
+;;
+
+let cm_items_of (cm : cm) =
+  (* List.nth_opt raises on a negative index — sub_open is -1 closed *)
+  if cm.sub_open < 0 then cm.entries
+  else
+    match List.nth_opt cm.entries cm.sub_open with
+    | Some (Ci_sub (_, Sub_menu items)) -> items
+    | _ -> cm.entries
+;;
+
+let cm_move t dir =
+  match (get t).cm with
+  | None -> ()
+  | Some cm ->
+      let items = cm_items_of cm in
+      let n = List.length items in
+      if n > 0 then (
+        let start =
+          if cm.hl < 0 then (if dir > 0 then 0 else n - 1)
+          else ((cm.hl + dir) mod n + n) mod n
+        in
+        let rec go i step =
+          if step >= n then None
+          else if cm_actionable (List.nth items i) then Some i
+          else go (((i + dir) mod n + n) mod n) (step + 1)
+        in
+        match go start 0 with
+        | Some hl -> set_cm t (Some { cm with hl })
+        | None -> ())
+;;
+
+(* hover drives the same hl the arrow keys move *)
+let cm_hl_at t i =
+  match (get t).cm with
+  | Some cm when cm.hl <> i -> set_cm t (Some { cm with hl = i })
+  | _ -> ()
+;;
+
+(* highlighted entry of the active list, if any *)
+let cm_hl_item (cm : cm) =
+  if cm.hl < 0 then None else List.nth_opt (cm_items_of cm) cm.hl
 ;;
 
 let run_cm_item t label =

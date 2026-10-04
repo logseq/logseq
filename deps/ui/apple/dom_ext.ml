@@ -164,10 +164,21 @@ let rec parse_compound (s : string) : compound =
           let name, value =
             match String.index_opt inner '=' with
             | Some eq ->
-                ( String.sub inner 0 eq
-                , Some
-                    (String.sub inner (eq + 1)
-                       (String.length inner - eq - 1)) )
+                let raw =
+                  String.sub inner (eq + 1)
+                    (String.length inner - eq - 1)
+                in
+                (* CSS allows quoted values ([a="v"]/[a='v']); the
+                   snapshot's attrs carry the bare string *)
+                let v =
+                  let n = String.length raw in
+                  if n >= 2
+                     && ((raw.[0] = '"' && raw.[n - 1] = '"')
+                         || (raw.[0] = '\'' && raw.[n - 1] = '\''))
+                  then String.sub raw 1 (n - 2)
+                  else raw
+                in
+                (String.sub inner 0 eq, Some v)
             | None -> (inner, None)
           in
           go j tag classes id ((name, value) :: attrs) nots

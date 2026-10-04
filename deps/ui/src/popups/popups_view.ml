@@ -557,8 +557,21 @@ let cm_shortcut_el (binding, caps) : t =
 let cm_item_cls = "ui__dropdown-menu-item"
 ;;
 
-let cm_item_el (entry_sig : (int * S.cm_item) Signal.signal) : t =
+let cm_item_el (st : S.t)
+    (entry_sig : (int * S.cm_item) Signal.signal) : t =
   let idx = Signal.get (Signal.map fst entry_sig) in
+  (* keyboard/hover highlight rides the mounted attrs — the native set-attr
+     dom-op only reaches textarea handles, and the Swift style check keys
+     off data-highlighted="true" at render time *)
+  let hl_attrs base =
+    Signal.map
+      (fun (v : S.view) ->
+        match v.S.cm with
+        | Some m when m.S.sub_open < 0 && m.S.hl = idx ->
+            attrs_v (("data-highlighted", "true") :: base)
+        | _ -> attrs_v base)
+      st.S.vs.Signal.state_signal
+  in
   (* keyed mounts run with parent=None, so the entry point must be a real
      node — wrap the dynamic branch in a box *)
   box ~key:"cm-entry"
@@ -571,18 +584,23 @@ let cm_item_el (entry_sig : (int * S.cm_item) Signal.signal) : t =
       | S.Ci_colors -> cm_color_row ()
       | S.Ci_headings -> cm_heading_row ()
       | S.Ci_sub (label, _sub) ->
+          let base =
+            [ ("role", "menuitem"); ("aria-haspopup", "menu")
+            ; ("tabindex", "-1"); ("data-cm-sub", string_of_int idx)
+            ; ("data-cm-idx", string_of_int idx) ]
+          in
           Logseq_dom.dom ~key:"sub"
-            ~style_class:"ui__dropdown-menu-sub-trigger"
-            ~attrs:
-              [ ("role", "menuitem"); ("aria-haspopup", "menu")
-              ; ("tabindex", "-1"); ("data-cm-sub", string_of_int idx) ]
+            ~style_class:"ui__dropdown-menu-sub-trigger" ~attrs:base
+            ~attrs_signal_v:(hl_attrs base)
             [ Logseq_dom.dom ~key:"lbl" ~tag:"span" ~text:label []
             ; Icons.icon ~cls:"ls-menu-chevron" "chevron-right" ]
       | S.Ci_item (label, scut, cmd) ->
-          Logseq_dom.dom ~key:"item" ~style_class:cm_item_cls
-            ~attrs:
-              [ ("role", "menuitem"); ("tabindex", "-1")
-              ; ("data-cm-item", cmd) ]
+          let base =
+            [ ("role", "menuitem"); ("tabindex", "-1")
+            ; ("data-cm-item", cmd); ("data-cm-idx", string_of_int idx) ]
+          in
+          Logseq_dom.dom ~key:"item" ~style_class:cm_item_cls ~attrs:base
+            ~attrs_signal_v:(hl_attrs base)
             (Logseq_dom.dom ~key:"lbl" ~tag:"span" ~text:label []
              :: (match scut with
                  | Some s -> [ cm_shortcut_el s ]
@@ -590,13 +608,22 @@ let cm_item_el (entry_sig : (int * S.cm_item) Signal.signal) : t =
         (Signal.map snd entry_sig) ]
 ;;
 
-let cm_sub_item_el (it : S.cm_item) : t =
+let cm_sub_item_el (st : S.t) (i : int) (it : S.cm_item) : t =
   match it with
   | S.Ci_item (label, scut, cmd) ->
-      Logseq_dom.dom ~key:"sub-item" ~style_class:cm_item_cls
-        ~attrs:
-          [ ("role", "menuitem"); ("tabindex", "-1")
-          ; ("data-cm-item", cmd) ]
+      let base =
+        [ ("role", "menuitem"); ("tabindex", "-1")
+        ; ("data-cm-item", cmd); ("data-cm-sub-idx", string_of_int i) ]
+      in
+      Logseq_dom.dom ~key:"sub-item" ~style_class:cm_item_cls ~attrs:base
+        ~attrs_signal_v:
+          (Signal.map
+             (fun (v : S.view) ->
+               match v.S.cm with
+               | Some m when m.S.sub_open >= 0 && m.S.hl = i ->
+                   attrs_v (("data-highlighted", "true") :: base)
+               | _ -> attrs_v base)
+             st.S.vs.Signal.state_signal)
         (Logseq_dom.dom ~key:"lbl" ~tag:"span" ~text:label []
          :: (match scut with
              | Some s -> [ cm_shortcut_el s ]
@@ -606,7 +633,8 @@ let cm_sub_item_el (it : S.cm_item) : t =
 
 (* dropdown-menu-sub-content for Sub_menu entries — positioned at the
    trigger's right edge (coords stored on hover in cm.sub_xy) *)
-let cm_sub_el (x : float) (y : float) (items : S.cm_item list) : t =
+let cm_sub_el (st : S.t) (x : float) (y : float)
+    (items : S.cm_item list) : t =
   Logseq_dom.dom ~key:"cm-sub"
     ~style_class:"ui__dropdown-menu-sub-content"
     ~attrs:
@@ -618,7 +646,7 @@ let cm_sub_el (x : float) (y : float) (items : S.cm_item list) : t =
             x y (y +. 8.) ) ]
     [ Logseq_dom.dom ~key:"w"
         ~attrs:[ ("data-keep-selection", "") ]
-        (List.map cm_sub_item_el items) ]
+        (List.mapi (cm_sub_item_el st) items) ]
 ;;
 
 (* (idx, x, y, items) while a Sub_menu is open; None otherwise — the
@@ -677,11 +705,11 @@ let cm_popover (st : S.t) : t =
         ~attrs:[ ("data-keep-selection", "") ]
         [ keyed ~source:entries_sig ~key:(fun ((i, _) : int * S.cm_item) -> i)
             ~cmp:Stdlib.compare
-            ~mount:(fun entry_sig -> cm_item_el entry_sig) ]
+            ~mount:(fun entry_sig -> cm_item_el st entry_sig) ]
     ; dyn ~equal:Stdlib.( = )
         (fun sub ->
           match sub with
-          | Some (_, x, y, items) -> cm_sub_el x y items
+          | Some (_, x, y, items) -> cm_sub_el st x y items
           | None -> Logseq_dom.nothing)
         (cm_sub_state st)
     ]
@@ -708,28 +736,7 @@ let close_cm_picker () =
       Properties_state.remove_overlay_el el
   | None -> ()
 
-(* base-ui sets data-highlighted on the hovered item (bg-muted) *)
-let cm_hi_el : Editor_dom.el option ref = ref None
-
-let cm_highlight (el : Dom_ext.element) =
-  (match !cm_hi_el with
-   | Some e -> Editor_dom.el_remove_attr e "data-highlighted"
-   | None -> ());
-  cm_hi_el :=
-    (match Dom_ext.closest el "[role=menuitem]" with
-     | Some it when
-         Dom_ext.closest it
-           ".ls-context-menu-content, .ui__dropdown-menu-sub-content"
-         <> None ->
-         let e = Editor_dom.el_of_json it in
-         Editor_dom.el_set_attr e "data-highlighted" "";
-         Some e
-     | _ -> None)
-
-let close_cm st =
-  cm_hi_el := None;
-  close_cm_picker ();
-  S.close_cm st
+let close_cm st = close_cm_picker (); S.close_cm st
 
 let run_cm_item st l = close_cm_picker (); S.run_cm_item st l
 let run_cm_color st l = close_cm_picker (); S.run_cm_color st l
@@ -868,8 +875,86 @@ let handle_input st (ev : Dom_ext.event) =
   | None -> ()
 ;;
 
+(* Set icon / Add reaction sub-triggers open the icon picker to the
+   right of the menu (base-ui inline-end placement); the choice applies
+   to every selected block for the multi-select menu *)
+let open_cm_picker (st : S.t) (pk : S.cm_picker)
+    (anchor : Dom_ext.element) (cm : S.cm) =
+  let uuids =
+    if cm.S.multi && Platform.selected_block_uuids () <> [] then
+      Platform.selected_block_uuids ()
+    else [ cm.S.block_id ]
+  in
+  let anchor = Editor_dom.el_of_json anchor in
+  close_cm_picker ();
+  match pk with
+  | S.Picker_icon ->
+      cm_picker_el :=
+        Some
+          (Icon_picker.open_picker_with_opts ~anchor ~del:false
+             ~opts:{ Icon_picker.emoji_only = false; sub = true }
+             ~on_chosen:(fun c ->
+               List.iter (fun u -> Page.set_icon u c) uuids;
+               close_cm st))
+  | S.Picker_emoji ->
+      cm_picker_el :=
+        Some
+          (Icon_picker.open_picker_with_opts ~anchor ~del:false
+             ~opts:{ Icon_picker.emoji_only = true; sub = true }
+             ~on_chosen:(fun c ->
+               (match c with
+                | Icon_picker.Emoji id ->
+                    List.iter
+                      (fun u -> Comments_view.toggle_reaction u id)
+                      uuids
+                | _ -> ());
+               close_cm st))
+;;
+
+let cm_sub_picker_open (cm : S.cm) =
+  cm.S.sub_open >= 0
+  &&
+  match List.nth_opt cm.S.entries cm.S.sub_open with
+  | Some (S.Ci_sub (_, S.Sub_picker _)) -> true
+  | _ -> false
+;;
+
+let cm_keydown st (ev : Dom_ext.event) =
+  match (S.get st).S.cm with
+  | None -> false
+  | Some cm when cm_sub_picker_open cm -> false
+  | Some cm -> (
+      match Dom_ext.key_ ev with
+      | Some "ArrowDown" -> S.cm_move st 1; true
+      | Some "ArrowUp" -> S.cm_move st (-1); true
+      | Some ("ArrowRight" | "Enter") -> (
+          match S.cm_hl_item cm with
+          | Some (S.Ci_item (_, _, cmd)) -> run_cm_item st cmd; true
+          | Some (S.Ci_sub (_, sub)) when cm.S.sub_open < 0 -> (
+              match
+                Dom_ext.doc_query_selector
+                  (Printf.sprintf "[data-cm-idx=\"%d\"]" cm.S.hl)
+              with
+              | Some trg ->
+                  let r = Dom_ext.bounding_rect trg in
+                  S.open_cm_sub st ~index:cm.S.hl
+                    ~x:(Dom_ext.rect_right r -. 4.)
+                    ~y:(Dom_ext.rect_top r -. 4.);
+                  (match sub with
+                   | S.Sub_picker pk -> open_cm_picker st pk trg cm
+                   | S.Sub_menu _ -> ())
+              | None -> ());
+              true
+          | _ -> true)
+      | Some "ArrowLeft" when cm.S.sub_open >= 0 ->
+          close_cm_picker ();
+          S.close_cm_sub st;
+          true
+      | _ -> false)
+;;
+
 let handle_keydown st (ev : Dom_ext.event) =
-  if S.ac_keydown st ev then (
+  if S.ac_keydown st ev || cm_keydown st ev then (
     Dom_ext.prevent_default ev;
     (* stopImmediate: same-target listeners registered later (the editor's
        own keydown) must not also react to the key the popup consumed *)
@@ -975,41 +1060,6 @@ let handle_click st (ev : Dom_ext.event) =
           | None -> ())
 ;;
 
-(* Set icon / Add reaction sub-triggers open the icon picker to the
-   right of the menu (base-ui inline-end placement); the choice applies
-   to every selected block for the multi-select menu *)
-let open_cm_picker (st : S.t) (pk : S.cm_picker)
-    (anchor : Dom_ext.element) (cm : S.cm) =
-  let uuids =
-    if cm.S.multi && Platform.selected_block_uuids () <> [] then
-      Platform.selected_block_uuids ()
-    else [ cm.S.block_id ]
-  in
-  let anchor = Editor_dom.el_of_json anchor in
-  close_cm_picker ();
-  match pk with
-  | S.Picker_icon ->
-      cm_picker_el :=
-        Some
-          (Icon_picker.open_picker_with_opts ~anchor ~del:false
-             ~opts:{ Icon_picker.emoji_only = false; sub = true }
-             ~on_chosen:(fun c ->
-               List.iter (fun u -> Page.set_icon u c) uuids;
-               close_cm st))
-  | S.Picker_emoji ->
-      cm_picker_el :=
-        Some
-          (Icon_picker.open_picker_with_opts ~anchor ~del:false
-             ~opts:{ Icon_picker.emoji_only = true; sub = true }
-             ~on_chosen:(fun c ->
-               (match c with
-                | Icon_picker.Emoji id ->
-                    List.iter
-                      (fun u -> Comments_view.toggle_reaction u id)
-                      uuids
-                | _ -> ());
-               close_cm st))
-;;
 
 let cm_hover st el =
   match Dom_ext.closest el "[data-cm-sub]" with
@@ -1044,7 +1094,19 @@ let handle_mousemove st (ev : Dom_ext.event) =
   match Dom_ext.target ev with
   | Some el -> (
       cm_hover st el;
-      cm_highlight el;
+      (* hover moves the same hl the arrow keys drive — one highlight
+         mechanism (data-highlighted on the item's mounted attrs) *)
+      (match Dom_ext.closest el "[data-cm-idx], [data-cm-sub-idx]" with
+       | Some it -> (
+           match
+             ( Dom_ext.get_attribute it "data-cm-idx"
+             , Dom_ext.get_attribute it "data-cm-sub-idx" ) with
+           | Some s, _ | _, Some s -> (
+               match int_of_string_opt s with
+               | Some i -> S.cm_hl_at st i
+               | None -> ())
+           | _ -> ())
+       | None -> ());
       (match Dom_ext.closest el ".menu-link-wrap" with
        | Some wrap -> (
            match Dom_ext.query_selector wrap "a.menu-link" with
