@@ -65,7 +65,12 @@ let label_of = function
   | "plugins" -> Some "plugins-dashboard"
   | "plugin-readme" -> Some "plugin-readme"
   | "login" -> Some "user-login"
+  | "new-graph" | "add-graph" -> Some "new-db-graph"
   | _ -> None
+(* cljs dialog-open! :title — h2.ui__dialog-title text (hidden when none) *)
+let title_of = function
+  | "new-graph" | "add-graph" -> I18n.create_new_graph
+  | _ -> ""
 let dialog_view name (ms : Model.t Signal.signal) : t =
   let is_settings = name = "settings" in
   let z = Dialogs_state.z_index name in
@@ -88,9 +93,12 @@ let dialog_view name (ms : Model.t Signal.signal) : t =
           | None -> [ ("role", "dialog") ])
         (* cljs shui dialog/core: h2.ui__dialog-title (hidden when the
            dialog has no title) then .ui__dialog-main-content > body *)
-        [ dom ~key:("dlg-t-" ^ name) ~tag:"h2"
-            ~style_class:"ui__dialog-title hidden"
-            []
+        [ (let title = title_of name in
+           dom ~key:("dlg-t-" ^ name) ~tag:"h2"
+             ~style_class:
+               ("ui__dialog-title" ^ if title = "" then " hidden" else "")
+             ~text:title
+             [])
         ; dom ~key:("dlg-m-" ^ name) ~style_class:"ui__dialog-main-content"
             [ body_of name ms ]
         ; close_btn ]
@@ -217,7 +225,8 @@ let render (ms : Model.t Signal.signal) : t =
           (* name is stable per key — sample once *)
           let v = dialog_view (Signal.get name_sig) ms in
           (* radix Dialog focuses the dialog's [autofocus] element on open
-             when it has one, else the close button *)
+             when it has one, else the content container itself (the
+             close button never gets a focus ring) *)
           (try
              ignore
                (Browser_ui.set_timeout
@@ -227,11 +236,10 @@ let render (ms : Model.t Signal.signal) : t =
                     with
                     | Some el -> Browser_ui.focus el
                     | None -> (
-                        match
-                          Browser_ui.qs
-                            ".ui__dialog-content .ui__dialog-close"
-                        with
-                        | Some el -> Browser_ui.focus el
+                        match Browser_ui.qs ".ui__dialog-content" with
+                        | Some el ->
+                            Browser_ui.set_attr el "tabindex" "-1";
+                            Browser_ui.focus el
                         | None -> ()))
                   16)
            with _ -> ());
