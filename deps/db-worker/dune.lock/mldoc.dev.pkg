@@ -27,6 +27,6 @@
 (source
  (fetch
   (url
-   git+https://github.com/logseq/mldoc#553dea6ed8694352527a189747f787365469c9cb)))
+   git+https://github.com/logseq/mldoc#f11230c367964af2b575524d00779cfb1ffc7147)))
 
 (dev)

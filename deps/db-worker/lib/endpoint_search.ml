@@ -105,6 +105,7 @@ let open_search_db_file repo : Sqlite.db =
         Sqlite.close db;
         exn
       with close_exn ->
+        Pending_closes.note repo db;
         Failure
           (Printf.sprintf "Search initialization failed: %s; close failed: %s"
              (Printexc.to_string exn) (Printexc.to_string close_exn))
@@ -851,7 +852,10 @@ let invalidate_search_db args : Wire.t E.t =
                  with exn ->
                    Worker_log.error "search/invalidate-search-db-failed"
                      [ ("repo", repo); ("error", Printexc.to_string exn) ]);
-                Sqlite.close db;
+                (try Sqlite.close db
+                 with exn ->
+                   Pending_closes.note repo db;
+                   raise exn);
                 E.pure Wire.nil))
   | _ -> invalid_arg "db-sync-invalidate-search-db expects (repo)"
 

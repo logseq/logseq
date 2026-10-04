@@ -389,7 +389,8 @@ let invoke_listener_handler (timings : (string * float) list ref) k
   timings := !timings @ [ (k, perf_time_ms () -. started_at) ];
   result
 
-let process_committed_tx ~persist_enabled ~sync_db_to_main_thread
+let process_committed_tx ~persist_enabled ~checksum_enabled
+    ~sync_db_to_main_thread
     ~(deferred : (string * handler) list) repo conn (r : tx_report) =
   let started_at = perf_time_ms () in
   (* one sqlite txn around the client-ops db writes — each separate
@@ -403,8 +404,9 @@ let process_committed_tx ~persist_enabled ~sync_db_to_main_thread
   let handler_timings = ref [] in
   let checksum_at = ref (perf_time_ms ()) in
   with_client_ops_tx (fun () ->
-      run_post_commit repo r.tx_meta "update-checksum" (fun () ->
-          !update_checksum repo r);
+      if checksum_enabled && not !Sync_state.pending_replay then
+        run_post_commit repo r.tx_meta "update-checksum" (fun () ->
+            !update_checksum repo r);
       checksum_at := perf_time_ms ();
       if persist_enabled then
         run_post_commit repo r.tx_meta "persist-local-tx" (fun () ->
@@ -413,7 +415,10 @@ let process_committed_tx ~persist_enabled ~sync_db_to_main_thread
   let checksum_at = !checksum_at in
   let persist_at = perf_time_ms () in
   let sync_result =
-    if sync_db_to_main_thread then
+    (* during pending replay each entry's per-report main-thread delta
+       would duplicate work — commit_synthesized_report emits the one
+       combined delta for the whole rebuild *)
+    if sync_db_to_main_thread && not !Sync_state.pending_replay then
       main_thread_sync_result repo conn r
     else None
   in
@@ -487,7 +492,43 @@ let listen_db_changes ?(handler_keys : string list option) repo conn =
                || not (tx_meta_bool r "batch-tx-report?"))
          then
            process_committed_tx ~persist_enabled
+             ~checksum_enabled:
+               (* a graph with a server conn updates the stored checksum
+                  only through the server conn's dedicated checksum
+                  listener — running it here too would double-count
+                  every server-conn tx once this conn is the server
+                  conn itself *)
+               (Sync_state.server_conn repo = None)
              ~sync_db_to_main_thread ~deferred:selected repo conn r))
+
+(* Runs the commit pipeline on a hand-built report (server-state rebind on
+   the display conn — no real transact produced one). Persist and checksum
+   stay off: the jump carries no local op and the stored checksum tracks
+   the server conn's own transacts. *)
+let commit_synthesized_report repo conn (r : tx_report) =
+  let all_handlers =
+    Hashtbl.fold (fun k f acc -> (k, f) :: acc) deferred_handlers []
+  in
+  process_committed_tx ~persist_enabled:false ~checksum_enabled:false
+    ~sync_db_to_main_thread:true ~deferred:all_handlers repo conn r
+
+(* Server-conn checksum tracking: remote applies and confirms transact on
+   the server conn, which has no listen-db-changes! listener — a checksum-only
+   listener keeps the stored checksum aligned with the server conn. *)
+let listen_db_checksum repo conn =
+  ignore
+    (Datascript.listen conn "listen-db-sync-checksum"
+       (fun (r : tx_report) ->
+          if
+            r.tx_data <> []
+            && (tx_meta_bool r "batch-final-tx-report?"
+                || not (tx_meta_bool r "batch-tx-report?"))
+          then
+            (* wrap like process_committed_tx — a checksum failure must
+               not escape notify_listeners and report a committed tx
+               as failed *)
+            run_post_commit repo r.tx_meta "update-checksum" (fun () ->
+                !update_checksum repo r)))
 
 (* built-in deferred listeners — mirror queues jobs with debounce *)
 let () =

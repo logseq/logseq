@@ -78,7 +78,7 @@ let fix_duplicate_orders (conn : conn) (tx_data : datom list)
            end
        | _ -> ())
     groups;
-  if !fixes <> [] then
+  if !fixes <> [] then begin
     let _report =
       (* cljs (merge tx-meta {:op :fix-duplicate-order}) — overwrites :op *)
       transact_conn conn (List.rev !fixes)
@@ -87,3 +87,4 @@ let fix_duplicate_orders (conn : conn) (tx_data : datom list)
            @ [ ("op", Keyword "fix-duplicate-order") ])
     in
     ()
+  end
