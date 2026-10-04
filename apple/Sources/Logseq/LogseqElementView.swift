@@ -3,6 +3,48 @@ import Foundation
 import LUIAppleBackend
 import SwiftUI
 
+/// String-keyed memo for the two hot parsers: `attrs` JSON and
+/// `LogseqStyle.parse(style-class)`. Both are pure functions of their input
+/// string and every element body eval re-parses them 10-20× (plus once per
+/// child in `childStyle`), so a ~500-element re-render used to run ~10k
+/// `JSONSerialization` calls per pass. Values change only when the raw string
+/// changes, so the string itself is the correct cache key; a size cap keeps
+/// churned strings from growing the maps unboundedly.
+@MainActor enum LogseqParseMemo {
+  private static var attrsCache: [String: [String: Any]] = [:]
+  private static var styleCache: [String: LogseqStyle] = [:]
+
+  static func attrs(_ json: String) -> [String: Any] {
+    if let hit = attrsCache[json] { return hit }
+    let dict =
+      (try? JSONSerialization.jsonObject(with: Data(json.utf8)))
+      as? [String: Any] ?? [:]
+    if attrsCache.count > 4096 { attrsCache.removeAll(keepingCapacity: true) }
+    attrsCache[json] = dict
+    return dict
+  }
+
+  static func style(_ classes: String) -> LogseqStyle {
+    if let hit = styleCache[classes] { return hit }
+    let parsed = LogseqStyle.parse(classes)
+    if styleCache.count > 4096 { styleCache.removeAll(keepingCapacity: true) }
+    styleCache[classes] = parsed
+    return parsed
+  }
+}
+
+enum LogseqPerf {
+  /// Chatty per-call probes (view evals, layout measure/place, dom-ops,
+  /// domfocus) gate here instead of LOGSEQ_PERF — thousands of synchronous
+  /// stderr writes inside a main-turn drain were inflating the very stalls
+  /// the probes measure.
+  nonisolated static let detail =
+    ProcessInfo.processInfo.environment["LOGSEQ_PERF_DETAIL"] != nil
+}
+
+/// TODO(perf-experiment): Equatable conformance measured separately — see
+/// NOTES.md stall investigation.
+
 /// One `logseq-<tag>` extension node rendered natively. The OCaml view layer
 /// emits DOM-shaped elements: `attrs` (JSON object), `events` (space-separated
 /// DOM names), `text`/`html` content, `style-class` (tailwind-ish classes), and
@@ -15,7 +57,6 @@ struct LogseqElementView: View {
   var inOverlay = false
   @Environment(\.logseqInOverlay) private var nestedInOverlay
   @Environment(\.logseqInImperative) private var inImperativeLayer
-  @ObservedObject private var titleHoverStore = LogseqTitleHoverStore.shared
   /// lui-overlay.css's `#ui__ac-inner` max-height: the enclosing
   /// `data-editor-popup-ref` popover pushes its --available-height budget
   /// down through this env so the AC list caps at
@@ -26,11 +67,8 @@ struct LogseqElementView: View {
   @ObservedObject private var appState = LogseqAppState.shared
 
   private var attrs: [String: Any] {
-    guard case .string(let json) = context.property("attrs"),
-      let data = json.data(using: .utf8),
-      let dict = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
-    else { return [:] }
-    return dict
+    guard case .string(let json) = context.property("attrs") else { return [:] }
+    return LogseqParseMemo.attrs(json)
   }
 
   private var wiredEvents: Set<String> {
@@ -41,7 +79,7 @@ struct LogseqElementView: View {
   private var style: LogseqStyle {
     var s = LogseqStyle()
     if case .string(let classes) = context.property("style-class") {
-      s = LogseqStyle.parse(classes)
+      s = LogseqParseMemo.style(classes)
     }
     if case .string(let accId) = context.property("accessibility-identifier") {
       s.applyAccessibilityId(accId)
@@ -197,17 +235,6 @@ struct LogseqElementView: View {
     }
   }
 
-  /// Web parity: visible only while an ancestor `block-content-wrapper`
-  /// is hovered.
-  private var titleActionsVisible: Bool {
-    guard isTitleActions else { return true }
-    var ancestor = context.parentID(of: context.nodeID)
-    while let id = ancestor {
-      if titleHoverStore.hovered.contains(id) { return true }
-      ancestor = context.parentID(of: id)
-    }
-    return false
-  }
 
   /// The DOM `id` dom-ops resolve against — carried on the
   /// `accessibility-identifier` prop (see LogseqStyles).
@@ -224,7 +251,7 @@ struct LogseqElementView: View {
   }
 
   private func perfProbe() -> Int {
-    guard ProcessInfo.processInfo.environment["LOGSEQ_PERF"] != nil else { return 0 }
+    guard LogseqPerf.detail else { return 0 }
     var s = ""
     if case .string(let v) = context.property("accessibility-identifier") { s = v }
     guard s.hasPrefix("journal") || context.nodeID < 700 else { return 0 }
@@ -271,27 +298,28 @@ struct LogseqElementView: View {
   private var core: some View {
     content
       .id(context.nodeID)
-      .background(
-        Group {
-          // The fillsOverlay presenter is a 0x0 placeholder — only the
-          // in-overlay re-render may report this node's frame, else the
-          // placeholder stomps the real rect (AC flip measurement).
-          // `path` elements draw their viewBox literally (a 0 0 192 512
-          // arrow reports a 192x512 frame) and swallow monitor hit-tests —
-          // their parent svg/a already reports the same region.
-          if (!style.fillsOverlay || inOverlay) && tag != "path" {
-            GeometryReader { g in
-              Color.clear.preference(
-                key: LogseqFrameKey.self,
-                value: [context.nodeID: LogseqFrameEntry(
-                  rect: g.frame(in: .named("logseqWindow")), tag: tag,
-                  z: frameZ)])
-            }
-          }
-        })
+      // Base page frames arrive via the backend `onFramesReport` channel
+      // (LogseqFrameStore.baseEntries); this overlay/imperative report is
+      // the only per-element geometry hook left — it feeds the z≥1000
+      // layer so popups out-hit the content below them. The fillsOverlay
+      // presenter is a 0x0 placeholder (inOverlay=false there), so only
+      // the real overlay/imperative render writes. `path` elements draw
+      // their viewBox literally (a 0 0 192 512 arrow reports 192x512)
+      // and swallow monitor hit-tests — the parent svg/a reports it.
+      .onGeometryChange(for: CGRect.self) { g in
+        g.frame(in: .global)
+      } action: { rect in
+        if (inOverlay || inImperativeLayer) && tag != "path" {
+          LogseqFrameStore.overlayEntries[context.nodeID] =
+            LogseqFrameEntry(rect: rect, tag: tag, z: frameZ)
+        }
+      }
+      .onDisappear {
+        LogseqFrameStore.overlayEntries.removeValue(forKey: context.nodeID)
+      }
       .onHover { inside in
         if isTitleHoverRegion {
-          titleHoverStore.set(context.nodeID, inside: inside)
+          LogseqTitleHoverStore.shared.set(context.nodeID, inside: inside)
           if ProcessInfo.processInfo.environment["LOGSEQ_DUMP"] != nil {
             try? "{\"hover\":\(inside),\"node\":\(context.nodeID)}".write(
               toFile: "/tmp/title-hover.json", atomically: true,
@@ -317,7 +345,7 @@ struct LogseqElementView: View {
         emitLifecycle("element-unmount")
         if isLeftSidebarLayout { LogseqSidebarStore.shared.open = false }
         if isTitleHoverRegion {
-          titleHoverStore.set(context.nodeID, inside: false)
+          LogseqTitleHoverStore.shared.set(context.nodeID, inside: false)
         }
       }
       .onChange(of: sidebarOpen) { _, open in
@@ -369,13 +397,10 @@ struct LogseqElementView: View {
         LogseqElementView(tag: tag, context: context, inOverlay: true)
           .environment(\.logseqInOverlay, true)
       }
+    } else if isTitleActions {
+      LogseqTitleActionsBody(content: contentBody, context: context)
     } else {
       contentBody
-        // Web: page title actions fade in on title-block hover.
-        .opacity(titleActionsVisible ? 1 : 0)
-        .allowsHitTesting(titleActionsVisible)
-        .animation(
-          .easeInOut(duration: 0.12), value: titleActionsVisible)
     }
   }
 
@@ -528,7 +553,7 @@ struct LogseqElementView: View {
   // MARK: - leaf + inline rendering
 
   private func perfBody(_ children: [Int]) -> Int {
-    guard ProcessInfo.processInfo.environment["LOGSEQ_PERF"] != nil,
+    guard LogseqPerf.detail,
           (context.nodeID >= 139 && context.nodeID <= 141)
             || (context.nodeID >= 183 && context.nodeID <= 184) else { return 0 }
     FileHandle.standardError.write(
@@ -593,15 +618,13 @@ struct LogseqElementView: View {
   private func childStyle(of child: Int) -> LogseqStyle {
     var s = LogseqStyle()
     if case .string(let classes) = context.childProperty(node: child, "style-class") {
-      s = LogseqStyle.parse(classes)
+      s = LogseqParseMemo.style(classes)
     }
     if case .string(let accId) = context.childProperty(node: child, "accessibility-identifier") {
       s.applyAccessibilityId(accId)
     }
     if case .string(let attrJson) = context.childProperty(node: child, "attrs"),
-      let data = attrJson.data(using: .utf8),
-      let dict = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-      let inline = dict["style"] as? String
+      let inline = LogseqParseMemo.attrs(attrJson)["style"] as? String
     {
       s.applyInline(inline)
     }
@@ -1009,6 +1032,34 @@ final class LogseqTitleHoverStore: ObservableObject {
   }
 }
 
+/// `ls-page-title-actions` wrapper — holds the ONLY titleHoverStore
+/// subscription. If the store lived on LogseqElementView directly, every
+/// publish (each title-block hover enter/exit AND each unmount's
+/// set(false)) would re-eval all ~500 element bodies at once.
+private struct LogseqTitleActionsBody<Content: View>: View {
+  let content: Content
+  let context: LUIAppleExtensionViewContext
+  @ObservedObject private var store = LogseqTitleHoverStore.shared
+
+  /// Web parity: visible only while an ancestor `block-content-wrapper`
+  /// is hovered.
+  private var visible: Bool {
+    var ancestor = context.parentID(of: context.nodeID)
+    while let id = ancestor {
+      if store.hovered.contains(id) { return true }
+      ancestor = context.parentID(of: id)
+    }
+    return false
+  }
+
+  var body: some View {
+    content
+      .opacity(visible ? 1 : 0)
+      .allowsHitTesting(visible)
+      .animation(.easeInOut(duration: 0.12), value: visible)
+  }
+}
+
 private struct LogseqOutOfFlowKey: LayoutValueKey {
   static let defaultValue = false
 }
@@ -1049,14 +1100,22 @@ struct LogseqRowLayout: Layout {
   /// instead of stretching it to the row height.
   var centerCross = false
 
+  /// Ideal size per child, measured once in `sizeThatFits` and reused by
+  /// `placeSubviews` — re-measuring inside place re-walks the whole child
+  /// subtree per container, multiplying a single layout pass by the depth.
+  typealias Cache = [CGSize]
+
+  func makeCache(subviews: Subviews) -> Cache { [] }
+
   func sizeThatFits(
-    proposal: ProposedViewSize, subviews: Subviews, cache: inout ()
+    proposal: ProposedViewSize, subviews: Subviews, cache: inout Cache
   ) -> CGSize {
+    cache = subviews.map { $0.sizeThatFits(.unspecified) }
     var width: CGFloat = 0
     var height: CGFloat = 0
     var flowIndex = 0
-    for subview in subviews {
-      let size = subview.sizeThatFits(.unspecified)
+    for (index, subview) in subviews.enumerated() {
+      let size = cache[index]
       if subview[LogseqOutOfFlowKey.self] { continue }
       if flowIndex > 0 { width += spacing }
       flowIndex += 1
@@ -1073,12 +1132,15 @@ struct LogseqRowLayout: Layout {
 
   func placeSubviews(
     in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews,
-    cache: inout ()
+    cache: inout Cache
   ) {
-    if ProcessInfo.processInfo.environment["LOGSEQ_PERF"] != nil,
+    if cache.count != subviews.count {
+      cache = subviews.map { $0.sizeThatFits(.unspecified) }
+    }
+    if LogseqPerf.detail,
        nodeID >= 1 && nodeID <= 270 {
-      let ws = subviews.map {
-        "\(Int($0.sizeThatFits(.unspecified).width))/\($0[LogseqGrowXKey.self])"
+      let ws = zip(subviews, cache).map {
+        "\(Int($1.width))/\($0[LogseqGrowXKey.self])"
       }.joined(separator: ",")
       FileHandle.standardError.write(
         "PERF row-place id=\(nodeID) n=\(subviews.count) b=\(Int(bounds.minX)),\(Int(bounds.minY)) \(Int(bounds.width))x\(Int(bounds.height)) w=[\(ws)]\n"
@@ -1092,8 +1154,8 @@ struct LogseqRowLayout: Layout {
     var total: CGFloat = 0
     var totalWeight = 0
     var flowIndex = 0
-    for subview in subviews {
-      let w = subview.sizeThatFits(.unspecified).width
+    for (index, subview) in subviews.enumerated() {
+      let w = cache[index].width
       ideals.append(w)
       let weight = subview[LogseqGrowXKey.self]
       weights.append(weight)
@@ -1122,8 +1184,7 @@ struct LogseqRowLayout: Layout {
         let anchor = subview[LogseqAnchorKey.self]
         let w = ideals[index]
         let fillY = subview[LogseqOutOfFlowFillYKey.self]
-        let h = fillY ? bounds.height
-          : subview.sizeThatFits(.unspecified).height
+        let h = fillY ? bounds.height : cache[index].height
         let px = anchor.x.map { bounds.minX + $0 }
           ?? anchor.right.map { bounds.maxX - $0 - w }
           ?? bounds.minX
@@ -1146,9 +1207,7 @@ struct LogseqRowLayout: Layout {
       w = max(0, w)
       // align-items: stretch by default; items-center hugs the child to its
       // natural height and centers it on the cross axis.
-      let h = centerCross
-        ? subview.sizeThatFits(.unspecified).height
-        : bounds.height
+      let h = centerCross ? cache[index].height : bounds.height
       let py = centerCross
         ? bounds.minY + max(0, bounds.height - h) / 2
         : bounds.minY
@@ -1175,15 +1234,29 @@ struct LogseqColumnLayout: Layout {
   /// to the container width.
   var centerCross = false
 
+  /// Ideal size per child at a given proposal width, measured once in
+  /// `sizeThatFits` and reused by `placeSubviews` — re-measuring inside
+  /// place re-walks the whole child subtree per container, multiplying a
+  /// single layout pass by the depth.
+  struct Cache {
+    var width: CGFloat?
+    var sizes: [CGSize] = []
+  }
+
+  func makeCache(subviews: Subviews) -> Cache { Cache() }
+
   func sizeThatFits(
-    proposal: ProposedViewSize, subviews: Subviews, cache: inout ()
+    proposal: ProposedViewSize, subviews: Subviews, cache: inout Cache
   ) -> CGSize {
+    cache.width = proposal.width
+    cache.sizes = subviews.map {
+      $0.sizeThatFits(ProposedViewSize(width: proposal.width, height: nil))
+    }
     var idealWidth: CGFloat = 0
     var height: CGFloat = 0
     var flowIndex = 0
-    for subview in subviews {
-      let size = subview.sizeThatFits(
-        ProposedViewSize(width: proposal.width, height: nil))
+    for (index, subview) in subviews.enumerated() {
+      let size = cache.sizes[index]
       if subview[LogseqOutOfFlowKey.self] { continue }
       if flowIndex > 0 { height += spacing }
       flowIndex += 1
@@ -1195,7 +1268,7 @@ struct LogseqColumnLayout: Layout {
     // a flex frame or a slice in placeSubviews, and the column must accept it
     // so leftover distribution can reach grow-weighted children.
     let out = CGSize(width: width, height: proposal.height ?? height)
-    if ProcessInfo.processInfo.environment["LOGSEQ_PERF"] != nil,
+    if LogseqPerf.detail,
        nodeID >= 1 && nodeID <= 270 {
       FileHandle.standardError.write(
         "PERF col-measure id=\(nodeID) n=\(subviews.count) ideal=\(Int(height)) prop=\(proposal.height.map { "\(Int($0))" } ?? "nil") out=\(Int(out.height))\n"
@@ -1206,18 +1279,23 @@ struct LogseqColumnLayout: Layout {
 
   func placeSubviews(
     in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews,
-    cache: inout ()
+    cache: inout Cache
   ) {
     // Ideal heights first; leftover goes to grow-weighted children so
     // flex-1/h-full content fills the column.
+    if cache.width != bounds.width || cache.sizes.count != subviews.count {
+      cache.width = bounds.width
+      cache.sizes = subviews.map {
+        $0.sizeThatFits(ProposedViewSize(width: bounds.width, height: nil))
+      }
+    }
     var heights = [CGFloat]()
     var weights = [Int]()
     var total: CGFloat = 0
     var totalWeight = 0
     var flowIndex = 0
-    let childProposal = ProposedViewSize(width: bounds.width, height: nil)
-    for subview in subviews {
-      let h = subview.sizeThatFits(childProposal).height
+    for (index, subview) in subviews.enumerated() {
+      let h = cache.sizes[index].height
       heights.append(h)
       let weight = subview[LogseqGrowYKey.self]
       weights.append(weight)
@@ -1230,7 +1308,7 @@ struct LogseqColumnLayout: Layout {
     }
     let leftover = bounds.height - total
     var y = bounds.minY
-    if ProcessInfo.processInfo.environment["LOGSEQ_PERF"] != nil,
+    if LogseqPerf.detail,
        nodeID >= 1 && nodeID <= 270 {
       let hs = heights.map { "\(Int($0))" }.joined(separator: ",")
       FileHandle.standardError.write(
@@ -1338,14 +1416,61 @@ struct LogseqFrameEntry: Equatable {
 }
 
 @MainActor enum LogseqFrameStore {
-  static var entries: [Int: LogseqFrameEntry] = [:]
+  /// Page-content frames ride the backend's `onFramesReport` channel
+  /// (`LUIFrameReportModifier` → `nodeFrames`), one dict hand-off per
+  /// coalesced layout flush. Previously every element carried its own
+  /// `GeometryReader` + preference that merged a per-node dict up the
+  /// whole ancestor chain — O(nodes × depth) merges on EVERY layout
+  /// pass, every frame during sidebar animations and window resizes.
+  static var baseEntries: [Int: LogseqFrameEntry] = [:]
+  /// Overlay/imperative popups paint at z≥1000 above page content, so
+  /// they keep a view-layer report (only the few elements inside an open
+  /// popup write this — the O(depth) merge cost only exists while a
+  /// popup is up and for popup nodes alone).
+  static var overlayEntries: [Int: LogseqFrameEntry] = [:]
 
-  /// Deepest element at the point: highest paint layer first, then the
+  /// Union for readers that want "whatever frame a node last painted"
+  /// (dom-op rect answers, snapshots, dumps) — overlays shadow base.
+  static var entries: [Int: LogseqFrameEntry] {
+    overlayEntries.isEmpty
+      ? baseEntries
+      : baseEntries.merging(overlayEntries) { _, overlay in overlay }
+  }
+
+  /// Element tag ("textarea", "div", …) for a base-entry node, resolved
+  /// lazily from its extension identifier — the backend frame channel
+  /// reports every node kind, not just elements.
+  private static func tag(of nodeID: Int) -> String? {
+    guard let context = LogseqElementRegistry.shared.context(forNode: nodeID),
+      let ident = context.extensionIdentifier(of: nodeID),
+      ident.hasPrefix("logseq-")
+    else { return nil }
+    return String(ident.dropFirst("logseq-".count))
+  }
+
+  /// Deepest element at the point: overlay layer first, then the
   /// smallest containing frame wins — approximating DOM hit order
   /// (overlays paint above content; children paint over ancestors).
-  static func hitTest(_ point: CGPoint) -> (nodeID: Int, tag: String)? {
+  /// `prefer` is the node that last won at this pointer area (e.g. the
+  /// mouseMoved monitor's last hit): the pointer sits still over it far
+  /// more often than it moves to a new node, so check it before the
+  /// O(n) scans below.
+  static func hitTest(
+    _ point: CGPoint,
+    prefer preferID: Int? = nil
+  ) -> (nodeID: Int, tag: String)? {
+    if let preferID {
+      if let overlay = overlayEntries[preferID], overlay.rect.contains(point) {
+        return (preferID, overlay.tag)
+      }
+      if let base = baseEntries[preferID], base.rect.contains(point),
+        let tag = tag(of: preferID), tag != "path"
+      {
+        return (preferID, tag)
+      }
+    }
     var best: (id: Int, z: Int, area: CGFloat)?
-    for (id, entry) in entries where entry.rect.contains(point) {
+    for (id, entry) in overlayEntries where entry.rect.contains(point) {
       let area = entry.rect.width * entry.rect.height
       if best == nil || entry.z > best!.z
         || (entry.z == best!.z && area < best!.area)
@@ -1353,15 +1478,24 @@ struct LogseqFrameEntry: Equatable {
         best = (id, entry.z, area)
       }
     }
-    guard let best, let entry = entries[best.id] else { return nil }
-    return (best.id, entry.tag)
-  }
-}
-
-struct LogseqFrameKey: PreferenceKey {
-  static let defaultValue: [Int: LogseqFrameEntry] = [:]
-  static func reduce(value: inout [Int: LogseqFrameEntry], nextValue: () -> [Int: LogseqFrameEntry]) {
-    value.merge(nextValue()) { _, new in new }
+    if let best, let entry = overlayEntries[best.id] {
+      return (best.id, entry.tag)
+    }
+    // Smallest containing element wins; `path` nodes don't hit-test
+    // (their parent svg reports the same region), and non-element nodes
+    // never did either.
+    let hits = baseEntries
+      .filter { $0.value.rect.contains(point) }
+      .sorted { a, b in
+        a.value.rect.width * a.value.rect.height
+          < b.value.rect.width * b.value.rect.height
+      }
+    for (id, _) in hits {
+      if let tag = tag(of: id), tag != "path" {
+        return (id, tag)
+      }
+    }
+    return nil
   }
 }
 

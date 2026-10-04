@@ -1148,3 +1148,48 @@ zoom!=1 path keeps the reader since it needs the container size.
   heights (140/141 = 770px). (LogseqElementView's `context.*` reads are
   live backend lookups — every extension view that renders backend state
   must subscribe to `context.revision` or accept staleness.)
+
+- Perf pass 3 — the main-wakeup trap: `DispatchQueue.main.async`,
+  `CFRunLoopPerformBlock`+`CFRunLoopWakeUp`, CFMachPort runloop sources
+  and cross-thread `Timer`s can ALL sit 0.6–2.9s undelivered while the
+  main runloop is parked in `_DPSNextEvent` — the parked wait only
+  services messages on the WindowServer event connection, and none of
+  those wakeups post to that connection. Verified fix: `runOnMain`
+  (LogseqRuntime.swift) = a `CFMachPortCreateRunLoopSource` (order 0)
+  whose port gets a `mach_msg` from `postWakeup()`, PLUS a self-sent
+  `NSAppleEventDescriptor` (kAEMiscStandards/kAEGetData, target = own
+  pid) which lands on the WindowServer connection itself. An
+  `NSEvent.addLocalMonitorForEvents(.any)` drain covers event-rich
+  periods inline. After the fix: patch apply e2e 0–6ms (was 0.6–2.9s),
+  Enter split renders ~instantly (ops always ran — the *patches* were
+  stuck in the wakeup queue). LUI side carries the same pattern for
+  `scheduleFramesReport` / spring-open (`devin/1791082860-mainloop-wakeup`).
+- Pitfall: `@MainActor` instance methods form `MainActor`-isolated
+  closures — running them on the OCaml worker SIGTRAPs in
+  `_swift_task_checkIsolatedSwift`. Worker-side closures must be built
+  inside `nonisolated private func` helpers; the `OCamlWorker` field is
+  `nonisolated(unsafe)`.
+- Pitfall: patch JSON was decoded ~3x on main (array split + per-batch
+  parse + `backend.apply(json:)` re-parse). `receivePatch` now
+  splits + `LUIAppleBackend.decode`s on the OCaml worker and queues
+  `DecodedPatchBatch` — main only mutates the tree (`apply(decoded:)`).
+- Pitfall: `validateNodeProperties(scope:)` filtered `nodes`/
+  `extensionNodes` dicts O(tree) per batch; now iterates the scope
+  directly (lui). `syncModalPresentation` DFS'd the whole tree on every
+  structural batch; `modalNodeCount` (counted in `commit`) skips the DFS
+  whenever no dialog/sheet/filePreview exists (lui).
+- Pitfall: op floods — focus retries re-emitted identical `set-class`
+  ops ~110x/click; each op = patch + layout pass. Dedup in
+  `imperative_dom.set_attr`, `vdom.set_class`, `editor_dom.el_set_class`
+  (snapshot els record `record_attr_override` so `el_get_attr`
+  converges) + `editor_actions` emits focus only when the target id
+  changes.
+- Pitfall: `NSWindow.didResizeNotification` fires continuously during
+  drag; debounce via `Timer.scheduledTimer` (default-mode timer only
+  fires when event tracking ends — the natural debounce point).
+- Pitfall: per-element `GeometryReader`+preference frame reporting was
+  O(nodes×depth) per layout pass (per frame during sidebar animation).
+  Base frames ride the backend's `onFramesReport` channel
+  (`LogseqFrameStore.baseEntries`); only overlay/imperative elements
+  keep view-layer `onGeometryChange` reports (`overlayEntries`).
+  `hitTest` prefers the last-hit node before scanning.

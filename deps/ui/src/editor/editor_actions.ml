@@ -80,6 +80,11 @@ let rec drain_pending_focus_actions attempts =
                  10;
              Js.Promise.resolve ()))
 
+(* the dom id of the el el_focus was last sent for — re-emitting the op
+   every retry saturates the host's op queue while the focus event still
+   hasn't had a turn, which is exactly what keeps ae from resolving *)
+let last_focus_emitted : string option ref = ref None
+
 let rec apply_focus () =
   (* a stale retry timer can fire after its arm was consumed or replaced;
      queued keys belong to the next landing, not the void — replay them
@@ -91,12 +96,20 @@ let rec apply_focus () =
         (* CodeMirror-backed code block: cm.focus() + setCursor landed *)
         S.pending_focus := None;
         focus_attempts := 0;
+        last_focus_emitted := None;
         drain_pending_focus_actions 0)
       else
       match D.textarea_of uuid with
       | Some el -> (
           D.autosize_textarea el;
-          D.el_focus el;
+          (* emit the focus op once per target: the host applies it when
+             the element materializes, so re-emitting just floods the
+             main-thread queue — each op costs a render invalidation *)
+          let key = D.el_dom_id el in
+          if key <> !last_focus_emitted then begin
+            D.el_focus el;
+            last_focus_emitted := key
+          end;
           (* a pending apply+refresh can still replace this node after
              landing — only consume the pending state once the element
              really holds focus; otherwise keep retrying so the remounted
@@ -105,6 +118,7 @@ let rec apply_focus () =
           | Some ae when ae == el ->
               S.pending_focus := None;
               focus_attempts := 0;
+              last_focus_emitted := None;
               (* a landing that ran late (remount during a remote-tx
                  refresh) must not stomp the caret: if the user typed
                  since this focus was requested, the stored caret is
@@ -114,7 +128,16 @@ let rec apply_focus () =
                 let c = max 0 (min caret len) in
                 D.el_set_selection_range el c c);
               drain_pending_focus_actions 0
-          | _ -> retry_focus ())
+          | ae ->
+              prerr_endline
+                ("PERF focus-retry t="
+                 ^ string_of_float (Platform.date_now_ms () /. 1000.)
+                 ^ " uuid=" ^ uuid ^ " ae="
+                 ^ (match ae with
+                    | Some _ -> "some(other)"
+                    | None -> "none"));
+              flush stderr;
+              retry_focus ())
       | None -> retry_focus ())
 
 and retry_focus () =
@@ -135,6 +158,7 @@ and retry_focus () =
   else (
     S.pending_focus := None;
     focus_attempts := 0;
+    last_focus_emitted := None;
     drain_pending_focus_actions 0)
 
 let request_focus uuid caret =

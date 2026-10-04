@@ -118,6 +118,10 @@ external el_query : el -> string -> el option = "querySelector"
   [@@mel.send] [@@mel.return nullable]
 external el_get_attr : el -> string -> string option = "getAttribute"
   [@@mel.send] [@@mel.return nullable]
+
+(* shared with the native impl: stable identity for an el — the DOM id
+   when present (native resolves snapshot/imperative ids too) *)
+let el_dom_id (el : el) : string option = el_get_attr el "id"
 external el_set_attr : el -> string -> string -> unit = "setAttribute"
   [@@mel.send]
 external el_remove_attr : el -> string -> unit = "removeAttribute"

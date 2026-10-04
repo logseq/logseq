@@ -48,6 +48,10 @@ let shortcut_key ev =
   | "%" -> "5" | "^" -> "6" | "&" -> "7" | "*" -> "8" | "(" -> "9"
   | ")" -> "0" | k -> k
 
+let perf_keys =
+  lazy
+    (match Sys.getenv_opt "LOGSEQ_PERF" with Some _ -> true | None -> false)
+
 let on_editor_arrows ev uuid el =
   let key = D.ev_key ev in
   let up = key = "ArrowUp" in
@@ -103,6 +107,8 @@ let on_editor_key ev uuid el =
         Editor_commands.cycle_todo uuid
     | "Enter" when not shift ->
         D.prevent_default ev;
+        (if Lazy.force perf_keys then
+           Printf.eprintf "PERF kdown-split uuid=%s\n%!" uuid);
         A.split_at_cursor uuid
     | "Tab" ->
         D.prevent_default ev;
@@ -465,8 +471,14 @@ let queue_racing_key ev uuid =
   S.pending_focus_actions := action :: !S.pending_focus_actions
 
 let on_keydown ev =
+  (if Lazy.force perf_keys then
+     Printf.eprintf "PERF kdown key=%s editing=%s ac=%b\n%!" (D.ev_key ev)
+       (match S.editing () with Some e -> e.S.uuid | None -> "-")
+       (ac_popup_open ()));
   if S.ready () then begin
-    if Editor_commands.popup_key ev then ()
+    if Editor_commands.popup_key ev then
+      (if Lazy.force perf_keys then
+         Printf.eprintf "PERF kdown-ate popup_key key=%s\n%!" (D.ev_key ev))
     else
       let target = D.ev_target ev in
       (* CodeMirror surfaces (fenced-code editor, query source editor)

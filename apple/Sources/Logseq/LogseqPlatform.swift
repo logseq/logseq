@@ -47,27 +47,49 @@ extension LogseqElement {
 /// popup flip's --available-height lift lands. A re-emitted `style` attr
 /// supersedes earlier mutations — web/React writes the new inline style
 /// over them — so decls are keyed to the emitted style they were added on.
-@Observable @MainActor final class LogseqStyleOverrides {
+/// Per-node override record. Views read this object's fields inside body,
+/// so each element subscribes to its own entry only — a dict-wide
+/// @Published store re-evaluated every element in the tree on any write.
+@Observable @MainActor final class LogseqStyleOverride {
+  var decls: [String] = []
+  var signature = ""
+}
+
+@MainActor final class LogseqStyleOverrides {
   static let shared = LogseqStyleOverrides()
-  private(set) var decls: [Int: [String]] = [:]
-  private var signatures: [Int: String] = [:]
+  /// Not @Observable itself: liveDecls hands out the per-node object, and
+  /// only writes to that object invalidate the element that reads it.
+  private var entries: [Int: LogseqStyleOverride] = [:]
+
+  private func entry(for nodeID: Int) -> LogseqStyleOverride {
+    if let o = entries[nodeID] { return o }
+    let o = LogseqStyleOverride()
+    entries[nodeID] = o
+    return o
+  }
 
   func add(nodeID: Int, emitted: String, _ decl: String) {
-    if signatures[nodeID] != emitted {
-      decls[nodeID] = []
-      signatures[nodeID] = emitted
+    let o = entry(for: nodeID)
+    if o.signature != emitted {
+      o.decls = []
+      o.signature = emitted
     }
-    decls[nodeID, default: []].append(decl)
+    o.decls.append(decl)
   }
 
   func liveDecls(for nodeID: Int, emitted: String) -> [String] {
-    guard signatures[nodeID] == emitted else { return [] }
-    return decls[nodeID] ?? []
+    let o = entry(for: nodeID)
+    guard o.signature == emitted else { return [] }
+    return o.decls
   }
 
   func clear(_ nodeID: Int) {
-    decls[nodeID] = nil
-    signatures[nodeID] = nil
+    // Emptying the entry (not removing it) notifies that node's readers;
+    // the dict entry then evicts so the next liveDecls starts fresh.
+    guard let o = entries[nodeID] else { return }
+    o.decls = []
+    o.signature = ""
+    entries.removeValue(forKey: nodeID)
   }
 }
 
@@ -91,6 +113,13 @@ extension LogseqElement {
       return
     }
     elements[id] = NSReferenceBox(element)
+    if ProcessInfo.processInfo.environment["LOGSEQ_PERF"] != nil,
+      id.hasPrefix("edit-block-")
+    {
+      FileHandle.standardError.write(
+        "PERF reg t=\(CFAbsoluteTimeGetCurrent()) id=\(id)\n"
+          .data(using: .utf8)!)
+    }
     onElementRegistered?(id)
   }
 
@@ -159,6 +188,7 @@ final class NSReferenceBox {
   private var mouseDownMonitor: Any?
   private var mouseUpMonitor: Any?
   private var lastMouseHitNode: Int?
+  private var windowSizeTimer: Timer?
   private let logger = Logger(subsystem: "com.logseq.native", category: "platform")
 
   func attach() {
@@ -170,10 +200,21 @@ final class NSReferenceBox {
     appearanceObservation = NSApp.observe(\.effectiveAppearance) { [weak self] _, _ in
       Task { @MainActor in self?.pushAppearance() }
     }
+    // didResizeNotification fires continuously while dragging the
+    // resize handle; debounce so OCaml only hears about the settled
+    // size. `Timer.scheduledTimer` lives in the default runloop mode,
+    // so during live resize tracking it only fires once the drag
+    // releases — exactly the debounce window.
     NotificationCenter.default.addObserver(
       forName: NSWindow.didResizeNotification, object: nil, queue: .main
     ) { [weak self] _ in
-      Task { @MainActor in self?.pushWindowSize() }
+      guard let self else { return }
+      self.windowSizeTimer?.invalidate()
+      self.windowSizeTimer = Timer.scheduledTimer(
+        withTimeInterval: 0.15, repeats: false
+      ) { [weak self] _ in
+        Task { @MainActor in self?.pushWindowSize() }
+      }
     }
     // Document-level keydown: web dispatches DOM keydown to document
     // listeners for every key; the native side only emits from the text
@@ -240,7 +281,7 @@ final class NSReferenceBox {
         let window = event.window, let contentView = window.contentView
       else { return event }
       let point = LogseqPlatform.windowPoint(event, in: contentView)
-      guard let hit = LogseqFrameStore.hitTest(point),
+      guard let hit = LogseqFrameStore.hitTest(point, prefer: lastMouseHitNode),
         let context = LogseqElementRegistry.shared.context(forNode: hit.nodeID)
       else { return event }
       if hit.nodeID == lastMouseHitNode { return event }
@@ -279,7 +320,7 @@ final class NSReferenceBox {
       guard let hit = LogseqFrameStore.hitTest(point),
         let context = LogseqElementRegistry.shared.context(forNode: hit.nodeID)
       else { return event }
-      DispatchQueue.main.async {
+      runOnMain {
         LogseqPlatform.emitClick(context: context, nodeID: hit.nodeID, point: point)
       }
       return event
@@ -587,6 +628,13 @@ final class NSReferenceBox {
   }
 
   private func domOpDict(name: String, dict: [String: Any], attempt: Int = 0) {
+    if LogseqPerf.detail {
+      let id = refID(dict) ?? "-"
+      let hit = target(dict) != nil
+      FileHandle.standardError.write(
+        "PERF domop t=\(CFAbsoluteTimeGetCurrent()) name=\(name) ref=\(id) hit=\(hit) attempt=\(attempt)\n"
+          .data(using: .utf8)!)
+    }
     if dict["ref"] != nil, let id = refID(dict), target(dict) == nil {
       pendingDomOps[id, default: []].append((name, dict))
       if attempt == 0 {

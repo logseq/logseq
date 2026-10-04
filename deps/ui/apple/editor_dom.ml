@@ -582,17 +582,37 @@ let is_editable_target target =
 let el_set_class (el : el) (c : string) : unit =
   if is_vdom_el el then Vdom.set_class el c
   else begin
-  (match Imperative_dom.id_of el with
-   | Some id -> (
-       match Imperative_dom.get id with
-       | Some n -> Imperative_dom.set_attr n "class" c
-       | None -> ())
-   | None -> ());
-  Host.dom_op "set-class"
-    (Js.Json.stringify
-       (Js.Json.JObject
-          ([ ("ref", el); ("class", Js.Json.JString c) ]
-          @ Imperative_dom.shadow_field el)))
+  (* el_set_attr records attr_overrides so el_get_attr converges; this
+     path used to skip that, so doc scans read the stale snapshot class
+     and re-emitted the same set-class every flush (~110x per click —
+     each op is a patch + a native ancestor-chain layout pass). *)
+  let changed =
+    match Imperative_dom.id_of el with
+    | Some id -> (
+        match Imperative_dom.get id with
+        | Some n ->
+            if n.Imperative_dom.s_cls = c then false
+            else begin
+              Imperative_dom.set_attr n "class" c;
+              true
+            end
+        | None -> (
+            (* snapshot el — not an imperative node; the override table is
+               the live record el_get_attr consults *)
+            match el_get_attr el "class" with
+            | Some cur when String.equal cur c -> false
+            | _ -> record_attr_override el "class" c; true))
+    | None -> (
+        match el_get_attr el "class" with
+        | Some cur when String.equal cur c -> false
+        | _ -> record_attr_override el "class" c; true)
+  in
+  if changed then
+    Host.dom_op "set-class"
+      (Js.Json.stringify
+         (Js.Json.JObject
+            ([ ("ref", el); ("class", Js.Json.JString c) ]
+            @ Imperative_dom.shadow_field el)))
   end
 
 let el_query (root : el) (sel : string) : el option =
@@ -722,7 +742,13 @@ let () =
       last_active_id :=
         (match Dom_ext.prop "target" ev with
          | Js.Json.JObject _ as t -> Dom_ext.str_prop "ref-id" t
-         | _ -> None))
+         | _ -> None);
+      prerr_endline
+        ("PERF focus-evt t="
+         ^ string_of_float (Unix.gettimeofday ())
+         ^ " last_active="
+         ^ (match !last_active_id with Some s -> s | None -> "none"));
+      flush stderr)
     true;
   document_add_listener "blur" (fun _ -> last_active_id := None) true;
   document_add_listener "element-mount"
