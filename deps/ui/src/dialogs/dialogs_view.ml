@@ -136,12 +136,24 @@ let confirm_view (c : Dialogs_state.confirm) =
           [ ("role", "alertdialog")
           ; ("style", Printf.sprintf "z-index:%d" z) ]
         ~style_class:"ui__alert-dialog-content"
-        [ dom ~key:"cfrm-t" ~tag:"h2"
-            ~style_class:"ui__alert-dialog-title"
-            ~text:c.title []
-        ; dom ~key:"cfrm-d" ~tag:"div"
-            ~style_class:"ui__alert-dialog-description"
-            ~text:c.desc []
+        [ (* cljs dialog/alert-inner: a confirm! with plain content
+             renders ui__alert-dialog-main-content only — no header *)
+          (if c.title = "" then
+             dom ~key:"cfrm-m"
+               ~style_class:"ui__alert-dialog-main-content"
+               [ dom ~key:"cfrm-mc" ~tag:"p"
+                   ~style_class:"font-medium mb-6" ~text:c.desc [] ]
+           else
+             dom ~key:"cfrm-h"
+               ~style_class:"ui__alert-dialog-header"
+               [ dom ~key:"cfrm-t" ~tag:"h2"
+                   ~style_class:"ui__alert-dialog-title" ~text:c.title []
+               ; if c.desc = "" then Logseq_dom.dom ~key:"cfrm-dx" []
+                 else
+                   dom ~key:"cfrm-d" ~tag:"div"
+                     ~style_class:"ui__alert-dialog-description"
+                     ~text:c.desc []
+               ])
         ; dom ~key:"cfrm-f"
             ~style_class:"ui__alert-dialog-footer"
             [ btn "cfrm-cancel" I18n.cancel "ls-btn-outline"

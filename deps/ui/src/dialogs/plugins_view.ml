@@ -300,10 +300,12 @@ let installed_card (pl : Js.Json.t) =
                             ~text:(t "plugin/report-security") []
                         ; menu_li "uninstall" (t "plugin/uninstall")
                             (fun () ->
+                              (* cljs plugins.cljs: content-only
+                                 confirm — [:b (t :plugin/delete-alert)] *)
                               Dialogs_state.ask
-                                ~title:
+                                ~title:""
+                                ~desc:
                                   (I18n.tf "plugin/delete-alert" [ name ])
-                                ~desc:""
                                 ~on_confirm:(fun () ->
                                   unregister_plugin pid)
                                 ())
