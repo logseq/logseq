@@ -368,8 +368,10 @@
              (when-not (entity/class? tag)
                (throw (ex-info (str "Not a tag: " tag-id)
                                {:tag (pr-str tag)})))
-             (when (and tag block)
-               (db-page-handler/add-tag repo (:db/id block) tag)))))
+             (when block
+               (p/let [_ (db-page-handler/add-tag repo (:db/id block) tag)
+                       updated-block (db-async/<get-block repo (:db/id block))]
+                 (sdk-utils/result->js updated-block))))))
 
 (defn remove-block-tag [id-or-name tag-id]
   (this-as this

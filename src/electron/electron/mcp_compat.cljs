@@ -278,21 +278,12 @@
             tags (js->clj result :keywordize-keys true)]
       (tag-uuid-result title tags))))
 
-        (defn get-tag
-          [api-fn args]
-          (let [tag-uuid (aget args "tag_uuid")
-            query "[:find [(pull ?tag [:block/uuid :block/title :block/name]) ...]
-                 :in $ ?uuid
-                 :where
-                 [?tag :block/uuid ?uuid]
-                 [?tag :block/tags ?class]
-                 [?class :db/ident :logseq.class/Tag]]"]
-            (p/let [result (api-fn "logseq.DB.datascriptQuery" [query (uuid-query-input tag-uuid)])
-            tags (js->clj result :keywordize-keys true)
-            tags (if (and (= 1 (count tags)) (vector? (first tags)))
-               (first tags)
-               tags)]
-          (tag-result tag-uuid tags))))
+(defn get-tag
+  [api-fn args]
+  (let [tag-uuid (aget args "tag_uuid")]
+    (p/let [result (api-fn "logseq.DB.getTag" [tag-uuid])
+            tag (js->clj result :keywordize-keys true)]
+      (tag-result tag-uuid (if tag [tag] [])))))
 
     (defn get-tag-users
       [api-fn args]
@@ -2780,19 +2771,19 @@
    :createBlock ["logseq.DB.insertBlock" "logseq.DB.datascriptQuery"]
    :updateBlock ["logseq.DB.updateBlock" "logseq.DB.datascriptQuery"]
    :moveBlock ["logseq.DB.moveBlock" "logseq.DB.datascriptQuery"]
-  :removeBlock ["logseq.DB.removeBlock" "logseq.DB.datascriptQuery"]
-  :splitBlock ["logseq.DB.datascriptQuery" "logseq.DB.insertBlock" "logseq.DB.moveBlock" "logseq.DB.updateBlock"]
-  :moveBlocks ["logseq.DB.datascriptQuery" "logseq.DB.moveBlock"]
-  :migratePage ["logseq.DB.datascriptQuery" "logseq.DB.moveBlock"]
-  :deletePage ["logseq.DB.datascriptQuery" "logseq.DB.deletePage"]
-  :clearPage ["logseq.DB.datascriptQuery" "logseq.DB.removeBlock"]
-  :retitleOverDuplicate ["logseq.DB.datascriptQuery" "logseq.DB.renamePage"]
-  :createPageofBlocks ["logseq.DB.datascriptQuery" "logseq.DB.insertBatchBlock"]
-  :importPage ["logseq.DB.datascriptQuery" "logseq.DB.createPage" "logseq.DB.insertBatchBlock" "logseq.DB.removeBlock"]
-  :repairLinks ["logseq.DB.datascriptQuery" "logseq.DB.createPage" "logseq.DB.createTag" "logseq.DB.updateBlock"]
-   :getTag ["logseq.DB.datascriptQuery"]
+   :removeBlock ["logseq.DB.removeBlock" "logseq.DB.datascriptQuery"]
+   :splitBlock ["logseq.DB.datascriptQuery" "logseq.DB.insertBlock" "logseq.DB.moveBlock" "logseq.DB.updateBlock"]
+   :moveBlocks ["logseq.DB.datascriptQuery" "logseq.DB.moveBlock"]
+   :migratePage ["logseq.DB.datascriptQuery" "logseq.DB.moveBlock"]
+   :deletePage ["logseq.DB.datascriptQuery" "logseq.DB.deletePage"]
+   :clearPage ["logseq.DB.datascriptQuery" "logseq.DB.removeBlock"]
+   :retitleOverDuplicate ["logseq.DB.datascriptQuery" "logseq.DB.renamePage"]
+   :createPageofBlocks ["logseq.DB.datascriptQuery" "logseq.DB.insertBatchBlock"]
+   :importPage ["logseq.DB.datascriptQuery" "logseq.DB.createPage" "logseq.DB.insertBatchBlock" "logseq.DB.removeBlock"]
+   :repairLinks ["logseq.DB.datascriptQuery" "logseq.DB.createPage" "logseq.DB.createTag" "logseq.DB.updateBlock"]
+   :getTag ["logseq.DB.getTag"]
    :getPropertyIndent ["logseq.DB.datascriptQuery"]
-   :getBlock ["logseq.DB.datascriptQuery"]
+  :getBlock ["logseq.DB.getBlock"]
    :getTagUsers ["logseq.DB.datascriptQuery"]
    :getBlockUUID ["logseq.DB.datascriptQuery"]
    :getBlockTree ["logseq.DB.datascriptQuery"]
@@ -2816,6 +2807,8 @@
 
 (def ^:private capability-probe-args
   {"logseq.DB.datascriptQuery" ["[:find ?e . :where [?e :block/uuid]]"]
+  "logseq.DB.getBlock" ["__mcp_capability_probe__" #js {:includeChildren false :includePage true}]
+  "logseq.DB.getTag" ["__mcp_capability_probe__"]
    "logseq.DB.getTagsByName" ["__mcp_capability_probe__"]
    "logseq.DB.getAllProperties" []
    "logseq.cli.listPages" [#js {}]

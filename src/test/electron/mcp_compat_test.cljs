@@ -410,6 +410,25 @@
           (p/then (fn [_] (js/queueMicrotask done)))
           (p/catch (fn [error] (is false (.-message error)) (js/queueMicrotask done)))))))
 
+(deftest get-tag-uses-existing-db-api
+  (let [tag-uuid "00000000-0000-4000-8000-000000000166"
+        tag-ident ":plugin.class._test_plugin/SmokeTag"
+        calls (atom [])
+        api (recording-api calls #js {:id 166 :uuid tag-uuid :title "Smoke Tag"
+                                      :name "smoke-tag" :ident tag-ident})]
+    (async done
+      (-> (mcp-compat/get-tag api #js {"tag_uuid" tag-uuid})
+          (p/then (fn [tag]
+                    (is (= [["logseq.DB.getTag" [tag-uuid]]] @calls))
+                    (is (true? (:found tag)))
+                    (is (= tag-uuid (:tag_uuid tag)))
+                    (is (= "Smoke Tag" (:title tag)))
+                    (is (= 166 (:id tag)))
+                    (is (= "smoke-tag" (:name tag)))
+                    (is (= tag-ident (:ident tag)))
+                    (js/queueMicrotask done)))
+          (p/catch (fn [error] (is false (.-message error)) (js/queueMicrotask done)))))))
+
 (deftest block-read-preserves-db-page-classification-and-tagged-blocks
   (let [{:keys [page-uuid block-uuid conn api]} (page-fixture)
         journal-uuid "00000000-0000-4000-8000-000000000165"
@@ -1024,6 +1043,8 @@
                     (is (true? (get-in result [:graph :version_matches])))
                     (is (= "unknown" (get-in result [:tools :getTagUUID :state])))
                     (is (some #{"getTagUUID"} (:unknown result)))
+                    (is (some #(= "logseq.DB.getTag" (first %)) @calls))
+                    (is (some #(= "logseq.DB.getBlock" (first %)) @calls))
                     (is (not (contains? (:tools result) :upsertNodes)))
                     (is (not (contains? (get-in result [:diagnostics :routes]) "upsertNodes")))
                     (is (not-any? #(= "logseq.cli.upsertNodes" (first %)) @calls))

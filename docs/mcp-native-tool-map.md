@@ -25,13 +25,13 @@ switching are separate statuses; getBlock evidence does not validate other rows.
 | `inspectPage` | page UUID, `detail` | detail-specific queries | query adapter | DB read |
 | `pageStats` | page UUID | fixed count queries | query adapter | DB read |
 | `getBlockUUID` | page UUID | query | query adapter | DB read |
-| `getBlock` | block UUID | exact entity query | single MCP adapter calls `logseq.DB.getBlock` using the existing Editor implementation and standard dispatch | no duplicate getter, special resolver, native module, or comparison switch; local tests pass; current smoke test pending |
+| `getBlock` | block UUID | exact entity query | single MCP adapter calls `logseq.DB.getBlock` using the existing Editor implementation and standard dispatch | production route switched; local tests pass; six read-only smoke cases pass; collapsed and property-bearing cases remain blocked pending live reads |
 | `searchBlocks` | text, page scope, regex, limit | predicate query + separate count | query adapter, single attempt | DB read/query |
 | `getBlockTree` | block UUID, depth/node caps | parent traversal query | query adapter | DB read |
 | `findBacklinks` | target UUID | reference/tag/property queries | query adapter | DB read |
 | `findOrphans` | page UUID | parent/page comparison query | query adapter | DB read |
 | `getTagUUID` | title | `getTagsByName` | API tag lookup | DB read |
-| `getTag` | tag UUID | query | query adapter | DB read |
+| `getTag` | tag UUID | UUID/title/name projection query | existing `logseq.DB.getTag` API; MCP preserves its full PageEntity fields, including UUID/title/name and richer id/ident metadata | production route switched; DB API and MCP pass-through tests pass; live validation pending |
 | `getTagUsers` | tag UUID | query | query adapter | DB read |
 | `getPropertyIndent` | property title | property-class query | query adapter | DB read |
 | `getProperyUsers` | property ident | query + value resolution | query adapter | DB read |
