@@ -1908,7 +1908,7 @@
  :graph/displayed-tags-count "{1} of {2}"
  :graph/layout "Layout"
  :graph/layout-depth "탐색 깊이"
- :graph/layout-force "노드 간 거리"
+ :graph/layout-force "힘 기반 그래프"
  :graph/layout-grid-layout "격자 보기"
  :graph/layout-link-distance "Link distance"
  :graph/layout-show-journals "저널 표시"
