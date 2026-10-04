@@ -197,11 +197,11 @@
 (defn get-page-uuid
   [api-fn args]
   (let [title (aget args "title")]
-    (p/let [by-title (query-pages api-fn page-title-query title)
-            pages (if (seq by-title)
-                    by-title
-                    (query-pages api-fn page-name-query (string/lower-case title)))]
-      (page-uuid-result title pages))))
+(p/let [by-title (query-pages api-fn page-title-query title)
+        pages (if (seq by-title)
+                by-title
+                (query-pages api-fn page-name-query (string/lower-case title)))]
+  (page-uuid-result title pages))))
 
 (defn get-tag-uuid
   [api-fn args]
@@ -224,23 +224,10 @@
           (js->clj result :keywordize-keys true))))
 
     (defn get-block-uuids
-      [api-fn args]
-      (let [page-uuid (aget args "page_uuid")
-            query (str "[:find (pull ?root [:db/id :block/uuid :block/title :block/name :block/order "
-                       "{:block/parent [:db/id :block/uuid]} {:block/page [:db/id :block/uuid]} "
-                       "{:block/_parent ...}]) . :where [?root :block/uuid " (uuid-query-input page-uuid) "]]")]
-        (p/let [result (api-fn "logseq.DB.datascriptQuery" [query])
-                root (js->clj result :keywordize-keys true)]
-          (when-not root
-            (throw (js/Error. (str "No entity exists with exact UUID " page-uuid))))
-          (when-not (or (:name root) (:block/name root))
-            (throw (js/Error. "UUID identifies a block, not a page")))
-          (letfn [(descendants [node]
-                    (mapcat (fn [child]
-                              (cons (dissoc child :_parent) (descendants child)))
-                            (:_parent node)))]
-            (mapv #(assoc % :page_uuid page-uuid)
-                  (sort-by #(str (:order %)) (descendants root)))))))
+  [api-fn args]
+  (let [page-uuid (aget args "page_uuid")]
+    (p/let [result (api-fn "logseq.DB.getPageBlockUUIDs" [page-uuid])]
+      (js->clj result :keywordize-keys true))))
 
     (defn block-tree-result
       [block-uuid root rows max-depth max-nodes]
@@ -2602,7 +2589,7 @@
    :getTagUsers ["logseq.DB.getTagUsers"]
   :getPropertyIndent ["logseq.DB.getPropertiesByTitle"]
    :getBlock ["logseq.DB.getBlock"]
-   :getBlockUUID ["logseq.DB.datascriptQuery"]
+  :getBlockUUID ["logseq.DB.getPageBlockUUIDs"]
    :getBlockTree ["logseq.DB.datascriptQuery"]
    :findBacklinks ["logseq.DB.datascriptQuery"]
    :findOrphans ["logseq.DB.datascriptQuery"]
@@ -2629,6 +2616,7 @@
    "logseq.DB.getTagUsers" ["00000000-0000-4000-8000-000000000999"]
    "logseq.DB.inspectPage" ["00000000-0000-4000-8000-000000000999" "page"]
   "logseq.DB.getPageStats" ["00000000-0000-4000-8000-000000000999"]
+  "logseq.DB.getPageBlockUUIDs" ["00000000-0000-4000-8000-000000000999"]
   "logseq.DB.getPropertiesByTitle" ["__mcp_capability_probe__"]
    "logseq.DB.getTagsByName" ["__mcp_capability_probe__"]
    "logseq.DB.getAllProperties" []

@@ -614,6 +614,26 @@
               :aliases alias-uuids
               :diagnostic diagnostic})))))))
 
+(defn get-page-block-uuids [page-uuid]
+  (when-not (util/uuid-string? page-uuid)
+    (throw (js/Error. "page_uuid must be a UUID")))
+  (let [repo (state/get-current-repo)
+        page-uuid* (sdk-utils/uuid-or-throw-error page-uuid)
+        tree-query "[:find (pull ?root [:db/id :block/uuid :block/title :block/name :block/order {:block/parent [:db/id :block/uuid]} {:block/page [:db/id :block/uuid]} {:block/_parent ...}]) . :in $ ?uuid :where [?root :block/uuid ?uuid]]"]
+    (p/let [root (<inspect-page-query repo tree-query page-uuid*)]
+      (when-not root
+        (throw (js/Error. (str "No entity exists with exact UUID " page-uuid))))
+      (when-not (inspect-page-field root :name)
+        (throw (js/Error. "UUID identifies a block, not a page")))
+      (letfn [(descendants [node]
+                (mapcat (fn [child]
+                          (cons (dissoc child :_parent)
+                                (descendants child)))
+                        (or (:_parent node) [])))]
+        (bean/->js
+         (mapv #(assoc % :page_uuid page-uuid)
+               (sort-by #(str (:order %)) (descendants root))))))))
+
 (defn get-tags-by-name [name]
   (p/let [tags (get-tags name)]
     (sdk-utils/result->js tags)))

@@ -24,7 +24,7 @@ switching are separate statuses; getBlock evidence does not validate other rows.
 | `findDuplicateTitles` | `normalize`, `include_recycled` | queries + grouping | query adapter | DB read |
 | `inspectPage` | page UUID, `detail` | page plus selected blocks, tags, properties, or declarations | dedicated `logseq.DB.inspectPage` API; retains the detail envelope and query-shaped entity keys | API implemented; local DB, MCP, and capability tests pass; live validation pending |
 | `pageStats` | page UUID | fixed counts, subtree/alias/reference/property analysis | dedicated `logseq.DB.getPageStats` API owns the read-only DB aggregation and preserves the response/diagnostic contract | production route switched; local DB, MCP, and capability tests pass; live validation pending |
-| `getBlockUUID` | page UUID | query | query adapter | DB read |
+| `getBlockUUID` | page UUID | flat descendant list with order, parent/page references, and cross-page ancestry | dedicated `logseq.DB.getPageBlockUUIDs` API preserves the parent traversal and output fields | production route switched; DB API, cross-page MCP, and capability tests pass; live validation pending |
 | `getBlock` | block UUID | exact entity query | single MCP adapter calls `logseq.DB.getBlock` using the existing Editor implementation and standard dispatch | production route switched; local tests pass; six read-only smoke cases pass; collapsed and property-bearing cases remain blocked pending live reads |
 | `searchBlocks` | text, page scope, regex, limit | predicate query + separate count | query adapter, single attempt | DB read/query |
 | `getBlockTree` | block UUID, depth/node caps | parent traversal query | query adapter | DB read |

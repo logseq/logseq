@@ -45,6 +45,26 @@
                               "logseq.DB.getBlock"
                               (clj->js (sdk-utils/normalize-keyword-for-json
                                    (d/pull @conn '[*] [:block/uuid (uuid (first args))]) true))
+                              "logseq.DB.getPageBlockUUIDs"
+                              (let [page-uuid (uuid (first args))
+                                    root-id (d/q '[:find ?root . :in $ ?uuid
+                                                   :where [?root :block/uuid ?uuid]]
+                                                 @conn page-uuid)]
+                                (letfn [(descendants [parent-id]
+                                          (mapcat (fn [child]
+                                                    (cons child (descendants (:db/id child))))
+                                                  (d/q '[:find [(pull ?child [:db/id :block/uuid :block/title :block/name :block/order
+                                                                                 {:block/parent [:db/id :block/uuid]}
+                                                                                 {:block/page [:db/id :block/uuid]}]) ...]
+                                                        :in $ ?parent
+                                                        :where [?child :block/parent ?parent]]
+                                                      @conn parent-id)))]
+                                  (let [blocks (descendants root-id)]
+                                (clj->js
+                                 (sdk-utils/normalize-keyword-for-json
+                                  (mapv #(assoc % :page_uuid (str page-uuid))
+                                    (sort-by #(str (:block/order %)) blocks))
+                                  false)))))
                               "logseq.DB.getTag"
                               (when (d/q '[:find ?tag . :in $ ?uuid
                                            :where [?tag :block/uuid ?uuid] [?tag :block/tags 159]]
@@ -1076,6 +1096,7 @@
                     (is (some #(= "logseq.DB.inspectPage" (first %)) @calls))
                     (is (some #(= "logseq.DB.getPropertiesByTitle" (first %)) @calls))
                     (is (some #(= "logseq.DB.getPageStats" (first %)) @calls))
+                    (is (some #(= "logseq.DB.getPageBlockUUIDs" (first %)) @calls))
                     (is (not (contains? (:tools result) :upsertNodes)))
                     (is (not (contains? (get-in result [:diagnostics :routes]) "upsertNodes")))
                     (is (not-any? #(= "logseq.cli.upsertNodes" (first %)) @calls))

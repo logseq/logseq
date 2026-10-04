@@ -979,6 +979,7 @@ export interface IDBProxy {
     detail?: 'page' | 'blocks' | 'tags' | 'properties' | 'declared' | 'all'
   ) => Promise<Record<string, any>>
   getPageStats: (pageUuid: BlockUUID) => Promise<Record<string, any>>
+  getPageBlockUUIDs: (pageUuid: BlockUUID) => Promise<Array<Partial<BlockEntity> & { page_uuid: BlockUUID }>>
   addBlockTag: (blockId: BlockIdentity, tagId: BlockIdentity) => Promise<BlockEntity | null>
   listTags: (options?: Partial<{ expand: boolean }>) => Promise<Array<Record<string, any>>>
   listProperties: (options?: Partial<{ expand: boolean }>) => Promise<Array<Record<string, any>>>

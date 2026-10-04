@@ -216,6 +216,27 @@
                    (is false (str error))))
         (p/finally done))))
 
+(deftest get-page-block-uuids-api-returns-flat-page-descendants
+  (test-helper/load-test-files
+   [{:page {:block/title "UUID API Page"}
+     :blocks [{:block/title "UUID API Block"}]}])
+  (async done
+    (-> (api-test/with-plugin-api
+          (fn []
+            (let [page (test-helper/find-page-by-title "UUID API Page")
+                  block (test-helper/find-block-by-content "UUID API Block")
+                  page-uuid (str (:block/uuid page))
+                  block-uuid (str (:block/uuid block))]
+              (p/let [result (db-based-api/get-page-block-uuids page-uuid)
+                      blocks (api-test/js->clj-kw result)]
+                (is (= [block-uuid] (mapv :uuid blocks)))
+                (is (= [page-uuid] (mapv :page_uuid blocks)))
+                (is (= (:db/id page) (get-in blocks [0 :page :id])))
+                (is (= (:db/id page) (get-in blocks [0 :parent :id])))))))
+        (p/catch (fn [error]
+                   (is false (str error))))
+        (p/finally done))))
+
 (deftest tag-properties-and-node-tags
   (async done
     (-> (api-test/with-plugin-api
