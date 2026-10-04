@@ -197,8 +197,8 @@ let commit uuid buf =
   if buf <> model_title uuid then (
     S.override_title uuid (Ops.normalized_title uuid buf);
     ignore
-      (let* sop = Ops.save_block_parsed uuid buf in
-      let* _ = Ops.apply_and_refresh [ sop ] in
+      (let* sops = Ops.save_block_parsed uuid buf in
+      let* _ = Ops.apply_and_refresh sops in
       (* the buffer is now persisted — advance base so the undo
                 resync gate treats it as clean and can restore reverted
                 titles instead of masking them with the pre-undo text *)
@@ -326,8 +326,8 @@ let flush_edit () =
       S.set (fun st -> { st with S.editing = None });
       if buf <> model_title e.uuid then
         ignore
-          (let* sop = Ops.save_block_parsed e.uuid buf in
-           Ops.apply [ sop ])
+          (let* sops = Ops.save_block_parsed e.uuid buf in
+           Ops.apply sops)
 
 (* property value cells open their own inline editor — entering one
    exits block editing just like a click into another block *)
@@ -563,12 +563,12 @@ let merge_prev uuid =
                its live buffer so it doesn't flash the stale title *)
             S.override_title uuid (Ops.normalized_title uuid buf);
             ignore
-              (let* sop =
+              (let* sops =
                  Ops.save_block_parsed prev_uuid (ptitle ^ buf)
                in
                let ops =
                  move_children_ops b prev_uuid
-                 @ [ Ops.delete_blocks [ uuid ]; sop ]
+                 @ (Ops.delete_blocks [ uuid ] :: sops)
                in
                let* pbuf = Ops.title_for_edit (String.trim ptitle) in
               S.set (fun st ->
@@ -775,6 +775,25 @@ let select_single uuid =
       ; anchor = Some uuid
       ; action_bar = false
       })
+
+(* shift+click: select the flat-order range from the current anchor
+   (or the editing block, committed) through the clicked block *)
+let select_range_to uuid =
+  (match S.editing () with
+   | Some _ -> exit_edit ~select:true
+   | None -> ());
+  match S.anchor () with
+  | Some anchor -> (
+      match range_between anchor uuid with
+      | [] -> ()
+      | range ->
+          S.set (fun st ->
+              { st with
+                S.selected = S.String_set.of_list range
+              ; anchor = Some anchor
+              ; action_bar = true
+              }))
+  | None -> select_single uuid
 
 let select_all () =
   match flat_uuids () with
@@ -1940,7 +1959,7 @@ let run_query_command ~advanced =
       in
       let _ = () in
       ignore
-        (let* sop = Ops.save_block_parsed e.uuid "" in
+        (let* sops = Ops.save_block_parsed e.uuid "" in
         let* () =
           Ops.apply_and_refresh
             ([ Ops.op "create-property-text-block"
@@ -1954,9 +1973,8 @@ let run_query_command ~advanced =
                  ]
              ; Ops.set_block_property e.uuid "block/tags"
                  (Wire.Keyword "logseq.class/Query")
-             ; sop
              ]
-            @ extra)
+            @ sops @ extra)
         in
         Js.Promise.resolve ())
 
@@ -2041,8 +2059,8 @@ let save_uploaded_files (input : Editor_dom.el) =
           let pre =
             if empty_target then Js.Promise.resolve ()
             else
-              let* sop = Ops.save_block_parsed e.uuid buffer in
-              Ops.apply [ sop ]
+              let* sops = Ops.save_block_parsed e.uuid buffer in
+              Ops.apply sops
           in
           ignore
             (let* () = pre in

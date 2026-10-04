@@ -1111,23 +1111,33 @@ let on_click ev =
                                               D.el_get_attr el "blockid"
                                             with
                                             | Some u ->
-                                                (* scope by container: the
-                                                   same block can render in
-                                                   main and the sidebar; only
-                                                   the tree where the click
-                                                   landed mounts the editor *)
-                                                let scope =
-                                                  match
-                                                    D.closest_sel
-                                                      ".cp__right-sidebar"
-                                                      target
-                                                  with
-                                                  | Some _ -> "sidebar"
-                                                  | None -> "main"
-                                                in
-                                                A.enter_edit ~scope u
-                                                  (String.length
-                                                     (A.model_title u))
+                                                if D.ev_shift ev then (
+                                                  (* cljs shift+click
+                                                     extends the block
+                                                     selection — keep the
+                                                     caret out of the
+                                                     tree *)
+                                                  D.prevent_default ev;
+                                                  A.select_range_to u)
+                                                else
+                                                  (* scope by container: the
+                                                     same block can render
+                                                     in main and the
+                                                     sidebar; only the tree
+                                                     where the click landed
+                                                     mounts the editor *)
+                                                  let scope =
+                                                    match
+                                                      D.closest_sel
+                                                        ".cp__right-sidebar"
+                                                        target
+                                                    with
+                                                    | Some _ -> "sidebar"
+                                                    | None -> "main"
+                                                  in
+                                                  A.enter_edit ~scope u
+                                                    (String.length
+                                                       (A.model_title u))
                                             | None -> ())
                                         | None -> ())))))))))
 
