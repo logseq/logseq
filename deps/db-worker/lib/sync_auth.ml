@@ -110,7 +110,7 @@ let refresh_id_and_access_token () : (string option * string option) Db_worker_e
          ; Wire.Keyword "body", data ])
 
 (* <resolve-ws-token *)
-let resolve_ws_token () : string option Db_worker_effect.t =
+let resolve_ws_token_impl () : string option Db_worker_effect.t =
   let token = Sync_util.auth_token () in
   if (not (Sync_util.cli_node_owner ())) && id_token_expired token then
     refresh_id_and_access_token () >>= fun (id_token, access_token) ->
@@ -130,6 +130,11 @@ let resolve_ws_token () : string option Db_worker_effect.t =
     Worker_state.merge_state (Wire.Map pairs);
     Db_worker_effect.pure id_token
   else Db_worker_effect.pure token
+
+(* test seam — cljs with-redefs [sync-auth/<resolve-ws-token] *)
+let resolve_ws_token_fn = ref resolve_ws_token_impl
+
+let resolve_ws_token () = !resolve_ws_token_fn ()
 
 let get_user_uuid (id_token : string option) : string option =
   match id_token with

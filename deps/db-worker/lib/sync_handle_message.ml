@@ -274,7 +274,7 @@ let handle_tx_reject repo (client : Sync_state.client) (message : Wire.t)
        if success_tx_ids <> None || failed_tx_id <> None then begin
          (* confirm the accepted ids into the server conn first, then
             drop the rejected one from the projection — one rebuild total *)
-         Sync_apply.confirm_pending_txs repo successful_tx_ids;
+         Sync_replay.confirm_pending_txs repo successful_tx_ids;
          let unpended =
            Sync_apply.mark_pending_txs_false ~rebuild:false repo
              successful_tx_ids
@@ -283,7 +283,7 @@ let handle_tx_reject repo (client : Sync_state.client) (message : Wire.t)
           | Some id -> Sync_apply.fail_pending_txs repo [ id ]
           | None ->
               if unpended > 0 then
-                Sync_apply.rebuild_display repo ~jump_tx_data:[])
+                Sync_replay.rebuild_display repo ~jump_tx_data:[])
        end
        else
          Sync_apply.fail_pending_txs repo inflight;
@@ -366,7 +366,7 @@ let handle_tx_batch_ok repo (client : Sync_state.client) remote_tx
   Sync_util.clear_last_sync_error client;
   (* confirmed by the server: fold their normalized tx data into the
      server conn, then un-pend so the next projection matches the base *)
-  Sync_apply.confirm_pending_txs repo !(client.inflight);
+  Sync_replay.confirm_pending_txs repo !(client.inflight);
   ignore (Sync_apply.mark_pending_txs_false repo !(client.inflight));
   client.inflight := [];
   broadcast_rtc_state client;
@@ -385,7 +385,7 @@ let update_latest_remote_state repo (message : Wire.t)
   let remote_tx = Wire.get "t" message in
   let remote_checksum = Wire.get "checksum" message in
   let has_checksum = remote_checksum <> None in
-  let latest_remote_tx = Hashtbl.find_opt Sync_apply.repo_latest_remote_tx repo in
+  let latest_remote_tx = Sync_apply.latest_remote_tx repo in
   let authoritative =
     message_type = "hello" || message_type = "changed"
   in
@@ -520,7 +520,7 @@ let handle_pull_ok repo (client : Sync_state.client) (local_tx : int option)
                     remote_txs))
           >>= fun remote_txs' ->
           Db_worker_effect.catch
-            (Sync_apply.apply_remote_txs repo client remote_txs')
+            (Sync_replay.apply_remote_txs repo client remote_txs')
             (fun e ->
                Worker_log.error "apply-remote-tx"
                  [ ("repo", repo); ("error", Printexc.to_string e) ];

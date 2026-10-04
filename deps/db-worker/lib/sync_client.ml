@@ -624,7 +624,7 @@ let () =
                 pairs
             in
             let result =
-              Sync_apply.apply_history_action repo
+              Sync_replay.apply_history_action repo
                 (Option.value ~default:"" tx_id_opt) undo tx_meta
             in
             (match result with
