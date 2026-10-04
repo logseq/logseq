@@ -4359,7 +4359,6 @@ select.form-select {
 
 .ui__button.as-ghost {
   background: none;
-  border-style: none;
 }
 
 .ui__button.as-ghost:hover {
@@ -4369,7 +4368,6 @@ select.form-select {
 .ui__button.as-destructive {
   background: hsl(var(--destructive, #d64545) / 0.9);
   color: #fff;
-  border-style: none;
 }
 
 .ui__button.as-destructive:hover {

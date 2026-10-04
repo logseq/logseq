@@ -394,6 +394,7 @@ blockquote {
 
   &.is-open {
     width: var(--ls-left-sidebar-width);
+    height: 100%;
   }
 
   &:not(.is-open) .left-sidebar-resizer {
@@ -486,6 +487,13 @@ blockquote {
     text-align: center;
     align-content: baseline;
     line-height: 1;
+    /* cljs wraps the node icon in .icon-cp-container (pr-1, inner icon
+       mr-0) — same geometry without the extra element */
+    padding-right: calc(var(--spacing) * 1);
+
+    .ui__icon {
+      margin-right: 0;
+    }
   }
 }
 
@@ -689,7 +697,6 @@ blockquote {
           height: 32px;
           width: 100%;
           border-radius: 6px;
-          color: var(--ls-primary-text-color);
 
           .page-title {
             white-space: nowrap;
