@@ -403,10 +403,28 @@ struct LogseqElementView: View {
         emitLifecycle("element-mount")
         registerElement()
         // .block-children[data-lazy-mount]: cljs lazy-block-children
-        // parity — a placeholder whose onAppear tells OCaml to mount
-        // the real children (once; near is a one-way latch)
-        if attrs["data-lazy-mount"] != nil {
-          DispatchQueue.main.async { emit("lazy-mount") }
+        // parity — the placeholder div is a zero-content leaf (if_ emits
+        // nothing until `near`), so SwiftUI never fires its own onAppear.
+        // Its .block-children-container parent does appear (it has
+        // children → a real view), so the parent checks its kids' attrs
+        // and emits lazy-mount on the placeholder's node.
+        if case .string(let cls) = context.property("style-class"),
+          cls.contains("block-children-container")
+        {
+          DispatchQueue.main.async {
+            for kid in self.context.childIDs {
+              guard case .string(let kAttrs) = self.context.childProperty(
+                node: kid, "attrs"),
+                kAttrs.contains("data-lazy-mount")
+              else { continue }
+              try? self.context.emit(
+                on: kid, name: "dom-event",
+                values: [
+                  "name": .string("lazy-mount"),
+                  "payload": .string("{\"nodeId\":\(kid)}"),
+                ])
+            }
+          }
         }
         if isLeftSidebarLayout {
           LogseqSidebarStore.shared.open = sidebarOpen
