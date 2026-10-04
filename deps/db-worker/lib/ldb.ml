@@ -528,20 +528,27 @@ let get_built_in_page db (title : string) : entity option =
   let u = Common_uuid.gen_uuid "builtin-block-uuid" title in
   counted_entity db (Lookup_ref ("block/uuid", Uuid u))
 
-(* common-initial-data/get-block-full-children-ids — the recursive
-   :parent rule, as in cljs. *)
+(* common-initial-data/get-block-full-children-ids — transitive children,
+   like the cljs (parent ?p ?c) recursive rule. Direct :block/parent
+   descent with a visited set instead of a per-call rules parse + datalog
+   eval; visited guards parent cycles. *)
 let get_block_full_children_ids db (block_eid : entity_id) : entity_id list =
-  let rules_edn =
-    "[[(parent ?p ?c) [?c :block/parent ?p]] \
-      [(parent ?p ?c) [?t :block/parent ?p] (parent ?t ?c)]]"
+  let child_ids (eid : entity_id) : entity_id list =
+    List.of_seq (datoms db Avet ~a:"block/parent" ~v:(Ref eid) ())
+    |> List.map (fun (d : datom) -> d.e)
   in
-  q_string db
-    "[:find [?c ...] :in $ ?id % :where (parent ?id ?c)]"
-    ~inputs:
-      [ Arg_scalar (Result_entity block_eid);
-        Arg_rules (Parser.parse_rules (Parser.read_edn rules_edn)) ]
-  |> List.filter_map
-       (fun row -> match row with [ Result_entity c ] -> Some c | _ -> None)
+  let visited = Hashtbl.create 16 in
+  let rec descendants (eid : entity_id) : entity_id list =
+    List.concat_map
+      (fun cid ->
+        if Hashtbl.mem visited cid then []
+        else begin
+          Hashtbl.add visited cid ();
+          cid :: descendants cid
+        end)
+      (child_ids eid)
+  in
+  descendants block_eid
 
 let page_exists_ids db (page_name : string) (tag_idents : string list) : entity_id list =
   let tag_set = tag_idents in

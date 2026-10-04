@@ -199,9 +199,7 @@ let block_refs (db : db) (block : entity) (properties : (attr * value list) list
   tag_refs @ link_refs @ property_key_refs @ property_value_refs
   @ content_refs
   |> List.filter (fun id -> id <> block_db_id && not (List.mem id alias_ids))
-  |> List.fold_left
-      (fun acc id -> if List.mem id acc then acc else acc @ [ id ])
-      []
+  |> Common_util.distinct_by Fun.id
 
 (* db-rebuild-block-refs — rebuilt :block/refs ids for a block *)
 let db_rebuild_block_refs (db : db) (block : entity)
