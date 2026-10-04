@@ -53,7 +53,7 @@ let row_class_str (b : Model.block) uuid (st : S.t) =
   ^ (if blank then "is-blank " else "")
   ^ (if embed then "embed-block " else "")
   ^ (if Comments.is_comments_area b then "is-comments-area " else "")
-  ^ "ls-block"
+  ^ "ls-block swipe-item"
 
 let row_class_sig uuid blank embed (b : Model.block) =
   ignore (blank, embed);
@@ -84,6 +84,8 @@ let row_attrs_of ~scope ~depth uuid (b : Model.block) (st : S.t) =
   ; ("containerid", uuid)
   ; ("data-block-title", b.block_title)
   ; ("data-comment-item", string_of_bool b.Model.block_is_comment)
+  ; ("data-comments-area"
+    , string_of_bool (Comments.is_comments_area b))
   ; ("data-block-format", "markdown")
   ; ("haschild", string_of_bool has_children)
   ; ( "data-collapsed"
@@ -96,9 +98,6 @@ let row_attrs_of ~scope ~depth uuid (b : Model.block) (st : S.t) =
        db block/level *)
     ("level", string_of_int depth)
   ]
-  @ (if Comments.is_comments_area b then
-       [ ("data-comments-area", "true") ]
-     else [])
   (* cljs sets blockid to the linked entity's uuid and
      originalblockid to the linking block's — we keep blockid as the
      embed block's own uuid so delegated editing/ops resolve it *)
@@ -314,11 +313,17 @@ let content_el uuid (b : Model.block) : t =
         [ dom ~key:("bh-" ^ uuid) ~style_class:"block-head-wrap"
             (if b.Model.block_is_query then [ Query_builder.block_el uuid b ]
              else
-               [ dom ~key:("bt-" ^ uuid) ~style_class:"inline w-full"
-                   (Render.title_block ~self:uuid
-                      ~resolved:(S.title_for uuid b.block_title)
-                      b)
-               ])
+               match Render.title_outer_class b with
+               | Some cls ->
+                   [ dom ~key:("bt-" ^ uuid) ~style_class:cls
+                       (Render.title_block ~self:uuid
+                          ~resolved:(S.title_for uuid b.block_title)
+                          b)
+                   ]
+               | None ->
+                   Render.title_block ~self:uuid
+                     ~resolved:(S.title_for uuid b.block_title)
+                     b)
         ]
     ]
 
