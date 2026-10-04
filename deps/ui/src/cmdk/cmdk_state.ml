@@ -80,11 +80,14 @@ let initial_view =
   ; recents = []; tip = 0 }
 
 let latest_vs : view Signal.signal option ref = ref None
+let latest_t : t option ref = ref None
 
 let make scheduler : t =
   let vs = Signal.state scheduler initial_view in
   latest_vs := Some vs.Signal.state_signal;
-  { vs; gen = ref 0 }
+  let st = { vs; gen = ref 0 } in
+  latest_t := Some st;
+  st
 
 let get st = Signal.get st.vs.state_signal
 
@@ -1358,3 +1361,8 @@ let run_highlighted_sidebar st =
 let hl_group st =
   let v = get st in
   Option.map (fun (it : item) -> it.gid) (item_at v v.hl)
+
+(* open the current palette without a handle — global shortcuts
+   (mod+k, mod+shift+p) fire before any caller holds st *)
+let open_latest ?(move = false) () =
+  match !latest_t with Some st -> open_palette ~move st | None -> ()

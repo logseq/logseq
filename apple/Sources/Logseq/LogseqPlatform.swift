@@ -247,10 +247,20 @@ final class NSReferenceBox {
         return event
       }
       let char = (event.charactersIgnoringModifiers ?? "").lowercased()
-      // Clipboard/edit/quit chords stay native; forwarding them would
-      // swallow AppKit behavior the OCaml side does not reproduce.
-      if chord && ["q", "w", "c", "v", "x", "a", "z", "h"].contains(char) {
-        return event
+      let shift = event.modifierFlags.contains(.shift)
+      // Chords the OS/AppKit owns stay native — quit/close/hide always;
+      // clipboard keys only while a text control is editing, and only
+      // the plain chord (shift variants are Logseq commands, as are
+      // block-selection copies when not editing). Everything else —
+      // mod+z/a included — reaches OCaml so outliner undo/redo,
+      // select-parent/all and block copy/cut actually fire.
+      if chord {
+        if ["q", "w", "h"].contains(char) {
+          return event
+        }
+        if editing && !shift && ["c", "v", "x"].contains(char) {
+          return event
+        }
       }
       self.sendKeyDown(event)
       return chord ? nil : event
