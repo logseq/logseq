@@ -9,8 +9,7 @@
 
 open Datascript
 
-let kw s = Wire.Keyword s
-let field k v = (kw k, v)
+let field k v = (Wire.keyword k, v)
 
 (* entity-tagged-with? — match cljs by-ident lookup, not deep
    class-instance resolution *)
@@ -57,14 +56,14 @@ let entity_ref_value (v : Wire.t) : bool =
   match v with
   | Wire.Map kvs ->
       List.exists
-        (fun (k, _) -> k = kw "db/id" || k = kw "block/uuid")
+        (fun (k, _) -> k = Wire.keyword "db/id" || k = Wire.keyword "block/uuid")
         kvs
   | _ -> false
 
 let entity_of_ref_wire db (v : Wire.t) : entity option =
   match v with
   | Wire.Map kvs -> (
-      let get k = List.assoc_opt (kw k) kvs in
+      let get k = List.assoc_opt (Wire.keyword k) kvs in
       match get "db/id" with
       | Some (Wire.Int id) -> Ldb.ent_of_id db id
       | _ -> (
@@ -143,7 +142,7 @@ let display_property_row db (property_id : string) (value : Wire.t) :
   | Some property ->
       Some
         (Wire.Map
-           [ field "property-id" (kw property_id)
+           [ field "property-id" (Wire.keyword property_id)
            ; field "property" property
            ; field "value" value ])
   | None -> None

@@ -4,7 +4,6 @@
 
 open Datascript
 
-let kw s = Wire.Keyword s
 
 let membership_affecting_attrs =
   [ "block/closed-value-property"; "block/order"; "block/parent"
@@ -33,7 +32,7 @@ let validate_blocks (blocks : Wire.t) : unit =
             | Wire.Uuid _ -> ()
             | _ ->
                 fail "Invalid block UUID"
-                  (Wire.Map [ kw "block-uuid", k ]));
+                  (Wire.Map [ Wire.keyword "block-uuid", k ]));
            match block with
            | Wire.Map _ -> (
                (match Wire.get "block/uuid" block with
@@ -41,8 +40,8 @@ let validate_blocks (blocks : Wire.t) : unit =
                 | _ ->
                     fail "Block UUID does not match its key"
                       (Wire.Map
-                         [ kw "block-uuid", k
-                         ; ( kw "replacement-uuid"
+                         [ Wire.keyword "block-uuid", k
+                         ; ( Wire.keyword "replacement-uuid"
                            , Option.value
                                (Wire.get "block/uuid" block)
                                ~default:Wire.Nil ) ]));
@@ -51,14 +50,14 @@ let validate_blocks (blocks : Wire.t) : unit =
                | v ->
                    fail "Invalid block transaction ID"
                      (Wire.Map
-                        [ kw "block-uuid", k
-                        ; ( kw "block-tx-id"
+                        [ Wire.keyword "block-uuid", k
+                        ; ( Wire.keyword "block-tx-id"
                           , Option.value v ~default:Wire.Nil ) ]))
            | _ ->
                fail "Invalid block replacement"
-                 (Wire.Map [ kw "block-uuid", k; kw "block", block ]))
+                 (Wire.Map [ Wire.keyword "block-uuid", k; Wire.keyword "block", block ]))
         kvs
-  | _ -> fail "Invalid block replacements" (Wire.Map [ kw "blocks", blocks ])
+  | _ -> fail "Invalid block replacements" (Wire.Map [ Wire.keyword "blocks", blocks ])
 
 let validate_deleted_block_uuids (deleted : Wire.t) : unit =
   match deleted with
@@ -69,11 +68,11 @@ let validate_deleted_block_uuids (deleted : Wire.t) : unit =
            | Wire.Uuid _ -> ()
            | _ ->
                fail "Invalid deleted block UUID"
-                 (Wire.Map [ kw "block-uuid", u ]))
+                 (Wire.Map [ Wire.keyword "block-uuid", u ]))
         xs
   | _ ->
       fail "Invalid deleted block UUID set"
-        (Wire.Map [ kw "deleted-block-uuids", deleted ])
+        (Wire.Map [ Wire.keyword "deleted-block-uuids", deleted ])
 
 (* structural-entity-ids *)
 let structural_entity_ids (tx_data : datom list) : entity_id list =
@@ -112,8 +111,8 @@ let membership_at (db : db) (entity_id : entity_id) : membership option =
                    | v ->
                        fail "Invalid child UUID"
                          (Wire.Map
-                            [ kw "entity-id", Wire.Int entity_id
-                            ; ( kw "block-uuid"
+                            [ Wire.keyword "entity-id", Wire.Int entity_id
+                            ; ( Wire.keyword "block-uuid"
                               , Option.map value_wire v
                                 |> Option.value ~default:Wire.Nil ) ])
                  in
@@ -123,8 +122,8 @@ let membership_at (db : db) (entity_id : entity_id) : membership option =
                    | v ->
                        fail "Invalid parent UUID"
                          (Wire.Map
-                            [ kw "entity-id", Wire.Int entity_id
-                            ; ( kw "parent-uuid"
+                            [ Wire.keyword "entity-id", Wire.Int entity_id
+                            ; ( Wire.keyword "parent-uuid"
                               , Option.map value_wire v
                                 |> Option.value ~default:Wire.Nil ) ])
                  in
@@ -206,10 +205,10 @@ let parent_patch base_rev rev (db_after : db) (parent_uuid : string)
   | Some _ ->
       Some
         (Wire.Map
-           [ kw "base-rev", Wire.Int base_rev
-           ; kw "rev", Wire.Int rev
-           ; kw "remove", ordered_operations rm
-           ; kw "upsert", ordered_operations up ])
+           [ Wire.keyword "base-rev", Wire.Int base_rev
+           ; Wire.keyword "rev", Wire.Int rev
+           ; Wire.keyword "remove", ordered_operations rm
+           ; Wire.keyword "upsert", ordered_operations up ])
   | None -> None
 
 let build_children_patches rev (tx_report : tx_report) : Wire.t =
@@ -516,7 +515,7 @@ let build ~(graph_id : string) ~(rev : int) ~(op_id : Wire.t)
   (match rev with
    | _ when rev < 0 ->
        fail "Invalid renderer revision"
-         (Wire.Map [ kw "rev", Wire.Int rev ])
+         (Wire.Map [ Wire.keyword "rev", Wire.Int rev ])
    | _ -> ());
   validate_blocks blocks;
   let deleted_wire =
@@ -536,7 +535,7 @@ let build ~(graph_id : string) ~(rev : int) ~(op_id : Wire.t)
    with
    | Some u ->
        fail "Block cannot be replaced and deleted"
-         (Wire.Map [ kw "block-uuid", Wire.Uuid u ])
+         (Wire.Map [ Wire.keyword "block-uuid", Wire.Uuid u ])
    | None -> ());
   let deleted =
     deleted_block_uuids
@@ -555,18 +554,18 @@ let build ~(graph_id : string) ~(rev : int) ~(op_id : Wire.t)
             ( Wire.Uuid u
             , Wire.Map
                 (List.filter_map Fun.id
-                   [ Some (kw "rev", Wire.Int rev)
+                   [ Some (Wire.keyword "rev", Wire.Int rev)
                    ; Option.map
-                       (fun id -> (kw "db/id", Wire.Int id))
+                       (fun id -> (Wire.keyword "db/id", Wire.Int id))
                        db_id ]) ))
     |> fun kvs -> Wire.Map kvs
   in
   Wire.Map
-    [ kw "graph-id", Wire.String graph_id
-    ; kw "rev", Wire.Int rev
-    ; kw "op-id", op_id
-    ; kw "blocks", blocks
-    ; kw "deleted", deleted
-    ; kw "children", build_children_patches rev tx_report
-    ; ( kw "affected-keys"
+    [ Wire.keyword "graph-id", Wire.String graph_id
+    ; Wire.keyword "rev", Wire.Int rev
+    ; Wire.keyword "op-id", op_id
+    ; Wire.keyword "blocks", blocks
+    ; Wire.keyword "deleted", deleted
+    ; Wire.keyword "children", build_children_patches rev tx_report
+    ; ( Wire.keyword "affected-keys"
       , Wire.Set affected_keys ) ]

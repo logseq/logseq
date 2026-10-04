@@ -7,27 +7,26 @@
 
 open Datascript
 
-let kw s = Wire.Keyword s
 
 let wire_map (kvs : (attr * value) list) : Wire.t =
   Wire.Map
-    (List.map (fun (a, v) -> (kw a, Ds_wire.transit_of_value v)) kvs)
+    (List.map (fun (a, v) -> (Wire.keyword a, Ds_wire.transit_of_value v)) kvs)
 
 let retract e a : Wire.t =
-  Wire.Array [ kw "db/retract"; Wire.Int e; kw a ]
+  Wire.Array [ Wire.keyword "db/retract"; Wire.Int e; Wire.keyword a ]
 
 let retract_v e a v : Wire.t =
   Wire.Array
-    [ kw "db/retract"; Wire.Int e; kw a; Ds_wire.transit_of_value v ]
+    [ Wire.keyword "db/retract"; Wire.Int e; Wire.keyword a; Ds_wire.transit_of_value v ]
 
 let retract_entity e : Wire.t =
-  Wire.Array [ kw "db/retractEntity"; Wire.Int e ]
+  Wire.Array [ Wire.keyword "db/retractEntity"; Wire.Int e ]
 
 let add e a v : Wire.t =
-  Wire.Array [ kw "db/add"; Wire.Int e; kw a; Ds_wire.transit_of_value v ]
+  Wire.Array [ Wire.keyword "db/add"; Wire.Int e; Wire.keyword a; Ds_wire.transit_of_value v ]
 
 let add_ident e a ident : Wire.t =
-  Wire.Array [ kw "db/add"; Wire.Int e; kw a; kw ident ]
+  Wire.Array [ Wire.keyword "db/add"; Wire.Int e; Wire.keyword a; Wire.keyword ident ]
 
 let namespace_of (s : string) : string option =
   match String.index_opt s '/' with
@@ -156,8 +155,8 @@ let fix_invalid_blocks (conn : conn)
                         (Ldb.ref_ents e "block/tags")
                  then
                    [ Wire.Array
-                       [ kw "db/retract"; Wire.Int id; kw "block/tags"
-                       ; kw "logseq.class/Tag" ] ]
+                       [ Wire.keyword "db/retract"; Wire.Int id; Wire.keyword "block/tags"
+                       ; Wire.keyword "logseq.class/Tag" ] ]
                  else if
                    ident <> None
                    && user_class_namespace (Option.get ident)
@@ -166,8 +165,8 @@ let fix_invalid_blocks (conn : conn)
                  then
                    [ add_ident id "block/tags" "logseq.class/Tag"
                    ; Wire.Array
-                       [ kw "db/retract"; Wire.Int id; kw "block/tags"
-                       ; kw "logseq.class/Page" ] ]
+                       [ Wire.keyword "db/retract"; Wire.Int id; Wire.keyword "block/tags"
+                       ; Wire.keyword "logseq.class/Page" ] ]
                  else if
                    Ldb.is_class e && Ldb.value e "kv/value" <> None
                  then [ retract id "kv/value" ]
@@ -178,8 +177,8 @@ let fix_invalid_blocks (conn : conn)
                    List.map
                      (fun (c : entity) ->
                        Wire.Array
-                         [ kw "db/retract"; Wire.Int id
-                         ; kw "logseq.property.class/extends"; Wire.Int c.id ])
+                         [ Wire.keyword "db/retract"; Wire.Int id
+                         ; Wire.keyword "logseq.property.class/extends"; Wire.Int c.id ])
                      (Ldb.ref_ents e "logseq.property.class/extends")
                  else if Ldb.value e "block/level" <> None then
                    [ retract id "block/level" ]
@@ -258,7 +257,7 @@ let fix_invalid_blocks (conn : conn)
                    List.map
                      (fun (t : entity) ->
                        Wire.Array
-                         [ kw "db/retract"; Wire.Int id; kw "block/tags"
+                         [ Wire.keyword "db/retract"; Wire.Int id; Wire.keyword "block/tags"
                          ; Wire.Int t.id ])
                      (List.filter
                         (fun t -> not (Ldb.is_class t))
@@ -378,8 +377,8 @@ let fix_invalid_blocks (conn : conn)
                    && Ldb.internal_page e
                  then
                    [ Wire.Array
-                       [ kw "db/retract"; Wire.Int id; kw "block/tags"
-                       ; kw "logseq.class/Page" ] ]
+                       [ Wire.keyword "db/retract"; Wire.Int id; Wire.keyword "block/tags"
+                       ; Wire.keyword "logseq.class/Page" ] ]
                  else if
                    Ldb.value e "logseq.property.asset/remote-metadata"
                    <> None
@@ -407,8 +406,8 @@ let fix_invalid_blocks (conn : conn)
                                    | Some _ ->
                                        [ retract_v d.e d.a (Ref vid)
                                        ; Wire.Array
-                                           [ kw "db/add"; Wire.Int d.e
-                                           ; kw d.a; Wire.Int property.id ] ]
+                                           [ Wire.keyword "db/add"; Wire.Int d.e
+                                           ; Wire.keyword d.a; Wire.Int property.id ] ]
                                    | None -> [ retract_v d.e d.a (Ref vid) ])
                               | None -> [ retract_v d.e d.a (Ref vid) ])
                          | None -> [ retract_v d.e d.a (Ref vid) ])
@@ -607,8 +606,8 @@ let log_validation_errors (errors : Db_validate.grouped_error list) : unit =
 
 let humanize_grouped (ge : Db_validate.grouped_error) : Wire.t =
   Wire.Map
-    [ kw "entity", Ds_wire.transit_of_value ge.ge_entity
-    ; kw "errors",
+    [ Wire.keyword "entity", Ds_wire.transit_of_value ge.ge_entity
+    ; Wire.keyword "errors",
       Ds_wire.transit_of_value (Malli.humanize ge.ge_errors) ]
 
 let rec validate_and_fix_invalid_blocks (conn : conn) : db_result =
@@ -670,17 +669,17 @@ let validate_db ?(fix = true) (conn : conn) : Wire.t =
       ~transit_payload:
         (Transit_codec.to_string
            (Wire.Array
-              [ kw "log"
+              [ Wire.keyword "log"
               ; Wire.Array
-                  [ kw "db-invalid"; kw "error"
+                  [ Wire.keyword "db-invalid"; Wire.keyword "error"
                   ; Wire.Map
-                      [ kw "msg", Wire.String "Validation errors"
-                      ; kw "errors", errors_wire ] ] ]));
+                      [ Wire.keyword "msg", Wire.String "Validation errors"
+                      ; Wire.keyword "errors", errors_wire ] ] ]));
     Broadcast.to_clients ~kind:"notification"
       ~transit_payload:
         (Transit_codec.to_string
            (Wire.Array
-              [ kw "notification"
+              [ Wire.keyword "notification"
               ; Wire.Array
                   [ Wire.String
                       (Printf.sprintf
@@ -691,14 +690,14 @@ let validate_db ?(fix = true) (conn : conn) : Wire.t =
                             " Attempting to fix invalid blocks. Run \
                              validation again to see if they were fixed."
                           else ""))
-                  ; kw "warning"; Wire.Bool false ] ]))
+                  ; Wire.keyword "warning"; Wire.Bool false ] ]))
   end
   else
     Broadcast.to_clients ~kind:"notification"
       ~transit_payload:
         (Transit_codec.to_string
            (Wire.Array
-              [ kw "notification"
+              [ Wire.keyword "notification"
               ; Wire.Array
                   [ Wire.String
                       (Printf.sprintf
@@ -706,20 +705,20 @@ let validate_db ?(fix = true) (conn : conn) : Wire.t =
                          counts.entities counts.pages counts.blocks
                          counts.classes counts.properties counts.objects
                          counts.property_pairs counts.datoms)
-                  ; kw "success"; Wire.Bool false ] ]));
+                  ; Wire.keyword "success"; Wire.Bool false ] ]));
   Wire.Map
-    [ kw "errors", errors_result
-    ; ( kw "invalid-entity-ids"
+    [ Wire.keyword "errors", errors_result
+    ; ( Wire.keyword "invalid-entity-ids"
       , Wire.Array
           (List.map (fun i -> Wire.Int i) result.dr_invalid_entity_ids) )
-    ; kw "entities", Wire.Int counts.entities
-    ; kw "pages", Wire.Int counts.pages
-    ; kw "blocks", Wire.Int counts.blocks
-    ; kw "classes", Wire.Int counts.classes
-    ; kw "properties", Wire.Int counts.properties
-    ; kw "objects", Wire.Int counts.objects
-    ; kw "property-pairs", Wire.Int counts.property_pairs
-    ; kw "datoms", Wire.Int counts.datoms ]
+    ; Wire.keyword "entities", Wire.Int counts.entities
+    ; Wire.keyword "pages", Wire.Int counts.pages
+    ; Wire.keyword "blocks", Wire.Int counts.blocks
+    ; Wire.keyword "classes", Wire.Int counts.classes
+    ; Wire.keyword "properties", Wire.Int counts.properties
+    ; Wire.keyword "objects", Wire.Int counts.objects
+    ; Wire.keyword "property-pairs", Wire.Int counts.property_pairs
+    ; Wire.keyword "datoms", Wire.Int counts.datoms ]
 
 (* db-core.cljs notify-invalid-data — cljs checks (not dev?) via
    goog.DEBUG; OCaml worker has no dev flag, treated as production. *)
@@ -731,27 +730,27 @@ let notify_invalid_data (report : tx_report) (errors : string list) : unit =
       ~transit_payload:
         (Transit_codec.to_string
            (Wire.Array
-              [ kw "notification"
+              [ Wire.keyword "notification"
               ; Wire.Array
-                  [ Wire.Nil; kw "error"; Wire.Nil; Wire.Nil; Wire.Nil
+                  [ Wire.Nil; Wire.keyword "error"; Wire.Nil; Wire.Nil; Wire.Nil
                   ; Wire.Map
-                      [ kw "i18n-key"
-                      , kw "storage/invalid-data-writing" ] ] ]));
+                      [ Wire.keyword "i18n-key"
+                      , Wire.keyword "storage/invalid-data-writing" ] ] ]));
     (* cljs platform/post-message! :capture-error — browser posts on self;
        node routes to the embedder's broadcast fn via to_clients *)
     Broadcast.to_clients ~kind:"capture-error"
       ~transit_payload:
         (Transit_codec.to_string
            (Wire.Array
-              [ kw "capture-error"
+              [ Wire.keyword "capture-error"
               ; Wire.Map
-                  [ ( kw "error"
+                  [ ( Wire.keyword "error"
                     , Wire.String "Invalid data writing to db" )
-                  ; ( kw "extra"
+                  ; ( Wire.keyword "extra"
                     , Wire.Map
-                        [ ( kw "errors"
+                        [ ( Wire.keyword "errors"
                           , Wire.String (String.concat "; " errors) )
-                        ; ( kw "tx-meta"
+                        ; ( Wire.keyword "tx-meta"
                           , Ds_wire.transit_of_tx_meta report.tx_meta ) ] ) ] ]))
   end
 
@@ -765,13 +764,13 @@ let recompute_checksum_diagnostics (_repo : string) (conn : conn)
     match diag with
     | Wire.Map kvs ->
         Option.value
-          (List.assoc_opt (kw k) kvs) ~default:Wire.Nil
+          (List.assoc_opt (Wire.keyword k) kvs) ~default:Wire.Nil
     | _ -> Wire.Nil
   in
   Wire.Map
-    [ kw "recomputed-checksum", get "checksum"
-    ; kw "local-checksum", Ds_wire.transit_of_value local_checksum
-    ; kw "remote-checksum", Ds_wire.transit_of_value remote_checksum
-    ; kw "e2ee?", get "e2ee?"
-    ; kw "checksum-attrs", get "attrs"
-    ; kw "blocks", get "blocks" ]
+    [ Wire.keyword "recomputed-checksum", get "checksum"
+    ; Wire.keyword "local-checksum", Ds_wire.transit_of_value local_checksum
+    ; Wire.keyword "remote-checksum", Ds_wire.transit_of_value remote_checksum
+    ; Wire.keyword "e2ee?", get "e2ee?"
+    ; Wire.keyword "checksum-attrs", get "attrs"
+    ; Wire.keyword "blocks", get "blocks" ]

@@ -8,7 +8,6 @@
 
 open Db_worker_effect.Infix
 
-let kw s = Wire.Keyword s
 
 let id_token () : string option =
   match Worker_state.state_get "auth/id-token" with
@@ -47,9 +46,9 @@ let expired (token : string option) : bool =
 (* merge refreshed tokens into app state, like sync-auth resolve-ws-token *)
 let merge_tokens new_id_token access_token =
   let pairs =
-    (kw "auth/id-token", Wire.String new_id_token)
+    (Wire.keyword "auth/id-token", Wire.String new_id_token)
     :: (match access_token with
-        | Some a -> [ (kw "auth/access-token", Wire.String a) ]
+        | Some a -> [ (Wire.keyword "auth/access-token", Wire.String a) ]
         | None -> [])
   in
   Worker_state.merge_state (Wire.Map pairs)
@@ -66,7 +65,7 @@ let ensure_id_and_access_token () : unit Db_worker_effect.t =
       raise
         (Dispatcher.Exn_info
            ( "empty or expired token and refresh failed"
-           , [ (kw "type", kw "expired-token") ] ))
+           , [ (Wire.keyword "type", Wire.keyword "expired-token") ] ))
     else Db_worker_effect.pure ()
   else Db_worker_effect.pure ()
 
@@ -76,7 +75,7 @@ let () =
       ensure_id_and_access_token () >>= fun () ->
       Db_worker_effect.pure
         (Wire.Map
-           [ ( kw "id-token"
+           [ ( Wire.keyword "id-token"
              , match id_token () with
                | Some t -> Wire.String t
                | None -> Wire.Nil ) ]))

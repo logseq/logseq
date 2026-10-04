@@ -4,7 +4,6 @@
 
 open Datascript
 
-let kw s = Wire.Keyword s
 
 let arg args i = List.nth_opt args i
 
@@ -45,7 +44,7 @@ let block_map_with_children db (block : entity) : Wire.t option =
       let children =
         Ldb.get_children block |> List.filter_map (block_map db)
       in
-      Some (Wire.Map ((kw "block/children", Wire.List children) :: pairs))
+      Some (Wire.Map ((Wire.keyword "block/children", Wire.List children) :: pairs))
   | _ -> None
 
 let block_ref_entity db (v : value) : entity option =
@@ -129,7 +128,7 @@ let block_uuid_of (block : entity) : string option =
 
 let block_lookup_ref (block : entity) : Wire.t =
   match block_uuid_of block with
-  | Some u -> Wire.Array [ kw "block/uuid"; Wire.Uuid u ]
+  | Some u -> Wire.Array [ Wire.keyword "block/uuid"; Wire.Uuid u ]
   | None -> Wire.Nil
 
 let comments_area_child (block : entity) : entity option =
@@ -171,18 +170,18 @@ let resolve_comments_area db (block_ref : Wire.t) : comments_area_resolution opt
       | None ->
           let insert_opts =
             Wire.Map
-              [ (kw "block-uuid",
+              [ (Wire.keyword "block-uuid",
                  (match block_uuid_of block with
                   | Some u -> Wire.Uuid u
                   | None -> Wire.Nil))
-              ; (kw "edit-block?", Wire.Bool false)
-              ; ( kw "other-attrs",
+              ; (Wire.keyword "edit-block?", Wire.Bool false)
+              ; ( Wire.keyword "other-attrs",
                   Wire.Map
-                    [ (kw "block/tags", Wire.Set [ kw comments_tag_ident ])
-                    ; ( kw comments_blocks_property
+                    [ (Wire.keyword "block/tags", Wire.Set [ Wire.keyword comments_tag_ident ])
+                    ; ( Wire.keyword comments_blocks_property
                       , Wire.Set [ block_lookup_ref block ] ) ] )
-              ; ( if Ldb.is_page block then (kw "start?", Wire.Bool true)
-                  else (kw "end?", Wire.Bool true) ) ]
+              ; ( if Ldb.is_page block then (Wire.keyword "start?", Wire.Bool true)
+                  else (Wire.keyword "end?", Wire.Bool true) ) ]
           in
           Some (Res_insert (comments_area_title block, insert_opts)))
 
@@ -222,16 +221,16 @@ let resolve_comments_area_for_blocks db (block_refs : Wire.t list)
         | None ->
             let insert_opts =
               Wire.Map
-                [ (kw "block-uuid",
+                [ (Wire.keyword "block-uuid",
                    (match block_uuid_of last_block with
                     | Some u -> Wire.Uuid u
                     | None -> Wire.Nil))
-                ; (kw "sibling?", Wire.Bool true)
-                ; (kw "edit-block?", Wire.Bool false)
-                ; ( kw "other-attrs",
+                ; (Wire.keyword "sibling?", Wire.Bool true)
+                ; (Wire.keyword "edit-block?", Wire.Bool false)
+                ; ( Wire.keyword "other-attrs",
                     Wire.Map
-                      [ (kw "block/tags", Wire.Set [ kw comments_tag_ident ])
-                      ; ( kw comments_blocks_property
+                      [ (Wire.keyword "block/tags", Wire.Set [ Wire.keyword comments_tag_ident ])
+                      ; ( Wire.keyword comments_blocks_property
                         , Wire.Set (List.map block_lookup_ref blocks) ) ] ) ]
             in
             Some (Res_insert ("Comments", insert_opts)))
@@ -264,8 +263,8 @@ let insert_comments_area (conn : conn) (title : string) (opts : Wire.t)
       let comments_area_uuid = Common_uuid.new_block_id () in
       let comments_area =
         let base =
-          [ (kw "block/title", Wire.String title)
-          ; (kw "block/uuid", Wire.Uuid comments_area_uuid) ]
+          [ (Wire.keyword "block/title", Wire.String title)
+          ; (Wire.keyword "block/uuid", Wire.Uuid comments_area_uuid) ]
         in
         let other =
           match Cljs_map.get opts "other-attrs" with
@@ -276,8 +275,8 @@ let insert_comments_area (conn : conn) (title : string) (opts : Wire.t)
       in
       let insert_opts =
         Wire.Map
-          [ (kw "sibling?", Wire.Bool sibling)
-          ; (kw "keep-uuid?", Wire.Bool true) ]
+          [ (Wire.keyword "sibling?", Wire.Bool sibling)
+          ; (Wire.keyword "keep-uuid?", Wire.Bool true) ]
       in
       let target_uuid =
         match block_uuid_of insert_target with
@@ -288,7 +287,7 @@ let insert_comments_area (conn : conn) (title : string) (opts : Wire.t)
         (Outliner_op.apply_ops conn
            (Wire.Array
               [ Wire.Array
-                  [ kw "insert-blocks"
+                  [ Wire.keyword "insert-blocks"
                   ; Wire.Array
                       [ Wire.Array [ comments_area ]; target_uuid; insert_opts ] ] ])
            Wire.Nil);
@@ -304,15 +303,15 @@ let rec ensure_comments_area conn (block_ref : Wire.t) : Wire.t option =
        | Some uuid ->
            let target_ref =
              match block_uuid_of comments_area with
-             | Some u -> Wire.Array [ kw "block/uuid"; Wire.Uuid u ]
+             | Some u -> Wire.Array [ Wire.keyword "block/uuid"; Wire.Uuid u ]
              | None -> Wire.Nil
            in
            ignore
              (Db_transact.transact conn
                 [ Wire.Array
-                    [ kw "db/add"; target_ref
-                    ; kw comments_blocks_property
-                    ; Wire.Array [ kw "block/uuid"; Wire.Uuid uuid ] ] ]
+                    [ Wire.keyword "db/add"; target_ref
+                    ; Wire.keyword comments_blocks_property
+                    ; Wire.Array [ Wire.keyword "block/uuid"; Wire.Uuid uuid ] ] ]
                 [ ("outliner-op", Keyword "save-block") ])
        | None -> ());
       (match
@@ -387,7 +386,7 @@ let delete_comment conn (comment_block_ref : Wire.t) : unit =
              (Outliner_op.apply_ops conn
                 (Wire.Array
                    [ Wire.Array
-                       [ kw "delete-blocks"
+                       [ Wire.keyword "delete-blocks"
                        ; Wire.Array
                            [ Wire.Array target_uuids; Wire.Map [] ] ] ])
                 Wire.Nil))

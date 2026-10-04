@@ -7,7 +7,6 @@ open Datascript
 module IntSet = Set.Make (Int)
 module IntMap = Map.Make (Int)
 
-let kw s = Wire.Keyword s
 let imadd m k v = IntMap.add k v m
 
 (* ---------- datom helpers ---------- *)
@@ -354,7 +353,7 @@ let build_links (links : link_raw list) : Wire.t list =
                            (fun (k, _) -> Wire.key_matches "edge/type" k)
                            kvs
                        then kvs
-                       else kvs @ [ (kw "edge/type", Wire.String "class-extends") ]
+                       else kvs @ [ (Wire.keyword "edge/type", Wire.String "class-extends") ]
                      in
                      let kvs =
                        match label_ with
@@ -363,7 +362,7 @@ let build_links (links : link_raw list) : Wire.t list =
                                 (List.exists
                                    (fun (k, _) -> Wire.key_matches "label" k)
                                    kvs) ->
-                           kvs @ [ (kw "label", Wire.String s) ]
+                           kvs @ [ (Wire.keyword "label", Wire.String s) ]
                        | Some s ->
                            List.map
                              (fun (k, v) ->
@@ -386,20 +385,20 @@ let build_links (links : link_raw list) : Wire.t list =
                                   (fun (k, _) -> Wire.key_matches "label" k)
                                   kvs) ->
                           result_set idx
-                            (Wire.Map (kvs @ [ (kw "label", Wire.String s) ]))
+                            (Wire.Map (kvs @ [ (Wire.keyword "label", Wire.String s) ]))
                       | _ -> ())
                   | None -> ())
            | None ->
                let entry =
                  Wire.Map
-                   ( [ (kw "source", Wire.String source)
-                     ; (kw "target", Wire.String target) ]
+                   ( [ (Wire.keyword "source", Wire.String source)
+                     ; (Wire.keyword "target", Wire.String target) ]
                    @ (if l.class_extends then
-                        [ (kw "edge/type", Wire.String "class-extends") ]
+                        [ (Wire.keyword "edge/type", Wire.String "class-extends") ]
                       else [])
                    @
                    match label_ with
-                   | Some s -> [ (kw "label", Wire.String s) ]
+                   | Some s -> [ (Wire.keyword "label", Wire.String s) ]
                    | None -> [] )
                in
                Hashtbl.replace index_by_endpoints endpoints !count;
@@ -602,23 +601,23 @@ let scalar_node (ctx : node_context) (id : entity_id) (kind : string)
     | _ -> string_of_int id
   in
   Wire.Map
-    ( [ (kw "id", Wire.String (string_of_int id))
-      ; (kw "db-id", Wire.Int id)
-      ; (kw "uuid", (match uuid with Some u -> Wire.String u | None -> Wire.Nil))
-      ; (kw "page?", Wire.Bool page)
-      ; (kw "label", Wire.String label)
-      ; (kw "kind", Wire.String kind) ]
+    ( [ (Wire.keyword "id", Wire.String (string_of_int id))
+      ; (Wire.keyword "db-id", Wire.Int id)
+      ; (Wire.keyword "uuid", (match uuid with Some u -> Wire.String u | None -> Wire.Nil))
+      ; (Wire.keyword "page?", Wire.Bool page)
+      ; (Wire.keyword "label", Wire.String label)
+      ; (Wire.keyword "kind", Wire.String kind) ]
     @ (match created_at with
-       | Some v -> [ (kw "block/created-at", Ds_wire.transit_of_value v) ]
+       | Some v -> [ (Wire.keyword "block/created-at", Ds_wire.transit_of_value v) ]
        | None -> [])
     @ (if kind = "tag" then
          match ident with
-         | Some i -> [ (kw "db-ident", kw i) ]
+         | Some i -> [ (Wire.keyword "db-ident", Wire.keyword i) ]
          | None -> []
        else [])
     @
     match icon with
-    | Some v -> [ (kw "icon", Ds_wire.transit_of_value v) ]
+    | Some v -> [ (Wire.keyword "icon", Ds_wire.transit_of_value v) ]
     | None -> [] )
 
 (* ---------- tags-and-objects graph ---------- *)
@@ -706,7 +705,7 @@ let build_tags_and_objects_graph (db : db) : Wire.t =
   in
   let tag_id_set = IntSet.union visible_tag_id_set (link_node_ids extends_links) in
   if IntSet.is_empty tag_id_set || IntSet.is_empty visible_object_ids then
-    Wire.Map [ (kw "nodes", Wire.Array []); (kw "links", Wire.Array []) ]
+    Wire.Map [ (Wire.keyword "nodes", Wire.Array []); (Wire.keyword "links", Wire.Array []) ]
   else begin
     let tag_links =
       List.filter (fun (_, t) -> IntSet.mem t tag_id_set) visible_tag_links
@@ -777,8 +776,8 @@ let build_tags_and_objects_graph (db : db) : Wire.t =
     in
     let all_links = List.sort_uniq compare (links @ property_links) in
     Wire.Map
-      [ (kw "nodes", Wire.Array nodes)
-      ; (kw "links", Wire.Array all_links) ]
+      [ (Wire.keyword "nodes", Wire.Array nodes)
+      ; (Wire.keyword "links", Wire.Array all_links) ]
   end
 
 (* ---------- page/block graphs ---------- *)
@@ -833,18 +832,18 @@ let build_nodes ~dark ~current_page (page_links : int IntMap.t option)
             in
             Some
               (Wire.Map
-                 ( [ (kw "id", Wire.String (string_of_int p.id))
-                   ; (kw "db-id", Wire.Int p.id)
-                   ; (kw "uuid",
+                 ( [ (Wire.keyword "id", Wire.String (string_of_int p.id))
+                   ; (Wire.keyword "db-id", Wire.Int p.id)
+                   ; (Wire.keyword "uuid",
                        (match uuid with Some u -> Wire.String u | None -> Wire.Nil))
-                   ; (kw "page?", Wire.Bool true)
-                   ; (kw "label", Wire.String page_title)
-                   ; (kw "kind", Wire.String kind)
-                   ; (kw "size", Wire.Int size)
-                   ; (kw "color", Wire.String color) ]
+                   ; (Wire.keyword "page?", Wire.Bool true)
+                   ; (Wire.keyword "label", Wire.String page_title)
+                   ; (Wire.keyword "kind", Wire.String kind)
+                   ; (Wire.keyword "size", Wire.Int size)
+                   ; (Wire.keyword "color", Wire.String color) ]
                  @
                  match Ldb.value p "block/created-at" with
-                 | Some v -> [ (kw "block/created-at", Ds_wire.transit_of_value v) ]
+                 | Some v -> [ (Wire.keyword "block/created-at", Ds_wire.transit_of_value v) ]
                  | None -> [] ))
         | None -> None
       end)
@@ -1070,7 +1069,7 @@ let normalize_page_name (nodes : Wire.t list) (links : Wire.t list) :
       links
   in
   Wire.Map
-    [ (kw "nodes", Wire.Array nodes'); (kw "links", Wire.Array links') ]
+    [ (Wire.keyword "nodes", Wire.Array nodes'); (Wire.keyword "links", Wire.Array links') ]
 
 (* ---------- large all-pages graph ---------- *)
 
@@ -1187,22 +1186,22 @@ imadd m pid (ident :: cur))
             let uuid = IntMap.find_opt page_id uuid_by_id in
             Some
               (Wire.Map
-                 ( [ (kw "id", Wire.String (string_of_int page_id))
-                   ; (kw "db-id", Wire.Int page_id)
-                   ; (kw "uuid",
+                 ( [ (Wire.keyword "id", Wire.String (string_of_int page_id))
+                   ; (Wire.keyword "db-id", Wire.Int page_id)
+                   ; (Wire.keyword "uuid",
                        (match uuid with Some u -> Wire.String u | None -> Wire.Nil))
-                   ; (kw "page?", Wire.Bool true)
-                   ; (kw "label", Wire.String page_title)
-                   ; (kw "kind", Wire.String (page_kind tag_idents))
-                   ; (kw "size", Wire.Int 8)
-                   ; (kw "color", Wire.String color) ]
+                   ; (Wire.keyword "page?", Wire.Bool true)
+                   ; (Wire.keyword "label", Wire.String page_title)
+                   ; (Wire.keyword "kind", Wire.String (page_kind tag_idents))
+                   ; (Wire.keyword "size", Wire.Int 8)
+                   ; (Wire.keyword "color", Wire.String color) ]
                  @ (match IntMap.find_opt page_id created_at_by_id with
                     | Some v ->
-                        [ (kw "block/created-at", Ds_wire.transit_of_value v) ]
+                        [ (Wire.keyword "block/created-at", Ds_wire.transit_of_value v) ]
                     | None -> [])
                  @
                  match IntMap.find_opt page_id icon_by_id with
-                 | Some v -> [ (kw "icon", Ds_wire.transit_of_value v) ]
+                 | Some v -> [ (Wire.keyword "icon", Ds_wire.transit_of_value v) ]
                  | None -> [] ))
         | _ -> None)
       name_datoms
@@ -1213,10 +1212,10 @@ imadd m pid (ident :: cur))
    | Wire.Map kvs ->
        Wire.Map
          (kvs
-          @ [ ( kw "all-pages"
+          @ [ ( Wire.keyword "all-pages"
               , Wire.Map
-                  [ (kw "created-at-min", Wire.Int 0)
-                  ; (kw "created-at-max", Wire.Int 0) ] ) ])
+                  [ (Wire.keyword "created-at-min", Wire.Int 0)
+                  ; (Wire.keyword "created-at-max", Wire.Int 0) ] ) ])
    | w -> w)
 
 (* ---------- all-pages graph ---------- *)
@@ -1244,21 +1243,21 @@ let build_all_pages_node ~(dark : bool) ~(page_links : int IntMap.t)
   let uuid = IntMap.find_opt page_id uuid_by_id in
   Some
     (Wire.Map
-       ( [ (kw "id", Wire.String (string_of_int page_id))
-         ; (kw "db-id", Wire.Int page_id)
-         ; (kw "uuid",
+       ( [ (Wire.keyword "id", Wire.String (string_of_int page_id))
+         ; (Wire.keyword "db-id", Wire.Int page_id)
+         ; (Wire.keyword "uuid",
              (match uuid with Some u -> Wire.String u | None -> Wire.Nil))
-         ; (kw "page?", Wire.Bool true)
-         ; (kw "label", Wire.String page_title)
-         ; (kw "kind", Wire.String kind)
-         ; (kw "size", Wire.Int size)
-         ; (kw "color", Wire.String color) ]
+         ; (Wire.keyword "page?", Wire.Bool true)
+         ; (Wire.keyword "label", Wire.String page_title)
+         ; (Wire.keyword "kind", Wire.String kind)
+         ; (Wire.keyword "size", Wire.Int size)
+         ; (Wire.keyword "color", Wire.String color) ]
        @ (match created_at with
-          | Some v -> [ (kw "block/created-at", Ds_wire.transit_of_value v) ]
+          | Some v -> [ (Wire.keyword "block/created-at", Ds_wire.transit_of_value v) ]
           | None -> [])
        @
        match IntMap.find_opt page_id icon_by_id with
-       | Some v -> [ (kw "icon", Ds_wire.transit_of_value v) ]
+       | Some v -> [ (Wire.keyword "icon", Ds_wire.transit_of_value v) ]
        | None -> [] ))
 
 let build_all_pages_graph (db : db) (opts : Wire.t) : Wire.t =
@@ -1443,11 +1442,11 @@ imadd m k n
     | Wire.Map kvs ->
         Wire.Map
           (kvs
-           @ [ ( kw "all-pages"
+           @ [ ( Wire.keyword "all-pages"
                , Wire.Map
-                   [ ( kw "created-at-min"
+                   [ ( Wire.keyword "created-at-min"
                      , Ds_wire.transit_of_value (Common_util.value_of_ms created_at_min) )
-                   ; ( kw "created-at-max"
+                   ; ( Wire.keyword "created-at-max"
                      , Ds_wire.transit_of_value (Common_util.value_of_ms created_at_max) ) ] ) ])
     | w -> w
   end
@@ -1470,7 +1469,7 @@ let build_global_graph (db : db) (opts : Wire.t) : Wire.t =
   | Wire.Map kvs ->
       Wire.Map
         (kvs
-         @ [ (kw "meta", Wire.Map [ (kw "view-mode", kw view_mode) ]) ])
+         @ [ (Wire.keyword "meta", Wire.Map [ (Wire.keyword "view-mode", Wire.keyword view_mode) ]) ])
   | w -> w
 
 (* ---------- page graph ---------- *)
@@ -1593,7 +1592,7 @@ let build_page_graph (db : db) (page_uuid : string) (theme : Wire.t option)
             | Wire.Map kvs -> (
                 match Wire.get "db-id" (Wire.Map kvs) with
                 | Some (Wire.Int id) when id = page_id ->
-                    Wire.Map (kvs @ [ (kw "root?", Wire.Bool true) ])
+                    Wire.Map (kvs @ [ (Wire.keyword "root?", Wire.Bool true) ])
                 | _ -> n)
             | _ -> n)
           built

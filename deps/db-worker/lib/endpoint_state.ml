@@ -5,9 +5,8 @@
 open Db_worker_effect
 
 let pure' v = pure v
-let kw s = Wire.Keyword s
 
-let ok_map ok = Wire.Map [ (kw "ok", Wire.Bool ok) ]
+let ok_map ok = Wire.Map [ (Wire.keyword "ok", Wire.Bool ok) ]
 
 (* :thread-api/sync-app-state [new-state] — merge into *state; log
    an error when the map explicitly carries :git/current-repo nil. *)
@@ -87,9 +86,9 @@ let () =
                pure'
                  (Wire.Map
                     [
-                      (kw "ok", Wire.Bool false);
-                      (kw "reason", kw "request-not-found");
-                      (kw "request-id", id_t);
+                      (Wire.keyword "ok", Wire.Bool false);
+                      (Wire.keyword "reason", Wire.keyword "request-not-found");
+                      (Wire.keyword "request-id", id_t);
                     ]))
       | _ -> invalid_arg "resolve-ui-request expects (request-id result)")
 
@@ -106,10 +105,10 @@ let () =
                let err =
                  Wire.Map
                    [
-                     (kw "code", kw "ui-request-rejected");
-                     (kw "request-id", id_t);
-                     (kw "action", action);
-                     (kw "data", error);
+                     (Wire.keyword "code", Wire.keyword "ui-request-rejected");
+                     (Wire.keyword "request-id", id_t);
+                     (Wire.keyword "action", action);
+                     (Wire.keyword "data", error);
                    ]
                in
                Db_worker_effect.wakeup resolver (Error err);
@@ -118,9 +117,9 @@ let () =
                pure'
                  (Wire.Map
                     [
-                      (kw "ok", Wire.Bool false);
-                      (kw "reason", kw "request-not-found");
-                      (kw "request-id", id_t);
+                      (Wire.keyword "ok", Wire.Bool false);
+                      (Wire.keyword "reason", Wire.keyword "request-not-found");
+                      (Wire.keyword "request-id", id_t);
                     ]))
       | _ -> invalid_arg "reject-ui-request expects (request-id error)")
 
@@ -135,10 +134,10 @@ let cancel_ui_requests context =
             (Error
                (Wire.Map
                   [
-                    (kw "code", kw "ui-request-cancelled");
-                    (kw "request-id", Wire.String id);
-                    (kw "action", action);
-                    (kw "context", context);
+                    (Wire.keyword "code", Wire.keyword "ui-request-cancelled");
+                    (Wire.keyword "request-id", Wire.String id);
+                    (Wire.keyword "action", action);
+                    (Wire.keyword "context", context);
                   ]))
       | None -> ())
     ids;
@@ -149,7 +148,7 @@ let () =
       let context = match args with t :: _ -> t | [] -> Wire.Nil in
       let n = cancel_ui_requests context in
       pure'
-        (Wire.Map [ (kw "ok", Wire.Bool true); (kw "cancelled", Wire.Int n) ]))
+        (Wire.Map [ (Wire.keyword "ok", Wire.Bool true); (Wire.keyword "cancelled", Wire.Int n) ]))
 
 (* :thread-api/mobile-logs [] — returns @*log wholesale (the ring
    itself enforces the >1000 → 800 trim). *)
@@ -169,12 +168,12 @@ let () =
               (fun (e : Worker_log.entry) ->
                  Wire.Map
                    [
-                     (kw "level", kw (level_str e.level));
-                     (kw "message", Wire.String e.message);
-                     ( kw "data",
+                     (Wire.keyword "level", Wire.keyword (level_str e.level));
+                     (Wire.keyword "message", Wire.String e.message);
+                     ( Wire.keyword "data",
                        Wire.Map
                          (List.map (fun (k, v) -> (Wire.String k, Wire.String v)) e.fields) );
-                     (kw "time-ms", Wire.Float (Time.epoch_ms_to_float e.time_ms));
+                     (Wire.keyword "time-ms", Wire.Float (Time.epoch_ms_to_float e.time_ms));
                    ])
               entries)))
 
