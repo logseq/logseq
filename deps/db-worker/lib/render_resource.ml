@@ -2681,7 +2681,8 @@ let resource_entry db (resource_key : Wire.t list) (runtime : runtime) : resourc
   | Watch_keys ks ->
       { watch_keys = ks; watch_all = false; value = res.value; slots = res.slots }
 
-let snapshot_request_limits = [ ("blocks", 1000); ("children", 25); ("resources", 25) ]
+let snapshot_request_limits =
+  [ ("blocks", 1000); ("children", 50); ("resources", 25) ]
 
 let wire_dedup (xs : Wire.t list) : Wire.t list =
   let rec go acc = function
