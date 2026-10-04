@@ -55,7 +55,7 @@ let recompute_checksum_diagnostics args =
   let repo = repo_of args in
   match Worker_state.datascript_conn repo with
   | None -> Db_worker_effect.pure Wire.Nil
-  | Some conn ->
+  | Some _ ->
       (* the stored checksum is computed over the confirmed conn — on a
          remote graph datascript_conn is the display projection, whose
          pending-inclusive db and display-domain max_tx would corrupt
