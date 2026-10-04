@@ -316,7 +316,8 @@ let set_graph_sync_metadata repo graph_id graph_e2ee =
                [ Wire.Keyword "db/ident"
                , Wire.Keyword "logseq.kv/graph-rtc-e2ee?"
                ; Wire.Keyword "kv/value", Wire.Bool graph_e2ee ] ]
-           [ ("outliner-op", Keyword "set-kvs") ])
+           [ ("outliner-op", Keyword "set-kvs")
+           ; ("checksum-exempt?", Bool true) ])
   | None -> ()
 
 let ensure_client_graph_uuid repo graph_id =
@@ -332,7 +333,9 @@ let persist_upload_graph_identity repo graph_id graph_e2ee =
   set_graph_sync_metadata repo graph_id graph_e2ee;
   (* the graph just became remote — split off the server conn now so
      remote txs never interleave with pending ops on one conn *)
-  Sync_apply.split_off_server_if_remote repo;
+  (* the snapshot below serializes the pre-split conn's datoms — keep
+     pending forward data in place so the upload carries it *)
+  Sync_apply.split_off_server_if_remote ~unapply_pending:false repo;
   ensure_client_graph_uuid repo graph_id;
   Wire.Map
     [ Wire.Keyword "graph-id", Wire.String graph_id
