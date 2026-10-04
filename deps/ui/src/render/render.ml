@@ -256,7 +256,7 @@ let src_eval_el ~(code : string) ~(uuid : string) : t =
               | w -> Runtime.signal_set st (Edn.to_string w));
              Js.Promise.resolve ())
       |> ignore);
-  Logseq_dom.dyn ~equal:(fun a b -> (a : string) = b)
+  Logseq_dom.dyn ~equal:(Logseq_dom.trace_equal "render" (fun a b -> (a : string) = b))
     (fun s ->
       D.el ~tag:"div"
         [ D.el ~tag:"code" ~text:(I18n.t "view/results") []

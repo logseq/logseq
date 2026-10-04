@@ -61,6 +61,11 @@ final class LogseqBlockTextView: NSTextView {
   /// Consume the pending request on attach so a single op converges.
   override func viewDidMoveToWindow() {
     super.viewDidMoveToWindow()
+    if ProcessInfo.processInfo.environment["LOGSEQ_PERF"] != nil {
+      FileHandle.standardError.write(
+        "PERF attach t=\(CFAbsoluteTimeGetCurrent()) id=\(domID ?? "-") win=\(window != nil)\n"
+          .data(using: .utf8)!)
+    }
     if let window, window.firstResponder !== self,
       let req = LogseqPlatform.lastFocusRequest,
       req.id == domID, Date().timeIntervalSince(req.at) < 5
@@ -234,6 +239,19 @@ struct LogseqTextArea: NSViewRepresentable {
         let chars = NSApp.currentEvent?.charactersIgnoringModifiers
         key = chars == "n" ? "n" : "ArrowDown"; which = chars == "n" ? 78 : 40
         swallow = autocompleteOpen
+      case #selector(NSResponder.moveToBeginningOfParagraph(_:)),
+           #selector(NSResponder.moveToBeginningOfParagraphAndModifySelection(_:)),
+           #selector(NSResponder.moveParagraphBackwardAndModifySelection(_:)):
+        // Option+Up reaches OCaml's editor keymap — alt+shift moves the
+        // block, alt alone is caret nav. Swallow the move case so AppKit's
+        // selection extension doesn't fight the repaint.
+        key = "ArrowUp"; which = 38
+        swallow = NSApp.currentEvent?.modifierFlags.contains(.shift) ?? false
+      case #selector(NSResponder.moveToEndOfParagraph(_:)),
+           #selector(NSResponder.moveToEndOfParagraphAndModifySelection(_:)),
+           #selector(NSResponder.moveParagraphForwardAndModifySelection(_:)):
+        key = "ArrowDown"; which = 40
+        swallow = NSApp.currentEvent?.modifierFlags.contains(.shift) ?? false
       case #selector(NSResponder.moveLeft(_:)),
            #selector(NSResponder.moveLeftAndModifySelection(_:)),
            #selector(NSResponder.moveBackward(_:)),
@@ -247,6 +265,11 @@ struct LogseqTextArea: NSViewRepresentable {
         key = "ArrowRight"; which = 39
         swallow = false
       default:
+        if ProcessInfo.processInfo.environment["LOGSEQ_PERF"] != nil {
+          FileHandle.standardError.write(
+            "PERF cmdsel name=\(NSStringFromSelector(commandSelector)) unhandled\n"
+              .data(using: .utf8)!)
+        }
         return false
       }
       let flags = NSApp.currentEvent?.modifierFlags ?? []
@@ -293,20 +316,33 @@ struct LogseqTextArea: NSViewRepresentable {
       // makeFirstResponder resigns the current first responder
       // synchronously, and its blur emit re-enters OCaml — which deadlocks
       // when the dom-op itself runs inside an OCaml callback. Defer one
-      // runloop tick so the blur lands after the outer call returns.
+      // runloop tick in that case; registration-drain and event-loop
+      // calls are already on main outside OCaml, so focus inline — the
+      // deferred queue can stall ~80ms parked in _DPSNextEvent.
       if ProcessInfo.processInfo.environment["LOGSEQ_PERF"] != nil {
         FileHandle.standardError.write(
           "PERF domfocus-req t=\(CFAbsoluteTimeGetCurrent()) domID=\((textView as? LogseqBlockTextView)?.domID ?? "-")\n"
             .data(using: .utf8)!)
       }
       let view = textView
-      runOnMainDeferred {
-        let ok = view?.window?.makeFirstResponder(view) ?? false
+      func attempt(_ remaining: Int) {
+        let ok = (view?.window != nil)
+          ? (view?.window?.makeFirstResponder(view) ?? false) : false
         if ProcessInfo.processInfo.environment["LOGSEQ_PERF"] != nil {
           FileHandle.standardError.write(
             "PERF domfocus t=\(CFAbsoluteTimeGetCurrent()) view=\(view != nil) window=\(view?.window != nil) ok=\(ok) accepts=\(view?.acceptsFirstResponder ?? false) editable=\(view?.isEditable ?? false) selectable=\(view?.isSelectable ?? false) key=\(view?.window?.isKeyWindow ?? false)\n"
               .data(using: .utf8)!)
         }
+        // The view registers its dom-id before attaching to a window —
+        // retry on later runloop turns until makeFirstResponder can stick.
+        if !ok, view != nil, remaining > 0 {
+          runOnMainDeferred { attempt(remaining - 1) }
+        }
+      }
+      if Thread.isMainThread, !LogseqRuntime.mainThreadInOcamlCall {
+        attempt(30)
+      } else {
+        runOnMainDeferred { attempt(30) }
       }
     }
 

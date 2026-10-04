@@ -31,10 +31,6 @@ enum LogseqDOMSnapshot {
     el["tag"] = tagName(of: ident)
     if case .string(let classes) = context.childProperty(node: nodeID, "style-class") {
       el["class"] = classes
-    } else {
-      FileHandle.standardError.write(
-        "DBG snap node=\(nodeID) no-style-class props=\(context.debugPropertyNames(of: nodeID))\n"
-          .data(using: .utf8)!)
     }
     var attrsDict: [String: Any] = [:]
     if case .string(let json) = context.childProperty(node: nodeID, "attrs"),

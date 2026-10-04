@@ -638,22 +638,30 @@ and row_sig ~depth ~editable ~library ~virtualize scope
 
 and row_children ~depth ~editable ~library ~virtualize scope
     (bs : Model.block Signal.signal) : t =
-  Logseq_dom.dyn
-    ~equal:(fun ((a : Model.block), ca) ((b : Model.block), cb) ->
-      a == b && ca = cb)
-    (fun (b, collapsed) ->
-      if collapsed || Comments.is_comments_area b || S.children_of b = []
-      then Logseq_dom.nothing
-      else
+  (* gate only on show/hide: children membership changes go through the
+     keyed list inside children_dom — remounting the whole subtree on
+     every splice (indent/outdent/collapse-adjacent edits) rebuilt
+     ~110 nodes per op *)
+  let show_sig =
+    Signal.map2
+      (fun (b : Model.block) (st : S.t) ->
         let uuid = Option.value b.block_uuid ~default:"" in
-        children_dom ~depth ~editable ~library ~virtualize uuid scope b)
-    (Signal.map2
-       (fun (b : Model.block) (st : S.t) ->
-         let uuid = Option.value b.block_uuid ~default:"" in
-         ( b
-         , effective_collapsed_st ~scope uuid b.block_default_collapsed
-             st ))
-       bs (S.signal ()))
+        not
+          (effective_collapsed_st ~scope uuid b.block_default_collapsed
+              st
+          || Comments.is_comments_area b
+          || S.children_of b = []))
+      bs (S.signal ())
+  in
+  Logseq_dom.dyn ~equal:(fun (a : bool) (b : bool) -> a = b)
+    (fun show ->
+      if not show then Logseq_dom.nothing
+      else
+        let b = Signal.get bs in
+        let uuid = Option.value b.block_uuid ~default:"" in
+        children_dom ~depth ~editable ~library ~virtualize uuid scope
+          bs)
+    show_sig
 
 and block_row_sig
     ?(depth = 0) ?(scope = "main") ?(editable = true) ?(library = false)
@@ -682,8 +690,8 @@ and estimate_children_height (b : Model.block) : float =
    render-children at every nesting level — a sibling list of >=64 gets
    its own windowed list inside .blocks-list-wrap *)
 and child_list ~depth ~editable ~library ~virtualize uuid scope
-    (b : Model.block) : t =
-  let kids = S.children_of b in
+    (bs : Model.block Signal.signal) : t =
+  let kids = S.children_of (Signal.get bs) in
   dom ~key:("blw-" ^ uuid) ~style_class:"blocks-list-wrap"
     ~attrs:
       (("data-level", string_of_int (depth + 1))
@@ -695,12 +703,17 @@ and child_list ~depth ~editable ~library ~virtualize uuid scope
                       ~virtualize)
            (Array.of_list kids) ]
      else
-       List.map (block_row ~scope ~editable ~depth:(depth + 1) ~library
-                   ~virtualize)
-         kids)
+       (* keyed like the top-level list: indent/outdent/move splices a
+          row in or out and only that row's node moves — siblings keep
+          their DOM identity instead of the whole subtree remounting *)
+       [ Logseq_dom.keyed ~source:(Signal.map S.children_of bs)
+           ~key:block_key ~cmp:String.compare
+           ~mount:(block_row_sig ~depth:(depth + 1) ~scope ~editable
+                     ~library ~virtualize) ])
 
 and children_dom ~depth ~editable ~library ~virtualize uuid scope
-    (b : Model.block) : t =
+    (bs : Model.block Signal.signal) : t =
+  let b = Signal.get bs in
   dom ~key:("children-" ^ uuid)
     ~style_class:"block-children-container flex"
     [ dom ~key:("border-" ^ uuid)
@@ -713,19 +726,23 @@ and children_dom ~depth ~editable ~library ~virtualize uuid scope
          Lazy_children.lazy_children ~key:("clist-" ^ uuid) ~uuid
            ~min_height:(estimate_children_height b)
            ~render:(fun () ->
-             child_list ~depth ~editable ~library ~virtualize uuid scope b)
+             child_list ~depth ~editable ~library ~virtualize uuid scope
+               bs)
        else
          dom ~key:("clist-" ^ uuid) ~style_class:"block-children w-full"
-           [ child_list ~depth ~editable ~library ~virtualize uuid scope b
+           [ child_list ~depth ~editable ~library ~virtualize uuid scope
+               bs
            ])
     ]
 
 and children_el ~depth ~editable ~library ~virtualize uuid scope
     (b : Model.block) : t =
-
+ fun ctx parent ->
+  let bs = Signal.constant ctx.Lui_ui.ui_scheduler b in
   if_
     ~test:(Signal.map (fun c -> not c) (collapsed_sig ~scope b))
-    (children_dom ~depth ~editable ~library ~virtualize uuid scope b)
+    (children_dom ~depth ~editable ~library ~virtualize uuid scope bs)
+    ctx parent
 
 (* Read-only row for linked-reference lists: same shell as row_el but the
    content never swaps to editor_el — a block shown in .references can

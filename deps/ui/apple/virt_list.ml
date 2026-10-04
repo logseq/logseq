@@ -22,6 +22,7 @@ let list ?(scroll_parent_id = "main-content-container") ?(overscan = 5)
     ?(pin_sig = fun () -> None)
     ?(data_sig = fun (_ : Lui_ui.ui_context) -> None)
     ?(on_end = fun () -> ())
+    ?(same_item = fun (a : 'a) (b : 'a) -> a == b || a = b)
     ~key_of ~render (data : 'a array) : t =
   ignore scroll_parent_id;
   ignore overscan;
@@ -29,7 +30,6 @@ let list ?(scroll_parent_id = "main-content-container") ?(overscan = 5)
   ignore initial_rows;
   ignore pin_key;
   ignore pin_sig;
-  ignore key_of;
   fun ctx parent ->
     let sched = ctx.Lui_ui.ui_scheduler in
     let arr_sig =
@@ -42,16 +42,53 @@ let list ?(scroll_parent_id = "main-content-container") ?(overscan = 5)
           list_attrs
           @ [ ("data-virt-count", string_of_int (Array.length arr)) ])
     in
-    let children_of (arr : 'a array) =
-      List.init (Array.length arr) (fun i -> render arr.(i))
+    (* keyed rows with a per-key render version — mirrors the web twin:
+       a splice keeps untouched rows mounted (adopted by key), and only
+       rows whose item fails [same_item] get a version bump that remounts
+       their row.  Callers whose items repaint internally from their own
+       signals (journals' journal_page_sig) pass a key-only equality so
+       splices never remount a whole day subtree. *)
+    let versions : (string, int) Hashtbl.t = Hashtbl.create 16 in
+    let prev_items : (string, 'a) Hashtbl.t = Hashtbl.create 16 in
+    let source_sig =
+      let prev : 'a array option ref = ref None in
+      Signal.map
+        (fun (arr : 'a array) ->
+          (match !prev with
+           | Some old ->
+               Hashtbl.reset prev_items;
+               Array.iter
+                 (fun it -> Hashtbl.replace prev_items (key_of it) it)
+                 old;
+               Array.iter
+                 (fun it ->
+                   let k = key_of it in
+                   match Hashtbl.find_opt prev_items k with
+                   | Some old_it when same_item old_it it -> ()
+                   | _ ->
+                       (if Sys.getenv_opt "LOGSEQ_PERF" <> None then
+                          Printf.eprintf "[virt-bump] %s\n%!" k);
+                       Hashtbl.replace versions k
+                         (1 + Option.value (Hashtbl.find_opt versions k)
+                            ~default:0))
+                 arr
+           | None -> ());
+          prev := Some arr;
+          arr)
+        arr_sig
     in
-    D.dyn ~equal:(fun a b -> a == b)
-      (fun arr ->
-        D.dom ~style_class:list_class ~events:"virt-end"
-          ~attrs_signal_v:attrs_sig
-          ~on_dom_event:(fun _name _payload -> on_end ())
-          (children_of arr))
-      arr_sig ctx parent
+    let key_of_versioned (it : 'a) =
+      Printf.sprintf "%s|%d" (key_of it)
+        (Option.value (Hashtbl.find_opt versions (key_of it)) ~default:0)
+    in
+    D.dom ~style_class:list_class ~events:"virt-end"
+      ~attrs_signal_v:attrs_sig
+      ~on_dom_event:(fun _name _payload -> on_end ())
+      [ D.keyed
+          ~source:(Signal.map Array.to_list source_sig)
+          ~key:key_of_versioned ~cmp:String.compare
+          ~mount:(fun item_sig -> render (Signal.get item_sig)) ]
+      ctx parent
 
 (* Signal-driven row stream: same [ls-virt-list] shell but children are
    a keyed collection, so a splice republishes only the touched rows —

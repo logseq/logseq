@@ -420,7 +420,7 @@ let cloze_el answer cue : t =
            ; ("aria-pressed", string_of_bool o) ])
          sig_)
     ~events:"click keydown" ~on_dom_event:toggle
-    [ dyn ~equal:(fun a b -> (a : bool) = b)
+    [ dyn ~equal:(Logseq_dom.trace_equal "render_inline" (fun a b -> (a : bool) = b))
         (fun o -> if o then revealed else hidden)
         sig_ ]
     context parent

@@ -255,7 +255,7 @@ let block_area ~uuid : t =
   let key = block_key uuid in
   let st = block_state context uuid in
   let node =
-    (dyn ~equal:(fun (a : S.area_data) b -> a = b)
+    (dyn ~equal:(Logseq_dom.trace_equal "block_area" (fun (a : S.area_data) b -> a = b))
        (fun d ->
           if d.rows = [] && d.hidden = [] && d.below = [] then
             (* dyn branch roots must keep identical props: set-prop
@@ -297,7 +297,7 @@ let block_left_chips ~uuid : t =
   let key = block_key uuid in
   let st = block_state context uuid in
   let node =
-    (dyn ~equal:(fun (a : S.area_data) b -> a.left = b.left)
+    (dyn ~equal:(Logseq_dom.trace_equal "block_left_chips" (fun (a : S.area_data) (b : S.area_data) -> a.left = b.left))
        (fun d ->
           if d.left = [] then
             row ~gap:8 ~cross:`center
@@ -504,7 +504,7 @@ let page_area (p : Model.page) : t =
       && (Editor_state.is_collapsed uuid || p.Model.page_is_tag)
     in
     let node =
-      (dyn ~equal:(fun (a : S.area_data) b -> a = b)
+      (dyn ~equal:(Logseq_dom.trace_equal "page_area" (fun (a : S.area_data) b -> a = b))
          (fun d ->
             if title_collapsed then column ~gap:0 []
             else if
@@ -545,7 +545,7 @@ let bidi_area (p : Model.page) : t =
                 ~db_id:p.Model.page_db_id)
   in
   let node =
-    (dyn ~equal:(fun (a : S.area_data) b -> a.bidi = b.bidi)
+    (dyn ~equal:(Logseq_dom.trace_equal "bidi_area" (fun (a : S.area_data) (b : S.area_data) -> a.bidi = b.bidi))
        (fun d ->
           if d.bidi = [] then
             column ~gap:8 ~grow:1.0
@@ -632,7 +632,8 @@ let sidebar_area ~uuid ~db_id ~title ~is_tag : t =
     }
   in
   let node =
-    (dyn ~equal:(fun (a : S.area_data) b -> a = b)
+    (dyn ~equal:(Logseq_dom.trace_equal "sb_area"
+                   (fun (a : S.area_data) b -> a = b))
        (fun d ->
           if (not is_tag) && d.rows = [] && d.hidden = [] then
             (* cljs: (and empty-full empty-hidden (not class?)) →

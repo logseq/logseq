@@ -158,7 +158,7 @@ let rows_of (v : V.t) =
    element exists, scope cleanup on unmount. *)
 let attach (ctx : Lui_ui.ui_context) st margin list_id scroll_parent_id
     data versions key_of overscan estimate_size pin_key pin_sig data_sig
-    on_end =
+    same_item on_end =
   match get_by_id list_id, get_by_id scroll_parent_id with
   | Some list_el, Some scroll_el ->
       margin :=
@@ -316,13 +316,13 @@ let attach (ctx : Lui_ui.ui_context) st margin list_id scroll_parent_id
                          i < Array.length old && unchanged_at i
                          &&
                          match Hashtbl.find_opt prev_items k with
-                         | Some old_it -> old_it == it || old_it = it
+                         | Some old_it -> same_item old_it it
                          | None -> false
                        in
                        if not unchanged then begin
                          dirty := true;
                          match Hashtbl.find_opt prev_items k with
-                         | Some old_it when old_it == it || old_it = it ->
+                         | Some old_it when same_item old_it it ->
                              ()
                          | _ ->
                              Hashtbl.replace versions k
@@ -390,6 +390,7 @@ let list ?(scroll_parent_id = "main-content-container") ?(overscan = 5)
     ?(pin_sig = fun () -> None)
     ?(data_sig = fun (_ : Lui_ui.ui_context) -> None)
     ?(on_end = fun () -> ())
+    ?(same_item = fun (a : 'a) (b : 'a) -> a == b || a = b)
     ~key_of ~render (data : 'a array) : t =
  fun ctx parent ->
   ignore initial_rows;
@@ -399,7 +400,10 @@ let list ?(scroll_parent_id = "main-content-container") ?(overscan = 5)
   let data_sig = data_sig ctx in
   let data = ref data in
   (* bumped per uuid by the items-signal splice when a row's item
-     changes — folds into the reload key so only touched rows remount *)
+     changes — folds into the reload key so only touched rows remount.
+     [same_item] decides "same" — callers whose rows repaint internally
+     from their own signals (journals' journal_page_sig) pass a
+     key-only equality so splices never remount the whole row *)
   let versions : (string, int) Hashtbl.t = Hashtbl.create 16 in
   let vstate_sig = st.Signal.state_signal in
   let spacer_attrs =
@@ -420,7 +424,7 @@ let list ?(scroll_parent_id = "main-content-container") ?(overscan = 5)
   set_timeout
     (fun () ->
       attach ctx st margin list_id scroll_parent_id data versions key_of
-        overscan estimate_size pin_key pin_sig data_sig on_end)
+        overscan estimate_size pin_key pin_sig data_sig same_item on_end)
     0;
   D.dom ~key:("vl-" ^ list_id) ~id:list_id ~style_class:list_class
     ~attrs:list_attrs

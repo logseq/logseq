@@ -447,6 +447,14 @@ private let platformRequest: PlatformRequestCallback = { data, length in
   private var ocamlMainReady = false
   private var ocamlCallDepth = 0
 
+  /// True while the main thread is inside an OCaml entry. Dom-ops that
+  /// trigger a responder change must defer in that case (the blur emit
+  /// re-enters OCaml and the domain lock is non-recursive); everywhere
+  /// else they can run inline instead of waiting on the deferred queue.
+  static var mainThreadInOcamlCall: Bool {
+    Thread.isMainThread && (activeRuntime?.ocamlCallDepth ?? 0) > 0
+  }
+
   init(extensionRegistry: LUIAppleExtensionRegistry) throws {
     installEventDrainMonitor()
     installTickTimer()

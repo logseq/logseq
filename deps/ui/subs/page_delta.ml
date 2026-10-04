@@ -330,11 +330,19 @@ let rec splice_children env parent_key (cur : Model.block list)
                 (* keep the positionally-assigned index — the canon wire
                    carries none and decode defaults it to 1, so swapping
                    blindly makes every touched sibling render "1." *)
-                { n with
-                  Model.block_children = c.Model.block_children
-                ; block_embed_children = c.Model.block_embed_children
-                ; block_order_index = c.Model.block_order_index
-                }
+                let merged =
+                  { n with
+                    Model.block_children = c.Model.block_children
+                  ; block_embed_children = c.Model.block_embed_children
+                  ; block_order_index = c.Model.block_order_index
+                  }
+                in
+                (* wire records are rebuilt whole, so an unchanged block
+                   still arrives as a fresh record — swapping it in breaks
+                   the == cutoffs downstream (row_children, keyed rows) and
+                   remounts every untouched row. Keep the old record when
+                   the merge is field-identical. *)
+                if merged = c then c else merged
             | _ -> c)
         | None -> c
       in

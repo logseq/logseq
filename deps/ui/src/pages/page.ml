@@ -1099,16 +1099,32 @@ let journal_meta_equal (a : Model.page) (b : Model.page) : bool =
   && a.page_internal = b.page_internal
   && a.page_built_in = b.page_built_in
   && a.page_add_object = b.page_add_object
-  && a.page_tags = b.page_tags
-  && a.page_tag_idents = b.page_tag_idents
-  && a.page_tag_uuids = b.page_tag_uuids
-  && a.page_tag_db_ids = b.page_tag_db_ids
+  (* tag chip fields moved to journal_title_equal — canon decodes leave
+     the uuid/db-id lists empty until resolve_page_tags fills them, and
+     gating the whole day shell on them remounts ~200 nodes per first
+     splice *)
   && a.page_linked_refs == b.page_linked_refs
   && a.page_parents == b.page_parents
   && a.page_db_collapsable = b.page_db_collapsable
 
+(* tag chip fields (titles/idents/uuids/db ids) gate only the title
+   row: canon decodes leave the uuid/db-id lists empty while
+   resolve_page_tags fills them — gating the whole day shell on them
+   would remount ~200 nodes the first time a splice lands. The title
+   area repaints on its own instead. *)
+let journal_title_equal (a : Model.page) (b : Model.page) : bool =
+  a.page_title = b.page_title && a.page_icon = b.page_icon
+  && a.page_tags = b.page_tags && a.page_tag_idents = b.page_tag_idents
+  && a.page_tag_uuids = b.page_tag_uuids
+  && a.page_tag_db_ids = b.page_tag_db_ids
+  && a.page_journal_day = b.page_journal_day
+  && a.page_internal = b.page_internal
+  && a.page_built_in = b.page_built_in && a.page_is_tag = b.page_is_tag
+  && a.page_is_property = b.page_is_property
+
 let journal_item_inner (m : Model.t)
-    ~(blocks_sig : Model.block list Signal.signal) (p : Model.page) : t =
+    ~(blocks_sig : Model.block list Signal.signal)
+    ~(page_sig : Model.page Signal.signal) (p : Model.page) : t =
   let key = Runtime.journal_item_key p in
   dom ~key:("jiw-" ^ key)
         ~style_class:
@@ -1117,7 +1133,9 @@ let journal_item_inner (m : Model.t)
         [ dom ~key:("jip-" ^ key)
             ~style_class:"relative grid gap-4 sm:gap-8 page-inner mb-16"
             [ dom ~key:("jit-" ^ key) ~style_class:"flex flex-row space-between"
-                [ page_title_el m p ]
+                [ Logseq_dom.dyn ~equal:journal_title_equal
+                    (fun (p' : Model.page) -> page_title_el m p')
+                    page_sig ]
             ; Properties_area.bidi_area p
             ; (* cljs journals: the day inner block list is eager — only
                  the outer days list is windowed (:virtualize? is set on
@@ -1162,7 +1180,8 @@ let journal_item ?(last = false) (m : Model.t) (p : Model.page) : t =
         in
         (Logseq_dom.dyn ~equal:journal_meta_equal
            (fun (p' : Model.page) ->
-             journal_item_inner m ~blocks_sig p')
+             journal_item_inner m ~blocks_sig
+               ~page_sig:(Signal.value p_sig) p')
            (Signal.value p_sig))
           ctx parent)
     ]
@@ -1205,6 +1224,12 @@ let journals_view (m : Model.t) (js : Model.page list) : t =
                                  ctx.Lui_ui.ui_scheduler)))
                        ~key_of:(fun (p : Model.page) ->
                          Option.value p.page_uuid ~default:p.page_title)
+                       (* day items repaint internally from
+                          journal_page_sig on every splice — remounting
+                          the virt row on any page-record change rebuilds
+                          the whole day subtree (~100+ mounts per edit);
+                          same key means same day *)
+                       ~same_item:(fun _ _ -> true)
                        ~render:(journal_item m) items ]
                ]
            ]
@@ -1260,8 +1285,14 @@ let page_key (p : Model.page option) =
   | None -> (None, None)
 
 let page_route (r : Model.route) =
+  (* routes whose content repaints through their own signals — the
+     region dyn must stay mounted across data publishes or every
+     outliner op rebuilds the whole page (journals: journals_sig pushes
+     merged day records into each item; pages: page_sig) *)
   match r with
-  | Model.Page _ | Model.Block_zoom _ | Model.Library -> true
+  | Model.Page _ | Model.Block_zoom _ | Model.Library | Model.Journals
+  | Model.Home ->
+      true
   | _ -> false
 
 let scope_of_route (r : Model.route) =
@@ -1467,16 +1498,31 @@ let region (ms : Model.t Signal.signal) : t =
         && a.page_missing = b.page_missing
         && page_key a.route_page = page_key b.route_page
       in
-      if page_route a.route && page_route b.route then shell
-      else
-        shell
-        && a.data_gen = b.data_gen
-        && a.editing_title = b.editing_title
-        && a.page_menu = b.page_menu
-        && a.confirm = b.confirm
-        && a.unlinked_open = b.unlinked_open
-        && a.unlinked_search = b.unlinked_search
-        && a.unlinked_query = b.unlinked_query)
+      let r =
+        if page_route a.route && page_route b.route then shell
+        else
+          shell
+          && a.data_gen = b.data_gen
+          && a.editing_title = b.editing_title
+          && a.page_menu = b.page_menu
+          && a.confirm = b.confirm
+          && a.unlinked_open = b.unlinked_open
+          && a.unlinked_search = b.unlinked_search
+          && a.unlinked_query = b.unlinked_query
+      in
+      (* journals keep repaint-on-publish semantics only for the
+         placeholder<->list structural transition — day-record splices
+         repaint through journals_sig without a region remount *)
+      let r =
+        if not r then r
+        else
+          match a.route, b.route with
+          | (Model.Journals | Model.Home), (Model.Journals | Model.Home)
+            when a.data_gen <> b.data_gen ->
+              a.journals = [] = (b.journals = [])
+          | _ -> r
+      in
+      r)
     (fun (m : Model.t) ->
       match m.phase, m.route with
       | Model.Ready, (Model.Journals | Model.Home) ->

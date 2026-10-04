@@ -762,9 +762,6 @@ struct LogseqElementView: View {
       || (attrs["data-db-collapsable"] as? String) == "true"
     probe.arrowCollapsed = (attrs["data-collapsed"] as? String) == "true"
     if !bailReason.isEmpty {
-      FileHandle.standardError.write(
-        "DBG probe-bail id=\(context.nodeID) why=\(bailReason)\n"
-          .data(using: .utf8)!)
       return nil
     }
     // Siblings of the main container (children column, properties area)
@@ -772,9 +769,6 @@ struct LogseqElementView: View {
     for c in context.childIDs where c != probe.mainContainerID {
       probe.siblings.append(c)
     }
-    FileHandle.standardError.write(
-      "DBG probe row=\(context.nodeID) main=\(probe.mainContainerID) ctrl=\(probe.controlID) content=\(probe.contentID) sibs=\(probe.siblings.count)\n"
-        .data(using: .utf8)!)
     return probe
   }
 
@@ -2450,8 +2444,6 @@ private struct LogseqFlatBlockRow: View {
       try context.emit(
         on: nodeID, name: "dom-event",
         values: ["name": .string("click"), "payload": .string(json)])
-      FileHandle.standardError.write(
-        "DBG emitClick ok node=\(nodeID)\n".data(using: .utf8)!)
     } catch {
       FileHandle.standardError.write(
         "DBG emitClick FAIL node=\(nodeID) err=\(error)\n".data(using: .utf8)!)
