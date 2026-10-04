@@ -132,10 +132,7 @@ let enqueue_catching queue task ~on_error =
    is opened lazily beside the graph db file. *)
 let client_ops_conns : (string, Sqlite.db) Hashtbl.t = Hashtbl.create 7
 
-let db_dir () =
-  match Runtime_env.env "LOGSEQ_WORKER_DB_DIR" with
-  | Some dir -> dir
-  | None -> "."
+let db_dir = Root_dir.worker_db_dir
 
 let sanitize_repo_name repo =
   String.map (fun c -> match c with '/' | '\\' | ':' -> '-' | c -> c) repo

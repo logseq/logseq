@@ -6,6 +6,13 @@ module E = Db_worker_effect
 let default_root_dir () =
   Filename.concat (Node_process.home_dir ()) "logseq"
 
+(* Base dir for per-graph sqlite/search/asset files. Falls back to the
+   process cwd, which is the graph-dir root in the cljs daemon path. *)
+let worker_db_dir () =
+  match Runtime_env.env "LOGSEQ_WORKER_DB_DIR" with
+  | Some dir -> dir
+  | None -> "."
+
 (* common-graph/expand-home — leading '~' expands to homedir
    (node-path/join semantics: the segment after ~ is treated as
    relative). *)

@@ -251,10 +251,7 @@ let page_relative_path repo db (page : entity) ~(opts : opts) : string option =
    LOGSEQ_WORKER_DB_DIR is the graphs data dir (the env runtime
    sqlite.ml data_dir uses); without it mirror writes landed in the
    worker cwd. *)
-let data_dir () =
-  match Runtime_env.env "LOGSEQ_WORKER_DB_DIR" with
-  | Some dir -> dir
-  | None -> "."
+let data_dir = Root_dir.worker_db_dir
 
 let repo_mirror_dir repo =
   Filename.concat (data_dir ())
