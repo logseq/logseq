@@ -110,9 +110,112 @@ let page_items (p : Model.page) =
   in
   fav @ del @ [ export_page; publish_page ] @ convert @ dev
 
+(* cljs util/email.cljs mask-email: '@' and '.' stay visible plus the
+   first and last non-separator chars; the rest become '*' *)
+let mask_email email =
+  let n = String.length email in
+  let sep c = c = '@' || c = '.' in
+  let first = ref (-1) and last = ref (-1) in
+  String.iteri
+    (fun i c ->
+      if not (sep c) then begin
+        if !first < 0 then first := i;
+        last := i
+      end)
+    email;
+  String.init n (fun i ->
+      let c = email.[i] in
+      if sep c || i = !first || i = !last then c else '*')
+
+let ghost_icon_btn_cls =
+  "ui__button inline-flex cursor-pointer items-center justify-center \
+   whitespace-nowrap rounded-md text-sm gap-1 font-medium \
+   ring-offset-background transition-colors focus-visible:outline-none \
+   focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 \
+   disabled:pointer-events-none disabled:opacity-50 select-none \
+   hover:bg-secondary/70 hover:text-secondary-foreground active:opacity-80 \
+   as-ghost box-content overflow-hidden"
+
+(* cljs header.cljs logged-in user block: separator + inert menuitem
+   with username, masked email (eye toggle) and a hover-reveal logout
+   ghost button (cljs prevents the menuitem's own select) *)
+let user_item () : Lui_elements.t =
+ fun ctx parent ->
+  let username = Option.value (Rtc_flows.username ()) ~default:"" in
+  let email = Option.value (Rtc_flows.email ()) ~default:"" in
+  let masked = Signal.state ctx.Lui_ui.ui_scheduler true in
+  dom ~key:"acct-user" ~style_class:"ui__dropdown-menu-item w-full"
+    ~attrs:[ ("role", "menuitem"); ("tabindex", "-1") ]
+    [ dom ~key:"u-span" ~tag:"span"
+        ~style_class:"flex flex-col relative group pt-1 w-full"
+        [ dom ~key:"u-name" ~tag:"b" ~style_class:"leading-none"
+            ~text:username []
+        ; dom ~key:"u-mail" ~tag:"small" ~style_class:"opacity-70"
+            [ dom ~key:"u-addr" ~tag:"span"
+                ~style_class:"ls-email-address inline-flex items-center"
+                ~attrs_signal_v:
+                  (Logseq_dom.reactive_attrs
+                     (fun m -> [ ("data-masked", string_of_bool m) ])
+                     (Signal.value masked))
+                [ dom ~key:"u-addr-t" ~tag:"span"
+                    ~text_signal:
+                      (Logseq_dom.reactive_text
+                         (fun m -> if m then mask_email email else email)
+                         (Signal.value masked))
+                    []
+                ; Logseq_dom.dyn ~equal:( = )
+                    (fun m ->
+                      dom ~key:"u-eye" ~tag:"button"
+                        ~style_class:
+                          (ghost_icon_btn_cls
+                          ^ " ml-1 inline-flex h-auto w-auto min-w-0 \
+                             border-0 bg-transparent p-0 text-current \
+                             opacity-70 hover:opacity-100")
+                        ~attrs:
+                          [ ("type", "button")
+                          ; ( "aria-label"
+                            , I18n.t
+                                (if m then "account/show-email-address"
+                                 else "account/hide-email-address") )
+                          ]
+                        ~events:"click"
+                        ~on_dom_event:(fun n _ ->
+                          if n = "click" then begin
+                            Signal.set masked
+                              (not (Signal.get_state masked));
+                            Runtime.flush ()
+                          end)
+                        [ Icons.icon ~size:14. ~cls:""
+                            (if m then "eye" else "eye-off") ])
+                    (Signal.value masked)
+                ]
+            ]
+        ; dom ~key:"u-logout" ~tag:"button"
+            ~style_class:
+              (ghost_icon_btn_cls
+              ^ " absolute right-1 top-3 h-auto w-auto min-w-0 border-0 \
+                 bg-transparent p-0 text-red-rx-09 opacity-0 \
+                 group-hover:opacity-100")
+            ~attrs:
+              [ ("type", "button")
+              ; ("aria-label", I18n.t "ui/logout")
+              ]
+            ~events:"click"
+            ~on_dom_event:(fun n _ ->
+              if n = "click" then begin
+                Rtc_flows.sign_out ();
+                Runtime.send (Action.Page_menu_set None);
+                Runtime.flush ()
+              end)
+            [ Icons.icon ~size:18. ~cls:"" "logout" ]
+        ]
+    ]
+    ctx parent
+
 (* app-wide entries mirror the cljs header dots menu
    (components/header.cljs toolbar-dots-menu): dialogs dispatch
-   ls:open-dialog, Recycle navigates to its page. *)
+   ls:open-dialog, Recycle navigates to its page. Logged in: cljs drops
+   the Login item and appends hr + the user block instead. *)
 let global_items () =
   let close () = Runtime.send (Action.Page_menu_set None) in
   [ icon_item "settings" I18n.settings "settings" (fun () ->
@@ -142,10 +245,14 @@ let global_items () =
   ; icon_item "import" I18n.import_ "file-upload" (fun () ->
         close ();
         Platform.set_location_hash "#/import")
-  ; icon_item "login" I18n.login "user" (fun () ->
-        close ();
-        Sidebar_state.open_dialog "login")
   ]
+  @
+  if Rtc_flows.logged_in () then
+    [ separator "acct-hr"; user_item () ]
+  else
+    [ icon_item "login" I18n.login "user" (fun () ->
+          close ();
+          Sidebar_state.open_dialog "login") ]
 
 external inner_width : float = "innerWidth" [@@mel.scope "window"]
 

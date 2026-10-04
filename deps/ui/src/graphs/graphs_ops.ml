@@ -196,8 +196,12 @@ let delete_remote_http uuid =
                [| ("Authorization", "Bearer " ^ token) |])
           ()
       in
-      (let* _ = Fetch.fetchWithInit ("https://api.logseq.io/graphs/" ^ uuid) init in
-      Js.Promise.resolve true)
+      (let* _ =
+         Fetch.fetchWithInit
+           (Rtc_ops.http_base () ^ "/graphs/" ^ uuid)
+           init
+       in
+       Js.Promise.resolve true)
       |> Js.Promise.catch (fun e ->
              Platform.console_error ("remote graph delete failed", e);
              Js.Promise.resolve false)
@@ -258,13 +262,49 @@ let delete_graph repo ~remote =
   else finish ()
 
 let ask_delete ~remote repo =
+  (* cljs delete-local-graph!/delete-remotely: confirm with
+     :title = confirm-desc, :description = delete-warning *)
   Dialogs_state.ask
-    ~title:(if remote then T.delete_remote_graph else T.delete_local_graph)
-    ~desc:
-      ((if remote then T.delete_remote_confirm repo
-        else T.delete_local_confirm repo)
-      ^ " " ^ T.delete_warning)
+    ~title:
+      (if remote then T.delete_remote_confirm repo
+       else T.delete_local_confirm repo)
+    ~desc:T.delete_warning
     ~on_confirm:(fun () -> ignore (delete_graph repo ~remote))
+    ()
+
+(* cljs sync.cljs <rtc-upload-graph!: sync-auth-state ->
+   db-sync-upload-graph -> <get-remote-graphs -> <rtc-start!. Worker
+   failures resolve as error transits — toast the known ones and skip
+   list/start like the cljs rejected chain *)
+let upload repo =
+  let* () =
+    (* cljs <ensure-current-graph-for-upload! — switch first so the
+       upload binds the open repo *)
+    if (Runtime.model ()).Model.repo = Some repo then Js.Promise.resolve ()
+    else navigate_journal repo
+  in
+  Rtc_ops.sync_app_state (Some repo);
+  Rtc_ops.set_sync_config ();
+  let* w =
+    Runtime.invoke1 "thread-api/db-sync-upload-graph" (Wire.String repo)
+  in
+  if Rtc_error.is_error w then begin
+    Rtc_error.report_outcome "upload-graph" w;
+    Js.Promise.resolve ()
+  end
+  else begin
+    let* _ = list_remote_graphs () in
+    Rtc_ops.start repo;
+    Js.Promise.resolve ()
+  end
+
+(* cljs repo.cljs upload-local-graph-with-confirm!: confirm dialog
+   (content-only alert) then the upload chain *)
+let ask_upload repo =
+  Dialogs_state.ask
+    ~title:""
+    ~desc:(I18n.t1 "graph/upload-local-confirm-desc" (short_name repo))
+    ~on_confirm:(fun () -> ignore (upload repo))
     ()
 
 (* after a graph opens, fetch + remember its worker uuid; in-graph routes
