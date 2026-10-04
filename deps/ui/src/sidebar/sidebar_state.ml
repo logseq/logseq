@@ -201,6 +201,122 @@ let on_resizer_mousemove ev =
     set_right_width (Printf.sprintf "%g%%" (ratio *. 100.))
   end
 
+(* ---------- edge-swipe + small-viewport behavior (cljs
+   left_sidebar.cljs) ----------
+   touchstart/move/end on #left-sidebar: a rightward drag from the
+   collapsed rail opens the sidebar, a leftward drag while open closes
+   it. While |dx| > 20px the layout carries .is-touching and
+   .left-sidebar-inner follows the finger via translate3d; the
+   shade-mask opacity tracks the drag ratio. Below 640px taps on
+   navigation targets inside the sidebar also close it. *)
+
+external touch_item :
+  Js.Json.t -> int -> Js.Json.t = "item" [@@mel.scope "touches"] [@@mel.send]
+
+external touches_length :
+  Js.Json.t -> int = "length" [@@mel.scope "touches"] [@@mel.get]
+
+external el_offset_width : Js.Json.t -> float = "offsetWidth" [@@mel.get]
+
+(* cljs util/sm-breakpoint? — document.documentElement.offsetWidth < 640 *)
+let sm_breakpoint () = el_offset_width doc_root < 640.
+
+let touch_before : (float * float) option ref = ref None
+let touch_dx = ref 0.
+let touch_pending = ref false
+
+let left_touch_x ev i =
+  if touches_length ev > i then Some (ev_client_x (touch_item ev i))
+  else None
+
+let left_touch_y ev i =
+  if touches_length ev > i then Some (ev_client_y (touch_item ev i))
+  else None
+
+let set_el_style el name v = style_set_prop el name v
+
+let apply_touch_drag sb dx =
+  let open_ = (!model_ref).Model.left_sidebar_open in
+  (match doc_query "#left-sidebar .left-sidebar-inner" with
+   | Some inner ->
+       let w = el_offset_width inner in
+       let tx =
+         if dx > 0. then
+           (* opening drag: reveal from -100% toward 0 *)
+           let clamped = if dx > w then w else dx in
+           Printf.sprintf "translate3d(calc(%.0fpx - 100%%), 0, 0)"
+             clamped
+         else
+           (* closing drag: shift left in px (cljs magnifies the ratio
+              to -% — px keeps the finger-tracking feel without the
+              off-screen jump) *)
+           Printf.sprintf "translate3d(%.0fpx, 0, 0)" dx
+       in
+       set_el_style inner "transform" tx;
+       (match doc_query "#left-sidebar > .shade-mask" with
+        | Some mask ->
+            let ratio =
+              if dx > 0. then clampf 0. 1. (dx /. w)
+              else clampf 0. 1. (1. +. (dx /. w))
+            in
+            (* the mask only matters while open or while opening; when
+               closed and not yet pending keep it transparent *)
+            if open_ || dx > 0. then
+              set_el_style mask "opacity"
+                (Printf.sprintf "%.2f" ratio)
+        | None -> ())
+   | None -> ());
+  if not !touch_pending then (
+    touch_pending := true;
+    class_add sb "is-touching")
+
+let clear_touch_drag () =
+  touch_before := None;
+  touch_dx := 0.;
+  touch_pending := false;
+  (match doc_query "#left-sidebar" with
+   | Some sb -> class_rm sb "is-touching"
+   | None -> ());
+  (match doc_query "#left-sidebar .left-sidebar-inner" with
+   | Some inner -> set_el_style inner "transform" ""
+   | None -> ());
+  match doc_query "#left-sidebar > .shade-mask" with
+  | Some mask -> set_el_style mask "opacity" ""
+  | None -> ()
+
+let on_doc_touchstart ev =
+  match click_target "#left-sidebar" ev with
+  | Some _ -> (
+      match left_touch_x ev 0, left_touch_y ev 0 with
+      | Some x, Some y -> touch_before := Some (x, y)
+      | _ -> ())
+  | None -> ()
+
+let on_doc_touchmove ev =
+  match !touch_before with
+  | Some (bx, _by) -> (
+      match left_touch_x ev 0 with
+      | Some ax ->
+          let dx = ax -. bx in
+          touch_dx := dx;
+          if Float.abs dx > 20. then
+            (match doc_query "#left-sidebar" with
+             | Some sb -> apply_touch_drag sb dx
+             | None -> ())
+      | None -> ())
+  | None -> ()
+
+let on_doc_touchend _ev =
+  if !touch_pending then begin
+    let open_ = (!model_ref).Model.left_sidebar_open in
+    let dx = !touch_dx in
+    (* cljs: >40px rightward opens the closed sidebar; >30px leftward
+       closes the open one *)
+    if (not open_ && dx > 40.) || (open_ && dx < -30.) then
+      Runtime.send Action.Toggle_left_sidebar
+  end;
+  clear_touch_drag ()
+
 let on_resizer_mouseup _ev =
   (match !left_resizing with
    | Some el -> (
@@ -939,7 +1055,31 @@ let on_doc_click st ev =
           else navigate_to_page ref_
       | None -> ())
   | None ->
-      if jbool "shiftKey" ev then
+      (* cljs left_sidebar.cljs: below the sm breakpoint a tap on a
+         navigation target inside the open sidebar closes it *)
+      if
+        sm_breakpoint ()
+        && (!model_ref).Model.left_sidebar_open
+      then
+        match
+          click_target
+            "#left-sidebar .sidebar-navigations a, #left-sidebar .favorites .bd, \
+             #left-sidebar .recent .bd, #left-sidebar .nav-header"
+            ev
+        with
+        | Some _ -> Runtime.send Action.Toggle_left_sidebar
+        | None ->
+            if jbool "shiftKey" ev then
+              match click_target "[data-testid='page title']" ev with
+              | Some _ -> (
+                  match !Runtime.current_page with
+                  | Some p -> (
+                      match p.Model.page_uuid with
+                      | Some u -> open_uuid st u
+                      | None -> ())
+                  | None -> ())
+              | None -> ()
+      else if jbool "shiftKey" ev then
         match click_target "[data-testid='page title']" ev with
         | Some _ -> (
             match !Runtime.current_page with
@@ -999,6 +1139,9 @@ let init (ms : Model.t Signal.signal) : t =
       Platform.on_document_event "mousedown" on_resizer_mousedown;
       Platform.on_document_event "mousemove" on_resizer_mousemove;
       Platform.on_document_event "mouseup" on_resizer_mouseup;
+      Platform.on_document_event "touchstart" on_doc_touchstart;
+      Platform.on_document_event "touchmove" on_doc_touchmove;
+      Platform.on_document_event "touchend" on_doc_touchend;
       sync_left_sidebar_width ();
       st
 

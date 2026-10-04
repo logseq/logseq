@@ -379,6 +379,8 @@ blockquote {
   position: fixed;
   top: 0;
   left: 0;
+  /* cljs container.css: the collapsed rail stays 10px wide below sm so
+     the edge swipe can grab it; is-open expands to a full overlay */
   width: 10px;
   z-index: var(--ls-z-index-level-4);
   transition: width 0.3s;
@@ -393,14 +395,71 @@ blockquote {
   }
 
   &.is-open {
-    width: var(--ls-left-sidebar-width);
+    width: 100%;
+    height: 100%;
   }
 
   &:not(.is-open) .left-sidebar-resizer {
     display: none;
   }
 
-  .shade-mask {
+  /* cljs container.css: dimming overlay behind the open sidebar on
+     small screens — taps dismiss the sidebar */
+  > .shade-mask {
+    background-color: rgba(0, 0, 0, 0.7);
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    opacity: 0;
+    transition: opacity 0.4s;
+    touch-action: none;
+  }
+
+  &.is-open > .shade-mask {
+    opacity: 1;
+  }
+
+  &.is-closing > .shade-mask {
+    opacity: 0;
+  }
+
+  /* cljs container.css: while the edge swipe is pending the whole
+     overlay widens and follows the finger with no transitions */
+  &.is-touching {
+    width: 100% !important;
+    transition: none;
+
+    .left-sidebar-inner {
+      transition: none !important;
+    }
+
+    > .shade-mask {
+      transition: none !important;
+    }
+  }
+
+  /* cljs container.css &:before — 3rem grab strip under the header
+     edge on small screens (hidden >=sm) */
+  &:before {
+    content: " ";
+    height: 3rem;
+    background-color: var(--ls-primary-background-color);
+    position: fixed;
+    left: 0;
+    top: 0;
+    opacity: 1;
+    z-index: 5;
+  }
+}
+
+html[data-theme="dark"] #left-sidebar > .shade-mask {
+  background-color: rgba(0, 0, 0, 0.15);
+}
+
+/* cljs right_sidebar.cljs toggle: (when-not (util/sm-breakpoint?)) —
+   the right-sidebar header button is not rendered below 640px */
+@media (max-width: 639.98px) {
+  .cp__header .toggle-right-sidebar {
     display: none;
   }
 }
@@ -413,6 +472,19 @@ blockquote {
   .cp__sidebar-left-layout {
     width: 0;
     z-index: var(--ls-z-index-level-1);
+
+    &.is-open {
+      width: var(--ls-left-sidebar-width);
+    }
+
+    &:before {
+      width: 0;
+      overflow: hidden;
+    }
+
+    > .shade-mask {
+      display: none;
+    }
   }
 }
 
